@@ -23,8 +23,8 @@ export type StructuredContext = {
   appendMessage(msg: NewStructuredMessage): StructuredMessage
   /** Reports the session's status to `quirky.session`; done and waiting also settle the session. */
   setStatus(sessionId: string, status: SessionStatus): void
-  /** Creates an ask and resolves with its final envelope once it is answered or cancelled. */
-  createAsk(spec: AskSpec, sessionId: string): Promise<AskEnvelope>
+  /** Native questions use the kernel-issued live lease; ordinary tool approvals retain their existing card path. */
+  createAsk(spec: AskSpec, sessionId: string, options?: { nativeQuestion?: boolean }): Promise<AskEnvelope>
   /** Stores a native provider session ID before the first turn is started. */
   setProviderSession(sessionId: string, providerSession: SessionProviderSession): Promise<void>
   /** The user's `claude` executable, found through their login shell. */

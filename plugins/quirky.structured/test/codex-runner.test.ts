@@ -95,6 +95,28 @@ afterEach(async () => {
 })
 
 describe('Codex app-server runner', () => {
+  test('native question frames preserve provider identity and receive the real typed answer instead of an approval decision', async () => {
+    await setup.runner.start(setup.session, '[native question]')
+    await until(() => setup.asks.length === 1)
+    expect(setup.asks[0]!.spec.questions[0]).toMatchObject({ id: 'destination', type: 'select' })
+    setup.asks[0]!.resolve({
+      status: 'answered', askId: 'ask_native', answers: { destination: { value: 'o2', label: 'Remote', source: 'option' } }, skipped: [], summary: 'Target: Remote'
+    })
+    await until(() => setup.statuses.at(-1) === 'done')
+    expect(setup.fixture.requests().find((entry) => entry.id === 'question-1')).toMatchObject({
+      result: { answers: { destination: { answers: ['Remote'] } } }
+    })
+  })
+
+  test('secret native questions fail before Ask creation and never return an approval', async () => {
+    await setup.runner.start(setup.session, '[native secret]')
+    await until(() => setup.statuses.at(-1) === 'done')
+    expect(setup.asks).toEqual([])
+    expect(setup.fixture.requests().find((entry) => entry.id === 'question-1')).toMatchObject({
+      error: { code: -32602, message: 'Secret native questions must be collected out of band' }
+    })
+  })
+
   test('stopping while resolving the executable prevents app-server spawn', async () => {
     const path = Promise.withResolvers<string>()
     let resolving = false

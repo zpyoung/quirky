@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { RpcErrorCode, type GitStatus, type UiPluginContext } from '@quirky/protocol'
+import type { FixAction } from '../ai/types'
 
 export type GitHubReviewTarget = { worktree: string; branch: string; head: string }
 type ReviewSummary = { number: number; url: string; state: 'open' | 'draft' | 'closed' | 'merged' }
@@ -198,21 +199,68 @@ export function useGitHubReview(context: UiPluginContext, worktree: string, stat
   return stored.value
 }
 
-/** Current branch review link and status, or an explicit unlinked/unavailable state. */
-export function GitHubReviewStatus({ context, lookup }: { context: UiPluginContext; lookup: GitHubReviewLookup }) {
-  if (lookup.kind === 'waiting' || lookup.kind === 'unsupported') return null
+type HostingAiAction = Extract<FixAction, 'branchSummary' | 'pullRequestDetails' | 'pullRequestReview' | 'reviewConversation'>
+type HostingAiFlow = { action: HostingAiAction; label: string }
+
+const BRANCH_FLOW: HostingAiFlow = { action: 'branchSummary', label: 'Summarize branch with AI' }
+const PR_FLOWS: readonly HostingAiFlow[] = [
+  { action: 'pullRequestDetails', label: 'Read pull request details with AI' },
+  { action: 'pullRequestReview', label: 'Review pull request with AI' },
+  { action: 'reviewConversation', label: 'Draft conversation reply with AI' }
+]
+
+type GitHubReviewStatusProps = {
+  context: UiPluginContext
+  lookup: GitHubReviewLookup
+  aiEnabled?: boolean
+  busy?: boolean
+  onLaunch?(action: HostingAiAction): void
+}
+
+/** Current branch review link and status; AI actions launch against this exact branch/PR source. */
+export function GitHubReviewStatus({ context, lookup, aiEnabled = false, busy = false, onLaunch }: GitHubReviewStatusProps) {
+  if (lookup.kind === 'waiting') return null
+  const actions = (pullRequest: boolean) => {
+    if (!aiEnabled || !onLaunch) return null
+    const flows = pullRequest ? [BRANCH_FLOW, ...PR_FLOWS] : [BRANCH_FLOW]
+    return (
+      <div className="scm-github-ai-source-actions">
+        {flows.map(({ action, label }) => (
+          <button key={action} type="button" disabled={busy} onClick={() => onLaunch(action)}>
+            {label}
+          </button>
+        ))}
+      </div>
+    )
+  }
+  if (lookup.kind === 'unsupported') return actions(false)
   if (lookup.kind === 'loading') {
-    return <p className="scm-github-review" data-scm-review-status data-state="loading" role="status">Checking for a pull request…</p>
+    return (
+      <>
+        <p className="scm-github-review" data-scm-review-status data-state="loading" role="status">Checking for a pull request…</p>
+        {actions(false)}
+      </>
+    )
   }
   if (lookup.kind === 'unavailable') {
-    return <p className="scm-github-review" data-scm-review-status data-state="unavailable" role="status">
-      GitHub pull-request lookup unavailable: {lookup.message}
-    </p>
+    return (
+      <>
+        <p className="scm-github-review" data-scm-review-status data-state="unavailable" role="status">
+          GitHub pull-request lookup unavailable: {lookup.message}
+        </p>
+        {actions(false)}
+      </>
+    )
   }
   if (lookup.kind === 'no-review') {
-    return <p className="scm-github-review" data-scm-review-status data-state="no-review" role="status">
-      No pull request is linked to this branch.
-    </p>
+    return (
+      <>
+        <p className="scm-github-review" data-scm-review-status data-state="no-review" role="status">
+          No pull request is linked to this branch.
+        </p>
+        {actions(false)}
+      </>
+    )
   }
 
   const label = lookup.review.state === 'open' ? 'Open'
@@ -226,11 +274,14 @@ export function GitHubReviewStatus({ context, lookup }: { context: UiPluginConte
     }
   }
   return (
-    <div className="scm-github-review" data-scm-review-status data-state="found" role="status">
-      <span>Pull request #{lookup.review.number} · {label}</span>
-      <button type="button" aria-label={`Open pull request #${lookup.review.number}`} onClick={() => void openReview()}>
-        Open PR #{lookup.review.number}
-      </button>
-    </div>
+    <>
+      <div className="scm-github-review" data-scm-review-status data-state="found" role="status">
+        <span>Pull request #{lookup.review.number} · {label}</span>
+        <button type="button" aria-label={`Open pull request #${lookup.review.number}`} onClick={() => void openReview()}>
+          Open PR #{lookup.review.number}
+        </button>
+      </div>
+      {actions(true)}
+    </>
   )
 }

@@ -482,16 +482,22 @@ export type AskAnswer =
   | { value: number; source: 'input' | 'default' }
   | { value: boolean; source: 'input' | 'default' }
 
-export type AskStatus = 'pending' | 'answered' | 'partial' | 'declined' | 'timed_out'
+export type AskStatus = 'pending' | 'answered' | 'partial' | 'declined' | 'timed_out' | 'unavailable'
 
-export type AskEnvelope = {
-  status: AskStatus
+type AskEnvelopeFields = {
   askId: string
   answers: Record<string, AskAnswer>
   skipped: string[]
-  /** One line per answered question, `<header or question>: <value>`; empty while pending and when declined. */
+  /** One line per answered question, `<header or question>: <value>`; empty while pending or unavailable. */
   summary: string
 }
+
+export type AskEnvelope =
+  | (AskEnvelopeFields & { status: Exclude<AskStatus, 'unavailable'> })
+  | (AskEnvelopeFields & { status: 'unavailable'; reason: string })
+
+/** Registration refusal is not a stored pending ask and never grants permission to proceed. */
+export type AskRegistration = { askId: string } | { status: 'unavailable'; reason: string }
 
 /** What `quirky ask` prints when a `--chunk-ms` chunk ends before the ask does. */
 export type AskPendingEnvelope = { status: 'pending'; askId: string; instruction: string }
@@ -513,6 +519,8 @@ export type Ask = {
   seq: number
   /** Pending behind an earlier pending ask of the same session. */
   queued: boolean
+  /** True when this Ask is backed by an exact orchestration coordinator question, not a local card. */
+  handoff?: boolean
   partial: AskPartial
   /** Epoch ms after which the ask times out, or null for no deadline. */
   expiresAt: number | null

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
-import { HOOK_TOKEN_HEADER } from '@quirky/protocol'
+import { HOOK_TOKEN_HEADER, type AskEnvelope } from '@quirky/protocol'
 import { waitFor, waitForAsync } from '../../../packages/daemon/test/helpers'
 import { Database } from 'bun:sqlite'
 import { join } from 'node:path'
@@ -1059,6 +1059,123 @@ describe('quirky.orchestration daemon API acceptance', () => {
     } finally {
       await resumed.settle()
     }
+  }, 30_000)
+
+  test('A1 Ask registrations hand off typed questions to the exact live Dispatch and replay one question', async () => {
+    const coordinator = await fixture.createParty('ask-coordinator')
+    const worker = await fixture.createParty('ask-worker')
+    const { run } = await createRun(coordinator, 'typed worker question')
+    const task = await createTask(coordinator, run.id, 'request a deployment choice')
+    const dispatch = await createDispatch(coordinator, run.id, task.task.id, worker.id)
+    const requestId = crypto.randomUUID()
+    const spec = {
+      title: 'Deployment details',
+      questions: [
+        {
+          id: 'environment',
+          type: 'select',
+          question: 'Which environment?',
+          options: [
+            { value: 'staging', label: 'Staging' },
+            { value: 'production', label: 'Production' }
+          ]
+        },
+        { id: 'note', type: 'text', question: 'What should be verified?' }
+      ]
+    }
+
+    const registered = await call<{ askId: string } | { status: 'unavailable'; reason: string }>(
+      worker,
+      'quirky.ask/register',
+      { spec, requestId, timeoutMs: 30_000 }
+    )
+    if (!('askId' in registered)) throw new Error(`worker registration was unavailable: ${registered.reason}`)
+
+    const waiting = ownPending(call<AskEnvelope>(worker, 'quirky.ask/wait', { askId: registered.askId, timeoutMs: 10_000 }))
+    try {
+      const question = await waitForAsync(async () => {
+        const inbox = await call<InboxResult>(coordinator, INBOX, { full: true, limit: 100 })
+        return inbox.messages.find((message) =>
+          message.type === 'question' &&
+          message.body.includes('[environment]') &&
+          message.body.includes('production — Production') &&
+          message.body.includes('[note]')
+        )
+      }, 5_000)
+      expect(question).toBeDefined()
+
+      const reconnectedWorker = await fixture.reconnect(worker)
+      const repeated = await call<{ askId: string } | { status: 'unavailable'; reason: string }>(
+        reconnectedWorker,
+        'quirky.ask/register',
+        { spec, requestId, timeoutMs: 30_000 }
+      )
+      expect(repeated).toEqual(registered)
+
+      const reply = await call<ReplyResult>(coordinator, REPLY, {
+        ...mutation(),
+        runId: run.id,
+        messageId: question!.id,
+        body: 'environment: production\nnote: verify the migration'
+      })
+      expect(reply.kind).toBe('question_answer')
+
+      expect(await waiting.value()).toMatchObject({
+        status: 'answered',
+        askId: registered.askId,
+        answers: {
+          environment: { value: 'production', label: 'Production', source: 'option' },
+          note: { value: 'verify the migration', source: 'input' }
+        },
+        skipped: []
+      })
+      const inbox = await call<InboxResult>(coordinator, INBOX, { full: true, limit: 100 })
+      expect(inbox.messages.filter((message) => message.type === 'question' && message.body.includes('[environment]'))).toHaveLength(1)
+      expect((await call<{ dispatch: DispatchRow }>(coordinator, DISPATCH_SHOW, { taskId: task.task.id })).dispatch.id).toBe(dispatch.dispatch.id)
+    } finally {
+      await waiting.settle()
+    }
+  }, 30_000)
+
+  test('A1 caller-supplied worker identity is rejected instead of retargeting an Ask handoff', async () => {
+    const coordinator = await fixture.createParty('ask-coordinator')
+    const worker = await fixture.createParty('ask-worker')
+    const unbound = await fixture.createParty('ask-unbound')
+    const { run } = await createRun(coordinator, 'exact ask owner')
+    const task = await createTask(coordinator, run.id, 'worker-only question')
+    await createDispatch(coordinator, run.id, task.task.id, worker.id)
+
+    await rejected(call(unbound, 'quirky.ask/register', {
+      spec: { questions: [{ id: 'go', type: 'confirm', question: 'Proceed?' }] },
+      requestId: crypto.randomUUID(),
+      identity: { runId: run.id, dispatchId: 'dispatch_forged', workerId: 'worker_forged', sessionId: worker.id }
+    }))
+    const inbox = await call<InboxResult>(coordinator, INBOX, { full: true, limit: 100 })
+    expect(inbox.messages.filter((message) => message.type === 'question')).toHaveLength(0)
+  }, 30_000)
+
+  test('A2 a live background Ask survives unknown session evidence and resolves unavailable only after exact exit proof', async () => {
+    const worker = await fixture.createParty('background-asker')
+    const created = await call<{ askId: string }>(worker, 'quirky.ask/create', {
+      spec: { questions: [{ id: 'go', type: 'confirm', question: 'Proceed?' }] }
+    })
+
+    await fixture.setupClient.callAny('plugin.disable', { id: 'quirky.session' })
+    const whileUnknown = await fixture.setupClient.callAny('quirky.ask/wait', { askId: created.askId, timeoutMs: 0 }) as AskEnvelope
+    expect(whileUnknown).toMatchObject({ status: 'pending', askId: created.askId })
+
+    await fixture.setupClient.callAny('plugin.enable', { id: 'quirky.session' })
+    fixture.harness.pty.exit(worker.id, 0)
+    const unavailable = await waitForAsync(async () => {
+      const result = await fixture.setupClient.callAny('quirky.ask/wait', { askId: created.askId, timeoutMs: 0 }) as AskEnvelope
+      return result.status === 'unavailable' ? result : undefined
+    }, 5_000)
+    expect(unavailable).toMatchObject({
+      status: 'unavailable',
+      askId: created.askId,
+      reason: expect.stringContaining(worker.id)
+    })
+    expect(unavailable.answers).toEqual({})
   }, 30_000)
 
   test('AC11 ordinary replies are threaded and gates keep dependent Tasks blocked until resolution', async () => {

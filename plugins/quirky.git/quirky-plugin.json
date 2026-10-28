@@ -2409,7 +2409,7 @@
       },
       {
         "id": "aiFix",
-        "description": "Opens a new agent tab in the worktree with a prompt that asks the agent to fix the failed commit or push, or to resolve the conflicts. Agent, arguments, template and launch options override the action's recipe; save stores the choices used for this launch.",
+        "description": "Opens a new terminal agent tab for a held commit/push failure, conflict, current branch summary, or current public GitHub pull-request details, review, or conversation draft. Hosted source is re-read from the exact current branch; conversation actions never post comments. Agent, arguments, template and launch options override the action recipe; save stores choices used for this launch.",
         "params": {
           "type": "object",
           "properties": {
@@ -2419,7 +2419,8 @@
             },
             "action": {
               "type": "string",
-              "description": "fixCommitFailure, fixPushFailure or resolveConflicts."
+              "enum": ["fixCommitFailure", "fixPushFailure", "resolveConflicts", "branchSummary", "pullRequestDetails", "pullRequestReview", "reviewConversation"],
+              "description": "The named terminal action to launch."
             },
             "agent": {
               "type": "string",
@@ -2479,7 +2480,7 @@
       },
       {
         "id": "aiFixPreview",
-        "description": "The prompt aiFix would send for the action, rendered through the recipe in effect, and that recipe. Starts nothing.",
+        "description": "The prompt aiFix would send for any terminal action, rendered through the recipe in effect, and that recipe. Starts nothing.",
         "readOnly": true,
         "params": {
           "type": "object",
@@ -2490,7 +2491,8 @@
             },
             "action": {
               "type": "string",
-              "description": "fixCommitFailure, fixPushFailure or resolveConflicts."
+              "enum": ["fixCommitFailure", "fixPushFailure", "resolveConflicts", "branchSummary", "pullRequestDetails", "pullRequestReview", "reviewConversation"],
+              "description": "The named terminal action to preview."
             }
           },
           "required": [
@@ -2566,7 +2568,7 @@
       },
       {
         "id": "aiRecipe",
-        "description": "The recipe an AI action runs with in the worktree's repository: each field from the repository's saved recipe, else the global one, else the default, with where it came from.",
+        "description": "The recipe an AI action runs with in the worktree's repository: each field from the repository's saved recipe, else the global one, else the default, with where each field came from.",
         "readOnly": true,
         "params": {
           "type": "object",
@@ -2577,7 +2579,8 @@
             },
             "action": {
               "type": "string",
-              "description": "CommitMessage, fixCommitFailure, fixPushFailure or resolveConflicts."
+              "enum": ["commitMessage", "fixCommitFailure", "fixPushFailure", "resolveConflicts", "branchSummary", "pullRequestDetails", "pullRequestReview", "reviewConversation"],
+              "description": "The AI action whose recipe is read."
             }
           },
           "required": [
@@ -2641,7 +2644,7 @@
       },
       {
         "id": "setAiRecipe",
-        "description": "Saves fields of an AI action's recipe for this repository or for all repositories, or deletes the saved recipe with reset. Fields not given are left as they are; an empty agent or template clears it, and launchOptions null clears picks to inheritance while {} suppresses inherited picks.",
+        "description": "Saves fields of a commit, failure, conflict, branch, or hosting-source AI recipe at repo or global scope, or deletes it with reset. Fields not given are left alone; null launchOptions restores inherited choices while {} suppresses inherited picks.",
         "params": {
           "type": "object",
           "properties": {
@@ -2651,7 +2654,8 @@
             },
             "action": {
               "type": "string",
-              "description": "CommitMessage, fixCommitFailure, fixPushFailure or resolveConflicts."
+              "enum": ["commitMessage", "fixCommitFailure", "fixPushFailure", "resolveConflicts", "branchSummary", "pullRequestDetails", "pullRequestReview", "reviewConversation"],
+              "description": "The AI action whose recipe is saved."
             },
             "scope": {
               "type": "string",

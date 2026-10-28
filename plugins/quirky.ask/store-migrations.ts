@@ -25,3 +25,15 @@ export function askQueueMigration(store: PluginStore): void {
 export function askOwnershipMigration(store: PluginStore): void {
   store.exec('ALTER TABLE asks ADD COLUMN owner_plugin_id TEXT;')
 }
+
+/** The plugin's fourth migration: durable registration, exact session authority and handoff state. */
+export function askHandoffMigration(store: PluginStore): void {
+  store.exec(`
+    ALTER TABLE asks ADD COLUMN reason TEXT;
+    ALTER TABLE asks ADD COLUMN request_id TEXT;
+    ALTER TABLE asks ADD COLUMN handoff_identity TEXT;
+    ALTER TABLE asks ADD COLUMN handoff_question_id TEXT;
+    ALTER TABLE asks ADD COLUMN owner_identity TEXT;
+    CREATE UNIQUE INDEX asks_request_id ON asks(request_id) WHERE request_id IS NOT NULL;
+  `)
+}

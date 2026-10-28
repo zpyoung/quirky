@@ -822,5 +822,34 @@ describe('AI Fix', () => {
     })
     expect(startsOf(w, 'claude')).toHaveLength(0)
   })
+  test('branch-summary recipes launch with the exact comparison source and raw arguments outrank structured picks', async () => {
+    w = await startAiWorld({ fakes: { codex: { raw: true } } })
+    w.write('feature.ts', 'export const feature = true\n')
+    w.git('add', 'feature.ts')
+    w.git('commit', '-q', '-m', 'Add feature')
+    await w.api('setAiRecipe', {
+      action: 'branchSummary',
+      scope: 'repo',
+      agent: 'codex',
+      args: '--model gpt-5.5',
+      launchOptions: { model: 'gpt-5.6-sol', optionValues: { effort: 'high' } }
+    })
+
+    const preview = await w.api('aiFixPreview', { action: 'branchSummary' })
+    expect(preview.prompt).toContain('Branch: "zoe/feat"')
+    expect(preview.prompt).toContain('"feature.ts"')
+    expect(preview.recipe).toMatchObject({ action: 'branchSummary', agent: 'codex' })
+    expect(startsOf(w, 'codex')).toHaveLength(0)
+
+    const started = await w.api('aiFix', { action: 'branchSummary' })
+    expect(started).toMatchObject({ agent: 'codex', saved: false })
+    const session = await w.call('quirky.session/get', { session: started.session })
+    expect(session.launchSettings.options).toMatchObject({
+      model: { source: 'extra-args' },
+      effort: { value: 'high', source: 'explicit' }
+    })
+    const starts = await startsAfter(w, 'codex', 1)
+    expect(valuesAfter(starts[0]!.argv, '-m', '--model')).toEqual(['gpt-5.5'])
+  })
 })
 

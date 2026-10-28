@@ -231,6 +231,11 @@ export function DashboardView({ context, input }: { context: UiPluginContext; in
       <header className="dashboard-toolbar" style={TOOLBAR_STYLE}>
         <h1 style={{ margin: 0, fontSize: 20 }}>Agent Dashboard</h1>
         <div className="dashboard-actions" style={ACTIONS_STYLE}>
+          <button type="button" onClick={() => {
+            void context.executeCommand(`command:${PLUGIN_ID}/openDashboardWindow`, view).catch((cause: unknown) => {
+              context.toast('Could not pop out the Dashboard', cause instanceof Error ? cause.message : String(cause))
+            })
+          }}>Pop out</button>
           {snapshot ? (
             <span className="dashboard-total" aria-label="Dashboard total">
               {snapshot.total} total{snapshot.hiddenIdle > 0 ? ` · ${snapshot.hiddenIdle} idle hidden` : ''}

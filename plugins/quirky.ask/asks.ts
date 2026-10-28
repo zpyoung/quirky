@@ -1,4 +1,5 @@
-import type { Ask, AskAnswer, AskEnvelope, AskPartial, AskSpec, PluginStore } from '@quirky/protocol'
+import type { Ask, AskAnswer, AskEnvelope, AskPartial, AskRegistration, AskSpec, PluginSessionAuthority, PluginStore } from '@quirky/protocol'
+import type { AskHandoffIdentity } from './runtime-types'
 import { buildSummary, validateAnswerSubmission } from './src/core/answers'
 import { validatePartial } from './src/core/partial'
 import { formatSpecErrors, validateAskSpec } from './src/core/spec'
@@ -48,27 +49,44 @@ type AskRow = {
   partial: string
   expires_at: number | null
   summary: string
+  reason: string | null
   seq: number
   created_seq: number
   owner_plugin_id: string | null
+  request_id: string | null
+  handoff_identity: string | null
+  handoff_question_id: string | null
+  owner_identity: string | null
+}
+type AskOwnerIdentity = Pick<PluginSessionAuthority, 'sessionId' | 'processIncarnation' | 'source'>
+type AskOutcome = {
+  status: AskEnvelope['status']
+  answers: Record<string, AskAnswer>
+  skipped: string[]
+  summary: string
+  reason?: string
 }
 
 function toAsk(row: AskRow, queued: boolean): Ask {
+  const common = {
+    askId: row.id,
+    answers: JSON.parse(row.answers),
+    skipped: JSON.parse(row.skipped),
+    summary: row.summary
+  }
+  const envelope: AskEnvelope = row.status === 'unavailable'
+    ? { ...common, status: 'unavailable', reason: row.reason ?? 'The exact asker session is no longer available.' }
+    : { ...common, status: row.status }
   return {
     id: row.id,
     spec: JSON.parse(row.spec) as AskSpec,
     sessionId: row.session_id,
     worktreeId: row.worktree_id,
     createdAt: row.created_at,
-    envelope: {
-      status: row.status,
-      askId: row.id,
-      answers: JSON.parse(row.answers),
-      skipped: JSON.parse(row.skipped),
-      summary: row.summary
-    },
+    envelope,
     seq: row.seq,
     queued,
+    ...(row.handoff_question_id === null ? {} : { handoff: true }),
     partial: JSON.parse(row.partial) as AskPartial,
     expiresAt: row.expires_at
   }
@@ -115,7 +133,15 @@ export class AskService {
     specInput: unknown,
     sessionId: string | null,
     worktreeId: string | null,
-    options: { timeoutMs?: number; checkCredentialText: boolean; ownerPluginId?: string }
+    options: {
+      timeoutMs?: number
+      checkCredentialText: boolean
+      ownerPluginId?: string
+      requestId?: string
+      handoffIdentity?: AskHandoffIdentity
+      handoffQuestionId?: string
+      ownerIdentity?: AskOwnerIdentity
+    }
   ): Ask {
     const checked = validateAskSpec(specInput, { checkCredentialText: options.checkCredentialText })
     if (!checked.ok) throw this.errors.invalidParams(formatSpecErrors(checked.errors))
@@ -129,8 +155,9 @@ export class AskService {
     const seq = this.store.transaction(() => {
       const next = this.nextSeq()
       this.store.run(
-        `INSERT INTO asks (id, spec, session_id, worktree_id, created_at, status, answers, skipped, partial, expires_at, summary, seq, created_seq, owner_plugin_id)
-         VALUES (?, ?, ?, ?, ?, 'pending', '{}', '[]', '{}', ?, '', ?, ?, ?)`,
+        `INSERT INTO asks
+          (id, spec, session_id, worktree_id, created_at, status, answers, skipped, partial, expires_at, summary, seq, created_seq, owner_plugin_id, request_id, handoff_identity, handoff_question_id, owner_identity)
+         VALUES (?, ?, ?, ?, ?, 'pending', '{}', '[]', '{}', ?, '', ?, ?, ?, ?, ?, ?, ?)`,
         id,
         JSON.stringify(checked.spec),
         sessionId,
@@ -139,14 +166,116 @@ export class AskService {
         expiresAt,
         next,
         next,
-        options.ownerPluginId ?? null
+        options.ownerPluginId ?? null,
+        options.requestId ?? null,
+        options.handoffIdentity === undefined ? null : JSON.stringify(options.handoffIdentity),
+        options.handoffQuestionId ?? null,
+        options.ownerIdentity === undefined ? null : JSON.stringify(options.ownerIdentity)
       )
       return next
     })
     this.armDeadline(id, expiresAt)
     const row = this.store.get<AskRow>('SELECT * FROM asks WHERE id = ?', id)!
-    this.hooks.created(toAsk(row, this.isQueued(row)), seq)
+    if (row.handoff_question_id === null) this.hooks.created(toAsk(row, this.isQueued(row)), seq)
     return this.get(id)
+  }
+
+  /** Returns a persisted registration only when its request, asker identity and spec still match. */
+  registration(
+    requestId: string,
+    specInput: unknown,
+    sessionId: string | null,
+    worktreeId: string | null,
+    ownerIdentity?: AskOwnerIdentity
+  ): AskRegistration | null {
+    if (requestId.trim() === '' || requestId.length > 256) {
+      throw this.errors.invalidParams('requestId must be a non-empty string of at most 256 characters')
+    }
+    const checked = validateAskSpec(specInput, { checkCredentialText: true })
+    if (!checked.ok) throw this.errors.invalidParams(formatSpecErrors(checked.errors))
+    const row = this.store.get<AskRow>('SELECT * FROM asks WHERE request_id = ?', requestId)
+    if (!row) return null
+    const storedOwner = row.owner_identity === null ? undefined : JSON.parse(row.owner_identity) as AskOwnerIdentity
+    const storedSessionId = storedOwner?.sessionId ?? row.session_id
+    const sameOwner = ownerIdentity === undefined
+      ? storedOwner === undefined
+      : storedOwner?.sessionId === ownerIdentity.sessionId && storedOwner.processIncarnation === ownerIdentity.processIncarnation
+    if (
+      row.spec !== JSON.stringify(checked.spec) ||
+      storedSessionId !== sessionId ||
+      row.worktree_id !== worktreeId ||
+      !sameOwner
+    ) {
+      throw this.errors.conflict(`requestId ${requestId} was already registered with different asker or question data`)
+    }
+    return { askId: row.id }
+  }
+
+  /** Durable Ask registration with an optional exact orchestration handoff. */
+  register(
+    specInput: unknown,
+    sessionId: string | null,
+    worktreeId: string | null,
+    options: {
+      requestId: string
+      timeoutMs?: number
+      ownerIdentity?: AskOwnerIdentity
+      handoff?: { identity: AskHandoffIdentity; questionId: string }
+    }
+  ): AskRegistration {
+    if (options.handoff && options.handoff.identity.sessionId !== sessionId) {
+      throw this.errors.invalidParams('handoff session identity does not match the registered asker')
+    }
+    const existing = this.registration(options.requestId, specInput, sessionId, worktreeId, options.ownerIdentity)
+    if (existing) return existing
+    try {
+      const ask = this.create(specInput, sessionId, worktreeId, {
+        requestId: options.requestId,
+        checkCredentialText: true,
+        ...(options.timeoutMs === undefined ? {} : { timeoutMs: options.timeoutMs }),
+        ...(options.ownerIdentity === undefined ? {} : { ownerIdentity: options.ownerIdentity }),
+        ...(options.handoff === undefined ? {} : {
+          handoffIdentity: options.handoff.identity,
+          handoffQuestionId: options.handoff.questionId
+        })
+      })
+      return { askId: ask.id }
+    } catch (error) {
+      const concurrent = this.registration(options.requestId, specInput, sessionId, worktreeId, options.ownerIdentity)
+      if (concurrent) return concurrent
+      throw error
+    }
+  }
+
+
+  /** Exact session identities for pending client-owned asks; plugin-owned asks have no session authority. */
+  pendingOwners(sessionId: string): { askId: string; identity: AskOwnerIdentity }[] {
+    return this.store.all<{ id: string; owner_identity: string }>(
+      "SELECT id, owner_identity FROM asks WHERE status = 'pending' AND owner_identity IS NOT NULL ORDER BY created_seq"
+    ).flatMap((row) => {
+      const identity = JSON.parse(row.owner_identity) as AskOwnerIdentity
+      return identity.sessionId === sessionId ? [{ askId: row.id, identity }] : []
+    })
+  }
+
+  /** Session IDs with a pending client-owned Ask, including handoffs hidden from the Questions panel. */
+  pendingOwnerSessions(): string[] {
+    const owners = this.store.all<{ owner_identity: string }>(
+      "SELECT owner_identity FROM asks WHERE status = 'pending' AND owner_identity IS NOT NULL"
+    )
+    return [...new Set(owners.map((row) => (JSON.parse(row.owner_identity) as AskOwnerIdentity).sessionId))]
+  }
+
+
+  /** The durable handoff marker, or null for a local Ask. */
+  handoff(askId: string): { identity: AskHandoffIdentity; questionId: string } | null {
+    const row = this.store.get<Pick<AskRow, 'handoff_identity' | 'handoff_question_id'>>(
+      'SELECT handoff_identity, handoff_question_id FROM asks WHERE id = ?',
+      askId
+    )
+    if (!row || row.handoff_identity === null || row.handoff_question_id === null) return null
+    const identity = JSON.parse(row.handoff_identity) as AskHandoffIdentity
+    return { identity, questionId: row.handoff_question_id }
   }
 
   /** The ask with its deadline applied; NotFound for an unknown ID. */
@@ -155,11 +284,14 @@ export class AskService {
     return toAsk(row, this.isQueued(row))
   }
 
-  /** Every ask in creation order, optionally only those still pending. */
-  list(pendingOnly: boolean): Ask[] {
+  /** Every local Ask in creation order; coordinator handoffs are available only to their exact waiter. */
+  list(pendingOnly: boolean, includeHandoff = false): Ask[] {
     this.settleOverdue(true)
+    const handoffFilter = includeHandoff ? '' : ' AND handoff_question_id IS NULL'
     const rows = this.store.all<AskRow>(
-      pendingOnly ? "SELECT * FROM asks WHERE status = 'pending' ORDER BY created_seq, id" : 'SELECT * FROM asks ORDER BY created_seq, id'
+      pendingOnly
+        ? `SELECT * FROM asks WHERE status = 'pending'${handoffFilter} ORDER BY created_seq, id`
+        : `SELECT * FROM asks WHERE 1 = 1${handoffFilter} ORDER BY created_seq, id`
     )
     return rows.map((row) => toAsk(row, this.isQueued(row)))
   }
@@ -229,6 +361,29 @@ export class AskService {
     return promise
   }
 
+  /** Runs one bounded orchestration wait under the same four-wait capacity gate as local asks. */
+  async waitHandoff(
+    askId: string,
+    timeoutMs: number | undefined,
+    signal: AbortSignal | undefined,
+    poll: (handoff: { identity: AskHandoffIdentity; questionId: string }, timeoutMs: number) => Promise<AskEnvelope>
+  ): Promise<AskEnvelope> {
+    if (this.stopped) throw new Error('quirky.ask has shut down')
+    const ask = this.get(askId)
+    if (signal?.aborted) throw new Error('ask wait connection closed')
+    const handoff = this.handoff(askId)
+    if (!handoff) throw this.errors.conflict(`ask ${askId} has no orchestration handoff`)
+    const limit = Math.max(0, Math.min(timeoutMs ?? MAX_WAIT_MS, MAX_WAIT_MS))
+    if (ask.envelope.status !== 'pending' || limit === 0) return ask.envelope
+    if (this.activeWaits >= MAX_WAIT_CONCURRENCY) throw this.errors.busy('ask wait capacity is busy')
+    this.activeWaits++
+    try {
+      return await poll(handoff, limit)
+    } finally {
+      this.activeWaits--
+    }
+  }
+
   /** Clears every timer and rejects each pending waiter; call before the store closes. */
   shutdown(): void {
     this.stopped = true
@@ -274,6 +429,22 @@ export class AskService {
     })
   }
 
+  /** A coordinator's explicit non-answer is partial, not an invalid card submit or implied consent. */
+  answerHandoff(askId: string, answersInput: unknown, skippedInput: unknown): AskEnvelope {
+    const ask = this.get(askId)
+    if (!this.handoff(askId)) throw this.errors.conflict(`ask ${askId} is not a coordinator handoff`)
+    if (ask.envelope.status !== 'pending') return ask.envelope
+    const spec = { ...ask.spec, questions: ask.spec.questions.map((question) => ({ ...question, required: false })) }
+    const checked = validateAnswerSubmission(spec, answersInput, skippedInput)
+    if (!checked.ok) throw this.errors.invalidParams(checked.message)
+    return this.resolve(ask, {
+      status: checked.skipped.length > 0 ? 'partial' : 'answered',
+      answers: checked.answers,
+      skipped: checked.skipped,
+      summary: buildSummary(ask.spec, checked.answers)
+    })
+  }
+
   /** Declines a pending ask; an ask that already finished is returned unchanged. */
   cancel(askId: string): AskEnvelope {
     const ask = this.get(askId)
@@ -308,6 +479,28 @@ export class AskService {
     return this.timeOut(ask, true)
   }
 
+  /** Terminally refuses only the exact client-owned incarnation proven to have ended. */
+  unavailableForSession(sessionId: string, reason: string, processIncarnation?: string): void {
+    for (const owner of this.pendingOwners(sessionId)) {
+      if (processIncarnation !== undefined && owner.identity.processIncarnation !== processIncarnation) continue
+      this.unavailable(owner.askId, reason, false)
+    }
+  }
+
+  /** Unavailable is a terminal refusal, never an answer or approval. */
+  unavailable(askId: string, reason: string, promote = true): AskEnvelope {
+    const ask = this.get(askId)
+    if (ask.envelope.status !== 'pending') return ask.envelope
+    const safeReason = reason.trim().slice(0, 1_024)
+    return this.resolve(ask, {
+      status: 'unavailable',
+      reason: safeReason || `The exact asker session ${ask.sessionId ?? 'unknown'} is no longer available.`,
+      answers: {},
+      skipped: ask.spec.questions.map((question) => question.id),
+      summary: ''
+    }, promote)
+  }
+
   /** Replaces a pending ask's draft; `ok` is false for an ask that already finished. */
   updatePartial(askId: string, partialInput: unknown): { ok: boolean } {
     const ask = this.get(askId)
@@ -333,14 +526,12 @@ export class AskService {
   }
 
   private isQueued(row: AskRow): boolean {
-    if (row.status !== 'pending' || row.session_id === null) return false
-    return (
-      this.store.get(
-        "SELECT 1 FROM asks WHERE status = 'pending' AND session_id = ? AND created_seq < ? LIMIT 1",
-        row.session_id,
-        row.created_seq
-      ) !== null
-    )
+    if (row.status !== 'pending' || row.session_id === null || row.handoff_question_id !== null) return false
+    return this.store.get(
+      "SELECT 1 FROM asks WHERE status = 'pending' AND handoff_question_id IS NULL AND session_id = ? AND created_seq < ? LIMIT 1",
+      row.session_id,
+      row.created_seq
+    ) !== null
   }
 
   /** The row for an ask, after timing it out if its deadline has passed. */
@@ -378,21 +569,20 @@ export class AskService {
     return this.resolve(ask, { status: 'timed_out', ...result }, promote)
   }
 
-  private resolve(
-    ask: Ask,
-    outcome: Pick<AskEnvelope, 'status' | 'answers' | 'skipped' | 'summary'>,
-    promote = true
-  ): AskEnvelope {
-    const envelope: AskEnvelope = { ...outcome, askId: ask.id }
+  private resolve(ask: Ask, outcome: AskOutcome, promote = true): AskEnvelope {
+    const envelope: AskEnvelope = outcome.status === 'unavailable'
+      ? { ...outcome, status: 'unavailable', reason: outcome.reason ?? 'The exact asker session is no longer available.', askId: ask.id }
+      : { ...outcome, status: outcome.status, askId: ask.id }
     const wasLive = ask.sessionId !== null && !ask.queued
     const seq = this.store.transaction(() => {
       const next = this.nextSeq()
       this.store.run(
-        "UPDATE asks SET status = ?, answers = ?, skipped = ?, summary = ?, seq = ? WHERE id = ? AND status = 'pending'",
+        "UPDATE asks SET status = ?, answers = ?, skipped = ?, summary = ?, reason = ?, seq = ? WHERE id = ? AND status = 'pending'",
         envelope.status,
         JSON.stringify(envelope.answers),
         JSON.stringify(envelope.skipped),
         envelope.summary,
+        envelope.status === 'unavailable' ? envelope.reason : null,
         next,
         ask.id
       )
@@ -411,7 +601,7 @@ export class AskService {
   private promote(sessionId: string): void {
     for (;;) {
       const row = this.store.get<AskRow>(
-        "SELECT * FROM asks WHERE status = 'pending' AND session_id = ? ORDER BY created_seq LIMIT 1",
+        "SELECT * FROM asks WHERE status = 'pending' AND handoff_question_id IS NULL AND session_id = ? ORDER BY created_seq LIMIT 1",
         sessionId
       )
       if (!row) return

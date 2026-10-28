@@ -1,3 +1,4 @@
+import { captureProviderSession } from '../capture'
 import type { AgentState, Normalizer, NormalizerCache } from '../types'
 import {
   claudeToolFields,
@@ -33,10 +34,16 @@ function children(cache: NormalizerCache): Set<string> {
 export const normalizeMuse: Normalizer = (payload, eventName, cache) => {
   if (eventName === 'UserPromptSubmit' && isCompactContinuation(readPrompt(payload))) return null
 
-  if (eventName === 'SubagentStart') {
-    const childId = readFirstString(payload, ['child_session_id', 'session_id'])
-    if (childId) children(cache).add(childId)
-    return null
+  if (eventName === 'SubagentStart' || eventName === 'SubagentStop') {
+    const childId = readFirstString(payload, ['child_session_id', 'agent_id', 'session_id'])
+    if (!childId) return null
+    const known = children(cache)
+    if (eventName === 'SubagentStart') {
+      known.add(childId)
+      return { eventName, state: null, newTurn: false, fields: {}, childOps: [{ op: 'start', id: childId, kind: 'agent' }] }
+    }
+    known.delete(childId)
+    return { eventName, state: null, newTurn: false, fields: {}, childOps: [{ op: 'stop', id: childId }] }
   }
   // a child's turn id equals its session id, which also catches one whose SubagentStart predates us
   const sessionId = readString(payload, 'session_id')
@@ -83,5 +90,6 @@ export const normalizeMuse: Normalizer = (payload, eventName, cache) => {
       ...(isToolEvent ? tool : {}),
       lastAssistantMessage: state === 'done' ? readString(payload, 'last_assistant_message') : undefined,
     },
+    providerSession: captureProviderSession('muse', payload) ?? undefined,
   })
 }

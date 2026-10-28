@@ -1,5 +1,5 @@
 import { createRoot } from 'react-dom/client'
-import type { MountFunction, UiPluginContext } from '@quirky/protocol'
+import type { Methods, MountFunction, UiPluginContext } from '@quirky/protocol'
 import { ActivityNavigation, ActivityView } from './ActivityView'
 import { DashboardNavigation, DashboardView, dashboardViewInput } from './DashboardView'
 import { openActivityThread } from './activity-navigation'
@@ -65,8 +65,24 @@ export function activate(context: UiPluginContext): void {
   context.provide(DASHBOARD_SIDEBAR_ID, mountDashboardSidebar)
   context.provide(`command:${PLUGIN_ID}/openActivity`, (args?: unknown) => context.openView(ACTIVITY_VIEW_ID, activityInput(args)))
   context.provide(`command:${PLUGIN_ID}/openActivityThread`, (args?: unknown) => openActivityThread(context, args))
-  context.provide(OPEN_DASHBOARD_COMMAND, (args?: unknown) => context.openView(DASHBOARD_VIEW_ID, dashboardViewInput(args)))
-  context.provide(TOGGLE_DASHBOARD_COMMAND, (args?: unknown) => {
+  const openWindow = (args?: unknown) => context.call('desktop.window.open', {
+    view: DASHBOARD_VIEW_ID, input: dashboardViewInput(args), title: 'Agent Dashboard'
+  })
+  const usePopout = () => {
+    try { return context.getSetting('dashboard-open-as') === 'pop-out' } catch { return false }
+  }
+  context.provide(`command:${PLUGIN_ID}/openDashboardWindow`, openWindow)
+  context.provide(OPEN_DASHBOARD_COMMAND, (args?: unknown) =>
+    usePopout() ? openWindow(args) : context.openView(DASHBOARD_VIEW_ID, dashboardViewInput(args))
+  )
+  context.provide(TOGGLE_DASHBOARD_COMMAND, async (args?: unknown) => {
+    if (usePopout()) {
+      const windows = await context.call('desktop.window.list', {}) as Methods['desktop.window.list']['result']
+      const matching = windows.filter((window) => window.view === DASHBOARD_VIEW_ID)
+      if (matching.length > 1) throw new Error('More than one Dashboard window exists. Close the exact window through desktop.window.close.')
+      if (matching.length === 1) return context.call('desktop.window.close', { windowId: matching[0]!.windowId })
+      return openWindow(args)
+    }
     if (context.getLayout().view?.id === DASHBOARD_VIEW_ID) context.closeView()
     else context.openView(DASHBOARD_VIEW_ID, dashboardViewInput(args))
   })

@@ -1,3 +1,6 @@
+import { GitHubReviewStatus } from '../../src/panel/GitHubReview'
+import { createElement } from 'react'
+import { createRoot } from 'react-dom/client'
 import { afterAll, beforeEach, describe, expect, test } from 'bun:test'
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
 import { registerDom } from './register-dom'
@@ -725,7 +728,16 @@ function mountSettings(fake: Fake, input: unknown = { worktree: 'feat' }) {
 }
 
 describe('NA-40: the Source Control AI defaults view', () => {
-  const ACTIONS = ['commitMessage', 'fixCommitFailure', 'fixPushFailure', 'resolveConflicts']
+  const ACTIONS = [
+    'commitMessage',
+    'fixCommitFailure',
+    'fixPushFailure',
+    'resolveConflicts',
+    'branchSummary',
+    'pullRequestDetails',
+    'pullRequestReview',
+    'reviewConversation'
+  ]
 
   async function openSettings(configure: (f: Fake) => void = () => {}) {
     const fake = aiFake()
@@ -749,7 +761,11 @@ describe('NA-40: the Source Control AI defaults view', () => {
       ['commitMessage', 'Commit message'],
       ['fixCommitFailure', 'Commit failure fixes'],
       ['fixPushFailure', 'Push failure fixes'],
-      ['resolveConflicts', 'Conflict resolution']
+      ['resolveConflicts', 'Conflict resolution'],
+      ['branchSummary', 'Branch summary'],
+      ['pullRequestDetails', 'Pull request details'],
+      ['pullRequestReview', 'Pull request review'],
+      ['reviewConversation', 'Review conversation']
     ])
     expect(fake.called('quirky.git/aiRecipe').map((c) => c.params)).toEqual(ACTIONS.map((action) => ({ worktree: 'feat', action })))
     expect([...inSection(element, 'commitMessage', 'Commit message agent').options].map((o) => o.textContent)).toEqual(['Default agent', 'Claude', 'Codex', 'Custom command'])
@@ -761,6 +777,32 @@ describe('NA-40: the Source Control AI defaults view', () => {
     }
     unmount()
   })
+  test('the current hosted branch exposes named AI source actions without launching or posting yet', async () => {
+    const fake = aiFake()
+    const element = document.createElement('div')
+    document.body.appendChild(element)
+    const root = createRoot(element)
+    const started: string[] = []
+    act(() => root.render(createElement(GitHubReviewStatus, {
+      context: fake.context,
+      lookup: {
+        kind: 'found',
+        target: { worktree: 'feat', branch: 'zoe/feat', head: 'a'.repeat(40) },
+        review: { number: 42, url: 'https://github.com/octo/quirky/pull/42', state: 'open' }
+      },
+      aiEnabled: true,
+      onLaunch: (action: string) => started.push(action)
+    })))
+    await click(buttonText(element, 'Summarize branch with AI'))
+    await click(buttonText(element, 'Read pull request details with AI'))
+    await click(buttonText(element, 'Review pull request with AI'))
+    await click(buttonText(element, 'Draft conversation reply with AI'))
+    expect(started).toEqual(['branchSummary', 'pullRequestDetails', 'pullRequestReview', 'reviewConversation'])
+    expect(fake.called('quirky.hosting/reviewConversation')).toEqual([])
+    act(() => root.unmount())
+    element.remove()
+  })
+
 
   test('shows the saved recipe of each action', async () => {
     const { element, unmount } = await openSettings((f) => f.on('quirky.git/aiRecipe', (params) => recipe(params.action as string, params.action === 'fixPushFailure' ? SAVED : {})))
@@ -770,6 +812,42 @@ describe('NA-40: the Source Control AI defaults view', () => {
     expect(inSection(element, 'commitMessage', 'Commit message agent').value).toBe('')
     unmount()
   })
+  test('keeps a stale saved model visible and offers an explicit provider refresh', async () => {
+    let refreshed = false
+    const { fake, element, unmount } = await openSettings((f) => {
+      f.on('quirky.git/aiRecipe', (params) =>
+        recipe(params.action as string, params.action === 'commitMessage'
+          ? { agent: 'codex', launchOptions: { model: 'retired-model' } }
+          : {})
+      )
+      f.on('quirky.agents/options', (params) => ({
+        agent: params.agent,
+        label: 'Codex',
+        supported: true,
+        discoverable: true,
+        models: [{ id: refreshed ? 'replacement-model' : 'current-model', label: refreshed ? 'Replacement model' : 'Current model', description: null, options: [] }],
+        unlisted: 'refuse',
+        unlistedOptions: [],
+        structured: false,
+        extraArgs: null
+      }))
+      f.on('quirky.agents/discoverModels', () => {
+        refreshed = true
+        return { agent: 'codex', host: 'local', status: 'available', authoritative: true, models: [{ id: 'replacement-model', label: 'Replacement model', options: [] }] }
+      })
+    })
+    const model = inSection(element, 'commitMessage', 'Commit message model')
+    expect(model.value).toBe('retired-model')
+    expect([...model.options].some((choice) => choice.value === 'retired-model' && choice.textContent?.includes('unavailable'))).toBe(true)
+    expect(section(element, 'commitMessage').textContent).toContain('Saved model retired-model is no longer available.')
+    await click(buttonText(section(element, 'commitMessage'), 'Refresh models'))
+    expect(fake.called('quirky.agents/discoverModels').map((call) => call.params)).toEqual([{ agent: 'codex', host: 'local' }])
+    expect(inSection(element, 'commitMessage', 'Commit message model').value).toBe('retired-model')
+    expect(section(element, 'commitMessage').textContent).toContain('Saved model retired-model is no longer available.')
+    expect(fake.called('quirky.git/setAiRecipe')).toEqual([])
+    unmount()
+  })
+
   test('custom command recipes have no catalog model or effort choices', async () => {
     const { element, unmount } = await openSettings((fake) =>
       fake.on('quirky.git/aiRecipe', (params) =>

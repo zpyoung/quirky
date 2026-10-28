@@ -1,4 +1,5 @@
-import { RpcError, RpcErrorCode, type AskEnvelope, type CliArgs, type CliContext, type CliModule } from '@quirky/protocol'
+import { randomUUID } from 'node:crypto'
+import { RpcError, RpcErrorCode, type AskEnvelope, type AskRegistration, type CliArgs, type CliContext, type CliModule } from '@quirky/protocol'
 import { parseSpecArgument } from './cli-spec'
 
 const POLL_MS = 60_000
@@ -74,18 +75,35 @@ export async function waitForAsk(ctx: CliContext, askId: string, limits: WaitLim
   }
 }
 
+async function registerWithRetry(ctx: CliContext, params: Record<string, unknown>): Promise<AskRegistration> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return (await ctx.call('quirky.ask/register', params)) as AskRegistration
+    } catch (error) {
+      if (error instanceof RpcError || attempt >= 2) throw error
+      await ctx.sleep(500)
+      await ctx.reconnect().catch(() => {})
+    }
+  }
+}
+
 export const commands: CliModule['commands'] = {
   /** Registers an ask for the caller's session and worktree, then waits for its envelope; the daemon owns `--timeout-ms`. */
   async ask(args, ctx) {
     const spec = await parseSpecArgument(String(args.flags.spec), ctx)
     const timeoutMs = positiveFlag(args, ctx, 'timeout-ms')
     const chunkMs = positiveFlag(args, ctx, 'chunk-ms')
-    const { askId } = (await ctx.call('quirky.ask/create', {
+    const registration = await registerWithRetry(ctx, {
       spec,
+      requestId: randomUUID(),
       ...(timeoutMs === undefined ? {} : { timeoutMs })
-    })) as { askId: string }
-    ctx.out.jsonLine({ status: 'registered', askId })
-    await waitForAsk(ctx, askId, chunkMs === undefined ? {} : { chunkMs })
+    })
+    if (!('askId' in registration)) {
+      ctx.out.jsonLine(registration)
+      return
+    }
+    ctx.out.jsonLine({ status: 'registered', askId: registration.askId })
+    await waitForAsk(ctx, registration.askId, chunkMs === undefined ? {} : { chunkMs })
   },
 
   async wait(args, ctx) {
