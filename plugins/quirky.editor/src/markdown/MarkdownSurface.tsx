@@ -3,6 +3,7 @@ import { EditorContent, useEditor, type Editor } from '@tiptap/react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import remarkMath from 'remark-math'
+import { RpcErrorCode } from '@quirky/protocol'
 import type { SurfaceProps } from '../types'
 import type { MarkdownHeading } from './source'
 import type { MarkdownReviewNote } from './notes'
@@ -61,6 +62,40 @@ function methodParams(bufferId: string, params: Record<string, unknown>): Record
 
 function errorText(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
+}
+
+type LinkModifiers = Pick<MouseEvent, 'metaKey' | 'ctrlKey' | 'shiftKey'>
+
+function isBrowserMethodUnavailable(error: unknown): boolean {
+  return typeof error === 'object' && error !== null && 'code' in error && error.code === RpcErrorCode.MethodNotFound
+}
+
+function hasCommandLinkModifier(event: LinkModifiers): boolean {
+  const platform = typeof navigator === 'undefined' ? '' : navigator.platform
+  return /^(?:Mac|iPhone|iPad|iPod)/.test(platform) ? event.metaKey : event.ctrlKey
+}
+
+async function openExternalTarget(
+  context: SurfaceProps['context'],
+  target: string,
+  worktreeId: string,
+  event?: LinkModifiers
+): Promise<void> {
+  if (!/^https?:/i.test(target)) {
+    await context.call('quirky.terminal/openExternal', { target })
+    return
+  }
+  try {
+    await context.call('quirky.browser/openLink', {
+      url: target,
+      worktree: `id:${worktreeId}`,
+      ...(event && hasCommandLinkModifier(event) ? { modifier: true } : {}),
+      ...(event?.shiftKey ? { shift: true } : {})
+    })
+  } catch (error) {
+    if (!isBrowserMethodUnavailable(error)) throw error
+    await context.call('quirky.terminal/openExternal', { target })
+  }
 }
 function bytesToBase64(bytes: Uint8Array): string {
   let binary = ''
@@ -339,7 +374,7 @@ function PreviewSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
         await props.context.call('quirky.editor/open', { worktree: `id:${props.buffer.worktreeId}`, path: result.resolved, focus: true })
         return
       }
-      if (result.kind === 'external') await props.context.call('quirky.terminal/openExternal', { target: href })
+      if (result.kind === 'external') await openExternalTarget(props.context, href, props.buffer.worktreeId, event)
     } catch (cause) {
       setError(errorText(cause))
     }
@@ -539,7 +574,7 @@ function RichSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
   const updateCompletionsRef = useRef<(current: Editor) => void>(() => {})
   const runSlashRef = useRef<(item: SlashItem) => void>(() => {})
   const chooseDocumentRef = useRef<(path: string) => void>(() => {})
-  const openExternalRef = useRef<(target: string) => void>(() => {})
+  const openExternalRef = useRef<(target: string, event: LinkModifiers) => void>(() => {})
   const slashRef = useRef<typeof slash>(slash)
   const docMenuRef = useRef<typeof docMenu>(docMenu)
 
@@ -619,14 +654,13 @@ function RichSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
             const target = documentLink.getAttribute('data-target')
             if (!target) return false
             event.preventDefault()
-            openExternalRef.current(target)
+            openExternalRef.current(target, event)
             return true
           }
-          if (!event.metaKey && !event.ctrlKey && !event.shiftKey) return false
           const href = event.target.closest('a[href]')?.getAttribute('href')
-          if (!href) return false
+          if (!href || (!/^https?:/i.test(href) && !event.metaKey && !event.ctrlKey && !event.shiftKey)) return false
           event.preventDefault()
-          openExternalRef.current(href)
+          openExternalRef.current(href, event)
           return true
         }
       }
@@ -1035,7 +1069,7 @@ function RichSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
     onView({ markdownAnchor: null })
   }, [buffer.view.markdownAnchor, editor, jumpToHeading, onView, source])
 
-  const openExternal = useCallback(async (target: string) => {
+  const openExternal = useCallback(async (target: string, event?: LinkModifiers) => {
     try {
       const result = await checkLink(target)
       if (result.kind === 'document' && result.resolved) {
@@ -1059,11 +1093,11 @@ function RichSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
       } else if (result.kind === 'anchor') {
         onView({ markdownAnchor: result.anchor ?? null })
       } else if (result.kind === 'external') {
-        await context.call('quirky.terminal/openExternal', { target })
+        await openExternalTarget(context, target, buffer.worktreeId, event)
       }
     } catch (cause) { setFeedback(errorText(cause)) }
   }, [buffer.worktreeId, checkLink, context, onView])
-  openExternalRef.current = (target) => { void openExternal(target) }
+  openExternalRef.current = (target, event) => { void openExternal(target, event) }
 
   const saveLink = useCallback(async () => {
     if (!editor) return
