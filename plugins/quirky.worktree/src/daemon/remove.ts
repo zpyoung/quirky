@@ -85,10 +85,13 @@ function blankRow(id: string, repoId: string, path: string): WorktreeRow {
     keep_branch: 0,
     birthtime: null,
     group_id: null,
+    created_root: null,
     project_group_id: null,
     last_activity_at: 0,
     instance_id: `unverified:${id}`,
-    created_root: null
+    linked_pr: null,
+    linked_issue: null,
+    push_target: null
   }
 }
 

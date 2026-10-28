@@ -316,7 +316,7 @@ async function readMetadata(env: HostingEnv, scope: Scope, repository: IdentityV
   }
 }
 
-function normalizeRestPull(raw: Record<string, unknown>): Record<string, unknown> | undefined {
+export function normalizeRestPull(raw: Record<string, unknown>): Record<string, unknown> | undefined {
   const head = isRecord(raw.head) ? raw.head : undefined
   const base = isRecord(raw.base) ? raw.base : undefined
   const headRefName = head ? parseBranch(head.ref) : undefined
