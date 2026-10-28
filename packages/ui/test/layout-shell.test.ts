@@ -220,6 +220,7 @@ function writeOverlayPlugin(installed: string): void {
 }
 
 
+
 test('SC-67: ui state lists the overlays with their reports, and a silent overlay is shown with an empty report', async () => {
   const env = await bootWindow(writeOverlayPlugin)
   await env.win.waitFor(async () => (await slotStates(env)).find((slot) => slot.id === HUD)?.report !== undefined)

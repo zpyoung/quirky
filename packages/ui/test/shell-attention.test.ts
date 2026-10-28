@@ -1,7 +1,8 @@
 import { afterEach, expect, test } from 'bun:test'
-import { mkdirSync, symlinkSync } from 'node:fs'
-import { basename, join, resolve } from 'node:path'
-import type { Ask, AskSpec, Repo, Worktree } from '@quirky/protocol'
+import { symlinkSync } from 'node:fs'
+import { join, resolve } from 'node:path'
+import { QuirkyClient, type Ask, type AskSpec, type Repo, type Worktree } from '@quirky/protocol'
+import { rpcUrl } from '@quirky/protocol/node'
 import { makeTempDir } from '../../daemon/test/plugins/fixtures'
 import { attentionStoreFor } from '../src/shell/attention'
 import { bootWindow, closeWindows, installUiPlugin, provide, type WindowEnv } from './fixtures/window-env'
@@ -10,10 +11,6 @@ const CURRENT_VIEW = 'view:acme.attention/current'
 const INBOX = 'host:inbox'
 
 function writeAttentionPlugin(installed: string): void {
-  mkdirSync(installed, { recursive: true })
-  for (const id of ['quirky.repo', 'quirky.worktree', 'quirky.ask']) {
-    symlinkSync(resolve(import.meta.dir, '../../../plugins', id), join(installed, id))
-  }
   installUiPlugin(
     installed,
     'acme.attention',
@@ -22,10 +19,19 @@ function writeAttentionPlugin(installed: string): void {
   )
 }
 
+function attentionBuiltinPlugins(): string {
+  const builtins = makeTempDir('ui-shell-attention-builtins-')
+  // Real quirky.* plugins must be discovered as built-ins; installed quirky.* IDs are reserved.
+  for (const id of ['quirky.repo', 'quirky.worktree', 'quirky.cli', 'quirky.sidebar-extras', 'quirky.ask']) {
+    symlinkSync(resolve(import.meta.dir, '../../../plugins', id), join(builtins, id))
+  }
+  return builtins
+}
+
 afterEach(closeWindows)
 
 async function bootAttention() {
-  const env = await bootWindow(writeAttentionPlugin)
+  const env = await bootWindow(writeAttentionPlugin, { builtinPluginsDir: attentionBuiltinPlugins() })
   const currentPath = makeTempDir('ui-shell-attention-current-')
   const otherPath = makeTempDir('ui-shell-attention-other-')
   const [currentRepo, otherRepo] = await Promise.all([
@@ -47,8 +53,15 @@ async function bootAttention() {
   return { env, attention, current, other, currentRepo, otherRepo }
 }
 
+// This CLI hello carries the asker worktree context without inventing session authority.
 async function createAsk(env: WindowEnv, spec: AskSpec, worktree: Worktree): Promise<string> {
-  const result = await env.agent.callAny('quirky.ask/create', { spec, worktree: worktree.id }) as { askId?: unknown }
+  const caller = await QuirkyClient.connect(rpcUrl(env.harness.runtime), {
+    role: 'cli',
+    name: 'shell-attention-test',
+    worktreeId: worktree.id
+  })
+  env.harness.clients.push(caller)
+  const result = await caller.callAny('quirky.ask/register', { spec, requestId: crypto.randomUUID() }) as { askId?: unknown }
   if (typeof result.askId !== 'string') throw new Error('The real Ask API did not return an ask ID.')
   return result.askId
 }
@@ -109,6 +122,7 @@ test('a new ask in another worktree expires from the toast only and remains pend
     expect(env.win.host.getState().layout.view).toEqual(originalView)
     expect(attention.getSnapshot().selectedWorktreeId).toBe(current.id)
     expect((await pendingAsks(env)).some((ask) => ask.id === askId)).toBe(true)
+    expect((await pendingAsks(env)).find((ask) => ask.id === askId)?.worktreeId).toBe(other.id)
 
     const [timerId, fire] = [...fakeTimers.entries()][0] ?? []
     expect(timerId).toBeDefined()
