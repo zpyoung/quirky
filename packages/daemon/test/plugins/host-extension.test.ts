@@ -31,6 +31,9 @@ function setup(options: { withExtension?: boolean; throwOnRevoke?: boolean; thro
       if (options.throwOnCreate) throw new Error('create blew up')
       return {
         dataDir: `/data/${plugin.id}`,
+        createFileResource: async () => {
+          throw new Error('unused')
+        },
         home: '/home',
         pty: {} as never,
         notify: () => undefined,

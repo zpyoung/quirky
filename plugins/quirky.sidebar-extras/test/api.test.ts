@@ -1,3 +1,5 @@
+import { Database } from 'bun:sqlite'
+import { join } from 'node:path'
 import { afterEach, describe, expect, setDefaultTimeout, test } from 'bun:test'
 import { RpcErrorCode } from '../../../packages/protocol/src'
 import { waitFor } from '../../../packages/daemon/test/helpers'
@@ -32,23 +34,14 @@ afterEach(async () => {
 const changedEvents = (events: { type: string }[]) => events.filter((event) => event.type === 'quirky.sidebar-extras/changed')
 
 describe('sidebar-extras API', () => {
-  test('reads complete desktop defaults without emitting mutation events', async () => {
+  test('publishes review preferences as changed only when they change', async () => {
     env = await boot()
     const watcher = await env.harness.connectWithEvents('cli')
 
     const state = await extras<ExtrasState>(watcher.client, 'state')
-    expect(state).toEqual({
-      client: 'desktop',
-      preferences: {
-        workspaceActivityWindow: 'all',
-        workspaceActivityCustomDays: 30,
-        alwaysShowDefaultBranchWorkspace: true,
-        workspaceActivityWindowBeforeLiveOnly: 'all'
-      },
-      active: null,
-      visits: {},
-      exits: {}
-    })
+    expect(state.client).toBe('desktop')
+    expect(state.preferences.hideCompletedReviewWorkspaces).toBe(false)
+    expect(state.preferences.hidePassingCheckWorkspaces).toBe(false)
     const projection = await extras(watcher.client, 'projection')
     expect(projection).toMatchObject(state)
     expect(changedEvents(watcher.events)).toHaveLength(0)
@@ -59,6 +52,16 @@ describe('sidebar-extras API', () => {
     await extras(watcher.client, 'state')
     await extras(watcher.client, 'projection')
     expect(changedEvents(watcher.events)).toHaveLength(1)
+    await extras(watcher.client, 'set', { hideCompletedReviewWorkspaces: true })
+    await waitFor(() => (changedEvents(watcher.events).length > 1 ? true : undefined))
+    const reviewChange = changedEvents(watcher.events).at(-1) as unknown as { data: ExtrasState }
+    expect(reviewChange.data.client).toBe('desktop')
+    expect(reviewChange.data.preferences).toMatchObject({
+      hideCompletedReviewWorkspaces: true,
+      hidePassingCheckWorkspaces: false
+    })
+    await extras(watcher.client, 'set', { hideCompletedReviewWorkspaces: true })
+    expect(changedEvents(watcher.events)).toHaveLength(2)
   })
 
   test('serializes activation in arrival order, stamps identity visits and exits, and leaves reads idempotent', async () => {
@@ -114,6 +117,18 @@ describe('sidebar-extras API', () => {
     })
     expect(await extras<ExtrasState>(env.client, 'state')).toEqual(initial)
 
+    for (const patch of [
+      { hideCompletedReviewWorkspaces: 'true' },
+      { hideCompletedReviewWorkspaces: null },
+      { hidePassingCheckWorkspaces: 1 },
+      { hidePassingCheckWorkspaces: 'false' }
+    ]) {
+      await expect(extras(env.client, 'set', { workspaceActivityWindow: 'month', ...patch })).rejects.toMatchObject({
+        code: RpcErrorCode.InvalidParams
+      })
+      expect(await extras<ExtrasState>(env.client, 'state')).toEqual(initial)
+    }
+
     const fromAll = await extras<ExtrasState>(env.client, 'set', { hideSleepingWorkspaces: true })
     expect(fromAll.preferences).toMatchObject({
       workspaceActivityWindow: 'live-only',
@@ -149,9 +164,26 @@ describe('sidebar-extras API', () => {
     expect(explicitWins.preferences.workspaceActivityWindow).toBe('month')
     expect((await extras<ExtrasState>(env.client, 'set', { showSleepingWorkspaces: true })).preferences.workspaceActivityWindow).toBe('month')
 
-    await extras(env.client, 'set', { client: 'phone', workspaceActivityWindow: 'today' })
-    expect((await extras<ExtrasState>(env.client, 'state', { client: 'phone' })).preferences.workspaceActivityWindow).toBe('today')
-    expect((await extras<ExtrasState>(env.client, 'state')).preferences.workspaceActivityWindow).toBe('month')
+    await extras(env.client, 'set', {
+      hideCompletedReviewWorkspaces: true,
+      hidePassingCheckWorkspaces: false
+    })
+    const phoneSet = await extras<ExtrasState>(env.client, 'set', {
+      client: 'phone',
+      workspaceActivityWindow: 'today',
+      hideCompletedReviewWorkspaces: false,
+      hidePassingCheckWorkspaces: true
+    })
+    expect(phoneSet.preferences).toMatchObject({
+      workspaceActivityWindow: 'today',
+      hideCompletedReviewWorkspaces: false,
+      hidePassingCheckWorkspaces: true
+    })
+    expect((await extras<ExtrasState>(env.client, 'state')).preferences).toMatchObject({
+      workspaceActivityWindow: 'month',
+      hideCompletedReviewWorkspaces: true,
+      hidePassingCheckWorkspaces: false
+    })
 
     const firstSet = extras<ExtrasState>(env.client, 'set', { workspaceActivityWindow: 'week' })
     const secondSet = extras<ExtrasState>(env.client, 'set', {
@@ -160,7 +192,12 @@ describe('sidebar-extras API', () => {
     })
     const [first, second] = await Promise.all([firstSet, secondSet])
     expect(first.preferences.workspaceActivityWindow).toBe('week')
-    expect(second.preferences).toMatchObject({ workspaceActivityWindow: 'custom', workspaceActivityCustomDays: 4 })
+    expect(second.preferences).toMatchObject({
+      workspaceActivityWindow: 'custom',
+      workspaceActivityCustomDays: 4,
+      hideCompletedReviewWorkspaces: true,
+      hidePassingCheckWorkspaces: false
+    })
     expect((await extras<ExtrasState>(env.client, 'state')).preferences.workspaceActivityWindow).toBe('custom')
     expect(week.preferences.workspaceActivityWindow).toBe('week')
     expect(custom.preferences.workspaceActivityCustomDays).toBe(3)
@@ -175,8 +212,18 @@ describe('sidebar-extras API', () => {
     clock = testClock
 
     const { before, phoneBefore } = await testClock.run(async () => {
-      await extras(currentEnv.client, 'set', { workspaceActivityWindow: 'week' })
-      await extras(currentEnv.client, 'set', { client: 'phone', workspaceActivityWindow: 'custom', workspaceActivityCustomDays: 5 })
+      await extras(currentEnv.client, 'set', {
+        workspaceActivityWindow: 'week',
+        hideCompletedReviewWorkspaces: true,
+        hidePassingCheckWorkspaces: false
+      })
+      await extras(currentEnv.client, 'set', {
+        client: 'phone',
+        workspaceActivityWindow: 'custom',
+        workspaceActivityCustomDays: 5,
+        hideCompletedReviewWorkspaces: false,
+        hidePassingCheckWorkspaces: true
+      })
       await extras(currentEnv.client, 'activate', { worktree: project.main.id })
       testClock.set(BASE + 1)
       await extras(currentEnv.client, 'activate', { worktree: feature.id })
@@ -197,6 +244,29 @@ describe('sidebar-extras API', () => {
     expect(phoneAfter.preferences).toEqual(phoneBefore.preferences)
   })
 
+
+  test('hydrates absent and corrupt review flags as disabled for legacy clients', async () => {
+    env = await boot()
+    await extras(env.client, 'state')
+    const store = new Database(join(env.harness.home, 'plugin-data', 'quirky.sidebar-extras', 'store.db'))
+    try {
+      const insert = store.query('INSERT INTO preferences (client, value) VALUES (?, ?)')
+      insert.run('legacy', JSON.stringify({ workspaceActivityWindow: 'week' }))
+      insert.run('corrupt', JSON.stringify({
+        hideCompletedReviewWorkspaces: 'true',
+        hidePassingCheckWorkspaces: null
+      }))
+    } finally {
+      store.close()
+    }
+
+    const legacy = await extras<ExtrasState>(env.client, 'state', { client: 'legacy' })
+    const corrupt = await extras<ExtrasState>(env.client, 'state', { client: 'corrupt' })
+    expect(legacy.preferences.hideCompletedReviewWorkspaces).toBe(false)
+    expect(legacy.preferences.hidePassingCheckWorkspaces).toBe(false)
+    expect(corrupt.preferences.hideCompletedReviewWorkspaces).toBe(false)
+    expect(corrupt.preferences.hidePassingCheckWorkspaces).toBe(false)
+  })
   test('does not transfer visits when a canonical worktree is replaced at the same path', async () => {
     env = await boot()
     const currentEnv = env

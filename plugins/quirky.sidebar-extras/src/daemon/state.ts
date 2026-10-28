@@ -9,6 +9,8 @@ export type Preferences = {
   workspaceActivityCustomDays: number
   alwaysShowDefaultBranchWorkspace: boolean
   workspaceActivityWindowBeforeLiveOnly: NonLiveActivityWindow
+  hideCompletedReviewWorkspaces: boolean
+  hidePassingCheckWorkspaces: boolean
 }
 
 export type ActiveWorkspace = { worktreeId: string; instanceId: string }
@@ -27,13 +29,17 @@ export type SetPatch = {
   alwaysShowDefaultBranchWorkspace?: boolean
   hideSleepingWorkspaces?: boolean
   showSleepingWorkspaces?: boolean
+  hideCompletedReviewWorkspaces?: boolean
+  hidePassingCheckWorkspaces?: boolean
 }
 
 export const DEFAULT_PREFERENCES: Preferences = {
   workspaceActivityWindow: 'all',
   workspaceActivityCustomDays: 30,
   alwaysShowDefaultBranchWorkspace: true,
-  workspaceActivityWindowBeforeLiveOnly: 'all'
+  workspaceActivityWindowBeforeLiveOnly: 'all',
+  hideCompletedReviewWorkspaces: false,
+  hidePassingCheckWorkspaces: false
 }
 
 const nonLiveWindows: readonly NonLiveActivityWindow[] = ['all', 'today', 'week', 'month', 'custom']
@@ -44,7 +50,9 @@ const SET_KEYS: Readonly<Partial<Record<string, true>>> = {
   workspaceActivityCustomDays: true,
   alwaysShowDefaultBranchWorkspace: true,
   hideSleepingWorkspaces: true,
-  showSleepingWorkspaces: true
+  showSleepingWorkspaces: true,
+  hideCompletedReviewWorkspaces: true,
+  hidePassingCheckWorkspaces: true
 }
 const ACTIVATE_KEYS: Readonly<Partial<Record<string, true>>> = { client: true, worktree: true }
 const DIRTY_KEYS: Readonly<Partial<Record<string, true>>> = { worktree: true }
@@ -124,6 +132,18 @@ export function validateSetParams(
     if (typeof params.showSleepingWorkspaces !== 'boolean') invalid(context, 'showSleepingWorkspaces must be a boolean')
     patch.showSleepingWorkspaces = params.showSleepingWorkspaces
   }
+  if (params.hideCompletedReviewWorkspaces !== undefined) {
+    if (typeof params.hideCompletedReviewWorkspaces !== 'boolean') {
+      invalid(context, 'hideCompletedReviewWorkspaces must be a boolean')
+    }
+    patch.hideCompletedReviewWorkspaces = params.hideCompletedReviewWorkspaces
+  }
+  if (params.hidePassingCheckWorkspaces !== undefined) {
+    if (typeof params.hidePassingCheckWorkspaces !== 'boolean') {
+      invalid(context, 'hidePassingCheckWorkspaces must be a boolean')
+    }
+    patch.hidePassingCheckWorkspaces = params.hidePassingCheckWorkspaces
+  }
   return { client, patch }
 }
 
@@ -171,7 +191,9 @@ function hydratePreferences(serialized: string | null): Preferences {
       : DEFAULT_PREFERENCES.alwaysShowDefaultBranchWorkspace,
     workspaceActivityWindowBeforeLiveOnly: isNonLiveWindow(value.workspaceActivityWindowBeforeLiveOnly)
       ? value.workspaceActivityWindowBeforeLiveOnly
-      : DEFAULT_PREFERENCES.workspaceActivityWindowBeforeLiveOnly
+      : DEFAULT_PREFERENCES.workspaceActivityWindowBeforeLiveOnly,
+    hideCompletedReviewWorkspaces: value.hideCompletedReviewWorkspaces === true,
+    hidePassingCheckWorkspaces: value.hidePassingCheckWorkspaces === true
   }
 }
 
@@ -193,6 +215,12 @@ function mergePreferences(current: Preferences, patch: SetPatch): Preferences {
   }
   if (patch.alwaysShowDefaultBranchWorkspace !== undefined) {
     next.alwaysShowDefaultBranchWorkspace = patch.alwaysShowDefaultBranchWorkspace
+  }
+  if (patch.hideCompletedReviewWorkspaces !== undefined) {
+    next.hideCompletedReviewWorkspaces = patch.hideCompletedReviewWorkspaces
+  }
+  if (patch.hidePassingCheckWorkspaces !== undefined) {
+    next.hidePassingCheckWorkspaces = patch.hidePassingCheckWorkspaces
   }
 
   if (explicitWindow === undefined) {
@@ -216,6 +244,8 @@ function samePreferences(left: Preferences, right: Preferences): boolean {
   return left.workspaceActivityWindow === right.workspaceActivityWindow &&
     left.workspaceActivityCustomDays === right.workspaceActivityCustomDays &&
     left.alwaysShowDefaultBranchWorkspace === right.alwaysShowDefaultBranchWorkspace &&
+    left.hideCompletedReviewWorkspaces === right.hideCompletedReviewWorkspaces &&
+    left.hidePassingCheckWorkspaces === right.hidePassingCheckWorkspaces &&
     left.workspaceActivityWindowBeforeLiveOnly === right.workspaceActivityWindowBeforeLiveOnly
 }
 

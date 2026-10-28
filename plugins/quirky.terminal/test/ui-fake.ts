@@ -85,6 +85,9 @@ export function fakeContext(handlers: Record<string, Handler> = {}, settings: Re
       return known[short]
     },
     async executeCommand() {},
+    createCommandDrag() { throw new Error('command dragging is unavailable in this fake') },
+    consumeCommandDrag() { return null },
+    cancelCommandDrag() {},
     openView(id, input) {
       opened.push({ id, input })
       layout.view = { id, input }

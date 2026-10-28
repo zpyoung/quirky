@@ -22,6 +22,33 @@ logs and cleanup.
 
 Inside any Quirky terminal, the `quirky` command is on PATH: try `quirky status` or `quirky help`.
 
+## Agent Session History
+
+Open **Agent Session History** to browse agent-owned transcripts and resume a session in a
+terminal. Workspace/Project filters follow the current context; select **All** to browse other
+directories. Resume uses the agent's configured command and the transcript's original directory.
+When the Accounts plugin is active, required account preparation must succeed before resume.
+Explicit launch-home overrides keep their precedence; preparation failure does not start a process.
+
+Transcript search is **off until explicitly enabled**. Before consent, the search box filters
+titles only. Enabling stores a local searchable copy of unredacted conversations and up to 3,072
+characters per tool result; authenticated clients can search that copy. Disable retains it.
+**Clear search data** disables search and removes only the derived index, not original transcripts.
+
+The same core flows are scriptable:
+
+```sh
+quirky vault list --unlimited --json
+quirky vault search --index-status --json
+quirky vault enable
+quirky vault search 'remembered words' --fresh --json
+quirky vault resume '<id from list>'
+quirky vault clear --yes
+```
+
+Advanced parity and verification obligations are tracked in
+[the vault's open findings](docs/loop/BLOCKERS.md#m3-vault-open-review-findings) and the dependent
+`m3-vault-parity-completion` queue item.
 ## How it's built
 
 - **`packages/pty-host`:** `quirky-pty` owns every terminal and its history.
@@ -32,9 +59,8 @@ Inside any Quirky terminal, the `quirky` command is on PATH: try `quirky status`
 - **`apps/desktop`:** the Electrobun window.
 - **`prototypes/`:** stack experiments, such as the native Swift shell.
 
-`bun run test` runs the package, app and plugin suite on the configured remote test host, plus
-macOS-only checks locally. Use `bun test <file>` for a targeted file, `bun test scripts` for the
-runner tests, and `bun run typecheck` for TypeScript.
+`bun run test` runs the whole suite through the configured test host. Use
+`bun scripts/suite.ts <dirs>` for affected packages and `bun test <file>` for a single file.
 
 ### Public plugin UI and grouping APIs
 
@@ -67,6 +93,21 @@ Preferences persist per client. Visit and departure stamps are keyed to filesyst
 identity, so replacing a worktree does not inherit its predecessor's recency.
 The separator switch is under Appearance > Window & Sidebar. The original header panel toggles
 remain available alongside the Source Control activity item.
+
+Workspace options also includes **Hide merged/closed reviews** and **Hide passing checks**.
+Each enabled toggle adds one to the filter badge; Clear filters resets both and the activity window.
+The same client-local preferences are scriptable:
+
+```sh
+quirky sidebar-extras set --hide-completed-review-workspaces=true --hide-passing-check-workspaces=true
+quirky sidebar-extras set --hide-completed-review-workspaces=false --hide-passing-check-workspaces=false
+quirky hosting cached-reviews --worktrees <worktree-id> --json
+```
+
+Review filters consume normal hosting lookup results without fetching or probing authentication.
+Uncached, unavailable, expired, or identity/head-stale review data leaves a workspace visible to
+the review filters. `sidebar-extras projection --json` reports combined `visibleIds`/`hiddenIds`,
+activity-only `hiddenCount`, and separate `reviewHiddenIds`/`reviewHiddenCount`.
 
 The operator-directed core landing leaves exhaustive parity and browser verification to
 `m2-sidebar-extras-followup`; see [the sidebar specification](docs/quirk/specs/2026-10-27-m2-sidebar-extras/logic.md)

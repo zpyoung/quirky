@@ -11,8 +11,11 @@
  * so several runs at once share the host's cores (`slots` defaults to 8). Files start slowest first,
  * by the times logged in `~/test-slots/durations.log` there. A run from the integration or verify
  * worktree is a land, which holds the land lock while it runs, so it can use every slot while other
- * runs share one. Files listed in scripts/test-on-macos.txt still run
- * here, alongside. If the host can't be reached the whole run falls back to this machine.
+ *   runs share one. Files listed in scripts/test-on-macos.txt still run here, alongside. If the host
+ *   can't be reached the whole run falls back to this machine.
+ * Before local tests, the CLI installs frozen dependencies when the current directory has a
+ * `package.json`; standalone test directories without a manifest need no install. The remote worker
+ * already installs them in its fresh checkout.
  * `QUIRKY_TEST_LOCAL=1` skips the host.
  *
  *   bun scripts/suite.ts packages apps plugins
@@ -20,6 +23,7 @@
 import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
 import { basename, dirname, isAbsolute, join, relative } from 'node:path'
+import { Store } from '../packages/daemon/src/store'
 import { createProcessScope, type ProcessScope } from './test-support/process-scope'
 
 export type SuiteResult = { ok: boolean; flaky: string[] }
@@ -44,14 +48,22 @@ async function tee(stream: ReadableStream<Uint8Array>, out: NodeJS.WriteStream |
   }
 }
 
-async function exec(cmd: string[], cwd: string, echo = true, stdin?: string, scope: ProcessScope = createProcessScope(), profileFile?: string): Promise<{ code: number; output: string }> {
+async function exec(
+  cmd: string[],
+  cwd: string,
+  echo = true,
+  stdin?: string,
+  scope: ProcessScope = createProcessScope(),
+  env: NodeJS.ProcessEnv = process.env,
+  profileFile?: string
+): Promise<{ code: number; output: string }> {
   const profile = process.env.QUIRKY_TEST_PROFILE === '1' && profileFile
     ? { file: profileFile, began: performance.now() }
     : undefined
   try {
     const options = {
       cwd,
-      env: { ...process.env, ...scope.env },
+      env: { ...env, ...scope.env },
       stdin: stdin === undefined ? 'ignore' as const : new Blob([stdin]),
       stdout: 'pipe' as const,
       stderr: 'pipe' as const
@@ -81,8 +93,32 @@ async function exec(cmd: string[], cwd: string, echo = true, stdin?: string, sco
   }
 }
 
+async function withTestHome<T>(run: (env: NodeJS.ProcessEnv, scope: ProcessScope) => Promise<T>): Promise<T> {
+  const scratch = mkdtempSync(join(tmpdir(), 'suite-home-'))
+  try {
+    const home = join(scratch, 'home')
+    const quirkyHome = join(scratch, 'quirky')
+    mkdirSync(home)
+    mkdirSync(quirkyHome)
+    const store = new Store(join(quirkyHome, 'quirky.db'))
+    try {
+      store.setSettingValue('setting:quirky.agent-status/hooks', false)
+    } finally {
+      store.close()
+    }
+    const scope = createProcessScope(quirkyHome)
+    try {
+      return await run({ ...process.env, HOME: home, QUIRKY_HOME: quirkyHome }, scope)
+    } finally {
+      await scope.cleanup()
+    }
+  } finally {
+    rmSync(scratch, { recursive: true, force: true })
+  }
+}
+
 const bunTest = (cwd: string, args: string[], echo = true, profileFile?: string) =>
-  exec(['bun', 'test', ...args], cwd, echo, undefined, createProcessScope(), profileFile)
+  withTestHome((env, scope) => exec(['bun', 'test', ...args], cwd, echo, undefined, scope, env, profileFile))
 const asPath = (file: string) => (isAbsolute(file) ? file : `./${file}`)
 
 /** Files with a failing test in a junit report, and how many tests failed in all. */
@@ -223,7 +259,9 @@ function slotted(slots: number, priority: boolean, log: string): Run {
         const lock = join(dir, `${(start + i) % usable}.lock`)
         if (!free(lock)) continue
         const began = Date.now()
-        const result = await exec(['flock', '-n', '-E', String(SLOT_BUSY), lock, 'bun', 'test', ...args], cwd, false, undefined, createProcessScope(), args.at(-1))
+        const result = await withTestHome((env, scope) =>
+          exec(['flock', '-n', '-E', String(SLOT_BUSY), lock, 'bun', 'test', ...args], cwd, false, undefined, scope, env, args.at(-1))
+        )
         if (result.code === SLOT_BUSY) continue
         appendFileSync(log, `${args.at(-1)?.replace(/^\.\//, '')} ${Date.now() - began}\n`)
         return result
@@ -284,6 +322,11 @@ async function runRemote(cwd: string, remote: Remote, files: string[], flags: st
   }
 }
 
+async function installLocalDependencies(cwd: string): Promise<boolean> {
+  if (!existsSync(join(cwd, 'package.json'))) return true
+  return (await exec(['bun', 'install', '--frozen-lockfile'], cwd)).code === 0
+}
+
 async function main(argv: string[]): Promise<boolean> {
   const cwd = process.cwd()
   if (argv[0] === '--worker') {
@@ -297,6 +340,7 @@ async function main(argv: string[]): Promise<boolean> {
   }
   const remote = remoteConfig(cwd)
   if (!remote) {
+    if (!(await installLocalDependencies(cwd))) return false
     if (process.env.QUIRKY_TEST_PROFILE === '1') {
       const flags = argv.filter((arg) => arg.startsWith('-'))
       return (await runFiles(cwd, discover(cwd, argv), flags, 1)).ok
@@ -310,12 +354,21 @@ async function main(argv: string[]): Promise<boolean> {
   const there = files.filter((file) => !macos.has(file))
   console.log(`running ${there.length} test files on ${remote.host} and ${here.length} macOS-only files here`)
   const land = ['integration', 'verify'].includes(basename(cwd)) && basename(dirname(cwd)) === 'build-loop'
-  const [away, local] = await Promise.all([runRemote(cwd, remote, there, flags, land), runFiles(cwd, here, flags, 1)])
+  let localInstall: Promise<boolean> | undefined
+  const installLocal = () => localInstall ??= installLocalDependencies(cwd)
+  const runLocal = async (files: string[]): Promise<SuiteResult> => {
+    if (files.length === 0) return { ok: true, flaky: [] }
+    if (!(await installLocal())) return { ok: false, flaky: [] }
+    return runFiles(cwd, files, flags, 1)
+  }
+  const [away, local] = await Promise.all([runRemote(cwd, remote, there, flags, land), runLocal(here)])
   if (away) {
     if (away.flaky.length > 0) recordFlakes(cwd, away.flaky)
     return away.ok && local.ok
   }
   console.error(`\n${remote.host} couldn't run the tests, so they run here instead`)
+  if (there.length === 0) return local.ok
+  if (!(await installLocal())) return false
   return (await runFiles(cwd, there, flags, 1)).ok && local.ok
 }
 

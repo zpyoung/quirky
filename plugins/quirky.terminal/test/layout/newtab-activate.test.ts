@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import type { QuirkyClient } from '@quirky/protocol'
 import type { Harness } from '../../../../packages/daemon/test/helpers'
 import { groupsInOrder, paneLeaves } from '../../src/layout/tree'
-import type { Tab, Workspace } from '../../src/layout/types'
+import { isViewTab, type Tab, type Workspace } from '../../src/layout/types'
 import { sessionCreates } from '../fakes/quirky.session/main'
 import { call, startPluginHarness, TERMINAL_PLUGINS } from '../support'
 
@@ -30,6 +30,7 @@ describe('newTab result', () => {
   test('names the new session, tab and pane', async () => {
     const result = await newTab()
     const tab = tabsOf(result.workspace).find((entry) => entry.id === result.tab)!
+    if (isViewTab(tab)) throw new Error('newTab returned a hosted view instead of a terminal')
     const [leaf] = paneLeaves(tab.root)
     expect(leaf!.id).toBe(result.pane)
     expect(leaf!.session).toBe(result.session)
@@ -39,6 +40,7 @@ describe('newTab result', () => {
   test('names the new ids when the tab is not activated', async () => {
     const result = await newTab({ activate: false })
     const tab = tabsOf(result.workspace).find((entry) => entry.id === result.tab)!
+    if (isViewTab(tab)) throw new Error('newTab returned a hosted view instead of a terminal')
     expect(paneLeaves(tab.root)[0]!.session).toBe(result.session)
     expect(paneLeaves(tab.root)[0]!.id).toBe(result.pane)
   })

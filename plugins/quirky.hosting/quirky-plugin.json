@@ -409,6 +409,51 @@
         "result": {"type": "object", "properties": {"accepted": {"type": "boolean"}, "generation": {"type": "integer"}, "candidates": {"type": "integer"}}, "required": ["accepted", "generation", "candidates"]}
       },
       {
+        "id": "cachedReviews",
+        "description": "Read current workspace review snapshots from cache only, without provider or auth requests.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": { "worktrees": { "type": "array", "description": "At most 1000 canonical workspace selectors; each nonempty and at most 4096 characters. The handler enforces these bounds.", "items": { "type": "string" } } },
+          "required": ["worktrees"],
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "workspaces": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "worktreeId": { "type": "string" },
+                  "instanceId": { "type": "string" },
+                  "branch": { "description": "Current branch name, or null." },
+                  "headOid": { "description": "Current local commit OID, or null." },
+                  "review": {
+                    "description": "Usable resolved review facts, or null for a cache miss or stale snapshot.",
+                    "properties": {
+                      "state": { "type": "string", "enum": ["open", "draft", "closed", "merged"] },
+                      "checksStatus": { "type": "string", "enum": ["neutral", "pending", "success", "failure"] },
+                      "headRefOid": { "type": "string" },
+                      "number": { "type": "integer", "minimum": 1 },
+                      "url": { "type": "string" }
+                    },
+                    "required": ["state", "checksStatus", "headRefOid", "number", "url"]
+                  },
+                  "stale": { "type": "boolean" },
+                  "error": { "type": "string" }
+                },
+                "required": ["worktreeId", "instanceId", "branch", "headOid", "review", "stale"],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": ["workspaces"],
+          "additionalProperties": false
+        }
+      },
+      {
         "id": "refreshState",
         "description": "Report bounded GitHub refresh queue state across active connections.",
         "connection": true,
@@ -422,6 +467,11 @@
         "id": "changed",
         "description": "A confirmed GitHub hosting mutation invalidated the affected repository reads.",
         "data": {"type": "object", "properties": {"worktreeId": {"type": "string"}, "repoId": {"type": "string"}, "host": {"type": "string"}, "owner": {"type": "string"}, "repo": {"type": "string"}, "sequence": {"type": "integer"}, "partial": {"type": "boolean"}, "completedSteps": {"type": "array", "items": {"type": "string"}}}, "required": ["worktreeId", "repoId", "sequence"]}
+      },
+      {
+        "id": "reviewCacheChanged",
+        "description": "A hosting review snapshot changed or was invalidated.",
+        "data": {"type": "object", "properties": {"worktreeId": {"type": "string"}, "repoId": {"type": "string"}}, "required": ["worktreeId", "repoId"], "additionalProperties": false}
       },
       {
         "id": "refresh",
@@ -476,6 +526,7 @@
       {"id": "refresh", "method": "refresh", "summary": "refresh a pull request directly"},
       {"id": "enqueue-refresh", "method": "enqueueRefresh", "summary": "enqueue a pull request refresh"},
       {"id": "visible-refresh-candidates", "method": "visibleRefreshCandidates", "summary": "report visible pull request refresh candidates"},
+      {"id": "cached-reviews", "method": "cachedReviews", "summary": "read cached workspace reviews without fetching"},
       {"id": "refresh-state", "method": "refreshState", "summary": "show pull request refresh queue state"}
     ]
   }

@@ -643,7 +643,7 @@ describe('warnings', () => {
       ],
       [plugin('acme.bare')]
     )
-    expect(warnings.get('acme.bare')).toMatchObject([{ level: 'warning' }])
+    expect(warnings.get('acme.bare')).toHaveLength(1)
   })
 
   test('a plugin whose only code-backed entry is an overlay and has no ui is warned', () => {

@@ -5,12 +5,13 @@ import { waitForAsync, type Harness } from '../../../packages/daemon/test/helper
 import { commands } from '../cli'
 import { renderWorkspace } from '../src/cli/text'
 import { groupsInOrder, paneLeaves } from '../src/layout/tree'
-import type { Group, PaneLeaf, Tab, Workspace } from '../src/layout/types'
+import { isTerminalTab } from '../src/layout/types'
+import type { Group, PaneLeaf, TerminalTab, Workspace } from '../src/layout/types'
 import { startPluginHarness, TERMINAL_PLUGINS, testCliContext } from './support'
 
 const pane = (id: string, session: string, extra: Partial<PaneLeaf> = {}): PaneLeaf => ({ kind: 'pane', id, session, title: null, exit: null, ...extra })
 
-const tab = (id: string, title: string, root: Tab['root'], extra: Partial<Tab> = {}): Tab => ({
+const tab = (id: string, title: string, root: TerminalTab['root'], extra: Partial<TerminalTab> = {}): TerminalTab => ({
   id,
   defaultTitle: title,
   customTitle: null,
@@ -24,7 +25,7 @@ const tab = (id: string, title: string, root: Tab['root'], extra: Partial<Tab> =
   ...extra
 })
 
-const group = (id: string, tabs: Tab[], activeTab: string | null): Group => ({ kind: 'group', id, tabs, activeTab, recent: [], lastQuickCommand: null })
+const group = (id: string, tabs: TerminalTab[], activeTab: string | null): Group => ({ kind: 'group', id, tabs, activeTab, recent: [], lastQuickCommand: null })
 
 /** The workspace drawn in the conceptual model of the logic spec, with a pane in each of the tabs the drawing leaves bare. */
 function conceptualWorkspace(): Workspace {
@@ -78,7 +79,7 @@ describe('the layout tree printer', () => {
 
   test('shows the title a tab displays, the colour with the active mark, and an ended pane\'s exit', () => {
     const ws = conceptualWorkspace()
-    const [first, build] = (ws.root as { first: Group }).first.tabs
+    const [first, build] = (ws.root as { first: Group }).first.tabs.filter(isTerminalTab)
     ;(ws.root as { first: Group }).first.tabs = [
       { ...first!, liveTitle: 'deploy "now"' },
       { ...build!, customTitle: 'Mine', color: 'teal', root: pane('pane-2', 's-2', { exit: { code: 137, signal: null } }), activePane: 'pane-2' }
@@ -511,7 +512,7 @@ describe('through the real CLI', () => {
 
   const cli = (args: string[], env: Record<string, string> = {}) => runCli(['terminal', ...args], { home: h.home, env: { QUIRKY_WORKTREE_ID: 'wt_main', ...env } })
   const layout = async (): Promise<Workspace> => JSON.parse((await cli(['layout', '--worktree', 'main', '--json'])).stdout)
-  const tabs = (ws: Workspace) => groupsInOrder(ws.root).flatMap((g) => g.tabs)
+  const tabs = (ws: Workspace) => groupsInOrder(ws.root).flatMap((g) => g.tabs.filter(isTerminalTab))
 
   test('quirky terminal --help lists the new words', async () => {
     const help = await runCli(['terminal', '--help'], { home: h.home })
