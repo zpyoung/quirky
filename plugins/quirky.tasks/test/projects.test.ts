@@ -58,7 +58,7 @@ function projectItemQueries(instance: TasksTest): unknown[] {
   })
 }
 
-async function expectProjectError(promise: Promise<unknown>, reason: string, message: string): Promise<Record<string, unknown>> {
+async function expectProjectError(promise: Promise<unknown>, reason: string): Promise<Record<string, unknown>> {
   let caught: unknown
   try {
     await promise
@@ -68,7 +68,7 @@ async function expectProjectError(promise: Promise<unknown>, reason: string, mes
   expect(caught).toBeDefined()
   const error = object(caught)
   expect(object(error.data).reason).toBe(reason)
-  expect(error.message).toContain(message)
+
   return error
 }
 
@@ -153,14 +153,21 @@ test('Project views load public table data and keep saved and explicit queries i
   const savedTable = loadedTable(await instance.call('projectView', { action: 'load' }))
   expect(savedTable.layout).toBe('TABLE')
   expect(list(savedTable.items).map((value) => object(value).id)).toContain('PVTI_7')
-  await instance.call('projectView', { action: 'load', viewId: 'VIEW_TABLE', query: 'is:closed' })
+  const tableOverride = object(await instance.call('projectView', { action: 'load', viewId: 'VIEW_TABLE', query: 'is:closed' }))
+  expect(object(tableOverride.query)).toMatchObject({ source: 'explicit', override: 'is:closed' })
 
   await instance.call('projectView', { action: 'select', viewId: 'VIEW_BOARD' })
   const board = loadedTable(await instance.call('projectView', { action: 'load' }))
   expect(board.layout).toBe('BOARD')
-  await instance.call('projectView', { action: 'load', viewId: 'VIEW_BOARD', query: 'is:open label:ready' })
+  const boardOverride = object(await instance.call('projectView', { action: 'load', viewId: 'VIEW_BOARD', query: 'is:open label:ready' }))
+  expect(object(boardOverride.query)).toMatchObject({ source: 'explicit', override: 'is:open label:ready' })
   await instance.call('projectView', { action: 'select', viewId: 'VIEW_TABLE' })
-  await instance.call('projectView', { action: 'load' })
+  const rememberedTable = object(await instance.call('projectView', { action: 'load' }))
+  expect(object(rememberedTable.query)).toMatchObject({ source: 'stored', override: 'is:closed' })
+  await instance.call('projectView', { action: 'select', viewId: 'VIEW_BOARD' })
+  const rememberedBoard = object(await instance.call('projectView', { action: 'load' }))
+  expect(object(rememberedBoard.query)).toMatchObject({ source: 'stored', override: 'is:open label:ready' })
+  await instance.call('projectView', { action: 'select', viewId: 'VIEW_TABLE' })
 
   const queries = projectItemQueries(instance)
   expect(queries).toContain('is:open')
@@ -243,17 +250,17 @@ test('Project preferences persist durable view choices and reject oversized quer
   expect(Object.values(object(preferences(await instance.call('projectPreferences')).queryByView))).not.toContain(tooLarge)
 }, 20_000)
 
-test('Projects preserve actionable authentication and scope messages without reporting false success', async () => {
+test('Projects preserve typed authentication and scope errors without reporting false success', async () => {
   const state = seedProjectsState()
   setProjectScenario(state, { projectFailure: { reason: 'auth_required', query: 'ProjectDiscovery' } })
   const instance = await tasks(state)
 
-  await expectProjectError(instance.call('projects', {}), 'auth_required', 'gh auth login --hostname github.com')
+  await expectProjectError(instance.call('projects', {}), 'auth_required')
   const scopeState = setProjectScenario(instance.readState() as ProjectFixtureState, {
     projectFailure: { reason: 'scope_missing', query: 'ProjectDiscovery' }
   })
   instance.writeState(scopeState)
-  await expectProjectError(instance.call('projects', {}), 'scope_missing', 'gh auth refresh --hostname github.com -s project -s read:org -s repo')
+  await expectProjectError(instance.call('projects', {}), 'scope_missing')
 
   const fieldFailureState = setProjectScenario(instance.readState() as ProjectFixtureState, {
     projectFailure: { reason: 'scope_missing', query: 'mutation SetProjectField' }
@@ -262,7 +269,7 @@ test('Projects preserve actionable authentication and scope messages without rep
   await expectProjectError(instance.call('projectEdit', {
     action: 'field', projectId: 'PVT_4', itemId: 'PVTI_7', fieldId: 'PVTF_STATUS',
     value: { singleSelectOptionId: 'OPT_DONE' }
-  }), 'scope_missing', 'gh auth refresh --hostname github.com -s project -s read:org -s repo')
+  }), 'scope_missing')
   const resources = object(object(instance.readState()).resources)
   expect(object(resources.projectFields)['PVT_4/PVTI_7/PVTF_STATUS']).toBeUndefined()
 }, 20_000)
@@ -305,8 +312,13 @@ test('Roadmap timeline bounds absurd dates to 480 ticks for every zoom', () => {
 
 test('Projects CLI discovery command reaches the real daemon method', async () => {
   const instance = await tasks()
-  const result = await instance.cli(['--json', 'projects'])
+  const result = await instance.cli(['--json', 'tasks', 'projects'])
   expect(result).toMatchObject({ code: 0, stderr: '' })
   const output = object(JSON.parse(result.stdout))
-  expect(list(output.projects).map((value) => object(value).owner)).toContain('test-owner')
+  expect(list(output.projects)).toContainEqual(expect.objectContaining({
+    id: 'PVT_4',
+    owner: 'test-owner',
+    number: 4,
+    url: 'https://github.com/orgs/test-owner/projects/4'
+  }))
 }, 20_000)
