@@ -400,6 +400,27 @@ export class SessionService {
    */
   resume = async (params: Record<string, unknown>): Promise<Session> => {
     const old = this.require(params.session as string)
+    if (old.kind === 'structured') {
+      if (params.fork !== undefined) throw this.context.error('conflict', 'structured sessions do not support fork')
+      if (params.providerSession !== undefined) {
+        throw this.context.error('invalid-params', 'structured sessions do not support providerSession overrides')
+      }
+      if (params.transcriptPath !== undefined) {
+        throw this.context.error('invalid-params', 'structured sessions do not support transcriptPath overrides')
+      }
+      const unsupported = Object.keys(params).find((key) => key !== 'session' && key !== 'prompt')
+      if (unsupported !== undefined) throw this.context.error('invalid-params', `structured resume does not support ${unsupported}`)
+      if (params.prompt !== undefined && typeof params.prompt !== 'string') {
+        throw this.context.error('invalid-params', 'prompt must be a string')
+      }
+      return (await this.context.call('quirky.structured/resume', {
+        session: old.id,
+        ...(params.prompt === undefined ? {} : { prompt: params.prompt })
+      })) as Session
+    }
+    if (params.prompt !== undefined) {
+      throw this.context.error('invalid-params', 'prompt is only supported when resuming a structured session')
+    }
     if (old.kind !== 'terminal') throw this.context.error('conflict', `session ${old.id} is not a terminal session`)
     if (old.agent === 'shell') throw this.context.error('conflict', `session ${old.id} is a shell, not an agent`)
     const info = await this.agentInfo(old.agent)
@@ -586,10 +607,20 @@ export class SessionService {
   register = async (params: Record<string, unknown>, caller: PluginCaller): Promise<Session> => {
     const checked = params.launchSettings === undefined || params.launchSettings === null ? null : checkLaunchSettings(params.launchSettings)
     if (typeof checked === 'string') throw this.context.error('invalid-params', `launchSettings is malformed: ${checked}`)
-    const worktree = await this.resolveWorktree(params.worktree, caller)
+    const cwd = this.startCwd(params.cwd)
+    const resolved = await this.resolveWorktree(params.worktree, caller, cwd)
+    const worktree = cwd === undefined ? resolved : { ...resolved, path: cwd }
+    const resumedFrom = params.resumedFrom
+    if (resumedFrom !== undefined) {
+      if (typeof resumedFrom !== 'string' || resumedFrom.length === 0) {
+        throw this.context.error('invalid-params', 'resumedFrom must be a non-empty session ID')
+      }
+      if (!this.records.get(resumedFrom)) throw this.context.error('not-found', `no such resumed session: ${resumedFrom}`)
+    }
     const session = {
       ...this.newRecord(worktree, 'structured', params.agent as AgentKind, params.title as string),
-      launchSettings: checked?.settings ?? null
+      launchSettings: checked?.settings ?? null,
+      ...(resumedFrom === undefined ? {} : { resumedFrom })
     }
     this.records.insert(session, worktree.repoId)
     return this.publish(session)

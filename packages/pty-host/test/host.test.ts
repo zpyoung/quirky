@@ -1,12 +1,15 @@
-import { afterEach, describe, expect, test } from 'bun:test'
-import { existsSync, statSync } from 'node:fs'
+import { afterEach, describe, expect, setDefaultTimeout, test } from 'bun:test'
+import { existsSync, readdirSync, statSync } from 'node:fs'
 import { join } from 'node:path'
+import { isatty } from 'node:tty'
 import { base64ToBytes, PTY_PROTOCOL_VERSION, type PtyEvent } from '@quirky/protocol'
 import { PtyClient } from '../src/client'
 import { readSegments } from '../src/history/log'
 import { concat, runCleanups, startHost, text, waitFor, type TestHost } from './helpers'
 
-afterEach(runCleanups)
+// Process-scope startup and cleanup can each outlast Bun's 5 s default under suite load.
+setDefaultTimeout(60_000)
+afterEach(runCleanups, 60_000)
 
 const ENV = { PATH: '/usr/bin:/bin', TERM: 'xterm-256color' }
 
@@ -199,29 +202,19 @@ describe('subscribe', () => {
   test('a wrapped tail replays from a line boundary and still joins the live stream exactly', async () => {
     const host = startHost({ tailBytes: 128 })
     const first = await host.connect()
-    await first.request(
-      'create',
-      {
-        ...createParams('w', sh("stty -echo && printf '\\033]777;quirky-shell-ready\\007' && exec /bin/cat")),
-        shellReady: true
-      }
-    )
+    // Keep one writer: kernel echo can interleave with cat inside the tokens we wait for.
+    await first.request('create', createParams('w', sh(`stty -echo; printf 'RAW_READY\\n'; exec cat`)))
     const whole = collect(first, 'w')
-    await first.request('subscribe', { sessionId: 'w' })
-    await waitFor(
-      () => host.server.manager.list().find((session) => session.sessionId === 'w')?.shellState === 'ready',
-      5000,
-      'cat ready'
-    )
+    const initial = await first.request('subscribe', { sessionId: 'w', mode: 'raw' })
+    const prefix = base64ToBytes(initial.replay)
+    await waitFor(async () => (await first.request('snapshot', { sessionId: 'w' })).ansi.includes('RAW_READY'), 5000, 'echo disabled')
     const lines = Array.from({ length: 40 }, (_, i) => `line-${i}\n`).join('')
-    const expectedBulk = lines.replace(/\n/g, '\r\n')
     first.sendInput('w', new TextEncoder().encode(lines))
-    await waitFor(() => whole.text().endsWith(expectedBulk), 5000, 'bulk output')
-    expect(whole.text()).toBe(expectedBulk)
+    await waitFor(() => whole.text().includes('line-39\r\n'), 5000, 'bulk output')
 
     const { sub, live } = await subscribeRaw(host, 'w')
     const replay = base64ToBytes(sub.replay)
-    const full = whole.text()
+    const full = text(concat([prefix, whole.all()]))
     expect(sub.offset).toBe(full.length)
     expect(replay.length).toBeLessThanOrEqual(128)
     expect(replay.length).toBeGreaterThan(0)
@@ -229,12 +222,10 @@ describe('subscribe', () => {
     expect(full[start - 1]).toBe('\n')
     expect(text(replay)).toBe(full.slice(start))
 
-    const expectedTail = 'tail-end\r\n'
     first.sendInput('w', new TextEncoder().encode('tail-end\n'))
-    await waitFor(() => whole.text().endsWith(expectedTail), 5000, 'more output')
-    expect(whole.text()).toBe(full + expectedTail)
-    await waitFor(() => sub.offset + live.all().length === whole.all().length, 5000, 'live catches up')
-    expect(text(concat([replay, live.all()]))).toBe(whole.text().slice(start))
+    await waitFor(() => whole.text().includes('tail-end\r\n'), 5000, 'more output')
+    await waitFor(() => sub.offset + live.all().length === prefix.length + whole.all().length, 5000, 'live catches up')
+    expect(text(concat([replay, live.all()]))).toBe(text(concat([prefix, whole.all()])).slice(start))
   })
 
   test('subscribing twice on one connection returns a fresh replay and keeps one subscription', async () => {
@@ -300,9 +291,18 @@ describe('terminal queries', () => {
   test('replies are not injected while a subscriber is attached', async () => {
     const host = startHost()
     const client = await host.connect()
-    await client.request('create', createParams('q2', askForDeviceStatus))
+    const out = collect(client, 'q2')
+    await client.request(
+      'create',
+      createParams('q2', sh(`read go; stty raw -echo; printf '\\033[5n'; dd bs=1 count=4 2>/dev/null | od -An -c | tr -s ' '`))
+    )
     await client.request('subscribe', { sessionId: 'q2' })
-    await Bun.sleep(700)
+    // Ask only after subscription, then let the emulator parse the query before sending our reply.
+    client.sendInput('q2', new TextEncoder().encode('\n'))
+    await waitFor(() => out.text().includes('\x1b[5n'), 5000, 'device-status query')
+    await client.request('snapshot', { sessionId: 'q2' })
+    client.sendInput('q2', new TextEncoder().encode('PING'))
+    await waitFor(async () => (await logText(host, 'q2')).includes('P I N G'), 5000, 'program saw only the client reply')
     expect(await logText(host, 'q2')).not.toContain('033 [ 0 n')
   })
 })
@@ -432,6 +432,63 @@ describe('resize, kill and exit', () => {
     expect(await logText(host, 'e')).toBe('hello')
     const [info] = await client.request('list', {})
     expect(info).toMatchObject({ sessionId: 'e', alive: false, exitCode: 3, offset: 5 })
+  })
+
+  test('a completed session releases its PTY descriptors after persisting output and exit status', async () => {
+    const host = startHost()
+    const client = await host.connect()
+    const seen = events(client)
+    const sessionId = 'ptyfd'
+    const baselineTtyFds = new Set(
+      readdirSync('/dev/fd')
+        .map(Number)
+        .filter((fd) => Number.isInteger(fd) && isatty(fd))
+    )
+    const finalMarker = 'PTY_FINAL'
+
+    await client.request(
+      'create',
+      createParams(
+        sessionId,
+        sh(
+          `if [ -t 0 ] && [ -t 1 ]; then printf 'PTY_READY\\n'; else exit 97; fi; read x; printf '${finalMarker}\\n'; exit 3`
+        )
+      )
+    )
+    await waitFor(
+      async () => (await logText(host, sessionId)).includes('PTY_READY'),
+      5000,
+      'interactive child to reach read'
+    )
+
+    // The shell confirms its real stdin/stdout are terminals and remains blocked in read;
+    // Bun may own more than one TTY fd on some platforms, so retain every newly allocated fd.
+    const newTtyFds = readdirSync('/dev/fd')
+      .map(Number)
+      .filter((fd) => Number.isInteger(fd) && !baselineTtyFds.has(fd) && isatty(fd))
+    expect(newTtyFds.length).toBeGreaterThan(0)
+
+    client.sendInput(sessionId, new TextEncoder().encode('\n'))
+    const exitEvent = await waitFor(
+      () => seen.find((event) => event.type === 'exit' && event.sessionId === sessionId),
+      5000,
+      'exit event'
+    )
+    expect(exitEvent).toMatchObject({ type: 'exit', sessionId, exitCode: 3, exitSignal: null, exitCause: 'exited' })
+    await waitFor(
+      async () => (await logText(host, sessionId)).includes(finalMarker),
+      5000,
+      'final output to persist'
+    )
+    expect(await logText(host, sessionId)).toContain(finalMarker)
+    const [info] = await client.request('list', {})
+    expect(info).toMatchObject({ sessionId, alive: false, exitCode: 3 })
+
+    await waitFor(
+      () => newTtyFds.every((fd) => !isatty(fd)),
+      5000,
+      'PTY descriptors to be released'
+    )
   })
 
   test('kill ends the whole process group', async () => {

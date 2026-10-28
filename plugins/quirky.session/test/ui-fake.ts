@@ -110,6 +110,7 @@ export function fakeContext(handlers: Record<string, Handler> = {}, settings: Re
     },
     togglePanel() {},
     getLayout: () => layout,
+    setPalette() {},
     onLayout: () => () => {},
     onStream(streamId, listener) {
       streams.set(streamId, listener)

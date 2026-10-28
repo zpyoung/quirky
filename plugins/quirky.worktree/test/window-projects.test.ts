@@ -310,15 +310,36 @@ test('SC-10: groups are made, filled, renamed, collapsed and deleted from the wi
   expect((await groups(w.agent))[0]!.repoIds).toEqual([api.repo.id])
   expect((await repos(w.agent)).find((r) => r.name === 'web')!.groupId).toBeNull()
 
+  const waitForDeleteDialog = () => w.win.waitFor(async () => {
+    const dialog = document.querySelector<HTMLElement>('[role="dialog"]')
+    if (!dialog) return undefined
+    const reported = (await report(w.agent))?.dialog
+    return reported?.kind === 'group' && reported.action === 'delete' ? { dialog, reported } : undefined
+  })
+
   await openGroupMenu(w.win, 'services')
   await choose(w.win, 'Delete Group…')
-  const deleting = await w.win.waitFor(() => dialogNamed('Delete Group'))
-  expect(await reportedDialog(w, 'group')).toMatchObject({ kind: 'group', action: 'delete' })
+  const deleting = await waitForDeleteDialog()
+  expect(deleting.reported).toMatchObject({ kind: 'group', action: 'delete', groupId: listed[0]!.id })
+  expect(deleting.dialog.textContent).toContain('Delete the group services')
+  expect(button(deleting.dialog, 'Cancel')).toBeDefined()
+  expect(button(deleting.dialog, 'Delete Group')).toBeDefined()
+  await click(button(deleting.dialog, 'Cancel')!)
+  await w.win.waitFor(() => !document.querySelector('[role="dialog"]'))
+  await reportedDialog(w, null)
+  expect(await groups(w.agent)).toMatchObject([{ id: listed[0]!.id, name: 'services', repoIds: [api.repo.id] }])
+  expect((await repos(w.agent)).find((r) => r.name === 'api')!.groupId).toBe(listed[0]!.id)
+
+  await openGroupMenu(w.win, 'services')
+  await choose(w.win, 'Delete Group…')
+  const confirming = await waitForDeleteDialog()
+  expect(confirming.reported).toMatchObject({ kind: 'group', action: 'delete', groupId: listed[0]!.id })
   await click(await w.win.waitFor(() => {
-    const action = button(deleting, 'Delete Group')
+    const action = button(confirming.dialog, 'Delete Group')
     return action && !action.disabled ? action : undefined
   }))
-  await closed(w, 'Delete Group')
+  await w.win.waitFor(() => !document.querySelector('[role="dialog"]'))
+  await reportedDialog(w, null)
   await w.win.waitFor(() => !groupSection('services'))
   expect(await groups(w.agent)).toEqual([])
   expect((await repos(w.agent)).map((r) => r.groupId)).toEqual([null, null])

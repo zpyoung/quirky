@@ -35,7 +35,7 @@ const add = (h: E2eHarness, fields: Record<string, unknown>) => h.call<Commands>
 test(
   'SC-50: limits and normalization',
   async () => {
-    const h = await startE2e()
+    const h = await startE2e({ cleanShell: true })
     await add(h, { label: 'Hello', command: 'echo hello' })
     for (let n = 2; n <= 40; n += 1) await add(h, { label: `Command ${n}`, command: `echo ${n}` })
     expect((await h.json<Commands>(['terminal', 'quick-command', 'list', '--all'])).commands).toHaveLength(40)
@@ -67,7 +67,7 @@ test(
 test(
   'SC-51: running from the tab strip opens a titled tab that runs the command once',
   async () => {
-    const h = await startE2e()
+    const h = await startE2e({ cleanShell: true })
     mkdirSync(join(h.repo, 'web'))
     const web = join(h.repo, 'web')
     const added = await h.json<Commands>(['terminal', 'quick-command', 'add', '--label', 'Hello', '--command', 'echo hello'])
@@ -95,7 +95,7 @@ test(
 test(
   'SC-52: running into a pane types the command, and runs it only with Append Enter',
   async () => {
-    const h = await startE2e()
+    const h = await startE2e({ cleanShell: true })
     await h.json<Commands>(['terminal', 'quick-command', 'add', '--label', 'Hello', '--command', 'echo hello'])
     await h.json<Commands>(['terminal', 'quick-command', 'add', '--label', 'Draft', '--command', 'echo draft', '--no-enter'])
     const build = await openTab(h, ['--title', 'Build'])
@@ -166,7 +166,7 @@ test(
 test(
   'SC-54: a repo command is offered only to that repo, and the strip remembers the last one',
   async () => {
-    const h = await startE2e()
+    const h = await startE2e({ cleanShell: true })
     const other = await addRepo(h, 'docs')
     await h.json<Commands>(['terminal', 'quick-command', 'add', '--label', 'Hello', '--command', 'echo hello'])
     const mine = await h.json<Commands>(['terminal', 'quick-command', 'add', '--label', 'Test', '--command', 'echo test', '--scope', 'repo'])

@@ -187,4 +187,35 @@ describe('import fence', () => {
       [6, '../../../packages/git/src/private']
     ])
   })
+
+  test('command metadata, quoted code and comments are not module imports', () => {
+    const dir = join(PLUGINS_ROOT, 'quirky.sample')
+    const source = [
+      "const commands = [{ name: 'import', description: 'Import setup from Claude Code' }]",
+      'const quoted = "export * from \'private-package\'"',
+      "const template = `require('private-package')`",
+      'const view = <div title="import \'private-package\'">from \'private-package\'</div>',
+      "// import 'private-package'",
+      "/* require('private-package') */",
+      "import { local } from './local'"
+    ].join('\n')
+    expect(scanImports(source, join(dir, 'src', 'a.tsx'), dir, new Set())).toEqual([])
+  })
+
+  test('re-exports and TypeScript literal module forms remain fenced', () => {
+    const dir = join(PLUGINS_ROOT, 'quirky.sample')
+    // These are parser inputs, not module loads.
+    const source = [
+      "export { value } from '../../quirky.other/export'",
+      "import legacy = require('undeclared-package')",
+      "type Hidden = import('../../../packages/daemon/src/hidden').Hidden",
+      "const lazy = import(`../../quirky.other/template`)"
+    ].join('\n')
+    expect(scanImports(source, join(dir, 'src', 'a.ts'), dir, new Set()).map(({ line, specifier }) => [line, specifier])).toEqual([
+      [1, '../../quirky.other/export'],
+      [2, 'undeclared-package'],
+      [3, '../../../packages/daemon/src/hidden'],
+      [4, '../../quirky.other/template']
+    ])
+  })
 })

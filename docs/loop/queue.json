@@ -229,8 +229,7 @@
         "m1-launch-settings",
         "m1-agent-status"
       ],
-      "status": "in-progress",
-      "lane": 12
+      "status": "done"
     },
     {
       "id": "m6-orchestration-core",
@@ -258,8 +257,9 @@
       "deps": [
         "m6-orchestration-core"
       ],
-      "status": "todo",
-      "early": true
+      "status": "in-progress",
+      "early": true,
+      "lane": 9
     },
     {
       "id": "m6-heimdall-core",
@@ -271,8 +271,9 @@
       "deps": [
         "m6-orchestration-workers"
       ],
-      "status": "todo",
-      "early": true
+      "status": "in-progress",
+      "early": true,
+      "lane": 11
     },
     {
       "id": "m6-heimdall-control",
@@ -284,8 +285,9 @@
       "deps": [
         "m6-heimdall-core"
       ],
-      "status": "todo",
-      "early": true
+      "status": "in-progress",
+      "early": true,
+      "lane": 10
     },
     {
       "id": "m6-heimdall-owner",
@@ -297,8 +299,9 @@
       "deps": [
         "m6-heimdall-core"
       ],
-      "status": "todo",
-      "early": true
+      "status": "in-progress",
+      "early": true,
+      "lane": 12
     },
     {
       "id": "fix-flaky-quirky-worktree-window-projects",
@@ -318,8 +321,7 @@
         "term-daemon.md"
       ],
       "deps": [],
-      "status": "in-progress",
-      "lane": 11
+      "status": "done"
     },
     {
       "id": "fix-flaky-quirky-git-files-scenarios",
@@ -339,8 +341,7 @@
         "term-daemon.md"
       ],
       "deps": [],
-      "status": "in-progress",
-      "lane": 10
+      "status": "done"
     },
     {
       "id": "m1-agent-status-scripting",
@@ -380,8 +381,7 @@
         "m2-source-control-core",
         "m1-agent-status"
       ],
-      "status": "in-progress",
-      "lane": 7
+      "status": "done"
     },
     {
       "id": "m3-session-info",
@@ -407,8 +407,7 @@
         "m1-agent-status",
         "m1-providers"
       ],
-      "status": "in-progress",
-      "lane": 9
+      "status": "done"
     },
     {
       "id": "m3-handoff",
@@ -1213,6 +1212,35 @@
         "term-daemon.md"
       ],
       "deps": [],
+      "status": "todo"
+    },
+    {
+      "id": "m4-hosting-ui-review-provider-parity",
+      "milestone": "M4",
+      "title": "Complete deferred GitLab/Bitbucket/Gitea/Azure Checks, creation composer and integration settings from hosting-ui.md sections10–12 when their currently blocked canonical provider APIs are available; preserve MR labels, no-draft Bitbucket and provider auth/settings contracts rather than fake success",
+      "docs": [
+        "hosting-ui.md"
+      ],
+      "deps": [
+        "m4-hosting-ui-reviews",
+        "m4-hosting-api-gitlab",
+        "m4-hosting-api-bitbucket-gitea-azure"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "m4-hosting-ui-review-browser-routing",
+      "milestone": "M4",
+      "title": "Complete review and stack-link in-app browser routing plus Shift+Cmd destination inversion after the public human browser pane and Link Routing setting land; current review links support the canonical system opener and explicitly refuse unavailable in-app delivery",
+      "docs": [
+        "hosting-ui.md",
+        "browser.md"
+      ],
+      "deps": [
+        "m4-hosting-ui-reviews",
+        "sa-browser-pane",
+        "sa-browser-profiles-settings"
+      ],
       "status": "todo"
     }
   ]

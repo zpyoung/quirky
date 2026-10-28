@@ -1,16 +1,16 @@
-import { useState } from 'react'
 import { useShortcuts } from './components/useShortcuts'
 import { ConfirmHost } from './components/ConfirmHost'
 import { ConnectionBanner } from './components/ConnectionBanner'
 import { MainArea } from './components/MainArea'
 import { Sidebar } from './components/Sidebar'
 import { Toasts } from './components/Toasts'
-import { useAppState, usePluginState } from './context'
+import { useAppState, usePluginHost, usePluginState } from './context'
 import { CommandPalette } from './plugins/CommandPalette'
 import { OverlayLayer } from './plugins/OverlayLayer'
 import { PluginSlot } from './plugins/PluginSlot'
 import { useRegion } from './plugins/useRegion'
 import { useThemeVariables } from './plugins/useThemeVariables'
+import { ActivityItems } from './plugins/ActivityItems'
 
 function NoToken() {
   return (
@@ -36,20 +36,24 @@ function PanelColumn({ id }: { id: string }) {
 export function App() {
   const state = useAppState()
   const { model, layout } = usePluginState()
-  const [paletteOpen, setPaletteOpen] = useState(false)
-  useShortcuts(() => setPaletteOpen((open) => !open))
+  const host = usePluginHost()
+  useShortcuts()
   useThemeVariables()
 
   if (state.connection === 'no-token') return <NoToken />
 
   const panel = layout.panel !== null && model?.panels.some((candidate) => candidate.id === layout.panel) ? layout.panel : null
+  const hasActivityItems = (model?.activityItems.length ?? 0) > 0
   const statusBars = model?.statusBars ?? []
   return (
     <div className="app">
       <ConnectionBanner />
-      <div className={`layout${panel !== null ? ' with-panel' : ''}${layout.sidebar ? '' : ' no-sidebar'}`}>
+      <div
+        className={`layout${panel !== null ? ' with-panel' : ''}${layout.sidebar ? '' : ' no-sidebar'}${hasActivityItems ? ' with-activity-items' : ''}`}
+      >
         <Sidebar />
         <MainArea />
+        {hasActivityItems && <ActivityItems />}
         {panel !== null && <PanelColumn id={panel} />}
       </div>
       {statusBars.length > 0 && (
@@ -58,7 +62,7 @@ export function App() {
         </div>
       )}
       <OverlayLayer />
-      {paletteOpen && <CommandPalette onClose={() => setPaletteOpen(false)} />}
+      {layout.palette === true && <CommandPalette onClose={() => host.setPalette(false)} />}
       <Toasts />
       <ConfirmHost />
     </div>

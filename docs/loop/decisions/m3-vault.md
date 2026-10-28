@@ -616,5 +616,16 @@
 - **Revisit if:** Land's merged whole gate reports another actual core or integration failure.
 - **Source:** locked by verification-before-completion and test-state isolation
 
+## D57: Keep the landed dock/palette and canonical PTY fix alongside Vault
+- **Question:** How should the next concurrent dock/activity/settings/PTY overlap be reconciled?
+- **Options:** Drop one UI family; retain competing fixture implementations; combine additive UI contracts and use the landed owner's PTY fixture.
+- **Chose:** Preserve activityItems/statusBars/menuItems/settingsSections, field category/section grouping and generic section mounts, plus palette/setPalette/mountView and the secure drag capability. Select the canonical landed echo-off/RAW_READY/raw-prefix PTY fixture; remove only orphaned unused variables from the alternate fixture.
+- **Why:** All runtime surfaces are independent. The dedicated PTY owner now has the canonical replay/readiness repair with exact byte/offset/join assertions; keeping an alternate branch variant would create needless conflict and duplicate conventions.
+- **Evidence:** New PTY D1-D15, test-cost D1-D13 and dock D1-D48 logs read; new sidebar/structured-runner tails read completely. Scoped UI writer retained HEAD09ec9ffa; parent resolved only PTY and lockfile overlap, regenerated Dock and Vault workspace entries. Typecheck and21-plugin build pass. Remote256files pass; both macOS files pass after terminal e2e's required isolated retry23/23, retained as load-sensitive evidence.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** A combined contribution cannot mount, account preparation is bypassed, or replay/live bytes no longer join exactly.
+- **Source:** locked by the landed additive UI/PTY contracts and configured runner policy
+
 ## Progress
-Restored core and its public graph pass fresh25-file remote verification, current typecheck, packaged build and all4 restored web goals including real fake-provider PTY execution. Earlier stale/partial snapshots are not counted passing. All landed owner contracts remain integrated; both completion items and open nonblocking findings remain recorded. Whole-suite verification and final done status remain owned by queue.ts land.
+Core and public support pass current typecheck, packaged21-plugin build, fresh25-file focused verification and256 remote affected files. Both macOS checks pass under configured isolated-retry policy; local readiness timing remains recorded. All4 restored web goals and real fake-provider execution are proven, account guards remain enforced, and both completion items are queued. Final whole-suite verification and done status remain owned by queue.ts land.

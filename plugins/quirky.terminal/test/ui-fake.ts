@@ -60,7 +60,7 @@ export function fakeContext(handlers: Record<string, Handler> = {}, settings: Re
   const mountedViews: { viewId: string; element: HTMLElement; input: unknown; unmounted: boolean }[] = []
   const values = new Map<string, boolean>()
   const state = { confirmAnswer: true }
-  const layout: UiLayout = { view: null, panel: null, sidebar: true, focus: null }
+  const layout: UiLayout & { palette?: boolean } = { view: null, panel: null, sidebar: true, focus: null, palette: false }
   const known = { ...TERMINAL_SETTING_DEFAULTS, ...settings }
 
   const context: UiPluginContext = {
@@ -96,6 +96,9 @@ export function fakeContext(handlers: Record<string, Handler> = {}, settings: Re
       layout.view = null
     },
     togglePanel() {},
+    setPalette(open) {
+      layout.palette = open ?? !layout.palette
+    },
     getLayout: () => layout,
     onLayout: () => () => {},
     onStream(streamId, listener) {

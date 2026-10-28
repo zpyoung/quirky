@@ -31,6 +31,7 @@ function commandTable(items: UiCommandEntry[]): string {
 function renderModel(model: UiModel): string {
   const sections: [string, unknown[], () => string][] = [
     ['SIDEBAR', model.sidebarSections, () => slotTable(model.sidebarSections)],
+    ['ACTIVITY ITEMS', model.activityItems, () => slotTable(model.activityItems)],
     ['STATUS BARS', model.statusBars, () => slotTable(model.statusBars)],
     ['PANELS', model.panels, () => slotTable(model.panels)],
     ['VIEWS', model.views, () => slotTable(model.views)],
@@ -89,7 +90,13 @@ function layoutLines(layout: UiLayout): string[] {
   const view = layout.view
     ? [layout.view.id, layout.view.input === undefined ? '' : JSON.stringify(layout.view.input)].filter(Boolean).join(' ')
     : '-'
-  return [`view: ${view}`, `panel: ${layout.panel ?? '-'}`, `sidebar: ${layout.sidebar ? 'shown' : 'hidden'}`, `focus: ${layout.focus ?? '-'}`]
+  return [
+    `view: ${view}`,
+    `panel: ${layout.panel ?? '-'}`,
+    `sidebar: ${layout.sidebar ? 'shown' : 'hidden'}`,
+    `focus: ${layout.focus ?? '-'}`,
+    `palette: ${layout.palette === true ? 'open' : 'closed'}`
+  ]
 }
 
 export const uiState: Command = {

@@ -181,6 +181,7 @@ export function fakeContext(initial: UiLayout): Fake {
       closeView() {},
       togglePanel() {},
       getLayout: () => layout,
+      setPalette() {},
       onLayout(listener) {
         layoutListeners.add(listener)
         return () => layoutListeners.delete(listener)

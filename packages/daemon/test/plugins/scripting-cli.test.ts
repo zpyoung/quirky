@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from 'bun:test'
+import { afterAll, afterEach, beforeAll, describe, expect, test } from 'bun:test'
 import { join } from 'node:path'
 import { runCli } from '../../../cli/test/fixtures/fake-daemon'
 import { makeTempHome, startHarness, type Harness } from '../helpers'
@@ -67,8 +67,9 @@ const harnesses: Harness[] = []
 
 afterEach(async () => {
   for (const harness of harnesses.splice(0)) await harness.cleanup()
-  removeTempDirs()
 })
+
+afterAll(() => removeTempDirs())
 
 /** A real daemon with `acme.notes` installed and inactive, plus a handle on the real CLI. */
 async function boot() {
@@ -99,10 +100,11 @@ type Env = Awaited<ReturnType<typeof boot>>
 
 /** Runs a command that must succeed and returns the single call `acme.notes` received. */
 async function sentParams(s: Env, ...args: string[]) {
+  const callsBefore = s.calls().length
   const result = await s.cli('acme.notes', 'add', ...args)
   expect(result.stderr).toBe('')
   expect(result.code).toBe(0)
-  return s.calls().at(-1)![1]
+  return s.calls().slice(callsBefore).at(-1)![1]
 }
 
 describe('SC-9: a plugin method is a CLI command', () => {
@@ -125,35 +127,40 @@ describe('SC-9: a plugin method is a CLI command', () => {
 })
 
 describe('SC-10: each schema type has one flag form', () => {
+  let s: Env
+  let harness: Harness
+
+  beforeAll(async () => {
+    s = await boot()
+    harness = harnesses.pop()!
+  })
+  afterAll(async () => {
+    await harness.cleanup()
+  })
+
   test('a string flag keeps digits as a string', async () => {
-    const s = await boot()
     expect(await sentParams(s, '--title', '42')).toEqual({ title: '42' })
   })
 
   test('an integer flag takes a space or =', async () => {
-    const s = await boot()
     expect(await sentParams(s, '--title', 'a', '--priority', '3')).toEqual({ title: 'a', priority: 3 })
     expect(await sentParams(s, '--title', 'a', '--priority=3')).toEqual({ title: 'a', priority: 3 })
   })
 
   test('a boolean flag is a switch or =false', async () => {
-    const s = await boot()
     expect(await sentParams(s, '--title', 'a', '--pinned')).toEqual({ title: 'a', pinned: true })
     expect(await sentParams(s, '--title', 'a', '--pinned=false')).toEqual({ title: 'a', pinned: false })
   })
 
   test('an enum flag takes one of its values', async () => {
-    const s = await boot()
     expect(await sentParams(s, '--title', 'a', '--color', 'blue')).toEqual({ title: 'a', color: 'blue' })
   })
 
   test('an array flag repeats', async () => {
-    const s = await boot()
     expect(await sentParams(s, '--title', 'a', '--tags', 'a', '--tags', 'b')).toEqual({ title: 'a', tags: ['a', 'b'] })
   })
 
   test('an object flag takes JSON', async () => {
-    const s = await boot()
     expect(await sentParams(s, '--title', 'a', '--meta', '{"k":1}')).toEqual({ title: 'a', meta: { k: 1 } })
   })
 
@@ -242,6 +249,17 @@ describe('SC-12: --params gives the whole params object', () => {
 })
 
 describe('SC-14: a generated command prints a readable text form', () => {
+  let s: Env
+  let harness: Harness
+
+  beforeAll(async () => {
+    s = await boot()
+    harness = harnesses.pop()!
+  })
+  afterAll(async () => {
+    await harness.cleanup()
+  })
+
   const printed: [string, string][] = [
     ['word', 'done\n'],
     ['number', '3\n'],
@@ -253,7 +271,6 @@ describe('SC-14: a generated command prints a readable text form', () => {
   ]
 
   test.each(printed)('%s prints %j', async (id, text) => {
-    const s = await boot()
     const result = await s.cli('acme.notes', id)
     expect(result.code).toBe(0)
     expect(result.stderr).toBe('')
@@ -261,7 +278,6 @@ describe('SC-14: a generated command prints a readable text form', () => {
   })
 
   test('a list of objects is a table with ID and TITLE columns', async () => {
-    const s = await boot()
     const result = await s.cli('acme.notes', 'table')
     expect(result.code).toBe(0)
     const lines = result.stdout.trimEnd().split('\n')

@@ -25,7 +25,7 @@ afterEach(cleanupAll)
 test(
   'SC-2: `quirky terminal layout` prints the tree',
   async () => {
-    const h = await startE2e()
+    const h = await startE2e({ cleanShell: true })
     const one = await openTab(h)
     const build = await openTab(h)
     const hello = await openTab(h)
@@ -69,7 +69,7 @@ test(
 test(
   'SC-4: sessions started elsewhere open in a new tab',
   async () => {
-    const h = await startE2e()
+    const h = await startE2e({ cleanShell: true })
     const first = await ensureWorkspace(h)
     const [only] = tabsOf(first)
     expect(only!.defaultTitle).toBe('Terminal 1')
@@ -90,7 +90,7 @@ test(
 test(
   'SC-5: a session closed elsewhere leaves its pane',
   async () => {
-    const h = await startE2e()
+    const h = await startE2e({ cleanShell: true })
     const one = await openTab(h)
     const build = await openTab(h)
     const right = await splitPane(h, build.pane.id, 'right')
@@ -115,7 +115,7 @@ test(
 test(
   'SC-6: a stale revision is refused',
   async () => {
-    const h = await startE2e()
+    const h = await startE2e({ cleanShell: true })
     const { pane } = await openTab(h)
     await splitPane(h, pane.id, 'right')
     const ws = await layoutOf(h)
@@ -136,7 +136,7 @@ test(
 test(
   'SC-7: bad targets fail with clear errors and leave the layout alone',
   async () => {
-    const h = await startE2e()
+    const h = await startE2e({ cleanShell: true })
     const one = await openTab(h)
     const two = await openTab(h)
     await terminal(h, 'tab', 'move', two.tab.id, '--split', 'right')

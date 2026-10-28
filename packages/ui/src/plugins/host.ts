@@ -1,6 +1,5 @@
 import {
   DEFAULT_THEME,
-  RESERVED_CHORDS,
   THEME_TOKENS,
   chordFromKeyEvent,
   evaluateWhen,
@@ -142,7 +141,7 @@ function messageOf(error: unknown): string {
 }
 
 function findSlot(model: UiModel, id: string): UiSlotEntry | undefined {
-  return [...model.sidebarSections, ...model.statusBars, ...model.panels, ...model.settingsSections, ...model.views, ...model.overlays].find((entry) => entry.id === id)
+  return [...model.sidebarSections, ...model.activityItems, ...model.statusBars, ...model.panels, ...model.settingsSections, ...model.views, ...model.overlays].find((entry) => entry.id === id)
 }
 
 /** Context keys the kernel gives meaning to: with both true, terminal keys go to the terminal first. */
@@ -291,17 +290,15 @@ export class WindowPluginHost {
   }
 
   /**
-   * Routes a key press to the `active` keybinding on its chord whose `when` holds and runs that
-   * binding's command without waiting for it. A binding with a `when` beats one without; otherwise
-   * the first in model order wins. When `terminalKeysFirst` and `terminalFocus` are both set, only a
-   * binding whose `when` mentions `terminalFocus` may fire: the others are skipped, the event's
-   * default is prevented so the webview never acts on the chord, and the key is reported as not
-   * consumed so the terminal still receives it. Returns whether the event was consumed; reserved
-   * chords never are.
+   * Routes a key press to an active keybinding on its chord whose `when` holds. A binding with a
+   * `when` beats one without; otherwise the first in model order wins. When `terminalKeysFirst` and
+   * `terminalFocus` are both set, only bindings whose `when` mentions `terminalFocus` may fire.
+   * Skipped keys are prevented so the webview never acts on them, but remain unconsumed so the
+   * terminal receives them. Returns whether the event was consumed.
    */
   handleKey(event: KeyEventLike): boolean {
     const chord = chordFromKeyEvent(event)
-    if (chord === null || RESERVED_CHORDS.includes(chord)) return false
+    if (chord === null) return false
     const applicable = (this.state.model?.keybindings ?? []).filter(
       (b) => b.status === 'active' && b.key === chord && (b.when === undefined || evaluateWhen(b.when, this.contextValues))
     )
@@ -339,6 +336,11 @@ export class WindowPluginHost {
     const wanted = open ?? this.state.layout.panel !== id
     if (wanted) this.layoutCall('ui.panel.open', { id })
     else if (this.state.layout.panel === id) this.layoutCall('ui.panel.close', {})
+  }
+
+  /** Opens or closes the shared palette; omitted `open` toggles its daemon-owned state. */
+  setPalette(open?: boolean): void {
+    this.layoutCall('ui.palette.set', open === undefined ? {} : { open })
   }
 
   /** Tells the daemon that the person put focus in `target`, unless it is already there. */
@@ -816,6 +818,7 @@ export class WindowPluginHost {
       openView: live((id: string, input?: unknown) => this.openView(id, input)),
       closeView: live(() => this.closeView()),
       togglePanel: live((id: string, open?: boolean) => this.togglePanel(id, open)),
+      setPalette: live((open?: boolean) => this.setPalette(open)),
       getLayout: live(() => this.state.layout),
       onLayout: live((listener: (layout: UiLayout) => void) => {
         this.layoutListeners.add(listener)

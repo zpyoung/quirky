@@ -93,6 +93,7 @@ export function fakeContext(layout: UiLayout = layoutFor(null)): Fake {
       openView: (id, input) => void fake.opened.push({ id, input }),
       closeView() {},
       togglePanel: (id, open) => void fake.panelToggles.push({ id, open }),
+      setPalette() {},
       getLayout: () => fake.layout,
       onLayout: () => () => {},
       onStream: () => () => {},
