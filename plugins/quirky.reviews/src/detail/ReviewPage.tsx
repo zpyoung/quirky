@@ -508,6 +508,7 @@ export function ReviewPage(props: ReviewsSurfaceProps) {
       <aside className="review-page-rail" aria-label="Review actions and assignments">
         <ReviewActions {...props} surface="detail" />
         <AssignmentPanels context={props.context} state={props.state} owner={owner} />
+        {detail.tab === 'conversation' && <section aria-label="Checks summary"><h3>Checks</h3><ChecksList {...props} surface="detail" compact /><button type="button" onClick={() => void selectTab('checks')}>Open Checks tab</button></section>}
       </aside>
     </div>}
   </main>

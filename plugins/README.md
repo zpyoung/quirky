@@ -120,6 +120,7 @@ PR; `stack.number` is a distinct stack resource ID, and `stack.entries[].number`
 contains the real member PR numbers. Unsupported or mismatched membership is
 explicitly unavailable, never synthesized from that stack ID. `truncated` reports
 omitted members. Optional `--pr-repo` preserves origin/upstream identity.
+
 ## Plugin settings pages
 
 A UI plugin can opt a declared view into the shell's **Settings → Plugin settings**
@@ -134,3 +135,40 @@ effective view ID through `ui.view.open`; it does not import feature code into t
 shell. Disabled or overridden-away views have no link. A view with no active UI
 module is shown disabled, and failed navigation leaves Settings open with an error.
 Ordinary views remain outside Settings unless they explicitly opt in.
+
+## Hosting reviews
+
+`quirky.reviews` owns the active-workspace **Checks** panel, full pull-request
+page, creation composer and hosting settings. It calls the public Hosting, Git,
+Worktree, Tasks and Agents APIs; the renderer never invokes `gh` directly.
+
+```sh
+quirky reviews open --worktree <id> --number 12 --tab conversation --json
+quirky reviews detail-set-tab --worktree <id> --number 12 --tab checks --json
+quirky reviews show-checks --json
+quirky reviews create-open --worktree <id> --json
+quirky reviews settings-open --worktree <id> --json
+quirky reviews state --json
+```
+
+Checks follows the workspace in the active view. PR headers open the shared Tasks
+workspace composer; they do not silently create or switch branches. Provider
+identity remains explicit when origin and upstream reuse a PR number. Merge and
+comment deletion retain kernel confirmation and canonical provider validation;
+queued merge is not displayed as completed merge.
+
+Creation rechecks the exact branch/head and eligibility, pushes first only when
+required, preserves an existing review, and reports a created PR separately from
+failed stack registration. Failed or superseded generation cannot replace another
+head's draft. Settings retain stale observations with an error instead of
+inventing connected accounts or empty budgets.
+
+The live API catalog contains all method schemas and generated command aliases.
+`reviews state` is the full daemon-owned navigation/draft/provider snapshot. Window
+slot reports are bounded summaries pointing to that method, so large comments or
+diffs do not exceed the kernel's 64-KiB report limit.
+
+Other-provider review/create/settings and in-app link routing have explicit
+prerequisite-dependent queue items; current cards and routing never claim those
+unavailable capabilities succeeded. Clipboard/system-browser/focus behavior is
+handed to the native scenario run, not inferred from headless web output.

@@ -2143,6 +2143,79 @@
         }
       },
       {
+        "id": "detailSetChecksCollapsed",
+        "description": "Show or hide the Checks summary body on the exact selected review surface.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "surface": {
+              "type": "string",
+              "enum": [
+                "detail",
+                "checks"
+              ]
+            },
+            "worktree": {
+              "type": "string"
+            },
+            "number": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "prRepo": {
+              "type": "object",
+              "properties": {
+                "host": {
+                  "type": "string"
+                },
+                "owner": {
+                  "type": "string"
+                },
+                "repo": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "host",
+                "owner",
+                "repo"
+              ],
+              "additionalProperties": false
+            },
+            "collapsed": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "surface",
+            "number",
+            "collapsed",
+            "worktree"
+          ],
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "surface": {
+              "type": "string",
+              "enum": [
+                "detail",
+                "checks"
+              ]
+            },
+            "collapsed": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "surface",
+            "collapsed"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
         "id": "detailExpandCheck",
         "description": "Expand or collapse a check.",
         "params": {
@@ -4793,6 +4866,11 @@
         "id": "detail-set-auto-merge",
         "method": "detailSetAutoMerge",
         "summary": "Enable or disable auto-merge with an expected-head guard."
+      },
+      {
+        "id": "detail-set-checks-collapsed",
+        "method": "detailSetChecksCollapsed",
+        "summary": "Show or hide the Checks summary body on the exact selected review surface."
       },
       {
         "id": "detail-expand-check",

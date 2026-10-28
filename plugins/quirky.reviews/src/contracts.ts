@@ -20,6 +20,7 @@ export type DetailState = {
   target: ReviewTarget | null; tab: ReviewTab; generation: number; loading: boolean; error: string | null
   review: ReviewData | null; details: JsonRecord | null; checks: JsonRecord | null; comments: JsonRecord | null; files: JsonRecord | null
   audience: Audience; grouping: 'grouped' | 'timeline'; expandedChecks: string[]; queuedComments: string[]
+  checksCollapsed: boolean
   selectedFile: string | null; diffMode: 'inline' | 'side-by-side'; collapsedFiles: string[]; fileFilter: string; fileTreeVisible: boolean
   commentDraft: string; bodyDraft: string | null; pending: string[]; fetchedAt: number
 }
@@ -28,6 +29,7 @@ export type ChecksState = {
   lookup: JsonRecord | null; eligibility: JsonRecord | null; review: ReviewData | null
   checks: JsonRecord | null; comments: JsonRecord | null; conflicts: JsonRecord | null
   audience: Audience; grouping: 'grouped' | 'timeline'; expandedChecks: string[]; queuedComments: string[]
+  checksCollapsed: boolean
   commentDraft: string; titleDraft: string | null; height: number; fetchedAt: number
   agentDialog: { action: 'fix' | 'conflicts' | 'comments'; prompt: string; agent?: string; args?: string; surface?: 'detail' | 'checks'; target?: ReviewTarget; headOid?: string; visible?: boolean } | null
 }

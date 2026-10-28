@@ -238,6 +238,12 @@ export const detailSpecs: (MethodSpec & { description: string })[] = [
     result: strictObject({ number: numberShape, enabled: { type: 'boolean' }, state: stringShape }, ['number', 'enabled', 'state']),
   },
   {
+    id: 'detailSetChecksCollapsed',
+    description: 'Show or hide the Checks summary body on the exact selected review surface.',
+    params: strictObject({ ...surfaceNumber, collapsed: { type: 'boolean' } }, ['surface', 'number', 'collapsed']),
+    result: strictObject({ surface: surfaceShape, collapsed: { type: 'boolean' } }, ['surface', 'collapsed']),
+  },
+  {
     id: 'detailExpandCheck',
     description: 'Expand or collapse a check.',
     params: strictObject({ ...targetIdentity, surface: surfaceShape, checkId: stringShape, expanded: { type: 'boolean' } }, ['surface', 'checkId', 'expanded']),
@@ -786,6 +792,7 @@ export function detailMethods(env: ReviewsEnv): ReviewMethodTable {
           comments: null,
           files: null,
           expandedChecks: [],
+          checksCollapsed: false,
           queuedComments: [],
           selectedFile: null,
           diffMode: 'inline',
@@ -1135,6 +1142,18 @@ export function detailMethods(env: ReviewsEnv): ReviewMethodTable {
         overrides = [...current]
       })
       return { author, bot: params.bot, overrides }
+    },
+
+    async detailSetChecksCollapsed(params) {
+      const selectedSurface = surface(params)
+      const selected = selection(params, selectedSurface, true)
+      if (typeof params.collapsed !== 'boolean') throw env.invalid('invalid_input', 'collapsed must be a boolean.')
+      const collapsed = params.collapsed
+      applyIfOwner(env, selected, (state) => {
+        if (selectedSurface === 'detail') state.detail.checksCollapsed = collapsed
+        else state.checks.checksCollapsed = collapsed
+      })
+      return { surface: selectedSurface, collapsed }
     },
 
     async detailExpandCheck(params) {

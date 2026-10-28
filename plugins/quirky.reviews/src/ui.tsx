@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import type { MountFunction, UiPluginContext } from '@quirky/protocol'
 import { CHECKS_PANEL, CREATE_VIEW, REVIEW_VIEW, SETTINGS_VIEW, type JsonRecord, type ReviewsState } from './contracts'
@@ -6,7 +6,7 @@ import { ReviewPage } from './detail/ReviewPage'
 import { ChecksPanel, ChecksAgentDialog } from './checks/ChecksPanel'
 import { CreateReview } from './create/CreateReview'
 import { HostingSettings } from './create/HostingSettings'
-import './reviews.css'
+import { REVIEWS_STYLE } from './style'
 
 function record(value: unknown): value is JsonRecord {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
@@ -19,7 +19,7 @@ function stateValue(raw: unknown): ReviewsState {
   const creation = raw.creation
   for (const section of [detail, checks, creation, raw.settings]) if (typeof section.generation !== 'number' || typeof section.loading !== 'boolean' || (section.error !== null && typeof section.error !== 'string')) throw new Error('The daemon returned invalid review request state.')
   if (!['conversation', 'checks', 'files'].includes(String(detail.tab)) || !['all', 'humans', 'bots'].includes(String(detail.audience)) || !['all', 'humans', 'bots'].includes(String(checks.audience))) throw new Error('The daemon returned invalid review navigation.')
-  for (const section of [detail, checks]) if (!Array.isArray(section.expandedChecks) || !Array.isArray(section.queuedComments) || typeof section.commentDraft !== 'string' || typeof section.fetchedAt !== 'number') throw new Error('The daemon returned invalid review controls.')
+  for (const section of [detail, checks]) if (!Array.isArray(section.expandedChecks) || !Array.isArray(section.queuedComments) || typeof section.checksCollapsed !== 'boolean' || typeof section.commentDraft !== 'string' || typeof section.fetchedAt !== 'number') throw new Error('The daemon returned invalid review controls.')
   if (!Array.isArray(detail.pending) || !Array.isArray(detail.collapsedFiles) || typeof detail.fileFilter !== 'string' || typeof detail.fileTreeVisible !== 'boolean' || typeof checks.height !== 'number' || !Array.isArray(creation.bases) || typeof creation.title !== 'string' || typeof creation.body !== 'string' || typeof creation.base !== 'string' || typeof creation.head !== 'string' || typeof creation.generating !== 'boolean' || typeof creation.submitting !== 'boolean') throw new Error('The daemon returned invalid review content.')
   for (const key of ['draft', 'useTemplate', 'generateDetailsOnOpen', 'openAfterCreate']) if (typeof raw.defaults[key] !== 'boolean') throw new Error('The daemon returned invalid review defaults.')
   // The authenticated daemon owns the remaining opaque provider records; each feature validates its own wire data.
@@ -27,25 +27,60 @@ function stateValue(raw: unknown): ReviewsState {
   return state
 }
 
-function Surface({ context, kind, report }: { context: UiPluginContext; kind: 'detail' | 'checks' | 'create' | 'settings'; report?: (state: unknown) => void }) {
+type SurfaceKind = 'detail' | 'checks' | 'create' | 'settings'
+
+function itemCount(value: JsonRecord | null, key: string): number | null {
+  const items = value?.[key]
+  return Array.isArray(items) ? items.length : null
+}
+
+/** Slot reports have a 64-KiB bound; full bodies and provider records stay in reviews/state. */
+function surfaceSummary(kind: SurfaceKind, state: ReviewsState, connectionError: boolean) {
+  const current = kind === 'detail' ? state.detail : kind === 'checks' ? state.checks : kind === 'create' ? state.creation : state.settings
+  const review = kind === 'detail' ? state.detail.review : kind === 'checks' ? state.checks.review : null
+  return {
+    surface: kind, revision: state.revision, stateMethod: 'quirky.reviews/state',
+    worktree: kind === 'detail' ? state.detail.target?.worktree ?? null : kind === 'checks' ? state.checks.worktree : kind === 'create' ? state.creation.worktree : state.settings.worktree,
+    number: review?.number ?? null, reviewState: review?.state ?? null,
+    loading: current.loading, errorPresent: connectionError || current.error !== null,
+    tab: kind === 'detail' ? state.detail.tab : null,
+    audience: kind === 'detail' ? state.detail.audience : kind === 'checks' ? state.checks.audience : null,
+    grouping: kind === 'detail' ? state.detail.grouping : kind === 'checks' ? state.checks.grouping : null,
+    checksCount: kind === 'detail' ? itemCount(state.detail.checks, 'checks') : kind === 'checks' ? itemCount(state.checks.checks, 'checks') : null,
+    checksCollapsed: kind === 'detail' ? state.detail.checksCollapsed : kind === 'checks' ? state.checks.checksCollapsed : null,
+    commentsCount: kind === 'detail' ? itemCount(state.detail.comments, 'comments') : kind === 'checks' ? itemCount(state.checks.comments, 'comments') : null,
+    filesCount: kind === 'detail' ? itemCount(state.detail.files, 'files') : null,
+    queuedCommentsCount: kind === 'detail' ? state.detail.queuedComments.length : kind === 'checks' ? state.checks.queuedComments.length : null,
+    generating: kind === 'create' ? state.creation.generating : null,
+    submitting: kind === 'create' ? state.creation.submitting : null
+  }
+}
+
+function Surface({ context, kind, report }: { context: UiPluginContext; kind: SurfaceKind; report?: (state: unknown) => void }) {
   const [state, setState] = useState<ReviewsState | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const request = useRef(0)
   const refresh = useCallback(async () => {
+    const epoch = ++request.current
     try {
       const next = stateValue(await context.call('quirky.reviews/state'))
+      if (epoch !== request.current) return
       setState((old) => !old || next.revision >= old.revision ? next : old)
       setError(null)
-      report?.({ surface: kind, state: next })
-    } catch (failure) { setError(failure instanceof Error ? failure.message : 'Review state is unavailable.') }
-  }, [context, kind, report])
+    } catch (failure) { if (epoch === request.current) setError(failure instanceof Error ? failure.message : 'Review state is unavailable.') }
+  }, [context])
   useEffect(() => {
     void refresh()
     const offEvent = context.subscribe((event) => { if (event.type === 'quirky.reviews/changed') void refresh() })
-    const offConnection = context.onConnection((status) => { if (status === 'connected') void refresh() })
-    return () => { offEvent(); offConnection() }
+    const offConnection = context.onConnection((status) => {
+      if (status === 'connected') { request.current++; setState(null); void refresh() }
+    })
+    return () => { request.current++; offEvent(); offConnection() }
   }, [context, refresh])
+  useEffect(() => { if (state && report) report(surfaceSummary(kind, state, error !== null)) }, [state, kind, report, error])
   const fail = (failure: unknown) => context.toast('Reviews', failure instanceof Error ? failure.message : 'The action failed.', { kind: 'error' })
   return <section className="reviews-surface" data-review-surface={kind}>
+    <style>{REVIEWS_STYLE}</style>
     {error && <div role="alert">{error}<button onClick={() => { void refresh() }}>Retry</button></div>}
     {!state ? <p role="status">Loading review…</p> : <>
       {kind === 'detail' && <ReviewPage context={context} state={state} refresh={refresh} />}
@@ -57,7 +92,7 @@ function Surface({ context, kind, report }: { context: UiPluginContext; kind: 'd
   </section>
 }
 
-function mount(context: UiPluginContext, kind: 'detail' | 'checks' | 'create' | 'settings'): MountFunction {
+function mount(context: UiPluginContext, kind: SurfaceKind): MountFunction {
   return (element, props) => {
     const root = createRoot(element)
     root.render(<Surface context={context} kind={kind} report={props.report} />)

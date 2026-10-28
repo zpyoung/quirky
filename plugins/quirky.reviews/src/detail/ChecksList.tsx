@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import type { JsonRecord, ReviewsSurfaceProps } from '../contracts'
 import { isRecord, parseCheckDetail, parseChecksResult, reviewContext, safeHttpUrl, type CheckDetail, type ReviewContext } from './data'
 
-export type ChecksListProps = ReviewsSurfaceProps & { surface: 'detail' | 'checks' }
+export type ChecksListProps = ReviewsSurfaceProps & { surface: 'detail' | 'checks'; compact?: boolean }
 type CheckRow = JsonRecord & { kind: string; name: string; status: string; conclusion: string | null; url: string | null; checkRunId: number | null; workflowRunId: number | null; suiteId: number | null }
 type Severity = 'failure' | 'action' | 'pending' | 'success' | 'neutral'
 
@@ -77,7 +77,7 @@ function lastErrorLine(text: string): number {
   return result
 }
 
-function viewParams(owner: NonNullable<ReturnType<typeof reviewContext>>) {
+function viewParams(owner: ReviewContext) {
   return { surface: owner.surface, worktree: owner.worktree, number: owner.number, ...(owner.repo === null ? {} : { prRepo: owner.repo }) }
 }
 
@@ -97,11 +97,11 @@ export function ChecksList(props: ChecksListProps) {
   const rows = owner === null ? null : checkRows(checksValue, owner.number)
   const parsedChecks = owner === null || checksValue === null ? null : parseChecksResult(checksValue, owner.number)
   const [pendingAction, setPendingAction] = useState<string | null>(null)
-  const [expandedSummary, setExpandedSummary] = useState(true)
+  const expandedSummary = !(props.surface === 'detail' ? props.state.detail.checksCollapsed : props.state.checks.checksCollapsed)
   const [actionError, setActionError] = useState<string | null>(null)
   const activeLoads = useRef(new Set<string>())
   const checksForView = useMemo(() => [...(rows ?? [])].sort((left, right) => severityRank(severity(left)) - severityRank(severity(right))), [rows])
-  const renderedChecks = checksForView.slice(0, 100)
+  const renderedChecks = checksForView.slice(0, props.compact ? 5 : 100)
   const failedCount = checksForView.filter((check) => severity(check) === 'failure' || severity(check) === 'action').length
   const actionableCount = checksForView.filter((check) => check.kind === 'check_run' && (check.workflowRunId !== null || check.checkRunId !== null)).length
   const expanded = props.surface === 'detail' ? props.state.detail.expandedChecks : props.state.checks.expandedChecks
@@ -212,15 +212,18 @@ export function ChecksList(props: ChecksListProps) {
 
   return <section className="review-checks-list" aria-label="Checks">
     <header className="review-checks-toolbar">
-      <button type="button" aria-expanded={expandedSummary} onClick={() => setExpandedSummary((value) => !value)}>{summary}</button>
+      <button type="button" aria-expanded={expandedSummary} onClick={() => {
+        void props.context.call('quirky.reviews/detailSetChecksCollapsed', { ...viewParams(owner), collapsed: expandedSummary })
+          .then(() => props.refresh()).catch((error: unknown) => setActionError(errorText(error)))
+      }}>{summary}</button>
       <span>{checksForView.filter((check) => severity(check) === 'success').length} passing</span>
       <span>{checksForView.filter((check) => severity(check) === 'failure').length} failing</span>
       <span>{checksForView.filter((check) => severity(check) === 'pending').length} pending</span>
       <span>{checksForView.filter((check) => severity(check) === 'action').length} unresolved</span>
       <button type="button" disabled={pendingAction !== null} onClick={() => void refresh()}>{pendingAction === 'refresh' ? 'Refreshing…' : 'Refresh checks'}</button>
-      <button type="button" disabled={pendingAction !== null || failedCount === 0} title={failedCount === 0 ? 'No failed checks to rerun.' : undefined} onClick={() => void rerun(true)}>Rerun failed</button>
-      <button type="button" disabled={pendingAction !== null || actionableCount === 0} title={actionableCount === 0 ? 'No actionable check or workflow run is available.' : undefined} onClick={() => void rerun(false)}>Rerun all</button>
-      {failedCount > 0 ? <button type="button" onClick={() => void openFixDialog()}>Fix broken checks</button> : null}
+      {!props.compact && <button type="button" disabled={pendingAction !== null || failedCount === 0} title={failedCount === 0 ? 'No failed checks to rerun.' : undefined} onClick={() => void rerun(true)}>Rerun failed</button>}
+      {!props.compact && <button type="button" disabled={pendingAction !== null || actionableCount === 0} title={actionableCount === 0 ? 'No actionable check or workflow run is available.' : undefined} onClick={() => void rerun(false)}>Rerun all</button>}
+      {failedCount > 0 ? <button type="button" onClick={() => void openFixDialog()}>{props.compact ? 'Fix checks' : 'Fix broken checks'}</button> : null}
     </header>
 
     {actionError ? <p role="alert" className="review-error">{actionError}</p> : null}
@@ -241,7 +244,7 @@ export function ChecksList(props: ChecksListProps) {
         const label = severity(check)
         return <li key={key} className={`review-check-row review-check-${label}`}>
           <div className="review-check-row-heading">
-            <button type="button" aria-expanded={isExpanded} onClick={() => void toggleExpanded(check)}>
+            <button type="button" aria-expanded={isExpanded} aria-label={`${check.name}: ${label}`} onClick={() => void toggleExpanded(check)}>
               <span>{label === 'failure' ? 'Failing' : label === 'action' ? 'Action required' : label === 'pending' ? 'Pending' : label === 'success' ? 'Passing' : 'Unresolved'}</span>
               <strong>{check.name}</strong>
               <span>{check.conclusion ?? check.status}</span>
