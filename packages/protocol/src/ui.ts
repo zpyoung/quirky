@@ -1,10 +1,10 @@
 import type { QuirkyEvent } from './rpc'
 
 /** The contribution kinds the UI plugin API adds. */
-export const UI_KINDS = ['status-bar', 'sidebar-section', 'panel', 'view', 'overlay', 'command', 'keybinding', 'setting', 'theme', 'menu-item'] as const
+export const UI_KINDS = ['status-bar', 'sidebar-section', 'activity-item', 'panel', 'view', 'overlay', 'command', 'keybinding', 'setting', 'theme', 'menu-item'] as const
 
 /** UI kinds whose implementation is code a plugin's UI module provides. */
-export const CODE_BACKED_KINDS = ['status-bar', 'view', 'panel', 'sidebar-section', 'overlay', 'command'] as const
+export const CODE_BACKED_KINDS = ['status-bar', 'view', 'panel', 'sidebar-section', 'activity-item', 'overlay', 'command'] as const
 
 /** The color slots a theme fills; window tokens map to CSS custom properties `--<token>`. */
 export const THEME_TOKENS = [
@@ -68,10 +68,10 @@ export const DEFAULT_THEME: ThemeInfo = {
 
 export type ThemeList = { chosen: string; active: string; themes: ThemeInfo[] }
 
-/** A status bar, sidebar section, panel, view or overlay in the UI model. */
+/** A status bar, sidebar section, activity item, panel, view or overlay in the UI model. */
 export type UiSlotEntry = {
   id: string
-  kind: 'status-bar' | 'sidebar-section' | 'panel' | 'view' | 'overlay'
+  kind: 'status-bar' | 'sidebar-section' | 'activity-item' | 'panel' | 'view' | 'overlay'
   /** The plugin whose declaration is in effect. */
   plugin: string
   title: string
@@ -122,6 +122,9 @@ export type SettingDeclaration = {
   type: 'boolean' | 'number' | 'string' | 'enum'
   title: string
   description?: string
+  /** Optional generic settings navigation metadata. */
+  category?: string
+  section?: string
   default: boolean | number | string
   minimum?: number
   maximum?: number
@@ -145,6 +148,8 @@ export type UiModel = {
   sidebarSections: UiSlotEntry[]
   /** Order ascending, then ID. */
   statusBars: UiSlotEntry[]
+  /** Order ascending, then ID. */
+  activityItems: UiSlotEntry[]
   /** Order ascending, then ID. */
   panels: UiSlotEntry[]
   /** ID ascending. */
@@ -197,7 +202,7 @@ export const DESKTOP_AWAY_MS = 180_000
 /** One slot in the UI model, with the latest report from its mounted window. */
 export type UiSlotState = {
   id: string
-  kind: 'status-bar' | 'sidebar-section' | 'panel' | 'view' | 'overlay'
+  kind: 'status-bar' | 'sidebar-section' | 'activity-item' | 'panel' | 'view' | 'overlay'
   plugin: string
   title: string
   shown: boolean

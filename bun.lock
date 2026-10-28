@@ -263,6 +263,20 @@
         "@types/react-dom": "^19.3.0",
       },
     },
+    "plugins/quirky.sidebar-extras": {
+      "name": "@quirky/plugin-sidebar-extras",
+      "version": "0.1.0",
+      "dependencies": {
+        "@quirky/protocol": "workspace:*",
+        "react": "19.2.0",
+        "react-dom": "19.2.0",
+      },
+      "devDependencies": {
+        "@happy-dom/global-registrator": "20.14.6",
+        "@types/react": "^19.3.0",
+        "@types/react-dom": "^19.3.0",
+      },
+    },
     "plugins/quirky.session-info": {
       "name": "@quirky/plugin-session-info",
       "version": "0.1.0",

@@ -3,13 +3,16 @@ import { basename } from 'node:path'
 import type { PluginStore, ProjectGroup, Repo, Worktree } from '@quirky/protocol'
 import { gitApi } from '@quirky/git'
 import { resolveRealPath, worktreeIdForPath } from '../../paths'
+import { instanceIdFor, filesystemIdentitySource, type DirectoryIdentitySource } from './identity'
 import { insertRow, metadataOf, rowOf, type WorktreeRow } from './store'
 
-/** What the join needs from the plugin: the store, the other plugin's records and the in-flight removes. */
+/** What the join needs from the plugin: the store, group lookup, identity source and in-flight removes. */
 export type ListEnv = {
   store: PluginStore
   groups(): Promise<ProjectGroup[]>
   log(message: string): void
+  /** Injectable internal seam; production uses the filesystem source. */
+  identitySource?: DirectoryIdentitySource
   /** IDs whose remove is in flight in this daemon. */
   removing: ReadonlySet<string>
 }
@@ -54,18 +57,33 @@ function compare(a: Worktree, b: Worktree): number {
  * path, so it is discarded and the workspace starts from defaults.
  */
 function rowForFolder(env: ListEnv, repoId: string, kind: 'git' | 'folder', path: string, id: string, fallbackCreatedAt: number): WorktreeRow {
-  const birthtime = birthtimeOf(path)
+  const identitySource = env.identitySource ?? filesystemIdentitySource
+  const identity = identitySource.stat(path)
+  const instanceId = identity === null ? null : instanceIdFor(identity)
+  const birthtime = identity === null ? birthtimeOf(path) : Math.round(identity.birthtimeMs)
   let row = rowOf(env.store, id)
-  const otherFolder = row && row.birthtime !== null && birthtime !== null && row.birthtime !== birthtime
-  if (row && (otherFolder || row.repo_id !== repoId)) {
+  const differentBirthtime = row && row.birthtime !== null && birthtime !== null && row.birthtime !== birthtime
+  const differentInstance =
+    row && instanceId !== null && row.instance_id !== '' && !row.instance_id.startsWith('unverified:') && row.instance_id !== instanceId
+  if (row && (differentBirthtime || differentInstance || row.repo_id !== repoId)) {
     // a row of a removed and re-added project is the same case: its metadata must not carry over
-    if (otherFolder) env.log(`discarded the metadata of ${id}: ${path} is a different folder than the one it was recorded for`)
+    if (differentBirthtime || differentInstance) env.log(`discarded the metadata of ${id}: ${path} is a different folder than the one it was recorded for`)
     env.store.run('DELETE FROM worktrees WHERE id = ?', id)
     row = null
   }
-  const complete = row && row.birthtime !== null && row.created_at !== null && row.path === path && row.kind === kind
+  const complete =
+    row && row.birthtime !== null && row.created_at !== null && row.path === path && row.kind === kind && (instanceId === null || row.instance_id === instanceId)
   if (complete) return row!
-  return insertRow(env.store, { id, repoId, kind, path, createdAt: birthtime ?? fallbackCreatedAt, createdBy: 'external', birthtime })
+  return insertRow(env.store, {
+    id,
+    repoId,
+    kind,
+    path,
+    createdAt: birthtime ?? fallbackCreatedAt,
+    createdBy: 'external',
+    birthtime,
+    instanceId: instanceId ?? (row?.instance_id ? row.instance_id : undefined)
+  })
 }
 
 /**
@@ -116,8 +134,10 @@ function listFolderProject(env: ListEnv, repo: Repo): Worktree[] {
       joinMetadata({ id: primaryId, repoId: repo.id, path, branch: null, head: '', isMain: true, kind: 'folder', groupId: null }, primary, env.removing.has(primaryId))
     ]
     for (const row of env.store.all<WorktreeRow>("SELECT * FROM worktrees WHERE repo_id = ? AND kind = 'folder' AND id != ?", repo.id, primaryId)) {
-      const facts: Facts = { id: row.id, repoId: repo.id, path: row.path ?? path, branch: null, head: '', isMain: false, kind: 'folder', groupId: null }
-      result.push(joinMetadata(facts, row, env.removing.has(row.id)))
+      const rowPath = row.path ?? path
+      const metadata = rowForFolder(env, repo.id, 'folder', rowPath, row.id, row.created_at ?? repo.addedAt)
+      const facts: Facts = { id: row.id, repoId: repo.id, path: rowPath, branch: null, head: '', isMain: false, kind: 'folder', groupId: null }
+      result.push(joinMetadata(facts, metadata, env.removing.has(row.id)))
     }
     return result.sort(compare)
   })
@@ -134,15 +154,19 @@ export async function listProject(env: ListEnv, repo: Repo, options: { prune?: b
 /** The folder workspaces on a group's parent folder. */
 export function listGroup(env: ListEnv, group: ProjectGroup): Worktree[] {
   const rows = env.store.all<WorktreeRow>('SELECT * FROM worktrees WHERE group_id = ?', group.id)
-  return rows
-    .map((row) =>
-      joinMetadata(
-        { id: row.id, repoId: groupRepoId(group.id), path: row.path ?? group.parentPath ?? '', branch: null, head: '', isMain: false, kind: 'folder', groupId: group.id },
-        row,
-        env.removing.has(row.id)
-      )
-    )
-    .sort(compare)
+  return env.store.transaction(() =>
+    rows
+      .map((row) => {
+        const path = row.path ?? group.parentPath ?? ''
+        const metadata = rowForFolder(env, row.repo_id, 'folder', path, row.id, row.created_at ?? Date.now())
+        return joinMetadata(
+          { id: row.id, repoId: groupRepoId(group.id), path, branch: null, head: '', isMain: false, kind: 'folder', groupId: group.id },
+          metadata,
+          env.removing.has(row.id)
+        )
+      })
+      .sort(compare)
+  )
 }
 
 /** Every project's workspaces, then every group's; a project git can't list is logged and left out. */
