@@ -66,5 +66,16 @@
 - **Revisit if:** Supported build/test targets change.
 - **Source:** deferred: platform
 
+## D7: Share printable HTML presentation without changing export semantics
+- **Question:** How can editor PDF export remain self-contained without plugin-owned CSS?
+- **Options:** exempt export source from lint; duplicate literal palette; pure shared print helper with canonical token text
+- **Chose:** `@quirky/ui/editor-print` createEditorPrintHtml with title/body/katexCss/theme; static bundled canonical tokens, preserved light print default and CSP. Markdown owner implements pure helper; parent owns package export integration.
+- **Why:** Lint deliberately covers every source file; export must remain functional without plugin CSS or runtime source-file assumptions in packaged builds.
+- **Evidence:** plugins/quirky.editor/src/markdown/pdf.ts; EditorMarkdown contract request; combined spec amendment
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** Bundling cannot embed the canonical asset or PDF appearance changes.
+- **Source:** assumed — autonomous
+
 ## Progress
 Combined spec self-reviewed and shared existing component/style ownership contracts committed before implementer dispatch. Next: three isolated source tasks, no worker checks/commits, barrier audit and integration; parent lint/typecheck/minimal actual UI proof, one roadmap catch-up and incoming-decision audit, final compiler gate then canonical queue land. Suites, automated golden scoring and review rounds remain unrun under build-first; no visual-approval claim.

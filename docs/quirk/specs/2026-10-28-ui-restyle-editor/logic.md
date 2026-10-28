@@ -69,4 +69,6 @@ Tasks run in separate external worktrees using absolute paths, no checks/build/l
 
 ## Self-review and amendments
 
+
+Shared print contract amendment: `@quirky/ui/editor-print` exports pure `createEditorPrintHtml({ title, body, katexCss, theme }: { title: string; body: string; katexCss: string; theme: 'dark' | 'light' }): string`. It HTML-escapes title, embeds existing caller-provided sanitized body/bundled KaTeX CSS and canonical token-derived theme styles in standalone CSP-compatible HTML. Palette comes from canonical tokens.css through a static bundled text import, never copied literals or runtime bundle-relative file reads. Existing printable light default is preserved. Markdown owner owns editor-print.ts; parent owns package export/asset declaration integration. No public editor RPC changes.
 2026-10-28: self-reviewed against all editor contribution categories and approved rollout. SC1–SC7 explicitly preserve behavior while covering presentation/lint/default placement. All observable gray areas resolved from approved spec and current feature semantics; no human questions or separate tech.md/spec review under build-first. Golden review not performed and not claimed.
