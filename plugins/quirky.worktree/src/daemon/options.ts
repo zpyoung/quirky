@@ -18,6 +18,7 @@ const OPTION_KEYS: Record<keyof StockWorktreeOptions, true> = {
   hideDefaultBranch: true,
   hideDetached: true,
   hideArchived: true,
+  hideOtherClients: true,
   filterRepoIds: true,
   showProperties: true,
   externalVisibilityDefault: true
@@ -64,6 +65,7 @@ function normalize(value: unknown): StockWorktreeOptions {
     hideDefaultBranch: record?.hideDefaultBranch === true,
     hideDetached: record?.hideDetached === true,
     hideArchived: typeof record?.hideArchived === 'boolean' ? record.hideArchived : DEFAULT_STOCK_OPTIONS.hideArchived,
+    hideOtherClients: record?.hideOtherClients === true,
     filterRepoIds,
     showProperties,
     externalVisibilityDefault: record?.externalVisibilityDefault === 'show' ? 'show' : 'hide'
@@ -93,7 +95,7 @@ export function setStockOptions(env: OptionsEnv, params: Record<string, unknown>
   if (params.projectOrderBy !== undefined && params.projectOrderBy !== 'manual' && params.projectOrderBy !== 'recent') {
     throw env.fail('invalid-params', 'projectOrderBy must be manual or recent')
   }
-  for (const key of ['compact', 'showBranch', 'showComment', 'showSleeping', 'hideCliCreated', 'hideDefaultBranch', 'hideDetached', 'hideArchived'] as const) {
+  for (const key of ['compact', 'showBranch', 'showComment', 'showSleeping', 'hideCliCreated', 'hideDefaultBranch', 'hideDetached', 'hideArchived', 'hideOtherClients'] as const) {
     if (params[key] !== undefined && typeof params[key] !== 'boolean') throw env.fail('invalid-params', `${key} must be a boolean`)
   }
   if (params.externalVisibilityDefault !== undefined && params.externalVisibilityDefault !== 'show' && params.externalVisibilityDefault !== 'hide') {
