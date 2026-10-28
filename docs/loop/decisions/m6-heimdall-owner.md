@@ -275,5 +275,49 @@
 - **Revisit if:** the refreshed actual native worker flow exposes another integration defect
 - **Source:** assumed — autonomous
 
+## D26: Let driving structured input reach its existing native startup barrier
+- **Question:** actual owner-worker startup failed before sending its first prompt with deferred flight_active
+- **Options:** retry a settled pointer; relax every busy check; distinguish driving worker input from idle mailbox nudges at the existing startup barrier
+- **Chose:** structuredRefusal receives the existing pointer purpose. A starting session still defers mailbox_pointer, while worker_start reaches the exact-incarnation, idempotent structured/send path, which already waits for startTasks. Keep working/waiting/exited refusals, operation receipts, payload identity and singleflight unchanged. Reserve only session/src/pointer.ts with both coordinating lanes before editing.
+- **Why:** create with deferStart reserves a real lease and schedules native initialization without a turn. Refusing starting before send prevents the driving request from reaching the serialization point that owns readiness. This is not a second pointer flight or permission to replay unknown work.
+- **Evidence:** artifact169 persisted start_failed/submitting/flight_active; read-only InitialPointerCause trace;42791478 isolated checkpoint,14public pointer tests58assertions pass. Post-fix actual native log proves initialize/thread/start/turn/start reached the real child and provider identity persisted; full owner-worker acceptance is not yet green.
+- **Reversibility:** easy
+- **Confidence:** high for the observed startup admission cause
+- **Revisit if:** initial input can reach a changed incarnation or idle mailbox input starts a busy session
+- **Source:** assumed — autonomous
+
+## D27: Preserve native history and exact follow-up identity instead of incidental total turns
+- **Question:** user reported the restart acceptance expected two turns but observed three under legitimate automatic owner work
+- **Options:** re-pin the new total; suppress automatic owner work; assert the native history contract
+- **Chose:** remove exact total/loaded-turn counters. Assert the original persisted history remains an identical prefix, native provider identity remains the same, and the explicitly sent follow-up appears exactly once. Wait for that follow-up rather than a global turn count. Retain model/effort continuity and actual process-backed resume.
+- **Why:** automatic owner turns can interleave with an independent user follow-up; losing history, changing conversation or duplicating that explicit follow-up are the consumer-visible failures.
+- **Evidence:** user scoped-suite report297pass/12fail and restart line499; no rerun to reconfirm; changed restart case1pass16assertions5.45s;42791478
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** a duplicate follow-up or missing history prefix is observed
+- **Source:** assumed — autonomous
+
+## D28: Observe real native work without changing production readiness policy
+- **Question:** a deliberately silent held native fixture starts a turn but emits no assistant/tool/result evidence for the worker readiness observer
+- **Options:** relax production observation or increase timeouts; fake working state on a timer; supply input-driven native commentary while the fixture remains held
+- **Chose:** consume lane10's isolated a5489be7 heldPrefix option as d34cf720. The shared native fixture emits real assistant commentary events only after receiving turn/start and retains the in-progress turn. Pass that option through the existing worker harness in isolated1b9bb6f6, leaving defaults unchanged. Use public catalog refresh/enable after the fixture launcher exists. No producer, observer or timeout policy changes.
+- **Why:** these owner message/question/stop flows require an alive, positively started worker, not simulation of an indefinitely silent model. Actual protocol activity proves work began without manufacturing process authority.
+- **Evidence:** native logs with initialize/thread/start/turn/start and persisted provider identity; silent-mode30-second observation result; actual heldPrefix case reaches ready with exact attestation and lands owner message-worker through serviceSend. The later ordinary CLI check result remains rejected by its public schema, not counted as passing.
+- **Reversibility:** easy
+- **Confidence:** high for native readiness and actual service message effect; full worker flow still requires core fixes
+- **Revisit if:** a fixture emits work before receiving driving input
+- **Source:** assumed — autonomous
+
+## D29: Verify abandonment through the real owner API and retain exact schema failure evidence
+- **Question:** complete common-intervention API proof and the first actual worker delivery failure
+- **Options:** rely only on callback units; bypass client validation to continue; exercise the public path and preserve its accepted receipt
+- **Chose:** add an owner abandon API case proving durable disarm and an independent native child's same-conversation follow-up. Remove a response-wording assertion from the existing independent-child case. For the worker check failure, inspect the already completed receipt read-only, apply the published schema to that exact result and send the diagnosed contract omission to the core owner. Do not replace/retry the accepted mutation or bypass CLI validation.
+- **Why:** a disarm must not kill unrelated work. The actual message was delivered, but a consumer cannot use it when its sender address is not declared by the response schema; hiding validation would substitute a weaker flow.
+- **Evidence:** owner API17pass113assertions28.87s; scripts66pass517assertions123.66s; artifact202 completed check receipt; protocol.validateValue exact failure params.messages[0].sender.kind is not allowed; published sender schema has no declared properties. Core coordinator notified and given /tmp/quirky-lane12-owner-live-status.md.
+- **Reversibility:** easy
+- **Confidence:** high for the verified API behavior and exact ordinary schema cause
+- **Revisit if:** the corrected published result schema still rejects an actual attested worker delivery
+- **Source:** assumed — autonomous
+
 ## Progress
-Actual core facade df799424 is merged as e410f69f after canonical owner/control integration f1f29443 and assigned owner type fixes913a63a0. All implementers returned. Own runtime/gates/worker/API58tests354assertions pass, including the16th exact human-answer API case;20owner files passed scoped compiler diagnostics. Both standalone API/CLI publication and scoped native cleanup smokes pass. New inactive-live assignment regression failed before and driver/worker9tests25assertions pass after the scan guard. Actual owner-worker acceptance initially failed because its Codex launcher appeared after catalog startup; durable inspection proves refusal, fixture now refreshes/enables through public API and shares the existing process scope. Refreshed real backend run is active. Final affected suite/scripts/full typecheck not yet run; queue dependency core still pending, bg_24 awaits readiness. Next: finish actual worker flow and any concrete fixes, publish checkpoint, merge dependency corrections, await deps ready, catch up build/roadmap once/read incoming logs, required gates, commit/detach/queue land. No fake backend, unstarted review/dogfood campaign or silent scope reduction.
+Owner branch through1b9bb6f6 includes actualdf799424/e410 facade, verified4bb boundaries, isolated427 startup-pointer/restart correction and d34 shared heldPrefix fixture. Own owner API17tests113assertions, prior owner runtime/gate/worker58tests354assertions, native69tests269assertions, driver/worker9tests25assertions, pointer14tests58assertions and semantic restart1test16assertions passed;21owner files scoped-type clean. Required scripts66tests517assertions pass. Actual owner-worker fixture is uncommitted: it now reaches positive ready/attested native work and lands serviceSend, but ordinary worker CLI check rejects the completed Run-sender delivery. Direct validation proves sender.kind is undeclared by check.result; core owner has exact receipt/schema evidence. No validation bypass or replacement mutation. Temporary SQLite/native diagnostics must be removed after core correction; message-before-question order and exact pending-question matching are authored. All implementers/scouts returned; bg_40 awaits queue core readiness. Next: integrate actual ordinary schema/stop/report/type fixes, finish worker message/answer/exact-stop/sibling proof, remove diagnostics/publish fixtures, dependency-ready/catch-up once/incoming logs, affected remote suite/full typecheck, commit/detach/queue land. Aged-item policy skips unstarted review/dogfood, not required behavior.
