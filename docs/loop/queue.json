@@ -1575,96 +1575,6 @@
       "status": "todo"
     },
     {
-      "id": "m7-test-triage",
-      "milestone": "M7",
-      "title": "End-phase test triage: run bun scripts/suite.ts packages apps plugins, bun test scripts and bun run typecheck on build/roadmap, and add one fix-test-<area>-<MMDD> item per failing package, app or plugin (naming its failing files and tests) so the lanes split the debugging; change no code",
-      "docs": [],
-      "deps": [
-        "sa-browser-agent-extras",
-        "m4-hosting-ui-review-browser-routing",
-        "sa-browser-profile-import-ui",
-        "m4-hosting-ui-tasks-complete-remaining-flows",
-        "m6-heimdall-host-power",
-        "m6-orchestration-idle-pointer-shutdown",
-        "m5-loops-ui-visible-stop-close-review",
-        "m7-editor-source-control-completion",
-        "m7-sweep-terminal-completion",
-        "sb-mobile-app-prerequisites",
-        "m2-editor-build-unbuilt-flows",
-        "m7-sweep-automation-completion",
-        "m7-orchestration-heimdall-unbuilt-flows",
-        "sb-mobile-app-panels-unbuilt-flows",
-        "m7-diff-markdown-local-images",
-        "m7-terminal-runtime-native-and-worktree-parity",
-        "m7-orchestration-worker-federation",
-        "m7-terminal-provider-host-and-worktree-remainder",
-        "fix-desktop-startup-imports"
-      ],
-      "status": "in-progress",
-      "lane": 8
-    },
-    {
-      "id": "m7-sweep-sessions",
-      "milestone": "M7",
-      "docs": [
-        "accounts.md",
-        "ai-vault.md",
-        "handoff.md",
-        "session-info.md",
-        "terminal-dock.md"
-      ],
-      "status": "todo",
-      "title": "Parity sweep for accounts.md, ai-vault.md, handoff.md, session-info.md, terminal-dock.md: every remaining flow in these feature docs, except the GitLab, Bitbucket, Gitea/Forgejo and Azure DevOps flows, the Objective runner and the PR sitter, which the user deferred. Find what earlier items left out or deferred, build or fix it, and record anything too large as a follow-up item",
-      "deps": [
-        "m3-session-info",
-        "m3-terminal-dock",
-        "m3-handoff",
-        "m3-accounts",
-        "m3-vault",
-        "m3-accounts-remaining-flows",
-        "m7-test-triage"
-      ]
-    },
-    {
-      "id": "m7-sweep-browser-mobile",
-      "milestone": "M7",
-      "docs": [
-        "browser.md",
-        "mobile.md"
-      ],
-      "status": "todo",
-      "title": "Parity sweep for browser.md, mobile.md: every remaining flow in these feature docs, except the GitLab, Bitbucket, Gitea/Forgejo and Azure DevOps flows, the Objective runner and the PR sitter, which the user deferred. Find what earlier items left out or deferred, build or fix it, and record anything too large as a follow-up item",
-      "deps": [
-        "sa-browser-agent",
-        "sa-browser-pane",
-        "sa-browser-profiles-settings",
-        "sa-browser-design-mode",
-        "sb-mobile-daemon",
-        "sb-mobile-app",
-        "sb-mobile-app-panels",
-        "m7-test-triage"
-      ]
-    },
-    {
-      "id": "m7-api-freeze",
-      "milestone": "M7",
-      "title": "Plugin API 1.0: freeze and version the API, manifests declare their API version, publish an example distro",
-      "docs": [],
-      "deps": [
-        "m7-sweep-terminal",
-        "m7-sweep-editor-source-control",
-        "m7-sweep-sessions",
-        "m7-sweep-hosting",
-        "m7-sweep-automation",
-        "m7-sweep-browser-mobile",
-        "m7-sweep-orchestration",
-        "m7-terminal-owner-provisioning-and-selector-flows",
-        "m7-vm-and-owner-bound-host-workspaces"
-      ],
-      "status": "todo",
-      "early": true
-    },
-    {
       "id": "ui-restyle-terminal",
       "milestone": "UI",
       "title": "UI redesign: restyle quirky.terminal and quirky.terminal-dock onto the shared components and tokens as tools/views in their default slots; adds its plugins to the UI lint enforced list and passes the lint check and the screenshot review against the golden screens. Follow docs/quirk/specs/2026-10-28-ui-redesign/logic.md (approved). Use only the shared components and tokens; the UI lint check must pass. Build-first mode applies: typecheck gates the land.",
@@ -1830,15 +1740,82 @@
       "status": "todo"
     },
     {
+      "id": "m7-test-triage",
+      "milestone": "M7",
+      "title": "End-phase test triage: run bun scripts/suite.ts packages apps plugins, bun test scripts and bun run typecheck on build/roadmap, and add one fix-test-<area>-<MMDD> item per failing package, app or plugin (naming its failing files and tests) so the lanes split the debugging; change no code",
+      "docs": [],
+      "deps": [
+        "sa-browser-agent-extras",
+        "m4-hosting-ui-review-browser-routing",
+        "sa-browser-profile-import-ui",
+        "m4-hosting-ui-tasks-complete-remaining-flows",
+        "m6-heimdall-host-power",
+        "m6-orchestration-idle-pointer-shutdown",
+        "m5-loops-ui-visible-stop-close-review",
+        "m7-editor-source-control-completion",
+        "m7-sweep-terminal-completion",
+        "sb-mobile-app-prerequisites",
+        "m2-editor-build-unbuilt-flows",
+        "m7-sweep-automation-completion",
+        "m7-orchestration-heimdall-unbuilt-flows",
+        "sb-mobile-app-panels-unbuilt-flows",
+        "m7-diff-markdown-local-images",
+        "m7-terminal-runtime-native-and-worktree-parity",
+        "m7-orchestration-worker-federation",
+        "m7-terminal-provider-host-and-worktree-remainder",
+        "fix-desktop-startup-imports"
+      ],
+      "status": "in-progress",
+      "lane": 8
+    },
+    {
+      "id": "m7-sweep-sessions",
+      "milestone": "M7",
+      "docs": [
+        "accounts.md",
+        "ai-vault.md",
+        "handoff.md",
+        "session-info.md",
+        "terminal-dock.md"
+      ],
+      "status": "todo",
+      "title": "Parity sweep for accounts.md, ai-vault.md, handoff.md, session-info.md, terminal-dock.md: every remaining flow in these feature docs, except the GitLab, Bitbucket, Gitea/Forgejo and Azure DevOps flows, the Objective runner and the PR sitter, which the user deferred. Find what earlier items left out or deferred, build or fix it, and record anything too large as a follow-up item",
+      "deps": [
+        "m3-session-info",
+        "m3-terminal-dock",
+        "m3-handoff",
+        "m3-accounts",
+        "m3-vault",
+        "m3-accounts-remaining-flows"
+      ]
+    },
+    {
+      "id": "m7-sweep-browser-mobile",
+      "milestone": "M7",
+      "docs": [
+        "browser.md",
+        "mobile.md"
+      ],
+      "status": "todo",
+      "title": "Parity sweep for browser.md, mobile.md: every remaining flow in these feature docs, except the GitLab, Bitbucket, Gitea/Forgejo and Azure DevOps flows, the Objective runner and the PR sitter, which the user deferred. Find what earlier items left out or deferred, build or fix it, and record anything too large as a follow-up item",
+      "deps": [
+        "sa-browser-agent",
+        "sa-browser-pane",
+        "sa-browser-profiles-settings",
+        "sa-browser-design-mode",
+        "sb-mobile-daemon",
+        "sb-mobile-app",
+        "sb-mobile-app-panels"
+      ]
+    },
+    {
       "id": "fix-flaky-pty-host-manager",
       "milestone": "M1",
       "title": "Fix the flaky packages/pty-host/test/manager.test.ts: it failed under load in 4 full-suite runs, and on the new 16-core test host its 'attach > raw mode replays the hot tail and joins the live stream at the offset' test failed even alone ('timed out waiting for echo and cat output' after 5 s). Find out with quirk:systematic-debugging whether the wait is too short or the attach misses output written between the replay and the live subscription, reproduce it under CPU load, and fix the code or the test",
       "docs": [
         "term-daemon.md"
       ],
-      "deps": [
-        "m7-test-triage"
-      ],
+      "deps": [],
       "status": "todo"
     },
     {
@@ -1863,9 +1840,7 @@
       "docs": [
         "worktrees.md"
       ],
-      "deps": [
-        "m7-test-triage"
-      ],
+      "deps": [],
       "status": "todo"
     },
     {
@@ -1875,9 +1850,7 @@
       "docs": [
         "term-ui.md"
       ],
-      "deps": [
-        "m7-test-triage"
-      ],
+      "deps": [],
       "status": "todo"
     },
     {
@@ -1887,9 +1860,7 @@
       "docs": [
         "term-daemon.md"
       ],
-      "deps": [
-        "m7-test-triage"
-      ],
+      "deps": [],
       "status": "todo"
     },
     {
@@ -1900,8 +1871,7 @@
         "mobile.md"
       ],
       "deps": [
-        "sb-mobile-daemon",
-        "m7-test-triage"
+        "sb-mobile-daemon"
       ],
       "status": "todo"
     },
@@ -1910,9 +1880,7 @@
       "milestone": "M1",
       "title": "Fix the native-only failures in m1-term-ui from the 2026-10-28 run: SC-37",
       "docs": [],
-      "deps": [
-        "m7-test-triage"
-      ],
+      "deps": [],
       "status": "todo"
     },
     {
@@ -1920,9 +1888,7 @@
       "milestone": "M2",
       "title": "Fix the native-only failures in m2-editor from the 2026-10-28 run: SC-9-native",
       "docs": [],
-      "deps": [
-        "m7-test-triage"
-      ],
+      "deps": [],
       "status": "todo"
     },
     {
@@ -1930,9 +1896,7 @@
       "milestone": "M3",
       "title": "Fix the native-only failures in m3-accounts from the 2026-10-28 run: AC6-AC7-native-link",
       "docs": [],
-      "deps": [
-        "m7-test-triage"
-      ],
+      "deps": [],
       "status": "todo"
     },
     {
@@ -1940,9 +1904,7 @@
       "milestone": "M3",
       "title": "Fix the native-only failures in m3-vault from the 2026-10-28 run: SC-18-native-clipboard",
       "docs": [],
-      "deps": [
-        "m7-test-triage"
-      ],
+      "deps": [],
       "status": "todo"
     },
     {
@@ -1950,9 +1912,7 @@
       "milestone": "Side A",
       "title": "Fix the native-only failures in sa-browser-agent from the 2026-10-28 run: C2-native-focus",
       "docs": [],
-      "deps": [
-        "m7-test-triage"
-      ],
+      "deps": [],
       "status": "todo"
     },
     {
@@ -1963,10 +1923,41 @@
         "accounts.md"
       ],
       "deps": [
-        "m3-accounts-remaining-flows",
-        "m7-test-triage"
+        "m3-accounts-remaining-flows"
       ],
       "status": "todo"
+    },
+    {
+      "id": "m7-api-freeze",
+      "milestone": "M7",
+      "title": "Plugin API 1.0: freeze and version the API, manifests declare their API version, publish an example distro",
+      "docs": [],
+      "deps": [
+        "m7-sweep-terminal",
+        "m7-sweep-editor-source-control",
+        "m7-sweep-sessions",
+        "m7-sweep-hosting",
+        "m7-sweep-automation",
+        "m7-sweep-browser-mobile",
+        "m7-sweep-orchestration",
+        "m7-terminal-owner-provisioning-and-selector-flows",
+        "m7-vm-and-owner-bound-host-workspaces",
+        "m7-test-triage",
+        "fix-flaky-pty-host-manager",
+        "m2-sidebar-extras-followup",
+        "fix-flaky-quirky-worktree-create",
+        "fix-flaky-terminal-features-pane",
+        "fix-flaky-pty-host-clear",
+        "sb-mobile-settings-visibility",
+        "fix-native-m1-term-ui-1028",
+        "fix-native-m2-editor-1028",
+        "fix-native-m3-accounts-1028",
+        "fix-native-m3-vault-1028",
+        "fix-native-sa-browser-agent-1028",
+        "m3-accounts-complete-user-acceptance-20261028"
+      ],
+      "status": "todo",
+      "early": true
     }
   ]
 }
