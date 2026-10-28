@@ -110,5 +110,60 @@
 - **Revisit if:** owner service responses change their consumed identity or certainty contract
 - **Source:** assumed — autonomous
 
+## D11: Validate commands before opening conditional deletion confirmation
+- **Question:** malformed delete requests reached the daemon's confirmation path before canonical command validation
+- **Options:** confirm invalid requests; duplicate a looser parser; reuse the control plane's canonical parser
+- **Chose:** describeCommand uses exported parseControlRequest. Invalid requests never open an ask and return invalid-command; valid delete retains single-use exact confirmation. Preserve ordinary awaiting-approval as Held: only verdict escalate records Escalated.
+- **Why:** a public invalid-delete regression first returned confirmation-required, then passed after the shared preflight. The real public control suite exercises exact approval, lifecycle, budget, flags, fences and confirmation cancellation without model calls.
+- **Evidence:** control-acceptance.test.ts; observed12pass98assertions2.40s before owner composition; runner verdict branch retained through ccbfa0cb/f1f29443
+- **Reversibility:** easy
+- **Confidence:** high for exercised public boundaries
+- **Revisit if:** describeCommand and command accept different request shapes
+- **Source:** assumed — autonomous
+
+## D12: Compose genuine dependency authority and preserve landed persistence history
+- **Question:** old dependency ancestry conflicted with canonical session/structured migrations and actual owner resource lifetime
+- **Options:** duplicate stores or fabricate service authority; compose real checkpoints and preserve canonical state
+- **Chose:** real orchestration ancestry7f789885, owner348efc61 through ccbfa0cb, then owner/core f1f29443. Preserve session badge migration8 and append pointer migration9; structured journal1 and receipt migration2; Session.launchSettings remains the only native launch replay snapshot. Scoped owner lifetimes stay in memory. Owner release must settle before deleting its enrollment, and uncertainty retains the row. Only owner-answer-sent maps to applied; plane owns revision/save/unpark.
+- **Why:** metadata cannot forge an attested worker or prove a stopped child. Renumbering landed migrations loses persisted state. Full public response metadata must not invalidate an otherwise exact consumed Run/question/receipt projection.
+- **Evidence:** session127pass386assertions; protocol12pass240assertions; merged structured/Claude56pass212assertions; owner/public-control62pass420assertions; control-host canonical receipt regressions. Actual backend proof currently reports core.listDispatches.bind activation failure, assigned to core rather than bypassed.
+- **Reversibility:** medium
+- **Confidence:** high for observed persistence/native/public boundaries; worker backend acceptance not yet passing
+- **Revisit if:** dependency catch-up changes canonical authority or persistence ownership
+- **Source:** assumed — autonomous
+
+## D13: Apply the aged-item rule without claiming an unrun dogfood campaign
+- **Question:** whether to begin the unstarted final review and seven-goal UI campaign after this item exceeded two hours
+- **Options:** start another campaign; follow the current night-mode exception while retaining actual-surface smoke
+- **Chose:** skip unstarted full review/dogfood under the aged-item rule. Run a bounded actual web-surface smoke required by the coding workflow: fresh isolated quirkyd, real built-in UI, public fixture kind, visible fleet/detail/glyphs/explanation and Pause. Keep native banners pending. No seven-goal likeuser verdict or final-review pass is claimed.
+- **Why:** current LOOP explicitly skips those unstarted campaigns for aged items, not implementation or verification. The minimal surface showed pushed fleet/counters/glyphs, verbatim operator-edit explanation and positive Pause feedback followed by Resume enabled/Pause disabled, with no frontend errors. Browser full-page screenshot wrapper stalled; a direct owned-CDP viewport capture succeeded, without an app workaround.
+- **Evidence:** authoritative LOOP Night mode; source claim/spec chronology; /tmp/heimdall-control-fleet.png and /tmp/heimdall-control-paused-detail.png; browser observations. Invalid first fixture setup used reserved built-in namespace under installed plugins; corrected to private real builtins, never relaxed admission.
+- **Reversibility:** easy
+- **Confidence:** high for exercised surface only
+- **Revisit if:** loop policy changes or a required surface fails
+- **Source:** locked by docs/loop/LOOP.md
+
+## D14: Require an acknowledged dispatch, not merely a live process or completed work
+- **Question:** the real child question fixture first mistook an attached failed-start process for active work, then incorrectly waited for a completed work effect
+- **Options:** widen default-Run lookup or add an explicit recipient; trust liveness alone; require the existing positive ready-dispatch acknowledgment
+- **Chose:** keep default worker Run routing and exact authentication unchanged. Trigger the real child CLI only when a live exact session/incarnation matches the running attempt's persisted dispatchId. The adapter writes that association only after a ready receipt; running work remains unresolved until its outcome is known. Positive rejected starts fail setup rather than being treated as ready.
+- **Why:** the child inspector proved matching expected/actual/assignee session IDs but Dispatch status failed, so run_required was not an authentication or resolver defect. Owner checkpoint42791478 fixes worker_start reaching the native startup barrier while preserving mailbox-pointer refusal. The held Codex fixture can opt into real input-driven assistant commentary without completing its turn; no timer, fake status or production observer bypass.
+- **Evidence:** actual child diagnostic artifact235; orchestration.ts ready-only dispatch mapping; runner.ts applyDispatchResult; isolated fixture checkpointa5489be7; unchanged-default Codex/protocol/host26pass291assertions. Final worker question/stop scenario remains under verification.
+- **Reversibility:** easy
+- **Confidence:** high for the identified setup and dispatch semantics; final native acceptance not yet passing
+- **Revisit if:** ready acknowledgment and exact live identity disagree
+- **Source:** assumed — autonomous
+
+## D15: Exercise a blocking Ask rather than invent a pending one-way message
+- **Question:** the native fixture sent a question-type message, then expected the blocking-question thread projection to expose it
+- **Options:** widen the backend projection and invent lifecycle state; create a real blocking Ask through the attested child CLI
+- **Chose:** actual child orchestration ask, atomically record its started identity before it exits, answer through Heimdall, then require the child CLI's exact answered message ID and body. Keep serviceRunShow's non-consuming question-thread projection unchanged. Pending-only UI rows may disappear after answer; positive service-backed journal evidence and the worker's received answer prove closure.
+- **Why:** source orchestration.md explicitly defines ask as the only worker question path. send --type question creates a one-way message but no question_threads row; changing the projection alone would not create answer authority. The apparent missing projection was our fixture error, not consumption deleting a pending Ask.
+- **Evidence:** source orchestration.md:477–488; messaging.ts send/beginAsk/serviceQuestions/answerQuestion. Corrected real-child test reached the final stop call after exact Ask reply, unpark and duplicate-refusal assertions; final stop was refused by core's task_not_startable live-worker guard (artifact267). No backend projection workaround applied.
+- **Reversibility:** easy
+- **Confidence:** high for exercised blocking Ask/answer/unpark/replay; overall native test remains failing at exact stop
+- **Revisit if:** a real pending Ask disappears from the owned read projection
+- **Source:** locked by docs/roadmap.md
+
 ## Progress
-Core runtime794266f1 and its import correction are merged. Operator main/manifest/host/lifecycle checkpoint752769fc published; main/service/manifest serial ownership handed to lane12 for the exact owner callback and owner APIs/CLI. Parent will not edit those hubs until its checkpoint. Manifest/nullable owner checks and actual main import pass; focused operator tests42pass192assertions after response/terminal regression fixes. Original component trees removed. Actual orchestration main/manifest/service facade still pending in dependency source; no stub or bypass used. Next: merge real backend and owner checkpoints, run daemon/CLI/worker/UI proof, affected suite/scripts/typecheck, deps-ready/catch-up/incoming decisions and queue land under current night policy. No full-runtime, dogfood, review or completion claim.
+Actual df799424/e410 service facade, owner4bb85a56 and native startup correction42791478 are integrated. Production build passes and packages Quirky.app39.23s; minimal actual web smoke completed and owned resources stopped. Latest public controls12pass98assertions4.33s; notifications3pass4assertions; shared consumer fixtures166pass737assertions; own operator42pass192assertions; scripts66pass517assertions. Required scoped run:297/309remote files passed,12failed; Mac terminal passed runner-owned isolated retry after load failures. Shared migration/resume/auth/schema fixture failures repaired without weakening consumer invariants. Latest full types138diagnostics28files; own remaining three fixture diagnostics corrected, core owns the remaining core/orchestration fixes. Real child blocking Ask receives the exact Heimdall answer, un-parks and rejects replay; final exact worker stop fails core's task_not_startable guard. Next: integrate core type/runtime corrections, prove exact native stop, rerun affected failures and final types, await deps-ready, single roadmap catch-up/read decisions, and queue land. No full dogfood/review/completion claim.

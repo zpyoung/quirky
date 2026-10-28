@@ -3,6 +3,7 @@ import type {
   ControlPlane,
   DebugReport,
   FleetRow,
+  FleetService,
   FleetAction,
   FleetSnapshot,
   KernelControlHost,
@@ -70,6 +71,10 @@ function payloadString(enrollment: Enrollment, keys: string[]): string | null {
 }
 
 function nameOf(enrollment: Enrollment): string {
+  if (enrollment.kind === 'hosted-review' && isRecord(enrollment.kindPayload)) {
+    const reviewNumber = enrollment.kindPayload.reviewNumber
+    if (typeof reviewNumber === 'number' && Number.isSafeInteger(reviewNumber) && reviewNumber > 0) return `Pull request #${reviewNumber}`
+  }
   return payloadString(enrollment, ['name', 'objectiveText', 'title']) ?? enrollment.kind
 }
 
