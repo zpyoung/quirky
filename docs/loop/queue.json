@@ -1317,6 +1317,42 @@
         "sa-browser-profiles-settings"
       ],
       "status": "todo"
+    },
+    {
+      "id": "sa-browser-pane-native-host-controls",
+      "milestone": "Side A",
+      "title": "Complete native browser hard reload with genuine cache bypass and explicit network/TLS load-error state while retaining requested URL/retry controls. Pinned public Electrobun tag exposes normal reload and load-started/committed/finished only, no ignoreCache/reloadFromOrigin or load-failed signal; resume with supported native APIs, never simulate hard reload by normal reload or URL mutation and never invent a failure flag.",
+      "docs": [
+        "browser.md"
+      ],
+      "deps": [
+        "sa-browser-pane"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "sa-browser-pane-workspace-preview",
+      "milestone": "Side A",
+      "title": "Complete workspace-document browser preview conversion and Back across convertedFrom/convertedTo: grant-scoped active HTML and in-grant assets in an isolated nonpersistent guest with outbound network/permissions/download denial. Current public file resources intentionally allow only passive MIME and sandbox responses; native SDK lacks equivalent grant protocol/network policy hooks. Add a safe public preview capability before rendering, never relax active HTML onto daemon origin or claim direct file browsing is equivalent.",
+      "docs": [
+        "browser.md"
+      ],
+      "deps": [
+        "sa-browser-pane"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "sb-mobile-settings-visibility",
+      "milestone": "Side B",
+      "title": "Recheck Settings > Mobile paired-device revoke visibility at 1280x720: guarded scroll/PageDown could not reach the clipped button; diagnose host overflow versus driver targeting and fix only reproduced app clipping (Mobile-page revoke path already works)",
+      "docs": [
+        "mobile.md"
+      ],
+      "deps": [
+        "sb-mobile-daemon"
+      ],
+      "status": "todo"
     }
   ]
 }
