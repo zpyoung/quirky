@@ -66,5 +66,16 @@
 - **Revisit if:** The operator changes the queued scope.
 - **Source:** deferred: platform
 
+## D7: Implement Session Info navigation in its actual owner
+- **Question:** Where does the queued SC-21 Open Vault action belong?
+- **Options:** Add it to the old session UI reference; implement it in the installed Session Info plugin.
+- **Chose:** Narrow source/manifest/test scope in `plugins/quirky.session-info`, with the existing public Vault open command; include the actual owner in affected verification.
+- **Why:** The action component located Session Info there; source search found no existing Vault navigation. Adding it to the unrelated worktree view would not complete the user's Session Info flow.
+- **Evidence:** plugins/quirky.session-info; plugins/quirky.session/src/ui.tsx; inherited BLOCKERS.md:170,249.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** The effective Session Info owner is overridden.
+- **Source:** assumed — autonomous
+
 ## Progress
-Scoped the full claimed matrix and read the feature, original acceptance/spec contracts, blocker entry and native evidence. Three components are designed; combined spec/contracts are being committed before implementers. No new acceptance claim yet. Next: implement and exercise each component, then built-browser campaign, affected runner/scripts/typecheck, one catch-up/review and supported queue landing. Inherited untracked .serena/ is not item work.
+Combined spec/contracts committed at b59ba608 before three disjoint implementers. All three component HEADs began there with empty dirty snapshots; no checks/commits allowed mid-flight. Parent prepared isolated packaged-browser fixture, verified web driver readiness, and wrote fresh pending native handoff while preserving historical failure evidence. No implementation acceptance claim yet. Next: barrier scope/HEAD audits, red/green consumer checks, build and full browser campaign, affected runner/scripts/typecheck, one catch-up/review and supported queue landing. Inherited untracked .serena/ is not item work.
