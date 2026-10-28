@@ -563,6 +563,35 @@
         }
       },
       {
+        "id": "markdownPreview",
+        "description": "Render detached modified Markdown with source-authorized local images and exact per-render resource release; never opens or changes editor buffers.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "action": { "type": "string", "enum": ["render", "release"] },
+            "leaseId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[A-Za-z0-9_-]+$", "description": "Unpredictable per-render identifier, normally crypto.randomUUID(). Exact idempotent release also cancels pending acquisition. Never reuse an active identifier." },
+            "worktree": { "type": "string", "minLength": 1, "description": "Required for render; explicit registered worktree selector, normally id:<id>." },
+            "path": { "type": "string", "minLength": 1, "description": "Required for render; authorized worktree-relative .md/.markdown/.mdx source location, including absent historical files. No absolute paths, schemes, backslashes or outside-worktree traversal." },
+            "text": { "type": "string", "description": "Required for render; modified Markdown with existing 8 MiB, line and block limits. Only editor-authorized local image resources can become image URLs." }
+          },
+          "required": ["action", "leaseId"],
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "description": "render returns {leaseId,html,worktreeId,path}; release returns {leaseId,released}. Unknown/already released identifiers return released:false. Active duplicates, capacity, cancelled acquisition and disposed service conflict. Up to64 active leases and64 local images each; no cross-lease eviction.",
+          "properties": {
+            "leaseId": { "type": "string" },
+            "html": { "type": "string", "description": "Canonical sanitized Markdown HTML; local image sources are opaque editor-owned resources." },
+            "worktreeId": { "type": "string" },
+            "path": { "type": "string" },
+            "released": { "type": "boolean" }
+          },
+          "required": ["leaseId"],
+          "additionalProperties": false
+        }
+      },
+      {
         "id": "notes",
         "description": "Persist, format, copy and send Markdown review notes.",
         "params": {

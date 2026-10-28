@@ -168,6 +168,14 @@ export type ViewerResourceParams =
   | { bufferId: string; action: 'media'; leaseId?: string }
   | { bufferId: string; action: 'release'; leaseId: string }
 
+/** One detached Markdown render effect owns one unpredictable lease, never an editor buffer. */
+export type MarkdownPreviewParams =
+  | { action: 'render'; leaseId: string; worktree: string; path: string; text: string }
+  | { action: 'release'; leaseId: string }
+export type MarkdownPreviewResult =
+  | { leaseId: string; html: string; worktreeId: string; path: string }
+  | { leaseId: string; released: boolean }
+
 export type SearchMatch = {
   line: number
   column: number
