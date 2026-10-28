@@ -165,5 +165,16 @@
 - **Revisit if:** the kernel's published built-in theme choices change.
 - **Source:** supersedes ui-screenshot-review D9
 
+## D15: Final caught-up smoke and canonical gate passed without a full visual-approval claim
+- **Question:** What evidence supports landing the reusable command after the canonical theme/lint cutover?
+- **Options:** infer compatibility from typecheck only; exercise current built-in themes and record the exact verification boundary
+- **Chose:** Build and capture the caught-up actual app; confirm selected built-in dark/light IDs. The first post-merge image exposed an initial sidebar-data race despite registered fixtures, so require all three real fixture worktree rows visible before the first capture. Final capture-only exited0/12.48s and its image visibly contains the repository and three rows. Final `bun run typecheck` exited0/46.71s including frozen install, canonical UI lint, root/mobile/desktop typing and prepared desktop SDK. Final reviewer preflight also refused a Google-author/Google-reviewer pairing at exit2/4.05s.
+- **Why:** Slot mounting alone was not evidence that fixture data had rendered. Condition-based readiness fixes the actual boundary rather than adding a sleep or suppressing an error. The current old shell still needs its separate restyle; earlier genuine85-floor review failed as expected.
+- **Evidence:** final-fixture-capture/capture-manifest.json and dark/light PNGs; post-merge-capture/theme-selection.json; post-merge-family-refused/review-report.json; final root typecheck output; lane notes' evidence archive
+- **Reversibility:** easy
+- **Confidence:** high for exercised shell/editor/Git, score/identity and interrupt paths; full-inventory and native quality remain unclaimed
+- **Revisit if:** end-phase tests or a restyle command exposes a contribution needing additional legitimate fixture data
+- **Source:** assumed — autonomous
+
 ## Progress
-Three disjoint implementers integrated after final HEAD/scope barrier: capture f4141b15, reviewer6f487299, CLI40c8bf87. Their worktrees were removed immediately after merge. Parent fixes and documentation ready to commit; one build/roadmap catch-up merge, incoming-decision read, final typecheck and canonical land remain. All smoke/model jobs and agents have returned.
+Implementation, docs and all5authored test files are integrated; test suites/review rounds/full-inventory dogfood/native runs were not executed under build-first. All implementers and narrow runtime/model jobs returned, component worktrees removed. One roadmap catch-up completed with incoming decisions read and package conflict resolved. Final caught-up runtime and UIlint/root/mobile/desktop gate passed (D15). No new product APIs or visual restyles, no unbuilt command flow deferred, no follow-up added. Next: commit final source/receipt, detach and canonical queue land ui-screenshot-review; preserve compact evidence beside lane notes, then remove owned scratch and end this one-item iteration.

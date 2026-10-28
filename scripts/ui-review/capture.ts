@@ -1014,6 +1014,11 @@ export async function captureApplication(options: CaptureOptions): Promise<Captu
     }), options.timeoutMs, options.signal, 'renderer navigation')
     await waitForUiWindow(captureRuntime)
     await waitForRendererModel(captureRuntime, model)
+    await bounded(Promise.all(activeFixtures.worktrees.map((worktree) =>
+      page.locator(`[data-worktree-id=${JSON.stringify(worktree.id)}]`).waitFor({
+        state: 'visible', timeout: options.timeoutMs
+      })
+    )), options.timeoutMs, options.signal, 'fixture worktree rows')
 
     const markAborted = () => {
       const message = sanitizedError(options.signal ? abortError(options.signal) : new Error('capture was aborted'), secrets)
