@@ -253,5 +253,60 @@
 - **Revisit if:** the authoritative land reports a concrete conflict or failure
 - **Source:** assumed — autonomous
 
+## D24: Repair the normal merged gate's owning failures rather than waive them
+- **Question:** Did the first normal queue landing pass?
+- **Options:** accept the earlier focused gate; repair the concrete full-gate failures
+- **Chose:** landing remains rejected. Merge current roadmap, preserve its new editor-drop capability decision, and investigate three independent owning boundaries: worker crash/restart fixture/runtime discovery; foreground/background Git fetch ownership; Dock send acceptance/consumer ordering.
+- **Why:** Full gate passed651/655remote files and all5macOS files. Shell-path's isolated retry passed20/0, but worker restart failed again and stopped remaining retries. No script/typecheck-after-suite clearance occurred and no retry policy or assertion is waived.
+- **Evidence:** bg32 exit1/331.65seconds, remote1793171027850-29800. Worker first failed JSON EOF in acceptance-support callAs, then restarted private daemon exited0; Worktree failed a real origin/main ref-lock conflict during immutable-setup-revision creation; Dock found second body at44 before first at94. Three scoped repair agents received those observed failures without rerunning baseline merely to confirm them. Incoming m4-editor-drop-open-in-place D1-D6 read: no supported Finder source-path API, no native patch or substitute flow authorized; no conflict with Automations.
+- **Reversibility:** easy
+- **Confidence:** high for observed gate failure; causes remain under investigation
+- **Revisit if:** owning repair evidence identifies a different producer boundary
+- **Source:** locked by docs/loop/LOOP.md step7.3
+
+## D25: Publish fixture replies atomically and observe the CLI's real recovery daemon
+- **Question:** Why did worker acceptance see JSON EOF and then a restarted process exit0?
+- **Options:** ignore parse/exit failures; repair fixture publication and duplicate daemon ownership
+- **Chose:** acceptance-control writes each reply to a same-directory temporary file and renames it into place. Crash acceptance keeps SIGKILL, then observes the pending CLI's normal autostarted replacement rather than launching a competing daemon; require a distinct healthy PID and register it with the fixture process scope.
+- **Why:** The reply path previously existed before writeFileSync completed. Separately, the actual CLI reconnects/autostarts after ConnectionLost; the fixture's additional spawn legitimately exited0 when another healthy daemon already owned that home. Production runtime publication already uses atomic rename and needed no change.
+- **Evidence:** acceptance-control.ts reply writer; acceptance-support.ts polling reader; acceptance-restart.ts lifecycle; protocol/node connectDaemon default autostart and CLI link reconnection. Persisted start_unknown, pending dispatch, untouched input and exact-replay refusal assertions remain.
+- **Reversibility:** easy
+- **Confidence:** high for traced causes; owning gate result recorded separately
+- **Revisit if:** an actual CLI recovery publishes no healthy replacement or a malformed atomic reply appears
+- **Source:** assumed — autonomous
+
+## D26: Serialize repository base fetches without changing the immutable setup revision
+- **Question:** Why could a later create race an earlier background Git refresh?
+- **Options:** suppress ref-lock errors; serialize all owned base fetches per repository
+- **Chose:** reuse Worktree's existing KeyedQueue for background and required foreground base fetches; retain the existing30second required-fetch default and all error/fallback semantics. The setup-revision regression defers a real fetch until after hook inspection, avoiding its own independent conflicting raw fetch; a separate held-refresh regression verifies a later create cannot start another fetch early.
+- **Why:** Background refresh can outlive the create queue slot. A create mutex alone therefore does not own the lifetime of its Git ref update. The checked hooks OID must remain the eventual workspace HEAD even when the remote-tracking ref changes.
+- **Evidence:** worktree/src/daemon/base.ts; create.test.ts immutable HEAD assertion and real-fetch gate. Fixture cleanup releases gates and settles accepted fetches before restoring the Git adapter.
+- **Reversibility:** medium
+- **Confidence:** high for the ownership boundary; owning gate result recorded separately
+- **Revisit if:** another owner bypasses base-fetch serialization
+- **Source:** assumed — autonomous
+
+## D27: Preserve send arrival order before asynchronous preflight can reorder it
+- **Question:** Why did Dock's second body reach the real PTY before the first?
+- **Options:** loosen substring ordering; reserve admission before binding and preflight
+- **Chose:** same-pane admission orders binding resolution; accepted-session admission orders preflight through enqueue. Release both at enqueue, leaving the existing operation queue in charge of execution/cancel/disable/exact-session safety. No public API or retry/timeout policy change.
+- **Why:** The previous queue only ordered operations after independently asynchronous preflights completed. It could therefore faithfully execute an already-reversed enqueue order; this was not a marker collision.
+- **Evidence:** terminal-dock/src/service.ts send/admission; send.test.ts waits for both full bodies and submits, then asserts first submit before second body and second submit at or after the exclusive body end. send requires an explicit nonempty pane; missing selectors are rejected rather than pretending to have ordered aliases.
+- **Reversibility:** medium
+- **Confidence:** high for the traced acceptance race; owning gate result recorded separately
+- **Revisit if:** public send accepts a new selector alias or preflight ownership changes
+- **Source:** assumed — autonomous
+
+## D28: Require actual recovery, PTY consumption and remote-base creation proof
+- **Question:** Did the rejected-gate repairs pass their real client paths?
+- **Options:** accept agent claims; run owning regressions, typed checks and isolated actual programs
+- **Chose:** worker-restart and Dock files passed their owning run; the added Worktree regression initially exposed an undeclared fixture counter, which was restored, then its entire owning file passed with no retries. Complete typecheck passed before that final file run.
+- **Why:** The separate actual CLI smoke SIGKILLed its owned daemon, observed a distinct healthy CLI-recovered PID, retained start_unknown/pending/outcome_unknown, refused exact replay and submitted no preamble. The actual PTY smoke consumed two complete sends in arrival order and drained the queue. A fresh actual daemon/CLI created two distinct remote-base workspaces at the expected OID, then completed the native automation/UI API smoke.
+- **Evidence:** bg33 two files passed/one failed, then bg34 exit0/94.20seconds, Worktree suite-result ok:true,flaky:[]; workerRecovery/dockFifo JSON true; workspaces wt_bc0759add19d and wt_51109ff6fc8a at8f2628b5dff456571c45f0f9da398dfc449312d0; native run a04a647b-c488-4c02-879c-5c7b67a4d665, session s_b1f28de68db3. Captured owner acceptance is not stale-owner negative proof. Packaged build passed28plugins/21UI modules with the same icon/release warnings.
+- **Reversibility:** easy
+- **Confidence:** high for exercised paths; authoritative normal land remains the final gate
+- **Revisit if:** the next merged gate reports a concrete failure
+- **Source:** assumed — autonomous
+
 ## Progress
-Step7 ready: all owned web campaigns and browser sessions ended; final render closure passed and the owned daemon/home are cleaned. Canonical e4ec3492 is merged; final affected17files/typecheck/packaged build passed. Register only the single remote UI follow-up immediately before landing, commit, detach and run canonical queue land. Independent review remains explicitly unstarted/skipped under D16. Handle only concrete normal-land failures; do not start another item.
+Step7 retry ready: D25-D27 repairs passed owning regressions, complete typecheck, actual CLI/PTY/remote-base/native smokes and packaged build as D28 records. All repair agents and finite verification jobs returned. Commit the seven owning source/test files and this log, detach and retry canonical queue land. Keep the one registered remote follow-up and prior UI evidence; no independent-review clearance, second follow-up or second item.

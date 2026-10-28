@@ -377,10 +377,25 @@ describe('the commit the setup gate read is the commit the workspace is made fro
     git(pusher, 'push', '-q', 'origin', 'main')
 
     const real = gitApi()
+    let backgroundRefresh: Promise<boolean> | undefined
+    let startBackgroundRefresh: (() => void) | undefined
     useTestGit({
       ...real,
+      fetchRemote: (...args: Parameters<typeof real.fetchRemote>) => {
+        const refresh = Promise.withResolvers<boolean>()
+        backgroundRefresh = refresh.promise
+        startBackgroundRefresh = () => {
+          void real.fetchRemote(...args).then(refresh.resolve, refresh.reject)
+        }
+        return refresh.promise
+      },
       addNewBranchWorktree: async (...args: Parameters<typeof real.addNewBranchWorktree>) => {
-        git(dir, 'fetch', '-q', 'origin')
+        const start = startBackgroundRefresh
+        startBackgroundRefresh = undefined
+        const refresh = backgroundRefresh
+        if (start === undefined || refresh === undefined) throw new Error('the base refresh was not queued before worktree creation')
+        start()
+        if (!(await refresh)) throw new Error('the remote base refresh did not complete')
         return real.addNewBranchWorktree(...args)
       }
     })
@@ -389,6 +404,55 @@ describe('the commit the setup gate read is the commit the workspace is made fro
       expect(git(dir, 'rev-parse', 'origin/main')).not.toBe(gated)
       expect(git(made.worktree.path, 'rev-parse', 'HEAD')).toBe(gated)
     } finally {
+      const start = startBackgroundRefresh
+      startBackgroundRefresh = undefined
+      start?.()
+      if (backgroundRefresh !== undefined) await backgroundRefresh
+      useTestGit(null)
+    }
+  })
+})
+
+describe('remote base refresh serialization', () => {
+  test('a refresh that outlives create is queued before the next base refresh', async () => {
+    await startApi()
+    const real = gitApi()
+    let started = 0
+    let secondCreateRequested = false
+    const firstRefreshGate = Promise.withResolvers<void>()
+    const firstRefreshStarted = Promise.withResolvers<void>()
+    const secondRefreshStarted = Promise.withResolvers<void>()
+    const fetches: Promise<boolean>[] = []
+    useTestGit({
+      ...real,
+      fetchRemote: (...args: Parameters<typeof real.fetchRemote>) => {
+        const ordinal = ++started
+        if (ordinal === 1) firstRefreshStarted.resolve()
+        if (ordinal === 2) secondRefreshStarted.resolve()
+        const fetch = (async () => {
+          if (ordinal === 1) await firstRefreshGate.promise
+          return real.fetchRemote(...args)
+        })()
+        fetches.push(fetch)
+        return fetch
+      }
+    })
+    try {
+      await create({ repo: 'api', name: 'first', base: 'origin/main' })
+      await firstRefreshStarted.promise
+      secondCreateRequested = true
+      await create({ repo: 'api', name: 'second', base: 'origin/main' })
+      expect(started).toBe(1)
+      firstRefreshGate.resolve()
+      await secondRefreshStarted.promise
+      expect(await Promise.all(fetches)).toEqual([true, true])
+    } finally {
+      firstRefreshGate.resolve()
+      await Promise.all(fetches).catch(() => {})
+      if (secondCreateRequested && started === 1) {
+        await waitFor(() => (started === 2 ? true : undefined), 5_000).catch(() => {})
+      }
+      await Promise.all(fetches).catch(() => {})
       useTestGit(null)
     }
   })
