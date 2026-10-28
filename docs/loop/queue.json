@@ -970,7 +970,7 @@
         "fork-loops.md",
         "ledger.md"
       ],
-      "status": "todo",
+      "status": "in-progress",
       "title": "Parity sweep for automations.md, fork-loops.md, ledger.md: every remaining flow in these feature docs, except the GitLab, Bitbucket, Gitea/Forgejo and Azure DevOps flows, the Objective runner and the PR sitter, which the user deferred. Find what earlier items left out or deferred, build or fix it, and record anything too large as a follow-up item",
       "deps": [
         "m5-structured-runner",
@@ -981,7 +981,8 @@
         "m5-loops-presets",
         "m5-loops-ui",
         "m5-ledger"
-      ]
+      ],
+      "lane": 1
     },
     {
       "id": "m7-sweep-browser-mobile",
