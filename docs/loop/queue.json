@@ -1641,6 +1641,19 @@
       ],
       "status": "todo",
       "early": true
+    },
+    {
+      "id": "m7-diff-markdown-local-images",
+      "milestone": "M7",
+      "title": "Complete detached modified-side Markdown diff local-image rendering through a public editor-owned authorized resource/lifetime contract. Existing text-only renderPreview deliberately omits local images; add source-bound authorization and exact per-mounted-diff resource release without opening/mutating editor buffers, private imports, unsafe URL rendering or cross-split invalidation. Preserve source-bound editor previews and public Git hosted tab identity.",
+      "docs": [
+        "editor.md",
+        "source-control.md"
+      ],
+      "deps": [
+        "m7-editor-source-control-completion"
+      ],
+      "status": "todo"
     }
   ]
 }
