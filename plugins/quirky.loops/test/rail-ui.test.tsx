@@ -1,4 +1,4 @@
-import { GlobalRegistrator } from '@happy-dom/global-registrator'
+import { registerUiDom, unregisterUiDom } from './ui-dom'
 import { afterAll, afterEach, beforeAll, expect, test } from 'bun:test'
 import { act, createElement } from 'react'
 import type { Root, createRoot as createRootFactory } from 'react-dom/client'
@@ -227,11 +227,10 @@ function setSelectValue(element: HTMLSelectElement, value: string) {
 let unmountCurrent: (() => Promise<void>) | null = null
 
 beforeAll(async () => {
-  GlobalRegistrator.register()
+  registerUiDom()
   // React DOM feature-detects the DOM during import; register happy-dom first.
   const reactDom = await import('react-dom/client')
   createRoot = reactDom.createRoot
-  ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 })
 
 afterEach(async () => {
@@ -240,7 +239,7 @@ afterEach(async () => {
 })
 
 afterAll(async () => {
-  await GlobalRegistrator.unregister()
+  await unregisterUiDom()
 })
 
 test('shows durable state and structured output without inventing a cost or composer', async () => {

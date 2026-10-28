@@ -303,7 +303,7 @@ function CloseLoopDialog({ context, dialog }: { context: UiPluginContext; dialog
     })
   }
   return (
-    <div role="presentation" style={{ position: 'fixed', inset: 0, zIndex: 10000, display: 'grid', placeItems: 'center', background: 'rgba(0,0,0,.45)' }}>
+    <div role="presentation" style={{ position: 'fixed', inset: 0, zIndex: 10000, pointerEvents: 'auto', display: 'grid', placeItems: 'center', background: 'rgba(0,0,0,.45)' }}>
       <section role="dialog" aria-modal="true" aria-labelledby="loop-close-title" style={{ minWidth: 320, maxWidth: 480, padding: 24, borderRadius: 12, background: 'var(--surface, #222)', color: 'var(--text, #fff)', boxShadow: '0 16px 48px rgba(0,0,0,.4)' }}>
         <h2 id="loop-close-title">Close a running loop?</h2>
         <p>{dialog.name}</p>

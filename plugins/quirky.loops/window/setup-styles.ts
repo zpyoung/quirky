@@ -3,6 +3,7 @@ export const setupStyles = `
   position: fixed;
   inset: 0;
   z-index: 1000;
+  pointer-events: auto;
   display: grid;
   place-items: center;
   padding: 12px;

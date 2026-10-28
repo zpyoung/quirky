@@ -1,7 +1,7 @@
 import { afterAll, afterEach, beforeAll, expect, test } from 'bun:test'
 import { act, createElement } from 'react'
 import type { Root, createRoot as createRootFactory } from 'react-dom/client'
-import { GlobalRegistrator } from '@happy-dom/global-registrator'
+import { registerUiDom, unregisterUiDom } from './ui-dom'
 import type { UiPluginContext } from '@quirky/protocol'
 import type { LoopSnapshot } from '../src/types'
 import type { SetupDialogProps, SurfaceHandle } from '../window/contracts'
@@ -59,11 +59,10 @@ let root: Root | null = null
 let createRoot: typeof createRootFactory
 
 beforeAll(async () => {
-  GlobalRegistrator.register()
+  registerUiDom()
   // React DOM feature-detects the DOM during import; register happy-dom first.
   const reactDom = await import('react-dom/client')
   createRoot = reactDom.createRoot
-  ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
   const [loadedForm, loadedDialog] = await Promise.all([
     import('../window/config-form').catch(() => null),
     import('../window/SetupDialog').catch(() => null)
@@ -74,7 +73,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await unmount()
-  await GlobalRegistrator.unregister()
+  await unregisterUiDom()
 })
 afterEach(async () => {
   await unmount()
