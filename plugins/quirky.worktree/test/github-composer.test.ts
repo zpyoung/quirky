@@ -118,10 +118,20 @@ function makeApp(options: AppOptions = {}) {
       calls.push({ method, params })
       const custom = options.onCall?.(method, params)
       if (custom !== undefined) return await custom
+      if (method === 'ui.window.self') return { connId: 1 }
       if (method === 'quirky.repo/show') {
         const selected = repos.find((entry) => entry.id === params.repo) ?? repo(String(params.repo))
         return details ?? { repo: selected, settings: projectSettings, hooks: effectiveHooks }
       }
+      if (method === 'quirky.worktree/projectMetadata') return {
+        repoId: String(params.repo),
+        identity: { displayName: null, icon: null, color: null, trackerProject: null },
+        externalVisibility: 'inherit',
+        effectiveExternalVisibility: 'hide',
+        externalInboxSuppressed: false,
+        sharedDirectories: []
+      }
+      if (method === 'quirky.hosting/projects') return { projects: [], partialFailures: [], truncated: false }
       if (method === 'quirky.repo/hooks') return effectiveHooks
       if (method === 'quirky.worktree/suggestName') return { name: `generated-${String(params.repo)}` }
       if (method === 'quirky.worktree/create') {
@@ -148,6 +158,7 @@ function makeApp(options: AppOptions = {}) {
       throw new Error(`unexpected UI call ${method}`)
     },
     getLayout: () => ({ view: null, panel: null, sidebar: true, focus: null }),
+    mountView() { return () => {} },
     openView(id: string, input?: unknown) {
       opened.push({ id, input })
     },
@@ -682,6 +693,7 @@ test('shared setup and issue trust choices accumulate across create retries', as
     toast() {},
     async call(method: string, params: Record<string, unknown> = {}) {
       calls.push({ method, params })
+      if (method === 'ui.window.self') return { connId: 1 }
       if (method === 'quirky.worktree/create') {
         attempt += 1
         if (attempt === 1) throw Object.assign(new Error('setup trust required'), { data: { reason: 'hooks-untrusted', repo: 'r1', kind: 'setup', script: 'echo setup', hash: 'setup-hash', ref: 'main' } })
@@ -715,6 +727,7 @@ test('Run once binds consent to the shown hash and asks again when the shared sc
     openView() {},
     toast() {},
     async call(method: string, params: Record<string, unknown> = {}) {
+      if (method === 'ui.window.self') return { connId: 1 }
       if (method !== 'quirky.worktree/create') throw new Error(`unexpected call ${method}`)
       const currentCallTrust = params.trustSetup === true && (params.trustSetupHash === undefined || params.trustSetupHash === current.hash)
       if (!currentCallTrust) {
@@ -747,6 +760,7 @@ test('Always trust on changed content replaces the earlier one-time pin', async 
     openView() {},
     toast() {},
     async call(method: string, params: Record<string, unknown> = {}) {
+      if (method === 'ui.window.self') return { connId: 1 }
       if (method === 'quirky.repo/trustHooks') {
         if (params.ref === current.ref) persisted.hash = current.hash
         return { ok: true }
@@ -791,6 +805,7 @@ test('Run once and Always cannot proceed when the untrusted-script error has no 
       toast: (_title: string, message: string) => toasts.push(message),
       async call(method: string, params: Record<string, unknown> = {}) {
         calls.push({ method, params })
+        if (method === 'ui.window.self') return { connId: 1 }
         if (method === 'quirky.worktree/create') {
           throw Object.assign(new Error('shared setup is untrusted'), {
             data: { reason: 'hooks-untrusted', repo: 'r1', kind: 'setup', script: 'echo setup', ref: 'main' }

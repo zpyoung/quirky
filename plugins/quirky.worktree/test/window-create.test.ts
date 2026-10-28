@@ -2,7 +2,7 @@ import { afterEach, beforeEach, expect, test } from 'bun:test'
 import { chmodSync, existsSync, mkdirSync, realpathSync, writeFileSync } from 'node:fs'
 import { basename, join, resolve } from 'node:path'
 import type { QuirkyClient, Repo, Session, UiState, Worktree, WorktreeCreateResult } from '@quirky/protocol'
-import { builtinsDir, makeTempHome, startHarness, type Harness } from '../../../packages/daemon/test/helpers'
+import { builtinsDir, makeHomeWithoutAutoHooks, startHarness, type Harness } from '../../../packages/daemon/test/helpers'
 import { makeTempDir, removeTempDirs } from '../../../packages/daemon/test/plugins/fixtures'
 import { startHeadlessWindow, type HeadlessWindow } from '../../../packages/ui/test/fixtures/headless-window'
 import { commitFiles, git, isolateGitConfig } from '../../quirky.repo/test/git-fixtures'
@@ -34,7 +34,7 @@ afterEach(async () => {
 
 /** A real daemon with the real repo, worktree and session plugins, and a headless window on it. */
 async function boot(): Promise<World> {
-  const harness = await startHarness({ home: makeTempHome('qwc-'), builtinPluginsDir: builtinsDir() })
+  const harness = await startHarness({ home: makeHomeWithoutAutoHooks('qwc-'), builtinPluginsDir: builtinsDir() })
   const agent = await harness.connect('cli', 'setup')
   const root = realpathSync(makeTempDir('qwc-root-'))
   await agent.callAny('setting.set', { id: 'setting:quirky.worktree/worktreesRoot', value: root })
@@ -75,6 +75,7 @@ async function openCreate(w: World, project: Project): Promise<HTMLElement> {
   await w.agent.callAny('ui.command.run', { id: NEW_WORKTREE, args: { repo: project.repo.id } })
   const dialog = await w.win.waitFor(() => dialogNamed(CREATE))
   await w.win.waitFor(() => field<HTMLSelectElement>(dialog, 'Project')?.value === project.repo.id)
+  await click(button(dialog, 'Name')!)
   await w.win.waitFor(() => field(dialog, 'Name')?.placeholder)
   return dialog
 }
@@ -297,6 +298,9 @@ test('the project select switches the placeholder and the report follows it', as
   const dialog = await openCreate(w, api)
   await setSelect(field<HTMLSelectElement>(dialog, 'Project')!, web.repo.id)
   await w.win.waitFor(async () => (await report(w.agent)).dialog?.repoId === web.repo.id)
+  await w.win.waitFor(() => button(dialog, 'Smart')?.getAttribute('aria-selected') === 'true')
+  await click(button(dialog, 'Name')!)
+  await w.win.waitFor(() => button(dialog, 'Name')?.getAttribute('aria-selected') === 'true')
   await setText(field(dialog, 'Name')!, 'in-web')
   await click(button(dialog, 'Create')!)
   expect((await named(w, 'in-web')).repoId).toBe(web.repo.id)
@@ -409,8 +413,8 @@ test('SC-33: the window asks before running an untrusted shared script', async (
   const api = await addProject(w, 'api', { files: { 'quirky.yaml': 'scripts:\n  setup: "touch ran.txt"\n' } })
   await repoSet(w.agent, 'api', { setupPolicy: 'run-by-default' })
   const setupSessions = async (name: string) => {
-    const made = await named(w, name)
-    return (await sessionsOf(w.agent, made.id)).filter((s) => s.title === 'Setup')
+    const made = (await worktrees(w.agent)).find((worktree) => worktree.name === name && worktree.createdBy !== 'external')
+    return made ? (await sessionsOf(w.agent, made.id)).filter((session) => session.title === 'Setup') : undefined
   }
   const create = async (name: string) => {
     const dialog = await openCreate(w, api)
@@ -426,19 +430,20 @@ test('SC-33: the window asks before running an untrusted shared script', async (
   expect(dialogs().length).toBe(2)
   await click(button(trust, "Don't run")!)
   await closed(w, 'Run setup from api?')
+  await named(w, 't1')
   expect(await setupSessions('t1')).toEqual([])
   expect(existsSync(join(w.root, 'api', 't1', 'ran.txt'))).toBe(false)
 
   await create('t2')
   await click(button(await w.win.waitFor(() => dialogNamed('Run setup from api?')), 'Run hooks')!)
-  await w.win.waitFor(async () => (await setupSessions('t2')).length === 1)
+  await w.win.waitFor(async () => (await setupSessions('t2'))?.length === 1)
 
   await create('t3')
   await click(button(await w.win.waitFor(() => dialogNamed('Run setup from api?')), 'Always trust')!)
-  await w.win.waitFor(async () => (await setupSessions('t3')).length === 1)
+  await w.win.waitFor(async () => (await setupSessions('t3'))?.length === 1)
 
   await create('t4')
-  await w.win.waitFor(async () => (await setupSessions('t4')).length === 1)
+  await w.win.waitFor(async () => (await setupSessions('t4'))?.length === 1)
   expect(dialogNamed('Run setup from api?')).toBeUndefined()
 
   commitFiles(api.dir, { 'quirky.yaml': 'scripts:\n  setup: "touch changed.txt"\n' })
@@ -446,7 +451,7 @@ test('SC-33: the window asks before running an untrusted shared script', async (
   const changed = await w.win.waitFor(() => dialogNamed("api's setup changed — run the new version?"))
   expect(changed.textContent).toContain('touch changed.txt')
   await click(button(changed, 'Run hooks')!)
-  await w.win.waitFor(async () => (await setupSessions('t5')).length === 1)
+  await w.win.waitFor(async () => (await setupSessions('t5'))?.length === 1)
 }, 60_000)
 
 test('SC-42: the Update dialog edits the display name and notes', async () => {

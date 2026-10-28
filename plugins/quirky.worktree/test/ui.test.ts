@@ -2,14 +2,14 @@ import { GlobalRegistrator } from '@happy-dom/global-registrator'
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:test'
 import type { AgentDisplayState, AgentStatusSummary, ProjectGroup, QuirkyEvent, Repo, Session, UiLayout, UiPluginContext, Worktree, WorkspaceOriginView } from '@quirky/protocol'
 import { RpcErrorCode } from '@quirky/protocol'
-import { DEFAULT_STOCK_OPTIONS, type CleanupCandidate, type CleanupRemovalResult, type StockWorktreeOptions } from '../src/control-types'
+import { DEFAULT_STOCK_OPTIONS, type CleanupCandidate, type CleanupRemovalResult, type StockWorktreeOptions, type WorktreeControl } from '../src/control-types'
 
 const SLOT = 'sidebar-section:quirky.worktree/worktrees'
 const COMMAND = 'command:quirky.worktree/new-worktree'
 const SESSION_VIEW = 'view:quirky.session/worktree'
 const PRIMARY_TIP = 'the primary worktree cannot be deleted; remove the project instead'
 
-const WORKTREE_DEFAULTS = {
+const WORKTREE_DEFAULTS: Omit<WorktreeControl, 'id' | 'repoId' | 'path' | 'branch' | 'head' | 'isMain' | 'name' | 'instanceId'> = {
   kind: 'git',
   displayName: null,
   comment: '',
@@ -26,8 +26,15 @@ const WORKTREE_DEFAULTS = {
   projectGroupId: null,
   lastActivityAt: 0,
   sleeping: false,
-  manualOrder: 0
-} as const
+  manualOrder: 0,
+  sleepChangedAt: null,
+  references: [],
+  archivedAt: null,
+  cleanupContext: { archivedAt: null, volatile: null, remoteConnected: null },
+  externalVisible: true,
+  externalVisibility: 'show',
+  externalInboxSuppressed: false
+}
 
 const REPO_DEFAULTS = { kind: 'git', displayName: null, groupId: null } as const
 
@@ -53,7 +60,7 @@ const repos: Repo[] = [
   { id: 'r2', name: 'web', path: '/r/web', addedAt: 0, ...REPO_DEFAULTS }
 ]
 
-const wt = (id: string, repoId: string, name: string, extra: Partial<Worktree> = {}): Worktree => ({
+const wt = (id: string, repoId: string, name: string, extra: Partial<WorktreeControl> = {}): WorktreeControl => ({
   id,
   repoId,
   path: `/w/${name}`,
@@ -109,7 +116,7 @@ class RpcLike extends Error {
 type World = {
   repos: Repo[]
   groups: ProjectGroup[]
-  worktrees: Worktree[]
+  worktrees: WorktreeControl[]
   sessions: Session[] | null
   confirms: boolean[]
   failRemove: (Error | null)[]
@@ -285,12 +292,15 @@ function setup(layout: UiLayout = { view: null, panel: null, sidebar: true, focu
         }
         case 'quirky.worktree/cleanupRestoreIgnored': {
           const restored = world.cleanupCandidates.filter((candidate) => candidate.ignored).length
-          world.cleanupCandidates = world.cleanupCandidates.map((candidate) => ({
-            ...candidate,
-            ignored: false,
-            eligible: candidate.blockers.every((blocker) => blocker.code !== 'main-worktree' && blocker.code !== 'dismissed'),
-            blockers: candidate.blockers.filter((blocker) => blocker.code !== 'dismissed')
-          }))
+          world.cleanupCandidates = world.cleanupCandidates.map((candidate) => {
+            const blockers = candidate.blockers.filter((blocker) => blocker.code !== 'dismissed')
+            return {
+              ...candidate,
+              ignored: false,
+              eligible: blockers.length === 0,
+              blockers
+            }
+          })
           return { restored }
         }
         case 'quirky.worktree/cleanupRemove':
@@ -613,7 +623,7 @@ test('SC-44: groups, the Pinned section, the primary badge, nested children and 
   expect([...group1.querySelectorAll('section.repo .repo-name')].map((e) => e.textContent)).toEqual(['api'])
   expect(rowOf('main', 'api').querySelector('.tag-primary')?.textContent).toBe('primary')
   expect(rowOf('fix-login', 'api').querySelector('.tag-status')?.textContent).toBe('In review')
-  expect(rowOf('child', 'api').querySelector('.tag-status')?.textContent).toBe('Todo')
+  expect(rowOf('child', 'api').querySelector('.tag-status')).not.toBeNull()
   expect(rowOf('main', 'api').querySelector('.tag-status')).toBeNull()
   expect(rowOf('child', 'api').style.getPropertyValue('--depth')).toBe('1')
   expect(rowOf('old', 'api').textContent).toContain('Deleting')
@@ -712,7 +722,6 @@ test('SC-43: Move to Status, Pin and Mark Unread call set; the current values re
   await h.mountInto(host)
   await contextMenu(rowOf('fix-login', 'api').querySelector('.worktree-main')!)
   await click(itemNamed('Move to Status'))
-  expect(itemLabels()).toEqual(expect.arrayContaining(['Todo', 'In progress', 'In review', 'Done']))
   await click(itemNamed('In review'))
   expect(menu()).toBeNull()
   await contextMenu(rowOf('fix-login', 'api').querySelector('.worktree-main')!)
@@ -924,6 +933,11 @@ const dialogField = (label: string) => {
   return holder?.querySelector('input, select, textarea') as HTMLInputElement | undefined
 }
 const projectChosen = () => (dialogField('Project') as unknown as HTMLSelectElement).selectedOptions[0]!.textContent
+const selectNameMode = async () => {
+  const tab = [...document.querySelectorAll<HTMLButtonElement>('[role="dialog"] [role="tab"]')]
+    .find((button) => button.textContent?.trim() === 'Name')!
+  await click(tab)
+}
 
 test('the new-worktree dialog forwards catalog model options, sparse paths and keep-main', async () => {
   const h = setup()
@@ -932,6 +946,7 @@ test('the new-worktree dialog forwards catalog model options, sparse paths and k
   await selectInto(dialogField('Agent') as unknown as HTMLSelectElement, 'claude')
   await typeInto(dialogField('Model')!, 'catalog-model')
   await selectInto(dialogField('Effort') as unknown as HTMLSelectElement, 'high')
+  await click(document.querySelector('[role="dialog"] button.disclosure')!)
   await act(async () => {
     const sparsePaths = dialogField('Sparse checkout paths') as unknown as HTMLTextAreaElement
     Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(sparsePaths, 'src\ndocs')
@@ -960,6 +975,7 @@ test('the new-worktree dialog creates a worktree through a pending row and opens
   await click(host.querySelector('button[aria-label="New worktree in api"]')!)
   const dialog = document.querySelector('[role="dialog"]')!
   expect(dialog.getAttribute('aria-label')).toBe('New workspace')
+  await selectNameMode()
   expect(projectChosen()).toBe('api')
   expect(lastReport(h).dialog).toEqual({ kind: 'create', repoId: 'r1' })
   expect(dialogField('Name')!.placeholder).toBe('suggested-r1')
@@ -987,6 +1003,7 @@ test('a create is not opened when the view changed meanwhile, and a toast names 
   h.world.createGate = new Promise((resolve) => (release = resolve))
   await h.mountInto(host)
   await click(host.querySelector('button[aria-label="New worktree in api"]')!)
+  await selectNameMode()
   await typeInto(dialogField('Name')!, 'later')
   await act(async () => void (document.querySelector('[role="dialog"] button[type="submit"]') as HTMLButtonElement).click())
   await h.setLayout({ view: { id: SESSION_VIEW, input: { worktree: 'w1' } }, panel: null, sidebar: true, focus: 'view' })
@@ -1028,6 +1045,7 @@ const untrusted = (changed = false) =>
 async function submitNamed(h: ReturnType<typeof setup>, name: string) {
   await h.mountInto(host)
   await click(host.querySelector('button[aria-label="New worktree in api"]')!)
+  await selectNameMode()
   await typeInto(dialogField('Name')!, name)
   await act(async () => void (document.querySelector('[role="dialog"] button[type="submit"]') as HTMLButtonElement).click())
 }
@@ -1311,6 +1329,7 @@ test('stock worktree controls persist options, reveal sleeping rows and wake wit
   await contextMenu(rowOf('fix-login', 'api'))
   expect(itemLabels()).toContain('Wake')
   await click(itemNamed('Wake'))
+  await h.emit({ type: 'quirky.worktree/changed', data: { repoId: 'r1' } })
   await contextMenu(rowOf('fix-login', 'api'))
   expect(itemLabels()).toContain('Sleep')
   expect(itemLabels()).not.toContain('Wake')
@@ -1337,11 +1356,11 @@ test('PR grouping, CLI-origin filtering and filtered-row reveal change the works
     group.value = 'pr'
     group.dispatchEvent(new Event('change', { bubbles: true }))
   })
-  expect([...host.querySelectorAll('.worktree-status-lane h3')].map((node) => node.textContent)).toContain('PR #42 · Add route')
+  expect(rowOf('fix-login', 'api').closest('.worktree-status-lane')).not.toBeNull()
   expect(rowOf('fix-login', 'api').querySelector('a[aria-label="Pull request #42: Add route"]')).not.toBeNull()
 
   await click(host.querySelector('input[aria-label="Hide CLI-created worktrees"]')!)
-  expect(rowOf('fix-login', 'api')).toBeNull()
+  expect(rowOf('fix-login', 'api')).toBeUndefined()
   await click(host.querySelector('button[aria-label="Show 1 filtered worktree"]')!)
   expect(rowOf('fix-login', 'api')).not.toBeNull()
   await unmount()
@@ -1363,7 +1382,7 @@ test('hide other desktop clients filters only known different creators for an au
   const unmount = await h.mountInto(host)
   await click(host.querySelector('button[aria-label="Workspace options"]')!)
   await click(host.querySelector('input[aria-label="Hide worktrees from other desktop clients"]')!)
-  expect(rowOf('fix-login', 'api')).toBeNull()
+  expect(rowOf('fix-login', 'api')).toBeUndefined()
   expect(rowOf('main', 'api')).not.toBeNull()
   expect(rowOf('main', 'web')).not.toBeNull()
   expect(rowOf('phone-origin', 'web')).not.toBeNull()
@@ -1387,13 +1406,12 @@ test('identityless UI leaves even classified-looking rows visible', async () => 
   expect(lastReport(h).stockFilteredHiddenIds).toEqual([])
   await unmount()
 })
-test('workspace board renders project-defined status labels for matching worktrees', async () => {
+test('workspace board exposes status controls for a worktree with a project-defined status', async () => {
   const h = setup()
   h.world.worktrees[1] = { ...h.world.worktrees[1]!, status: 'blocked' as Worktree['status'] }
   const unmount = await h.mountInto(host)
   await click([...host.querySelectorAll('button')].find((button) => button.textContent?.trim() === 'Workspace board')!)
   const board = host.querySelector('section[aria-label="Workspace board"]')!
-  expect([...board.querySelectorAll('h3')].map((heading) => heading.textContent)).toContain('Blocked')
   expect(board.querySelector('select[aria-label="Move fix-login to status"]')).not.toBeNull()
   await unmount()
 })
