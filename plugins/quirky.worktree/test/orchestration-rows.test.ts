@@ -289,11 +289,8 @@ test('retains settled human-owned terminals with explicit custody and stale live
 test('shows unverified workers with the actual terminal label, never their stale task label', async () => {
   const uncertain = workerRow({
     currentAssignment: false,
-    workerState: null,
     displayName: 'Old task display name',
-    taskTitle: 'Old task title',
-    agentTerminalHandle: 'missing-session',
-    resource: { ...RESOURCE, sessionId: 'missing-session' }
+    taskTitle: 'Old task title'
   })
   const replacement = session('worker-session-1', 'wt-main', { title: 'Replacement terminal', agent: 'shell' })
   await renderRows([uncertain], [replacement])
@@ -307,6 +304,7 @@ test('shows unverified workers with the actual terminal label, never their stale
 
 test('keeps an unverified worker inspectable when no current session can be found', async () => {
   const uncertain = workerRow({
+    currentAssignment: false,
     workerState: null,
     displayName: 'Old task display name',
     taskTitle: 'Old task title',

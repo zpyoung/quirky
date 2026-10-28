@@ -1,8 +1,8 @@
 import { afterAll, afterEach, beforeAll, describe, expect, test } from 'bun:test'
 import { act } from 'react'
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
-import { activate } from '../src/ui'
 import type { MountFunction, UiPluginContext } from '@quirky/protocol'
+import type { activate as Activate } from '../src/ui'
 import { ORCHESTRATION_EXAMPLES, createLatestRequestGuard, dismissSetup, isSetupDismissed } from '../src/window/setup-state'
 
 type Status = {
@@ -28,11 +28,14 @@ type FakeUi = {
 }
 
 let mounted: (() => void)[] = []
+let activate: typeof Activate
 let fake: FakeUi | null = null
 
-beforeAll(() => {
+beforeAll(async () => {
   GlobalRegistrator.register()
   ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+  // React DOM must initialize after this test's DOM globals, not at static module-load time.
+  ;({ activate } = await import('../src/ui'))
 })
 afterAll(async () => {
   await GlobalRegistrator.unregister()
@@ -127,7 +130,7 @@ async function mountSlot(fakeUi: FakeUi, slotId: string): Promise<HTMLElement> {
 }
 
 function button(root: ParentNode, label: string): HTMLButtonElement {
-  const match = [...root.querySelectorAll('button')].find((entry) => entry.textContent?.trim() === label)
+  const match = [...root.querySelectorAll('button')].find((entry) => (entry.getAttribute('aria-label') ?? entry.textContent?.trim()) === label)
   if (!match) throw new Error(`button not found: ${label}`)
   return match as HTMLButtonElement
 }
@@ -161,10 +164,10 @@ describe('orchestration setup UI', () => {
 
     const depth = root.querySelector('input[aria-label="Nested worker depth"]') as HTMLInputElement | null
     expect(depth).not.toBeNull()
-    setInput(depth!, '1.5')
+    await act(async () => { setInput(depth!, '1.5') })
     await act(async () => { button(root, 'Save depth').click() })
     expect(ui.calls.some((call) => call.method === 'quirky.orchestration/policySet')).toBe(false)
-    setInput(depth!, '2')
+    await act(async () => { setInput(depth!, '2') })
     await act(async () => { button(root, 'Save depth').click() })
     expect(ui.calls.find((call) => call.method === 'quirky.orchestration/policySet')?.params).toEqual({ nestedWorkerMaxDepth: 2 })
   })
@@ -327,7 +330,7 @@ describe('orchestration setup UI', () => {
 
     const policyResponse = Promise.withResolvers<FakeUi['policy']>()
     deferred.set('quirky.orchestration/policySet', policyResponse.promise)
-    setInput(depth!, '2')
+    await act(async () => { setInput(depth!, '2') })
     await act(async () => { button(root, 'Save depth').click() })
     expect(button(root, 'Install').disabled).toBe(true)
     expect(button(root, 'Re-check').disabled).toBe(true)
@@ -355,7 +358,7 @@ describe('orchestration setup UI', () => {
       }
     })
     const root = await mountSlot(ui, 'overlay:quirky.orchestration/floating-setup')
-    ui.emit({ type: 'quirky.terminal/floating' })
+    await act(async () => { ui.emit({ type: 'quirky.terminal/floating' }) })
     expect(statusReads).toBe(2)
     await act(async () => { newer.resolve(missing); await newer.promise })
     expect(root.textContent).toContain('Enable orchestration')

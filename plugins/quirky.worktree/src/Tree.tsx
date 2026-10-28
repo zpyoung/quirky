@@ -56,7 +56,7 @@ function WorktreeCard({ context, worktree, depth, childCount, collapsed, session
   return (
     <li
       className={className}
-      style={{ '--depth': depth } as CSSProperties}
+      style={{ '--depth': depth, flexWrap: 'wrap' } as CSSProperties}
       draggable={worktree.kind === 'git'}
       onDragStart={(event) => onDragStart(worktree, event)}
       onDragEnd={onDragEnd}

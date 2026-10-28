@@ -130,6 +130,7 @@ export function OrchestrationSettings({ context }: { context: UiPluginContext })
 
   const install = async () => {
     if (busy) return
+    const token = guard.next()
     const agentIds = status?.agents
       .filter((agent) => agent.state === 'missing' || agent.state === 'stale' || agent.state === 'error')
       .map((agent) => agent.id)

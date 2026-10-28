@@ -11,6 +11,7 @@ import { rpcUrl } from '@quirky/protocol/node'
 const CLI_MAIN = resolve(import.meta.dir, '../../../packages/cli/src/main.ts')
 const TARGET_OVERRIDE_KEYS = [
   'CLAUDE_CONFIG_DIR',
+  'QUIRKY_AGENT_SEARCH_DIRS',
   'CODEX_HOME',
   'XDG_CONFIG_HOME',
   'GROK_HOME',
@@ -43,6 +44,8 @@ beforeEach(async () => {
   try {
     fixture = await startOrchestrationFixture()
     process.env.XDG_CONFIG_HOME = join(fixture.userHome, '.config')
+    process.env.QUIRKY_AGENT_SEARCH_DIRS = process.env.PATH?.split(':')[0] ?? ''
+    await fixture.setupClient.callAny('quirky.agents/refresh', {})
   } catch (error) {
     restoreTargetOverrides()
     throw error
@@ -104,7 +107,7 @@ function assertPrivateTargets(status: { agents: { id: string; path: string | nul
 }
 
 
-function agentState(status: { agents: { id: string; state: string }[] }, id: string) {
+function agentState<T extends { id: string; state: string }>(status: { agents: T[] }, id: string): T {
   const agent = status.agents.find((entry) => entry.id === id)
   if (!agent) throw new Error(`detected agent ${id} missing from skill status`)
   return agent
@@ -169,6 +172,7 @@ describe('orchestration setup acceptance', () => {
     await api('quirky.agents/refresh')
     const cursorPath = join(fixture.userHome, '.cursor', 'skills', 'orchestration', 'SKILL.md')
     mkdirSync(dirname(cursorPath), { recursive: true })
+    rmSync(cursorPath, { force: true })
     mkdirSync(cursorPath)
     writeFileSync(claudePath, 'previous generated version\n')
 

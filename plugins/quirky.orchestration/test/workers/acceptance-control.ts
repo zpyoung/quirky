@@ -1,4 +1,4 @@
-import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 /** Runs CLI commands as a real launched provider or structured tool process. */
@@ -29,7 +29,10 @@ export function startWorkerControl(onSettledReport?: () => void) {
         children.add(child)
         const [stdout, stderr, code] = await Promise.all([new Response(child.stdout).text(), new Response(child.stderr).text(), child.exited])
         children.delete(child)
-        writeFileSync(join(root, `${request.id}.reply.json`), JSON.stringify({ stdout, stderr, code }))
+        const reply = join(root, `${request.id}.reply.json`)
+        const stagedReply = `${reply}.tmp`
+        writeFileSync(stagedReply, JSON.stringify({ stdout, stderr, code }), { flag: 'wx' })
+        renameSync(stagedReply, reply)
         if (request.args.includes('worker_done')) onSettledReport?.()
       }
     } catch (error) {

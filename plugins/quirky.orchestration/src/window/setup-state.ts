@@ -1,5 +1,6 @@
 export const SETUP_DISMISSED_KEY = 'quirky.orchestration.setupDismissed'
 export const SETUP_DISMISSED_EVENT = 'quirky.orchestration.setup-dismissed'
+export const SETUP_STATUS_CHANGED_EVENT = 'quirky.orchestration.setup-status-changed'
 
 export const ORCHESTRATION_EXAMPLES = [
   {
