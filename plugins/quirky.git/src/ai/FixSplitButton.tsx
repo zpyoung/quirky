@@ -1,11 +1,10 @@
 import { useRef, useState } from 'react'
 import { PopupMenu } from '../panel/Menu'
 import { SparkleIcon } from './SparkleIcon'
-import type { FixAction } from './types'
 
 /** What a card needs to offer an AI launch: the action, whether one is running, and the two ways to start it. */
 export type FixButtonProps = {
-  action: FixAction
+  action: 'fixCommitFailure' | 'fixPushFailure' | 'resolveConflicts'
   busy: boolean
   onFix(): void
   onCustomize(): void
@@ -13,7 +12,7 @@ export type FixButtonProps = {
 
 type Copy = { label: string; primary: string; title: string; chevron: string }
 
-const COPY: Readonly<Record<FixAction, Copy>> = {
+const COPY: Readonly<Record<FixButtonProps['action'], Copy>> = {
   fixCommitFailure: {
     label: 'AI Fix',
     primary: 'Start the default AI agent to fix this commit failure',

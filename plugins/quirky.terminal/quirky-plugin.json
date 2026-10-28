@@ -2985,8 +2985,8 @@
       }
     ],
     "cli-command": [
-      {"id":"emulators","words":"emulators","summary":"list available local iOS simulators","method":"emulators"},
-      {"id":"emulator-frame","words":"emulator-frame","summary":"capture one exact booted iOS simulator frame","method":"emulatorFrame"},
+      {"id":"emulators","words":"emulators","summary":"list available local iOS simulators","methods":["quirky.terminal/emulators"]},
+      {"id":"emulator-frame","words":"emulator-frame","summary":"capture one exact booted iOS simulator frame","positionals":[{"name":"device","description":"exact booted simulator UDID","required":true}],"methods":["quirky.terminal/emulatorFrame"]},
       {
         "id": "read",
         "words": "read",

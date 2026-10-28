@@ -26,6 +26,8 @@
       {
         "id": "commandInstall",
         "description": "Installs a user-owned command launcher; a foreign target is replaced only when replaceForeign is explicitly true.",
+        "destructive": true,
+        "confirm": "Install this external Quirky command launcher?",
         "params": { "type": "object", "properties": { "path": { "type": "string" }, "executablePath": { "type": "string" }, "entrypointPath": { "type": "string" }, "profileHome": { "type": "string" }, "replaceForeign": { "type": "boolean" } }, "required": ["executablePath", "entrypointPath"], "additionalProperties": false },
         "result": { "type": "object", "properties": { "path": { "type": "string" }, "target": {}, "state": { "type": "string", "enum": ["missing", "managed", "foreign"] }, "profileHome": { "type": "string" } }, "required": ["path", "target", "state", "profileHome"], "additionalProperties": false }
       },
@@ -34,7 +36,7 @@
         "description": "Removes the exact unchanged managed command launcher; preserves any missing or replaced foreign file.",
         "destructive": true,
         "confirm": "Remove the managed Quirky command launcher?",
-        "params": { "type": "object", "properties": { "path": { "type": "string" }, "yes": { "type": "boolean" }, "confirmation": { "type": "string" } }, "additionalProperties": false },
+        "params": { "type": "object", "properties": { "path": { "type": "string" } }, "additionalProperties": false },
         "result": { "type": "object", "properties": { "removed": { "type": "boolean" }, "state": { "type": "string", "enum": ["missing", "foreign"] } }, "required": ["removed", "state"], "additionalProperties": false }
       },
       {
@@ -53,6 +55,8 @@
       {
         "id": "profileLauncherInstall",
         "description": "Creates a shell-safe profile launcher pinned to an exact QUIRKY_HOME and real CLI target.",
+        "destructive": true,
+        "confirm": "Install this profile-bound Quirky launcher?",
         "params": { "type": "object", "properties": { "name": { "type": "string" }, "path": { "type": "string" }, "profileHome": { "type": "string" }, "executablePath": { "type": "string" }, "entrypointPath": { "type": "string" }, "replaceForeign": { "type": "boolean" } }, "required": ["name", "profileHome", "executablePath", "entrypointPath"], "additionalProperties": false },
         "result": { "type": "object", "properties": { "name": { "type": "string" }, "path": { "type": "string" }, "target": {}, "state": { "type": "string", "enum": ["missing", "managed", "foreign"] }, "profileHome": { "type": "string" } }, "required": ["name", "path", "target", "state", "profileHome"], "additionalProperties": false }
       },
@@ -61,7 +65,7 @@
         "description": "Removes one unchanged managed profile launcher and never deletes a replaced foreign file.",
         "destructive": true,
         "confirm": "Remove this managed profile launcher?",
-        "params": { "type": "object", "properties": { "path": { "type": "string" }, "yes": { "type": "boolean" }, "confirmation": { "type": "string" } }, "required": ["path"], "additionalProperties": false },
+        "params": { "type": "object", "properties": { "path": { "type": "string" } }, "required": ["path"], "additionalProperties": false },
         "result": { "type": "object", "properties": { "removed": { "type": "boolean" }, "state": { "type": "string", "enum": ["missing", "foreign"] } }, "required": ["removed", "state"], "additionalProperties": false }
       },
       {
@@ -89,7 +93,7 @@
         "description": "Removes one saved paired runtime and its private offer.",
         "destructive": true,
         "confirm": "Remove this saved paired runtime?",
-        "params": { "type": "object", "properties": { "selector": { "type": "string" }, "yes": { "type": "boolean" }, "confirmation": { "type": "string" } }, "required": ["selector"], "additionalProperties": false },
+        "params": { "type": "object", "properties": { "selector": { "type": "string" } }, "required": ["selector"], "additionalProperties": false },
         "result": { "type": "object", "properties": { "id": { "type": "string" }, "name": { "type": "string" }, "endpoint": { "type": "string" }, "pairedDeviceId": { "type": "string" }, "createdAt": { "type": "number" }, "lastUsedAt": {} }, "required": ["id", "name", "endpoint", "pairedDeviceId", "createdAt", "lastUsedAt"], "additionalProperties": false }
       },
       {

@@ -51,6 +51,7 @@ const KNOWN_FIELDS = new Set([
   'install',
   'launchOptions',
   'modelDiscovery',
+  'windows',
   'oneShot'
 ])
 
@@ -123,6 +124,8 @@ function parse(plugin: string, id: string, data: Record<string, unknown>): Agent
     submitRetryMs: positiveInteger(data, 'submitRetryMs') ?? null,
     lineSettleMs: positiveInteger(data, 'lineSettleMs') ?? null,
     enterWithPaste: boolean(data, 'enterWithPaste') ?? false,
+    homepage: text(data, 'homepage') ?? null,
+    install: text(data, 'install') ?? null,
     trust: oneOf<TrustPreset>(data, 'trust', TRUST_PRESETS) ?? null,
     launchOptions: launchCatalog,
     modelDiscovery: discovery,
@@ -131,17 +134,23 @@ function parse(plugin: string, id: string, data: Record<string, unknown>): Agent
 }
 
 function modelDiscovery(value: unknown): ModelDiscoverySpec {
-  if (!isPlainObject(value)) fail('modelDiscovery must be an object')
-  for (const key of Object.keys(value)) if (key !== 'args' && key !== 'timeoutMs' && key !== 'format') fail(`modelDiscovery has an unknown field ${key}`)
-  const args = value.args
-  if (!Array.isArray(args) || args.length === 0 || args.length > 32 || !args.every((item) => typeof item === 'string' && item.trim() !== '' && item.length <= 512 && !/[\u0000-\u001f\u007f]/.test(item))) {
-    fail('modelDiscovery.args must be a list of 1 to 32 non-empty arguments of at most 512 characters')
-  }
-  if (typeof value.timeoutMs !== 'number' || !Number.isInteger(value.timeoutMs) || value.timeoutMs < 1 || value.timeoutMs > 10_000) {
+  const data = isPlainObject(value) ? value : fail('modelDiscovery must be an object')
+  for (const key of Object.keys(data)) if (key !== 'args' && key !== 'timeoutMs' && key !== 'format') fail(`modelDiscovery has an unknown field ${key}`)
+  const args: unknown[] = Array.isArray(data.args) ? data.args : fail('modelDiscovery.args must be a list of 1 to 32 non-empty arguments of at most 512 characters')
+  if (args.length === 0 || args.length > 32) fail('modelDiscovery.args must be a list of 1 to 32 non-empty arguments of at most 512 characters')
+  const parsedArgs = args.map((item): string => {
+    const argument = typeof item === 'string' ? item : fail('modelDiscovery.args must be a list of 1 to 32 non-empty arguments of at most 512 characters')
+    if (argument.trim() === '' || argument.length > 512 || /[\u0000-\u001f\u007f]/.test(argument)) {
+      fail('modelDiscovery.args must be a list of 1 to 32 non-empty arguments of at most 512 characters')
+    }
+    return argument
+  })
+  const timeoutMs = typeof data.timeoutMs === 'number' ? data.timeoutMs : fail('modelDiscovery.timeoutMs must be an integer from 1 to 10000')
+  if (!Number.isInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 10_000) {
     fail('modelDiscovery.timeoutMs must be an integer from 1 to 10000')
   }
-  if (value.format !== 'json') fail('modelDiscovery.format must be one of: json')
-  return { args: [...args] as string[], timeoutMs: value.timeoutMs, format: 'json' }
+  const format = data.format === 'json' ? data.format : fail('modelDiscovery.format must be one of: json')
+  return { args: parsedArgs, timeoutMs, format }
 }
 
 function oneShot(value: unknown): OneShotSpec {

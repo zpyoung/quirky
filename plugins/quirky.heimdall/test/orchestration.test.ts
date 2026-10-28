@@ -369,6 +369,7 @@ function makeContext(
     createFileResource: () => { throw new Error('unexpected file resource request') },
     clients: { accept: () => { throw new Error('unexpected remote client admission') } },
     call,
+    forward: async () => { throw new Error('The isolated orchestration fixture has no authenticated client caller') },
     subscribe,
     log: () => {},
     provide: () => {},

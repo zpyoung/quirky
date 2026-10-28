@@ -58,16 +58,17 @@ const ASK_WAIT_MS = 60_000
 
 const isConnectionLost = (error: unknown) => error instanceof Error && error.name === 'ConnectionLost'
 
+export type RpcLinkClient = Pick<QuirkyClient, 'callAny' | 'close'>
 /**
  * Connects on first use, so commands that fail validation or print help never touch the daemon.
  * Calls without an explicit transport ID use `<base>:<method-hash>#<k>`; each selected ID is
  * reused across connection-loss resends, while confirmation retries use a fresh ID.
  */
-export function createDaemonLink(connect: () => Promise<QuirkyClient>, options: DaemonLinkOptions = {}): DaemonLink {
+export function createDaemonLink(connect: () => Promise<RpcLinkClient>, options: DaemonLinkOptions = {}): DaemonLink {
   const base = options.requestBase ?? randomUUID()
   const counts = new Map<string, number>()
   const destructive = new Set<string>()
-  let current: Promise<QuirkyClient> | null = null
+  let current: Promise<RpcLinkClient> | null = null
   let closed = false
 
   const get = () => {

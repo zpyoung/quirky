@@ -24,6 +24,40 @@ Reinstalling over a running copy: quit Quirky first (window close or tray Quit),
 The app is unsigned. If macOS refuses to open the copy, run
 `xattr -dr com.apple.quarantine ~/Applications/Quirky.app` once.
 
+## External command and profile launchers
+
+The built-in CLI Settings owner exposes installation status, install, reveal and removal through `quirky.cli/*` methods and matching commands. From a source checkout, bootstrap an external command with the current CLI entrypoint:
+
+```sh
+bun packages/cli/src/main.ts cli status --json
+bun packages/cli/src/main.ts cli install --path "$HOME/.local/bin/quirky" --yes
+quirky cli profile install --name work --home "$HOME/.quirky-work" --path "$HOME/.local/bin/quirky-work" --yes
+quirky cli profile list --json
+```
+
+Put the chosen command directory on `PATH`. Launchers pin both the executable/entrypoint and `QUIRKY_HOME`, including paths containing spaces or apostrophes. Keep the pinned entrypoint available. Installation and removal use kernel confirmation; `--yes` explicitly bypasses it. A foreign command requires `--replace-foreign`, and uninstall never deletes a managed command that another program has replaced. Filesystem permission errors remain errors; this does not obtain privileged installation authorization.
+
+## Paired runtime CLI selection
+
+Save an existing mobile-v2 pairing offer, or select one for a single invocation:
+
+```sh
+quirky runtime add --name remote --code "$PAIRING_OFFER"
+quirky runtime list --json
+quirky --runtime remote api call quirky.worktree/list --json
+quirky --pairing-code "$PAIRING_OFFER" api call quirky.worktree/list --json
+```
+
+Saved credential metadata is private to the profile; list/status output omits offers and tokens. `--runtime` and `--pairing-code` are mutually exclusive. Explicit selection overrides `QUIRKY_RUNTIME` or `QUIRKY_PAIRING_CODE`; `--runtime local` explicitly opts out. An unavailable remote target never falls back to the local daemon. Current-cwd/active local shortcuts and local administration commands refuse remote selection.
+
+Paired calls reuse the mobile-v2 encrypted connection and its existing device grant, not local owner privileges. Methods outside that grant refuse; full-owner remote CLI administration is not implemented.
+
+## Native folder and auxiliary-window bridges
+
+Supported shells expose public `desktop.folder.pick` and `desktop.window.open/list/close` routes. Folder cancellation returns no paths and does not overwrite the UI's typed draft; a missing native shell refuses rather than showing a browser prompt. Dashboard's open-as setting selects an in-window view or an owner-bound pop-out. Auxiliary route/filter updates retain that window identity, while workspace-card commands route to its owning main window.
+
+These bridges do not provide generic per-window workspace sleep/close routing. Notification permission, click and dismissal callbacks also remain unavailable in the pinned SDK; a void notification call is not delivery proof. Production signed helper/TCC/launchd/admission/upgrade integration still requires an authorized signing identity.
+
 ## Development mode
 
 ```sh

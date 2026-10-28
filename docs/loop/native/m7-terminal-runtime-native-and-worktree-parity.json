@@ -1,0 +1,62 @@
+{
+  "item": "m7-terminal-runtime-native-and-worktree-parity",
+  "spec": "docs/quirk/specs/2026-10-28-m7-terminal-runtime-native-and-worktree-parity/logic.md",
+  "scenarios": [
+    {
+      "id": "NATIVE-FOLDER-SELECT-CANCEL",
+      "title": "On a fresh temporary profile, use Add Project and project Worktree Location Browse to select an owned temporary directory through the real macOS chooser. Cancel a second chooser and verify the previously typed draft remains unchanged; no browser prompt or success on cancellation.",
+      "status": "pending",
+      "lastRun": null,
+      "report": null,
+      "summary": null
+    },
+    {
+      "id": "NATIVE-DASHBOARD-OWNER-ROUTE",
+      "title": "Set Dashboard open-as to pop-out, open it with a filter, change the filter inside the auxiliary window and verify only that window's declared route/input changes. With two temporary-profile shells, refuse ambiguous ownership rather than opening or closing the other shell's window.",
+      "status": "pending",
+      "lastRun": null,
+      "report": null,
+      "summary": null
+    },
+    {
+      "id": "NATIVE-DASHBOARD-CARD-FOCUS",
+      "title": "Click a Dashboard pop-out workspace/activity card and observe the owning main window become active with the exact workspace and terminal pane. The auxiliary Dashboard must not become the terminal destination or activate a different profile's main window.",
+      "status": "pending",
+      "lastRun": null,
+      "report": null,
+      "summary": null
+    },
+    {
+      "id": "NATIVE-DASHBOARD-CLOSE",
+      "title": "Close the auxiliary Dashboard using the real macOS close control, then list native windows and reopen it. The closed registry row disappears, the main window remains usable and the temporary profile's daemon and live PTY remain running.",
+      "status": "pending",
+      "lastRun": null,
+      "report": null,
+      "summary": null
+    },
+    {
+      "id": "NATIVE-REMAPPED-TERMINAL-KEYS",
+      "title": "In a focused real terminal pane, Save a new search shortcut in Terminal Settings, invoke it through the native keyboard, Disable it and Reset it. Verify effective menu hints and shortcut behavior agree and remapped commands do not type shortcut bytes into the shell.",
+      "status": "pending",
+      "lastRun": null,
+      "report": null,
+      "summary": null
+    },
+    {
+      "id": "NATIVE-EXACT-SIMULATOR-PREVIEW",
+      "title": "Using an explicitly provisioned disposable booted iOS Simulator, select its exact UDID in New Mobile Emulator and observe a real current screenshot. Hide the tab and verify polling stops, then reveal/refresh. Never boot/control or fall back to another device; report blocked if no owned booted Simulator is available.",
+      "status": "pending",
+      "lastRun": null,
+      "report": null,
+      "summary": null
+    },
+    {
+      "id": "NATIVE-LAUNCHER-REVEAL",
+      "title": "Install a launcher inside an owned temporary directory from CLI Settings, invoke Reveal and observe Finder reveal that exact path. Foreign-file refusal and unchanged managed removal remain explicit; no privileged directory or real user profile is modified.",
+      "status": "pending",
+      "lastRun": null,
+      "report": null,
+      "summary": null
+    }
+  ]
+}

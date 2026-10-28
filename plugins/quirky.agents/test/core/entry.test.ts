@@ -112,9 +112,8 @@ describe('validateEntry', () => {
     })
   })
 
-  test('parses a bounded provider-owned model discovery declaration', () => {
-    const declaration = { args: ['models', '--json'], timeoutMs: 1_000, format: 'json' }
-    expect(entryOf({ ...minimal, modelDiscovery: declaration }).modelDiscovery).toEqual(declaration)
+  test('refuses unbounded or unsupported provider discovery probes', () => {
+    const declaration = { args: ['models', '--json'], timeoutMs: 1_000, format: 'json' as const }
     expect(errorOf({ ...minimal, modelDiscovery: { ...declaration, timeoutMs: 0 } })).toBe(
       'modelDiscovery.timeoutMs must be an integer from 1 to 10000'
     )

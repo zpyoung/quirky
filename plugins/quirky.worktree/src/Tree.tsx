@@ -6,7 +6,7 @@ import { resolveMembershipTarget, type MembershipTarget } from './membership'
 import { changeGroup, copyText, setWorkspaceSleeping, setWorktree } from './actions'
 import { ContextMenu, groupMenu, projectMenu, workspaceMenu, type MenuItem } from './Menu'
 import { projectSeparatorBoundaries, repoLabel, type AutomationAvailabilitySnapshot, type DialogState, type GroupNode, type ProjectNode, type TreeModel, type TreeRow } from './report'
-import type { WorktreeProjectIdentity } from './parity-types'
+import type { WorktreeProjectIdentity, WorktreeStatusDefinition } from './parity-types'
 import { StatusDot, UnreadBell } from './StatusDot'
 import { worktreeGlyph } from './status'
 import { OrchestrationRows, type OrchestrationWorkerRow } from './OrchestrationRows'
@@ -124,6 +124,7 @@ function WorktreeCard({
   loop,
   now,
   selected,
+  repoName,
   options,
   statusDefinitions,
   automationExpanded,

@@ -82,6 +82,7 @@ export type AgentEntry = {
   trust: TrustPreset | null
   homepage: string | null
   install: string | null
+  launchOptions: LaunchCatalog | null
   /** Read-only provider-owned model discovery; null when the owner exposes no list command. */
   modelDiscovery: ModelDiscoverySpec | null
   /** How the agent runs once to produce text; null when it can't. */

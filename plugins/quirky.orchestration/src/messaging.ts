@@ -3,6 +3,8 @@ import type { CallerConnection, PluginCaller, PluginContext, PluginStore } from 
 import type {
   AskParams,
   AskHandoffIdentity,
+  AskResult,
+  ThreadId,
   AcceptedCheckCheckpoint,
   CheckObservationResult,
   CheckParams,

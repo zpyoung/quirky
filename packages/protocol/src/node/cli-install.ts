@@ -38,7 +38,7 @@ export type ProfileLauncherStatus = {
 export type LauncherRemovalResult = { removed: boolean; state: 'missing' | 'foreign' }
 
 function quoteShell(value: string): string {
-  return `'${value.replace(/'/g, `'[0m"'"'[0m`)}'`
+  return "'" + value.replaceAll("'", "'\\''") + "'"
 }
 
 function absolutePath(value: string, field: string): string {

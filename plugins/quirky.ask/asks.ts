@@ -1,4 +1,4 @@
-import type { Ask, AskAnswer, AskEnvelope, AskPartial, AskRegistration, AskSpec, PluginSessionAuthority, PluginStore } from '@quirky/protocol'
+import type { Ask, AskAnswer, AskEnvelope, AskPartial, AskSpec, PluginSessionAuthority, PluginStore } from '@quirky/protocol'
 import type { AskHandoffIdentity } from './runtime-types'
 import { buildSummary, validateAnswerSubmission } from './src/core/answers'
 import { validatePartial } from './src/core/partial'
@@ -187,7 +187,7 @@ export class AskService {
     sessionId: string | null,
     worktreeId: string | null,
     ownerIdentity?: AskOwnerIdentity
-  ): AskRegistration | null {
+  ): { askId: string } | null {
     if (requestId.trim() === '' || requestId.length > 256) {
       throw this.errors.invalidParams('requestId must be a non-empty string of at most 256 characters')
     }
@@ -222,7 +222,7 @@ export class AskService {
       ownerIdentity?: AskOwnerIdentity
       handoff?: { identity: AskHandoffIdentity; questionId: string }
     }
-  ): AskRegistration {
+  ): { askId: string } {
     if (options.handoff && options.handoff.identity.sessionId !== sessionId) {
       throw this.errors.invalidParams('handoff session identity does not match the registered asker')
     }

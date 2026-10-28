@@ -2,6 +2,7 @@ import { afterEach, expect, test } from 'bun:test'
 import { chmodSync, mkdirSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { cleanupAll, E2eHarness } from './e2e-support'
+import type { EmulatorListing } from '../src/emulator'
 
 afterEach(cleanupAll)
 
@@ -16,7 +17,7 @@ test('simulator CLI lists real provider-format devices and the API returns only 
     chmodSync(command, 0o755)
     return resolve(import.meta.dir, '../../..', 'plugins')
   } })
-  expect(await harness.json(['terminal', 'emulators'])).toEqual({ available: true, devices: [{ id: device, name: 'Owned simulator', state: 'Booted', runtime: 'runtime' }] })
+  expect(await harness.json<EmulatorListing>(['terminal', 'emulators'])).toEqual({ available: true, devices: [{ id: device, name: 'Owned simulator', state: 'Booted', runtime: 'runtime' }] })
   expect(await harness.call('quirky.terminal/emulatorFrame', { device })).toMatchObject({ device, mime: 'image/png', data: png })
   await expect(harness.call('quirky.terminal/emulatorFrame', { device: 'booted' })).rejects.toThrow('exact simulator')
   await expect(harness.call('quirky.terminal/emulatorFrame', { device: 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee' })).rejects.toThrow('Unknown exact simulator')

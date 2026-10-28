@@ -2066,6 +2066,7 @@
                 "showProperties": { "type": "array", "items": { "type": "string" } },
                 "externalVisibilityDefault": { "type": "string", "enum": ["show", "hide"] }
             }
+            }
           },
           "required": ["options"]
         }
@@ -2556,7 +2557,7 @@
           "project-icon": { "type": "string", "description": "project icon, emoji or symbol" },
           "project-color": { "type": "string", "description": "project color in #RGB or #RRGGBB format" },
           "tracker-project": { "type": "string", "description": "tracker project key" },
-          "external-worktree-visibility": { "type": "string", "enum": ["show", "hide", "inherit"] },
+          "external-worktree-visibility": { "type": "string", "enum": ["show", "hide", "inherit"], "description": "show or hide external worktrees, or inherit the global policy" },
           "suppress-inbox": { "type": "boolean", "description": "suppress the external-worktree review inbox" },
           "shared-directories": { "type": "json", "description": "JSON array of ignored, relative shared paths carried into new worktrees" },
           "show-inbox": { "type": "boolean", "description": "restore the external-worktree review inbox" }

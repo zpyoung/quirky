@@ -255,6 +255,7 @@ export class AgentsService {
    */
   resolveLaunch = (params: Params): ResolvedLaunch => {
     const entry = this.launchEntry(this.entryOf(params.agent as string))
+    const config = this.configs.get(entry.id)
     const structured = params.structured === true
     return this.guard(() => {
       const { selection, extras } = this.picks(entry, params)

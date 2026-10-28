@@ -43,6 +43,7 @@ type ActionParams = Record<string, unknown> & {
   bufferId?: string
   expectedRevision?: number
   worktree?: string
+  group?: string
   query?: string
   text?: string
   format?: MarkdownFormat
@@ -364,7 +365,7 @@ async function markdownAction(host: EditorServices, rawParams: Record<string, un
   if (!action) throw errorOf(host, 'invalid-params', 'markdown action is required.')
 
   if (action === 'renderPreview') {
-    if (params.bufferId !== undefined || params.path !== undefined || params.worktree !== undefined) {
+    if (params.bufferId !== undefined || params.path !== undefined || params.worktree !== undefined || params.group !== undefined) {
       throw errorOf(host, 'invalid-params', 'renderPreview accepts only Markdown text and has no buffer, path or worktree context.')
     }
     if (typeof params.text !== 'string') throw errorOf(host, 'invalid-params', 'text is required for Markdown renderPreview.')
@@ -401,7 +402,10 @@ async function markdownAction(host: EditorServices, rawParams: Record<string, un
         if (existsSync(absolutePath)) continue
         throw error
       }
-      const opened = await host.context.call('quirky.editor/open', { worktree: `id:${resolved.id}`, path: relativePath, mode: 'rich', focus: false }) as EditorBuffer
+      const opened = await host.context.call('quirky.editor/open', {
+        worktree: `id:${resolved.id}`, path: relativePath, mode: 'rich', focus: false,
+        ...(params.group === undefined ? {} : { group: params.group })
+      }) as EditorBuffer
       const buffer = await host.markUntitled(opened.id, templatePath !== undefined)
       return { buffer, path: relativePath, template: templatePath ?? null, templateCreated: templatePath !== undefined }
     }

@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, test } from 'bun:test'
 import { mkdirSync, readlinkSync, writeFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { RpcErrorCode, type Repo, type Worktree, type WorktreeCreateResult } from '@quirky/protocol'
+import type { ProjectMetadata } from '../src/daemon/project'
 import { waitFor } from '../../../packages/daemon/test/helpers'
 import { call, failure, git, isolateGitConfig } from '../../quirky.repo/test/git-fixtures'
 import { testCliContext } from '../../quirky.repo/test/harness'
@@ -268,7 +270,7 @@ describe('per-project shared directories', () => {
       sharedDirectories: ['../outside']
     }))
     expect(refused.code).toBe(RpcErrorCode.InvalidParams)
-    expect((await call(client, 'quirky.worktree/projectMetadata', { repo: repo.id })).sharedDirectories)
+    expect(((await call(client, 'quirky.worktree/projectMetadata', { repo: repo.id })) as ProjectMetadata).sharedDirectories)
       .toEqual(['.env.local', 'config/private'])
 
     const { ctx } = testCliContext(client)
@@ -276,7 +278,7 @@ describe('per-project shared directories', () => {
       positionals: [repo.id],
       flags: { 'shared-directories': '["vendor","private/data"]' }
     }, ctx)
-    expect((await call(client, 'quirky.worktree/projectMetadata', { repo: repo.id })).sharedDirectories)
+    expect(((await call(client, 'quirky.worktree/projectMetadata', { repo: repo.id })) as ProjectMetadata).sharedDirectories)
       .toEqual(['vendor', 'private/data'])
   })
   test('saved project shared directories are linked by the existing carry owner', async () => {

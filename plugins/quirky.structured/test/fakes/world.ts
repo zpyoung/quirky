@@ -240,7 +240,7 @@ export class FakeWorld {
     return session
   }
 
-  private settle(ask: Ask, status: AskEnvelope['status'], answers: AskEnvelope['answers']): AskEnvelope {
+  private settle(ask: Ask, status: Exclude<AskEnvelope['status'], 'unavailable'>, answers: AskEnvelope['answers']): AskEnvelope {
     ask.envelope = { status, askId: ask.id, answers, skipped: [], summary: '' }
     for (const wake of this.waiters.get(ask.id) ?? []) wake()
     this.waiters.delete(ask.id)

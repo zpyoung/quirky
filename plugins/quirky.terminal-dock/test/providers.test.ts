@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { PluginContext, Session } from '@quirky/protocol'
 import type { DockQuestion } from '../src/types'
+import { createProviderBridge } from '../src/providers'
 import { questionFromInput } from '../src/providers/questions'
 
 const providerSessionId = 'provider-session-123'

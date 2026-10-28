@@ -91,6 +91,7 @@ class Runtime {
         return () => runtime.subscribers.delete(listener)
       },
       async call(method, params = {}) { return await runtime.call(method, params) },
+      forward: async () => { throw new Error('The isolated Loop fixture has no authenticated client caller') },
       async createFileResource() { throw new Error('not used') },
       clients: { accept() { throw new Error('Loop engine tests must not admit remote clients') } },
       openStore(migrations) {

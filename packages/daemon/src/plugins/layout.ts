@@ -465,7 +465,7 @@ export class LayoutService {
       kind: 'window-activate-owner',
       request: { windowId: request.windowId }
     })
-    if (!isRecord(activation) || activation.activated !== true) {
+    if (!isRecord(activation) || !('activated' in activation) || activation.activated !== true) {
       throw conflict('the owning native window could not be activated')
     }
     return { result: result.result, activated: true }

@@ -1097,7 +1097,7 @@ describe('quirky.orchestration daemon API acceptance', () => {
         const inbox = await call<InboxResult>(coordinator, INBOX, { full: true, limit: 100 })
         return inbox.messages.find((message) =>
           message.type === 'question' &&
-          message.body.includes('[environment]') &&
+          message.body?.includes('[environment]') &&
           message.body.includes('production — Production') &&
           message.body.includes('[note]')
         )
@@ -1130,7 +1130,7 @@ describe('quirky.orchestration daemon API acceptance', () => {
         skipped: []
       })
       const inbox = await call<InboxResult>(coordinator, INBOX, { full: true, limit: 100 })
-      expect(inbox.messages.filter((message) => message.type === 'question' && message.body.includes('[environment]'))).toHaveLength(1)
+      expect(inbox.messages.filter((message) => message.type === 'question' && message.body?.includes('[environment]'))).toHaveLength(1)
       expect((await call<{ dispatch: DispatchRow }>(coordinator, DISPATCH_SHOW, { taskId: task.task.id })).dispatch.id).toBe(dispatch.dispatch.id)
     } finally {
       await waiting.settle()

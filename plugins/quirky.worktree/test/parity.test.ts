@@ -188,19 +188,19 @@ describe('workspace navigation and Open in', () => {
     await call(w.t.client, 'quirky.worktree/navigate', { worktree: third.id })
     const back = await cli(w, ['worktree', 'back', '--json'])
     expect(back.code).toBe(0)
-    expect((await ui.callAny('ui.state') as { layout: { view: { input: { worktree: string } } } }).layout.view.input.worktree).toBe(second.id)
+    expect((await ui.callAny('ui.state', {}) as { layout: { view: { input: { worktree: string } } } }).layout.view.input.worktree).toBe(second.id)
 
     await call(w.t.client, 'quirky.worktree/navigationForward')
-    expect((await ui.callAny('ui.state') as { layout: { view: { input: { worktree: string } } } }).layout.view.input.worktree).toBe(third.id)
+    expect((await ui.callAny('ui.state', {}) as { layout: { view: { input: { worktree: string } } } }).layout.view.input.worktree).toBe(third.id)
     await call(w.t.client, 'quirky.worktree/navigationMove', { direction: 'previous' })
-    expect((await ui.callAny('ui.state') as { layout: { view: { input: { worktree: string } } } }).layout.view.input.worktree).toBe(main.id)
+    expect((await ui.callAny('ui.state', {}) as { layout: { view: { input: { worktree: string } } } }).layout.view.input.worktree).toBe(main.id)
     await call(w.t.client, 'quirky.worktree/navigationMove', { direction: 'next' })
-    expect((await ui.callAny('ui.state') as { layout: { view: { input: { worktree: string } } } }).layout.view.input.worktree).toBe(third.id)
+    expect((await ui.callAny('ui.state', {}) as { layout: { view: { input: { worktree: string } } } }).layout.view.input.worktree).toBe(third.id)
     await call(w.t.client, 'quirky.worktree/navigationIndex', { index: 1 })
-    expect((await ui.callAny('ui.state') as { layout: { view: { input: { worktree: string } } } }).layout.view.input.worktree).toBe(main.id)
+    expect((await ui.callAny('ui.state', {}) as { layout: { view: { input: { worktree: string } } } }).layout.view.input.worktree).toBe(main.id)
 
     await call(w.t.client, 'quirky.worktree/openIn', { worktree: second.id, target: 'changes' })
-    expect(await ui.callAny('ui.state')).toMatchObject({ layout: { view: { id: 'view:quirky.git/diff', input: { worktree: second.id, mode: 'combined', area: 'all' } } } })
+    expect(await ui.callAny('ui.state', {})).toMatchObject({ layout: { view: { id: 'view:quirky.git/diff', input: { worktree: second.id, mode: 'combined', area: 'all' } } } })
   })
 
   test('navigation refuses ambiguous multi-window routing without changing the visible view', async () => {
@@ -211,6 +211,6 @@ describe('workspace navigation and Open in', () => {
     await w.t.h.connect('ui')
     await first.callAny('ui.view.open', { id: 'view:quirky.session/worktree', input: { worktree: worktree.id } })
     await expect(call(w.t.client, 'quirky.worktree/navigate', { worktree: worktree.id })).rejects.toThrow(/window/i)
-    expect((await first.callAny('ui.state') as { layout: { view: { input: { worktree: string } } } }).layout.view.input.worktree).toBe(worktree.id)
+    expect((await first.callAny('ui.state', {}) as { layout: { view: { input: { worktree: string } } } }).layout.view.input.worktree).toBe(worktree.id)
   })
 })

@@ -232,8 +232,10 @@ async function gitForCreate(cwd: string, args: string[], input?: string): Promis
     env: { ...process.env, GIT_TERMINAL_PROMPT: '0', GIT_NO_LAZY_FETCH: '1' }
   })
   if (input !== undefined) {
-    child.stdin.write(input)
-    child.stdin.end()
+    const stdin = child.stdin
+    if (!stdin) throw new Error('git stdin pipe was not created')
+    stdin.write(input)
+    stdin.end()
   }
   const [stdout, stderr, exitCode] = await Promise.all([
     new Response(child.stdout).text(),

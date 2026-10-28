@@ -144,6 +144,7 @@ export function QuickOpenOverlay({ context, report }: { context: UiPluginContext
       const result = await context.call('quirky.editor/markdown', {
         action: 'new',
         ...(request.worktree ? { worktree: request.worktree } : {}),
+        ...(request.group === undefined ? {} : { group: request.group }),
         title,
         ...(template ? { template } : {})
       }) as { path?: string }

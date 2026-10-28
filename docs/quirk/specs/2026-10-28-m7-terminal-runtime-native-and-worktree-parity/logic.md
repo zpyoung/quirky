@@ -91,3 +91,46 @@ Scope: plugins/quirky.worktree/** only, including tests/docs/manifest. No sideba
 
 ### Parent — terminal extras and integration
 Scope: plugins/quirky.terminal/**; minimal exact-group public picker propagation in plugins/quirky.editor/{quirky-plugin.json,src/ui.tsx,src/window/overlayState.ts,src/window/QuickOpenOverlay.tsx}; packages/daemon/src/plugins/{ui-model.ts,ui-service.ts} and matching keybinding behavior tests; packages/protocol/src/pty.ts and packages/pty-host/src/scanner.ts plus private-status tests for PTY-owned OSC9999. A/B were notified of these reserved disjoint files. Parent also owns cross-component docs/decisions/notes, root bun.lock/install after actual dependency changes and final minimal cross-owner integration. Reuse public destinations, existing status normalization and mounted resource lifetimes. No alternate package lock, private cross-plugin imports or fabricated native authority. Parent owns disposable smoke scripts, final typecheck, one roadmap merge and incoming decision reconciliation, at most one exact unbuilt-flow successor and canonical land. Never touch protected loop/scripts/shared queue/index directly; no runtime verification claim until actually exercised on fresh temporary HOME/QUIRKY_HOME.
+
+## Landing disposition
+
+Reader: subsequent implementers and end-phase verification lanes — Decision: distinguish shipped source, exercised evidence and remaining implementation obligations. This landing is not exhaustive terminal parity. The acceptance inventory above remains binding; the single successor carries only genuinely unbuilt flows.
+
+### Implemented source
+
+- A1/A2: callback-lifetime caller forwarding, durable typed Ask identity and unavailable outcomes, same-process observation-channel replay, coordinator partial/no-answer, kernel confirmation nonconsent, mobile unavailable rendering, and native Claude/Codex question conversion. Native structured handoff connects with the existing kernel-issued live session lease and closes its client on settlement/exit/shutdown. Permission cards retain their separate path.
+- A3/A4: provider-declared bounded local model discovery with nonempty authoritative retirement, preserved failed/empty probes and stale UI choices; local bounded Codex/Muse transcript status retries and PTY-owned bounded OSC9999 facts into the existing status owner. Built-in agent validation accepts the existing `windows` declaration. Automation/remote-host gaps are listed below.
+- A5: canonical-resolver-backed branch summary, PR details/review and review-conversation draft recipes. A summary or review draft is not branch-name or conversation-name generation.
+- B1/B2: built-in managed-command/profile-launcher Settings/API/CLI; exact pinned executable, entrypoint and profile; foreign/replaced-file protection; shell-safe apostrophe paths; private saved-runtime metadata and redacted summaries. Actual CLI target selection uses the extracted shared mobile-v2 E2EE client, explicit-over-ambient precedence and no local fallback, preserves request IDs/confirmation errors and refuses local-only shortcuts/admin commands. Safe remote discovery exposes only the existing mobile device grant. It does not grant remote owner administration.
+- B3/B4: public supported folder chooser and owner-scoped native auxiliary-window registry/routes; Dashboard open-as setting, same-window filter updates and main-owner workspace commands; truthful missing capability and notification/signing prerequisites. Real chooser/focus/window-frame scenarios remain pending native acceptance, not unbuilt source.
+- C1/C2: persisted PR grouping, activity/project sorting, project manual/recent order, card properties and available authoritative filters/counts; external show/hide/inherit policy and review-inbox suppression without deleting work.
+- C3/C5: persistent reference link/unlink, custom statuses/board, project display/icon/color/tracker-key metadata, navigation/Open in, archive timestamps and seven-day cleanup fingerprints. Canonical non-forced removal remains the destructive authority. Unknown volatile/remote context stays null; ambiguous multi-window sleep/navigation refuses.
+- C4: canonical create preflights/forwards agent model/options, validates/materializes sparse paths, performs only safe clean exact-base primary fast-forwards, reports actual launch/shared-path/primary receipts, stores per-project shared paths, and exposes native Browse for project paths. Unsupported environment/default-tab composition refuses before creation.
+- T1: exact-group New/Open Markdown and Open File commands/menu/picker; New Markdown's first buffer open also receives the captured group. Read-only exact-UDID local iOS Simulator preview with real `xcrun simctl` provider, bounded output/frame/timeouts, visible-only polling and explicit unavailable/stale/error states. Compatible bounded SIXEL/iTerm image and font-ligature addons, lazy resource fencing and replay ordering. Generic persisted effective keybinding overrides drive actual Settings, dispatch and menu hints.
+
+Parent integration additionally owns the editor Markdown service's initial destination, the real CLI paired link and safe mobile discovery; these complete the public contracts rather than introduce alternate authorities. Obsolete CLI type aliases and old mobile crypto source paths are removed; callers import the shared public entrypoint.
+
+### Unbuilt flows retained for one successor
+
+All following flows remain obligations, not accepted substitutes:
+
+- Actual built-in provider model-list probes, exact automation-host retirement and supported non-local discovery/launch capabilities; authenticated remote status/hook relay. Generic custom-provider local discovery is not a built-in probe or remote transport.
+- Full-owner remote CLI administration requires an authenticated grant beyond mobile-v2; existing phone credentials must not be escalated.
+- Native notification permission/click/dismiss lifecycle requires supported SDK callbacks. Production signed helper/TCC/launchd/admission/upgrade needs an authorized signing/packaging identity; this workstation reported zero valid signing identities.
+- Generic exact per-window workspace navigation/sleep/close routes. The implemented auxiliary Dashboard bridge is not that lifecycle API.
+- Authoritative host/other-client identity and available-host controls; volatile/remote-connectivity cleanup classifiers. Missing metadata is not fabricated and null evidence never proves inactivity.
+- Prepared-checkout pools, remote-host creation, environment recipes/default-tab composition through their public owners, avatar controls and provider-backed tracker defaults. Explicit pre-mutation refusal is not implementation of these flows.
+- Kitty graphics, independent per-terminal light/dark/custom theme choices, and authorized floating Markdown/editor/Browser composition and remaining distinct destinations. SIXEL/iTerm or an existing phone panel is not an equivalent.
+- Distinct branch-name and conversation-name generation through canonical recipe/resolver ownership.
+
+Existing phone panels/artifact grants/foreground notifications, Browser controls/import/routing, editor leases, automation/sidebar/dock, native clipboard and host-power/shutdown retain their landed owners; the successor must reconcile rather than duplicate them. Linux/Windows/WSL work remains a platform deferral.
+
+### Exercised evidence and limits
+
+`bun run typecheck` passed root and mobile after integration; the actual UI build produced nine files and 25 plugin UI modules. Permanent regression tests were authored/updated, not run, under build-first policy. No formal review, whole suite or dogfood campaign is claimed.
+
+A disposable real daemon/PTY/CLI with fresh HOME/QUIRKY_HOME and owned provider standins exercised kernel-authenticated native Codex question → active Dispatch → exact coordinator → native reply; plain-worker durable Ask replay/answer and unknown unavailable; bounded simulator list/frame and implicit-target refusal. Real encrypted one-off/saved paired CLI calls succeeded for an allowed worktree method; owner-only and missing-target calls refused without local fallback.
+
+Actual Chromium exercised the Terminal menu, exact-device PNG preview and hidden polling stop, real remapped search keystroke, Settings Save/Disable/Reset, and fully mounted rich Markdown in a non-active split. The Markdown scenario first exposed a duplicate in the old active group; after propagating the initial-open group and rebuilding/restarting, left tabs stayed unchanged and only the captured right group gained the document. Two actual installed launchers then proved isolated spaced/apostrophe profile homes and preserved arguments after correcting shell quoting. Public worktree option/project-policy/reference/status mutations and readbacks also succeeded.
+
+Screenshots are recorded in the decision log. The preview used an owned generated PNG provider, not a real Simulator; native chooser/focus/window lifecycle is pending in the native handoff. Image-protocol, provider edge, restart/replacement, cleanup and other authored acceptance cases remain for the end phase. Search's close X was covered by the pane header during the narrow browser interaction; Escape closed it. This observation is not a new verification/debug queue item.

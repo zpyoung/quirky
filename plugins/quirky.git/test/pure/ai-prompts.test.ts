@@ -251,7 +251,7 @@ describe('named hosting and branch prompts', () => {
     const prompt = buildReviewConversationPrompt({
       worktreePath: '/tmp/worktree',
       review,
-      comments: [{ kind: 'issue_comment', author: 'reviewer', body: 'Could you explain the API change?' }],
+      comments: [{ kind: 'issue_comment', author: 'reviewer', body: 'Could you explain the API change?', path: null, line: null }],
       partialFailures: []
     })
     expect(prompt).toContain('Could you explain the API change?')

@@ -62,7 +62,7 @@
 - **Why:** WindowPluginHost already chooses active context-matching bindings from this model. Another listener would leave original bindings live and could leak shortcut bytes into shells.
 - **Evidence:** packages/daemon/src/plugins/ui-model.ts and ui-service.ts; packages/ui/src/plugins/host.ts handleKey; authored keybinding-overrides.test.ts and distro-collision regression (not run).
 - **Reversibility:** medium
-- **Confidence:** high for contract; runtime proof pending
+- **Confidence:** high for effective remapping and actual Settings Save/Disable/Reset; collision edge tests unrun
 - **Revisit if:** End-phase keyboard scenarios find a context/precedence mismatch.
 - **Source:** assumed — autonomous
 
@@ -73,7 +73,7 @@
 - **Why:** term-ui.md names a preview tab while agents retain their own tools. This is distinct from the shipped mobile companion and does not introduce native chat, a Swift shell or generic computer-use authority. The supported simctl executable is available; no real simulator was read or mutated during source investigation.
 - **Evidence:** xcrun --find simctl exited0 with /Applications/Xcode.app/Contents/Developer/usr/bin/simctl; terminal emulator.ts and EmulatorView.tsx; authored isolated external-provider API test (unrun).
 - **Reversibility:** medium
-- **Confidence:** medium until actual changed-path smoke and nightly native check
+- **Confidence:** medium: actual owned-provider preview and hidden polling exercised; real Simulator/native acceptance pending
 - **Revisit if:** The real SDK/provider cannot return bounded screenshot data for an explicitly selected simulator.
 - **Source:** assumed — autonomous
 
@@ -84,7 +84,7 @@
 - **Why:** Published peer ranges match the pinned xterm. An unmounted addon must not recreate hidden resources, and a tab picker must not silently send a split's document to another group. Floating Markdown/editor has no authorized document root and refuses visibly instead of inventing filesystem authority.
 - **Evidence:** https://registry.npmjs.org/@xterm/addon-image/0.8.0 ; https://registry.npmjs.org/@xterm/addon-ligatures/0.9.0 ; upstream addon public typings at commit9ba6c00a; editor overlayState/QuickOpenOverlay and terminal commands/extras source.
 - **Reversibility:** medium
-- **Confidence:** medium until changed-path browser smoke
+- **Confidence:** high for exercised exact split-document destination; renderer protocol acceptance unrun
 - **Revisit if:** A compatible Kitty-capable addon or public floating-document owner is implemented.
 - **Source:** assumed — autonomous; deferred: Kitty graphics and floating authorized document composition
 
@@ -117,7 +117,7 @@
 - **Why:** The kernel already issues and verifies these credentials for structured sessions; no new authority source or impersonation API is needed. A stored Ask cannot make an expired provider lease live.
 - **Evidence:** RuntimeSessionAuthority.openStructuredLease/resolveForConnection; public connectDaemon identity option; quirky.structured native-questions, runners and createAsk integration; authored native provider-frame tests (not run).
 - **Reversibility:** hard (caller authority)
-- **Confidence:** high for design; actual runtime proof pending
+- **Confidence:** high for exercised native Codex lease/coordinator round trip; Claude callback coverage authored but unrun
 - **Revisit if:** A supported public in-process session-scoped call primitive replaces the credentialed local connection without weakening lifetime fences.
 - **Source:** assumed — autonomous
 
@@ -128,9 +128,42 @@
 - **Why:** Dropping answer identity would falsely reject a genuine coordinator; comparing observation source would break same-process restart replay; partial/no-answer must not become consent or an endlessly invalid card submit.
 - **Evidence:** parent repairs in dispatcher/orchestration/Ask; authored source-channel restoration, coordinator partial, unknown outcome and native conversion tests (unrun).
 - **Reversibility:** medium
-- **Confidence:** medium until disposable runtime proof
+- **Confidence:** medium: live durable handoff/replay and unavailable exercised; restart/replacement edge tests unrun
 - **Revisit if:** Actual API/CLI handoff/restart execution contradicts these invariants.
 - **Source:** assumed — autonomous
 
+## D13: Complete real paired CLI wiring without escalating the mobile grant
+- **Question:** Does extracting a client or saving an offer alone implement remote CLI selection?
+- **Options:** Ship metadata only; connect by copying crypto or granting owner access; wire the shared client and retain its actual device authorization.
+- **Chose:** Parent completed actual explicit/ambient target selection, one-off/saved pairing, safe remote method discovery, nonsecret target errors, request-ID/confirmation preservation and local-only command refusal. The existing mobile-v2 grant remains the boundary; no owner fallback or token/offer output.
+- **Why:** A transport library without the CLI caller is an incomplete flow; a phone credential is not authority for owner administration.
+- **Evidence:** packages/cli/src/paired-link.ts, main.ts and runtime-selection.ts; shared protocol paired-client; quirky.mobile/api. Actual encrypted allowed calls exited0, owner-only call exited2, missing saved target exited1 despite a live local daemon.
+- **Reversibility:** hard (authentication boundary)
+- **Confidence:** high for exercised allowed/refused selection
+- **Revisit if:** A separately authenticated owner-grant protocol is provided.
+- **Source:** assumed — autonomous; deferred: full-owner remote CLI administration
+
+## D14: Retain exact remaining provider, recipe, worktree and terminal implementation flows
+- **Question:** Which obligations remain after integrating the reachable source?
+- **Options:** Claim complete parity from related features; create verification/debug successors; retain one implementation-only successor with every genuinely unbuilt flow.
+- **Chose:** Keep the spec's final unbuilt ledger: built-in/exact automation-host/non-local discovery; authenticated remote status relay; full-owner remote CLI grant; generic exact per-window workspace lifecycle; authoritative host/client/volatile/remote metadata; prepared pools/host creation/environment/default tabs/avatar/tracker defaults; Kitty/custom terminal themes/floating authorized destinations; distinct branch/conversation naming. Notification/signing prerequisites remain D9.
+- **Why:** Generic local discovery is not a built-in probe; a draft/summary is not naming; an auxiliary Dashboard route is not generic workspace closure; explicit refusal is not a supported creation option. Build-first permits one successor for these unbuilt flows only.
+- **Evidence:** spec Landing disposition; supported owner contracts and component source handoffs. Existing phone/Browser/editor/automation/native-clipboard/host-power owners remain unchanged rather than duplicated.
+- **Reversibility:** medium
+- **Confidence:** high for inventory, no exhaustive parity claim
+- **Revisit if:** Incoming integration decisions demonstrate one of these exact flows already has a landed owner.
+- **Source:** deferred: remaining provider, remote authorization, worktree and terminal implementation flows
+
+## D15: Narrow runtime proof repairs actual contract failures, not test wording
+- **Question:** What did the required disposable changed-path execution establish?
+- **Options:** Trust compiler/worker reports; run forbidden suites; execute isolated real daemon/CLI/web paths with owned provider standins and retain precise limits.
+- **Chose:** Root+mobile typecheck and UI bundle passed. Real kernel native Codex/Dispatch/coordinator and plain-worker Ask paths passed; encrypted CLI allowed/refused/no-fallback paths passed. Actual browser showed emulator160x280 PNG and stopped hidden polling, effective remapped search and Settings Save/Disable/Reset. Split Markdown exposed duplicate initial active-group opening: propagate group through the initial Markdown action, rebuild/restart and prove left tabs unchanged/right-only rich document. Actual launcher execution exposed literal ANSI shell-quote corruption: replace with plain POSIX apostrophe escaping and prove two exact profile homes/arguments. Fix owned provider shebang to the actual Bun executable instead of a broken unrelated system Node.
+- **Why:** Source success is not consumer proof. No test was rerun to reconfirm a user-reported failure, and no incidental wording assertions were pinned.
+- **Evidence:** AUTHORITY_SMOKE and SMOKE_READY disposable receipts; typecheck26.18s; UI build9files/25modules; screenshots omp-sshots-15b81b9b808a06ab.webp (preview), omp-sshots-15b81bfced8a06ac.webp (search), omp-sshots-15b81fd1364a06ae.webp (rich document), under /var/folders/x5/07kj5yld16l9wd5p_v01h20c0000gp/T/. Public worktree option/project/reference/status readbacks also succeeded.
+- **Reversibility:** easy
+- **Confidence:** high for named exercised paths only
+- **Revisit if:** End-phase scenarios expose unexercised provider/native/renderer/restart edges. Search close X was covered by pane header; Escape worked. Preserve this observation for that phase, not another queue item.
+- **Source:** assumed — autonomous
+
 ## Progress
-Contract/spec commit740ff1b0 precedes implementation. Parent terminal/render/remap/editor/PTY source and tests authored; original incomplete A/C workers stopped, focused serial recoveries active in their original trees; B CLI/native bridge active. Parent completed native structured caller and Ask integration plus Dashboard public consumers without overlapping retry scopes. No permanent tests, typecheck, build, product smoke, review or dogfood run yet. Next: settle all components, audit scope/HEADs, commit/merge each and immediately remove its worktree, install using existing bun.lock convention, run typecheck and disposable actual API/CLI/web smoke, record exact dispositions/native pending evidence, catch up once/read incoming decisions, typecheck and canonical land. Do not end with work running or claim another queue item.
+Source components merged and temporary component worktrees removed: contracts740ff1b0, parent6276f05b, authority31a8ccf7, worktreeeecab33a, CLI/native35b193b5. Final parent integration and consumer docs are ready to commit. Root+mobile typecheck and actual UI build passed; D15 records only exercised disposable proof. Permanent suites/reviews/dogfood remain unrun. Owned V7 daemon/PTY/children exited0 and browser closed; confirm temporary homes removed. Native scenarios remain pending. Next: commit, catch up exactly once with build/roadmap/read every incoming decision, reconcile the unbuilt ledger, typecheck merge result, add at most one implementation-only successor, detach and canonical land. End after this one item's receipt; no new claim.

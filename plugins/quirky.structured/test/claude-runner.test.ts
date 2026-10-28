@@ -46,7 +46,7 @@ function makeContext(): StructuredContext {
   }
 }
 
-function envelope(status: AskEnvelope['status'], decision?: string): AskEnvelope {
+function envelope(status: Exclude<AskEnvelope['status'], 'unavailable'>, decision?: string): AskEnvelope {
   return {
     status,
     askId: 'a_1',

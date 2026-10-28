@@ -156,6 +156,7 @@ function listFolderProject(env: ListEnv, repo: Repo): WorktreeControl[] {
       result.push(joinMetadata(facts, metadata, env.removing.has(row.id), env.store))
     }
     return result.sort(compare)
+  })
 }
 
 /**
