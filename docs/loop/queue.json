@@ -1918,8 +1918,7 @@
       "title": "Fix the native-only failures in sa-browser-agent from the 2026-10-28 run: C2-native-focus",
       "docs": [],
       "deps": [],
-      "status": "in-progress",
-      "lane": 12
+      "status": "blocked"
     },
     {
       "id": "m3-accounts-complete-user-acceptance-20261028",
