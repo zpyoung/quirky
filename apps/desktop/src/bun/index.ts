@@ -1,8 +1,8 @@
-import { existsSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { QuirkyClient } from '@quirky/protocol'
 import { ensureDaemon, quirkyHome, rpcUrl, type RuntimeInfo } from '@quirky/protocol/node'
-import { ApplicationMenu, BrowserWindow, Tray, Utils, app, type ApplicationMenuItemConfig } from 'electrobun/main'
+import { ApplicationMenu, BrowserView, BrowserWindow, Tray, Utils, app, type ApplicationMenuItemConfig } from 'electrobun/main'
 import { maintainConnection } from './connection'
 import { setDockBadge } from './dock'
 import {
@@ -21,7 +21,8 @@ import {
   type TrayState
 } from './events'
 import { daemonUrl, errorPageHtml } from './page'
-import { resolveRuntimeEnv, trayDotPath } from './paths'
+import { findRepoRoot, resolveRuntimeEnv, trayDotPath } from './paths'
+import { createNativeBrowserHandlers, type NativeBrowserHostRPC } from './native-browser'
 import { playSound } from './sound'
 import { loadViewMenuSettings, toggleViewMenuSetting, viewMenuSettingFromEvent, type ViewMenuSetting } from './view-menu'
 
@@ -36,6 +37,29 @@ const pathOptions = {
 }
 
 Object.assign(process.env, resolveRuntimeEnv(pathOptions))
+
+async function loadNativeBrowserPreload(): Promise<string> {
+  const repoRoot = process.env.QUIRKY_REPO_ROOT || findRepoRoot(import.meta.dir, existsSync)
+  const resourceDir = app.isPackaged
+    ? dirname(process.env.QUIRKY_UI_DIR ?? '')
+    : repoRoot ? join(repoRoot, 'apps', 'desktop', 'resources') : ''
+  if (!resourceDir) throw new Error('cannot locate native browser preload resources')
+  const preloadPath = join(resourceDir, 'native-browser-preload.js')
+  if (existsSync(preloadPath)) return readFileSync(preloadPath, 'utf8')
+  if (app.isPackaged || !repoRoot) throw new Error('native browser preload bundle is missing')
+
+  const entry = join(repoRoot, 'apps', 'desktop', 'src', 'bun', 'native-browser-preload.ts')
+  const result = await Bun.build({ entrypoints: [entry], target: 'browser', format: 'iife', minify: true })
+  if (!result.success) {
+    for (const log of result.logs) console.error(log)
+    throw new Error('failed to bundle trusted native browser preload')
+  }
+  const output = result.outputs[0]
+  if (!output) throw new Error('trusted native browser preload bundle is empty')
+  return output.text()
+}
+
+const nativeBrowserPreload = await loadNativeBrowserPreload()
 
 const logPath = join(quirkyHome(), 'logs', 'daemon.log')
 let stopping = false
@@ -70,17 +94,35 @@ function showDaemon(info: RuntimeInfo): void {
 }
 
 function createWindow(content: { html: string | null; url: string | null }): BrowserWindow {
-  const created = new BrowserWindow({
+  let created: BrowserWindow | null = null
+  const nativeBrowserHandlers = createNativeBrowserHandlers({
+    getWindow: () => created ? { id: created.id, webview: created.webview } : null,
+    getView: (id) => BrowserView.getById(id)
+  })
+  const rpc = BrowserView.defineRPC<NativeBrowserHostRPC>({
+    handlers: {
+      requests: {
+        claimNativeBrowserView: nativeBrowserHandlers.claim,
+        setNativeBrowserZoom: nativeBrowserHandlers.setZoom,
+        releaseNativeBrowserView: nativeBrowserHandlers.release
+      }
+    }
+  })
+  const nativeBrowserWindowOptions = process.platform === 'darwin' ? { preload: nativeBrowserPreload, rpc } : {}
+  created = new BrowserWindow({
     title: WINDOW_TITLE,
     frame: { width: 1400, height: 900, x: 80, y: 80 },
-    ...content
+    ...content,
+    ...nativeBrowserWindowOptions
   })
-  created.on('close', () => {
+  const ownedWindow = created
+  ownedWindow.on('close', () => {
+    nativeBrowserHandlers.dispose()
     stopping = true
     window = null
   })
-  created.on('focus', () => applyTray({ type: 'focus' }))
-  return created
+  ownedWindow.on('focus', () => applyTray({ type: 'focus' }))
+  return ownedWindow
 }
 
 function showWindow(): void {

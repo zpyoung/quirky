@@ -286,7 +286,7 @@ export interface AcceptedAskCheckpoint {
   timeoutMs: number
 }
 
-/** Durable supervised acceptance before any process/workspace launch effect. */
+/** Durable acceptance for a scoped worker mutation before external process/workspace effects. */
 export interface AcceptedWorkerCheckpoint {
   state: 'accepted'
   accepted: true

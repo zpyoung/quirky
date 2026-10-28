@@ -255,6 +255,20 @@ Registration update: `bun scripts/build-loop/queue.ts add /tmp/quirky-session-in
 - **Isolated retry:** a different case, “a remote base that moves after the hooks were read does not change the commit checked out”, failed `git fetch -q origin` with `cannot lock ref refs/remotes/origin/main: is at 5549f0f4044fc0bd6207c2f67aa3ace59af0f97c but expected f85218387be054f4435ae642b09ba319f631971a`.
 - **Evidence:** `bun run test`, remote snapshot `runs/1793142204136-90736`, artifact://51. No worktree implementation or test was edited in the PTY item, and this failure was not suppressed. The corrected PTY package separately passed two complete 14-file remote runs with no flaky reruns.
 
+## sa-browser-pane: deferred native page-event interception
+
+- **Owner:** queued `sa-browser-pane-native-events`, dependent on `sa-browser-pane`; authoritative queue add confirmed on 2026-10-28.
+- **Flows:** Native system-webview JavaScript alert/confirm/prompt/beforeunload overlays and fail-closed responses; basic-auth and loopback-only certificate prompts; controlled collision-safe download destination/cancel/shelf actions; opener/postbody-preserving OAuth popups and external-app launch interception.
+- **Outside limit:** pinned public Electrobun SDK exposes native navigation/find/zoom, popup URL metadata and download notifications, but not the synchronous dialog/auth/certificate response handles, native download destination/cancel controls or opener-preserving popup ownership these flows require.
+- **Evidence:** installed `apps/desktop/.hutch/devkit/api/sdks/main/core/BrowserView.ts:44-218,309-374`, `api/preload/webviewTag.ts:12-26,361-402`, `api/sdks/main/events/webviewEvents.ts:1-38`; BrowserNativeHost/BrowserPaneMap public API surveys. These are supported API limitations, not evidence that private native callbacks do not exist.
+- **Unblock:** a supported SDK capability supplying those controls, without private FFI/pointers, global TLS bypass, asynchronous fake synchronous dialogs, or silently replacing native human browsing with Chrome. Reachable Chrome Watch page-event behavior remains owned by this pane item and is not cleared by this deferral.
+
+## sa-browser-pane: Native host controls and workspace grant preview
+
+- **Queued before the operator freeze:** `sa-browser-pane-native-host-controls` and `sa-browser-pane-workspace-preview`, both todo and dependent on `sa-browser-pane`, confirmed in the authoritative queue.
+- **Native host controls:** the public tag provides normal reload and started/committed/finished events, not genuine cache-bypass reload or a load-failed callback. Native UI must not label normal reload as hard reload or invent a network/TLS error flag. Watch's CDP equivalents remain in this item.
+- **Workspace grant preview:** passive plugin file resources reject active HTML and use sandbox CSP. Source `doc-preview-protocol.ts:33-65,75-151` additionally needs isolated nonpersistent grant/asset serving and outbound network/permission/download policy. Do not weaken daemon-origin MIME security or call explicit `file://` browsing/editor new-tab an equivalent conversion. Canonical source actions and explicit local HTML browsing remain core.
+- **Latest operator ruling:** no further browser queue follow-ups; any additional unavoidable gap is recorded in decision log/BLOCKERS only. Lane8 owns its separate native profile-clear completion limitation; this item does not duplicate it.
 ## m3-vault: terminal input timing during affected verification
 
 - **LOW — shell readiness can advance during CLI round trips** (`plugins/quirky.terminal/test/e2e.test.ts:144`). The macOS SC-2 case expected pending after two CLI sends but observed ready under load; its configured isolated retry passed all23 cases169 assertions. The256 remote files and both macOS files returned a passing runner result. No terminal state, test deadline, assertion or retry rule was changed in this item.
@@ -277,6 +291,23 @@ Registration update: `bun scripts/build-loop/queue.ts add /tmp/quirky-session-in
   and no pending waiters/foreign process cleanup. No human decision is required.
 - **Still shipped:** durable Run/Dispatch mail, FIFO delivery/ack, exclusive waits, resumable
   questions/replies, gates, and explicit exact-incarnation/idempotent session prompt submission.
+
+## m6-orchestration-workers: observed default-profile editor activation timeout
+
+- **Type:** observed integration bug, medium severity.
+- **File:** `plugins/quirky.editor/main.ts:28-51`, awaited restore in `src/daemon/service.ts:212-226`.
+- **Description:** the final merged built UI on a fresh private profile displayed
+  `quirky.editor failed to activate: activation timed out`; subsequent shared-browser
+  observations also timed out. The editor timeout's cause is not established.
+- **Evidence:** screenshot `omp-sshots-15b77ad4f1dc5ef8.png`; private test PATH was
+  `fakebin:/usr/bin:/bin`. Source inspection does not establish missing `rg` as the cause.
+- **Verification boundary:** the worker terminal UI was exercised successfully in a fresh
+  private profile after public `plugin.disable({id:"quirky.editor"})`, using a dedicated
+  owned Chromium process. No editor source or worker guard was changed to make that pass.
+  Actual worker focus/title, physical takeover, retained release and exact stop passed.
+- **Next diagnostic:** reproduce editor activation with its restore trace and normal tool
+  environment; distinguish that producer timeout from the shared-browser driver timeouts.
+  This records an observation, not an unfinished worker flow or a human decision.
 ## m4-hosting-ui-tasks: deferred parity and cross-feature acceptance
 
 - **Owner:** registered follow-up `m4-hosting-ui-tasks-complete-remaining-flows`, dependent on Tasks, sourced worktree creation and Reviews. The operator's 4am sprint directive authorizes the exercised core landing, not a claim that all25 original scenarios passed.
@@ -287,4 +318,27 @@ Registration update: `bun scripts/build-loop/queue.ts add /tmp/quirky-session-in
 
 - **MEDIUM, LOW confidence — Settings paired-device revoke reachability remains unconfirmed** (`plugins/quirky.mobile/src/ui.tsx:70`, `packages/ui/src/styles.css:1137-1144`). At1280x720, the guarded UI run found the Settings revoke button mostly below the status bar; scroll/PageDown produced no observable change. The host slot already supplies `overflow: auto`, so an app layout cause was not established and no speculative CSS change was made. The shorter Mobile-page revoke route worked for all three run-created pairings. Follow-up `sb-mobile-settings-visibility` owns distinguishing scroll-driver targeting from actual clipping.
 - **Tool limitations, not claimed passes:** stable interface Refresh produced no visible change twice; IP redaction hid the custom-address value signal although save/persistence worked; Cmd+R/Cmd+Shift+R did not establish a browser reload. Functional intro/settings/driving/devices goals passed; pairing/post-build goals remain partial in `.quirk/using-apps-like-a-user/runs/20261028T005355-6182/report.md`. No test overrides or kept-open windows.
+
+
+## sa-browser-pane: operator-approved narrow landing and existing follow-up ownership
+
+- **Current acceptance:** API/CLI pane lifecycle and navigation only, using the committed `build/sa-browser-pane` and `/tmp/sa-browser-pane.fiGLjz` trees. This supersedes the previous full-scenario acceptance promise; implementation and tests remain preserved and must not be deleted or weakened.
+- **Existing handoffs:** queue titles remain unchanged; D23 and this entry extend their scope per the operator. No new queue item is added.
+  - `sa-browser-pane-native-host-controls` owns Watch screencast transport/input/find/zoom/viewport acceptance plus remaining base-pane UI scenarios, hard-reload, and load-error.
+  - `sa-browser-pane-native-events` owns dialogs/auth/cert/download/popups/OAuth/external events.
+  - `sa-browser-pane-workspace-preview` owns grant document preview/UI.
+  - Lane8's `sa-browser-profiles-settings` owns profile integration and corresponding UI/settings scenarios. Existing subflow handoffs remain unchanged: `sa-browser-profile-import-ui` retains its import-UI handoff to `sa-browser-profiles-settings` and `sa-browser-agent-extras`; `sa-browser-native-profile-clear-completion` retains native deletion-completion and isolated-storage-root proof; `sa-browser-native-identity` retains supported Native user-agent override and restart requirements; `sa-browser-localhost-label-routing` retains real per-worktree host/port routing, not display-only rewriting.
+  - `m7-sweep-browser-mobile` remains the final parity audit, not a replacement for these specific mappings.
+- **Acceptance limits:** the operator skipped review; Native nightly remains pending. No broad UI acceptance or Watch transport/input/find/zoom/viewport acceptance is claimed here, and none of the deferred flows is reported passing.
+- **Parent landing:** parent owns the final affected suite (`bun scripts/suite.ts plugins/quirky.browser packages/ui packages/protocol apps/desktop`), scripts (`bun test scripts`) and typecheck (`bun run typecheck`) gates, followed by controller `queue.ts land`.
+- **Precise lane8 boundary:** cross-lane pane/profile composition and visible integration acceptance is assigned to this item's already-added `sa-browser-pane-native-host-controls`, alongside the deferred base-pane UI. Lane8 retains its own profiles/settings implementation and focused queued subflows; this deferred composition is not a new gate for lane8. This clarifies the owner list above under the operator's “follow-ups this item already added” ruling, without editing queue titles or adding items.
+
+## sa-browser-pane: first merged-gate evidence and preserved verification limits
+
+- First normal controller land rejected: all five Mac-only files passed, including Browser automation and pane tests; remote630files624passed6failed exceeded the configured isolated-retry limit, so no remote retries occurred.
+- Concrete Browser integration defects were repaired without relaxing consumer assertions: terminal contributions now precede the typed management footer; SC-22 waits for actual detected-agent readiness rather than a count that Browser legitimately changes.
+- Dock cancellation now holds the real post-body/pre-Enter boundary through an injected fixture-only hook after the unchanged500ms delay. Explicit per-harness built-in overlays replace the proposed shared prototype monkeypatch. Cancellation/PTY bytes and actual effort/transcript/sentinel/draft assertions remain. Only an incidental negative notice-prose pin was deleted.
+- Fresh scoped proof: Dock send/defect files2/2pass, no retries; exact terminal SC-22 passes; menu unit file passes; typecheck passes after fixture plumbing. This is not a claim that a single post-fix630-file run passed.
+- Unchanged failures still awaiting the normal merged retry: Git remote SC-29 wait (five possible predicates; available stack does not identify one), daemon lock five-second test bound, incoming loops-store five-second bound. No speculative producer change, timeout increase or waived assertion was used for these.
+- Operator's45-minute target was not met; the first controller verification alone took1800.57seconds after source submission. No on-time or authoritative landed claim is inferred from a submitted command.
 

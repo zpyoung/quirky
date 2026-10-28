@@ -49,11 +49,15 @@ export interface DurableMutationOptions<T extends object> {
 export interface OrchestrationWorkerCore extends LifecycleCorePort {
   readonly context: PluginContext
   readonly store: PluginStore
+  readonly nestedWorkerMaxDepth: number
   registerWorkerPort(port: WorkerLifecyclePort): void
   requireCoordinator(caller: RuntimeCallerEvidence, runId?: RunId): RunRow
   getRun(runId: RunId): RunRow
   getTask(taskId: TaskId): TaskRow
   getDispatch(dispatchId: DispatchId): DispatchRow
+  listDispatches(runId?: RunId): DispatchRow[]
+  boundRunId(caller: RuntimeCallerEvidence): RunId | null
+  attentionFor(dispatchId: DispatchId): { guidance: boolean; input: boolean; approval: boolean; rootCompletion: boolean }
   createDispatch(input: DispatchAdmissionInput & { supervised?: boolean }, caller: RuntimeCallerEvidence, identity: SessionIdentity): DispatchRow
   createTask(input: Omit<TaskCreateParams, keyof MutationRequest>, caller: RuntimeCallerEvidence): TaskRow
   reserveWorkerDispatch(input: Omit<DispatchAdmissionInput, 'assigneeSessionId'>, caller: RuntimeCallerEvidence): DispatchRow

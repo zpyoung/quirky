@@ -19,6 +19,7 @@ export type SendEngineInput = {
   ensure(): void | Promise<void>
   phase(value: string): void
   bodyMayHaveBeenWritten(): void | Promise<void>
+  beforeSubmit?(signal: AbortSignal): Promise<void>
 }
 
 function abortError(): Error {
@@ -207,6 +208,7 @@ export async function executePrompt(input: SendEngineInput, id: string): Promise
 
     input.phase('submitting')
     await cancellableDelay(500, input.signal)
+    if (input.beforeSubmit) await input.beforeSubmit(input.signal)
     await input.ensure()
     checkAbort(input.signal)
     await writeBody(input, '\r', false, markMayHaveBeenWritten, markAccepted)

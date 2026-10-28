@@ -91,6 +91,8 @@ export type E2eOptions = {
   zshrc?: string
   /** Contents of `$HOME/.bashrc`, which the bash wrapper sources before its own integration. */
   bashrc?: string
+  /** Builds an isolated built-in plugin directory after this harness's home exists. */
+  builtinPluginsDir?: (home: string) => string
 }
 
 export type Attached = {
@@ -138,7 +140,8 @@ export class E2eHarness {
     readonly shell: string,
     private readonly scratch: string,
     private readonly scope: ProcessScope,
-    readonly cleanShell: boolean
+    readonly cleanShell: boolean,
+    private readonly builtinPluginsDir?: string
   ) {}
 
   /** Creates the temp home and repo, starts the daemon and registers the repo. */
@@ -164,7 +167,7 @@ export class E2eHarness {
         writeFileSync(sessionShell, `#!/bin/sh\n[ "$1" = "-l" ] && shift\nexec ${command} "$@"\n`)
         chmodSync(sessionShell, 0o755)
       }
-      harness = new E2eHarness(home, repo, sessionShell, scratch, scope, options.cleanShell ?? false)
+      harness = new E2eHarness(home, repo, sessionShell, scratch, scope, options.cleanShell ?? false, options.builtinPluginsDir?.(home))
       live.add(harness)
       if (options.zshrc !== undefined) writeFileSync(join(home, '.zshrc'), options.zshrc)
       if (options.bashrc !== undefined) writeFileSync(join(home, '.bashrc'), options.bashrc)
@@ -215,7 +218,8 @@ export class E2eHarness {
       QUIRKY_HOME: this.home,
       SHELL: this.shell,
       QUIRKY_PORT: '0',
-      QUIRKY_TEST_ENTER_DELAY_MS: '20'
+      QUIRKY_TEST_ENTER_DELAY_MS: '20',
+      ...(this.builtinPluginsDir ? { QUIRKY_BUILTIN_PLUGINS_DIR: this.builtinPluginsDir } : {})
     }
   }
 
