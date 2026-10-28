@@ -161,6 +161,7 @@ function safeOutcome(value: unknown): Lookup | undefined {
     url,
     title,
     body,
+    updatedAt: typeof source.updatedAt === 'string' && Number.isFinite(Date.parse(source.updatedAt)) ? source.updatedAt : null,
     state,
     headRefName,
     baseRefName,

@@ -113,6 +113,8 @@ export type SettingDeclaration = {
   minimum?: number
   maximum?: number
   values?: string[]
+  /** Exposes a boolean setting as a checked item in the native View menu. */
+  menu?: 'view'
 }
 
 export type UiSettingEntry = { id: string; plugin: string } & SettingDeclaration

@@ -424,7 +424,6 @@ async function mergeMetadata(env: TasksEnv, target: ItemTarget): Promise<Record<
     autoMergeEnableEligible,
     directMethods: mergeEligible ? methods.allowed : [],
     queueMethods: queueEligible ? methods.allowed : [],
-    confirmationFormat: '<direct|queue> <method> PR #<number>'
   }
 }
 
@@ -517,8 +516,6 @@ async function mutateRow(env: TasksEnv, params: Record<string, unknown>): Promis
     if (mergeAction !== 'direct' && mergeAction !== 'queue') invalid(env, 'mergeAction must be direct or queue.')
     const expectedHead = text(params.expectedHead)
     if (!expectedHead) invalid(env, 'expectedHead is required for merge.')
-    const confirmation = text(params.confirmation)
-    if (confirmation !== `${mergeAction} ${method} PR #${target.number}`) invalid(env, 'The merge confirmation does not match this operation and pull request.')
     const { review, prRepo } = await loadReview(env, target)
     const methods = mergeMethods(review)
     if (review.headRefOid !== expectedHead) invalid(env, 'The pull request head changed. Refresh and confirm the merge again.')
@@ -533,7 +530,8 @@ async function mutateRow(env: TasksEnv, params: Record<string, unknown>): Promis
       prRepo,
       expectedHead,
       method,
-      action: mergeAction
+      action: mergeAction,
+      yes: true
     })
     const outcome = object(result)
     const state = outcome?.state
@@ -633,10 +631,24 @@ async function options(env: TasksEnv, params: Record<string, unknown>): Promise<
 }
 
 
+async function rowConfirmation(env: TasksEnv, params: Record<string, unknown>): Promise<string | null> {
+  if (params.action !== 'merge') return null
+  const target = readTarget(env, params.target)
+  if (target.kind !== 'pullRequest') invalid(env, 'merge requires a pullRequest target.')
+  const method = safeMethod(env, params.method)
+  const action = params.mergeAction ?? 'direct'
+  if (action !== 'direct' && action !== 'queue') invalid(env, 'mergeAction must be direct or queue.')
+  const head = text(params.expectedHead)
+  if (!head || !/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/i.test(head)) invalid(env, 'expectedHead must be the full current pull request SHA.')
+  const repository = await trustedPRRepo(env, target)
+  return `${action === 'queue' ? 'Queue' : 'Merge'} ${method} PR #${target.number} in ${repository.host}/${repository.owner}/${repository.repo} at ${head}?`
+}
+
 export function listMethods(env: TasksEnv): TaskMethodTable {
   return {
     list: (params) => listWork(env, params),
     row: (params) => mutateRow(env, params),
+    rowConfirmation: (params) => rowConfirmation(env, params),
     checks: (params) => checks(env, params),
     options: (params) => options(env, params),
     mergeMetadata: async (params) => mergeMetadata(env, readTarget(env, params.target)),

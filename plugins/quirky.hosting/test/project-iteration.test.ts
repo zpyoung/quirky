@@ -31,7 +31,7 @@ test('iteration project views preserve real option intervals and read back a car
   runs.push(run)
   run.writeState({ iterationId: 'sprint-one' })
   const target = { owner: 'test-owner', ownerType: 'organization', projectNumber: 1, viewId: 'V1' }
-  const before = await run.call('projectTable', target) as { fields: { id: string; options: { id: string; name: string; startDate: string; duration: number }[] }[]; items: { fieldValues: { fieldId: string; value: unknown }[] }[] }
+  const before = await run.call('projectTable', target) as { fields: { id: string; options: { id: string; name: string; startDate: string; duration: number; completed: boolean }[] }[]; items: { fieldValues: { fieldId: string; value: unknown }[] }[] }
   expect(before.fields[0]?.options).toEqual([
     { id: 'sprint-one', name: 'Sprint one', startDate: '2026-10-19', duration: 14, completed: false },
     { id: 'sprint-two', name: 'Sprint two', startDate: '2026-11-02', duration: 14, completed: false }

@@ -28,7 +28,7 @@ test('Settings opens a contributed preferences view and removes its link when it
   button.click()
   await window_.waitFor(() => document.body.textContent?.includes('Plugin preferences content'))
   const client = await harness.connect('cli')
-  expect((await client.call('ui.state')).layout.view).toEqual({ id: 'view:acme.preferences/preferences' })
+  expect((await client.call('ui.state', {})).layout.view).toEqual({ id: 'view:acme.preferences/preferences' })
   expect(document.querySelector('[role="dialog"]')).toBeNull()
   await window_.click('button[aria-label="Settings"]')
   await client.call('plugin.disable', { id: 'acme.preferences' })

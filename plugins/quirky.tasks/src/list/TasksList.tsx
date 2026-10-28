@@ -673,7 +673,7 @@ export function TasksList({ context, state, refresh }: TasksSurfaceProps) {
     setBusy(key, true)
     setOptimistic((previous) => ({ ...previous, [key]: { item, patch, generation, keepVisible } }))
     try {
-      const result = await context.call('quirky.tasks/row', { target: rowTarget(item), ...action })
+      const result = await context.call('quirky.tasks/row', { target: rowTarget(item), ...action, ...(action.action === 'merge' ? { yes: true } : {}) })
       if (mutationGenerations.current.get(key) !== generation) return result
       const response = object(result)
       const confirmedPatch = action.action === 'issueStatus'
@@ -854,7 +854,7 @@ export function TasksList({ context, state, refresh }: TasksSurfaceProps) {
     const title = mergeAction === 'queue' ? `Merge when ready PR #${item.number}?` : `Merge ${method} PR #${item.number}?`
     const confirmed = await context.confirm({
       title,
-      body: mergeAction === 'queue' ? 'This will add the pull request to the configured GitHub merge queue.' : 'This will update the pull request on GitHub.',
+      body: `${mergeAction === 'queue' ? 'This will add the pull request to the configured GitHub merge queue.' : 'This will update the pull request on GitHub.'} ${item.url}`,
       confirmLabel: mergeAction === 'queue' ? 'Merge when ready' : method
     })
     if (!confirmed) return
@@ -865,7 +865,6 @@ export function TasksList({ context, state, refresh }: TasksSurfaceProps) {
         method,
         mergeAction,
         expectedHead,
-        confirmation: `${mergeAction} ${method} PR #${item.number}`
       }, {}))
       if (outcome?.kind === 'enqueued') context.toast('Merge queued', `PR #${item.number} was added to the GitHub merge queue.`)
       else if (outcome?.kind === 'pending') context.toast('Merge pending', `GitHub is still processing PR #${item.number}.`)

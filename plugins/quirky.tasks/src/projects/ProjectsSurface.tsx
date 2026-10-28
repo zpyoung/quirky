@@ -785,7 +785,7 @@ export function ProjectsSurface({ context, state, refresh }: TasksSurfaceProps) 
     const content = item.content ?? {}
     const name = typeof content.title === 'string' && content.title.trim() ? content.title.trim().slice(0, 80) : `${content.kind === 'pullRequest' ? 'PR' : 'Issue'} #${content.number}`
     const url = externalUrl ?? ''
-    const prompt = `Work on this GitHub ${content.kind === 'pullRequest' ? 'pull request' : 'issue'}: ${name}\\n\\n${url}${typeof content.body === 'string' && content.body.trim() ? `\\n\\n${content.body}` : ''}`
+    const prompt = `Work on this GitHub ${content.kind === 'pullRequest' ? 'pull request' : 'issue'}: ${name}\n\n${url}${typeof content.body === 'string' && content.body.trim() ? `\n\n${content.body}` : ''}`
     const existingLink = linkedWorkspace(item, state, project)
     const workspaceAction = existingLink && !forceNew ? 'resume' : 'start'
     setBusyItem(item.id)

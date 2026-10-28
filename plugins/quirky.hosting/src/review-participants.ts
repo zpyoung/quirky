@@ -45,7 +45,7 @@ export function reviewParticipants(raw: Record<string, unknown>): ReviewParticip
   }
 }
 
-export function isReviewParticipants(value: unknown): value is ReviewParticipants {
+export function isReviewParticipants(value: unknown): value is ReviewParticipants & Record<string, unknown> {
   if (!isRecord(value) || typeof value.participantsTruncated !== 'boolean') return false
   for (const key of ['requestedReviewers', 'assignees']) {
     const entries = value[key]

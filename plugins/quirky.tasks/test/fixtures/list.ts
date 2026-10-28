@@ -73,13 +73,17 @@ const save = () => {
 }
 const emit = (value) => { save(); process.stdout.write(typeof value === 'string' ? value : JSON.stringify(value)); process.exit(0) }
 const fail = (message) => { save(); process.stderr.write(message); process.exit(1) }
+function repoArgument() {
+  const index = args.findIndex((part) => part === '--repo' || part === '-R')
+  return String(args[index + 1] ?? 'test-owner/test-repo').split('/').slice(-2).join('/')
+}
 save()
 if (args[0] === 'auth' && args[1] === 'status') {
   emit(state.auth === false ? 'No authentication configured for github.com\n' : 'Logged in to github.com account fixture-user (keyring)\nActive account: true\nToken scopes: repo, project, read:org\n')
 }
 if (args[0] === 'issue' && ['close', 'reopen', 'edit'].includes(args[1])) {
   const number = Number(args[2])
-  const repo = args[args.indexOf('--repo') + 1]
+  const repo = repoArgument()
   const items = Array.isArray(state.items?.[repo]) ? state.items[repo] : []
   const item = items.find((entry) => entry.kind === 'issue' && entry.number === number)
   if (!item) fail('issue not found')
@@ -107,7 +111,7 @@ if (args[0] === 'issue' && ['close', 'reopen', 'edit'].includes(args[1])) {
 }
 if (args[0] === 'pr' && args[1] === 'edit') {
   const number = Number(args[2])
-  const repo = args[args.indexOf('--repo') + 1]
+  const repo = repoArgument()
   const items = Array.isArray(state.items?.[repo]) ? state.items[repo] : []
   const item = items.find((entry) => entry.kind === 'pullRequest' && entry.number === number)
   if (!item) fail('pull request not found')
@@ -122,7 +126,7 @@ if (args[0] === 'pr' && args[1] === 'edit') {
   emit('')
 }
 if (args[0] === 'pr' && args[1] === 'list') {
-  const repo = args[args.indexOf('--repo') + 1]
+  const repo = repoArgument()
   const search = args.includes('--search') ? args[args.indexOf('--search') + 1] : ''
   if (state.failList === repo) fail('fixture list failure')
   const items = Array.isArray(state.items?.[repo]) ? state.items[repo] : []
@@ -132,7 +136,7 @@ if (args[0] === 'pr' && args[1] === 'list') {
 }
 if (args[0] === 'pr' && args[1] === 'view') {
   const number = Number(args[2])
-  const repo = args[args.indexOf('--repo') + 1]
+  const repo = repoArgument()
   const items = Array.isArray(state.items?.[repo]) ? state.items[repo] : []
   const item = items.find((entry) => entry.kind === 'pullRequest' && entry.number === number)
   if (!item) fail('pull request not found')
@@ -179,7 +183,12 @@ if (args[0] === 'api') {
       const number = Number(graphqlVariables.number)
       const item = (state.items?.[owner + '/' + repo] ?? []).find((entry) => entry.number === number)
       const node = item ? toGraphqlNode(item) : null
-      emit({ data: { repository: { issue: item?.kind === 'issue' ? { ...node, participants: { nodes: (item.participants ?? []).map((login) => ({ login })), pageInfo: { hasNextPage: false } }, comments: { nodes: [], pageInfo: { hasNextPage: false } } } : null, pullRequest: item?.kind === 'pullRequest' ? { ...node, participants: { nodes: (item.participants ?? []).map((login) => ({ login })), pageInfo: { hasNextPage: false } }, reviews: { nodes: [], pageInfo: { hasNextPage: false } } : null } } } })
+      const participants = { nodes: (item?.participants ?? []).map((login) => ({ login })), pageInfo: { hasNextPage: false } }
+      const emptyComments = { nodes: [], pageInfo: { hasNextPage: false } }
+      emit({ data: { repository: {
+        issue: item?.kind === 'issue' ? { ...node, participants, comments: emptyComments } : null,
+        pullRequest: item?.kind === 'pullRequest' ? { ...node, participants, reviews: emptyComments } : null
+      } } })
     }
   }
   const labelRoute = /^repos\/([^/]+)\/([^/]+)\/(labels|assignees)(?:\?.*)?/.exec(endpoint)
@@ -266,10 +275,9 @@ function toPullRequest(item) {
     html_url: item.url,
     mergeable: true,
     autoMergeRequest: null,
-    requestedReviewers: item.requestedReviewers === null ? null : (item.requestedReviewers ?? []).map((login) => ({ login })),
+    reviewRequests: item.requestedReviewers === null ? null : (item.requestedReviewers ?? []).map((login) => ({ login })),
     reviews: item.reviews === null ? null : (item.reviews ?? []).map((review) => ({ author: review.author ? { login: review.author } : null, state: review.state })),
     assignees: item.reviewAssignees === null ? null : (item.reviewAssignees ?? item.assignees ?? []).map((login) => ({ login })),
-    participantsTruncated: item.participantsTruncated ?? false
   }
 }
 function toRestPull(item) {

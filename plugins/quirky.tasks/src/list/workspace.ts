@@ -160,15 +160,8 @@ function composeRequest(
 }
 
 async function defaultAgent(env: TasksEnv): Promise<string | null> {
-  const result = object(await env.context.call('quirky.agents/list', {}))
-  const agents = Array.isArray(result?.agents) ? result.agents.map(object).filter((entry): entry is Record<string, unknown> => entry !== null) : []
-  const available = agents.filter((agent) => agent.installed === true && agent.enabled === true && typeof agent.id === 'string' && agent.id !== 'shell')
-  const explicit = result?.defaultAgent
-  if (typeof explicit === 'string' && explicit !== 'auto' && explicit !== 'shell') {
-    return typeof available.find((agent) => agent.id === explicit)?.id === 'string' ? explicit : null
-  }
-  const selected = available.find((agent) => agent.isDefault === true)
-  return typeof selected?.id === 'string' ? selected.id : null
+  const selected = object(await env.context.call('quirky.agents/pick', { forAgentTab: true }))
+  return typeof selected?.agent === 'string' && selected.agent.length > 0 && selected.agent !== 'shell' ? selected.agent : null
 }
 
 async function validateAgent(env: TasksEnv, value: string | null): Promise<string | null> {
@@ -184,6 +177,8 @@ async function setupPolicy(env: TasksEnv, repoId: string): Promise<string | null
   try {
     const details = object(await env.context.call('quirky.repo/show', { repo: repoId }))
     const settings = object(details?.settings)
+    const setup = object(object(details?.hooks)?.setup)
+    if (!setup || typeof setup.text !== 'string' || setup.text.trim().length === 0) return null
     return typeof settings?.setupPolicy === 'string' ? settings.setupPolicy : null
   } catch {
     return null
@@ -307,6 +302,7 @@ async function createFromComposer(
   try {
     const created = workspaceResult(await env.context.call('quirky.worktree/create', {
       repo: source.repo.id,
+      github: targetUrl(target),
       ...(name ? { name } : {}),
       setup,
       ...(agent ? { agent } : {}),
