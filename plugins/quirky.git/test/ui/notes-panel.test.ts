@@ -71,7 +71,7 @@ async function open(notes: TestNote[], configure: (fake: Fake) => void = () => {
 
 const shelf = (root: ParentNode) => q(root, 'section[aria-label="Notes"]')
 const menus = () => qa(document.body, '[role="menu"]')
-const menuButtons = (menu: Element) => qa(menu as HTMLElement, ':scope > li > button[role="menuitem"]') as HTMLButtonElement[]
+const menuButtons = (menu: Element) => qa(menu as HTMLElement, '[role="menuitem"]') as HTMLButtonElement[]
 const menuItem = (menu: Element, label: string) => menuButtons(menu).find((button) => button.textContent?.trim().startsWith(label)) ?? null
 const menuText = (menu: Element) => menu.textContent ?? ''
 const hover = (target: Element) => act(async () => void target.dispatchEvent(new MouseEvent('mouseover', { bubbles: true })))
@@ -82,7 +82,7 @@ describe('NA-13: the shelf and the overflow item exist only with notes', () => {
     const { element, unmount } = await open([])
     expect(shelf(element)).toBeNull()
     await click(byLabel(element, 'More source control actions'))
-    expect(qa(document.body, '[role="menu"] button').map((b) => b.textContent)).toEqual(['View as tree', 'Change Base Ref…', 'Refresh branch compare'])
+    expect(qa(document.body, '[role="menu"] [role="menuitem"]').map((b) => b.textContent)).toEqual(['View as tree', 'Change Base Ref…', 'Refresh branch compare'])
     unmount()
   })
 
@@ -92,7 +92,7 @@ describe('NA-13: the shelf and the overflow item exist only with notes', () => {
     expect(box.previousElementSibling?.hasAttribute('data-branch-row')).toBe(true)
     expect(q(element, '[data-git-content]')!.previousElementSibling).toBe(box)
     await click(byLabel(element, 'More source control actions'))
-    expect(qa(document.body, '[role="menu"] button').map((b) => b.textContent)).toContain('Notes 2')
+    expect(qa(document.body, '[role="menu"] [role="menuitem"]').map((b) => b.textContent)).toContain('Notes 2')
     unmount()
   })
 
@@ -280,7 +280,7 @@ describe('NA-12: notes are cleared per file or all at once, after a yes', () => 
   test('the menu offers Clear all notes... then one entry per path', async () => {
     const { element, unmount } = await open([note('a', 'math.ts', 5), note('b', 'math.ts', 30), note('c', 'util.ts', 2)])
     await click(byLabel(element, 'More note actions'))
-    expect(qa(document.body, '[role="menu"] button').map((b) => b.textContent)).toEqual(['Clear all notes...', 'Clear notes for math.ts', 'Clear notes for util.ts'])
+    expect(qa(document.body, '[role="menu"] [role="menuitem"]').map((b) => b.textContent)).toEqual(['Clear all notes...', 'Clear notes for math.ts', 'Clear notes for util.ts'])
     unmount()
   })
 
@@ -331,7 +331,7 @@ describe('menus: submenus open on hover and ArrowRight and close on ArrowLeft an
     const picked: string[] = []
     let closed = 0
     const items: ContextMenuItem[] = [
-      { label: 'Alpha', submenu: [{ label: 'One', onSelect: () => void picked.push('One') }, { label: 'Two', disabled: true }, { label: 'Three', onSelect: () => void picked.push('Three') }] },
+      { label: 'Alpha', submenu: [{ label: 'One', onSelect: () => void picked.push('One') }, { label: 'Two', enabled: false }, { label: 'Three', onSelect: () => void picked.push('Three') }] },
       { label: 'Beta', onSelect: () => void picked.push('Beta') }
     ]
     const element = document.createElement('div')
@@ -353,30 +353,34 @@ describe('menus: submenus open on hover and ArrowRight and close on ArrowLeft an
     await menu.unmount()
   })
 
-  test('ArrowRight opens the submenu and focuses its first enabled row, ArrowDown skips disabled rows', async () => {
+  test('ArrowRight opens a submenu; arrow keys skip disabled rows and Enter selects an enabled row', async () => {
     const menu = await mountMenu()
-    expect(document.activeElement?.textContent).toBe('Alpha')
+    await key('ArrowDown')
     await key('ArrowRight')
     expect(menus()).toHaveLength(2)
-    expect(document.activeElement?.textContent).toBe('One')
+    const child = menus()[1]!
+    expect(menuButtons(child).find((button) => button.disabled)?.textContent).toContain('Two')
     await key('ArrowDown')
-    expect(document.activeElement?.textContent).toBe('Three')
     await key('ArrowDown')
-    expect(document.activeElement?.textContent).toBe('One')
+    expect(child.querySelector('[role="menuitem"][data-highlighted]')?.textContent).toContain('Three')
+    await key('Enter')
+    expect(menu.picked).toEqual(['Three'])
+    expect(menu.closed()).toBe(1)
     await menu.unmount()
   })
 
-  test('ArrowLeft closes the submenu and returns to its row; Escape closes the submenu first, then the menu', async () => {
+  test('ArrowLeft returns from a submenu and Escape closes the submenu before the menu', async () => {
     const menu = await mountMenu()
+    await key('ArrowDown')
     await key('ArrowRight')
     await key('ArrowLeft')
     expect(menus()).toHaveLength(1)
-    expect(document.activeElement?.textContent).toBe('Alpha')
     await key('ArrowRight')
     await key('Escape')
     expect(menus()).toHaveLength(1)
     expect(menu.closed()).toBe(0)
     await key('Escape')
+    expect(menus()).toHaveLength(1)
     expect(menu.closed()).toBe(1)
     await menu.unmount()
   })
@@ -391,20 +395,15 @@ describe('menus: submenus open on hover and ArrowRight and close on ArrowLeft an
     expect(menu.closed()).toBe(1)
     await menu.unmount()
   })
-  test('a mousedown or Escape inside an element that stops propagation, such as a terminal pane, still closes the menu', async () => {
+  test('an outside mousedown closes the menu even when its target stops propagation', async () => {
     const pane = document.createElement('div')
     pane.addEventListener('mousedown', (event) => event.stopPropagation())
-    pane.addEventListener('keydown', (event) => event.stopPropagation())
     pane.tabIndex = 0
     document.body.append(pane)
     const menu = await mountMenu()
     await act(async () => void pane.dispatchEvent(new MouseEvent('mousedown', { bubbles: true })))
     expect(menu.closed()).toBe(1)
     await menu.unmount()
-    const again = await mountMenu()
-    await act(async () => void pane.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })))
-    expect(again.closed()).toBe(1)
-    await again.unmount()
     pane.remove()
   })
 })

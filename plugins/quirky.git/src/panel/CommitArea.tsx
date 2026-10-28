@@ -28,7 +28,7 @@ export function CommitArea({ message, onMessage, locked, primary, menu, spinner,
 
   const entries: ContextMenuItem[] = menu.map((item) => ({
     label: item.label,
-    disabled: !item.enabled,
+    enabled: item.enabled,
     title: item.title,
     separatorBefore: item.separatorBefore,
     onSelect: () => onMenu(item.id)

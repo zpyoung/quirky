@@ -121,5 +121,60 @@
 - **Revisit if:** moved/hidden slot acceptance contradicts the canonical open-tool projection
 - **Source:** assumed — autonomous
 
+## D12: Compose concurrent exports and converge on the landed shared menu
+- **Question:** the sole roadmap catch-up conflicted in public exports, shared React refs and lint enrollment, and revealed two independently authored ContextMenu implementations
+- **Options:** discard another restyle; keep parallel menus/aliases; retain additive exports and migrate to the landed menu authority
+- **Chose:** merge7a234811 unions selection-overlay/terminal-theme/editor-print/editor-theme exports, Ref/RefObject contracts and all7plugin lint opt-ins. Retain the landed context-menu implementation/body portal and its enabled/danger/checked field authority; migrate Git constructors, add only required heading/title/icon/detail/badge/group metadata, and remove our duplicate control/CSS. Keep only Popover in floating.tsx and adopt canonical ui-transparent
+- **Why:** incoming terminal D2/D8 already establishes the shared searchable menu and overlay boundary. A duplicate export or field-alias converter would violate clean cutover and leave two standards. All6incoming decision logs were read in full, including untruncated Progress; preserve exact-window input/focus, Ask ownership/filtering, mobile grants and reported platform/native limits
+- **Evidence:** merge conflicts in package.json/contracts.ts/ui-lint-plugins.json; merged design-system/index.ts duplicate exports; ui-restyle-terminal D2/D8; incoming browser/editor/UI/Ask/mobile decisions
+- **Reversibility:** medium (shared presentation contracts)
+- **Confidence:** high
+- **Revisit if:** canonical menu migration loses an existing Git or terminal interaction
+- **Source:** locked by incoming ui-restyle-terminal decisions
+
+## D13: Fence final browser proof with a unique profile and explicit CDP
+- **Question:** incoming editor/browser/terminal logs document cross-lane target reuse by the app.path helper
+- **Options:** assume a named app.path handle is isolated; stop using it and launch a uniquely owned browser service
+- **Chose:** final proof uses named headless Chrome service with private scratch profile, mock-keychain/basic password store and exact CDP56998. Previous handle still reported our exact private origin; release only that own-origin tab without browser kill, then stop further use of path-based targeting. Earlier captures are pre-isolation observations, not the final isolation receipt
+- **Why:** own-origin guards prevented observed drift here, but an executable path alone is not cross-lane process/profile ownership evidence. Explicit process/profile/CDP is the safe documented contract
+- **Evidence:** incoming ui-restyle-browser D9 and ui-restyle-editor D10/terminal D10; lane2-ui-git-exclusive-chrome PID588/profile chrome-user; explicit-CDP ownOrigin:true
+- **Reversibility:** easy
+- **Confidence:** high for explicit final ownership; earlier profile/OS credential-store behavior is not independently certified
+- **Revisit if:** a browser URL fails the owned-origin guard
+- **Source:** locked by incoming browser-isolation decisions
+
+## D14: Reconfigure syntax highlighting when the canonical appearance changes
+- **Question:** the settled light-to-dark screenshot retained dark, low-contrast light-theme syntax colors on the dark surface
+- **Options:** accept stale engine colors; recreate the editor and lose transient state; reconfigure only the syntax compartment
+- **Chose:** use the canonical data-theme appearance before computed-color fallback, and observe its changes through a disposed-with-editor CodeMirror ViewPlugin. Reconfigure only syntax highlighting through a Compartment; retain language, document, selection, notes and editor lifetime
+- **Why:** syntaxExtensions previously selected a fixed highlighter once at editor construction. CSS variables updated chrome, but not library syntax rules. This is the theme behavior required by the approved redesign, not a new editor capability
+- **Evidence:** initial settled final-dark screenshot15b8831e8f4bd928 showed low-contrast light syntax; plugins/quirky.git/src/view/theme.ts syntaxExtensions; final live-theme runtime receipt follows
+- **Reversibility:** easy
+- **Confidence:** high for identified source boundary; final actual appearance proof required
+- **Revisit if:** actual dark/light toggling fails to update syntax or changes editor data
+- **Source:** locked by approved redesign appearance behavior
+
+## D15: Finish with current compiler/build and bounded owned-surface proof
+- **Question:** what is verified after the sole catch-up, canonical-menu convergence and live-syntax repair?
+- **Options:** reuse older receipts; claim full suites/golden approval; record fresh current gates and explicit limits
+- **Chose:** final bun run typecheck plus actual UI build exited0/30.75s, including frozen install/UIlint/root/mobile/prepared-desktop and11host/vendor files25plugin modules. Fresh isolated daemon and uniquely owned CDP browser proved real stage/unstage, body-portal menu clamped at1148..1340 in1340viewport, real note card/Popover with Escape, clean Changes No changes/Open terminal presence, and visible Checks exact-worktree no-origin recovery. Settled screenshots show horizontal All Changes, both appearances and no document overflow. Actual keyword colors changed dark198/120/221 → light119/0/136 → dark again without reload or editor-text change
+- **Why:** current source is exercised rather than inferred from earlier builds. Earlier pre-isolation Reviews empty/settings observations remain qualified, not populated-provider acceptance. Authored slot/menu/popover regressions remain unrun under build-first. Minimal fixture lacks quirky.session/list, so nested notes-send runtime acceptance is unproved; no fake fallback or product workaround was added. An immediate Retry read preceded async completion, so no successful Retry generation claim
+- **Evidence:** bg12 full gate/build receipt; .quirk/build-loop/ui-restyle-git/proof.json and final-dark.png/final-light.png; actual API/DOM/menu/appearance readbacks; current-origin pageErrors[]/requestFailures[] while prior stopped-origin health refusals remain historical
+- **Reversibility:** easy
+- **Confidence:** high for exercised paths only; suites, golden85 score, provider/AI, native and foreign-platform acceptance unclaimed
+- **Revisit if:** canonical merge-result gate or end-phase/visual owner finds a regression
+- **Source:** locked by docs/loop/LOOP.md build-first verification boundary
+
+## D16: Close owned proof resources without killing a shared browser profile
+- **Question:** what can be safely stopped after final proof?
+- **Options:** kill every observed Chrome PID; preserve shared-path processes and stop only exact owned resources
+- **Chose:** release final own-origin explicit-CDP tab, stop uniquely owned Chrome service/profile, and stop all four private daemon scopes. Each daemon exited0 with GIT_UI_SMOKE_CLEANED true. All workers/children/checks returned and all component worktrees were removed. A final process snapshot still showed earlier helper PID83023 using shared .omp/browser-profiles/google-chrome-91d4e3efbae21d18/port56540; leave that shared-profile process untouched after releasing our own-origin tab, rather than risk another lane's browser
+- **Why:** an application-path helper is not exclusive process ownership. The final unique chrome-user/CDP56998 service is stopped; no owned fixture daemon, PTY, browser tab or worker remains doing this item's work. Preserve inherited .quirk/.serena and only remove attributed scratch after land
+- **Evidence:** explicit browser close; lane2-ui-git-exclusive-chrome stop; all four smoke service receipts, final v4 exit0/cleanup true; exact earlier-PID command snapshot
+- **Reversibility:** easy
+- **Confidence:** high for named owned resources; no assertion that shared browser processes belong exclusively to this lane
+- **Revisit if:** an exclusively owned surviving child is identified by exact process/profile identity
+- **Source:** locked by incoming browser-isolation decisions and operator resource directive
+
 ## Progress
-All three source components and two compiler fixers returned; all component worktrees removed. Full pre-catch-up typecheck (UIlint/root/mobile/prepared-desktop) passed once; later slot regression/header wrapping and removal of1500obsolete Git CSS lines await the final caught-up gate. Actual isolated macOS renderer exercised stage/unstage, commit eligibility, context menu, base dialog, notes preview/Escape, diff rendering, dark/light, Reviews empty/settings and visible Checks no-origin recovery. Fixture declarations include genuine Browser settings without activating native/browser/provider code; no real accounts/homes or native-window proof. No suites, formal/golden review, populated provider review flow or native run is claimed. Next commit, sole roadmap catch-up/read incoming decisions, final gate and focused reload, canonical land.
+Ready to land. Sole catch-up merge7a234811 read all6incoming logs and preserved every shared export/ref/enforcement contract. Canonical shared menu convergence removed the duplicate; live syntax now follows both appearance transitions without changing editor text. Final typecheck/UIlint/root/mobile/prepared-desktop plus actual UI build passed30.75s; bounded final real surface proof and all limitations are D15. No suite, formal/golden review, populated provider/AI or native acceptance is claimed. All owned workers/checks/fixture scopes and unique browser are finished; shared-profile browser is intentionally untouched per D16. Commit final source/docs, detach and run canonical absolute queue land; await its result and remove only owned scratch after success.

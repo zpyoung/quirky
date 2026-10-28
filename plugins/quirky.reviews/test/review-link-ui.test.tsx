@@ -145,7 +145,7 @@ async function makeUiHarness(host: HostingTest): Promise<UiHarness> {
     togglePanel() {},
     setPalette() {},
     getLayout: () => layout,
-    onLayout(listener) {
+    onLayout(listener: (layout: UiLayout) => void) {
       layoutListeners.add(listener)
       return () => layoutListeners.delete(listener)
     },

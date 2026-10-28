@@ -81,7 +81,7 @@ test('NA-9, NA-10, NA-13: the shelf, the row counts and the overflow item agains
   expect(q('[data-note-count]', rowContainerOf('README.md', 'branch')!)?.title).toBe('1 note')
 
   await click(byLabel('More source control actions'))
-  expect(qa('[role="menu"] button').map(text)).toContain('Notes 5')
+  expect(qa('[role="menu"] [role="menuitem"]').map(text)).toContain('Notes 5')
   await click(buttonText('Notes 5'))
 
   const rows = qa('[data-note-row] .ui-list-row__main')
@@ -127,13 +127,13 @@ test('NA-17, NA-22: the shelf menu lists the agent sessions, sends to one, and t
 
   await click(q('section[aria-label="Notes"] [aria-label="Send notes to an agent"]'))
   const menu = await w.win.waitFor(() => q('[role="menu"][aria-label="Send notes"]'))
-  const rows = qa(':scope > li', menu)
-  const labels = rows.map((row) => text(q('[role="menuitem"]', row) ?? row))
-  expect(labels.some((label) => label.startsWith('Send notes to'))).toBe(true)
+  const buttons = qa('[role="menuitem"]', menu) as HTMLButtonElement[]
+  const labels = buttons.map(text)
+  const headings = qa('[role="presentation"]', menu).map(text)
+  expect(headings).toContain('Send notes to')
+  expect(headings).toContain('New agent')
   expect(labels.some((label) => label.startsWith('Claude'))).toBe(true)
   expect(labels.some((label) => label.startsWith('Codex'))).toBe(true)
-  expect(labels.some((label) => label.startsWith('New agent'))).toBe(true)
-  const buttons = qa(':scope > li > button[role="menuitem"]', menu) as HTMLButtonElement[]
   const [first, second] = buttons
   expect(text(first)).toContain('Working ·')
   expect(first!.disabled).toBe(false)

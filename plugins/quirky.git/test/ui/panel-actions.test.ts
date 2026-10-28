@@ -38,7 +38,7 @@ const dialogTitle = () => {
   const titleId = dialog()?.getAttribute('aria-labelledby')
   return titleId ? document.getElementById(titleId)?.textContent ?? null : null
 }
-const menuLabels = () => qa(document.body, '[role="menu"] button').map((b) => b.textContent)
+const menuLabels = () => qa(document.body, '[role="menu"] [role="menuitem"]').map((b) => b.textContent)
 const message = (element: HTMLElement) => byLabel(element, 'Commit message') as HTMLTextAreaElement
 
 describe('SC-23: the discard dialogs', () => {
@@ -545,7 +545,7 @@ describe('SC-30: a running remote call', () => {
     expect(primary(element).disabled).toBe(true)
     expect(q(primary(element), '[aria-label="Action in progress"]')).not.toBeNull()
     await click(chevron(element))
-    const rows = qa(document.body, '[role="menu"] button') as HTMLButtonElement[]
+    const rows = qa(document.body, '[role="menu"] [role="menuitem"]') as HTMLButtonElement[]
     expect(rows.every((b) => b.disabled)).toBe(true)
     unmount()
   })

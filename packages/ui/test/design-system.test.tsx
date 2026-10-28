@@ -226,30 +226,43 @@ describe('shared graphite components', () => {
     expect(container.querySelector('[role="menu"]')).toBeNull()
   })
 
-  test('context menus preserve nested keyboard navigation and never select disabled rows', async () => {
+  test('context menus skip headings and disabled rows before selecting an enabled nested item', async () => {
     const actions: string[] = []
     function Example() {
       const [open, setOpen] = useState(true)
       return open ? <ContextMenu x={0} y={0} label="File actions" onClose={() => setOpen(false)} items={[
-        { label: 'Unavailable', disabled: true, onSelect: () => actions.push('disabled') },
+        { label: 'Destinations', heading: true },
+        { label: 'Unavailable', enabled: false, onSelect: () => actions.push('disabled') },
         { label: 'Send to', submenu: [
-          { label: 'Unavailable target', disabled: true },
-          { label: 'Agent', onSelect: () => actions.push('agent') },
+          { label: 'Unavailable target', enabled: false, onSelect: () => actions.push('disabled target') },
+          { label: 'Agent', icon: '★', detail: 'Ready', badge: 2, title: 'Agent destination', onSelect: () => actions.push('agent') },
         ] },
-        { label: 'Copy', onSelect: () => actions.push('copy') },
+        { label: 'Copy', icon: '⧉', detail: 'Copies the path', badge: 'Current', checked: true, title: 'Current action', separatorBefore: true },
       ]} /> : null
     }
     await render(<Example />)
-    const parent = document.querySelector<HTMLButtonElement>('[role="menuitem"][aria-haspopup="menu"]')!
-    expect(document.activeElement).toBe(parent)
+    const parent = document.querySelector<HTMLElement>('[role="menu"][aria-label="File actions"]')!
+    expect(parent.querySelector('[role="presentation"]')?.textContent).toBe('Destinations')
+    const current = [...parent.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find((item) => item.textContent?.includes('Copy'))!
+    expect(current.title).toBe('Current action')
+    expect(current.getAttribute('aria-checked')).toBe('true')
+    expect(current.hasAttribute('data-current')).toBe(true)
+    expect(current.textContent).toContain('⧉')
+    expect(current.querySelector('.ui-help-text')?.textContent).toBe('Copies the path')
+    expect(current.querySelector('.ui-badge')?.textContent).toBe('Current')
+    expect(parent.querySelector('[role="separator"]')).not.toBeNull()
+
+    await key(parent, 'ArrowDown')
     await key(parent, 'ArrowRight')
-    const child = [...document.querySelectorAll<HTMLButtonElement>('[role="menu"][aria-label="Send to"] button')].find((button) => button.textContent === 'Agent')!
-    expect(document.activeElement).toBe(child)
-    await key(child, 'Escape')
-    expect(document.querySelector('[role="menu"][aria-label="Send to"]')).toBeNull()
-    expect(document.activeElement).toBe(parent)
-    await key(parent, 'ArrowRight')
-    await click(document.querySelector('[role="menu"][aria-label="Send to"] button:not(:disabled)')!)
+    const child = document.querySelector<HTMLElement>('[role="menu"][aria-label="Send to"]')!
+    expect(child.querySelector<HTMLButtonElement>('[role="menuitem"]:disabled')?.textContent).toContain('Unavailable target')
+    const agent = child.querySelector<HTMLButtonElement>('[role="menuitem"]:not(:disabled)')!
+    expect(agent.title).toBe('Agent destination')
+    expect(agent.textContent).toContain('★')
+    expect(agent.querySelector('.ui-help-text')?.textContent).toBe('Ready')
+    expect(agent.querySelector('.ui-badge')?.textContent).toBe('2')
+    await key(child, 'ArrowDown')
+    await key(child, 'Enter')
     expect(actions).toEqual(['agent'])
     expect(document.querySelector('[role="menu"]')).toBeNull()
   })

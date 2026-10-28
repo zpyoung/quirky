@@ -1,4 +1,5 @@
-import { EditorState, type Extension } from '@codemirror/state'
+import { Compartment, EditorState, type Extension } from '@codemirror/state'
+import { ViewPlugin, type EditorView } from '@codemirror/view'
 import { javascript } from '@codemirror/lang-javascript'
 import { json } from '@codemirror/lang-json'
 import { markdown } from '@codemirror/lang-markdown'
@@ -32,6 +33,8 @@ export function languageExtension(id: LanguageId): Extension[] {
 
 /** Whether the shared surface token resolves to a dark colour; unreadable values use the dark syntax palette. */
 export function isDarkShell(element: Element): boolean {
+  const appearance = element.closest('[data-theme]')?.getAttribute('data-theme') ?? document.documentElement.getAttribute('data-theme')
+  if (appearance === 'dark' || appearance === 'light') return appearance === 'dark'
   const value = getComputedStyle(element).getPropertyValue('--ui-surface').trim()
   const hex = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(value)?.[1]
   if (!hex) return true
@@ -42,8 +45,26 @@ export function isDarkShell(element: Element): boolean {
 
 /** Token colours for a path's language, picked for the shell's light or dark background. */
 export function syntaxExtensions(path: string, host: Element): Extension[] {
-  const style = isDarkShell(host) ? oneDarkHighlightStyle : defaultHighlightStyle
-  return [...languageExtension(languageForPath(path)), syntaxHighlighting(style, { fallback: true })]
+  const palette = new Compartment()
+  let dark = isDarkShell(host)
+  const highlight = () => syntaxHighlighting(dark ? oneDarkHighlightStyle : defaultHighlightStyle, { fallback: true })
+  return [
+    ...languageExtension(languageForPath(path)),
+    palette.of(highlight()),
+    ViewPlugin.fromClass(class {
+      private observer: MutationObserver
+      constructor(view: EditorView) {
+        this.observer = new MutationObserver(() => {
+          const next = isDarkShell(host)
+          if (next === dark) return
+          dark = next
+          view.dispatch({ effects: palette.reconfigure(highlight()) })
+        })
+        this.observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] })
+      }
+      destroy() { this.observer.disconnect() }
+    }),
+  ]
 }
 
 /** CodeMirror keeps '\n' as its line break unless told otherwise; a CRLF file must save back as CRLF. */

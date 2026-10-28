@@ -363,7 +363,7 @@ describe('SC-17: the tree view', () => {
   test('the more-actions menu lists View as list/tree, Change Base Ref… and Refresh branch compare', async () => {
     const { element, unmount } = await open()
     await click(byLabel(element, 'More source control actions'))
-    expect(qa(document.body, '[role="menu"] button').map((b) => b.textContent)).toEqual(['View as tree', 'Change Base Ref…', 'Refresh branch compare'])
+    expect(qa(document.body, '[role="menu"] [role="menuitem"]').map((b) => b.textContent)).toEqual(['View as tree', 'Change Base Ref…', 'Refresh branch compare'])
     unmount()
   })
 })
@@ -383,7 +383,7 @@ describe('SC-18: the row menu and dragging', () => {
       f.status = statusOf([entry('src/app/a.ts')])
     })
     await contextMenu(element, 'src/app/a.ts')
-    expect(qa(document.body, '[role="menu"] button').map((b) => b.textContent)).toEqual(['View', 'Copy Path', 'Copy Relative Path', 'Reveal in Finder'])
+    expect(qa(document.body, '[role="menu"] [role="menuitem"]').map((b) => b.textContent)).toEqual(['View', 'Copy Path', 'Copy Relative Path', 'Reveal in Finder'])
     await click(buttonText(document.body, 'Copy Path'))
     await contextMenu(element, 'src/app/a.ts')
     await click(buttonText(document.body, 'Copy Relative Path'))

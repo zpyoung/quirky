@@ -506,7 +506,8 @@ describe('NA-6: notes are edited and deleted', () => {
     const { card } = await withNote()
     await click(buttonIn(card(), 'Send notes to an agent'))
     const menu = q(document.body, '[role="menu"][aria-label="Send notes"]')!
-    expect(qa(menu, ':scope > li').map(text)).toEqual(['Send notes to', 'New agent', 'Claude'])
+    expect(qa(menu, '[role="presentation"]').map(text)).toEqual(['Send notes to', 'New agent'])
+    expect(qa(menu, '[role="menuitem"]').map(text)).toEqual(['Claude'])
     await click(buttonIn(menu, 'Claude'))
     expect(fake.callsTo('quirky.git/sendNotes')[0]!.params).toEqual({ worktree: 'w1', scope: 'note', id: 'n1', agent: 'claude' })
   })
@@ -618,7 +619,8 @@ describe('NA-14: the diff header pill and the combined view note controls', () =
     expect(pill.closest('header')).not.toBeNull()
     await click(pill)
     const menu = q(document.body, '[role="menu"]')!
-    expect(qa(menu, ':scope > li').map((li) => text(li))).toEqual(['Send notes', 'This file2', 'All unsent notes3'])
+    expect(qa(menu, '[role="presentation"]').map(text)).toEqual(['Send notes'])
+    expect(qa(menu, '[role="menuitem"]').map(text)).toEqual(['This file2', 'All unsent notes3'])
   })
 
   test('no pill without a note on the file', async () => {
@@ -648,7 +650,8 @@ describe('NA-14: the diff header pill and the combined view note controls', () =
 
     await click(sendIcon('math.ts'))
     const menu = q(document.body, '[role="menu"]')!
-    expect(qa(menu, ':scope > li').map((li) => text(li))).toEqual(['Send notes', 'This file2', 'All unsent notes3'])
+    expect(qa(menu, '[role="presentation"]').map(text)).toEqual(['Send notes'])
+    expect(qa(menu, '[role="menuitem"]').map(text)).toEqual(['This file2', 'All unsent notes3'])
     await click(document.body)
     document.body.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
 

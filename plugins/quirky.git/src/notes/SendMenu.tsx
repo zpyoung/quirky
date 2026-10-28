@@ -67,7 +67,7 @@ function targetEntry(target: NoteTarget, send: (to: { session: string }) => void
     label: target.label,
     icon: <StatusDot status={status} label={label} />,
     detail: parts.join(' · '),
-    disabled: !target.sendable,
+    enabled: target.sendable,
     ...(target.reason === undefined ? {} : { title: target.reason }),
     onSelect: () => send({ session: target.session })
   }
@@ -78,7 +78,7 @@ function targetEntries(targets: Targets, send: (to: { session: string } | { agen
   const rows: ContextMenuItem[] = [{ label: 'Send notes to', heading: true }, ...targets.sessions.map((target) => targetEntry(target, send))]
   rows.push({ label: 'New agent', heading: true, separatorBefore: true })
   for (const agent of targets.agents) rows.push({ label: agent.label, onSelect: () => send({ agent: agent.id }) })
-  if (targets.agents.length === 0) rows.push({ label: 'No agents available', disabled: true })
+  if (targets.agents.length === 0) rows.push({ label: 'No agents available', enabled: false })
   return rows
 }
 
@@ -151,7 +151,7 @@ export function SendMenu({ context, worktree, scopes, ariaLabel, children, respo
     if (sendable.length === 1) return rowsFor(sendable[0]!)
     return [
       { label: 'Send notes', heading: true },
-      ...sendable.map((scope) => ({ label: scope.label, badge: scope.unsent.length, disabled: scope.unsent.length === 0, submenu: rowsFor(scope) }))
+      ...sendable.map((scope) => ({ label: scope.label, badge: scope.unsent.length, enabled: scope.unsent.length > 0, submenu: rowsFor(scope) }))
     ]
   }
 
