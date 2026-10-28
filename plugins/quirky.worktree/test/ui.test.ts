@@ -937,7 +937,7 @@ test('Add project Browse uses the native picker and cancellation preserves the t
   expect(h.toasts.at(-1)?.title).toBe('Native folder picker unavailable')
 })
 
-const dialogName = (dialog: HTMLElement) =>
+const dialogName = (dialog: Element) =>
   (dialog.getAttribute('aria-labelledby')?.split(/\s+/) ?? [])
     .map((id) => document.getElementById(id)?.textContent?.trim() ?? '')
     .filter(Boolean)

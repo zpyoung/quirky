@@ -121,5 +121,27 @@
 - **Revisit if:** post-merge compiler or actual Worktrees menu smoke rejects the composed contract
 - **Source:** supersedes ui-restyle-worktrees D8 (Menu-extension clause only)
 
+## D12: Keep the final compiler and runtime receipts bounded to what ran
+- **Question:** does the composed branch satisfy the build-first gate, and what did the final smoke actually establish?
+- **Options:** reuse the earlier compiler result; claim a full post-merge visual campaign; record the composed gate and partial narrow runtime evidence
+- **Chose:** the eight-file test continuation was scope/HEAD audited, committed fe5b6f95, merged and its worktree removed. Delete incidental class/color/depth/copy pins rather than re-pin them; preserve hierarchy/state/membership/navigation/trust/refusal/cancellation coverage using semantic controls. Two test-helper TypeScript mismatches were corrected at the helpers. Final full UIlint/root/mobile/prepared-desktop typecheck plus actual UI build passed exit0 in31.90s, emitting11host/vendor files and25plugin modules. No suites ran.
+- **Why:** the fresh merged app showed canonical primary Delete disabled with its real explanation, and its192px-wide root menu clamped to viewport bottom469. A later managed-browser submenu/Escape attempt lost reliable event/navigation control; a separate explicit-CDP attempt remained aborted despite healthy private HTTP and public daemon status. Do not turn those driver failures into product fixes or a claimed full post-merge interaction pass. Earlier real status mutation, all other D9–D10 flows and final repaired stacked-focus replay remain valid pre-catch-up evidence.
+- **Evidence:** final compiler/build output31.90s; tests barrier HEAD8de9061/eight declared paths; canonical menu browser readback at owned origin57563; private HTTP/status receipts; both daemon services exited0/homeRemoved:true; browser handles released and dedicated Chrome service stopped
+- **Reversibility:** easy
+- **Confidence:** high for compiler and named runtime paths; no complete model/native/end-phase acceptance claim
+- **Revisit if:** the existing final visual/end-phase workflow supplies a real application failure
+- **Source:** locked by docs/loop/LOOP.md build-first boundary
+
+## D13: Do not infer complete native browser-state isolation from HOME alone
+- **Question:** what isolation limit did the explicitly owned Chrome diagnostic reveal?
+- **Options:** hide native startup side effects; attempt to roll back unknown user updater state; retain evidence and avoid speculative real-state cleanup
+- **Chose:** stop the owned diagnostic Chrome, release its attachment and remove only owned scratch/profile data after land. Its log shows native allocator/display-link warnings and GoogleUpdater accessing/writing the user's Library despite the temporary HOME and unique browser profile. Do not delete or restore unrelated Library files without their prior state. No Quirky, Claude or Codex real home was edited by the application fixture.
+- **Why:** macOS native services may resolve account directories independently of HOME; the log disproves a stronger no-side-effects browser claim. This is a diagnostic-harness/platform limit, not permission to change production behavior or fabricate validation. Prefer a verified testing-browser distribution/isolated OS account for later native-browser acceptance.
+- **Evidence:** proc://worktree-l12-chrome-cdp diagnostic output; explicit Chrome PID29004/profile chrome-cdp; private daemon home and status; original user metadata unchanged
+- **Reversibility:** medium
+- **Confidence:** high for observed log entries; prior updater state and exact external-file deltas unknown
+- **Revisit if:** the browser harness supplies a verified account-state isolation boundary
+- **Source:** deferred: platform
+
 ## Progress
-The sole roadmap catch-up is being resolved with canonical ContextMenu reuse (D11), not a second menu system. All source components are integrated and removed. The scoped eight-file behavior-test continuation returned without checks/commits; its barrier audit/integration is next. Pre-catch-up runtime proof is D9–D10; owned runtime exited0 with homeRemoved:true and managed tabs empty. Next: finish this composition, integrate tests, run final typecheck/build and focused post-merge menu smoke, then commit/detach/canonical land. Suites, formal review and screenshot scoring remain unrun by policy.
+Ready for canonical land: sole catch-up c6a1c69a preserves all incoming owners and canonical shared ContextMenu; tests fe5b6f95 integrated, all four owned component worktrees removed. Final composed UIlint/root/mobile/prepared-desktop typecheck and actual UI build passed31.90s. Focused runtime proof and limits are D9–D13; no suite, full dogfood, screenshot-model or native acceptance claim. Every worker/check returned, both private daemon/PTY scopes exited0/homeRemoved:true, all managed tabs released and the exact owned Chrome service stopped. Next: commit this final receipt/helper corrections, detach and canonical queue land; await its authoritative result, preserve evidence and remove owned scratch. No unbuilt feature flow or follow-up item.

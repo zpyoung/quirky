@@ -72,7 +72,7 @@ const groupSection = (name: string) => [...document.querySelectorAll<HTMLElement
 
 const item = (label: string): HTMLElement | undefined => menuItem(document, label)
 const branchNotice = (): HTMLElement | undefined =>
-  document.querySelector<HTMLElement>('[aria-label="Kept branches"] [role="status"]')
+  document.querySelector<HTMLElement>('[aria-label="Kept branches"] [role="status"]') ?? undefined
 
 
 async function choose(win: HeadlessWindow, label: string): Promise<void> {
