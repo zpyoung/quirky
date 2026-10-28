@@ -148,7 +148,8 @@ export function createWorkerLifecycle(
     dispatch: DispatchRow,
     failureClass: 'infrastructure' | 'worker_report',
     failureReason: string,
-    circuitBroken = false
+    circuitBroken = false,
+    terminationReason?: NonNullable<DispatchRow['terminationReason']>
   ): DispatchRow => {
     if (dispatch.status !== 'pending' && dispatch.status !== 'dispatched') return dispatch
     return core.transitionDispatch({
@@ -157,6 +158,7 @@ export function createWorkerLifecycle(
       nextState: circuitBroken ? 'circuit_broken' : 'failed',
       failureClass,
       failureReason,
+      ...(terminationReason === undefined ? {} : { terminationReason }),
       at: utcNow()
     } as DispatchTransitionInput)
   }
@@ -182,7 +184,7 @@ export function createWorkerLifecycle(
   }
   const finishStopDispatch = (dispatchId: DispatchId): void => {
     const dispatch = core.getDispatch(dispatchId)
-    transitionDispatchFailure(dispatch, 'worker_report', 'stopped')
+    transitionDispatchFailure(dispatch, 'worker_report', 'stopped', false, 'operator_close')
     setTaskAfterFence(core.getDispatch(dispatchId), true)
   }
 
@@ -893,7 +895,9 @@ export function createWorkerLifecycle(
         updateStage(current.dispatchId, 'failed', { stage: 'process_exited', lastError: failure })
       }
       const circuitBroken = dispatch.failureCount + 1 >= FAILURE_BUDGET
-      const settledDispatch = transitionDispatchFailure(dispatch, 'infrastructure', 'process_exited', circuitBroken)
+      const terminationReason = reason === 'operator_close' || reason === 'killed' ? 'operator_close'
+        : reason === 'signaled' ? 'signaled' : reason === 'exited' ? 'exited' : 'unknown'
+      const settledDispatch = transitionDispatchFailure(dispatch, 'infrastructure', 'process_exited', circuitBroken, terminationReason)
       const nextTaskState = otherActiveAttempt(task.id, dispatch.id)
         ? 'dispatched'
         : settledDispatch.status === 'circuit_broken' ? 'failed' : 'ready'
@@ -911,7 +915,9 @@ export function createWorkerLifecycle(
           dispatch.id,
           `Agent exited unexpectedly (${reason})`,
           `Worker ${sessionId} stopped while running task "${title}" (${task.id}). ${reason}. ${disposition}`,
-          true
+          true,
+          'escalation',
+          { taskId: task.id, dispatchId: dispatch.id, exitCode, exitCause: reason, handle: sessionId }
         )
       }
     })
@@ -1100,7 +1106,9 @@ export function createWorkerLifecycle(
       }
       void runtime.observe(worker, dispatch).then((observation) => {
         if (disposed || observation.status !== 'exited' || !isExactIdentity(worker, observation.identity)) return
-        onExit(sessionId, worker.processIncarnation, event.exitCause, exitCode)
+        const reason = event.exitCause === 'killed' ? 'operator_close' : event.exitSignal ? 'signaled'
+          : event.exitCause === 'exited' ? 'exited' : 'unknown'
+        onExit(sessionId, worker.processIncarnation, reason, exitCode)
       }).catch(() => {})
     }
   })

@@ -176,6 +176,8 @@ WorkerStart request uses requestId/contractVersion plus taskId|spec; runId/from 
 
 Persist WorkerRow plus private runtimeEpoch/startOptions/identity; terminal resource with origin/current/prior owner Dispatch IDs, session/worktree/incarnation, ownershipState, releaseState, retainedReason, release/error/recovery/archive metadata; per-Dispatch immutable output archives; bounded fleet snapshots/cursors. Use the core PluginStore migration/transaction convention and receipt ledger. Atomic CAS must settle worker/custody with Task/Dispatch/mail/question changes, including reports racing readiness. All async runtime effects occur outside transactions with persisted stages before/after.
 
+Private worker identity records distinguish supervisor `runtimeEpoch` from attached kernel `processRuntimeEpoch`; the latter is null before attachment and must match actual SessionIdentity/caller proof. Durable replay is checked before asynchronous `beforeAccept` preflight, synchronous acceptance/checkpoint commits before effects, and `afterCommit` owns launch/close. Initial preamble submission requires explicit driving intent rather than inheriting the mailbox-only Cursor no-Enter policy.
+
 ### Integration boundary
 
 Before dispatching workers, commit exact worker types and same-store bridge signatures. Reconcile bridge with lane1's published store/service implementation; do not implement a mock core or a no-op lifecycle hook. Worker runtime receives public context and exact incarnation evidence. It does not trust from strings, titles, client metadata or speculative process PID reuse.

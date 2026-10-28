@@ -155,7 +155,7 @@ async function observeCandidate(runtime: WorkerRuntime, candidate: FleetCandidat
 }
 
 function sessionStatusRow(value: unknown, sessionId: string, now: number): AgentEvidence {
-  if (!isRecord(value) || value.sessionId !== sessionId || typeof value.evidenceAt !== 'number' || !Number.isFinite(value.evidenceAt) || typeof value.restoredUnconfirmed !== 'boolean') {
+  if (!isRecord(value) || value.sessionId !== sessionId || typeof value.evidenceAt !== 'number' || !Number.isFinite(value.evidenceAt) || (value.restoredUnconfirmed !== undefined && typeof value.restoredUnconfirmed !== 'boolean')) {
     return { durable: false, liveStatus: 'unavailable', lastObservedAt: null, reason: 'missing_status', state: null, display: null, label: null, detail: null }
   }
   const evidenceAt = value.evidenceAt

@@ -673,3 +673,26 @@ describe('worker fleet projection and snapshots', () => {
   })
 
 })
+
+test('preserves fresh and stale evidence from real status rows with an optional restoration flag', async () => {
+  for (const stale of [false, true]) {
+    const dispatch = makeDispatch(1, 'run_1' as RunId)
+    const session = sessionFixture()
+    const harness = makeHarness({
+      dispatches: [dispatch],
+      records: [makeRecord(dispatch, session.id)],
+      resources: [makeResource(dispatch, session.id)],
+      session,
+      // AgentStatusService.get returns AgentRow; restoredUnconfirmed is optional.
+      status: { state: 'working', display: 'working', evidenceAt: Date.now() - (stale ? 31 * 60_000 : 0), sessionId: session.id }
+    })
+    const fleet = createWorkerFleet(harness.core, harness.repo, harness.runtime)
+    const shown = await fleet.show({ dispatchId: dispatch.id })
+    expect(shown.projection.evidence.liveStatus).toBe(stale ? 'stale' : 'fresh')
+    expect(shown.projection.liveness).toEqual(stale ? { status: 'unverifiable', reason: 'stale_status' } : { status: 'live', reason: null })
+    const output = createWorkerOutput(harness.core, harness.repo, harness.runtime)
+    const read = await output.read({ dispatchId: dispatch.id })
+    expect(read.agentLiveness).toEqual(stale ? { status: 'unverifiable', reason: 'stale_status' } : { status: 'live', reason: null })
+    fleet.dispose()
+  }
+})

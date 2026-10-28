@@ -811,7 +811,8 @@ export function createWorkerRuntime(context: PluginContext): WorkerRuntime {
         const result = identity.kind === 'structured'
           ? await call<Record<string, unknown>>(context, 'quirky.structured/stop', { session: resource.sessionId, expectedIncarnation: resource.processIncarnation })
           : await call<Record<string, unknown>>(context, 'quirky.session/close', { session: resource.sessionId, expectedIncarnation: resource.processIncarnation })
-        const positivelyClosed = result.closed === true || result.stopped === true || result.ok === true
+        const positivelyClosed = result.ok === true && result.closed === true
+          && result.sessionId === resource.sessionId && result.processIncarnation === resource.processIncarnation
         return positivelyClosed ? { closed: true } : { closed: false, reason: typeof result.reason === 'string' ? result.reason : 'The guarded close did not positively confirm the exact session was closed.' }
       } catch (cause) {
         return { closed: false, reason: messageOf(cause) }

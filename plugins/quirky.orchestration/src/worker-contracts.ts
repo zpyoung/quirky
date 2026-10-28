@@ -132,7 +132,7 @@ export interface WorkerCore extends OrchestrationWorkerCore {
   reserveWorkerDispatch(input: { taskId: TaskId; runId: RunId; retryOfDispatchId?: DispatchId }, caller: CoordinatorEvidence): DispatchRow
   attachWorkerAuthority(dispatchId: DispatchId, identity: SessionIdentity, caller: CoordinatorEvidence): DispatchRow
   mutateWorker<T extends object>(method: string, params: MutationRequest & object, caller: CoordinatorEvidence, operation: (store: PluginStore) => T, options?: DurableMutationOptions<T>): Promise<MutationResult<T>>
-  emitWorkerStatus(dispatchId: DispatchId, subject: string, body: string, high: boolean): void
+  emitWorkerStatus(dispatchId: DispatchId, subject: string, body: string, high: boolean, type?: 'status' | 'escalation', payload?: JsonValue): void
   closeWorkerQuestions(dispatchId: DispatchId, at: UtcTimestamp): void
   listDispatches(): DispatchRow[]
   boundRunId(caller: RuntimeCallerEvidence): RunId | null

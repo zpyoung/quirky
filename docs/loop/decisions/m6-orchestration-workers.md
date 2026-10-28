@@ -121,5 +121,60 @@
 - **Revisit if:** service ownership or mailbox generation cannot be represented without false process provenance
 - **Source:** assumed — autonomous
 
+## D12: Keep supervisor ownership epoch distinct from kernel process epoch
+- **Question:** exact report/heartbeat/output evidence during implementation review
+- **Options:** compare kernel caller epoch to the worker factory UUID; persist the actual attached identity epoch separately
+- **Chose:** WorkerRecord.runtimeEpoch owns supervisor restart/in-flight operations; processRuntimeEpoch starts null and is stamped from actual SessionIdentity at attachment. Exact process proofs compare that kernel epoch and incarnation, never a fabricated equality.
+- **Why:** the two epochs answer different questions. Comparing them rejected valid reports; ignoring them entirely could hide an authority mismatch.
+- **Evidence:** lifecycle.ts isExactCaller review; worker-contracts.ts processRuntimeEpoch; corrected lifecycle23pass/110assert and output-fleet23pass/159assert with deliberately distinct fixture epochs
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** restored authority supplies a new independently proven kernel epoch for the same incarnation
+- **Source:** assumed — autonomous
+
+## D13: Separate read-only identity from destructive custody
+- **Question:** live settled reclaimability, user takeover inspection and exit precedence
+- **Options:** require owned custody for every read; independently prove the current process while guarding close separately
+- **Chose:** same-current-owner user_owned/external workers remain readable and can prove liveness; transferred/released attempts remain archive-pinned. Owned succeeded/failed workers are reclaimable even while their agent stays live. Positive exact/certified exit outranks an earlier fresh working row. Live source cursors permit append but reject consumed-content rewrites.
+- **Why:** takeover prohibits cleanup, not inspection. Settlement, liveness, content continuity and custody are independent facts.
+- **Evidence:** orchestration.md:364-389; output/fleet corrections and actual23pass/159assert component run. First run exposed undefined fallback variable; fixed both auto and cursor paths. Removed a new incorrect show.terminalState assertion rather than add a nonexistent response field.
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** public source-pinned output changes its continuity contract
+- **Source:** locked by research/orca-features/orchestration.md
+
+## D14: Replay durable completed requests before asynchronous preflight
+- **Question:** how to refuse new invalid placement without invalidating an accepted replay
+- **Options:** validate before the ledger; perform ledger replay/mismatch checks before a beforeAccept callback
+- **Chose:** core mutation wrapper checks caller-bound replay/mismatch first, then runs asynchronous beforeAccept, then synchronously accepts Task/Dispatch/Worker/checkpoint in one transaction; process effects remain afterCommit.
+- **Why:** a changed catalog or workspace cannot convert a completed exact replay into a new refusal or second launch.
+- **Evidence:** WorkerStart interface finding; requested core DurableMutationOptions.beforeAccept in msg_57e61cdf00b0; AC19
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** the core implements a different equally atomic caller-bound replay fast path
+- **Source:** assumed — autonomous
+
+## D15: Distinguish a driving worker brief from an idle-mailbox pointer
+- **Question:** whether the mailbox pointer seam can safely carry every initial worker preamble
+- **Options:** reuse Cursor no-Enter nudges unchanged; make initial driving intent explicit in the exact-incarnation durable submit seam
+- **Chose:** explicit worker_start driving purpose, provider-safe submit plan and full admitted brief size; preserve mailbox-only Cursor no-auto-Enter behavior. Runtime owner must confirm and publish the actual seam; no raw-write fallback.
+- **Why:** the coordinator requested a new worker turn, not merely a hint to an idle agent. Treating all Cursor starts as unknown because the wrong API withheld Enter would not implement the launch flow.
+- **Evidence:** core D10; orchestration.md:325-327,502-524; WorkerStart runtime seam question; msg_cd979e5c17f6
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** the existing public runtime submit already proves the required driving semantics for every supported provider
+- **Source:** assumed — autonomous
+
+## D16: Synchronous explicit input guards, not deferred generic write events
+- **Question:** first-key custody, query replies and deactivation safety
+- **Options:** treat PluginPty.onInput as human; emit an asynchronous PluginEvents notice; guard explicit physical input synchronously before bytes
+- **Chose:** public reportUserInput/onUserInput/lastUserInput PTY seam and exact-incarnation terminal/userInput. Renderer onKey/custom keys/paste/drop/IME intent claims custody before its bytes; plain onData query replies and injected prompts do not claim. Positive early input evidence is reconciled at custody creation.
+- **Why:** PluginPty.onInput hears programmatic writes, while PluginEvents schedules setImmediate and cannot fence cleanup before the first key.
+- **Evidence:** packages/daemon/src/plugins/events.ts:62-70; pty-api.ts and terminal input changes; actual before smoke returned unknown terminal/userInput in a private home. After-change full runtime proof remains pending.
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** a public input-origin hook provides stronger ordering with less machinery
+- **Source:** assumed — autonomous
+
 ## Progress
-Iteration3 claimed this new early item. Requirements and locked decisions read; core contracts researched. Initial core merge was aborted cleanly to merge latest transitive structured dependency first; conflict-resolution implementer is working only on conflicted paths. No worker feature runtime code or acceptance claim yet. Next: finish prerequisite merges, write combined logic/technical spec, commit contracts, dispatch at most3 implementers, exercise complete API/CLI acceptance and visible custody scenarios, merge dependency updates, final targeted suite/scripts/typecheck and independent review, wait deps ready and queue-controlled landing. Do not revive the old preparation-only dependency gate.
+Iteration3: M5 and core contracts/schema merged; combined AC1-20 spec and shared contracts committed through1a75bb8b. Lifecycle component passed23tests/110assertions; output/fleet component passed23tests/159assertions after confirmed fixes. No component committed before the final wave barrier. Starter finishing against replay-safe beforeAccept and explicit driving-submit semantics; core runtime/domain source is still an external integration prerequisite. Parent has uncommitted synchronous input-origin/public terminal/UI code, component composition and real launched-process CLI acceptance fixtures. Actual private-daemon missing-method repros and launched-provider status CLI smoke completed/cleaned; no full worker API/UI acceptance claim. Next: finish starter and core merges, authoritative scope/HEAD audit, integrate real core adapter/manifest/CLI, run all worker end-to-end flows and final affected checks/review, wait deps ready and queue-controlled land. Preserve unattributed .serena/project.local.yml in component trees; never force-delete it as owned. No prepare-only dependency stop.

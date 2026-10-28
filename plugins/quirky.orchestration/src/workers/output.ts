@@ -351,7 +351,7 @@ async function sameLease(runtime: WorkerRuntime, dispatch: DispatchRow, record: 
 }
 
 function parseAgentEvidence(value: unknown, sessionId: string, now: number): AgentEvidence {
-  if (!isRecord(value) || value.sessionId !== sessionId || typeof value.evidenceAt !== 'number' || !Number.isFinite(value.evidenceAt) || typeof value.restoredUnconfirmed !== 'boolean') {
+  if (!isRecord(value) || value.sessionId !== sessionId || typeof value.evidenceAt !== 'number' || !Number.isFinite(value.evidenceAt) || (value.restoredUnconfirmed !== undefined && typeof value.restoredUnconfirmed !== 'boolean')) {
     return { liveStatus: 'unavailable', reason: 'missing_status' }
   }
   if (value.restoredUnconfirmed === true) return { liveStatus: 'redacted_restore', reason: 'restored_unconfirmed' }
@@ -406,8 +406,9 @@ function agentLiveness(
     && (evidence.reason === 'peer_changed' || evidence.reason === 'host_unavailable' || evidence.reason === 'capability_unsupported')) {
     return { status: 'unverifiable', reason: evidence.reason }
   }
-  if (observation.status === 'live' && observation.exactWorker) return { status: 'live', reason: null }
   if (evidence.liveStatus === 'fresh') return { status: 'live', reason: null }
+  if (evidence.liveStatus === 'unavailable' && evidence.reason === 'missing_status'
+    && observation.status === 'live' && observation.exactWorker) return { status: 'live', reason: null }
   return { status: 'unverifiable', reason: evidence.reason || observation.reason || 'missing_status' }
 }
 
