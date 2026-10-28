@@ -1,6 +1,5 @@
 import { afterEach, beforeEach, expect, test } from 'bun:test'
-import { chmodSync, existsSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
-import { execFileSync } from 'node:child_process'
+import { existsSync, mkdtempSync, readFileSync, realpathSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { MobileTestClient } from './support/client'
@@ -11,7 +10,7 @@ import { issueFixtureRecord, issueFixtureSource, seedIssueFixture } from '../../
 import { startAccounts, cleanupAll, type AccountsHarness } from '../../quirky.accounts/test/support/index'
 import { bootHosting, type HostingTest } from '../../quirky.hosting/test/helpers'
 import { writeClaudeFixture, writeJsonlFixture } from '../../quirky.vault/test/fixtures/scanner-fixtures'
-import { workspaceFixtureSource } from '../../quirky.tasks/test/fixtures/workspace'
+import { bootWorkspace } from '../../quirky.tasks/test/fixtures/workspace'
 
 type MobileHost = { client: { callAny(method: string, params?: Record<string, unknown>): Promise<unknown> } }
 type RecordValue = Record<string, unknown>
@@ -102,46 +101,6 @@ function listItemState(host: TasksTest): RecordValue[] {
   const state = record(host.readState())
   const items = record(state.items)
   return list(items['test-owner/test-repo']).map(record)
-}
-function runGit(realGit: string, cwd: string, ...args: string[]): string {
-  return execFileSync(realGit, ['-C', cwd, ...args], { encoding: 'utf8', env: process.env }).trim()
-}
-
-function configureSharedWorkspaceHooks(host: TasksTest, setup: string, issueCommand: string): void {
-  const realGit = Bun.which('git')
-  if (!realGit) throw new Error('Git is required for the mobile workspace consent fixture.')
-  const baseBare = join(host.root, 'mobile-base.git')
-  execFileSync(realGit, ['init', '--quiet', '--bare', baseBare], { env: process.env, stdio: 'ignore' })
-  runGit(realGit, host.repoPath, 'push', '--quiet', baseBare, 'refs/heads/main:refs/heads/main')
-  runGit(realGit, host.repoPath, 'checkout', '--quiet', 'main')
-  const hooksFile = [
-    `scripts:\n  setup: ${JSON.stringify(setup)}`,
-    `issueCommand: ${JSON.stringify(issueCommand)}`
-  ].join('\n') + '\n'
-  writeFileSync(join(host.repoPath, 'quirky.yaml'), hooksFile)
-  runGit(realGit, host.repoPath, 'add', 'quirky.yaml')
-  runGit(realGit, host.repoPath, '-c', 'user.name=Mobile Fixture', '-c', 'user.email=mobile@example.test', '-c', 'commit.gpgsign=false', 'commit', '--quiet', '-m', 'configure shared task hooks')
-  const revision = runGit(realGit, host.repoPath, 'rev-parse', 'HEAD')
-  runGit(realGit, host.repoPath, 'update-ref', 'refs/remotes/origin/main', revision)
-  runGit(realGit, host.repoPath, 'push', '--quiet', baseBare, 'refs/heads/main:refs/heads/main')
-  runGit(realGit, host.repoPath, 'checkout', '--quiet', 'feature')
-
-  const origin = 'https://github.com/test-owner/test-repo.git'
-  const shim = `#!${process.execPath}
-const realGit = ${JSON.stringify(realGit)}
-const rewrites = ${JSON.stringify([[origin, baseBare]])}
-const args = process.argv.slice(2)
-const configArgs = ['fetch', 'push', 'ls-remote'].includes(args[0] ?? '')
-  ? rewrites.flatMap(([url, localPath]) => ['-c', 'url.file://' + localPath + '.insteadOf=' + url])
-  : []
-const result = Bun.spawnSync([realGit, ...configArgs, ...args], { stdin: 'ignore', stdout: 'pipe', stderr: 'pipe' })
-if (result.stdout.byteLength > 0) process.stdout.write(result.stdout)
-if (result.stderr.byteLength > 0) process.stderr.write(result.stderr)
-process.exit(result.exitCode ?? 1)
-`
-  const gitShim = join(host.root, 'fakebin', 'git')
-  writeFileSync(gitShim, shim)
-  chmodSync(gitShim, 0o755)
 }
 
 test('encrypted task consumers list, detail, edit, and create a workspace attached to the selected repository', async () => {
@@ -409,13 +368,13 @@ test('encrypted vault consumers list and search owned Claude sessions by workspa
   expect(resumed).not.toHaveProperty('launch')
 }, 60_000)
 test('paired mobile workspace consent carries content pins through both hooks and executes each approved script', async () => {
-  const host = await bootTasks(workspaceFixtureSource, {
+  const host = await bootWorkspace({
     extraBuiltins: ['quirky.mobile', 'quirky.agents', 'quirky.session', 'quirky.terminal']
   })
   tasksHost = host
   const setupScript = "printf 'setup-ran' > setup-marker.txt"
   const issueCommand = "printf 'issue-ran' > issue-marker.txt"
-  configureSharedWorkspaceHooks(host, setupScript, issueCommand)
+  host.setHooks({ setup: setupScript, issueCommand })
   const issue = fixtureIssue('test-owner', 'test-repo', 22, '2026-10-02T00:00:00Z')
   host.writeState(seedListFixture({ 'test-owner/test-repo': [issue] }))
   const mobile = await pairPhone(host)
