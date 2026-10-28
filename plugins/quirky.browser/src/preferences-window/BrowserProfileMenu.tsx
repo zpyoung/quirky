@@ -8,8 +8,8 @@ function profileIdForPane(pane: BrowserPreferencesProps['pane']): string {
   return 'default'
 }
 
-export function BrowserProfileMenu(props: BrowserPreferencesProps) {
-  const { context, pane, onError } = props
+export function BrowserProfileMenu(props: BrowserPreferencesProps & { inline?: boolean }) {
+  const { context, pane, onError, inline = false } = props
   const { preferences, loading, stateError, refresh, saveSetting } = useBrowserPreferenceData(context, onError)
   const menuId = useId()
   const [menuOpen, setMenuOpen] = useState(false)
@@ -21,13 +21,15 @@ export function BrowserProfileMenu(props: BrowserPreferencesProps) {
   const [profileSwitching, setProfileSwitching] = useState(false)
   const profileSwitchingRef = useRef(false)
   const profileSelectionRequest = useRef(0)
+  const paneIdentity = pane?.id
+  const paneProfile = profileIdForPane(pane)
 
   useEffect(() => {
     profileSelectionRequest.current += 1
     profileSwitchingRef.current = false
     setProfileSwitching(false)
-    setSelectedProfile(profileIdForPane(pane))
-  }, [pane])
+    setSelectedProfile(paneProfile)
+  }, [paneIdentity, paneProfile])
 
   const profiles = preferences?.profiles ?? []
   const effectiveSelection = pane ? selectedProfile : (profiles.find((row) => row.active)?.profile.id ?? 'default')
@@ -76,8 +78,8 @@ export function BrowserProfileMenu(props: BrowserPreferencesProps) {
   }
 
   return <div className="browser-profile-menu">
-    <button type="button" aria-expanded={menuOpen} aria-controls={menuId} onClick={() => setMenuOpen((open) => !open)}>Profile: {menuLabel}</button>
-    {menuOpen && <div id={menuId} aria-label="Browser profile menu">
+    {!inline && <button type="button" aria-expanded={menuOpen} aria-controls={menuId} onClick={() => setMenuOpen((open) => !open)}>Profile: {menuLabel}</button>}
+    {(inline || menuOpen) && <div id={menuId} aria-label="Browser profile menu">
       {loading && !preferences && <p>Loading browser profiles…</p>}
       {stateError && <p role="alert">{stateError}</p>}
       {preferences && <fieldset>
@@ -103,6 +105,11 @@ export function BrowserProfileMenu(props: BrowserPreferencesProps) {
       <button type="button" disabled={loading && !preferences} onClick={() => { setCreateOpen(true); setActionError(null); setSuccessMessage(null) }}>New Profile</button>
       <button type="button" aria-expanded={importOpen} onClick={() => setImportOpen((open) => !open)}>Import Cookies</button>
       {importOpen && <ImportDetails context={context} imports={preferences?.imports ?? null} loadError={stateError} onHideHint={() => void hideHint()} onError={onError} />}
+      <button type="button" onClick={() => void context.executeCommand('command:quirky.browser/browserSettings').catch((cause: unknown) => {
+        const message = errorMessage(cause)
+        setActionError(message)
+        onError(message)
+      })}>Browser Settings…</button>
       {createOpen && <ProfileCreator context={context} onCreated={profileCreated} onCancel={() => setCreateOpen(false)} onError={onError} />}
     </div>}
   </div>

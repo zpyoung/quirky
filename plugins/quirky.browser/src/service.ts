@@ -100,10 +100,7 @@ export class BrowserService {
       listProfiles: () => this.store.listProfiles(),
       listPanes: () => this.listPanes(),
       listPageProfiles: () => this.store.listPages().map((page) => page.profileId),
-      setPaneProfile: async (pane, profile) => {
-        this.profileLifecycle.assertAvailable(profile)
-        return await this.setPaneProfile(pane, profile)
-      },
+      setPaneProfile: (pane, profile) => this.profileLifecycle.withProfileAdmission(profile, () => this.setPaneProfile(pane, profile)),
       clearProfile: (profile, remove) => this.profileLifecycle.clearProfile(profile, remove)
     })
   }
@@ -131,7 +128,7 @@ export class BrowserService {
       case 'tabList': return this.tabList(params, caller)
       case 'tabShow': return this.tabShow(params)
       case 'tabCurrent': return this.tabCurrent(params, caller)
-      case 'tabCreate': return await this.createPage(params, caller)
+      case 'tabCreate': return await this.profileLifecycle.withProfileAdmission(optionalString(params, 'profile') ?? 'default', () => this.createPage(params, caller))
       case 'tabSwitch': return await this.tabSwitch(params, caller)
       case 'tabClose': return await this.tabClose(params, caller)
       case 'profileList': return { profiles: this.store.listProfiles() }

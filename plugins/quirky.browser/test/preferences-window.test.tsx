@@ -216,6 +216,10 @@ test('profile switching prevents overlapping requests while the selected profile
   if (!defaultRadio || !reviewRadio) throw new Error('Missing profile selection controls')
 
   await act(async () => { reviewRadio.click(); await settleUI() })
+  await act(async () => {
+    root?.render(<BrowserProfileMenu {...props(context, { ...pane(), title: 'Fresh page telemetry' })} />)
+    await settleUI()
+  })
   expect(defaultRadio.disabled).toBe(true)
   expect(reviewRadio.disabled).toBe(true)
   expect(calls.filter(({ method }) => method === 'quirky.browser/profileSet')).toHaveLength(1)

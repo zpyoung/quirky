@@ -8,6 +8,7 @@ import type { BrowserRuntime } from './runtime/driver'
 export class ProfileLifecycle {
   private active = true
   private readonly maintaining = new Set<string>()
+  private readonly admissions = new Map<string, number>()
   private readonly pending = new Map<string, { profile: string; claimed: boolean }>()
 
   constructor(
@@ -35,12 +36,25 @@ export class ProfileLifecycle {
     if (this.maintaining.has(profile)) throw this.context.error('conflict', 'browser_error: This profile is clearing or awaiting a known native-clear result; restart the daemon if the clear failed.')
   }
 
+  async withProfileAdmission<T>(profile: string, operation: () => Promise<T>): Promise<T> {
+    if (!this.active) throw this.context.error('conflict', 'browser_error: Browser is shutting down.')
+    this.assertAvailable(profile)
+    this.admissions.set(profile, (this.admissions.get(profile) ?? 0) + 1)
+    try {
+      return await operation()
+    } finally {
+      const remaining = (this.admissions.get(profile) ?? 1) - 1
+      if (remaining === 0) this.admissions.delete(profile)
+      else this.admissions.set(profile, remaining)
+    }
+  }
+
   async clearProfile(profile: string, remove: boolean): Promise<void> {
     if (!this.active) throw this.context.error('conflict', 'browser_error: Browser is shutting down.')
     this.store.getProfile(profile)
     this.assertAvailable(profile)
     if (remove && profile === 'default') throw this.context.error('invalid-params', 'browser_error: Default cannot be removed.')
-    if (this.listPanes().some((pane) => pane.profileId === profile) || this.store.listPages().some((page) => page.profileId === profile)) {
+    if (this.admissions.has(profile) || this.listPanes().some((pane) => pane.profileId === profile) || this.store.listPages().some((page) => page.profileId === profile)) {
       throw this.context.error('conflict', 'browser_error: Close this profile\'s panes and pages before clearing it.')
     }
     this.maintaining.add(profile)
