@@ -10,6 +10,28 @@ function noArgs(args: CliArgs, context: CliContext): void {
 }
 
 const named: CliModule['commands'] = {
+  async notificationPoll(args, context) {
+    if (args.positionals.length > 0) throw context.usage('notification-poll accepts only named flags')
+    const after = args.flags.after
+    const waitMs = args.flags['wait-ms']
+    if (after !== undefined && (typeof after !== 'number' || !Number.isSafeInteger(after) || after < 0)) throw context.usage('--after must be a nonnegative safe integer')
+    if (waitMs !== undefined && (typeof waitMs !== 'number' || !Number.isInteger(waitMs) || waitMs < 0 || waitMs > 25000)) throw context.usage('--wait-ms must be0..25000')
+    const epoch = stringFlag(args, 'epoch')
+    const suppressWorktree = stringFlag(args, 'suppress-worktree')
+    const value = await context.call('quirky.mobile/notificationPoll', {
+      ...(after === undefined ? {} : { after }),
+      ...(waitMs === undefined ? { waitMs: 0 } : { waitMs }),
+      ...(epoch === undefined ? {} : { epoch }),
+      ...(suppressWorktree === undefined ? {} : { suppressWorktree }),
+      ...(args.flags['only-away'] === undefined ? {} : { onlyWhenDesktopAway: args.flags['only-away'] === true })
+    })
+    context.out.result(value, () => JSON.stringify(value, null, 2))
+  },
+  async notificationTest(args, context) {
+    noArgs(args, context)
+    const value = await context.call('quirky.mobile/notificationTest', {})
+    context.out.result(value, () => JSON.stringify(value))
+  },
   async info(args, context) {
     noArgs(args, context)
     const value = await context.call('quirky.mobile/info', {})

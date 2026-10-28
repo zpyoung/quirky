@@ -44,5 +44,27 @@
 - **Revisit if:** Gemini dispatch cannot run.
 - **Source:** assumed — autonomous
 
+## D5: Add notification-only replay rather than grant general daemon events
+- **Question:** existing notifications API has no mobile subscription or replay; should phones get events.subscribe?
+- **Options:** broad daemon events; foreground-only badge reads; scoped bounded notification replay.
+- **Chose:** public quirky.mobile/notificationPoll and notificationTest, connection-scoped authenticated device identity,256-record epoch/cursor log, filter-before-replay cursor advancement, one pending waiter per device, disconnect cleanup. Sample macOS IOHIDSystem HIDIdleTime and IOConsoleLocked without exposing user/session data; unknown presence never silences. Test alert bypasses away filtering, no native desktop banner.
+- **Why:** Core.broadcast sends all subscribed events without mobile role filtering. A general event grant would unnecessarily expose unrelated plugin data. Long polling fits existing trusted bridge call interface without a new privileged stream.
+- **Evidence:** packages/daemon/src/service.ts:74-82; packages/protocol/src/plugins.ts:277-303; actual ioreg output in iteration; notification-replay tests3pass/16assertions and encrypted subscription acceptance1pass/11assertions after red failures.
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** a typed per-client JSON event subscription capability is introduced.
+- **Source:** assumed — autonomous
+
+## D6: Extend Git's public contract for guarded branch switching
+- **Question:** mobile Source Control names Switch Branch but no public checkout method exists.
+- **Options:** falsely call setBase; defer reachable Git operation; add guarded branch-switch operation.
+- **Chose:** PhoneScm also owns the exact Git/protocol busy-operation/desktop exhaustiveness paths it enumerated: new switchBranch and describeSwitchBranch methods, exact listed ref, clean uncapped tree and no active operation, per-worktree lock, optional expected source branch/HEAD, explicit confirmation. Parent owns final mobile allowlist.
+- **Why:** public API growth belongs with required feature; changing comparison base is not checkout.
+- **Evidence:** agent PhoneScm API survey; existing packages/protocol/src/model.ts GitBusyOp; plugins/quirky.git/src/daemon/lock.ts.
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** branch switching conflicts with the existing worktree ownership rules.
+- **Source:** assumed — autonomous
+
 ## Progress
-Claimed item, created build/sb-mobile-app-panels from build/roadmap and merged current sb-mobile-app contracts/spec. Dependency still in progress on lane5. Design and combined spec self-review complete; commit panel contracts/spec/decisions next, then dispatch three disjoint components. Lane5 coordination accepted input, delivery unproven. Inherited untracked .serena metadata untouched. No implementation/test claims yet.
+Contracts/spec committed eb750d27. Three disjoint component workers running in /tmp/quirky-panels-{scm,files-tasks,activity}; HEAD eb750d27, scopes in /tmp/quirky-panel-run.42yijv/journal.json. PhoneScm scope explicitly expanded for guarded Git branch switch. Parent implemented notification-only replay/service and encrypted acceptance (green3unit+1integration); raw presence sampling verified on macOS. Dependency lane5 published newer bridge state/extension contracts53b19b61; merge those next. Native app/pages still in progress. Web dogfood doctor ready. No final suite/build/UI/review claims.
