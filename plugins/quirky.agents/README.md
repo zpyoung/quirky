@@ -8,7 +8,12 @@ Claude uses the official Models API `GET https://api.anthropic.com/v1/models`, w
 
 Both probes require complete, nonempty valid snapshots before they update that host's catalog or emit `modelSnapshot`. Empty, malformed, unavailable, unsupported, truncated, and timed-out probes preserve the prior catalog and choices. HTTP probe time is capped at 8 seconds; response and normalized snapshot size at 256 KiB; pagination at 32 pages and 4096 models. The Anthropic protocol follows the official [List Models reference](https://docs.anthropic.com/en/api/models-list), [API overview and authentication headers](https://docs.anthropic.com/en/api/overview), and [API versioning documentation](https://docs.anthropic.com/en/api/versioning), which requires `anthropic-version: 2026-10-21`.
 
-Other protocols, including Gemini's models API and Pi's `get_available_models` RPC, are not declared or implemented here. They must not be reported as successful discovery until their real protocol is implemented with the correct selected-account authority.
+Gemini Models API and Pi RPC discovery use their documented provider protocols. They do not create managed accounts or sessions; their credential and runtime boundaries are described below.
+Gemini uses the official [Models API](https://ai.google.dev/api/models) with `pageSize=1000`, `nextPageToken` pagination, and `generateContent` filtering; launch IDs use `baseModelId`. `GEMINI_API_KEY` or `GOOGLE_API_KEY` is accepted only from an explicit per-agent launch environment; if both are set there, `GOOGLE_API_KEY` takes precedence. The key is sent in `x-goog-api-key`, never taken from ambient system variables or Gemini OAuth credentials.
+
+Pi runs `pi --mode rpc --no-session` and queries the documented [JSONL RPC](https://github.com/badlogic/pi-mono/blob/main/packages/coding-agent/docs/rpc.md) `get_available_models` command. IDs retain the exact `provider/modelId` accepted by Pi's [`--model` option](https://github.com/badlogic/pi-mono/blob/main/packages/coding-agent/docs/cli.md). For reasoning-enabled models, `set_model` and `get_available_thinking_levels` provide exact per-model `--thinking` choices. The process uses the planned launch environment and real provider home without inventing an account or session.
+
+All provider probes need a complete nonempty snapshot before replacing choices. Requests/processes time out after 8 seconds; output and normalized snapshots are capped at 256 KiB; API pagination at 32 pages/4096 records; and selector catalogs at 500 models. Credentials and pagination tokens are never returned.
 
 CLI examples:
 

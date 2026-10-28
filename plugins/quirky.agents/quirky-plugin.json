@@ -3138,6 +3138,32 @@
           "{transcript}"
         ],
         "homepage": "https://pi.dev",
+        "modelDiscovery": { "protocol": "pi-rpc", "timeoutMs": 8000 },
+        "launchOptions": {
+          "model": {
+            "flag": ["--model", "{value}"],
+            "conflicts": [{ "flags": ["--model"] }]
+          },
+          "options": [
+            {
+              "id": "effort",
+              "label": "Thinking level",
+              "type": "select",
+              "choices": [
+                { "value": "off", "label": "Off" },
+                { "value": "minimal", "label": "Minimal" },
+                { "value": "low", "label": "Low" },
+                { "value": "medium", "label": "Medium" },
+                { "value": "high", "label": "High" },
+                { "value": "xhigh", "label": "Extra high" },
+                { "value": "max", "label": "Maximum" }
+              ],
+              "flag": ["--thinking", "{value}"],
+              "conflicts": [{ "flags": ["--thinking"] }]
+            }
+          ],
+          "models": []
+        },
         "windows": {
           "shiftEnterEncoding": "csi-u"
         },
@@ -3285,6 +3311,7 @@
           "{id}"
         ],
         "homepage": "https://github.com/google-gemini/gemini-cli",
+        "modelDiscovery": { "protocol": "gemini-models", "timeoutMs": 8000 },
         "launchOptions": {
           "model": {
             "flag": [

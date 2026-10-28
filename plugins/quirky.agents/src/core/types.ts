@@ -93,6 +93,8 @@ export type AgentEntry = {
 export type ModelDiscoverySpec =
   | { protocol: 'codex-app-server'; timeoutMs: number }
   | { protocol: 'anthropic-models'; timeoutMs: number }
+  | { protocol: 'gemini-models'; timeoutMs: number }
+  | { protocol: 'pi-rpc'; timeoutMs: number }
   | { protocol?: 'argv-json'; args: string[]; timeoutMs: number; format: 'json' }
 
 

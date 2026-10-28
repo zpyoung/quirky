@@ -36,7 +36,14 @@ import {
 } from './core/types'
 import type { DiscoveryOptionInfo, ModelDiscovery } from './discovery-types'
 import { parseCodexAppServerModels, parseDiscoveredModels } from './core/discovered-models'
-import { runAnthropicModelsProbe, runCodexAppServerModelProbe, runModelProbe, type ModelProbeResult } from './model-probe'
+import {
+  runAnthropicModelsProbe,
+  runCodexAppServerModelProbe,
+  runGeminiModelsProbe,
+  runModelProbe,
+  runPiRpcModelProbe,
+  type ModelProbeResult
+} from './model-probe'
 import { DeliveryRunner } from './delivery'
 import { detect, readLoginPath, searchDirs, type Detection, type SearchDirs } from './detect'
 import { Generator } from './generate'
@@ -91,6 +98,12 @@ function plannedEnvironmentOf(value: unknown): Env {
   }
   return providerEnvironmentOf(value.record.env, 'quirky.agents/plan')
 }
+function plannedLaunchEnvironmentOf(value: unknown): Env {
+  if (!isPlainObject(value) || !Object.hasOwn(value, 'env')) {
+    throw new Error('quirky.agents/plan returned an invalid launch environment')
+  }
+  return providerEnvironmentOf(value.env, 'quirky.agents/plan')
+}
 
 function providerHomeOverridesOf(userEnv: Env): {
   claude: { value: string | null; source: 'explicit' | 'inherited' | 'absent' }
@@ -117,6 +130,16 @@ function anthropicApiKey(value: unknown): string | null {
   if (typeof value !== 'string') return null
   const key = value.trim()
   return key !== '' && key.length <= MAX_ANTHROPIC_KEY_LENGTH && !/[\u0000-\u001f\u007f]/.test(key) ? key : null
+}
+function selectedGeminiApiKey(explicitEnv: Env): string | null {
+  for (const name of ['GOOGLE_API_KEY', 'GEMINI_API_KEY']) {
+    if (!Object.hasOwn(explicitEnv, name)) continue
+    const value = explicitEnv[name]
+    if (typeof value !== 'string' || value.trim() === '') continue
+    const key = value.trim()
+    return key.length <= 16_384 && !/[\u0000-\u001f\u007f]/.test(key) ? key : null
+  }
+  return null
 }
 
 function selectedAnthropicApiKey(prepared: ProviderProbeEnvironment): string | null {
@@ -708,6 +731,12 @@ export class AgentsService {
     return this.probeLocalModels(this.entryOf(agent))
   }
 
+  private async plannedAgentEnvironment(agent: string): Promise<{ cwd: string; launchEnv: Env }> {
+    const cwd = process.cwd()
+    const plan = await this.context.call('quirky.agents/plan', { agent, cwd })
+    return { cwd, launchEnv: plannedLaunchEnvironmentOf(plan) }
+  }
+
   private async preparedProviderEnvironment(agent: string): Promise<ProviderProbeEnvironment> {
     const cwd = process.cwd()
     const plan = await this.context.call('quirky.agents/plan', { agent, cwd })
@@ -762,6 +791,18 @@ export class AgentsService {
         return this.discoveryFailure(entry.id, 'local', 'the selected Claude account has no API key for model discovery')
       }
       run = await runAnthropicModelsProbe(apiKey, declaration.timeoutMs)
+    } else if (declaration.protocol === 'gemini-models') {
+      let planned: { cwd: string; launchEnv: Env }
+      try {
+        planned = await this.plannedAgentEnvironment(entry.id)
+      } catch {
+        return this.discoveryFailure(entry.id, 'local', 'the explicit Gemini provider environment could not be prepared')
+      }
+      const apiKey = selectedGeminiApiKey(planned.launchEnv)
+      if (apiKey === null) {
+        return this.discoveryFailure(entry.id, 'local', 'no explicit Gemini API key is configured for model discovery')
+      }
+      run = await runGeminiModelsProbe(apiKey, declaration.timeoutMs)
     } else {
       if (!this.detection.installed(entry.id)) return this.discoveryFailure(entry.id, 'local', 'the provider executable is not installed')
       const launch = tokenize(entry.launch)
@@ -785,6 +826,23 @@ export class AgentsService {
           )
         } catch {
           return this.discoveryFailure(entry.id, 'local', 'the provider model probe failed')
+        }
+      } else if (declaration.protocol === 'pi-rpc') {
+        let planned: { cwd: string; launchEnv: Env }
+        try {
+          planned = await this.plannedAgentEnvironment(entry.id)
+        } catch {
+          return this.discoveryFailure(entry.id, 'local', 'the Pi provider environment could not be prepared')
+        }
+        try {
+          run = await runPiRpcModelProbe(
+            [executable, ...launch.tokens.slice(1), '--mode', 'rpc', '--no-session'],
+            declaration.timeoutMs,
+            materializeProviderEnvironment(process.env, [planned.launchEnv]),
+            planned.cwd
+          )
+        } catch {
+          return this.discoveryFailure(entry.id, 'local', 'the Pi RPC model probe failed')
         }
       } else {
         try {
