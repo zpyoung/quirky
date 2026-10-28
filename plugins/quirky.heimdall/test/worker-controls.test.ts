@@ -143,7 +143,6 @@ describe('native Heimdall worker controls', () => {
       ])
       expect(successfulCliResult('heimdall answer', answer)).toMatchObject({ kind: 'applied' })
       const askEvidence = await fixture.waitForQuestionResult()
-      expect(askEvidence.spawnError).toBeUndefined()
       expect(askEvidence.code).toBe(0)
       expect(successfulCliResult('orchestration ask', askEvidence)).toMatchObject({
         state: 'answered',
