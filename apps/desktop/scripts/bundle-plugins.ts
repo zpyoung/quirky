@@ -214,8 +214,25 @@ function copyUi(pluginId: string, pluginDir: string, outPluginDir: string, ui: s
   if (!existsSync(from)) {
     throw new Error(`plugin ${pluginId}: ${ui} is missing; run \`bun run build\` to produce the plugin UI modules`)
   }
-  mkdirSync(dirname(join(outPluginDir, ui)), { recursive: true })
-  cpSync(from, join(outPluginDir, ui))
+  const relativeDirectory = dirname(ui)
+  if (relativeDirectory === '.') {
+    mkdirSync(dirname(join(outPluginDir, ui)), { recursive: true })
+    cpSync(from, join(outPluginDir, ui))
+    return
+  }
+  const sourceDirectory = join(pluginDir, relativeDirectory)
+  const outputDirectory = join(outPluginDir, relativeDirectory)
+  mkdirSync(dirname(outputDirectory), { recursive: true })
+  cpSync(sourceDirectory, outputDirectory, { recursive: true })
+}
+
+function copyNotebookBridge(pluginDir: string, outPluginDir: string): void {
+  const relativePath = 'src/notebook/kernel-bridge.py'
+  const from = join(pluginDir, relativePath)
+  if (!existsSync(from)) return
+  const to = join(outPluginDir, relativePath)
+  mkdirSync(dirname(to), { recursive: true })
+  cpSync(from, to)
 }
 
 const LEGAL_NOTICE_NAME = /^(?:licen[cs]e|notice)(?:[._-].*)?$/i
@@ -231,8 +248,13 @@ function copyLegalNotices(pluginId: string, pluginDir: string, outPluginDir: str
 }
 
 /**
- * Writes a self-contained copy of each plugin and its declared private native assets. Entry
- * dependencies are bundled; test sources and node_modules remain behind.
+ * Writes a self-contained copy of every plugin under `srcDir` into `outDir`, replacing whatever
+ * was there. Each copy holds the rewritten manifest; `main` and `cli` bundled to `.js` with their
+ * dependencies inlined; generated UI asset tree and any `sounds/` directory; the plugin-local
+ * runtime bridge `src/notebook/kernel-bridge.py` when present; declared private package assets;
+ * and legal notices. Other sources, `test/` and `node_modules/` stay behind.
+ * A manifest that names a UI module which has not been built fails the whole bundle. Returns the
+ * bundled plugin IDs.
  */
 export async function bundlePlugins(srcDir: string, outDir: string): Promise<string[]> {
   rmSync(outDir, { recursive: true, force: true })
@@ -254,6 +276,7 @@ export async function bundlePlugins(srcDir: string, outDir: string): Promise<str
     if (manifest.main) manifest.main = await bundleEntry(id, pluginDir, outPluginDir, manifest.main)
     if (manifest.cli) manifest.cli = await bundleEntry(id, pluginDir, outPluginDir, manifest.cli)
     if (manifest.ui) copyUi(id, pluginDir, outPluginDir, manifest.ui)
+    copyNotebookBridge(pluginDir, outPluginDir)
     if (existsSync(join(pluginDir, SOUNDS))) cpSync(join(pluginDir, SOUNDS), join(outPluginDir, SOUNDS), { recursive: true })
     copyPrivateAssets(id, pluginDir, outPluginDir, manifest, [manifest.main, manifest.cli].filter((name): name is string => typeof name === 'string'))
     copyLegalNotices(id, pluginDir, outPluginDir)

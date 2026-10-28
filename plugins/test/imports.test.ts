@@ -188,6 +188,38 @@ describe('import fence', () => {
     ])
   })
 
+  test('ignores string contents, control flow, and comments that resemble imports', () => {
+    const dir = join(PLUGINS_ROOT, 'quirky.sample')
+    const file = join(dir, 'src', 'a.ts')
+    const source = [
+      "const mode = 'import'",
+      "if (mode === 'import') throw new Error('imports are unavailable')",
+      `const docs = "Don't use import('undeclared-package') here"`,
+      "// import 'comment-only-package'",
+      "/* export * from 'another-comment-only-package' */"
+    ].join('\n')
+    expect(scanImports(source, file, dir, new Set())).toEqual([])
+  })
+
+  test('flags forbidden static, type-only, export, type-expression, and dynamic imports', () => {
+    const dir = join(PLUGINS_ROOT, 'quirky.sample')
+    const file = join(dir, 'src', 'a.ts')
+    const source = [
+      "import { secret } from 'undeclared-runtime'",
+      "import type { Secret } from 'undeclared-type-import'",
+      "export type { Secret } from 'undeclared-type-export'",
+      "type Imported = import('undeclared-type-expression').Secret",
+      "const lazy = import('undeclared-dynamic')"
+    ].join('\n')
+    expect(scanImports(source, file, dir, new Set()).map((v) => [v.line, v.specifier])).toEqual([
+      [1, 'undeclared-runtime'],
+      [2, 'undeclared-type-import'],
+      [3, 'undeclared-type-export'],
+      [4, 'undeclared-type-expression'],
+      [5, 'undeclared-dynamic']
+    ])
+  })
+
   test('command metadata, quoted code and comments are not module imports', () => {
     const dir = join(PLUGINS_ROOT, 'quirky.sample')
     const source = [

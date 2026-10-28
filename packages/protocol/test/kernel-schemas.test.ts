@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import { CONNECTION_METHODS, KERNEL_EVENT_SCHEMAS, KERNEL_METHOD_SCHEMAS, type KernelMethodSchema, type Schema } from '../src'
 
+
 const EVENT_TYPES = [
   'notify',
   'plugin.changed',
@@ -27,6 +28,7 @@ function walk(schema: Schema): Schema[] {
 }
 
 describe('kernel method schemas', () => {
+
   test('read-only and destructive methods are flagged', () => {
     const entries = KERNEL_METHOD_SCHEMAS as Record<string, KernelMethodSchema>
     const readOnly = Object.keys(entries).filter((name) => entries[name]!.readOnly)

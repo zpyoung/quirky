@@ -201,6 +201,7 @@ export async function startDaemon(options: DaemonOptions): Promise<DaemonHandle>
       core,
       handle: rpcHandler,
       pluginFile: (id) => plugins.pluginFiles(id),
+      fileResources: pluginRuntime.fileResources,
       port: listenPort,
       rpcToken,
       daemonVersion,
@@ -254,6 +255,7 @@ export async function startDaemon(options: DaemonOptions): Promise<DaemonHandle>
       await server.stop(true)
       pluginRuntime.scheduler.stop()
       await plugins.stop()
+      await pluginRuntime.fileResources.close()
       pty.close()
       store.close()
     }

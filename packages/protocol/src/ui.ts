@@ -176,12 +176,17 @@ export type UiModel = {
   modules: Record<string, { url: string; provides: string[] }>
 }
 
-/** The daemon-owned window layout; `palette` is absent when the command palette is closed. */
+/** The daemon-owned layout: open view/panel, sidebar visibility and desired panel geometry; `palette` is absent when the command palette is closed. */
 export type UiLayout = {
   view: { id: string; input?: unknown } | null
   panel: string | null
   sidebar: boolean
-  focus: 'sidebar' | 'view' | 'panel' | null,
+  focus: 'sidebar' | 'view' | 'panel' | null
+  /** Desired width by effective panel ID; absent entries retain the shell's default width. */
+  panelWidths?: Record<string, number>
+  /** Global activity-bar position; absence retains the shell's existing default geometry. */
+  activityBarPosition?: 'top' | 'side'
+  /** Whether the command palette is open; absent means closed. */
   palette?: boolean
 }
 
