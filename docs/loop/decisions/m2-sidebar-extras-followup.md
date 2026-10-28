@@ -66,5 +66,38 @@
 - **Revisit if:** dispatch fails; follow bounded retry/fallback ladder.
 - **Source:** locked by docs/loop/LOOP.md
 
+## D7: Adjudicate mechanical spec references separately from model findings
+- **Question:** whether the mandatory Codex specification pass found a real design blocker?
+- **Options:** blindly accept prepass shorthand failures; inspect each reported reference against its full contextual path.
+- **Chose:** standard Codex promote and fresh refute both emitted empty arrays; no model findings, advisories, limitations or questions. Mechanical gate reported NEEDS_FIXES with nineteen LOW-confidence MEDIUM reference candidates. F1–F4/F7–F11 are contextual short filenames with full paths in Code references; F5–F6 are valid comma-separated line selectors unsupported by the checker; F12–F13 are runnable command text misclassified as paths; F14–F19 are valid sibling/relative links whose context was lost when staging both docs in a scratch artifact. Reject these candidates as false positives after resolving their full repository/spec context. No claim that the unmodified mechanical gate returned PASS.
+- **Why:** the gate cannot resolve markdown sibling links after concatenation into /tmp or recognize shell commands as commands. Rewriting execution contracts to satisfy that heuristic would not improve implementation fidelity.
+- **Evidence:** /tmp/quirky-sidebar-followup.e9Wt3N/spec-review/{resolve,prepass,findings,refute,gate,manifest}.json; actual model dispatches returned; named sources read in this run.
+- **Reversibility:** easy.
+- **Confidence:** high.
+- **Revisit if:** a worker cannot resolve the contextual full pointer.
+- **Source:** assumed — autonomous
+
+## D8: Replace the incorrect activity expectation with consumer-visible fallback precedence coverage
+- **Question:** why did the baseline activity scenario fail, and should production projection change?
+- **Options:** take the maximum of every timestamp; preserve observed-activity precedence and use creation/repository values only as fallbacks.
+- **Chose:** remove the old incorrect unconditional-maximum scenario, not repin it. Add real-daemon cutoff/visibility regressions proving departure recency takes precedence over later fallback timestamps, then creation-only/repository-only fallback and all rolling-window boundaries. Preserve fresh/stale canonical agent evidence; add failed-provider versus absent-optional-source and positive-evidence precedence cases. Corrupt preferences now exercise restart and valid recovery. Actual extras contribution override/disable keeps worktrees usable. Disable automatic hooks before enabling agent-status in test homes.
+- **Why:** projection.ts returns positive observed activity before fallback fields, exactly as the locked contract requires. The failed test expected a later fallback timestamp even though positive observations existed. No production runtime defect was established.
+- **Evidence:** actual baseline suite failure at activity.test.ts157, normal and automatic isolated retry; corrected runtime suite six files passed without retries in26.95s; component source/tests under plugins/quirky.sidebar-extras.
+- **Reversibility:** easy.
+- **Confidence:** high.
+- **Revisit if:** a canonical runtime source demonstrates incorrect activity precedence.
+- **Source:** locked by docs/quirk/specs/2026-10-27-m2-sidebar-extras/tech.md
+
+## D9: Prove guard failures before changing renderer behavior
+- **Question:** which guard defects and preparation-fixture repairs were actually observed?
+- **Options:** accept worker claims; run parent-owned tests after the component barrier.
+- **Chose:** parent observed folder-owned/ownerless drag changing Team→Release and Status/mid-mode drag changing null→Team; ownerless menus exposed membership. Existing Project drag and manual reorder passed. Repair Menu/Tree eligibility and mode gates, retain independent reorder, use rolling labels. Preparation initially activated stock filtering against incomplete WorktreeControl fixtures, hiding rows because archivedAt was undefined; fill required canonical fixture fields, not weaken production. Select the activity filter control instead of the stock-options control. Remove obsolete copied label inventories and exact unrelated separator-position pins while preserving first/nested/sticky/geometry assertions.
+- **Why:** these are presentation-only membership safety boundaries; neither folder writes nor grouping changes may silently alter membership. Tests must exercise actual semantic controls.
+- **Evidence:** parent red run15pass/13fail with five concrete mutation/menu failures; updated two-file renderer/e2e run passed without retry21.70s. Additional immediate-preview cleanup seam is still being completed; no final source acceptance claim yet.
+- **Reversibility:** easy.
+- **Confidence:** high for exercised cases.
+- **Revisit if:** final source or caught-up shell invalidates a tested interaction.
+- **Source:** assumed — autonomous
+
 ## Progress
-Scope audit and original17SC/decisions read. Combined continuation logic plus sibling tech authored and self-reviewed; no source changes. Next: commit specs, run required Codex spec review, then disjoint membership/renderer and daemon-edge components, parent-only checks after barrier, guarded web campaign, bounded final review, dependency-ready/catchup/land. No verification pass claimed yet.
+Runtime component six-file suite passes; renderer two-file suite passes on its current source. Final review of source identified immediate mode-change preview cleanup and mutation-time owner guard still to tighten; worker is preparing that boundary. Parent has not committed either component while a sibling is active. Next: finish boundary red/green, authoritative scope/HEAD audit, commit and merge components/remove their trees, catch up/read decisions, affected checks+build, guarded web, bounded final review, dependency-ready/land. Scratch fixture is prepared, not started; no web campaign pass claimed.
