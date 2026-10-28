@@ -39,10 +39,10 @@ export function conflictBlocks(text: string): ConflictBlock[] {
 }
 
 const LINE_CLASSES = {
-  marker: 'qg-conflict-marker',
-  current: 'qg-conflict-current',
-  base: 'qg-conflict-base',
-  incoming: 'qg-conflict-incoming'
+  marker: 'ui-editor-conflict-marker',
+  current: 'ui-editor-conflict-current',
+  base: 'ui-editor-conflict-base',
+  incoming: 'ui-editor-conflict-incoming'
 } as const
 
 class LabelWidget extends WidgetType {
@@ -55,8 +55,7 @@ class LabelWidget extends WidgetType {
   }
 
   toDOM(): HTMLElement {
-    const span = document.createElement('span')
-    span.className = 'qg-conflict-label'
+    span.className = 'ui-editor-conflict-label'
     span.textContent = this.label
     return span
   }
@@ -64,11 +63,6 @@ class LabelWidget extends WidgetType {
 
 const lineDecoration = (cls: string) => Decoration.line({ class: cls })
 
-/**
- * The line tints and end-of-line labels for every conflict block in `doc`: marker lines get
- * `qg-conflict-marker` plus a label ("Current change", "Common ancestor", "Incoming change",
- * "End conflict"); the lines between markers get `qg-conflict-current|base|incoming`.
- */
 export function conflictDecorationSet(doc: Text): DecorationSet {
   const builder = new RangeSetBuilder<Decoration>()
   const marker = (lineNumber: number, label: string) => {

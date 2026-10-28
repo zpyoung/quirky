@@ -1,5 +1,4 @@
-import { useRef, useState } from 'react'
-import { PopupMenu } from '../panel/Menu'
+import { Button, IconButton, Menu, StatusDot } from '@quirky/ui'
 import { SparkleIcon } from './SparkleIcon'
 
 /** What a card needs to offer an AI launch: the action, whether one is running, and the two ways to start it. */
@@ -36,40 +35,25 @@ const COPY: Readonly<Record<FixButtonProps['action'], Copy>> = {
 /** The AI launch button of a card: the primary starts the default agent, the chevron offers Customize launch... */
 export function FixSplitButton({ action, busy, onFix, onCustomize }: FixButtonProps) {
   const copy = COPY[action]
-  const chevron = useRef<HTMLButtonElement>(null)
-  const [menuAt, setMenuAt] = useState<{ x: number; y: number } | null>(null)
-
-  const openMenu = () => {
-    const box = chevron.current?.getBoundingClientRect()
-    setMenuAt({ x: box?.left ?? 0, y: box?.bottom ?? 0 })
-  }
 
   return (
-    <div className="scm-split scm-ai-fix">
-      <button type="button" className="scm-ai-fix-primary" aria-label={copy.primary} title={copy.title} disabled={busy} onClick={onFix}>
-        {busy ? <span className="scm-spinner" aria-hidden="true" /> : <SparkleIcon />}
+    <div className="ui-cluster">
+      <Button type="button" variant="primary" aria-label={copy.primary} title={copy.title} disabled={busy} onClick={onFix}>
+        {busy ? <StatusDot status="working" /> : <SparkleIcon />}
         {copy.label}
-      </button>
-      <button
-        ref={chevron}
-        type="button"
-        className="scm-ai-fix-chevron"
-        aria-label={copy.chevron}
-        title={copy.chevron}
-        aria-haspopup="menu"
-        disabled={busy}
-        onClick={openMenu}
-      >
-        ▾
-      </button>
-      {menuAt && (
-        <PopupMenu
-          x={menuAt.x}
-          y={menuAt.y}
-          label={copy.chevron}
-          items={[{ label: 'Customize launch...', onSelect: onCustomize }]}
-          onClose={() => setMenuAt(null)}
-        />
+      </Button>
+      {busy ? (
+        <IconButton label={copy.chevron} title={copy.chevron} disabled>
+          <span aria-hidden="true">▾</span>
+        </IconButton>
+      ) : (
+        <div title={copy.chevron}>
+          <Menu
+            label={copy.chevron}
+            trigger="▾"
+            items={[{ id: 'customize-launch', label: 'Customize launch...', onAction: onCustomize }]}
+          />
+        </div>
       )}
     </div>
   )

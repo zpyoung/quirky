@@ -64,9 +64,9 @@ afterEach(() => {
 describe('quirky.git combined diff', () => {
   test('SC-62: reads "Changes" with the file count, and the toolbar has the named buttons', async () => {
     const { element } = await open()
-    expect(element.querySelector('.qgv-toolbar .qgv-title')?.textContent).toBe('Changes')
-    expect(element.querySelector('.qgv-count')?.textContent).toBe('8 changed files')
-    const labels = [...element.querySelectorAll('.qgv-toolbar button')].map((b) => b.textContent)
+    expect(element.querySelector('h2')?.textContent).toBe('Changes')
+    expect(element.querySelector('[aria-label="8 changed files"]')?.textContent).toBe('8 changed files')
+    const labels = [...(element.querySelector('h2')?.closest('header')?.querySelectorAll('button') ?? [])].map((b) => b.textContent)
     expect(labels).toEqual([
       'Open Branch Diff',
       'Collapse All',
@@ -135,10 +135,11 @@ describe('quirky.git combined diff', () => {
 
   test('SC-62: each section header shows the path, counts, copy path and Open diff', async () => {
     const { element } = await open()
-    const head = sectionOf(element, 'f1.ts').querySelector('.qgv-section-head')!
-    expect(head.querySelector('.qgv-path')?.textContent).toBe('f1.ts')
-    expect(head.querySelector('.qgv-counts')?.textContent).toBe('+2 -1')
-    expect(byLabel(head, 'Copy path')).not.toBeNull()
+    const head = sectionOf(element, 'f1.ts').querySelector('header')!
+    expect(head.querySelector('[title="f1.ts"]')?.textContent).toBe('f1.ts')
+    expect(head.querySelector('[aria-label="Added 2 lines"]')?.textContent).toBe('+2')
+    expect(head.querySelector('[aria-label="Removed 1 line"]')?.textContent).toBe('-1')
+    expect(byText(head, 'Copy path')).not.toBeNull()
     await click(byText(head, 'Open diff'))
     expectOpened(fake, s.DIFF_VIEW, { worktree: 'w1', mode: 'file', source: 'unstaged', path: 'f1.ts' })
   })
@@ -148,7 +149,7 @@ describe('quirky.git combined diff', () => {
     expect(report().collapsed).toBe(false)
     await click(byText(element, 'Collapse All'))
     expect(report().collapsed).toBe(true)
-    expect([...element.querySelectorAll<HTMLElement>('.qgv-section-body')].every((b) => b.hidden)).toBe(true)
+    expect([...element.querySelectorAll<HTMLElement>('section[data-path] > div[hidden]')].every((b) => b.hidden)).toBe(true)
     expect(byText(element, 'Expand All')).not.toBeNull()
     await click(byText(element, 'Expand All'))
     expect(report().collapsed).toBe(false)
@@ -166,8 +167,8 @@ describe('quirky.git combined diff', () => {
   test('SC-62: a single section collapses from its chevron', async () => {
     const { element } = await open()
     await click(byLabel(element, 'Collapse f2.ts'))
-    expect(sectionOf(element, 'f2.ts').querySelector<HTMLElement>('.qgv-section-body')!.hidden).toBe(true)
-    expect(sectionOf(element, 'f1.ts').querySelector<HTMLElement>('.qgv-section-body')!.hidden).toBe(false)
+    expect(sectionOf(element, 'f2.ts').querySelector<HTMLElement>(':scope > div[hidden]')!.hidden).toBe(true)
+    expect(sectionOf(element, 'f1.ts').querySelector<HTMLElement>(':scope > div[hidden]')!.hidden).toBe(false)
   })
 
   test('SC-64: load-diff still works on a collapsed section', async () => {
@@ -199,7 +200,7 @@ describe('quirky.git combined diff', () => {
     expect(element.querySelector('nav[aria-label=Files]')).toBeNull()
     await click(byText(element, 'Show file tree'))
     expect(fake.settings.combinedDiffFileTree).toBe('shown')
-    const items = [...element.querySelectorAll('.qgv-tree-item')].map((i) => i.textContent)
+    const items = [...element.querySelectorAll('nav[aria-label="Files"] button[aria-pressed]')].map((i) => i.textContent)
     expect(items).toEqual([...small, 'big.txt'])
     expect(byText(element, 'Hide file tree')).not.toBeNull()
     await click(byText(element, 'Hide file tree'))
@@ -232,7 +233,7 @@ describe('quirky.git combined diff', () => {
       removed: 0
     })
     const branch = await open({ worktree: 'w1', mode: 'combined', area: 'branch' })
-    expect(branch.element.querySelector('.qgv-toolbar .qgv-title')?.textContent).toBe('Branch Changes (origin/main)')
+    expect(branch.element.querySelector('h2')?.textContent).toBe('Branch Changes (origin/main)')
     expect(fake.callsTo('quirky.git/diff').at(-1)?.params).toEqual({ worktree: 'w1', path: 'util.ts', source: 'branch' })
     expect(byText(branch.element, 'Open All Changes')).not.toBeNull()
     expect(branch.element.querySelector('.cm-content[contenteditable=true]')).toBeNull()
@@ -284,7 +285,7 @@ describe('quirky.git combined diff', () => {
     expect([...element.querySelectorAll('section')].map((e) => e.dataset.path)).toEqual(['s.ts', 'u.ts', 'n.txt', 'c.ts'])
     const sources = fake.callsTo('quirky.git/diff').map((c) => c.params.source)
     expect(sources).toEqual(['staged', 'unstaged', 'unstaged', 'branch'])
-    expect(element.querySelector('.qgv-toolbar .qgv-title')?.textContent).toBe('All Changes')
+    expect(element.querySelector('h2')?.textContent).toBe('All Changes')
   })
 
   test('a commit\'s combined diff reads commitFiles and diffs each file against that commit', async () => {
@@ -297,7 +298,7 @@ describe('quirky.git combined diff', () => {
     const { element } = await open({ worktree: 'w1', mode: 'combined', commit: 'ccccccc' })
     expect(fake.callsTo('quirky.git/commitFiles')[0].params).toEqual({ worktree: 'w1', commit: 'ccccccc' })
     expect(fake.callsTo('quirky.git/diff')[0].params).toEqual({ worktree: 'w1', path: 'a.ts', source: 'commit', commit: oid })
-    expect(element.querySelector('.qgv-toolbar .qgv-title')?.textContent).toBe('Commit ccccccc')
+    expect(element.querySelector('h2')?.textContent).toBe('Commit ccccccc')
     expect(byText(element, 'Open Branch Diff')).toBeNull()
   })
 
@@ -376,7 +377,8 @@ describe('quirky.git combined diff', () => {
     await act(async () => fake.emit({ type: 'quirky.git/changed', data: { worktreeId: 'w1' } }))
     await settle()
     expect(fake.callsTo('quirky.git/diff').slice(before).map((c) => c.params.path)).toEqual(small.slice(0, 6))
-    expect(sectionOf(element, 'f1.ts').querySelector('.qgv-counts')?.textContent).toBe('+5 -5')
+    expect(sectionOf(element, 'f1.ts').querySelector('[aria-label="Added 5 lines"]')?.textContent).toBe('+5')
+    expect(sectionOf(element, 'f1.ts').querySelector('[aria-label="Removed 5 lines"]')?.textContent).toBe('-5')
   })
 
   test('a loaded section whose file is rewritten with the same counts shows the new content', async () => {
@@ -398,7 +400,7 @@ describe('quirky.git combined diff', () => {
       params.path === 'f1.ts' ? textDiff({ ...diffOf('f1.ts'), modified: 'agent\n', modifiedHash: 'hash-2' }) : diffOf(params.path as string)
     await act(async () => fake.emit({ type: 'quirky.git/changed', data: { worktreeId: 'w1' } }))
     await settle()
-    expect(sectionOf(element, 'f1.ts').querySelector('.qgv-stale')).not.toBeNull()
+    expect(sectionOf(element, 'f1.ts').querySelector('[role="alert"]')).not.toBeNull()
     expect(report().stale).toBe(true)
     expect(s.modifiedEditor(element, 0).state.sliceDoc()).toBe('mine\n')
   })
@@ -412,8 +414,8 @@ describe('quirky.git combined diff: editable sections', () => {
     fake.handlers['quirky.git/save'] = () => ({ hash: 'hash-2' })
     edit(element, 'mine\n', 1)
     await settle()
-    expect(sectionOf(element, 'f2.ts').querySelector('.qgv-dirty')).not.toBeNull()
-    expect(sectionOf(element, 'f1.ts').querySelector('.qgv-dirty')).toBeNull()
+    expect(sectionOf(element, 'f2.ts').querySelector('[aria-label="Unsaved changes"]')).not.toBeNull()
+    expect(sectionOf(element, 'f1.ts').querySelector('[aria-label="Unsaved changes"]')).toBeNull()
     expect(report().dirty).toBe(true)
     await act(async () => void (await fake.run('save')))
     await settle()
@@ -421,7 +423,7 @@ describe('quirky.git combined diff: editable sections', () => {
       { worktree: 'w1', path: 'f2.ts', content: 'mine\n', expected: 'hash-1' }
     ])
     expect(report().dirty).toBe(false)
-    expect(sectionOf(element, 'f2.ts').querySelector('.qgv-dirty')).toBeNull()
+    expect(sectionOf(element, 'f2.ts').querySelector('[aria-label="Unsaved changes"]')).toBeNull()
   })
 
   test('SC-62: a stale section shows its own bar with Reload from Disk and Overwrite', async () => {
@@ -432,7 +434,7 @@ describe('quirky.git combined diff: editable sections', () => {
     edit(element, 'mine\n', 0)
     await act(async () => void (await fake.run('save')))
     await settle()
-    const bar = sectionOf(element, 'f1.ts').querySelector('.qgv-stale')
+    const bar = sectionOf(element, 'f1.ts').querySelector('[role="alert"]')
     expect(bar?.textContent).toContain('This file changed on disk since this section loaded.')
     expect(report().stale).toBe(true)
     fake.handlers['quirky.git/save'] = () => ({ hash: 'hash-9' })
@@ -451,7 +453,7 @@ describe('quirky.git combined diff: editable sections', () => {
     const before = fake.callsTo('quirky.git/diff').length
     await click(byText(sectionOf(element, 'f1.ts'), 'Reload from Disk'))
     expect(fake.callsTo('quirky.git/diff').slice(before).map((c) => c.params.path)).toEqual(['f1.ts'])
-    expect(sectionOf(element, 'f1.ts').querySelector('.qgv-stale')).toBeNull()
+    expect(sectionOf(element, 'f1.ts').querySelector('[role="alert"]')).toBeNull()
     expect(s.modifiedEditor(element, 0).state.sliceDoc()).toBe(modifiedText('f1.ts'))
   })
 

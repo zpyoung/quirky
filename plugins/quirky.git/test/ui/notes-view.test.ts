@@ -145,8 +145,9 @@ async function addAt(view: View, n: number): Promise<void> {
   await click(plusButton(view.dom))
 }
 
-const draftOf = (root: ParentNode) => q(root, '.qgv-note-draft')
-const cardsOf = (root: ParentNode) => qa(root, '.qgv-note-card')
+const draftOf = (root: ParentNode) => q(root, '[data-note-card="draft"]')
+const cardsOf = (root: ParentNode) => qa(root, '[data-note-card="saved"]')
+const notePillOf = (root: ParentNode) => q<HTMLButtonElement>(root, 'button[aria-label^="Show "], button[aria-label="Send AI notes to an agent"]')
 const textareaOf = (card: ParentNode) => q<HTMLTextAreaElement>(card, 'textarea')!
 const buttonIn = (card: ParentNode, label: string) => qa<HTMLButtonElement>(card, 'button').find((b) => text(b) === label || b.getAttribute('aria-label') === label) ?? null
 
@@ -189,11 +190,11 @@ describe('NA-1: the "+" beside a line adds a one-line note', () => {
     await hover(view, 30)
     const plus = plusButton(element)!
     expect(plus.title).toBe('Add note for the AI')
-    expect(plus.closest('.qgv-note-gutter')).not.toBeNull()
+    expect(plus.closest('.ui-editor-action-gutter')).not.toBeNull()
     await click(plus)
 
     const draft = draftOf(element)!
-    expect(text(q(draft, '.qgv-note-title'))).toBe('Line 30')
+    expect(text(q(draft, '.ui-tool-panel-frame__title'))).toBe('Line 30')
     expect(textareaOf(draft).placeholder).toBe('Add note for the AI')
     expect(qa(draft, 'button').map(text)).toEqual(['Cancel', 'Add note'])
     expect(lineEl(view, 30).nextElementSibling?.contains(draft)).toBe(true)
@@ -205,13 +206,13 @@ describe('NA-1: the "+" beside a line adds a one-line note', () => {
     await wait(10)
     expect(draftOf(element)).toBeNull()
     const [saved] = cardsOf(element)
-    expect(text(q(saved, '.qgv-note-meta'))).toBe('Note line 30')
-    expect(text(q(saved, '.qgv-note-body'))).toBe('Handle the empty list')
+    expect(text(q(saved, '.ui-tool-panel-frame__title'))).toBe('Note line 30')
+    expect(text(q(saved, 'p'))).toBe('Handle the empty list')
     expect(lineEl(view, 30).nextElementSibling?.contains(saved)).toBe(true)
     expect(buttonIn(saved, 'Send notes to an agent')).not.toBeNull()
     expect(buttonIn(saved, 'Edit note')).not.toBeNull()
     expect(buttonIn(saved, 'Delete note')).not.toBeNull()
-    expect(text(q(element, '.qgv-note-pill'))).toBe('AI notes 1')
+    expect(text(notePillOf(element))).toBe('AI notes 1')
   })
 })
 
@@ -222,17 +223,17 @@ describe('NA-2: a range comes from a gutter drag or from Mod+Shift+A', () => {
     await dispatch(numberCell(view, 3), pointer('pointerdown'))
     await dispatch(numberCell(view, 5), pointer('pointermove'))
     await wait(40)
-    expect(qa(view.dom, '.qgv-note-range').map((el) => el.textContent)).toEqual(['line 3', 'line 4', 'line 5'])
+    expect(qa(view.dom, '.ui-editor-line-accent').map((el) => el.textContent)).toEqual(['line 3', 'line 4', 'line 5'])
     await dispatch(numberCell(view, 7), pointer('pointerup'))
 
     const draft = draftOf(element)!
-    expect(text(q(draft, '.qgv-note-title'))).toBe('Lines 3-7')
+    expect(text(q(draft, '.ui-tool-panel-frame__title'))).toBe('Lines 3-7')
     expect(lineEl(view, 7).nextElementSibling?.contains(draft)).toBe(true)
     await setValue(textareaOf(draft), 'Extract this')
     await press(textareaOf(draft), 'Enter')
     expect(addCalls()).toEqual([{ worktree: 'w1', path: 'math.ts', startLine: 3, line: 7, body: 'Extract this' }])
     await wait(10)
-    expect(text(q(cardsOf(element)[0], '.qgv-note-meta'))).toBe('Note lines 3-7')
+    expect(text(q(cardsOf(element)[0], '.ui-tool-panel-frame__title'))).toBe('Note lines 3-7')
   })
 
   test('dragging upward orders the range', async () => {
@@ -240,7 +241,7 @@ describe('NA-2: a range comes from a gutter drag or from Mod+Shift+A', () => {
     const view = modifiedEditor(element)
     await dispatch(numberCell(view, 9), pointer('pointerdown'))
     await dispatch(numberCell(view, 6), pointer('pointerup'))
-    expect(text(q(draftOf(element)!, '.qgv-note-title'))).toBe('Lines 6-9')
+    expect(text(q(draftOf(element)!, '.ui-tool-panel-frame__title'))).toBe('Lines 6-9')
   })
 
   test('(b) a selection from line 12 column 1 to line 15 column 1 and the chord: Lines 12-14', async () => {
@@ -248,8 +249,8 @@ describe('NA-2: a range comes from a gutter drag or from Mod+Shift+A', () => {
     const view = modifiedEditor(element)
     select(view, 12, 15)
     await chord(view)
-    expect(text(q(draftOf(element)!, '.qgv-note-title'))).toBe('Lines 12-14')
-    expect(qa(view.dom, '.qgv-note-range').map((el) => el.textContent)).toEqual(['line 12', 'line 13', 'line 14'])
+    expect(text(q(draftOf(element)!, '.ui-tool-panel-frame__title'))).toBe('Lines 12-14')
+    expect(qa(view.dom, '.ui-editor-line-accent').map((el) => el.textContent)).toEqual(['line 12', 'line 13', 'line 14'])
   })
 
   test('(b) a selection that ends inside line 15 keeps it, and a cursor makes a one-line draft', async () => {
@@ -257,11 +258,11 @@ describe('NA-2: a range comes from a gutter drag or from Mod+Shift+A', () => {
     const view = modifiedEditor(element)
     select(view, 12, 15, 2)
     await chord(view)
-    expect(text(q(draftOf(element)!, '.qgv-note-title'))).toBe('Lines 12-15')
+    expect(text(q(draftOf(element)!, '.ui-tool-panel-frame__title'))).toBe('Lines 12-15')
     await press(textareaOf(draftOf(element)!), 'Escape')
     select(view, 8, 8)
     await chord(view)
-    expect(text(q(draftOf(element)!, '.qgv-note-title'))).toBe('Line 8')
+    expect(text(q(draftOf(element)!, '.ui-tool-panel-frame__title'))).toBe('Line 8')
   })
 
   test('the chord leaves an open draft as it is', async () => {
@@ -271,8 +272,8 @@ describe('NA-2: a range comes from a gutter drag or from Mod+Shift+A', () => {
     await setValue(textareaOf(draftOf(element)!), 'typed')
     select(view, 3, 5, 1)
     await chord(view)
-    expect(qa(element, '.qgv-note-draft')).toHaveLength(1)
-    expect(text(q(draftOf(element)!, '.qgv-note-title'))).toBe('Line 30')
+    expect(qa(element, '[data-note-card="draft"]')).toHaveLength(1)
+    expect(text(q(draftOf(element)!, '.ui-tool-panel-frame__title'))).toBe('Line 30')
     expect(textareaOf(draftOf(element)!).value).toBe('typed')
   })
 
@@ -284,11 +285,11 @@ describe('NA-2: a range comes from a gutter drag or from Mod+Shift+A', () => {
     await dispatch(document, new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }))
     await dispatch(numberCell(view, 9), pointer('pointerup'))
     expect(draftOf(element)).toBeNull()
-    expect(qa(view.dom, '.qgv-note-range')).toHaveLength(0)
+    expect(qa(view.dom, '.ui-editor-line-accent')).toHaveLength(0)
 
     await dispatch(numberCell(view, 11), pointer('pointerdown'))
     await dispatch(numberCell(view, 11), pointer('pointerup'))
-    expect(text(q(draftOf(element)!, '.qgv-note-title'))).toBe('Line 11')
+    expect(text(q(draftOf(element)!, '.ui-tool-panel-frame__title'))).toBe('Line 11')
   })
 
   test('a drag ignores touch, ctrl-click, other buttons and a press while a draft is open', async () => {
@@ -302,7 +303,7 @@ describe('NA-2: a range comes from a gutter drag or from Mod+Shift+A', () => {
     await addAt(view, 30)
     await dispatch(numberCell(view, 3), pointer('pointerdown'))
     await dispatch(numberCell(view, 5), pointer('pointerup'))
-    expect(text(q(draftOf(element)!, '.qgv-note-title'))).toBe('Line 30')
+    expect(text(q(draftOf(element)!, '.ui-tool-panel-frame__title'))).toBe('Line 30')
   })
 
   test('pressing the "+" and releasing on it opens its line once', async () => {
@@ -313,8 +314,8 @@ describe('NA-2: a range comes from a gutter drag or from Mod+Shift+A', () => {
     await dispatch(plus, pointer('pointerdown'))
     await dispatch(plus, pointer('pointerup'))
     await dispatch(plus, new MouseEvent('click', { bubbles: true }))
-    expect(qa(element, '.qgv-note-draft')).toHaveLength(1)
-    expect(text(q(draftOf(element)!, '.qgv-note-title'))).toBe('Line 30')
+    expect(qa(element, '[data-note-card="draft"]')).toHaveLength(1)
+    expect(text(q(draftOf(element)!, '.ui-tool-panel-frame__title'))).toBe('Line 30')
   })
 })
 
@@ -408,9 +409,9 @@ describe('NA-3: the draft card keys and buttons', () => {
     const { element, view, area } = await draftOn()
     await setValue(area, 'carry me')
     await addAt(view, 31)
-    expect(qa(element, '.qgv-note-draft')).toHaveLength(1)
+    expect(qa(element, '[data-note-card="draft"]')).toHaveLength(1)
     const draft = draftOf(element)!
-    expect(text(q(draft, '.qgv-note-title'))).toBe('Line 31')
+    expect(text(q(draft, '.ui-tool-panel-frame__title'))).toBe('Line 31')
     expect(textareaOf(draft).value).toBe('carry me')
     expect(lineEl(view, 31).nextElementSibling?.contains(draft)).toBe(true)
   })
@@ -474,7 +475,7 @@ describe('NA-6: notes are edited and deleted', () => {
     expect(fake.callsTo('quirky.git/editNote')[0]!.params).toEqual({ worktree: 'w1', id: 'n1', body: 'Handle empty and null' })
     await wait(10)
     expect(q(card(), 'textarea')).toBeNull()
-    expect(text(q(card(), '.qgv-note-body'))).toBe('Handle empty and null')
+    expect(text(q(card(), 'p'))).toBe('Handle empty and null')
   })
 
   test('Escape and Cancel leave the text as it was', async () => {
@@ -482,24 +483,24 @@ describe('NA-6: notes are edited and deleted', () => {
     await click(buttonIn(card(), 'Edit note'))
     await setValue(textareaOf(card()), 'changed')
     await press(textareaOf(card()), 'Escape')
-    expect(text(q(card(), '.qgv-note-body'))).toBe('Handle the empty list')
+    expect(text(q(card(), 'p'))).toBe('Handle the empty list')
     await click(buttonIn(card(), 'Edit note'))
     expect(textareaOf(card()).value).toBe('Handle the empty list')
     await setValue(textareaOf(card()), 'changed')
     await click(buttonIn(card(), 'Cancel'))
-    expect(text(q(card(), '.qgv-note-body'))).toBe('Handle the empty list')
+    expect(text(q(card(), 'p'))).toBe('Handle the empty list')
     expect(fake.callsTo('quirky.git/editNote')).toHaveLength(0)
   })
 
   test('Delete note removes the card and the pill with no confirmation', async () => {
     const { element, card } = await withNote()
-    expect(q(element, '.qgv-note-pill')).not.toBeNull()
+    expect(notePillOf(element)).not.toBeNull()
     await click(buttonIn(card(), 'Delete note'))
     await wait(10)
     expect(fake.callsTo('quirky.git/deleteNote')[0]!.params).toEqual({ worktree: 'w1', id: 'n1' })
     expect(server.confirms).toBe(0)
     expect(cardsOf(element)).toHaveLength(0)
-    expect(q(element, '.qgv-note-pill')).toBeNull()
+    expect(notePillOf(element)).toBeNull()
   })
 
   test('the card send menu offers only this note', async () => {
@@ -530,7 +531,7 @@ describe('NA-7: a note shows in every diff of its path, never where there is no 
       })
       const view = modifiedEditor(element)
       const [card] = cardsOf(element)
-      expect(text(q(card!, '.qgv-note-meta'))).toBe('Note lines 2-4')
+      expect(text(q(card!, '.ui-tool-panel-frame__title'))).toBe('Note lines 2-4')
       expect(lineEl(view, 4).nextElementSibling?.contains(card!)).toBe(true)
       unmount()
       mounted = null
@@ -541,7 +542,7 @@ describe('NA-7: a note shows in every diff of its path, never where there is no 
     const short = textDiff({ original: numbered(30), modified: numbered(30).replace('line 20\n', 'twenty\n') })
     const { element } = await open([note('far', 'math.ts', 99)], short)
     const view = modifiedEditor(element)
-    expect(text(q(cardsOf(element)[0]!, '.qgv-note-meta'))).toBe('Note line 99')
+    expect(text(q(cardsOf(element)[0]!, '.ui-tool-panel-frame__title'))).toBe('Note line 99')
     expect(lineEl(view, view.state.doc.lines).nextElementSibling?.contains(cardsOf(element)[0]!)).toBe(true)
   })
 
@@ -553,9 +554,9 @@ describe('NA-7: a note shows in every diff of its path, never where there is no 
     mounted = mountView(fake, { worktree: 'w1', mode: 'combined', area: 'unstaged' })
     await settle()
     const view = modifiedEditor(mounted.element)
-    expect(text(q(cardsOf(mounted.element)[0]!, '.qgv-note-meta'))).toBe('Note lines 2-4')
+    expect(text(q(cardsOf(mounted.element)[0]!, '.ui-tool-panel-frame__title'))).toBe('Note lines 2-4')
     await addAt(view, 10)
-    expect(text(q(draftOf(mounted.element)!, '.qgv-note-title'))).toBe('Line 10')
+    expect(text(q(draftOf(mounted.element)!, '.ui-tool-panel-frame__title'))).toBe('Line 10')
     await setValue(textareaOf(draftOf(mounted.element)!), 'Also this')
     await press(textareaOf(draftOf(mounted.element)!), 'Enter')
     expect(addCalls()).toEqual([{ worktree: 'w1', path: 'util.ts', line: 10, body: 'Also this' }])
@@ -570,7 +571,7 @@ describe('NA-7: a note shows in every diff of its path, never where there is no 
       const { element } = await open([note('n1', 'math.ts', 3)], diff)
       expect(q(element, '.cm-editor')).toBeNull()
       expect(plusButton(element)).toBeNull()
-      expect(q(element, '.qgv-note-card')).toBeNull()
+      expect(q(element, '[data-note-card="saved"]')).toBeNull()
       await act(async () => void (await fake.run('add-review-note')))
       await settle()
       expect(draftOf(element)).toBeNull()
@@ -613,10 +614,10 @@ describe('NA-14: the diff header pill and the combined view note controls', () =
 
   test('the single-file header pill opens the send menu with This file and All unsent notes', async () => {
     const { element } = await open(three)
-    const pill = q<HTMLButtonElement>(element, '.qgv-note-pill')!
+    const pill = notePillOf(element)!
     expect(text(pill)).toBe('AI notes 2')
     expect(pill.getAttribute('aria-label')).toBe('Send AI notes to an agent')
-    expect(pill.closest('.qgv-bar')).not.toBeNull()
+    expect(pill.closest('header')).not.toBeNull()
     await click(pill)
     const menu = q(document.body, '[role="menu"]')!
     expect(qa(menu, ':scope > li').map((li) => text(li))).toEqual(['Send notes', 'This file2', 'All unsent notes3'])
@@ -624,7 +625,7 @@ describe('NA-14: the diff header pill and the combined view note controls', () =
 
   test('no pill without a note on the file', async () => {
     const { element } = await open([note('u1', 'util.ts', 2, 4)])
-    expect(q(element, '.qgv-note-pill')).toBeNull()
+    expect(notePillOf(element)).toBeNull()
   })
 
   async function combined(notes: TestNote[]) {
@@ -642,8 +643,8 @@ describe('NA-14: the diff header pill and the combined view note controls', () =
     const element = await combined(three)
     const pill = byLabel(element, 'Show 3 AI notes')!
     expect(text(pill)).toBe('AI notes 3')
-    expect(pill.closest('.qgv-toolbar')).not.toBeNull()
-    const sendIcon = (path: string) => q(element.querySelector(`section[data-path="${path}"]`)!, '.qgv-section-head [aria-label="Send notes to an agent"]')
+    expect(pill.closest('header')).not.toBeNull()
+    const sendIcon = (path: string) => q(element.querySelector(`section[data-path="${path}"]`)!, 'header button[aria-label="Send notes to an agent"]')
     expect(sendIcon('math.ts')).not.toBeNull()
     expect(sendIcon('util.ts')).not.toBeNull()
     expect(sendIcon('other.ts')).toBeNull()
@@ -654,25 +655,25 @@ describe('NA-14: the diff header pill and the combined view note controls', () =
     await click(document.body)
     document.body.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
 
-    const send = q(element, '.qgv-toolbar')!.querySelector<HTMLButtonElement>('button[aria-label="Send notes to an agent"]')!
+    const send = q<HTMLButtonElement>(element, 'header button[aria-label="Send notes to an agent"]')!
     expect(text(send)).toContain('Send')
   })
 
   test('no notes: no pill, no Send, no section send icon', async () => {
     const element = await combined([])
-    expect(q(element, '.qgv-note-pill')).toBeNull()
-    expect(q(element, '.qgv-toolbar [aria-label="Send notes to an agent"]')).toBeNull()
-    expect(q(element, '.qgv-section-head [aria-label="Send notes to an agent"]')).toBeNull()
+    expect(notePillOf(element)).toBeNull()
+    expect(q(element, 'button[aria-label="Send notes to an agent"]')).toBeNull()
+    expect(q(element, 'section[data-path] header button[aria-label="Send notes to an agent"]')).toBeNull()
   })
 
   test('the pill previews up to 4 notes with Copy and Clear', async () => {
     const five = [...three, note('m3', 'math.ts', 31), note('m4', 'math.ts', 32)]
     const element = await combined(five)
     await click(byLabel(element, 'Show 5 AI notes'))
-    const popover = q(element, '.qgv-note-popover')!
-    expect(qa(popover, '.qgv-note-preview')).toHaveLength(4)
-    expect(text(q(popover, '.qgv-note-more'))).toBe('1 more note in Source Control')
-    expect(qa(popover, '.qgv-note-preview').map((row) => text(q(row, '.qgv-note-preview-path')))).toEqual(['math.ts', 'math.ts', 'math.ts', 'math.ts'])
+    const popover = q(element, '[role="dialog"][aria-label="AI notes"]')!
+    expect(qa(popover, 'li[data-note-preview]')).toHaveLength(4)
+    expect(text(popover)).toContain('1 more note in Source Control')
+    expect(qa(popover, 'li[data-note-preview]').map((row) => text(q(row, '[title]')))).toEqual(['math.ts', 'math.ts', 'math.ts', 'math.ts'])
 
     await click(buttonIn(popover, 'Copy'))
     expect(fake.callsTo('quirky.git/formatNotes')[0]!.params).toEqual({ worktree: 'w1' })
@@ -683,14 +684,14 @@ describe('NA-14: the diff header pill and the combined view note controls', () =
     expect(server.confirms).toBe(1)
     expect(fake.callsTo('quirky.git/clearNotes')[0]!.params).toEqual({ worktree: 'w1', yes: true })
     await wait(10)
-    expect(q(element, '.qgv-note-pill')).toBeNull()
+    expect(notePillOf(element)).toBeNull()
   })
 
   test('a refused clipboard write toasts Failed to copy notes', async () => {
     const element = await combined(three)
     Object.defineProperty(navigator, 'clipboard', { value: { writeText: async () => Promise.reject(new Error('denied')) }, configurable: true })
     await click(byLabel(element, 'Show 3 AI notes'))
-    await click(buttonIn(q(element, '.qgv-note-popover')!, 'Copy'))
+    await click(buttonIn(q(element, '[role="dialog"][aria-label="AI notes"]')!, 'Copy'))
     expect(fake.toasts[0]![0]).toBe('Failed to copy notes')
   })
 })
@@ -718,14 +719,14 @@ describe('scrolling to a note and the add-review-note command', () => {
     select(view, 5, 7, 3)
     await act(async () => void (await fake.run('add-review-note')))
     await settle()
-    expect(text(q(draftOf(element)!, '.qgv-note-title'))).toBe('Lines 5-7')
+    expect(text(q(draftOf(element)!, '.ui-tool-panel-frame__title'))).toBe('Lines 5-7')
     await act(async () => void (await fake.run('add-review-note')))
-    expect(qa(element, '.qgv-note-draft')).toHaveLength(1)
+    expect(qa(element, '[data-note-card="draft"]')).toHaveLength(1)
   })
 
   test('the command does nothing when no diff is open', async () => {
     await act(async () => void (await fake.run('add-review-note')))
-    expect(document.querySelector('.qgv-note-draft')).toBeNull()
+    expect(document.querySelector('[data-note-card="draft"]')).toBeNull()
   })
 
   test('the draft survives the diff being replaced by a refresh', async () => {
