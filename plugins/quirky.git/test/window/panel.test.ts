@@ -8,7 +8,10 @@ import { boot, DIFF_VIEW, openView, SESSION_VIEW, sc1, shutdown, type World } fr
 
 const { scratch } = isolateGitConfig()
 const SLOW = 90_000
-afterEach(shutdown)
+afterEach(async () => {
+  await shutdown()
+  globalThis.__QUIRKY_TEST_REVEAL__ = undefined
+})
 
 const setting = (w: World, name: string, value: unknown) => w.agent.callAny('setting.set', { id: `setting:quirky.git/${name}`, value })
 const settingValue = async (w: World, name: string) => ((await w.agent.callAny('setting.get', { id: `setting:quirky.git/${name}` })) as { value: unknown }).value
@@ -92,11 +95,11 @@ test('SC-17: View as tree groups rows by folder, stages a folder, and the choice
 }, SLOW)
 
 test('SC-18: the row menu opens the diff, copies paths and reveals the file; dragging carries the absolute path', async () => {
-  const w = await boot(scratch)
   const copied: string[] = []
-  Object.defineProperty(navigator, 'clipboard', { value: { writeText: async (value: string) => void copied.push(value) }, configurable: true })
   const revealed: string[] = []
   globalThis.__QUIRKY_TEST_REVEAL__ = (path) => void revealed.push(path)
+  const w = await boot(scratch)
+  Object.defineProperty(navigator, 'clipboard', { value: { writeText: async (value: string) => void copied.push(value) }, configurable: true })
   w.write('src/app/a.ts', 'a\n')
   await w.win.waitFor(() => rowOf('src/app/a.ts'))
   const row = rowOf('src/app/a.ts')!.closest('li')!

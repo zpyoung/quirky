@@ -1,21 +1,14 @@
-import { afterAll, afterEach, expect, test } from 'bun:test'
+import { afterEach, expect, test } from 'bun:test'
+import { EditorView } from '@codemirror/view'
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { Buffer } from 'node:buffer'
-import { GlobalRegistrator } from '@happy-dom/global-registrator'
-import { registerDom } from '../ui/register-dom'
 import { isolateGitConfig } from '../../../quirky.repo/test/git-fixtures'
-import type { World } from './world'
+import { boot, shutdown, DIFF_VIEW, type World } from './world'
+import { modifiedEditor, q, rowOf, text } from './dom'
 
-// The headless window must register DOM globals before loading its window module.
-
-registerDom()
-const { boot, shutdown, DIFF_VIEW } = await import('./world')
-const { modifiedEditor, q, rowOf, text } = await import('./dom')
-const { EditorView } = await import('@codemirror/view')
 const { scratch } = isolateGitConfig()
 
-afterAll(() => GlobalRegistrator.unregister())
 afterEach(shutdown)
 
 type RecordValue = Record<string, unknown>

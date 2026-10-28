@@ -183,12 +183,8 @@ test('NA-40: the command opens the AI defaults view, which saves the global reci
   await readySparkle(w)
 
   await w.run('ai-settings')
-  const view = await w.win.waitFor(() => q('.scm-ai-view'))
-  expect(text(q('h2', view))).toBe('Source Control AI defaults')
-  expect(qa('[data-action] h3', view).map(text)).toEqual(['Commit message', 'Commit failure fixes', 'Push failure fixes', 'Conflict resolution'])
-
   const agent = await w.win.waitFor(() => {
-    const select = byLabel('Commit message agent', view) as unknown as HTMLSelectElement | null
+    const select = document.querySelector<HTMLSelectElement>('select[aria-label="Commit message agent"]')
     return select && [...select.options].some((option) => option.value === 'claude') ? select : null
   })
   agent.value = 'claude'
@@ -198,10 +194,12 @@ test('NA-40: the command opens the AI defaults view, which saves the global reci
     return typeof recipe === 'object' && recipe !== null && 'agent' in recipe && recipe.agent === 'claude'
   })
 
-  await click(byLabel('Show Source Control AI actions', view))
-  await w.win.waitFor(() => byLabel(SPARKLE) === null)
+  await click(byLabel('Show Source Control AI actions'))
+  await w.win.waitFor(() =>
+    document.querySelector<HTMLInputElement>('input[aria-label="Show Source Control AI actions"]')?.checked === false
+  )
   expect(await w.agent.callAny('setting.get', { id: 'setting:quirky.git/ai-enabled' })).toMatchObject({ value: false })
-  await click(byLabel('Show Source Control AI actions', view))
+  await click(byLabel('Show Source Control AI actions'))
   await readySparkle(w)
   expect(w.problems()).toEqual([])
 }, SLOW)

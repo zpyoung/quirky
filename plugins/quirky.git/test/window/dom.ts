@@ -56,7 +56,10 @@ export async function modEnter(element: Element): Promise<void> {
 }
 
 export const toasts = (): Array<{ title: string; body: string }> =>
-  qa('.toast').map((t) => ({ title: text(q('.toast-title', t)), body: text(q('.toast-body', t)) }))
+  qa('.toasts [role="status"], .toasts [role="alert"]').map((toast) => ({
+    title: text(q('.ui-toast__title', toast)),
+    body: text(q('.ui-toast__description', toast))
+  }))
 
 /**
  * Presses the save chord on a CodeMirror editor's content. CodeMirror decides at load time whether
@@ -106,8 +109,12 @@ export function stubIntersectionObserver() {
   }
 }
 
-/** The last CodeMirror editor under `root`: the modified side of a diff. */
-export function modifiedEditor(EditorView: { findFromDOM(dom: HTMLElement): any }, root: ParentNode = document): any {
-  const editors = qa('.cm-editor', root)
-  return EditorView.findFromDOM(editors[editors.length - 1]!)
+/** The modified-side CodeMirror editor in the active hosted Git diff. */
+export function modifiedEditor(EditorView: { findFromDOM(dom: HTMLElement): any }, root?: ParentNode): any {
+  const scope = root ?? q('[data-git-view-root]')
+  if (!scope) throw new Error('Git diff view is not mounted')
+  const editors = qa('.cm-editor', scope)
+  const editor = editors[editors.length - 1]
+  if (!editor) throw new Error('Git diff view has no editor')
+  return EditorView.findFromDOM(editor)
 }

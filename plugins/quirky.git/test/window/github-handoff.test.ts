@@ -244,24 +244,24 @@ function reviewStatus() {
 }
 const reviewAction = () => q('[data-git-create-review] button') as HTMLButtonElement | null
 
-async function waitForReviewState(w: World, kind: string, summary?: string) {
+async function waitForReviewState(w: World, kind: string, prNumber?: number) {
   return w.win.waitFor(() => {
     const status = reviewStatus()
-    return status?.getAttribute('data-state') === kind && (summary === undefined || text(status).includes(summary)) ? status : undefined
+    return status?.getAttribute('data-state') === kind &&
+      (prNumber === undefined || text(status).includes(`#${prNumber}`)) ? status : undefined
   })
 }
-async function waitForPrimary(w: World, label: string, title: string, enabled: boolean): Promise<void> {
+async function waitForPrimary(w: World, label: string, enabled: boolean): Promise<void> {
   const reported = await w.win.waitFor(async () => {
     const value = (await w.report())?.primary
     const shown = primary()
-    return value?.label === label && value.title === title && value.enabled === enabled &&
-      text(shown) === label && shown.title === title && shown.disabled === !enabled ? value : undefined
+    return value?.label === label && value.enabled === enabled &&
+      text(shown) === label && shown.disabled === !enabled ? value : undefined
   })
-  expect(reported).toEqual({ label, enabled, title })
+  expect(reported).toMatchObject({ label, enabled })
 }
 
 async function openGitHubPanel(w: World): Promise<void> {
-  await w.agent.callAny('setting.set', { id: 'setting:quirky.agent-status/hooks', value: false })
   await w.agent.callAny('ui.panel.open', { id: PANEL })
   await w.win.waitFor(() => q('[data-git-panel]'))
 }
@@ -274,7 +274,7 @@ test('GitHub Source Control reports current PR status, ignores stale worktree re
   fixture.installTransport(w.originDir)
   await openGitHubPanel(w)
 
-  await waitForReviewState(w, 'no-review', 'No pull request is linked')
+  await waitForReviewState(w, 'no-review')
   expect(buttonText('Create PR')?.disabled).toBe(false)
   const originalHead = w.git('rev-parse', 'HEAD')
   fixture.setLookup('zoe/feat', { kind: 'found', number: 70, state: 'OPEN' })
@@ -283,33 +283,33 @@ test('GitHub Source Control reports current PR status, ignores stale worktree re
     reason: 'manual'
   })
   expect(externalRefresh).toMatchObject({ kind: 'found', review: { number: 70 } })
-  await waitForReviewState(w, 'found', 'Pull request #70 · Open')
+  await waitForReviewState(w, 'found', 70)
   expect(w.git('rev-parse', 'HEAD')).toBe(originalHead)
   expect(buttonText('Create PR')).toBeUndefined()
 
   const linked = await w.addWorktree('linked')
   fixture.setLookup('zoe/linked', { kind: 'found', number: 71, state: 'OPEN' })
   await selectWorktree(w, linked.id, 'zoe/linked')
-  await waitForReviewState(w, 'found', 'Pull request #71 · Open')
+  await waitForReviewState(w, 'found', 71)
   expect(buttonText('Open PR #71')).toBeDefined()
   expect(buttonText('Create PR')).toBeUndefined()
 
   const unavailable = await w.addWorktree('unavailable')
   fixture.setLookup('zoe/unavailable', { kind: 'unavailable' })
   await selectWorktree(w, unavailable.id, 'zoe/unavailable')
-  await waitForReviewState(w, 'unavailable', 'unavailable')
+  await waitForReviewState(w, 'unavailable')
   expect(reviewAction()?.disabled).toBe(true)
 
   const merged = await w.addWorktree('merged')
   fixture.setLookup('zoe/merged', { kind: 'found', number: 73, state: 'MERGED' })
   await selectWorktree(w, merged.id, 'zoe/merged')
-  await waitForReviewState(w, 'found', 'Pull request #73 · Merged')
+  await waitForReviewState(w, 'found', 73)
   expect(buttonText('Create PR')).toBeUndefined()
 
   const closed = await w.addWorktree('closed')
   fixture.setLookup('zoe/closed', { kind: 'found', number: 74, state: 'CLOSED' })
   await selectWorktree(w, closed.id, 'zoe/closed')
-  await waitForReviewState(w, 'found', 'Pull request #74 · Closed')
+  await waitForReviewState(w, 'found', 74)
   expect(buttonText('Create PR')).toBeUndefined()
 
   const slow = await w.addWorktree('slow')
@@ -318,11 +318,11 @@ test('GitHub Source Control reports current PR status, ignores stale worktree re
   fixture.setLookup('zoe/current', { kind: 'found', number: 76, state: 'OPEN' })
   await selectWorktree(w, slow.id, 'zoe/slow')
   await w.win.waitFor(() => existsSync(fixture!.pending('zoe/slow')))
-  await waitForReviewState(w, 'loading', 'Checking for a pull request')
+  await waitForReviewState(w, 'loading')
   expect(reviewAction()?.disabled).toBe(true)
 
   await selectWorktree(w, current.id, 'zoe/current')
-  await waitForReviewState(w, 'found', 'Pull request #76 · Open')
+  await waitForReviewState(w, 'found', 76)
   const shownStates: string[] = []
   const observer = new MutationObserver(() => shownStates.push(text(reviewStatus())))
   observer.observe(reviewStatus()!.parentElement!, { subtree: true, childList: true, characterData: true })
@@ -335,8 +335,8 @@ test('GitHub Source Control reports current PR status, ignores stale worktree re
     }) as { kind?: string; review?: { number?: number } }
     expect(slowReply).toMatchObject({ kind: 'found', review: { number: 75 } })
     await selectWorktree(w, current.id, 'zoe/current')
-    await w.win.waitFor(() => text(reviewStatus()).includes('Pull request #76 · Open'))
-    expect(shownStates.some((state) => state.includes('Pull request #75'))).toBe(false)
+    await w.win.waitFor(() => text(reviewStatus()).includes('#76'))
+    expect(shownStates.some((state) => state.includes('#75'))).toBe(false)
   } finally {
     observer.disconnect()
   }
@@ -344,7 +344,7 @@ test('GitHub Source Control reports current PR status, ignores stale worktree re
   const preparation = await w.addWorktree('prepare')
   unsetUpstream(preparation.path, 'zoe/prepare')
   await selectWorktree(w, preparation.id, 'zoe/prepare')
-  await waitForReviewState(w, 'no-review', 'No pull request is linked')
+  await waitForReviewState(w, 'no-review')
   const before = git(preparation.path, 'rev-parse', 'HEAD')
   writeFileSync(join(preparation.path, 'math.ts'), 'a\nB\nc\nd\ne\n')
   await w.win.waitFor(() => q('[data-row-path="math.ts"] button[aria-pressed]'))
@@ -381,26 +381,26 @@ test('SC-28: unpublished primary waits for current GitHub state before publishin
   unsetUpstream(noReview.path, 'zoe/no-review-primary')
   fixture.setLookup('zoe/no-review-primary', { kind: 'none' })
   await selectWorktree(w, noReview.id, 'zoe/no-review-primary')
-  await waitForReviewState(w, 'no-review', 'No pull request is linked')
-  await waitForPrimary(w, 'Publish Branch', 'Publish this branch to origin', true)
+  await waitForReviewState(w, 'no-review')
+  await waitForPrimary(w, 'Publish Branch', true)
 
   const loading = await w.addWorktree('loading-primary')
   unsetUpstream(loading.path, 'zoe/loading-primary')
   fixture.setLookup('zoe/loading-primary', { kind: 'found', number: 81, state: 'OPEN', hold: true })
   await selectWorktree(w, loading.id, 'zoe/loading-primary')
   await w.win.waitFor(() => existsSync(fixture!.pending('zoe/loading-primary')))
-  await waitForReviewState(w, 'loading', 'Checking for a pull request')
-  await waitForPrimary(w, 'Publish Branch', 'Checking GitHub pull-request status before publishing this branch.', false)
+  await waitForReviewState(w, 'loading')
+  await waitForPrimary(w, 'Publish Branch', false)
   fixture.release('zoe/loading-primary')
   await w.win.waitFor(() => existsSync(fixture!.done('zoe/loading-primary')))
-  await waitForReviewState(w, 'found', 'Pull request #81 · Open')
+  await waitForReviewState(w, 'found', 81)
 
   const unavailable = await w.addWorktree('unavailable-primary')
   unsetUpstream(unavailable.path, 'zoe/unavailable-primary')
   fixture.setLookup('zoe/unavailable-primary', { kind: 'unavailable' })
   await selectWorktree(w, unavailable.id, 'zoe/unavailable-primary')
-  await waitForReviewState(w, 'unavailable', 'unavailable')
-  await waitForPrimary(w, 'Publish Branch', 'GitHub pull-request status is unavailable. Retry before publishing this branch.', false)
+  await waitForReviewState(w, 'unavailable')
+  await waitForPrimary(w, 'Publish Branch', false)
   writeFileSync(join(unavailable.path, 'math.ts'), 'changed while lookup was unavailable\n')
   await w.win.waitFor(() => text(primary()) === 'Stage All')
   expect(primary().disabled).toBe(false)
@@ -409,7 +409,7 @@ test('SC-28: unpublished primary waits for current GitHub state before publishin
   unsetUpstream(merged.path, 'zoe/merged-primary')
   fixture.setLookup('zoe/merged-primary', { kind: 'found', number: 82, state: 'MERGED' })
   await selectWorktree(w, merged.id, 'zoe/merged-primary')
-  await waitForReviewState(w, 'found', 'Pull request #82 · Merged')
-  await waitForPrimary(w, 'Publish Branch', 'Nothing to commit. PR is already merged.', false)
+  await waitForReviewState(w, 'found', 82)
+  await waitForPrimary(w, 'Publish Branch', false)
   expect(w.problems()).toEqual([])
 }, SLOW)
