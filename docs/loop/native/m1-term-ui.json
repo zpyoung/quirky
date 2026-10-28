@@ -13,10 +13,10 @@
     {
       "id": "SC-37",
       "title": "Text copied in another macOS app pastes into a pane with ⌘V, bracketed only when the program asked for it",
-      "status": "fail",
+      "status": "pending",
       "lastRun": "2026-10-28",
       "report": "/Users/zpyoung/orca/workspaces/quirky/native-qa/.quirk/using-apps-like-a-user/runs/20261028T045314-56e5/report.md",
-      "summary": "Cmd+V never pastes: Quirky toasts 'Could not paste ... user denied permission' or WebKit shows its own Paste callout, and nothing reaches the pane."
+      "summary": "Native text-read bridge repair prepared in fix-native-m1-term-ui-1028; rerun Cmd+V and bracket modes in the real window. Prior failure: WebKit denied clipboard access or showed its Paste callout; report and lastRun above retain that evidence."
     },
     {
       "id": "SC-41",
