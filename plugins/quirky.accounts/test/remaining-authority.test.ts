@@ -65,10 +65,11 @@ describe('remaining account authority', () => {
     })
     try {
       const request = { idempotencyKey: 'preference-preserved-reset', expectedScope: scope }
-      const first = await call(h, 'quirky.accounts/consumeResetCredit', request)
-      const replay = await call(h, 'quirky.accounts/consumeResetCredit', request)
-      expect(first).toBe('reset')
-      expect(replay).toBe(first)
+      const first = await call<{ outcome: string; state: UsageState }>(h, 'quirky.accounts/consumeResetCredit', request)
+      const replay = await call<{ outcome: string; state: UsageState }>(h, 'quirky.accounts/consumeResetCredit', request)
+      expect(first.outcome).toBe('reset')
+      expect(codexOffer(first.state)).toMatchObject({ availableCount: 1, expectedScope: scope })
+      expect(replay).toEqual(first)
       expect(redemptions).toBe(1)
 
       const managed = await add(h, 'codex', 'authority-reset@example.test')
