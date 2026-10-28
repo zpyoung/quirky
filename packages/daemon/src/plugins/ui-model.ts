@@ -1,6 +1,8 @@
 import {
   CODE_BACKED_KINDS,
+  DARK_THEME,
   DEFAULT_THEME,
+  LIGHT_THEME,
   parseChord,
   parseContributionId,
   parseWhen,
@@ -261,7 +263,7 @@ function buildThemes(effective: ContributionInfo[]): ThemeInfo[] {
     }
   })
   declared.sort((a, b) => a.title.localeCompare(b.title) || compare(a.id, b.id))
-  return [DEFAULT_THEME, ...declared]
+  return [DEFAULT_THEME, DARK_THEME, LIGHT_THEME, ...declared]
 }
 
 function buildMenuItems(effective: ContributionInfo[]): UiMenuItemEntry[] {

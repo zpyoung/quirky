@@ -107,11 +107,11 @@ describe('UI plugin API wiring', () => {
     })
   })
 
-  test('theme.set persists across a daemon restart on the same home', async () => {
+  test('theme.set persists the dark app appearance pin across a daemon restart', async () => {
     const harness = await boot()
     const { client, events } = await harness.connectWithEvents()
-    const list = await client.call('theme.set', { id: 'theme:acme.ui/night' })
-    expect(list).toMatchObject({ chosen: 'theme:acme.ui/night', active: 'theme:acme.ui/night' })
+    const list = await client.call('theme.set', { id: 'dark' })
+    expect(list).toMatchObject({ chosen: 'dark', active: 'dark' })
     await waitFor(() => events.find((event) => event.type === 'theme.changed'))
     const { home } = harness
     harnesses.splice(harnesses.indexOf(harness), 1)
@@ -122,7 +122,7 @@ describe('UI plugin API wiring', () => {
     const restarted = await startHarness({ home, builtinPluginsDir: null })
     harnesses.push(restarted)
     const again = await restarted.connect()
-    expect(await again.call('theme.list', {})).toMatchObject({ chosen: 'theme:acme.ui/night', active: 'theme:acme.ui/night' })
+    expect(await again.call('theme.list', {})).toMatchObject({ chosen: 'dark', active: 'dark' })
   })
 
   test('a daemon plugin reads the effective setting through context.getSetting', async () => {
