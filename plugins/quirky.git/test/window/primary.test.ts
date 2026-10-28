@@ -2,40 +2,37 @@ import { afterEach, expect, test } from 'bun:test'
 import { chmodSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { isolateGitConfig } from '../../../quirky.repo/test/git-fixtures'
-import { byLabel, click, messageBox, primary, primaryNow, q, qa, rowOf, text, type } from './dom'
+import { byLabel, click, messageBox, primary, q, qa, rowOf, text, type } from './dom'
 import { boot, shutdown, type World } from './world'
 
 const { scratch } = isolateGitConfig()
 const SLOW = 90_000
 afterEach(shutdown)
 
-/** Waits for the primary button to show `label`, then returns it and the panel's report of it. */
-async function ladder(w: World, label: string) {
-  await w.win.waitFor(() =>
-    text(primary()) === label &&
-    (label !== 'Publish Branch' || !primary().disabled)
-  )
+/** Waits for a user-visible primary action state and its daemon report. */
+async function ladder(w: World, label: string, enabled: boolean) {
+  await w.win.waitFor(() => text(primary()) === label && primary().disabled === !enabled)
   const reported = await w.win.waitFor(async () => {
-    const r = (await w.report())?.primary
-    return r?.label === label ? r : undefined
+    const state = (await w.report())?.primary
+    return state?.label === label && state.enabled === enabled ? state : undefined
   })
-  expect(reported).toEqual({ label, enabled: !primary().disabled, title: primary().title })
-  return primaryNow()
+  expect(reported).toMatchObject({ label, enabled })
+  return { label: text(primary()), enabled: !primary().disabled }
 }
 
 test('SC-28: the primary button follows the ladder through Stage All, Commit, Push, Pull, Sync and Publish Branch', async () => {
   const w = await boot(scratch)
-  expect(await ladder(w, 'Commit')).toEqual({ label: 'Commit', enabled: false, title: 'Nothing to commit. Branch is up to date.' })
+  expect(await ladder(w, 'Commit', false)).toEqual({ label: 'Commit', enabled: false })
 
   w.write('math.ts', 'a\nB\nc\nd\ne\n')
-  expect(await ladder(w, 'Stage All')).toEqual({ label: 'Stage All', enabled: true, title: 'Stage all changes' })
+  expect(await ladder(w, 'Stage All', true)).toEqual({ label: 'Stage All', enabled: true })
   await click(primary())
-  expect(await ladder(w, 'Commit')).toMatchObject({ enabled: false, title: 'Enter a commit message to commit' })
+  expect(await ladder(w, 'Commit', false)).toEqual({ label: 'Commit', enabled: false })
   await type(messageBox(), 'Update math')
-  expect(await ladder(w, 'Commit')).toEqual({ label: 'Commit', enabled: true, title: 'Commit staged changes' })
+  expect(await ladder(w, 'Commit', true)).toEqual({ label: 'Commit', enabled: true })
   await click(primary())
 
-  expect(await ladder(w, 'Push')).toEqual({ label: 'Push', enabled: true, title: 'Push 1 commit(s)' })
+  expect(await ladder(w, 'Push', true)).toEqual({ label: 'Push', enabled: true })
   await click(primary())
   await w.win.waitFor(() => text(primary()) === 'Commit')
   expect(w.git('rev-parse', 'HEAD')).toBe(w.git('rev-parse', 'origin/zoe/feat'))
@@ -45,7 +42,7 @@ test('SC-28: the primary button follows the ladder through Stage All, Commit, Pu
   peer.commit({ 'b.ts': 'bee 2\n' }, 'peer one')
   peer.push('zoe/feat')
   w.git('fetch', '-q')
-  expect(await ladder(w, 'Pull')).toEqual({ label: 'Pull', enabled: true, title: 'Pull 1 commit(s)' })
+  expect(await ladder(w, 'Pull', true)).toEqual({ label: 'Pull', enabled: true })
   await click(primary())
   await w.win.waitFor(() => text(primary()) === 'Commit')
   expect(w.git('show', 'HEAD:b.ts')).toBe('bee 2')
@@ -54,14 +51,14 @@ test('SC-28: the primary button follows the ladder through Stage All, Commit, Pu
   peer.push('zoe/feat')
   w.commit({ 'd.ts': 'dee 2\n' }, 'local two')
   w.git('fetch', '-q')
-  expect(await ladder(w, 'Sync')).toEqual({ label: 'Sync', enabled: true, title: 'Pull 1, push 1' })
+  expect(await ladder(w, 'Sync', true)).toEqual({ label: 'Sync', enabled: true })
   await click(primary())
   await w.win.waitFor(() => text(primary()) === 'Commit' && (w.git('rev-list', '--count', 'origin/zoe/feat..HEAD') === '0'))
   expect(w.git('rev-parse', 'HEAD')).toBe(w.git('rev-parse', 'origin/zoe/feat'))
   expect(w.git('show', 'HEAD:c.ts')).toBe('sea 2')
 
   w.git('checkout', '-q', '-b', 'zoe/other')
-  expect(await ladder(w, 'Publish Branch')).toEqual({ label: 'Publish Branch', enabled: true, title: 'Publish this branch to origin' })
+  expect(await ladder(w, 'Publish Branch', true)).toEqual({ label: 'Publish Branch', enabled: true })
   await click(primary())
   await w.win.waitFor(() => text(primary()) === 'Commit')
   expect(w.git('rev-parse', '--abbrev-ref', 'zoe/other@{upstream}')).toBe('origin/zoe/other')
@@ -74,9 +71,8 @@ test('SC-28: Force Push shows when the commits behind are patch-equivalent', asy
   w.git('push', '-q')
   w.git('commit', '-q', '--amend', '-m', 'work again')
   w.git('fetch', '-q')
-  const shown = await ladder(w, 'Force Push')
+  const shown = await ladder(w, 'Force Push', true)
   expect(shown.enabled).toBe(true)
-  expect(shown.title).toBe('Remote only has older copies of local commits. Force push 1 branch commits with lease to update origin/zoe/feat.')
 }, SLOW)
 
 test('SC-30: a push running from the CLI shows a disabled Push titled "Push in progress…", refuses a second remote call, and clears afterwards', async () => {

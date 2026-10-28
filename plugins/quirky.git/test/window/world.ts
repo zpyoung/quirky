@@ -231,7 +231,21 @@ export function badge(): { count: string; title: string } | null {
   return span ? { count: span.textContent ?? '', title: span.getAttribute('title') ?? '' } : null
 }
 
-/** The diff view the layout shows, or null. */
-export async function openView(w: World): Promise<{ id: string; input?: any } | null> {
-  return (await w.state()).layout.view as { id: string; input?: any } | null
+type TerminalViewTab = { id: string; kind: 'view'; viewId: string; input?: Record<string, unknown> }
+type TerminalTab = { id: string; kind?: never }
+type WorkspaceTab = TerminalViewTab | TerminalTab
+type WorkspaceGroup = { kind: 'group'; id: string; tabs: WorkspaceTab[]; activeTab: string | null }
+type WorkspaceNode = WorkspaceGroup | { kind: 'split'; first: WorkspaceNode; second: WorkspaceNode }
+type TerminalWorkspace = { root: WorkspaceNode; activeGroup: string }
+
+function groupsIn(node: WorkspaceNode): WorkspaceGroup[] {
+  return node.kind === 'group' ? [node] : [...groupsIn(node.first), ...groupsIn(node.second)]
+}
+
+/** The active hosted view in this worktree's terminal workspace, or null. */
+export async function openView(w: World): Promise<{ id: string; input?: Record<string, unknown> } | null> {
+  const { workspace } = await w.agent.callAny('quirky.terminal/workspace', { workspace: w.feat.id }) as { workspace: TerminalWorkspace }
+  const group = groupsIn(workspace.root).find((candidate) => candidate.id === workspace.activeGroup)
+  const tab = group?.tabs.find((candidate) => candidate.id === group.activeTab)
+  return tab?.kind === 'view' ? { id: tab.viewId, ...(tab.input === undefined ? {} : { input: tab.input }) } : null
 }
