@@ -39,6 +39,7 @@ const ENVIRONMENT_KEYS = [
   'GH_ENTERPRISE_TOKEN', 'GITHUB_ENTERPRISE_TOKEN', 'GH_HOST', 'GH_REPO', 'GH_PROMPT_DISABLED',
   'GIT_CONFIG_GLOBAL', 'GIT_CONFIG_SYSTEM', 'GIT_CONFIG_NOSYSTEM', 'GIT_CONFIG_COUNT', 'GIT_CONFIG_PARAMETERS',
   'GIT_DIR', 'GIT_WORK_TREE', 'GIT_INDEX_FILE', 'GIT_TERMINAL_PROMPT',
+  'QUIRKY_AGENT_SEARCH_DIRS',
   'QUIRKY_TEST_FIXTURE_DIR', 'QUIRKY_TEST_GH_SOURCE', 'QUIRKY_TEST_GH_LOG', 'QUIRKY_TEST_GH_ACTIVITY',
   'QUIRKY_TEST_SSH_CONFIG'
 ] as const
@@ -201,6 +202,7 @@ export async function bootHosting(ghSource: string, options: HostingTestOptions 
   process.env.XDG_CONFIG_HOME = join(home, '.config')
   process.env.GH_CONFIG_DIR = join(home, '.config', 'gh')
   process.env.PATH = `${fakebin}${delimiter}${previousEnvironment.get('PATH') ?? ''}`
+  process.env.QUIRKY_AGENT_SEARCH_DIRS = previousEnvironment.get('QUIRKY_AGENT_SEARCH_DIRS') ?? fakebin
   process.env.QUIRKY_TEST_SSH_CONFIG = sshConfig
   process.env.GH_TOKEN = 'fixture-ambient-token'
   process.env.GITHUB_TOKEN = 'fixture-github-token'

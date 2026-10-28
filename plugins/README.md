@@ -176,3 +176,33 @@ effective view ID through `ui.view.open`; it does not import feature code into t
 shell. Disabled or overridden-away views have no link. A view with no active UI
 module is shown disabled, and failed navigation leaves Settings open with an error.
 Ordinary views remain outside Settings unless they explicitly opt in.
+
+## GitHub Tasks
+
+`quirky.tasks` supplies Tasks lists, issue detail/creation, Project tables/boards/roadmaps,
+and the shared workspace composer. Its generated commands use the `tasks` group:
+
+```sh
+quirky tasks open --mode issues --json
+quirky tasks open --mode prs --page 3 --json
+quirky tasks projects --json
+quirky tasks --help
+```
+
+`quirky.tasks/workspace` with `action: "start"` opens the retained composer; it does not
+create a workspace until confirmation. Targets contain `worktree`, `kind` (`issue` or
+`pullRequest`), `number`, and the exact GitHub `url`. Creation delegates to
+`quirky.worktree/create` with that URL as `github`; there is no plain-create fallback.
+Merge uses conditional kernel confirmation and the canonical hosting expected-head guard.
+Ordinary issue edits, reviewer changes and opening the composer do not ask.
+
+The public UI-library exports are `@quirky/plugin-tasks/markdown`
+(`Markdown`, `MarkdownComposer`, `safeHttpUrl`) and
+`@quirky/plugin-tasks/review-navigation` (`openReview`).
+PR navigation calls `quirky.reviews/open` with `{worktree, number, tab?}`;
+`tab` is `conversation`, `checks`, or `files`. Missing contributions produce an error,
+not an issue page pretending to be PR detail.
+
+Task Sources is a contributed Settings view. A boolean setting can also declare
+`"menu": "view"` for a native View-menu toggle backed by the same public setting value.
+Native clipboard, system-browser and focus effects remain pending in the nightly handoff.
