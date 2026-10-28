@@ -83,12 +83,28 @@ export type PluginContext = {
   readonly home: string
   /** The PTY host connection; listeners registered through it are removed when the plugin is revoked. */
   readonly pty: PluginPty
+  /** Synchronous native lifecycle fences; subscriptions are removed when this activation is revoked. */
+  readonly hostPower: PluginHostPower
   /** Broadcasts `notify` with `desktop` defaulting to true; with no desktop client connected, runs the kernel notifier. */
   notify(notification: PluginNotification): void
   /** The kernel's session launch environment and launch-hook pipeline. */
   readonly launch: PluginLaunch
   /** Admits authenticated remote clients through the same RPC dispatcher and stream lifecycle. */
   readonly clients: PluginClients
+}
+
+/** In-process only: callbacks must finish synchronously, before the daemon acknowledges native sleep. */
+export type HostPowerListener = {
+  suspend(): void
+  resume(): void
+}
+
+export type PluginHostPower = {
+  /** False on platforms without a native source. macOS registration failures are startup errors. */
+  readonly supported: boolean
+  readonly suspended: boolean
+  /** Replays suspend synchronously if already sleeping. The disposer is idempotent. */
+  subscribe(listener: HostPowerListener): () => void
 }
 
 /** Trusted transports authenticate peers before admission; authorization is checked on every call. */

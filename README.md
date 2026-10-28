@@ -35,15 +35,16 @@ page-origin module requires a native development build, not Expo Go. To check th
 client and page code, use `bun run typecheck:mobile` and `bun run build:mobile-pages`.
 
 The companion opens workspaces, drives terminal sessions under an explicit input lease, and
-answers agent questions. Workspace **Sleep** retains terminal history and supported agents'
-resume identities; **Wake** resumes the captured sessions. Unknown workspace origins remain
-visible under automation/other-client filters. Markdown tabs use the actual editor document
-and tab identity, with revision-guarded edits and saves.
+answers agent questions. Workspace **Sleep** parks its views without stopping processes;
+opening it wakes those views. **Stop sessions (retain history)** is a separate, explicit operation
+that preserves PTY history and supported agents' resume identities. Unknown workspace origins
+remain visible under automation/other-client filters. Markdown tabs use the actual editor
+document and tab identity, with revision-guarded edits and saves.
 
 **Browser (Chrome Watch)** is explicit opt-in, with a connection-owned stream and typed controls;
 selecting an existing Native tab never converts it silently. Interactive native chat, dictation,
 and Native browser mirroring still need their recorded architecture or host prerequisites.
-Other mobile panels and signed distribution are tracked separately. Actual camera, secure-store,
+Signed distribution is tracked separately. Actual camera, secure-store,
 WebView and keyboard checks remain in the [base native handoff](docs/loop/native/sb-mobile-app.json)
 and [workspace/tab handoff](docs/loop/native/sb-mobile-app-prerequisites.json).
 
@@ -80,6 +81,35 @@ quirky vault clear --yes
 Advanced parity and verification obligations are tracked in
 [the vault's open findings](docs/loop/BLOCKERS.md#m3-vault-open-review-findings) and the dependent
 `m3-vault-parity-completion` queue item.
+## Terminal artifacts on the phone
+
+In a local terminal session, open **More → Terminal artifacts** to browse files named in that
+terminal's recent output. Artifact previews can open files outside the worktree without granting
+the phone a general file-path API. Normal Files browsing remains worktree-contained.
+
+Complete writable UTF-8 text and Markdown up to 48 KiB can be edited with **Save terminal artifact**.
+Larger text is explicitly truncated and read-only. PNG, JPEG, GIF and WebP previews are bounded to
+192 KiB; other binary files show metadata only. The artifact service currently supports macOS hosts.
+
+The same operations are scriptable. Set the source IDs to the actual worktree and terminal session;
+take `ARTIFACT_ID` and `GRANT` from the list result, and `REVISION` from the preview:
+
+```sh
+quirky terminal artifacts list "$WORKTREE_ID" "$SESSION_ID" --json
+quirky terminal artifacts preview "$WORKTREE_ID" "$SESSION_ID" \
+  --artifact-id "$ARTIFACT_ID" --grant "$GRANT" --json
+quirky terminal artifacts save "$WORKTREE_ID" "$SESSION_ID" \
+  --artifact-id "$ARTIFACT_ID" --grant "$GRANT" \
+  --revision "$REVISION" --content-file ./draft.md --json
+quirky terminal artifacts refresh "$WORKTREE_ID" "$SESSION_ID" \
+  --artifact-id "$ARTIFACT_ID" --grant "$GRANT" --json
+```
+
+Grants belong to the authenticated caller and exact source session. They expire after five minutes;
+retained source authority lasts at most thirty minutes. Refresh returns a replacement grant but
+does not approve changed disk content. A stale revision, replaced file or lost source refuses the
+save and preserves the phone draft. Reload content explicitly to adopt disk changes.
+
 ## How it's built
 
 - **`packages/pty-host`:** `quirky-pty` owns every terminal and its history.

@@ -50,7 +50,7 @@ internal class MobileWebShellGeneration private constructor(
       val assets = root.opt("assets") as? JSONArray ?: return null
       if (assets.length() == 0 || assets.length() > MOBILE_WEB_SHELL_MAX_ASSETS) return null
       val routes = root.opt("routes") as? JSONArray ?: return null
-      if (routes.length() != 2) return null
+      if (routes.length() < 2 || routes.length() > 64) return null
 
       val entries = mutableMapOf<String, MobileWebShellAsset>()
       var declaredTotal = 0L

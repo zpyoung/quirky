@@ -3,7 +3,13 @@ import { chmodSync, existsSync, lstatSync, mkdirSync, readFileSync, realpathSync
 import { isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { validateValue, type Schema } from '@quirky/protocol'
 import { fault } from '../runtime/errors'
-export type BrowserProfile = { id: string; label: string; scope: 'default' | 'isolated' }
+
+export type BrowserProfile = {
+  id: string
+  label: string
+  scope: 'default' | 'isolated' | 'imported'
+  source?: { browserFamily: string; profileName?: string; importedAt: number }
+}
 export type BrowserPage = {
   browserPageId: string
   worktreeId: string | null
@@ -21,7 +27,17 @@ const PROFILE_SCHEMA: Schema = {
   properties: {
     id: { type: 'string' },
     label: { type: 'string' },
-    scope: { type: 'string', enum: ['default', 'isolated'] }
+    scope: { type: 'string', enum: ['default', 'isolated', 'imported'] },
+    source: {
+      type: 'object',
+      properties: {
+        browserFamily: { type: 'string' },
+        profileName: { type: 'string' },
+        importedAt: { type: 'number' }
+      },
+      required: ['browserFamily', 'importedAt'],
+      additionalProperties: false
+    }
   },
   required: ['id', 'label', 'scope'],
   additionalProperties: false
@@ -214,7 +230,30 @@ export class BrowserStore {
   }
 
   listProfiles(): BrowserProfile[] {
-    return [...this.state.profiles].sort((a, b) => a.id === 'default' ? -1 : b.id === 'default' ? 1 : a.label.localeCompare(b.label))
+    return this.state.profiles
+      .map((profile) => ({ ...profile, ...(profile.source ? { source: { ...profile.source } } : {}) }))
+      .sort((a, b) => a.id === 'default' ? -1 : b.id === 'default' ? 1 : a.label.localeCompare(b.label))
+  }
+
+  markImported(profileId: string, source: { browserFamily: string; profileName?: string; importedAt: number }): void {
+    const profile = this.getProfile(profileId)
+    const previousScope = profile.scope
+    const previousSource = profile.source
+    profile.scope = 'imported'
+    profile.source = { ...source }
+    try {
+      this.persist()
+    } catch (error) {
+      profile.scope = previousScope
+      if (previousSource) profile.source = previousSource
+      else delete profile.source
+      throw error
+    }
+  }
+
+  setPageProfile(pageId: string, profileId: string): BrowserPage {
+    this.getProfile(profileId)
+    return this.updatePage(pageId, (page) => { page.profileId = profileId })
   }
 
   getProfile(id: string): BrowserProfile {

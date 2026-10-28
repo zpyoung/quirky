@@ -1,18 +1,10 @@
 import type { MobileBundleManifest, MobileBundleRoute, MobileRoute } from '../contracts'
+import { validateRoute } from './bridge-policy'
 
 const ASSET_PART = /^[A-Za-z0-9][A-Za-z0-9_.@-]{0,127}$/
 
 export function resolveBundleRoute(manifest: MobileBundleManifest, route: MobileRoute): MobileBundleRoute {
-  if (route === null || typeof route !== 'object') throw new Error('page route is invalid')
-  if (route.kind === 'workspaces') {
-    if (Object.keys(route).length !== 1) throw new Error('workspace route contains unsupported parameters')
-  } else if (route.kind === 'session') {
-    if (Object.keys(route).some((key) => !['kind', 'worktreeId', 'sessionId'].includes(key)) ||
-      typeof route.worktreeId !== 'string' || route.worktreeId.length === 0 || route.worktreeId.length > 1024 ||
-      (route.sessionId !== undefined && (typeof route.sessionId !== 'string' || route.sessionId.length > 1024))) throw new Error('session route parameters are invalid')
-  } else {
-    throw new Error('page route is not available in this app bundle')
-  }
+  validateRoute(route)
   const found = manifest.routes.find((item) => item.kind === route.kind)
   if (!found) throw new Error('page route is not available in this app bundle')
   return found

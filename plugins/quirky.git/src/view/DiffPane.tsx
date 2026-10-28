@@ -25,6 +25,8 @@ export type PaneHandle = {
   save(): Promise<void>
   reload(): Promise<void>
   overwrite(): Promise<void>
+  /** The current modified-side draft, whether or not it has been saved. */
+  modifiedText(): string
   /** The file changed on disk under an unsaved draft. */
   markStale(): void
 }
@@ -247,6 +249,7 @@ function TextPane({ context, worktree, path, diff, editable, settings, variant, 
       save: () => actions.current.save(),
       reload: () => reload(),
       overwrite: () => actions.current.overwrite(),
+      modifiedText: () => draft.current ?? mergeRef.current?.getModified() ?? base.current.text,
       markStale: () => setStale(true)
     }
   }

@@ -1,5 +1,6 @@
 import type {
   MobileConnectionState,
+  MobileCredentialRead,
   MobileHost,
   MobileLogEntry,
   MobileNativeActions,
@@ -474,7 +475,7 @@ export function createMobileRuntime(dependencies: MobileRuntimeDependencies): Mo
     const rollback: {
       value: {
         host: StoredHost | undefined
-        credential: Awaited<ReturnType<MobileSecretStorage['read']>>
+        credential: MobileCredentialRead
       } | undefined
     } = { value: undefined }
     let writeAttempted = false
@@ -484,7 +485,7 @@ export function createMobileRuntime(dependencies: MobileRuntimeDependencies): Mo
       const saved = await updateState(async (current) => {
         const previousHost = current.hosts.find((host) => host.id === hostId)
         if (previousHost?.cleanupPending) throw new MobileRpcError('connection', 'Retry secure credential cleanup before pairing this desktop again')
-        const previousCredential: Awaited<ReturnType<MobileSecretStorage['read']>> = previousHost
+        const previousCredential: MobileCredentialRead = previousHost
           ? await dependencies.secrets.read(hostId)
           : { kind: 'missing' }
         if (previousCredential.kind === 'unavailable') throw new MobileRpcError('connection', 'Secure storage is temporarily unavailable')

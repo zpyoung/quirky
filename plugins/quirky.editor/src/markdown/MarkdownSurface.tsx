@@ -169,11 +169,27 @@ function expandDocumentLinks(markdown: string): string {
         const anchorStart = target.indexOf('#')
         const path = anchorStart < 0 ? target : target.slice(0, anchorStart)
         const anchor = anchorStart < 0 ? undefined : target.slice(anchorStart + 1)
-        const href = `${path.split('/').map((part) => encodeURIComponent(part)).join('/')}${anchor === undefined ? '' : `#${encodeURIComponent(anchor)}`}`
+        const encodedPath = path.split('/').map((part) => {
+          try { return encodeURIComponent(decodeURIComponent(part)) }
+          catch { return encodeURIComponent(part) }
+        }).join('/')
+        const href = `${encodedPath}${anchor === undefined ? '' : `#${encodeURIComponent(anchor)}`}`
         return `[${label}](${href})`
       })
     }).join('')
   }).join('\n')
+}
+
+function documentLinkTarget(currentPath: string, documentPath: string): string {
+  const from = currentPath.split('/').slice(0, -1).filter((part) => part !== '' && part !== '.')
+  const to = documentPath.replace(/\.(?:md|markdown|mdx)$/i, '').split('/').filter((part) => part !== '' && part !== '.')
+  let common = 0
+  while (common < from.length && common < to.length && from[common] === to[common]) common += 1
+  const relative = [
+    ...Array.from({ length: from.length - common }, () => '..'),
+    ...to.slice(common)
+  ].join('/') || to.at(-1) || ''
+  return relative.split('/').map((part) => part === '..' ? part : encodeURIComponent(part)).join('/')
 }
 
 function MarkdownPreview({
@@ -506,7 +522,7 @@ function RichSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
   const [readOnly, setReadOnly] = useState(buffer.readOnly)
   const [flushError, setFlushError] = useState<string | null>(null)
   const [slash, setSlash] = useState<{ query: string; index: number } | null>(null)
-  const [docMenu, setDocMenu] = useState<{ query: string; index: number; items: { relativePath: string; name: string }[]; truncated: boolean } | null>(null)
+  const [docMenu, setDocMenu] = useState<{ query: string; index: number; from: number; to: number; items: { relativePath: string; name: string }[]; total: number; truncated: boolean } | null>(null)
   const [selection, setSelection] = useState<{ from: number; to: number; text: string; startLine: number; endLine: number } | null>(null)
   const [linkBubble, setLinkBubble] = useState(false)
   const [linkValue, setLinkValue] = useState('')
@@ -565,6 +581,9 @@ function RichSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
   const revision = useRef(buffer.contentRevision)
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const composition = useRef(false)
+  const docQueryRef = useRef<string | null>(null)
+  const docRangeRef = useRef<{ from: number; to: number } | null>(null)
+  const docRequestRef = useRef(0)
   const flushRef = useRef<() => Promise<void>>(async () => {})
   const editorRef = useRef<Editor | null>(null)
   const updateCompletionsRef = useRef<(current: Editor) => void>(() => {})
@@ -597,6 +616,14 @@ function RichSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
           setLinkBubble(true)
           return true
         }
+        if (event.key === 'Escape' && docMenuRef.current) {
+          event.preventDefault()
+          docRequestRef.current += 1
+          docQueryRef.current = null
+          docRangeRef.current = null
+          setDocMenu(null)
+          return true
+        }
         if (event.key === 'Escape' && slashRef.current) {
           event.preventDefault()
           setSlash(null)
@@ -618,14 +645,14 @@ function RichSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
           }
         }
         const currentDocs = docMenuRef.current
-        if (currentDocs && ['ArrowDown', 'ArrowUp', 'Enter'].includes(event.key)) {
+        if (currentDocs && currentDocs.items.length > 0 && ['ArrowDown', 'ArrowUp', 'Enter', 'Tab'].includes(event.key)) {
           event.preventDefault()
-          if (event.key === 'Enter') {
+          if (event.key === 'Enter' || event.key === 'Tab') {
             const selected = currentDocs.items[currentDocs.index]
             if (selected) chooseDocumentRef.current(selected.relativePath)
           } else {
             const delta = event.key === 'ArrowDown' ? 1 : -1
-            setDocMenu({ ...currentDocs, index: (currentDocs.index + delta + currentDocs.items.length) % Math.max(1, currentDocs.items.length) })
+            setDocMenu({ ...currentDocs, index: (currentDocs.index + delta + currentDocs.items.length) % currentDocs.items.length })
           }
           return true
         }
@@ -662,6 +689,7 @@ function RichSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
         }
       }
     },
+    onCreate: ({ editor: current }) => updateCompletionsRef.current(current),
     onUpdate: ({ editor: current }) => {
       const markdown = current.getMarkdown()
       pendingText.current = markdown
@@ -685,9 +713,16 @@ function RichSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
   editorRef.current = editor
 
   const updateCompletions = useCallback((current: Editor) => {
-    if (readOnly || composition.current) {
-      setSlash(null)
+    const dismissDocuments = () => {
+      docRequestRef.current += 1
+      docQueryRef.current = null
+      docRangeRef.current = null
       setDocMenu(null)
+    }
+    if (readOnly || composition.current || !current.state.selection.empty ||
+      current.isActive('code') || current.isActive('codeBlock')) {
+      setSlash(null)
+      dismissDocuments()
       return
     }
     const $from = current.state.selection.$from
@@ -695,22 +730,51 @@ function RichSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
     const slashMatch = /^\s*\/([a-z0-9-]*)$/i.exec(before)
     if (slashMatch) {
       setSlash({ query: slashMatch[1] ?? '', index: 0 })
-      setDocMenu(null)
+      dismissDocuments()
       return
     }
     setSlash(null)
     const docMatch = /(?:^|[\s(])\[\[([^\[\]|\r\n]*)$/.exec(before)
     if (!docMatch) {
-      setDocMenu(null)
+      dismissDocuments()
       return
     }
     const query = docMatch[1] ?? ''
+    const range = { from: $from.pos - query.length - 2, to: $from.pos }
+    if (range.from < 1) {
+      dismissDocuments()
+      return
+    }
+    docRangeRef.current = range
+    if (docQueryRef.current === query) {
+      const currentMenu = docMenuRef.current
+      if (currentMenu) setDocMenu({ ...currentMenu, ...range })
+      return
+    }
+    docQueryRef.current = query
+    const request = ++docRequestRef.current
     void onAction(MARKDOWN_METHOD, methodParams(buffer.id, { action: 'documents', query })).then((raw) => {
-      const result = raw as { documents?: { relativePath: string; name: string }[]; truncated?: boolean }
-      setDocMenu({ query, index: 0, items: result.documents ?? [], truncated: result.truncated === true })
-    }).catch((cause: unknown) => setFeedback(errorText(cause)))
+      if (request !== docRequestRef.current || readOnly || composition.current) return
+      const result = raw as { documents?: { relativePath: string; name: string }[]; total?: number; truncated?: boolean }
+      const items = result.documents ?? []
+      const latestRange = docRangeRef.current
+      if (!latestRange) return
+      setDocMenu({
+        query,
+        index: 0,
+        ...latestRange,
+        items,
+        total: typeof result.total === 'number' ? result.total : items.length,
+        truncated: result.truncated === true
+      })
+    }).catch((cause: unknown) => {
+      if (request === docRequestRef.current) setFeedback(errorText(cause))
+    })
   }, [buffer.id, onAction, readOnly])
   updateCompletionsRef.current = updateCompletions
+  useEffect(() => {
+    if (editor) updateCompletions(editor)
+  }, [editor, updateCompletions])
 
   const flush = useCallback(async () => {
     if (!editor) return
@@ -774,20 +838,40 @@ function RichSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
     }
     setReadOnly(buffer.readOnly)
     editor.setEditable(!buffer.readOnly)
+    if (buffer.readOnly) {
+      docRequestRef.current += 1
+      docQueryRef.current = null
+      docRangeRef.current = null
+      setDocMenu(null)
+      setSlash(null)
+    }
   }, [buffer.contentRevision, buffer.draft, buffer.readOnly, editor])
 
   useEffect(() => {
     if (!editor) return
     const element = editor.view.dom
-    const start = () => { composition.current = true }
-    const end = () => { composition.current = false; updateCompletions(editor) }
+    const start = () => {
+      composition.current = true
+      docRequestRef.current += 1
+      docQueryRef.current = null
+      docRangeRef.current = null
+      setDocMenu(null)
+      setSlash(null)
+    }
+    const end = () => {
+      composition.current = false
+      docQueryRef.current = null
+      docRangeRef.current = null
+      setDocMenu(null)
+      setSlash(null)
+    }
     element.addEventListener('compositionstart', start)
     element.addEventListener('compositionend', end)
     return () => {
       element.removeEventListener('compositionstart', start)
       element.removeEventListener('compositionend', end)
     }
-  }, [editor, updateCompletions])
+  }, [editor])
 
   useEffect(() => () => {
     if (timer.current) clearTimeout(timer.current)
@@ -933,7 +1017,19 @@ function RichSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
     else if (item.format === 'codeBlock') editor.chain().focus().toggleCodeBlock().run()
     else if (item.format === 'divider') editor.chain().focus().setHorizontalRule().run()
     else if (item.format === 'table') editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()
-    else if (item.format === 'details' || item.format === 'collapsibleHeading') editor.chain().focus().insertContent('<details><summary>Toggle</summary><p>Content</p></details>').run()
+    else if (item.format === 'details') editor.chain().focus().insertContent({
+      type: 'markdownToggle',
+      attrs: { summary: 'Toggle Text', headingLevel: null, open: false },
+      content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Content' }] }]
+    }).run()
+    else if (item.format === 'collapsibleHeading') {
+      const level = Number(/^toggleHeading([1-5])$/.exec(item.id)?.[1] ?? 1)
+      editor.chain().focus().insertContent({
+        type: 'markdownToggle',
+        attrs: { summary: `Heading ${level}`, headingLevel: level, open: false },
+        content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Content' }] }]
+      }).run()
+    }
     else if (item.format === 'mermaid') editor.chain().focus().setCodeBlock({ language: 'mermaid' }).insertContent('graph TD\n  A[Start] --> B[End]').run()
     else if (item.format === 'inlineMath') editor.commands.insertInlineMath({ latex: 'x^2' })
     else if (item.format === 'blockMath') editor.commands.insertBlockMath({ latex: 'x^2' })
@@ -948,17 +1044,28 @@ function RichSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
   runSlashRef.current = runSlash
 
   const chooseDocument = useCallback((path: string) => {
-    if (!editor) return
-    const $from = editor.state.selection.$from
-    const before = $from.parent.textContent.slice(0, $from.parentOffset)
-    const match = /(?:^|[\s(])\[\[([^\[\]|\r\n]*)$/.exec(before)
-    const queryLength = match?.[1]?.length ?? 0
-    const range = { from: Math.max(1, editor.state.selection.from - queryLength - 2), to: editor.state.selection.from }
-    const target = path.replace(/\.(?:md|markdown|mdx)$/i, '')
-    editor.chain().focus().insertContentAt(range, `[[${target}]]`).run()
+    const menu = docMenuRef.current
+    const range = docRangeRef.current
+    if (!editor || !menu || !range || readOnly || composition.current) return
+    if (path === '' || path.startsWith('/') || path.includes('\\') || path.split('/').includes('..') || /[\r\n\[\]|]/.test(path)) {
+      setFeedback('The selected document target is unsafe.')
+      return
+    }
+    const target = documentLinkTarget(buffer.relativePath, path)
+    if (target === '' || /[\r\n\[\]|]/.test(target)) {
+      setFeedback('The selected document target is unsafe.')
+      return
+    }
+    editor.chain().focus().insertContentAt(range, {
+      type: 'markdownDocumentLink',
+      attrs: { target, label: target }
+    }).run()
+    docRequestRef.current += 1
+    docQueryRef.current = null
+    docRangeRef.current = null
     setDocMenu(null)
     void flush()
-  }, [editor, flush])
+  }, [buffer.relativePath, editor, flush, readOnly])
   chooseDocumentRef.current = chooseDocument
 
   const insertToolbarFormat = useCallback((format: MarkdownFormat) => {
@@ -1316,8 +1423,12 @@ function RichSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
 
       {docMenu && <div role="dialog" aria-label="Markdown document links" style={{ ...toolbarStyle, position: 'relative', zIndex: 4 }}>
         <strong>Markdown document links</strong>
-        {docMenu.items.length === 0 ? <span>No documents found</span> : docMenu.items.map((item, index) => <button key={item.relativePath} type="button" style={{ ...buttonStyle, outline: index === docMenu.index ? '2px solid currentColor' : undefined }} onMouseDown={(event) => event.preventDefault()} onClick={() => chooseDocument(item.relativePath)}>{item.relativePath}</button>)}
-        {docMenu.truncated && <span>Showing up to 20 documents.</span>}
+        <div role="listbox" aria-label="Document matches">
+          {docMenu.items.length === 0
+            ? <span>No documents found</span>
+            : docMenu.items.map((item, index) => <button key={item.relativePath} type="button" role="option" aria-selected={index === docMenu.index} style={{ ...buttonStyle, outline: index === docMenu.index ? '2px solid currentColor' : undefined }} onMouseDown={(event) => event.preventDefault()} onClick={() => chooseDocument(item.relativePath)}>{item.relativePath}</button>)}
+        </div>
+        <span>{docMenu.items.length} of {docMenu.total} matches{docMenu.truncated ? ' (truncated)' : ''}</span>
       </div>}
       {slash && <div role="dialog" aria-label="Slash commands" style={{ ...toolbarStyle, position: 'relative', zIndex: 4 }}>
         <input autoFocus aria-label="Search blocks" placeholder="Search blocks…" value={slash.query} onChange={(event) => setSlash({ query: event.currentTarget.value, index: 0 })} />

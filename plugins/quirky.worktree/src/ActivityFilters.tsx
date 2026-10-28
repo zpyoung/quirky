@@ -130,13 +130,22 @@ export function ActivityFilters({ projection, error, setPreferences }: Props) {
             />
             <span>Hide passing checks</span>
           </label>
+          <label>
+            <input
+              type="checkbox"
+              checked={preferences.hideAutomationCreated ?? false}
+              onChange={(event) => void setPreferences({ hideAutomationCreated: event.currentTarget.checked })}
+            />
+            <span>Hide automation-created</span>
+          </label>
           <button
             className="workspace-clear-filters"
             type="button"
             onClick={() => void setPreferences({
               workspaceActivityWindow: 'all',
               hideCompletedReviewWorkspaces: false,
-              hidePassingCheckWorkspaces: false
+              hidePassingCheckWorkspaces: false,
+              hideAutomationCreated: false
             })}
           >
             Clear filters
@@ -147,6 +156,11 @@ export function ActivityFilters({ projection, error, setPreferences }: Props) {
         <button className="workspace-hidden-count" type="button" onClick={() => void setPreferences({ workspaceActivityWindow: 'all' })}>
           Show {projection.hiddenCount} hidden {projection.hiddenCount === 1 ? 'workspace' : 'workspaces'}
         </button>
+      )}
+      {projection && projection.automationHiddenCount > 0 && (
+        <p className="workspace-hidden-count" role="status">
+          {projection.automationHiddenCount} automation-created {projection.automationHiddenCount === 1 ? 'workspace' : 'workspaces'} hidden
+        </p>
       )}
       {error && <p className="workspace-activity-error" role="alert">Workspace activity filters unavailable: {error}</p>}
     </div>

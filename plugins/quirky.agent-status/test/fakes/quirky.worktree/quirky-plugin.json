@@ -16,6 +16,26 @@
         }
       },
       {
+        "id": "list",
+        "readOnly": true,
+        "params": { "type": "object", "properties": { "repo": { "type": "string" } } },
+        "result": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string" },
+              "repoId": { "type": "string" },
+              "status": { "type": "string" },
+              "kind": { "type": "string" },
+              "branch": { "type": "string" },
+              "head": { "type": "string" }
+            },
+            "required": ["id", "repoId", "status", "kind", "branch", "head"]
+          }
+        }
+      },
+      {
         "id": "testHoldResolve",
         "params": { "type": "object" }
       },

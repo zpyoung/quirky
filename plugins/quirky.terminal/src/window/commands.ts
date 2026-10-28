@@ -181,6 +181,33 @@ async function openSessionCommand(context: UiPluginContext, raw: unknown): Promi
     return { ok: false, reason }
   }
 }
+async function forkAgentSessionCommand(context: UiPluginContext, raw: unknown): Promise<CommandFailure | typeof OK> {
+  const sessionId = textArg(argsOf(raw), 'session')
+  if (sessionId === undefined) throw new Error('session is required')
+  const source = (await context.call('quirky.session/get', { session: sessionId })) as Session
+  if (source.id !== sessionId) throw new Error(`session ${sessionId} is not the exact session returned by the provider`)
+  if (source.kind !== 'terminal') throw new Error(`session ${sessionId} is not a terminal agent session`)
+  if (source.agent === 'shell') throw new Error(`session ${sessionId} is a shell, not an agent`)
+  if (typeof source.providerSession?.id !== 'string' || source.providerSession.id === '') {
+    throw new Error(`session ${sessionId} has no captured provider session`)
+  }
+
+  const forked = (await context.call('quirky.session/resume', { session: sessionId, fork: true })) as Session
+  if (
+    forked.id === sessionId ||
+    forked.resumedFrom !== sessionId ||
+    forked.agent !== source.agent ||
+    forked.worktreeId !== source.worktreeId ||
+    forked.cwd !== source.cwd ||
+    (forked.providerSession !== null && forked.providerSession !== undefined)
+  ) {
+    throw new Error(`Fork did not return a distinct copy of session ${sessionId}`)
+  }
+  const opened = await openSessionCommand(context, { session: forked.id, workspace: forked.worktreeId })
+  if ('ok' in opened && opened.ok === false) throw new Error(opened.reason)
+  return OK
+}
+
 
 /**
  * The handlers of `quirky.terminal`'s window commands, by command name. Most act on the focused
@@ -205,6 +232,7 @@ export function terminalCommands(context: UiPluginContext): Record<string, Comma
     'focus-pane': (args) => focusPaneCommand(context, args),
     'focus-previous-pane': on(context, 'pane', (controller) => controller.focusPrevious()),
     'open-session': (args) => openSessionCommand(context, args),
+    'fork-agent-session': (args) => forkAgentSessionCommand(context, args),
     'toggle-expand-pane': onPane(context, (controller, pane) => controller.toggleExpand(pane)),
     equalize: on(context, 'tab', (controller, args) => controller.equalize(textArg(args, 'tab'))),
     'set-pane-title': onPane(context, (controller, pane) => controller.setTitle(pane)),

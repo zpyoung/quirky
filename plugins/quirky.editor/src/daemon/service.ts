@@ -13,6 +13,7 @@ import type {
   EditorReadResult,
   EditorServices,
   EditorStateData,
+  ExplorerParams,
   EditorTransferBeginParams,
   EditorTransferChunkParams,
   EditorTransferKind,
@@ -26,7 +27,7 @@ import { WorktreePaths, type ResolvedWorktree } from './paths'
 import { ContentsSearch } from './search'
 import { ExplorerService } from './explorer'
 import { FileInventory, normalizeRipgrepPath, parseQuickOpenTarget, QUICK_OPEN_MAX_ENTRIES, QUICK_OPEN_MAX_RESULTS, QUICK_OPEN_QUERY_MAX_BYTES } from './inventory'
-import { MAX_READ_BYTES, MAX_TEXT_FILE_BYTES, guardedWrite, hashText, movePathWithoutOverwrite, readByteRange, readSnapshot, type FileSnapshot } from './files'
+import { MAX_READ_BYTES, MAX_TEXT_FILE_BYTES, guardedWrite, hashText, movePathWithoutOverwrite, probeWriteAccess, readByteRange, readSnapshot, type FileSnapshot } from './files'
 import { KeyedQueue } from './queue'
 
 export const EDITOR_DOCUMENT_VIEW = 'view:quirky.editor/document'
@@ -82,6 +83,11 @@ type HistoryResult = { undo: number; redo: number; canUndo: boolean; canRedo: bo
 type CoreStateParams = { bufferId?: string; worktree?: string }
 type DraftParams = { bufferId: string; content: string; expectedRevision: number }
 type SaveParams = { bufferId: string; trigger?: 'user' | 'autosave' | 'overwrite'; expectedRevision?: number }
+type SaveOutcome =
+  | { kind: 'saved'; buffer: EditorBuffer }
+  | { kind: 'skipped'; buffer: EditorBuffer }
+  | { kind: 'external'; external: 'deleted' | 'changed' }
+  | { kind: 'permission-denied' }
 type CloseParams = { bufferId: string; tabId?: string; choice?: 'save' | 'discard' | 'cancel' }
 type SaveAsParams = { bufferId: string; path: string; expectedRevision: number }
 type ViewParams = { bufferId: string; action?: string; tabId?: string; patch?: Record<string, unknown>; preview?: boolean }
@@ -206,7 +212,14 @@ export class EditorDaemon {
       canClose: (params) => this.canClose(params as unknown as CloseParams),
       reopen: (params, caller) => this.reopen(params as { worktree?: string; focus?: boolean }, caller),
       view: (params) => this.view(params as ViewParams),
-      explorer: (params, caller) => this.explorerService.call(params as Parameters<ExplorerService['call']>[0], caller),
+      explorer: async (params, caller) => {
+        const request = params as ExplorerParams
+        const result = await this.explorerService.call(request, caller)
+        if (request.action === 'navigate' || request.action === 'select' || request.action === 'reveal' || request.action === 'preferences') {
+          this.emit()
+        }
+        return result
+      },
       mutate: (params, caller) => this.mutate(params as MutateParams, caller),
       history: (params, caller) => this.fileHistory(params as { worktree?: string; action: 'state' | 'undo' | 'redo' }, caller),
       quickOpen: (params, caller) => this.quickOpen(params as { worktree?: string; action: 'search' | 'record' | 'history' | 'clearHistory'; query?: string; path?: string; limit?: number }, caller),
@@ -282,6 +295,7 @@ export class EditorDaemon {
         baseline: snapshot.hash,
         size: snapshot.size,
         readOnly: snapshot.readOnly,
+        diskWritable: snapshot.diskWritable,
         dirty: false,
         external: null,
         diskContent: null,
@@ -646,6 +660,7 @@ export class EditorDaemon {
           draft: null,
           baseline: contentHash,
           size: contentBytes,
+          diskWritable: installedSnapshot.diskWritable,
           dirty: false,
           external: null,
           diskContent: null,
@@ -1372,13 +1387,15 @@ export class EditorDaemon {
     const baseline = state.buffer.baseline
     if (trigger !== 'overwrite' && baseline === null) throw this.context.error('conflict', 'Cannot save because this buffer has no verified disk baseline.')
     const keys = await this.fileKeys(savedPath)
-    return await this.fileQueue.run(keys, async () => {
+    const returnEditorBuffer = await this.fileQueue.run<EditorBuffer>(keys, async () => {
       const currentState = this.requireState(bufferId)
       if (trigger === 'autosave' && (generation !== currentState.generation || !this.autosaveEligible(currentState) || currentState.autosaveHold || !currentState.verified)) return currentState.buffer
       if (currentState.buffer.path !== savedPath || (trigger !== 'overwrite' && currentState.buffer.baseline !== baseline)) {
         throw this.context.error('conflict', 'The editor buffer baseline changed while the save was queued; re-read state before saving.')
       }
-      const result = await this.bufferQueue.run<{ buffer: EditorBuffer } | { external: 'deleted' | 'changed' }>([`buffer:${bufferId}`], async () => {
+      const diskWritable = await probeWriteAccess(savedPath)
+      await this.updateDiskWritable(bufferId, diskWritable)
+      const outcome = await this.bufferQueue.run<SaveOutcome>([`buffer:${bufferId}`], async () => {
         const latest = this.requireState(bufferId)
         this.assertSaveRevision(expectedRevision, latest.buffer.contentRevision)
         if (latest.buffer.path !== savedPath || (trigger !== 'overwrite' && latest.buffer.baseline !== baseline)) {
@@ -1386,22 +1403,29 @@ export class EditorDaemon {
         }
         if (latest.buffer.readOnly) throw this.context.error('invalid-params', 'This file is read-only.')
         if (latest.transferHolds.size > 0) {
-          if (trigger === 'autosave') return { buffer: latest.buffer }
+          if (trigger === 'autosave') return { kind: 'skipped', buffer: latest.buffer }
           throw this.context.error('conflict', 'A text transfer is in progress for this buffer.')
         }
         if (trigger === 'autosave' && (generation !== latest.generation || !this.autosaveEligible(latest) || latest.autosaveHold || !latest.verified)) {
-          return { buffer: latest.buffer }
+          return { kind: 'skipped', buffer: latest.buffer }
         }
         const content = latest.buffer.draft ?? latest.buffer.content
         const currentBaseline = latest.buffer.baseline
         if (trigger !== 'overwrite' && currentBaseline === null) {
           throw this.context.error('conflict', 'Cannot save because this buffer has no verified disk baseline.')
         }
-        const writeResult = trigger === 'overwrite'
-          ? await this.forceWrite(savedPath, content)
-          : await guardedWrite(savedPath, content, currentBaseline!, trigger !== 'autosave')
+        let writeResult: 'written' | 'changed' | 'missing'
+        try {
+          writeResult = trigger === 'overwrite'
+            ? await this.forceWrite(savedPath, content)
+            : await guardedWrite(savedPath, content, currentBaseline!, trigger !== 'autosave')
+        } catch (error) {
+          const code = (error as NodeJS.ErrnoException | null)?.code
+          if (code === 'EACCES' || code === 'EPERM' || code === 'EROFS') return { kind: 'permission-denied' }
+          throw error
+        }
         if (writeResult !== 'written') {
-          return { external: writeResult === 'missing' ? 'deleted' as const : 'changed' as const }
+          return { kind: 'external', external: writeResult === 'missing' ? 'deleted' : 'changed' }
         }
         const hash = hashText(content)
         this.ownWrites.set(savedPath, { hash, expiresAt: Date.now() + 3000 })
@@ -1413,6 +1437,7 @@ export class EditorDaemon {
           draft: clearDraft ? null : latest.buffer.draft,
           baseline: hash,
           size: Buffer.byteLength(content, 'utf8'),
+          diskWritable: true,
           dirty: clearDraft ? false : latest.buffer.dirty,
           external: null,
           diskContent: null,
@@ -1434,19 +1459,34 @@ export class EditorDaemon {
         if (trigger === 'user' || trigger === 'overwrite') latest.autosaveHold = false
         this.persist(latest)
         this.emit()
-        return { buffer: next }
+        return { kind: 'saved', buffer: next }
       })
-      if ('external' in result) {
-        await this.markWriteConflict(currentState, savedPath, result.external)
-        throw this.context.error('conflict', result.external === 'deleted'
+      if (outcome.kind === 'external') {
+        await this.markWriteConflict(currentState, savedPath, outcome.external)
+        throw this.context.error('conflict', outcome.external === 'deleted'
           ? 'The file was deleted after it was opened. Compare, reload, or explicitly overwrite.'
-          : 'This file changed on disk since your edits. Use the banner to compare, reload, or explicitly overwrite.')
+          : 'This file changed on disk since your edits. Use the banner to compare, reload, or overwrite.')
+      }
+      if (outcome.kind === 'permission-denied') {
+        await this.updateDiskWritable(bufferId, false)
+        throw this.context.error('conflict', 'The file is not writable with the current OS permissions. The draft and baseline were retained; restore write access and retry Save.')
       }
       const latest = this.requireState(bufferId)
       this.scheduleAutosave(latest)
-      return result.buffer
+      return outcome.buffer
+    })
+    return returnEditorBuffer
+  }
+  private async updateDiskWritable(bufferId: string, diskWritable: boolean): Promise<EditorBuffer> {
+    return await this.bufferQueue.run([`buffer:${bufferId}`], async () => {
+      const state = this.requireState(bufferId)
+      if (state.buffer.diskWritable === diskWritable) return state.buffer
+      const next = { ...state.buffer, diskWritable, revision: state.buffer.revision + 1 }
+      this.commit(state, next, false)
+      return next
     })
   }
+
 
   private async viewPatch(bufferId: string, patch: Record<string, unknown>, tabId?: string): Promise<EditorBuffer> {
     const keys = Object.keys(patch)
@@ -1637,6 +1677,7 @@ export class EditorDaemon {
           ...current.buffer,
           external: snapshot === null ? 'deleted' : (snapshot.hash === current.buffer.baseline ? null : 'changed'),
           diskContent: snapshot?.text ?? null,
+          diskWritable: snapshot?.diskWritable ?? false,
           revision: current.buffer.revision + 1
         }
         this.commit(current, next, false)
@@ -1655,7 +1696,7 @@ export class EditorDaemon {
         await this.bufferQueue.run([`buffer:${bufferId}`], async () => {
           const current = this.requireState(bufferId)
           current.diskSignature = null
-          this.commit(current, { ...current.buffer, external: 'deleted', diskContent: null, revision: current.buffer.revision + 1 }, false)
+          this.commit(current, { ...current.buffer, external: 'deleted', diskContent: null, diskWritable: false, revision: current.buffer.revision + 1 }, false)
         })
         throw this.context.error('conflict', 'Cannot keep edits because the file is deleted.')
       }
@@ -1666,6 +1707,7 @@ export class EditorDaemon {
         const next: EditorBuffer = {
           ...current.buffer,
           baseline: snapshot.hash,
+          diskWritable: snapshot.diskWritable,
           external: null,
           diskContent: null,
           revision: current.buffer.revision + 1
@@ -1704,6 +1746,7 @@ export class EditorDaemon {
           baseline: snapshot.hash,
           size: snapshot.size,
           readOnly: snapshot.readOnly,
+          diskWritable: snapshot.diskWritable,
           dirty: false,
           external: null,
           diskContent: null,
@@ -1757,7 +1800,9 @@ export class EditorDaemon {
       const stamp = this.ownWrites.get(path.path)
       if (stamp !== undefined && stamp.expiresAt > Date.now() && snapshot?.hash === stamp.hash) {
         this.ownWrites.delete(path.path)
-        return state.buffer
+        return snapshot.diskWritable === state.buffer.diskWritable
+          ? state.buffer
+          : await this.updateDiskWritable(bufferId, snapshot.diskWritable)
       }
       if (stamp !== undefined && stamp.expiresAt <= Date.now()) this.ownWrites.delete(path.path)
       return await this.bufferQueue.run([`buffer:${bufferId}`], async () => {
@@ -1765,28 +1810,30 @@ export class EditorDaemon {
         const old = current.buffer
           current.diskSignature = null
         if (snapshot === null) {
-          const next = { ...old, external: 'deleted' as const, diskContent: null, error: null, revision: old.revision + 1 }
+          const next = { ...old, external: 'deleted' as const, diskContent: null, diskWritable: false, error: null, revision: old.revision + 1 }
           current.verified = false
           this.commit(current, next, false)
           return next
         }
         if (old.baseline === null) {
           current.diskSignature = snapshot.hash
-          const next = { ...old, external: 'changed' as const, diskContent: snapshot.text, error: 'Disk baseline is unknown; save is blocked until Reload or explicit Overwrite.', revision: old.revision + 1 }
+          const next = { ...old, external: 'changed' as const, diskContent: snapshot.text, diskWritable: snapshot.diskWritable, error: 'Disk baseline is unknown; save is blocked until Reload or explicit Overwrite.', revision: old.revision + 1 }
           current.verified = false
           this.commit(current, next, false)
           return next
         }
         if (snapshot.hash === old.baseline) {
           current.diskSignature = null
-          const next = old.external === null && old.diskContent === null ? old : { ...old, external: null, diskContent: null, error: null, revision: old.revision + 1 }
+          const next = old.external === null && old.diskContent === null && old.diskWritable === snapshot.diskWritable
+            ? old
+            : { ...old, external: null, diskContent: null, diskWritable: snapshot.diskWritable, error: null, revision: old.revision + 1 }
           current.verified = true
           if (next !== old) this.commit(current, next, false)
           return next
         }
         if (old.dirty || current.autosaveHold) {
           current.diskSignature = snapshot.hash
-          const next = { ...old, external: 'changed' as const, diskContent: snapshot.text, error: null, revision: old.revision + 1 }
+          const next = { ...old, external: 'changed' as const, diskContent: snapshot.text, diskWritable: snapshot.diskWritable, error: null, revision: old.revision + 1 }
           current.verified = false
           this.commit(current, next, false)
           return next
@@ -1799,6 +1846,7 @@ export class EditorDaemon {
           baseline: snapshot.hash,
           size: snapshot.size,
           readOnly: snapshot.readOnly,
+          diskWritable: snapshot.diskWritable,
           dirty: false,
           external: null,
           diskContent: null,
@@ -2438,6 +2486,7 @@ export class EditorDaemon {
         ...current.buffer,
         external,
         diskContent: disk?.text ?? null,
+        diskWritable: disk?.diskWritable ?? false,
         revision: current.buffer.revision + 1
       }, false)
       current.verified = false

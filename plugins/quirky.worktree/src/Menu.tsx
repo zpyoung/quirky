@@ -122,6 +122,7 @@ export type WorkspaceMenuHandlers = {
   openDeleteDialog(worktree: Worktree, descendants: number): void
   setMembership(worktree: Worktree, group: ProjectGroup | null): void
   moveProject(repo: Repo, group: ProjectGroup | null): void
+  setSleeping(worktree: Worktree, sleeping: boolean, withDescendants: boolean): void
 }
 
 /** The items of a workspace card's menu, in order. */
@@ -138,6 +139,16 @@ export function workspaceMenu(
         label: descendants > 0 ? `Delete with Descendants (${descendants})…` : 'Delete',
         onSelect: () => on.openDeleteDialog(worktree, descendants)
       }
+  const sleeping = 'sleeping' in worktree && worktree.sleeping === true
+  const sleepItems: MenuItem[] = sleeping
+    ? [
+        { label: 'Wake', onSelect: () => on.setSleeping(worktree, false, false) },
+        ...(descendants > 0 ? [{ label: `Wake with Descendants (${descendants})`, onSelect: () => on.setSleeping(worktree, false, true) }] : [])
+      ]
+    : [
+        { label: 'Sleep', onSelect: () => on.setSleeping(worktree, true, false) },
+        ...(descendants > 0 ? [{ label: `Sleep with Descendants (${descendants})`, onSelect: () => on.setSleeping(worktree, true, true) }] : [])
+      ]
   const items: MenuItem[] = [
     { label: 'Update…', onSelect: () => on.openDialog({ kind: 'update', worktreeId: worktree.id }) },
     {
@@ -159,6 +170,7 @@ export function workspaceMenu(
     worktree.parentId
       ? { label: 'Remove from Parent', onSelect: () => on.removeParent(worktree) }
       : { label: 'Set Parent Worktree…', onSelect: () => on.openDialog({ kind: 'parent', worktreeId: worktree.id }) },
+    ...sleepItems,
     del
   ]
   if (worktree.kind === 'git') {

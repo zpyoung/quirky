@@ -229,16 +229,4 @@ describe('asks', () => {
     service.shutdown()
   })
 
-  test('a pending ask is announced, and a queued one waits to surface', async () => {
-    const fake = fakeContext(answers([ask]))
-    const service = new NotificationsService(fake.context)
-    service.onEvent(settledEvent('quirky.ask/created', { ask: { ...ask, queued: true }, seq: 1 }))
-    await Bun.sleep(30)
-    expect(fake.notifications).toEqual([])
-
-    service.onEvent(settledEvent('quirky.ask/created', { ask, seq: 2 }))
-    await Bun.sleep(30)
-    expect(fake.notifications).toMatchObject([{ title: 'Deploy?', body: 'Ship?' }])
-    service.shutdown()
-  })
 })

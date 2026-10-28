@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import type { ItemTarget, TaskMethodTable, TaskRepo, TasksEnv, WorkspaceLink } from '../contracts'
+import type { ItemTarget, TaskMethodTable, TaskRepo, TaskWorkspaceCreated, TasksEnv, WorkspaceComposerRequest, WorkspaceLink } from '../contracts'
 import {
   eligibleRepositories,
   errorReason,
@@ -14,22 +14,7 @@ import {
 } from './source'
 
 const SESSION_VIEW = 'view:quirky.session/worktree'
-type SetupChoice = 'run' | 'skip' | 'inherit'
-type ComposerRequest = {
-  requestId: string
-  target: ItemTarget
-  repoId: string
-  repoName: string
-  name: string
-  title: string
-  prompt: string
-  setup: SetupChoice
-  agent: string | null
-  setupDecisionRequired?: boolean
-  trustScript?: string
-  trustChanged?: boolean
-  error?: string
-}
+type SetupChoice = WorkspaceComposerRequest['setup']
 
 function invalid(env: TasksEnv, message: string): never {
   throw env.context.error('invalid-params', message)
@@ -78,6 +63,14 @@ function setupChoice(env: TasksEnv, value: unknown): SetupChoice {
   if (value === undefined || value === 'inherit') return 'inherit'
   if (value === 'run' || value === 'skip') return value
   return invalid(env, 'setup must be run, skip, or inherit.')
+}
+
+type IssueCommandChoice = NonNullable<WorkspaceComposerRequest['issueCommand']>
+
+function issueCommandChoice(env: TasksEnv, value: unknown): IssueCommandChoice {
+  if (value === undefined || value === 'inherit') return 'inherit'
+  if (value === 'run' || value === 'skip') return value
+  return invalid(env, 'issueCommand must be run, skip, or inherit.')
 }
 
 
@@ -133,7 +126,7 @@ function linkValue(target: ItemTarget, source: ResolvedRepoSource, worktree: { i
   return { worktree: worktree.id, name: worktree.name, url, repoId: source.repo.id }
 }
 
-function emitComposer(env: TasksEnv, request: ComposerRequest | null): void {
+function emitComposer(env: TasksEnv, request: WorkspaceComposerRequest | null): void {
   env.context.emit('workspaceComposer', { request })
 }
 
@@ -141,8 +134,8 @@ function composeRequest(
   target: ItemTarget,
   repo: TaskRepo,
   item: Record<string, unknown>,
-  fields: { name?: string; prompt?: string; setup?: SetupChoice; agent?: string | null; requestId?: string; error?: string } = {}
-): ComposerRequest {
+  fields: { name?: string; prompt?: string; setup?: SetupChoice; issueCommand?: IssueCommandChoice; agent?: string | null; requestId?: string; error?: string } = {}
+): WorkspaceComposerRequest {
   const title = typeof item.title === 'string' && item.title.trim() ? item.title.trim() : `#${target.number}`
   const defaultPrompt = promptFor(target, item)
   return {
@@ -154,6 +147,7 @@ function composeRequest(
     title,
     prompt: fields.prompt?.trim() || defaultPrompt,
     setup: fields.setup ?? 'inherit',
+    ...(target.kind === 'issue' ? { issueCommand: fields.issueCommand ?? 'inherit' } : {}),
     agent: fields.agent ?? null,
     ...(fields.error ? { error: fields.error } : {})
   }
@@ -224,31 +218,47 @@ function workspaceResult(result: unknown): { record: Record<string, unknown>; wo
   return { record, worktree: { id: worktree.id, name: worktree.name, repoId: worktree.repoId } }
 }
 
-type WorkspaceSession = { request: ComposerRequest | null }
+type WorkspaceSession = { request: WorkspaceComposerRequest | null; intent: number; creatingRequestId?: string }
 
-function setComposer(env: TasksEnv, session: WorkspaceSession, request: ComposerRequest | null): void {
+function setComposer(env: TasksEnv, session: WorkspaceSession, request: WorkspaceComposerRequest | null): void {
   session.request = request
   emitComposer(env, request)
 }
 
 
-function composerResult(request: ComposerRequest, blocked = false): Record<string, unknown> {
+function composerResult(request: WorkspaceComposerRequest, blocked = false): Record<string, unknown> {
   return { kind: 'composer', ...request, ...(blocked ? { blocked: true } : {}) }
 }
 
-function mergeComposerError(request: ComposerRequest, error: unknown): ComposerRequest {
+function mergeComposerError(request: WorkspaceComposerRequest, error: unknown): WorkspaceComposerRequest {
   const outer = object(error)
   const data = object(outer?.data)
   const reason = errorReason(error)
-  return {
-    ...request,
-    ...(reason === 'setup-decision-required' ? { setupDecisionRequired: true } : {}),
-    ...(reason === 'hooks-untrusted' ? {
-      trustScript: typeof data?.script === 'string' ? data.script : '',
-      trustChanged: data?.changed === true
-    } : {}),
-    error: messageOf(error)
+  const updated: WorkspaceComposerRequest = { ...request, error: messageOf(error) }
+  delete updated.setupDecisionRequired
+  delete updated.trustKind
+  delete updated.trustScript
+  delete updated.trustHash
+  delete updated.trustChanged
+
+  if (reason === 'setup-decision-required') {
+    updated.setupDecisionRequired = true
+    return updated
   }
+  if (reason !== 'hooks-untrusted') return updated
+
+  const kind = data?.kind === 'setup' || data?.kind === 'issue' ? data.kind : undefined
+  const hash = typeof data?.hash === 'string' && data.hash.length > 0 ? data.hash : undefined
+  if (kind) updated.trustKind = kind
+  updated.trustScript = typeof data?.script === 'string' ? data.script : ''
+  if (hash) updated.trustHash = hash
+  updated.trustChanged = data?.changed === true ||
+    (request.trustKind === kind && typeof request.trustHash === 'string' && hash !== undefined && request.trustHash !== hash) ||
+    (kind === 'setup' && request.trustSetupHash !== undefined && request.trustSetupHash !== hash) ||
+    (kind === 'issue' && request.trustIssueCommandHash !== undefined && request.trustIssueCommandHash !== hash)
+  if (kind === 'setup' && request.trustSetupHash !== hash) delete updated.trustSetupHash
+  if (kind === 'issue' && request.trustIssueCommandHash !== hash) delete updated.trustIssueCommandHash
+  return updated
 }
 
 function isSetupRetry(error: unknown): boolean {
@@ -261,81 +271,177 @@ async function createFromComposer(
   session: WorkspaceSession,
   target: ItemTarget,
   params: Record<string, unknown>,
-  current: ComposerRequest | null,
-  trustedAgent: string | null
+  current: WorkspaceComposerRequest | null,
+  trustedAgent: string | null,
+  intent: number
 ): Promise<Record<string, unknown>> {
   const requestId = stringValue(params.composerRequestId, 'composerRequestId')
   const fromComposer = requestId !== undefined
   if (fromComposer && (!current || current.requestId !== requestId || targetLinkKey(current.target) !== targetLinkKey(target))) {
     invalid(env, 'This workspace composer request is no longer active.')
   }
-  const source = await resolveTargetRepo(env, target)
-  const item = await loadItem(env, target)
-  const setup = setupChoice(env, params.setup ?? current?.setup)
-  const name = stringValue(params.name, 'name') ?? current?.name
-  const prompt = stringValue(params.prompt, 'prompt') ?? current?.prompt ?? promptFor(target, item)
-  const agentValue = params.agent === undefined ? (current?.agent ?? trustedAgent) : stringValue(params.agent, 'agent') ?? null
-  const agent = await validateAgent(env, agentValue)
-  if (!fromComposer && params.newWorkspace !== true) {
-    const request = composeRequest(target, source.repo, item, { name, prompt, setup, agent })
-    setComposer(env, session, request)
-    return composerResult(request)
+  if (session.intent !== intent || (fromComposer && session.request?.requestId !== requestId)) {
+    invalid(env, 'This workspace composer request is no longer active.')
   }
-  if (!fromComposer) {
-    if (!agent) {
-      const request = composeRequest(target, source.repo, item, { name, prompt, setup, agent })
+  if (fromComposer && session.creatingRequestId === requestId) invalid(env, 'This workspace creation is already in progress.')
+  if (fromComposer) session.creatingRequestId = requestId
+
+  let request: WorkspaceComposerRequest | null = current ? { ...current } : null
+  const isCurrent = () => session.intent === intent && (!fromComposer || session.request?.requestId === requestId)
+  const assertCurrent = () => {
+    if (!isCurrent()) invalid(env, 'This workspace composer request is no longer active.')
+  }
+  try {
+    const setup = setupChoice(env, params.setup ?? current?.setup)
+    const issueCommand = target.kind === 'issue'
+      ? issueCommandChoice(env, params.issueCommand ?? current?.issueCommand)
+      : undefined
+    const name = stringValue(params.name, 'name') ?? current?.name
+    const promptValue = stringValue(params.prompt, 'prompt')
+    const agentValue = params.agent === undefined ? (current?.agent ?? trustedAgent) : stringValue(params.agent, 'agent') ?? null
+
+    if (request) {
+      request = {
+        ...request,
+        name: name ?? request.name,
+        prompt: promptValue ?? request.prompt,
+        setup,
+        ...(issueCommand === undefined ? {} : { issueCommand }),
+        agent: agentValue
+      }
+      delete request.error
+      delete request.setupDecisionRequired
+    }
+
+    const trustSetup = params.trustSetup === true
+    if (params.trustSetup !== undefined && typeof params.trustSetup !== 'boolean') invalid(env, 'trustSetup must be a boolean.')
+    const trustIssueCommand = params.trustIssueCommand === true
+    if (params.trustIssueCommand !== undefined && typeof params.trustIssueCommand !== 'boolean') invalid(env, 'trustIssueCommand must be a boolean.')
+    const trustSetupHash = stringValue(params.trustSetupHash, 'trustSetupHash')
+    const trustIssueCommandHash = stringValue(params.trustIssueCommandHash, 'trustIssueCommandHash')
+    if (trustSetupHash !== undefined && !trustSetup) invalid(env, 'trustSetupHash requires trustSetup approval.')
+    if (trustIssueCommandHash !== undefined && !trustIssueCommand) invalid(env, 'trustIssueCommandHash requires trustIssueCommand approval.')
+
+    const approvalHash = (kind: 'setup' | 'issue', enabled: boolean, supplied: string | undefined): string | undefined => {
+      if (!enabled) return undefined
+      if (!fromComposer || !current || !request) invalid(env, `Untrusted ${kind} content can only run after explicit composer approval.`)
+      const retained = kind === 'setup' ? current.trustSetupHash : current.trustIssueCommandHash
+      const displayed = current.trustKind === kind ? current.trustHash : undefined
+      const expected = retained ?? displayed
+      if (!expected || !supplied || supplied !== expected) invalid(env, `Run-once ${kind} approval must include the displayed content hash.`)
+      if (kind === 'setup' && setup !== 'run') invalid(env, 'Untrusted setup can only run after choosing Run setup.')
+      if (kind === 'issue' && issueCommand !== 'run') invalid(env, 'Untrusted issue command can only run after choosing Run issue command.')
+      return supplied
+    }
+    const approvedSetupHash = approvalHash('setup', trustSetup, trustSetupHash)
+    const approvedIssueCommandHash = approvalHash('issue', trustIssueCommand, trustIssueCommandHash)
+
+    const source = await resolveTargetRepo(env, target)
+    assertCurrent()
+    const item = await loadItem(env, target)
+    assertCurrent()
+    const agent = await validateAgent(env, agentValue)
+    assertCurrent()
+
+    if (!fromComposer && params.newWorkspace !== true) {
+      request = composeRequest(target, source.repo, item, { name, prompt: promptValue, setup, issueCommand, agent })
+      if (session.intent !== intent) invalid(env, 'This workspace request was superseded.')
       setComposer(env, session, request)
       return composerResult(request)
     }
-    const policy = await setupPolicy(env, source.repo.id)
-    if (policy === 'ask' && setup === 'inherit') {
-      const request = composeRequest(target, source.repo, item, { name, prompt, setup, agent, error: 'Choose whether to run the repository setup before creating this workspace.' })
-      request.setupDecisionRequired = true
-      setComposer(env, session, request)
-      return composerResult(request, true)
+    if (!fromComposer) {
+      if (!agent) {
+        request = composeRequest(target, source.repo, item, { name, prompt: promptValue, setup, issueCommand, agent })
+        if (session.intent !== intent) invalid(env, 'This workspace request was superseded.')
+        setComposer(env, session, request)
+        return composerResult(request)
+      }
+      const policy = await setupPolicy(env, source.repo.id)
+      assertCurrent()
+      if (policy === 'ask' && setup === 'inherit') {
+        request = composeRequest(target, source.repo, item, { name, prompt: promptValue, setup, issueCommand, agent, error: 'Choose whether to run the repository setup before creating this workspace.' })
+        request.setupDecisionRequired = true
+        setComposer(env, session, request)
+        return composerResult(request, true)
+      }
     }
-  }
-  const trustSetup = params.trustSetup === true
-  if (params.trustSetup !== undefined && typeof params.trustSetup !== 'boolean') invalid(env, 'trustSetup must be a boolean.')
-  if (trustSetup && (!fromComposer || !current?.trustScript || setup !== 'run')) invalid(env, 'Untrusted setup can only run after an explicit composer approval.')
-  const request = current ?? composeRequest(target, source.repo, item, { name, prompt, setup, agent })
-  try {
+
+    request ??= composeRequest(target, source.repo, item, { name, prompt: promptValue, setup, issueCommand, agent })
+    request.name = name ?? request.name
+    request.prompt = promptValue ?? request.prompt
+    request.setup = setup
+    if (issueCommand !== undefined) request.issueCommand = issueCommand
+    request.agent = agent
+    if (approvedSetupHash !== undefined) request.trustSetupHash = approvedSetupHash
+    if (approvedIssueCommandHash !== undefined) request.trustIssueCommandHash = approvedIssueCommandHash
+    assertCurrent()
+
     const created = workspaceResult(await env.context.call('quirky.worktree/create', {
       repo: source.repo.id,
       github: targetUrl(target),
-      ...(name ? { name } : {}),
+      ...(name !== undefined ? { name } : {}),
       setup,
+      ...(issueCommand === 'run' || issueCommand === 'skip' ? { issueCommand } : {}),
       ...(agent ? { agent } : {}),
-      ...(prompt ? { prompt } : {}),
-      ...(trustSetup ? { trustSetup: true } : {}),
+      ...(request.prompt.trim().length > 0 ? { prompt: request.prompt } : {}),
+      ...(trustSetup ? { trustSetup: true, trustSetupHash: approvedSetupHash } : {}),
+      ...(trustIssueCommand ? { trustIssueCommand: true, trustIssueCommandHash: approvedIssueCommandHash } : {}),
       createdBy: 'window',
       activate: true
     }))
     if (created.worktree.repoId !== source.repo.id) throw new Error('The new workspace belongs to a different repository.')
     const link = linkValue(target, source.source, created.worktree)
     env.update((state) => { state.links[targetLinkKey(target)] = link })
-    if (current?.requestId === request.requestId) setComposer(env, session, null)
-    return { kind: 'created', target, worktree: created.record.worktree, setup: created.record.setup, warnings: created.record.warnings ?? [] }
+
+    const canonical = { ...created.record, kind: 'created', target } as unknown as TaskWorkspaceCreated
+    const warnings = Array.isArray(canonical.warnings) ? [...canonical.warnings] : []
+    const promptWasProvided = request.prompt.trim().length > 0
+    let promptDelivery: unknown = canonical.promptDelivery
+    if (typeof canonical.agentSessionId === 'string') {
+      try {
+        const sessionRecord = object(await env.context.call('quirky.session/get', { session: canonical.agentSessionId }))
+        if (sessionRecord && Object.hasOwn(sessionRecord, 'promptDelivery')) promptDelivery = sessionRecord.promptDelivery
+        else {
+          promptDelivery = null
+          warnings.push(promptWasProvided
+            ? `Could not confirm prompt delivery for ${agent ?? 'the selected agent'} in the created workspace.`
+            : `Could not read the session state for ${agent ?? 'the selected agent'} in the created workspace.`)
+        }
+      } catch (error) {
+        promptDelivery = null
+        warnings.push(promptWasProvided
+          ? `Could not confirm prompt delivery for ${agent ?? 'the selected agent'} in the created workspace: ${messageOf(error)}`
+          : `Could not read the session state for ${agent ?? 'the selected agent'} in the created workspace: ${messageOf(error)}`)
+      }
+    }
+    if (fromComposer && isCurrent()) setComposer(env, session, null)
+    return { ...canonical, agent, warnings, ...(promptDelivery === undefined ? {} : { promptDelivery }) }
   } catch (error) {
-    if (isSetupRetry(error)) {
+    if (isSetupRetry(error) && request && isCurrent()) {
       const updated = mergeComposerError(request, error)
       setComposer(env, session, updated)
       return composerResult(updated, true)
     }
-    if (fromComposer && current?.requestId === request.requestId) {
+    if (fromComposer && request && isCurrent()) {
       const updated = { ...request, error: messageOf(error) }
       setComposer(env, session, updated)
       return composerResult(updated, true)
     }
     throw error
+  } finally {
+    if (fromComposer && session.creatingRequestId === requestId) delete session.creatingRequestId
   }
 }
-
 async function workspace(env: TasksEnv, session: WorkspaceSession, params: Record<string, unknown>): Promise<Record<string, unknown>> {
   let target = readTarget(env, params.target)
-  if (!identityFromTarget(target)) target = await canonicalTarget(env, target)
   const action = params.action
   if (action !== 'start' && action !== 'resume' && action !== 'link' && action !== 'unlink') invalid(env, 'action must be start, resume, link, or unlink.')
+  if (params.composerRequestId === undefined) {
+    session.intent += 1
+    if (session.request) setComposer(env, session, null)
+  }
+  const intent = session.intent
+  if (!identityFromTarget(target)) target = await canonicalTarget(env, target)
   if (action === 'unlink') return unlinkWorkspace(env, target)
   if (action === 'link') {
     const selector = stringValue(params.worktree, 'worktree')
@@ -364,22 +470,26 @@ async function workspace(env: TasksEnv, session: WorkspaceSession, params: Recor
       agent = null
     }
   }
-  return createFromComposer(env, session, target, params, session.request, agent)
+  return createFromComposer(env, session, target, params, session.request, agent, intent)
 }
 
-function composerState(session: WorkspaceSession): ComposerRequest | null {
+function composerState(session: WorkspaceSession): WorkspaceComposerRequest | null {
   return session.request
 }
 
-function composerCancel(env: TasksEnv, session: WorkspaceSession, params: Record<string, unknown>): ComposerRequest | null {
+function composerCancel(env: TasksEnv, session: WorkspaceSession, params: Record<string, unknown>): WorkspaceComposerRequest | null {
   const requestId = stringValue(params.requestId, 'requestId')
   if (!requestId) invalid(env, 'requestId is required.')
-  if (session.request?.requestId === requestId) setComposer(env, session, null)
+  if (session.request?.requestId === requestId) {
+    if (session.creatingRequestId === requestId) invalid(env, 'Workspace creation is already in progress and cannot be cancelled.')
+    session.intent += 1
+    setComposer(env, session, null)
+  }
   return session.request
 }
 
 export function createWorkspaceMethods(env: TasksEnv): TaskMethodTable {
-  const session: WorkspaceSession = { request: null }
+  const session: WorkspaceSession = { request: null, intent: 0 }
   return {
     workspace: (params) => workspace(env, session, params),
     workspaceComposerState: () => composerState(session),

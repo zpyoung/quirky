@@ -68,7 +68,13 @@ function fakeContext(initial: Ask[]) {
       if (method === 'quirky.ask/updatePartial') return { ok: true }
       if (method === 'quirky.ask/answer' || method === 'quirky.ask/cancel') {
         asks = asks.filter((ask) => ask.id !== params?.askId)
-        return { status: 'answered', askId: params?.askId, answers: {}, skipped: [] }
+        return {
+          status: method === 'quirky.ask/cancel' ? 'declined' : 'answered',
+          askId: params?.askId,
+          answers: {},
+          skipped: [],
+          summary: method === 'quirky.ask/answer' ? 'Go?: Yes' : ''
+        }
       }
       throw new Error(`unexpected ${method}`)
     },
@@ -104,6 +110,9 @@ function fakeContext(initial: Ask[]) {
     failAnswers: (message: string | null) => void (failWith = message),
     add(ask: Ask) {
       asks = [...asks, ask]
+    },
+    replace(next: Ask[]) {
+      asks = [...next]
     },
     drop(askId: string) {
       asks = asks.filter((ask) => ask.id !== askId)
@@ -150,11 +159,18 @@ async function mount(fake: Fake) {
 let nextSeq = 1000
 const created = (ask: Ask, seq = nextSeq++): QuirkyEvent => ({ type: 'quirky.ask/created', data: { ask, seq } })
 const surfaced = (ask: Ask, seq = nextSeq++): QuirkyEvent => ({ type: 'quirky.ask/surfaced', data: { ask, seq } })
-const resolved = (askId: string, seq = nextSeq++): QuirkyEvent => ({
-  type: 'quirky.ask/resolved',
-  data: { askId, envelope: { status: 'answered', askId, answers: {}, skipped: [], summary: '' }, seq }
+const resolved = (
+  askId: string,
+  envelope: Ask['envelope'] = { status: 'answered', askId, answers: {}, skipped: [], summary: '' },
+  seq = nextSeq++
+): QuirkyEvent => ({ type: 'quirky.ask/resolved', data: { askId, envelope, seq } })
+const declined = (askId: string): Ask['envelope'] => ({
+  status: 'declined',
+  askId,
+  answers: {},
+  skipped: [],
+  summary: ''
 })
-
 const wait = (ms: number) =>
   act(async () => {
     await new Promise((resolve) => setTimeout(resolve, ms))
@@ -470,7 +486,7 @@ describe('the Questions panel module', () => {
     fake.drop('ask_a')
     fake.drop('ask_b')
     fake.add(promoted)
-    await fake.emit(resolved('ask_a', 3))
+    await fake.emit(resolved('ask_a', declined('ask_a'), 3))
     await fake.emit(surfaced(promoted, 4))
 
     expect([...element.querySelectorAll('.ask-card h3')].map((node) => node.textContent)).toEqual(['B'])
@@ -527,15 +543,15 @@ describe('the Questions panel module', () => {
     fake.add(next)
     await fake.emit(created(next, 2))
     fake.failLists('temporary RPC failure')
-    await fake.emit(resolved('ask_x', 3))
+    await fake.emit(resolved('ask_x', declined('ask_x'), 3))
     fake.failLists(null)
     release()
     await settled()
     expect(fake.badges.at(-1)).toBe(2)
 
-    const lists = () => fake.calls.filter((call) => call.method === 'quirky.ask/list').length
+    const lists = () => fake.calls.filter((call) => call.method === 'quirky.ask/list' && call.params?.pendingOnly === true).length
     const before = lists()
-    await fake.emit(resolved('ask_x', 3))
+    await fake.emit(resolved('ask_x', declined('ask_x'), 3))
     expect(lists()).toBe(before + 1)
   })
 
@@ -642,9 +658,47 @@ describe('the Questions panel module', () => {
     })
     expect(element.querySelectorAll('.ask-card')).toHaveLength(0)
   })
+  test('Q2: an API answer immediately shows its terminal summary', async () => {
+    const ask: Ask = {
+      ...selectAsk('ask_api', 'Confirm?', 1),
+      spec: { questions: [{ id: 'go', type: 'confirm', question: 'Go?' }] }
+    }
+    const fake = fakeContext([ask])
+    await activated(fake)
+    const { element } = await mount(fake)
 
-  test('SC-23: an option preview shows as plain text behind a toggle', async () => {
-    const content = '**JSX** <script>x()</script>'
+    await click(buttonIn(fieldsetOf(element, 'go'), 'Yes'))
+    await click(buttonIn(element, 'Submit'))
+    await settled()
+
+    expect(fake.calls.find((call) => call.method === 'quirky.ask/answer')?.params).toMatchObject({
+      askId: 'ask_api',
+      answers: { go: { value: true, source: 'input' } }
+    })
+    expect(element.querySelector('.ask-result')?.textContent).toContain('Go?: Yes')
+    expect(fake.badges.at(-1)).toBeNull()
+  })
+
+
+  test('SC-23: option previews render rich Markdown inside a hostile-content-free sandbox', async () => {
+    const content = [
+      '## Rich preview',
+      '',
+      'Use **bold** and `code`.',
+      '',
+      '<script>globalThis.pwned = true</script>',
+      '<img src="https://attacker.invalid/pixel.png" onerror="globalThis.pwned = true">',
+      '<a href="javascript:globalThis.pwned = true">hostile link</a>',
+      '<iframe src="https://attacker.invalid/frame"></iframe>',
+      '<form action="https://attacker.invalid/post"><button>submit</button></form>',
+      '<img srcset="https://attacker.invalid/one.png 1x, https://attacker.invalid/two.png 2x" alt="responsive">',
+      '<video poster="https://attacker.invalid/poster"><source src="https://attacker.invalid/movie"></video>',
+      '<button formaction="https://attacker.invalid/submit">submit outside a form</button>',
+      '<div style="background-image: url(https://attacker.invalid/css)">styled</div>',
+      '<link rel="stylesheet" href="https://attacker.invalid/style.css">',
+      '<base href="https://attacker.invalid/">',
+      '<meta http-equiv="refresh" content="0;url=https://attacker.invalid/redirect">'
+    ].join('\n')
     const ask: Ask = {
       ...selectAsk('ask_p', 'P', 1),
       spec: {
@@ -661,19 +715,41 @@ describe('the Questions panel module', () => {
     const fake = fakeContext([ask])
     await activated(fake)
     const { element } = await mount(fake)
-    expect(element.textContent).not.toContain('JSX')
+    expect(element.textContent).not.toContain('Rich preview')
 
     await click(buttonIn(element, 'Show preview'))
 
-    const pre = element.querySelector('pre') as HTMLPreElement
-    expect(pre.textContent).toBe(content)
-    expect(pre.children).toHaveLength(0)
-    expect(element.querySelector('script')).toBeNull()
-    expect(element.querySelector('strong')).toBeNull()
+    const frame = element.querySelector('iframe.ask-preview') as HTMLIFrameElement
+    expect(frame).not.toBeNull()
+    expect(frame.getAttribute('sandbox')).toBe('')
+    expect(frame.getAttribute('referrerpolicy')).toBe('no-referrer')
     expect(buttonIn(element, 'Hide preview')).toBeDefined()
 
+    const preview = new DOMParser().parseFromString(frame.getAttribute('srcdoc')!, 'text/html')
+    expect(preview.querySelector('h2')?.textContent).toBe('Rich preview')
+    expect(preview.querySelector('strong')?.textContent).toBe('bold')
+    expect(preview.querySelector('code')?.textContent).toBe('code')
+    expect(preview.querySelector('script, img, iframe, object, embed, form, button, a, video, source, link, style, base')).toBeNull()
+    expect([...preview.querySelectorAll('*')].some((node) => [...node.attributes].some((attribute) => /^on/i.test(attribute.name)))).toBe(false)
+    expect(preview.documentElement.innerHTML).not.toContain('https://attacker.invalid')
+    const cspMeta = preview.querySelector<HTMLMetaElement>('meta[http-equiv="Content-Security-Policy"]')
+    const csp = cspMeta?.content ?? ''
+    expect(csp).toContain("default-src 'none'")
+    expect(csp).toContain("script-src 'none'")
+    expect(csp).toContain("connect-src 'none'")
+    expect(csp).toContain("img-src 'none'")
+    expect(csp).toContain("media-src 'none'")
+    expect(csp).toContain("form-action 'none'")
+    expect(csp).toContain("navigate-to 'none'")
+
+    const fieldset = fieldsetOf(element, 'framework')
+    await click(buttonIn(fieldset, 'React'))
+    await type(withOwnAnswer(fieldset), 'a custom framework')
+    expect(buttonIn(fieldset, 'React').getAttribute('aria-pressed')).toBe('true')
+    expect(withOwnAnswer(fieldset).value).toBe('a custom framework')
+
     await click(buttonIn(element, 'Hide preview'))
-    expect(element.querySelector('pre')).toBeNull()
+    expect(element.querySelector('iframe.ask-preview')).toBeNull()
   })
 
   test('SC-24: a resolved event removes the card and clears the badge', async () => {
@@ -687,7 +763,35 @@ describe('the Questions panel module', () => {
 
     expect(element.querySelectorAll('.ask-card')).toHaveLength(0)
     expect(fake.badges.at(-1)).toBeNull()
+    expect(element.querySelector('.ask-result')?.textContent).toContain('Answered')
   })
+  test('Q2: the terminal envelope flashes beside the promoted head without counting as pending', async () => {
+    const first = { ...selectAsk('ask_1', 'Deploy?', 1), sessionId: 'sess_1' }
+    const queued = { ...selectAsk('ask_2', 'Next?', 2), sessionId: 'sess_1', queued: true }
+    const fake = fakeContext([first, queued])
+    await activated(fake)
+    const { element, reports } = await mount(fake)
+
+    expect(element.querySelectorAll('.ask-card')).toHaveLength(1)
+    expect(fake.badges.at(-1)).toBe(1)
+
+    fake.replace([{ ...queued, queued: false }])
+    await fake.emit(resolved('ask_1', {
+      status: 'answered',
+      askId: 'ask_1',
+      answers: { go: { value: true, source: 'input' } },
+      skipped: [],
+      summary: 'Deploy?: Yes'
+    }))
+    await settled()
+
+    expect(element.querySelector('.ask-result')?.textContent).toContain('Deploy?: Yes')
+    expect(element.querySelectorAll('.ask-card')).toHaveLength(1)
+    expect(element.textContent).toContain('Next?')
+    expect(fake.badges.at(-1)).toBe(1)
+    expect(reports.at(-1)).toMatchObject({ pending: [{ askId: 'ask_2' }], queued: 0 })
+  })
+
 
   test('refreshes on reconnect and stops listening on deactivate', async () => {
     const fake = fakeContext([])

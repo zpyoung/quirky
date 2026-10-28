@@ -14,6 +14,12 @@ during daemon teardown. AC9 below remains the unweakened follow-up contract; exp
 `session/pointer`, idempotent driving prompts and all durable mail/wait/question/gate flows remain
 in scope. Review/dogfood not already started is skipped under the operator's landing instruction.
 
+2026-10-28 follow-up: automatic scheduling is restored by
+[`m6-orchestration-idle-pointer-shutdown`](../2026-10-28-m6-orchestration-idle-pointer-shutdown/logic.md).
+That spec preserves AC9's safety behavior and timeout, replaces its incorrect Dispatch
+`--run` string pin with execution of the actual command, and records backpressure/shutdown proof.
+The scoped core landing and checkpoint above remain historical records, not current feature limits.
+
 ## Purpose
 Give coordinators and workers a durable, scriptable namespace for supervised work without introducing an automatic scheduler. A coordinator owns a Run, creates dependent Tasks, and handles durable messages, questions and gates. A Dispatch is one authoritative attempt, never merely a copied Task ID.
 

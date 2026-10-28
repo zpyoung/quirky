@@ -76,7 +76,7 @@ export function builtinDir(rules?: Record<string, unknown>): string {
     for (const entry of readdirSync(PLUGIN_DIR)) if (entry !== 'rules') symlinkSync(join(PLUGIN_DIR, entry), join(plugin, entry))
     for (const [agent, body] of Object.entries(rules)) writeFileSync(join(plugin, 'rules', `${agent}.json`), JSON.stringify(body))
   }
-  for (const fake of ['quirky.session', 'quirky.worktree', 'quirky.agents']) symlinkSync(join(FAKES_DIR, fake), join(dir, fake))
+  for (const fake of ['quirky.session', 'quirky.worktree', 'quirky.agents', 'quirky.hosting']) symlinkSync(join(FAKES_DIR, fake), join(dir, fake))
   return dir
 }
 

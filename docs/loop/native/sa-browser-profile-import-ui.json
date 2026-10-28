@@ -1,0 +1,14 @@
+{
+  "item": "sa-browser-profile-import-ui",
+  "spec": "docs/quirk/specs/2026-10-28-sa-browser-profile-import-ui/logic.md",
+  "scenarios": [
+    {
+      "id": "SC-3-native-file-chooser",
+      "title": "On a fresh isolated HOME and QUIRKY_HOME, open Browser Settings without mounting a Native browser pane, create a fresh UUID-named isolated profile, open that row's Import Cookies > From File, and verify the macOS file chooser opens and returns focus to Import Cookies when cancelled. With an owned synthetic JSON cookie file (example.test only), choose it and confirm the named managed Chrome destination; observe real summary, toast and source badge. Never import installed browser credentials or use/clear Default Native storage; stop the owned daemon/window and delete the temporary home/file.",
+      "status": "pending",
+      "lastRun": null,
+      "report": null,
+      "summary": null
+    }
+  ]
+}

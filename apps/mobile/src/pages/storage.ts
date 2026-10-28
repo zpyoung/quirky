@@ -1,4 +1,4 @@
-import type { ProjectGroup, Repo, Session, Worktree, WorktreeStatus } from '@quirky/protocol'
+import type { ProjectGroup, Repo, Session, Worktree, WorktreeAutomationProvenance, WorktreeStatus } from '@quirky/protocol'
 import type { MobilePageBridge } from '../contracts'
 
 export type WorkspaceGroupBy = 'none' | 'status' | 'pr' | 'project'
@@ -86,6 +86,7 @@ function preferencesFrom(value: unknown): WorkspacePreferences | null {
     : DEFAULT_WORKSPACE_PREFERENCES.sidebarWidth
   const nextFilters = { ...DEFAULT_WORKSPACE_PREFERENCES.filters }
   for (const key of FILTER_KEYS) if (typeof filters[key] === 'boolean') nextFilters[key] = filters[key] as boolean
+
   return {
     groupBy: isEnum(value.groupBy, GROUP_BY) ? value.groupBy : DEFAULT_WORKSPACE_PREFERENCES.groupBy,
     sortBy: isEnum(value.sortBy, SORT_BY) ? value.sortBy : DEFAULT_WORKSPACE_PREFERENCES.sortBy,
@@ -146,6 +147,15 @@ function isPushTarget(value: unknown): boolean {
   return isRecord(value) && typeof value.remoteName === 'string' && typeof value.branchName === 'string' && typeof value.maintainerCanModify === 'boolean'
 }
 
+function isAutomationProvenance(value: unknown): value is WorktreeAutomationProvenance {
+  if (!isRecord(value)) return false
+  const keys = ['kind', 'automationId', 'automationName', 'runId', 'runTitle', 'projectId', 'hostId']
+  return Object.keys(value).length === keys.length && keys.every((key) => Object.hasOwn(value, key)) &&
+    value.kind === 'created-by-automation' && typeof value.automationId === 'string' &&
+    typeof value.automationName === 'string' && typeof value.runId === 'string' &&
+    typeof value.runTitle === 'string' && typeof value.projectId === 'string' && value.hostId === 'local'
+}
+
 function isWorktree(value: unknown): value is Worktree {
   if (!isRecord(value)) return false
   return typeof value.id === 'string' && typeof value.repoId === 'string' && typeof value.path === 'string' &&
@@ -158,7 +168,9 @@ function isWorktree(value: unknown): value is Worktree {
     (value.baseRef === null || typeof value.baseRef === 'string') && typeof value.keepBranch === 'boolean' &&
     typeof value.removing === 'boolean' && (value.groupId === null || typeof value.groupId === 'string') &&
     (value.projectGroupId === null || typeof value.projectGroupId === 'string') && typeof value.lastActivityAt === 'number' &&
-    typeof value.instanceId === 'string' && isWorktreeLink(value.linkedPR) && isWorktreeLink(value.linkedIssue) && isPushTarget(value.pushTarget)
+    typeof value.instanceId === 'string' && isWorktreeLink(value.linkedPR) && isWorktreeLink(value.linkedIssue) &&
+    isPushTarget(value.pushTarget) &&
+    (value.automationProvenance === undefined || value.automationProvenance === null || isAutomationProvenance(value.automationProvenance))
 }
 
 function isSessionSummary(value: unknown): value is WorkspaceSessionSummary {

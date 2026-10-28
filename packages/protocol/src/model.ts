@@ -22,6 +22,24 @@ export type WorktreeStatus = 'todo' | 'in-progress' | 'in-review' | 'done'
 /** The surface that created a workspace; `external` for ones found already on disk. */
 export type WorktreeCreatedBy = 'window' | 'cli' | 'api' | 'external'
 
+/** Durable creation attribution; snapshots survive renamed or deleted automation history. */
+export type WorktreeAutomationProvenance = {
+  kind: 'created-by-automation'
+  automationId: string
+  automationName: string
+  runId: string
+  runTitle: string
+  projectId: string
+  hostId: 'local'
+}
+
+/** Single-use dispatch capability; never persisted in workspace metadata or returned by list/show. */
+export type WorktreeAutomationProvenanceRequest = {
+  automationId: string
+  runId: string
+  dispatchToken: string
+}
+
 /** A GitHub repository identity established by the hosting plugin. */
 export type GitHubRepositoryIdentity = { host: string; owner: string; repo: string }
 
@@ -94,6 +112,8 @@ export type Worktree = {
   lastActivityAt: number
   /** Filesystem-instance identity, distinct from the path-derived worktree ID. */
   instanceId: string
+  /** Present only when creation was authorized by a live automation dispatch. */
+  automationProvenance?: WorktreeAutomationProvenance | null
 }
 
 /** A named, orderable collection of projects in the tree. */
@@ -318,7 +338,7 @@ export type GitConflictKind =
 export type GitOperation = 'merge' | 'rebase' | 'cherry-pick' | 'none'
 
 /** An operation that holds a worktree's lock while it runs; at most one per worktree. */
-export type GitBusyOp = 'push' | 'force-push' | 'pull' | 'fast-forward' | 'fetch' | 'sync' | 'rebase' | 'continue' | 'abort'
+export type GitBusyOp = 'push' | 'force-push' | 'switch' | 'pull' | 'fast-forward' | 'fetch' | 'sync' | 'rebase' | 'continue' | 'abort'
 
 /** One row of the Source Control panel. A path both staged and changed has two entries. */
 export type GitStatusEntry = {

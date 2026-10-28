@@ -847,6 +847,11 @@ export function SessionPage({ bridge, route, connected, onNavigate, onReport }: 
         <button className="qp-icon-button" type="button" aria-label="New Tab" disabled={!canMutate} onClick={openNewTab}>＋</button>
       </div>
       <div className="qp-session-body">
+        <nav className="qp-tabs" aria-label="Workspace pages">
+          <button className="qp-tab" type="button" aria-label="Open files for this workspace" onClick={() => void onNavigate({ kind: 'files', worktreeId: route.worktreeId })}>Files</button>
+          <button className="qp-tab" type="button" aria-label="Open source control for this workspace" onClick={() => void onNavigate({ kind: 'source-control', worktreeId: route.worktreeId, tab: 'changes' })}>Source control</button>
+          <button className="qp-tab" type="button" aria-label="Open agent history for this workspace" onClick={() => void onNavigate({ kind: 'agent-history', worktreeId: route.worktreeId })}>History</button>
+        </nav>
         {structuredCount > 0 && <div className="qp-error" role="note">{structuredCount} structured {structuredCount === 1 ? 'session is' : 'sessions are'} not shown here. This phone view supports real terminal sessions and asks, not native chat.</div>}
         {pageError && sessions.length === 0 && workspaceTabs.length === 0 ? <div className="qp-session-empty qp-empty"><strong>Workspace unavailable</strong>Reconnect or return to the workspace list and retry.</div> : null}
         {selectedMarkdownTab && <MarkdownTabView
@@ -963,6 +968,11 @@ export function SessionPage({ bridge, route, connected, onNavigate, onReport }: 
             setActionsOpen(false)
             setRenameDialog(true)
           }}>Rename session</button>
+          <button className="qp-button" type="button" disabled={!selectedSession} onClick={() => {
+            if (!selectedSession) return
+            setActionsOpen(false)
+            void onNavigate({ kind: 'terminal-artifacts', worktreeId: route.worktreeId, sessionId: selectedSession.id })
+          }}>Terminal artifacts</button>
           <button className="qp-button" type="button" disabled={!selectedSession || !ownsTerminal} onClick={() => void clearTerminal()}>Clear terminal</button>
           <button className="qp-button" type="button" disabled={!selectedSession || !canMutate} onClick={() => selectedSession && void prepareClose([selectedSession.id], false)}>Close tab</button>
           <button className="qp-button" type="button" disabled={!selectedSession || !canMutate || !terminalGranted || !clipboardWriteGranted || copyBusy} onClick={() => selectedSession && void copyAndLeave([selectedSession.id])}>Copy & leave</button>

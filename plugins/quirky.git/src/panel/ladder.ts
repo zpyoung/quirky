@@ -15,7 +15,7 @@ export type LadderState = {
   /** The compare base ref, such as `origin/main` or `refs/remotes/origin/main`; null when none is known. */
   base: string | null
   /** Blocks the unpublished-branch action until the current GitHub review state is known. */
-  reviewGate?: 'loading' | 'unavailable' | 'merged'
+  reviewGate?: 'loading' | 'unavailable' | 'merged' | 'linked'
 }
 
 /** What the primary button does when pressed. */
@@ -27,6 +27,7 @@ export type PrimaryAction = { kind: PrimaryKind; label: string; enabled: boolean
 const BUSY_LABELS: Readonly<Record<GitBusyOp, string>> = {
   push: 'Push',
   'force-push': 'Force Push',
+  switch: 'Switch Branch',
   pull: 'Pull',
   'fast-forward': 'Fast-forward',
   fetch: 'Fetch',
@@ -78,6 +79,13 @@ function pick(state: LadderState): PrimaryAction {
   }
   if (status === null) return commitRow('Stage at least one file to commit')
   const up = status.upstreamStatus
+  const pushUnavailable = state.reviewGate === 'loading'
+    ? 'Checking GitHub pull-request status before pushing.'
+    : state.reviewGate === 'unavailable'
+      ? 'GitHub pull-request status is unavailable. Retry before pushing.'
+      : state.reviewGate === 'merged'
+        ? 'The linked pull request is already merged.'
+        : null
   if (!up.hasUpstream) {
     if (status.detached) return commitRow('Check out a branch before publishing commits.')
     if (state.reviewGate === 'loading') {
@@ -89,6 +97,9 @@ function pick(state: LadderState): PrimaryAction {
     if (state.reviewGate === 'merged') {
       return { kind: 'publish', label: 'Publish Branch', enabled: false, title: 'Nothing to commit. PR is already merged.' }
     }
+    if (state.reviewGate === 'linked') {
+      return { kind: 'push', label: 'Push to PR', enabled: true, title: 'Push to the validated linked pull-request head.' }
+    }
     return { kind: 'publish', label: 'Publish Branch', enabled: true, title: 'Publish this branch to origin' }
   }
   if (up.ahead > 0 && up.behind > 0) {
@@ -96,14 +107,24 @@ function pick(state: LadderState): PrimaryAction {
       return {
         kind: 'force-push',
         label: 'Force Push',
-        enabled: true,
-        title: `Remote only has older copies of local commits. Force push ${up.ahead} branch commits with lease to update ${up.name ?? status.upstream ?? 'the remote'}.`
+        enabled: pushUnavailable === null,
+        title: pushUnavailable ?? `Remote only has older copies of local commits. Force push ${up.ahead} branch commits with lease to update ${up.name ?? status.upstream ?? 'the remote'}.`
       }
     }
-    return { kind: 'sync', label: 'Sync', enabled: true, title: `Pull ${up.behind}, push ${up.ahead}` }
+    if (state.reviewGate === 'linked') {
+      return { kind: 'sync', label: 'Sync', enabled: false, title: 'Sync cannot select a linked PR destination. Pull, then push to the validated PR target.' }
+    }
+    return {
+      kind: 'sync',
+      label: 'Sync',
+      enabled: pushUnavailable === null,
+      title: pushUnavailable ?? `Pull ${up.behind}, push ${up.ahead}`
+    }
   }
   if (up.behind > 0) return { kind: 'pull', label: 'Pull', enabled: true, title: `Pull ${up.behind} commit(s)` }
-  if (up.ahead > 0) return { kind: 'push', label: 'Push', enabled: true, title: `Push ${up.ahead} commit(s)` }
+  if (up.ahead > 0) {
+    return { kind: 'push', label: 'Push', enabled: pushUnavailable === null, title: pushUnavailable ?? `Push ${up.ahead} commit(s)` }
+  }
   return commitRow('Nothing to commit. Branch is up to date.')
 }
 
@@ -205,27 +226,37 @@ export function menuItems(state: LadderState): MenuItem[] {
 
   const branchReason = detached ? 'Check out a branch first' : null
   const upstreamReason = branchReason ?? (hasUpstream ? null : 'Publish Branch')
-  const syncReason = upstreamReason ?? (lease ? 'Force Push first' : null)
+  const pushReason = state.reviewGate === 'loading'
+    ? 'Checking GitHub pull-request status before pushing.'
+    : state.reviewGate === 'unavailable'
+      ? 'GitHub pull-request status is unavailable. Retry before pushing.'
+      : state.reviewGate === 'merged'
+        ? 'The linked pull request is already merged.'
+        : null
+  const syncReason = upstreamReason ??
+    (state.reviewGate === 'linked' ? 'Sync cannot select a linked PR destination.' : lease ? 'Force Push first' : null)
   const base = state.base === null ? null : stripRemotePrefix(state.base)
   const ahead = up?.ahead ?? 0
   const behind = up?.behind ?? 0
+  const pushLabel = state.reviewGate === 'linked' && !hasUpstream ? 'Push to PR' : 'Push'
+  const publishLabel = state.reviewGate === 'linked' ? 'Push to PR' : 'Publish Branch'
 
   const items: MenuItem[] = [
     row('commit', 'Commit', commitReason),
-    row('commit-push', lease ? 'Commit & Force Push' : 'Commit & Push', commitReason ?? branchReason),
-    row('commit-sync', 'Commit & Sync', commitReason ?? syncReason),
-    row('push', withCount('Push', ahead), branchReason, { separatorBefore: true }),
-    row('force-push', withCount('Force Push', ahead), branchReason),
+    row('commit-push', lease ? 'Commit & Force Push' : 'Commit & Push', commitReason ?? branchReason ?? pushReason),
+    row('commit-sync', 'Commit & Sync', commitReason ?? syncReason ?? pushReason),
+    row('push', withCount(pushLabel, ahead), branchReason ?? pushReason, { separatorBefore: true }),
+    row('force-push', withCount('Force Push', ahead), branchReason ?? pushReason),
     row('pull', withCount('Pull', behind), upstreamReason),
     row('fast-forward', withCount('Fast-forward', behind), upstreamReason),
-    row('sync', hasUpstream && (ahead > 0 || behind > 0) ? `Sync (↓${behind} ↑${ahead})` : 'Sync', syncReason),
+    row('sync', hasUpstream && (ahead > 0 || behind > 0) ? `Sync (↓${behind} ↑${ahead})` : 'Sync', syncReason ?? pushReason),
     row(
       'rebase',
       base === null ? 'Rebase from Base' : `Rebase from ${base}`,
       base?.includes('/') ? null : 'Base branch is not on the remote'
     ),
     row('fetch', 'Fetch', null, { title: 'Fetch from remote without merging' }),
-    row('publish', 'Publish Branch', branchReason ?? (hasUpstream ? 'Branch already has an upstream' : null))
+    row('publish', publishLabel, branchReason ?? pushReason ?? (hasUpstream ? 'Branch already has an upstream' : null))
   ]
   if (status?.operation === 'merge' || status?.operation === 'rebase') {
     items.push(row('abort', `Abort ${status.operation}`, null, { separatorBefore: true }))

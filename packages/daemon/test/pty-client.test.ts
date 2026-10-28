@@ -229,6 +229,152 @@ describe('a host that accepts shutdown but never replies or closes', () => {
   })
 })
 
+describe('fake PTY transport backpressure', () => {
+  test('keeps large replies and terminal data in frame order under socket backpressure', async () => {
+    const dir = home()
+    const { promise: listReceived, resolve: resolveListReceived } = Promise.withResolvers<void>()
+    const host = startFakePtyHost(dir, {
+      onRequest: (request) => {
+        if (request.type === 'list') resolveListReceived()
+      }
+    })
+    cleanups.push(() => host.stop())
+
+    const largeField = 'x'.repeat(4096)
+    const sessionCount = 512
+    for (let index = 0; index < sessionCount; index++) {
+      const sessionId = `large-${index}`
+      host.sessions.set(sessionId, {
+        info: {
+          sessionId,
+          state: 'running',
+          pid: 4000 + index,
+          alive: true,
+          exitCode: null,
+          exitSignal: null,
+          exitCause: null,
+          cols: 80,
+          rows: 24,
+          argv: ['sh'],
+          cwd: `/fake/${largeField}`,
+          title: null,
+          shellState: 'pending',
+          createdAt: index,
+          offset: 0
+        },
+        env: {},
+        buffer: [],
+        subscribers: new Set()
+      })
+    }
+    host.sessions.set('live', {
+      info: {
+        sessionId: 'live',
+        state: 'running',
+        pid: 5000,
+        alive: true,
+        exitCode: null,
+        exitSignal: null,
+        exitCause: null,
+        cols: 80,
+        rows: 24,
+        argv: ['sh'],
+        cwd: '/fake/live',
+        title: null,
+        shellState: 'pending',
+        createdAt: 0,
+        offset: 0
+      },
+      env: {},
+      buffer: [],
+      subscribers: new Set()
+    })
+
+    const largeText = 'S'.repeat(1024 * 1024)
+    const snapshot = {
+      ansi: largeText,
+      cols: 80,
+      rows: 24,
+      cursor: { x: 0, y: 0 },
+      modes: { alternateScreen: false, bracketedPaste: false, mouseTracking: false, applicationCursor: false },
+      cwd: '/fake/live',
+      title: null,
+      shellState: 'pending' as const,
+      offset: 0
+    }
+    const readResult = { lines: [largeText], cols: 80, rows: 24, alt: false }
+    const historyResult = { lines: [largeText], cursor: 'history-cursor' }
+    host.setSnapshotResult(snapshot)
+    host.setReadResult(readResult)
+    host.setHistoryResult(historyResult)
+
+    const client = newClient(dir, { connectTimeoutMs: 10_000 })
+    await client.connect()
+    await client.request('subscribe', { sessionId: 'live' }, { timeoutMs: 10_000 })
+
+    const frameOrder: string[] = []
+    const dataEvents: { sessionId: string; bytes: Uint8Array }[] = []
+    client.onData((sessionId, bytes) => {
+      frameOrder.push('data')
+      dataEvents.push({ sessionId, bytes })
+    })
+    const terminalBytes = Uint8Array.from({ length: 32 * 1024 }, (_, index) => index % 251)
+    const listPromise = client.request('list', {}, {
+      timeoutMs: 10_000,
+      onResult: () => frameOrder.push('list')
+    })
+    await Promise.race([
+      listReceived,
+      listPromise.then(() => {
+        throw new Error('list response arrived before its request notification')
+      })
+    ])
+
+    host.emit('live', terminalBytes)
+    const snapshotPromise = client.request('snapshot', { sessionId: 'live' }, {
+      timeoutMs: 10_000,
+      onResult: () => frameOrder.push('snapshot')
+    })
+    const readPromise = client.request('read', { sessionId: 'live', lines: 1 }, {
+      timeoutMs: 10_000,
+      onResult: () => frameOrder.push('read')
+    })
+    const historyPromise = client.request('history', { sessionId: 'live', lines: 1 }, {
+      timeoutMs: 10_000,
+      onResult: () => frameOrder.push('history')
+    })
+    const clearPromise = client.request('clear', { sessionId: 'live' }, {
+      timeoutMs: 10_000,
+      onResult: () => frameOrder.push('clear')
+    })
+    const resetModesPromise = client.request('resetModes', { sessionId: 'live' }, {
+      timeoutMs: 10_000,
+      onResult: () => frameOrder.push('resetModes')
+    })
+    const [listed, receivedSnapshot, receivedRead, receivedHistory, cleared, resetModes] = await Promise.all([
+      listPromise,
+      snapshotPromise,
+      readPromise,
+      historyPromise,
+      clearPromise,
+      resetModesPromise
+    ])
+
+    expect(listed).toHaveLength(sessionCount + 1)
+    expect(listed[sessionCount - 1]).toMatchObject({ sessionId: `large-${sessionCount - 1}`, cwd: `/fake/${largeField}` })
+    expect(listed[sessionCount]).toMatchObject({ sessionId: 'live', cwd: '/fake/live' })
+    expect(receivedSnapshot).toEqual(snapshot)
+    expect(receivedRead).toEqual(readResult)
+    expect(receivedHistory).toEqual(historyResult)
+    expect(cleared).toEqual({})
+    expect(resetModes).toEqual({})
+    expect(frameOrder).toEqual(['list', 'data', 'snapshot', 'read', 'history', 'clear', 'resetModes'])
+    expect(dataEvents).toHaveLength(1)
+    expect(dataEvents[0].sessionId).toBe('live')
+    expect(dataEvents[0].bytes).toEqual(terminalBytes)
+  })
+})
+
 describe('events through createPtyApi', () => {
   test('facts and exits reach each plugin until it is revoked', async () => {
     const dir = home()

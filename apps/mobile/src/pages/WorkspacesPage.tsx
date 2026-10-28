@@ -3,6 +3,7 @@ import type { ProjectGroup, Repo, Session, Worktree, WorktreeCreateResult, Works
 import type { MobilePageBridge, MobileRoute } from '../contracts'
 import { PageError, PageModal, errorMessage, statusLabel } from './components'
 import { matchesWorkspaceFilters } from './workspace-filters'
+import { loopSummaryLabel, parseLoopSummaries, selectLoopSummaries, type LoopSummary } from './loop-summaries'
 import {
   DEFAULT_WORKSPACE_PREFERENCES,
   projectWorkspaceSessions,
@@ -26,8 +27,10 @@ type Props = {
   onReport(state: Record<string, unknown>): void
 }
 
-type DeleteDialog = { worktree: Worktree; description: string }
-type GroupedRows = { key: string; label: string; worktrees: Worktree[] }
+type WorktreeView = Worktree & { sleeping?: boolean; sleepChangedAt?: number | null }
+type WorktreeParkResult = { worktrees: Array<{ worktreeId: string; sleeping: boolean; changedAt: number }> }
+type DeleteDialog = { worktree: WorktreeView; description: string }
+type GroupedRows = { key: string; label: string; worktrees: WorktreeView[] }
 
 const GROUP_OPTIONS: Array<{ value: WorkspaceGroupBy; label: string }> = [
   { value: 'none', label: 'None' }, { value: 'status', label: 'Status' }, { value: 'pr', label: 'PR' }, { value: 'project', label: 'Project' }
@@ -45,7 +48,7 @@ const PROPERTY_OPTIONS: Array<{ value: WorkspacePropertyKey; label: string }> = 
 const FILTER_OPTIONS: Array<{ key: WorkspaceFilterKey; label: string; detail: string }> = [
   { key: 'exceptDefaultBranch', label: 'Except default branch', detail: 'Keep the primary worktree visible when other filters would hide it.' },
   { key: 'hideDefaultBranch', label: 'Hide default branch', detail: 'Hide primary worktrees.' },
-  { key: 'hideSleeping', label: 'Hide sleeping', detail: 'Hide only workspaces whose sessions are authoritatively asleep. Partial recovery stays visible.' },
+  { key: 'hideSleeping', label: 'Hide sleeping', detail: 'Hide only worktrees parked through the Worktree view lifecycle. Stopped sessions remain visible.' },
   { key: 'hideAutomationCreated', label: 'Hide automation-created', detail: 'Hide only workspaces with recorded automation origin. Unknown origins remain visible.' },
   { key: 'hideCliCreated', label: 'Hide CLI-created', detail: 'Hide workspaces whose source is the Quirky CLI.' },
   { key: 'hideOtherClient', label: 'Hide other-client workspaces', detail: 'Hide workspaces proven to originate from another client. Unknown origins remain visible.' },
@@ -86,11 +89,12 @@ function activeFilterCount(filters: WorkspacePreferences['filters']): number {
 export function WorkspacesPage({ bridge, connected, onNavigate, onReport }: Props) {
   const [repos, setRepos] = useState<Repo[]>([])
   const [groups, setGroups] = useState<ProjectGroup[]>([])
-  const [worktrees, setWorktrees] = useState<Worktree[]>([])
+  const [worktrees, setWorktrees] = useState<WorktreeView[]>([])
   const [sessions, setSessions] = useState<WorkspaceSessionSummary[]>([])
   const [origins, setOrigins] = useState<WorkspaceOriginView[]>([])
   const [sleepStates, setSleepStates] = useState<WorkspaceSleepState[]>([])
-  const [sleepDialog, setSleepDialog] = useState<Worktree | null>(null)
+  const [sleepDialog, setSleepDialog] = useState<WorktreeView | null>(null)
+  const [stopSessionsDialog, setStopSessionsDialog] = useState<WorktreeView | null>(null)
   const [sleepBusy, setSleepBusy] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [stale, setStale] = useState(!connected)
@@ -111,8 +115,11 @@ export function WorkspacesPage({ bridge, connected, onNavigate, onReport }: Prop
   const [deleteError, setDeleteError] = useState<string | null>(null)
   const [menuWorktreeId, setMenuWorktreeId] = useState<string | null>(null)
   const [selectedRepoId, setSelectedRepoId] = useState<string | null>(null)
+  const [loopSummaries, setLoopSummaries] = useState<Map<string, LoopSummary>>(() => new Map())
+  const [loopSummaryStatus, setLoopSummaryStatus] = useState<'available' | 'unavailable'>('unavailable')
   const requestId = useRef(0)
   const loadInFlight = useRef<number | null>(null)
+  const loopSummaryRequestId = useRef(0)
   const serverLoaded = useRef(false)
   const widthDrag = useRef<{ startX: number; width: number } | null>(null)
   const resizeListeners = useRef<{ move(event: globalThis.PointerEvent): void; up(): void } | null>(null)
@@ -154,19 +161,37 @@ export function WorkspacesPage({ bridge, connected, onNavigate, onReport }: Prop
   const load = useCallback(async () => {
     if (!pageActiveNow()) {
       requestId.current += 1
+      loopSummaryRequestId.current += 1
+      setLoopSummaryStatus('unavailable')
       setStale(true)
       setLoading(false)
       return
     }
     if (loadInFlight.current === requestId.current) return
     const currentRequest = ++requestId.current
+    const summaryRequest = ++loopSummaryRequestId.current
     loadInFlight.current = currentRequest
     setLoading(true)
+
+    void bridge.call<unknown>('quirky.loops/summaries', {}).then((raw) => {
+      if (summaryRequest !== loopSummaryRequestId.current || !pageActiveNow()) return
+      const summaries = parseLoopSummaries(raw)
+      if (summaries === null) {
+        setLoopSummaryStatus('unavailable')
+        return
+      }
+      setLoopSummaries(selectLoopSummaries(summaries))
+      setLoopSummaryStatus('available')
+    }).catch(() => {
+      if (summaryRequest !== loopSummaryRequestId.current || !pageActiveNow()) return
+      setLoopSummaryStatus('unavailable')
+    })
+
     try {
       const [nextRepos, nextGroups, nextWorktrees, nextSessions, nextOrigins, nextSleepStates] = await Promise.all([
         bridge.call<Repo[]>('quirky.repo/list', {}),
         bridge.call<ProjectGroup[]>('quirky.repo/groupList', {}),
-        bridge.call<Worktree[]>('quirky.worktree/list', {}),
+        bridge.call<WorktreeView[]>('quirky.worktree/list', {}),
         bridge.call<Session[]>('quirky.session/list', {}),
         bridge.call<WorkspaceOriginView[]>('quirky.worktree/origins', {}),
         bridge.call<WorkspaceSleepState[]>('quirky.session/workspaceSleepStates', {})
@@ -243,7 +268,7 @@ export function WorkspacesPage({ bridge, connected, onNavigate, onReport }: Prop
       const projectGroup = worktree.projectGroupId ? groupsById.get(worktree.projectGroupId) : undefined
       if (selectedRepoId && worktree.repoId !== selectedRepoId) return false
       if (search && ![worktree.name, worktree.branch ?? '', worktree.path, worktree.id, worktree.comment, repo?.name ?? '', repo?.displayName ?? '', projectGroup?.name ?? ''].some((part) => part.toLocaleLowerCase().includes(search))) return false
-      return matchesWorkspaceFilters(worktree, filter, originsByWorktree.get(worktree.id), sleepByWorktree.get(worktree.id)?.state)
+      return matchesWorkspaceFilters(worktree, filter, originsByWorktree.get(worktree.id))
     })
     const index = new Map(worktrees.map((worktree, position) => [worktree.id, position]))
     const activity = (worktree: Worktree) => sessionsByWorktree.get(worktree.id) ?? []
@@ -276,6 +301,19 @@ export function WorkspacesPage({ bridge, connected, onNavigate, onReport }: Prop
     })
     return sorted
   }, [worktrees, reposById, groupsById, sessionsByWorktree, originsByWorktree, sleepByWorktree, repos, selectedRepoId, query, preferences])
+
+  const loopSummaryReport = useMemo(() => {
+    const rows: Array<{ worktreeId: string; loopId: string; label: string }> = []
+    for (const worktree of visibleWorktrees.slice(0, 256)) {
+      const summary = loopSummaries.get(worktree.id)
+      if (summary) rows.push({
+        worktreeId: worktree.id,
+        loopId: summary.id,
+        label: loopSummaryLabel(summary, loopSummaryStatus === 'available')
+      })
+    }
+    return rows
+  }, [visibleWorktrees, loopSummaries, loopSummaryStatus])
 
   const groupedRows = useMemo((): GroupedRows[] => {
     const labels = new Map<string, string>()
@@ -341,26 +379,33 @@ export function WorkspacesPage({ bridge, connected, onNavigate, onReport }: Prop
     }
   }
 
-  const changeSleep = async (worktree: Worktree, wake: boolean): Promise<boolean> => {
+  const changeWorktreeParking = async (worktree: WorktreeView, sleeping: boolean): Promise<boolean> => {
     if (!canMutateNow() || sleepBusy) return false
     setSleepBusy(worktree.id)
     setActionError(null)
     try {
-      const state = await bridge.call<WorkspaceSleepState>(wake ? 'quirky.session/wakeWorkspace' : 'quirky.session/sleepWorkspace', { worktree: worktree.id })
+      const result = await bridge.call<WorktreeParkResult>(
+        sleeping ? 'quirky.worktree/sleep' : 'quirky.worktree/wake',
+        { worktree: worktree.id }
+      )
       if (!pageActiveNow()) return false
-      setSleepStates((current) => [...current.filter((item) => item.worktreeId !== state.worktreeId), state])
+      const updated = result.worktrees.find((item) => item.worktreeId === worktree.id)
+      if (!updated) throw new Error(`Worktree ${worktree.id} returned no parking state`)
+      setWorktrees((current) =>
+        current.map((item) =>
+          item.id === updated.worktreeId
+            ? { ...item, sleeping: updated.sleeping, sleepChangedAt: updated.changedAt }
+            : item
+        )
+      )
       setSleepDialog(null)
-      const expected = wake ? 'awake' : 'asleep'
-      if (state.state !== expected) {
-        const errors = state.sessions.flatMap((session) => session.error ? [`${session.sessionId}: ${session.error}`] : [])
-        setActionError(`Workspace recovery is ${state.state}.${errors.length ? ` ${errors.join(' ')}` : ' Use Wake to resume retained sessions.'}`)
-        return false
-      }
-      setNotice(`${worktree.name} ${wake ? 'is awake' : 'is asleep; history and resume records are retained'}.`)
+      setNotice(sleeping
+        ? `${worktree.name} is parked; sessions and buffers remain available.`
+        : `${worktree.name} is awake.`)
       await load()
       return true
     } catch (cause) {
-      setActionError(errorMessage(cause, wake ? 'Could not wake this workspace.' : 'Sleep was refused; recovery records are retained.'))
+      setActionError(errorMessage(cause, sleeping ? 'Could not sleep this workspace view.' : 'Could not wake this workspace view.'))
       await load()
       return false
     } finally {
@@ -368,9 +413,42 @@ export function WorkspacesPage({ bridge, connected, onNavigate, onReport }: Prop
     }
   }
 
-  const openWorkspace = async (worktree: Worktree) => {
-    const state = sleepByWorktree.get(worktree.id)?.state
-    if (state === 'asleep' && !(await changeSleep(worktree, true))) return
+  const changeSessionState = async (worktree: WorktreeView, wake: boolean): Promise<boolean> => {
+    if (!canMutateNow() || sleepBusy) return false
+    setSleepBusy(worktree.id)
+    setActionError(null)
+    try {
+      const state = await bridge.call<WorkspaceSleepState>(
+        wake ? 'quirky.session/wakeWorkspace' : 'quirky.session/sleepWorkspace',
+        { worktree: worktree.id }
+      )
+      if (!pageActiveNow()) return false
+      setSleepStates((current) => [...current.filter((item) => item.worktreeId !== state.worktreeId), state])
+      setStopSessionsDialog(null)
+      const expected = wake ? 'awake' : 'asleep'
+      if (state.state !== expected) {
+        const errors = state.sessions.flatMap((session) => session.error ? [`${session.sessionId}: ${session.error}`] : [])
+        setActionError(`Session recovery is ${state.state}.${errors.length ? ` ${errors.join(' ')}` : ''}`)
+        return false
+      }
+      setNotice(wake
+        ? `Stopped sessions resumed in ${worktree.name}.`
+        : `Sessions stopped in ${worktree.name}; terminal history and resume records are retained.`)
+      await load()
+      return true
+    } catch (cause) {
+      setActionError(errorMessage(cause, wake ? 'Could not resume stopped sessions.' : 'Session stopping was refused; recovery records are retained.'))
+      await load()
+      return false
+    } finally {
+      setSleepBusy(null)
+    }
+  }
+
+  const openWorkspace = async (worktree: WorktreeView) => {
+    const processState = sleepByWorktree.get(worktree.id)?.state
+    if (worktree.sleeping === true && !(await changeWorktreeParking(worktree, false))) return
+    if (processState === 'asleep' && !(await changeSessionState(worktree, true))) return
     await onNavigate({ kind: 'session', worktreeId: worktree.id })
   }
 
@@ -446,6 +524,8 @@ export function WorkspacesPage({ bridge, connected, onNavigate, onReport }: Prop
   }
 
   useEffect(() => () => {
+    requestId.current += 1
+    loopSummaryRequestId.current += 1
     const listeners = resizeListeners.current
     if (listeners) {
       window.removeEventListener('pointermove', listeners.move)
@@ -461,9 +541,11 @@ export function WorkspacesPage({ bridge, connected, onNavigate, onReport }: Prop
       searchOpen,
       optionsOpen,
       sidebarCollapsed: preferences.sidebarCollapsed,
-      detailMode: preferences.cardLayout
+      detailMode: preferences.cardLayout,
+      loopSummaryStatus,
+      loopSummaries: loopSummaryReport
     })
-  }, [onReport, visibleWorktrees, selectedRepoId, searchOpen, optionsOpen, preferences.sidebarCollapsed, preferences.cardLayout])
+  }, [onReport, visibleWorktrees, selectedRepoId, searchOpen, optionsOpen, preferences.sidebarCollapsed, preferences.cardLayout, loopSummaryStatus, loopSummaryReport])
 
   const sidebarStyle = { '--sidebar-width': `${preferences.sidebarWidth}px` } as CSSProperties
   const activeFilters = activeFilterCount(preferences.filters)
@@ -487,6 +569,11 @@ export function WorkspacesPage({ bridge, connected, onNavigate, onReport }: Prop
         <button className="qp-icon-button" type="button" aria-label="Floating Workspace" title="Create a terminal in the real Floating workspace" disabled={!canMutate || !bridge.init.grants.includes('terminal')} onClick={() => void openFloating()}>↗</button>
       </header>
       <div className="qp-content">
+        <nav className="qp-tabs" aria-label="Host pages">
+          <button className="qp-tab" type="button" aria-label="Open host tasks" onClick={() => void onNavigate({ kind: 'tasks' })}>Tasks</button>
+          <button className="qp-tab" type="button" aria-label="Open host accounts" onClick={() => void onNavigate({ kind: 'accounts' })}>Accounts</button>
+          <button className="qp-tab" type="button" aria-label="Open host notifications" onClick={() => void onNavigate({ kind: 'notifications' })}>Notifications</button>
+        </nav>
         <div className="qp-workspace-layout" data-sidebar-collapsed={preferences.sidebarCollapsed} style={sidebarStyle}>
           <aside className={`qp-sidebar${preferences.sidebarCollapsed ? ' qp-sidebar--collapsed' : ''}`} aria-label="Projects">
             <div className="qp-sidebar__heading">Projects</div>
@@ -545,10 +632,13 @@ export function WorkspacesPage({ bridge, connected, onNavigate, onReport }: Prop
                     )}
                     {!isGroupCollapsed && <div className="qp-worktree-rows">
                       {roots.map((worktree) => renderWorktreeTree(worktree, 0, group.worktrees, {
-                        bridge, canMutate, groupsById, menuWorktreeId, preferences, reposById, sessionsByWorktree, sleepByWorktree, sleepBusy,
+                        bridge, canMutate, groupsById, loopSummaries, loopSummaryStatus, menuWorktreeId, preferences, reposById, sessionsByWorktree, sleepByWorktree, sleepBusy,
                         collapsed, onOpen: (item) => void openWorkspace(item), onToggleCollapse: toggleCollapsed,
                         onToggleMenu: (id) => setMenuWorktreeId(menuWorktreeId === id ? null : id), onPin: togglePin, onDelete: requestDelete,
-                        onSleep: (item) => { setMenuWorktreeId(null); setSleepDialog(item) }, onWake: (item) => void changeSleep(item, true)
+                        onSleep: (item) => { setMenuWorktreeId(null); setSleepDialog(item) },
+                        onWake: (item) => { setMenuWorktreeId(null); void changeWorktreeParking(item, false) },
+                        onStopSessions: (item) => { setMenuWorktreeId(null); setStopSessionsDialog(item) },
+                        onResumeSessions: (item) => { setMenuWorktreeId(null); void changeSessionState(item, true) }
                       }))}
                     </div>}
                   </section>
@@ -591,11 +681,21 @@ export function WorkspacesPage({ bridge, connected, onNavigate, onReport }: Prop
       {sleepDialog && <PageModal title="Sleep workspace" labelledBy="qp-sleep-workspace-title" onClose={() => { if (!sleepBusy) setSleepDialog(null) }} footer={
         <>
           <button className="qp-button" type="button" disabled={sleepBusy !== null} onClick={() => setSleepDialog(null)}>Cancel</button>
-          <button className="qp-button qp-button--primary" type="button" disabled={!canMutate || sleepBusy !== null} onClick={() => void changeSleep(sleepDialog, false)}>{sleepBusy ? 'Stopping sessions…' : 'Sleep workspace'}</button>
+          <button className="qp-button qp-button--primary" type="button" disabled={!canMutate || sleepBusy !== null} onClick={() => void changeWorktreeParking(sleepDialog, true)}>{sleepBusy ? 'Parking workspace…' : 'Sleep workspace'}</button>
         </>
       }>
-        <p className="qp-dialog-copy">Stop sessions in {sleepDialog.name} while retaining terminal history and supported agent resume identities. Wake resumes the recorded sessions; this does not delete the workspace.</p>
-        <p className="qp-dialog-copy">If a session cannot be safely resumed, the desktop refuses before stopping it. Partial recovery remains visible.</p>
+        <p className="qp-dialog-copy">Sleep parks this worktree's view and frees view memory. It does not stop terminal processes or agent sessions, and it does not delete terminal history or editor buffers.</p>
+        <p className="qp-dialog-copy">The desktop closes only an exact safe view; it never closes an unrelated window. Open the workspace later to wake its view.</p>
+        {actionError && <PageError>{actionError}</PageError>}
+      </PageModal>}
+      {stopSessionsDialog && <PageModal title="Stop sessions" labelledBy="qp-stop-sessions-title" onClose={() => { if (!sleepBusy) setStopSessionsDialog(null) }} footer={
+        <>
+          <button className="qp-button" type="button" disabled={sleepBusy !== null} onClick={() => setStopSessionsDialog(null)}>Cancel</button>
+          <button className="qp-button qp-button--primary" type="button" disabled={!canMutate || sleepBusy !== null} onClick={() => void changeSessionState(stopSessionsDialog, false)}>{sleepBusy ? 'Stopping sessions…' : 'Stop sessions (retain history)'}</button>
+        </>
+      }>
+        <p className="qp-dialog-copy">This separate action stops terminal process trees and supported structured sessions while retaining terminal history and provider resume identities. The worktree view remains open and visible.</p>
+        <p className="qp-dialog-copy">If an active session cannot be resumed safely, the desktop refuses before stopping any session. Partial recovery remains visible.</p>
         {actionError && <PageError>{actionError}</PageError>}
       </PageModal>}
       {deleteDialog && <PageModal title="Delete workspace" labelledBy="qp-delete-workspace-title" onClose={() => { if (!deleteBusy) setDeleteDialog(null) }} footer={
@@ -622,17 +722,21 @@ type RenderContext = {
   sessionsByWorktree: Map<string, WorkspaceSessionSummary[]>
   sleepByWorktree: Map<string, WorkspaceSleepState>
   sleepBusy: string | null
+  loopSummaries: Map<string, LoopSummary>
+  loopSummaryStatus: 'available' | 'unavailable'
   collapsed(key: string, isWorktree?: boolean): boolean
-  onOpen(worktree: Worktree): void
+  onOpen(worktree: WorktreeView): void
   onToggleCollapse(key: string, isWorktree?: boolean): void
   onToggleMenu(id: string): void
-  onPin(worktree: Worktree): void
-  onDelete(worktree: Worktree): void
-  onSleep(worktree: Worktree): void
-  onWake(worktree: Worktree): void
+  onPin(worktree: WorktreeView): void
+  onDelete(worktree: WorktreeView): void
+  onSleep(worktree: WorktreeView): void
+  onWake(worktree: WorktreeView): void
+  onStopSessions(worktree: WorktreeView): void
+  onResumeSessions(worktree: WorktreeView): void
 }
 
-function renderWorktreeTree(worktree: Worktree, depth: number, groupRows: Worktree[], context: RenderContext): ReactNode {
+function renderWorktreeTree(worktree: WorktreeView, depth: number, groupRows: WorktreeView[], context: RenderContext): ReactNode {
   const visibleIds = new Set(groupRows.map((item) => item.id))
   const children = groupRows.filter((item) => item.parentId === worktree.id)
   const isCollapsed = context.collapsed(worktree.id, true)
@@ -641,12 +745,15 @@ function renderWorktreeTree(worktree: Worktree, depth: number, groupRows: Worktr
   const displayProperties = new Set(context.preferences.properties)
   const isPinnedHere = context.preferences.pinnedWorktreeIds.includes(worktree.id)
   const sessionRows = context.sessionsByWorktree.get(worktree.id) ?? []
-  const sleep = context.sleepByWorktree.get(worktree.id)
-  const sleeping = sleep !== undefined && sleep.state !== 'awake'
-  const sleepPending = context.sleepBusy !== null || sleep?.state === 'sleeping' || sleep?.state === 'waking'
+  const sessionSleep = context.sleepByWorktree.get(worktree.id)
+  const sessionSleepState = sessionSleep?.state
+  const parked = worktree.sleeping === true
+  const sleepPending = context.sleepBusy !== null || sessionSleepState === 'sleeping' || sessionSleepState === 'waking'
   const activeSession = sessionRows.find((item) => item.status === 'working' || item.status === 'waiting' || item.status === 'running')
   const activityLabel = activeSession ? `${activeSession.agent} · ${statusLabel(activeSession.status)}` : sessionRows.length > 0 ? 'No active agent' : 'No sessions'
   const cardClass = `qp-worktree-card${context.preferences.cardLayout === 'compact' ? ' qp-worktree-card--compact' : ''}${depth > 0 ? ' qp-worktree-card--child' : ''}`
+  const loopSummary = context.loopSummaries.get(worktree.id)
+  const loopLabel = loopSummary ? loopSummaryLabel(loopSummary, context.loopSummaryStatus === 'available') : null
   const externalLink = (url: string) => {
     if (!context.bridge.init.grants.includes('externalLink')) return
     void context.bridge.native.openExternal(url).catch(() => {})
@@ -661,8 +768,12 @@ function renderWorktreeTree(worktree: Worktree, depth: number, groupRows: Worktr
           {children.length > 0 && <button className="qp-icon-button" type="button" aria-label={`${isCollapsed ? 'Expand' : 'Collapse'} ${worktree.name}`} aria-expanded={!isCollapsed} onClick={() => context.onToggleCollapse(worktree.id, true)}>{isCollapsed ? '▸' : '▾'}</button>}
           <div className="qp-worktree-card__body">
             <div className="qp-worktree-card__name">{worktree.name}{worktree.isMain ? ' · primary' : ''}</div>
-            {sleeping && <span className="qp-chip qp-chip--warn">{sleep.state === 'asleep' ? 'Sleeping' : `Recovery: ${sleep.state}`}</span>}
+            {parked && <span className="qp-chip qp-chip--warn">Sleeping</span>}
+            {sessionSleepState === 'asleep' && <span className="qp-chip qp-chip--warn">Sessions stopped</span>}
+            {sessionSleepState !== undefined && sessionSleepState !== 'awake' && sessionSleepState !== 'asleep' &&
+              <span className="qp-chip qp-chip--warn">Session recovery</span>}
             {displayProperties.has('branch') && <div className="qp-worktree-card__branch">{worktree.branch ?? 'Detached HEAD'}</div>}
+            {loopLabel && <div className="qp-worktree-card__branch">{loopLabel}</div>}
             {displayProperties.has('project') && <div className="qp-worktree-card__project">{displayName(repo, projectGroup, worktree)}</div>}
             {displayProperties.has('kind') && <div className="qp-worktree-card__project">{worktree.kind === 'git' ? 'Git worktree' : 'Folder workspace'}</div>}
             {displayProperties.has('path') && <div className="qp-worktree-card__branch" title={worktree.path}>Path · {worktree.path}</div>}
@@ -697,15 +808,20 @@ function renderWorktreeTree(worktree: Worktree, depth: number, groupRows: Worktr
             {displayProperties.has('activity') && worktree.lastActivityAt > 0 && <span className="qp-chip qp-chip--muted">Updated {new Date(worktree.lastActivityAt).toLocaleString()}</span>}
           </div>
         )}
-        <button className="qp-button qp-worktree-card__open" type="button" disabled={sleepPending || (sleeping && !context.canMutate)} aria-label={`Open ${worktree.name}`} onClick={() => context.onOpen(worktree)}>
+        <button className="qp-button qp-worktree-card__open" type="button" disabled={sleepPending || (parked && !context.canMutate)} aria-label={`Open ${worktree.name}`} onClick={() => context.onOpen(worktree)}>
           Open workspace · {sessionRows.length} {sessionRows.length === 1 ? 'tab' : 'tabs'}
         </button>
         {context.menuWorktreeId === worktree.id && <div className="qp-worktree-card__menu" role="group" aria-label={`Actions for ${worktree.name}`}>
           <button type="button" disabled={!context.bridge.init.grants.includes('storage')} onClick={() => context.onPin(worktree)}>{isPinnedHere ? 'Unpin on this phone' : 'Pin on this phone'}</button>
-          {sleeping
+          {parked
             ? <button type="button" disabled={!context.canMutate || sleepPending} onClick={() => context.onWake(worktree)}>Wake workspace</button>
             : <button type="button" disabled={!context.canMutate || sleepPending || worktree.removing} onClick={() => context.onSleep(worktree)}>Sleep workspace</button>}
-          {sleep?.state === 'partial' && <p>Some sessions need recovery. Wake retries retained resume records.</p>}
+          {sessionSleepState === 'asleep'
+            ? <button type="button" disabled={!context.canMutate || sleepPending} onClick={() => context.onResumeSessions(worktree)}>Resume stopped sessions</button>
+            : sessionSleepState !== undefined && sessionSleepState !== 'awake'
+              ? <button type="button" disabled={!context.canMutate || sleepPending} onClick={() => context.onResumeSessions(worktree)}>Retry session recovery</button>
+              : <button type="button" disabled={!context.canMutate || sleepPending || worktree.removing} onClick={() => context.onStopSessions(worktree)}>Stop sessions (retain history)</button>}
+          {sessionSleepState === 'partial' && <p>Session recovery is partial. The workspace remains openable.</p>}
           <button type="button" disabled={!context.canMutate || worktree.isMain || worktree.removing} title={worktree.isMain ? 'The primary worktree cannot be deleted.' : undefined} onClick={() => context.onDelete(worktree)}>{worktree.removing ? 'Deleting…' : 'Delete workspace'}</button>
         </div>}
       </article>

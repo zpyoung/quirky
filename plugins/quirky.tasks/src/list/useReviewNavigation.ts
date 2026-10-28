@@ -21,7 +21,7 @@ export function useReviewNavigation(
 ): (target: ItemTarget, tab?: ReviewTab) => Promise<boolean> {
   return useCallback(async (target: ItemTarget, tab: ReviewTab = 'conversation'): Promise<boolean> => {
     try {
-      await openReview(context, { worktree: target.worktree, number: target.number, tab })
+      await openReview(context, { ...target, tab })
       return true
     } catch (error) {
       const code = object(error)?.code

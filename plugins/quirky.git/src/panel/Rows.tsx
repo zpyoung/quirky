@@ -21,14 +21,14 @@ export type RowItem = {
 /** A hover button of a row or folder. */
 export type RowButton = { label: string; glyph: string; run(): void; destructive?: boolean }
 
-export type ClickKind = 'plain' | 'mod' | 'shift'
+export type ClickKind = 'plain' | 'mod' | 'shift' | 'split'
 
 /** A submodule row's expansion: `entries` is null until the first read finishes, `failed` when it did not. */
 export type Expansion = { open: boolean; entries: readonly GitStatusEntry[] | null; failed: boolean }
 
 /** What a section's rows can do; the section decides, the rows only call. */
 export type RowHandlers = {
-  click(item: RowItem, kind: ClickKind): void
+  click(item: RowItem, kind: ClickKind, permanent?: boolean): void
   contextMenu(item: RowItem, x: number, y: number): void
   buttons(item: RowItem): RowButton[]
   folderButtons(items: RowItem[]): RowButton[]
@@ -49,7 +49,8 @@ type Props = {
   handlers: RowHandlers
 }
 
-const clickKind = (event: MouseEvent): ClickKind => (event.metaKey || event.ctrlKey ? 'mod' : event.shiftKey ? 'shift' : 'plain')
+const clickKind = (event: MouseEvent): ClickKind =>
+  event.metaKey || event.ctrlKey ? 'mod' : event.shiftKey ? 'shift' : event.altKey ? 'split' : 'plain'
 
 /** The paths of a section's file rows in the order they are shown, which shift-click selects across. */
 export function displayPaths(items: readonly RowItem[], viewMode: ViewMode, scope: string, collapsed: ReadonlySet<string>): string[] {
@@ -214,7 +215,7 @@ function FileRow({ item, depth, tree, selected, handlers }: { item: RowItem; dep
             {expansion.open ? '▾' : '▸'}
           </button>
         )}
-        <button type="button" className="scm-row-main" title={item.path} aria-pressed={selected} onClick={(event) => handlers.click(item, clickKind(event))}>
+        <button type="button" className="scm-row-main" title={item.path} aria-pressed={selected} onClick={(event) => handlers.click(item, clickKind(event), event.detail > 1)}>
           <span className={`scm-file-icon scm-status-${item.status}`} aria-hidden="true" />
           <span className="scm-row-text">
             <span className="scm-row-line">

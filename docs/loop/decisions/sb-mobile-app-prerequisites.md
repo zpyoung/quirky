@@ -154,5 +154,38 @@
 - **Revisit if:** An authorized ruling or real Native producer removes one of these prerequisites.
 - **Source:** deferred: remaining ruled and Native host flows
 
+## D15: Correct the inherited Sleep assumption without discarding the explicit recovery prerequisite
+- **Question:** The canonical catchup supplies a source-grounded decision that Worktree Sleep parks views, while the older mobile deferral assumed it stops processes.
+- **Options:** Ignore the incoming ruling; silently replace the built recovery APIs with parking; preserve both explicit operations with distinct authority and names.
+- **Chose:** Phone Sleep workspace/Wake workspace/Hide sleeping consume the canonical quirky.worktree/sleep,wake and Worktree.sleeping, keeping processes/buffers. Opening wakes parked views. Retain the newly built session stop/history/resume prerequisite under a separate Stop sessions (retain history) confirmation and Resume stopped sessions action, with distinct status wording and CLI/API ownership. No automatic descendant authority. Parked state is not inferred from session recovery, and partial recovery remains openable.
+- **Why:** Incoming m7-sweep-terminal-completion D9 reread the actual worktrees source and explicitly corrected its old safety interpretation. A generic Sleep button must not kill agents under a decision that guarantees view parking. The queue's explicit retained-history/session-resume prerequisite can still ship without redefining Worktree Sleep.
+- **Evidence:** docs/loop/decisions/m7-sweep-terminal-completion.md:91-100; plugins/quirky.worktree/src/daemon/controls.ts:205-232; current Worktree.sleeping contract; combined logic spec dated canonical-catchup amendment.
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** An authorized product ruling explicitly unifies these distinct lifecycles.
+- **Source:** supersedes sb-mobile-app D8 (Sleep interpretation only)
+
+## D16: Preserve every incoming authority and producer convention during the one canonical catchup
+- **Question:** Which incoming feature contracts must coexist with this implementation?
+- **Options:** Resolve whole files to one side; combine source owners and migrate the new consumers.
+- **Chose:** Read all15incoming decision logs fully through MobileIncomingBindings. Preserve bounded polling notifications and generation-specific cancellation, panel/terminal-artifact route grants, native transport proof, strict report/viewport/claim validation, secret-free producer projections, loop summaries and real Native metadata. Merge Editor Save CAS inside incoming permission/writability/viewer ownership. Keep incoming canonical Worktree migration5 unchanged and append the private creator table as migration6. Derive positive automation only from canonical immutable live-dispatch automationProvenance; private origin evidence supplies stable paired-device comparison, not a second automation classifier.
+- **Why:** Concurrently landed producer ownership is binding. A missing origin-table row cannot erase reliable canonical automation evidence, and mixing two additions into an already-applied migration would leave existing integration homes without a table. Neither metadata nor mobile connectivity grants remote-host/filesystem or Native engine authority.
+- **Evidence:** MobileIncomingBindings D coverage for all15logs; MobileOrigin merge resolution; MobileTabs atomic-save/permission resolution; source merge conflict receipts. New phone tab operations remain session-route-only; lifecycle/origin queries stay base-workspace routes; unrelated panels do not acquire Browser driving authority.
+- **Reversibility:** medium
+- **Confidence:** high for inspected composition; postmerge typecheck/runtime smoke still required
+- **Revisit if:** The final caught-up gate exposes a concrete contract conflict.
+- **Source:** locked by docs/loop/LOOP.md
+
+## D17: Land only the caught-up tree with exact executed proof
+- **Question:** Does the canonical merge preserve the changed phone paths and pass its only build-first gate?
+- **Options:** Treat premerge evidence as postmerge proof; verify the actual composed source and retain limits.
+- **Chose:** Resolve all source conflicts without whole-file backouts, remove the duplicate safe-catalog CLI handler reported by the first postmerge compiler run, then run root/mobile typecheck successfully in24.22s. Run a fresh real daemon/PTY/encrypted-phone smoke on the caught-up source. Canonical view Sleep preserved the running shell; explicit session stop/restart/resume retained history. The actual phone UI separately parked/hid/woke the worktree and stopped its sessions; Hide sleeping kept the stopped-but-unparked row visible. Opening resumed its shell. Markdown preview remained inert. Session-scoped Watch navigated, streamed and sent displayed-pixel pointer/text input to the actual target.
+- **Why:** Canonical parking, immutable dispatch provenance, strict page policies and Editor permissions arrived during implementation. Their compiled/runtime composition—not an earlier branch—is the deliverable.
+- **Evidence:** bun run typecheck exit0, including apps/mobile TS; MOBILE_API_SMOKE {actualEncryptedPhone:true,realPty:true,distinctCallerOrigins:true,markdownCasAndScope:true,viewSleepPreservesProcesses:true,sleepRestartWakeHistory:true};1006227-byte temporary page bundle; PHONE_VIEW_PARKING true with sessionStatus running; actual UI parkedRowHidden true and stopped row visible; POSTMERGE_WATCH_INPUT_OK true with BROWSER_CLICKED_7/POSTMERGE_PHONE_7 read from the real target. Postmerge smoke exited0 in4m39s with homeRemoved:true; all reported hook files were inside that owned temporary HOME; owned browser tab released. No suite, review campaign, full desktop build or default native-keychain/iOS pass claimed.
+- **Reversibility:** easy
+- **Confidence:** high for executed caught-up paths only
+- **Revisit if:** Canonical land reports a conflict/type error, or end-phase/native scenarios find a concrete regression.
+- **Source:** assumed — autonomous
+
 ## Progress
-Feature source and phone integration assembled; all workers and smoke services stopped, owned homes cleaned. Permitted Sleep/provenance/Markdown/explicit Watch paths have real runtime evidence with the limitations in D9–D13. No suite/model-review/full-desktop-build pass is claimed. Next: register the single remaining unbuilt-flow follow-up, commit source/docs, catch up once with build/roadmap, read incoming bindings, run root/mobile typecheck, detach and canonical queue.ts land sb-mobile-app-prerequisites. End after this one item, not a second claim.
+Single canonical catchup resolved; all workers/services stopped and all owned smoke homes cleaned. The caught-up source passed root/mobile typecheck and actual API/PTY/UI merge-seam smoke in D17. Native N1–N3 remain pending; suites/reviews remain postponed. The single remaining unbuilt-flow follow-up is registered. Next: commit the merge receipt and resolutions, detach, run canonical queue.ts land sb-mobile-app-prerequisites, clean owned scratch, update loop notes, and end this one item without another claim.

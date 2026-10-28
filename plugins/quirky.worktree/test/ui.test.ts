@@ -2,6 +2,7 @@ import { GlobalRegistrator } from '@happy-dom/global-registrator'
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:test'
 import type { AgentDisplayState, AgentStatusSummary, ProjectGroup, QuirkyEvent, Repo, Session, UiLayout, UiPluginContext, Worktree } from '@quirky/protocol'
 import { RpcErrorCode } from '@quirky/protocol'
+import type { CleanupCandidate, CleanupRemovalResult, StockWorktreeOptions } from '../src/control-types'
 
 const SLOT = 'sidebar-section:quirky.worktree/worktrees'
 const COMMAND = 'command:quirky.worktree/new-worktree'
@@ -23,7 +24,9 @@ const WORKTREE_DEFAULTS = {
   removing: false,
   groupId: null,
   projectGroupId: null,
-  lastActivityAt: 0
+  lastActivityAt: 0,
+  sleeping: false,
+  manualOrder: 0
 } as const
 
 const REPO_DEFAULTS = { kind: 'git', displayName: null, groupId: null } as const
@@ -123,6 +126,9 @@ type World = {
   confirmDelete: boolean
   /** The branch a remove reports as kept. */
   keptBranch: { name: string; head: string } | null
+  options: StockWorktreeOptions
+  cleanupCandidates: CleanupCandidate[]
+  cleanupResults: CleanupRemovalResult[]
 }
 
 function setup(layout: UiLayout = { view: null, panel: null, sidebar: true, focus: null }) {
@@ -139,7 +145,13 @@ function setup(layout: UiLayout = { view: null, panel: null, sidebar: true, focu
     createExtra: {},
     changedFiles: 0,
     confirmDelete: true,
-    keptBranch: null
+    keptBranch: null,
+    options: { groupBy: 'project', sortBy: 'recent', compact: false, showBranch: true, showComment: true, showSleeping: true },
+    cleanupCandidates: [
+      { worktreeId: 'w2', name: 'fix-login', fingerprint: 'fix-fingerprint', reason: 'idle-clean', ignored: false, eligible: true, blockers: [] },
+      { worktreeId: 'w1', name: 'main', fingerprint: 'main-fingerprint', reason: 'idle-clean', ignored: false, eligible: false, blockers: [{ code: 'main-worktree', detail: 'Primary worktrees cannot be deleted.' }] }
+    ],
+    cleanupResults: [{ worktreeId: 'w2', removed: true }]
   }
   const calls: Call[] = []
   const confirmed: { title: string; body?: string }[] = []
@@ -171,6 +183,49 @@ function setup(layout: UiLayout = { view: null, panel: null, sidebar: true, focu
         }
         case 'quirky.worktree/list':
           return [...world.worktrees]
+        case 'quirky.worktree/options':
+          return { ...world.options }
+        case 'quirky.worktree/setOptions':
+          world.options = { ...world.options, ...params } as StockWorktreeOptions
+          return { ...world.options }
+        case 'quirky.worktree/reorder':
+          return { ok: true }
+        case 'quirky.worktree/sleepPreview': {
+          const target = world.worktrees.find((worktree) => worktree.id === params.worktree)!
+          const sleeping = 'sleeping' in target && target.sleeping === true
+          return { worktrees: [{ worktreeId: target.id, name: target.name, sleeping, allowed: true, blockers: [] }] }
+        }
+        case 'quirky.worktree/sleep':
+        case 'quirky.worktree/wake': {
+          const target = world.worktrees.find((worktree) => worktree.id === params.worktree)!
+          const sleeping = method === 'quirky.worktree/sleep'
+          world.worktrees = world.worktrees.map((worktree) =>
+            worktree.id === target.id ? { ...worktree, sleeping } as Worktree : worktree
+          )
+          return { worktrees: [{ worktreeId: target.id, sleeping, changedAt: Date.now() }] }
+        }
+        case 'quirky.worktree/cleanupPreview':
+          return { generatedAt: Date.now(), candidates: [...world.cleanupCandidates] }
+        case 'quirky.worktree/cleanupIgnore': {
+          world.cleanupCandidates = world.cleanupCandidates.map((candidate) =>
+            candidate.worktreeId === params.worktreeId
+              ? { ...candidate, ignored: true, eligible: false, blockers: [...candidate.blockers, { code: 'dismissed', detail: 'Ignored by the user.' }] }
+              : candidate
+          )
+          return { ok: true }
+        }
+        case 'quirky.worktree/cleanupRestoreIgnored': {
+          const restored = world.cleanupCandidates.filter((candidate) => candidate.ignored).length
+          world.cleanupCandidates = world.cleanupCandidates.map((candidate) => ({
+            ...candidate,
+            ignored: false,
+            eligible: candidate.blockers.every((blocker) => blocker.code !== 'main-worktree' && blocker.code !== 'dismissed'),
+            blockers: candidate.blockers.filter((blocker) => blocker.code !== 'dismissed')
+          }))
+          return { restored }
+        }
+        case 'quirky.worktree/cleanupRemove':
+          return { results: world.cleanupResults }
         case 'quirky.session/list':
           if (world.sessions === null) throw new RpcLike('method not found', RpcErrorCode.MethodNotFound)
           return world.sessions
@@ -1099,4 +1154,70 @@ describe('agent status glyphs', () => {
       globalThis.setInterval = realSetInterval
     }
   })
+})
+test('stock worktree controls persist options, reveal sleeping rows and wake without replacing the session', async () => {
+  const h = setup()
+  h.world.options = { groupBy: 'status', sortBy: 'name', compact: false, showBranch: true, showComment: true, showSleeping: false }
+  h.world.worktrees[1] = { ...h.world.worktrees[1]!, comment: 'keep this note', sleeping: true } as Worktree
+  const unmount = await h.mountInto(host)
+
+  expect([...host.querySelectorAll('li.worktree .worktree-name')].map((node) => node.textContent)).not.toContain('fix-login')
+  await click(host.querySelector('button[aria-label="Workspace options"]')!)
+  const group = host.querySelector('select[aria-label="Group by"]') as HTMLSelectElement
+  await act(async () => {
+    group.value = 'none'
+    group.dispatchEvent(new Event('change', { bubbles: true }))
+  })
+  const sort = host.querySelector('select[aria-label="Sort by"]') as HTMLSelectElement
+  await act(async () => {
+    sort.value = 'manual'
+    sort.dispatchEvent(new Event('change', { bubbles: true }))
+  })
+
+  const reveal = [...host.querySelectorAll('button')].find((button) => button.textContent?.trim() === 'Show 1 hidden sleeping worktree')!
+  await click(reveal)
+  expect([...host.querySelectorAll('li.worktree .worktree-name')].map((node) => node.textContent)).toContain('fix-login')
+  expect(rowOf('fix-login', 'api').querySelector('.worktree-branch')?.textContent).toBe('fix-login')
+  expect(rowOf('fix-login', 'api').querySelector('.worktree-comment')?.textContent).toBe('keep this note')
+  await click(host.querySelector('input[aria-label="Compact cards"]')!)
+  await click(host.querySelector('input[aria-label="Show branch"]')!)
+  await click(host.querySelector('input[aria-label="Show comment"]')!)
+  expect(rowOf('fix-login', 'api').querySelector('.worktree-branch')).toBeNull()
+  expect(rowOf('fix-login', 'api').querySelector('.worktree-comment')).toBeNull()
+  await contextMenu(rowOf('fix-login', 'api'))
+  expect(itemLabels()).toContain('Wake')
+  await click(itemNamed('Wake'))
+  await contextMenu(rowOf('fix-login', 'api'))
+  expect(itemLabels()).toContain('Sleep')
+  expect(itemLabels()).not.toContain('Wake')
+  await unmount()
+})
+
+test('cleanup review prevents blocked selection and supports ignoring and restoring suggestions', async () => {
+  const h = setup()
+  const unmount = await h.mountInto(host)
+  await click([...host.querySelectorAll('button')].find((button) => button.textContent?.trim() === 'Review cleanup')!)
+
+  const dialog = document.querySelector('[role="dialog"]') as HTMLElement
+  expect(dialog.textContent).toContain('Primary worktrees cannot be deleted.')
+  expect(dialog.textContent).toContain('fix-login')
+  await click([...dialog.querySelectorAll('button')].find((button) => button.textContent?.trim() === 'Ignore fix-login')!)
+  expect((dialog.querySelector('input[aria-label="Select fix-login"]') as HTMLInputElement).disabled).toBe(true)
+  await click([...dialog.querySelectorAll('button')].find((button) => button.textContent?.trim() === 'Restore ignored suggestions')!)
+  expect((dialog.querySelector('input[aria-label="Select fix-login"]') as HTMLInputElement).disabled).toBe(false)
+
+  expect((dialog.querySelector('input[aria-label="Select main"]') as HTMLInputElement).disabled).toBe(true)
+  expect([...dialog.querySelectorAll('button')].find((button) => button.textContent?.trim() === 'Delete selected')!.disabled).toBe(true)
+  await unmount()
+})
+
+test('Escape dismisses cleanup review and leaves the workspace available', async () => {
+  const h = setup()
+  const unmount = await h.mountInto(host)
+  await click([...host.querySelectorAll('button')].find((button) => button.textContent?.trim() === 'Review cleanup')!)
+  expect(document.querySelector('[role="dialog"]')).not.toBeNull()
+  await act(async () => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })))
+  expect(document.querySelector('[role="dialog"]')).toBeNull()
+  expect(rowOf('fix-login', 'api').textContent).toContain('fix-login')
+  await unmount()
 })

@@ -1,16 +1,35 @@
 import { useSyncExternalStore } from 'react'
-import type { UiPluginContext } from '@quirky/protocol'
+import type { AskEnvelope, UiPluginContext } from '@quirky/protocol'
 import { AskCard } from './AskCard'
 import type { AskStore } from './store'
 
+const RESULT_LABELS: Record<AskEnvelope['status'], string> = {
+  pending: 'Pending',
+  answered: 'Answered',
+  partial: 'Partially answered',
+  declined: 'Declined',
+  timed_out: 'Timed out'
+}
+
 export function AskCards({ store, context }: { store: AskStore; context: UiPluginContext }) {
   const asks = useSyncExternalStore(store.subscribe, store.get)
-  if (asks.length === 0) return <p className="muted">No pending questions.</p>
+  const flashes = useSyncExternalStore(store.subscribe, store.flashes)
   return (
     <div className="ask-stack" style={{ position: 'static', width: 'auto', maxHeight: 'none', overflowY: 'visible' }}>
-      {asks.map((ask) => (
-        <AskCard key={ask.id} ask={ask} context={context} onResolved={store.remove} />
+      {flashes.map(({ ask }) => (
+        <article className="ask-result" data-ask-result={ask.id} role="status" aria-live="polite" aria-label={`${ask.spec.title ?? 'Question'}: ${RESULT_LABELS[ask.envelope.status]}`} key={`result:${ask.id}`}>
+          <h3>{ask.spec.title ?? 'Question'}</h3>
+          <p><strong>{RESULT_LABELS[ask.envelope.status]}</strong></p>
+          {ask.envelope.summary && <p style={{ whiteSpace: 'pre-wrap' }}>{ask.envelope.summary}</p>}
+        </article>
       ))}
+      {asks.length === 0 ? (
+        <p className="muted">No pending questions.</p>
+      ) : (
+        asks.map((ask) => (
+          <AskCard key={ask.id} ask={ask} context={context} onResolved={store.resolve} />
+        ))
+      )}
     </div>
   )
 }

@@ -1,4 +1,6 @@
-# Session workspace sleep
+# Sessions
+
+## Workspace sleep
 
 Workspace sleep reversibly stops active worktree sessions. Terminal sessions retain PTY history; structured Claude/Codex sessions stop through their provider runner and resume from the saved provider conversation ID. It never closes or forgets sessions. A shell wakes into the same session/history; agents use their provider-aware resume path.
 
@@ -31,3 +33,11 @@ quirky session wake floating
 ```
 
 Use `quirky session wake <worktree>` to retry partial recovery. A failed session retains its error and is not silently relaunched as a blank agent conversation.
+
+## Agent restore and Fork
+
+`quirky.session/restore({ session })` restores retained terminal history under the same session ID. A still-running session is returned unchanged. Shell sessions resume as shells; a lost agent session resumes only when it has a syntactically valid captured provider session, a saved launch record, a resumable provider and an existing launch folder. The restore reuses `quirky.agents/prepareResume`, the launch record, provider account preparation and the saved cwd. It does not create a replacement session or type a resume command into a live PTY.
+
+Missing or syntactically invalid provider IDs, unsupported providers and unavailable launch folders refuse before a PTY is spawned. The record stays exited/restorable and the host history is retained; inspect it with `quirky terminal history <session>` rather than silently replacing the agent with a shell. Provider IDs continue to come from the existing hook capture path. A syntactically valid but stale provider ID has no separate public existence-check API; the provider CLI remains authoritative when the restore process starts.
+
+The terminal pane Fork command is `command:quirky.terminal/fork-agent-session({ session })`. It accepts the exact pane session ID, refuses shells and stale/mismatched sessions, then calls `quirky.session/resume({ session, fork: true })` and opens only the distinct returned session. The public session resolver remains authoritative for provider support and fork-ID validation.

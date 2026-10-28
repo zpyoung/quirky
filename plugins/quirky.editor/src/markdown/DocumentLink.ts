@@ -38,10 +38,10 @@ export const MarkdownDocumentLink = Node.create({
     level: 'inline',
     start: (source: string) => source.indexOf('[['),
     tokenize: (source: string) => {
-      const match = /^\[\[([^\]|\r\n]+)(?:\|([^\]\r\n]+))?\]\]/.exec(source)
+      const match = /^\[\[([^\]|\r\n]+)(?:\|([^\]\r\n]*))?\]\]/.exec(source)
       if (!match) return undefined
       const target = match[1]!.trim()
-      const label = match[2]?.trim() ?? target
+      const label = match[2] ?? target
       if (target === '') return undefined
       return { type: 'markdownDocumentLink', raw: match[0], target, label }
     }
@@ -57,9 +57,9 @@ export const MarkdownDocumentLink = Node.create({
     }
   },
 
-  renderMarkdown({ node }) {
-    const target = String(node.attrs.target ?? '')
-    const label = String(node.attrs.label ?? '')
+  renderMarkdown(node) {
+    const target = String(node.attrs?.target ?? '')
+    const label = String(node.attrs?.label ?? '')
     return `[[${target}${label && label !== target ? `|${label}` : ''}]]`
   }
 })

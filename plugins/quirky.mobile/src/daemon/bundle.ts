@@ -21,6 +21,21 @@ const GRANTS: Record<string, true> = {
 }
 const WORKSPACE_GRANTS: readonly MobilePageGrant[] = ['rpc', 'storage', 'navigate', 'terminal', 'externalLink']
 const SESSION_GRANTS: readonly MobilePageGrant[] = ['rpc', 'storage', 'navigate', 'terminal', 'clipboard.read', 'clipboard.write', 'externalLink']
+const PANEL_GRANTS: readonly MobilePageGrant[] = ['rpc', 'storage', 'navigate', 'clipboard.write', 'externalLink']
+const ROUTES: Readonly<Record<string, { path: string; grants: readonly MobilePageGrant[] }>> = {
+  workspaces: { path: '/', grants: WORKSPACE_GRANTS },
+  session: { path: '/session', grants: SESSION_GRANTS },
+  'source-control': { path: '/source-control', grants: PANEL_GRANTS },
+  review: { path: '/review', grants: PANEL_GRANTS },
+  files: { path: '/files', grants: PANEL_GRANTS },
+  'file-preview': { path: '/files/preview', grants: PANEL_GRANTS },
+  tasks: { path: '/tasks', grants: PANEL_GRANTS },
+  accounts: { path: '/accounts', grants: ['rpc', 'storage', 'navigate'] },
+  'agent-history': { path: '/agent-history', grants: ['rpc', 'storage', 'navigate'] },
+  notifications: { path: '/notifications', grants: ['rpc', 'storage', 'navigate'] },
+  'terminal-artifacts': { path: '/terminal-artifacts', grants: ['rpc', 'storage', 'navigate'] },
+  'terminal-artifact': { path: '/terminal-artifact', grants: ['rpc', 'storage', 'navigate'] }
+}
 const SHA256_HEX = /^[0-9a-f]{64}$/
 const SAFE_ASSET_PART = /^[A-Za-z0-9][A-Za-z0-9_.@-]{0,127}$/
 const MIME = /^[a-zA-Z0-9.+-]+\/[a-zA-Z0-9.+-]+(?:;\s*charset=utf-8)?$/
@@ -62,7 +77,7 @@ function validateManifest(value: unknown): MobileBundleManifest {
   if (typeof value.buildId !== 'string' || !SHA256_HEX.test(value.buildId)) throw new MobileBundleError('conflict', 'mobile page bundle build ID is invalid')
   if (!Number.isSafeInteger(value.totalBytes) || (value.totalBytes as number) < 1 || (value.totalBytes as number) > 32 * 1024 * 1024) throw new MobileBundleError('conflict', 'mobile page bundle total size is invalid')
   if (!Array.isArray(value.assets) || value.assets.length === 0 || value.assets.length > 256) throw new MobileBundleError('conflict', 'mobile page bundle asset count is invalid')
-  if (!Array.isArray(value.routes) || value.routes.length !== 2 || value.routes.length > 64) throw new MobileBundleError('conflict', 'mobile page bundle route count is invalid')
+  if (!Array.isArray(value.routes) || value.routes.length < 2 || value.routes.length > 64) throw new MobileBundleError('conflict', 'mobile page bundle route count is invalid')
 
   let totalBytes = 0
   const seenPaths: Record<string, true> = {}
@@ -79,13 +94,13 @@ function validateManifest(value: unknown): MobileBundleManifest {
 
   const seenKinds: Record<string, true> = {}
   for (const route of value.routes) {
-    if (!isRecord(route) || !exactKeys(route, ['kind', 'path', 'grants']) ||
-      (route.kind !== 'workspaces' && route.kind !== 'session') ||
-      (route.kind === 'workspaces' ? route.path !== '/' : route.path !== '/session')) throw new MobileBundleError('conflict', 'mobile page bundle route is invalid')
+    if (!isRecord(route) || !exactKeys(route, ['kind', 'path', 'grants']) || typeof route.kind !== 'string' ||
+      !Object.hasOwn(ROUTES, route.kind)) throw new MobileBundleError('conflict', 'mobile page bundle route is invalid')
+    const expected = ROUTES[route.kind]!
+    if (route.path !== expected.path) throw new MobileBundleError('conflict', 'mobile page bundle route path is invalid')
     if (Object.hasOwn(seenKinds, route.kind)) throw new MobileBundleError('conflict', 'mobile page bundle has duplicate routes')
     seenKinds[route.kind] = true
-    const grants = route.kind === 'workspaces' ? WORKSPACE_GRANTS : SESSION_GRANTS
-    if (!validGrantList(route.grants, grants)) throw new MobileBundleError('conflict', 'mobile page bundle route grants are unsupported')
+    if (!validGrantList(route.grants, expected.grants)) throw new MobileBundleError('conflict', 'mobile page bundle route grants are unsupported')
   }
   if (!Object.hasOwn(seenKinds, 'workspaces') || !Object.hasOwn(seenKinds, 'session')) throw new MobileBundleError('conflict', 'mobile page bundle route is missing')
   return value as unknown as MobileBundleManifest

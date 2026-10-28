@@ -98,7 +98,11 @@ if (args.includes('graphql')) {
     const issue = issues[key(owner, repo, number)]
     if (isObject(issue)) {
       const issueKey = key(owner, repo, number)
-      const issueComments = Array.isArray(comments[issueKey]) ? comments[issueKey] : []
+      let issueComments = Array.isArray(comments[issueKey]) ? comments[issueKey] : []
+      if (Number(state.laggingCommentReads) > 0) {
+        state.laggingCommentReads = Number(state.laggingCommentReads) - 1
+        issueComments = issueComments.slice(0, -1)
+      }
       const assignees = names(issue.assignees, 'login').map((login) => ({ login }))
       const labels = names(issue.labels, 'name').map((name) => ({ name }))
       const participants = [...new Set([issue.user?.login, ...issueComments.map((comment) => comment.user?.login)].filter((login) => typeof login === 'string'))].map((login) => ({ login }))

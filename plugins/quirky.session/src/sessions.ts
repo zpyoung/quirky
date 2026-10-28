@@ -798,40 +798,14 @@ export class SessionService {
     const replayRecord = old.launch
       ? { command: old.launch.command, args: old.launch.args, env: { ...old.launch.env } }
       : { command: '', args: '', env: {} }
-    const accountPrepare = await this.accountPreparationAvailable()
-    const userEnv = old.launch?.env ?? {}
-    const launched = await this.start(session, this.records.repoIdOf(old.id), params, undefined, async (additions) => {
-      const accountResume =
-        old.agent === 'claude' || old.agent === 'codex'
-          ? { sourceSessionId: old.id, providerSession }
-          : undefined
-      const prepared = accountPrepare
-        ? await this.prepareAccount(session, old.agent, old.cwd, userEnv, additions.env, accountResume)
-        : null
-      const preparedProviderSession =
-        prepared?.resumeTranscriptPath === undefined
-          ? providerSession
-          : { ...providerSession, transcriptPath: prepared.resumeTranscriptPath }
-      const hookEnv = preparedHookEnv(additions.env, userEnv, prepared)
-      const resumed = (await this.context.call('quirky.agents/prepareResume', {
-        agent: old.agent,
-        cwd: old.cwd,
-        record: old.launch ?? null,
-        providerSession: preparedProviderSession,
-        fork,
-        hookArgs: additions.args,
-        hookEnv
-      })) as { command: string; env: Record<string, string | null>; record: SessionLaunch }
-      return {
-        argv: this.context.launch.commandArgv(resumed.command),
-        envPatch: resumed.env,
-        launch: resumed.record,
-        launchSettings: old.launchSettings ?? null,
-        promptDelivery: null,
-        paste: null,
-        providerSession: fork ? null : preparedProviderSession
-      }
-    }, { record: replayRecord })
+    const launched = await this.start(
+      session,
+      this.records.repoIdOf(old.id),
+      params,
+      undefined,
+      (additions) => this.prepareResumeLaunch(session, old, providerSession, fork, additions.args, additions.env),
+      { record: replayRecord }
+    )
     return this.deliverAfterLaunch(launched, false)
   }
 
@@ -1255,9 +1229,9 @@ export class SessionService {
   }
 
   /**
-   * Starts a shell in a session that ended with the PTY host and still has its history stored. The
-   * session keeps its ID and becomes a `shell`. A running session is returned as it is; one that
-   * ended on its own or was killed is a conflict. Concurrent calls for one session share one spawn.
+   * Restores retained terminal history under the same session ID. Shell sessions start a shell;
+   * agent sessions resume only from a captured provider session and launch record. A running session
+   * is returned unchanged, and incomplete agent identity refuses without discarding its history.
    */
   restore = async (params: Record<string, unknown>, caller?: PluginCaller): Promise<Session> => {
     const session = this.require(params.session as string)
@@ -1290,41 +1264,98 @@ export class SessionService {
   private async startRestore(session: Session): Promise<Session> {
     this.restoreExits.set(session.id, null)
     try {
-      const additions = await this.context.launch.hooks({
-        sessionId: session.id,
-        worktreeId: session.worktreeId,
-        repoId: this.records.repoIdOf(session.id) ?? '',
-        cwd: session.cwd,
-        agent: 'shell'
-      })
-      const accountPrepare = await this.accountPreparationAvailable()
-      const prepared = accountPrepare ? await this.prepareAccount(session, 'shell', session.cwd, {}, additions.env) : null
-      const envPatch = preparedHookEnv(additions.env, {}, prepared)
+      if (session.kind !== 'terminal') throw this.context.error('conflict', `session ${session.id} is not a terminal session`)
+
+      let spec: LaunchSpec
+      if (session.agent === 'shell') {
+        const additions = await this.context.launch.hooks({
+          sessionId: session.id,
+          worktreeId: session.worktreeId,
+          repoId: this.records.repoIdOf(session.id) ?? '',
+          cwd: session.cwd,
+          agent: 'shell'
+        })
+        const accountPrepare = await this.accountPreparationAvailable()
+        const prepared = accountPrepare ? await this.prepareAccount(session, 'shell', session.cwd, {}, additions.env) : null
+        spec = {
+          argv: this.context.launch.shellArgv(),
+          envPatch: preparedHookEnv(additions.env, {}, prepared),
+          ...(prepared?.shellInit ? { shellInit: prepared.shellInit } : {}),
+          launch: null,
+          launchSettings: null,
+          promptDelivery: null,
+          paste: null,
+          providerSession: null
+        }
+      } else {
+        const providerSession = session.providerSession
+        if (!providerSession) {
+          throw this.context.error('conflict', `session ${session.id} has no provider session; its terminal history remains available with quirky terminal history`)
+        }
+        const launch = session.launch
+        if (!launch) {
+          throw this.context.error('conflict', `session ${session.id} has no launch snapshot; its terminal history remains available with quirky terminal history`)
+        }
+        if (typeof providerSession.id !== 'string') throw this.context.error('invalid-params', 'provider session id must be a string')
+        const idProblem = providerSessionIdProblem(providerSession.id)
+        if (idProblem) throw this.context.error('invalid-params', idProblem)
+        if (!existsSync(session.cwd)) {
+          throw this.context.error('conflict', `the session's folder ${session.cwd} no longer exists; its terminal history remains available with quirky terminal history`)
+        }
+        const agent = await this.agentInfo(session.agent)
+        if (!agent.resumable) {
+          throw this.context.error('conflict', `${session.agent} can't resume sessions; its terminal history remains available with quirky terminal history`)
+        }
+        const resumeSource = { ...session, launch }
+        const additions = await this.context.launch.hooks({
+          sessionId: session.id,
+          worktreeId: session.worktreeId,
+          repoId: this.records.repoIdOf(session.id) ?? '',
+          cwd: session.cwd,
+          agent: session.agent,
+          record: { command: launch.command, args: launch.args, env: { ...launch.env } }
+        })
+        spec = await this.prepareResumeLaunch(session, resumeSource, providerSession, false, additions.args, additions.env)
+      }
+
       await this.context.pty.spawn(session.id, {
-        argv: this.context.launch.shellArgv(),
+        argv: spec.argv,
         cwd: session.cwd,
         env: this.context.launch.env({
           sessionId: session.id,
           worktreeId: session.worktreeId,
-          agent: 'shell',
-          envPatch,
-          ...(prepared?.shellInit ? { shellInit: prepared.shellInit } : {})
+          agent: session.agent,
+          envPatch: spec.envPatch,
+          ...(spec.shellInit === undefined ? {} : { shellInit: spec.shellInit })
         }),
         cols: 80,
         rows: 24,
-        shellReady: this.context.launch.shellReady(),
+        shellReady: session.agent === 'shell' && this.context.launch.shellReady(),
         restore: true
       })
+      const current = this.records.get(session.id)
+      if (!current) {
+        await this.context.pty.forget(session.id).catch(() => {})
+        throw this.context.error('conflict', `session ${session.id} was closed while it was restoring`)
+      }
       const earlyExit = this.restoreExits.get(session.id)
+      const beforeProviderSession = session.providerSession
+      const providerSessionUnchanged =
+        (current.providerSession?.id ?? null) === (beforeProviderSession?.id ?? null) &&
+        (current.providerSession?.transcriptPath ?? null) === (beforeProviderSession?.transcriptPath ?? null)
+      const stored = {
+        launch: spec.launch,
+        launchSettings: spec.launchSettings,
+        ...(providerSessionUnchanged && spec.providerSession !== null ? { providerSession: spec.providerSession } : {})
+      }
       const restored = this.records.update(
         session.id,
         earlyExit
-          ? { ...exitFields(earlyExit), agent: 'shell', launch: null, launchSettings: null }
+          ? { ...stored, ...exitFields(earlyExit), agent: session.agent }
           : {
-              status: 'running',
-              agent: 'shell',
-              launch: null,
-              launchSettings: null,
+              ...stored,
+              status: current.status === 'exited' ? 'running' : current.status,
+              agent: session.agent,
               exitCode: null,
               exitSignal: null,
               exitCause: null,
@@ -1575,6 +1606,47 @@ export class SessionService {
     }
     return accountPreparationOf(await this.context.call('quirky.accounts/prepare', request))
   }
+  private async prepareResumeLaunch(
+    target: Session,
+    source: Session,
+    providerSession: SessionProviderSession,
+    fork: boolean,
+    hookArgs: string[],
+    hookEnv: Record<string, string | null>
+  ): Promise<LaunchSpec> {
+    const userEnv = source.launch?.env ?? {}
+    const accountResume =
+      source.agent === 'claude' || source.agent === 'codex'
+        ? { sourceSessionId: source.id, providerSession }
+        : undefined
+    const accountPrepare = await this.accountPreparationAvailable()
+    const prepared = accountPrepare
+      ? await this.prepareAccount(target, source.agent, source.cwd, userEnv, hookEnv, accountResume)
+      : null
+    const preparedProviderSession =
+      prepared?.resumeTranscriptPath === undefined
+        ? providerSession
+        : { ...providerSession, transcriptPath: prepared.resumeTranscriptPath }
+    const resumed = (await this.context.call('quirky.agents/prepareResume', {
+      agent: source.agent,
+      cwd: source.cwd,
+      record: source.launch ?? null,
+      providerSession: preparedProviderSession,
+      fork,
+      hookArgs,
+      hookEnv: preparedHookEnv(hookEnv, userEnv, prepared)
+    })) as { command: string; env: Record<string, string | null>; record: SessionLaunch }
+    return {
+      argv: this.context.launch.commandArgv(resumed.command),
+      envPatch: resumed.env,
+      launch: resumed.record,
+      launchSettings: source.launchSettings ?? null,
+      promptDelivery: null,
+      paste: null,
+      providerSession: fork ? null : preparedProviderSession
+    }
+  }
+
   private async pickAgent(): Promise<string> {
     return ((await this.context.call('quirky.agents/pick', {})) as { agent: string }).agent
   }

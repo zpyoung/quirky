@@ -1,6 +1,7 @@
 import { existsSync, statSync } from 'node:fs'
 import { basename } from 'node:path'
 import type { PluginStore, ProjectGroup, Repo, Worktree } from '@quirky/protocol'
+import type { WorktreeControl } from '../control-types'
 import { gitApi } from '@quirky/git'
 import { resolveRealPath, worktreeIdForPath } from '../../paths'
 import { instanceIdFor, filesystemIdentitySource, type DirectoryIdentitySource } from './identity'
@@ -36,7 +37,7 @@ export function birthtimeOf(path: string): number | null {
  * `name` is the display name, else the branch for a primary checkout, the given name for a
  * non-primary folder workspace and the folder name for everything else.
  */
-export function joinMetadata(facts: Facts, row: WorktreeRow, removing: boolean): Worktree {
+export function joinMetadata(facts: Facts, row: WorktreeRow, removing: boolean): WorktreeControl {
   const folderName = basename(facts.path)
   const name =
     row.display_name ||
@@ -45,7 +46,7 @@ export function joinMetadata(facts: Facts, row: WorktreeRow, removing: boolean):
 }
 
 /** Primary first, then oldest first, then by ID so the order is total. */
-function compare(a: Worktree, b: Worktree): number {
+function compare(a: WorktreeControl, b: WorktreeControl): number {
   if (a.isMain !== b.isMain) return a.isMain ? -1 : 1
   if (a.createdAt !== b.createdAt) return a.createdAt - b.createdAt
   return a.id < b.id ? -1 : a.id > b.id ? 1 : 0
@@ -93,11 +94,11 @@ function rowForFolder(env: ListEnv, repoId: string, kind: 'git' | 'folder', path
  * nor a folder remains for them, so a failed git call (which throws) changes nothing.
  * `prune: false` skips that removal for callers that only need the IDs.
  */
-async function listGitProject(env: ListEnv, repo: Repo, prune: boolean): Promise<Worktree[]> {
+async function listGitProject(env: ListEnv, repo: Repo, prune: boolean): Promise<WorktreeControl[]> {
   const registrations = await gitApi().listRegistrations(repo.path)
   const registered = new Set(registrations.map((registration) => worktreeIdForPath(registration.path)))
   return env.store.transaction(() => {
-    const result: Worktree[] = []
+    const result: WorktreeControl[] = []
     for (const registration of registrations) {
       if (registration.prunable || !registration.exists) continue
       const id = worktreeIdForPath(registration.path)
@@ -127,7 +128,7 @@ async function listGitProject(env: ListEnv, repo: Repo, prune: boolean): Promise
 }
 
 /** A folder project's workspaces: the synthesised primary plus its folder-workspace rows. */
-function listFolderProject(env: ListEnv, repo: Repo): Worktree[] {
+function listFolderProject(env: ListEnv, repo: Repo): WorktreeControl[] {
   return env.store.transaction(() => {
     const path = resolveRealPath(repo.path)
     const primaryId = worktreeIdForPath(repo.path)
@@ -149,12 +150,12 @@ function listFolderProject(env: ListEnv, repo: Repo): Worktree[] {
  * Every workspace of a project, primary first. A git project's list throws when git can't be
  * asked; a folder project needs no git.
  */
-export async function listProject(env: ListEnv, repo: Repo, options: { prune?: boolean } = {}): Promise<Worktree[]> {
+export async function listProject(env: ListEnv, repo: Repo, options: { prune?: boolean } = {}): Promise<WorktreeControl[]> {
   return repo.kind === 'folder' ? listFolderProject(env, repo) : listGitProject(env, repo, options.prune !== false)
 }
 
 /** The folder workspaces on a group's parent folder. */
-export function listGroup(env: ListEnv, group: ProjectGroup): Worktree[] {
+export function listGroup(env: ListEnv, group: ProjectGroup): WorktreeControl[] {
   const rows = env.store.all<WorktreeRow>('SELECT * FROM worktrees WHERE group_id = ?', group.id)
   return env.store.transaction(() =>
     rows
@@ -172,12 +173,12 @@ export function listGroup(env: ListEnv, group: ProjectGroup): Worktree[] {
 }
 
 /** Every project's workspaces, then every group's; a project git can't list is logged and left out. */
-export async function listEverything(env: ListEnv, repos: Repo[]): Promise<Worktree[]> {
+export async function listEverything(env: ListEnv, repos: Repo[]): Promise<WorktreeControl[]> {
   const lists = await Promise.all(
     repos.map((repo) =>
       listProject(env, repo).catch((error) => {
         env.log(`could not list the workspaces of ${repo.name}: ${error instanceof Error ? error.message : String(error)}`)
-        return [] as Worktree[]
+        return [] as WorktreeControl[]
       })
     )
   )

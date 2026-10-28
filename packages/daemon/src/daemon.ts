@@ -25,6 +25,9 @@ import { startSocketServer } from './socket-server'
 import { Core } from './service'
 import { Store } from './store'
 import { migrateV1Settings } from './v1-settings'
+import { HostPowerService } from './host-power'
+import { createMacOSHostPowerSource } from './native-host-power'
+import type { NativeHostPowerSource } from './host-power-contracts'
 
 export type DaemonOptions = {
   home: string
@@ -54,6 +57,8 @@ export type DaemonOptions = {
   onStopRequested?: () => void
   /** How long without input before a window stops counting as present; defaults to `$QUIRKY_DESKTOP_AWAY_MS` (a positive integer) or `DESKTOP_AWAY_MS`. */
   desktopAwayMs?: number
+  /** Trusted embedded-host/test injection only; undefined selects the platform's real native source. */
+  hostPowerSource?: NativeHostPowerSource | null
 }
 
 export type DaemonHandle = {
@@ -110,6 +115,20 @@ function positiveInteger(text: string | undefined): number | undefined {
  * loopback and publishes `runtime.json`. Callers decide whether a daemon already owns the home.
  */
 export async function startDaemon(options: DaemonOptions): Promise<DaemonHandle> {
+  const log = options.log ?? ((message: string) => console.error(`[quirkyd] ${message}`))
+  const source = options.hostPowerSource === undefined
+    ? process.platform === 'darwin' ? createMacOSHostPowerSource(log) : null
+    : options.hostPowerSource
+  const hostPower = new HostPowerService(log, source)
+  try {
+    return await startDaemonWithPower(options, hostPower)
+  } catch (error) {
+    hostPower.dispose()
+    throw error
+  }
+}
+
+async function startDaemonWithPower(options: DaemonOptions, hostPower: HostPowerService): Promise<DaemonHandle> {
   const home = ensureHome(options.home)
   mkdirSync(join(home, 'logs'), { recursive: true, mode: 0o700 })
   const installedPluginsDir = join(home, 'plugins')
@@ -174,6 +193,7 @@ export async function startDaemon(options: DaemonOptions): Promise<DaemonHandle>
     store,
     sessionAuthority,
     log,
+    hostPower,
     launchHookTimeoutMs: options.launchHookTimeoutMs ?? 5000,
     schedulerRecheckMs: options.schedulerRecheckMs ?? 60_000,
     shell,
@@ -258,7 +278,11 @@ export async function startDaemon(options: DaemonOptions): Promise<DaemonHandle>
       await socketServer.stop()
       await server.stop(true)
       pluginRuntime.scheduler.stop()
-      await plugins.stop()
+      try {
+        await plugins.stop()
+      } finally {
+        hostPower.dispose()
+      }
       await pluginRuntime.fileResources.close()
       pty.close()
       store.close()

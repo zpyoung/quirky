@@ -47,6 +47,8 @@ export type DiffRequest = {
   head?: string
   commit?: string
   parent?: string | null
+  /** For unstaged only, compare HEAD with the working file rather than the index. */
+  compareAgainstHead?: boolean
 }
 
 /** One side of a diff; `tooBig` sides carry no bytes. */
@@ -167,13 +169,17 @@ function decodeSide(side: Side): string {
 
 /**
  * Both sides of `request.path` for its source, shaped as a `GitDiff`: staged is HEAD to index,
- * unstaged is index (else HEAD) to the working file, branch is merge base to head, commit is
- * parent to commit. Images carry base64 sides; binary and too-large files carry empty bodies.
+ * unstaged is index (else HEAD) to the working file, or HEAD to the working file when requested;
+ * branch is merge base to head, commit is parent to commit. Images carry base64 sides; binary and
+ * too-large files carry empty bodies.
  * Throws `GitError` for a bad commit id or any git failure other than a missing path, so an
  * unreadable diff never looks like "no changes".
  */
 export async function diffSource(cwd: string, request: DiffRequest): Promise<GitDiff> {
   const { path, source, oldPath } = request
+  if (request.compareAgainstHead === true && source !== 'unstaged') {
+    throw new GitError('compareAgainstHead is only available for source unstaged.', '', -1)
+  }
   const fromPath = oldPath ?? path
   let original: Side
   let modified: Side
@@ -181,10 +187,17 @@ export async function diffSource(cwd: string, request: DiffRequest): Promise<Git
   if (source === 'staged') {
     ;[original, modified] = await Promise.all([readBlob(cwd, `HEAD:${path}`), readBlob(cwd, `:${path}`)])
   } else if (source === 'unstaged') {
-    const [indexSide, file] = await Promise.all([readBlob(cwd, `:${path}`), readWorkingFile(cwd, path)])
-    original = indexSide.present ? indexSide : await readBlob(cwd, `HEAD:${path}`)
-    working = file
-    modified = file.side
+    if (request.compareAgainstHead === true) {
+      const [headSide, file] = await Promise.all([readBlob(cwd, `HEAD:${fromPath}`), readWorkingFile(cwd, path)])
+      original = headSide
+      working = file
+      modified = file.side
+    } else {
+      const [indexSide, file] = await Promise.all([readBlob(cwd, `:${path}`), readWorkingFile(cwd, path)])
+      original = indexSide.present ? indexSide : await readBlob(cwd, `HEAD:${path}`)
+      working = file
+      modified = file.side
+    }
   } else if (source === 'branch') {
     const mergeBase = requireOid(request.mergeBase)
     const head = requireOid(request.head)

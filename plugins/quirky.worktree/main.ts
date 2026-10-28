@@ -19,6 +19,19 @@ import { deleteBranch, describeRemove, removeWorktree, type DeleteBranchParams, 
 import { createGroupForWorktree, setWorktree, showWorktree, type CreateGroupParams, type SetEnv, type SetParams } from './src/daemon/set'
 import { filesystemIdentitySource } from './src/daemon/identity'
 import { forgetWorktreeOrigins, openWorktreeStore, readV1Rows, type WorktreeOriginCreator } from './src/daemon/store'
+import {
+  cleanupIgnore,
+  cleanupPreview,
+  cleanupRemove,
+  cleanupRestoreIgnored,
+  previewSleep,
+  sleepWorktree,
+  wakeWorktree,
+  worktreeRuntimeBlockers,
+  type ControlEnv
+} from './src/daemon/controls'
+import { readStockOptions, reorderWorktrees, setStockOptions } from './src/daemon/options'
+import type { CleanupSelection, WorktreeControl } from './src/control-types'
 
 const DEFAULT_WORKTREES_ROOT = '~/quirky/workspaces'
 const ROOT_SETTING = 'setting:quirky.worktree/worktreesRoot'
@@ -64,11 +77,7 @@ function identityOf(caller: PluginCaller, params: { cwd?: string; worktreeId?: s
 }
 function originCreatorOf(caller: PluginCaller): WorktreeOriginCreator {
   if (caller.role === 'plugin') {
-    return {
-      creatorKind: caller.pluginId === 'quirky.automations' ? 'automation' : 'plugin',
-      creatorId: caller.pluginId,
-      creatorRole: 'plugin'
-    }
+    return { creatorKind: 'plugin', creatorId: caller.pluginId, creatorRole: 'plugin' }
   }
   if (caller.role === 'mobile' && typeof caller.deviceId === 'string') {
     return { creatorKind: 'paired-device', creatorId: caller.deviceId, creatorRole: 'mobile' }
@@ -150,7 +159,7 @@ export async function activate(context: PluginContext): Promise<void> {
   async function findWorktree(
     selector: string,
     identity: CallerIdentity
-  ): Promise<{ repo: Repo | undefined; worktree: Worktree; all: Worktree[] }> {
+  ): Promise<{ repo: Repo | undefined; worktree: WorktreeControl; all: WorktreeControl[] }> {
     await reconcileDeletedGroups()
     const repos = await listRepos()
     const all = await listEverything(listEnv, repos)
@@ -168,7 +177,7 @@ export async function activate(context: PluginContext): Promise<void> {
       const ids = matches.map((worktree) => `id:${worktree.id}`)
       throw fail('conflict', `${selector} matches ${matches.length} worktrees: ${ids.join(', ')}`, { matches: ids })
     }
-    const worktree = matches[0]!
+    const worktree = all.find((candidate) => candidate.id === matches[0]!.id)!
     return { repo: repos.find((repo) => repo.id === worktree.repoId), worktree, all }
   }
 
@@ -224,6 +233,9 @@ export async function activate(context: PluginContext): Promise<void> {
     resolveRepo: async (selector) => (await context.call('quirky.repo/resolve', { selector })) as Repo,
     hooksAt: async (repo, ref) => (await context.call('quirky.repo/hooks', { repo: repo.id, ref })) as EffectiveHooks,
     closeSessions,
+    assertNoActiveSessions: async (worktreeId) =>
+      (await worktreeRuntimeBlockers((method, params) => context.call(method, params), worktreeId))
+        .map((blocker) => `${blocker.code}: ${blocker.detail}`),
     branches: new BranchCleaner()
   }
 
@@ -233,7 +245,7 @@ export async function activate(context: PluginContext): Promise<void> {
    */
   async function ownedIds(params: Record<string, any>): Promise<string[]> {
     const repo = (await context.call('quirky.repo/resolve', { selector: String(params.repo) })) as Repo
-    const listed = await listProject(listEnv, repo, { prune: false }).catch(() => [] as Worktree[])
+    const listed = await listProject(listEnv, repo, { prune: false }).catch(() => [] as WorktreeControl[])
     const recorded = store.all<{ id: string }>('SELECT id FROM worktrees WHERE repo_id = ?', repo.id).map((row) => row.id)
     return [...new Set([...recorded, ...listed.map((worktree) => worktree.id), worktreeIdForPath(repo.path)])].sort()
   }
@@ -310,12 +322,25 @@ export async function activate(context: PluginContext): Promise<void> {
     identitySource: filesystemIdentitySource,
     changed: (data) => void context.emit('changed', data)
   }
+  const controlEnv: ControlEnv = {
+    list: listEnv,
+    remove: removeEnv,
+    store,
+    repos: listRepos,
+    call: (method, params) => context.call(method, params),
+    find: async (selector, identity) => {
+      const { worktree, all } = await findWorktree(selector, identity)
+      return { worktree, all }
+    },
+    fail,
+    changed: (data) => void context.emit('changed', data)
+  }
 
   const handlers: Record<string, Handler> = {
     async list(params) {
       await reconcileDeletedGroups()
       if (params.repo === undefined && params.group === undefined) return await listEverything(listEnv, await listRepos())
-      const result: Worktree[] = []
+      const result: WorktreeControl[] = []
       if (params.repo !== undefined) {
         const repo = (await context.call('quirky.repo/resolve', { selector: String(params.repo) })) as Repo
         try {
@@ -329,13 +354,16 @@ export async function activate(context: PluginContext): Promise<void> {
     },
     async origins(_params, caller) {
       await reconcileDeletedGroups()
-      await listEverything(listEnv, await listRepos())
+      const listedWorktrees = await listEverything(listEnv, await listRepos())
+      const listedById = new Map<string, WorktreeControl>()
+      for (const worktree of listedWorktrees) listedById.set(worktree.id, worktree)
       const rows = store.all<{
         id: string
+        instance_id: string
         creator_kind: string | null
         creator_id: string | null
       }>(
-        `SELECT worktrees.id, worktree_origins.creator_kind, worktree_origins.creator_id
+        `SELECT worktrees.id, worktrees.instance_id, worktree_origins.creator_kind, worktree_origins.creator_id
          FROM worktrees
          LEFT JOIN worktree_origins
            ON worktree_origins.worktree_id = worktrees.id
@@ -344,10 +372,14 @@ export async function activate(context: PluginContext): Promise<void> {
       )
       return rows.map((row) => {
         const knownCreator =
-          row.creator_kind === 'automation' ||
           row.creator_kind === 'plugin' ||
           row.creator_kind === 'paired-device' ||
           row.creator_kind === 'client'
+        const listed = listedById.get(row.id)
+        const hasAutomationProvenance =
+          listed !== undefined &&
+          listed.instanceId === row.instance_id &&
+          listed.automationProvenance?.kind === 'created-by-automation'
         const otherClient =
           row.creator_kind === 'paired-device' &&
           typeof row.creator_id === 'string' &&
@@ -357,7 +389,7 @@ export async function activate(context: PluginContext): Promise<void> {
             : null
         return {
           worktreeId: row.id,
-          automation: knownCreator ? row.creator_kind === 'automation' : null,
+          automation: hasAutomationProvenance ? true : knownCreator ? false : null,
           otherClient
         }
       })
@@ -380,7 +412,36 @@ export async function activate(context: PluginContext): Promise<void> {
     async resolve(params, caller) {
       return (await findWorktree(String(params.selector), identityOf(caller, params))).worktree
     },
-    ownedIds
+    ownedIds,
+    options: () => readStockOptions(store),
+    setOptions(params) {
+      const options = setStockOptions({ store, fail }, params)
+      context.emit('optionsChanged', { options })
+      return options
+    },
+    async reorder(params) {
+      const all = await listEverything(listEnv, await listRepos())
+      const result = reorderWorktrees({ store, fail }, all, params.worktrees)
+      if (Array.isArray(params.worktrees)) {
+        for (const id of params.worktrees) {
+          if (typeof id !== 'string') continue
+          const worktree = all.find((candidate) => candidate.id === id)
+          if (worktree) context.emit('changed', { repoId: worktree.repoId, worktreeId: worktree.id })
+        }
+      }
+      return result
+    },
+    sleepPreview: (params, caller) => previewSleep(controlEnv, params as { worktree: string; withDescendants?: boolean }, identityOf(caller)),
+    sleep: (params, caller) => sleepWorktree(controlEnv, params as { worktree: string; withDescendants?: boolean }, identityOf(caller)),
+    wake: (params, caller) => wakeWorktree(controlEnv, params as { worktree: string; withDescendants?: boolean }, identityOf(caller)),
+    cleanupPreview: () => cleanupPreview(controlEnv),
+    cleanupIgnore: (params) => cleanupIgnore(controlEnv, params as { worktreeId: string; fingerprint: string }),
+    cleanupRestoreIgnored: () => cleanupRestoreIgnored(controlEnv),
+    cleanupRemove: (params, caller) => cleanupRemove(
+      controlEnv,
+      params as { selection: CleanupSelection[]; confirmed: boolean },
+      identityOf(caller)
+    ),
   }
   for (const [name, handler] of Object.entries(handlers)) {
     context.provide(formatContributionId('method', context.pluginId, name), handler)

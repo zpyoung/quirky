@@ -15,14 +15,29 @@ export type ViewHandle = {
   loadDiff(path: string): Promise<void>
 }
 
+const hostedHandles = new Map<string, ViewHandle>()
 let current: ViewHandle | null = null
+let activeHostedTab: string | null = null
 
 /** Makes `handle` the view commands act on until the returned function runs. */
 export function registerView(handle: ViewHandle): () => void {
-  current = handle
-  return () => {
-    if (current === handle) current = null
+  const tabId = handle.input.tabId
+  if (tabId) {
+    hostedHandles.set(tabId, handle)
+    if (activeHostedTab === null || activeHostedTab === tabId) current = handle
+  } else {
+    current = handle
   }
+  return () => {
+    if (tabId && hostedHandles.get(tabId) === handle) hostedHandles.delete(tabId)
+    if (current === handle) current = activeHostedTab ? hostedHandles.get(activeHostedTab) ?? null : null
+  }
+}
+
+/** Selects a mounted hosted diff from a public terminal workspace snapshot. */
+export function setActiveHostedView(tabId: string | null): void {
+  activeHostedTab = tabId
+  current = tabId === null ? null : hostedHandles.get(tabId) ?? null
 }
 
 /** The mounted diff view, or null when none is open. */

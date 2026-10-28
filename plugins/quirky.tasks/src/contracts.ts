@@ -1,4 +1,4 @@
-import type { MethodHandler, PluginContext, UiPluginContext, UiLayout } from '@quirky/protocol'
+import type { MethodHandler, PluginContext, UiPluginContext, UiLayout, WorktreeCreateResult, PromptDeliveryState } from '@quirky/protocol'
 
 export const TASKS_VIEW = 'view:quirky.tasks/tasks'
 export const TASKS_SETTINGS_VIEW = 'view:quirky.tasks/settings'
@@ -61,6 +61,35 @@ export type ProjectPreferences = {
   roadmapZoom: 'month' | 'quarter' | 'year'
 }
 export type WorkspaceLink = { worktree: string; name: string; url: string; repoId: string }
+
+/** Daemon-held request; hook approvals are independent and pin the displayed shared content. */
+export type WorkspaceComposerRequest = {
+  requestId: string
+  target: ItemTarget
+  repoId: string
+  repoName: string
+  name: string
+  title: string
+  prompt: string
+  setup: 'run' | 'skip' | 'inherit'
+  issueCommand?: 'run' | 'skip' | 'inherit'
+  agent: string | null
+  setupDecisionRequired?: boolean
+  trustKind?: 'setup' | 'issue'
+  trustScript?: string
+  trustHash?: string
+  trustChanged?: boolean
+  trustSetupHash?: string
+  trustIssueCommandHash?: string
+  error?: string
+}
+
+/** Creation is not delivery: pending/failure remains visible through the public session record. */
+export type TaskWorkspaceCreated = WorktreeCreateResult & {
+  kind: 'created'
+  target: ItemTarget
+  promptDelivery?: PromptDeliveryState | null
+}
 export type TaskNavigation = {
   source: string
   mode: 'issues' | 'prs' | 'projects'

@@ -77,6 +77,33 @@ describe('quirky.git commands', () => {
       await fake.run('open-diff', { path: 'a.ts', source: 'conflict' })
       expectOpened(fake, s.DIFF_VIEW, { worktree: 'w1', mode: 'conflict-file', path: 'a.ts' })
     })
+    test('open-diff sends placement and display through the public terminal hosted-view API', async () => {
+      await fake.run('open-diff', {
+        path: 'README.md',
+        source: 'unstaged',
+        preview: true,
+        split: true,
+        groupId: 'w1:group',
+        display: 'preview'
+      })
+      expect(fake.callsTo('quirky.terminal/openViewTab').at(-1)?.params).toMatchObject({
+        workspace: 'id:w1',
+        group: 'w1:group',
+        preview: false,
+        input: {
+          worktree: 'w1',
+          mode: 'file',
+          source: 'unstaged',
+          path: 'README.md',
+          display: 'preview',
+          groupId: 'w1:group',
+          preview: false,
+          split: true
+        }
+      })
+      expect(fake.callsTo('quirky.terminal/moveTab').at(-1)?.params).toMatchObject({ split: 'right', of: 'w1:group' })
+    })
+
 
     test('open-diff needs a path', async () => {
       await expect(fake.run('open-diff', {})).rejects.toThrow('open-diff needs a path.')

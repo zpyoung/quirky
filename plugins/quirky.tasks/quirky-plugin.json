@@ -1242,6 +1242,23 @@
               "type": "boolean",
               "description": "Only accepted after an explicit composer approval to run this untrusted setup once."
             },
+            "trustSetupHash": {
+              "type": "string",
+              "description": "Creator-issued hash of the displayed shared setup; required with composer one-time setup approval."
+            },
+            "issueCommand": {
+              "type": "string",
+              "enum": ["run", "skip", "inherit"],
+              "description": "Issue command choice independent of repository setup."
+            },
+            "trustIssueCommand": {
+              "type": "boolean",
+              "description": "One-time approval of the displayed shared issue command in the active composer."
+            },
+            "trustIssueCommandHash": {
+              "type": "string",
+              "description": "Creator-issued hash pinning one-time issue-command approval."
+            },
             "composerRequestId": {
               "type": "string",
               "description": "Active daemon-held composer request required when submitting the visible form."
@@ -1294,6 +1311,14 @@
             "setup": {
               "description": "Setup policy for a composer result; the public setup outcome for a created result."
             },
+            "setupDecisionRequired": {
+              "type": "boolean",
+              "description": "The visible composer must collect an explicit setup run-or-skip choice."
+            },
+            "blocked": {
+              "type": "boolean",
+              "description": "Creation is waiting for a setup or hook-trust decision."
+            },
             "url": {
               "type": "string"
             },
@@ -1305,6 +1330,43 @@
               "items": {}
             },
             "agent": {},
+            "agentSessionId": {
+              "type": "string"
+            },
+            "agentPending": {
+              "type": "boolean",
+              "description": "Agent launch is waiting for repository setup, not confirmed delivery."
+            },
+            "promptDelivery": {
+              "description": "Observed public session promptDelivery; pending, unconfirmed and not-delivered are not delivered."
+            },
+            "issueCommand": {
+              "description": "Independent issue-command choice in a composer or canonical execution outcome after creation."
+            },
+            "trustKind": {
+              "type": "string",
+              "enum": ["setup", "issue"]
+            },
+            "trustScript": {
+              "type": "string",
+              "description": "The exact untrusted shared hook content requiring a decision."
+            },
+            "trustHash": {
+              "type": "string",
+              "description": "Creator-issued SHA-256 of the displayed hook content."
+            },
+            "trustChanged": {
+              "type": "boolean",
+              "description": "The displayed script differs from a previously trusted or displayed version."
+            },
+            "trustSetupHash": {
+              "type": "string",
+              "description": "Retained setup approval pinned to its displayed hash."
+            },
+            "trustIssueCommandHash": {
+              "type": "string",
+              "description": "Retained issue-command approval pinned to its displayed hash."
+            },
             "error": {
               "type": "string"
             }

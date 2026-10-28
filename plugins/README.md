@@ -183,8 +183,12 @@ nonzero; neither an idle pointer nor missing status proves that work finished.
 
 Public session helpers provide exact-incarnation identity, guarded close and idempotent prompt
 submission. Structured `create` accepts `deferStart: true` without a prompt, so authority can attach
-before the first turn. Automatic idle-mailbox nudging is deferred to
-`m6-orchestration-idle-pointer-shutdown`; explicit safe submission and durable mail remain available.
+before the first turn. Automatic idle-mailbox hints use the same safe submission path: Run
+coordinators receive `quirky orchestration check --run <id>` and Dispatch workers receive
+`quirky orchestration check`. Hints never contain message bodies or acknowledge mail. Active
+deliveries and consuming waiters retain mailbox ownership. Shutdown stops scheduler timers and
+listeners without waiting for external RPC settlement; attempted operations keep their durable
+IDs for restart recovery.
 Worker placement, custody and fleet use this same core. Headless coordinators use the plugin-owned
 service APIs below; plugin metadata cannot impersonate a session.
 
@@ -264,8 +268,20 @@ their native launch authority; they do not receive the service principal. See
 Watcher state, attempt facts, a bounded diagnostic trace ring and terminal summaries live in the
 plugin's private store; unresolved attempt traces remain pinned. A newer unknown store version
 remains inspectable but cannot execute work. Removing a
-watcher removes its own history, not its workers. Automatic OS sleep/wake binding is not installed
-by this plugin.
+watcher removes its own history, not its workers.
+
+On macOS, the daemon's in-process IOKit power source automatically suspends every Heimdall runner
+before acknowledging system sleep. Wake resumes runners with an immediate live reconciliation;
+active budgets exclude the sleeping gap. This does not stop workers or resolve uncertain effects.
+Real sleep/wake verification is tracked separately on a dedicated idle macOS host.
+
+Plugin authors can use `context.hostPower.subscribe({ suspend, resume })` for the same lifecycle.
+Both callbacks must complete synchronously: fence work before returning; never return a promise
+or use the asynchronous event bus as a pre-sleep fence. `hostPower.suspended` exposes current state,
+and subscribing during suspension calls `suspend` before returning. The returned disposer is
+idempotent; the host also removes subscriptions when that plugin activation is revoked.
+`hostPower.supported` is false on platforms without a native source; macOS registration failure
+is a daemon startup error, not a silent fallback.
 
 ## Shared checks
 
@@ -418,13 +434,24 @@ The live API catalog contains all method schemas and generated command aliases.
 slot reports are bounded summaries pointing to that method, so large comments or
 diffs do not exceed the kernel's 64-KiB report limit.
 
-Review links use Browser's Link Routing setting and Shift+Cmd/Ctrl modifier policy.
-Each PR/Checks action carries its originating worktree, including when the two surfaces
-show different worktrees. API callers can supply `--worktree`; an omitted target is
-inferred only from an unambiguous visible Review/Checks context. Routing failures do
-not silently launch the system browser. Other-provider review/create/settings remain
-explicitly deferred. Clipboard/system-browser/focus and native guest behavior are
-handed to the native scenario run, not inferred from headless web output.
+Review header and Checks stack-member links use Browser's **Link Routing** setting.
+Plain activation follows that setting. On macOS, **Shift+Cmd-click** forces the
+system browser when **Hold Shift** inversion is off; when inversion is on it flips
+the configured destination for that click. Shift+Ctrl alone is not Cmd on macOS.
+The control's tooltip names both destinations and updates with Browser settings.
+Stack buttons open the actual member PR URL, not the stack resource number.
+
+Each PR/Checks action carries its originating worktree, including when the two
+surfaces show different worktrees. Script the same route with
+`quirky reviews open-link --url <https-url> --worktree <id> --invert --json`;
+`--invert` represents the alternate chord, not an unconditional destination flip.
+An omitted worktree is inferred only from an unambiguous visible Review/Checks
+context. Routing failures do not silently launch the system browser.
+Other-provider review/create/settings remain explicitly deferred.
+Clipboard/system-browser/focus and native guest behavior are handed to the native
+scenario run, not inferred from daemon routing receipts. Native runs must establish
+isolated Default storage and a run-owned system-browser session before clicking.
+
 ## GitHub Tasks
 
 `quirky.tasks` supplies Tasks lists, issue detail/creation, Project tables/boards/roadmaps,
@@ -437,18 +464,35 @@ quirky tasks projects --json
 quirky tasks --help
 ```
 
-`quirky.tasks/workspace` with `action: "start"` opens the retained composer; it does not
-create a workspace until confirmation. Targets contain `worktree`, `kind` (`issue` or
-`pullRequest`), `number`, and the exact GitHub `url`. Creation delegates to
-`quirky.worktree/create` with that URL as `github`; there is no plain-create fallback.
+`quirky.tasks/workspace` with `action: "start"` normally opens the retained composer.
+Project-style `newWorkspace: true` requests can create directly when a usable agent
+and setup policy allow it; otherwise they return the composer. Targets contain
+`worktree`, `kind` (`issue` or `pullRequest`), `number`, and the exact GitHub `url`.
+Creation delegates to `quirky.worktree/create` with that URL as `github`; there is
+no plain-create fallback.
+
+Composer submissions carry `composerRequestId`. Setup and issue-command choices
+are independent. Approve only the displayed script: use `trustSetup` with
+`trustSetupHash`, or `issueCommand: "run"` with `trustIssueCommand` and
+`trustIssueCommandHash`. Preserve both approved pins when another script needs
+consent; changed content requires fresh approval. Skipping one script does not
+skip the other.
+
+Created results retain `agentSessionId`, `agentPending`, setup/issue-command
+outcomes and warnings. `promptDelivery` is an observed session state, not proof
+from workspace creation: `pending`, `unconfirmed`, and `not-delivered` do not mean
+the agent received context. Read `quirky.session/get` for subsequent delivery
+changes; do not recreate a workspace to retry a failed agent launch.
 Merge uses conditional kernel confirmation and the canonical hosting expected-head guard.
 Ordinary issue edits, reviewer changes and opening the composer do not ask.
 
 The public UI-library exports are `@quirky/plugin-tasks/markdown`
 (`Markdown`, `MarkdownComposer`, `safeHttpUrl`) and
 `@quirky/plugin-tasks/review-navigation` (`openReview`).
-PR navigation calls `quirky.reviews/open` with `{worktree, number, tab?}`;
-`tab` is `conversation`, `checks`, or `files`. Missing contributions produce an error,
+PR navigation accepts the complete target, including `url` or `host`/`owner`/`repo`,
+and calls `quirky.reviews/open` with `{worktree, number, tab?, prRepo?}`.
+`tab` is `conversation`, `checks`, or `files`. Source identity prevents same-number
+origin/upstream PRs from being confused. Missing contributions produce an error,
 not an issue page pretending to be PR detail.
 
 Task Sources is a contributed Settings view. A boolean setting can also declare
@@ -461,6 +505,14 @@ Native clipboard, system-browser and focus effects remain pending in the nightly
 same JSON-RPC API used by the desktop and CLI. The compatible Quirky phone app
 and its signed installation links are not distributed yet; the desktop does
 not redirect users to the incompatible Orca app or its hosted relay.
+
+The Expo source companion includes Source Control and diff-review notes,
+worktree-contained file previews/editing, GitHub Tasks and linked workspace
+creation, Claude/Codex account usage and selection, agent-history search/resume,
+and direct foreground notification subscriptions. Host and session navigation
+uses the same validated route contract as paired-host deep links.
+Native background push and non-GitHub Tasks providers remain separately tracked.
+Grant-authorized terminal artifacts use device/source/session-bound capabilities rather than a general path API.
 
 ```sh
 quirky mobile info --json
@@ -498,9 +550,12 @@ or **Restore** after the phone leaves. The default retains phone dimensions unti
 restored; Settings offers timed restoration. The corresponding APIs are
 `quirky.terminal/mobileState`, `/takeBack`, `/restoreFit` and `/claim`.
 
-Phone workspace controls use `quirky.session/sleepWorkspace`, `/wakeWorkspace` and
-`/workspaceSleepStates`. Sleep records recovery before stopping processes and preserves PTY
-history; unsupported agents are refused before teardown. Interrupted or wrong-filesystem-instance
+Phone workspace **Sleep** uses `quirky.worktree/sleep` and `/wake` to park views while keeping
+processes and buffers. Hide sleeping uses that canonical worktree state.
+
+The separate **Stop sessions (retain history)** action uses `quirky.session/sleepWorkspace`,
+`/wakeWorkspace` and `/workspaceSleepStates`. It records recovery before stopping processes and
+preserves PTY history; unsupported agents are refused before teardown. Interrupted or wrong-filesystem-instance
 recovery stays visible as partial rather than restoring into a replacement workspace.
 
 `quirky.worktree/origins` returns caller-relative automation/other-client predicates, with `null`
@@ -548,6 +603,46 @@ Their non-secret stage, choices, devices and error state are readable through
 `ui.state` slot reports. The live method schemas are in `quirky api --json`;
 [the behavior spec](../docs/quirk/specs/2026-10-27-sb-mobile-daemon/logic.md)
 defines the scope and limits.
+
+Phone launcher pickers use `quirky.mobile/agentCatalog` (`quirky mobile
+agent-catalog --json`). It exposes labels, installed/enabled/default status and
+resume capability, never configured commands, arguments or environment credentials.
+Mobile Session results omit the optional launch plan before serialization.
+History resumes through `quirky.vault/resume`, which prepares on the desktop;
+the secret-bearing `prepareResume` plan is not granted to phones.
+
+Source Control's **Switch Branch** uses `quirky.git/describeSwitchBranch` followed
+by confirmed `switchBranch`. It requires an uncapped clean tree, no active merge
+or rebase, an exact available local/remote ref and no other worktree holding the
+target. Optional expected branch/HEAD values reject stale UI state. A remote ref
+creates its local tracking branch; an existing divergent local branch is never reset.
+
+```sh
+quirky git describeSwitchBranch --worktree id:<worktree> --branch feature --json
+quirky git switchBranch --worktree id:<worktree> --branch feature --expected-branch main --expected-head <oid> --yes --json
+```
+
+Paired phones subscribe to a notification-only replay feed with
+`quirky.mobile/notificationPoll`; the general daemon event catalog is not granted.
+Keep the returned `epoch` and `cursor` for reconnect catch-up. A process restart
+resets the epoch; a gap beyond the 256-record window reports `truncated`.
+Away/focused-workspace filters still advance the cursor, so suppressed records do
+not reappear after reconnect. Unknown desktop presence does not silence alerts.
+The macOS away check uses 180 seconds of keyboard/mouse idle or a locked console.
+
+```sh
+quirky mobile notification-test --json
+quirky mobile notification-poll --wait-ms 0 --json
+quirky mobile notification-poll --after 12 --epoch <epoch> --only-away --json
+```
+
+Long polls accept `waitMs` up to 25000. A phone can bind its poll to a
+`subscriptionId` and release that same generation with
+`quirky.mobile/notificationCancel`; a late cancellation cannot stop its replacement.
+The server takes device identity from the authenticated connection, never params.
+These are direct foreground subscriptions, **not APNs/FCM background push**.
+No hosted push gateway or upstream Orca token registration is implied.
+
 ## Create a workspace from GitHub
 
 Use the new-workspace dialog's Smart field for `#123` or a GitHub PR/issue URL.
@@ -670,3 +765,42 @@ stopping worker or independent sessions. Unconfirmed cleanup retains uncertainty
 than starting a replacement conversation.
 
 Use `quirky heimdall --help` and `quirky api --json` for the live commands and schemas.
+
+## Editor, Git diffs and sidebar edges
+
+`quirky.editor` keeps one shared draft and disk precondition per buffer. Rich Markdown
+supports nested/empty details sections, collapsible headings and `[[document links]]`;
+unsupported forms still open in Source mode rather than silently losing content.
+Document-link completion is keyboard-accessible and does not run during IME composition.
+
+The buffer's optional `diskWritable` is advisory effective OS access, separate from the
+format's `readOnly` capability. A readable non-writable Markdown file can keep drafts and
+local review notes. The actual save is authoritative: denial retains the draft and dirty
+state, and a retry refreshes the permission fact.
+
+**Changes** stays in the edit tab and compares HEAD against its current shared draft,
+not against the index. Markdown diff preview renders the modified side only and says so.
+Detached diff previews omit local images; ordinary source-bound Markdown previews retain
+their existing authorized image support. The public text-only rendering action is
+`quirky.editor/markdown {action:"renderPreview",text}`, returning sanitized HTML without
+opening a buffer or granting filesystem access.
+
+Source Control single-click opens a replaceable diff preview; double-click or pin promotes
+it. Option-click opens a right split. Cmd-click toggles row selection and Shift-click extends
+it instead of reproducing Orca's unreachable-selection defect. Public `open-diff` command
+arguments include `preview`, `split`, `groupId` and `display` (`source` or `preview`).
+
+`quirky.git/pushTarget` accepts `purpose:"review"` or `"creation"`. A review target comes
+from fresh GitHub head identity matched to a configured remote, not from a guessed origin.
+Purpose-specific `push` and `forcePush` revalidate the exact destination and private URL
+snapshot before mutation; a missing or ambiguous head target never falls back to publishing
+another repository. Force push retains its explicit lease and confirmation. No remote is
+created and no public caller-supplied push URL is accepted.
+
+Sidebar activity reads canonical current agent display evidence; stale rows alone do not
+establish liveness. Quiet time windows refresh without unrelated events, and client-local
+preferences retain conservative corrupt-state recovery. Separator presentation excludes
+first, host-adjacent, sticky and nested boundaries without changing row geometry.
+
+[Completion contracts and acceptance scenarios](../docs/quirk/specs/2026-10-28-m7-editor-source-control-completion/logic.md).
+

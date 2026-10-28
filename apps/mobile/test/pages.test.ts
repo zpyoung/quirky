@@ -4,7 +4,8 @@ import { act, createElement } from 'react'
 import type { Root, createRoot as ReactCreateRoot } from 'react-dom/client'
 import type { Ask, MobileMarkdownDocument, MobileWorkspaceTab, Repo, Session, Worktree } from '@quirky/protocol'
 import type { MobilePageBridge } from '../src/contracts'
-import { validatePageReport } from '../src/shell/bridge-policy'
+import { validatePageReport, validatePageRpc, isPageMutation } from '../src/shell/bridge-policy'
+import { DEFAULT_WORKSPACE_PREFERENCES, workspacePreferencesKey } from '../src/pages/storage'
 import type { PageApp as PageAppComponent } from '../src/pages/PageApp'
 
 const repo: Repo = {
@@ -100,13 +101,26 @@ afterEach(async () => {
 })
 
 type Call = { method: string; params: Record<string, unknown> }
-function fakeBridge(options: { route?: MobilePageBridge['init']['route']; worktrees?: Worktree[]; sessions?: Session[]; asks?: Ask[]; sessionTabs?: MobileWorkspaceTab[]; answerError?: string } = {}) {
+function fakeBridge(options: {
+  route?: MobilePageBridge['init']['route']
+  worktrees?: Worktree[]
+  sessions?: Session[]
+  asks?: Ask[]
+  sessionTabs?: MobileWorkspaceTab[]
+  answerError?: string
+  loopSummaries?: unknown
+  summaryError?: string
+  summaryProvider?: () => Promise<unknown>
+} = {}) {
   let worktrees = options.worktrees ?? [makeWorktree('wt-api', 'api-payments'), makeWorktree('wt-web', 'web-shell', { repoId: 'repo-web' })]
   let sessions = options.sessions ?? [session]
   let asks = options.asks ?? []
   let sessionTabs = options.sessionTabs ?? []
   const documents = new Map<string, MobileMarkdownDocument>()
+  let loopSummaries = options.loopSummaries ?? []
+  let summaryError = options.summaryError
   const calls: Call[] = []
+  const reports: Record<string, unknown>[] = []
   const navigations: unknown[] = []
   const storage = new Map<string, string>()
   let connectionState: MobilePageBridge['state'] = { phase: 'connected', attempts: 0 }
@@ -195,6 +209,11 @@ function fakeBridge(options: { route?: MobilePageBridge['init']['route']; worktr
           }
           break
         }
+        case 'quirky.loops/summaries':
+          if (options.summaryProvider) result = await options.summaryProvider()
+          else if (summaryError) throw new Error(summaryError)
+          else result = loopSummaries
+          break
         case 'quirky.worktree/describeRemove': result = 'This will remove the selected workspace and its sessions.'; break
         case 'quirky.worktree/remove':
           worktrees = worktrees.filter((item) => item.id !== params.worktree)
@@ -229,16 +248,22 @@ function fakeBridge(options: { route?: MobilePageBridge['init']['route']; worktr
     },
     native: { async clipboardRead() { return '' }, async clipboardWrite() {}, async openExternal() {}, async haptic() {} },
     async navigate(route: unknown) { navigations.push(route) },
-    report: (state: Record<string, unknown>) => validatePageReport(state),
+    report: (state: Record<string, unknown>) => {
+      validatePageReport(state)
+      reports.push(state)
+    },
     close: () => {}
   } as unknown as MobilePageBridge
   const setConnection = (state: MobilePageBridge['state']) => {
     connectionState = state
     for (const handler of stateHandlers) handler(state)
   }
-  return { bridge, calls, navigations, storage, setConnection }
+  return {
+    bridge, calls, navigations, storage, reports, setConnection,
+    setLoopSummaries(value: unknown) { loopSummaries = value },
+    setSummaryError(value: string | null) { summaryError = value ?? undefined }
+  }
 }
-
 async function mount(bridge: MobilePageBridge): Promise<void> {
   container = document.createElement('div')
   document.body.append(container)
@@ -246,6 +271,13 @@ async function mount(bridge: MobilePageBridge): Promise<void> {
   await act(async () => {
     root!.render(createElement(PageApp, { bridge }))
   })
+}
+
+async function unmountPage(): Promise<void> {
+  if (root) await act(async () => root?.unmount())
+  root = null
+  container?.remove()
+  container = null
 }
 
 async function click(button: HTMLButtonElement): Promise<void> {
@@ -439,4 +471,193 @@ test('an answer conflict refreshes the authoritative expired ask state', async (
   expect(calls).toContainEqual({ method: 'quirky.ask/list', params: { pendingOnly: false } })
   expect(container?.textContent).toContain('Expired')
   expect(container?.textContent).toContain('ask expired')
+})
+
+test('automation loop summaries render in both layouts and only sanitized labels enter the page report', async () => {
+  const worktrees = [
+    makeWorktree('wt-needs-you', 'needs-you'),
+    makeWorktree('wt-paused', 'paused'),
+    makeWorktree('wt-running', 'running')
+  ]
+  const summaries = [
+    { id: 'loop-running-new', worktreeId: 'wt-needs-you', state: 'running', pauseReason: null, iterationsCompleted: 9, maxIterations: 10, updatedAt: 100 },
+    { id: 'loop-needs-you', worktreeId: 'wt-needs-you', state: 'needs-you', pauseReason: null, iterationsCompleted: 4, maxIterations: 8, updatedAt: 2 },
+    { id: 'loop-paused', worktreeId: 'wt-paused', state: 'paused', pauseReason: 'cap-iterations', iterationsCompleted: 2, maxIterations: 2, updatedAt: 3 },
+    { id: 'loop-uncapped', worktreeId: 'wt-running', state: 'running', pauseReason: null, iterationsCompleted: 3, maxIterations: null, updatedAt: 4, prompt: 'private prompt' }
+  ]
+  const { bridge, calls, reports } = fakeBridge({ worktrees, loopSummaries: summaries })
+  await mount(bridge)
+
+  expect(calls).toContainEqual({ method: 'quirky.loops/summaries', params: {} })
+  expect(container?.textContent).toContain('Loop 4/8 · needs-you')
+  expect(container?.textContent).toContain('Loop 2/2 · paused: iteration cap reached')
+  expect(container?.textContent).toContain('Loop 3 · running')
+  expect(reports.at(-1)).toMatchObject({
+    loopSummaryStatus: 'available',
+    loopSummaries: [
+      { worktreeId: 'wt-needs-you', loopId: 'loop-needs-you', label: 'Loop 4/8 · needs-you' },
+      { worktreeId: 'wt-paused', loopId: 'loop-paused', label: 'Loop 2/2 · paused: iteration cap reached' },
+      { worktreeId: 'wt-running', loopId: 'loop-uncapped', label: 'Loop 3 · running' }
+    ]
+  })
+  expect(JSON.stringify(reports.at(-1))).not.toContain('private prompt')
+  expect(calls.filter((call) => call.method.startsWith('quirky.loops/'))).toEqual([
+    { method: 'quirky.loops/summaries', params: {} }
+  ])
+  expect(calls.some((call) => call.method.startsWith('quirky.terminal/'))).toBe(false)
+
+  await click(buttonNamed('Workspace options'))
+  await click(buttonNamed('Compact'))
+  await click(buttonNamed('Done'))
+  expect(container?.textContent).toContain('Loop 4/8 · needs-you')
+  expect(container?.textContent).toContain('Loop 2/2 · paused: iteration cap reached')
+})
+
+test('an unavailable loop provider does not prevent the workspace catalog from loading', async () => {
+  const { bridge } = fakeBridge({ summaryError: 'unknown loop summary method' })
+  await mount(bridge)
+
+  expect(container?.textContent).toContain('api-payments')
+  expect(container?.textContent).toContain('web-shell')
+  expect(container?.textContent).not.toContain('Could not load workspaces')
+  expect(container?.textContent).not.toContain('Loop ')
+})
+
+test('malformed loop summaries are unavailable without breaking the workspace page', async () => {
+  const { bridge, reports } = fakeBridge({ loopSummaries: [{ id: 'bad-loop', state: 'running' }] })
+  await mount(bridge)
+
+  expect(container?.textContent).toContain('api-payments')
+  expect(container?.textContent).not.toContain('Loop ')
+  expect(reports.at(-1)).toMatchObject({ loopSummaryStatus: 'unavailable', loopSummaries: [] })
+})
+
+test('cached loop summaries become unverifiable on disconnect and read failure, then clear after a successful empty read', async () => {
+  const { bridge, calls, reports, setConnection, setLoopSummaries, setSummaryError } = fakeBridge({
+    loopSummaries: [{ id: 'loop-cache', worktreeId: 'wt-api', state: 'running', pauseReason: null, iterationsCompleted: 3, maxIterations: 10, updatedAt: 1 }]
+  })
+  await mount(bridge)
+  expect(container?.textContent).toContain('Loop 3/10 · running')
+
+  await act(async () => setConnection({ phase: 'disconnected', attempts: 1 }))
+  expect(container?.textContent).toContain('Loop 3/10 · unverifiable')
+
+  setSummaryError('loop plugin is unavailable')
+  await act(async () => setConnection({ phase: 'connected', attempts: 0 }))
+  expect(container?.textContent).toContain('Loop 3/10 · unverifiable')
+
+  setSummaryError(null)
+  setLoopSummaries([{ id: 'loop-refreshed', worktreeId: 'wt-api', state: 'running', pauseReason: null, iterationsCompleted: 4, maxIterations: 10, updatedAt: 2 }])
+  await act(async () => setConnection({ phase: 'disconnected', attempts: 1 }))
+  await act(async () => setConnection({ phase: 'connected', attempts: 0 }))
+  expect(container?.textContent).toContain('Loop 4/10 · running')
+
+  setLoopSummaries([])
+  await act(async () => setConnection({ phase: 'disconnected', attempts: 1 }))
+  await act(async () => setConnection({ phase: 'connected', attempts: 0 }))
+  expect(container?.textContent).not.toContain('Loop 4/10')
+  expect(reports.at(-1)).toMatchObject({ loopSummaryStatus: 'available', loopSummaries: [] })
+  expect(calls.filter((call) => call.method === 'quirky.loops/summaries')).toHaveLength(4)
+})
+
+test('older summary responses cannot replace newer refreshes or update an unmounted page', async () => {
+  const stale = Promise.withResolvers<unknown>()
+  const afterUnmount = Promise.withResolvers<unknown>()
+  let summaryReads = 0
+  const { bridge, reports, setConnection } = fakeBridge({
+    summaryProvider: () => {
+      summaryReads += 1
+      if (summaryReads === 1) return stale.promise
+      if (summaryReads === 2) return Promise.resolve([
+        { id: 'loop-current', worktreeId: 'wt-api', state: 'running', pauseReason: null, iterationsCompleted: 6, maxIterations: null, updatedAt: 2 }
+      ])
+      return afterUnmount.promise
+    }
+  })
+  await mount(bridge)
+  await act(async () => setConnection({ phase: 'disconnected', attempts: 1 }))
+  await act(async () => setConnection({ phase: 'connected', attempts: 0 }))
+  expect(container?.textContent).toContain('Loop 6 · running')
+
+  await act(async () => {
+    stale.resolve([{ id: 'loop-stale', worktreeId: 'wt-api', state: 'needs-you', pauseReason: null, iterationsCompleted: 1, maxIterations: 1, updatedAt: 1 }])
+    await Promise.resolve()
+  })
+  expect(container?.textContent).toContain('Loop 6 · running')
+  expect(container?.textContent).not.toContain('loop-stale')
+
+  await act(async () => setConnection({ phase: 'disconnected', attempts: 1 }))
+  await act(async () => setConnection({ phase: 'connected', attempts: 0 }))
+  const reportsBeforeUnmount = reports.length
+  await unmountPage()
+  await act(async () => {
+    afterUnmount.resolve([{ id: 'loop-after-unmount', worktreeId: 'wt-api', state: 'needs-you', pauseReason: null, iterationsCompleted: 1, maxIterations: 1, updatedAt: 3 }])
+    await Promise.resolve()
+  })
+  expect(reports).toHaveLength(reportsBeforeUnmount)
+})
+
+test('page bridge admits only empty-parameter loop summaries as a read-only consumer API', () => {
+  expect(() => validatePageRpc('quirky.loops/summaries', {}, ['rpc'])).not.toThrow()
+  expect(isPageMutation('quirky.loops/summaries')).toBe(false)
+  for (const params of [{ worktree: 'wt-api' }, { includeEnded: true }, { token: 'secret' }]) {
+    expect(() => validatePageRpc('quirky.loops/summaries', params, ['rpc'])).toThrow()
+  }
+  for (const method of ['quirky.loops/list', 'quirky.loops/get', 'quirky.loops/history', 'quirky.loops/iterations', 'quirky.loops/create', 'quirky.loops/stop']) {
+    expect(() => validatePageRpc(method, {}, ['rpc'])).toThrow()
+  }
+})
+
+test('automation-created workspace filtering uses only durable provenance and persists its option', async () => {
+  const provenance = {
+    kind: 'created-by-automation' as const,
+    automationId: 'automation-1',
+    automationName: 'Nightly',
+    runId: 'run-1',
+    runTitle: 'Nightly run',
+    projectId: repo.id,
+    hostId: 'local' as const
+  }
+  const worktrees = [
+    makeWorktree('wt-automated-main', 'automated-main', { isMain: true, automationProvenance: provenance }),
+    makeWorktree('wt-automated-feature', 'automated-feature', { automationProvenance: provenance }),
+    makeWorktree('wt-auto-prefix', 'auto-generated-by-a-person'),
+    makeWorktree('wt-cli', 'cli-created', { createdBy: 'cli' })
+  ]
+  const { bridge, storage } = fakeBridge({ worktrees })
+  const preferenceKey = workspacePreferencesKey('host-1')
+  storage.set(preferenceKey, JSON.stringify({
+    ...DEFAULT_WORKSPACE_PREFERENCES,
+    filters: { ...DEFAULT_WORKSPACE_PREFERENCES.filters, exceptDefaultBranch: true }
+  }))
+  await mount(bridge)
+
+  await click(buttonNamed('Workspace options'))
+  const checkbox = [...document.querySelectorAll<HTMLLabelElement>('.qp-filter-toggle')]
+    .find((label) => label.textContent?.includes('Hide automation-created'))?.querySelector('input')
+  if (!checkbox) throw new Error('Missing automation-created filter')
+  expect(checkbox.disabled).toBe(false)
+  expect(checkbox.checked).toBe(false)
+  await act(async () => {
+    checkbox.checked = true
+    checkbox.dispatchEvent(new Event('change', { bubbles: true }))
+  })
+  await click(buttonNamed('Done'))
+
+  expect(container?.textContent).toContain('automated-main')
+  expect(container?.textContent).not.toContain('automated-feature')
+  expect(container?.textContent).toContain('auto-generated-by-a-person')
+  expect(container?.textContent).toContain('cli-created')
+  expect(buttonNamed('Workspace options').textContent).toContain('2 active filters')
+  const saved = JSON.parse(storage.get(preferenceKey) ?? '{}') as { filters?: { hideAutomationCreated?: boolean } }
+  expect(saved.filters?.hideAutomationCreated).toBe(true)
+
+  await unmountPage()
+  await mount(bridge)
+  expect(container?.textContent).toContain('automated-main')
+  expect(container?.textContent).not.toContain('automated-feature')
+  const reloadedCheckbox = [...document.querySelectorAll<HTMLLabelElement>('.qp-filter-toggle')]
+    .find((label) => label.textContent?.includes('Hide automation-created'))?.querySelector('input')
+  expect(reloadedCheckbox?.disabled).toBe(false)
+  expect(reloadedCheckbox?.checked).toBe(true)
 })

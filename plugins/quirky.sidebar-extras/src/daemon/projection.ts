@@ -1,10 +1,16 @@
 import { isAbsolute, relative, resolve, sep } from 'node:path'
-import { RpcErrorCode, type PluginContext, type PtySessionInfo, type Repo, type Session, type Worktree } from '@quirky/protocol'
-import type { ExtrasState } from './state'
+import { RpcErrorCode, type AgentDisplayState, type PluginContext, type PtySessionInfo, type Repo, type Session, type Worktree } from '@quirky/protocol'
+import { isPlainRecord, type ExtrasState } from './state'
 import { readReviewDecisions, type ReviewReason } from './reviews'
 
 const DAY_MS = 86_400_000
 const WINDOW_DAYS = { today: 1, week: 7, month: 30 } as const
+const AGENT_DISPLAYS: readonly string[] = [
+  'working', 'monitoring', 'waiting', 'permission', 'blocked', 'failed', 'interrupted', 'done', 'unverifiable', 'idle', 'unconfirmed'
+]
+const LIVE_AGENT_DISPLAYS: readonly string[] = ['working', 'monitoring', 'waiting', 'permission', 'blocked']
+
+type AgentStatusFact = { sessionId: string; display: AgentDisplayState }
 
 type WorkspaceProjection = {
   worktreeId: string
@@ -21,6 +27,8 @@ export type ActivityProjection = ExtrasState & {
   hiddenIds: string[]
   hiddenCount: number
   filterCount: number
+  automationHiddenIds: string[]
+  automationHiddenCount: number
   reviewHiddenIds: string[]
   reviewHiddenCount: number
   workspaces: WorkspaceProjection[]
@@ -30,6 +38,7 @@ type RuntimeFacts = {
   sessions: Session[]
   sessionsError?: string
   ptyError?: string
+  agentStatusError?: string
   liveWorktreeIds: Set<string>
 }
 
@@ -82,8 +91,36 @@ async function readPtySessions(context: PluginContext): Promise<{ sessions: PtyS
   }
 }
 
+function isAgentDisplay(value: unknown): value is AgentDisplayState {
+  return typeof value === 'string' && AGENT_DISPLAYS.includes(value)
+}
+
+function isAgentStatusFact(value: unknown): value is AgentStatusFact {
+  return isPlainRecord(value) && typeof value.sessionId === 'string' && isAgentDisplay(value.display)
+}
+
+function isAgentStatusList(value: unknown): value is AgentStatusFact[] {
+  return Array.isArray(value) && value.every(isAgentStatusFact)
+}
+
+
+async function readAgentStatuses(context: PluginContext): Promise<{ rows: AgentStatusFact[]; error?: string }> {
+  try {
+    const response = await context.call('quirky.agent-status/list')
+    if (!isAgentStatusList(response)) throw new Error('quirky.agent-status/list returned an invalid status list')
+    return { rows: response }
+  } catch (error) {
+    if (isMethodNotFound(error)) return { rows: [] }
+    return { rows: [], error: messageOf(error) }
+  }
+}
+
 async function runtimeFacts(context: PluginContext, worktrees: Worktree[]): Promise<RuntimeFacts> {
-  const [sessionResult, ptyResult] = await Promise.all([readSessions(context), readPtySessions(context)])
+  const [sessionResult, ptyResult, agentResult] = await Promise.all([
+    readSessions(context),
+    readPtySessions(context),
+    readAgentStatuses(context)
+  ])
   const bySessionId = new Map(sessionResult.sessions.map((session) => [session.id, session]))
   const liveWorktreeIds = new Set<string>()
 
@@ -104,10 +141,18 @@ async function runtimeFacts(context: PluginContext, worktrees: Worktree[]): Prom
     if (owner !== undefined) liveWorktreeIds.add(owner.id)
   }
 
+  for (const status of agentResult.rows) {
+    const session = bySessionId.get(status.sessionId)
+    if (session !== undefined && session.status !== 'exited' && LIVE_AGENT_DISPLAYS.includes(status.display)) {
+      liveWorktreeIds.add(session.worktreeId)
+    }
+  }
+
   return {
     sessions: sessionResult.sessions,
     ...(sessionResult.error === undefined ? {} : { sessionsError: sessionResult.error }),
     ...(ptyResult.error === undefined ? {} : { ptyError: ptyResult.error }),
+    ...(agentResult.error === undefined ? {} : { agentStatusError: agentResult.error }),
     liveWorktreeIds
   }
 }
@@ -135,7 +180,8 @@ function cutoffFor(state: ExtrasState, now: number): number | null {
 }
 
 function errorForUnknownRuntime(facts: RuntimeFacts): string | undefined {
-  const errors = [facts.ptyError, facts.sessionsError].filter((error): error is string => error !== undefined)
+  const errors = [facts.ptyError, facts.sessionsError, facts.agentStatusError]
+    .filter((error): error is string => error !== undefined)
   return errors.length === 0 ? undefined : errors.join('; ')
 }
 
@@ -181,6 +227,7 @@ export async function projectActivity(
   const cutoff = cutoffFor(state, now())
   const visibleIds: string[] = []
   const hiddenIds: string[] = []
+  const automationHiddenIds: string[] = []
   const workspaces: WorkspaceProjection[] = []
   const reviewHiddenIds: string[] = []
   let activityHiddenCount = 0
@@ -190,7 +237,7 @@ export async function projectActivity(
     const selected = active?.worktreeId === worktree.id && active.instanceId === worktree.instanceId
     const live = facts.liveWorktreeIds.has(worktree.id)
       ? true
-      : facts.ptyError !== undefined || facts.sessionsError !== undefined
+      : facts.ptyError !== undefined || facts.sessionsError !== undefined || facts.agentStatusError !== undefined
         ? null
         : false
     const error = live === null ? errorForUnknownRuntime(facts) : undefined
@@ -235,8 +282,11 @@ export async function projectActivity(
       ...(review?.error === undefined ? {} : { reviewError: review.error })
     })
     if (!visible) activityHiddenCount++
+    const automationHidden = state.preferences.hideAutomationCreated &&
+      worktree.automationProvenance?.kind === 'created-by-automation'
+    if (automationHidden) automationHiddenIds.push(worktree.id)
     if (review?.hidden === true) reviewHiddenIds.push(worktree.id)
-    const combinedVisible = visible && review?.hidden !== true
+    const combinedVisible = visible && review?.hidden !== true && !automationHidden
     const destination = combinedVisible ? visibleIds : hiddenIds
     destination.push(worktree.id)
 
@@ -248,7 +298,10 @@ export async function projectActivity(
     hiddenCount: activityHiddenCount,
     filterCount: (state.preferences.workspaceActivityWindow === 'all' ? 0 : 1) +
       (state.preferences.hideCompletedReviewWorkspaces ? 1 : 0) +
-      (state.preferences.hidePassingCheckWorkspaces ? 1 : 0),
+      (state.preferences.hidePassingCheckWorkspaces ? 1 : 0) +
+      (state.preferences.hideAutomationCreated ? 1 : 0),
+    automationHiddenIds,
+    automationHiddenCount: automationHiddenIds.length,
     reviewHiddenIds,
     reviewHiddenCount: reviewHiddenIds.length,
     workspaces

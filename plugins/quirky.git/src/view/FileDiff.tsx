@@ -8,6 +8,7 @@ import { useNotes } from '../notes/useNotes'
 import { fetchDiff, isEditable, messageOf, POLL_MS, useRefreshTriggers } from './data'
 import { DiffPane, type PaneHandle, type PaneState } from './DiffPane'
 import { ErrorNotice } from './Fallbacks'
+import { openHostedDiff } from './hosted-tabs'
 import type { ModeProps } from './types'
 
 const IDLE: PaneState = { changes: 0, current: null, dirty: false, stale: false, tooLarge: false }
@@ -27,6 +28,8 @@ export function FileDiff({ context, input, settings, setSetting, report, bind, c
   const [loaded, setLoaded] = useState<Loaded | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [pane, setPane] = useState<PaneState>(IDLE)
+  const [previewHtml, setPreviewHtml] = useState<string | null>(null)
+  const [previewError, setPreviewError] = useState<string | null>(null)
   const [menuOpen, setMenuOpen] = useState(false)
   const paneRef = useRef<PaneHandle | null>(null)
   const allNotes = useNotes(context, input.worktree)
@@ -96,6 +99,9 @@ export function FileDiff({ context, input, settings, setSetting, report, bind, c
 
   const state = loaded ? pane : IDLE
   const stateKey = JSON.stringify(state)
+  const lowerPath = path.toLowerCase()
+  const markdown = lowerPath.endsWith('.md') || lowerPath.endsWith('.markdown')
+  const showMarkdownPreview = markdown && input.display === 'preview'
   useEffect(() => {
     report({
       mode: 'file',
@@ -110,6 +116,36 @@ export function FileDiff({ context, input, settings, setSetting, report, bind, c
       tooLarge: state.tooLarge
     })
   }, [stateKey, source, path, input.commit, report])
+  useEffect(() => {
+    if (!showMarkdownPreview || !loaded) {
+      setPreviewHtml(null)
+      setPreviewError(null)
+      return
+    }
+    let alive = true
+    const text = paneRef.current?.modifiedText() ?? loaded.diff.modified
+    setPreviewHtml(null)
+    setPreviewError(null)
+    void context.call('quirky.editor/markdown', { action: 'renderPreview', text }).then((value: unknown) => {
+      if (!alive) return
+      if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+        setPreviewError('The Markdown preview renderer returned invalid content.')
+        return
+      }
+      const response = value as Record<string, unknown>
+      const html = response.html
+      if (typeof html !== 'string') {
+        setPreviewError('The Markdown preview renderer returned invalid content.')
+        return
+      }
+      setPreviewHtml(html)
+    }).catch((error: unknown) => {
+      if (alive) setPreviewError(messageOf(error))
+    })
+    return () => {
+      alive = false
+    }
+  }, [context, showMarkdownPreview, loaded?.revision, stateKey])
 
   useEffect(() => {
     if (!menuOpen) return
@@ -122,6 +158,13 @@ export function FileDiff({ context, input, settings, setSetting, report, bind, c
 
   const sideLabel = settings.sideBySide ? 'Switch to inline diff' : 'Switch to side-by-side diff'
   const chip = SOURCE_CHIP[source]
+  const switchDisplay = () => {
+    if (!markdown) return
+    const display = showMarkdownPreview ? 'source' : 'preview'
+    void openHostedDiff(context, { ...input, display }).catch((error: unknown) =>
+      context.toast('Could not switch Markdown diff view', messageOf(error))
+    )
+  }
   return (
     <div className="qgv-file">
       <header className="qgv-bar">
@@ -145,96 +188,132 @@ export function FileDiff({ context, input, settings, setSetting, report, bind, c
             <NotesPillContent count={fileNotes.length} />
           </SendMenu>
         )}
-        <button
-          type="button"
-          aria-label="Previous change"
-          title="Previous change"
-          disabled={state.changes === 0}
-          onClick={() => void paneRef.current?.previousChange()}
-        >
-          ↑
-        </button>
-        <button
-          type="button"
-          aria-label="Next change"
-          title="Next change"
-          disabled={state.changes === 0}
-          onClick={() => void paneRef.current?.nextChange()}
-        >
-          ↓
-        </button>
-        <button
-          type="button"
-          aria-label={sideLabel}
-          title={sideLabel}
-          onClick={() => setSetting('diffDefaultView', settings.sideBySide ? 'inline' : 'side-by-side')}
-        >
-          {settings.sideBySide ? '▤' : '▥'}
-        </button>
-        <span className="qgv-menu-anchor">
+        {!showMarkdownPreview && (
+          <>
+            <button
+              type="button"
+              aria-label="Previous change"
+              title="Previous change"
+              disabled={state.changes === 0}
+              onClick={() => void paneRef.current?.previousChange()}
+            >
+              ↑
+            </button>
+            <button
+              type="button"
+              aria-label="Next change"
+              title="Next change"
+              disabled={state.changes === 0}
+              onClick={() => void paneRef.current?.nextChange()}
+            >
+              ↓
+            </button>
+            <button
+              type="button"
+              aria-label={sideLabel}
+              title={sideLabel}
+              onClick={() => setSetting('diffDefaultView', settings.sideBySide ? 'inline' : 'side-by-side')}
+            >
+              {settings.sideBySide ? '▤' : '▥'}
+            </button>
+            <span className="qgv-menu-anchor">
+              <button
+                type="button"
+                aria-label="More actions"
+                title="More actions"
+                aria-haspopup="menu"
+                aria-expanded={menuOpen}
+                onClick={() => setMenuOpen((open) => !open)}
+              >
+                ⋯
+              </button>
+              {menuOpen && (
+                <div className="qgv-menu" role="menu">
+                  <button
+                    type="button"
+                    role="menuitemcheckbox"
+                    aria-checked={settings.wrap}
+                    onClick={() => {
+                      setSetting('diffWordWrap', !settings.wrap)
+                      setMenuOpen(false)
+                    }}
+                  >
+                    <span className="qgv-check">{settings.wrap ? '✓' : ''}</span>Word Wrap
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitemcheckbox"
+                    aria-checked={settings.showWhitespace}
+                    onClick={() => {
+                      setSetting('diffShowWhitespace', !settings.showWhitespace)
+                      setMenuOpen(false)
+                    }}
+                  >
+                    <span className="qgv-check">{settings.showWhitespace ? '✓' : ''}</span>Show Whitespace
+                  </button>
+                </div>
+              )}
+            </span>
+          </>
+        )}
+        {markdown && (
           <button
             type="button"
-            aria-label="More actions"
-            title="More actions"
-            aria-haspopup="menu"
-            aria-expanded={menuOpen}
-            onClick={() => setMenuOpen((open) => !open)}
+            aria-label={showMarkdownPreview ? 'Show Source' : 'Preview Modified Markdown'}
+            title={showMarkdownPreview ? 'Show both diff sides' : 'Preview only modified Markdown'}
+            onClick={switchDisplay}
           >
-            ⋯
+            {showMarkdownPreview ? 'Source' : 'Preview'}
           </button>
-          {menuOpen && (
-            <div className="qgv-menu" role="menu">
-              <button
-                type="button"
-                role="menuitemcheckbox"
-                aria-checked={settings.wrap}
-                onClick={() => {
-                  setSetting('diffWordWrap', !settings.wrap)
-                  setMenuOpen(false)
-                }}
-              >
-                <span className="qgv-check">{settings.wrap ? '✓' : ''}</span>Word Wrap
-              </button>
-              <button
-                type="button"
-                role="menuitemcheckbox"
-                aria-checked={settings.showWhitespace}
-                onClick={() => {
-                  setSetting('diffShowWhitespace', !settings.showWhitespace)
-                  setMenuOpen(false)
-                }}
-              >
-                <span className="qgv-check">{settings.showWhitespace ? '✓' : ''}</span>Show Whitespace
-              </button>
-            </div>
-          )}
-        </span>
+        )}
         <button type="button" aria-label="Close" title="Close" onClick={close}>
           ✕
         </button>
       </header>
       <div className="qgv-body">
-        {error !== null && loaded === null ? (
-          <ErrorNotice message={error} />
-        ) : loaded === null ? (
-          <p className="qgv-muted qgv-pad">Loading diff...</p>
-        ) : (
-          <DiffPane
-            key={loaded.revision}
-            context={context}
-            worktree={input.worktree}
-            path={path}
-            diff={loaded.diff}
-            editable={editable}
-            settings={settings}
-            variant="file"
-            onState={onState}
-            bind={onPaneHandle}
-            onSaved={onSaved}
-            onReload={onReload}
-            notes={binding}
-          />
+        {showMarkdownPreview && (
+          <div className="qgv-markdown-preview-panel">
+            <p className="qgv-markdown-preview-notice">
+              Showing only the modified Markdown side. Local images are omitted because this detached preview has no source-file context. Switch to Source to compare both sides.
+            </p>
+            {loaded === null ? (
+              error !== null ? <ErrorNotice message={error} /> : <p className="qgv-muted qgv-pad">Loading modified Markdown...</p>
+            ) : previewError !== null ? (
+              <ErrorNotice message={`Markdown preview unavailable: ${previewError}. Open Source to compare the file.`} />
+            ) : previewHtml === null ? (
+              <p className="qgv-muted qgv-pad">Rendering modified Markdown...</p>
+            ) : (
+              <div
+                className="qgv-markdown-preview markdown-body"
+                style={{ padding: '16px 24px', overflow: 'auto', lineHeight: 1.6 }}
+                dangerouslySetInnerHTML={{ __html: previewHtml }}
+              />
+            )}
+          </div>
         )}
+        <div className="qgv-source-diff" hidden={showMarkdownPreview}>
+          {error !== null && loaded === null ? (
+            <ErrorNotice message={error} />
+          ) : loaded === null ? (
+            <p className="qgv-muted qgv-pad">Loading diff...</p>
+          ) : (
+            <DiffPane
+              key={loaded.revision}
+              context={context}
+              worktree={input.worktree}
+              path={path}
+              diff={loaded.diff}
+              editable={editable}
+              settings={settings}
+              variant="file"
+              onState={onState}
+              bind={onPaneHandle}
+              onSaved={onSaved}
+              onReload={onReload}
+              notes={binding}
+            />
+          )}
+        </div>
       </div>
     </div>
   )
