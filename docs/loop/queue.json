@@ -885,7 +885,7 @@
         "term-ui.md",
         "worktrees.md"
       ],
-      "status": "todo",
+      "status": "in-progress",
       "title": "Parity sweep for ask.md, cli.md, agent-status.md, launch-settings.md, notifications.md, providers.md, term-daemon.md, term-ui.md, worktrees.md: every remaining flow in these feature docs, except the GitLab, Bitbucket, Gitea/Forgejo and Azure DevOps flows, the Objective runner and the PR sitter, which the user deferred. Find what earlier items left out or deferred, build or fix it, and record anything too large as a follow-up item",
       "deps": [
         "m0-scripting",
@@ -906,7 +906,8 @@
         "fix-flaky-quirky-worktree-window-projects",
         "fix-flaky-pty-host-host",
         "fix-test-cost"
-      ]
+      ],
+      "lane": 7
     },
     {
       "id": "m7-sweep-editor-source-control",
