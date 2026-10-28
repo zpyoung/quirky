@@ -44,5 +44,27 @@
 - **Revisit if:** public native storage-root isolation is established.
 - **Source:** deferred: platform
 
+## D5: Retain the existing route owner after all incoming decisions
+- **Question:** Does the single final roadmap catch-up change this assignment?
+- **Options:** absorb newly blocked Native flows; preserve the bounded Reviews consumer slice.
+- **Chose:** preserve Reviews gesture/hint ownership and existing Browser openLink; no new native/protocol/localhost/profile implementation. Read all 15 incoming logs and retain their public event, exact source and isolated-native boundaries.
+- **Why:** the Browser native identity/clear/events/controls/preview/localhost items explicitly lack supported public capabilities and must not be imitated here. No incoming decision conflicts with this consumer-only change.
+- **Evidence:** final roadmap merge after a00dd5f0; IncomingReviewRoutingRules read fix-terminal-dock-unfinished-flows-20261027, m2-editor-complete-remaining-flows, m3-vault-parity-completion, m5-automations-dispatch-remote-and-args, m5-loops-ui-visible-stop-close-review, m6-heimdall-host-power, m7-sweep-orchestration, six sa-browser native/localhost logs and sb-mobile-app-panels/install-links.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** a public Browser contract changes during an actual landing-conflict recovery.
+- **Source:** assumed — autonomous
+
+## D6: Separate the typecheck gate and isolated module smoke from acceptance
+- **Question:** What verification is actually current?
+- **Options:** imply the written regressions passed; retain exact bounded evidence.
+- **Chose:** permanent mounted-control/daemon acceptance tests are written but NOT RUN; no build, suite, dogfood or review. First typecheck found missing isRecord import in the new fixture; added the existing guard import, removed subscription-count wiring assertions, and required hints to change visibly after settings changes. Second bun run typecheck passed root and mobile. A disposable happy-dom presentation smoke mounted the actual shared routing hook, exercised live hint changes and five click classifications, then unmounted; no daemon, OS opener or native guest started.
+- **Why:** typecheck is the current controller gate, not runtime/OS assurance. The isolated smoke is a bounded changed-module execution, not full control/daemon acceptance or visual proof. Its initial dependency-resolution failure used root package scope; the corrected Reviews package-scoped resolver completed successfully without product changes.
+- **Evidence:** typecheck exit0/22.84s including mobile; /tmp/quirky-l8-review-routing-smoke.ts output: Shift+Cmd true; Shift+Ctrl, Shift-only, Cmd-only and keyboard false; hint changed from Quirky/system to system/Quirky. Component HEAD be31687e stayed unchanged, exactly four scoped source/test files integrated as a00dd5f0; component worktree removed.
+- **Reversibility:** easy
+- **Confidence:** high for the observed gate/module behavior; full acceptance and native effects unverified
+- **Revisit if:** end-phase acceptance or native handoff finds a defect.
+- **Source:** assumed — autonomous
+
 ## Progress
-Design and shared existing contracts specified; next commit the specification, dispatch one bounded implementer, then catch up once, typecheck and land. No tests/review/dogfood run under build-first policy.
+Implementation complete and bounded evidence recorded. One final roadmap catch-up done; all 15 incoming decision logs read without a consumer-routing conflict. Root/mobile typecheck passed; permanent acceptance unrun, native scenarios pending, no review/dogfood/build claim. No unbuilt in-scope flow or follow-up added. Commit, detach and run authoritative queue.ts land, then await its actual receipt in this turn.

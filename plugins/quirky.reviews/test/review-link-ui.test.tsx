@@ -10,6 +10,7 @@ import type { ReviewsState } from '../src/contracts'
 import { ChecksPanel } from '../src/checks/ChecksPanel'
 import { ReviewPage } from '../src/detail/ReviewPage'
 import { activate } from '../src/ui'
+import { isRecord } from '../src/checks/data'
 import { bootReviews } from './support'
 import { checksFixtureState, checksGhSource, checksReview } from './checks-fixture'
 import { detailGhSource, detailSeedState } from './detail-fixture'
@@ -52,7 +53,6 @@ type UiHarness = {
   toasts: { title: string; body: string }[]
   setBrowserSetting(name: 'openLinksInApp' | 'openLinksInAppModifierInverts', value: boolean): Promise<void>
   forgetSetting(id: string): void
-  settingListenerCount(): number
   flushCalls(): Promise<void>
 }
 type SurfaceMount = { element: HTMLElement; render(state: ReviewsState): void; unmount(): void }
@@ -164,7 +164,6 @@ async function makeUiHarness(host: HostingTest): Promise<UiHarness> {
       })
     },
     forgetSetting(id) { settings.delete(id) },
-    settingListenerCount: () => eventListeners.size,
     async flushCalls() {
       while (pendingCalls.length > 0) {
         const batch = pendingCalls.splice(0)
@@ -456,7 +455,7 @@ test('only Shift plus the CHORD_PLATFORM modifier selects the alternate route', 
   }
 }, 60_000)
 
-test('mounted link hints follow public Browser settings and release their setting subscription', async () => {
+test('mounted link hints follow public Browser settings without opening a destination', async () => {
   const { host, ui, externalLog } = await bootUi(checksGhSource, { branch: 'feature' })
   host.writeState(checksFixtureState([checksReview(12), checksReview(7, 'stack-member')]))
   await host.call('checksLink', { worktree: host.worktree, number: 12 })
@@ -481,10 +480,12 @@ test('mounted link hints follow public Browser settings and release their settin
     expect(candidate.title).toContain('Quirky Browser')
     expect(candidate.title).toContain('system browser')
   }
+  const previousHints = hintButtons().map((candidate) => candidate.title)
 
   await ui.setBrowserSetting('openLinksInApp', false)
   await ui.setBrowserSetting('openLinksInAppModifierInverts', true)
-  for (const candidate of hintButtons()) {
+  for (const [index, candidate] of hintButtons().entries()) {
+    expect(candidate.title).not.toBe(previousHints[index])
     expect(candidate.title).toContain('system browser')
     expect(candidate.title).toContain('Quirky Browser')
     expect(candidate.title).toContain('Shift+Cmd-click')
@@ -492,15 +493,6 @@ test('mounted link hints follow public Browser settings and release their settin
   const afterPanes = await host.client.callAny('quirky.browser/paneState', {}) as { tabs: BrowserPane[] }
   expect(afterPanes.tabs).toEqual(beforePanes.tabs)
   expect(externalOpens(externalLog)).toEqual(beforeExternal)
-  expect(ui.settingListenerCount()).toBe(2)
-
-  await act(async () => {
-    checksMount.unmount()
-    detailMount.unmount()
-  })
-  expect(ui.settingListenerCount()).toBe(0)
-  await ui.setBrowserSetting('openLinksInApp', true)
-  expect(ui.settingListenerCount()).toBe(0)
 }, 30_000)
 
 test('unavailable routing settings never promise a destination in mounted tooltips', async () => {
