@@ -1,5 +1,6 @@
 import { act } from 'react'
 import { RpcError, RpcErrorCode, type QuirkyEvent, type UiLayout, type UiPluginContext } from '@quirky/protocol'
+import { createNativeBrowserCapability } from '../../../../packages/ui/src/native-browser'
 import manifest from '../../quirky-plugin.json'
 import type { AgentInfo, AgentListing, PermissionMode } from '../../src/core/types'
 
@@ -22,6 +23,7 @@ export function fakeContext(handlers: Record<string, Handler> = {}) {
 
   const context: UiPluginContext = {
     pluginId: 'quirky.agents',
+    nativeBrowser: createNativeBrowserCapability(),
     log() {},
     provide(id, implementation) {
       provided.set(id, implementation as (...args: any[]) => any)

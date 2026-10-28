@@ -6,6 +6,7 @@ import type {
   UiLayout,
   UiPluginContext
 } from '@quirky/protocol'
+import { createNativeBrowserCapability } from '../../../../packages/ui/src/native-browser'
 
 // the caller registers happy-dom first, then imports this module
 const { act } = await import('react')
@@ -121,6 +122,7 @@ export function fakeContext(initial: UiLayout): Fake {
     called: (method) => fake.calls.filter((c) => c.method === method),
     context: {
       pluginId: 'quirky.git',
+      nativeBrowser: createNativeBrowserCapability(),
       log() {},
       provide() {},
       async call(method, params = {}) {

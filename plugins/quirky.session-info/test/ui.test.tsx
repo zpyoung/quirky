@@ -2,6 +2,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, test } from 'bun:test
 import { act } from 'react'
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
 import type { QuirkyEvent, UiPluginContext } from '@quirky/protocol'
+import { createNativeBrowserCapability } from '../../../packages/ui/src/native-browser'
 import type { PanelState, SessionInfo } from '../src/types'
 
 type Handler = (params: Record<string, unknown>) => unknown | Promise<unknown>
@@ -17,6 +18,7 @@ function makeContext(handlers: Record<string, Handler> = {}) {
   const toasts: { title: string; body: string }[] = []
   const context: UiPluginContext = {
     pluginId: 'quirky.session-info',
+    nativeBrowser: createNativeBrowserCapability(),
     log() {},
     provide(id, implementation) { provided.set(id, implementation as (...args: unknown[]) => unknown) },
     async call(method, params = {}) {
