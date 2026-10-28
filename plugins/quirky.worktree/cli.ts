@@ -351,18 +351,18 @@ const named: CliModule['commands'] = {
     if (args.flags['no-fallback'] === true) params.allowLocalBaseFallback = false
     if (args.flags['keep-main'] === true) params.keepMain = true
     if (args.flags.activate === true) params.activate = true
-    const runtime = stringFlag(args, 'runtime')
-    if (runtime !== undefined) {
-      if (stringFlag(args, 'host') !== undefined) throw ctx.usage('--runtime and --host cannot be used together')
+    const onRuntime = stringFlag(args, 'on-runtime')
+    if (onRuntime !== undefined) {
+      if (stringFlag(args, 'host') !== undefined) throw ctx.usage('--on-runtime and --host cannot be used together')
       if (typeof params.repo !== 'string' || params.repo.trim() === '' || params.group !== undefined) {
-        throw ctx.usage('--runtime requires an explicit remote Git project selector with --repo, not --group')
+        throw ctx.usage('--on-runtime requires an explicit remote Git project selector with --repo, not --group')
       }
       if (params.activate === true || args.flags.window !== undefined) {
         throw ctx.usage('remote worktrees cannot be activated in a local UI window')
       }
       const remoteParams = { ...params }
       delete remoteParams.createdBy
-      const remote = (await ctx.call('quirky.worktree/createRemote', { runtime, ...remoteParams })) as RemoteWorktreeCreateReceipt
+      const remote = (await ctx.call('quirky.worktree/createRemote', { runtime: onRuntime, ...remoteParams })) as RemoteWorktreeCreateReceipt
       ctx.out.result(remote, () => [
         `created ${remote.result.worktree.name} on owner runtime ${remote.runtime.name} (${remote.runtime.id})`,
         `remote worktree: ${remote.result.worktree.id}`,
@@ -424,6 +424,7 @@ const named: CliModule['commands'] = {
     const hideDefaultBranch = toggle(args, ctx, 'hide-default-branch', 'show-default-branch')
     const hideDetached = toggle(args, ctx, 'hide-detached', 'show-detached')
     const hideArchived = toggle(args, ctx, 'hide-archived', 'show-archived')
+    const hideOtherClients = toggle(args, ctx, 'hide-other-clients', 'show-other-clients')
     const externalVisibilityDefault = stringFlag(args, 'external-visibility-default')
     const filterRepoIds = jsonFlag(args, ctx, 'filter-repo-ids')
     const showProperties = jsonFlag(args, ctx, 'show-properties')
@@ -439,6 +440,7 @@ const named: CliModule['commands'] = {
       ...(hideDefaultBranch === undefined ? {} : { hideDefaultBranch }),
       ...(hideDetached === undefined ? {} : { hideDetached }),
       ...(hideArchived === undefined ? {} : { hideArchived }),
+      ...(hideOtherClients === undefined ? {} : { hideOtherClients }),
       ...(externalVisibilityDefault === undefined ? {} : { externalVisibilityDefault }),
       ...(filterRepoIds === undefined ? {} : { filterRepoIds }),
       ...(showProperties === undefined ? {} : { showProperties })
@@ -458,6 +460,7 @@ const named: CliModule['commands'] = {
       ['hide default branch', options.hideDefaultBranch ? 'yes' : 'no'],
       ['hide detached', options.hideDetached ? 'yes' : 'no'],
       ['hide archived', options.hideArchived ? 'yes' : 'no'],
+      ['hide other desktop clients', options.hideOtherClients ? 'yes' : 'no'],
       ['external default', options.externalVisibilityDefault],
       ['project filter', options.filterRepoIds.join(', ') || 'all']
     ]))
