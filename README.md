@@ -73,6 +73,63 @@ quirky vault clear --yes
 Advanced parity and verification obligations are tracked in
 [the vault's open findings](docs/loop/BLOCKERS.md#m3-vault-open-review-findings) and the dependent
 `m3-vault-parity-completion` queue item.
+## Terminal artifacts on the phone
+
+In a local terminal session, open **More → Terminal artifacts** to browse files named in that
+terminal's recent output. Artifact previews can open files outside the worktree without granting
+the phone a general file-path API. Normal Files browsing remains worktree-contained.
+
+Complete writable UTF-8 text and Markdown up to 48 KiB can be edited with **Save terminal artifact**.
+Larger text is explicitly truncated and read-only. PNG, JPEG, GIF and WebP previews are bounded to
+192 KiB; other binary files show metadata only. The artifact service currently supports macOS hosts.
+
+The same operations are scriptable. Set the source IDs to the actual worktree and terminal session;
+take `ARTIFACT_ID` and `GRANT` from the list result, and `REVISION` from the preview:
+
+```sh
+quirky terminal artifacts list "$WORKTREE_ID" "$SESSION_ID" --json
+quirky terminal artifacts preview "$WORKTREE_ID" "$SESSION_ID" \
+  --artifact-id "$ARTIFACT_ID" --grant "$GRANT" --json
+quirky terminal artifacts save "$WORKTREE_ID" "$SESSION_ID" \
+  --artifact-id "$ARTIFACT_ID" --grant "$GRANT" \
+  --revision "$REVISION" --content-file ./draft.md --json
+quirky terminal artifacts refresh "$WORKTREE_ID" "$SESSION_ID" \
+  --artifact-id "$ARTIFACT_ID" --grant "$GRANT" --json
+```
+
+Grants belong to the authenticated caller and exact source session. They expire after five minutes;
+retained source authority lasts at most thirty minutes. Refresh returns a replacement grant but
+does not approve changed disk content. A stale revision, replaced file or lost source refuses the
+save and preserves the phone draft. Reload content explicitly to adopt disk changes.
+
+## Markdown diff images
+
+Git's Markdown diff preview and the editor's Changes preview show the modified text, including
+local images resolved relative to the Markdown source. Images must stay within the registered
+worktree. Remote URLs, unsafe paths and missing images are not loaded. Historical diffs use
+current worktree image files, not images from the historical commit.
+
+Detached previews do not open editor buffers or change files. Each mounted preview owns a
+separate resource lease; switching to Source, replacing the preview or unmounting it releases only
+that lease, leaving other splits and ordinary editor previews intact.
+
+The public `quirky.editor/markdownPreview` method is also available through the generated CLI:
+
+```sh
+LEASE_ID="$(uuidgen)"
+quirky editor markdown-preview-resource --action render --lease-id "$LEASE_ID" \
+  --worktree "id:$WORKTREE_ID" --path docs/Guide.md \
+  --text '![Chart](images/chart.png)' --json
+quirky editor markdown-preview-resource --action release --lease-id "$LEASE_ID" --json
+```
+
+Render returns sanitized `html`, `leaseId`, `worktreeId` and the normalized source `path`.
+Release is idempotent and returns `released:false` for an unknown or already released lease.
+Use a fresh lease ID for each render and release it when no longer needed. Up to 64 leases and
+64 local images per render are supported; exceeding a bound fails without evicting another
+preview. Text-only `quirky.editor/markdown` with `action:renderPreview` remains context-free and
+does not load local images.
+
 ## How it's built
 
 - **`packages/pty-host`:** `quirky-pty` owns every terminal and its history.

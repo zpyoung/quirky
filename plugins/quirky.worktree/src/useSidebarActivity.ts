@@ -9,6 +9,7 @@ export type ActivityPreferences = {
   workspaceActivityWindowBeforeLiveOnly: Exclude<ActivityWindow, 'live-only'>
   hideCompletedReviewWorkspaces: boolean
   hidePassingCheckWorkspaces: boolean
+  hideAutomationCreated: boolean
 }
 export type ActivityPreferencePatch = Partial<Pick<
   ActivityPreferences,
@@ -17,6 +18,7 @@ export type ActivityPreferencePatch = Partial<Pick<
   | 'alwaysShowDefaultBranchWorkspace'
   | 'hideCompletedReviewWorkspaces'
   | 'hidePassingCheckWorkspaces'
+  | 'hideAutomationCreated'
 >>
 export type SidebarActivityState = {
   client: string
@@ -30,6 +32,8 @@ export type SidebarProjection = SidebarActivityState & {
   hiddenIds: string[]
   hiddenCount: number
   filterCount: number
+  automationHiddenIds: string[]
+  automationHiddenCount: number
   reviewHiddenIds: string[]
   reviewHiddenCount: number
   workspaces: Array<{

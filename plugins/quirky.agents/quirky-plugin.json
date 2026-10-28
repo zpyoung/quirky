@@ -1612,7 +1612,7 @@
       },
       {
         "id": "prepareResume",
-        "description": "Plans a resume or fork from a launch record.",
+        "description": "Plans only a provider resume or fork from the captured launch record and provider session. quirky.session uses this resolver for explicit resume, pane Fork and same-session cold restore; process creation remains owned by the session plugin.",
         "params": {
           "type": "object",
           "properties": {

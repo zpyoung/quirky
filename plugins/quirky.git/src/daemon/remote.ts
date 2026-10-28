@@ -1,10 +1,32 @@
-import { gitApi, RemoteError } from '@quirky/git'
+import { gitApi, RemoteError, type ExactPushTarget } from '@quirky/git'
 import type { GitBusyOp, Worktree } from '@quirky/protocol'
 import { holdPushFailure } from './ai-fix'
 import { effectiveBase } from './base'
 import type { DaemonEnv, Handler } from './env'
+import { pushTarget as resolvePushTarget, requirePushTarget, type ValidatedPushTarget } from './push-target'
 
-const FULL_SHA = /^[0-9a-f]{40}$/i
+type PushPurpose = 'review' | 'creation'
+
+function pushPurpose(env: DaemonEnv, value: unknown): PushPurpose | undefined {
+  if (value === undefined) return undefined
+  if (value !== 'review' && value !== 'creation') {
+    throw env.context.error('invalid-params', 'purpose must be review or creation.')
+  }
+  return value
+}
+
+function exactTarget(target: ValidatedPushTarget): ExactPushTarget {
+  return {
+    remote: target.remote,
+    dest: target.branch,
+    localBranch: target.localBranch,
+    localHead: target.localHead,
+    pushUrl: target.pushUrl,
+    pushUrlFingerprint: target.pushUrlFingerprint
+  }
+}
+
+const FULL_SHA = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/i
 
 /** The operations that publish commits, so a hook failure of one is held for AI Fix and a success clears it. */
 const PUSHING: readonly GitBusyOp[] = ['push', 'force-push', 'sync']
@@ -45,18 +67,24 @@ async function currentBranch(worktree: Worktree): Promise<string> {
 function expectedParam(env: DaemonEnv, expected: unknown): string | undefined {
   if (expected === undefined) return undefined
   if (typeof expected !== 'string' || !FULL_SHA.test(expected)) {
-    throw env.context.error('invalid-params', 'expected must be a full 40-character commit id.')
+    throw env.context.error('invalid-params', 'expected must be a full 40- or 64-character commit id.')
   }
   return expected
 }
 
-/** Pushes HEAD to its push target, publishing the branch and setting the upstream. */
+/** Pushes HEAD to its configured target, or to a fresh validated GitHub target for review/creation. */
 export function push(env: DaemonEnv): Handler {
   return async (params, caller) => {
     const worktree = await env.resolve(params, caller)
-    return remoteOperation(env, worktree, 'push', () => gitApi().push(worktree.path))
+    const purpose = pushPurpose(env, params.purpose)
+    return remoteOperation(env, worktree, 'push', async () => {
+      if (purpose === undefined) return gitApi().push(worktree.path)
+      const target = await requirePushTarget(env, worktree, caller, purpose)
+      return gitApi().push(worktree.path, { target: exactTarget(target) })
+    })
   }
 }
+
 
 /**
  * Replaces the remote branch with HEAD only if it is still at `expected` (default: where the last
@@ -66,24 +94,43 @@ export function forcePush(env: DaemonEnv): Handler {
   return async (params, caller) => {
     const worktree = await env.resolve(params, caller)
     const expected = expectedParam(env, params.expected)
+    const purpose = pushPurpose(env, params.purpose)
     return remoteOperation(env, worktree, 'force-push', async () => {
       const git = gitApi()
-      const { remote, dest } = await git.pushTarget(worktree.path, await currentBranch(worktree))
-      const lease = expected ?? (await git.remoteTrackingSha(worktree.path, remote, dest))
-      return git.push(worktree.path, { lease: { expected: lease } })
+      if (purpose === undefined) {
+        const { remote, dest } = await git.pushTarget(worktree.path, await currentBranch(worktree))
+        const lease = expected ?? (await git.remoteTrackingSha(worktree.path, remote, dest))
+        return git.push(worktree.path, { lease: { expected: lease } })
+      }
+
+      const target = await requirePushTarget(env, worktree, caller, purpose)
+      if (purpose === 'review' && expected !== undefined && expected !== target.headOid) {
+        throw env.errors.reasoned('conflict', 'stale-target', 'The pull-request head changed since force-push confirmation. Confirm again.')
+      }
+      const lease = expected ?? target.headOid ?? (await git.remoteTrackingSha(worktree.path, target.remote, target.branch))
+      return git.push(worktree.path, { lease: { expected: lease }, target: exactTarget(target) })
     })
   }
 }
 
-/** The question asked before `forcePush`. */
+/** The question asked before a force push. */
 export function describeForcePush(env: DaemonEnv): Handler {
   return async (params, caller) => {
     const worktree = await env.resolve(params, caller)
     expectedParam(env, params.expected)
+    const purpose = pushPurpose(env, params.purpose)
+    if (purpose !== undefined) {
+      const target = await requirePushTarget(env, worktree, caller, purpose)
+      return `Force push ${target.localBranch} to ${target.remote}/${target.branch}${target.fork ? ' (fork)' : ''}? This replaces the remote branch with your local commits.`
+    }
     const branch = await currentBranch(worktree)
     const { remote } = await gitApi().pushTarget(worktree.path, branch)
     return `Force push ${branch} to ${remote}? This replaces the remote branch with your local commits.`
   }
+}
+
+export function pushTarget(env: DaemonEnv): Handler {
+  return resolvePushTarget(env)
 }
 
 /** Pulls the upstream into the current branch; divergent branches are merged. */

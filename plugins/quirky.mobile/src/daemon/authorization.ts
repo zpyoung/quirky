@@ -21,6 +21,7 @@ const PARAMS: Readonly<Record<string, readonly string[]>> = {
   'quirky.mobile/notificationCancel': ['subscriptionId'],
   'quirky.mobile/notificationTest': [],
   'quirky.repo/list': [],
+  'quirky.loops/summaries': [],
   'quirky.repo/groupList': [],
   'quirky.worktree/list': ['repo'],
   'quirky.worktree/show': ['worktree'],

@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, expect, test } from 'bun:test'
-import { existsSync, mkdtempSync, readFileSync, realpathSync, rmSync } from 'node:fs'
+import { chmodSync, existsSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import { execFileSync } from 'node:child_process'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { MobileTestClient } from './support/client'
@@ -10,6 +11,7 @@ import { issueFixtureRecord, issueFixtureSource, seedIssueFixture } from '../../
 import { startAccounts, cleanupAll, type AccountsHarness } from '../../quirky.accounts/test/support/index'
 import { bootHosting, type HostingTest } from '../../quirky.hosting/test/helpers'
 import { writeClaudeFixture, writeJsonlFixture } from '../../quirky.vault/test/fixtures/scanner-fixtures'
+import { workspaceFixtureSource } from '../../quirky.tasks/test/fixtures/workspace'
 
 type MobileHost = { client: { callAny(method: string, params?: Record<string, unknown>): Promise<unknown> } }
 type RecordValue = Record<string, unknown>
@@ -100,6 +102,46 @@ function listItemState(host: TasksTest): RecordValue[] {
   const state = record(host.readState())
   const items = record(state.items)
   return list(items['test-owner/test-repo']).map(record)
+}
+function runGit(realGit: string, cwd: string, ...args: string[]): string {
+  return execFileSync(realGit, ['-C', cwd, ...args], { encoding: 'utf8', env: process.env }).trim()
+}
+
+function configureSharedWorkspaceHooks(host: TasksTest, setup: string, issueCommand: string): void {
+  const realGit = Bun.which('git')
+  if (!realGit) throw new Error('Git is required for the mobile workspace consent fixture.')
+  const baseBare = join(host.root, 'mobile-base.git')
+  execFileSync(realGit, ['init', '--quiet', '--bare', baseBare], { env: process.env, stdio: 'ignore' })
+  runGit(realGit, host.repoPath, 'push', '--quiet', baseBare, 'refs/heads/main:refs/heads/main')
+  runGit(realGit, host.repoPath, 'checkout', '--quiet', 'main')
+  const hooksFile = [
+    `scripts:\n  setup: ${JSON.stringify(setup)}`,
+    `issueCommand: ${JSON.stringify(issueCommand)}`
+  ].join('\n') + '\n'
+  writeFileSync(join(host.repoPath, 'quirky.yaml'), hooksFile)
+  runGit(realGit, host.repoPath, 'add', 'quirky.yaml')
+  runGit(realGit, host.repoPath, '-c', 'user.name=Mobile Fixture', '-c', 'user.email=mobile@example.test', '-c', 'commit.gpgsign=false', 'commit', '--quiet', '-m', 'configure shared task hooks')
+  const revision = runGit(realGit, host.repoPath, 'rev-parse', 'HEAD')
+  runGit(realGit, host.repoPath, 'update-ref', 'refs/remotes/origin/main', revision)
+  runGit(realGit, host.repoPath, 'push', '--quiet', baseBare, 'refs/heads/main:refs/heads/main')
+  runGit(realGit, host.repoPath, 'checkout', '--quiet', 'feature')
+
+  const origin = 'https://github.com/test-owner/test-repo.git'
+  const shim = `#!${process.execPath}
+const realGit = ${JSON.stringify(realGit)}
+const rewrites = ${JSON.stringify([[origin, baseBare]])}
+const args = process.argv.slice(2)
+const configArgs = ['fetch', 'push', 'ls-remote'].includes(args[0] ?? '')
+  ? rewrites.flatMap(([url, localPath]) => ['-c', 'url.file://' + localPath + '.insteadOf=' + url])
+  : []
+const result = Bun.spawnSync([realGit, ...configArgs, ...args], { stdin: 'ignore', stdout: 'pipe', stderr: 'pipe' })
+if (result.stdout.byteLength > 0) process.stdout.write(result.stdout)
+if (result.stderr.byteLength > 0) process.stderr.write(result.stderr)
+process.exit(result.exitCode ?? 1)
+`
+  const gitShim = join(host.root, 'fakebin', 'git')
+  writeFileSync(gitShim, shim)
+  chmodSync(gitShim, 0o755)
 }
 
 test('encrypted task consumers list, detail, edit, and create a workspace attached to the selected repository', async () => {
@@ -365,4 +407,84 @@ test('encrypted vault consumers list and search owned Claude sessions by workspa
   expect(typeof resumed.id).toBe('string')
   expect(resumed.id).not.toBe(sourceSession.id)
   expect(resumed).not.toHaveProperty('launch')
+}, 60_000)
+test('paired mobile workspace consent carries content pins through both hooks and executes each approved script', async () => {
+  const host = await bootTasks(workspaceFixtureSource, {
+    extraBuiltins: ['quirky.mobile', 'quirky.agents', 'quirky.session', 'quirky.terminal']
+  })
+  tasksHost = host
+  const setupScript = "printf 'setup-ran' > setup-marker.txt"
+  const issueCommand = "printf 'issue-ran' > issue-marker.txt"
+  configureSharedWorkspaceHooks(host, setupScript, issueCommand)
+  const issue = fixtureIssue('test-owner', 'test-repo', 22, '2026-10-02T00:00:00Z')
+  host.writeState(seedListFixture({ 'test-owner/test-repo': [issue] }))
+  const mobile = await pairPhone(host)
+  const target = {
+    worktree: host.worktree,
+    kind: 'issue',
+    number: 22,
+    url: issue.url
+  }
+
+  const initial = record(await mobile.call('quirky.tasks/workspace', {
+    target,
+    action: 'start',
+    newWorkspace: true,
+    setup: 'run',
+    issueCommand: 'run',
+    agent: ''
+  }))
+  expect(initial).toMatchObject({ kind: 'composer', target, setup: 'run', issueCommand: 'run' })
+  const composer = {
+    target,
+    action: 'start',
+    newWorkspace: true,
+    composerRequestId: stringField(initial, 'requestId'),
+    name: 'mobile-consent-22',
+    prompt: stringField(initial, 'prompt'),
+    setup: 'run',
+    issueCommand: 'run',
+    agent: ''
+  }
+
+  const setupPrompt = record(await mobile.call('quirky.tasks/workspace', composer))
+  expect(setupPrompt).toMatchObject({
+    kind: 'composer',
+    trustKind: 'setup',
+    trustScript: setupScript,
+    trustHash: expect.stringMatching(/^[a-f0-9]{64}$/)
+  })
+  const setupHash = stringField(setupPrompt, 'trustHash')
+  expect((await host.client.callAny('quirky.worktree/list', { repo: host.repoId }) as unknown[])).toHaveLength(1)
+
+  const issuePrompt = record(await mobile.call('quirky.tasks/workspace', {
+    ...composer,
+    trustSetup: true,
+    trustSetupHash: setupHash
+  }))
+  expect(issuePrompt).toMatchObject({
+    kind: 'composer',
+    setup: 'run',
+    trustKind: 'issue',
+    trustScript: issueCommand,
+    trustHash: expect.stringMatching(/^[a-f0-9]{64}$/),
+    trustSetupHash: setupHash
+  })
+  const issueHash = stringField(issuePrompt, 'trustHash')
+  expect((await host.client.callAny('quirky.worktree/list', { repo: host.repoId }) as unknown[])).toHaveLength(1)
+
+  const created = record(await mobile.call('quirky.tasks/workspace', {
+    ...composer,
+    trustSetup: true,
+    trustSetupHash: setupHash,
+    trustIssueCommand: true,
+    trustIssueCommandHash: issueHash
+  }))
+  expect(created).toMatchObject({ kind: 'created', target, agent: null })
+  expect(record(created.setup).ran).not.toBe('skipped')
+  const worktree = record(created.worktree)
+  const path = stringField(worktree, 'path')
+  await waitForAsync(() => existsSync(join(path, 'issue-marker.txt')) ? true : false, 15_000)
+  expect(readFileSync(join(path, 'setup-marker.txt'), 'utf8')).toBe('setup-ran')
+  expect(readFileSync(join(path, 'issue-marker.txt'), 'utf8')).toBe('issue-ran')
 }, 60_000)

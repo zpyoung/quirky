@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import type { OrchestrationSubmission, PluginCaller, PluginContext } from '@quirky/protocol'
 import { openPluginStore } from '../../../packages/daemon/src/plugins/stores'
+import { HostPowerService } from '../../../packages/daemon/src/host-power'
 import { createKernelService } from '../src/service'
 import type { Enrollment, JudgmentQuestionRequest, KindRegistration, Snapshot } from '../src/contracts'
 
@@ -55,6 +56,7 @@ function fixture(submissionReply: () => unknown | Promise<unknown> = () => ({ ki
   }))
   const context = {
     pluginId: 'quirky.heimdall', dir: root, dataDir, home,
+    hostPower: new HostPowerService(() => {}, null).forPlugin('quirky.heimdall', () => false),
     log() {}, provide() {}, emit() { return false }, subscribe() { return () => {} },
     async call(method: string, params: Record<string, unknown> = {}) {
       if (method === 'plugin.contributions') return methods

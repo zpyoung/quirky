@@ -150,9 +150,15 @@ export function createTasksEnv(context: PluginContext): TasksEnv {
     async navigate(input) {
       const patch = validateNavigation(context, input)
       const current = state.navigation
-      const contextChanged = ('mode' in patch && patch.mode !== current.mode) || ('query' in patch && patch.query !== current.query) || ('repoIds' in patch && JSON.stringify(patch.repoIds) !== JSON.stringify(current.repoIds)) || ('source' in patch && patch.source !== current.source)
+      const modeChanged = 'mode' in patch && patch.mode !== current.mode
+      const contextChanged = modeChanged || ('query' in patch && patch.query !== current.query) || ('repoIds' in patch && JSON.stringify(patch.repoIds) !== JSON.stringify(current.repoIds)) || ('source' in patch && patch.source !== current.source)
       const result = env.update(next => {
-        next.navigation = { ...next.navigation, ...(contextChanged ? { page: 1, scrollTop: 0 } : {}), ...patch }
+        next.navigation = {
+          ...next.navigation,
+          ...(contextChanged ? { page: 1, scrollTop: 0 } : {}),
+          ...(modeChanged && !('detail' in patch) ? { detail: null } : {}),
+          ...patch
+        }
         if (patch.mode && patch.mode !== current.mode && !('query' in patch)) next.navigation.query = patch.mode === 'prs' ? 'is:pr is:open' : 'is:issue is:open'
       })
       await context.call('ui.view.open', { id: TASKS_VIEW, input: { navigation: result.navigation, revision: result.revision } })

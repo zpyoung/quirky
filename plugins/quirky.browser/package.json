@@ -8,7 +8,8 @@
     "agent-browser": "0.27.0",
     "pngjs": "7.0.0",
     "react": "19.2.0",
-    "react-dom": "19.2.0"
+    "react-dom": "19.2.0",
+    "tldts": "7.4.16"
   },
   "devDependencies": {
     "@quirky/git": "workspace:*",
@@ -34,6 +35,11 @@
         "dependency": "pngjs",
         "source": "LICENSE",
         "destination": "licenses/pngjs-LICENSE"
+      },
+      {
+        "dependency": "tldts",
+        "source": "LICENSE",
+        "destination": "licenses/tldts.LICENSE"
       }
     ]
   }

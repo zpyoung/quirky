@@ -9,7 +9,9 @@ import {
   pull,
   push,
   pushTarget,
+  pushUrlFingerprint,
   rebaseFromBase,
+  remotePushUrls,
   remoteTrackingSha,
   type RemoteErrorReason
 } from '../src/index'
@@ -56,6 +58,12 @@ async function reasonOf(promise: Promise<unknown>): Promise<RemoteErrorReason> {
 
 const head = (cwd: string, rev = 'HEAD') => git(cwd, 'rev-parse', rev)
 const originHead = (env: Env, branch: string) => git(env.origin, 'rev-parse', `refs/heads/${branch}`)
+async function exactTarget(env: Env, remote: string, dest: string) {
+  const urls = await remotePushUrls(env.work, remote)
+  const pushUrl = urls[0]
+  if (urls.length !== 1 || pushUrl === undefined) throw new Error('expected one configured push URL')
+  return { remote, dest, localBranch: 'feat', localHead: head(env.work), pushUrl, pushUrlFingerprint: pushUrlFingerprint(pushUrl) }
+}
 
 /** The peer checks out `branch` from origin (creating it when absent) and commits one file. */
 function peerCommit(env: Env, branch: string, files: Record<string, string>): string {
@@ -116,6 +124,64 @@ describe('push', () => {
     expect(result.remote).toBe('fork')
     expect(git(fork, 'rev-parse', 'refs/heads/feat')).toBe(head(env.work))
     expect(originExists(env, 'feat')).toBe(false)
+  })
+
+  test('uses the provider-validated remote and branch even when the default push remote differs', async () => {
+    const env = setup()
+    const fork = join(env.origin, '..', 'fork.git')
+    git(env.work, 'init', '-q', '--bare', '-b', 'main', fork)
+    git(env.work, 'remote', 'add', 'fork', fork)
+    git(env.work, 'config', 'branch.feat.pushRemote', 'origin')
+    git(env.work, 'config', 'branch.feat.remote', 'fork')
+    git(env.work, 'config', 'branch.feat.merge', 'refs/heads/review/feature')
+    const target = await exactTarget(env, 'fork', 'review/feature')
+
+    expect(await push(env.work, { target })).toEqual({ remote: 'fork', branch: 'feat', upstream: 'fork/review/feature' })
+    expect(git(fork, 'rev-parse', 'refs/heads/review/feature')).toBe(target.localHead)
+    expect(originExists(env, 'feat')).toBe(false)
+    expect(originExists({ ...env, origin: fork }, 'feat')).toBe(false)
+  })
+
+  test('a changed configured push URL refuses the validated snapshot without contacting either destination', async () => {
+    const env = setup()
+    const fork = join(env.origin, '..', 'fork.git')
+    const replacement = join(env.origin, '..', 'replacement.git')
+    git(env.work, 'init', '-q', '--bare', '-b', 'main', fork)
+    git(env.work, 'init', '-q', '--bare', '-b', 'main', replacement)
+    git(env.work, 'remote', 'add', 'fork', fork)
+    const target = await exactTarget(env, 'fork', 'feat')
+    git(env.work, 'remote', 'set-url', '--push', 'fork', replacement)
+
+    const error = await failureOf(push(env.work, { target }))
+    expect(error.message).toContain('configured push URL changed')
+    expect(originExists({ ...env, origin: fork }, 'feat')).toBe(false)
+    expect(originExists({ ...env, origin: replacement }, 'feat')).toBe(false)
+  })
+  test('redacts the validated push URL from remote failure diagnostics', async () => {
+    const env = setup()
+    const remoteUrl = 'https://push-user:push-secret@127.0.0.1:1/private.git'
+    git(env.work, 'remote', 'add', 'fork', remoteUrl)
+    const target = await exactTarget(env, 'fork', 'feat')
+    const error = await failureOf(push(env.work, { target }))
+    const diagnostic = JSON.stringify({ message: error.message, summary: error.summary, output: error.output })
+
+    expect(diagnostic).not.toContain(remoteUrl)
+    expect(diagnostic).not.toContain('push-secret')
+    expect(diagnostic).not.toContain('127.0.0.1')
+  })
+
+  test('a stale exact target refuses mutation after local HEAD changes', async () => {
+    const env = setup()
+    const fork = join(env.origin, '..', 'fork.git')
+    git(env.work, 'init', '-q', '--bare', '-b', 'main', fork)
+    git(env.work, 'remote', 'add', 'fork', fork)
+    git(env.work, 'config', 'branch.feat.pushRemote', 'fork')
+    const target = await exactTarget(env, 'fork', 'feat')
+    commitFiles(env.work, { 'raced.txt': 'new head\\n' })
+
+    const error = await failureOf(push(env.work, { target }))
+    expect(error.message).toContain('local branch or HEAD changed')
+    expect(originExists({ ...env, origin: fork }, 'feat')).toBe(false)
   })
 
   test('is rejected as non-fast-forward when the remote moved', async () => {

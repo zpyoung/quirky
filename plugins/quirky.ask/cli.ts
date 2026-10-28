@@ -1,8 +1,16 @@
-import { RpcError, type AskEnvelope, type CliArgs, type CliContext, type CliModule } from '@quirky/protocol'
+import { RpcError, RpcErrorCode, type AskEnvelope, type CliArgs, type CliContext, type CliModule } from '@quirky/protocol'
 import { parseSpecArgument } from './cli-spec'
 
 const POLL_MS = 60_000
 const MAX_CONSECUTIVE_CONNECTION_FAILURES = 10
+const WAIT_BUSY_RETRY_MS = 250
+
+function isRuntimeBusy(error: unknown): boolean {
+  if (!(error instanceof RpcError) || error.code !== RpcErrorCode.Conflict) return false
+  const data = error.data
+  return typeof data === 'object' && data !== null && !Array.isArray(data) && 'reason' in data && data.reason === 'runtime_busy'
+}
+
 
 function positiveFlag(args: CliArgs, ctx: CliContext, name: 'timeout-ms' | 'chunk-ms'): number | undefined {
   const value = args.flags[name]
@@ -49,6 +57,11 @@ export async function waitForAsk(ctx: CliContext, askId: string, limits: WaitLim
         : ctx.call('quirky.ask/wait', { askId, timeoutMs: Math.min(POLL_MS, Math.ceil(Math.min(timeoutLeft, chunkLeft))) }))) as AskEnvelope
       failures = 0
     } catch (error) {
+      if (isRuntimeBusy(error)) {
+        const remaining = Math.min(timeoutLeft, chunkLeft)
+        if (remaining > 0) await ctx.sleep(Math.min(WAIT_BUSY_RETRY_MS, Math.max(1, Math.ceil(remaining))))
+        continue
+      }
       if (error instanceof RpcError || ++failures > MAX_CONSECUTIVE_CONNECTION_FAILURES) throw error
       await ctx.sleep(Math.min(500 * failures, 5000))
       await ctx.reconnect().catch(() => {})

@@ -89,6 +89,16 @@ test('separator projection excludes leading and sticky boundaries', () => {
   expect(projectSeparatorBoundaries(sections, new Set(), false)).toEqual([])
 })
 
+test('separator boundaries keep Pinned first and omit host-adjacent and sticky edges', () => {
+  expect(projectSeparatorBoundaries(['pinned', 'group:team'], new Set(), true)).toEqual(['group:team'])
+  expect(projectSeparatorBoundaries(['pinned', 'group:team'], new Set(['pinned']), true)).toEqual([])
+  expect(projectSeparatorBoundaries(
+    ['repo:local', 'host:remote', 'repo:remote', 'repo:next'],
+    new Set(),
+    true
+  )).toEqual(['repo:next'])
+})
+
 test('SC-44: the report nests children under their parent with depth, and the primary comes first', () => {
   const report = buildReport(
     input({

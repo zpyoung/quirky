@@ -1,0 +1,27 @@
+{
+  "id": "quirky.accounts",
+  "name": "Fake accounts",
+  "version": "0.0.0",
+  "main": "main.ts",
+  "activation": "startup",
+  "contributes": {
+    "method": [
+      {
+        "id": "prepare",
+        "params": {
+          "type": "object",
+          "properties": {
+            "agent": { "type": "string" },
+            "sessionId": { "type": "string" },
+            "worktreeId": { "type": "string" },
+            "cwd": { "type": "string" },
+            "homeOverrides": { "type": "object" },
+            "resume": { "type": "object" }
+          },
+          "required": ["agent", "sessionId", "worktreeId", "cwd", "homeOverrides"]
+        },
+        "result": { "type": "object" }
+      }
+    ]
+  }
+}

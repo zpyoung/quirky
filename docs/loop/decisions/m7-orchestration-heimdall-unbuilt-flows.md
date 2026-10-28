@@ -143,5 +143,16 @@
 - **Revisit if:** the worker-federation implementation replaces these contracts end to end.
 - **Source:** assumed — autonomous
 
+## D14: Compose incoming host power and pointer authority without taking their ownership
+- **Question:** The one mandatory roadmap catch-up conflicted in the protocol export list and kernel shutdown cleanup.
+- **Options:** keep one side and lose an authority boundary; compose the independent additions.
+- **Chose:** Preserve both runtime-peers and terminal-artifacts exports; unsubscribe workspace-change handling and dispose host-power callbacks at shutdown. Keep incoming synchronous sleep fencing, late-runner suspended-state inheritance and mailbox-correct pointer/shutdown generation fences. Migrate the new submission fixture to the canonical HostPowerService test capability.
+- **Why:** All 14 incoming logs were read completely (155 D entries and14 Progress sections, no unreads). Their authority boundaries are additive and do not grant remote ledger/artifact filesystem or worker execution authority. Our peer transport does not unblock unrelated blocked host-authority work by implication.
+- **Evidence:** IncomingAuthorityDecisions report; m6-heimdall-host-power D1,D6; m6-orchestration-idle-pointer-shutdown D8–D10; exact two conflict resolutions. Composed root+mobile typecheck passed24.17s. A post-catch-up two-real-daemon pairing/remote watcher/detail/debug/qualified CLI/owner-budget smoke passed; its fixtures then exited0 and cleaned. The first post-catch-up fixture attempt stopped before daemon startup because its hook-setting overlay needed the current manifest shape; only the private fixture overlay was adapted.
+- **Reversibility:** medium
+- **Confidence:** high for read decisions, typecheck and exercised API paths; real OS sleep cycle and remote workers remain unverified/unbuilt respectively.
+- **Revisit if:** native end-phase or federation implementation demonstrates a conflicting authority seam.
+- **Source:** assumed — autonomous
+
 ## Progress
-All three component source slices are integrated; owned component worktrees removed. D11 explicitly defers only unbuilt remote worker flows into one prepared implementation follow-up (not yet added). Filesystem epoch and real two-daemon API/CLI/shipped-view smoke passed as narrowly recorded in D12; both owned fixtures and browser tabs are stopped. No suites, paid-provider call, full UI campaign or final code review were run. Next: commit parent integration, one roadmap catch-up/read incoming decisions, final typecheck, add the single follow-up, detach and canonical queue land. Inherited .serena/ untouched. The prescribed two-hour target was exceeded; no on-time completion claim.
+All source components and parent integration are complete for the amended shipping scope; all component worktrees removed. One roadmap catch-up resolved additively and all incoming decisions read. Final typecheck and actual isolated filesystem/API/CLI/shipped-view smoke evidence are recorded above; no suites, paid-provider call, full UI campaign or final code review ran. All owned daemon fixtures and browser tabs stopped. D11's single implementation follow-up is prepared but not yet added. Next: commit resolved catch-up, final typecheck, add that one follow-up, detach and canonical queue land. Inherited .serena/ untouched. The prescribed two-hour target was exceeded; no on-time completion claim.

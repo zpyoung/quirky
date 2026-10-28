@@ -5,6 +5,12 @@ type ProjectIdentity = { owner: string; ownerType: ProjectTarget['ownerType']; n
 type ProjectEditAction = 'field' | 'issue' | 'issueType'
 type ViewSelector = { viewId?: string; viewNumber?: number; viewName?: string }
 type DiscoveryEntry = { cachedAt: number; result: Params }
+type ProjectViewOwnership = {
+  beginSelection(): number
+  isCurrentSelection(request: number): boolean
+  beginQuery(requestKey: string): number
+  claimQuery(requestKey: string, viewKey: string, request: number): boolean
+}
 
 const DISCOVERY_TTL_MS = 5 * 60_000
 const DISCOVERY_CACHE_CAPACITY = 32
@@ -428,12 +434,48 @@ function viewQueryKey(view: Params | undefined, selector: ViewSelector): string 
   if (selector.viewName !== undefined) return `name:${selector.viewName.toLowerCase()}`
   return undefined
 }
+function projectViewRequestKey(
+  env: TasksEnv,
+  params: Params,
+  hasTarget: boolean,
+  navigationProject: ProjectTarget | null,
+  selector: ViewSelector
+): string {
+  const target = params.project === undefined ? hasTarget ? null : navigationProject : validateProjectTarget(params.project)
+  const targetKey = target
+    ? projectIdentity(target)
+    : JSON.stringify([
+        'reference',
+        typeof params.host === 'string' ? params.host.toLowerCase() : '',
+        params.input !== undefined ? String(params.input) : [params.owner ?? '', params.projectNumber ?? '', params.ownerType ?? '']
+      ])
+  let viewKey = 'default'
+  if (selector.viewId !== undefined) viewKey = selector.viewId
+  else if (selector.viewNumber !== undefined) viewKey = `number:${selector.viewNumber}`
+  else if (selector.viewName !== undefined) viewKey = `name:${selector.viewName.toLowerCase()}`
+  else if (target?.viewId !== undefined) viewKey = target.viewId
+  else if (target?.viewNumber !== undefined) viewKey = `number:${target.viewNumber}`
+  else if (target) viewKey = env.read().projects.lastViewByProject[targetKey] ?? viewKey
+  return JSON.stringify([targetKey, viewKey])
+}
 
-async function projectView(env: TasksEnv, params: Params): Promise<unknown> {
+async function projectView(env: TasksEnv, params: Params, ownership: ProjectViewOwnership): Promise<unknown> {
   const selectedAction = action(params, ['list', 'select', 'load', 'refresh'])
-  const worktree = await registeredWorktree(env, params.worktree)
   const hasTarget = params.project !== undefined || params.input !== undefined || params.owner !== undefined || params.projectNumber !== undefined
   const navigationProject = hasTarget ? null : env.read().navigation.project
+  const explicitSelector = selectedAction === 'list' ? {} : parseViewSelector(params)
+  const tableAction = selectedAction === 'load' || selectedAction === 'refresh'
+  const clearQueryOverride = tableAction ? optionalBoolean(params, 'clearQueryOverride') : false
+  const hasQueryOverride = tableAction && params.query !== undefined
+  if (hasQueryOverride && clearQueryOverride) return fail('query cannot be combined with clearQueryOverride.')
+  const queryOverride = hasQueryOverride ? boundedString(params.query, 'query', MAX_QUERY_BYTES, { allowEmpty: true, trim: false }) : undefined
+  const selectionRequest = selectedAction === 'select' ? ownership.beginSelection() : undefined
+  const queryWriteRequested = hasQueryOverride || clearQueryOverride
+  const queryRequestKey = queryWriteRequested
+    ? projectViewRequestKey(env, params, hasTarget, navigationProject, explicitSelector)
+    : undefined
+  const queryRequest = queryRequestKey === undefined ? undefined : ownership.beginQuery(queryRequestKey)
+  const worktree = await registeredWorktree(env, params.worktree)
   if (!hasTarget && navigationProject === null) return fail('A project or selected project is required.')
   const targetParams = hasTarget ? params : { ...params, project: navigationProject }
   const { project, resolved } = await resolveProjectTarget(env, targetParams, worktree, true)
@@ -449,7 +491,6 @@ async function projectView(env: TasksEnv, params: Params): Promise<unknown> {
   }
 
   const views = returnedViews(viewsPayload)
-  const explicitSelector = parseViewSelector(params)
   const projectSelector: ViewSelector = explicitSelector.viewId !== undefined || explicitSelector.viewNumber !== undefined || explicitSelector.viewName !== undefined
     ? explicitSelector
     : {
@@ -484,6 +525,9 @@ async function projectView(env: TasksEnv, params: Params): Promise<unknown> {
       viewId,
       ...(viewNumber === undefined ? {} : { viewNumber })
     }
+    if (selectionRequest === undefined || !ownership.isCurrentSelection(selectionRequest)) {
+      return { action: selectedAction, project: selectedProject, view: selectedView, result: viewsPayload, preferences: env.read().projects }
+    }
     const updated = env.update((state) => {
       state.projects = {
         ...state.projects,
@@ -492,19 +536,19 @@ async function projectView(env: TasksEnv, params: Params): Promise<unknown> {
       }
     })
     await env.navigate({ mode: 'projects', project: selectedProject })
-    return { action: selectedAction, project: selectedProject, view: selectedView, result: viewsPayload, preferences: updated.projects }
+    const selectedPreferences = ownership.isCurrentSelection(selectionRequest) ? updated.projects : env.read().projects
+    return { action: selectedAction, project: selectedProject, view: selectedView, result: viewsPayload, preferences: selectedPreferences }
   }
 
   const selectorKey = viewQueryKey(selectedView, tableSelector)
-  const clearQueryOverride = optionalBoolean(params, 'clearQueryOverride')
-  if (params.query !== undefined && clearQueryOverride) return fail('query cannot be combined with clearQueryOverride.')
-  const hasQueryOverride = params.query !== undefined
-  const queryOverride = hasQueryOverride ? boundedString(params.query, 'query', MAX_QUERY_BYTES, { allowEmpty: true, trim: false }) : undefined
   const queryKey = selectorKey === undefined ? undefined : queryViewIdentity(project, selectorKey)
   const preferences = env.read().projects
   const storedQuery = queryKey === undefined ? undefined : preferences.queryByView[queryKey]
   const querySource = hasQueryOverride ? 'explicit' : clearQueryOverride ? 'view-filter' : storedQuery !== undefined ? 'stored' : 'view-filter'
   const effectiveQuery = hasQueryOverride ? queryOverride : clearQueryOverride ? undefined : storedQuery
+  if (queryKey !== undefined && queryRequestKey !== undefined && queryRequest !== undefined) {
+    ownership.claimQuery(queryRequestKey, queryKey, queryRequest)
+  }
   const tableParams: Params = {
     worktree,
     owner: project.owner,
@@ -516,7 +560,8 @@ async function projectView(env: TasksEnv, params: Params): Promise<unknown> {
     ...(selectedAction === 'refresh' ? { noCache: true } : {})
   }
   const table = await callHosting(env, 'projectTable', tableParams)
-  if (queryKey !== undefined && (hasQueryOverride || clearQueryOverride)) {
+  if (queryKey !== undefined && (hasQueryOverride || clearQueryOverride) && queryRequestKey !== undefined && queryRequest !== undefined &&
+    ownership.claimQuery(queryRequestKey, queryKey, queryRequest)) {
     env.update((state) => {
       const queryByView = { ...state.projects.queryByView }
       if (clearQueryOverride) delete queryByView[queryKey]
@@ -752,10 +797,42 @@ async function projectPreferences(env: TasksEnv, params: Params): Promise<unknow
 
 export function projectMethods(env: TasksEnv): TaskMethodTable {
   const discoveryCache = new Map<string, DiscoveryEntry>()
+  const queryGenerations = new Map<string, number>()
+  let selectionGeneration = 0
+  let queryGeneration = 0
+  const trimQueryGenerations = (first: string, second?: string) => {
+    if (queryGenerations.size <= MAX_PREFERENCE_PROJECTS * 2) return
+    for (const key of queryGenerations.keys()) {
+      if (key !== first && key !== second) {
+        queryGenerations.delete(key)
+        return
+      }
+    }
+  }
+  const ownership: ProjectViewOwnership = {
+    beginSelection: () => ++selectionGeneration,
+    isCurrentSelection: (request) => request === selectionGeneration,
+    beginQuery(requestKey) {
+      const request = ++queryGeneration
+      queryGenerations.delete(requestKey)
+      queryGenerations.set(requestKey, request)
+      trimQueryGenerations(requestKey)
+      return request
+    },
+    claimQuery(requestKey, viewKey, request) {
+      if (queryGenerations.get(requestKey) !== request) return false
+      const currentViewRequest = queryGenerations.get(viewKey)
+      if (currentViewRequest !== undefined && currentViewRequest > request) return false
+      queryGenerations.delete(viewKey)
+      queryGenerations.set(viewKey, request)
+      trimQueryGenerations(requestKey, viewKey)
+      return true
+    }
+  }
   return {
     projects: (params) => discoverProjects(env, params, discoveryCache),
     projectSelect: (params) => selectProject(env, params),
-    projectView: (params) => projectView(env, params),
+    projectView: (params) => projectView(env, params, ownership),
     projectEdit: (params) => editProject(env, params),
     projectPreferences: (params) => projectPreferences(env, params)
   }

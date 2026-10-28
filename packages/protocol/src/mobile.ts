@@ -73,7 +73,7 @@ export type MobileTerminalState = {
 /** Page-delivery DTOs shared by the mobile plugin and the Expo companion. */
 export type MobilePageGrant = 'rpc' | 'terminal' | 'storage' | 'navigate' | 'clipboard.read' | 'clipboard.write' | 'externalLink' | 'haptics'
 export type MobileBundleAsset = { path: string; bytes: number; sha256: string; contentType: string }
-export type MobileBundleRoute = { kind: 'workspaces' | 'session' | 'source-control' | 'review' | 'files' | 'file-preview' | 'tasks' | 'accounts' | 'agent-history' | 'notifications'; path: string; grants: MobilePageGrant[] }
+export type MobileBundleRoute = { kind: 'workspaces' | 'session' | 'source-control' | 'review' | 'files' | 'file-preview' | 'terminal-artifacts' | 'terminal-artifact' | 'tasks' | 'accounts' | 'agent-history' | 'notifications'; path: string; grants: MobilePageGrant[] }
 export type MobileBundleManifest = {
   v: 1
   shellVersion: 1
@@ -87,6 +87,7 @@ export type MobileBundleReadResult = { buildId: string; path: string; offset: nu
 
 /** Panel additions to the single mobile admission policy; native pages never grant arbitrary RPC. */
 export const PANEL_METHOD_PARAMS: Readonly<Record<string, readonly string[]>> = {
+  'quirky.terminal/artifacts': ['action', 'worktree', 'session', 'artifactId', 'grant', 'expectedRevision', 'content'],
   'quirky.git/status': ['worktree'],
   'quirky.git/diff': ['worktree', 'path', 'staged', 'source', 'oldPath', 'mergeBase', 'head', 'commit', 'parent'],
   'quirky.git/stage': ['worktree', 'paths', 'scope'],
@@ -144,7 +145,7 @@ export const PANEL_METHOD_PARAMS: Readonly<Record<string, readonly string[]>> = 
   'quirky.tasks/issue': ['worktree', 'number', 'url', 'projectId', 'itemId', 'host', 'owner', 'repo', 'refresh'],
   'quirky.tasks/issueEdit': ['worktree', 'number', 'url', 'projectId', 'itemId', 'host', 'owner', 'repo', 'title', 'body', 'state', 'stateReason', 'duplicateOf', 'labels', 'assignees'],
   'quirky.tasks/issueComment': ['worktree', 'number', 'url', 'projectId', 'itemId', 'host', 'owner', 'repo', 'body'],
-  'quirky.tasks/workspace': ['target', 'action', 'newWorkspace', 'name', 'prompt', 'setup', 'agent', 'composerRequestId', 'trustSetup'],
+  'quirky.tasks/workspace': ['target', 'action', 'newWorkspace', 'name', 'prompt', 'setup', 'issueCommand', 'agent', 'composerRequestId', 'trustSetup', 'trustSetupHash', 'trustIssueCommand', 'trustIssueCommandHash'],
   'quirky.tasks/workspaceComposerCancel': ['requestId'],
   'quirky.accounts/list': ['provider'],
   'quirky.accounts/usage': [],

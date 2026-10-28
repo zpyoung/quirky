@@ -323,6 +323,20 @@ test('SC-16/17: appearance setting changes separators through CLI without changi
   expect(card('feature', 'api')).toBeDefined()
   expect((await agent.callAny('quirky.repo/list', {})) as Repo[]).toContainEqual(expect.objectContaining({ id: api.id }))
   expect((await agent.callAny('quirky.worktree/list', {})) as Worktree[]).toContainEqual(expect.objectContaining({ id: feature.id }))
+  await win.stop()
+  for (const client of world.harness.clients) client.close()
+  await world.harness.daemon.stop()
+  world.harness.pty.stop()
+  world.harness = await startHarness({ home: world.harness.home, builtinPluginsDir: builtinsDir() })
+  world.agent = await world.harness.connect('cli', 'sidebar-extras-e2e-restarted')
+  world.win = await startHeadlessWindow({ home: world.harness.home, runtime: world.harness.runtime })
+  await world.win.waitFor(() => card('feature', 'api'))
+  const restored = await world.win.waitFor(async () => {
+    const latest = await report(world.agent)
+    return latest?.separators?.enabled === false ? latest : undefined
+  })
+  expect(restored.separators?.enabled).toBe(false)
+  expect(rowGeometry()).toEqual(rowsBefore)
 }, SLOW)
 
 test('disabled sidebar extras leaves core worktree dispatch available', async () => {

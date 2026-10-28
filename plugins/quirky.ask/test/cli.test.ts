@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
-import type { AskEnvelope, QuirkyClient } from '@quirky/protocol'
+import { RpcError, RpcErrorCode, type AskEnvelope, type QuirkyClient } from '@quirky/protocol'
 import { waitFor, type Harness } from '../../../packages/daemon/test/helpers'
 import { commands } from '../cli'
 import { cleanupAll, confirmSpec, connectAs, deploy, openWindow, startAsk, testCli } from './support'
@@ -89,6 +89,27 @@ describe('quirky ask command module', () => {
     const [ask] = (await (await connectAs(h)).callAny('quirky.ask/list', {})) as { envelope: AskEnvelope }[]
     expect(ask.envelope.status).toBe('timed_out')
   })
+  test('Q2: CLI timeout preserves the terminal default summary in the public resolution event', async () => {
+    const window = await openWindow(h)
+    const cli = await cliFor()
+    const timedSpec = JSON.stringify({ questions: [{ id: 'go', type: 'confirm', question: 'Go?', default: true }] })
+
+    await run(cli, 'ask', { spec: timedSpec, 'timeout-ms': 20 })
+
+    const [registered, envelope] = cli.lines as [{ askId: string }, AskEnvelope]
+    expect(envelope).toEqual({
+      status: 'timed_out',
+      askId: registered.askId,
+      answers: { go: { value: true, source: 'default' } },
+      skipped: [],
+      summary: 'Go?: Yes'
+    })
+    await waitFor(() => window.events.some((event) => event.type === 'quirky.ask/resolved'))
+    expect(window.events.find((event) => event.type === 'quirky.ask/resolved')).toMatchObject({
+      data: { askId: registered.askId, envelope: { status: 'timed_out', summary: 'Go?: Yes' } }
+    })
+  })
+
 
   test('an ask answered before --timeout-ms is not cancelled', async () => {
     await answerAsksAfter(50)
@@ -124,6 +145,41 @@ describe('quirky ask command module', () => {
     await run(cancelled, 'cancel', { id: second })
     expect(cancelled.lines).toEqual([{ status: 'declined', askId: second, answers: {}, skipped: [], summary: '' }])
   })
+  test('Q2: CLI cancellation flashes the terminal envelope while FIFO promotes the next ask', async () => {
+    const caller = await connectAs(h, { sessionId: 'sess_fifo', worktreeId: 'wt_fifo' })
+    const window = await openWindow(h)
+    const first = (await caller.callAny('quirky.ask/create', { spec: confirmSpec })) as { askId: string }
+    const second = (await caller.callAny('quirky.ask/create', { spec: confirmSpec })) as { askId: string }
+    await waitFor(() => window.events.filter((event) => event.type === 'quirky.ask/created').length === 2)
+
+    const cli = await cliFor()
+    await run(cli, 'cancel', { id: first.askId })
+    expect(cli.lines).toEqual([{ status: 'declined', askId: first.askId, answers: {}, skipped: [], summary: '' }])
+
+    await waitFor(() => window.events.some((event) => event.type === 'quirky.ask/surfaced'))
+    const resolvedFirst = window.events.find((event) => event.type === 'quirky.ask/resolved' && (event.data as { askId: string }).askId === first.askId)
+    const surfacedSecond = window.events.find((event) => event.type === 'quirky.ask/surfaced')
+    expect(resolvedFirst).toMatchObject({ data: { askId: first.askId, envelope: { status: 'declined', summary: '' }, seq: 3 } })
+    expect(surfacedSecond).toMatchObject({ data: { ask: { id: second.askId, queued: false }, seq: 4 } })
+
+    const answered = await caller.callAny('quirky.ask/answer', { askId: second.askId, answers: { go: { value: true, source: 'input' } } })
+    expect(answered).toMatchObject({ status: 'answered', askId: second.askId, summary: 'Go?: Yes' })
+    await waitFor(() => window.events.some((event) => event.type === 'quirky.ask/resolved' && (event.data as { askId: string }).askId === second.askId))
+    const askSequences = window.events.flatMap((event) => {
+      if (
+        event.type !== 'quirky.ask/created' &&
+        event.type !== 'quirky.ask/surfaced' &&
+        event.type !== 'quirky.ask/resolved'
+      ) return []
+      if (!('data' in event)) return []
+      const data = event.data
+      if (typeof data !== 'object' || data === null || Array.isArray(data) || !('seq' in data) || typeof data.seq !== 'number') return []
+      return [data.seq]
+    })
+    expect(askSequences).toEqual([1, 2, 3, 4, 5])
+    expect(await caller.callAny('quirky.ask/list', { pendingOnly: true })).toEqual([])
+  })
+
 
   test('SC-28: wait --id on an answered ask prints the same envelope at once', async () => {
     const asker = await connectAs(h)
@@ -132,6 +188,37 @@ describe('quirky ask command module', () => {
     const cli = await cliFor()
     await run(cli, 'wait', { id: askId })
     expect(cli.lines).toEqual([answered])
+  })
+
+  test('Q2: wait retries a typed capacity conflict without reconnecting or expiring the ask', async () => {
+    const asker = await connectAs(h)
+    const { askId } = (await asker.callAny('quirky.ask/create', { spec: confirmSpec })) as { askId: string }
+    const cli = await cliFor()
+    const call = cli.ctx.call
+    const methods: string[] = []
+    const sleeps: number[] = []
+    let busy = true
+    cli.ctx.call = async (method, params) => {
+      methods.push(method)
+      if (method === 'quirky.ask/wait' && busy) {
+        busy = false
+        throw new RpcError(RpcErrorCode.Conflict, 'ask wait capacity is busy', { reason: 'runtime_busy' })
+      }
+      return call(method, params)
+    }
+    cli.ctx.sleep = async (ms) => {
+      sleeps.push(ms)
+      await asker.callAny('quirky.ask/answer', { askId, answers: { go: { value: true, source: 'input' } } })
+    }
+
+    await run(cli, 'wait', { id: askId, 'timeout-ms': 1000 })
+
+    expect((cli.lines[0] as AskEnvelope).status).toBe('answered')
+    expect(sleeps).toHaveLength(1)
+    expect(sleeps[0]).toBeGreaterThan(0)
+    expect(sleeps[0]).toBeLessThanOrEqual(250)
+    expect(cli.reconnects).toBe(0)
+    expect(methods).not.toContain('quirky.ask/expire')
   })
 
   test('SC-28: a partial answer prints partial', async () => {

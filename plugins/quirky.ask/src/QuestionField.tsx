@@ -1,6 +1,7 @@
 import { useState, type CSSProperties } from 'react'
 import type { AskOption, AskQuestion } from '@quirky/protocol'
 import type { QuestionDraft } from './core/submission'
+import { PreviewFrame } from './PreviewFrame'
 
 type Props = {
   question: AskQuestion
@@ -95,7 +96,7 @@ function OptionRow({ option, pressed, onPress }: { option: AskOption; pressed: b
           </button>
         )}
       </div>
-      {option.preview && previewing && <pre style={{ whiteSpace: 'pre-wrap', margin: '4px 0 0' }}>{option.preview.content}</pre>}
+      {option.preview && previewing && <PreviewFrame preview={option.preview} />}
     </div>
   )
 }

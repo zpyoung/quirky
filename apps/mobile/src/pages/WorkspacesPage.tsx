@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, 
 import type { ProjectGroup, Repo, Session, Worktree, WorktreeCreateResult } from '@quirky/protocol'
 import type { MobilePageBridge, MobileRoute } from '../contracts'
 import { PageError, PageModal, errorMessage, statusLabel } from './components'
+import { loopSummaryLabel, parseLoopSummaries, selectLoopSummaries, type LoopSummary } from './loop-summaries'
 import {
   DEFAULT_WORKSPACE_PREFERENCES,
   projectWorkspaceSessions,
@@ -44,7 +45,7 @@ const PROPERTY_OPTIONS: Array<{ value: WorkspacePropertyKey; label: string }> = 
 const FILTER_OPTIONS: Array<{ key: WorkspaceFilterKey; label: string; detail: string }> = [
   { key: 'exceptDefaultBranch', label: 'Except default branch', detail: 'Keep the primary worktree visible when other filters would hide it.' },
   { key: 'hideDefaultBranch', label: 'Hide default branch', detail: 'Hide primary worktrees.' },
-  { key: 'hideAutomationCreated', label: 'Hide automation-created', detail: 'Unavailable: public worktree metadata does not distinguish automation from ordinary API-created workspaces.' },
+  { key: 'hideAutomationCreated', label: 'Hide automation-created', detail: 'Hide workspaces with durable automation creation provenance.' },
   { key: 'hideCliCreated', label: 'Hide CLI-created', detail: 'Hide workspaces whose source is the Quirky CLI.' },
   { key: 'hideOtherClient', label: 'Hide other-client workspaces', detail: 'Unavailable: public worktree metadata does not identify the originating client.' },
   { key: 'hideDetachedHead', label: 'Hide detached HEAD', detail: 'Hide worktrees without a branch name.' }
@@ -78,7 +79,7 @@ function statusRank(status: string): number {
 }
 
 function activeFilterCount(filters: WorkspacePreferences['filters']): number {
-  return FILTER_OPTIONS.reduce((count, option) => count + (option.key !== 'hideOtherClient' && option.key !== 'hideAutomationCreated' && filters[option.key] ? 1 : 0), 0)
+  return FILTER_OPTIONS.reduce((count, option) => count + (option.key !== 'hideOtherClient' && filters[option.key] ? 1 : 0), 0)
 }
 
 export function WorkspacesPage({ bridge, connected, onNavigate, onReport }: Props) {
@@ -105,8 +106,11 @@ export function WorkspacesPage({ bridge, connected, onNavigate, onReport }: Prop
   const [deleteError, setDeleteError] = useState<string | null>(null)
   const [menuWorktreeId, setMenuWorktreeId] = useState<string | null>(null)
   const [selectedRepoId, setSelectedRepoId] = useState<string | null>(null)
+  const [loopSummaries, setLoopSummaries] = useState<Map<string, LoopSummary>>(() => new Map())
+  const [loopSummaryStatus, setLoopSummaryStatus] = useState<'available' | 'unavailable'>('unavailable')
   const requestId = useRef(0)
   const loadInFlight = useRef<number | null>(null)
+  const loopSummaryRequestId = useRef(0)
   const serverLoaded = useRef(false)
   const widthDrag = useRef<{ startX: number; width: number } | null>(null)
   const resizeListeners = useRef<{ move(event: globalThis.PointerEvent): void; up(): void } | null>(null)
@@ -148,14 +152,32 @@ export function WorkspacesPage({ bridge, connected, onNavigate, onReport }: Prop
   const load = useCallback(async () => {
     if (!pageActiveNow()) {
       requestId.current += 1
+      loopSummaryRequestId.current += 1
+      setLoopSummaryStatus('unavailable')
       setStale(true)
       setLoading(false)
       return
     }
     if (loadInFlight.current === requestId.current) return
     const currentRequest = ++requestId.current
+    const summaryRequest = ++loopSummaryRequestId.current
     loadInFlight.current = currentRequest
     setLoading(true)
+
+    void bridge.call<unknown>('quirky.loops/summaries', {}).then((raw) => {
+      if (summaryRequest !== loopSummaryRequestId.current || !pageActiveNow()) return
+      const summaries = parseLoopSummaries(raw)
+      if (summaries === null) {
+        setLoopSummaryStatus('unavailable')
+        return
+      }
+      setLoopSummaries(selectLoopSummaries(summaries))
+      setLoopSummaryStatus('available')
+    }).catch(() => {
+      if (summaryRequest !== loopSummaryRequestId.current || !pageActiveNow()) return
+      setLoopSummaryStatus('unavailable')
+    })
+
     try {
       const [nextRepos, nextGroups, nextWorktrees, nextSessions] = await Promise.all([
         bridge.call<Repo[]>('quirky.repo/list', {}),
@@ -233,8 +255,8 @@ export function WorkspacesPage({ bridge, connected, onNavigate, onReport }: Prop
       if (search && ![worktree.name, worktree.branch ?? '', worktree.path, worktree.id, worktree.comment, repo?.name ?? '', repo?.displayName ?? '', projectGroup?.name ?? ''].some((part) => part.toLocaleLowerCase().includes(search))) return false
       if (filter.hideDefaultBranch && worktree.isMain) return false
       if (filter.exceptDefaultBranch && worktree.isMain) return true
+      if (filter.hideAutomationCreated && worktree.automationProvenance) return false
       if (filter.hideCliCreated && worktree.createdBy === 'cli') return false
-      if (filter.hideDetachedHead && worktree.branch === null) return false
       return true
     })
     const index = new Map(worktrees.map((worktree, position) => [worktree.id, position]))
@@ -268,6 +290,19 @@ export function WorkspacesPage({ bridge, connected, onNavigate, onReport }: Prop
     })
     return sorted
   }, [worktrees, reposById, groupsById, sessionsByWorktree, repos, selectedRepoId, query, preferences])
+
+  const loopSummaryReport = useMemo(() => {
+    const rows: Array<{ worktreeId: string; loopId: string; label: string }> = []
+    for (const worktree of visibleWorktrees.slice(0, 256)) {
+      const summary = loopSummaries.get(worktree.id)
+      if (summary) rows.push({
+        worktreeId: worktree.id,
+        loopId: summary.id,
+        label: loopSummaryLabel(summary, loopSummaryStatus === 'available')
+      })
+    }
+    return rows
+  }, [visibleWorktrees, loopSummaries, loopSummaryStatus])
 
   const groupedRows = useMemo((): GroupedRows[] => {
     const labels = new Map<string, string>()
@@ -405,6 +440,8 @@ export function WorkspacesPage({ bridge, connected, onNavigate, onReport }: Prop
   }
 
   useEffect(() => () => {
+    requestId.current += 1
+    loopSummaryRequestId.current += 1
     const listeners = resizeListeners.current
     if (listeners) {
       window.removeEventListener('pointermove', listeners.move)
@@ -420,9 +457,11 @@ export function WorkspacesPage({ bridge, connected, onNavigate, onReport }: Prop
       searchOpen,
       optionsOpen,
       sidebarCollapsed: preferences.sidebarCollapsed,
-      detailMode: preferences.cardLayout
+      detailMode: preferences.cardLayout,
+      loopSummaryStatus,
+      loopSummaries: loopSummaryReport
     })
-  }, [onReport, visibleWorktrees, selectedRepoId, searchOpen, optionsOpen, preferences.sidebarCollapsed, preferences.cardLayout])
+  }, [onReport, visibleWorktrees, selectedRepoId, searchOpen, optionsOpen, preferences.sidebarCollapsed, preferences.cardLayout, loopSummaryStatus, loopSummaryReport])
 
   const sidebarStyle = { '--sidebar-width': `${preferences.sidebarWidth}px` } as CSSProperties
   const activeFilters = activeFilterCount(preferences.filters)
@@ -509,7 +548,7 @@ export function WorkspacesPage({ bridge, connected, onNavigate, onReport }: Prop
                     )}
                     {!isGroupCollapsed && <div className="qp-worktree-rows">
                       {roots.map((worktree) => renderWorktreeTree(worktree, 0, group.worktrees, {
-                        bridge, canMutate, groupsById, menuWorktreeId, preferences, reposById, sessionsByWorktree,
+                        bridge, canMutate, groupsById, loopSummaries, loopSummaryStatus, menuWorktreeId, preferences, reposById, sessionsByWorktree,
                         collapsed, onOpen: (item) => void onNavigate({ kind: 'session', worktreeId: item.id }), onToggleCollapse: toggleCollapsed,
                         onToggleMenu: (id) => setMenuWorktreeId(menuWorktreeId === id ? null : id), onPin: togglePin, onDelete: requestDelete
                       }))}
@@ -573,6 +612,8 @@ type RenderContext = {
   preferences: WorkspacePreferences
   reposById: Map<string, Repo>
   sessionsByWorktree: Map<string, WorkspaceSessionSummary[]>
+  loopSummaries: Map<string, LoopSummary>
+  loopSummaryStatus: 'available' | 'unavailable'
   collapsed(key: string, isWorktree?: boolean): boolean
   onOpen(worktree: Worktree): void
   onToggleCollapse(key: string, isWorktree?: boolean): void
@@ -593,6 +634,8 @@ function renderWorktreeTree(worktree: Worktree, depth: number, groupRows: Worktr
   const activeSession = sessionRows.find((item) => item.status === 'working' || item.status === 'waiting' || item.status === 'running')
   const activityLabel = activeSession ? `${activeSession.agent} · ${statusLabel(activeSession.status)}` : sessionRows.length > 0 ? 'No active agent' : 'No sessions'
   const cardClass = `qp-worktree-card${context.preferences.cardLayout === 'compact' ? ' qp-worktree-card--compact' : ''}${depth > 0 ? ' qp-worktree-card--child' : ''}`
+  const loopSummary = context.loopSummaries.get(worktree.id)
+  const loopLabel = loopSummary ? loopSummaryLabel(loopSummary, context.loopSummaryStatus === 'available') : null
   const externalLink = (url: string) => {
     if (!context.bridge.init.grants.includes('externalLink')) return
     void context.bridge.native.openExternal(url).catch(() => {})
@@ -608,6 +651,7 @@ function renderWorktreeTree(worktree: Worktree, depth: number, groupRows: Worktr
           <div className="qp-worktree-card__body">
             <div className="qp-worktree-card__name">{worktree.name}{worktree.isMain ? ' · primary' : ''}</div>
             {displayProperties.has('branch') && <div className="qp-worktree-card__branch">{worktree.branch ?? 'Detached HEAD'}</div>}
+            {loopLabel && <div className="qp-worktree-card__branch">{loopLabel}</div>}
             {displayProperties.has('project') && <div className="qp-worktree-card__project">{displayName(repo, projectGroup, worktree)}</div>}
             {displayProperties.has('kind') && <div className="qp-worktree-card__project">{worktree.kind === 'git' ? 'Git worktree' : 'Folder workspace'}</div>}
             {displayProperties.has('path') && <div className="qp-worktree-card__branch" title={worktree.path}>Path · {worktree.path}</div>}
@@ -709,7 +753,7 @@ function OptionsSheet({ bridge, preferences, onClose, onChange }: {
         </label>
         {FILTER_OPTIONS.map((option) => (
           <label className="qp-filter-toggle" key={option.key}>
-            <input type="checkbox" disabled={option.key === 'hideOtherClient' || option.key === 'hideAutomationCreated'} checked={preferences.filters[option.key]} onChange={(event) => setFilter(option.key, event.currentTarget.checked)} />
+            <input type="checkbox" disabled={option.key === 'hideOtherClient'} checked={preferences.filters[option.key]} onChange={(event) => setFilter(option.key, event.currentTarget.checked)} />
             <span>{option.label}<small>{option.detail}</small></span>
           </label>
         ))}

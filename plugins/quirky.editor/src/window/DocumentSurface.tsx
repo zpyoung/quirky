@@ -7,6 +7,7 @@ import { openExplorerSearch } from './explorerIntent'
 import { requestSingleClose } from './overlayState'
 import { setEditorSetting, useEditorSettings } from './settings'
 import { SourceEditor, type SourceEditorHandle } from './SourceEditor'
+import { ChangesSurface } from './ChangesSurface'
 import { hydrateBuffer, hydrateDiskContent, importFileTransfer, writeDraft } from './transfers'
 const MarkdownSurface = lazy(() => import('../markdown/MarkdownSurface').then((module) => ({ default: module.MarkdownSurface })))
 const NotebookSurface = lazy(() => import('../notebook/NotebookSurface').then((module) => ({ default: module.NotebookSurface })))
@@ -237,6 +238,7 @@ function DocumentBody({ context, input }: { context: UiPluginContext; input: Doc
   const [compareOpen, setCompareOpen] = useState(false)
   const [undoReloadUntil, setUndoReloadUntil] = useState(0)
   const [renamePath, setRenamePath] = useState<string | null>(null)
+  const [changesOpen, setChangesOpen] = useState(false)
   const sourceRef = useRef<SourceEditorHandle>(null)
   const rootRef = useRef<HTMLDivElement>(null)
   const activeRegistration = useRef<ActiveDocumentRegistration | null>(null)
@@ -550,6 +552,25 @@ function DocumentBody({ context, input }: { context: UiPluginContext; input: Doc
   }, [context, input.bufferId, input.tabId])
   const actualTabId = input.tabId ?? buffer?.tabId ?? null
   const actualMode = input.mode ?? buffer?.mode ?? 'source'
+  const canOfferChanges = buffer !== null &&
+    (buffer.kind === 'text' || buffer.kind === 'markdown') &&
+    !buffer.readOnly && !buffer.untitled && buffer.baseline !== null &&
+    buffer.error === null && buffer.external !== 'deleted' && actualMode !== 'preview'
+  const openChanges = useCallback(async () => {
+    if (!canOfferChanges) return
+    try {
+      await flushActiveDocument()
+      setUiError(null)
+      setChangesOpen(true)
+    } catch (reason) {
+      const message = messageOf(reason)
+      setUiError(message)
+      context.toast('Changes could not be opened', message)
+    }
+  }, [canOfferChanges, context, flushActiveDocument])
+  useEffect(() => {
+    if (!canOfferChanges) setChangesOpen(false)
+  }, [canOfferChanges])
 
   const onAction = useCallback((method: string, params: Record<string, unknown>) => {
     const needsBuffer = BUFFER_METHODS[method] === true && params.bufferId === undefined
@@ -744,20 +765,22 @@ function DocumentBody({ context, input }: { context: UiPluginContext; input: Doc
   }
 
   const openMode = async (mode: SurfaceMode) => {
-    if (!buffer) return
+    const selectedBuffer = bufferRef.current
+    if (!selectedBuffer) return
+    setChangesOpen(false)
     try {
-      if (mode === 'preview' && buffer.kind === 'markdown') {
+      if (mode === 'preview' && selectedBuffer.kind === 'markdown') {
         await context.call('quirky.editor/open', {
-          worktree: buffer.worktreeId,
-          path: buffer.relativePath,
+          worktree: selectedBuffer.worktreeId,
+          path: selectedBuffer.relativePath,
           mode: 'preview',
           preview: false,
           focus: true
         })
-      } else if (actualMode === 'preview' && buffer.kind === 'markdown') {
+      } else if (actualMode === 'preview' && selectedBuffer.kind === 'markdown') {
         await flushActiveDocument()
         const updated = await context.call('quirky.editor/view', {
-          bufferId: buffer.id,
+          bufferId: selectedBuffer.id,
           ...(actualTabId === null ? {} : { tabId: actualTabId }),
           action: 'returnToEdit',
           patch: { mode }
@@ -767,7 +790,7 @@ function DocumentBody({ context, input }: { context: UiPluginContext; input: Doc
         refresh()
       } else {
         const updated = await context.call('quirky.editor/view', {
-          bufferId: buffer.id,
+          bufferId: selectedBuffer.id,
           action: 'update',
           patch: { mode }
         }) as EditorBufferInfo
@@ -902,16 +925,20 @@ function DocumentBody({ context, input }: { context: UiPluginContext; input: Doc
   const isMarkdown = buffer.kind === 'markdown'
   const isNotebook = buffer.kind === 'notebook'
   const mediaKind = buffer.kind === 'image' || buffer.kind === 'pdf' || buffer.kind === 'audio' || buffer.kind === 'video' || buffer.kind === 'binary'
-  const viewerKind = mediaKind || (buffer.kind === 'mermaid' && actualMode !== 'source') || (buffer.kind === 'csv' && actualMode !== 'source')
-  const showSource = !mediaKind && (actualMode === 'source' || (!isMarkdown && !isNotebook && buffer.kind !== 'csv' && buffer.kind !== 'mermaid'))
-  const showMarkdown = isMarkdown && actualMode !== 'source'
-  const showNotebook = isNotebook && actualMode !== 'source'
-  const showViewer = viewerKind
+  const showSource = !changesOpen && !mediaKind && (actualMode === 'source' || (!isMarkdown && !isNotebook && buffer.kind !== 'csv' && buffer.kind !== 'mermaid'))
+  const showMarkdown = !changesOpen && isMarkdown && actualMode !== 'source'
+  const showNotebook = !changesOpen && isNotebook && actualMode !== 'source'
+  const viewerKind = buffer.kind === 'csv' || buffer.kind === 'mermaid' || mediaKind
+  const showViewer = !changesOpen && viewerKind
+  const showChanges = changesOpen && canOfferChanges
   const surfaceProps = featureProps
   const saveButton = () => void save('user').catch(handleError)
   const closeButton = () => void requestSingleClose(context, buffer.id, actualTabId ?? undefined)
   const changeWrap = (value: boolean) => void saveSetting('editorWordWrap', value)
   const pathTitle = buffer.relativePath || buffer.name
+  const changesBuffer = localText === null
+    ? buffer
+    : { ...buffer, draft: localText === buffer.content ? null : localText, dirty: localText !== buffer.content }
 
   return (
     <div
@@ -959,6 +986,12 @@ function DocumentBody({ context, input }: { context: UiPluginContext; input: Doc
               <button type="button" aria-pressed={actualMode !== 'source'} onClick={() => void openMode('rich')}>Preview</button>
             </div>
           )}
+          {canOfferChanges && <button
+            type="button"
+            aria-label={changesOpen ? 'Close Changes' : 'Changes'}
+            aria-pressed={changesOpen}
+            onClick={() => changesOpen ? setChangesOpen(false) : void openChanges()}
+          >{changesOpen ? 'Close Changes' : 'Changes'}</button>}
           {!buffer.readOnly && <button type="button" onClick={saveButton} disabled={!buffer.untitled && !buffer.dirty && !buffer.external}>{buffer.untitled ? 'Save As…' : 'Save'}</button>}
           <button type="button" onClick={() => void pin()} aria-pressed={buffer.pinned} title={buffer.pinned ? 'Unpin tab' : 'Pin tab'}>{buffer.pinned ? 'Unpin' : 'Pin'}</button>
           <button type="button" onClick={() => context.togglePanel(EXPLORER_PANEL, true)}>Explorer</button>
@@ -992,6 +1025,11 @@ function DocumentBody({ context, input }: { context: UiPluginContext; input: Doc
           </details>
         </div>
       </header>
+      {!buffer.readOnly && buffer.diskWritable === false && (
+        <section className="qe-permission-banner" role="status">
+          This file is not writable with the current OS permissions. Editing and review notes remain available; Save keeps the draft until write access is restored.
+        </section>
+      )}
       {renamePath !== null && (
         <div className="qe-inline-rename">
           <label>Rename to <input autoFocus value={renamePath} onChange={(event) => setRenamePath(event.currentTarget.value)} onKeyDown={(event) => {
@@ -1020,6 +1058,23 @@ function DocumentBody({ context, input }: { context: UiPluginContext; input: Doc
         </div>
       )}
       <div className="qe-document-content">
+        {showChanges && <ChangesSurface
+          context={context}
+          buffer={changesBuffer}
+          tabId={actualTabId}
+          fontSize={fontSize}
+          fontFamily={settings.fontFamily}
+          wrap={settings.wordWrap}
+          minimap={settings.minimap}
+          onDraft={submitDraft}
+          flushDraft={flushDrafts}
+          onView={updateView}
+          onEditorFocus={focusEditor}
+          onSearchInFiles={searchInFiles}
+          error={sourceError}
+          onError={setSourceError}
+          registerCommandHandlers={registerCommandHandlers}
+        />}
         {showSource && (
           <SourceEditor
             key={`${buffer.id}:${editorGeneration}`}

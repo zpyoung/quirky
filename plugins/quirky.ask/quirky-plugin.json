@@ -51,8 +51,9 @@
       },
       {
         "id": "wait",
-        "description": "Long-polls up to `timeoutMs` (max 60000); returns status `pending` if still unanswered. `timeoutMs: 0` returns the current envelope at once.",
+        "description": "Long-polls up to `timeoutMs` (max 60000); returns status `pending` if still unanswered. Up to four waits run concurrently; overflow is a Conflict with `data.reason: runtime_busy`. Disconnect releases the waiter without changing the ask. `timeoutMs: 0` returns the current envelope at once.",
         "readOnly": true,
+        "connection": true,
         "params": {
           "type": "object",
           "properties": {

@@ -176,20 +176,69 @@ function withoutCode(text: string): string {
   return output.join('\n')
 }
 
-function hasMarkdownToggleNode(markdown: string): boolean | null {
+function markdownToggleCount(markdown: string): number | null {
   let editor: Editor | null = null
   try {
     editor = createHeadlessMarkdownEditor(markdown)
-    let found = false
+    let count = 0
     editor.state.doc.descendants((node) => {
-      if (node.type.name === 'markdownToggle') found = true
+      if (node.type.name === 'markdownToggle') count += 1
     })
-    return found
+    return count
   } catch {
     return null
   } finally {
     editor?.destroy()
   }
+}
+
+function supportedDetailsCount(source: string): number | null {
+  const details: boolean[] = []
+  let summaryOpen = false
+  let summaryStart = -1
+  let count = 0
+  const tags = /<\/?details(?=\s|>)[^<>]*>|<\/?summary\b[^<>]*>/gi
+  let match: RegExpExecArray | null
+  while ((match = tags.exec(source)) !== null) {
+    const tag = match[0]
+    if (/^<details(?=\s|>)/i.test(tag)) {
+      if (summaryOpen || !/^<details(?:\s+open)?\s*>$/i.test(tag)) return null
+      details.push(false)
+      count += 1
+      continue
+    }
+    if (/^<\/details/i.test(tag)) {
+      if (summaryOpen || details.length === 0 || !details.pop()) return null
+      continue
+    }
+    if (/^<summary/i.test(tag)) {
+      if (!/^<summary>$/i.test(tag) || summaryOpen || details.length === 0 || details.at(-1) === true) return null
+      details[details.length - 1] = true
+      summaryOpen = true
+      summaryStart = match.index + tag.length
+      continue
+    }
+    if (!/^<\/summary>$/i.test(tag) || !summaryOpen) return null
+    const summary = source.slice(summaryStart, match.index)
+    const heading = /^<h([1-5])>([\s\S]*)<\/h\1>$/i.exec(summary)
+    const text = heading?.[2] ?? summary
+    if (/<\/?[A-Za-z][\w.:-]*(?:\s[^<>]*)?\/?>|<!--[\s\S]*?-->/.test(text)) return null
+    for (const entity of text.matchAll(/&(?:#[\da-f]+|#x[\da-f]+|[a-z][\w]+);/gi)) {
+      if (!['&amp;', '&lt;', '&gt;', '&quot;', '&#39;'].includes(entity[0])) return null
+    }
+    summaryOpen = false
+    summaryStart = -1
+  }
+  return summaryOpen || details.length > 0 ? null : count
+}
+
+function withoutSupportedDetails(source: string): string {
+  return source
+    .replace(/<\/?details(?:\s+open)?\s*>/gi, '')
+    .replace(/<summary>([\s\S]*?)<\/summary>/gi, (_match, summary: string) => {
+      const heading = /^<h([1-5])>([\s\S]*)<\/h\1>$/i.exec(summary)
+      return heading?.[2] ?? summary
+    })
 }
 
 export type RichEligibility = { eligible: boolean; reason: string | null; bytes: number; openAnywayAvailable: boolean }
@@ -220,14 +269,21 @@ export function richEligibility(
       openAnywayAvailable
     }
   }
-  if (/<details(?:\s|>)/i.test(outsideCode)) {
-    const hasDetails = hasMarkdownToggleNode(body)
-    if (hasDetails === null) {
+  const detailsCount = supportedDetailsCount(outsideCode)
+  if (detailsCount === null) {
+    return { eligible: false, reason: 'This Markdown could not be parsed safely. Open source mode to edit it.', bytes, openAnywayAvailable }
+  }
+  if (detailsCount > 0) {
+    const parsedCount = markdownToggleCount(body)
+    if (parsedCount === null) {
       return { eligible: false, reason: 'This Markdown could not be parsed safely. Open source mode to edit it.', bytes, openAnywayAvailable }
     }
-    if (hasDetails) return { eligible: false, reason: 'Editable only in source mode because this file contains HTML or JSX.', bytes, openAnywayAvailable }
+    if (parsedCount !== detailsCount) {
+      return { eligible: false, reason: 'Editable only in source mode because this file contains unsupported HTML or JSX.', bytes, openAnywayAvailable }
+    }
   }
-  if (/<\/?[A-Za-z][\w.:-]*(?:\s[^<>]*)?\/?>|<!--[\s\S]*?-->/.test(outsideCode)) {
+  const htmlSource = detailsCount > 0 ? withoutSupportedDetails(outsideCode) : outsideCode
+  if (/<\/?[A-Za-z][\w.:-]*(?:\s[^<>]*)?\/?>|<!--[\s\S]*?-->/.test(htmlSource)) {
     return { eligible: false, reason: 'Editable only in source mode because this file contains HTML or JSX.', bytes, openAnywayAvailable }
   }
   return { eligible: true, reason: null, bytes, openAnywayAvailable }

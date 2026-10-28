@@ -3,6 +3,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, expect, test } from 'bun:te
 import type { ProjectGroup, QuirkyEvent, Repo, Session, UiLayout, UiPluginContext, Worktree } from '@quirky/protocol'
 import { RpcErrorCode } from '@quirky/protocol'
 import { resolveMembershipTarget } from '../src/membership'
+import type { DropPreviewReport } from '../src/report'
 
 const SLOT = 'sidebar-section:quirky.worktree/worktrees'
 const BASE = Date.now()
@@ -16,6 +17,7 @@ type Preferences = {
   workspaceActivityWindowBeforeLiveOnly: Exclude<WindowName, 'live-only'>
   hideCompletedReviewWorkspaces: boolean
   hidePassingCheckWorkspaces: boolean
+  hideAutomationCreated: boolean
 }
 type SidebarState = {
   client: string
@@ -44,6 +46,8 @@ type SidebarProjection = SidebarState & {
   hiddenIds: string[]
   hiddenCount: number
   filterCount: number
+  automationHiddenIds: string[]
+  automationHiddenCount: number
   reviewHiddenIds: string[]
   reviewHiddenCount: number
   workspaces: ProjectedWorkspace[]
@@ -58,16 +62,20 @@ type RendererReport = {
   appliedFilter: Preferences | null
   hiddenIds: string[]
   hiddenCount: number
+  automationHiddenIds: string[]
+  automationHiddenCount: number
   reviewHiddenIds: string[]
   reviewHiddenCount: number
   filterCount: number
-  dropPreview: { kind: 'group' | 'repo'; id: string } | null
+  separators: { enabled: boolean; eligibleBoundaries: string[] }
+  dropPreview: DropPreviewReport | null
 }
 type TestWorld = {
   repos: Repo[]
   groups: Group[]
   worktrees: Worktree[]
   sessions: Session[]
+  now: number
   preferences: Preferences
   active: SidebarState['active']
   visits: Record<string, number>
@@ -104,6 +112,46 @@ function callGate(): CallGate {
     wait: gate.promise,
     start: started.resolve,
     release: gate.resolve
+  }
+}
+function intervalClock() {
+  const realSetInterval = globalThis.setInterval
+  const realClearInterval = globalThis.clearInterval
+  const cleanup: Array<() => void> = []
+  const intervals: { callback: () => void; delay: number; elapsed: number }[] = []
+
+  const interceptSetInterval = (<TArgs extends unknown[]>(
+    callback: (...args: TArgs) => void,
+    delay?: number,
+    ...args: TArgs
+  ) => {
+    const handle = realSetInterval(() => {}, delay)
+    cleanup.push(() => realClearInterval(handle))
+    if (typeof callback === 'function') {
+      intervals.push({
+        callback: () => callback(...args),
+        delay: delay ?? 0,
+        elapsed: 0
+      })
+    }
+    return handle
+  }) as typeof globalThis.setInterval
+  globalThis.setInterval = interceptSetInterval
+
+  return {
+    advance(milliseconds: number) {
+      for (const interval of intervals) {
+        interval.elapsed += milliseconds
+        while (interval.delay > 0 && interval.elapsed >= interval.delay) {
+          interval.elapsed -= interval.delay
+          interval.callback()
+        }
+      }
+    },
+    restore() {
+      globalThis.setInterval = realSetInterval
+      for (const clear of cleanup) clear()
+    }
   }
 }
 
@@ -241,11 +289,13 @@ function setup(
     alwaysShowDefaultBranchWorkspace: true,
     workspaceActivityWindowBeforeLiveOnly: 'all',
     hideCompletedReviewWorkspaces: false,
-    hidePassingCheckWorkspaces: false
+    hidePassingCheckWorkspaces: false,
+    hideAutomationCreated: false
   }
   const world: TestWorld = {
     ...data,
     sessions: [session('s-other', 'w-other', 'working')],
+    now: BASE,
     preferences,
     active: null,
     visits: {},
@@ -302,7 +352,7 @@ function setup(
         }
       } else if (window !== 'all') {
         const days = window === 'today' ? 1 : window === 'week' ? 7 : window === 'month' ? 30 : snapshot.preferences.workspaceActivityCustomDays
-        visible = activityAt >= BASE - days * DAY
+        visible = activityAt >= world.now - days * DAY
         reason = visible ? 'recent' : 'old'
       }
       const review = world.reviews[item.id]
@@ -325,13 +375,16 @@ function setup(
       }
     })
     const activityHiddenIds = new Set(projected.filter((item) => item.reason === 'sleeping' || item.reason === 'old').map((item) => item.worktreeId))
+    const automationHiddenIds = snapshot.preferences.hideAutomationCreated
+      ? world.worktrees.filter((item) => item.automationProvenance?.kind === 'created-by-automation').map((item) => item.id)
+      : []
     const reviewHiddenIds = projected.filter((item) => {
       const review = world.reviews[item.worktreeId]
       if (!review || review.stale || review.error) return false
       return (snapshot.preferences.hideCompletedReviewWorkspaces && (review.state === 'merged' || review.state === 'closed')) ||
         (snapshot.preferences.hidePassingCheckWorkspaces && review.checksStatus === 'success')
     }).map((item) => item.worktreeId)
-    const hidden = new Set([...activityHiddenIds, ...reviewHiddenIds])
+    const hidden = new Set([...activityHiddenIds, ...automationHiddenIds, ...reviewHiddenIds])
     const visibleIds = projected.filter((item) => !hidden.has(item.worktreeId)).map((item) => item.worktreeId)
     const hiddenIds = projected.filter((item) => hidden.has(item.worktreeId)).map((item) => item.worktreeId)
     return {
@@ -341,7 +394,10 @@ function setup(
       hiddenCount: activityHiddenIds.size,
       filterCount: (window === 'all' ? 0 : 1) +
         Number(snapshot.preferences.hideCompletedReviewWorkspaces) +
-        Number(snapshot.preferences.hidePassingCheckWorkspaces),
+        Number(snapshot.preferences.hidePassingCheckWorkspaces) +
+        Number(snapshot.preferences.hideAutomationCreated),
+      automationHiddenIds,
+      automationHiddenCount: automationHiddenIds.length,
       reviewHiddenIds,
       reviewHiddenCount: reviewHiddenIds.length,
       workspaces: projected
@@ -408,6 +464,7 @@ function setup(
           if (params.alwaysShowDefaultBranchWorkspace !== undefined) world.preferences.alwaysShowDefaultBranchWorkspace = params.alwaysShowDefaultBranchWorkspace as boolean
           if (params.hideCompletedReviewWorkspaces !== undefined) world.preferences.hideCompletedReviewWorkspaces = params.hideCompletedReviewWorkspaces as boolean
           if (params.hidePassingCheckWorkspaces !== undefined) world.preferences.hidePassingCheckWorkspaces = params.hidePassingCheckWorkspaces as boolean
+          if (params.hideAutomationCreated !== undefined) world.preferences.hideAutomationCreated = params.hideAutomationCreated as boolean
           return state(typeof params.client === 'string' ? params.client : 'desktop')
         case 'quirky.sidebar-extras/activate': {
           if (world.extrasDisabled) throw new RpcLike('sidebar extras is disabled', RpcErrorCode.MethodNotFound)
@@ -1222,4 +1279,97 @@ test('hosting review events refresh only active filters and late projections can
   await h.flush()
   expect(card('feature')).toBeUndefined()
   expect(lastReport(h).reviewHiddenIds).toContain('w-feature')
+})
+test('quiet activity aging refreshes at sixty seconds without store events', async () => {
+  const h = setup()
+  h.world.preferences.workspaceActivityWindow = 'today'
+  h.world.worktrees.find((item) => item.id === 'w-other')!.lastActivityAt = BASE - DAY + 1
+  const timers = intervalClock()
+  try {
+    await h.mount()
+    expect(card('other')).toBeDefined()
+    const projectionCalls = h.calls.filter((call) => call.method === 'quirky.sidebar-extras/projection').length
+
+    h.world.now = BASE + 59_999
+    await act(async () => {
+      timers.advance(59_999)
+      await Promise.resolve()
+    })
+    await h.flush()
+    expect(card('other')).toBeDefined()
+    expect(h.calls.filter((call) => call.method === 'quirky.sidebar-extras/projection')).toHaveLength(projectionCalls)
+
+    h.world.now = BASE + 60_000
+    await act(async () => {
+      timers.advance(1)
+      await Promise.resolve()
+    })
+    await h.flush()
+    expect(card('other')).toBeUndefined()
+    expect(lastReport(h).hiddenCount).toBeGreaterThan(0)
+  } finally {
+    await currentCleanup?.()
+    currentCleanup = null
+    timers.restore()
+  }
+})
+test('section separators mark top-level boundaries only with Pinned first', async () => {
+  const h = setup()
+  await h.mount()
+  const separators = lastReport(h).separators
+  expect(separators.enabled).toBe(true)
+  expect(separators.eligibleBoundaries).toContain('group:g-team')
+  expect(separators.eligibleBoundaries).not.toContain('pinned')
+  expect(host.querySelector('section.pinned')?.classList.contains('section-separator')).toBe(false)
+  expect(sectionForGroup('Team')?.classList.contains('section-separator')).toBe(true)
+  expect(sectionForGroup('Child')?.classList.contains('section-separator')).toBe(false)
+  expect(sectionForRepo('api')?.classList.contains('section-separator')).toBe(false)
+})
+test('sticky top-level headers suppress adjacent section separators', async () => {
+  const style = document.createElement('style')
+  style.textContent = 'section.group[data-top-level-section="group:g-team"] > .group-header { position: sticky; }'
+  document.head.append(style)
+  const h = setup()
+  try {
+    await h.mount()
+    const separators = lastReport(h).separators
+    expect(separators.eligibleBoundaries).not.toContain('group:g-team')
+    expect(separators.eligibleBoundaries).not.toContain('group:g-release')
+    expect(separators.eligibleBoundaries).toContain('repo:r-web')
+    expect(sectionForGroup('Team')?.classList.contains('section-separator')).toBe(false)
+    expect(sectionForGroup('Child')?.classList.contains('section-separator')).toBe(false)
+  } finally {
+    style.remove()
+  }
+})
+
+test('automation filtering uses only durable attribution and appears in visible counts', async () => {
+  const h = setup()
+  const attributed = h.world.worktrees.find((item) => item.id === 'w-lost')!
+  attributed.name = 'auto-generated'
+  attributed.automationProvenance = {
+    kind: 'created-by-automation', automationId: 'auto-1', automationName: 'Audit',
+    runId: 'run-1', runTitle: 'Audit run', projectId: 'r-web', hostId: 'local'
+  }
+  const namePrefixApi = h.world.worktrees.find((item) => item.id === 'w-other')!
+  namePrefixApi.name = 'auto-manual'
+  namePrefixApi.createdBy = 'api'
+  await h.mount()
+  await openFilters(h)
+
+  expect(checkboxFor('Hide automation-created')?.checked).toBe(false)
+  expect(card('auto-generated')).toBeDefined()
+  expect(card('auto-manual')).toBeDefined()
+  await h.click(checkboxFor('Hide automation-created')!)
+
+  expect(h.world.preferences.hideAutomationCreated).toBe(true)
+  expect(card('auto-generated')).toBeUndefined()
+  expect(card('auto-manual')).toBeDefined()
+  expect(lastReport(h).automationHiddenIds).toEqual(['w-lost'])
+  expect(lastReport(h).automationHiddenCount).toBe(1)
+  expect(lastReport(h).hiddenIds).toContain('w-lost')
+  expect(lastReport(h).appliedFilter?.hideAutomationCreated).toBe(true)
+  expect(lastReport(h).filterCount).toBe(1)
+  expect(filterButton()?.textContent).toContain('1')
+  expect(h.calls.filter((call) => call.method === 'quirky.sidebar-extras/set').at(-1)?.params).toEqual({ hideAutomationCreated: true })
 })

@@ -1080,8 +1080,7 @@
       "deps": [
         "sa-browser-agent"
       ],
-      "status": "in-progress",
-      "lane": 5
+      "status": "done"
     },
     {
       "id": "m4-hosting-ui-review-provider-parity",
@@ -1110,8 +1109,7 @@
         "sa-browser-pane",
         "sa-browser-profiles-settings"
       ],
-      "status": "in-progress",
-      "lane": 8
+      "status": "done"
     },
     {
       "id": "sb-mobile-install-links",
@@ -1149,7 +1147,7 @@
         "sa-browser-profiles-settings",
         "sa-browser-agent-extras"
       ],
-      "status": "todo"
+      "status": "done"
     },
     {
       "id": "sa-browser-native-identity",
@@ -1223,8 +1221,7 @@
         "m4-worktrees-create-from-github",
         "m4-hosting-ui-reviews"
       ],
-      "status": "in-progress",
-      "lane": 10
+      "status": "done"
     },
     {
       "id": "m6-heimdall-host-power",
@@ -1236,8 +1233,7 @@
       "deps": [
         "m6-heimdall-core"
       ],
-      "status": "in-progress",
-      "lane": 11
+      "status": "done"
     },
     {
       "id": "m6-orchestration-idle-pointer-shutdown",
@@ -1249,8 +1245,7 @@
       "deps": [
         "m6-orchestration-core"
       ],
-      "status": "in-progress",
-      "lane": 1
+      "status": "done"
     },
     {
       "id": "m5-automations-dispatch-remote-and-args",
@@ -1287,8 +1282,7 @@
       "deps": [
         "m5-loops-ui"
       ],
-      "status": "in-progress",
-      "lane": 2
+      "status": "done"
     },
     {
       "id": "m7-editor-source-control-completion",
@@ -1302,8 +1296,7 @@
       "deps": [
         "m7-sweep-editor-source-control"
       ],
-      "status": "in-progress",
-      "lane": 3
+      "status": "done"
     },
     {
       "id": "m7-sweep-terminal-completion",
@@ -1323,8 +1316,7 @@
       "deps": [
         "m7-sweep-terminal"
       ],
-      "status": "in-progress",
-      "lane": 9
+      "status": "done"
     },
     {
       "id": "sb-mobile-app-prerequisites",
@@ -1349,8 +1341,7 @@
       "deps": [
         "m2-editor-complete-remaining-flows"
       ],
-      "status": "in-progress",
-      "lane": 6
+      "status": "done"
     },
     {
       "id": "m7-sweep-automation-completion",
@@ -1364,8 +1355,7 @@
       "deps": [
         "m7-sweep-automation"
       ],
-      "status": "in-progress",
-      "lane": 12
+      "status": "done"
     },
     {
       "id": "m7-orchestration-heimdall-unbuilt-flows",
@@ -1391,7 +1381,7 @@
       "deps": [
         "sb-mobile-app-panels"
       ],
-      "status": "todo"
+      "status": "done"
     },
     {
       "id": "fix-flaky-daemon-pty-client",
@@ -1404,12 +1394,83 @@
       "status": "done"
     },
     {
+      "id": "m7-ledger-remote-host-flows",
+      "milestone": "M7",
+      "title": "Build unimplemented SSH-host ledger workspace ownership/routing, remote import/evidence and selected-runtime availability from ledger.md after public host registration/incarnation lookup, remote repo/workspace identity and generation-fenced filesystem/execution APIs exist. Current ledger roots are local; never dereference SSH paths locally, invent synthetic generations or fall back to local reads. Preserve independent local ledger behavior and existing remote automation owner boundaries. Block if the public host prerequisite remains absent; this is unbuilt functionality, not verification/review/debugging.",
+      "docs": [
+        "ledger.md"
+      ],
+      "deps": [
+        "m7-sweep-automation-completion"
+      ],
+      "status": "blocked"
+    },
+    {
+      "id": "sb-mobile-push-provider-prerequisites",
+      "milestone": "Side B",
+      "title": "Implement remaining mobile native APNs/FCM token registration, per-host leases, OS permission/sound and background tap delivery after an operator-controlled push gateway contract and native delivery credentials/entitlements exist; implement GitLab/Linear/Jira Tasks list/filter/board/detail/comments/field mutations and linked workspace creation after provider-owned public APIs land. Terminal-artifact preview/save/grants are already implemented and are not part of this follow-up.",
+      "docs": [
+        "mobile.md"
+      ],
+      "deps": [
+        "sb-mobile-app-panels-unbuilt-flows",
+        "m4-hosting-api-gitlab",
+        "m4-worktrees-create-from-gitlab"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "m7-diff-markdown-local-images",
+      "milestone": "M7",
+      "title": "Complete detached modified-side Markdown diff local-image rendering through a public editor-owned authorized resource/lifetime contract. Existing text-only renderPreview deliberately omits local images; add source-bound authorization and exact per-mounted-diff resource release without opening/mutating editor buffers, private imports, unsafe URL rendering or cross-split invalidation. Preserve source-bound editor previews and public Git hosted tab identity.",
+      "docs": [
+        "editor.md",
+        "source-control.md"
+      ],
+      "deps": [
+        "m7-editor-source-control-completion"
+      ],
+      "status": "done"
+    },
+    {
+      "id": "m7-terminal-runtime-native-and-worktree-parity",
+      "milestone": "M7",
+      "title": "Build the distinct unbuilt terminal-domain flows in docs/quirk/specs/2026-10-28-m7-sweep-terminal-completion/logic.md disposition ledger: caller-preserving orchestration/native-provider Ask handoff and unavailable-envelope/kernel/mobile caller migration; external installed CLI command manager/status/reveal/profile launchers and saved/one-off paired runtime selection without local fallback; public Dashboard pop-out window route; Codex/Muse transcript polling/retry, private OSC9999 and remote status/hook producers (Claude per-launch statusline already ships); authoritative nonempty model discovery/retirement, stale-choice UI and host capability gates; hosting/review/branch/conversation AI recipe composition through the canonical resolver; distinct terminal browser/Markdown/editor/handoff tab composition, Mobile Emulator tab, renderer extras and remappable shortcuts consistent with visible-only mounted views; remaining worktree PR grouping/agent-activity sort/project order/card/property/CLI-origin/default-branch/detached/other-client/host filters, external visibility inbox/policies, back-forward/keyboard/Open-in, manual reference link/unlink, custom-status board/icons/avatar/tracker/project identity, sparse/prepared-pool/keep-main/behind/host-run/issue-command-split/environment/default-tabs/model/shared-path creation choices; archived-seven-day cleanup metadata, volatile/remote-connectivity classifiers and exact per-window sleep routes; supported native notification permission/click/dismiss hooks, signed terminal-host launchd/TCC/admission/upgrade packaging and public folder-picker bridge (SDK dialog exists). Reconcile later shipped owners before coding: do NOT duplicate landed phone panels/foreground notification controls/terminal artifact grants, automation provenance/sidebar filters, Browser agent/import/routing controls, editor viewer leases, host-power/orchestration shutdown or the existing automation-remote/sidebar-extras/dock/native clipboard owners. Preserve explicit hosting/Objective/sitter exclusions and macOS scope. This is unbuilt flow implementation, not a testing/review/debug task.",
+      "docs": [
+        "ask.md",
+        "cli.md",
+        "agent-status.md",
+        "launch-settings.md",
+        "notifications.md",
+        "providers.md",
+        "term-daemon.md",
+        "term-ui.md",
+        "worktrees.md"
+      ],
+      "deps": [
+        "m7-sweep-terminal-completion"
+      ],
+      "status": "in-progress",
+      "lane": 11
+    },
+    {
+      "id": "sb-mobile-chat-voice-native-ruling",
+      "milestone": "Side B",
+      "title": "Build only remaining unbuilt phone flows after their prerequisites: interactive native-chat transcripts/attachments/queued-chat/options/background-task UI and dictation/voice models/settings require an authorized architecture/roadmap ruling plus owned public APIs; existing Native browser tab mirroring requires a supported safe Native-frame/control producer and phone-scoped identity/data path. Keep shipped terminal/ask, reversible Sleep, origin filters, Markdown and explicit Chrome Watch unchanged; do not silently convert Native tabs or override sb-mobile-app D5 and architecture background-only/roadmap dictation exclusions. See sb-mobile-app-prerequisites D3,D7,D12.",
+      "docs": [
+        "mobile.md"
+      ],
+      "deps": [
+        "sb-mobile-app-prerequisites"
+      ],
+      "status": "todo"
+    },
+    {
       "id": "m7-test-triage",
       "milestone": "M7",
       "title": "End-phase test triage: run bun scripts/suite.ts packages apps plugins, bun test scripts and bun run typecheck on build/roadmap, and add one fix-test-<area>-<MMDD> item per failing package, app or plugin (naming its failing files and tests) so the lanes split the debugging; change no code",
       "docs": [],
       "deps": [
-        "sb-mobile-app-panels",
         "sa-browser-agent-extras",
         "m4-hosting-ui-review-browser-routing",
         "sa-browser-profile-import-ui",
@@ -1423,7 +1484,10 @@
         "m2-editor-build-unbuilt-flows",
         "m7-sweep-automation-completion",
         "m7-orchestration-heimdall-unbuilt-flows",
-        "sb-mobile-app-panels-unbuilt-flows"
+        "sb-mobile-app-panels-unbuilt-flows",
+        "m7-diff-markdown-local-images",
+        "m7-terminal-runtime-native-and-worktree-parity",
+        "sb-mobile-chat-voice-native-ruling"
       ],
       "status": "todo"
     },

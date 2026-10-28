@@ -1,7 +1,8 @@
 import type { ActivityPreferences } from './useSidebarActivity'
 import type { MembershipTarget } from './membership'
-import type { AgentDisplayState, GitHubWorktreeLink, ProjectGroup, Repo, Session, Worktree, WorktreePushTarget, WorktreeStatus } from '@quirky/protocol'
+import type { AgentDisplayState, GitHubWorktreeLink, ProjectGroup, Repo, Session, Worktree, WorktreeAutomationProvenance, WorktreePushTarget, WorktreeStatus } from '@quirky/protocol'
 import { worktreeGlyph, worktreeStatus, type DisplayStatus } from './status'
+import type { StockWorktreeOptions } from './control-types'
 import type { LoopReport, LoopStatusSnapshot } from './loop-status'
 
 /** A create the window has sent and not yet seen finish; shown as a pending row under its project. */
@@ -13,6 +14,7 @@ export type DialogState =
   | { kind: 'update' | 'parent' | 'base-fallback'; worktreeId: string }
   | { kind: 'delete'; worktreeId: string; withDescendants: boolean }
   | { kind: 'trust'; repoId: string }
+  | { kind: 'cleanup' }
   | { kind: 'project-settings' | 'remove-project'; repoId: string }
   | { kind: 'add-project' }
   | { kind: 'import'; path: string }
@@ -63,13 +65,23 @@ export type ActivityReport = {
   hiddenIds: string[]
   hiddenCount: number
   filterCount: number
+  automationHiddenIds?: string[]
+  automationHiddenCount?: number
   reviewHiddenIds?: string[]
   reviewHiddenCount?: number
 }
 export type FilterStatus = 'loading' | 'available' | 'missing' | 'error'
+export type AutomationAvailabilityStatus = 'not-checked' | 'checking' | 'available' | 'missing' | 'error' | 'unavailable'
+export type AutomationAvailabilitySnapshot = {
+  worktreeId: string
+  automationId: string
+  runId: string
+  definition: AutomationAvailabilityStatus
+  runHistory: AutomationAvailabilityStatus
+}
 export type DropPreviewReport = MembershipTarget
 
-/** Projects eligible hairline boundaries from ordered logical top-level sections and sticky headers. */
+/** Projects top-level hairline boundaries, excluding the first, host-adjacent, and sticky edges. */
 export function projectSeparatorBoundaries(
   sectionKeys: readonly string[],
   stickySections: ReadonlySet<string>,
@@ -80,7 +92,12 @@ export function projectSeparatorBoundaries(
   for (let index = 1; index < sectionKeys.length; index++) {
     const previous = sectionKeys[index - 1]!
     const current = sectionKeys[index]!
-    if (!stickySections.has(previous) && !stickySections.has(current)) boundaries.push(current)
+    if (
+      !stickySections.has(previous) &&
+      !stickySections.has(current) &&
+      !previous.startsWith('host:') &&
+      !current.startsWith('host:')
+    ) boundaries.push(current)
   }
   return boundaries
 }
@@ -279,6 +296,17 @@ export type WorkspaceReport = {
   linkedIssue?: GitHubWorktreeLink
   pushTarget?: WorktreePushTarget
   loop?: LoopReport
+  sleeping: boolean
+  manualOrder: number
+  automation?: {
+    provenance: WorktreeAutomationProvenance
+    expanded: boolean
+    availability: { definition: AutomationAvailabilityStatus; runHistory: AutomationAvailabilityStatus }
+    navigation: {
+      automation: { page: 'detail'; automationId: string }
+      run: { page: 'run'; automationId: string; runId: string }
+    }
+  }
 }
 
 export type ProjectReport = { id: string; name: string; kind: 'git' | 'folder'; worktrees: WorkspaceReport[] }
@@ -296,6 +324,8 @@ export type WorktreesReport = {
   visibleIds: string[] | null
   hiddenIds: string[]
   hiddenCount: number
+  automationHiddenIds: string[]
+  automationHiddenCount: number
   reviewHiddenIds: string[]
   reviewHiddenCount: number
   filterCount: number
@@ -304,6 +334,10 @@ export type WorktreesReport = {
   separators: SeparatorReport
   dropPreview: DropPreviewReport | null
   loops?: { status: LoopStatusSnapshot['status']; error: string | null }
+  stockOptions?: StockWorktreeOptions
+  stockHiddenIds?: string[]
+  stockHiddenCount?: number
+  revealSleeping?: boolean
 }
 
 export type ReportInput = {
@@ -318,6 +352,7 @@ export type ReportInput = {
   notices?: NoticeReport[]
   visibleIds?: ReadonlySet<string> | null
   activity?: ActivityReport | null
+  automationAvailability?: AutomationAvailabilitySnapshot | null
   activityStatus?: FilterStatus
   activityError?: string | null
   separators?: SeparatorReport
@@ -335,6 +370,14 @@ export function buildReport(input: ReportInput): WorktreesReport {
   const workspace = ({ worktree, depth, repoName }: TreeRow): WorkspaceReport => {
     const glyph = sessions === null ? null : worktreeGlyph(sessions, worktree.id, now)
     const loop = input.loopStatus?.byWorktree.get(worktree.id)
+    const provenance = worktree.automationProvenance
+    const checkedAutomation = input.automationAvailability
+    const automationAvailability = provenance?.kind === 'created-by-automation' &&
+      checkedAutomation?.worktreeId === worktree.id &&
+      checkedAutomation.automationId === provenance.automationId &&
+      checkedAutomation.runId === provenance.runId
+      ? checkedAutomation
+      : null
     return {
       id: worktree.id,
       name: worktree.name,
@@ -354,6 +397,8 @@ export function buildReport(input: ReportInput): WorktreesReport {
       depth,
       pending: false,
       removing: worktree.removing,
+      sleeping: 'sleeping' in worktree && worktree.sleeping === true,
+      manualOrder: 'manualOrder' in worktree && typeof worktree.manualOrder === 'number' ? worktree.manualOrder : 0,
       selected: worktree.id === selectedId,
       ...(loop ? {
         loop: {
@@ -364,6 +409,20 @@ export function buildReport(input: ReportInput): WorktreesReport {
           iterationsCompleted: loop.iterationsCompleted,
           maxIterations: loop.maxIterations,
           label: loop.label
+        }
+      } : {}),
+      ...(provenance?.kind === 'created-by-automation' ? {
+        automation: {
+          provenance,
+          expanded: automationAvailability !== null,
+          availability: {
+            definition: automationAvailability?.definition ?? 'not-checked',
+            runHistory: automationAvailability?.runHistory ?? 'not-checked'
+          },
+          navigation: {
+            automation: { page: 'detail', automationId: provenance.automationId },
+            run: { page: 'run', automationId: provenance.automationId, runId: provenance.runId }
+          }
         }
       } : {})
     }
@@ -388,6 +447,8 @@ export function buildReport(input: ReportInput): WorktreesReport {
         depth: 0,
         pending: true,
         removing: false,
+        sleeping: false,
+        manualOrder: 0,
         selected: false
       }))
     ]
@@ -412,6 +473,8 @@ export function buildReport(input: ReportInput): WorktreesReport {
     visibleIds: input.visibleIds ? [...input.visibleIds] : null,
     hiddenIds: activity?.hiddenIds ?? [],
     hiddenCount: activity?.hiddenCount ?? 0,
+    automationHiddenIds: activity?.automationHiddenIds ?? [],
+    automationHiddenCount: activity?.automationHiddenCount ?? 0,
     reviewHiddenIds: activity?.reviewHiddenIds ?? [],
     reviewHiddenCount: activity?.reviewHiddenCount ?? 0,
     filterCount: activity?.filterCount ?? 0,

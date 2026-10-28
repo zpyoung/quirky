@@ -1,3 +1,12 @@
+import type { BrowserFamily, Cookie } from '../cookies/types'
+
+export type CookieTransport = {
+  list(profileId: string): Promise<Cookie[]>
+  delete(profileId: string, cookie: Cookie): Promise<void>
+  set(profileId: string, cookie: Cookie): Promise<void>
+}
+export type BrowserDialogEvent = { pageId: string; type: string }
+
 export type BrowserSpawnOptions = {
   cwd: string
   env: Record<string, string>
@@ -17,6 +26,10 @@ export type BrowserDependencies = {
   spawn: BrowserSpawn
   chromeArguments?: string[]
   chromePath?: string | null
+  sourceRoots?: Partial<Record<BrowserFamily, string>>
+  keyProvider?: (family: BrowserFamily) => Promise<Buffer | null>
+  wrapCookieTransport?: (transport: CookieTransport) => CookieTransport
+  onDialog?: (event: BrowserDialogEvent) => void
   onOperation?: (event: BrowserOperationEvent) => void
   onControl?: (control: BrowserTestControl) => void
   /** Overrides the OS destination only for isolated runtime consumers/tests. */

@@ -1087,7 +1087,7 @@
       },
       {
         "id": "restore",
-        "description": "Starts a shell in a session that ended with the PTY host and can be restored; a running session is returned unchanged.",
+        "description": "Restores retained terminal history in place; shells start a shell, while agent sessions resume the captured provider conversation from the saved launch snapshot. Missing or unsupported agent identity is refused without discarding history; a live session is returned unchanged.",
         "params": {
           "type": "object",
           "properties": {
@@ -2039,7 +2039,7 @@
       {
         "id": "restore",
         "words": "restore",
-        "summary": "start a shell in a session that was lost with the terminal host",
+        "summary": "restore a lost terminal; resume agents only from captured provider identity and launch snapshot",
         "positionals": [
           {
             "name": "session",

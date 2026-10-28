@@ -232,6 +232,33 @@ export async function setWorktree(
   }
 }
 
+/** Changes only persisted visibility metadata; sleep first checks the exact selected subtree. */
+export async function setWorkspaceSleeping(
+  context: UiPluginContext,
+  worktreeId: string,
+  sleeping: boolean,
+  withDescendants = false
+): Promise<boolean> {
+  const params = { worktree: worktreeId, ...(withDescendants ? { withDescendants: true } : {}) }
+  try {
+    if (sleeping) {
+      const preview = await context.call('quirky.worktree/sleepPreview', params) as {
+        worktrees: Array<{ name: string; allowed: boolean; blockers: Array<{ detail: string }> }>
+      }
+      const blocked = preview.worktrees.filter((row) => !row.allowed)
+      if (blocked.length > 0) {
+        context.toast('Could not sleep workspace', blocked.map((row) => `${row.name}: ${row.blockers.map((blocker) => blocker.detail).join(' ')}`).join(' '))
+        return false
+      }
+    }
+    await context.call(`quirky.worktree/${sleeping ? 'sleep' : 'wake'}`, params)
+    return true
+  } catch (error) {
+    context.toast(`Could not ${sleeping ? 'sleep' : 'wake'} workspace`, messageOf(error))
+    return false
+  }
+}
+
 /** Puts `text` on the clipboard; a refusal becomes a toast. */
 export async function copyText(context: UiPluginContext, text: string): Promise<void> {
   try {

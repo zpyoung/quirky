@@ -6,10 +6,11 @@ import { builtinsDir, makeTempHome, startHarness, type Harness } from '../../../
 import { isolateGitConfig, makeRepo } from '../../quirky.repo/test/git-fixtures'
 
 const { scratch } = isolateGitConfig()
-function testBuiltins(fakeHosting = false): string {
+function testBuiltins(fakeHosting = false, includeAgentStatus = false): string {
   const directory = join(scratch(), 'builtin')
   mkdirSync(directory, { recursive: true })
-  for (const name of ['quirky.repo', 'quirky.worktree', 'quirky.session', 'quirky.agents', 'quirky.git', 'quirky.sidebar-extras']) {
+  const plugins = ['quirky.repo', 'quirky.worktree', 'quirky.session', 'quirky.agents', 'quirky.git', 'quirky.sidebar-extras']
+  for (const name of [...plugins, ...(includeAgentStatus ? ['quirky.agent-status'] : [])]) {
     symlinkSync(join(builtinsDir(), name), join(directory, name))
   }
   if (fakeHosting) writeFakeHostingPlugin(directory)
@@ -96,6 +97,7 @@ export type ExtrasPreferences = {
   workspaceActivityWindowBeforeLiveOnly: Exclude<ActivityWindow, 'live-only'>
   hideCompletedReviewWorkspaces: boolean
   hidePassingCheckWorkspaces: boolean
+  hideAutomationCreated: boolean
 }
 
 export type ExtrasState = {
@@ -111,6 +113,8 @@ export type ActivityProjection = ExtrasState & {
   hiddenIds: string[]
   hiddenCount: number
   filterCount: number
+  automationHiddenIds: string[]
+  automationHiddenCount: number
   reviewHiddenIds: string[]
   reviewHiddenCount: number
   workspaces: {
@@ -139,6 +143,7 @@ export type TestEnvironment = {
   client: QuirkyClient
   worktreeRoot: string
   fakeHosting: boolean
+  agentStatus: boolean
 }
 
 export type TestClock = {
@@ -205,12 +210,13 @@ export function fakeClock(initial: number): TestClock {
   }
 }
 
-export async function boot(options: { fakeHosting?: boolean } = {}): Promise<TestEnvironment> {
+export async function boot(options: { fakeHosting?: boolean; agentStatus?: boolean } = {}): Promise<TestEnvironment> {
   const fakeHosting = options.fakeHosting ?? false
+  const agentStatus = options.agentStatus ?? false
   const home = makeTempHome('qse-')
   let harness: Harness | undefined
   try {
-    harness = await startHarness({ home, builtinPluginsDir: testBuiltins(fakeHosting) })
+    harness = await startHarness({ home, builtinPluginsDir: testBuiltins(fakeHosting, agentStatus) })
     const client = await harness.connect('cli', 'sidebar-extras-tests')
     const root = scratch()
     const worktreeRoot = join(root, 'worktrees')
@@ -219,7 +225,7 @@ export async function boot(options: { fakeHosting?: boolean } = {}): Promise<Tes
       id: 'setting:quirky.worktree/worktreesRoot',
       value: realpathSync(worktreeRoot)
     })
-    return { harness, client, worktreeRoot: realpathSync(worktreeRoot), fakeHosting }
+    return { harness, client, worktreeRoot: realpathSync(worktreeRoot), fakeHosting, agentStatus }
   } catch (error) {
     if (harness) await harness.cleanup()
     else rmSync(home, { recursive: true, force: true })
@@ -231,14 +237,15 @@ export async function restart(env: TestEnvironment): Promise<TestEnvironment> {
   const home = env.harness.home
   const worktreeRoot = env.worktreeRoot
   const fakeHosting = env.fakeHosting
+  const agentStatus = env.agentStatus
   for (const client of env.harness.clients) client.close()
   await env.harness.daemon.stop()
   env.harness.pty.stop()
-  const harness = await startHarness({ home, builtinPluginsDir: testBuiltins(fakeHosting) })
+  const harness = await startHarness({ home, builtinPluginsDir: testBuiltins(fakeHosting, agentStatus) })
   // Assign before connecting so the fixture's afterEach can clean up a replacement that fails to connect.
   env.harness = harness
   const client = await harness.connect('cli', 'sidebar-extras-tests-restarted')
-  return { harness, client, worktreeRoot, fakeHosting }
+  return { harness, client, worktreeRoot, fakeHosting, agentStatus }
 }
 
 export async function createGitProject(client: QuirkyClient, files: Record<string, string> = { 'README.md': 'clean\n' }) {

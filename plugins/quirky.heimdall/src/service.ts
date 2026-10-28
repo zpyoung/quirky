@@ -54,6 +54,41 @@ export function createKernelService(context: PluginContext, now: () => number = 
   let started = false
   let startPromise: Promise<void> | undefined
   let shutdownPromise: Promise<void> | undefined
+  let suspended = context.hostPower.suspended
+  const disposeHostPower = context.hostPower.subscribe({
+    suspend() {
+      if (stopped || suspended) return
+      suspended = true
+      const failures: Error[] = []
+      for (const [watcherId, runner] of runners) {
+        try {
+          runner.suspend()
+        } catch (error) {
+          failures.push(new Error(`watcher ${watcherId} suspend failed: ${errorMessage(error)}`, { cause: error }))
+        }
+      }
+      if (failures.length > 0) {
+        const diagnostics = failures.map((failure) => failure.message).join('; ')
+        throw new AggregateError(failures, `failed to suspend ${failures.length} Heimdall runner(s): ${diagnostics}`)
+      }
+    },
+    resume() {
+      if (stopped || !suspended) return
+      suspended = false
+      const failures: Error[] = []
+      for (const [watcherId, runner] of runners) {
+        try {
+          runner.resume()
+        } catch (error) {
+          failures.push(new Error(`watcher ${watcherId} resume failed: ${errorMessage(error)}`, { cause: error }))
+        }
+      }
+      if (failures.length > 0) {
+        const diagnostics = failures.map((failure) => failure.message).join('; ')
+        throw new AggregateError(failures, `failed to resume ${failures.length} Heimdall runner(s): ${diagnostics}`)
+      }
+    }
+  })
 
   const changed = (watcherId: string): void => {
     if (!stopped) context.emit('changed', { watcherId })
@@ -137,12 +172,14 @@ export function createKernelService(context: PluginContext, now: () => number = 
     }
     const existing = runners.get(enrollment.watcherId)
     if (existing) {
+      if (suspended) existing.suspend()
       existing.schedule(0)
       return existing
     }
     const runnerOptions: RunnerOptions = { ...options, enrollment }
     const runner = createRunner(runnerOptions)
     runners.set(enrollment.watcherId, runner)
+    if (suspended) runner.suspend()
     runner.schedule(0)
     if (wakesBeforeRestore.delete(enrollment.watcherId)) wake(enrollment.watcherId)
     return runner
@@ -402,6 +439,7 @@ export function createKernelService(context: PluginContext, now: () => number = 
     if (shutdownPromise) return shutdownPromise
     stopped = true
     unsubscribeWorkspaceChanges()
+    disposeHostPower()
     const ownerShutdown = owner.shutdown()
     orchestration.dispose()
     wakesBeforeRestore.clear()

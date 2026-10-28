@@ -5,6 +5,8 @@ export type PanelRoute =
   | { kind: 'review'; worktreeId: string; path?: string }
   | { kind: 'files'; worktreeId: string; path?: string }
   | { kind: 'file-preview'; worktreeId: string; path: string }
+  | { kind: 'terminal-artifacts'; worktreeId: string; sessionId: string }
+  | { kind: 'terminal-artifact'; worktreeId: string; sessionId: string; artifactId: string; grant: string }
   | { kind: 'tasks' }
   | { kind: 'accounts' }
   | { kind: 'agent-history'; worktreeId: string }
@@ -12,4 +14,10 @@ export type PanelRoute =
 
 export type PhoneRoute = MobileRoute | { kind: 'home' }
 export type PanelBridge = MobilePageBridge
-export type PanelProps = { bridge: PanelBridge; route: PanelRoute }
+export type PanelNavigationGuard = () => Promise<boolean>
+export type PanelProps = {
+  bridge: PanelBridge
+  route: PanelRoute
+  connected?: boolean
+  onRegisterNavigationGuard?: (guard: PanelNavigationGuard) => () => void
+}

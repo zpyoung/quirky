@@ -17,11 +17,13 @@ export type RemoveParams = {
   withDescendants?: boolean
   skipArchive?: boolean
   allowFailedArchiveHook?: boolean
+  /** Internal cleanup guard: refuse live or unknown runtime state and never close sessions. */
+  safeOnly?: boolean
 }
 
 export type DeleteBranchParams = { repo: string; branch: string; head: string }
 
-type Options = { force: boolean; withDescendants: boolean; skipArchive: boolean; allowFailedArchiveHook: boolean }
+type Options = { force: boolean; withDescendants: boolean; skipArchive: boolean; allowFailedArchiveHook: boolean; safeOnly: boolean }
 
 /** A remove that is running in this daemon, so an identical request can share it. */
 export type InFlightRemove = { options: string; promise: Promise<WorktreeRemoveResult> }
@@ -39,6 +41,8 @@ export type RemoveEnv = ListEnv & {
   hooksAt(repo: Repo, ref: string): Promise<EffectiveHooks>
   /** Closes every session of a worktree, attempting all; one message per failure. */
   closeSessions(worktreeId: string): Promise<string[]>
+  /** Rechecks public session process evidence without closing anything. */
+  assertNoActiveSessions(worktreeId: string): Promise<string[]>
   branches: BranchCleaner
 }
 
@@ -57,7 +61,8 @@ const optionsOf = (params: RemoveParams): Options => ({
   force: params.force === true,
   withDescendants: params.withDescendants === true,
   skipArchive: params.skipArchive === true,
-  allowFailedArchiveHook: params.allowFailedArchiveHook === true
+  allowFailedArchiveHook: params.allowFailedArchiveHook === true,
+  safeOnly: params.safeOnly === true
 })
 
 /** A workspace git no longer lists as a usable folder: `gone` has no folder, `forgotten` has a folder but no registration. */
@@ -91,7 +96,12 @@ function blankRow(id: string, repoId: string, path: string): WorktreeRow {
     instance_id: `unverified:${id}`,
     linked_pr: null,
     linked_issue: null,
-    push_target: null
+    push_target: null,
+    manual_order: 0,
+    sleeping: 0,
+    sleep_changed_at: 0,
+    cleanup_ignored_fingerprint: null,
+    cleanup_ignored_at: null
   }
 }
 
@@ -274,6 +284,10 @@ async function removeNested(env: RemoveEnv, scope: Scope, child: Worktree, optio
 
 /** Steps 5 to 12 for one workspace that has no descendants left. */
 async function removeOne(env: RemoveEnv, scope: Scope, target: Worktree, options: Options): Promise<Piece> {
+  if (options.safeOnly) {
+    const blockers = await env.assertNoActiveSessions(target.id)
+    if (blockers.length > 0) throw reasoned(env, 'conflict', 'runtime-safety', `could not prove ${target.name} has no live sessions: ${blockers.join('; ')}`)
+  }
   if (target.kind === 'folder') return removeFolderWorkspace(env, target, options)
   const repo = scope.repos.find((candidate) => candidate.id === target.repoId)
   if (!repo) throw env.fail('not-found', `no project for ${target.name}`)
@@ -286,8 +300,13 @@ function dropRow(env: RemoveEnv, target: Worktree): void {
   env.changed({ repoId: target.repoId, worktreeId: target.id })
 }
 
-/** Closes the workspace's sessions; a failure stops the remove unless forced, when it is reported instead. */
+/** Closes sessions for an ordinary remove; safe-only cleanup rechecks and never closes them. */
 async function closeSessions(env: RemoveEnv, target: Worktree, options: Options): Promise<string[]> {
+  if (options.safeOnly) {
+    const blockers = await env.assertNoActiveSessions(target.id)
+    if (blockers.length > 0) throw reasoned(env, 'conflict', 'runtime-safety', `could not prove ${target.name} has no live sessions: ${blockers.join('; ')}`)
+    return []
+  }
   const errors = await env.closeSessions(target.id)
   if (errors.length > 0 && !options.force) throw env.fail('conflict', `could not close the sessions of ${target.name}: ${errors.join('; ')}`)
   return errors

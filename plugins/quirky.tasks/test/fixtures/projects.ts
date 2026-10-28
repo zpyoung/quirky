@@ -223,6 +223,16 @@ const save = () => {
 }
 const emit = (value) => { save(); process.stdout.write(JSON.stringify(value)); process.exit(0) }
 const fail = (message) => { save(); process.stderr.write(message); process.exit(1) }
+// Real fixture-process latency lets API tests control out-of-order responses without mocking the daemon.
+const delayProjectFixture = async (delays, key) => {
+  const values = delays && typeof delays === 'object' ? delays : {}
+  const delay = Number(values[key] ?? 0)
+  if (Number.isFinite(delay) && delay > 0) {
+    const { promise, resolve } = Promise.withResolvers()
+    setTimeout(resolve, delay)
+    await promise
+  }
+}
 save()
 if (args.includes('auth') && args.includes('status')) {
   process.stdout.write(typeof state.authStatus === 'string' ? state.authStatus : 'Logged in to github.com account project-fixture (keyring)\nActive account: true\nToken scopes: repo, project, read:org\n')
@@ -256,12 +266,13 @@ function projectNode(project, kind, owner, number) {
 }
 function allProjects() { return Object.values(projectViews).filter((candidate) => candidate && typeof candidate === 'object') }
 function projectFieldValue(item, fieldId) {
+  const initial = item.fieldValues && item.fieldValues[fieldId]
+  if (state.projectIndexLagging === true) return initial ?? null
   const stored = projectFields[item.projectId + '/' + item.id + '/' + fieldId]
   if (stored && typeof stored === 'object') {
     if (stored.cleared === true) return null
     if (Object.hasOwn(stored, 'value')) return stored.value
   }
-  const initial = item.fieldValues && item.fieldValues[fieldId]
   return initial ?? null
 }
 function fieldConfig(project, fieldId) {
@@ -273,6 +284,9 @@ function fieldConfig(project, fieldId) {
   return null
 }
 function itemGraphNode(item) {
+  if (item.restricted === true || item.type === 'REDACTED') {
+    return { id: item.id, type: 'REDACTED', content: null, fieldValues: { nodes: [] } }
+  }
   const kind = item.kind === 'pullRequest' ? 'PullRequest' : item.kind === 'draft' ? 'DraftIssue' : 'Issue'
   const issue = issues[(item.repository ?? '') + '/' + item.number]
   const content = {
@@ -355,6 +369,7 @@ if (query.includes('query ProjectViews')) {
     verticalGroupByFields: Array.isArray(view.verticalGroupByFields) ? { nodes: view.verticalGroupByFields } : view.verticalGroupByFields ?? { nodes: [] },
     sortByFields: Array.isArray(view.sortByFields) ? { nodes: view.sortByFields } : view.sortByFields ?? { nodes: [] }
   }))
+  await delayProjectFixture(state.projectViewsDelayMs, String(number))
   emit({ data: { [kind]: { projectV2: { id: project.projectId ?? project.id ?? 'PVT_4', number, views: { nodes: views, pageInfo: { endCursor: null, hasNextPage: false } } } } } })
 }
 if (query.includes('query ProjectItems')) {
@@ -367,6 +382,7 @@ if (query.includes('query ProjectItems')) {
   const items = matchingItems(owner, number).map(itemGraphNode)
   const rows = query.includes('queryOverride') && typeof variable('query') === 'string' && variable('query').includes('is:closed') ? items.filter((item) => item.content.issueState === 'CLOSED' || item.content.pullRequestState === 'CLOSED') : items
   const projectId = project.projectId ?? project.id ?? 'PVT_4'
+  await delayProjectFixture(state.projectItemQueryDelayMs, String(variable('query') ?? ''))
   emit({ data: { [kind]: { projectV2: { id: projectId, number, title: project.title ?? 'Fixture project', items: { nodes: rows, pageInfo: { endCursor: null, hasNextPage: false }, totalCount: rows.length } } } } })
 }
 if (query.includes('query WorkItemDetails')) {

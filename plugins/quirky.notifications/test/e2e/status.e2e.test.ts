@@ -10,9 +10,10 @@ afterAll(() => n?.cleanup())
 const ask = (text: string) =>
   n.call('quirky.ask/create', { spec: { questions: [{ id: 'go', question: text, type: 'confirm' }] } }) as Promise<{ askId: string }>
 
+type ApiProperty = { description?: string; enum?: string[] }
 type ApiDescription = {
-  methods: { name: string; plugin: string | null; params: { type?: string }; result: { properties?: Record<string, unknown> } }[]
-  events: { name: string }[]
+  methods: { name: string; plugin: string | null; params: { type?: string }; result: { properties?: Record<string, ApiProperty> } }[]
+  events: { name: string; data?: { properties?: Record<string, ApiProperty> } }[]
 }
 
 describe('the badge and the status command', () => {
@@ -85,6 +86,8 @@ describe('the badge and the status command', () => {
     }
     const status = ours.find((method) => method.name === 'quirky.notifications/status')!
     expect(Object.keys(status.result.properties!).sort()).toEqual(['badge', 'label', 'pendingAsks', 'sound', 'unreadSessions', 'unreadWorktrees'])
+    expect(status.result.properties!.pendingAsks.description).toContain('queued and resolved')
+    expect(description.events.find((event) => event.name === 'quirky.notifications/attention')?.data?.properties?.source?.enum).toContain('ask')
     expect(description.events.map((event) => event.name).filter((name) => name.startsWith('quirky.notifications/')).sort()).toEqual([
       'quirky.notifications/attention',
       'quirky.notifications/changed',

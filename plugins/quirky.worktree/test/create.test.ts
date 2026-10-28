@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, setDefaultTimeout, test } from 'bun:test'
 import { existsSync, mkdirSync, readdirSync, realpathSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { RpcErrorCode, type Repo, type Session, type Worktree, type WorktreeCreateResult } from '@quirky/protocol'
+import { RpcErrorCode, type GitHubWorktreeSource, type Repo, type Session, type Worktree, type WorktreeCreateResult } from '@quirky/protocol'
 import { waitFor } from '../../../packages/daemon/test/helpers'
 import { gitApi } from '@quirky/git'
 import { useTestGit } from '@quirky/git/testing'
@@ -9,6 +9,7 @@ import { call, commitFiles, failure, git, isolateGitConfig } from '../../quirky.
 import { testCliContext } from '../../quirky.repo/test/harness'
 import { commands } from '../cli'
 import { githubUser, makeOrigin, makeProject, repoSet, setSetting, startWorld, useGlobalGitConfig, type SessionMode, type World } from './fixtures/repos'
+import { agentPromptParameters } from '../src/daemon/create'
 
 setDefaultTimeout(60_000)
 const { scratch } = isolateGitConfig()
@@ -34,6 +35,34 @@ const viewOf = (state: unknown) => (state as { layout: { view: { id: string; inp
 const create = (params: Record<string, unknown>) => call(w!.client, 'quirky.worktree/create', params) as Promise<WorktreeCreateResult>
 const list = async (repo: string) => (await call(w!.client, 'quirky.worktree/list', { repo })) as Worktree[]
 const worktreeCount = (dir: string) => git(dir, 'worktree', 'list', '--porcelain').split('\n').filter((line) => line.startsWith('worktree ')).length
+describe('issue-derived startup prompt delivery', () => {
+  const source: GitHubWorktreeSource = {
+    item: {
+      provider: 'github',
+      kind: 'issue',
+      number: 4,
+      title: 'Add a multiply function',
+      url: 'https://github.com/test-owner/test-repo/issues/4',
+      repository: { host: 'github.com', owner: 'test-owner', repo: 'test-repo' }
+    },
+    head: null,
+    base: null
+  }
+
+  test('the raw issue URL is left as a draft by default, while generic prompts keep submitted defaults', () => {
+    expect(agentPromptParameters({}, source)).toEqual({
+      prompt: source.item.url,
+      submitPrompt: false
+    })
+    expect(agentPromptParameters({ prompt: 'Please fix this.' }, null)).toEqual({ prompt: 'Please fix this.' })
+    expect(agentPromptParameters({ prompt: 'A custom issue prompt.' }, source)).toEqual({ prompt: 'A custom issue prompt.' })
+    expect(agentPromptParameters({ submitPrompt: true }, source)).toEqual({ prompt: source.item.url, submitPrompt: true })
+    expect(agentPromptParameters({ prompt: 'A custom prompt.', submitPrompt: false }, null)).toEqual({
+      prompt: 'A custom prompt.',
+      submitPrompt: false
+    })
+  })
+})
 
 async function cli(positionals: string[], flags: Record<string, string | boolean> | undefined, options: { json: true; client?: World['client'] }): Promise<WorktreeCreateResult>
 async function cli(positionals: string[], flags?: Record<string, string | boolean>, options?: { json?: false; client?: World['client'] }): Promise<string>
@@ -42,6 +71,30 @@ async function cli(positionals: string[], flags: Record<string, string | boolean
   await commands.create!({ positionals, flags }, ctx)
   return options.json ? (JSON.parse(lines[0]!) as WorktreeCreateResult) : lines[0]!
 }
+test('worktree CLI forwards draft and submit choices on issue and generic prompts', async () => {
+  const { repo } = await startApi()
+  const created = (await create({ repo: repo.id, name: 'cli-fixture' })).worktree
+  const { ctx } = testCliContext(w!.client)
+  const calls: Array<{ method: string; params: Record<string, unknown> }> = []
+  ctx.call = async (method, params = {}) => {
+    calls.push({ method, params })
+    return { worktree: created, warnings: [], setup: { ran: 'none' } }
+  }
+
+  await commands.create!({
+    positionals: [],
+    flags: { repo: repo.id, name: 'issue', github: 'https://github.com/test-owner/test-repo/issues/4', agent: 'claude', 'draft-prompt': true }
+  }, ctx)
+  expect(calls[0]?.params).toMatchObject({ submitPrompt: false, github: 'https://github.com/test-owner/test-repo/issues/4' })
+  expect(calls[0]?.params).not.toHaveProperty('prompt')
+
+  calls.length = 0
+  await commands.create!({
+    positionals: [],
+    flags: { repo: repo.id, name: 'generic', agent: 'claude', prompt: 'Please implement this.', 'submit-prompt': true }
+  }, ctx)
+  expect(calls[0]?.params).toMatchObject({ prompt: 'Please implement this.', submitPrompt: true })
+})
 
 describe('SC-14: a create with just a name uses the defaults (CLI)', () => {
   test('the worktree is on <user>/<name> cut from origin/main with no upstream, and the view is untouched', async () => {
