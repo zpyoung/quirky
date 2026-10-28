@@ -1,8 +1,8 @@
 import type { QuirkyEvent } from '@quirky/protocol'
 import { randomUUID } from 'node:crypto'
-import type { DispatchRow, DispatchStatus, JsonValue, RunRow, TaskRow, UtcTimestamp } from '../contracts'
+import type { DispatchRow, DispatchStatus, JsonValue, MutationResult, RunRow, TaskRow, UtcTimestamp } from '../contracts'
 import type {
-  CoordinatorEvidence, ServiceCoordinatorEvidence, TerminalResource, TurnStart, WorkerCore, WorkerEffect,
+  CoordinatorEvidence, FederatedWorkerStartHooks, ServiceCoordinatorEvidence, TerminalResource, TurnStart, WorkerCore, WorkerEffect,
   WorkerLifecycle, WorkerModeDecision, WorkerPlacement, WorkerRecord,
   WorkerRepository, WorkerRuntime, WorkerSetup, WorkerStartParams,
   WorkerStartReceipt, WorkerStarter,
@@ -441,6 +441,7 @@ async function launchAccepted(
   run: RunRow,
   initial: WorkerStartReceipt,
   timeoutMs: number,
+  federationHooks?: FederatedWorkerStartHooks,
 ): Promise<WorkerStartReceipt> {
   let stage = 'retry_release'
   let turnStart: TurnStart = 'unobserved'
@@ -452,11 +453,12 @@ async function launchAccepted(
   let custodyRecorded = false
 
   try {
-    await releaseRetryResource(lifecycle, repository, params, caller, run.id)
     const task = core.getTask(initial.taskId)
     const dispatch = core.getDispatch(initial.dispatchId)
     const existingRecord = repository.get(initial.dispatchId)
     if (!existingRecord) throw fail('operation_unknown', `Accepted worker ${initial.dispatchId} is unavailable after commit.`)
+    if (federationHooks) await federationHooks.beforeLaunch(initial, existingRecord)
+    await releaseRetryResource(lifecycle, repository, params, caller, run.id)
 
     stage = 'placing'
     repository.update(initial.dispatchId, { stage: params.worktree === 'new-child' || params.worktree === 'new-top-level' ? 'worktree_creating' : 'placing' }, 'starting')
@@ -539,6 +541,15 @@ async function launchAccepted(
     }
     if (attached.id !== initial.dispatchId || attached.assigneeSessionId !== placement.identity.sessionId) {
       throw fail('worker_identity_changed', 'Core attached a different worker identity than the attested placement.')
+    }
+    if (federationHooks) {
+      const attachedWorker = repository.get(initial.dispatchId)
+      if (!attachedWorker || attachedWorker.sessionId !== placement.identity.sessionId ||
+        attachedWorker.processIncarnation !== placement.identity.processIncarnation ||
+        attachedWorker.processRuntimeEpoch !== placement.identity.runtimeEpoch) {
+        throw fail('worker_identity_changed', 'Federated worker attachment did not retain the exact process identity.')
+      }
+      await federationHooks.attached(attachedWorker, attached)
     }
 
     const prompt = buildWorkerPreamble(task, attached, placement.identity, coordinatorAddress(run, caller), core.nestedWorkerMaxDepth)
@@ -740,66 +751,80 @@ export function createWorkerStarter(
   let disposed = false
   const setupUnsubscribers = new Set<() => void>()
 
-  const starter: WorkerStarter = {
-    async start(params, caller) {
-      if (disposed) throw fail('runtime_inactive', 'Worker starter has been deactivated.')
-      let preflight: StartPreflight | null = null
-      return core.mutateWorker('workerStart', params, caller, store => {
-        const admitted = preflight
-        if (!admitted) throw fail('lifecycle_conflict', 'Worker acceptance ran before admission preflight.')
-        if (store !== core.store || store !== repository.store) throw fail('lifecycle_conflict', 'Worker acceptance must use the core orchestration store.')
-        const currentRun = core.requireCoordinator(caller, params.runId)
-        if (currentRun.id !== admitted.run.id) throw fail('consumer_fenced', 'The coordinator Run changed before worker acceptance.')
-        let task: TaskRow
-        if (params.taskId) {
-          task = taskForRun(core, params.taskId, currentRun.id)
-        } else {
-          task = core.createTask({
-            runId: currentRun.id,
-            spec: params.spec!,
-            ...(params.taskTitle !== undefined ? { taskTitle: params.taskTitle } : {}),
-            ...(params.displayName !== undefined ? { displayName: params.displayName } : {}),
-            ...(params.dependencyTaskIds !== undefined ? { dependencyTaskIds: params.dependencyTaskIds } : {}),
-            ...(params.parentTaskId !== undefined ? { parentTaskId: params.parentTaskId } : {}),
-          }, caller)
-        }
-        const dispatch = core.reserveWorkerDispatch({
-          taskId: task.id,
+  const start = async (
+    params: WorkerStartParams,
+    caller: CoordinatorEvidence,
+    federationHooks?: FederatedWorkerStartHooks,
+  ): Promise<MutationResult<WorkerStartReceipt>> => {
+    if (disposed) throw fail('runtime_inactive', 'Worker starter has been deactivated.')
+    let preflight: StartPreflight | null = null
+    return core.mutateWorker('workerStart', params, caller, store => {
+      const admitted = preflight
+      if (!admitted) throw fail('lifecycle_conflict', 'Worker acceptance ran before admission preflight.')
+      if (store !== core.store || store !== repository.store) throw fail('lifecycle_conflict', 'Worker acceptance must use the core orchestration store.')
+      const currentRun = core.requireCoordinator(caller, params.runId)
+      if (currentRun.id !== admitted.run.id) throw fail('consumer_fenced', 'The coordinator Run changed before worker acceptance.')
+      let task: TaskRow
+      if (params.taskId) {
+        task = taskForRun(core, params.taskId, currentRun.id)
+      } else {
+        task = core.createTask({
           runId: currentRun.id,
-          ...(params.retryOfDispatchId ? { retryOfDispatchId: params.retryOfDispatchId } : {}),
+          spec: params.spec!,
+          ...(params.taskTitle !== undefined ? { taskTitle: params.taskTitle } : {}),
+          ...(params.displayName !== undefined ? { displayName: params.displayName } : {}),
+          ...(params.dependencyTaskIds !== undefined ? { dependencyTaskIds: params.dependencyTaskIds } : {}),
+          ...(params.parentTaskId !== undefined ? { parentTaskId: params.parentTaskId } : {}),
         }, caller)
-        const receipt = initialReceipt(params, currentRun.id, task.id, dispatch, admitted.decision, admitted.timeoutMs)
-        repository.insert(makeRecord(params, receipt, runtime, admitted.worktreeId))
-        return receipt
-      }, {
-        beforeAccept: async () => {
-          const timeoutMs = validateRequest(params, caller)
-          const run = core.requireCoordinator(caller, params.runId)
-          if (isServiceCaller(caller) && run.id !== caller.runId) throw fail('consumer_fenced', 'Service coordinator does not own the requested Run.')
-          if (params.terminal && run.coordinatorSessionId === params.terminal) {
-            throw fail('terminal_is_coordinator', 'The Run coordinator session cannot be reused as a worker.')
-          }
-          if (params.taskId) taskForRun(core, params.taskId, run.id)
-          const validation = await runtime.validate(params, caller)
-          if (params.terminal) refuseActiveTerminal(core, repository, params.terminal)
-          preflight = { run, worktreeId: validation.worktreeId, decision: validation.decision, timeoutMs }
-        },
-        acceptedCheckpoint: accepted => ({
-          state: 'accepted',
-          accepted: true,
-          runId: accepted.runId,
-          taskId: accepted.taskId,
-          dispatchId: accepted.dispatchId,
-        }),
-        afterCommit: accepted => {
-          const admitted = preflight
-          if (!admitted) throw fail('operation_unknown', 'Worker start was accepted without its admission preflight.')
-          return launchAccepted(
-            core, repository, runtime, lifecycle, setupUnsubscribers, () => !disposed,
-            params, caller, admitted.run, accepted, admitted.timeoutMs,
-          )
-        },
-      })
+      }
+      const dispatch = core.reserveWorkerDispatch({
+        taskId: task.id,
+        runId: currentRun.id,
+        ...(params.retryOfDispatchId ? { retryOfDispatchId: params.retryOfDispatchId } : {}),
+      }, caller)
+      const receipt = initialReceipt(params, currentRun.id, task.id, dispatch, admitted.decision, admitted.timeoutMs)
+      repository.insert(makeRecord(params, receipt, runtime, admitted.worktreeId))
+      const acceptedWorker = repository.get(receipt.dispatchId)
+      if (!acceptedWorker) throw fail('worker_port_unavailable', `Accepted worker ${receipt.dispatchId} has no repository record.`)
+      federationHooks?.accepted(receipt, acceptedWorker)
+      return receipt
+    }, {
+      beforeAccept: async () => {
+        const timeoutMs = validateRequest(params, caller)
+        const run = core.requireCoordinator(caller, params.runId)
+        if (isServiceCaller(caller) && run.id !== caller.runId) throw fail('consumer_fenced', 'Service coordinator does not own the requested Run.')
+        if (params.terminal && run.coordinatorSessionId === params.terminal) {
+          throw fail('terminal_is_coordinator', 'The Run coordinator session cannot be reused as a worker.')
+        }
+        if (params.taskId) taskForRun(core, params.taskId, run.id)
+        const validation = await runtime.validate(params, caller)
+        if (params.terminal) refuseActiveTerminal(core, repository, params.terminal)
+        preflight = { run, worktreeId: validation.worktreeId, decision: validation.decision, timeoutMs }
+      },
+      acceptedCheckpoint: accepted => ({
+        state: 'accepted',
+        accepted: true,
+        runId: accepted.runId,
+        taskId: accepted.taskId,
+        dispatchId: accepted.dispatchId,
+      }),
+      afterCommit: accepted => {
+        const admitted = preflight
+        if (!admitted) throw fail('operation_unknown', 'Worker start was accepted without its admission preflight.')
+        return launchAccepted(
+          core, repository, runtime, lifecycle, setupUnsubscribers, () => !disposed,
+          params, caller, admitted.run, accepted, admitted.timeoutMs, federationHooks,
+        )
+      },
+    })
+  }
+
+  const starter: WorkerStarter = {
+    start(params, caller) {
+      return start(params, caller)
+    },
+    startFederated(params, caller, federationHooks) {
+      return start(params, caller, federationHooks)
     },
     dispose() {
       disposed = true

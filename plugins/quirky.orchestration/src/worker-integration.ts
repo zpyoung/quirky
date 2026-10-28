@@ -3,9 +3,12 @@ import type {
   CoordinatorAuthority, DispatchAdmissionInput, DispatchId, DispatchRow, DispatchStatus, JsonValue, LifecycleCorePort,
   MutationCheckpoint, MutationRequest, MutationResult, MutatingOrchestrationMethod,
   ResetMode, RunId, RunRow, RuntimeCallerEvidence, TaskCreateParams, TaskId, TaskRow, UtcTimestamp,
-  WorkerOutcome, WorkerRow, WorkerState, WorkerTransitionInput,
+  FederatedWorkerExitAcceptance, FederatedWorkerExitInput, WorkerDoneReportInput, WorkerExitResult, WorkerHeartbeatInput,
+  WorkerOutcome, WorkerReportAuthority, WorkerReportResult, HeartbeatResult,
+  WorkerRow, WorkerState, WorkerTransitionInput,
 } from './contracts'
 import type { SessionIdentity } from './runtime-contracts'
+import type { FederationReportAuthority } from './federation/contracts'
 
 /** Registered by the supervised-worker extension in the same orchestration plugin.
  * Every hook runs synchronously inside the core's enclosing store transaction.
@@ -21,15 +24,23 @@ export interface WorkerLifecyclePort {
   acceptReport(store: PluginStore, input: {
     dispatchId: DispatchId
     outcome: WorkerOutcome
-    caller: RuntimeCallerEvidence
+    caller: WorkerReportAuthority
     at: UtcTimestamp
   }): WorkerRow | null
   recordHeartbeat(store: PluginStore, input: {
     dispatchId: DispatchId
-    caller: RuntimeCallerEvidence
+    caller: WorkerReportAuthority
     at: UtcTimestamp
   }): void
+
+  acceptFederatedExit(
+    store: PluginStore,
+    input: FederatedWorkerExitInput,
+    authority: FederationReportAuthority,
+  ): FederatedWorkerExitAcceptance
 }
+
+export type { WorkerReportAuthority } from './contracts'
 
 /** Acceptance runs in the ledger's transaction; asynchronous effects begin after commit. */
 export interface DurableMutationOptions<T extends object> {
@@ -51,6 +62,7 @@ export interface OrchestrationWorkerCore extends LifecycleCorePort {
   readonly store: PluginStore
   readonly nestedWorkerMaxDepth: number
   registerWorkerPort(port: WorkerLifecyclePort): void
+  registerFederationAuthorityValidator(validator: (authority: FederationReportAuthority) => void): void
   requireCoordinator(caller: CoordinatorAuthority, runId?: RunId): RunRow
   getRun(runId: RunId): RunRow
   getTask(taskId: TaskId): TaskRow
@@ -66,6 +78,10 @@ export interface OrchestrationWorkerCore extends LifecycleCorePort {
   attachWorkerAuthority(dispatchId: DispatchId, identity: SessionIdentity, caller: CoordinatorAuthority): DispatchRow
   emitWorkerStatus(dispatchId: DispatchId, subject: string, body: string, high: boolean, type?: 'status' | 'escalation', payload?: JsonValue): void
   closeWorkerQuestions(dispatchId: DispatchId, at: UtcTimestamp): void
+  preflightFederatedWorkerDone(input: WorkerDoneReportInput, authority: FederationReportAuthority): WorkerReportResult | null
+  reportFederatedWorkerDone(input: WorkerDoneReportInput, authority: FederationReportAuthority): WorkerReportResult
+  recordFederatedHeartbeat(input: WorkerHeartbeatInput, authority: FederationReportAuthority): HeartbeatResult
+  reportFederatedWorkerExit(input: FederatedWorkerExitInput, authority: FederationReportAuthority): WorkerExitResult
   mutateWorker<T extends object>(
     method: string,
     params: MutationRequest & Record<string, unknown>,

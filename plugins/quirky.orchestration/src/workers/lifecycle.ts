@@ -6,7 +6,9 @@ import type {
   WorkerUserInputParams
 } from '../worker-contracts'
 import type { SessionIdentity } from '../runtime-contracts'
-import type { WorkerLifecyclePort } from '../worker-integration'
+import type { WorkerLifecyclePort, WorkerReportAuthority } from '../worker-integration'
+import type { FederationEngine, FederationReportAuthority } from '../federation/contracts'
+import type { FederatedWorkerExitAcceptance, FederatedWorkerExitInput } from '../contracts'
 
 const FAILURE_BUDGET = 3
 const ACTIVE_WORKER_STATES = new Set<WorkerState>(['starting', 'ready', 'start_unknown', 'stopping', 'stop_unknown'])
@@ -29,7 +31,41 @@ function resourceMatchesWorker(resource: TerminalResource, worker: WorkerRecord)
     resource.sessionId === worker.sessionId && resource.processIncarnation === worker.processIncarnation
 }
 
-function isExactCaller(record: WorkerRecord, dispatch: DispatchRow, caller: RuntimeCallerEvidence): boolean {
+function sameFederationAuthority(left: FederationReportAuthority, right: FederationReportAuthority): boolean {
+  return left.kind === right.kind && left.dispatchId === right.dispatchId &&
+    left.peerId === right.peerId && left.pairingRevision === right.pairingRevision &&
+    left.peerFingerprint === right.peerFingerprint && left.hostIncarnation === right.hostIncarnation &&
+    left.sessionId === right.sessionId && left.processIncarnation === right.processIncarnation &&
+    left.processRuntimeEpoch === right.processRuntimeEpoch
+}
+
+function isFederatedCaller(caller: WorkerReportAuthority): caller is FederationReportAuthority {
+  return 'kind' in caller && caller.kind === 'federated-worker'
+}
+
+function isExactCaller(
+  record: WorkerRecord,
+  dispatch: DispatchRow,
+  caller: WorkerReportAuthority,
+  federation: FederationEngine | null
+): boolean {
+  if (isFederatedCaller(caller)) {
+    if (!federation || !record.sessionId || !record.processIncarnation || !record.processRuntimeEpoch) return false
+    const binding = federation.home(dispatch.id)
+    if (!binding || binding.side !== 'home' || binding.homeDispatchId !== dispatch.id ||
+      binding.homeTaskId !== dispatch.taskId || binding.homeRunId !== dispatch.runId) return false
+    try {
+      const expected = federation.reportAuthority(binding)
+      return sameFederationAuthority(caller, expected) &&
+        caller.dispatchId === dispatch.id && caller.sessionId === record.sessionId &&
+        caller.sessionId === dispatch.assigneeSessionId &&
+        caller.processIncarnation === record.processIncarnation &&
+        caller.processRuntimeEpoch === record.processRuntimeEpoch
+    } catch {
+      return false
+    }
+  }
+  if (!('runtimeOwned' in caller)) return false
   return caller.runtimeOwned === true && caller.live === true && record.processRuntimeEpoch !== null &&
     caller.callerSessionId === record.sessionId &&
     caller.runtimeSessionId === record.sessionId &&
@@ -108,7 +144,8 @@ export function createWorkerLifecycle(
   core: WorkerCore,
   repo: WorkerRepository,
   runtime: WorkerRuntime,
-  output: WorkerOutput
+  output: WorkerOutput,
+  getFederation: () => FederationEngine | null = () => null
 ): WorkerLifecycle {
   const existing = lifecycleByCore.get(core)
   if (existing) return existing
@@ -773,7 +810,7 @@ export function createWorkerLifecycle(
       if (input.nextState !== 'succeeded' || input.correction !== 'unobserved_prompt_report' ||
         worker.stage !== 'turn_unobserved' || input.report.dispatchId !== input.dispatchId ||
         input.report.taskId !== dispatch.taskId || input.report.outcome !== 'succeeded' ||
-        !isExactCaller(worker, dispatch, input.caller)) {
+        !isExactCaller(worker, dispatch, input.caller, getFederation())) {
         throw core.context.error('conflict', 'Only an exact unobserved-prompt report can correct this failed worker.')
       }
     } else if (!canChangeWorkerState(input.expectedState, input.nextState)) {
@@ -836,7 +873,7 @@ export function createWorkerLifecycle(
       return null
     }
     const worker = repo.get(input.dispatchId)
-    if (!worker || !isExactCaller(worker, dispatch, input.caller)) return null
+    if (!worker || !isExactCaller(worker, dispatch, input.caller, getFederation())) return null
     if (worker.state === 'stopping' || (worker.state === 'stop_unknown' && worker.stage === 'stopping') ||
       worker.state === 'stopped' || worker.state === 'abandoned') return null
 
@@ -872,7 +909,7 @@ export function createWorkerLifecycle(
     let dispatch: DispatchRow
     try {
       dispatch = core.getDispatch(input.dispatchId)
-      if (dispatch.status !== 'dispatched' || !isExactCaller(worker, dispatch, input.caller)) return
+      if (dispatch.status !== 'dispatched' || !isExactCaller(worker, dispatch, input.caller, getFederation())) return
     } catch {
       return
     }
@@ -881,6 +918,77 @@ export function createWorkerLifecycle(
       if (!current || current.state !== 'ready' || current.processIncarnation !== worker.processIncarnation ||
         current.runtimeEpoch !== worker.runtimeEpoch) return
       repo.addObservation(input.dispatchId, 'heartbeat', { at: input.at })
+    })
+  }
+  const acceptFederatedExit: WorkerLifecyclePort['acceptFederatedExit'] = (store, input, authority) => {
+    assertStore(store)
+    return core.store.transaction(() => {
+      let dispatch: DispatchRow
+      try {
+        dispatch = core.getDispatch(input.dispatchId)
+      } catch {
+        return { status: 'rejected', reason: 'unknown_dispatch' }
+      }
+      const current = repo.get(input.dispatchId)
+      if (!current) return { status: 'rejected', reason: 'unknown_dispatch' }
+      if (dispatch.taskId !== input.taskId) return { status: 'rejected', reason: 'task_dispatch_mismatch' }
+      if (authority.dispatchId !== input.dispatchId || authority.processIncarnation !== input.processIncarnation ||
+        !isExactCaller(current, dispatch, authority, getFederation())) {
+        return { status: 'rejected', reason: 'worker_identity_changed' }
+      }
+      if (input.reason === 'operator_close' || input.reason === 'killed') {
+        return { status: 'rejected', reason: 'inactive_dispatch' }
+      }
+
+      const existingExits = store.all<{ payload_json: string }>(
+        `SELECT payload_json FROM worker_observations
+         WHERE dispatch_id = ? AND facet = 'process_exit' ORDER BY id DESC`,
+        input.dispatchId
+      )
+      for (const row of existingExits) {
+        let previous: unknown
+        try {
+          previous = JSON.parse(row.payload_json) as unknown
+        } catch {
+          return { status: 'rejected', reason: 'worker_identity_changed' }
+        }
+        if (previous === null || typeof previous !== 'object' || Array.isArray(previous)) continue
+        const event = previous as Record<string, unknown>
+        if (event.sessionId !== authority.sessionId || event.incarnation !== input.processIncarnation) continue
+        return event.reason === input.reason && event.exitCode === input.exitCode
+          ? { status: 'duplicate' }
+          : { status: 'rejected', reason: 'worker_identity_changed' }
+      }
+
+      if (TERMINAL_WORKER_STATES.has(current.state) || current.state === 'stopping' ||
+        (current.state === 'stop_unknown' && current.stage === 'stopping') || dispatch.status !== 'dispatched') {
+        return { status: 'rejected', reason: 'inactive_dispatch' }
+      }
+      const resource = repo.resource(input.dispatchId)
+      if (resource && !resourceMatchesWorker(resource, current)) {
+        return { status: 'rejected', reason: 'worker_identity_changed' }
+      }
+
+      repo.addObservation(input.dispatchId, 'process_exit', {
+        sessionId: authority.sessionId,
+        incarnation: input.processIncarnation,
+        reason: input.reason,
+        exitCode: input.exitCode,
+        at: input.at,
+        processRuntimeEpoch: authority.processRuntimeEpoch,
+        federation: {
+          peerId: authority.peerId,
+          pairingRevision: authority.pairingRevision,
+          peerFingerprint: authority.peerFingerprint,
+          hostIncarnation: authority.hostIncarnation
+        }
+      })
+      updateState(input.dispatchId, current.state, 'failed')
+      updateStage(input.dispatchId, 'failed', {
+        stage: 'process_exited',
+        lastError: `Worker process exited (${input.reason}) with exit code ${input.exitCode === null ? 'unknown' : input.exitCode}.`
+      })
+      return { status: 'accepted' }
     })
   }
 
@@ -1094,6 +1202,7 @@ export function createWorkerLifecycle(
     reset,
     acceptReport,
     recordHeartbeat,
+    acceptFederatedExit,
     stop,
     abandon,
     release,

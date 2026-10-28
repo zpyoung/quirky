@@ -1,7 +1,8 @@
 import type { MethodHandler, PluginCaller } from '@quirky/protocol'
 import type { DeclaredCallerAliases, RuntimeCallerEvidence } from '../contracts'
+import type { FederationEngine, FederationSurface } from '../federation/contracts'
 import type {
-  WorkerControlParams, WorkerCore, WorkerLifecycle, WorkerListParams, WorkerReadParams, WorkerStarter,
+  WorkerControlParams, WorkerCore, WorkerLifecycle, WorkerListParams, WorkerListResult, WorkerReadParams, WorkerStarter,
   WorkerShowParams, WorkerStartParams, WorkerUserInputParams,
 } from '../worker-contracts'
 import { createWorkerFleet } from './fleet'
@@ -18,6 +19,7 @@ export interface WorkerComponents {
   methods: Record<string, MethodHandler>
   starter: WorkerStarter
   lifecycle: WorkerLifecycle
+  bindFederation(engine: FederationEngine, surface: FederationSurface): void
   dispose(): Promise<void>
 }
 
@@ -26,9 +28,12 @@ export function registerWorkers(core: WorkerCore, resolveCaller: WorkerCallerRes
   const repo = createWorkerStore(core.store)
   const runtime = createWorkerRuntime(core.context)
   const output = createWorkerOutput(core, repo, runtime)
-  const lifecycle = createWorkerLifecycle(core, repo, runtime, output)
+  let federationEngine: FederationEngine | null = null
+  let federationSurface: FederationSurface | null = null
+  const getFederation = () => federationEngine
+  const lifecycle = createWorkerLifecycle(core, repo, runtime, output, getFederation)
   const starter = createWorkerStarter(core, repo, runtime, lifecycle)
-  const fleet = createWorkerFleet(core, repo, runtime)
+  const fleet = createWorkerFleet(core, repo, runtime, getFederation)
   let active = true
   const pending = new Set<Promise<void>>()
   const track = (work: Promise<void>) => {
@@ -38,21 +43,76 @@ export function registerWorkers(core: WorkerCore, resolveCaller: WorkerCallerRes
   const unsubscribeInput = onUserInput((input) => {
     if (active) lifecycle.userInput(input)
   })
-  const recover = () => { if (active) track(lifecycle.recoverReleases()) }
-  const unsubscribeReconnect = core.context.pty.onReconnect(recover)
-  recover()
+  const unsubscribeReconnect = core.context.pty.onReconnect(() => {
+    if (active) track(lifecycle.recoverReleases())
+  })
+  if (active) track(lifecycle.recoverReleases())
 
-  const control = (method: 'stop' | 'abandon' | 'release' | 'retain'): MethodHandler => async (params, caller) =>
-    lifecycle[method](params as unknown as WorkerControlParams, await resolveCaller(caller, { from: params.from as string | undefined }))
+  const coordinatorControl = (method: 'stop' | 'abandon' | 'release' | 'retain'): WorkerLifecycle['stop'] => (params, caller) => {
+    if (federationEngine?.home(params.dispatchId)) {
+      if (!federationSurface) throw core.context.error('conflict', 'Federation surface is unavailable.')
+      return federationSurface.control(method, params, caller)
+    }
+    return lifecycle[method](params, caller)
+  }
+  const control = (method: 'stop' | 'abandon' | 'release' | 'retain'): MethodHandler => {
+    const execute = coordinatorControl(method)
+    return async (params, caller) => execute(
+      params as unknown as WorkerControlParams,
+      await resolveCaller(caller, { from: params.from as string | undefined }),
+    )
+  }
   const methods: Record<string, MethodHandler> = {
-    workerStart: async (params, caller) => starter.start(params as unknown as WorkerStartParams, await resolveCaller(caller, { from: params.from as string | undefined })),
-    workerShow: (params) => fleet.show(params as unknown as WorkerShowParams),
-    workerRead: (params) => output.read(params as unknown as WorkerReadParams),
+    workerStart: async (params, caller) => {
+      const input = params as unknown as WorkerStartParams
+      const evidence = await resolveCaller(caller, { from: params.from as string | undefined })
+      if (Object.hasOwn(params, 'on')) {
+        if (!federationEngine) throw core.context.error('conflict', 'Federated worker execution is unavailable.')
+        return federationEngine.start(input, evidence)
+      }
+      return starter.start(input, evidence)
+    },
+    workerShow: (params) => {
+      const input = params as unknown as WorkerShowParams
+      const binding = federationEngine?.home(input.dispatchId)
+      if (binding) {
+        if (!federationSurface) throw core.context.error('conflict', 'Federation surface is unavailable.')
+        return federationSurface.show(input)
+      }
+      return fleet.show(input)
+    },
+    workerRead: (params) => {
+      const input = params as unknown as WorkerReadParams
+      const binding = federationEngine?.home(input.dispatchId)
+      if (binding) {
+        if (!federationSurface) throw core.context.error('conflict', 'Federation surface is unavailable.')
+        return federationSurface.read(input)
+      }
+      return output.read(input)
+    },
     workerList: async (params, caller) => {
       // Read-only host inventory remains available to an unbound operator. A supplied
       // session still must authenticate rather than silently becoming an all-Runs query.
       const evidence = caller.role !== 'plugin' && caller.sessionId ? await resolveCaller(caller) : null
-      return fleet.list(params as WorkerListParams, evidence)
+      const input = params as WorkerListParams
+      if (!federationSurface || input.includeRemote !== true) {
+        const local = await fleet.list(input, evidence)
+        return federationSurface ? federationSurface.list(input, evidence, local) : local
+      }
+      if (input.cursor !== undefined) return federationSurface.list(input, evidence, {
+        workers: [],
+        scope: { runId: null, source: 'all' },
+        page: { nextCursor: null, snapshotId: '', total: 0 },
+        partialHostErrors: []
+      })
+      const local = await fleet.list({
+        ...input,
+        terminalState: undefined,
+        includeRemote: false,
+        cursor: undefined,
+        limit: undefined
+      }, evidence)
+      return federationSurface.list(input, evidence, local)
     },
     workerStop: control('stop'),
     workerAbandon: control('abandon'),
@@ -82,8 +142,27 @@ export function registerWorkers(core: WorkerCore, resolveCaller: WorkerCallerRes
     methods,
     // Service coordinators use these same typed pipelines through an owner-Run core
     // adapter; they do not re-enter the session-authenticated public handlers.
-    starter,
-    lifecycle,
+    starter: {
+      ...starter,
+      start(params, caller) {
+        if (Object.hasOwn(params, 'on')) {
+          if (!federationEngine) throw core.context.error('conflict', 'Federated worker execution is unavailable.')
+          return federationEngine.start(params, caller)
+        }
+        return starter.start(params, caller)
+      },
+    },
+    lifecycle: {
+      ...lifecycle,
+      stop: coordinatorControl('stop'),
+      abandon: coordinatorControl('abandon'),
+      release: coordinatorControl('release'),
+      retain: coordinatorControl('retain'),
+    },
+    bindFederation(engine, surface) {
+      federationEngine = engine
+      federationSurface = surface
+    },
     async dispose(): Promise<void> {
       active = false
       unsubscribeInput()

@@ -230,11 +230,8 @@ function isServiceCoordinator(caller: CoordinatorEvidence): caller is ServiceCoo
 async function resolveServicePlan(
   context: PluginContext,
   params: WorkerStartParams,
-  caller: ServiceCoordinatorEvidence,
+  exactWorktree = false,
 ): Promise<StartPlan> {
-  if (!params.runId || params.runId !== caller.runId) {
-    throw failure('consumer_fenced', 'A service worker start must name the Run owned by that service.')
-  }
   const selector = params.worktree
   if (selector === 'current' || selector === 'new-child' || selector === 'active') {
     throw failure('invalid_argument', 'A service worker start requires an explicit workspace; current, active, and new-child require a coordinator session.')
@@ -257,6 +254,7 @@ async function resolveServicePlan(
     if (repo.kind !== 'git') throw failure('invalid_argument', 'Folder projects cannot create orchestration worktrees; use an exact existing folder workspace.')
   } else {
     selectedWorktree = await showWorktree(context, selector)
+    if (exactWorktree && selectedWorktree.id !== selector) throw failure('invalid_argument', 'A federated worker requires an exact existing worktree ID.')
     worktreeId = selectedWorktree.id
   }
   if (params.baseBranch !== undefined && repo) await repoHooks(context, repo.id, params.baseBranch)
@@ -303,8 +301,30 @@ async function resolveServicePlan(
   }
   return { decision, worktreeId, coordinatorWorktreeId: null, selectedWorktree, selectedSession, repo, agent, agentOptions }
 }
+
+/** Side-effect-free host placement and agent validation before home acceptance. */
+export async function preflightFederatedWorkerStart(
+  context: PluginContext,
+  params: WorkerStartParams,
+): Promise<{ worktreeId: string | null; decision: WorkerModeDecision }> {
+  if (params.worktree !== 'new-top-level' && (params.worktree === 'current' || params.worktree === 'new-child' || params.worktree === 'active')) {
+    throw failure('invalid_argument', 'Federated workers require an exact existing worktree or new-top-level placement.')
+  }
+  if (params.worktree === 'new-top-level' &&
+    (typeof params.repo !== 'string' || params.repo.trim().length === 0 || typeof params.name !== 'string' || params.name.trim().length === 0)) {
+    throw failure('invalid_argument', 'Federated new-top-level placement requires both repository and name.')
+  }
+  const plan = await resolveServicePlan(context, params, true)
+  return { worktreeId: plan.worktreeId, decision: plan.decision }
+}
+
 async function resolvePlan(context: PluginContext, params: WorkerStartParams, caller: CoordinatorEvidence): Promise<StartPlan> {
-  if (isServiceCoordinator(caller)) return resolveServicePlan(context, params, caller)
+  if (isServiceCoordinator(caller)) {
+    if (!params.runId || params.runId !== caller.runId) {
+      throw failure('consumer_fenced', 'A service worker start must name the Run owned by that service.')
+    }
+    return resolveServicePlan(context, params)
+  }
   const sessions = await listSessions(context)
   const coordinator = sessions.find(session => session.id === caller.runtimeSessionId)
     ?? sessions.find(session => session.id === caller.callerSessionId)

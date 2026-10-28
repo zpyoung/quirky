@@ -1,5 +1,6 @@
 import type { MethodHandler, PluginContext } from '@quirky/protocol'
 import type { DispatchId, TaskId } from './contracts'
+import type { FederationEngine } from './federation/contracts'
 import type { OrchestrationWorkerCore } from './worker-integration'
 import { fail } from './errors'
 import { targetIdentity } from './identity'
@@ -13,7 +14,11 @@ type AssignmentRecord = {
 }
 
 /** Read-only current terminal target, shared by links, rows and operator CLI navigation. */
-export function createTaskNavigation(context: PluginContext, core: Pick<OrchestrationWorkerCore, 'store' | 'getTask'>): MethodHandler {
+export function createTaskNavigation(
+  context: PluginContext,
+  core: Pick<OrchestrationWorkerCore, 'store' | 'getTask'>,
+  engine: FederationEngine
+): MethodHandler {
   const workers = createWorkerStore(core.store)
   const latest = (taskId: TaskId): DispatchId | null => core.store.get<{ id: DispatchId }>(
     'SELECT id FROM dispatches WHERE task_id = ? ORDER BY created_at DESC, id DESC LIMIT 1', taskId
@@ -30,9 +35,23 @@ export function createTaskNavigation(context: PluginContext, core: Pick<Orchestr
       fail(context, 'invalid_argument', 'taskId must identify a Task')
     }
     const taskId = params.taskId as TaskId
-    core.getTask(taskId)
+    const task = core.getTask(taskId)
     const dispatchId = latest(taskId)
     if (!dispatchId) fail(context, 'terminal_not_found', 'This Task has no Dispatch terminal to open', { taskId })
+    const binding = engine.home(dispatchId)
+    if (binding) {
+      if (binding.side !== 'home' || binding.homeDispatchId !== dispatchId ||
+        binding.homeTaskId !== taskId || binding.homeRunId !== task.runId) {
+        fail(context, 'worker_identity_changed', 'The latest remote Dispatch binding no longer matches this Task.', { taskId, dispatchId })
+      }
+      return {
+        kind: 'remote_output',
+        taskId,
+        dispatchId,
+        viewId: 'view:quirky.orchestration/remote-worker-output',
+        input: { dispatchId }
+      }
+    }
     const dispatch = assignmentRecord(dispatchId)
     const sessionId = dispatch.assignee_session_id
     if (!sessionId) fail(context, 'terminal_not_found', 'The latest Dispatch has no assigned terminal', { taskId, dispatchId })

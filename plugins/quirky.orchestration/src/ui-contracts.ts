@@ -24,3 +24,7 @@ export interface OrchestrationSkillInstallParams {
 export interface OrchestrationPolicySetParams {
   nestedWorkerMaxDepth: number
 }
+export interface RemoteWorkerOutputInput {
+  /** Home Dispatch ID; the public workerRead method resolves its paired host binding. */
+  dispatchId: string
+}
