@@ -143,5 +143,49 @@
 - **Revisit if:** final affected or landing gate regresses native lifecycle
 - **Source:** assumed — autonomous
 
+## D14: Preserve lease-aware send admission and durable CLI request identity
+- **Question:** core landing conflicted with the incoming orchestration runtime before this dependent item could finish
+- **Options:** run gates against stale shared code; copy in-flight resolution; await and merge its audited publication
+- **Chose:** wait for committed24c6e028, then merge the audited recovery tip. Preserve per-session idle/sequence vetoes, exact-incarnation checks, durable operation receipts/fingerprints, native leases/deferred startup, plugin-owner and revoked-context cleanup, and CliContext.requestBase compatibility. No loop type or public preset semantics change.
+- **Why:** losing either send-guard or lease/receipt side violates a binding caller contract. The incoming orchestration D1-D42 log was read fully by PresetIncomingBindings at roadmap b67e846f, blob c86ba85af1c4a4164a340152f5e733308d87756d; core D24/D25 read after merge.
+- **Evidence:** core handoff24c6e028; source merge; own post-merge typecheck exit0/48.38seconds and repeated native CLI smoke exit0/27.50seconds, ok:true/homeRemoved:true. Dependency queue remains pending until authoritative land succeeds.
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** the controller finds a replay/identity/cleanup regression
+- **Source:** locked by docs/loop/decisions/m6-orchestration-core.md
+
+## D15: Apply the night-mode fast path without claiming an unstarted review
+- **Question:** dependency conflict recovery passed the ninety-minute review cutoff before final review started
+- **Options:** begin a new model-review campaign; finish required gates and native proof, then land under night mode
+- **Chose:** do not start the prepared cross-family review. Finish every specified flow, close required-gate failures and land after dependency readiness. No review verdict/PASS or UI dogfood pass is claimed. No feature flow is deferred or follow-up added.
+- **Why:** authoritative night mode explicitly skips unstarted review/dogfood for overdue items once their own checks pass. This item adds no UI scenario.
+- **Evidence:** session began before03:20UTC; recovered core publication24c6e028 occurred04:59UTC, after the cutoff; reviewer criteria exist but no model reviewer was dispatched
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** a blocking behavioral failure remains
+- **Source:** locked by docs/loop/LOOP.md
+
+## D16: Make the engine fixture honor public migration versions
+- **Question:** first affected remote gate12of13files passed; restart in engine.test.ts replayed the new ALTER migration and failed duplicate skipped_ticks column, including the runner's isolated retry
+- **Options:** make production schema mutation silently idempotent; fix the fake openStore adapter's incorrect version handling
+- **Chose:** test adapter applies only migrations at indices greater than or equal to its stored version, advancing after each success. Real public stores already implement versioned forward migration. Keep the second migration and restart assertion intact.
+- **Why:** the fake re-applied all migrations on every new LoopService instance; idempotent CREATE had hidden it before presets added a real migration. Actual daemon restart and positive skipped-count persistence already passed.
+- **Evidence:** first remote13file gate ok:false/flaky:[]/165.85seconds; fixed local engine gate17pass/0fail/75assertions/10.88seconds; second full affected gate pending
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** a real public-store restart fails migration
+- **Source:** assumed — autonomous
+
+## D17: Select fixture guardians by exact home and current process owner
+- **Question:** required scripts gate failed67/68tests because the home-removal cleanup test chose the first machine-wide guardian not present in a baseline snapshot
+- **Options:** relax its15second watchdog; rerun until lucky; bind candidate identity to the exact test scope
+- **Chose:** test-only guardian config parsing validates home/owner shape and selects only exact temporary home plus current owner PID. Ignore vanished/malformed/nonmatching candidates. The existing test creates an owned decoy after baseline, asserts target ownership before registering any PID for cleanup, and confirms the decoy survives until its own cleanup. Keep all existing process postconditions,15second budget and production scope code unchanged.
+- **Why:** concurrent lanes can start guardians between baseline and selection; the old test could wait on and later kill a different lane's guardian. The deterministic owned-decoy red received decoy home instead of target home, proving misselection without registering a foreign PID. Corrected target passed1/0 with6assertions in7.17seconds.
+- **Evidence:** required scripts67/1/182.75seconds; deterministic red at config.home expected target rNOSAS, received owned decoy apSisj; narrow green; standalone commit9dcbd033 changes only scripts/process-scope.test.ts. Lane2 reviewed/cherry-picked it as5ffc4032 and its same-budget narrow check passed1/0/6assertions. Our full scripts rerun passed68/0/568assertions in197.50seconds.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** another fixture selects a process without owner evidence
+- **Source:** assumed — autonomous
+
 ## Progress
-Runtime edaae57f and public surface a82b5a8d audited and merged; component worktrees removed after preserving inherited metadata in named stashes. Core/preset merge resolved preserving both intents, then duplicate method and fixture type issues fixed. Pure decision/queue/pacing55pass/0fail/98assertions. Actual executable native smoke PASSED (D13). TypeScript clean after D12. Corrected three-file API/CLI/runtime test run is currently in progress; final affected runner/scripts and dependency readiness/catchup still pending. Reviewer criteria prepared but no review started or PASS claimed. No second item; no whole-queue completion claim.
+Own25new API/CLI/runtime tests pass/199assertions; pure55/0; post-lease typecheck passed48.38seconds and repeated actual native CLI/daemon/Codex smoke passed27.50seconds with exactly3turns and verified home removal. Required affected remote suite passed13/13files,0fail/0flaky retries in166.84seconds; required scripts passed68/0/568assertions in197.50seconds. D16/D17 close the two actual gate failures without weakening production safety. Core evidence29223563 and safe candidatee4b9cd1d merged; core D26/D27 read. All agents/implementation worktrees are finished/removed; only bg_20 deps waiter is active. Await core queue ready, perform the single roadmap catch-up/read any new decision deltas, final compatibility typecheck, commit/detach and authoritative land. D15 skips unstarted review; no feature flow was deferred, no second item claimed, no whole-queue completion claim.
