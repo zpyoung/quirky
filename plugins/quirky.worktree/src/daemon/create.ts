@@ -50,6 +50,9 @@ export type CreateParams = {
   github?: string
   issueCommand?: 'run' | 'skip'
   trustIssueCommand?: boolean
+  /** Content identity shown by a one-time consent UI; mismatches require a new decision. */
+  trustIssueCommandHash?: string
+  trustSetupHash?: string
   displayName?: string
   comment?: string
   parent?: string

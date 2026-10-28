@@ -93,7 +93,7 @@ async function remoteIdentityFromUrl(value: string): Promise<ParsedRemoteIdentit
 }
 
 async function resolveSshAlias(alias: string): Promise<string | null> {
-  let proc: ReturnType<typeof Bun.spawn>
+  let proc: Bun.Subprocess<'ignore', 'pipe', 'ignore'>
   try {
     proc = Bun.spawn(['ssh', '-G', '--', alias], { env: { ...process.env }, stdin: 'ignore', stdout: 'pipe', stderr: 'ignore' })
   } catch {

@@ -51,7 +51,7 @@ test(
     expect(bound.session).toBe(created.session)
     expect(tabsOf(created.workspace)).toHaveLength(tabsOf(before).length)
     expect(focusState(created.workspace)).toEqual(originalFocus)
-    expect(await h.call('quirky.terminal/focusContext')).toEqual({ workspace: before.id })
+    expect(await h.call<{ workspace: string | null }>('quirky.terminal/focusContext')).toEqual({ workspace: before.id })
 
     await h.waitForLine(created.session, 'ISSUE_COMMAND_MARKER')
     const exited = await h.waitForSession(created.session, 'to exit', (session) => session.status === 'exited')
@@ -67,7 +67,7 @@ test(
       )
     })
     expect(focusState(settled)).toEqual(originalFocus)
-    expect(await h.call('quirky.terminal/focusContext')).toEqual({ workspace: before.id })
+    expect(await h.call<{ workspace: string | null }>('quirky.terminal/focusContext')).toEqual({ workspace: before.id })
     expect((await h.sessionRecords()).filter((session) => session.id === created.session)).toHaveLength(1)
     expect(await h.screen(created.session)).toContain('ISSUE_COMMAND_MARKER')
   },

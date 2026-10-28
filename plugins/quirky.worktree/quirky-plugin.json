@@ -235,6 +235,14 @@
               "type": "boolean",
               "description": "Trust the selected commit's shared issue command for this creation only."
             },
+            "trustIssueCommandHash": {
+              "type": "string",
+              "description": "Pin one-time issue-command consent to the shared script hash shown by hooks-untrusted; use with trustIssueCommand."
+            },
+            "trustSetupHash": {
+              "type": "string",
+              "description": "Pin one-time setup consent to the shared script hash shown by hooks-untrusted; use with trustSetup."
+            },
             "displayName": {
               "type": "string",
               "description": "Explicit label; otherwise a GitHub source title is used."

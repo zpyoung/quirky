@@ -71,7 +71,10 @@ const main = (repoId = 'r1', id = 'wt-main'): Worktree => ({
   baseRef: null,
   keepBranch: false,
   removing: false,
-  groupId: null
+  groupId: null,
+  projectGroupId: null,
+  lastActivityAt: 0,
+  instanceId: `fixture:${id}`
 })
 const mains = [main(), main('r2', 'wt-web')]
 const settings: ProjectSettings = {
@@ -704,6 +707,9 @@ test('sidebar renders a durable linked PR as an external link beside the editabl
     sessions: [],
     selectedId: null,
     now: 0,
+    separatorEnabled: false,
+    onDropPreviewChange() {},
+    onSeparatorStateChange() {},
     openDialog() {},
     requestDelete() {}
   })))
