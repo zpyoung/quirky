@@ -1,0 +1,26 @@
+{
+  "id": "quirky.hosting",
+  "name": "Fake hosting",
+  "version": "0.0.0",
+  "main": "main.ts",
+  "activation": "startup",
+  "dependencies": ["quirky.worktree"],
+  "contributes": {
+    "method": [
+      {
+        "id": "forBranch",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": { "type": "string" },
+            "branch": { "type": "string" },
+            "headOid": { "type": "string" }
+          },
+          "required": ["worktree"]
+        },
+        "result": { "type": "object" }
+      }
+    ]
+  }
+}

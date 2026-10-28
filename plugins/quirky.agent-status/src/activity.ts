@@ -21,10 +21,11 @@ const ATTENTION_ORDER: Record<AgentDisplayState, number> = {
 
 const COMPLETED: Partial<Record<AgentDisplayState, true>> = { done: true, failed: true, interrupted: true }
 
-/** A terminal session that vanished during active work has an interrupted Activity outcome, not a stale working label. */
+/** A boundary snapshot is idle, while completed turns remain Done regardless of acknowledgment. */
 function displayOfSnapshot(snapshot: StoredActivity, now: number) {
   const row: AgentRow = !snapshot.live && snapshot.row.state !== 'done' ? { ...snapshot.row, state: 'done', interrupted: true } : snapshot.row
-  return displayOf(row, now, snapshot.live)
+  const display = displayOf(row, now, snapshot.live)
+  return row.sessionBoundary === true && display.display === 'done' ? { ...display, display: 'idle', label: 'Idle' } : display
 }
 
 /** Retains the latest status snapshot per terminal session, independently of its live status row. */
