@@ -187,5 +187,49 @@
 - **Revisit if:** the same semantic cases fail within their finite bound or a real latency contract is introduced.
 - **Source:** assumed — autonomous
 
+## D18: Prove repository visibility before calling an authenticated item 404 “not found”
+- **Question:** can a missing item and an inaccessible repository share GitHub's 404 response?
+- **Options:** label every 404 not-found; label every 404 unavailable; make a same-auth repository probe for source resolution.
+- **Chose:** only the fresh worktree-source path probes the selected repository after an item 404. Matching owner, repository name and canonical html_url establish visibility; otherwise preserve unavailable. Authentication, rate-limit and transport failures retain their own categories. No persistent cache or ordinary workItem semantic change.
+- **Why:** a generic unavailable result hides a genuinely missing issue in a repository the caller can access; accepting malformed visibility metadata would make the converse false claim.
+- **Evidence:** source acceptance run 10 pass/0 fail before deleting two incidental read-count assertions; corrected packaged UI run 20261028T015045-c593, obs-5 shows item-not-found and disabled Create.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** GitHub changes the repository visibility response or its authenticated privacy behavior.
+- **Source:** assumed — autonomous
+
+## D19: Verify content-pinned consent through the actual API and CLI
+- **Question:** did the D16 guard close the reproduced execution race without losing independent choices?
+- **Options:** inspect request wiring only; drive the real runtime and command-line flags.
+- **Chose:** keep consumer-visible stale-hash and matching-hash regression cases. Stale approval refuses before creation even when the replacement is persistently trusted; matching current CLI approval executes the selected script and records the linked issue. UI state tests model mutable consent rather than immutable request-object snapshots.
+- **Why:** API/CLI execution and marker files prove authority boundaries; copying a request into an assertion does not.
+- **Evidence:** consent regressions 2 pass/26 assertions; final fast UI 20 pass/93 assertions; isolated smoke emitted CONSENT_PIN_SMOKE_OK; final typecheck exit0, packaged build exit0.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** approval can execute content other than its supplied pin.
+- **Source:** assumed — autonomous
+
+## D20: Preserve raw web evidence and replace only the malformed fixture goal
+- **Question:** how to close visible acceptance flows and dispose of owned test resources?
+- **Options:** call a fixture-blocked result a pass; mutate its begun fixture; preserve it and run the unresolved goal against a fresh coherent fixture.
+- **Chose:** preserve three guarded web reports under .quirk/using-apps-like-a-user/runs/. Base run 20261028T002033-4786 passes all five goals: Smart PR creation, GitHub mixed selection/clear/issue creation, create-more reset, invalid source safety, and local issue-command settings/output. Run 20261028T013430-c11e passes shared issue Run once, actual terminal output, prompt-again and skip, but records source-notfound blocked because the fixture omitted repository html_url. Fresh run 20261028T015045-c593 passes that corrected goal: not-found, disabled Create, cancel with only primary main remaining.
+- **Why:** the blocked report remains unmodified and is not application evidence. In the corrected run, ref-fill returned STALE and the keyboard value signal returned NO_EFFECT, but obs-5 visibly proves the typed source/error; required Escape cancellation then produced OBSERVED and obs-6 proves no creation. No testing overrides or surface bypasses. All three owned daemon services exited0 and their temporary homes were removed. The blocked run's retained owned headless browser was explicitly closed after its report ended, without changing its verdict, to satisfy LOOP.md's process-cleanup rule.
+- **Evidence:** each run's report.json, screenshots and trees at the paths above; base artifact-location.json maps its original temporary paths; obs-12/14/18/19 show shared consent/output/re-prompt/skip; corrected obs-5/6 inspected directly. Reports have no findings, gates or cleanup errors. Headless web only; no native claim.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** a real provider reproduces a source error or command-consent failure.
+- **Source:** locked by docs/loop/LOOP.md verification and test cleanup; assumed — autonomous (fresh fixture closure)
+
+## D21: Complete one cross-family review round without changing its immutable code scope
+- **Question:** how to complete the final review when the operating system refuses oversized prompt arguments?
+- **Options:** narrow the reviewed patch; repeat successful stages; stage the same patch and resume only undispatched stages.
+- **Chose:** staged the immutable 690777-character captured code diff and required bounded reads. Reviewed model.ts, worktree/repo/hosting/terminal plugins, plugins/README.md and the three suite-test bounds, including the shared-file integration resolutions; unrelated incoming features and author decision/spec reasoning were not review inputs. Reused the three successful Gemini high promote results and resumed only fresh blind refutation after its inline diff hit the same OS limit. All three official deep gates/manifests PASS: correctness, compliance and security; zero blocking, advisory, suppressed, contested or limitation findings.
+- **Why:** argument transport is not a substantive review result. OpenAI implementers and Google Gemini 3.1 Pro reviewers preserve the chosen cross-family pairing. No code fix batch was needed.
+- **Evidence:** captured range dbe05bbc8654e976ddb6d96d0d9a6d3f8c548ec3..e7384808c95896ba67691e404d7c0d0f8cbecf72; official artifact hash d69c46af3f8f64925a4258f5b353094e211c74de857ef58faf9bc1aa2237c390; prepass actual source smoke exit0 in1477ms; final three gate outputs C/S/X PASS blocking0 advisory0 suppressed0. Generated lockfile excluded by the resolver.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** merge-result verification exposes a concrete defect.
+- **Source:** locked by docs/loop/LOOP.md one final review round; assumed — autonomous (file transport)
+
 ## Progress
-All original and repair components integrated; their worktrees removed. Catch-up completed once at 2e2d617e with additive model/schema/store/report resolution. Typecheck and full packaged build passed (20 plugins); scoped failures were repaired and their two files passed; scripts now 66/0. Guarded packaged web run is active on the owned GhwtPackagedDogfood service. New confirmed consent race is being fixed by BindScriptConsent in /tmp/quirky-ghwt-consent-fix (base102de2d1). Next: merge/verify consent fix, finish UI evidence and any narrow closure, stop/clean owned service, update user docs, final cross-family review/fix, then queue land. No pre-land whole suite.
+Implementation and all worker repairs integrated; implementer worktrees removed. Single catch-up completed at 2e2d617e. Scoped suite failures repaired and both repaired files passed; scripts 66/0; current typecheck and packaged build exit0; consent runtime/CLI and guarded UI closure passed. Final cross-family review C/S/X PASS with no findings. All owned test services stopped and temporary homes removed; raw UI reports preserved. Next: commit this evidence, detach and queue.ts land m4-worktrees-create-from-github; land owns whole-suite merge-result verification. Notify lane6 of the authoritative landing result. No quirky.tasks edits.
