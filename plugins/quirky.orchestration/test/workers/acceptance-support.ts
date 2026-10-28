@@ -31,14 +31,14 @@ export async function eventually<T>(read: () => T | Promise<T>, accepts: (value:
 }
 
 /** The CLI is executed by the real launched coordinator/worker, not an impersonated hello. */
-export async function startWorkerAcceptance(): Promise<WorkerAcceptance> {
+export async function startWorkerAcceptance(options: { heldPrefix?: string } = {}): Promise<WorkerAcceptance> {
   const fixture = await startAgentsE2E({ extraEnv: { WORKER_TEST_CLI: CLI }, timeScale: 0.1 })
   try {
     fixture.addFake('claude')
     const launcher = join(fixture.fakebin, 'claude')
     writeFileSync(launcher, `#!${process.execPath}\nimport ${JSON.stringify(AGENT)}\n`)
     chmodSync(launcher, 0o755)
-    const native = createCodexAppServerFixture(join(fixture.userHome, 'native-codex'))
+    const native = createCodexAppServerFixture(join(fixture.userHome, 'native-codex'), options)
     const codex = join(fixture.fakebin, 'codex')
     writeFileSync(codex, `#!${process.execPath}
 import { startWorkerControl } from ${JSON.stringify(join(import.meta.dir, 'acceptance-control.ts'))}
