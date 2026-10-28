@@ -26,7 +26,7 @@ const ID_IN_TEXT = /"(?:tab|grp|pane|split)-(\d+)"/g
 
 const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error))
 const isNotFound = (error: unknown) => (error as { code?: number } | null)?.code === RpcErrorCode.NotFound
-const isTabbed = (session: Session) => session.kind === 'terminal' || session.kind === 'structured'
+const isTabbed = (session: Session) => session.background !== true && session.kind === 'terminal'
 
 /** What `createTab` takes beyond the workspace: where the tab goes and what its session runs. */
 export type NewTabSpec = {
@@ -244,7 +244,9 @@ export class LayoutService {
     const groupId = params.group as string
     const workspace = this.ownerOf('group', groupId)
     const session = await this.session(params.session as string)
-    if (!isTabbed(session)) throw this.context.error('conflict', `session ${session.id} cannot be placed in a terminal tab`)
+    if (session.kind !== 'terminal' && session.kind !== 'structured') {
+      throw this.context.error('conflict', `session ${session.id} cannot be placed in a terminal tab`)
+    }
     if (session.worktreeId !== workspace.id) {
       throw this.context.error('conflict', `session ${session.id} belongs to ${session.worktreeId}, not workspace ${workspace.id}`)
     }
