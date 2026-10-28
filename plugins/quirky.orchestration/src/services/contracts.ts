@@ -10,6 +10,7 @@ export interface ServiceCoordinatorPrincipal {
   kind: 'service'
   pluginId: string
   runId: RunId
+  authority: 'kernel_plugin'
 }
 /** Session callers retain independently attested runtime evidence without a synthetic session. */
 export type CoordinatorAuthority = RuntimeCallerEvidence | ServiceCoordinatorPrincipal
