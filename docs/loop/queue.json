@@ -1401,6 +1401,18 @@
       "status": "done"
     },
     {
+      "id": "m7-ledger-remote-host-flows",
+      "milestone": "M7",
+      "title": "Build unimplemented SSH-host ledger workspace ownership/routing, remote import/evidence and selected-runtime availability from ledger.md after public host registration/incarnation lookup, remote repo/workspace identity and generation-fenced filesystem/execution APIs exist. Current ledger roots are local; never dereference SSH paths locally, invent synthetic generations or fall back to local reads. Preserve independent local ledger behavior and existing remote automation owner boundaries. Block if the public host prerequisite remains absent; this is unbuilt functionality, not verification/review/debugging.",
+      "docs": [
+        "ledger.md"
+      ],
+      "deps": [
+        "m7-sweep-automation-completion"
+      ],
+      "status": "todo"
+    },
+    {
       "id": "m7-test-triage",
       "milestone": "M7",
       "title": "End-phase test triage: run bun scripts/suite.ts packages apps plugins, bun test scripts and bun run typecheck on build/roadmap, and add one fix-test-<area>-<MMDD> item per failing package, app or plugin (naming its failing files and tests) so the lanes split the debugging; change no code",
@@ -1419,7 +1431,8 @@
         "m2-editor-build-unbuilt-flows",
         "m7-sweep-automation-completion",
         "m7-orchestration-heimdall-unbuilt-flows",
-        "sb-mobile-app-panels-unbuilt-flows"
+        "sb-mobile-app-panels-unbuilt-flows",
+        "m7-ledger-remote-host-flows"
       ],
       "status": "todo"
     },
@@ -1619,18 +1632,6 @@
       ],
       "status": "todo",
       "early": true
-    },
-    {
-      "id": "m7-ledger-remote-host-flows",
-      "milestone": "M7",
-      "title": "Build unimplemented SSH-host ledger workspace ownership/routing, remote import/evidence and selected-runtime availability from ledger.md after public host registration/incarnation lookup, remote repo/workspace identity and generation-fenced filesystem/execution APIs exist. Current ledger roots are local; never dereference SSH paths locally, invent synthetic generations or fall back to local reads. Preserve independent local ledger behavior and existing remote automation owner boundaries. Block if the public host prerequisite remains absent; this is unbuilt functionality, not verification/review/debugging.",
-      "docs": [
-        "ledger.md"
-      ],
-      "deps": [
-        "m7-sweep-automation-completion"
-      ],
-      "status": "todo"
     }
   ]
 }
