@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useImperativeHandle, useRef, useState, type CSSProperties, type Ref } from 'react'
+import { useCallback, useEffect, useImperativeHandle, useRef, useState, type Ref } from 'react'
 import { Terminal, type ILinkHandler, type ITerminalAddon } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import { WebglAddon } from '@xterm/addon-webgl'
@@ -120,27 +120,6 @@ type Runtime = {
 
 const EMPTY_RESULTS: Results = { index: -1, count: 0 }
 
-const style: Record<string, CSSProperties> = {
-  host: { position: 'absolute', inset: 0, boxSizing: 'border-box', overflow: 'hidden' },
-  screen: { position: 'absolute' },
-  hint: {
-    position: 'absolute',
-    left: 6,
-    bottom: 6,
-    zIndex: 15,
-    maxWidth: 'calc(100% - 12px)',
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
-    whiteSpace: 'nowrap',
-    padding: '2px 8px',
-    borderRadius: 4,
-    background: 'var(--popover, rgba(30, 32, 38, 0.95))',
-    color: 'var(--popover-foreground, #d7dae0)',
-    border: '1px solid var(--border, #3a3d45)',
-    fontSize: 11,
-    pointerEvents: 'none'
-  }
-}
 
 function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
@@ -980,11 +959,13 @@ export function TerminalPaneView(props: TerminalPaneProps) {
     <div
       ref={hostRef}
       data-terminal-pane={sessionId}
-      style={{ ...style.host, opacity: active ? 1 : settings['inactive-pane-opacity'] }}
+      className="terminal-pane-host"
+      style={{ opacity: active ? 1 : settings['inactive-pane-opacity'] }}
     >
       <div
         ref={screenRef}
-        style={{ ...style.screen, left: settings['padding-x'], right: settings['padding-x'], top: settings['padding-y'], bottom: settings['padding-y'] }}
+        className="terminal-pane-screen"
+        style={{ left: settings['padding-x'], right: settings['padding-x'], top: settings['padding-y'], bottom: settings['padding-y'] }}
       />
       <MobileDriverOverlay context={context} sessionId={sessionId} />
       {search ? (
@@ -1005,7 +986,7 @@ export function TerminalPaneView(props: TerminalPaneProps) {
         />
       ) : null}
       {hint ? (
-        <div data-pane-link-hint style={style.hint}>
+        <div data-pane-link-hint className="terminal-pane-link-hint">
           {hint}
         </div>
       ) : null}

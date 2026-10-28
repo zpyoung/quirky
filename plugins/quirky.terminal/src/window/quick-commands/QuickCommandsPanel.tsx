@@ -2,10 +2,10 @@ import { useEffect, useMemo, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import type { UiPluginContext } from '@quirky/protocol'
 import type { QuickCommand } from '../../layout/types'
+import { Badge, Button, EmptyState, FormRow, IconButton, ListRow, ToolPanelFrame } from '@quirky/ui'
 import { QuickCommandDialog } from './QuickCommandDialog'
 import { searchQuickCommands } from './search'
 import { PencilIcon, TrashIcon, confirmAndRemove, summaryOf, useQuickCommands } from './shared'
-import { ensureQuickCommandStyles } from './styles'
 
 export type ScopeFilter = 'all' | 'global' | 'repo'
 
@@ -72,7 +72,6 @@ function useCurrentRepo(context: UiPluginContext, override: string | null | unde
  * where they are managed.
  */
 export function QuickCommandsPanel({ context, report, repo: repoOverride }: Props) {
-  useState(ensureQuickCommandStyles)
   const { commands, loaded, refresh } = useQuickCommands(context, 'all')
   const repo = useCurrentRepo(context, repoOverride)
   const [filter, setFilter] = useState<ScopeFilter>('all')
@@ -86,50 +85,80 @@ export function QuickCommandsPanel({ context, report, repo: repoOverride }: Prop
   }, [report, commands.length, filter, query, rows])
 
   return (
-    <div className="qc-panel">
-      <header className="qc-header">
-        <input className="qc-input" type="search" placeholder="Search quick commands" aria-label="Search quick commands" value={query} onChange={(event) => setQuery(event.target.value)} />
-        <select className="qc-select" aria-label="Filter by scope" value={filter} onChange={(event) => setFilter(event.target.value as ScopeFilter)}>
-          {FILTERS.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.text}
-            </option>
-          ))}
-        </select>
-        <button type="button" onClick={() => setDialog({ command: null })}>
-          Add Command
-        </button>
-      </header>
-      {!loaded ? null : commands.length === 0 ? (
-        <p className="qc-empty">{EMPTY_TEXT}</p>
-      ) : rows.length === 0 ? (
-        <p className="qc-empty">{query.trim() ? 'No commands match this search.' : 'No commands in the selected scopes.'}</p>
-      ) : (
-        <ul className="qc-list">
-          {rows.map((row) => (
-            <li key={row.id} className="qc-row" data-command={row.id}>
-              <div className="qc-row-main">
-                <div className="qc-row-title">
-                  <span className="qc-label">{row.label.trim() || 'Untitled'}</span>
-                  <span className="qc-badge" title={row.scope === 'repo' ? (row.repo ?? undefined) : undefined}>
-                    {row.scope === 'repo' ? 'Project' : 'Global'}
-                  </span>
-                  {row.kind === 'agent' ? <span className="qc-hint">Agent</span> : <span className="qc-hint">{row.appendEnter ? 'Enter' : 'Insert'}</span>}
-                </div>
-                <span className="qc-body">{row.command.trim() ? summaryOf(row) : 'No command text'}</span>
-              </div>
-              <span className="qc-actions">
-                <button type="button" className="qc-icon-button" aria-label={`Edit ${row.label}`} title="Edit" onClick={() => setDialog({ command: row })}>
-                  <PencilIcon />
-                </button>
-                <button type="button" className="qc-icon-button qc-danger" aria-label={`Delete ${row.label}`} title="Delete" onClick={() => void confirmAndRemove(context, row).then(refresh)}>
-                  <TrashIcon />
-                </button>
-              </span>
-            </li>
-          ))}
-        </ul>
-      )}
+    <div className="tt-tool-panel-fill qc-panel-shell">
+      <ToolPanelFrame title="Quick Commands" actions={<Button onClick={() => setDialog({ command: null })}>Add Command</Button>}>
+        <div className="qc-panel">
+          <header className="qc-header">
+            <FormRow label="Search" htmlFor="quick-command-search">
+              <input
+                id="quick-command-search"
+                className="ui-text-field__input"
+                type="search"
+                placeholder="Search quick commands"
+                aria-label="Search quick commands"
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+              />
+            </FormRow>
+            <FormRow label="Scope" htmlFor="quick-command-scope">
+              <select
+                id="quick-command-scope"
+                className="ui-text-field__input"
+                aria-label="Filter by scope"
+                value={filter}
+                onChange={(event) => setFilter(event.target.value as ScopeFilter)}
+              >
+                {FILTERS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.text}
+                  </option>
+                ))}
+              </select>
+            </FormRow>
+          </header>
+          {!loaded ? null : commands.length === 0 ? (
+            <EmptyState message={EMPTY_TEXT} />
+          ) : rows.length === 0 ? (
+            <EmptyState message={query.trim() ? 'No commands match this search.' : 'No commands in the selected scopes.'} />
+          ) : (
+            <ul className="qc-list">
+              {rows.map((row) => (
+                <li key={row.id} className="qc-row" data-command={row.id}>
+                  <ListRow
+                    title={
+                      <span className="qc-row-title">
+                        <span className="qc-label">{row.label.trim() || 'Untitled'}</span>
+                        <span className="qc-badge" title={row.scope === 'repo' ? (row.repo ?? undefined) : undefined}>
+                          <Badge>{row.scope === 'repo' ? 'Project' : 'Global'}</Badge>
+                        </span>
+                        <span className="qc-hint">
+                          <Badge>{row.kind === 'agent' ? 'Agent' : row.appendEnter ? 'Enter' : 'Insert'}</Badge>
+                        </span>
+                      </span>
+                    }
+                    description={<span className="qc-body">{row.command.trim() ? summaryOf(row) : 'No command text'}</span>}
+                    trailing={
+                      <span className="qc-actions">
+                        <IconButton label={`Edit ${row.label}`} title="Edit" onClick={() => setDialog({ command: row })}>
+                          <PencilIcon />
+                        </IconButton>
+                        <IconButton
+                          label={`Delete ${row.label}`}
+                          title="Delete"
+                          variant="destructive"
+                          onClick={() => void confirmAndRemove(context, row).then(refresh)}
+                        >
+                          <TrashIcon />
+                        </IconButton>
+                      </span>
+                    }
+                  />
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </ToolPanelFrame>
       {dialog ? <QuickCommandDialog key={dialog.command?.id ?? 'new'} context={context} command={dialog.command} repo={repo} onSaved={() => void refresh()} onClose={() => setDialog(null)} /> : null}
     </div>
   )

@@ -1,4 +1,5 @@
-import { useEffect, type CSSProperties, type KeyboardEvent, type RefObject } from 'react'
+import { useEffect, type KeyboardEvent, type RefObject } from 'react'
+import { Button, IconButton } from '@quirky/ui'
 
 type Props = {
   query: string
@@ -15,31 +16,6 @@ type Props = {
   onClose(): void
 }
 
-const style: Record<string, CSSProperties> = {
-  box: {
-    position: 'absolute',
-    top: 8,
-    right: 8,
-    zIndex: 20,
-    display: 'flex',
-    alignItems: 'center',
-    gap: 4,
-    width: 340,
-    maxWidth: 'calc(100% - 16px)',
-    padding: '4px 8px',
-    borderRadius: 8,
-    border: '1px solid var(--border, #3a3d45)',
-    background: 'var(--popover, rgba(30, 32, 38, 0.95))',
-    color: 'var(--popover-foreground, #d7dae0)',
-    boxShadow: '0 4px 14px rgba(0, 0, 0, 0.35)',
-    fontSize: 12
-  },
-  input: { flex: 1, minWidth: 0, border: 'none', outline: 'none', background: 'transparent', color: 'inherit', fontSize: 13 },
-  status: { flexShrink: 0, padding: '0 4px', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums', opacity: 0.7 },
-  button: { flexShrink: 0, minWidth: 22, height: 22, padding: '0 4px', border: 'none', borderRadius: 4, background: 'transparent', color: 'inherit', cursor: 'pointer' },
-  pressed: { background: 'rgba(255, 255, 255, 0.16)' },
-  divider: { width: 1, height: 16, background: 'var(--border, #3a3d45)' }
-}
 
 /**
  * The find box of a terminal pane: query field, Case sensitive and Regex toggles, the match
@@ -72,36 +48,36 @@ export function SearchBox(props: Props) {
   }
 
   return (
-    <div data-pane-search style={style.box} onKeyDown={onKeyDown} role="search">
+    <div data-pane-search className="tt-pane-search" onKeyDown={onKeyDown} role="search">
       <input
         ref={inputRef}
         type="text"
+        className="ui-text-field__input tt-pane-search__input"
         aria-label="Search"
         placeholder="Search..."
-        style={style.input}
         value={props.query}
         onChange={(event) => props.onQueryChange(event.target.value)}
       />
-      <button type="button" title="Case sensitive" aria-pressed={props.caseSensitive} style={{ ...style.button, ...(props.caseSensitive ? style.pressed : null) }} onClick={() => props.onCaseSensitiveChange(!props.caseSensitive)}>
+      <Button type="button" className="tt-pane-search__action" title="Case sensitive" aria-pressed={props.caseSensitive} onClick={() => props.onCaseSensitiveChange(!props.caseSensitive)}>
         Aa
-      </button>
-      <button type="button" title="Regex" aria-pressed={props.regex} style={{ ...style.button, ...(props.regex ? style.pressed : null) }} onClick={() => props.onRegexChange(!props.regex)}>
+      </Button>
+      <Button type="button" className="tt-pane-search__action" title="Regex" aria-pressed={props.regex} onClick={() => props.onRegexChange(!props.regex)}>
         .*
-      </button>
-      <span data-pane-search-status style={style.status}>
+      </Button>
+      <span data-pane-search-status className="tt-pane-search__status">
         {props.status}
       </span>
-      <span style={style.divider} />
-      <button type="button" title="Previous match" aria-label="Previous match" style={style.button} onClick={props.onPrevious}>
+      <span className="tt-pane-search__divider" />
+      <IconButton className="tt-pane-search__action" type="button" label="Previous match" title="Previous match" onClick={props.onPrevious}>
         ↑
-      </button>
-      <button type="button" title="Next match" aria-label="Next match" style={style.button} onClick={props.onNext}>
+      </IconButton>
+      <IconButton className="tt-pane-search__action" type="button" label="Next match" title="Next match" onClick={props.onNext}>
         ↓
-      </button>
-      <span style={style.divider} />
-      <button type="button" title="Close" aria-label="Close search" style={style.button} onClick={props.onClose}>
+      </IconButton>
+      <span className="tt-pane-search__divider" />
+      <IconButton className="tt-pane-search__action" type="button" label="Close search" title="Close" onClick={props.onClose}>
         ×
-      </button>
+      </IconButton>
     </div>
   )
 }
