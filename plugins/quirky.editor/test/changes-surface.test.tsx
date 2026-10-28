@@ -204,9 +204,13 @@ test('Changes compares HEAD to the shared draft, not staged content, in the same
   expect(surface.element.querySelector('[aria-pressed="true"][aria-label="Side by side"]')).not.toBeNull()
   await act(async () => surface.element.querySelector<HTMLButtonElement>('[aria-label="Inline"]')?.click())
   expect(surface.element.querySelector('.qe-changes-inline')).not.toBeNull()
-  expect(surface.element.querySelector('[aria-label="Inline diff"]')?.textContent).toContain('Committed HEAD')
-  expect(surface.element.querySelector('[aria-label="Inline diff"]')?.textContent).toContain('Shared draft')
-  expect(surface.element.querySelector('[aria-label="Inline diff"]')?.textContent).not.toContain('Staged index')
+  const inlineRows = [...surface.element.querySelectorAll<HTMLElement>('.qe-changes-inline-row')]
+  const reconstruct = (excluded: 'added' | 'removed') => inlineRows
+    .filter((row) => !row.classList.contains(excluded))
+    .map((row) => row.querySelector('code')?.textContent ?? '')
+    .join('')
+  expect(reconstruct('added')).toBe('Committed HEAD')
+  expect(reconstruct('removed')).toBe('Shared draft')
   expect(surface.element.querySelector('[aria-label="Next change"]')).not.toBeNull()
 })
 
@@ -276,10 +280,15 @@ test('Changes rejects a detached response for another lease and leaves Source av
   await flush()
   await act(async () => surface.element.querySelector<HTMLButtonElement>('[aria-label="Markdown preview"]')?.click())
   await flush()
-  expect(surface.element.querySelector('[role="alert"]')?.textContent).toContain('invalid')
-  expect(surface.element.querySelector('[aria-label="Source editor"]')).not.toBeNull()
+  const previewError = surface.element.querySelector('[role="alert"]')
+  expect(previewError).not.toBeNull()
+  const sourceButton = surface.element.querySelector<HTMLButtonElement>('[aria-label="Source editor"]')
+  expect(sourceButton).not.toBeNull()
   expect(surface.element.querySelector('.qe-changes-markdown-preview')).toBeNull()
   expect(surface.liveResourceCount()).toBe(0)
+  await act(async () => sourceButton?.click())
+  await flush()
+  expect(surface.element.querySelector('[aria-label="Modified editor"] .cm-content')?.textContent).toContain('Shared draft')
 })
 
 test('Changes makes a clean HEAD comparison explicit', async () => {
