@@ -1208,8 +1208,7 @@
       "deps": [
         "sa-browser-pane"
       ],
-      "status": "in-progress",
-      "lane": 6
+      "status": "blocked"
     },
     {
       "id": "sa-browser-pane-workspace-preview",

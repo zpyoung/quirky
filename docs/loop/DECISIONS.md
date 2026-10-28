@@ -6,6 +6,9 @@ files, not this one.
 
 | Reversibility | Confidence | Entry | Decision | Source |
 | --- | --- | --- | --- | --- |
+| medium. | high. | [sa-browser-pane-native-host-controls D4](decisions/sa-browser-pane-native-host-controls.md) | Require real cache bypass without changing page identity or data | locked by browser.md and sa-browser-pane D15-D17 |
+| medium. | high. | [sa-browser-pane-native-host-controls D5](decisions/sa-browser-pane-native-host-controls.md) | Native failure state must come from actual navigation failure | locked by browser.md and sa-browser-pane D4/D17 |
+| easy. | high. | [sa-browser-pane-native-host-controls D8](decisions/sa-browser-pane-native-host-controls.md) | Audit isolated sources only and preserve unrelated metadata | deferred: platform |
 | evidence can be extended | high for the receipts, source runtime unresolved | [sa-browser-profiles-settings D18](decisions/sa-browser-profiles-settings.md) | Separate passing evidence from the remaining source-runtime failure | assumed — autonomous |
 | evidence can be extended | high for exercised results, residual flakes unattributed | [sa-browser-profiles-settings D20](decisions/sa-browser-profiles-settings.md) | Accept the runner's success without erasing its flakes | assumed — autonomous |
 | evidence can be extended | high for exercised compiled ui/api behavior, native assurance absent | [sa-browser-profiles-settings D25](decisions/sa-browser-profiles-settings.md) | Verify final compiled Watch switching, not only metadata | assumed — autonomous |
@@ -49,6 +52,7 @@ files, not this one.
 | hard | high | [sb-mobile-install-links D2](decisions/sb-mobile-install-links.md) | Preserve the Quirky identity and reject incompatible upstream destinations | locked by docs/architecture.md |
 | hard | high | [m3-handoff D5](decisions/m3-handoff.md) | A new built-in plugin, `quirky.handoff`, owns composition, launch and lineage in the daemon; the window is a thin view | assumed — autonomous |
 | hard for privacy, easy for bookkeeping | high | [m3-vault-consent-tip-completion D2](decisions/m3-vault-consent-tip-completion.md) | Seen is a consequence of successful local opt-in, never authorization to index | locked by docs/quirk/specs/2026-10-27-m3-vault/logic.md |
+| hard (engine/host boundary). | high for supported api absence; not a claim that webkit itself lacks the capability. | [sa-browser-pane-native-host-controls D3](decisions/sa-browser-pane-native-host-controls.md) | Preserve Native/Watch separation and supported host ownership | locked by docs/architecture.md and sa-browser-pane D17 |
 | hard | high | [m0-core D6](decisions/m0-core.md) | v1's methods are renamed to their plugin's namespace, with no aliases, and the protocol version goes to 2 | supersedes m0-daemon-api D5 |
 | hard | high | [m0-core D7](decisions/m0-core.md) | v1's events become the plugins' events | assumed — autonomous |
 | hard | high | [m0-core D31](decisions/m0-core.md) | Port v1 for real, growing the public plugin API, rather than facades or raw RPC primitives | locked by docs/roadmap.md (built-ins use only the public API); assumed — autonomous (the approach) |
@@ -91,6 +95,7 @@ files, not this one.
 | hard | high | [m5-automations-dispatch D1](decisions/m5-automations-dispatch.md) | Use daemon structured execution, never a hidden terminal | locked by docs/architecture.md |
 | hard | high | [m1-term-ui D7](decisions/m1-term-ui.md) | Layout lives in the daemon; the window renders it and changes it only through methods | locked by docs/roadmap.md |
 | hard | high | [m1-providers D9](decisions/m1-providers.md) | Agent IDs, labels and table values are Orca's | locked by docs/architecture.md |
+| medium (acceptance ownership). | high. | [sa-browser-pane-native-host-controls D1](decisions/sa-browser-pane-native-host-controls.md) | Retain the queue core and all binding inherited acceptance | locked by sa-browser-pane D23 and sa-browser-design-mode D33 |
 | medium (lifecycle and safety) | source-backed, runtime proof pending at recording | [sa-browser-design-mode D12](decisions/sa-browser-design-mode.md) | Close source integration defects before claiming acceptance | assumed — autonomous |
 | medium (payload latency) | source-backed; final runtime test required | [sa-browser-design-mode D19](decisions/sa-browser-design-mode.md) | Finish the original Grab payload image contract without holding a user-waiting lock | locked by browser.md |
 | medium (image boundaries); hard (locked agent architecture) | source-backed; native-only behavior remains pending nightly. | [sa-browser-design-mode D27](decisions/sa-browser-design-mode.md) | Bound images without destructive editing or invented chat | locked by docs/architecture.md and browser.md; assumed — autonomous image budget |
@@ -657,6 +662,8 @@ files, not this one.
 | medium | high | [m3-session-info D9](decisions/m3-session-info.md) | macOS local execution is the supported transport | deferred: platform |
 | medium | high | [m3-session-info D12](decisions/m3-session-info.md) | Accept the specification review's three implementation gaps | assumed — autonomous |
 | medium | high | [m3-session-info D27](decisions/m3-session-info.md) | Close supplemental final A1 with a real bounded-I/O fix | assumed — autonomous |
+| easy (process). | high. | [sa-browser-pane-native-host-controls D2](decisions/sa-browser-pane-native-host-controls.md) | Answer design questions autonomously and stop at the unsupported core boundary | locked by docs/loop/LOOP.md |
+| easy (queue item can be re-enabled when prerequisite exists). | high. | [sa-browser-pane-native-host-controls D7](decisions/sa-browser-pane-native-host-controls.md) | Block the whole item without clearing retained acceptance or fabricating a landing | assumed — autonomous |
 | easy (window-only state) | source-backed; actual shortcut rerun and native nightly remain required | [sa-browser-design-mode D24](decisions/sa-browser-design-mode.md) | Preserve armed keyboard and Native overlay semantics | locked by browser.md design interaction and sa-browser-pane Native mask contract |
 | easy (validation and isolated fixtures) | observed failure and focused passing fixture; final combined gate remains required. | [sa-browser-design-mode D26](decisions/sa-browser-design-mode.md) | Keep privacy and fixture costs explicit | assumed — autonomous |
 | easy | high, actual visible paste | [sa-browser-design-mode D28](decisions/sa-browser-design-mode.md) | Distinguish clipboard-only success from a changed screenshot | assumed — autonomous |
@@ -1304,6 +1311,7 @@ files, not this one.
 | easy | high for unchanged current behavior; not a new ui acceptance claim | [sa-browser-localhost-label-routing D5](decisions/sa-browser-localhost-label-routing.md) | Preserve current unavailable UX and browser isolation | locked by docs/loop/decisions/sa-browser-profiles-settings.md |
 | easy | high for audit outcome; actual routed connectivity remains unimplemented and unverified | [sa-browser-localhost-label-routing D6](decisions/sa-browser-localhost-label-routing.md) | Record a source-capability investigation, not feature acceptance | locked by docs/loop/LOOP.md |
 | easy | high for scope; no cross-platform capability claim | [sa-browser-localhost-label-routing D7](decisions/sa-browser-localhost-label-routing.md) | Retain the macOS-only platform boundary | deferred: platform |
+| easy when upstream adds apis; medium for an explicitly approved native fork. | high for inspected supported release surfaces; no assertion about unreleased/private sdk code. | [sa-browser-pane-native-host-controls D6](decisions/sa-browser-pane-native-host-controls.md) | Latest published SDK does not unblock either native core flow | assumed — autonomous |
 | easy | high | [m0-core D1](decisions/m0-core.md) | Classify the item as an API, CLI, Organization and Visual design, and run every research phase | assumed — autonomous |
 | easy | high | [m0-core D2](decisions/m0-core.md) | Skip the visual companion and the adhd offer, use the standard gray-area set | locked by docs/loop/LOOP.md |
 | easy | high | [m0-core D3](decisions/m0-core.md) | Keep m0-core as one item with one pair of specs, built in waves | locked by docs/loop/queue.json |
