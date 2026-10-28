@@ -409,6 +409,28 @@ Their non-secret stage, choices, devices and error state are readable through
 `ui.state` slot reports. The live method schemas are in `quirky api --json`;
 [the behavior spec](../docs/quirk/specs/2026-10-27-sb-mobile-daemon/logic.md)
 defines the scope and limits.
+
+Paired phones subscribe to a notification-only replay feed with
+`quirky.mobile/notificationPoll`; the general daemon event catalog is not granted.
+Keep the returned `epoch` and `cursor` for reconnect catch-up. A process restart
+resets the epoch; a gap beyond the256-record window reports `truncated`.
+Away/focused-workspace filters still advance the cursor, so suppressed records do
+not reappear after reconnect. Unknown desktop presence does not silence alerts.
+The macOS away check uses180seconds of keyboard/mouse idle or a locked console.
+
+```sh
+quirky mobile notification-test --json
+quirky mobile notification-poll --wait-ms 0 --json
+quirky mobile notification-poll --after 12 --epoch <epoch> --only-away --json
+```
+
+Long polls accept `waitMs` up to25000. A phone can bind its poll to a
+`subscriptionId` and release that same generation with
+`quirky.mobile/notificationCancel`; a late cancellation cannot stop its replacement.
+The server takes device identity from the authenticated connection, never params.
+These are direct foreground subscriptions, **not APNs/FCM background push**.
+No hosted push gateway or upstream Orca token registration is implied.
+
 ## Create a workspace from GitHub
 
 Use the new-workspace dialog's Smart field for `#123` or a GitHub PR/issue URL.

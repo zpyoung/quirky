@@ -8,7 +8,8 @@ export class MobileAuthorizationError extends Error {
 const PARAMS: Readonly<Record<string, readonly string[]>> = {
   'status.get': [],
   'quirky.mobile/info': [],
-  'quirky.mobile/notificationPoll': ['after', 'epoch', 'waitMs', 'onlyWhenDesktopAway', 'suppressWorktree'],
+  'quirky.mobile/notificationPoll': ['after', 'epoch', 'waitMs', 'onlyWhenDesktopAway', 'suppressWorktree', 'subscriptionId'],
+  'quirky.mobile/notificationCancel': ['subscriptionId'],
   'quirky.mobile/notificationTest': [],
   'quirky.session/list': ['worktree'],
   'quirky.session/get': ['session'],

@@ -66,5 +66,27 @@
 - **Revisit if:** branch switching conflicts with the existing worktree ownership rules.
 - **Source:** assumed — autonomous
 
+## D7: Bind subscription cancellation to an authenticated device and generation
+- **Question:** how does disabling or leaving the page release a long poll when the shared native RPC connection stays alive?
+- **Options:** wait25seconds and risk re-enable conflicts; close the shared connection; generation-scoped cancellation.
+- **Chose:** optional subscriptionId on polls and notificationCancel; only the authenticated caller's matching waiter is cancelled. A stale old-page cleanup cannot cancel a replacement. The page root owns one DirectNotifications manager across all routes; settings edit its shared preferences and in-app alerts navigate using authoritative worktree/session IDs.
+- **Why:** page unmount is not transport disconnect, and a device-global late cancel races the next page generation. No new broad event or socket privilege is necessary.
+- **Evidence:** notification-replay.test.ts stale-generation and cross-device regression; encrypted notifications.test.ts cancellation/replacement/revocation and real quirky.notifications/send capture;5tests39assertions passed. Actual CLI->daemon->sealed-phone->CLI replay smoke passed with both desktopAway false and true sampled on separate runs.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** the public bridge gains per-request cancellation.
+- **Source:** assumed — autonomous
+
+## D8: Keep native background push separate from direct foreground subscriptions
+- **Question:** should the direct-only phone claim upstream APNs/FCM registration and background delivery?
+- **Options:** call Orca's service; fake background push with foreground events; defer the external push service while shipping real direct subscriptions.
+- **Chose:** real scoped direct foreground subscriptions and in-app notification routing; no upstream service calls or token registration. Record APNs/FCM gateway/native entitlement/token/lease/background-tap integration in the single follow-up before landing. macOS idle/lock filtering ships now; Linux/Windows presence probes and actual mobile device background behavior require platform work.
+- **Why:** neither Quirky notifications nor mobile APIs provide native push registration/gateway; external operator-controlled delivery credentials and native app entitlements are unavailable. Architecture disallows upstream hosted relay and never authorizes reusing Orca's push account/service. A socket event is not background OS delivery.
+- **Evidence:** quirky.notifications manifest public status/send/test/preview; mobile.md429-438; sb-mobile-app D2/D6 and spec excluded hosted services; actual reviewer/runtime capability survey.
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** an operator-controlled push service and native app delivery credentials are configured.
+- **Source:** deferred: native background push service
+
 ## Progress
-Contracts/spec committed eb750d27. Three disjoint component workers running in /tmp/quirky-panels-{scm,files-tasks,activity}; HEAD eb750d27, scopes in /tmp/quirky-panel-run.42yijv/journal.json. PhoneScm scope explicitly expanded for guarded Git branch switch. Parent implemented notification-only replay/service and encrypted acceptance (green3unit+1integration); raw presence sampling verified on macOS. Dependency lane5 published newer bridge state/extension contracts53b19b61; merge those next. Native app/pages still in progress. Web dogfood doctor ready. No final suite/build/UI/review claims.
+Contracts/spec committed eb750d27. Parent notification service17bbe2b7, with cancellation/CLI correction now verified5tests39assertions plus actual CLI smoke. Dependency bridge state contracts merged through53b19b61. Three independent component workers still running; parent owns shared route/auth integration only after base lands per itsD7. Native handoff written pending. Web dogfood driver ready; final affected-suite/scripts/typecheck/build/built-UI/review/land remain to execute. No whole-suite local run is planned: night-mode rule reserves it for queue land despite protocol changes.

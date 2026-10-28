@@ -32,6 +32,13 @@ export function registerMobileNotifications(context: PluginContext): () => void 
       unsubscribeClose()
     }
   })
+  context.provide('method:quirky.mobile/notificationCancel', (params: { subscriptionId?: string }, caller: PluginCaller) => {
+    if (caller.role === 'plugin' || !caller.connection) throw context.error('invalid-params', 'notification cancellation requires a client connection')
+    const deviceId = caller.role === 'mobile' ? caller.deviceId : `local:${caller.connection.id}`
+    if (!deviceId) throw context.error('invalid-params', 'authenticated device identity is required')
+    if (params.subscriptionId !== undefined && params.subscriptionId.length > 128) throw context.error('invalid-params', 'invalid notification subscription')
+    return { cancelled: replay.cancel(deviceId, params.subscriptionId) }
+  })
   context.provide('method:quirky.mobile/notificationTest', () => {
     replay.append({ title: 'Quirky mobile test notification', body: 'Your direct phone notification subscription is working.' }, true)
     return { sent: true }
