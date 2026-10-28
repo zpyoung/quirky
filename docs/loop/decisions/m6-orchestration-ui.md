@@ -77,5 +77,27 @@
 - **Revisit if:** another platform is authorized
 - **Source:** deferred: platform
 
+## D8: Resolve navigation in one public daemon operation, including context-only Dispatches
+- **Question:** implementation review found renderer navigation required a supervised Worker although the source makes every assigned Task navigable
+- **Options:** leave context-only work unnavigable; duplicate process/custody proof in each renderer; one read-only taskTerminal method
+- **Chose:** taskTerminal({taskId}) returns exact task/dispatch/session/worktree IDs using the latest dispatch, public targetIdentity and same-store assignment/resource evidence. Both links and sidebar consume it; CLI exposes task-terminal. Structured, replaced/reused/released or absent terminals refuse honestly. Context-only live assignments do not require Worker rows.
+- **Why:** source coverage includes low-level assigned tasks, and the daemon already owns exact authority/custody. Renderer copies create inconsistent checks and cannot inspect context-only incarnation proof.
+- **Evidence:** orchestration.md section10; src/runs.ts dispatchShow; src/navigation.ts and test/navigation-acceptance.test.ts
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** federation provides an actual remote navigation destination
+- **Source:** locked by research/orca-features/orchestration.md
+
+## D9: Separate current-assignment confidence from worker liveness
+- **Question:** stable task labels could survive into a replacement process when only resource owner IDs were checked
+- **Options:** trust old labels; hide all unverifiable workers; project exact assignment confidence independently
+- **Chose:** required fleet currentAssignment boolean derives exact observation and resource/session/incarnation consistency. False confidence keeps inspectable uncertainty but uses actual session title/agent or explicit unverified label, never the obsolete task title. Stale-but-exact identity retains task label with stale activity.
+- **Why:** source restricts task display labels to the same live assignment and says absence is never proof. Hiding uncertainty is as misleading as calling it dead.
+- **Evidence:** orchestration.md UI and safe-failure rule; src/worker-contracts.ts currentAssignment, workers/fleet.ts and worktree OrchestrationRows.tsx
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** provider-neutral prompt lineage gives stronger exact assignment evidence
+- **Source:** assumed — autonomous
+
 ## Progress
-Iteration5 scoped and merged current build/m6-orchestration-workers dependency. Research scouts are mapping exact settings/skill and renderer contracts. Next: commit combined spec and shared contracts, implement disjoint slices, verify and land. No feature implementation or passing verification is claimed yet.
+Iteration5 contracts/spec committed e02f5a7e; three disjoint implementation trees dispatched. Terminal links and sidebar/fleet have returned authored code/tests; setup/policy/skill remains running. Parent adds the shared navigation endpoint and source-coverage/evidence amendments. No tests/build/dogfood have run yet; only web doctor passed. Next: wait implementation barrier, scope audit, integrate, run focused/affected gates, catch up once, review/dogfood and land.
