@@ -142,9 +142,9 @@ export function ChecksList(props: ChecksListProps) {
 
   const openCheck = async (check: CheckRow) => {
     const url = safeHttpUrl(check.url)
-    if (url === null) return
+    if (owner === null || url === null) return
     try {
-      await props.context.call('quirky.reviews/openLink', { url })
+      await props.context.call('quirky.reviews/openLink', { url, worktree: owner.worktree })
     } catch (error) {
       setActionError(errorText(error))
     }
@@ -256,7 +256,7 @@ export function ChecksList(props: ChecksListProps) {
               : detail === null ? <p role="status">{activeLoading ? 'Loading check details…' : 'Check details have not been requested.'}</p>
                 : <CheckDetailView details={detail} checkRunId={check.checkRunId} workflowRunId={check.workflowRunId}
                   onCopy={(tail) => void copyTail(tail)}
-                  onOpen={(url) => { void props.context.call('quirky.reviews/openLink', { url }).catch((error: unknown) => setActionError(errorText(error))) }} />}
+                  onOpen={(url) => { if (owner === null) return; void props.context.call('quirky.reviews/openLink', { url, worktree: owner.worktree }).catch((error: unknown) => setActionError(errorText(error))) }} />}
             {!canLoadDetails && check.checkRunId !== null ? <p role="alert">A verified pull request head is required to load check details.</p> : null}
             {runIdentity !== null ? <p>Check run #{check.checkRunId ?? '—'} · workflow #{check.workflowRunId ?? '—'}</p> : null}
           </div> : null}

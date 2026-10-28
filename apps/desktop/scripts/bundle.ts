@@ -40,6 +40,20 @@ for (const { entry, out } of bundles) {
   console.log(`bundled ${entry} -> resources/${out}`)
 }
 
+const nativeBrowserPreload = await Bun.build({
+  entrypoints: [join(import.meta.dir, '..', 'src', 'bun', 'native-browser-preload.ts')],
+  target: 'browser',
+  format: 'iife',
+  minify: true,
+  outdir: resources,
+  naming: 'native-browser-preload.js'
+})
+if (!nativeBrowserPreload.success) {
+  for (const log of nativeBrowserPreload.logs) console.error(log)
+  throw new Error('failed to bundle trusted native browser preload')
+}
+console.log('bundled trusted native browser preload -> resources/native-browser-preload.js')
+
 rmSync(join(resources, 'ui'), { recursive: true, force: true })
 if (existsSync(join(uiDist, 'index.html'))) {
   cpSync(uiDist, join(resources, 'ui'), { recursive: true })

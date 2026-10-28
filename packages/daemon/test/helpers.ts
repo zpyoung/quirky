@@ -164,7 +164,7 @@ export async function waitFor<T>(
 }
 
 export async function waitForAsync<T>(
-  check: () => Promise<T | undefined | null | false>,
+  check: () => T | undefined | null | false | Promise<T | undefined | null | false>,
   timeoutMs = 2000
 ): Promise<T> {
   const deadline = Date.now() + timeoutMs

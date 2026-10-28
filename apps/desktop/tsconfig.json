@@ -14,7 +14,8 @@
     "baseUrl": ".",
     "paths": {
       "electrobun": [".hutch/devkit/api/sdks/main/index.ts", "types/electrobun-main.d.ts"],
-      "electrobun/main": [".hutch/devkit/api/sdks/main/index.ts", "types/electrobun-main.d.ts"]
+      "electrobun/main": [".hutch/devkit/api/sdks/main/index.ts", "types/electrobun-main.d.ts"],
+      "electrobun/view": [".hutch/devkit/api/browser/index.ts", "types/electrobun-main.d.ts"]
     }
   },
   "include": ["src", "test", "scripts", "electrobun.config.ts", "hutch.config.ts"]

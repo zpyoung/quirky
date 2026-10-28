@@ -1,6 +1,7 @@
-import { TERMINAL_PANE_MENU, type Session, type UiMenuItemEntry, type UiModel, type UiPluginContext } from '@quirky/protocol'
+import { TERMINAL_PANE_MENU, TERMINAL_TAB_MENU, type Session, type UiMenuItemEntry, type UiModel, type UiPluginContext } from '@quirky/protocol'
+import type { MenuContributionItem } from './workspace/controller'
 import { findGroup } from '../layout/tree'
-import type { FloatingState, PaneLeaf, QuickCommand, Workspace } from '../layout/types'
+import type { FloatingState, Group, PaneLeaf, QuickCommand, Workspace } from '../layout/types'
 import { FLOATING_WORKSPACE } from '../layout/types'
 import { isQuickCommandComplete } from '../quick-commands/normalize'
 import { paneQuickCommandItems } from './quick-commands'
@@ -399,9 +400,10 @@ export function paneMenuQuickCommands(context: UiPluginContext, source: QuickCom
   })
 }
 
-/** The `menu-item` contributions in effect, kept current for the pane menu, which reads them synchronously when it opens. */
+/** The effective public `menu-item` registry snapshot shared by the pane and tab menus. */
 export type MenuContributionSource = {
   items(): UiMenuItemEntry[]
+  subscribe(listener: () => void): () => void
   dispose(): void
 }
 
@@ -409,13 +411,17 @@ export function watchMenuContributions(context: UiPluginContext): MenuContributi
   let items: UiMenuItemEntry[] = []
   let live = true
   let latest = 0
+  const listeners = new Set<() => void>()
   const load = async () => {
     const mine = ++latest
     try {
       const model = (await context.call('ui.contributions')) as UiModel
-      if (live && mine === latest) items = model.menuItems ?? []
+      if (live && mine === latest) {
+        items = model.menuItems ?? []
+        for (const listener of [...listeners]) listener()
+      }
     } catch {
-      // the menus list no contributed rows until the next change brings them
+      // The last effective list remains until the next change brings one.
     }
   }
   void load()
@@ -427,10 +433,17 @@ export function watchMenuContributions(context: UiPluginContext): MenuContributi
   })
   return {
     items: () => items,
+    subscribe(listener) {
+      listeners.add(listener)
+      return () => {
+        listeners.delete(listener)
+      }
+    },
     dispose() {
       live = false
       unsubscribe()
       stopConnection()
+      listeners.clear()
     }
   }
 }
@@ -448,6 +461,29 @@ export function paneMenuContributions(context: UiPluginContext, source: MenuCont
       label: item.title,
       onSelect: () =>
         void context.executeCommand(item.command, { session: pane.session }).catch((error: unknown) => {
+          context.toast(item.title, error instanceof Error ? error.message : String(error))
+        })
+    }))
+}
+
+/** Public tab-menu rows preserve placement and receive their worktree, workspace, and group context. */
+export function tabMenuContributions(
+  context: UiPluginContext,
+  source: MenuContributionSource,
+  worktree: string,
+  workspace: string,
+  group: Group
+): MenuContributionItem[] {
+  return source
+    .items()
+    .filter((item) => item.menu === TERMINAL_TAB_MENU)
+    .sort((left, right) => left.id.localeCompare(right.id))
+    .map((item) => ({
+      id: item.id,
+      after: item.after,
+      label: item.title,
+      onSelect: () =>
+        void context.executeCommand(item.command, { worktree, workspace, group: group.id }).catch((error: unknown) => {
           context.toast(item.title, error instanceof Error ? error.message : String(error))
         })
     }))

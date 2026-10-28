@@ -7,6 +7,7 @@ import {
   parseWhen,
   THEME_COLOR_RE,
   TERMINAL_PANE_MENU,
+  TERMINAL_TAB_MENU,
   THEME_TOKENS,
   UI_KINDS,
   type SettingDeclaration,
@@ -78,7 +79,7 @@ function checkKeybinding(label: string, entry: Entry, errors: string[]): void {
 
 function checkMenuItem(label: string, entry: Entry, errors: string[]): void {
   if (entry.menu === undefined) errors.push(`${label}: menu is required`)
-  else if (entry.menu !== TERMINAL_PANE_MENU) errors.push(`${label}: menu must be ${TERMINAL_PANE_MENU}`)
+  else if (entry.menu !== TERMINAL_PANE_MENU && entry.menu !== TERMINAL_TAB_MENU) errors.push(`${label}: unsupported window menu`)
 
   const command = entry.command
   if (command === undefined) errors.push(`${label}: command is required`)
@@ -88,6 +89,7 @@ function checkMenuItem(label: string, entry: Entry, errors: string[]): void {
 
   const when = entry.when
   if (when !== undefined) {
+    if (entry.menu !== TERMINAL_PANE_MENU) errors.push(`${label}: when is only supported for ${TERMINAL_PANE_MENU}`)
     if (!isRecord(when)) errors.push(`${label}: when must be an object`)
     else {
       for (const field of Object.keys(when)) if (field !== 'agent') errors.push(`${label}: unknown condition \`${field}\` in when`)

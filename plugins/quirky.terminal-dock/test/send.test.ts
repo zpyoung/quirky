@@ -1,9 +1,12 @@
 import { afterEach, expect, test } from 'bun:test'
 import type { DockState, SendResult } from '../src/types'
-import { enableDock, inputBytes, launchFakeClaude, paneOf, startDockE2E, waitForTuiInput, type DockHarness } from './support'
+import { enableDock, inputBytes, launchFakeClaude, paneOf, startDockE2E, waitForDockBeforeEnter, waitForTuiInput, type DockHarness, type DockSubmitWait } from './support'
 
 let harness: DockHarness | undefined
+let beforeEnter: DockSubmitWait | undefined
 afterEach(async () => {
+  beforeEnter?.dispose()
+  beforeEnter = undefined
   await harness?.cleanup()
   harness = undefined
 })
@@ -18,13 +21,23 @@ test(
 
     const one = harness.call('quirky.terminal-dock/send', { pane, id: 'dock-one', text: 'one' }) as Promise<SendResult>
     const two = harness.call('quirky.terminal-dock/send', { pane, id: 'dock-two', text: 'two\nlines' }) as Promise<SendResult>
-    const consumed = await waitForTuiInput(harness, (input) => input.indexOf(Buffer.from('one')) >= 0 && input.indexOf(Buffer.from('two')) >= 0)
+    const consumed = await waitForTuiInput(harness, (input) => {
+      const firstBody = input.indexOf(Buffer.from('one'))
+      const firstSubmit = input.indexOf(0x0d, firstBody + Buffer.byteLength('one'))
+      const secondBody = input.indexOf(Buffer.from('two\rlines'))
+      const secondSubmit = input.indexOf(0x0d, secondBody + Buffer.byteLength('two\rlines'))
+      return firstBody >= 0 && firstSubmit >= 0 && secondBody >= 0 && secondSubmit >= 0
+    })
     const firstBody = consumed.indexOf(Buffer.from('one'))
-    const secondBody = consumed.indexOf(Buffer.from('two'))
+    const firstBodyEnd = firstBody + Buffer.byteLength('one')
+    const firstSubmit = consumed.indexOf(0x0d, firstBodyEnd)
+    const secondBody = consumed.indexOf(Buffer.from('two\rlines'))
+    const secondBodyEnd = secondBody + Buffer.byteLength('two\rlines')
+    const secondSubmit = consumed.indexOf(0x0d, secondBodyEnd)
     expect(firstBody).toBeGreaterThanOrEqual(0)
-    expect(secondBody).toBeGreaterThan(firstBody)
-    expect(consumed.includes(Buffer.from('two\rlines'))).toBe(true)
-
+    expect(firstSubmit).toBeGreaterThanOrEqual(firstBodyEnd)
+    expect(secondBody).toBeGreaterThan(firstSubmit)
+    expect(secondSubmit).toBeGreaterThanOrEqual(secondBodyEnd)
     const [first, second] = await Promise.all([one, two])
     expect(first.id).toBe('dock-one')
     expect(second.id).toBe('dock-two')
@@ -43,14 +56,17 @@ test(
 test(
   'SC-21: cancelling one queued send never writes it, and cancelling the current send suppresses delayed Enter',
   async () => {
-    harness = await startDockE2E()
+    harness = await startDockE2E({ holdBeforeEnter: true })
     const session = await launchFakeClaude(harness)
     await enableDock(harness)
     const pane = await paneOf(harness, session.id)
+    const beforeEnterWait = waitForDockBeforeEnter(harness)
+    beforeEnter = beforeEnterWait
 
     const first = harness.call('quirky.terminal-dock/send', { pane, id: 'current', text: 'first-body' }) as Promise<SendResult>
     const queued = harness.call('quirky.terminal-dock/send', { pane, id: 'queued', text: 'never-write' }) as Promise<SendResult>
     await waitForTuiInput(harness, (input) => input.indexOf(Buffer.from('first-body')) >= 0)
+    await beforeEnterWait.reached
 
     await harness.call('quirky.terminal-dock/cancel', { pane, send: 'queued' })
     await harness.call('quirky.terminal-dock/cancel', { pane, send: 'current' })

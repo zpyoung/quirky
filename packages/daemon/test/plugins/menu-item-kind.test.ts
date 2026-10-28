@@ -40,12 +40,12 @@ describe('menu-item entries', () => {
     expect(parse({ id: 'any', menu: 'quirky.terminal/pane', title: 'Any', command: 'open', when: {} }).ok).toBe(true)
   })
 
-  test('the menu must be quirky.terminal/pane', () => {
-    expect(errorsFor({ ...GOOD, menu: 'quirky.terminal/tab' })).toEqual(['menu-item handoff: menu must be quirky.terminal/pane'])
-    const { menu: _menu, ...missing } = GOOD
-    expect(errorsFor(missing)).toEqual(['menu-item handoff: menu is required'])
+  test('menu targets accept pane and tab and reject unrelated targets', () => {
+    expect(parse(GOOD).ok).toBe(true)
+    expect(parse({ ...GOOD, menu: 'quirky.terminal/tab', when: undefined }).ok).toBe(true)
+    expect(parse({ ...GOOD, menu: 'quirky.terminal/tab' }).ok).toBe(false)
+    expect(parse({ ...GOOD, menu: 'quirky.terminal/other' }).ok).toBe(false)
   })
-
   test('title and command are required', () => {
     const { title: _title, command: _command, ...bare } = GOOD
     expect(errorsFor(bare)).toEqual(['menu-item handoff: title is required', 'menu-item handoff: command is required'])

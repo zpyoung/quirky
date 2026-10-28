@@ -89,7 +89,7 @@ export async function startHeadlessWindow(options: HeadlessWindowOptions): Promi
     }
   } as typeof getContext
 
-  const [{ createElement }, { createRoot }, { App }, { AppContext }, { createShell }] = await Promise.all([
+  const [{ createElement, act }, { createRoot }, { App }, { AppContext }, { createShell }] = await Promise.all([
     import('react'),
     import('react-dom/client'),
     import('../../src/App'),
@@ -162,12 +162,19 @@ export async function startHeadlessWindow(options: HeadlessWindowOptions): Promi
     async stop() {
       if (stopped) return
       stopped = true
-      root.unmount()
-      shell.plugins.stop()
-      shell.connection.stop()
-      // React's scheduler still has a task queued that reads `window`
-      await Bun.sleep(20)
-      await GlobalRegistrator.unregister()
+      const previousActEnvironment = Reflect.get(globalThis, 'IS_REACT_ACT_ENVIRONMENT')
+      Reflect.set(globalThis, 'IS_REACT_ACT_ENVIRONMENT', true)
+      try {
+        await act(async () => {
+          shell.connection.stop()
+          shell.plugins.stop()
+          root.unmount()
+        })
+      } finally {
+        if (previousActEnvironment === undefined) Reflect.deleteProperty(globalThis, 'IS_REACT_ACT_ENVIRONMENT')
+        else Reflect.set(globalThis, 'IS_REACT_ACT_ENVIRONMENT', previousActEnvironment)
+        await GlobalRegistrator.unregister()
+      }
     }
   }
   await waitFor(() => shell.store.getState().connection === 'connected' && shell.plugins.getState().model !== null)

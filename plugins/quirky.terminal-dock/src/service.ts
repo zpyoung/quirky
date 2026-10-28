@@ -140,6 +140,11 @@ function optionNotice(value: unknown): string | null {
   return typeof value === 'string' && value.length > 0 ? value : null
 }
 
+/** Internal integration-fixture hooks; absent from normal plugin activation. */
+export type DockServiceTestHooks = {
+  beforeSubmit?(signal: AbortSignal): Promise<void>
+}
+
 /** Daemon-authoritative dock records and per-terminal acknowledged send queues. */
 export class DockService {
   readonly methods: Record<string, MethodHandler>
@@ -163,6 +168,7 @@ export class DockService {
   private readonly freshEvidence = new Map<string, FreshEvidence>()
   private readonly queues = new Map<string, SessionQueue>()
   private readonly sendOperations = new Map<string, Operation>()
+  private readonly sendAdmissionTails = new Map<string, Promise<void>>()
   private mutationTail: Promise<void> = Promise.resolve()
   private recoveryPending = true
   private stopped = false
@@ -171,7 +177,8 @@ export class DockService {
   constructor(
     private readonly context: PluginContext,
     private readonly store: DockStore,
-    private readonly bridge: ProviderBridge
+    private readonly bridge: ProviderBridge,
+    private readonly testHooks: DockServiceTestHooks = {}
   ) {
     this.methods = {
       get: (params) => this.get(params),
@@ -1227,99 +1234,116 @@ export class DockService {
   }
 
   private async send(params: Record<string, unknown>): Promise<SendResult> {
-    const binding = await this.resolveBinding({ pane: params.pane })
-    const id = params.id === undefined ? randomUUID() : params.id
-    if (typeof id !== 'string' || id.length === 0 || id.length > 160) throw this.context.error('invalid-params', 'send id must be a nonempty string of at most 160 characters')
-    if (!this.enabled()) return { id, outcome: 'refused', accepted: false, reason: 'Terminal dock is disabled' }
-    await this.ensureRecovered()
-    const status = binding.status
-    await this.reconcileBinding(binding, status)
-    const refusal = await this.writeRefusal(binding, status)
-    if (refusal) return { id, outcome: 'refused', accepted: false, reason: refusal }
-    const provider = await this.refreshProvider(binding, true)
-    if (provider.question) return { id, outcome: 'refused', accepted: false, reason: 'An agent question or permission request is awaiting an answer' }
+    // Keep same-pane calls in arrival order while resolving each accepted session binding.
+    const paneAdmissionKey = typeof params.pane === 'string' ? `pane:${params.pane}` : null
+    const releasePaneAdmission = paneAdmissionKey
+      ? await this.reserveSendAdmission(paneAdmissionKey)
+      : () => {}
+    let resultPromise: Promise<unknown>
+    try {
+      const binding = await this.resolveBinding({ pane: params.pane })
+      const id = params.id === undefined ? randomUUID() : params.id
+      if (typeof id !== 'string' || id.length === 0 || id.length > 160) throw this.context.error('invalid-params', 'send id must be a nonempty string of at most 160 characters')
+      if (!this.enabled()) return { id, outcome: 'refused', accepted: false, reason: 'Terminal dock is disabled' }
+      // Session admission keeps asynchronous preflight from reordering queue reservations.
+      const releaseSessionAdmission = await this.reserveSendAdmission(`session:${binding.session.id}`)
+      try {
+        await this.ensureRecovered()
+        const status = binding.status
+        await this.reconcileBinding(binding, status)
+        const refusal = await this.writeRefusal(binding, status)
+        if (refusal) return { id, outcome: 'refused', accepted: false, reason: refusal }
+        const provider = await this.refreshProvider(binding, true)
+        if (provider.question) return { id, outcome: 'refused', accepted: false, reason: 'An agent question or permission request is awaiting an answer' }
 
-    const textSupplied = Object.hasOwn(params, 'text')
-    if (textSupplied && typeof params.text !== 'string') throw this.context.error('invalid-params', 'send text must be a string')
-    let snapshot: DockRecovery | undefined
-    let attachments: DockAttachment[] = []
-    const prepared = await this.mutate(() => {
-      if (!this.enabled() || this.stopped) throw this.context.error('invalid-params', 'Terminal dock is disabled')
-      const record = this.store.get(binding.pane) ?? defaultDockRecord(binding.pane, binding.session.id, binding.tab)
-      if (this.wasUsedId(id)) throw this.context.error('invalid-params', `duplicate send ID ${id}`)
-      if (!textSupplied && params.revision !== record.revision) {
-        const state = this.stateFrom(binding, record, { noTerminal: false, reason: null }, null)
-        throw this.conflict('dock revision conflict', state)
-      }
-      if (record.recovery.length >= 64) throw this.context.error('invalid-params', 'terminal dock send queue is full')
-      const text = textSupplied ? (params.text as string) : record.draft
-      const attachmentIds = textSupplied ? [] : [...record.draftAttachments]
-      if (text.length === 0 && attachmentIds.length === 0) {
-        return { refused: { id, outcome: 'refused', accepted: false, reason: 'Send requires text or an attachment' } satisfies SendResult }
-      }
-      const sequence = record.nextSequence++
-      snapshot = { id, sequence, text, attachments: attachmentIds, mayHaveWritten: false, createdAt: Date.now() }
-      const nextRecovery = [...record.recovery, snapshot]
-      const nextDraft = textSupplied ? record.draft : ''
-      const nextDraftAttachments = textSupplied ? record.draftAttachments : []
-      if (recoverableTextLength(nextDraft, nextRecovery) > MAX_RECOVERABLE_CHARS) {
-        throw this.context.error('invalid-params', 'recoverable-text-limit: enqueue would exceed the 200000-character combined recovery budget')
-      }
-      if (recoverableAttachmentCount(nextDraftAttachments, nextRecovery) > MAX_ATTACHMENTS) {
-        throw this.context.error('invalid-params', `queued send would exceed the ${MAX_ATTACHMENTS}-attachment recovery budget`)
-      }
-      for (const attachmentId of attachmentIds) {
-        const attachment = record.attachments.find((item) => item.id === attachmentId)
-        if (!attachment) throw this.context.error('invalid-params', `attachment ${attachmentId} is no longer available`)
-        attachments.push(attachment)
-      }
-      record.recovery = nextRecovery
-      record.recentSendIds = [...record.recentSendIds.filter((existing) => existing !== id), id].slice(-200)
-      if (!textSupplied) {
-        record.draft = ''
-        record.draftAttachments = []
-        this.historyBrowse.delete(binding.pane)
-      }
-      record.notice = null
-      record.revision++
-      record.updatedAt = Date.now()
-      this.store.put(record)
-      return { queued: true }
-    })
-    if ('refused' in prepared && prepared.refused !== undefined) return prepared.refused
-    if (!snapshot) throw this.context.error('conflict', 'send snapshot was not created')
-
-    const operation = this.createOperation(id, binding, 'send', async (operation) => {
-      const result = await executePrompt({
-        context: this.context,
-        session: binding.session,
-        text: snapshot!.text,
-        attachments,
-        bridge: this.bridge,
-        signal: operation.controller.signal,
-        ensure: () => this.ensureWritable(binding, operation.controller.signal),
-        phase: (phase) => {
-          operation.phase = phase
-          this.announce(binding.pane)
-        },
-        bodyMayHaveBeenWritten: async () => {
-          if (this.stopped || operation.controller.signal.aborted || !this.enabled() || operation.restored) {
-            throw new Error('Terminal dock send stopped before body dispatch')
+        const textSupplied = Object.hasOwn(params, 'text')
+        if (textSupplied && typeof params.text !== 'string') throw this.context.error('invalid-params', 'send text must be a string')
+        let snapshot: DockRecovery | undefined
+        let attachments: DockAttachment[] = []
+        const prepared = await this.mutate(() => {
+          const record = this.store.get(binding.pane) ?? defaultDockRecord(binding.pane, binding.session.id, binding.tab)
+          if (this.wasUsedId(id)) throw this.context.error('invalid-params', `duplicate send ID ${id}`)
+          if (!textSupplied && params.revision !== record.revision) {
+            const state = this.stateFrom(binding, record, { noTerminal: false, reason: null }, null)
+            throw this.conflict('dock revision conflict', state)
           }
-          await this.mutate(() => {
-            if (this.stopped || operation.controller.signal.aborted || !this.enabled() || operation.restored) return
-            const record = this.store.get(binding.pane)
-            const recovery = record?.recovery.find((item) => item.id === id)
-            if (!record || !recovery || recovery.mayHaveWritten) return
-            recovery.mayHaveWritten = true
-            record.updatedAt = Date.now()
-            this.store.put(record)
-          })
-        }
-      }, id)
-      return result
-    }, snapshot)
-    const result = await this.enqueue(operation)
+          if (record.recovery.length >= 64) throw this.context.error('invalid-params', 'terminal dock send queue is full')
+          const text = textSupplied ? (params.text as string) : record.draft
+          const attachmentIds = textSupplied ? [] : [...record.draftAttachments]
+          if (text.length === 0 && attachmentIds.length === 0) {
+            return { refused: { id, outcome: 'refused', accepted: false, reason: 'Send requires text or an attachment' } satisfies SendResult }
+          }
+          const sequence = record.nextSequence++
+          snapshot = { id, sequence, text, attachments: attachmentIds, mayHaveWritten: false, createdAt: Date.now() }
+          const nextRecovery = [...record.recovery, snapshot]
+          const nextDraft = textSupplied ? record.draft : ''
+          const nextDraftAttachments = textSupplied ? record.draftAttachments : []
+          if (recoverableTextLength(nextDraft, nextRecovery) > MAX_RECOVERABLE_CHARS) {
+            throw this.context.error('invalid-params', 'recoverable-text-limit: enqueue would exceed the 200000-character combined recovery budget')
+          }
+          if (recoverableAttachmentCount(nextDraftAttachments, nextRecovery) > MAX_ATTACHMENTS) {
+            throw this.context.error('invalid-params', `queued send would exceed the ${MAX_ATTACHMENTS}-attachment recovery budget`)
+          }
+          for (const attachmentId of attachmentIds) {
+            const attachment = record.attachments.find((item) => item.id === attachmentId)
+            if (!attachment) throw this.context.error('invalid-params', `attachment ${attachmentId} is no longer available`)
+            attachments.push(attachment)
+          }
+          record.recovery = nextRecovery
+          record.recentSendIds = [...record.recentSendIds.filter((existing) => existing !== id), id].slice(-200)
+          if (!textSupplied) {
+            record.draft = ''
+            record.draftAttachments = []
+            this.historyBrowse.delete(binding.pane)
+          }
+          record.notice = null
+          record.revision++
+          record.updatedAt = Date.now()
+          this.store.put(record)
+          return { queued: true }
+        })
+        if ('refused' in prepared && prepared.refused !== undefined) return prepared.refused
+        if (!snapshot) throw this.context.error('conflict', 'send snapshot was not created')
+
+        const operation = this.createOperation(id, binding, 'send', async (operation) => {
+          const result = await executePrompt({
+            context: this.context,
+            session: binding.session,
+            text: snapshot!.text,
+            attachments,
+            bridge: this.bridge,
+            signal: operation.controller.signal,
+            ensure: () => this.ensureWritable(binding, operation.controller.signal),
+            phase: (phase) => {
+              operation.phase = phase
+              this.announce(binding.pane)
+            },
+            ...(this.testHooks.beforeSubmit ? { beforeSubmit: this.testHooks.beforeSubmit } : {}),
+            bodyMayHaveBeenWritten: async () => {
+              if (this.stopped || operation.controller.signal.aborted || !this.enabled() || operation.restored) {
+                throw new Error('Terminal dock send stopped before body dispatch')
+              }
+              await this.mutate(() => {
+                if (this.stopped || operation.controller.signal.aborted || !this.enabled() || operation.restored) return
+                const record = this.store.get(binding.pane)
+                const recovery = record?.recovery.find((item) => item.id === id)
+                if (!record || !recovery || recovery.mayHaveWritten) return
+                recovery.mayHaveWritten = true
+                record.updatedAt = Date.now()
+                this.store.put(record)
+              })
+            }
+          }, id)
+          return result
+        }, snapshot)
+        resultPromise = this.enqueue(operation)
+      } finally {
+        releaseSessionAdmission()
+      }
+    } finally {
+      releasePaneAdmission()
+    }
+    const result = await resultPromise
     return result as SendResult
   }
 
@@ -1548,6 +1572,19 @@ export class DockService {
       this.queues.set(session, queue)
     }
     return queue
+  }
+  private async reserveSendAdmission(identity: string): Promise<() => void> {
+    const previous = this.sendAdmissionTails.get(identity)
+    const { promise: current, resolve: releaseCurrent } = Promise.withResolvers<void>()
+    this.sendAdmissionTails.set(identity, current)
+    if (previous) await previous
+    let released = false
+    return () => {
+      if (released) return
+      released = true
+      releaseCurrent(undefined)
+      if (this.sendAdmissionTails.get(identity) === current) this.sendAdmissionTails.delete(identity)
+    }
   }
 
   private async pump(session: string, queue: SessionQueue): Promise<void> {

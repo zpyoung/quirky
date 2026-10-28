@@ -30,6 +30,7 @@ type Row = {
   exit_signal: string | null
   exit_cause: ExitCause | null
   restorable: number
+  background: number
   launch: string | null
   provider_session: string | null
   prompt_delivery: PromptDeliveryState | null
@@ -82,6 +83,13 @@ function parseJson<T>(text: string | null): T | null {
     return null
   }
 }
+/** Stored launch records are replay snapshots, never a place for transient process credentials. */
+const withoutSessionToken = (launch: SessionLaunch | null): SessionLaunch | null => {
+  if (launch === null || !Object.hasOwn(launch.env, 'QUIRKY_SESSION_TOKEN')) return launch
+  const env = { ...launch.env }
+  delete env.QUIRKY_SESSION_TOKEN
+  return { ...launch, env }
+}
 
 const badgesOf = (text: string | null): Pick<Session, 'badges'> => {
   const badges = parseJson<Record<string, SessionBadge>>(text)
@@ -102,7 +110,8 @@ const toSession = (row: Row): Session => ({
   exitSignal: row.exit_signal,
   exitCause: row.exit_cause,
   restorable: row.restorable === 1,
-  launch: parseJson<SessionLaunch>(row.launch),
+  ...(row.background === 1 ? { background: true } : {}),
+  launch: withoutSessionToken(parseJson<SessionLaunch>(row.launch)),
   providerSession: parseJson<SessionProviderSession>(row.provider_session),
   promptDelivery: row.prompt_delivery,
   launchSettings: parseJson<LaunchSettings>(row.launch_settings),
@@ -145,6 +154,33 @@ function importV1Sessions(store: PluginStore, home: string): void {
     }
   } finally {
     v1.close()
+  }
+}
+
+function ensureBadgeAndPointerSchema(store: PluginStore): void {
+  const columns = store.all<{ name: string }>('PRAGMA table_info(sessions)')
+  if (!columns.some(({ name }) => name === 'badges')) {
+    store.exec('ALTER TABLE sessions ADD COLUMN badges TEXT')
+  }
+  store.exec(`
+    CREATE TABLE IF NOT EXISTS session_pointer_operations (
+      operation_id TEXT PRIMARY KEY,
+      session_id TEXT NOT NULL,
+      expected_incarnation TEXT NOT NULL,
+      payload_hash TEXT NOT NULL,
+      phase TEXT NOT NULL CHECK (phase IN ('reserved', 'write_attempted', 'enter_attempted', 'settled')),
+      result_json TEXT,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS session_pointer_operations_updated_at ON session_pointer_operations(updated_at)
+  `)
+}
+
+function ensureBackgroundColumn(store: PluginStore): void {
+  const columns = store.all<{ name: string }>('PRAGMA table_info(sessions)')
+  if (!columns.some(({ name }) => name === 'background')) {
+    store.exec('ALTER TABLE sessions ADD COLUMN background INTEGER NOT NULL DEFAULT 0')
   }
 }
 
@@ -199,20 +235,14 @@ export function sessionMigrations(home: string): StoreMigration[] {
       store.exec('ALTER TABLE sessions ADD COLUMN badges TEXT')
     },
     (store) => {
-      store.exec(`
-        CREATE TABLE session_pointer_operations (
-          operation_id TEXT PRIMARY KEY,
-          session_id TEXT NOT NULL,
-          expected_incarnation TEXT NOT NULL,
-          payload_hash TEXT NOT NULL,
-          phase TEXT NOT NULL CHECK (phase IN ('reserved', 'write_attempted', 'enter_attempted', 'settled')),
-          result_json TEXT,
-          created_at INTEGER NOT NULL,
-          updated_at INTEGER NOT NULL
-        );
-        CREATE INDEX session_pointer_operations_updated_at ON session_pointer_operations(updated_at)
-      `)
+      // Version 8 diverged between badges and pointer operations.
+      ensureBadgeAndPointerSchema(store)
     },
+    (store) => {
+      // Older version 9 stores already have background but may not have pointer operations.
+      ensureBadgeAndPointerSchema(store)
+      ensureBackgroundColumn(store)
+    }
   ]
 }
 
@@ -256,8 +286,8 @@ export class SessionRecords {
   insert(session: Session, repoId: string | null): void {
     this.store.run(
       `INSERT OR IGNORE INTO sessions (id, kind, agent, worktree_id, cwd, title, status, created_at, last_activity_at, exit_code, repo_id,
-        launch, provider_session, prompt_delivery, resumed_from, launch_settings, exit_signal, exit_cause, restorable, agent_status, name)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        launch, provider_session, prompt_delivery, resumed_from, launch_settings, exit_signal, exit_cause, restorable, agent_status, name, background)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       session.id,
       session.kind,
       session.agent,
@@ -269,7 +299,7 @@ export class SessionRecords {
       session.lastActivityAt,
       session.exitCode,
       repoId,
-      jsonOrNull(session.launch),
+      jsonOrNull(withoutSessionToken(session.launch ?? null)),
       jsonOrNull(session.providerSession),
       session.promptDelivery ?? null,
       session.resumedFrom ?? null,
@@ -278,7 +308,8 @@ export class SessionRecords {
       session.exitCause,
       session.restorable ? 1 : 0,
       jsonOrNull(session.agentStatus),
-      session.name ?? null
+      session.name ?? null,
+      session.background === true ? 1 : 0
     )
   }
 
@@ -296,6 +327,7 @@ export class SessionRecords {
       exitSignal?: string | null
       exitCause?: ExitCause | null
       restorable?: boolean
+      background?: boolean
       launch?: SessionLaunch | null
       providerSession?: SessionProviderSession | null
       promptDelivery?: PromptDeliveryState | null
@@ -314,7 +346,8 @@ export class SessionRecords {
     if (fields.exitSignal !== undefined) columns.push(['exit_signal', fields.exitSignal])
     if (fields.exitCause !== undefined) columns.push(['exit_cause', fields.exitCause])
     if (fields.restorable !== undefined) columns.push(['restorable', fields.restorable ? 1 : 0])
-    if (fields.launch !== undefined) columns.push(['launch', jsonOrNull(fields.launch)])
+    if (fields.background !== undefined) columns.push(['background', fields.background ? 1 : 0])
+    if (fields.launch !== undefined) columns.push(['launch', jsonOrNull(withoutSessionToken(fields.launch))])
     if (fields.providerSession !== undefined) columns.push(['provider_session', jsonOrNull(fields.providerSession)])
     if (fields.promptDelivery !== undefined) columns.push(['prompt_delivery', fields.promptDelivery])
     if (fields.launchSettings !== undefined) columns.push(['launch_settings', jsonOrNull(fields.launchSettings)])

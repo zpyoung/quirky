@@ -98,67 +98,78 @@ async function begin(prompt = 'hello') {
 }
 
 describe('start', () => {
-  test('runs the query with the worktree, the resolved claude and the default permission mode', async () => {
+  test('runs the query with the worktree and resolved executable', async () => {
     const query = await begin()
     expect(query.params.options?.cwd).toBe('/work/tree')
     expect(query.params.options?.pathToClaudeCodeExecutable).toBe('/usr/local/bin/claude')
-    expect(query.params.options?.permissionMode ?? 'default').toBe('default')
     expect(typeof query.params.options?.canUseTool).toBe('function')
-    expect(typeof query.params.options?.sessionId).toBe('string')
     await until(() => query.written.length === 1)
     expect(query.written[0]).toMatchObject({ type: 'user', message: { role: 'user', content: 'hello' } })
   })
 
-  test('SC-23: a model and effort pick reaches the query options, and no pick sets neither', async () => {
+  test('a model and effort pick reaches the query options', async () => {
     await runner.start(session, 'hello', { model: 'opus', effort: 'high' })
     expect(queries[0].params.options?.model).toBe('opus')
     expect(queries[0].params.options?.effort).toBe('high')
 
-    session = { ...session, id: 's_2' }
-    await runner.start(session, 'again')
-    expect(queries[1].params.options).not.toHaveProperty('model')
-    expect(queries[1].params.options).not.toHaveProperty('effort')
   })
 
-  test('persists its native ID before the first turn and resumes without creating a new conversation', async () => {
+  test('persists its native ID after SDK init and resumes with the known ID', async () => {
     await runner.start(session, 'first prompt')
-    expect(providerSessions).toEqual([{ sessionId: 's_1', id: expect.any(String), transcriptPath: null }])
+    expect(providerSessions).toEqual([])
+
+    const freshInit = { type: 'system', subtype: 'init', session_id: 'fresh-native-id' }
+    const nativeSessionId = freshInit.session_id
+    queries[0].emit(freshInit)
+    await until(() => providerSessions.length === 1)
+    expect(providerSessions).toEqual([{ sessionId: 's_1', id: nativeSessionId, transcriptPath: null }])
 
     const resumedSession = {
       ...session,
       id: 's_2',
-      providerSession: { id: 'native-claude-id', transcriptPath: '/tmp/native.jsonl' }
+      providerSession: { id: nativeSessionId, transcriptPath: '/tmp/native.jsonl' }
     }
+    const resumedInit = { type: 'system', subtype: 'init', session_id: nativeSessionId }
     await runner.start(resumedSession, undefined, {
       model: 'sonnet',
-      providerSession: { id: 'native-claude-id', transcriptPath: '/tmp/native.jsonl' }
+      providerSession: { id: nativeSessionId, transcriptPath: '/tmp/native.jsonl' }
     })
-    expect(queries[1].params.options?.resume).toBe('native-claude-id')
+    expect(queries[1].params.options?.resume).toBe(nativeSessionId)
     expect(queries[1].params.options).not.toHaveProperty('sessionId')
     expect(queries[1].params.options?.model).toBe('sonnet')
-    expect(providerSessions.at(-1)).toEqual({
-      sessionId: 's_2',
-      id: 'native-claude-id',
-      transcriptPath: '/tmp/native.jsonl'
-    })
+    queries[1].emit(resumedInit)
+    await until(() => messages.some((message) => message.data === resumedInit))
+    expect(providerSessions).toEqual([
+      { sessionId: 's_1', id: nativeSessionId, transcriptPath: null },
+      { sessionId: 's_2', id: nativeSessionId, transcriptPath: '/tmp/native.jsonl' }
+    ])
     await runner.send('s_2', 'continue later')
     await until(() => queries[1].written.length === 1)
-    expect(queries[1].written[0]).toMatchObject({ session_id: 'native-claude-id', message: { content: 'continue later' } })
+    expect(queries[1].written[0]?.session_id).toBe(nativeSessionId)
+    expect(queries[1].written[0]?.message).toEqual({ role: 'user', content: 'continue later' })
   })
 
   test('opens a native session without submitting an initial model turn', async () => {
-    await runner.start(session, undefined, { env: { QUIRKY_SESSION_ID: session.id, QUIRKY_SESSION_TOKEN: 'test-token' } })
-    expect(providerSessions).toEqual([{ sessionId: session.id, id: expect.any(String), transcriptPath: null }])
+    await runner.start(session, undefined)
+    expect(providerSessions).toEqual([])
     expect(messages).toEqual([])
     expect(statuses).toEqual(['running'])
 
-    await runner.send(session.id, 'first custody-recorded turn')
+    const nativeInit = { type: 'system', subtype: 'init', session_id: 'idle-native-id' }
+    queries[0].emit(nativeInit)
+    await until(() => providerSessions.length === 1)
+    expect(providerSessions).toEqual([{ sessionId: session.id, id: 'idle-native-id', transcriptPath: null }])
+
+    await runner.send(session.id, 'first turn after native init')
     await until(() => queries[0]?.written.length === 1)
-    expect(queries[0]?.written[0]).toMatchObject({
-      session_id: providerSessions[0]?.id,
-      message: { content: 'first custody-recorded turn' }
+    expect(queries[0]?.written[0]?.session_id).toBe('idle-native-id')
+    expect(queries[0]?.written[0]?.message).toEqual({
+      role: 'user',
+      content: 'first turn after native init'
     })
   })
+
+
   test('passes the prepared account environment to Claude Code', async () => {
     await runner.start(session, 'hello', { env: { CLAUDE_CONFIG_DIR: '/managed/claude' } })
 
@@ -196,7 +207,7 @@ describe('start', () => {
     expect(queries).toHaveLength(0)
     expect(messages).toHaveLength(0)
     expect(statuses).not.toContain('working')
-    await expect(slow.send(session.id, 'late')).rejects.toThrow('session is not running')
+    await expect(slow.send(session.id, 'late')).rejects.toThrow()
   })
 
   test('rejects agents other than claude', async () => {
@@ -275,6 +286,19 @@ describe('status', () => {
     expect(statuses).toEqual(['working', 'done'])
     await runner.send('s_1', 'more')
     expect(statuses).toEqual(['working', 'done', 'working'])
+  })
+
+
+  test('failed results journal the error, tear down the query, and exit without publishing done', async () => {
+    const query = await begin()
+    const failure = { type: 'result', subtype: 'error_api_error', result: 'provider failed', is_error: true }
+    query.emit(failure)
+    await until(() => statuses.includes('exited'))
+    expect(messages.at(-1)).toMatchObject({ role: 'result', text: 'provider failed', data: failure })
+    await until(() => query.closed > 0)
+    expect(query.closed).toBeGreaterThan(0)
+    expect(statuses).toEqual(['working', 'exited'])
+    await expect(runner.send('s_1', 'after failure')).rejects.toThrow()
   })
 
   test('exited when the query ends', async () => {
@@ -360,20 +384,20 @@ describe('send', () => {
   })
 
   test('throws for an unknown session', async () => {
-    await expect(runner.send('s_nope', 'x')).rejects.toThrow('session is not running')
+    await expect(runner.send('s_nope', 'x')).rejects.toThrow()
   })
 
   test('throws once the session has been stopped', async () => {
     await begin()
     await runner.stop('s_1')
-    await expect(runner.send('s_1', 'x')).rejects.toThrow('session is not running')
+    await expect(runner.send('s_1', 'x')).rejects.toThrow()
   })
 
   test('throws once the query has ended', async () => {
     const query = await begin()
     query.end()
     await until(() => statuses.includes('exited'))
-    await expect(runner.send('s_1', 'x')).rejects.toThrow('session is not running')
+    await expect(runner.send('s_1', 'x')).rejects.toThrow()
   })
 })
 

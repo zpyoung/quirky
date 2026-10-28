@@ -8,8 +8,18 @@ import { asPluginError, fault } from './runtime/errors'
 import { parseExec } from './runtime/exec'
 import type { BrowserDependencies } from './runtime/dependencies'
 import { BrowserStore, type BrowserPage } from './profiles/store'
+import { ProfileLifecycle } from './preferences-lifecycle'
+import { registerPreferences } from './preferences/controller'
+import { identityModeFromSetting } from './preferences/identity'
+import type { PreferencesController } from './preferences/contract'
+import { PANE_METHODS, type PaneMethod, type PaneTab } from './pane-contract'
+import { PaneService } from './pane-service'
 
-export type BrowserPlugin = { deactivate(): Promise<void> }
+export type BrowserPlugin = {
+  deactivate(): Promise<void>
+  setPaneProfile(paneId: string, profileId: string): Promise<PaneTab>
+  listPanes(): PaneTab[]
+}
 type Worktree = { id: string; name: string; path: string; branch?: unknown }
 
 const WORKTREE_LIST_SCHEMA: Schema = {
@@ -77,39 +87,77 @@ export class BrowserService {
   private readonly store: BrowserStore
   private readonly runtime: BrowserRuntime
   private readonly actions: BrowserActions
+  private readonly profileLifecycle: ProfileLifecycle
+  private preferences?: PreferencesController
+  private readonly panes: PaneService
   private active = true
   constructor(private readonly context: PluginContext, dependencies: BrowserDependencies) {
     this.store = new BrowserStore(context.dataDir)
-    this.runtime = new BrowserRuntime(this.store, dependencies, (pageId) => this.actions?.clearPageRefs(pageId))
+    this.runtime = new BrowserRuntime(this.store, dependencies, (pageId) => this.actions?.clearPageRefs(pageId), identityModeFromSetting(context.getSetting('identityMode')))
     this.actions = new BrowserActions(this.store, this.runtime)
+    this.profileLifecycle = new ProfileLifecycle(context, this.store, this.runtime, () => this.listPanes())
+    this.panes = new PaneService(
+      context,
+      this.store,
+      this.runtime,
+      (selector, caller, allowNoScope) => this.resolveWorktreeTarget(selector, undefined, caller, allowNoScope),
+      () => this.listWorktrees(),
+      dependencies.downloadDirectory
+    )
   }
 
   activate(): void {
     for (const name of BROWSER_METHODS) {
       this.context.provide(`method:quirky.browser/${name}`, (params: Record<string, unknown>, caller: PluginCaller) => this.call(name, params, caller))
     }
+    this.profileLifecycle.activate()
+    this.preferences = registerPreferences(this.context, {
+      listProfiles: () => this.store.listProfiles(),
+      listPanes: () => this.listPanes(),
+      listPageProfiles: () => this.store.listPages().map((page) => page.profileId),
+      setPaneProfile: (pane, profile) => this.setPaneProfile(pane, profile),
+      clearProfile: (profile, remove) => this.profileLifecycle.clearProfile(profile, remove)
+    })
+  }
+  setPaneProfile(paneId: string, profileId: string): Promise<PaneTab> {
+    return this.profileLifecycle.withProfileAdmission(profileId, () => this.panes.setPaneProfile(paneId, profileId))
+  }
+
+  listPanes(): PaneTab[] {
+    return this.panes.listPanes()
   }
 
   async deactivate(): Promise<void> {
     this.active = false
+    this.preferences?.deactivate()
+    this.profileLifecycle.deactivate()
+    await this.panes.deactivate()
     await this.runtime.stopAll()
   }
 
   private async call(name: BrowserMethod, params: Record<string, unknown>, caller: PluginCaller): Promise<unknown> {
     try {
       if (!this.active) throw fault('browser_error', 'browser plugin is shutting down')
-      return await this.invoke(name, params, caller)
+      const result = await this.invoke(name, params, caller)
+      if (name === 'tabCreate' || name === 'tabClose' || name === 'profileCreate' || name === 'paneOpen' || name === 'paneClose') this.context.emit('preferencesChanged', {})
+      return result
     } catch (error) {
       throw asPluginError(this.context, error)
     }
   }
 
   private async invoke(name: BrowserMethod, params: Record<string, unknown>, caller: PluginCaller): Promise<unknown> {
+    if (name === 'paneOpen') {
+      const pageId = optionalString(params, 'page')
+      const profileId = pageId === undefined ? optionalString(params, 'profile') ?? 'default' : this.store.getPage(pageId).profileId
+      return await this.profileLifecycle.withProfileAdmission(profileId, () => this.panes.call('paneOpen', params, caller))
+    }
+    if ((PANE_METHODS as readonly string[]).includes(name)) return await this.panes.call(name as PaneMethod, params, caller)
     switch (name) {
       case 'tabList': return this.tabList(params, caller)
       case 'tabShow': return this.tabShow(params)
       case 'tabCurrent': return this.tabCurrent(params, caller)
-      case 'tabCreate': return await this.createPage(params, caller)
+      case 'tabCreate': return await this.profileLifecycle.withProfileAdmission(optionalString(params, 'profile') ?? 'default', () => this.createPage(params, caller))
       case 'tabSwitch': return await this.tabSwitch(params, caller)
       case 'tabClose': return await this.tabClose(params, caller)
       case 'profileList': return { profiles: this.store.listProfiles() }
@@ -152,6 +200,7 @@ export class BrowserService {
     const worktreeId = await this.resolveWorktreeTarget(optionalString(params, 'worktree'), optionalString(params, 'cwd'), caller, false)
     const profileId = optionalString(params, 'profile') ?? 'default'
     this.store.getProfile(profileId)
+    this.profileLifecycle.assertAvailable(profileId)
     const page = this.store.addPage({ worktreeId: worktreeId ?? null, profileId, url: 'about:blank', title: '' })
     try {
       await this.runtime.withPage(page, 'tabCreate', async (execution) => {

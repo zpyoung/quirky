@@ -255,6 +255,34 @@ Registration update: `bun scripts/build-loop/queue.ts add /tmp/quirky-session-in
 - **Isolated retry:** a different case, “a remote base that moves after the hooks were read does not change the commit checked out”, failed `git fetch -q origin` with `cannot lock ref refs/remotes/origin/main: is at 5549f0f4044fc0bd6207c2f67aa3ace59af0f97c but expected f85218387be054f4435ae642b09ba319f631971a`.
 - **Evidence:** `bun run test`, remote snapshot `runs/1793142204136-90736`, artifact://51. No worktree implementation or test was edited in the PTY item, and this failure was not suppressed. The corrected PTY package separately passed two complete 14-file remote runs with no flaky reruns.
 
+## m6-heimdall-core: deferred automatic native host-power binding
+
+- **Follow-up:** `m6-heimdall-host-power`, confirmed `todo` in the authoritative queue and dependent on core.
+- **Missing flow:** no trusted macOS daemon sleep/wake producer currently invokes the tested runner suspend/resume hooks. Automatic exclusion of host-sleep gaps is not claimed.
+- **Evidence:** daemon/native entrypoints expose no power source; `PluginContext.subscribe` receives only existing events and delivers asynchronously after emit (`packages/daemon/src/plugins/events.ts:61-70`). A subscription alone cannot establish a pre-sleep fencing/ack barrier.
+- **Risk:** an unfenced host sleep can be counted as active work until contact is re-established; explicit suspend/resume and observed contact-loss accounting remain implemented.
+- **Unblock:** an in-process trusted native publisher and public pre-sleep callback/ack seam, with runner binding/subscription disposal and verification on an idle macOS/native test host. No helper-process workaround or timer-delay inference.
+- **Decision:** core D21 and the amended logic spec record this one deferred flow under the authorized night-mode policy. All other reachable core acceptance remains required before landing.
+## sa-browser-pane: deferred native page-event interception
+
+- **Owner:** queued `sa-browser-pane-native-events`, dependent on `sa-browser-pane`; authoritative queue add confirmed on 2026-10-28.
+- **Flows:** Native system-webview JavaScript alert/confirm/prompt/beforeunload overlays and fail-closed responses; basic-auth and loopback-only certificate prompts; controlled collision-safe download destination/cancel/shelf actions; opener/postbody-preserving OAuth popups and external-app launch interception.
+- **Outside limit:** pinned public Electrobun SDK exposes native navigation/find/zoom, popup URL metadata and download notifications, but not the synchronous dialog/auth/certificate response handles, native download destination/cancel controls or opener-preserving popup ownership these flows require.
+- **Evidence:** installed `apps/desktop/.hutch/devkit/api/sdks/main/core/BrowserView.ts:44-218,309-374`, `api/preload/webviewTag.ts:12-26,361-402`, `api/sdks/main/events/webviewEvents.ts:1-38`; BrowserNativeHost/BrowserPaneMap public API surveys. These are supported API limitations, not evidence that private native callbacks do not exist.
+- **Unblock:** a supported SDK capability supplying those controls, without private FFI/pointers, global TLS bypass, asynchronous fake synchronous dialogs, or silently replacing native human browsing with Chrome. Reachable Chrome Watch page-event behavior remains owned by this pane item and is not cleared by this deferral.
+
+## sa-browser-profiles-settings: prerequisite-limited UI flows
+
+- **Owner:** queued `sa-browser-profile-import-ui`, dependent on this item and `sa-browser-agent-extras`. Browser menu/toolbar/Session & Cookies cannot truthfully list detected source browsers/profiles, open a working From File import or show import result summaries until the real engine/API removed from shipped core is restored. Current UI must disclose unavailable and Google-login exclusion; it must not scan protected source data on mount. Evidence: `docs/loop/decisions/sa-browser-agent.md:399-419`; external `browser.md:72-85,391-421`. Unblock by landing extras and connecting explicit-open discovery/import.
+- **Owner:** queued `sa-browser-native-identity`, dependent on this item. Human Native Cleaned/Native UA override needs a supported public SDK hook; inspected `apps/desktop/.hutch/devkit/api/sdks/main/core/BrowserView.ts:44-218` exposes partition but no user-agent setter. Chrome identity is separately reachable; a restart setting must not pretend native UA changed. Unblock with supported native UA override, not private pointers or Chrome substitution.
+- **Owner:** queued `sa-browser-localhost-label-routing`, dependent on this item. Localhost Worktree Labels needs actual native/agent hostname-to-worktree-port routing/DNS capability, absent from the current local-only Browser public API; merely replacing localhost in URL text is not a reachable mapping. Evidence: external `browser.md:127`; `docs/architecture.md:180-203`; item logic SC7. Current UI explains unavailable instead of saving an effective-looking no-op. Unblock with faithful supported host/port mapping.
+- **Owner:** queued `sa-browser-native-profile-clear-completion`, dependent on this item. Native Default/site-data clear and isolated-profile removal cannot be reported complete from `SessionInstance.clearStorageData(...):void` (`apps/desktop/.hutch/devkit/api/sdks/main/proc/native.ts:3347-3365`): the public surface proves invocation only, and no supported acknowledgement/barrier or native storage-root override is projected/documented. Current native clear rejects before invocation, retaining Chrome data/profile metadata; no real native deletion ran. Unblock with supported deletion completion and prove native storage-root isolation before testing shared Default. Until then nightly uses only fresh run-owned UUID partitions; QUIRKY_HOME/HOME alone is not root proof. This supersedes D5's assumed clear completion, not native profile switching.
+## sa-browser-pane: Native host controls and workspace grant preview
+
+- **Queued before the operator freeze:** `sa-browser-pane-native-host-controls` and `sa-browser-pane-workspace-preview`, both todo and dependent on `sa-browser-pane`, confirmed in the authoritative queue.
+- **Native host controls:** the public tag provides normal reload and started/committed/finished events, not genuine cache-bypass reload or a load-failed callback. Native UI must not label normal reload as hard reload or invent a network/TLS error flag. Watch's CDP equivalents remain in this item.
+- **Workspace grant preview:** passive plugin file resources reject active HTML and use sandbox CSP. Source `doc-preview-protocol.ts:33-65,75-151` additionally needs isolated nonpersistent grant/asset serving and outbound network/permission/download policy. Do not weaken daemon-origin MIME security or call explicit `file://` browsing/editor new-tab an equivalent conversion. Canonical source actions and explicit local HTML browsing remain core.
+- **Latest operator ruling:** no further browser queue follow-ups; any additional unavoidable gap is recorded in decision log/BLOCKERS only. Lane8 owns its separate native profile-clear completion limitation; this item does not duplicate it.
 ## m3-vault: terminal input timing during affected verification
 
 - **LOW — shell readiness can advance during CLI round trips** (`plugins/quirky.terminal/test/e2e.test.ts:144`). The macOS SC-2 case expected pending after two CLI sends but observed ready under load; its configured isolated retry passed all23 cases169 assertions. The256 remote files and both macOS files returned a passing runner result. No terminal state, test deadline, assertion or retry rule was changed in this item.
@@ -277,6 +305,23 @@ Registration update: `bun scripts/build-loop/queue.ts add /tmp/quirky-session-in
   and no pending waiters/foreign process cleanup. No human decision is required.
 - **Still shipped:** durable Run/Dispatch mail, FIFO delivery/ack, exclusive waits, resumable
   questions/replies, gates, and explicit exact-incarnation/idempotent session prompt submission.
+
+## m6-orchestration-workers: observed default-profile editor activation timeout
+
+- **Type:** observed integration bug, medium severity.
+- **File:** `plugins/quirky.editor/main.ts:28-51`, awaited restore in `src/daemon/service.ts:212-226`.
+- **Description:** the final merged built UI on a fresh private profile displayed
+  `quirky.editor failed to activate: activation timed out`; subsequent shared-browser
+  observations also timed out. The editor timeout's cause is not established.
+- **Evidence:** screenshot `omp-sshots-15b77ad4f1dc5ef8.png`; private test PATH was
+  `fakebin:/usr/bin:/bin`. Source inspection does not establish missing `rg` as the cause.
+- **Verification boundary:** the worker terminal UI was exercised successfully in a fresh
+  private profile after public `plugin.disable({id:"quirky.editor"})`, using a dedicated
+  owned Chromium process. No editor source or worker guard was changed to make that pass.
+  Actual worker focus/title, physical takeover, retained release and exact stop passed.
+- **Next diagnostic:** reproduce editor activation with its restore trace and normal tool
+  environment; distinguish that producer timeout from the shared-browser driver timeouts.
+  This records an observation, not an unfinished worker flow or a human decision.
 ## m4-hosting-ui-tasks: deferred parity and cross-feature acceptance
 
 - **Owner:** registered follow-up `m4-hosting-ui-tasks-complete-remaining-flows`, dependent on Tasks, sourced worktree creation and Reviews. The operator's 4am sprint directive authorizes the exercised core landing, not a claim that all25 original scenarios passed.
@@ -287,4 +332,108 @@ Registration update: `bun scripts/build-loop/queue.ts add /tmp/quirky-session-in
 
 - **MEDIUM, LOW confidence — Settings paired-device revoke reachability remains unconfirmed** (`plugins/quirky.mobile/src/ui.tsx:70`, `packages/ui/src/styles.css:1137-1144`). At1280x720, the guarded UI run found the Settings revoke button mostly below the status bar; scroll/PageDown produced no observable change. The host slot already supplies `overflow: auto`, so an app layout cause was not established and no speculative CSS change was made. The shorter Mobile-page revoke route worked for all three run-created pairings. Follow-up `sb-mobile-settings-visibility` owns distinguishing scroll-driver targeting from actual clipping.
 - **Tool limitations, not claimed passes:** stable interface Refresh produced no visible change twice; IP redaction hid the custom-address value signal although save/persistence worked; Cmd+R/Cmd+Shift+R did not establish a browser reload. Functional intro/settings/driving/devices goals passed; pairing/post-build goals remain partial in `.quirk/using-apps-like-a-user/runs/20261028T005355-6182/report.md`. No test overrides or kept-open windows.
+
+
+## m5-loops-ui: operator-directed remaining visible verification
+
+- **Owner:** the sole follow-up `m5-loops-ui-visible-stop-close-review`, dependent on this landing.
+- **Still shipped:** complete New loop dialog, three presets, validation/Advanced controls, hosted read-only output/rail, genuine saved output after fresh cleanup, queue/history/detail/control forms, declared API/CLI commands and guarded Cancel/Keep running/Stop tab closure.
+- **Remaining visible flows:** Stop panel Cancel, After this iteration and Now; Close Cancel, Keep running and Stop loop. Their API/CLI/native paths are exercised, but no visible pass is claimed. Finish these on the existing implementation with unique fixture native conversation identities; retain all tests and ownership guards.
+- **Evidence:** `.quirk/using-apps-like-a-user/runs/20261028T071503-520f/report.md` passed observe/adjust/queue, but F5/F6 show fixture startup crashes. The throwaway provider returned `scripted-thread` while the continued queue already owned that conversation. A UUID-based fixture then admitted two native conversations concurrently and cleaned all owned preflight sessions. Production exclusivity was not weakened.
+- **Tool-limited setup:** run `20261028T060845-277a` exercised defaults, preset changes, queue draft CRUD, invalid cap/timeout/cost feedback, Cancel/reset and successful background Start with preserved focus. Start was `UNSETTLED`; stable observation proved the result, but the tool's last-act pass guard prevented a pass verdict. Record/finalize this limitation without pretending the app failed.
+- **Unstarted review:** the prepared Gemini cross-family discovery/refute campaign was never dispatched. The follow-up owns one bounded code review and its blocking fixes, not an invented PASS.
+- **Scope clarification:** reattachment through the declared command/CLI is already independently proven; no unrequested GUI loop picker is assumed. No feature runtime/API flow was replaced with a mock, stub or no-op.
+- **Unblock when:** the named visible cases and bounded review are completed against the landed code. No human decision is required.
+
+## m5-automations-dispatch: deferred constrained flows
+
+- **Source decisions:** `docs/loop/decisions/m5-automations-dispatch.md` D2-D3.
+- **Remote host flows:** SSH/runtime execution, registration-generation ownership, workspace pin/re-pin and re-adoption require public remote host registration/execution APIs that are absent. Remote contexts refuse and never execute locally. Complete the public prerequisite, then exercise these remote flows end-to-end.
+- **Raw extra agent arguments:** the binding structured-only architecture and m5-structured-runner D6 explicitly refuse them. Model and effort use native structured options; no hidden PTY fallback or partial argv interpretation was added. A later item must resolve that binding conflict before promising raw arguments.
+- **Follow-up:** `m5-automations-dispatch-remote-and-args`, dependent on local dispatch, covers both constrained flows.
+
+- **Verification limit:** no final cross-family review was started. LOOP's expired-item fast path was used after owned checks and typecheck passed (dispatch D26); this is not model-review clearance.
+
+## m5-automations-ui: deferred remote authority surfaces
+
+- **Source decision:** `docs/loop/decisions/m5-automations-ui.md` D15. Local create/edit/list/details/runs and local OpenClaw controls ship; no remote action is redirected to the local machine.
+- **Remaining flow:** remote Host selection, owner-preserving authority moves, remote list/history availability, and remote OpenClaw controls need public host registration-generation, execution, ownership and capability APIs. The editor currently explains local-only authority; raw arguments remain visibly unsupported under the structured-runner contract.
+- **Owner:** the single follow-up `m5-automations-ui-remote-authorities`, dependent on this UI item and `m5-automations-dispatch-remote-and-args`, retains these UI flows until the public prerequisite exists.
+- **Verification limit:** final independent model review was not started under LOOP's expired-item rule (UI D16). Availability probes and criteria preparation are not review clearance. Native View-menu visibility remains pending in `docs/loop/native/m5-automations-ui.json`.
+## sa-browser-pane: operator-approved narrow landing and existing follow-up ownership
+
+- **Current acceptance:** API/CLI pane lifecycle and navigation only, using the committed `build/sa-browser-pane` and `/tmp/sa-browser-pane.fiGLjz` trees. This supersedes the previous full-scenario acceptance promise; implementation and tests remain preserved and must not be deleted or weakened.
+- **Existing handoffs:** queue titles remain unchanged; D23 and this entry extend their scope per the operator. No new queue item is added.
+  - `sa-browser-pane-native-host-controls` owns Watch screencast transport/input/find/zoom/viewport acceptance plus remaining base-pane UI scenarios, hard-reload, and load-error.
+  - `sa-browser-pane-native-events` owns dialogs/auth/cert/download/popups/OAuth/external events.
+  - `sa-browser-pane-workspace-preview` owns grant document preview/UI.
+  - Lane8's `sa-browser-profiles-settings` owns profile integration and corresponding UI/settings scenarios. Existing subflow handoffs remain unchanged: `sa-browser-profile-import-ui` retains its import-UI handoff to `sa-browser-profiles-settings` and `sa-browser-agent-extras`; `sa-browser-native-profile-clear-completion` retains native deletion-completion and isolated-storage-root proof; `sa-browser-native-identity` retains supported Native user-agent override and restart requirements; `sa-browser-localhost-label-routing` retains real per-worktree host/port routing, not display-only rewriting.
+  - `m7-sweep-browser-mobile` remains the final parity audit, not a replacement for these specific mappings.
+- **Acceptance limits:** the operator skipped review; Native nightly remains pending. No broad UI acceptance or Watch transport/input/find/zoom/viewport acceptance is claimed here, and none of the deferred flows is reported passing.
+- **Parent landing:** parent owns the final affected suite (`bun scripts/suite.ts plugins/quirky.browser packages/ui packages/protocol apps/desktop`), scripts (`bun test scripts`) and typecheck (`bun run typecheck`) gates, followed by controller `queue.ts land`.
+
+## sa-browser-profiles-settings: configured-retry flakes retained
+
+- **Severity: medium; unattributed helper/frame readiness.** After0713467c's fresh-target binding repair, the affected Browser directory gate returned success through its configured isolated-file retry. Initial macOS automation C1 (`plugins/quirky.browser/test/automation.test.ts:45`) reported `browser_tab_changed: native helper lost the managed tab mapping`; C2 (`:106`) failed CLI switching. Initial Watch acceptance (`plugins/quirky.browser/test/pane.test.ts:77`) missed its12000ms frame condition. The configured retries passed automation6tests76assertions and pane3tests77assertions;9remote files passed initially. This is not a zero-flaky receipt or proof of a resource-load cause. No deadline increase or assertion suppression was used.
+- **Severity: medium; UI Search readiness.** The broader affected non-Browser run passed220remote files after its configured `packages/ui/test/features-search.test.ts:179` SC73 retry, plus3macOS files. The initial search input was null; the isolated file passed5tests52assertions. Existing readiness-flake evidence remains applicable; no new queue item is added under the operator freeze.
+- Root types and the rebuilt27-plugin/20UI-module artifact passed after the binding repair. The focused Browser UI/compiled navigation receipts do not approve the allowlist fixture's omitted Git/sidebar-extras surfaces, native storage clearing/isolation, or a full parity campaign.
+- **Precise lane8 boundary:** cross-lane pane/profile composition and visible integration acceptance is assigned to this item's already-added `sa-browser-pane-native-host-controls`, alongside the deferred base-pane UI. Lane8 retains its own profiles/settings implementation and focused queued subflows; this deferred composition is not a new gate for lane8. This clarifies the owner list above under the operator's “follow-ups this item already added” ruling, without editing queue titles or adding items.
+
+## sa-browser-pane: first merged-gate evidence and preserved verification limits
+
+- First normal controller land rejected: all five Mac-only files passed, including Browser automation and pane tests; remote630files624passed6failed exceeded the configured isolated-retry limit, so no remote retries occurred.
+- Concrete Browser integration defects were repaired without relaxing consumer assertions: terminal contributions now precede the typed management footer; SC-22 waits for actual detected-agent readiness rather than a count that Browser legitimately changes.
+- Dock cancellation now holds the real post-body/pre-Enter boundary through an injected fixture-only hook after the unchanged500ms delay. Explicit per-harness built-in overlays replace the proposed shared prototype monkeypatch. Cancellation/PTY bytes and actual effort/transcript/sentinel/draft assertions remain. Only an incidental negative notice-prose pin was deleted.
+- Fresh scoped proof: Dock send/defect files2/2pass, no retries; exact terminal SC-22 passes; menu unit file passes; typecheck passes after fixture plumbing. This is not a claim that a single post-fix630-file run passed.
+- Unchanged failures still awaiting the normal merged retry: Git remote SC-29 wait (five possible predicates; available stack does not identify one), daemon lock five-second test bound, incoming loops-store five-second bound. No speculative producer change, timeout increase or waived assertion was used for these.
+- Operator's45-minute target was not met; the first controller verification alone took1800.57seconds after source submission. No on-time or authoritative landed claim is inferred from a submitted command.
+
+## m5-automations-ui: open review findings
+
+- **LOW — row action menu Escape dismissal unconfirmed** (`plugins/quirky.automations/src/list/AutomationsPage.tsx:1132,1148`). Original guarded campaign20261028T044328-79db observed Escape/Refresh leave the row menu open. Toggle/action navigation remained usable; the final expired-item batch fixed blocking flow/render failures only. No dismissal fix or passing dismissal assertion is claimed.
+- **Tool-only limits:** browser reload hotkeys returned no observable reload in the original campaign. The passing manual-run continuation20261028T061353-1ab4 closed its browser but reported a frontmost-restoration error; later render closure20261028T065201-fe17 ended cleanly with no kept-open windows or cleanup errors. Native menu/focus proof remains pending, not inferred from web screenshots.
+
+## m4-editor-drop-open-in-place: blocked
+
+Stopped at step 3 (brainstorming feasibility). The core SC-9 behavior needs Finder's real source paths, but no supported path-bearing native drop API was found in installed Electrobun 2.0.4 or latest published 2.0.5. The item explicitly requires blocking rather than adding an unapproved native patch/fork.
+
+Evidence:
+- `apps/desktop/hutch.config.ts:6-8` pins 2.0.4. Current `DocumentSurface.tsx:736-766` opens app-private worktree drags in place but imports ordinary `DataTransfer.files`; `transfers.ts:107-126` sends filename/content, not original source identity.
+- The registry latest tag is 2.0.5 (beta is 2.0.5-beta.5): https://registry.npmjs.org/electrobun/latest . The complete release comparison has no non-test changes under the public main SDK, browser or preload: https://github.com/blackboardsh/electrobun/compare/v2.0.4...v2.0.5 . Its macOS native diff adds fullscreen diagnostics, not drop callbacks.
+- Pinned latest webview event factories expose no native-drop/path event: https://github.com/blackboardsh/electrobun/blob/v2.0.5/package/src/sdks/main/events/webviewEvents.ts#L16-L39 . The drop preload checks only `Files` and restores Windows focus: https://github.com/blackboardsh/electrobun/blob/v2.0.5/package/src/preload/externalDropFocus.ts#L7-L40 . The general clipboard's file-format detection is not the drag pasteboard or a source-path extractor.
+- Executed Bun audit imported the installed/latest public event modules under fresh temporary HOME/QUIRKY_HOME, compared the pinned release and searched latest macOS native hooks. Exit 0: identical eleven-entry webview event factories; `changedPublicSdkBrowserPreloadFiles: []`; `nativeDropHooks: []`. This is executable API/source evidence, not a real Finder-drop/native-window test.
+- Corroborating upstream discussion explicitly calls for native bindings for inbound full paths: https://github.com/blackboardsh/electrobun/issues/63#issuecomment-4056077426 . This comment is not treated as official API documentation.
+
+Tried: current installed SDK and app drop/typed-RPC routes; latest published SDK/native/preload/browser sources; complete 2.0.4-to-2.0.5 changes; independent read-only scout; executable public-module/source audit. Rejected basename/content matching, clipboard polling, picker substitution, URI-only partial routing and an empty event scaffold because none supplies genuine Finder identity. No production code, dependency pin or existing drop policy was changed.
+
+Unblock when Electrobun publishes a supported dropped-source-path callback/extractor, or the user explicitly approves a native patch/fork. Then carry real paths through typed shell RPC/public events and prove same-worktree open-in-place versus external collision-safe import with actual Finder drops. Until then m2-editor D19's approved import-all policy remains in force. Decision log: `docs/loop/decisions/m4-editor-drop-open-in-place.md`; archived evidence: lane 9 ignored iteration folder, `editor-drop-feasibility-evidence.tar.gz`.
+
+## sa-browser-profiles-settings: final verification receipt
+
+- The latest Browser boundary after exact headless-target resume and Watch profile/orphan fixes passed9remote files and2macOS files without retries. Earlier helper/frame failures above remain historical evidence, not a claim that every intermittent cause was attributed.
+- The final caught-up broader gate passed217remote files and5macOS files through the canonical retries. Initial failures retained: Markdown's five-second fixture-hook timeout followed by invalid-buffer/closed-connection fallout, daemon shell-path, and terminal search readiness; isolated files passed. No product deadline or condition assertion was relaxed.
+- Actual compiled Watch UI selected fresh UUID Alpha→Beta→Alpha: visible stored data became Empty profile in Beta and returned in Alpha, one hosted Browser tab and unchanged address, pageerrors empty. Original API pages remain alive. The close-during-preparation regression initially caught unconfirmed swallowed orphan cleanup; internal tabClose now carries yes:true and propagates errors, and the complete Browser gate passes.
+- Current types,28-plugin/20UI-module desktop build and ownership-safe scripts68tests570assertions passed. Icon/release.baseUrl warnings persist. Native partitions/deletion completion, import engine, native identity/localhost capabilities and OS-only handoffs retain their exact existing limitations; no new queue item or full parity/review approval is claimed.
+
+## m7-sweep-terminal: remaining parity and verification limits
+
+- **Owner:** one dependent item, `m7-sweep-terminal-completion`, registered through the authoritative queue. The complete nine-document flow/defect inventory is `docs/quirk/specs/2026-10-28-m7-sweep-terminal/logic.md`; old M1/M2 non-goals remain obligations, not exemptions.
+- **Larger flows:** ask handoff/provider bridges/liveness, rich preview/result/attention/autofocus and delayed escalation; installed/profile CLI and paired-runtime selection; Dashboard/pop-out and hidden-idle count defect; additional transcript/status producers and remote hooks; discovery/retirement/stale model and host-capability behavior; remaining hosting recipe composition, issue-draft/pane-fork/cold-resume and terminal cross-feature/rendering/keybinding composition; worktree sleep/cleanup/stock options/external visibility/navigation/manual references/status board and advanced create/project options; supported native notification, terminal-host and folder-picker prerequisites. Respect the explicit non-GitHub-hosting/Objective/sitter exclusions and macOS platform scope. Reconcile already-owned automation remote/raw-args, terminal-dock and sidebar-extras items instead of duplicating them.
+- **Guarded UI evidence:** campaign `20261028T081739-fab2` reports3 Activity goal passes. Recipe settings/customize goals remained unset when the driver stopped responding; they are classified tool-blocked, not passes. The inherited Codex/gpt-5.5/High Customize dialog was visible at obs-33, but no edit/save completion is claimed. Reports remain under `.quirk/using-apps-like-a-user/runs/20261028T081739-fab2/`.
+- **Activity repair closure limit:** F1's blank-selector alert and F2's clipped lower row received code repairs and focused passing React/API tests plus a successful rebuilt app. A new guarded recovery `20261028T100639-4329` timed out during begin before driver selection or any action; end wrote a cleanup_failed report with no kept-open windows. Thus no post-repair visible closure is claimed. The completion owner must rerun the relevant visible paths once the driver initializes reliably; this is not a claim that the original screenshot findings were visually re-tested.
+- **Native handoff:** actual desktop visibility/load completion and physical terminal focus remain pending in `docs/loop/native/m7-sweep-terminal.json`. A synthetic native-role client in the isolated smoke is not physical-window proof.
+- **Review limit:** no final cross-family code review was dispatched. Canonical LOOP's expired-item fast path was applied after owned checks/typecheck; model availability/READY and structural plugin validation are not code-review clearance. The4am target was missed.
+- **Verification receipt:** actual standalone daemon/CLI/PTY smoke passed twice with owned provider stand-ins and cleaned homes/processes. The caught-up affected run passed284/286 remote files and all3 selected Mac files; its2 failures were obsolete default-copy assertions, not failed new feature scenarios. Those assertions were replaced with consumer-level argv/readback checks, and the complete2-file remote recovery passed without retries. Scripts68pass/0fail/576assertions; final compiler recovery exit0. Authoritative land must still verify its whole merge result.
+## m7-sweep-hosting: delivered repairs and remaining acceptance
+
+- **Implemented core:** scoped search/count batching and cursor-page reuse (`9cc24e68`); repository-owned Issue types in either Project-owner kind (`eafde4d7`); exact-worktree Reviews→Browser routing (`390cdc37`); current-type display before choices load (`539aa1c9`). Existing API schemas/lookup/createOpen are unchanged except the window link command now accepts its existing method's worktree argument.
+- **Observed gates:** first integrated Hosting/Tasks/Reviews/Worktree gate57/57files, no flaky retries; scripts68pass574assertions; root typecheck and packaged22-UI-module/29-plugin build passed. After the real visual fix, Tasks4/4files, root typecheck and rebuilt package passed. Correcting the missing `gh pr view` fixture exposed a cross-repo fixture mismatch, not waived: preserve its failed4/5file run and exact source-qualified repair. Final corrected Reviews5/5files passed without retries; final fixture typing passed.
+- **Observed UI:**20261028T093651-8202 retains original typeFAIL, layoutsPARTIAL and SettingsPASS. Fresh rebuilt20261028T095840-a759 **PASS** closes the type failure: Bug visible before focus, Task saved, Board→Table visibly retains Task before refocus. Avatarfixture DNS console/network findings remain. Today visibly scrolled toOctober but the guarded screen classifier returnedNO_EFFECT; no formal layoutPASS is claimed.20261028T100136-9f7f is partial fixture setup; faithful20261028T100616-138d shows hydrated Conversation, actionable status-only rerun error, README diff and the exact PR12 URL revealed in Browser in the same workspace. Final route action was classifiedUNSETTLED, so formal goal remainsPARTIAL despite its destination screenshot. Native guest rendering is explicitly unavailable in this web client.
+- **Existing followup owners retained:** `m4-hosting-ui-tasks-complete-remaining-flows` still owns the full25-scenario campaign, real Project direct-source creation/default-agent/ready-gated single context delivery and added-repo/deep-link/stale/overlapping-write boundaries. `m4-hosting-api-github-parity` is extending independent boundaries from these committed API repairs; lane6 consumed the shared source, not an uncommitted copy. `m4-hosting-ui-review-browser-routing` retains broader stack/modifier/native acceptance. No duplicate followup or false completion of those items was written. See decisionsD7–D11.
+- **Native/platform:** `docs/loop/native/m7-sweep-hosting.json` remains pending; no shared Default native partition, real forge/account state or system browser was exercised. Linux/Windows remain unverified platform work.
+- **Review limit:** C1's requested missing-context fallback was rejected under exact-source/fail-closed policy; no accepted blocking finding remains. Security refute's empty-claim excerpt fallback included unrelated incoming docs/author reasoning after an ARG_MAX failure; its machinePASS is not full independent-context assurance. Raw prompts/results/manifests are archived with the item's private evidence.
+
+## m7-sweep-hosting: open nonblocking findings
+
+- **LOW — repeated error presentation** (`plugins/quirky.reviews/src/detail/ChecksList.tsx:229-230`): an expected status-only rerun error appears as both actionError and activeError, plus the page-level error strip. Actual20261028T100616-138d obs3 shows the repeated copy. The operation fails visibly and safely; deduplicate presentation in the existing broader Reviews acceptance work rather than hide the error.
 

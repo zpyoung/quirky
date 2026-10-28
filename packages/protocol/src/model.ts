@@ -260,6 +260,8 @@ export type Session = {
   worktreeId: string
   cwd: string
   title: string
+  /** Background work is not auto-adopted into terminal tabs; an explicit session view can still show it. */
+  background?: boolean
   status: SessionStatus
   createdAt: number
   lastActivityAt: number
@@ -284,7 +286,7 @@ export type Session = {
   name?: string | null
   /** Why the session is marked unread; null or absent when it is not. */
   unread?: SessionUnread | null
-  /** Chips on the session's tab, keyed `<plugin id>/<key>`; absent when there are none. */
+  /** Chips on the session's tab, keyed `<plugin id>/<key>` or `<client role>/<key>`; absent when there are none. */
   badges?: Record<string, SessionBadge>
 }
 

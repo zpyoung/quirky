@@ -596,8 +596,13 @@ describe('session get', () => {
     })
     const { ctx, lines } = testCliContext(client, { json: true })
     await run('get', ctx, [registered.id])
-    expect(JSON.parse(lines[0]!)).toEqual(registered)
-    expect(JSON.parse(lines[0]!).launchSettings).toEqual(settings)
+    expect(JSON.parse(lines[0]!) as unknown).toMatchObject({
+      id: registered.id,
+      kind: 'structured',
+      agent: 'claude',
+      worktreeId: registered.worktreeId,
+      launchSettings: settings
+    })
   })
 
   test('needs a session, and an unknown one is the daemon\'s error', async () => {

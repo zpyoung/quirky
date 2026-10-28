@@ -142,6 +142,13 @@
       "version": "0.1.0",
       "dependencies": {
         "@quirky/protocol": "workspace:*",
+        "react": "19.2.0",
+        "react-dom": "19.2.0",
+      },
+      "devDependencies": {
+        "@happy-dom/global-registrator": "20.14.6",
+        "@types/react": "^19.3.0",
+        "@types/react-dom": "^19.3.0",
       },
     },
     "plugins/quirky.agents": {
@@ -177,6 +184,13 @@
       "version": "0.1.0",
       "dependencies": {
         "@quirky/protocol": "workspace:*",
+        "react": "19.2.0",
+        "react-dom": "19.2.0",
+      },
+      "devDependencies": {
+        "@happy-dom/global-registrator": "20.14.6",
+        "@types/react": "^19.3.0",
+        "@types/react-dom": "^19.3.0",
       },
     },
     "plugins/quirky.browser": {
@@ -185,9 +199,14 @@
       "dependencies": {
         "@quirky/protocol": "workspace:*",
         "agent-browser": "0.27.0",
+        "react": "19.2.0",
+        "react-dom": "19.2.0",
       },
       "devDependencies": {
+        "@happy-dom/global-registrator": "20.14.6",
         "@quirky/git": "workspace:*",
+        "@types/react": "^19.3.0",
+        "@types/react-dom": "^19.3.0",
       },
     },
     "plugins/quirky.checks": {
@@ -300,6 +319,19 @@
         "@types/react-dom": "^19.3.0",
       },
     },
+    "plugins/quirky.heimdall": {
+      "name": "@quirky/plugin-heimdall",
+      "version": "0.1.0",
+      "dependencies": {
+        "@quirky/protocol": "workspace:*",
+        "react": "19.2.0",
+        "react-dom": "19.2.0",
+      },
+      "devDependencies": {
+        "@types/react": "^19.3.0",
+        "@types/react-dom": "^19.3.0",
+      },
+    },
     "plugins/quirky.hosting": {
       "name": "@quirky/plugin-hosting",
       "version": "0.1.0",
@@ -327,6 +359,13 @@
       "version": "0.1.0",
       "dependencies": {
         "@quirky/protocol": "workspace:*",
+        "react": "19.2.0",
+        "react-dom": "19.2.0",
+      },
+      "devDependencies": {
+        "@happy-dom/global-registrator": "20.14.6",
+        "@types/react": "^19.3.0",
+        "@types/react-dom": "^19.3.0",
       },
     },
     "plugins/quirky.mobile": {
@@ -367,6 +406,13 @@
       "version": "0.1.0",
       "dependencies": {
         "@quirky/protocol": "workspace:*",
+        "react": "19.2.0",
+        "react-dom": "19.2.0",
+      },
+      "devDependencies": {
+        "@happy-dom/global-registrator": "20.14.6",
+        "@types/react": "^19.3.0",
+        "@types/react-dom": "^19.3.0",
       },
     },
     "plugins/quirky.palette": {
@@ -1001,10 +1047,11 @@
     "@quirky/plugin-checks": ["@quirky/plugin-checks@workspace:plugins/quirky.checks"],
 
     "@quirky/plugin-editor": ["@quirky/plugin-editor@workspace:plugins/quirky.editor"],
-
     "@quirky/plugin-git": ["@quirky/plugin-git@workspace:plugins/quirky.git"],
 
     "@quirky/plugin-handoff": ["@quirky/plugin-handoff@workspace:plugins/quirky.handoff"],
+
+    "@quirky/plugin-heimdall": ["@quirky/plugin-heimdall@workspace:plugins/quirky.heimdall"],
 
     "@quirky/plugin-hosting": ["@quirky/plugin-hosting@workspace:plugins/quirky.hosting"],
 

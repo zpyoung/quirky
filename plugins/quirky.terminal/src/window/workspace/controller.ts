@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { RpcErrorCode, type QuirkyEvent, type Session, type UiPluginContext } from '@quirky/protocol'
+import { RpcErrorCode, type QuirkyEvent, type Session, type UiMenuItemEntry, type UiPluginContext } from '@quirky/protocol'
 import { displayTitle } from '../../layout/titles'
 import { findGroup, groupsInOrder, paneLeaves, setGroupRatio, setPaneRatio } from '../../layout/tree'
 import type { DropZone } from '../../layout/tree'
@@ -60,6 +60,7 @@ export type TabDrop = { kind: 'zone'; group: string; zone: DropZone } | { kind: 
 
 export type ControllerState = {
   status: 'loading' | 'ready' | 'missing' | 'error'
+  selectionError: string | null
   workspace: Workspace | null
   sessions: Readonly<Record<string, Session>>
   cwds: Readonly<Record<string, string>>
@@ -81,16 +82,21 @@ export type ControllerState = {
 }
 type DockHostState = { mounted: boolean; focused: boolean; composerFocused: boolean }
 
+export type MenuContributionItem = MenuItem & Pick<UiMenuItemEntry, 'after'>
 /** The slots and switches a host of the workspace can set. */
 export type WorkspaceOptions = {
   /** `floating` mounts the floating workspace: no tab is created for it, and closing its last tab minimizes the panel. */
   workspace?: 'floating'
   /** Rendered after the `+` button of each group's strip. */
   stripExtras?: (group: Group) => ReactNode
-  /** The rows of the pane menu's Quick Commands submenu. */
+  /** Quick-command rows supplied by the terminal host for this pane. */
   paneMenuExtras?: (pane: PaneLeaf) => MenuItem[]
   /** Rows other plugins contribute to the pane menu, shown right after the Quick Commands row. */
   paneMenuContributions?: (pane: PaneLeaf, session: Session | undefined) => MenuItem[]
+  /** After-placed tab rows are searchable; unplaced rows are static, before Agent settings. */
+  tabMenuContributions?: (group: Group, workspace: string) => MenuContributionItem[]
+  /** The public menu contribution list changes, keeping an open + menu current. */
+  subscribeMenuContributions?: (listener: () => void) => () => void
   /** Menus beyond `tab`, `pane`, `plus` and `actions`, opened by `openMenu(kind, target)`. */
   extraMenus?: Record<string, (target: string | null) => MenuItem[]>
   /** The element carrying the theme's custom properties; defaults to the mount element. */
@@ -210,6 +216,7 @@ export class WorkspaceController {
     this.startSession = session
     this.state = {
       status: 'loading',
+      selectionError: null,
       workspace: null,
       sessions: {},
       cwds: {},
@@ -270,8 +277,12 @@ export class WorkspaceController {
         void this.load(false)
       })
     )
+    const unsubscribeMenuContributions = this.options.subscribeMenuContributions?.(() => {
+      if (this.state.menu?.kind === 'plus') this.set({})
+    })
+    if (unsubscribeMenuContributions) this.unsubscribes.push(unsubscribeMenuContributions)
     this.set({ settings: readWorkspaceSettings(this.context, this.settingOverrides) })
-    void this.load(!this.floating)
+    void this.load(!this.floating && this.startSession === undefined)
   }
 
   stop(): void {
@@ -356,13 +367,89 @@ export class WorkspaceController {
   private afterWorkspace(workspace: Workspace): void {
     if (!this.didFocusInput && this.startSession !== undefined) {
       this.didFocusInput = true
-      const loc = locateSession(workspace, this.startSession)
-      if (loc) void this.focusPane(loc.leaf.id)
+      void this.openRequestedSession(workspace, this.startSession)
     }
     const unknown = groupsInOrder(workspace.root).some((group) =>
       group.tabs.some((tab) => isTerminalTab(tab) && paneLeaves(tab.root).some((leaf) => !this.state.sessions[leaf.session]))
     )
     if (unknown) void this.reloadSessions()
+  }
+
+  private async openRequestedSession(workspace: Workspace, sessionId: string): Promise<void> {
+    let session = this.state.sessions[sessionId]
+    if (!session) {
+      try {
+        session = (await this.context.call('quirky.session/get', { session: sessionId })) as Session
+      } catch (error) {
+        if (this.stopped) return
+        const message = hasCode(error, RpcErrorCode.NotFound)
+          ? `Session ${sessionId} was not found.`
+          : `Could not open session ${sessionId}: ${messageOf(error)}`
+        this.set({ selectionError: message })
+        return
+      }
+    }
+    if (this.stopped) return
+    if (session.worktreeId !== workspace.id) {
+      this.set({ selectionError: `Session ${sessionId} belongs to a different worktree.` })
+      return
+    }
+
+    this.set({ sessions: { ...this.state.sessions, [sessionId]: session }, selectionError: null })
+    const current = this.ws ?? workspace
+    const existing = locateSession(current, sessionId)
+    if (existing) {
+      await this.focusRequestedSession(current, sessionId)
+      return
+    }
+
+    const group = groupsInOrder(current.root)[0]
+    if (!group) {
+      this.set({ selectionError: `No workspace group is available for session ${sessionId}.` })
+      return
+    }
+
+    let result: { workspace?: Workspace } | undefined
+    try {
+      result = (await this.context.call(`${TERMINAL_PREFIX}adoptSession`, { group: group.id, session: sessionId })) as
+        | { workspace?: Workspace }
+        | undefined
+    } catch (error) {
+      if (this.stopped) return
+      this.set({ selectionError: `Could not open session ${sessionId}: ${messageOf(error)}` })
+      return
+    }
+    if (this.stopped) return
+    if (!result?.workspace) {
+      this.set({ selectionError: `Could not open session ${sessionId}.` })
+      return
+    }
+    this.apply(result.workspace)
+    const adopted = locateSession(this.ws ?? result.workspace, sessionId)
+    if (!adopted) {
+      this.set({ selectionError: `Could not select session ${sessionId}.` })
+      return
+    }
+    await this.focusRequestedSession(this.ws ?? result.workspace, sessionId)
+  }
+
+  private async focusRequestedSession(workspace: Workspace, sessionId: string): Promise<void> {
+    const loc = locateSession(workspace, sessionId)
+    if (!loc) {
+      this.set({ selectionError: `Could not select session ${sessionId}.` })
+      return
+    }
+    const shown = loc.tab.expandedPane === null || loc.tab.expandedPane === loc.leaf.id
+    if (
+      loc.tab.activePane === loc.leaf.id &&
+      loc.group.activeTab === loc.tab.id &&
+      workspace.activeGroup === loc.group.id &&
+      shown
+    ) {
+      return
+    }
+    const focused = await this.run('focusPane', { pane: loc.leaf.id }, 'select the session')
+    if (!focused && !this.stopped) this.set({ selectionError: `Could not select session ${sessionId}.` })
   }
 
   private async reloadSessions(): Promise<void> {
@@ -1077,12 +1164,21 @@ export class WorkspaceController {
   private plusItems(groupId: string | null, query: string): MenuItem[] {
     const group = groupId && this.ws ? findGroup(this.ws.root, groupId) : null
     const target = group?.id
-    const rows: MenuItem[] = filterEntries(this.state.agents, query).map((entry) => ({
+    const needle = query.trim().toLowerCase()
+    const contributed = group ? (this.options.tabMenuContributions?.(group, this.workspaceId) ?? []) : []
+    const entries = filterEntries(this.state.agents, query)
+    const rows: MenuItem[] = entries.map((entry) => ({
       label: entry.label,
       key: entry.kind === 'terminal' ? '⌘T' : null,
       onSelect: () => this.chooseEntry(entry, target)
     }))
-    const needle = query.trim().toLowerCase()
+    const footer = entries.findIndex((entry) => entry.kind === 'manage')
+    const visibleContributions = contributed.filter(
+      (item) =>
+        (needle === '' || item.after === 'quick-commands') &&
+        (needle === '' || item.label.toLowerCase().includes(needle))
+    )
+    rows.splice(footer < 0 ? rows.length : footer, 0, ...visibleContributions)
     if (needle !== '' && this.ws) {
       for (const candidate of groupsInOrder(this.ws.root)) {
         for (const tab of candidate.tabs) {

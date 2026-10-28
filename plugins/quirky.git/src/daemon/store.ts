@@ -23,5 +23,7 @@ export const migrations: StoreMigration[] = [
     args TEXT,
     template TEXT,
     PRIMARY KEY (scope, action)
-  )`
+  )`,
+  `ALTER TABLE recipes ADD COLUMN launch_options TEXT;
+  ALTER TABLE recipes ADD COLUMN launch_options_agent TEXT`
 ]

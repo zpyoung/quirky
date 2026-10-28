@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { statSync } from 'node:fs'
 import { isAbsolute } from 'node:path'
-import type { PluginCaller, PluginContext, Worktree } from '@quirky/protocol'
+import type { PluginCaller, PluginContext, PluginInfo, Worktree } from '@quirky/protocol'
 import { runCommand, type CommandResult } from './executor'
 
 const DEFAULT_TIMEOUT_SECONDS = 60
@@ -11,6 +11,7 @@ type ActiveCheck = {
   controller: AbortController
   cancelled: boolean
   completion?: Promise<CheckResult>
+  ownerPluginId?: string
 }
 type ErrorKind = 'invalid-params' | 'not-found' | 'conflict'
 
@@ -46,6 +47,26 @@ export async function activate(context: PluginContext): Promise<void> {
   let shuttingDown = false
   const fail = (kind: ErrorKind, message: string) => context.error(kind, message)
 
+  context.subscribe(async (event) => {
+    if (event.type !== 'plugin.changed' || shuttingDown) return
+    try {
+      const plugins = await context.call('plugin.list', {}) as PluginInfo[]
+      const activeIds = new Set(plugins.filter((plugin) => plugin.state === 'active' || plugin.state === 'activating').map((plugin) => plugin.id))
+      for (const record of active.values()) {
+        if (record.ownerPluginId !== undefined && !activeIds.has(record.ownerPluginId)) {
+          record.cancelled = true
+          record.controller.abort()
+        }
+      }
+    } catch (error) {
+      try {
+        context.log(`could not reconcile check owners: ${error instanceof Error ? error.message : String(error)}`)
+      } catch {
+        // The checks context itself was revoked; deactivate cancels its remaining processes.
+      }
+    }
+  })
+
   async function run(params: Record<string, unknown>, caller: PluginCaller): Promise<CheckResult> {
     if (shuttingDown) throw fail('conflict', 'checks plugin is shutting down')
     const command = params.command
@@ -77,12 +98,20 @@ export async function activate(context: PluginContext): Promise<void> {
         throw fail('invalid-params', 'checkId must be a nonempty string')
       }
       checkId = params.checkId
-      if (active.has(checkId)) throw fail('conflict', `checkId is already active: ${checkId}`)
     } else {
       checkId = randomUUID()
     }
 
-    const record: ActiveCheck = { controller: new AbortController(), cancelled: false }
+    let ownerPluginId: string | undefined
+    if (caller.role === 'plugin') {
+      const plugins = await context.call('plugin.list', {}) as PluginInfo[]
+      const owner = plugins.find((plugin) => plugin.id === caller.pluginId)
+      if (owner && owner.state !== 'active' && owner.state !== 'activating') throw fail('conflict', 'the check owner is no longer active')
+      if (owner) ownerPluginId = owner.id
+    }
+    if (shuttingDown) throw fail('conflict', 'checks plugin is shutting down')
+    if (active.has(checkId)) throw fail('conflict', `checkId is already active: ${checkId}`)
+    const record: ActiveCheck = { controller: new AbortController(), cancelled: false, ownerPluginId }
     active.set(checkId, record)
     const completion = (async () => {
       try {

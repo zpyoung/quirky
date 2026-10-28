@@ -2,10 +2,9 @@ import { Database } from 'bun:sqlite'
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import type { PluginStore, StoreMigration, StructuredMessage, StructuredRole } from '@quirky/protocol'
-import type { StructuredLaunchOptions } from './runner'
 
 type Row = { session_id: string; seq: number; role: StructuredRole; text: string; data: string | null; at: number }
-type LaunchOptionsRow = { options_json: string }
+
 export type StructuredSendReceipt = {
   operationId: string
   sessionId: string
@@ -20,13 +19,6 @@ type StoredSendReceipt = {
   state: StructuredSendReceipt['state']
 }
 
-
-const CREATE_LAUNCH_OPTIONS_TABLE = `
-  CREATE TABLE IF NOT EXISTS structured_launch_options (
-    session_id TEXT PRIMARY KEY,
-    options_json TEXT NOT NULL
-  )`
-
 const CREATE_SEND_RECEIPTS_TABLE = `
   CREATE TABLE IF NOT EXISTS structured_send_receipts (
     operation_id TEXT PRIMARY KEY,
@@ -38,28 +30,6 @@ const CREATE_SEND_RECEIPTS_TABLE = `
   );
   CREATE INDEX IF NOT EXISTS structured_send_receipts_updated_at ON structured_send_receipts(updated_at)
 `
-
-
-function parseLaunchOptions(json: string): StructuredLaunchOptions {
-  let value: unknown
-  try {
-    value = JSON.parse(json)
-  } catch {
-    throw new Error('stored structured launch options are malformed')
-  }
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
-    throw new Error('stored structured launch options are malformed')
-  }
-  const options = value as Record<string, unknown>
-  const unsupported = Object.keys(options).find((key) => key !== 'model' && key !== 'effort')
-  if (unsupported !== undefined) throw new Error(`stored structured launch options contain unsupported field "${unsupported}"`)
-  if (options.model !== undefined && typeof options.model !== 'string') throw new Error('stored structured model is malformed')
-  if (options.effort !== undefined && typeof options.effort !== 'string') throw new Error('stored structured effort is malformed')
-  return {
-    ...(options.model === undefined ? {} : { model: options.model }),
-    ...(options.effort === undefined ? {} : { effort: options.effort })
-  }
-}
 
 const CREATE_TABLE = `
   CREATE TABLE IF NOT EXISTS structured_messages (
@@ -95,41 +65,15 @@ function createAndImportV1(home: string): StoreMigration {
   }
 }
 
-function createLaunchOptionsTable(): StoreMigration {
-  return (store) => store.exec(CREATE_LAUNCH_OPTIONS_TABLE)
-}
 
 /** The migrations of the plugin's store, for `context.openStore`. */
 export function journalMigrations(home: string): StoreMigration[] {
-  return [
-    createAndImportV1(home),
-    createLaunchOptionsTable(),
-    (store) => store.exec(CREATE_SEND_RECEIPTS_TABLE)
-  ]
+  return [createAndImportV1(home), (store) => store.exec(CREATE_SEND_RECEIPTS_TABLE)]
 }
 
 /** The structured sessions' message journal. */
 export class Journal {
   constructor(private readonly store: PluginStore) {}
-
-  /** Stores the exact native model and effort selection applied to a structured session. */
-  setLaunchOptions(sessionId: string, options: StructuredLaunchOptions): void {
-    this.store.run(
-      `INSERT INTO structured_launch_options (session_id, options_json) VALUES (?, ?)
-       ON CONFLICT(session_id) DO UPDATE SET options_json = excluded.options_json`,
-      sessionId,
-      JSON.stringify(options)
-    )
-  }
-
-  /** Returns null when the session predates the private launch-options migration. */
-  getLaunchOptions(sessionId: string): StructuredLaunchOptions | null {
-    const row = this.store.get<LaunchOptionsRow>(
-      'SELECT options_json FROM structured_launch_options WHERE session_id = ?',
-      sessionId
-    )
-    return row ? parseLaunchOptions(row.options_json) : null
-  }
 
   sendReceipt(operationId: string): StructuredSendReceipt | null {
     const row = this.store.get<StoredSendReceipt>(
@@ -243,11 +187,11 @@ export class Journal {
     })
   }
 
-  /** Drops the session's journal. */
+  /** Drops the session's messages and send receipts atomically. */
   remove(sessionId: string): void {
     this.store.transaction(() => {
       this.store.run('DELETE FROM structured_messages WHERE session_id = ?', sessionId)
-      this.store.run('DELETE FROM structured_launch_options WHERE session_id = ?', sessionId)
+      this.store.run('DELETE FROM structured_send_receipts WHERE session_id = ?', sessionId)
     })
   }
 }

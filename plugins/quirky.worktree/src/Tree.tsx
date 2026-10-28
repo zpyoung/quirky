@@ -1,11 +1,14 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type MouseEvent } from 'react'
 import type { ProjectGroup, Repo, Session, UiPluginContext, Worktree } from '@quirky/protocol'
+import type { HeimdallWorktreeStatus } from './useTree'
 import { resolveMembershipTarget, type MembershipTarget } from './membership'
 import { changeGroup, copyText, SESSION_VIEW, setWorktree } from './actions'
 import { ContextMenu, groupMenu, projectMenu, STATUS_LABELS, workspaceMenu, type MenuItem } from './Menu'
 import { projectSeparatorBoundaries, repoLabel, type DialogState, type GroupNode, type ProjectNode, type TreeModel, type TreeRow } from './report'
 import { StatusDot, UnreadBell } from './StatusDot'
 import { worktreeGlyph } from './status'
+import { OrchestrationRows, type OrchestrationWorkerRow } from './OrchestrationRows'
+import { useOrchestrationRows } from './useOrchestrationRows'
 
 export type TreeProps = {
   context: UiPluginContext
@@ -27,6 +30,52 @@ type OpenMenu = { x: number; y: number; label: string; items: MenuItem[] }
 
 const plural = (count: number) => `${count} ${count === 1 ? 'child' : 'children'}`
 
+function isHeimdallWorktreeStatus(value: unknown): value is HeimdallWorktreeStatus {
+  if (typeof value !== 'object' || value === null) return false
+  const status = value as Record<string, unknown>
+  return typeof status.watcherId === 'string' && typeof status.watcherName === 'string' &&
+    typeof status.state === 'string' && (status.ownerContact === 'live' || status.ownerContact === 'unverifiable') &&
+    typeof status.observedAtMs === 'number' &&
+    (status.detail === undefined || typeof status.detail === 'string') &&
+    (status.consecutiveErrors === undefined || typeof status.consecutiveErrors === 'number')
+}
+
+function heimdallStatusOf(worktree: Worktree): HeimdallWorktreeStatus | null {
+  if (!('heimdallStatus' in worktree)) return null
+  return isHeimdallWorktreeStatus(worktree.heimdallStatus) ? worktree.heimdallStatus : null
+}
+
+function HeimdallGlyph({ status, now }: { status: HeimdallWorktreeStatus; now: number }) {
+  let label = status.state
+  let color = 'var(--muted)'
+  if (status.ownerContact === 'unverifiable') {
+    const ageSeconds = Math.max(0, Math.floor((now - status.observedAtMs) / 1_000))
+    label = `Host unreachable · last confirmed ${ageSeconds}s ago`
+    color = 'var(--amber)'
+  } else if (status.state === 'escalated' || status.state === 'parked') {
+    color = 'var(--amber)'
+  } else if (status.state === 'held' && (status.reason === 'tick-error' || (status.consecutiveErrors ?? 0) > 0)) {
+    label = 'Error · retrying'
+    color = 'var(--amber)'
+  } else if (status.state === 'held') {
+    label = status.reason ? `Held · ${status.reason}` : 'Held'
+    color = 'var(--amber)'
+  } else if (status.state === 'acting' || status.state === 'watching') {
+    color = 'var(--green)'
+  } else if (status.state === 'unreachable' || status.state === 'malformed') {
+    color = 'var(--danger)'
+  }
+  const title = [`${status.watcherName}: ${label}`, status.reason, status.detail].filter(Boolean).join(' · ')
+  return (
+    <span role="img" aria-label={`Heimdall ${label}`} title={title} style={{ display: 'inline-flex', color, flex: '0 0 auto', alignItems: 'center' }}>
+      <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">
+        <circle cx="6" cy="6" r="4.6" fill="none" stroke="currentColor" strokeWidth="1.3" />
+        <circle cx="6" cy="6" r="1.8" fill="currentColor" />
+      </svg>
+    </span>
+  )
+}
+
 type CardProps = {
   context: UiPluginContext
   worktree: Worktree
@@ -34,6 +83,7 @@ type CardProps = {
   childCount: number
   collapsed: boolean
   sessions: Session[] | null
+  orchestrationWorkers: readonly OrchestrationWorkerRow[]
   now: number
   selected: boolean
   repoName?: string
@@ -43,17 +93,18 @@ type CardProps = {
   onDragEnd(): void
 }
 
-function WorktreeCard({ context, worktree, depth, childCount, collapsed, sessions, now, selected, repoName, onToggle, onMenu, onDragStart, onDragEnd }: CardProps) {
+function WorktreeCard({ context, worktree, depth, childCount, collapsed, sessions, orchestrationWorkers, now, selected, repoName, onToggle, onMenu, onDragStart, onDragEnd }: CardProps) {
   const open = () => {
     context.openView(SESSION_VIEW, { worktree: worktree.id })
     if (worktree.unread) void setWorktree(context, worktree.id, { unread: false })
   }
   const linkedWork = worktree.linkedPR ?? worktree.linkedIssue
   const className = ['worktree', selected && 'selected', worktree.removing && 'removing'].filter(Boolean).join(' ')
+  const heimdall = heimdallStatusOf(worktree)
   return (
     <li
       className={className}
-      style={{ '--depth': depth } as CSSProperties}
+      style={{ '--depth': depth, flexWrap: 'wrap' } as CSSProperties}
       draggable={worktree.kind === 'git'}
       onDragStart={(event) => onDragStart(worktree, event)}
       onDragEnd={onDragEnd}
@@ -64,6 +115,7 @@ function WorktreeCard({ context, worktree, depth, childCount, collapsed, session
     >
       <button className="worktree-main" onClick={open} title={worktree.path}>
         {worktree.unread ? <UnreadBell /> : <StatusDot glyph={sessions === null ? null : worktreeGlyph(sessions, worktree.id, now)} />}
+        {heimdall && <HeimdallGlyph status={heimdall} now={now} />}
         <span className={worktree.unread ? 'worktree-name worktree-name-unread' : 'worktree-name'}>{worktree.name}</span>
         {repoName && <span className="tag tag-repo">{repoName}</span>}
         {worktree.isMain && <span className="tag tag-primary">primary</span>}
@@ -97,6 +149,7 @@ function WorktreeCard({ context, worktree, depth, childCount, collapsed, session
       >
         ⋯
       </button>
+      <OrchestrationRows context={context} workers={orchestrationWorkers} sessions={sessions} worktreeId={worktree.id} />
     </li>
   )
 }
@@ -128,10 +181,11 @@ export function Tree({
   onDropPreviewChange,
   onSeparatorStateChange
 }: TreeProps) {
-  const [folded, setFolded] = useState<ReadonlySet<string>>(new Set())
+  const orchestrationWorkers = useOrchestrationRows(context)
   const [menu, setMenu] = useState<OpenMenu | null>(null)
   const [dropPreview, setDropPreview] = useState<MembershipTarget | null>(null)
   const [stickySections, setStickySections] = useState<ReadonlySet<string>>(new Set())
+  const [folded, setFolded] = useState<Set<string>>(() => new Set())
   const treeRoot = useRef<HTMLDivElement>(null)
   const draggedWorktree = useRef<Worktree | null>(null)
   const previewRef = useRef<MembershipTarget | null>(null)
@@ -307,6 +361,7 @@ export function Tree({
             childCount={row.childCount}
             collapsed={folded.has(worktree.id)}
             sessions={sessions}
+            orchestrationWorkers={worktree.pinned ? [] : orchestrationWorkers}
             now={now}
             selected={worktree.id === selectedId}
             repoName={repoName}
@@ -487,6 +542,7 @@ export function Tree({
                   childCount={0}
                   collapsed={false}
                   sessions={sessions}
+                  orchestrationWorkers={orchestrationWorkers}
                   now={now}
                   selected={worktree.id === selectedId}
                   repoName={repoName}

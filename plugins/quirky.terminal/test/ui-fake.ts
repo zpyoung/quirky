@@ -1,5 +1,6 @@
 import { act } from 'react'
 import { RpcError, RpcErrorCode, type QuirkyEvent, type UiLayout, type UiPluginContext } from '@quirky/protocol'
+import { createNativeBrowserCapability } from '../../../packages/ui/src/native-browser'
 
 type Handler = (params: Record<string, any>) => unknown
 
@@ -65,6 +66,7 @@ export function fakeContext(handlers: Record<string, Handler> = {}, settings: Re
 
   const context: UiPluginContext = {
     pluginId: 'quirky.terminal',
+    nativeBrowser: createNativeBrowserCapability(),
     log() {},
     provide(id, implementation) {
       provided.set(id, implementation as (...args: any[]) => any)
@@ -145,8 +147,20 @@ export function fakeContext(handlers: Record<string, Handler> = {}, settings: Re
     mountedViews,
     /** The current value of a window-global context key. */
     contextValue: (key: string) => values.get(key),
+    /** Updates the window model before deferred plugin delivery, as WindowPluginHost does. */
+    setSetting: (name: string, value: unknown) => {
+      const short = name.replace(/^setting:quirky\.terminal\//, '')
+      if (!(short in known)) throw new Error(`no setting ${name}`)
+      known[short] = value
+    },
     callsTo: (method: string) => calls.filter((call) => call.method === method),
-    emit: (event: QuirkyEvent) => act(async () => void eventListeners.forEach((listener) => listener(event))),
+    emit: (event: QuirkyEvent) => {
+      if (event.type === 'setting.changed') {
+        const short = event.id.replace(/^setting:quirky\.terminal\//, '')
+        if (short in known) known[short] = event.value
+      }
+      return act(async () => void eventListeners.forEach((listener) => listener(event)))
+    },
     setConnection: (status: 'connected' | 'reconnecting') => act(async () => void connectionListeners.forEach((listener) => listener(status))),
     /** Delivers `bytes` on stream `streamId` as the daemon would. */
     push: (streamId: number, bytes: string | Uint8Array) =>
@@ -187,6 +201,8 @@ export function paneHandlers(options: { replay?: string; existing?: string[] } =
     'quirky.terminal/attach': () => attachResult({ streamId: ++nextStream, replay: options.replay ?? '' }),
     'quirky.terminal/detach': () => ({ ok: true }),
     'quirky.terminal/write': () => ({ ok: true }),
+    'quirky.session/identity': (params) => ({ sessionId: params.session, processIncarnation: `fixture-${params.session}`, live: true }),
+    'quirky.terminal/userInput': () => ({ ok: true }),
     'quirky.terminal/resize': () => ({ ok: true }),
     'quirky.terminal/pathsExist': (params) => ({ exists: (params.paths as string[]).map((path) => existing.has(path)) }),
     'quirky.terminal/openExternal': () => ({ ok: true }),

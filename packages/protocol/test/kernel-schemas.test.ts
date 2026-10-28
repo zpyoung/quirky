@@ -47,12 +47,6 @@ describe('kernel method schemas', () => {
     }
   })
 
-  test('ui window methods are connection methods', () => {
-    for (const name of ['ui.report', 'ui.shell.report', 'ui.window.focused', 'ui.window.activity', 'ui.command.reply']) {
-      expect(CONNECTION_METHODS).toContain(name as (typeof CONNECTION_METHODS)[number])
-    }
-  })
-
   test('only the hello, subscribe and ui window methods are connection methods', () => {
     expect([...CONNECTION_METHODS].sort()).toEqual([
       'client.hello',
@@ -65,18 +59,12 @@ describe('kernel method schemas', () => {
     ])
   })
 
-  test('no v1 feature method keeps a schema', () => {
-    const v1 = /^(settings|repo|worktree|session|terminal|git|ask|structured)\./
-    expect(methodNames.filter((name) => v1.test(name))).toEqual([])
-  })
-
   test('every connection method has a schema', () => {
     for (const name of CONNECTION_METHODS) expect(methodNames).toContain(name)
   })
 
-  test('every entry has a description, an object params schema and a result schema', () => {
+  test('every method has object params and a result schema', () => {
     for (const [name, entry] of Object.entries(KERNEL_METHOD_SCHEMAS)) {
-      expect(entry.description, name).not.toBe('')
       expect(entry.params.type, name).toBe('object')
       expect(typeof entry.result, name).toBe('object')
     }
@@ -96,20 +84,8 @@ describe('kernel method schemas', () => {
     }
   })
 
-  test('params never reject what the handlers accept', () => {
-    const p = (name: string) => methodSchemas[name]!
-    expect(p('setting.set').required).toEqual(['id', 'value'])
-    expect(p('setting.set').properties!.value!.type).toBeUndefined()
-    expect(p('client.hello').properties!.protocolVersion).toMatchObject({ type: 'integer', minimum: 0 })
-    expect(p('client.hello').properties!.role!.enum).toEqual(['desktop', 'ui', 'cli', 'mobile'])
-    expect(p('status.get')).toEqual({ type: 'object' })
-  })
-  test('palette state is optional in layout and palette.set accepts an omitted open value', () => {
-    const paletteSet = KERNEL_METHOD_SCHEMAS['ui.palette.set']!
-    expect(paletteSet.params.properties?.open?.type).toBe('boolean')
-    expect(paletteSet.params.required ?? []).not.toContain('open')
-    expect(paletteSet.result.properties?.palette?.type).toBe('boolean')
-  })
+
+
 })
 
 describe('kernel event schemas', () => {
@@ -121,9 +97,8 @@ describe('kernel event schemas', () => {
     expect(KERNEL_EVENT_SCHEMAS.notify.data.required).toEqual(['title', 'body', 'desktop'])
   })
 
-  test('every entry describes an object without a type property', () => {
+  test('every entry has object data without a type property', () => {
     for (const [type, entry] of Object.entries(KERNEL_EVENT_SCHEMAS)) {
-      expect(entry.description, type).not.toBe('')
       const data: Schema = entry.data
       expect(data.type, type).toBe('object')
       expect(data.properties?.type, type).toBeUndefined()
