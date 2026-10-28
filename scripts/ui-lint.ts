@@ -499,8 +499,8 @@ function scanCssLiteralTemplate(
   }
 }
 
-function isCssImportSpecifier(text: string): boolean {
-  return /\.(?:css|scss|sass|less)(?:[?#].*)?$/i.test(text)
+function isDisallowedCssImport(text: string): boolean {
+  return text !== '@quirky/ui/styles.css' && /\.(?:css|scss|sass|less)(?:[?#].*)?$/i.test(text)
 }
 
 function isCssKey(property: string): boolean {
@@ -795,13 +795,13 @@ function scanTypeScriptSource(file: string, source: string, plugin: boolean): Ui
   const visit = (node: ts.Node): void => {
     if (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) {
       const specifier = node.moduleSpecifier
-      if (plugin && specifier && ts.isStringLiteralLike(specifier) && isCssImportSpecifier(specifier.text)) {
+      if (plugin && specifier && ts.isStringLiteralLike(specifier) && isDisallowedCssImport(specifier.text)) {
         report(emitter, specifier.getStart(sourceFile), 'ui/no-plugin-css')
       }
     }
     if (ts.isCallExpression(node) && plugin && (node.expression.kind === ts.SyntaxKind.ImportKeyword || (ts.isIdentifier(node.expression) && node.expression.text === 'require'))) {
       const specifier = node.arguments[0]
-      if (specifier && ts.isStringLiteralLike(specifier) && isCssImportSpecifier(specifier.text)) report(emitter, specifier.getStart(sourceFile), 'ui/no-plugin-css')
+      if (specifier && ts.isStringLiteralLike(specifier) && isDisallowedCssImport(specifier.text)) report(emitter, specifier.getStart(sourceFile), 'ui/no-plugin-css')
     }
     if (ts.isJsxAttribute(node) && ts.isIdentifier(node.name) && node.name.text === 'style') scanStyleAttribute(node)
     if (ts.isJsxElement(node)) scanJsxStyleElement(node)

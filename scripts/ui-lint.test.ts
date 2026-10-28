@@ -110,6 +110,11 @@ test('plugin mode prohibits stylesheet files, imports, style elements, and DOM s
   ])
 })
 
+test('plugins may load the canonical shared stylesheet but not their own CSS', () => {
+  const source = `import '@quirky/ui/styles.css'; const shared = import('@quirky/ui/styles.css'); require('@quirky/ui/styles.css'); import './local.css'`
+  expect(rules(source, 'plugins/example/src/ui.tsx', { plugin: true })).toEqual(['ui/no-plugin-css'])
+})
+
 test('opted-in HTML scripts cannot inject a stylesheet element', () => {
   const source = `<script>const node = document.createElement('style'); node.textContent = '.x { color: red }'</script>`
   expect(rules(source, 'plugins/example/index.html', { plugin: true })).toEqual([

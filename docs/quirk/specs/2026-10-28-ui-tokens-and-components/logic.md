@@ -19,7 +19,7 @@ The UI linter reads the always-enforced `packages/ui` source and explicitly opte
 - A separate gallery document avoids exposing test-only daemon methods or adding a router to the running desktop application.
 - All current `packages/ui` style literals are tokenized so enforcement has no historical-baseline escape. Compatibility geometry/syntax tokens preserve current layouts and editor styling until area restyles; new shared components use the approved fixed steps, not those compatibility values.
 - Only canonical token-definition declarations may contain raw colors or pixels. The exemption is not file-wide permission for ordinary rules. Dynamic measured dimensions remain valid; literal numeric React style dimensions are pixels and must be replaced by token expressions. Unitless values (opacity, flex, line-height, z-index), zero, percentages, fractions, and runtime measurements are not raw pixels.
-- Plugin CSS includes source CSS/SCSS/Less files, CSS imports, inline style sheets and DOM stylesheet injection; opted-in plugins compose shared components/tokens instead. Native rendering engines' semantic configuration (for example CodeMirror style maps) remains covered by color/pixel checking, not prohibited as arbitrary plugin CSS when in `packages/ui`.
+- Plugin CSS includes source CSS/SCSS/Less files, private CSS imports, inline style sheets and DOM stylesheet injection; opted-in plugins compose shared components/tokens instead. The canonical `@quirky/ui/styles.css` import is allowed because its source is owned and enforced in the shared UI package. Native rendering engines' semantic configuration (for example CodeMirror style maps) remains covered by color/pixel checking, not prohibited as arbitrary plugin CSS when in `packages/ui`.
 
 ## Behavior and acceptance scenarios
 
@@ -69,3 +69,5 @@ Enforced plugin: an explicit plugin ID whose UI source must obey all three rules
 ## Status & amendments
 
 2026-10-28: Self-reviewed against the upstream item row and operator's staged-lint update. SC1–SC6 cover this item's flows; upstream full-window scenarios remain with existing queue owners. Separate tech/spec review omitted under build-first mode.
+
+2026-10-28: Clarified canonical shared CSS import admission; private plugin CSS stays prohibited. Lane4's landed public terminal-theme export composes with the shared root/CSS exports; no new preference or terminal owner introduced.

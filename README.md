@@ -181,7 +181,8 @@ to the daemon.
 `bun run typecheck` runs the same gate. Plugin enforcement is staged:
 `scripts/ui-lint-plugins.json` starts empty, and each `ui-restyle-*` item adds its plugin IDs.
 Unlisted legacy plugins are not checked. Listed plugins must also remove their own CSS files,
-CSS imports, style elements and stylesheet injection; use the shared controls and tokens instead.
+private CSS imports, style elements and stylesheet injection; the canonical
+`@quirky/ui/styles.css` import is allowed. Use shared controls and tokens instead.
 Only custom-property values in the two central design-system token files may define raw
 primitives. Existing host geometry remains in `compatibility-tokens.css` until its area restyle;
 new shared controls use the approved semantic tokens and size scale. Static source analysis

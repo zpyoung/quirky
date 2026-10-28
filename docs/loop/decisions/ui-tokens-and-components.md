@@ -99,5 +99,16 @@
 - **Revisit if:** end-phase tests or screenshot-review owner find a regression
 - **Source:** assumed — autonomous
 
+## D10: Compose landed theme exports and admit only the canonical shared stylesheet
+- **Question:** final roadmap catch-up and plugin stylesheet reuse
+- **Options:** trust an automatic JSON merge; discard the terminal subpath; preserve one complete export map and permit the shared CSS entrypoint
+- **Chose:** sole roadmap catch-up brought ui-terminal-theme; read all D1–D10 and full Progress, no decision conflict. Git merged two exports keys without a textual conflict, making the latter hide the public component entrypoint; typecheck caught module resolution errors. Removed only the duplicate key while preserving root, styles.css and terminal-theme entries. Opted-in plugins may import @quirky/ui/styles.css (static/dynamic/require), never private plugin CSS
+- **Why:** shared stylesheet reuse is the approved design, not plugin-owned CSS. Duplicate JSON keys are a semantic merge defect even when Git reports no conflict
+- **Evidence:** caught-up typecheck initially exit2/module-not-found; corrected public export readback; final frozen-install/UIlint/root/mobile/desktop typing exit0/27.58s; caught-up UI build11 files/25 plugin modules exit0; direct shared/private CSS admission smoke exit0 with one exact private-import diagnostic
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** a later restyle needs another public central style entry
+- **Source:** assumed — autonomous
+
 ## Progress
-Integrated all three audited components and removed their worktrees; focused lint/gallery proof passed as D8–D9 record. Permanent tests authored but UNRUN; no review/suite/dogfood claim. Next: commit final fixes/docs, catch up once with build/roadmap, preserve lane4 terminal export/theme runtime, read incoming decision bindings, rerun typecheck and land through canonical absolute queue.ts.
+Ready to land. All implementation source and acceptance tests committed; suites/review/full dogfood UNRUN under build-first. Exact focused runtime evidence is D8–D10. Sole roadmap catch-up completed and incoming theme decisions read; final typecheck including UIlint/root/mobile/desktop passed, composed exports readback preserved all three entries. Owned gallery tab closed, production-static smoke server stopped, all implementers returned, all component worktrees removed with inherited metadata preserved; parent .serena untouched. Next: commit this final checkpoint, detach, canonical absolute queue.ts land ui-tokens-and-components, await success, remove owned scratch and end exactly this iteration.
