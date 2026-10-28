@@ -33,6 +33,17 @@
 - **Revisit if:** the queue enters the end phase and assigns actual suite failures
 - **Source:** locked by docs/loop/LOOP.md; assumed — autonomous for focused smoke design
 
+## D4: Post-edit smoke and typecheck passed; no suite verdict is claimed
+- **Question:** what fresh evidence supports landing the test synchronization fix?
+- **Options:** infer success from the edit; exercise the real boundary and run the required gate.
+- **Chose:** after commit `7798e8e2`, merge `build/roadmap` once (already up to date; no incoming decisions), rerun the controlled real replay/daemon/PTY scenario, then typecheck sequentially.
+- **Why:** the post-edit command exited0 in50.98s. With replay held, the drop was prevented, zero bytes were written, and the historical prompt condition was false. With replay released and the shell marker parsed, the drop wrote exactly `'/tmp/a b.txt' /tmp/c.txt`, the prompt contained the paths, and no command-not-found/no-such-file error appeared. Cleanup reported `homeRemoved:true`. Root UI lint, root/mobile/desktop typechecks all passed. React teardown emitted synchronous-unmount and act warnings; the probe did not establish warning-free rendering or full UI health.
+- **Evidence:** `bun /tmp/quirky-pane-lane5-aPlNGNdx/probe.ts && bun run typecheck`, exit0; sequential execution used no stress workload. Permanent pane/scripts/affected suites and review/dogfood were not run under D3.
+- **Reversibility:** easy
+- **Confidence:** high for this controlled boundary and static gate; not a repeated-suite flake-rate claim
+- **Revisit if:** end-phase tests expose another failure
+- **Source:** assumed — autonomous, observed verification
+
 ## Progress
 
-Root cause identified from historical output and reproduced through a deterministic real replay barrier. SC-38 now waits for a shell-computed marker in the actual pane before its drop. Product behavior and timeout budgets are unchanged. Initial probe failed module resolution only, cleaned its home, then the corrected probe exercised both boundary states successfully. Pending: single roadmap catch-up and incoming decision read, fresh post-edit real-path smoke and typecheck, commit, detach, canonical queue land, scratch cleanup. No permanent suite/review/dogfood pass is claimed.
+Fix committed; single roadmap catch-up was already up to date, no incoming decisions. Fresh post-edit controlled real-path proof and root/mobile/desktop typecheck passed (D4). Permanent suite/review/dogfood remain unrun by build-first instruction. No product behavior, timeout budgets, protected loop paths or real user state changed. Next: commit this receipt, detach, canonical queue land, wait for its result, then remove owned scratch directory. All scout work has returned.
