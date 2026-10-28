@@ -432,7 +432,7 @@ describe('quirky.accounts daemon API acceptance', () => {
       agent: 'claude', sessionId, worktreeId: 'worktree-acceptance', cwd: h.userHome,
       homeOverrides: { claude: { value: null, source: 'absent' }, codex: { value: null, source: 'absent' } }
     })
-    expect(prepared.account).toEqual({ provider: 'claude', id: idA, label: 'hook-a@example.test', source: 'managed' })
+    expect(prepared.account).toEqual({ provider: 'claude', id: idA, label: 'hook-a@example.test', source: 'managed', authKind: 'oauth' })
     const configDir = prepared.env.CLAUDE_CONFIG_DIR
     expect(configDir).toBe(h.managedHome('claude', idA))
     const payload = {

@@ -301,6 +301,64 @@ describe('arguments and output', () => {
     await commands['hooks-remove']!({ positionals: ['cursor'], flags: {} }, ctx)
     expect(lines).toEqual(['cursor: nothing to remove'])
   })
+  test('runtime hook setup and removal execute on the owner target and phone-only routing never falls back', async () => {
+    const source = await Rig.start({ sessions: [] })
+    const target = await Rig.start({ sessions: [] })
+    try {
+      await target.client.callAny('quirky.agents/setAgents', { agents: listing({ gemini: 'on' }) })
+      const targetIdentity = {
+        id: 'runtime-target-id',
+        name: 'Target owner',
+        endpoint: 'wss://target.invalid',
+        grantId: 'owner-grant-id'
+      }
+      const { ctx, lines } = testCliContext(source.client, { env: { HOME: userHome } })
+      const localCall = ctx.call
+      const routed: { runtime: string; method: string; params: Record<string, unknown> }[] = []
+      ctx.call = async (method, params = {}) => {
+        if (method !== 'quirky.cli/runtimeCall') return localCall(method, params)
+        const runtime = params.runtime
+        const remoteMethod = params.method
+        const remoteParams = params.params
+        if (typeof runtime !== 'string' || typeof remoteMethod !== 'string' ||
+          typeof remoteParams !== 'object' || remoteParams === null || Array.isArray(remoteParams)) {
+          throw new Error('malformed runtime call')
+        }
+        routed.push({ runtime, method: remoteMethod, params: remoteParams as Record<string, unknown> })
+        if (runtime === 'phone-only') throw ctx.fail('phone grants cannot administer owner runtimes')
+        return { runtime: targetIdentity, result: await target.client.callAny(remoteMethod, remoteParams as Record<string, unknown>) }
+      }
+
+      const original = { theme: 'remote-owner' }
+      const path = put('.gemini/settings.json', original)
+      await commands['hooks-setup']!({ positionals: ['gemini'], flags: { host: 'runtime:target-owner' } }, ctx)
+      expect(routed[0]).toEqual({
+        runtime: 'target-owner',
+        method: 'quirky.agent-status/hooksSetup',
+        params: { agent: 'gemini' }
+      })
+      expect(lines[0]).toContain('Target owner')
+      expect(readFileSync(path, 'utf8')).toContain('quirky-hook')
+
+      await commands['hooks-remove']!({ positionals: ['gemini'], flags: { host: 'runtime:target-owner' } }, ctx)
+      expect(routed[1]).toEqual({
+        runtime: 'target-owner',
+        method: 'quirky.agent-status/hooksRemove',
+        params: { agent: 'gemini' }
+      })
+      expect(JSON.parse(readFileSync(path, 'utf8'))).toEqual(original)
+
+      const phoneFailure = await failure(commands['hooks-setup']!({
+        positionals: ['gemini'],
+        flags: { host: 'runtime:phone-only' }
+      }, ctx))
+      expect(phoneFailure.message).toBe('phone grants cannot administer owner runtimes')
+      expect(JSON.parse(readFileSync(path, 'utf8'))).toEqual(original)
+    } finally {
+      await source.cleanup()
+      await target.cleanup()
+    }
+  })
 })
 
 describe('the hooks service on its own', () => {

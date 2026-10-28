@@ -1520,8 +1520,7 @@
       "deps": [
         "m7-terminal-provider-host-and-worktree-remainder"
       ],
-      "status": "in-progress",
-      "lane": 12
+      "status": "done"
     },
     {
       "id": "ui-tokens-and-components",
@@ -1545,8 +1544,7 @@
       "title": "UI redesign: a command that launches Quirky on a temporary QUIRKY_HOME with fixture worktrees, captures every tool and view in dark and light, and has a separate reviewer model score each capture against the golden screens in the spec, failing below a set score. Follow docs/quirk/specs/2026-10-28-ui-redesign/logic.md (approved). Use only the shared components and tokens; the UI lint check must pass. Build-first mode applies: typecheck gates the land.",
       "docs": [],
       "deps": [],
-      "status": "in-progress",
-      "lane": 6
+      "status": "done"
     },
     {
       "id": "ui-shell-slots",
@@ -1572,7 +1570,8 @@
       "deps": [
         "m7-terminal-owner-provisioning-and-selector-flows"
       ],
-      "status": "todo"
+      "status": "in-progress",
+      "lane": 6
     },
     {
       "id": "ui-restyle-terminal",
@@ -1750,6 +1749,44 @@
       "status": "done"
     },
     {
+      "id": "fix-flaky-pty-host-manager",
+      "milestone": "M1",
+      "title": "Fix the flaky packages/pty-host/test/manager.test.ts: it failed under load in 4 full-suite runs, and on the new 16-core test host its 'attach > raw mode replays the hot tail and joins the live stream at the offset' test failed even alone ('timed out waiting for echo and cat output' after 5 s). Find out with quirk:systematic-debugging whether the wait is too short or the attach misses output written between the replay and the live subscription, reproduce it under CPU load, and fix the code or the test",
+      "docs": [
+        "term-daemon.md"
+      ],
+      "deps": [],
+      "status": "done"
+    },
+    {
+      "id": "fix-flaky-quirky-worktree-create",
+      "milestone": "M1",
+      "title": "Fix the flaky plugins/quirky.worktree/test/create.test.ts: it failed under load in 5 full-suite runs and passed when rerun alone (see <git common dir>/build-loop/flakes.log). Find the timing assumption with quirk:systematic-debugging, reproducing on the test host with bun scripts/suite.ts plugins/quirky.worktree (never generate CPU load on the Mac), and fix the test or the code it exposes",
+      "docs": [
+        "worktrees.md"
+      ],
+      "deps": [],
+      "status": "done"
+    },
+    {
+      "id": "fix-flaky-pty-host-clear",
+      "milestone": "M1",
+      "title": "Fix the flaky packages/pty-host/test/clear.test.ts: it failed 3 times in full-suite runs today (15:28, 22:47, 23:11 UTC). Find out with quirk:systematic-debugging whether a wait is too short under load or the clear races with output, reproduce it under CPU load on the test host, and fix the code or the test",
+      "docs": [
+        "term-daemon.md"
+      ],
+      "deps": [],
+      "status": "done"
+    },
+    {
+      "id": "fix-native-m3-accounts-1028",
+      "milestone": "M3",
+      "title": "Fix the native-only failures in m3-accounts from the 2026-10-28 run: AC6-AC7-native-link",
+      "docs": [],
+      "deps": [],
+      "status": "done"
+    },
+    {
       "id": "m7-test-triage",
       "milestone": "M7",
       "title": "End-phase test triage: run bun scripts/suite.ts packages apps plugins, bun test scripts and bun run typecheck on build/roadmap, and add one fix-test-<area>-<MMDD> item per failing package, app or plugin (naming its failing files and tests) so the lanes split the debugging; change no code",
@@ -1821,16 +1858,6 @@
       "lane": 7
     },
     {
-      "id": "fix-flaky-pty-host-manager",
-      "milestone": "M1",
-      "title": "Fix the flaky packages/pty-host/test/manager.test.ts: it failed under load in 4 full-suite runs, and on the new 16-core test host its 'attach > raw mode replays the hot tail and joins the live stream at the offset' test failed even alone ('timed out waiting for echo and cat output' after 5 s). Find out with quirk:systematic-debugging whether the wait is too short or the attach misses output written between the replay and the live subscription, reproduce it under CPU load, and fix the code or the test",
-      "docs": [
-        "term-daemon.md"
-      ],
-      "deps": [],
-      "status": "done"
-    },
-    {
       "id": "m2-sidebar-extras-followup",
       "milestone": "M7",
       "title": "Complete sidebar-extras deferred parity and verification: audit all 17 spec scenarios, guarded web flows, quiet aging/runtime freshness/corrupt-preference edges, and nonblocking findings recorded in m2-sidebar-extras decisions",
@@ -1844,28 +1871,6 @@
       "status": "in-progress",
       "early": true,
       "lane": 4
-    },
-    {
-      "id": "fix-flaky-quirky-worktree-create",
-      "milestone": "M1",
-      "title": "Fix the flaky plugins/quirky.worktree/test/create.test.ts: it failed under load in 5 full-suite runs and passed when rerun alone (see <git common dir>/build-loop/flakes.log). Find the timing assumption with quirk:systematic-debugging, reproducing on the test host with bun scripts/suite.ts plugins/quirky.worktree (never generate CPU load on the Mac), and fix the test or the code it exposes",
-      "docs": [
-        "worktrees.md"
-      ],
-      "deps": [],
-      "status": "in-progress",
-      "lane": 1
-    },
-    {
-      "id": "fix-flaky-pty-host-clear",
-      "milestone": "M1",
-      "title": "Fix the flaky packages/pty-host/test/clear.test.ts: it failed 3 times in full-suite runs today (15:28, 22:47, 23:11 UTC). Find out with quirk:systematic-debugging whether a wait is too short under load or the clear races with output, reproduce it under CPU load on the test host, and fix the code or the test",
-      "docs": [
-        "term-daemon.md"
-      ],
-      "deps": [],
-      "status": "in-progress",
-      "lane": 11
     },
     {
       "id": "sb-mobile-settings-visibility",
@@ -1899,20 +1904,13 @@
       "lane": 10
     },
     {
-      "id": "fix-native-m3-accounts-1028",
-      "milestone": "M3",
-      "title": "Fix the native-only failures in m3-accounts from the 2026-10-28 run: AC6-AC7-native-link",
-      "docs": [],
-      "deps": [],
-      "status": "todo"
-    },
-    {
       "id": "fix-native-m3-vault-1028",
       "milestone": "M3",
       "title": "Fix the native-only failures in m3-vault from the 2026-10-28 run: SC-18-native-clipboard",
       "docs": [],
       "deps": [],
-      "status": "todo"
+      "status": "in-progress",
+      "lane": 1
     },
     {
       "id": "fix-native-sa-browser-agent-1028",
@@ -1920,7 +1918,7 @@
       "title": "Fix the native-only failures in sa-browser-agent from the 2026-10-28 run: C2-native-focus",
       "docs": [],
       "deps": [],
-      "status": "todo"
+      "status": "blocked"
     },
     {
       "id": "m3-accounts-complete-user-acceptance-20261028",
@@ -1932,7 +1930,8 @@
       "deps": [
         "m3-accounts-remaining-flows"
       ],
-      "status": "todo"
+      "status": "in-progress",
+      "lane": 11
     },
     {
       "id": "m7-api-freeze",
@@ -1965,6 +1964,317 @@
       ],
       "status": "todo",
       "early": true
+    },
+    {
+      "id": "fix-test-scripts-1028",
+      "milestone": "M7",
+      "title": "Fix end-phase bun test scripts failures after ui-screenshot-review landed: settled frozen dependencies, 113 pass/13 fail/945 assertions across12files on macOS. scripts/ui-review/review.test.ts has12failures: threshold85, redaction, score84, unknown target/empty inventory, bad digests, invalid JSON/scores, actual family mismatch, unknown provider family, GitHub Copilot family, invisible target, image tamper and timeout-child cleanup; actual output includes fake-pi-watch.cjs appendFileSync path undefined and repeated manifest captures mkdir EEXIST. scripts/ui-review/cli.test.ts:219 rejects malformed review-only input but misses its expected validation diagnostic. Raw output retained in lane2 .quirk/build-loop/sb-mobile-settings-visibility/post-merge-scripts.log; Mobile Settings investigation changes no production or test source. Diagnose/fix these exact scripts defects without weakening consumer-visible coverage; distinguish source-text/incidental tests per project rules. Parent caught-up bun run build and typecheck pass; do not infer scripts pass.",
+      "docs": [],
+      "deps": [
+        "m7-test-triage"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "fix-test-apps-mobile-1028",
+      "milestone": "M7",
+      "title": "Repair end-phase apps/mobile failures from baseline 97aaa12d (full evidence docs/loop/reports/m7-test-triage.json, area apps/mobile). Files and exact failed tests: apps/mobile/test/panels/files-tasks.test.ts: mobile composer keeps setup and issue-command consent independent and forwards both displayed pins | apps/mobile/test/terminal-artifacts.test.tsx: artifact routes reject paths and only authorize methods bound to the selected route and grant; Session More actions opens artifacts for the exact selected terminal session | apps/mobile/test/session-tabs.test.tsx: Browser Watch scrolls the real page using coordinates in the displayed frame | apps/mobile/test/pages.test.ts: page bridge admits only empty-parameter loop summaries as a read-only consumer API; automation-created workspace filtering uses only durable provenance and persists its option | apps/mobile/test/bundle.test.ts: verified mobile page generations > downloads contiguous bounded chunks, verifies hashes, then activates the complete generation; verified mobile page generations > rejects a build ID that does not match the canonical manifest before staging; verified mobile page generations > a failed update never activates partial or hash-mismatched bytes and leaves the previous generation usable; verified mobile page generations > rejects unsupported shell versions, unsafe asset paths, duplicate paths and oversized manifests | apps/mobile/test/shell.test.ts: isolated page shell and generation storage > atomic generation activation exposes no partial files and keeps the prior verified generation on failure; isolated page shell and generation storage > reuses an unchanged verified generation and prunes stale cache records after activation. Reproduce via canonical suite; fix consumer-visible defects and delete incidental wording/source/default/inventory mirror assertions rather than repinning them. Preserve fresh private process homes and cleanup. Cross-plugin failures must coordinate with the owning repair, not introduce aliases or bypasses.",
+      "docs": [],
+      "deps": [
+        "m7-test-triage"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "fix-test-packages-daemon-1028",
+      "milestone": "M7",
+      "title": "Repair end-phase packages/daemon failures from baseline 97aaa12d (full evidence docs/loop/reports/m7-test-triage.json, area packages/daemon). Files and exact failed tests: packages/daemon/test/desktop-shell.test.ts: auxiliary routes remain daemon-readable, local to their window, and pruned by the native owner close. Reproduce via canonical suite; fix consumer-visible defects and delete incidental wording/source/default/inventory mirror assertions rather than repinning them. Preserve fresh private process homes and cleanup. Cross-plugin failures must coordinate with the owning repair, not introduce aliases or bypasses.",
+      "docs": [],
+      "deps": [
+        "m7-test-triage"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "fix-test-packages-ui-1028",
+      "milestone": "M7",
+      "title": "Repair end-phase packages/ui failures from baseline 97aaa12d (full evidence docs/loop/reports/m7-test-triage.json, area packages/ui). Files and exact failed tests: packages/ui/test/gallery.test.tsx: typing, selecting a tab, and selecting a menu item update local status in both themes | packages/ui/test/terminal-theme.test.ts: the root dark appearance stays authoritative over a light system and inherits terminal base colors | packages/ui/test/exit.e2e.test.ts: SC-31: an ask opens the Questions panel, badges its toggle and announces itself; SC-29: a second pending ask stays listed after the first is answered, and answering it resolves its waiter | packages/ui/test/layout-shell.test.ts: a dialog taller than the window scrolls inside it, so its buttons stay reachable | packages/ui/test/routed-commands.test.ts: SC-41: with two windows the command runs once, in the one that last reported focus. Coordinate with ui-shell-slots for active shared-shell changes. Reproduce via canonical suite; fix consumer-visible defects and delete incidental wording/source/default/inventory mirror assertions rather than repinning them. Preserve fresh private process homes and cleanup. Cross-plugin failures must coordinate with the owning repair, not introduce aliases or bypasses.",
+      "docs": [],
+      "deps": [
+        "m7-test-triage"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "fix-test-packages-pty-host-1028",
+      "milestone": "M7",
+      "title": "Repair end-phase packages/pty-host failures from baseline 97aaa12d (full evidence docs/loop/reports/m7-test-triage.json, area packages/pty-host). Files and exact failed tests: packages/pty-host/test/stop-with-history.test.ts: stop with history > stops the root and descendants, retains output, and restores the same history. Reproduce via canonical suite; fix consumer-visible defects and delete incidental wording/source/default/inventory mirror assertions rather than repinning them. Preserve fresh private process homes and cleanup. Cross-plugin failures must coordinate with the owning repair, not introduce aliases or bypasses.",
+      "docs": [],
+      "deps": [
+        "m7-test-triage"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "fix-test-agent-status-1028",
+      "milestone": "M7",
+      "title": "Repair end-phase plugins/quirky.agent-status failures from baseline 97aaa12d (full evidence docs/loop/reports/m7-test-triage.json, area plugins/quirky.agent-status). Files and exact failed tests: plugins/quirky.agent-status/test/transcript-producers.test.ts: captured provider status producers > private OSC status facts use the captured session owner and ignore provider identity changes; captured provider status producers > private OSC status facts are fenced to the provider turn as well as the session | plugins/quirky.agent-status/test/e2e/hooks-cli.e2e.test.ts: SC-27: the Agent status hooks switch > off removes the entries, a restart does nothing, setup refuses while off, and on installs again | plugins/quirky.agent-status/test/hooks.test.ts: SC-27: the Agent status hooks switch > off removes every entry and status shows hooks_disabled; the restart touches nothing; on installs again; SC-27: the Agent status hooks switch > setup while the switch is off refuses with the switch message; SC-27: the Agent status hooks switch > remove still works while the switch is off. Reproduce via canonical suite; fix consumer-visible defects and delete incidental wording/source/default/inventory mirror assertions rather than repinning them. Preserve fresh private process homes and cleanup. Cross-plugin failures must coordinate with the owning repair, not introduce aliases or bypasses.",
+      "docs": [],
+      "deps": [
+        "m7-test-triage"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "fix-test-ask-1028",
+      "milestone": "M7",
+      "title": "Repair end-phase plugins/quirky.ask failures from baseline 97aaa12d (full evidence docs/loop/reports/m7-test-triage.json, area plugins/quirky.ask). Files and exact failed tests: plugins/quirky.ask/test/presentation-store.test.ts: Q2: a timeout summary is retained for four seconds outside the pending badge | plugins/quirky.ask/test/asks.test.ts: the queue > SC-14: a second ask from the same session waits | plugins/quirky.ask/test/cli.test.ts: spec refusals > SC-3: header, label, description and default may say API token; --chunk-ms > SC-20: the real quirky binary prints the same two lines | plugins/quirky.ask/test/ui.test.ts: the Questions panel module > SC-23: option previews render rich Markdown inside a hostile-content-free sandbox | plugins/quirky.ask/test/v1-import.test.ts: migration 4 > adds nullable exact-owner and idempotency fields without changing imported Ask rows | plugins/quirky.ask/test/panel.test.ts: the Questions panel > SC-31: with a window connected and no panel open, a new ask opens the panel and sends no notify; the Questions panel > SC-31: an already open Questions panel is left alone for a second ask | plugins/quirky.ask/test/confirmation.test.ts: quirky.ask as the confirmation backend > D20: a destructive call opens a confirm ask for the caller and runs once it is answered yes; quirky.ask as the confirmation backend > a declined confirm ask refuses the call; quirky.ask as the confirmation backend > an unavailable confirmation is a refusal and never runs the destructive method. Reproduce via canonical suite; fix consumer-visible defects and delete incidental wording/source/default/inventory mirror assertions rather than repinning them. Preserve fresh private process homes and cleanup. Cross-plugin failures must coordinate with the owning repair, not introduce aliases or bypasses.",
+      "docs": [],
+      "deps": [
+        "m7-test-triage"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "fix-test-browser-1028",
+      "milestone": "M7",
+      "title": "Repair end-phase plugins/quirky.browser failures from baseline 97aaa12d (full evidence docs/loop/reports/m7-test-triage.json, area plugins/quirky.browser). Files and exact failed tests: plugins/quirky.browser/test/cookie-import-window.test.tsx: source detection begins only when opened and empty/error states retain file import recovery | plugins/quirky.browser/test/extras-api.test.ts: daemon imports an explicit JSON cookie source into a managed profile; page profile methods select, report, restore Default, and clone through the public API | plugins/quirky.browser/test/extras-automation.test.ts: SC3: cookies retain exact host, path, partition identity and storage stays in its profile/page scope; SC4: page profile rebinding is isolated and clone copies cookies transactionally into an independent page; SC5: history, advanced interactions, signed nth and full-page capture operate on the exact page; SC6-SC7: HAR, multiple intercept patterns, headers, emulation, clipboard and out-of-band dialog response are real; SC4 rollback: a failed cookie clone restores every destination identity | plugins/quirky.browser/test/extras-cli.test.ts: CLI keeps @file text literal and reads large fill values only through explicit file mode; file import uses an explicit --file source and the dispatcher confirmation path | plugins/quirky.browser/test/import.test.ts: daemon import replaces only safe families and accepts explicit file and JSON bytes; daemon import reads Chromium Local State profiles, decrypts v24 rows, and skips unreadable families; daemon imports Firefox SQLite/WAL and Safari binarycookies without modifying source bytes; daemon replacement rolls back exact cookie values, reports jobs, and drains imports on shutdown | plugins/quirky.browser/test/preferences-window.test.tsx: import controls detect only after expansion, preserve the settings link, and persist hint hiding. Reproduce via canonical suite; fix consumer-visible defects and delete incidental wording/source/default/inventory mirror assertions rather than repinning them. Preserve fresh private process homes and cleanup. Cross-plugin failures must coordinate with the owning repair, not introduce aliases or bypasses.",
+      "docs": [],
+      "deps": [
+        "m7-test-triage"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "fix-test-cli-1028",
+      "milestone": "M7",
+      "title": "Repair end-phase plugins/quirky.cli failures from baseline 97aaa12d (full evidence docs/loop/reports/m7-test-triage.json, area plugins/quirky.cli). Files and exact failed tests: plugins/quirky.cli/test/runtimes.test.ts: saved paired runtime APIs retain private offers but never return credentials from add, list, show, or status; a malformed pairing offer is rejected before any saved runtime is written. Reproduce via canonical suite; fix consumer-visible defects and delete incidental wording/source/default/inventory mirror assertions rather than repinning them. Preserve fresh private process homes and cleanup. Cross-plugin failures must coordinate with the owning repair, not introduce aliases or bypasses.",
+      "docs": [],
+      "deps": [
+        "m7-test-triage"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "fix-test-editor-1028",
+      "milestone": "M7",
+      "title": "Repair end-phase plugins/quirky.editor failures from baseline 97aaa12d (full evidence docs/loop/reports/m7-test-triage.json, area plugins/quirky.editor). Files and exact failed tests: plugins/quirky.editor/test/changes-surface.test.tsx: Changes compares HEAD to the shared draft, not staged content, in the same editable tab; Changes rejects a detached response for another lease and leaves Source available | plugins/quirky.editor/test/explorer-interactions.test.ts: Explorer interaction and expansion state are isolated by worktree | plugins/quirky.editor/test/viewers.test.ts: viewer API behavior > SC-19: small quoted CSV preserves multiline UTF-8 fields across table edits and save; viewer API behavior > CSV copy returns quoted TSV in source coordinates and pastes it back losslessly | plugins/quirky.editor/test/browser-link-routing.test.tsx: document-link completion shows capped totals, follows keyboard selection, and inserts an extensionless atom; document-link completion accepts Tab, dismisses with Escape, and respects boundary, IME and read-only guards. Reproduce via canonical suite; fix consumer-visible defects and delete incidental wording/source/default/inventory mirror assertions rather than repinning them. Preserve fresh private process homes and cleanup. Cross-plugin failures must coordinate with the owning repair, not introduce aliases or bypasses.",
+      "docs": [],
+      "deps": [
+        "m7-test-triage"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "fix-test-git-1028",
+      "milestone": "M7",
+      "title": "Repair end-phase plugins/quirky.git failures from baseline 97aaa12d (full evidence docs/loop/reports/m7-test-triage.json, area plugins/quirky.git). Files and exact failed tests: plugins/quirky.git/test/pure/ai-fix-sources.test.ts: public hosting-backed recipe source flows > PR details, code review, and conversation drafts fetch named public sources and launch through terminal/newTab | plugins/quirky.git/test/window/hosted-diff.test.ts: Source Control preview replaces only a clean hosted tab, promotes on double click or pin, and splits with Option-click; dirty hosted diffs refuse close and are never replaced by another preview; Markdown diff previews the modified side with an authorized image and releases only its hosted lease | plugins/quirky.git/test/scenarios/ai.test.ts: recipes > NA-39: recipes are read and saved through the CLI; recipes > recipes are per action, fields clear and reset, and every save announces aiChanged; AI Fix > branch-summary recipes launch with the exact comparison source and raw arguments outrank structured picks; AI name recipes > branchName uses the current branch and committed work context, and returns a candidate without renaming; AI name recipes > conversationName uses the exact captured structured conversation and leaves its title untouched; AI name recipes > branchName raw arguments outrank structured recipe picks and invalid output does not mutate the branch | plugins/quirky.git/test/window/panel.test.ts: SC-18: the row menu opens the diff, copies paths and reveals the file; dragging carries the absolute path; quirky.git/changed events refresh the panel and an open diff before the next poll | plugins/quirky.git/test/window/remote.test.ts: SC-28: Force Push confirms with the daemon's question, leases on the shown commit and updates the remote; SC-32: a rejected push toasts \"pull first\" and fetches, so the ladder moves to Sync; SC-38: a failing pre-push hook shows the Push blocked card and no inline remote error | plugins/quirky.git/test/window/conflict-views.test.ts: SC-45: the conflict review lists the snapshot, then Refresh marks a staged file Resolved and a removed one Gone; SC-41: a conflict staged in a terminal without being opened in Quirky is not listed as resolved locally; SC-44: the conflict file view tints the markers, labels the blocks and wraps Next conflict; SC-44: a file deleted by them asks whether to keep it, and a file with no working copy says so | plugins/quirky.git/test/window/primary.test.ts: SC-28: the primary button follows the ladder through Stage All, Commit, Push, Pull, Sync and Publish Branch; SC-28: Force Push shows when the commits behind are patch-equivalent | plugins/quirky.git/test/window/view-file.test.ts: SC-60: the file diff opens titled, scrolled to the first change, moves with F7 and the arrows, and Close returns to the sessions; SC-60: a file without changes disables both arrows; SC-61: an unstaged diff saves with Cmd+S, flags a file rewritten underneath, and offers Overwrite and Reload from Disk; SC-61: Revert Block and revert-change put a block back in the editor only; staged diffs are read-only; SC-57: a branch diff whose merge base cannot be read says so instead of looking empty | plugins/quirky.git/test/window/ai.test.ts: NA-40: the command opens the AI defaults view, which saves the global recipe and hides the AI buttons live | plugins/quirky.git/test/window/github-handoff.test.ts: GitHub Source Control reports current PR status, ignores stale worktree replies, and hands off guarded creation to Reviews; SC-28: unpublished primary waits for current GitHub state before publishing | plugins/quirky.git/test/window/view-combined.test.ts: SC-62: View all opens a combined diff with lazy sections, a Load diff for the large file and the conflict left out; SC-62: unstaged sections of a combined diff are editable and save; SC-63: big, image and binary diffs show their fallbacks, and a draft past the limit keeps its Save; SC-63: a draft that crosses the display limit is replaced by the fallback and saved with Save | plugins/quirky.git/test/window/commands.test.ts: SC-64: every window command routed through ui.command.run does what its button does; SC-64: Mod+Shift+G shows the panel and F7 runs next-change; SC-65: ui state shows what the panel and the diff view display | plugins/quirky.git/test/window/selection.test.ts: SC-15: click opens the diff, Shift-click selects a range, Cmd-click toggles, Escape clears | plugins/quirky.git/test/window/conflicts.test.ts: SC-41: a sync that stops on a conflict leads, in the window, to Continue merge and Push; SC-43: Abort merge in the window confirms first and returns to the pre-merge commit | plugins/quirky.git/test/window/notes-panel.test.ts: NA-9, NA-10, NA-13: the shelf, the row counts and the overflow item against a real daemon | plugins/quirky.git/test/window/compare.test.ts: SC-47: Committed on Branch lists what the branch changed since its base, with totals and the hover title; SC-54: the Commits dock opens a commit's combined diff and one of its files | plugins/quirky.git/test/window/notes-view.test.ts: NA-1: the \"+\" beside line 12 adds a note that every part of the window shows; NA-2, NA-14: a command-opened draft and the combined view over a real daemon | plugins/quirky.git/test/scenarios/diff.test.ts: diff sources > editor Changes compares HEAD to the working file, not the staged index | plugins/quirky.git/test/ui/view-combined.test.ts: quirky.git combined diff > the report lists sections, loaded sections and the state of the edits | plugins/quirky.git/test/ui/view-file.test.ts: quirky.git file diff view > unmounting stops listening to events | plugins/quirky.git/test/scenarios/catalog.test.ts: SC-66: the API lists every method with its schema (CLI) > CLI catalog marks destructive Git operations and preserves typed discard flags | plugins/quirky.git/test/ui/ai.test.ts: NA-24: the sparkle button > (b) a message typed: disabled, asks to clear it; NA-24: the sparkle button > (e) a commit running: \"Commit in progress…\"; NA-25: generating a message > with no recipe the sparkle opens the Generate Commit Message dialog, which runs once and saves nothing; NA-30: typing during a run keeps the box > typing keeps what was typed; NA-30: typing during a run keeps the box > typing and deleting again still keeps the box, empty; NA-33: AI Fix on the Commit blocked card > the card has the split button, whose primary starts the default agent and toasts; NA-33: AI Fix on the Commit blocked card > a refused launch toasts the daemon message; NA-33: AI Fix on the Commit blocked card > the Commit Failed details have \"Fix with AI\" beside Close; NA-33: AI Fix on the Commit blocked card > with the setting off the card and its details show no AI buttons; NA-37: Customize launch > the chevron offers Customize launch... and the dialog is prefilled from the preview; NA-37: Customize launch > Detecting agents... while the list loads, and No enabled agents with none; NA-37: Customize launch > a saved agent that is unavailable with no enabled agents still shows No enabled agents and keeps Start disabled; NA-37: Customize launch > an edited launch passes provider choices and reset fields with the saved recipe; NA-37: Customize launch > with \"All repositories\" the save goes to the global scope; NA-37: Customize launch > an untouched launch starts the agent chosen without saving anything; NA-37: Customize launch > with the save box cleared the edited launch only starts; NA-37: Customize launch > values equal to the saved recipe show \"Launch recipe already saved\" and a plain Start agent; NA-37: Customize launch > a one-off model and effort choice is passed through and saved with the recipe; NA-37: Customize launch > raw model and effort arguments disable catalog controls and say they are set by CLI arguments; NA-37: Customize launch > Reset puts the template back to {basePrompt}; NA-37: Customize launch > a refused start keeps the dialog and toasts the daemon message; NA-37: Customize launch > Cancel and Escape close it without starting anything; NA-40: the Source Control AI defaults view > name actions use distinct recipes and retain the last candidate when a later generation fails; NA-40: the Source Control AI defaults view > each change saves the global recipe at once; NA-40: the Source Control AI defaults view > settings save provider model and effort choices, then clear them when the agent changes; NA-40: the Source Control AI defaults view > the switch and the custom command write the settings | plugins/quirky.git/test/ui/commands.test.ts: quirky.git commands > opening views > SC-64: open-diff opens the file diff view on the path, in the open view's worktree; quirky.git commands > opening views > open-diff takes oldPath, commit and an explicit worktree, and defaults the source from the area; quirky.git commands > opening views > SC-64: open-diff with source conflict opens the conflict file view; quirky.git commands > opening views > open-diff sends placement and display through the public terminal hosted-view API; quirky.git commands > opening views > SC-64: open-changes opens the combined diff of an area; quirky.git commands > opening views > open-branch-changes, open-commit and review-conflicts; quirky.git commands > opening views > the worktree comes from the open diff view when the layout has another view; quirky.git commands > acting on the open view > a view opened with a new input replaces the old one as the target | plugins/quirky.git/test/ui.test.ts: quirky.git source-control panel > closing the panel unsubscribes from events and layout | plugins/quirky.git/test/pure/ai-prompts.test.ts: named hosting and branch prompts > pull request details preserve trusted repository, exact head, title and body. Reproduce via canonical suite; fix consumer-visible defects and delete incidental wording/source/default/inventory mirror assertions rather than repinning them. Preserve fresh private process homes and cleanup. Cross-plugin failures must coordinate with the owning repair, not introduce aliases or bypasses.",
+      "docs": [],
+      "deps": [
+        "m7-test-triage"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "fix-test-heimdall-1028",
+      "milestone": "M7",
+      "title": "Repair end-phase plugins/quirky.heimdall failures from baseline 97aaa12d (full evidence docs/loop/reports/m7-test-triage.json, area plugins/quirky.heimdall). Files and exact failed tests: plugins/quirky.heimdall/test/fleet-worker-acceptance.test.ts: an actual Heimdall-owned worker stays inspectable but stops counting after its CLI report | plugins/quirky.heimdall/test/lease.test.ts: atomic claims contend, expire to a higher epoch, and stale assert/release cannot affect it | plugins/quirky.heimdall/test/host-power.test.ts: Heimdall host-power lifecycle binding > fences an in-flight read, resumes with a live read, and excludes the sleeping interval from budget; Heimdall host-power lifecycle binding > restored and newly enrolled runners remain dormant while the host is suspended; Heimdall host-power lifecycle binding > removes its power subscription before shutdown and fences a pending read from stale effects; Heimdall host-power lifecycle binding > attempts every synchronous runner fence and reports the failing watcher | plugins/quirky.heimdall/test/owner-worker-acceptance.test.ts: owner worker messages, answers, and exact stop reach an attested native child | plugins/quirky.heimdall/test/owner-acceptance.test.ts: optional Claude owner configuration survives restart and resumes its persisted provider conversation; natural keys deduplicate provider turns while full failure detail appears in the conversation and inspection; the generated owner-ready CLI accepts an issued file and translated kind actions pass through the native capability gate; an owner human question parks until its exact escalation is answered in the same native conversation; a report accepted for stale content is held and reissued in the same provider conversation; stale, malformed, oversized, and symlink reports are refused without native attempts; continue capability boundary: owner-off; continue capability boundary: owner-gated; continue capability boundary: native-off; continue capability boundary: native-gated; continue capability boundary: both-on; a translated kind action cannot execute when its native action capability is off; disabling Heimdall stops its owner child while an unrelated structured child accepts another turn; owner abandon disarms the watcher without stopping an unrelated native conversation | plugins/quirky.heimdall/test/worker-controls.test.ts: native Heimdall worker controls > answers a real worker question and stops that exact live process | plugins/quirky.heimdall/test/runner.test.ts: Heimdall runner gate and budget behavior > journals provider answers as shadow observations without changing action authority | plugins/quirky.heimdall/test/control-acceptance.test.ts: Heimdall operators through daemon API and real CLI > daemon delete confirmation is exact and single-use; cancellation never removes history; Heimdall operators through daemon API and real CLI > foreign targets and unverifiable workers fail closed through public command API | plugins/quirky.heimdall/test/control-api.test.ts: Heimdall control API > returns an applied stop receipt while fleet publication is still pending | plugins/quirky.heimdall/test/orchestration.test.ts: Heimdall orchestration adapter > owner-run worker evidence drives billable contact and malformed rows cannot appear live. Reproduce via canonical suite; fix consumer-visible defects and delete incidental wording/source/default/inventory mirror assertions rather than repinning them. Preserve fresh private process homes and cleanup. Cross-plugin failures must coordinate with the owning repair, not introduce aliases or bypasses.",
+      "docs": [],
+      "deps": [
+        "m7-test-triage"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "fix-test-mobile-1028",
+      "milestone": "M7",
+      "title": "Repair end-phase plugins/quirky.mobile failures from baseline 97aaa12d (full evidence docs/loop/reports/m7-test-triage.json, area plugins/quirky.mobile). Files and exact failed tests: plugins/quirky.mobile/test/browser-watch.test.ts: mobile Watch uses real worktree tab identity, bounded frames and connection-owned leases | plugins/quirky.mobile/test/panels-activity-tasks.test.ts: paired mobile workspace consent carries content pins through both hooks and executes each approved script | plugins/quirky.mobile/test/session-tabs.test.ts: public mobile Markdown APIs preserve actual tab identity, bounded drafts and dirty-close decisions. Reproduce via canonical suite; fix consumer-visible defects and delete incidental wording/source/default/inventory mirror assertions rather than repinning them. Preserve fresh private process homes and cleanup. Cross-plugin failures must coordinate with the owning repair, not introduce aliases or bypasses.",
+      "docs": [],
+      "deps": [
+        "m7-test-triage"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "fix-test-loops-1028",
+      "milestone": "M7",
+      "title": "Repair end-phase plugins/quirky.loops failures from baseline 97aaa12d (full evidence docs/loop/reports/m7-test-triage.json, area plugins/quirky.loops). Files and exact failed tests: plugins/quirky.loops/test/ui-native-controls.test.ts: rendered Stop Cancel and After this iteration preserve a held native turn until structured steering settles it; rendered Close Cancel preserves the tab, Keep running detaches the same held queue turn, and Stop loop leaves its native sentinel live | plugins/quirky.loops/test/api.test.ts: quirky.loops public API > L06: approval asks move a loop to needs-you and answering resumes observation. Reproduce via canonical suite; fix consumer-visible defects and delete incidental wording/source/default/inventory mirror assertions rather than repinning them. Preserve fresh private process homes and cleanup. Cross-plugin failures must coordinate with the owning repair, not introduce aliases or bypasses.",
+      "docs": [],
+      "deps": [
+        "m7-test-triage"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "fix-test-orchestration-1028",
+      "milestone": "M7",
+      "title": "Repair end-phase plugins/quirky.orchestration failures from baseline 97aaa12d (full evidence docs/loop/reports/m7-test-triage.json, area plugins/quirky.orchestration). Files and exact failed tests: plugins/quirky.orchestration/test/federation-engine.test.ts: paired daemon worker-start executes only on the selected host and replays one durable receipt; remote retain, stop, release/archive, and abandon affect only the exact host worker | plugins/quirky.orchestration/test/federation-mail-acceptance.test.ts: paired daemons preserve FIFO mail and ask identity; a rejected home completion leaves the host unsettled | plugins/quirky.orchestration/test/peer-transport.test.ts: paired loopback peers expose safe status and reject methods outside the method ceiling; remote status and hook-status reads retain exact peer identity without copying remote rows; provider model discovery executes on the exact authenticated peer without local fallback; unpair revokes saved peer credentials; peer-listen CLI reads its credential from a private file without printing it | plugins/quirky.orchestration/test/services/submission-preflight.test.ts: session callers cannot register a service submission hook; submission callback methods cannot escape the registering plugin namespace | plugins/quirky.orchestration/test/federation-surface.test.ts: home reads and controls the exact host worker, preserves host output provenance, and archives before release | plugins/quirky.orchestration/test/acceptance-api.test.ts: quirky.orchestration daemon API acceptance > A2 a live background Ask survives unknown session evidence and resolves unavailable only after exact exit proof | plugins/quirky.orchestration/test/setup-migration.test.ts: daemon activation upgrades the prior canonical service store once and preserves its data and policy. Reproduce via canonical suite; fix consumer-visible defects and delete incidental wording/source/default/inventory mirror assertions rather than repinning them. Preserve fresh private process homes and cleanup. Cross-plugin failures must coordinate with the owning repair, not introduce aliases or bypasses.",
+      "docs": [],
+      "deps": [
+        "m7-test-triage"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "fix-test-notifications-1028",
+      "milestone": "M7",
+      "title": "Repair end-phase plugins/quirky.notifications failures from baseline 97aaa12d (full evidence docs/loop/reports/m7-test-triage.json, area plugins/quirky.notifications). Files and exact failed tests: plugins/quirky.notifications/test/ask-escalation.test.ts: delayed ask notifications > Q3: resolution and FIFO head replacement cancel the old timer and the promoted head gets a full delay | plugins/quirky.notifications/test/gates.test.ts: delivery gates > SC-18: every source goes through the same gates; attention events > SC-43: the attention event goes out whatever the switches say, for attention sources only | plugins/quirky.notifications/test/heimdall.test.ts: Heimdall transitions use the sole notification policy > a new exact approval delivers once; folded repeats do not notify again; Heimdall transitions use the sole notification policy > terminal transition honors the shared enabled switch and emits no native or toast event when disabled; Heimdall transitions use the sole notification policy > terminal transition delivers the real final reason and opens its detail. Reproduce via canonical suite; fix consumer-visible defects and delete incidental wording/source/default/inventory mirror assertions rather than repinning them. Preserve fresh private process homes and cleanup. Cross-plugin failures must coordinate with the owning repair, not introduce aliases or bypasses.",
+      "docs": [],
+      "deps": [
+        "m7-test-triage"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "fix-test-session-1028",
+      "milestone": "M7",
+      "title": "Repair end-phase plugins/quirky.session failures from baseline 97aaa12d (full evidence docs/loop/reports/m7-test-triage.json, area plugins/quirky.session). Files and exact failed tests: plugins/quirky.session/test/workspace-sleep.test.ts: workspace sleep and wake > retains shell history and stops descendants across daemon restart; sleep and wake are idempotent; workspace sleep and wake > resumes an agent with its stored provider conversation identity; workspace sleep and wake > normal structured resume propagates its provider identity while using workspace admission; workspace sleep and wake > workspace wake admits the structured provider update without deadlocking; workspace sleep and wake > does not wake an old session into a replacement worktree at the same path; workspace sleep and wake > retains a partial stop and retries the live session without losing history; workspace sleep and wake > retains a partial wake error and retries with the original provider identity | plugins/quirky.session/test/sessions.test.ts: exit and reconciliation > a daemon restart marks sessions the host no longer has as exited and leaves live ones; quirky.session/restore > cold restore replays the captured provider ID, launch snapshot and cwd in the same session; quirky.session/restore > cold Codex restore re-applies provider account preparation before resolving the captured conversation; quirky.session/restore > an unsupported cold agent restore refuses before spawning and keeps history restorable; quirky.session/restore > concurrent cold agent restores share one provider launch and warm restores never launch again | plugins/quirky.session/test/cli.test.ts: session restore > the restore CLI resumes a cold agent in place from its provider session; the CLI catalog > SC-17: lists the session group, its commands and its methods under quirky.session/ | plugins/quirky.session/test/sessions-launch.test.ts: SessionService.create > a provider session saved while spawn is in flight survives the launch. Reproduce via canonical suite; fix consumer-visible defects and delete incidental wording/source/default/inventory mirror assertions rather than repinning them. Preserve fresh private process homes and cleanup. Cross-plugin failures must coordinate with the owning repair, not introduce aliases or bypasses.",
+      "docs": [],
+      "deps": [
+        "m7-test-triage"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "fix-test-tasks-1028",
+      "milestone": "M7",
+      "title": "Repair end-phase plugins/quirky.tasks failures from baseline 97aaa12d (full evidence docs/loop/reports/m7-test-triage.json, area plugins/quirky.tasks). Files and exact failed tests: plugins/quirky.tasks/test/projects-ui.test.tsx: Project Start reports post-create outcomes truthfully and stays linked; Project query overrides remain isolated and survive switching views; board moves clear into No Status and failed moves restore the confirmed column; restricted Project rows stay read-only, refresh errors retain rows, and unknown sources offer repo addition | plugins/quirky.tasks/test/remaining-list-issue.test.ts: a delayed issue list cannot repaint the PR view after a mode switch; a failed assignee edit preserves an earlier successful status change in the rendered row; quiet adoption retains a confirmed status while search indexing lags, then adopts the indexed row; a failed later reviewer request retains an earlier confirmed reviewer update; confirmed issue comments remain visible after a lagging detail read. Reproduce via canonical suite; fix consumer-visible defects and delete incidental wording/source/default/inventory mirror assertions rather than repinning them. Preserve fresh private process homes and cleanup. Cross-plugin failures must coordinate with the owning repair, not introduce aliases or bypasses.",
+      "docs": [],
+      "deps": [
+        "m7-test-triage"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "fix-test-terminal-1028",
+      "milestone": "M7",
+      "title": "Repair end-phase plugins/quirky.terminal failures from baseline 97aaa12d (full evidence docs/loop/reports/m7-test-triage.json, area plugins/quirky.terminal). Files and exact failed tests: plugins/quirky.terminal/test/artifacts-api.test.ts: binds a grant to the authenticated mobile device, not its connection or request fields; caps discovered artifacts at fifty while reporting scan limits; requires live kernel launch authority even when terminal metadata names an existing local file; expires grants at five minutes and refresh keeps the original preview revision through disk changes; refuses a same-path inode replacement before writing through the pinned descriptor; refuses a capability after its terminal process incarnation changes; shutdown drops every in-memory artifact grant | plugins/quirky.terminal/test/artifacts.test.ts: discovers only printed outside-worktree files and saves from the exact preview across CLI connections; refuses stale revisions without changing external bytes and rejects a repointed parent symlink; bounds text previews and keeps binary and raster files read-only; a second authenticated mobile device cannot use another device’s artifact grant | plugins/quirky.terminal/test/emulator.test.ts: simulator CLI lists real provider-format devices and the API returns only the exact selected device frame | plugins/quirky.terminal/test/e2e.test.ts: SC-23: kill asks first, force-quits the session and keeps its output | plugins/quirky.terminal/test/e2e-ui/workspace-panes.test.ts: SC-39: the pane menu | plugins/quirky.terminal/test/e2e/tabs.test.ts: SC-14: the CLI asks before closing a running command unless --yes | plugins/quirky.terminal/test/e2e-ui/workspace-view.test.ts: SC-71: opening a requested background structured session selects its transcript without creating a shell | plugins/quirky.terminal/test/e2e-ui/features-search.test.ts: SC-73: Enter and Cmd+G in the search box step | plugins/quirky.terminal/test/cli-layout.test.ts: usage errors > tab color accepts only the ten names | plugins/quirky.terminal/test/window/wiring-commands.test.ts: what the module provides > every contribution the manifest declares or overrides, and nothing else | plugins/quirky.terminal/test/window/pane-attach.test.ts: settings apply live > padding and background opacity apply to the pane surface | plugins/quirky.terminal/test/ui.test.ts: the plugin module > provides every contribution the manifest declares or overrides, the Sessions panel and its command among them | plugins/quirky.terminal/test/ui-manifest.test.ts: the commands and default keys > SC-63: the keys, commands and conditions are exactly those of the tech spec | plugins/quirky.terminal/test/window/settings.test.ts: pane settings > the defaults match the fake context and every manifest setting the pane reads. Reproduce via canonical suite; fix consumer-visible defects and delete incidental wording/source/default/inventory mirror assertions rather than repinning them. Preserve fresh private process homes and cleanup. Cross-plugin failures must coordinate with the owning repair, not introduce aliases or bypasses.",
+      "docs": [],
+      "deps": [
+        "m7-test-triage"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "fix-test-worktree-1028",
+      "milestone": "M7",
+      "title": "Repair end-phase plugins/quirky.worktree failures from baseline 97aaa12d (full evidence docs/loop/reports/m7-test-triage.json, area plugins/quirky.worktree). Files and exact failed tests: plugins/quirky.worktree/test/automation-provenance.test.ts: worktree automation provenance API > rejects malformed requests and caller-supplied snapshots before creating Git workspaces | plugins/quirky.worktree/test/automation-sidebar-api.test.ts: hideAutomationCreated persists per client and filters provenance without matching API creators or name prefixes | plugins/quirky.worktree/test/automation-sidebar.test.tsx: lazy details preserve provenance and open the exact recorded automation and older run; a confirmed missing definition disables definition navigation; a successful complete history scan proves the recorded run was pruned; failed availability reads are not reported as deleted; a disabled automation plugin is unavailable rather than deleted; unmount prevents a pending availability response from changing the report; plugin events recheck expanded availability and a collapsed request cannot replace the next workspace | plugins/quirky.worktree/test/creation-parity.test.ts: worktree create parity boundaries > sparse paths are validated before worktree creation and selected files are materialized; worktree create parity boundaries > keep-main fast-forwards only the exact clean primary branch to its fetched remote base; worktree create parity boundaries > keep-main leaves a dirty primary checkout untouched and reports no behind claim | plugins/quirky.worktree/test/default-tabs-create.test.ts: create applies selected shared default tabs through the terminal owner without stealing focus; invalid default-tab selections and untrusted shared commands refuse before creating a worktree | plugins/quirky.worktree/test/control.test.ts: stock worktree options > manual reorder updates persisted ordering without changing pins or nested membership; reversible sleep and wake > unknown per-window visibility refuses sleep rather than closing another window view; safe cleanup preview and removal > preview exposes the supported blockers and still identifies a genuinely unused clean workspace; safe cleanup preview and removal > cleanup revalidates exact window visibility before canonical removal | plugins/quirky.worktree/test/origins-api.test.ts: quirky.worktree/origins public API > the actual automation producer is distinguished from generic API and its origin persists across restart | plugins/quirky.worktree/test/prepared-create.test.ts: the CLI prefetch is consumed by canonical create only for the exact repo and base; dirty, sparse, and existing-branch creates never claim a prepared checkout; restart removes only the exact owned preparation and preserves a foreign locked worktree | plugins/quirky.worktree/test/window-navigation.test.ts: navigation history and open-in are isolated by exact kernel UI connection; create activation refuses an untargeted multiwindow before worktree mutation; sleep parks only the selected window view and leaves sessions and other layouts alive; sleep resolves explicit view selectors before parking and refuses unknown view owners; compare-and-close refuses a stale inspected view without closing the newly selected view; navigation CLI targets the selected numeric window and refuses missing window identities | plugins/quirky.worktree/test/parity.test.ts: remaining workspace options are durable and truthful > PR grouping, activity/project sorting, manual project order, card properties, and data-backed filters persist through API and CLI; external worktree visibility and project identity > external show/hide/inherit policy and inbox suppression preserve the checkout; external worktree visibility and project identity > project identity fields survive restart without changing the repo path; archived cleanup classification > an archived workspace becomes a seven-day cleanup candidate only after the boundary and remains fingerprinted; workspace navigation and Open in > navigation refuses ambiguous multi-window routing without changing the visible view | plugins/quirky.worktree/test/window-create.test.ts: SC-28: Mod+Enter submits the dialog; SC-25: a window create shows a pending row, then opens the result only if you stayed; SC-26: Create more keeps the dialog open and resets it; the Base field starts at the project base and is sent only when changed; the Advanced fields reach the new workspace; the project select switches the placeholder and the report follows it; SC-20: a create from an unreachable remote base shows the local-base notice; SC-27: the window creates the same worktree as the CLI from the same input; SC-31: the window asks for the setup choice before it will create; SC-33: the window asks before running an untrusted shared script | plugins/quirky.worktree/test/window-projects.test.ts: SC-9: Remove Project closes terminals, leaves folders and forgets metadata | plugins/quirky.worktree/test/setup.test.ts: SC-39: .worktreeinclude copies gitignored files and shared directories are linked (CLI) > the text output lists each warning on its own line after the record | plugins/quirky.worktree/test/sidebar-extras.e2e.test.ts: SC-02/08/10/17: real CLI and sidebar share activity preferences, selected workspace, and membership; SC-16/17: appearance setting changes separators through CLI without changing sidebar row identity | plugins/quirky.worktree/test/worktree.test.ts: repo removal and worktree ownership > ownedIds lists the main worktree and the created ones; removing the repo forgets them | plugins/quirky.worktree/test/metadata.test.ts: SC-9: removing a project drops its metadata > adding the project again shows the worktree with no display name (API) | plugins/quirky.worktree/test/folder.test.ts: SC-12: a folder project lists its primary and creates folder workspaces (CLI) > removing the project drops its folder workspaces | plugins/quirky.worktree/test/sidebar-membership.test.ts: worktree identity and delayed group assignment > zero-birthtime path replacement is rejected using the held directory device and inode | plugins/quirky.worktree/test/v1-import.test.ts: SC-26: a v1 home carries over > repos, the worktree ownership map and the worktrees root are imported once; SC-26: a v1 home carries over > a session in an imported-owned worktree still closes with its repo when git cannot list it; SC-26: a v1 home carries over > a second start copies nothing again | plugins/quirky.worktree/test/ui.test.ts: SC-35: renders repos and worktrees and reports them with status and selection; SC-36: the selected row follows the open view input; SC-37: clicking a worktree opens the session view on it; SC-43: opening an unread worktree marks it read; shows no status dots and reports null statuses when quirky.session is off; status follows the session events; refreshes the tree on repo, group and worktree changes; a plugin.changed event reloads the tree and the sessions; SC-44: groups, the Pinned section, the primary badge, nested children and status labels; SC-43: the card menu opens and closes on Escape and outside click; SC-43: Move to Status, Pin and Mark Unread call set; the current values read the other way; a failed set becomes a toast; SC-43: Copy Path and Copy Worktree Name use the clipboard and a failure toasts; SC-59: the primary worktree has Delete disabled with a tooltip; a parent offers Delete with Descendants and removes them together; Update and Set Parent open their dialogs and the report names them; SC-47: Delete asks in the window and passes force and yes with no ask card; the delete dialog leaves out the change count for no changes or a failed status; a cancelled delete removes nothing; Don't ask again turns the setting off first and toasts; with confirmDelete off, Delete removes at once; a refused delete toasts the failure with its message, and the card is not left showing Deleting; a delete that keeps its branch shows a notice whose Delete branch calls deleteBranch; the new-worktree dialog forwards catalog model options, sparse paths and keep-main; the new-worktree dialog creates a worktree through a pending row and opens it; a create is not opened when the view changed meanwhile, and a toast names it; a setup-decision-required refusal opens the setup choice instead of a toast, and the answer goes with the retry; SC-42: Update saves the display name and notes through set; SC-41: Set Parent offers the other workspaces, not the workspace or its descendants; agent status glyphs > working draws glyph-working with the label \"Working\"; agent status glyphs > monitoring draws glyph-monitoring with the label \"Monitoring background tasks\"; agent status glyphs > waiting draws glyph-waiting with the label \"Waiting for input\"; agent status glyphs > permission draws glyph-permission with the label \"Needs attention\"; agent status glyphs > blocked draws glyph-blocked with the label \"Blocked\"; agent status glyphs > failed draws glyph-failed with the label \"Failed\"; agent status glyphs > interrupted draws glyph-interrupted with the label \"Interrupted\"; agent status glyphs > done draws glyph-done with the label \"Done\"; agent status glyphs > unverifiable draws glyph-unverifiable with the label \"No recent update\"; agent status glyphs > idle draws glyph-idle with the label \"Idle\"; agent status glyphs > unconfirmed draws glyph-unconfirmed with the label \"Couldn't confirm\"; agent status glyphs > SC-35: the card follows its most urgent session as they change; agent status glyphs > a session with no summary keeps the coarse dot; agent status glyphs > SC-36: progress shows a ring on live states only; agent status glyphs > an unfinished state with no evidence for 30 minutes decays, and a done one does not; agent status glyphs > a one-minute tick shows decay and updates the report with no event; stock worktree controls persist options, reveal sleeping rows and wake without replacing the session; PR grouping, CLI-origin filtering and filtered-row reveal change the workspace list; workspace board renders project-defined status labels for matching worktrees; cleanup review prevents blocked selection and supports ignoring and restoring suggestions; Escape dismisses cleanup review and leaves the workspace available | plugins/quirky.worktree/test/sidebar-extras-ui.test.ts: SC-03: diversion keeps an empty project placeholder and returning a parent restores child nesting; SC-05: cancelling group deletion preserves its subtree; confirming releases nested memberships; SC-01: new group creation is guarded by the selected Git worktree identity; SC-02/06: loose membership menus move and remove one worktree, and folder rows offer only project actions; SC-02: moving a Git project moves every repo row without changing loose worktree membership; SC-04: current painted geometry joins, no-ops, leaves only at the owning repo, and ignores unrelated sections; SC-08/11/12: filters use exact windows, validate custom days on Enter and blur, and recover an empty list; Custom days commits on blur without Enter and rejects an invalid blur without changing the window; SC-10/13: Live preserves selected, unknown, folder and default rows; visits are identity-keyed and idempotent; disabled extras falls back to the ordinary tree, while ordinary failures report unavailability; review filters use server preferences, compose with activity, and clear independently; hosting review events refresh only active filters and late projections cannot restore stale visibility; quiet activity aging refreshes at sixty seconds without store events; section separators mark top-level boundaries only with Pinned first; automation filtering uses only durable attribution and appears in visible counts | plugins/quirky.worktree/test/loop-status.test.tsx: selects each worktree loop by priority, update recency, and stable ID with strict attachment evidence; unread keeps its bell while JSON retains the loop, and an empty snapshot removes the projection; disconnects and failed refreshes make cached needs-you unverifiable until fresh evidence returns; a stale initial summary response cannot overwrite the snapshot invalidated by a loop event; plugin disable clears cached rows and fences a delayed summaries response | plugins/quirky.worktree/test/github-composer.test.ts: Smart # references resolve authoritatively and create from the canonical PR URL; a pasted GitHub PR URL is an authoritative source lookup; GitHub search shows mixed labelled items, selected source, external link, clear, and issue base option; an issue-derived agent prompt keeps its raw URL as an unsubmitted draft by default; a person can explicitly submit an issue-derived prompt and generic prompts remain submitted by default; plain Smart text offers an explicit name choice and branch/name modes retain existing behavior; Smart text searches local and remote branches through the public Git API; Name mode keeps blank generated-name creation available; create more resets the selected source, name, query, agent and setup choice; shared setup and issue trust choices accumulate across create retries; Run once binds consent to the shown hash and asks again when the shared script changes; Always trust on changed content replaces the earlier one-time pin; Run once and Always cannot proceed when the untrusted-script error has no hash; Project Settings edits the local GitHub issue command and shows shared command trust | plugins/quirky.worktree/test/ui-report.test.ts: a removing worktree and a pending create are reported with their flags. Coordinate with lane4 m2-sidebar-extras-followup: consume its landed activity/Menu/Tree/ActivityFilters, window-navigation real-session fixture and ui-report assertion corrections, do not duplicate them. Reproduce via canonical suite; fix consumer-visible defects and delete incidental wording/source/default/inventory mirror assertions rather than repinning them. Preserve fresh private process homes and cleanup. Cross-plugin failures must coordinate with the owning repair, not introduce aliases or bypasses.",
+      "docs": [],
+      "deps": [
+        "m7-test-triage",
+        "m2-sidebar-extras-followup"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "fix-test-vault-1028",
+      "milestone": "M7",
+      "title": "Repair end-phase plugins/quirky.vault failures from baseline 97aaa12d (full evidence docs/loop/reports/m7-test-triage.json, area plugins/quirky.vault). Files and exact failed tests: plugins/quirky.vault/test/window-parity.test.ts: SC-08: Settings reports real index counts and focuses search; connection errors expose a retry that recovers against the daemon; SC-15/16: a stale real index page replaces the old result set, and independently reachable limits are visible | plugins/quirky.vault/test/flows.test.ts: vault public acceptance flows > real host contributions preserve identity, expose partial availability, redact remote paths, and fail honestly. Reproduce via canonical suite; fix consumer-visible defects and delete incidental wording/source/default/inventory mirror assertions rather than repinning them. Preserve fresh private process homes and cleanup. Cross-plugin failures must coordinate with the owning repair, not introduce aliases or bypasses.",
+      "docs": [],
+      "deps": [
+        "m7-test-triage"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "fix-test-hosting-1028",
+      "milestone": "M7",
+      "title": "Repair end-phase plugins/quirky.hosting failures from baseline 97aaa12d (full evidence docs/loop/reports/m7-test-triage.json, area plugins/quirky.hosting). Files and exact failed tests: plugins/quirky.hosting/test/pr.test.ts: quirky.hosting PR reads > review push selects the fork head rather than base origin and pushes only to that exact configured remote; quirky.hosting PR reads > review push revalidates each target and refuses unsafe, stale, closed, ambiguous or detached destinations before any push. Reproduce via canonical suite; fix consumer-visible defects and delete incidental wording/source/default/inventory mirror assertions rather than repinning them. Preserve fresh private process homes and cleanup. Cross-plugin failures must coordinate with the owning repair, not introduce aliases or bypasses.",
+      "docs": [],
+      "deps": [
+        "m7-test-triage"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "fix-test-handoff-1028",
+      "milestone": "M7",
+      "title": "Repair end-phase plugins/quirky.handoff failures from baseline 97aaa12d (full evidence docs/loop/reports/m7-test-triage.json, area plugins/quirky.handoff). Files and exact failed tests: plugins/quirky.handoff/test/service.test.ts: SC-6: a new worktree is created only at Start, and only with a name > a blank name is an invalid target and a named one creates nothing | plugins/quirky.handoff/test/service-drafts.test.ts: the plugin declares what it provides > every H1 method, both events and the CLI commands are in the catalog. Reproduce via canonical suite; fix consumer-visible defects and delete incidental wording/source/default/inventory mirror assertions rather than repinning them. Preserve fresh private process homes and cleanup. Cross-plugin failures must coordinate with the owning repair, not introduce aliases or bypasses.",
+      "docs": [],
+      "deps": [
+        "m7-test-triage"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "fix-test-ledger-1028",
+      "milestone": "M7",
+      "title": "Repair end-phase plugins/quirky.ledger failures from baseline 97aaa12d (full evidence docs/loop/reports/m7-test-triage.json, area plugins/quirky.ledger). Files and exact failed tests: plugins/quirky.ledger/test/window.test.ts: SC-17 and SC-11: project settings and owner-removal previews retain ledger snapshots | plugins/quirky.ledger/test/ledger.test.ts: Project ledger API: review, bulk operations and confirmation > a destructive API call requires the standard confirmation and consumes the answer once; Project ledger API: owner lifecycle and attachment > removal preview snapshots guard repo removal; retained entries detach and reattach eagerly on re-add; Project ledger API: owner lifecycle and attachment > recovers a project ledger from its canonical repository root when no origin remote exists; Project ledger API: owner lifecycle and attachment > canonical project identity preserves non-GitHub path case and nondefault ports; Project ledger API: owner lifecycle and attachment > ambiguous live codebase matches remain detached until a unique project is available; Project ledger API: owner lifecycle and attachment > detached ledgers can be explicitly attached to an empty same-tier owner with equivalence history | plugins/quirky.ledger/test/import-cli.test.ts: Project ledger CLI: positional, flag, text, JSON and exit contracts > attach is scriptable; detached ledgers remain directly readable and can be removed with a revision snapshot; Project ledger CLI: legacy import formats and replay safety > automatic same-codebase recovery preserves import identity and deletion tombstones; Project ledger CLI: legacy import formats and replay safety > equivalent project attachment reuses a unique imported source anchor without creating a duplicate. Reproduce via canonical suite; fix consumer-visible defects and delete incidental wording/source/default/inventory mirror assertions rather than repinning them. Preserve fresh private process homes and cleanup. Cross-plugin failures must coordinate with the owning repair, not introduce aliases or bypasses.",
+      "docs": [],
+      "deps": [
+        "m7-test-triage"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "fix-test-packages-cli-1028",
+      "milestone": "M7",
+      "title": "Repair end-phase packages/cli failures from baseline 97aaa12d (full evidence docs/loop/reports/m7-test-triage.json, area packages/cli). Files and exact failed tests: packages/cli/test/v1-words.e2e.test.ts: SC-20: v1 command lines run through the plugins > SC-20: text output keeps v1 tables and records; SC-20: v1 command lines run through the plugins > SC-20: --json output keeps v1 shapes; SC-20: v1 command lines run through the plugins > SC-20: repo and worktree positionals take selectors and v1 plain IDs | packages/cli/test/cli.e2e.test.ts: flag parsing > an unknown flag names the command and the valid flags | packages/cli/test/theme.test.ts: theme list > marks the active theme with *; theme list > marks the active theme after a choice; theme list > marks a chosen theme that is not active with (chosen); theme list > keeps a chosen theme that is no longer listed as a chosen line | packages/cli/test/ui.test.ts: ui contributions > prints one headed table per non-empty section. Reproduce via canonical suite; fix consumer-visible defects and delete incidental wording/source/default/inventory mirror assertions rather than repinning them. Preserve fresh private process homes and cleanup. Cross-plugin failures must coordinate with the owning repair, not introduce aliases or bypasses.",
+      "docs": [],
+      "deps": [
+        "m7-test-triage"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "fix-test-repo-1028",
+      "milestone": "M7",
+      "title": "Repair end-phase plugins/quirky.repo failures from baseline 97aaa12d (full evidence docs/loop/reports/m7-test-triage.json, area plugins/quirky.repo). Files and exact failed tests: plugins/quirky.repo/test/projects.test.ts: SC-9: removing a project > forgets it and its settings, takes it out of its group, and leaves the folder | plugins/quirky.repo/test/repo.test.ts: quirky.repo methods > remove forgets the repo and emits changed; removing it again is NotFound; SC-10: repo selectors > remove takes a selector; remove closes the repo sessions > only the sessions of the removed repo are closed; remove closes the repo sessions > sessions still close when git can no longer list the repo worktrees; remove closes the repo sessions > a same-named repo keeps its sessions; remove closes the repo sessions > a session in an externally created worktree closes with its repo after the directory is gone; remove closes the repo sessions > a failed close keeps the repo so removal can be retried; remove closes the repo sessions > without quirky.session the repo is removed with nothing to close | plugins/quirky.repo/test/cli.test.ts: SC-20: quirky repo commands keep v1 output > rm prints \"removed <repo>\" and takes selectors; SC-20: quirky repo commands keep v1 output > rm --json prints the method result | plugins/quirky.repo/test/hooks.test.ts: effectiveHooks: reading the shared file > no file means no hooks, the default startup policy and no warnings. Reproduce via canonical suite; fix consumer-visible defects and delete incidental wording/source/default/inventory mirror assertions rather than repinning them. Preserve fresh private process homes and cleanup. Cross-plugin failures must coordinate with the owning repair, not introduce aliases or bypasses.",
+      "docs": [],
+      "deps": [
+        "m7-test-triage"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "fix-test-terminal-dock-1028",
+      "milestone": "M7",
+      "title": "Repair end-phase plugins/quirky.terminal-dock failures from baseline 97aaa12d (full evidence docs/loop/reports/m7-test-triage.json, area plugins/quirky.terminal-dock). Files and exact failed tests: plugins/quirky.terminal-dock/test/defects.e2e.test.ts: Codex transcript evidence clears a snapshot send despite a stale composer prompt. Reproduce via canonical suite; fix consumer-visible defects and delete incidental wording/source/default/inventory mirror assertions rather than repinning them. Preserve fresh private process homes and cleanup. Cross-plugin failures must coordinate with the owning repair, not introduce aliases or bypasses.",
+      "docs": [],
+      "deps": [
+        "m7-test-triage"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "fix-test-agents-1028",
+      "milestone": "M7",
+      "title": "Repair end-phase plugins/quirky.agents failures from baseline 97aaa12d (full evidence docs/loop/reports/m7-test-triage.json, area plugins/quirky.agents). Files and exact failed tests: plugins/quirky.agents/test/service.test.ts: provider-owned model discovery > only a bounded provider probe replaces the exact local catalog; empty, malformed and failed probes preserve it; provider-owned model discovery > Codex discovery refuses to run under a raw inherited home when account preparation is unavailable | plugins/quirky.agents/test/cli.test.ts: the CLI catalog > lists the agents group with every command and the methods each calls | plugins/quirky.agents/test/core/entry.test.ts: validateEntry > links must be http(s) URLs. Reproduce via canonical suite; fix consumer-visible defects and delete incidental wording/source/default/inventory mirror assertions rather than repinning them. Preserve fresh private process homes and cleanup. Cross-plugin failures must coordinate with the owning repair, not introduce aliases or bypasses.",
+      "docs": [],
+      "deps": [
+        "m7-test-triage"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "fix-test-accounts-1028",
+      "milestone": "M7",
+      "title": "Repair end-phase plugins/quirky.accounts failures from baseline 97aaa12d (full evidence docs/loop/reports/m7-test-triage.json, area plugins/quirky.accounts). Files and exact failed tests: plugins/quirky.accounts/test/accounts-api.test.ts: quirky.accounts lifecycle API and CLI > Codex app-server discovery uses the selected account, and failures preserve its model snapshot; quirky.accounts lifecycle API and CLI > remove uses the destructive confirmation convention and explicit yes removes only the managed credential name; quirky.accounts lifecycle API and CLI > Codex resume continues from the prepared target after the original profile is removed | plugins/quirky.accounts/test/profiles.test.ts: quirky.accounts profile ownership and routing > Claude history remains shared when the first account predates default history and survives its removal. Reproduce via canonical suite; fix consumer-visible defects and delete incidental wording/source/default/inventory mirror assertions rather than repinning them. Preserve fresh private process homes and cleanup. Cross-plugin failures must coordinate with the owning repair, not introduce aliases or bypasses.",
+      "docs": [],
+      "deps": [
+        "m7-test-triage"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "fix-test-packages-protocol-1028",
+      "milestone": "M7",
+      "title": "Repair end-phase packages/protocol failures from baseline 97aaa12d (full evidence docs/loop/reports/m7-test-triage.json, area packages/protocol). Files and exact failed tests: packages/protocol/test/ui.test.ts: theme tokens and the default theme > DEFAULT_THEME fills exactly THEME_TOKENS with valid colors | packages/protocol/test/kernel-schemas.test.ts: kernel method schemas > read-only and destructive methods are flagged; kernel method schemas > only the hello, subscribe and ui window methods are connection methods; kernel event schemas > cover every event type. Reproduce via canonical suite; fix consumer-visible defects and delete incidental wording/source/default/inventory mirror assertions rather than repinning them. Preserve fresh private process homes and cleanup. Cross-plugin failures must coordinate with the owning repair, not introduce aliases or bypasses.",
+      "docs": [],
+      "deps": [
+        "m7-test-triage"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "fix-test-scripts-ui-review-1028",
+      "milestone": "M7",
+      "title": "Fix bun test scripts failures found during fix-native-m3-vault-1028: scripts/ui-review/review.test.ts has 12 failures (threshold85 returns error; redaction/low-score/family/visibility/digest/timeout cases return error; repeated manifest() mkdir captures EEXIST); scripts/ui-review/cli.test.ts malformed review-only input returns exit2 without ui-review-error.json (ENOENT at219). Overall113pass13fail945assertions in98.17s on2026-10-28. Preserve actual validation/model/visibility/redaction/error behavior; diagnose before repair, no assertion weakening. Evidence docs/loop/decisions/fix-native-m3-vault-1028.md.",
+      "docs": [],
+      "deps": [
+        "m7-test-triage"
+      ],
+      "status": "todo"
     }
   ]
 }

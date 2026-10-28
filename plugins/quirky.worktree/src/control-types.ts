@@ -14,6 +14,7 @@ export type StockWorktreeOptions = {
   hideDefaultBranch: boolean
   hideDetached: boolean
   hideArchived: boolean
+  hideOtherClients: boolean
   filterRepoIds: string[]
   showProperties: WorktreeCardProperty[]
   externalVisibilityDefault: Exclude<ExternalVisibility, 'inherit'>
@@ -31,6 +32,7 @@ export const DEFAULT_STOCK_OPTIONS: StockWorktreeOptions = {
   hideDefaultBranch: false,
   hideDetached: false,
   hideArchived: true,
+  hideOtherClients: false,
   filterRepoIds: [],
   showProperties: ['branch', 'notes', 'pullRequest', 'issue', 'automation', 'activity'],
   externalVisibilityDefault: 'hide'
@@ -52,6 +54,7 @@ export function isStockWorktreeOptions(value: unknown): value is StockWorktreeOp
     typeof options.hideDefaultBranch === 'boolean' &&
     typeof options.hideDetached === 'boolean' &&
     typeof options.hideArchived === 'boolean' &&
+    typeof options.hideOtherClients === 'boolean' &&
     stringArray(options.filterRepoIds) &&
     Array.isArray(options.showProperties) && options.showProperties.every((property) => properties.includes(property as WorktreeCardProperty)) &&
     (options.externalVisibilityDefault === 'show' || options.externalVisibilityDefault === 'hide')

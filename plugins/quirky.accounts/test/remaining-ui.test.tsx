@@ -74,6 +74,7 @@ let credentialStatuses: CredentialStatus[]
 let clearCredentialGate: Promise<unknown> | null
 let confirmGate: Promise<boolean> | null
 let confirmCalls: unknown[]
+let externalOpenGate: Promise<unknown> | null
 
 beforeAll(() => {
   GlobalRegistrator.register()
@@ -101,6 +102,7 @@ beforeEach(() => {
   clearCredentialGate = null
   confirmGate = null
   confirmCalls = []
+  externalOpenGate = null
   container = document.createElement('div')
   document.body.append(container)
 })
@@ -159,6 +161,10 @@ function makeContext(): UiPluginContext {
       }
       if (method === 'quirky.accounts/loginStatus') return { status: 'pending', url: null, error: null, result: null }
       if (method === 'quirky.accounts/cancelLogin') return { cancelled: true }
+      if (method === 'quirky.terminal/openExternal') {
+        if (externalOpenGate) return await externalOpenGate
+        return { ok: true }
+      }
       if (method === 'quirky.accounts/remove') return stateValue
       if (method === 'quirky.accounts/clearCredential') {
         if (clearCredentialGate) return await clearCredentialGate
@@ -377,6 +383,38 @@ test('a provider no-credit outcome remains a visible non-success', async () => {
 })
 
 
+
+test('a failed sign-in browser handoff remains retryable without losing Copy or Cancel', async () => {
+  const url = 'https://auth.openai.com/oauth/authorize?response_type=code&state=fixture-only'
+  stateValue.pendingLogin = { id: 'login-1', provider: 'codex', accountId: null, status: 'pending', url, error: null, result: null }
+  const gate = Promise.withResolvers<unknown>()
+  externalOpenGate = gate.promise
+  await mount('view:quirky.accounts/settings')
+  await act(async () => { buttonByText('Codex').click() })
+  await settle()
+  await act(async () => { buttonByText('Open').click() })
+  expect(buttonByText('Opening…').disabled).toBe(true)
+  expect(buttonByText('Copy link').disabled).toBe(false)
+  expect(buttonByText('Cancel').disabled).toBe(false)
+
+  await act(async () => { gate.reject(new Error('system handler unavailable')) })
+  await settle()
+  expect(container.querySelector('[role="alert"]')?.textContent).toContain('Could not open the sign-in link')
+  expect(buttonByText('Open').disabled).toBe(false)
+  expect(container.textContent).toContain('Cancel')
+
+  externalOpenGate = null
+  await act(async () => { buttonByText('Open').click() })
+  await settle()
+  expect(container.querySelector('[role="alert"]')).toBeNull()
+  expect(buttonByText('Open').disabled).toBe(false)
+  expect(buttonByText('Copy link').disabled).toBe(false)
+
+  stateValue.pendingLogin = null
+  await act(async () => { buttonByText('Cancel').click() })
+  await settle()
+  expect(container.textContent).not.toContain('Codex opened this sign-in link')
+})
 
 test('login controls reject a second add while the first login request is pending', async () => {
   stateValue = makeState('claude', 71, 'Account B', { stale: false })
