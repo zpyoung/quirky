@@ -38,9 +38,10 @@ export const ACCOUNTS_CSS = `
 .accounts-ui .credential-entry input{flex:1}
 .accounts-ui.usage-status-bar{align-items:center;display:flex;flex:1 1 auto;gap:6px;max-width:100%;min-width:0;position:relative;white-space:nowrap}
 .accounts-ui .usage-status-cta{max-width:min(520px,calc(100vw - 48px));min-width:0;white-space:normal}
-.accounts-ui .usage-measure{display:flex;gap:5px;left:0;pointer-events:none;position:absolute;top:0;visibility:hidden;width:max-content}
-.accounts-ui .usage-trigger,.accounts-ui .usage-refresh{align-items:center;display:inline-flex;gap:5px;padding:4px 7px}
-.accounts-ui .usage-chips{align-items:center;display:flex;flex:1 1 auto;gap:5px;min-width:0;overflow:hidden}
+.accounts-ui .usage-measure{contain:layout paint;display:flex;gap:5px;height:0;left:0;overflow:hidden;pointer-events:none;position:absolute;top:0;visibility:hidden;width:0}
+.accounts-ui .usage-measure>*{flex:0 0 auto}
+.accounts-ui .usage-trigger,.accounts-ui .usage-refresh{align-items:center;display:inline-flex;flex:0 0 auto;gap:5px;padding:4px 7px}
+.accounts-ui .usage-chips{align-items:center;display:flex;flex:1 1 0;gap:5px;min-width:var(--usage-more-min-width,0px);overflow:hidden}
 .accounts-ui .usage-chip{align-items:center;border:1px solid var(--border,#2b2f3a);border-radius:6px;display:inline-flex;flex:0 0 auto;gap:5px;padding:3px 6px}
 .accounts-ui .usage-detailed-chip{display:inline-flex;gap:5px}
 .accounts-ui .usage-detailed-chip>span{align-items:center;display:inline-flex;gap:3px}
