@@ -71,8 +71,8 @@ export type PluginContext = {
     contentType: string
     disposition?: 'inline' | 'attachment'
   }): Promise<{ url: string; revoke(): void }>
-  /** Opens this plugin's private SQLite store, applying any migrations it has not yet run. */
-  openStore(migrations: StoreMigration[]): PluginStore
+  /** Opens this plugin's private SQLite store; opt in to read-only access when its schema is newer than this build. */
+  openStore(migrations: StoreMigration[], options?: { newerVersion?: 'read-only' }): PluginStore
   /** The current value of a setting: a short name in this plugin's own namespace, or a full setting ID. */
   getSetting(name: string): unknown
   /** The raw stored value of any setting ID, declared or not, or undefined when none is stored. */
@@ -310,6 +310,8 @@ export type StoreValue = string | number | bigint | boolean | null | Uint8Array
 export type PluginStore = {
   /** The number of migrations applied so far. */
   readonly version: number
+  /** True when opened against a newer schema with read-only access; every SQL statement is enforced read-only by SQLite. */
+  readonly readOnly?: boolean
   /** Runs one statement that modifies data. */
   run(sql: string, ...params: StoreValue[]): { changes: number; lastInsertRowid: number }
   /** The first matching row, or null. */

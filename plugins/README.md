@@ -74,8 +74,8 @@ path when account preparation moves the conversation.
 The plugin exposes `create`, `messages`, `send`, `stop`, and `resume`. Creation returns a session
 record before startup finishes; `send` waits for native startup before submitting input. Messages
 are journaled and status comes from native events. Command/file permissions become ordinary
-`quirky.ask` questions. Cancellation denies approval; disabling the creating plugin cancels its
-pending approvals.
+`quirky.ask` questions. Cancellation denies approval; disabling the creating plugin stops its
+owned runners and cancels their pending approvals.
 
 Stop a connected runner before resuming its conversation:
 
@@ -93,6 +93,37 @@ ID with `quirky structured send --session <id> --text <prompt>`.
 Codex stop bounds its final pipe cleanup even when an independently detached child retains an
 output descriptor. Its process group is the execution ownership boundary; it does not adopt
 independently detached services.
+
+Background consumers can pass `requireIdle: true` and the observed `expectedAfterSeq` to
+`quirky.structured/send`. The service serializes sends and rejects busy or stale observations
+before delivering the prompt. `messages` accepts `limit` and `tail`; a tail query selects the
+newest bounded messages and still returns them in ascending sequence order.
+
+## Until-done loops
+
+`quirky.loops` owns persistent background loops; `quirky loop` is its CLI alias:
+
+```sh
+quirky loop create --agent codex --prompt "Finish the task and keep notes" \
+  --check "bun test" --max-iterations 5
+quirky loop list --json
+quirky loop show <loop-id> --json
+quirky loop steer <loop-id> "Concentrate on the failing scenario"
+quirky loop resume <loop-id> --add-iterations 2
+```
+
+Completion requires all configured independent check/evaluator signals to pass. `LOOP_DONE`
+alone never completes a loop. Pause, stop, edit, protected paths, checkpoints, no-progress and
+budget controls share the same public `quirky.loops/*` methods. Active loops pause after a
+daemon restart; only an explicit resume starts them again. Notes live under `.quirky/loops/`
+and remain private to the Git worktree.
+
+The plugin uses native structured sessions and never creates a PTY or adopts a terminal pane.
+See [the loop command and API guide](quirky.loops/README.md) for flags, evidence and lifecycle rules.
+
+Plugin stores still refuse a schema newer than their migration list by default. A reader can opt
+in with `context.openStore(migrations, { newerVersion: 'read-only' })` and inspect `store.readOnly`;
+SQLite enforces read-only access, migrations do not run, and write/transaction methods refuse.
 
 ## Orchestration
 

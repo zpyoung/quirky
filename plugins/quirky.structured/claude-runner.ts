@@ -175,7 +175,7 @@ class ClaudeRunner implements StructuredRunner {
     claudeSessionId: string
   ): void {
     const input = createInputStream()
-    if (prompt === undefined) {
+    if (prompt === undefined || prompt === '') {
       this.context.setStatus(session.id, 'running')
     } else {
       const first = userMessage(prompt, claudeSessionId)
@@ -334,6 +334,9 @@ class ClaudeRunner implements StructuredRunner {
       case 'result':
         append('result', resultText(msg), msg)
         if (msg.is_error !== true) this.context.setStatus(sessionId, 'done')
+        return
+      case 'rate_limit_event':
+        append('system', 'Claude rate limit event', msg)
         return
       default:
         append('system', String(msg?.type ?? 'event'), msg)
