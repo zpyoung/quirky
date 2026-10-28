@@ -44,5 +44,49 @@
 - **Revisit if:** the selected reviewer actually fails dispatch.
 - **Source:** assumed — autonomous
 
+## D5: Preserve whole-pick shadowing and repair the actual API test boundaries
+- **Question:** Does raw-model precedence require changing the provider resolver, and which daemon tests remain meaningful?
+- **Options:** change upstream effort inheritance; repin provenance/schema/catalog copies; preserve locked launch behavior and assert actual argv/refusal/nonmutation.
+- **Chose:** No production changes. Raw model wins exactly once and discards the model-dependent structured effort, as launch-settings SC-15 requires. Invalid CLI/API actions are rejected at their real dispatcher boundary without persisting anything; branch/name generation preserves its captured context and branch/title. Split all three malformed Git argument calls. Wait for the captured structured turn before inspecting it. Use an explicit real-newline baseline to distinguish HEAD, index and working content.
+- **Why:** The earlier launch-settings amendment explicitly says model extras shadow the whole pick because options belong to the picked model. Dispatcher validation precedes handler reason payloads; structured/create schedules journaling asynchronously. The original HEAD assertion used literal escaped newlines. A first worker revision used a trimming Git helper; parent rejected it before execution and retained byte-exact input/output checks.
+- **Evidence:** docs/quirk/specs/2026-10-26-m1-launch-settings/logic.md:10,261-268; tech.md:241-244; raw triage log:2750-2970,7739; test/scenarios/ai-world.ts runGit; test/scenarios/diff.test.ts.
+- **Reversibility:** easy (tests only)
+- **Confidence:** high for source/evidence; canonical tests remain pending below.
+- **Revisit if:** actual launched argv or persisted state contradicts the locked precedence.
+- **Source:** locked by docs/quirk/specs/2026-10-26-m1-launch-settings/logic.md SC-15
+
+## D6: Correct fixture ownership instead of changing Git UI behavior
+- **Question:** What explains the UI and window failure families?
+- **Options:** restore legacy layout/CSS/DOM behavior; adapt fixture lifecycle, public hosted authority and semantic user controls.
+- **Chose:** Let startHeadlessWindow own its DOM registration; load component ReactDOM/portal modules after registerDom. Read hosted diff identity from the terminal workspace instead of legacy layout.view, and scope editor access to its Git view root. Follow shared toast/alert controls and enabled primary readiness; install the reveal seam before daemon activation. Preserve plugin-owned listeners when checking component disposal, and ensure disposed views do not refresh. Retain actual API/CLI/window actions while removing obsolete catalog/whole-report/copy/mock-forwarding mirrors.
+- **Why:** The restyle and terminal-hosted cutovers preserve product flows but invalidate private presentation and legacy routing assumptions. A plugin lifetime is longer than a single panel/view mount. No compatibility alias, timeout increase, source bypass or new product state is needed.
+- **Evidence:** component8099413b/window6869d500/UI8ed17e60; raw triage hosted registration and UI event failures; src/view/hosted-tabs.ts; test/window/world.ts and dom.ts; test/ui/ai.test.ts.
+- **Reversibility:** easy (tests only)
+- **Confidence:** high for identified boundaries; composed checks remain pending.
+- **Revisit if:** the canonical suites expose a remaining consumer-visible defect.
+- **Source:** assumed — autonomous
+
+## D7: Compose all incoming restyles at the single catch-up
+- **Question:** Do concurrent Worktrees, Tasks and Settings decisions conflict with the repair?
+- **Options:** discard incoming presentation contracts; preserve their shared controls and authority.
+- **Chose:** Single clean roadmap merge after the three audited component merges; read all three incoming logs fully, including untruncated Worktrees D17 and Settings D8/Progress. Preserve canonical rich ContextMenu geometry, native shared fields and stacked Dialog ownership, host tool placement and unchanged feature APIs. All worker trees retained14ab2a40; parent source delta was empty at the barrier. Their copied .serena metadata was not staged.
+- **Why:** The repair owns tests, not another presentation convention or unrelated source. Current shared source must be exercised rather than earlier isolated branches.
+- **Evidence:** all-tree HEAD/path/untracked barrier; component merge receipts; docs/loop/decisions/ui-restyle-{worktrees,tasks,settings}.md.
+- **Reversibility:** easy (composition only)
+- **Confidence:** high
+- **Revisit if:** required canonical landing recovery brings an actual conflict.
+- **Source:** locked by incoming ui-restyle decisions
+
+## D8: Exercise actual CLI/API behavior and disclose driver and generated-cache limits
+- **Question:** Which runtime observations support the test-only repair?
+- **Options:** claim tests alone; relabel failed smoke probes; retain exact real-daemon CLI/API outcomes and clean source compiler scope.
+- **Chose:** Disposable real Git repository/daemon/CLI proved staged HEAD-to-index, unstaged index-to-working and editor HEAD-to-working bytes; save; stale-write refusal without mutation; global recipe save/read through CLI; branch unchanged. All private homes/process scopes removed. Initial probes incorrectly compared /tmp with canonical /private/tmp and required a working-file hash on read-only staged diffs; corrected only the throwaway driver. Cleanup logged the inherited worktree deactivation warning; no pristine-output claim.
+- **Why:** Real runtime state is independent evidence; fixture mistakes are not product defects. Root typecheck encountered13lint diagnostics in an inherited ignored generated Mobile bundle after incoming Mobile lint enrollment. Those are build outputs, not source edits: preserve them in the user's worktree and run the same compiler command in an owned source-only verification checkout, removing only its newly copied ignored bundle. Do not weaken the scanner or mutate another area's implementation.
+- **Evidence:** actual smoke exit0/4.73s GIT_PUBLIC_CLI_API_SMOKE_OK and GIT_PUBLIC_SMOKE_CLEANED true; failed root typecheck artifact23; git check-ignore -v names .gitignore:12 /plugins/quirky.mobile/assets/mobile/.
+- **Reversibility:** easy (throwaway verification environment)
+- **Confidence:** high for named exercised runtime paths; compiler and suite results recorded when available.
+- **Revisit if:** canonical merge-result typecheck reports a source error rather than inherited ignored output.
+- **Source:** assumed — autonomous
+
 ## Progress
-Claimed exactly one item on lane 1 and created build/fix-test-git-1028 from current build/roadmap. Baseline triage inventory and exact error excerpts read; read-only scout is mapping all failures before ownership slices are dispatched. No baseline tests rerun and no implementation edits yet. Next: commit ownership decisions/contracts, implement independent repairs, run affected canonical suite and scripts/typecheck plus actual public runtime smoke, perform one bounded cross-family review, catch up and land through canonical absolute queue path.
+Three test-only components audited, committed, merged and removed; sole roadmap catch-up complete. All four agents returned. Canonical full Git+scripts suite and clean-source verification typecheck are running. Actual isolated public CLI/API smoke passed with cleanup and explicit warning/driver limits above. Next: fix any exercised residual failure, complete one deep cross-family review round and accepted-finding batch, update receipts/notes, detach and land exactly fix-test-git-1028 through the canonical absolute controller.
