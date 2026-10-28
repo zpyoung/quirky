@@ -116,7 +116,7 @@ export function NewIssueDialog(props: TasksSurfaceProps) {
     void props.context.call('quirky.tasks/issueChoices', { kind: 'source', repoId: draft.repoId }).then((value) => {
       if (!active || request !== sourceLoad.current) return
       const raw = record(value)
-      const sources = array(raw?.sources).flatMap((value) => {
+      const sources = array(raw?.sources).flatMap<SourceChoice>((value) => {
         const source = record(value)
         if (!source) return []
         const id = source.id
