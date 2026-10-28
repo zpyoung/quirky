@@ -103,7 +103,7 @@ function isProfileUsage(value: unknown): value is ProfileUsage {
 function isPreferencesState(value: unknown): value is PreferencesState {
   if (!isRecord(value) || !Array.isArray(value.profiles) || !value.profiles.every(isProfileUsage)) return false
   if (!isRecord(value.identity) || (value.identity.selected !== 'clean' && value.identity.selected !== 'native') || (value.identity.active !== 'clean' && value.identity.active !== 'native') || typeof value.identity.restartRequired !== 'boolean' || value.identity.nativeSupported !== false) return false
-  if (!isRecord(value.imports) || value.imports.available !== false || typeof value.imports.reason !== 'string') return false
+  if (!isRecord(value.imports) || value.imports.available !== true || value.imports.destination !== 'managed-chrome' || value.imports.nativeSupported !== false || typeof value.imports.reason !== 'string') return false
   if (!isRecord(value.localhostLabels) || value.localhostLabels.available !== false || typeof value.localhostLabels.reason !== 'string') return false
   return true
 }
@@ -211,33 +211,6 @@ export function ProfileCreator({ context, onCreated, onCancel, onError }: {
   </div>
 }
 
-export function ImportDetails({ context, imports, loadError, onHideHint, onError }: {
-  context: UiPluginContext
-  imports: PreferencesState['imports'] | null
-  loadError?: string | null
-  onHideHint(): void
-  onError(message: string): void
-}) {
-  const [error, setError] = useState<string | null>(null)
-  const openSettings = async () => {
-    setError(null)
-    try {
-      await context.executeCommand(BROWSER_SETTINGS_COMMAND)
-    } catch (cause) {
-      const message = errorMessage(cause)
-      setError(message)
-      onError(message)
-    }
-  }
-  return <section aria-label="Cookie import details">
-    <h3>Import Cookies</h3>
-    {imports ? <p>Cookie import is unavailable: {imports.reason}</p> : loadError ? <p role="alert">Cookie import availability could not be loaded: {loadError}</p> : <p>Loading cookie import availability…</p>}
-    <p>Google logins are not imported. Sign in to Google directly in Quirky.</p>
-    {error && <p role="alert">{error}</p>}
-    <button type="button" onClick={() => void openSettings()}>Browser Settings</button>
-    <button type="button" onClick={onHideHint}>Hide Hint</button>
-  </section>
-}
 
 export function profileSourceLabel(profile: BrowserProfile): string | null {
   if ('sourceLabel' in profile && typeof profile.sourceLabel === 'string' && profile.sourceLabel.trim()) return profile.sourceLabel
