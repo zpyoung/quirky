@@ -1828,8 +1828,7 @@
         "term-daemon.md"
       ],
       "deps": [],
-      "status": "in-progress",
-      "lane": 10
+      "status": "done"
     },
     {
       "id": "m2-sidebar-extras-followup",
