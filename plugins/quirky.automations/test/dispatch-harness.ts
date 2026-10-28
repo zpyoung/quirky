@@ -1,5 +1,5 @@
 import { Database } from 'bun:sqlite'
-import type { PluginStore, StoreValue } from '@quirky/protocol'
+import type { PluginStore, StoreValue, WorktreeAutomationProvenanceRequest } from '@quirky/protocol'
 import type {
   AutomationDefinition,
   AutomationRun,
@@ -60,6 +60,8 @@ export interface DispatchHarness {
   context: AutomationDispatchContext
   hooks: AutomationDispatchHooks
   calls: PublicCall[]
+  provenanceRequests: WorktreeAutomationProvenanceRequest[]
+  provenanceRevoked: string[]
   sessions: Map<string, ScriptedSession>
   messages: Map<string, ScriptedMessage[]>
   changedRuns: string[]
@@ -71,7 +73,10 @@ export interface DispatchHarness {
   setCheckGate(value: Promise<ScriptedCheckResult>): void
   checkWasStarted: Promise<void>
   checkCancelCount: number
+  worktreeWasStarted: Promise<void>
+  setWorktreeGate(value: Promise<Record<string, unknown>>): void
   setWorktreeResult(value: Record<string, unknown>): void
+  setWorktreeError(error: Error | null): void
   onCreate: ((session: ScriptedSession, prompt: string) => void) | null
   onSend: ((session: ScriptedSession, prompt: string) => void) | null
   setNow(value: number): void
@@ -80,7 +85,6 @@ export interface DispatchHarness {
   waitForRunStatus(runId: string, status: AutomationRun['status']): Promise<AutomationRun>
   close(): void
 }
-
 export function makeDefinition(id: string, now: number, patch: Partial<AutomationDefinition> = {}): AutomationDefinition {
   return {
     id,
@@ -140,6 +144,8 @@ export function createDispatchHarness(now = 1_800_000_000_000): DispatchHarness 
   }
   const store = createAutomationStore(pluginStore)
   const calls: PublicCall[] = []
+  const provenanceRequests: WorktreeAutomationProvenanceRequest[] = []
+  const provenanceRevoked: string[] = []
   const sessions = new Map<string, ScriptedSession>()
   const messages = new Map<string, ScriptedMessage[]>()
   const listeners = new Set<(event: { type: string; data?: unknown }) => void>()
@@ -169,8 +175,12 @@ export function createDispatchHarness(now = 1_800_000_000_000): DispatchHarness 
   let checkError: Error | null = null
   const checkStarted = Promise.withResolvers<void>()
   const checkWasStarted = checkStarted.promise
+  const worktreeStarted = Promise.withResolvers<void>()
+  const worktreeWasStarted = worktreeStarted.promise
   let checkCancelCount = 0
   let worktreeResult: Record<string, unknown> | null = null
+  let worktreeError: Error | null = null
+  let worktreeGate: Promise<Record<string, unknown>> | null = null
   let onCreate: ((session: ScriptedSession, prompt: string) => void) | null = null
   let onSend: ((session: ScriptedSession, prompt: string) => void) | null = null
   let nextSession = 0
@@ -257,14 +267,6 @@ export function createDispatchHarness(now = 1_800_000_000_000): DispatchHarness 
         checkCancelCount += 1
         return { cancelled: true }
       }
-      if (method === 'quirky.worktree/create') {
-        if (worktreeResult) return worktreeResult
-        return {
-          worktree: { id: 'wt-created', path: '/repo-a/created', name: String(params.name), repoId: 'repo-a' },
-          setup: { ran: 'skipped' },
-          warnings: []
-        }
-      }
       if (method === 'quirky.agents/resolveLaunch') {
         const options = typeof params.options === 'object' && params.options !== null ? params.options as Record<string, unknown> : {}
         return {
@@ -273,6 +275,19 @@ export function createDispatchHarness(now = 1_800_000_000_000): DispatchHarness 
             ...(typeof options.effort === 'string' ? { effort: options.effort } : {})
           },
           launchSettings: { agent: params.agent, summary: 'resolved' }
+        }
+      }
+      if (method === 'quirky.worktree/create') {
+        if (worktreeError) throw worktreeError
+        if (worktreeGate) {
+          worktreeStarted.resolve()
+          return worktreeGate
+        }
+        if (worktreeResult) return worktreeResult
+        return {
+          worktree: { id: 'wt-created', path: '/repo-a/created', name: String(params.name), repoId: 'repo-a' },
+          setup: { ran: 'skipped' },
+          warnings: []
         }
       }
       if (method === 'quirky.structured/create') {
@@ -351,6 +366,21 @@ export function createDispatchHarness(now = 1_800_000_000_000): DispatchHarness 
       lanes.set(id, settled)
       return current.finally(() => { if (lanes.get(id) === settled) lanes.delete(id) })
     },
+    issueWorkspaceProvenance(runId, repoId) {
+      const run = store.getRun(runId)
+      const definition = run && store.get(run.automationId)
+      if (!run || !definition || repoId !== definition.projectId) throw new Error('dispatch provenance target mismatch')
+      const request = {
+        automationId: definition.id,
+        runId,
+        dispatchToken: `test-dispatch-capability-${runId}`
+      }
+      provenanceRequests.push(request)
+      return request
+    },
+    revokeWorkspaceProvenance(dispatchToken) {
+      provenanceRevoked.push(dispatchToken)
+    },
     changed(_automationId, runId) {
       changedRuns.push(runId)
       for (const notify of changeWaiters.get(runId) ?? []) notify()
@@ -358,6 +388,8 @@ export function createDispatchHarness(now = 1_800_000_000_000): DispatchHarness 
   }
   return {
     database,
+    provenanceRequests,
+    provenanceRevoked,
     store,
     context,
     hooks,
@@ -373,12 +405,15 @@ export function createDispatchHarness(now = 1_800_000_000_000): DispatchHarness 
     setCheckError(error: Error | null) { checkError = error },
     setCheckGate(value: Promise<ScriptedCheckResult>) { checkGate = value },
     checkWasStarted,
+    worktreeWasStarted,
     get checkCancelCount() { return checkCancelCount },
     setWorktreeResult(value: Record<string, unknown>) { worktreeResult = value },
     get onCreate() { return onCreate },
     set onCreate(value: ((session: ScriptedSession, prompt: string) => void) | null) { onCreate = value },
     get onSend() { return onSend },
     set onSend(value: ((session: ScriptedSession, prompt: string) => void) | null) { onSend = value },
+    setWorktreeError(error: Error | null) { worktreeError = error },
+    setWorktreeGate(value: Promise<Record<string, unknown>>) { worktreeGate = value },
     setNow(value: number) { nowValue = value },
     addDefinition(definition: AutomationDefinition) { return store.insert(definition) },
     addRun(definition: AutomationDefinition, trigger: 'manual' | 'scheduled' = 'scheduled') {

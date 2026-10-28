@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { Buffer } from 'node:buffer'
-import type { PluginContext, PluginStore } from '@quirky/protocol'
+import type { PluginContext, PluginStore, WorktreeAutomationProvenance, WorktreeAutomationProvenanceRequest } from '@quirky/protocol'
 import type {
   AutomationDefinition,
   AutomationPrecheck,
@@ -35,6 +35,9 @@ const MAX_OPTION_COUNT = 16
 const MAX_OPTION_VALUE_LENGTH = 128
 const MAX_JSON_RECORD_BYTES = 64 * 1024
 const MAX_SAFE_GRACE_MINUTES = Math.floor(Number.MAX_SAFE_INTEGER / 60_000)
+const WORKSPACE_PROVENANCE_TTL_MS = 120_000
+const MAX_WORKSPACE_PROVENANCE_CAPABILITIES = 1_024
+const MAX_WORKSPACE_PROVENANCE_TOKEN_LENGTH = 128
 
 type Params = Record<string, unknown>
 type RunReason = 'definition' | 'run'
@@ -47,6 +50,14 @@ type ScheduleInspection = {
   latest: number | null
 }
 type LaunchOverrides = NonNullable<AutomationDefinition['launchOverrides']>
+type WorkspaceProvenanceCapability = {
+  automationId: string
+  runId: string
+  repoId: string
+  expiresAt: number
+  expiryTimer: ReturnType<typeof setTimeout>
+  provenance: WorktreeAutomationProvenance
+}
 
 export type AutomationServiceContext = Pick<PluginContext, 'pluginId' | 'openStore' | 'emit' | 'error' | 'log'> & Partial<Pick<PluginContext, 'call'>>
 export type AutomationService = {
@@ -60,6 +71,7 @@ export type AutomationService = {
   schedule(params: Params): ScheduleInspection
   target(params: Params): Promise<AutomationTargetResolution>
   dispatch(params: Params): Promise<AutomationRun>
+  claimWorkspaceProvenance(params: Params): WorktreeAutomationProvenance
   tick(): Promise<ServiceResult>
   start(): Promise<void>
   dispose(): void
@@ -463,6 +475,54 @@ export function createAutomationService(
   const store = createAutomationStore(database)
   const lanes = new Map<string, Promise<void>>()
   const targets = options.targets
+  const workspaceProvenanceCapabilities = new Map<string, WorkspaceProvenanceCapability>()
+  const issueWorkspaceProvenance = (runId: string, repoId: string): WorktreeAutomationProvenanceRequest => {
+    const run = store.getRun(runId)
+    const definition = run ? store.get(run.automationId) : null
+    const owner = definition?.owner
+    if (
+      !run || !definition || run.status !== 'dispatching' || run.workspaceId !== null ||
+      definition.workspaceMode !== 'new_per_run' || definition.workspaceId !== null ||
+      definition.projectId !== repoId || owner?.kind !== 'local' || owner.repoId !== repoId || owner.workspaceId !== null
+    ) {
+      throw context.error('conflict', 'Automation dispatch cannot authorize this workspace creation.')
+    }
+    for (const [token, capability] of workspaceProvenanceCapabilities) {
+      if (capability.expiresAt <= now) {
+        clearTimeout(capability.expiryTimer)
+        workspaceProvenanceCapabilities.delete(token)
+      }
+    }
+    if (workspaceProvenanceCapabilities.size >= MAX_WORKSPACE_PROVENANCE_CAPABILITIES) {
+      throw context.error('conflict', 'Too many automation workspace creations are awaiting authorization.')
+    }
+    const dispatchToken = randomUUID()
+    const provenance: WorktreeAutomationProvenance = {
+      kind: 'created-by-automation',
+      automationId: definition.id,
+      automationName: definition.name,
+      runId: run.id,
+      runTitle: run.title,
+      projectId: definition.projectId,
+      hostId: 'local'
+    }
+    const expiresAt = now + WORKSPACE_PROVENANCE_TTL_MS
+    const expiryTimer = setTimeout(() => workspaceProvenanceCapabilities.delete(dispatchToken), WORKSPACE_PROVENANCE_TTL_MS)
+    workspaceProvenanceCapabilities.set(dispatchToken, {
+      automationId: definition.id,
+      runId: run.id,
+      repoId,
+      expiresAt,
+      expiryTimer,
+      provenance
+    })
+    return { automationId: definition.id, runId: run.id, dispatchToken }
+  }
+  const revokeWorkspaceProvenance = (dispatchToken: string): void => {
+    const capability = workspaceProvenanceCapabilities.get(dispatchToken)
+    clearTimeout(capability?.expiryTimer)
+    workspaceProvenanceCapabilities.delete(dispatchToken)
+  }
   if (options.createDispatcher && !targets) {
     throw context.error('invalid-params', 'An automation dispatcher requires a target resolver.')
   }
@@ -471,6 +531,8 @@ export function createAutomationService(
     targets,
     clock,
     inLane: <T>(automationId: string, work: () => T | Promise<T>) => runInLane(lanes, automationId, work),
+    issueWorkspaceProvenance,
+    revokeWorkspaceProvenance,
     changed: (automationId, runId) => mutationEvent(context, 'run', automationId, { runId, action: 'dispatched' })
   } : undefined
   const dispatcher: AutomationDispatcher | undefined = hooks && options.createDispatcher
@@ -686,6 +748,46 @@ export function createAutomationService(
     })
   })
 
+  const claimWorkspaceProvenance = (params: Params): WorktreeAutomationProvenance => handleError(context, () => {
+    const object = checkRecord(context, params, 'claimWorkspaceProvenance')
+    checkFields(context, object, ['automationId', 'runId', 'dispatchToken', 'repoId'], 'claimWorkspaceProvenance')
+    const automationId = requiredString(context, object.automationId, 'claimWorkspaceProvenance.automationId', MAX_ID_LENGTH, false)
+    const runId = requiredString(context, object.runId, 'claimWorkspaceProvenance.runId', MAX_ID_LENGTH, false)
+    const dispatchToken = requiredString(
+      context,
+      object.dispatchToken,
+      'claimWorkspaceProvenance.dispatchToken',
+      MAX_WORKSPACE_PROVENANCE_TOKEN_LENGTH,
+      false
+    )
+    const repoId = requiredString(context, object.repoId, 'claimWorkspaceProvenance.repoId', MAX_ID_LENGTH, false)
+    if (dispatchToken.length < 16) {
+      throw context.error('invalid-params', 'claimWorkspaceProvenance.dispatchToken is malformed.')
+    }
+    const capability = workspaceProvenanceCapabilities.get(dispatchToken)
+    clearTimeout(capability?.expiryTimer)
+    workspaceProvenanceCapabilities.delete(dispatchToken)
+    if (
+      !capability || capability.expiresAt <= clock() ||
+      capability.automationId !== automationId || capability.runId !== runId || capability.repoId !== repoId
+    ) {
+      throw context.error('conflict', 'Automation workspace provenance capability is invalid, expired, or already consumed.')
+    }
+    const run = store.getRun(runId)
+    const definition = store.get(automationId)
+    const owner = definition?.owner
+    if (
+      !run || !definition || run.status !== 'dispatching' || run.workspaceId !== null ||
+      run.automationId !== automationId || definition.workspaceMode !== 'new_per_run' ||
+      definition.workspaceId !== null || definition.projectId !== repoId ||
+      owner?.kind !== 'local' || owner.repoId !== repoId || owner.workspaceId !== null ||
+      definition.name !== capability.provenance.automationName || run.title !== capability.provenance.runTitle
+    ) {
+      throw context.error('conflict', 'Automation workspace provenance is no longer valid for this dispatch.')
+    }
+    return capability.provenance
+  })
+
   const dispatch = (params: Params) => handleAsyncError(context, async () => {
     const object = checkRecord(context, params, 'dispatch')
     checkFields(context, object, ['runId'], 'dispatch')
@@ -793,6 +895,7 @@ export function createAutomationService(
     schedule,
     target,
     dispatch,
+    claimWorkspaceProvenance,
     tick,
     async start() {
       if (started || disposed) return
@@ -807,6 +910,8 @@ export function createAutomationService(
     dispose() {
       if (disposed) return
       dispatcher?.dispose()
+      for (const capability of workspaceProvenanceCapabilities.values()) clearTimeout(capability.expiryTimer)
+      workspaceProvenanceCapabilities.clear()
       disposed = true
       if (timer !== undefined) clearInterval(timer)
       timer = undefined

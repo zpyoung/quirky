@@ -73,6 +73,61 @@ describe('automation run dispatcher', () => {
       command: 'bun test', startedAt: now, completedAt: now, pass: true, stdout: 'ok'
     })
   })
+  test('new-per-run dispatch scopes one provenance capability to workspace creation only', async () => {
+    const harness = fixture()
+    const { run } = newRun(harness, { workspaceMode: 'new_per_run', workspaceId: null })
+
+    const dispatched = await harness.dispatcher.dispatch(run.id)
+
+    const create = harness.calls.find((call) => call.method === 'quirky.worktree/create')
+    const request = create?.params.automationProvenanceRequest as Record<string, unknown>
+    expect(dispatched?.status).toBe('dispatched')
+    expect(harness.provenanceRequests).toHaveLength(1)
+    expect(request).toMatchObject({ automationId: run.automationId, runId: run.id })
+    expect(Object.keys(request).sort()).toEqual(['automationId', 'dispatchToken', 'runId'])
+    expect(harness.provenanceRequests[0]).toEqual(request)
+    expect(harness.provenanceRevoked).toEqual([request.dispatchToken])
+  })
+
+  test('existing-workspace dispatch does not issue provenance and failed creation revokes it', async () => {
+    const ordinary = fixture()
+    const existingRun = newRun(ordinary).run
+    await ordinary.dispatcher.dispatch(existingRun.id)
+    expect(ordinary.provenanceRequests).toEqual([])
+    expect(ordinary.provenanceRevoked).toEqual([])
+    expect(ordinary.calls.some((call) => call.method === 'quirky.worktree/create')).toBe(false)
+
+    const failed = fixture()
+    failed.setWorktreeError(new Error('create refused'))
+    const { run } = newRun(failed, { workspaceMode: 'new_per_run', workspaceId: null })
+    const refused = await failed.dispatcher.dispatch(run.id)
+    const request = failed.provenanceRequests[0]!
+
+    expect(refused?.status).toBe('dispatch_failed')
+    expect(failed.provenanceRevoked).toEqual([request.dispatchToken])
+  })
+  test('dispatcher disposal revokes an in-flight workspace capability', async () => {
+    const harness = fixture()
+    const gate = Promise.withResolvers<Record<string, unknown>>()
+    harness.setWorktreeGate(gate.promise)
+    const { run } = newRun(harness, { workspaceMode: 'new_per_run', workspaceId: null })
+    const dispatch = harness.dispatcher.dispatch(run.id)
+    await harness.worktreeWasStarted
+    const request = harness.provenanceRequests[0]!
+
+    harness.dispatcher.dispose()
+    expect(harness.provenanceRevoked).toEqual([request.dispatchToken])
+
+    gate.resolve({
+      worktree: { id: 'wt-created', path: '/repo-a/created', name: 'created', repoId: 'repo-a' },
+      setup: { ran: 'skipped' },
+      warnings: []
+    })
+    await dispatch
+    expect(harness.provenanceRevoked).toEqual([request.dispatchToken])
+  })
+
+
 
   test('manual dispatch bypasses a failing scheduled precheck', async () => {
     const harness = fixture()
