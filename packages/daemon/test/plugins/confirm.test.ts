@@ -94,18 +94,19 @@ function setup(options: { asks?: boolean; kernelDescribers?: Record<string, Kern
         return { askId }
       }
     }
-    methods['quirky.ask/wait'] = {
+    methods['quirky.ask/list'] = {
       data: { params: { type: 'object', additionalProperties: true }, readOnly: true },
-      run: (params) => {
-        const ask = asks.get(params.askId as string)
-        if (!ask) throw new DaemonError(RpcErrorCode.NotFound, `no such ask: ${params.askId}`)
-        return {
-          status: ask.status,
-          askId: params.askId,
-          answers: ask.status === 'answered' ? { confirm: { value: ask.value, source: 'input' } } : {},
-          skipped: []
-        }
-      }
+      run: (params) => [...asks]
+        .filter(([askId]) => params.askId === undefined || params.askId === askId)
+        .map(([askId, ask]) => ({
+          id: askId,
+          envelope: {
+            status: ask.status,
+            askId,
+            answers: ask.status === 'answered' ? { confirm: { value: ask.value, source: 'input' } } : {},
+            skipped: []
+          }
+        }))
     }
   }
   const handlers = {

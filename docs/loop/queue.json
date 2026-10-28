@@ -1608,7 +1608,8 @@
         "ui-terminal-theme",
         "ui-screenshot-review"
       ],
-      "status": "todo"
+      "status": "in-progress",
+      "lane": 2
     },
     {
       "id": "ui-restyle-browser",
@@ -1620,7 +1621,8 @@
         "ui-terminal-theme",
         "ui-screenshot-review"
       ],
-      "status": "todo"
+      "status": "in-progress",
+      "lane": 8
     },
     {
       "id": "ui-restyle-worktrees",
@@ -1632,7 +1634,8 @@
         "ui-terminal-theme",
         "ui-screenshot-review"
       ],
-      "status": "todo"
+      "status": "in-progress",
+      "lane": 12
     },
     {
       "id": "ui-restyle-agents",
@@ -1644,7 +1647,8 @@
         "ui-terminal-theme",
         "ui-screenshot-review"
       ],
-      "status": "todo"
+      "status": "in-progress",
+      "lane": 1
     },
     {
       "id": "ui-restyle-orchestration",
@@ -1882,6 +1886,56 @@
       "status": "done"
     },
     {
+      "id": "fix-test-agent-status-1028",
+      "milestone": "M7",
+      "title": "Repair end-phase plugins/quirky.agent-status failures from baseline 97aaa12d (full evidence docs/loop/reports/m7-test-triage.json, area plugins/quirky.agent-status). Files and exact failed tests: plugins/quirky.agent-status/test/transcript-producers.test.ts: captured provider status producers > private OSC status facts use the captured session owner and ignore provider identity changes; captured provider status producers > private OSC status facts are fenced to the provider turn as well as the session | plugins/quirky.agent-status/test/e2e/hooks-cli.e2e.test.ts: SC-27: the Agent status hooks switch > off removes the entries, a restart does nothing, setup refuses while off, and on installs again | plugins/quirky.agent-status/test/hooks.test.ts: SC-27: the Agent status hooks switch > off removes every entry and status shows hooks_disabled; the restart touches nothing; on installs again; SC-27: the Agent status hooks switch > setup while the switch is off refuses with the switch message; SC-27: the Agent status hooks switch > remove still works while the switch is off. Reproduce via canonical suite; fix consumer-visible defects and delete incidental wording/source/default/inventory mirror assertions rather than repinning them. Preserve fresh private process homes and cleanup. Cross-plugin failures must coordinate with the owning repair, not introduce aliases or bypasses.",
+      "docs": [],
+      "deps": [
+        "m7-test-triage"
+      ],
+      "status": "done"
+    },
+    {
+      "id": "fix-test-cli-1028",
+      "milestone": "M7",
+      "title": "Repair end-phase plugins/quirky.cli failures from baseline 97aaa12d (full evidence docs/loop/reports/m7-test-triage.json, area plugins/quirky.cli). Files and exact failed tests: plugins/quirky.cli/test/runtimes.test.ts: saved paired runtime APIs retain private offers but never return credentials from add, list, show, or status; a malformed pairing offer is rejected before any saved runtime is written. Reproduce via canonical suite; fix consumer-visible defects and delete incidental wording/source/default/inventory mirror assertions rather than repinning them. Preserve fresh private process homes and cleanup. Cross-plugin failures must coordinate with the owning repair, not introduce aliases or bypasses.",
+      "docs": [],
+      "deps": [
+        "m7-test-triage"
+      ],
+      "status": "done"
+    },
+    {
+      "id": "fix-test-apps-mobile-1028",
+      "milestone": "M7",
+      "title": "Repair end-phase apps/mobile failures from baseline 97aaa12d (full evidence docs/loop/reports/m7-test-triage.json, area apps/mobile). Files and exact failed tests: apps/mobile/test/panels/files-tasks.test.ts: mobile composer keeps setup and issue-command consent independent and forwards both displayed pins | apps/mobile/test/terminal-artifacts.test.tsx: artifact routes reject paths and only authorize methods bound to the selected route and grant; Session More actions opens artifacts for the exact selected terminal session | apps/mobile/test/session-tabs.test.tsx: Browser Watch scrolls the real page using coordinates in the displayed frame | apps/mobile/test/pages.test.ts: page bridge admits only empty-parameter loop summaries as a read-only consumer API; automation-created workspace filtering uses only durable provenance and persists its option | apps/mobile/test/bundle.test.ts: verified mobile page generations > downloads contiguous bounded chunks, verifies hashes, then activates the complete generation; verified mobile page generations > rejects a build ID that does not match the canonical manifest before staging; verified mobile page generations > a failed update never activates partial or hash-mismatched bytes and leaves the previous generation usable; verified mobile page generations > rejects unsupported shell versions, unsafe asset paths, duplicate paths and oversized manifests | apps/mobile/test/shell.test.ts: isolated page shell and generation storage > atomic generation activation exposes no partial files and keeps the prior verified generation on failure; isolated page shell and generation storage > reuses an unchanged verified generation and prunes stale cache records after activation. Reproduce via canonical suite; fix consumer-visible defects and delete incidental wording/source/default/inventory mirror assertions rather than repinning them. Preserve fresh private process homes and cleanup. Cross-plugin failures must coordinate with the owning repair, not introduce aliases or bypasses.",
+      "docs": [],
+      "deps": [
+        "m7-test-triage"
+      ],
+      "status": "done"
+    },
+    {
+      "id": "fix-test-ask-1028",
+      "milestone": "M7",
+      "title": "Repair end-phase plugins/quirky.ask failures from baseline 97aaa12d (full evidence docs/loop/reports/m7-test-triage.json, area plugins/quirky.ask). Files and exact failed tests: plugins/quirky.ask/test/presentation-store.test.ts: Q2: a timeout summary is retained for four seconds outside the pending badge | plugins/quirky.ask/test/asks.test.ts: the queue > SC-14: a second ask from the same session waits | plugins/quirky.ask/test/cli.test.ts: spec refusals > SC-3: header, label, description and default may say API token; --chunk-ms > SC-20: the real quirky binary prints the same two lines | plugins/quirky.ask/test/ui.test.ts: the Questions panel module > SC-23: option previews render rich Markdown inside a hostile-content-free sandbox | plugins/quirky.ask/test/v1-import.test.ts: migration 4 > adds nullable exact-owner and idempotency fields without changing imported Ask rows | plugins/quirky.ask/test/panel.test.ts: the Questions panel > SC-31: with a window connected and no panel open, a new ask opens the panel and sends no notify; the Questions panel > SC-31: an already open Questions panel is left alone for a second ask | plugins/quirky.ask/test/confirmation.test.ts: quirky.ask as the confirmation backend > D20: a destructive call opens a confirm ask for the caller and runs once it is answered yes; quirky.ask as the confirmation backend > a declined confirm ask refuses the call; quirky.ask as the confirmation backend > an unavailable confirmation is a refusal and never runs the destructive method. Reproduce via canonical suite; fix consumer-visible defects and delete incidental wording/source/default/inventory mirror assertions rather than repinning them. Preserve fresh private process homes and cleanup. Cross-plugin failures must coordinate with the owning repair, not introduce aliases or bypasses.",
+      "docs": [],
+      "deps": [
+        "m7-test-triage"
+      ],
+      "status": "done"
+    },
+    {
+      "id": "fix-test-packages-ui-1028",
+      "milestone": "M7",
+      "title": "Repair end-phase packages/ui failures from baseline 97aaa12d (full evidence docs/loop/reports/m7-test-triage.json, area packages/ui). Files and exact failed tests: packages/ui/test/gallery.test.tsx: typing, selecting a tab, and selecting a menu item update local status in both themes | packages/ui/test/terminal-theme.test.ts: the root dark appearance stays authoritative over a light system and inherits terminal base colors | packages/ui/test/exit.e2e.test.ts: SC-31: an ask opens the Questions panel, badges its toggle and announces itself; SC-29: a second pending ask stays listed after the first is answered, and answering it resolves its waiter | packages/ui/test/layout-shell.test.ts: a dialog taller than the window scrolls inside it, so its buttons stay reachable | packages/ui/test/routed-commands.test.ts: SC-41: with two windows the command runs once, in the one that last reported focus. Coordinate with ui-shell-slots for active shared-shell changes. Reproduce via canonical suite; fix consumer-visible defects and delete incidental wording/source/default/inventory mirror assertions rather than repinning them. Preserve fresh private process homes and cleanup. Cross-plugin failures must coordinate with the owning repair, not introduce aliases or bypasses.",
+      "docs": [],
+      "deps": [
+        "m7-test-triage"
+      ],
+      "status": "done"
+    },
+    {
       "id": "m7-sweep-sessions",
       "milestone": "M7",
       "docs": [
@@ -1960,50 +2014,6 @@
       "lane": 11
     },
     {
-      "id": "fix-test-apps-mobile-1028",
-      "milestone": "M7",
-      "title": "Repair end-phase apps/mobile failures from baseline 97aaa12d (full evidence docs/loop/reports/m7-test-triage.json, area apps/mobile). Files and exact failed tests: apps/mobile/test/panels/files-tasks.test.ts: mobile composer keeps setup and issue-command consent independent and forwards both displayed pins | apps/mobile/test/terminal-artifacts.test.tsx: artifact routes reject paths and only authorize methods bound to the selected route and grant; Session More actions opens artifacts for the exact selected terminal session | apps/mobile/test/session-tabs.test.tsx: Browser Watch scrolls the real page using coordinates in the displayed frame | apps/mobile/test/pages.test.ts: page bridge admits only empty-parameter loop summaries as a read-only consumer API; automation-created workspace filtering uses only durable provenance and persists its option | apps/mobile/test/bundle.test.ts: verified mobile page generations > downloads contiguous bounded chunks, verifies hashes, then activates the complete generation; verified mobile page generations > rejects a build ID that does not match the canonical manifest before staging; verified mobile page generations > a failed update never activates partial or hash-mismatched bytes and leaves the previous generation usable; verified mobile page generations > rejects unsupported shell versions, unsafe asset paths, duplicate paths and oversized manifests | apps/mobile/test/shell.test.ts: isolated page shell and generation storage > atomic generation activation exposes no partial files and keeps the prior verified generation on failure; isolated page shell and generation storage > reuses an unchanged verified generation and prunes stale cache records after activation. Reproduce via canonical suite; fix consumer-visible defects and delete incidental wording/source/default/inventory mirror assertions rather than repinning them. Preserve fresh private process homes and cleanup. Cross-plugin failures must coordinate with the owning repair, not introduce aliases or bypasses.",
-      "docs": [],
-      "deps": [
-        "m7-test-triage"
-      ],
-      "status": "in-progress",
-      "lane": 8
-    },
-    {
-      "id": "fix-test-packages-ui-1028",
-      "milestone": "M7",
-      "title": "Repair end-phase packages/ui failures from baseline 97aaa12d (full evidence docs/loop/reports/m7-test-triage.json, area packages/ui). Files and exact failed tests: packages/ui/test/gallery.test.tsx: typing, selecting a tab, and selecting a menu item update local status in both themes | packages/ui/test/terminal-theme.test.ts: the root dark appearance stays authoritative over a light system and inherits terminal base colors | packages/ui/test/exit.e2e.test.ts: SC-31: an ask opens the Questions panel, badges its toggle and announces itself; SC-29: a second pending ask stays listed after the first is answered, and answering it resolves its waiter | packages/ui/test/layout-shell.test.ts: a dialog taller than the window scrolls inside it, so its buttons stay reachable | packages/ui/test/routed-commands.test.ts: SC-41: with two windows the command runs once, in the one that last reported focus. Coordinate with ui-shell-slots for active shared-shell changes. Reproduce via canonical suite; fix consumer-visible defects and delete incidental wording/source/default/inventory mirror assertions rather than repinning them. Preserve fresh private process homes and cleanup. Cross-plugin failures must coordinate with the owning repair, not introduce aliases or bypasses.",
-      "docs": [],
-      "deps": [
-        "m7-test-triage"
-      ],
-      "status": "in-progress",
-      "lane": 1
-    },
-    {
-      "id": "fix-test-agent-status-1028",
-      "milestone": "M7",
-      "title": "Repair end-phase plugins/quirky.agent-status failures from baseline 97aaa12d (full evidence docs/loop/reports/m7-test-triage.json, area plugins/quirky.agent-status). Files and exact failed tests: plugins/quirky.agent-status/test/transcript-producers.test.ts: captured provider status producers > private OSC status facts use the captured session owner and ignore provider identity changes; captured provider status producers > private OSC status facts are fenced to the provider turn as well as the session | plugins/quirky.agent-status/test/e2e/hooks-cli.e2e.test.ts: SC-27: the Agent status hooks switch > off removes the entries, a restart does nothing, setup refuses while off, and on installs again | plugins/quirky.agent-status/test/hooks.test.ts: SC-27: the Agent status hooks switch > off removes every entry and status shows hooks_disabled; the restart touches nothing; on installs again; SC-27: the Agent status hooks switch > setup while the switch is off refuses with the switch message; SC-27: the Agent status hooks switch > remove still works while the switch is off. Reproduce via canonical suite; fix consumer-visible defects and delete incidental wording/source/default/inventory mirror assertions rather than repinning them. Preserve fresh private process homes and cleanup. Cross-plugin failures must coordinate with the owning repair, not introduce aliases or bypasses.",
-      "docs": [],
-      "deps": [
-        "m7-test-triage"
-      ],
-      "status": "in-progress",
-      "lane": 2
-    },
-    {
-      "id": "fix-test-ask-1028",
-      "milestone": "M7",
-      "title": "Repair end-phase plugins/quirky.ask failures from baseline 97aaa12d (full evidence docs/loop/reports/m7-test-triage.json, area plugins/quirky.ask). Files and exact failed tests: plugins/quirky.ask/test/presentation-store.test.ts: Q2: a timeout summary is retained for four seconds outside the pending badge | plugins/quirky.ask/test/asks.test.ts: the queue > SC-14: a second ask from the same session waits | plugins/quirky.ask/test/cli.test.ts: spec refusals > SC-3: header, label, description and default may say API token; --chunk-ms > SC-20: the real quirky binary prints the same two lines | plugins/quirky.ask/test/ui.test.ts: the Questions panel module > SC-23: option previews render rich Markdown inside a hostile-content-free sandbox | plugins/quirky.ask/test/v1-import.test.ts: migration 4 > adds nullable exact-owner and idempotency fields without changing imported Ask rows | plugins/quirky.ask/test/panel.test.ts: the Questions panel > SC-31: with a window connected and no panel open, a new ask opens the panel and sends no notify; the Questions panel > SC-31: an already open Questions panel is left alone for a second ask | plugins/quirky.ask/test/confirmation.test.ts: quirky.ask as the confirmation backend > D20: a destructive call opens a confirm ask for the caller and runs once it is answered yes; quirky.ask as the confirmation backend > a declined confirm ask refuses the call; quirky.ask as the confirmation backend > an unavailable confirmation is a refusal and never runs the destructive method. Reproduce via canonical suite; fix consumer-visible defects and delete incidental wording/source/default/inventory mirror assertions rather than repinning them. Preserve fresh private process homes and cleanup. Cross-plugin failures must coordinate with the owning repair, not introduce aliases or bypasses.",
-      "docs": [],
-      "deps": [
-        "m7-test-triage"
-      ],
-      "status": "in-progress",
-      "lane": 12
-    },
-    {
       "id": "fix-test-browser-1028",
       "milestone": "M7",
       "title": "Repair end-phase plugins/quirky.browser failures from baseline 97aaa12d (full evidence docs/loop/reports/m7-test-triage.json, area plugins/quirky.browser). Files and exact failed tests: plugins/quirky.browser/test/cookie-import-window.test.tsx: source detection begins only when opened and empty/error states retain file import recovery | plugins/quirky.browser/test/extras-api.test.ts: daemon imports an explicit JSON cookie source into a managed profile; page profile methods select, report, restore Default, and clone through the public API | plugins/quirky.browser/test/extras-automation.test.ts: SC3: cookies retain exact host, path, partition identity and storage stays in its profile/page scope; SC4: page profile rebinding is isolated and clone copies cookies transactionally into an independent page; SC5: history, advanced interactions, signed nth and full-page capture operate on the exact page; SC6-SC7: HAR, multiple intercept patterns, headers, emulation, clipboard and out-of-band dialog response are real; SC4 rollback: a failed cookie clone restores every destination identity | plugins/quirky.browser/test/extras-cli.test.ts: CLI keeps @file text literal and reads large fill values only through explicit file mode; file import uses an explicit --file source and the dispatcher confirmation path | plugins/quirky.browser/test/import.test.ts: daemon import replaces only safe families and accepts explicit file and JSON bytes; daemon import reads Chromium Local State profiles, decrypts v24 rows, and skips unreadable families; daemon imports Firefox SQLite/WAL and Safari binarycookies without modifying source bytes; daemon replacement rolls back exact cookie values, reports jobs, and drains imports on shutdown | plugins/quirky.browser/test/preferences-window.test.tsx: import controls detect only after expansion, preserve the settings link, and persist hint hiding. Reproduce via canonical suite; fix consumer-visible defects and delete incidental wording/source/default/inventory mirror assertions rather than repinning them. Preserve fresh private process homes and cleanup. Cross-plugin failures must coordinate with the owning repair, not introduce aliases or bypasses.",
@@ -2013,16 +2023,6 @@
       ],
       "status": "in-progress",
       "lane": 5
-    },
-    {
-      "id": "fix-test-cli-1028",
-      "milestone": "M7",
-      "title": "Repair end-phase plugins/quirky.cli failures from baseline 97aaa12d (full evidence docs/loop/reports/m7-test-triage.json, area plugins/quirky.cli). Files and exact failed tests: plugins/quirky.cli/test/runtimes.test.ts: saved paired runtime APIs retain private offers but never return credentials from add, list, show, or status; a malformed pairing offer is rejected before any saved runtime is written. Reproduce via canonical suite; fix consumer-visible defects and delete incidental wording/source/default/inventory mirror assertions rather than repinning them. Preserve fresh private process homes and cleanup. Cross-plugin failures must coordinate with the owning repair, not introduce aliases or bypasses.",
-      "docs": [],
-      "deps": [
-        "m7-test-triage"
-      ],
-      "status": "done"
     },
     {
       "id": "fix-test-editor-1028",
@@ -2246,6 +2246,16 @@
       "status": "todo"
     },
     {
+      "id": "fix-test-scripts-profile-timeout-1028",
+      "milestone": "M7",
+      "title": "Repair bun test scripts timeout in scripts/suite.test.ts:196: runFiles emits no profile rows when profiling is disabled. During caught-up fix-test-agent-status-1028 gates on macOS, bun test scripts returned125pass/1fail across126tests12files in284.50s; named case exceeded5000ms (5053.94ms). No diagnosed root cause or flake claim; no deadlines/assertions/source changed. Other suite fixture broken/flaky log lines are intentional nested test outputs, not extra top-level failures. Diagnose actual process/profile behavior and preserve deterministic private HOME/QUIRKY_HOME and child cleanup; delete incidental assertions rather than repin. Evidence docs/loop/decisions/fix-test-agent-status-1028.md and lane2 iteration11 raw artifact://30.",
+      "docs": [],
+      "deps": [
+        "m7-test-triage"
+      ],
+      "status": "todo"
+    },
+    {
       "id": "m7-api-freeze",
       "milestone": "M7",
       "title": "Plugin API 1.0: freeze and version the API, manifests declare their API version, publish an example distro",
@@ -2302,20 +2312,11 @@
         "fix-test-agents-1028",
         "fix-test-accounts-1028",
         "fix-test-packages-protocol-1028",
-        "fix-test-scripts-ui-review-1028"
+        "fix-test-scripts-ui-review-1028",
+        "fix-test-scripts-profile-timeout-1028"
       ],
       "status": "todo",
       "early": true
-    },
-    {
-      "id": "fix-test-scripts-profile-timeout-1028",
-      "milestone": "M7",
-      "title": "Repair bun test scripts timeout in scripts/suite.test.ts:196: runFiles emits no profile rows when profiling is disabled. During caught-up fix-test-agent-status-1028 gates on macOS, bun test scripts returned125pass/1fail across126tests12files in284.50s; named case exceeded5000ms (5053.94ms). No diagnosed root cause or flake claim; no deadlines/assertions/source changed. Other suite fixture broken/flaky log lines are intentional nested test outputs, not extra top-level failures. Diagnose actual process/profile behavior and preserve deterministic private HOME/QUIRKY_HOME and child cleanup; delete incidental assertions rather than repin. Evidence docs/loop/decisions/fix-test-agent-status-1028.md and lane2 iteration11 raw artifact://30.",
-      "docs": [],
-      "deps": [
-        "m7-test-triage"
-      ],
-      "status": "todo"
     }
   ]
 }

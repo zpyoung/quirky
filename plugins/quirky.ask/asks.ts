@@ -285,14 +285,15 @@ export class AskService {
   }
 
   /** Every local Ask in creation order; coordinator handoffs are available only to their exact waiter. */
-  list(pendingOnly: boolean, includeHandoff = false): Ask[] {
+  list(pendingOnly: boolean, includeHandoff = false, askId?: string): Ask[] {
     this.settleOverdue(true)
+    const idFilter = askId === undefined ? '1 = 1' : 'id = ?'
+    const pendingFilter = pendingOnly ? " AND status = 'pending'" : ''
     const handoffFilter = includeHandoff ? '' : ' AND handoff_question_id IS NULL'
-    const rows = this.store.all<AskRow>(
-      pendingOnly
-        ? `SELECT * FROM asks WHERE status = 'pending'${handoffFilter} ORDER BY created_seq, id`
-        : `SELECT * FROM asks WHERE 1 = 1${handoffFilter} ORDER BY created_seq, id`
-    )
+    const query = `SELECT * FROM asks WHERE ${idFilter}${pendingFilter}${handoffFilter} ORDER BY created_seq, id`
+    const rows = askId === undefined
+      ? this.store.all<AskRow>(query)
+      : this.store.all<AskRow>(query, askId)
     return rows.map((row) => toAsk(row, this.isQueued(row)))
   }
 

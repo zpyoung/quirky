@@ -695,6 +695,7 @@ describe('the Questions panel module', () => {
       '<video poster="https://attacker.invalid/poster"><source src="https://attacker.invalid/movie"></video>',
       '<button formaction="https://attacker.invalid/submit">submit outside a form</button>',
       '<div style="background-image: url(https://attacker.invalid/css)">styled</div>',
+      '<style>body { background: url(https://attacker.invalid/stylesheet); }</style>',
       '<link rel="stylesheet" href="https://attacker.invalid/style.css">',
       '<base href="https://attacker.invalid/">',
       '<meta http-equiv="refresh" content="0;url=https://attacker.invalid/redirect">'
@@ -729,8 +730,10 @@ describe('the Questions panel module', () => {
     expect(preview.querySelector('h2')?.textContent).toBe('Rich preview')
     expect(preview.querySelector('strong')?.textContent).toBe('bold')
     expect(preview.querySelector('code')?.textContent).toBe('code')
-    expect(preview.querySelector('script, img, iframe, object, embed, form, button, a, video, source, link, style, base')).toBeNull()
+    expect(preview.body.querySelector('script, img, iframe, object, embed, form, button, video, source, link, style, base')).toBeNull()
     expect([...preview.querySelectorAll('*')].some((node) => [...node.attributes].some((attribute) => /^on/i.test(attribute.name)))).toBe(false)
+    expect(preview.querySelector('a')?.textContent).toBe('hostile link')
+    expect([...preview.querySelectorAll('*')].some((node) => [...node.attributes].some((attribute) => /^(?:href|src|srcset|action|formaction|target|download)$/i.test(attribute.name)))).toBe(false)
     expect(preview.documentElement.innerHTML).not.toContain('https://attacker.invalid')
     const cspMeta = preview.querySelector<HTMLMetaElement>('meta[http-equiv="Content-Security-Policy"]')
     const csp = cspMeta?.content ?? ''

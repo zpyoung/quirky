@@ -186,8 +186,11 @@ async function settleUI(): Promise<void> {
   await Promise.resolve()
 }
 
-function clickButton(label: string): Promise<void> {
-  const button = [...container.querySelectorAll('button')].find((candidate) => candidate.textContent?.trim() === label || candidate.getAttribute('aria-label') === label)
+function clickButton(label: string | RegExp): Promise<void> {
+  const button = [...container.querySelectorAll('button')].find((candidate) => {
+    const accessibleName = candidate.getAttribute('aria-label') ?? candidate.textContent?.trim() ?? ''
+    return typeof label === 'string' ? accessibleName === label : label.test(accessibleName)
+  })
   if (!(button instanceof HTMLButtonElement)) throw new Error(`Missing button: ${label}`)
   return act(async () => {
     button.click()
@@ -496,11 +499,10 @@ test('import controls detect only after expansion, preserve the settings link, a
   await clickButton('Import Cookies')
   expect(calls.filter(({ method }) => method === 'quirky.browser/detectBrowsers')).toHaveLength(1)
   await clickButton('Import Cookies')
+  await clickButton(/^Browser Settings\b/)
+  expect(commands).toEqual(['command:quirky.browser/browserSettings'])
   await clickButton('Import browser data')
   expect(calls.filter(({ method }) => method === 'quirky.browser/detectBrowsers')).toHaveLength(2)
-
-  await clickButton('Browser Settings')
-  expect(commands).toEqual(['command:quirky.browser/browserSettings'])
   await clickButton('Hide Hint')
   expect(container.querySelector('[aria-label="Import browser data hint"]')).toBeNull()
   expect(calls).toContainEqual({ method: 'setting.set', params: { id: settingIds.importHintHidden, value: true } })
