@@ -187,5 +187,38 @@
 - **Revisit if:** the operator changes the completion rule.
 - **Source:** locked by docs/loop/LOOP.md
 
+## D18: Complete the route/bridge cutover and translate resolved history scopes
+- **Question:** how do the built panels reach the real native shell and public APIs without widening general RPC authority?
+- **Options:** separate ad-hoc panel host; canonical MobileRoute, verified bundle and trusted bridge cutover.
+- **Chose:** all ten canonical page kinds, paired-host deep links and PR/history aliases, native/home/settings/session navigation, strict route/grant/report gates and one shared public PANEL_METHOD_PARAMS ceiling. Direct notifications run across active visible routes and have dismissible, new-arrival-only alerts. Local history resolves within to authorized paths and removes the opaque selector before worker dispatch; remote forwarding retains its selector.
+- **Why:** the real engine accepts resolved paths but explicitly refuses unresolved within. Forwarding both caused public scoped searches to return unavailable. History transcript paths are optional public DTO metadata, not credentials; no unrequested transcript-path confidentiality fork was added. Credential-bearing launch plans remain withheld.
+- **Evidence:** native cutover ae428633:6tests24assertions; page cutover7ce7cfc6:5tests49assertions and production hash checks; sealed Git/editor957f161a:3tests75assertions; sealed Tasks/accounts/history507b2458:4tests98assertions; actual engine scope replay and service fix4eae7532.
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** a new page method or route changes the native ceiling.
+- **Source:** assumed — autonomous
+
+## D19: Require the native authenticated transcript proof before any RPC or binary data
+- **Question:** why did the actual native factory fail against the daemon despite independent encrypted API consumers working?
+- **Options:** ignore non-RPC messages; accept any status reply as proof; implement the missing strict control-frame transition.
+- **Chose:** exact v2 e2ee_authenticated keys and matching transcript hash, no early RPC/binary, duplicate/wrong/missing proof rejection, error classification preserving unavailable versus invalid pairing, and one properly observed handshake rejection lifecycle. Typed owned buffers avoid copies; secure rollback uses a named credential-read result and mutable transaction snapshot, not an unsafe cast. Declared native-origin peers match locked Expo/Zod versions.
+- **Why:** native acceptText treated the authenticated control proof as JSON-RPC and pairingProof had no resolve path. The real browser-host startup exposed this actual transport failure. The repair does not relax MAC/counter/session/pinned-key checks or suppress protocol errors.
+- **Evidence:** d5b6715a:18tests50assertions, including actual createMobileRpc/daemon interop; source failure before repair; final root and Expo typecheck exit0 after36f0e962 and the transport merge.
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** the authenticated control-frame contract is versioned.
+- **Source:** assumed — autonomous
+
+## D20: Land with typecheck only under the operator's build-first cutover
+- **Question:** what remains after the operator moved all testing and debugging into the end phase?
+- **Options:** continue suites/dogfood/review/debugging; commit built flows, pass typecheck and land now.
+- **Chose:** stop all further suites, review, dogfood and test-failure work. Native and browser surface campaigns are not claimed passed. One follow-up, sb-mobile-app-panels-unbuilt-flows, names only the three unbuilt implementation groups in D8–D10; no test, verification, review or debugging item is added. Keep historical observed results and the earlier isolation disclosure without treating them as a full-suite claim.
+- **Why:** the priority operator note and current LOOP Build first, test at the end explicitly make typecheck the only landing gate until m7-test-triage.
+- **Evidence:** authoritative git show build/roadmap:docs/loop/LOOP.md; canonical queue add exit0 for the single follow-up; deps ready:true; final bun run typecheck exit0 in25.41seconds. Earlier scripts68tests570assertions and page build777814bytes are historical, not additional gates.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** m7-test-triage is claimed.
+- **Source:** supersedes sb-mobile-app-panels D17; locked by docs/loop/LOOP.md
+
 ## Progress
-Feature source components merged and original trees removed. Parent safe metadata APIs and vault projection verified; scoped panel admission module written and unit-verified but not wired into shared base authorization until base lands perD7. Two isolated encrypted acceptance components exist at /tmp/quirky-panels-{git-editor-proof,activity-proof}, source-only and not yet accepted; parent must run them against final policy. Browser host helper is being authored under /tmp/quirky-panel-run.42yijv/ui against actual final PageApp and sealed RPC, no fake backend. Dependency still pending; current base through3fc2dceb merged, full native/pages/bundle still awaited. Final affected suite/scripts/typecheck/build/real UI/review/followup/land remain. No whole-suite local run: night mode reserves it for queue land.
+Built implementation and acceptance tests committed; every implementer worktree removed and every owned startup/check process finished. Dependencies ready:true. Root and Expo typecheck pass. The single implementation-only follow-up was added. Next: merge build/roadmap once, preserve incoming decisions, rerun only typecheck, commit/detach and canonical queue land. No further suite, UI campaign, review or failure debugging before the end phase. After land, remove the owned /tmp scratch and update loop notes with the controller's actual receipt.

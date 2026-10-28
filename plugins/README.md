@@ -359,6 +359,14 @@ same JSON-RPC API used by the desktop and CLI. The compatible Quirky phone app
 and its signed installation links are not distributed yet; the desktop does
 not redirect users to the incompatible Orca app or its hosted relay.
 
+The Expo source companion includes Source Control and diff-review notes,
+worktree-contained file previews/editing, GitHub Tasks and linked workspace
+creation, Claude/Codex account usage and selection, agent-history search/resume,
+and direct foreground notification subscriptions. Host and session navigation
+uses the same validated route contract as paired-host deep links.
+Native background push, non-GitHub Tasks providers and grant-authorized terminal
+artifacts remain implementation work in `sb-mobile-app-panels-unbuilt-flows`.
+
 ```sh
 quirky mobile info --json
 quirky mobile state --json
