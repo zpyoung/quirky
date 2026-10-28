@@ -65,7 +65,7 @@ async function startWithSessions() {
   const builtinPluginsDir = join(home, 'builtin')
   mkdirSync(builtinPluginsDir, { recursive: true })
   const pluginsRoot = join(import.meta.dir, '..', '..')
-  for (const id of ['quirky.repo', 'quirky.worktree', 'quirky.session']) {
+  for (const id of ['quirky.cli', 'quirky.repo', 'quirky.worktree', 'quirky.session']) {
     symlinkSync(join(pluginsRoot, id), join(builtinPluginsDir, id))
   }
   symlinkSync(join(pluginsRoot, 'quirky.session', 'test', 'fakes', 'quirky.agents'), join(builtinPluginsDir, 'quirky.agents'))
@@ -309,7 +309,7 @@ describe('worktree identity and delayed group assignment', () => {
       stat: () => replacement
     }
     const env: SetEnv = {
-      store: { transaction: () => { throw new Error('a stale assignment must not write') } } as unknown as PluginStore,
+      store: { get: () => null, transaction: () => { throw new Error('a stale assignment must not write') } } as unknown as PluginStore,
       fail: (kind, message, data) => Object.assign(new Error(message), {
         code: kind === 'conflict' ? RpcErrorCode.Conflict : kind === 'not-found' ? RpcErrorCode.NotFound : RpcErrorCode.InvalidParams,
         ...(data === undefined ? {} : { data })

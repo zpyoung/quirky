@@ -9,7 +9,7 @@ const { scratch } = isolateGitConfig()
 function testBuiltins(fakeHosting = false, includeAgentStatus = false): string {
   const directory = join(scratch(), 'builtin')
   mkdirSync(directory, { recursive: true })
-  const plugins = ['quirky.repo', 'quirky.worktree', 'quirky.session', 'quirky.agents', 'quirky.git', 'quirky.sidebar-extras']
+  const plugins = ['quirky.cli', 'quirky.repo', 'quirky.worktree', 'quirky.session', 'quirky.agents', 'quirky.git', 'quirky.sidebar-extras']
   for (const name of [...plugins, ...(includeAgentStatus ? ['quirky.agent-status'] : [])]) {
     symlinkSync(join(builtinsDir(), name), join(directory, name))
   }

@@ -113,7 +113,7 @@ test('public loop create, hosted-view binding and stop stay in sync with the sid
   const heldTurn = Promise.withResolvers<string>()
   releaseTurn = () => heldTurn.resolve('iteration completed')
   rig = await startLoopRig({
-    extraPlugins: ['quirky.terminal', 'quirky.git', 'quirky.sidebar-extras'],
+    extraPlugins: ['quirky.cli', 'quirky.terminal', 'quirky.git', 'quirky.sidebar-extras'],
     script: async () => {
       turnStarted.resolve()
       return heldTurn.promise

@@ -48,9 +48,13 @@ test('the CLI prefetch is consumed by canonical create only for the exact repo a
   const [createdOut, createdErr, createCode] = await Promise.all([new Response(cli.stdout).text(), new Response(cli.stderr).text(), cli.exited])
   expect(createCode).toBe(0)
   expect(createdErr).toBe('')
-  expect(JSON.parse(createdOut)).toMatchObject({
-    ok: true,
-    result: { worktree: { name: 'from-prepared' }, creationReceipt: { preparedCheckout: true } }
+  const created = JSON.parse(createdOut) as {
+    worktree: { name: string }
+    creationReceipt: { preparedCheckout: boolean }
+  }
+  expect(created).toMatchObject({
+    worktree: { name: 'from-prepared' },
+    creationReceipt: { preparedCheckout: true }
   })
   expect(countRegistrations(w.dir)).toBe(2)
   expect(git(w.dir, 'worktree', 'list', '--porcelain')).not.toContain('.quirky-preparing')
@@ -132,6 +136,7 @@ test('restart removes only the exact owned preparation and preserves a foreign l
   mkdirSync(join(w.root, '.quirky-preparing'), { recursive: true })
   git(w.dir, 'worktree', 'add', '--detach', '--no-checkout', '--lock', '--reason', 'foreign-owner', foreignPath, 'origin/main')
   await w.t.restart()
+  await w.t.client.callAny('quirky.worktree/list')
   const registrations = git(w.dir, 'worktree', 'list', '--porcelain')
   expect(registrations).toContain(foreignPath)
   expect(registrations).not.toContain(preparedPath)
