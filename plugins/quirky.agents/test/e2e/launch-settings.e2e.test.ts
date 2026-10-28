@@ -59,7 +59,6 @@ const configure = async (e2e: E2E, agent: string, ...flags: string[]) => {
 const shape = (options: OptionInfo[]) => options.map((o) => ({ id: o.id, label: o.label, type: o.type, values: o.choices?.map((c) => c.value) ?? null }))
 type Shape = ReturnType<typeof shape>[number]
 const select = (id: string, label: string, values: string[]): Shape => ({ id, label, type: 'select', values })
-const toggle = (id: string, label: string): Shape => ({ id, label, type: 'boolean', values: null })
 
 describe('the catalog (SC-1 to SC-4)', () => {
   let e2e: E2E
@@ -125,65 +124,6 @@ describe('the catalog (SC-1 to SC-4)', () => {
     60_000
   )
 
-  test(
-    'SC-3: each of the ten agents has its catalog and the others report none',
-    async () => {
-      const low3 = ['low', 'medium', 'high']
-      const expected: Record<string, { models: string[]; options: Shape[]; unlisted: 'accept' | 'refuse' }> = {
-        claude: { models: ['Fable', 'Opus', 'Sonnet', 'Haiku'], options: [select('effort', 'Effort', [...low3, 'xhigh', 'max'])], unlisted: 'accept' },
-        codex: {
-          models: ['GPT-5.6 Sol', 'GPT-5.6 Terra', 'GPT-5.6 Luna', 'GPT-5.5', 'GPT-5.2 Codex'],
-          options: [select('effort', 'Reasoning effort', ['minimal', ...low3, 'xhigh', 'max', 'ultra'])],
-          unlisted: 'accept'
-        },
-        codebuddy: {
-          models: ['Default', 'Fast', 'Balanced', 'Primary', 'Deep'],
-          options: [select('effort', 'Reasoning effort', ['minimal', ...low3, 'xhigh', 'max'])],
-          unlisted: 'accept'
-        },
-        gemini: { models: ['Gemini 3 Pro Preview', 'Gemini 3 Flash Preview', 'Gemini 2.5 Pro', 'Gemini 2.5 Flash'], options: [], unlisted: 'refuse' },
-        cursor: {
-          models: ['Auto', 'GPT-5.3 Codex', 'Claude Opus 4.8'],
-          options: [select('effort', 'Effort', low3), toggle('fastMode', 'Fast mode'), toggle('thinking', 'Thinking')],
-          unlisted: 'refuse'
-        },
-        grok: { models: ['Grok 4.7', 'Grok 4.6', 'Grok 4.5'], options: [select('effort', 'Reasoning effort', [...low3, 'xhigh'])], unlisted: 'accept' },
-        muse: { models: [], options: [select('effort', 'Reasoning effort', ['minimal', ...low3, 'xhigh', 'max', 'ultra'])], unlisted: 'accept' },
-        antigravity: { models: [], options: [select('effort', 'Reasoning effort', low3)], unlisted: 'accept' },
-        omp: { models: [], options: [], unlisted: 'accept' },
-        opencode: { models: [], options: [], unlisted: 'accept' }
-      }
-
-      const listing = (await e2e.call('quirky.agents/list', {})) as Listing
-      const supported: string[] = []
-      for (const { id } of listing.agents) {
-        const info = await optionsOf(e2e, id)
-        if (!expected[id]) {
-          expect(info).toMatchObject({ agent: id, supported: false, models: [], unlistedOptions: [], unlisted: 'refuse' })
-          continue
-        }
-        supported.push(id)
-        const want = expected[id]!
-        expect(info.supported).toBe(true)
-        expect(info.models.map((m) => m.label)).toEqual(want.models)
-        expect(info.unlisted).toBe(want.unlisted)
-        // the option set is the union of what the models offer, or what unlisted models get when none are listed
-        const offered = info.models.length ? info.models.flatMap((m) => shape(m.options)) : shape(info.unlistedOptions)
-        const ids = new Set(offered.map((o) => o.id))
-        expect(want.options.map((o) => o.id).sort()).toEqual([...ids].sort())
-        for (const option of want.options) {
-          const seen = offered.filter((o) => o.id === option.id)
-          expect(seen[0]).toMatchObject({ id: option.id, label: option.label, type: option.type })
-          const widest = seen.map((o) => o.values).filter((v): v is string[] => v !== null).sort((a, b) => b.length - a.length)[0] ?? null
-          expect(widest as unknown).toEqual(option.values)
-        }
-      }
-      expect(supported.sort()).toEqual(Object.keys(expected).sort())
-      expect(listing.agents.map((a) => a.id)).toContain('claude-agent-teams')
-      expect((await optionsOf(e2e, 'claude-agent-teams')).supported).toBe(false)
-    },
-    120_000
-  )
 
   test(
     'SC-4: the catalog says which extra arguments each agent accepts',

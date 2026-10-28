@@ -303,7 +303,8 @@ test(
     expect(report.active).toBe(session.id)
     await ui.el(`[data-session="${session.id}"] .qt-structured-body .structured`)
     expect(ui.q(`[data-session="${session.id}"] .xterm`)).toBeNull()
-    expect(ui.callsTo('workspace').at(-1)).toEqual({ workspace: 'main' })
+    const sourceWorktree = (await h.sessionRecord(session.id)).worktreeId
+    expect(ui.callsTo('workspace').at(-1)).toEqual({ workspace: sourceWorktree })
     expect(ui.callsTo('adoptSession').at(-1)).toMatchObject({ group: group.id, session: session.id })
   },
   SCENARIO_MS

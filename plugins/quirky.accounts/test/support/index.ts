@@ -252,10 +252,13 @@ export async function startAccounts(options: AccountsOptions = {}): Promise<Acco
   for (const plugin of options.plugins ?? []) {
     symlinkSync(resolve(PLUGIN_DIR, `../${plugin}`), join(builtinPluginsDir, plugin))
   }
+  if (options.plugins?.includes('quirky.worktree') && !options.plugins.includes('quirky.cli')) {
+    symlinkSync(resolve(PLUGIN_DIR, '../quirky.cli'), join(builtinPluginsDir, 'quirky.cli'))
+  }
   process.env.HOME = userHome
   process.env.QUIRKY_HOME = home
   process.env.PATH = `${fakeBin}:${originalEnv.get('PATH') ?? ''}`
-  delete process.env.QUIRKY_AGENT_SEARCH_DIRS
+  process.env.QUIRKY_AGENT_SEARCH_DIRS = fakeBin
   for (const key of PROVIDER_ENV_KEYS) delete process.env[key]
   delete process.env.ZDOTDIR
   delete process.env.ENV

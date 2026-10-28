@@ -6,7 +6,16 @@ import { startHarness, type Harness } from '../../../../packages/daemon/test/hel
 import { writeEveryAgentFixture } from '../fixtures/scanner-fixtures'
 
 const SOURCE_HOME_ENV = 'QUIRKY_VAULT_SOURCE_HOME'
-const PLUGIN_IDS = ['quirky.repo', 'quirky.worktree', 'quirky.agents', 'quirky.session', 'quirky.terminal', 'quirky.vault', 'quirky.ask']
+const PLUGIN_IDS = [
+  'quirky.repo',
+  'quirky.cli',
+  'quirky.worktree',
+  'quirky.agents',
+  'quirky.session',
+  'quirky.terminal',
+  'quirky.vault',
+  'quirky.ask'
+]
 const PLUGINS_ROOT = join(import.meta.dir, '..', '..', '..')
 
 export type FixtureExpectation = {

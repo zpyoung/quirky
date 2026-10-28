@@ -13,3 +13,6 @@ plugins/quirky.browser/test/import.test.ts  real managed-profile cookie imports 
 plugins/quirky.browser/test/extras-api.test.ts  public profile/cookie API integration launches installed macOS Chrome; remote host has no Chrome/Chromium
 plugins/quirky.browser/test/extras-cli.test.ts  CLI fill and import acceptance launches installed macOS Chrome; remote host has no Chrome/Chromium
 plugins/quirky.mobile/test/browser-watch.test.ts  owned phone Watch frames/input require installed macOS Chrome; remote host has no Chrome/Chromium
+plugins/quirky.terminal/test/artifacts.test.ts  requires the supported Darwin terminal host and O_NOFOLLOW/O_NONBLOCK; production intentionally refuses artifact access on Linux
+plugins/quirky.terminal/test/artifacts-api.test.ts  artifact capability behavior requires Darwin/O_NOFOLLOW/O_NONBLOCK; the Linux platform refusal precedes grants and inode checks
+plugins/quirky.terminal/test/emulator.test.ts  iOS Simulator preview intentionally requires macOS before invoking the owned xcrun fixture

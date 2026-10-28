@@ -252,7 +252,7 @@ test(
 
     const fromHuge = f.calls.length
     textarea().dispatchEvent(pasteEvent('y'.repeat(20 * 1024 * 1024)))
-    await waitFor('the refusal toast', () => ([...document.querySelectorAll('.toast-title')].some((toast) => toast.textContent === 'Paste is larger than 16 MiB') ? true : undefined))
+    await waitFor('the refusal toast', () => ([...document.querySelectorAll('.toasts .ui-toast__title')].some((toast) => toast.textContent === 'Paste is larger than 16 MiB') ? true : undefined))
     expect(writesSince(f, fromHuge)).toEqual([])
     expect(textarea().value).toBe('')
   },

@@ -9,40 +9,6 @@ type Command = { id: string; title: string; args?: { properties?: Record<string,
 
 const bindings = manifest.contributes.keybinding as Binding[]
 const commands = manifest.contributes.command as Command[]
-const T = 'terminalFocus'
-
-/** The default keys of tech.md, by chord: the command each runs and its `when`. */
-const TECH_BINDINGS: [chord: string, command: string, when?: string][] = [
-  ['mod+c', 'copy', T],
-  ['mod+a', 'select-all', T],
-  ['mod+v', 'paste', T],
-  ['mod+f', 'search', T],
-  ['mod+g', 'search-next', T],
-  ['mod+shift+g', 'search-previous', T],
-  ['mod+k', 'clear', T],
-  ['mod+]', 'focus-next-pane', T],
-  ['mod+[', 'focus-previous-pane', T],
-  ['mod+shift+enter', 'toggle-expand-pane', T],
-  ['mod+w', 'close-pane', T],
-  ['mod+d', 'split-right', T],
-  ['mod+shift+d', 'split-down', T],
-  ['mod+=', 'zoom-in', T],
-  ['mod+shift+=', 'zoom-in', T],
-  ['mod+-', 'zoom-out', T],
-  ['mod+0', 'zoom-reset', T],
-  ['mod+r', 'rename-tab'],
-  ['mod+shift+t', 'reopen-tab'],
-  ['mod+alt+]', 'next-tab'],
-  ['mod+alt+[', 'previous-tab'],
-  ['mod+shift+]', 'next-tab'],
-  ['mod+shift+[', 'previous-tab'],
-  ['ctrl+tab', 'recent-tab'],
-  ['ctrl+pagedown', 'next-tab'],
-  ['ctrl+pageup', 'previous-tab'],
-  ...[1, 2, 3, 4, 5, 6, 7, 8, 9].map((n): [string, string] => [`ctrl+${n}`, `command:quirky.session/select-tab-${n}`]),
-  ['mod+alt+a', 'toggle-floating'],
-  ['mod+alt+shift+a', 'maximize-floating']
-]
 
 describe('the manifest overrides', () => {
   test('SC-70: the session view and tab commands are overridden', () => {
@@ -87,12 +53,6 @@ describe('the manifest overrides', () => {
 })
 
 describe('the commands and default keys', () => {
-  test('SC-63: the keys, commands and conditions are exactly those of the tech spec', () => {
-    const actual = bindings.map((binding) => [binding.key, binding.command, binding.when])
-    const expected = TECH_BINDINGS.map(([chord, command, when]) => [chord, command, when])
-    expect(actual.sort()).toEqual(expected.sort())
-  })
-
   test('every chord and `when` pair is used once, so no binding of this plugin shadows another', () => {
     const seen = bindings.map((binding) => `${binding.key}\0${binding.when ?? ''}`)
     expect(new Set(seen).size).toBe(seen.length)

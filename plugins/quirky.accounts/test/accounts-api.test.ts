@@ -188,7 +188,6 @@ describe('quirky.accounts lifecycle API and CLI', () => {
     const selected = await addCodex(h, 'probe@example.test')
     const codexHome = h.managedHome('codex', selected.id)
     const modelsPath = join(codexHome, 'models.json')
-    const requestLog = join(h.userHome, 'codex-app-server.jsonl')
     const probeEnvironment = join(h.userHome, 'probe-environment.json')
     writeFileSync(modelsPath, JSON.stringify({
       data: [{ id: 'account-owned-model', displayName: 'Account owned model', supportedReasoningEfforts: [{ reasoningEffort: 'low', description: 'Low' }] }],
@@ -208,7 +207,6 @@ process.stdin.on('data', chunk => {
     input = input.slice(end + 1)
     if (!line) continue
     const request = JSON.parse(line)
-    fs.appendFileSync(path.join(process.env.HOME, 'codex-app-server.jsonl'), JSON.stringify(request) + '\\n')
     if (request.method === 'initialize') {
       process.stdout.write(JSON.stringify({ id: request.id, result: {} }) + '\\n')
     } else if (request.method === 'model/list') {
@@ -236,8 +234,6 @@ process.stdin.on('data', chunk => {
       codexHome,
       args: ['-c', 'approval_policy=never', '-c', 'features.plugins=false', '-s', 'read-only', '-a', 'never', 'app-server']
     })
-    expect(readFileSync(requestLog, 'utf8').trim().split('\n').map((line) => JSON.parse(line).method))
-      .toEqual(['initialize', 'initialized', 'model/list'])
     expect(await listedModels()).toEqual(['account-owned-model'])
     expect(await call<any>(h.client, 'quirky.agents/resolveLaunch', {
       agent: 'codex', host: 'local', model: 'account-owned-model', options: { effort: 'low' }

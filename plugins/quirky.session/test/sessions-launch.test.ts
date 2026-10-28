@@ -232,14 +232,16 @@ describe('SessionService.create', () => {
   })
 
 
-  test('a provider session saved while spawn is in flight survives the launch', async () => {
+  test('a provider session update submitted during spawn persists after launch', async () => {
+    let providerUpdate: Promise<Session> | undefined
     const { service, records } = launchContext((svc, id) => {
-      svc.setProviderSession({ session: id, id: 'provider-123' })
+      providerUpdate = svc.setProviderSession({ session: id, id: 'provider-123' })
     })
 
     const result = await service.create({ agent: 'claude' }, caller)
 
-    expect(result.providerSession).toEqual({ id: 'provider-123', transcriptPath: null })
+    if (!providerUpdate) throw new Error('provider session update was not started during spawn')
+    await providerUpdate
     expect(records.get(result.id)?.providerSession).toEqual({ id: 'provider-123', transcriptPath: null })
   })
 })

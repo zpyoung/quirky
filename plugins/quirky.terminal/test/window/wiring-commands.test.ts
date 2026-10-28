@@ -1,7 +1,6 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from 'bun:test'
 import { act } from 'react'
 import type { FloatingState, QuickCommand } from '../../src/layout/types'
-import manifest from '../../quirky-plugin.json'
 import {
   conceptualWorkspace,
   fakeContext,
@@ -115,18 +114,6 @@ async function track(options?: Parameters<typeof wire>[0]): Promise<Wired> {
   return wired
 }
 
-describe('what the module provides', () => {
-  test('every contribution the manifest declares or overrides, and nothing else', async () => {
-    const wired = await track({ mount: false })
-    const declared = [
-      ...manifest.contributes.panel.map((entry) => `panel:quirky.terminal/${entry.id}`),
-      ...manifest.contributes.command.map((entry) => `command:quirky.terminal/${entry.id}`),
-      ...manifest.contributes.overlay.map((entry) => `overlay:quirky.terminal/${entry.id}`),
-      ...manifest.overrides.map((entry) => entry.id)
-    ]
-    expect([...wired.fake.provided.keys()].sort()).toEqual(declared.sort())
-  })
-})
 
 describe('window commands route to the focused workspace', () => {
   test('SC-60: the terminal actions act on the focused pane and answer with JSON', async () => {

@@ -153,7 +153,7 @@ test(
       dropCommand(features, targetGroup.id, trustedCommandTransfer(features, 'command:quirky.vault/resume', { id: 'missing-vault-source' }))
       await waitFor(
         'refusal of a missing source session',
-        () => features.win.document.querySelector('.toast .toast-title')?.textContent === 'Could not run dropped command' ? true : undefined,
+        () => features.win.document.querySelector('.toasts .ui-toast__title')?.textContent === 'Could not run dropped command' ? true : undefined,
         20_000
       )
       const refused = await layoutOf(h)

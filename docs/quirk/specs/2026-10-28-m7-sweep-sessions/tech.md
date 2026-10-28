@@ -1,6 +1,6 @@
 # Session extras sweep technical specification
 
-Status: Combined Codex promote/refute review completed; caller dispositions and corrections recorded in this item's decision log. Implementation not yet started.
+Status: Local flow repairs implemented and the single roadmap catch-up integrated. Current typecheck and packaged build pass; final affected-consumer verification and cross-family review are in progress. Visual/native evidence retains the limits recorded in the decision log.
 Logic: [scope and scenarios](logic.md#behavior-and-acceptance-matrix).
 
 ## Architecture
@@ -31,7 +31,7 @@ Supports [A1–A5](logic.md#behavior-and-acceptance-matrix). No durable schema m
 Supports [execution contract](logic.md#execution-contract).
 
 ### A: Accounts responsive suffix and sign-in opening
-One isolated worktree, one task, no semantic dependencies. Allowed source files: `plugins/quirky.accounts/src/window/Usage.tsx`, `plugins/quirky.accounts/src/window/styles.ts`, `plugins/quirky.accounts/src/window/AccountsSettings.tsx`, `plugins/quirky.accounts/src/window/model.ts`, and optional new `plugins/quirky.accounts/src/window/usage-fit.ts`. New regression targets: `plugins/quirky.accounts/test/sweep-ui.test.tsx` and `plugins/quirky.accounts/test/sweep-fit.test.ts`. Tests expose fit boundary transitions and captured login URL/error behavior, never source-text/CSS-string pins or copied constants. A numeric fit test covers gap/button-width invariants; actual browser measurement proves layout containment. Parent runs `bun test plugins/quirky.accounts/test/sweep-fit.test.ts plugins/quirky.accounts/test/sweep-ui.test.tsx` against the authored files, followed by affected suites.
+One isolated worktree, one task, no semantic dependencies. Allowed source files: `plugins/quirky.accounts/src/window/Usage.tsx`, `plugins/quirky.accounts/src/window/styles.ts`, `plugins/quirky.accounts/src/window/AccountsSettings.tsx`, `plugins/quirky.accounts/src/window/model.ts`, and optional new `plugins/quirky.accounts/src/window/usage-fit.ts`. New regression targets: `plugins/quirky.accounts/test/sweep-ui.test.tsx` and `plugins/quirky.accounts/test/sweep-fit.test.ts`. Tests expose fit boundary transitions and captured login URL/error behavior, never source-text/CSS-string pins or copied constants. A numeric fit test covers gap/button-width invariants; actual browser measurement proves layout containment. Under the operator's later policy, parent runs `bun scripts/suite.ts plugins/quirky.accounts/test/sweep-fit.test.ts plugins/quirky.accounts/test/sweep-ui.test.tsx`, followed by affected suites.
 
 ### B: External isolated real-runtime scene and probes
 No repository edits. Own `/tmp/quirky-session-sweep.2Whr6x/runtime/**` only. Prepare real daemon+PTY fixture using built-in UI dist assets and owned fake provider executables/native-format transcripts. Prepare scripts that drive public API and generated CLI for all five owners, and a long-lived scene for parent guarded web use. Every runtime has fresh QUIRKY_HOME/HOME/provider/XDG dirs, fake keychain where required, and deterministic no-network provider fixtures. Close clients/daemon/PTY/children in finally; explicit signal cleanup for the long-lived scene. Reuse existing acceptance harnesses/data shapes rather than inventing successful responses. Parent runs literal scripts from their documented runtime commands after both agents return. No test/build/lint/typecheck/check/formatter mid-flight, no provider network or model calls. Return exact commands, metadata fields, safety/cleanup mechanics and any uncovered scenarios; no passing claims.
@@ -57,7 +57,7 @@ Supports the complete [acceptance matrix](logic.md#behavior-and-acceptance-matri
 
 COMMAND: `bun scripts/suite.ts plugins/quirky.accounts plugins/quirky.vault plugins/quirky.handoff plugins/quirky.session-info plugins/quirky.terminal-dock plugins/quirky.terminal plugins/quirky.session plugins/quirky.agents packages/ui`
 
-COMMAND: `bun test scripts`
+COMMAND: `bun scripts/suite.ts scripts`
 
 COMMAND: `bun run typecheck`
 
@@ -75,3 +75,6 @@ Supports the dated [logic amendments](logic.md#status--amendments), not a broade
 - Discovery diagnostic owns `plugins/quirky.agents/src/service.ts` only for the proven direct-process executable resolution root. `plugins/quirky.agents/src/detect.ts:106-134` distinguishes `locate().path` from `resolveExecutable()`, which deliberately returns null for on-login-PATH commands because shell launches need no override. Direct model probes need the located path for both cases. Preserve current provider-account environment and nonempty snapshot contracts. Existing provider discovery/API tests supply the regression; unknown login-timeout cause does not justify a speculative timeout/retry change.
 - Vault sweep repair owns the actual failure paths in `plugins/quirky.vault/src/**` and `plugins/quirky.vault/test/**`, plus removal of the incidental catalog-list pin in `plugins/quirky.handoff/test/service-drafts.test.ts`. Fix only traced SC08 error/retry, SC15/16 paging, real-host contribution and Gemini setup/readiness failures; preserve every meaningful scope, redaction, source-preservation and generation assertion.
 - Canonical `fix-test-ask-1028` remains lane12-owned. Consume its existing public-list exact-ID envelope fix at the single integration catch-up. No duplicate read endpoint, connection weakening, borrowed client or confirmation bypass is permitted here.
+
+## Verification policy amendment
+The operator requires every subsequent test, including single cases and scripts, through `bun scripts/suite.ts`. Only the explicit macOS list and packaged native-app checks run locally. The completed guarded run and supplementary browser measurements retain their exact limited evidence; all local browsers and runtime processes were closed afterward. The remaining visual goals are not converted into API/mounted passes; see the item's recorded tool/policy-limit evidence. The actual five-owner daemon/PTY/CLI smoke was adapted temporarily to the remote runner, passed, and its four adapter files were archived and removed before final gates.

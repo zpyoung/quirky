@@ -15,6 +15,8 @@ Pi runs `pi --mode rpc --no-session` and queries the documented [JSONL RPC](http
 
 All provider probes need a complete nonempty snapshot before replacing choices. Requests/processes time out after 8 seconds; output and normalized snapshots are capped at 256 KiB; API pagination at 32 pages/4096 records; and selector catalogs at 500 models. Credentials and pagination tokens are never returned.
 
+Agent contribution metadata may omit `homepage` and `install`; when provided, each must be an HTTP(S) URL. Invalid metadata is reported as an invalid contribution rather than exposing a non-web link in the catalog.
+
 CLI examples:
 
 ```sh

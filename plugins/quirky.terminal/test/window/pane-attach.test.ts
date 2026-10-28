@@ -199,7 +199,10 @@ describe('settings apply live', () => {
   })
 
   test('padding and background opacity apply to the pane surface', async () => {
-    const { pane } = await mount({ settings: settings({ 'padding-x': 10, 'padding-y': 6, 'background-opacity': 0.5 }) })
+    const source = document.createElement('div')
+    source.style.setProperty('--terminal-background', '#16181d')
+    document.body.appendChild(source)
+    const { pane } = await mount({ themeSource: source, settings: settings({ 'padding-x': 10, 'padding-y': 6, 'background-opacity': 0.5 }) })
     const host = pane.element.querySelector('[data-terminal-pane]') as HTMLElement
     const screen = host.firstElementChild as HTMLElement
     expect(screen.style.left).toBe('10px')

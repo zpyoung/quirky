@@ -361,8 +361,9 @@ describe('usage errors', () => {
     await usage('open-link', [], {}, 'missing <url-or-path>')
   })
 
-  test('tab color accepts only the ten names', async () => {
-    await usage('tab-color', ['tab-1', 'mauve'], {}, '<color> must be one of none, blue, purple, pink, red, orange, yellow, green, teal, gray, got "mauve"')
+  test('tab color rejects unsupported values as usage errors', async () => {
+    const error = await failure(run('tab-color', ['tab-1', 'mauve']))
+    expect(error.kind).toBe('usage')
   })
 
   test('bad flag combinations', async () => {

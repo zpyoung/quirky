@@ -20,6 +20,23 @@
         "params": { "type": "object", "properties": { "agent": { "type": "string" } }, "required": ["agent"] }
       },
       {
+        "id": "plan",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": {
+            "agent": { "type": "string" },
+            "prompt": { "type": "string" },
+            "submitPrompt": { "type": "boolean" },
+            "cwd": { "type": "string" },
+            "model": { "type": "string" },
+            "options": { "type": "object", "additionalProperties": true },
+            "extraArgs": { "type": "string" }
+          },
+          "required": ["agent"]
+        }
+      },
+      {
         "id": "resolveLaunch",
         "params": {
           "type": "object",

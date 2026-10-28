@@ -234,7 +234,7 @@ test(
       const dialog = await options
       buttonNamed(dialog, 'Clear').click()
       await reportOf<HistoryReport>(features, HISTORY_PANEL, 'no-agent selection', (state) => state.disabledAgents.length === 25)
-      expect(document.querySelector('[role="status"]')?.textContent).toContain('No agents selected')
+      expect(document.querySelector('[data-vault-query-status]')?.textContent).toContain('No agents selected')
       buttonNamed(dialog, 'Select all').click()
       await reportOf<HistoryReport>(features, HISTORY_PANEL, 'select-all restored', (state) => state.disabledAgents.length === 0 && !state.loading)
 
@@ -624,9 +624,10 @@ test(
       expect(fresh.generation).toBeGreaterThan(originalPage.generation)
       expect(fresh.hits[0]?.sessionId).toBe('new-page-result')
 
-      const beforeStalePageRequest = features.calls.length
+      const searchCalls = features.calls
+      const beforeStalePageRequest = searchCalls.length
       features.win.document.querySelector<HTMLButtonElement>('[data-vault-load-more]')!.click()
-      const stalePageRequest = await until(features, () => features.calls.slice(beforeStalePageRequest).find((call) => (
+      const stalePageRequest = await until(features, () => searchCalls.slice(beforeStalePageRequest).find((call) => (
         call.method === 'quirky.vault/search'
         && call.params.query === 'pagefreshnessneedle'
         && call.params.cursor === originalPage.page.cursor

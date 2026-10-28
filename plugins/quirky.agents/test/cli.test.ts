@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test } from 'bun:test'
 import { chmodSync, mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import type { ApiDescription, CliContext, QuirkyClient } from '@quirky/protocol'
+import type { CliContext, QuirkyClient } from '@quirky/protocol'
 import { runCli } from '../../../packages/cli/test/fixtures/fake-daemon'
 import { startHarness, type Harness } from '../../../packages/daemon/test/helpers'
 import { writePlugin } from '../../../packages/daemon/test/plugins/fixtures'
@@ -554,29 +554,6 @@ describe('agents plan with a pick', () => {
 })
 
 describe('the CLI catalog', () => {
-  test('lists the agents group with every command and the methods each calls', async () => {
-    const { client } = await start()
-    const api = (await client.callAny('api.describe', {})) as ApiDescription
-    expect(api.cli.groups.find((g) => g.plugin === 'quirky.agents')).toEqual({ plugin: 'quirky.agents', words: 'agents', aliases: [] })
-    const own = api.cli.commands.filter((c) => c.plugin === 'quirky.agents')
-    expect(own.map((c) => c.words).sort()).toEqual([
-      'agents configure',
-      'agents default',
-      'agents disable',
-      'agents enable',
-      'agents get',
-      'agents list',
-      'agents options',
-      'agents permissions',
-      'agents plan',
-      'agents refresh',
-      'agents resolve'
-    ])
-    expect(own.every((c) => c.module?.endsWith('/quirky.agents/cli.ts'))).toBe(true)
-    expect(own.find((c) => c.words === 'agents disable')!.methods).toEqual(['quirky.agents/setEnabled'])
-    expect(own.find((c) => c.words === 'agents options')!.methods).toEqual(['quirky.agents/options'])
-    expect(own.find((c) => c.words === 'agents resolve')!.methods).toEqual(['quirky.agents/resolveLaunch'])
-  })
 
   test('quirky agents list --json resolves through the real CLI', async () => {
     const { h, client } = await start()

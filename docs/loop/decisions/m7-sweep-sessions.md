@@ -156,5 +156,60 @@ The deterministic combined-scratch prepass returned25 path findings, not a clean
 - **Revisit if:** Full current-source remote suites expose a consumer regression.
 - **Source:** assumed — autonomous, actual acceptance boundary evidence
 
+## D15: Preserve both source intents in the single roadmap catch-up
+- **Question:** How should the actual incoming899b0573 conflicts and newly binding decisions be reconciled?
+- **Options:** Keep the old shell/owner assumptions; overwrite measurement; combine current owner contracts with the sweep's distinct changes.
+- **Chose:** Merge checkpoint7cfa4ee8 with build/roadmap once as bb774ec6. Read all22 full incoming logs/206decisions/305050bytes, including Progress/evidence. Keep incoming native Open single-flight/inline error/keyed login state; keep incoming separate empty-Usage/status ownership while retaining chipsRef/gap fitting/contained measurement; remove obsolete CTA-only CSS. Remove the duplicated early provider resolver because the canonical direct-process branch already uses locate after its saved command override and HTTP providers need no CLI.
+- **Why:** The actual conflicts were competing implementations of compatible intents, not permission to discard either feature. Canonical Ask now reads list{askId} through SQL filtering before deserialization, preserving wait connection identity and confirmation digest/atomic one-use. New six-slot shell replaces legacy rails but preserves contribution IDs and exact-window routing/input/history. Incoming fixture/native evidence retains its own partial and red results.
+- **Evidence:** immutable incoming899b05738ac51c06cf7330416f7b006049c439e1; actual-catchup.json; complete incoming-decisions manifest/materialized logs and scout inventory; five resolved conflict blocks in four files; bb774ec6.
+- **Reversibility:** medium
+- **Confidence:** high for source intent and complete decision inventory; final current-source gates remain independent.
+- **Revisit if:** Canonical landing reports a new conflict or current acceptance exposes a regression.
+- **Source:** locked by incoming decision logs and user canonical Ask ruling
+
+## D16: Keep genuine unbuilt host integrations explicit
+- **Question:** Did earlier local M3 completion leave actual kept host flows unbuilt, rather than merely unverified?
+- **Options:** Infer full parity from extension tests; borrow worker/phone authority; retain local core and register one exact implementation successor after the canonical owner prerequisite.
+- **Chose:** Prepare one successor for focused-owner Accounts scope/sign-in gates, a shipped production paired Vault host contributor and remote actions, and host-qualified Handoff target/detection/reachability/secret-warning/delivery/lineage. It depends on this item and m7-vm-and-owner-bound-host-workspaces. Reconfirm the production-contributor absence after catch-up; register only once just before landing. No verification-only successor.
+- **Why:** Accounts state/UI lacks host scope; Vault consumes vault-host contributions but the only concrete contributors are test fixtures; Handoff's target and probe model are local. Registered full-owner workspace placement is separately in progress. A test forwarder, local filesystem path, or worker/phone grant cannot establish the missing feature authority. Local flows are independently usable. SSH/WSL and native chat remain locked exclusions, not new paired feature work.
+- **Evidence:** SessionsDeferredFlowAudit source inventory; external accounts Remote server scope, Vault host/enable-all and Handoff Target/host/probe sections; post-catchup repository literal search finds vault-host only in the consumer and tests; canonical queue m7-vm-and-owner-bound-host-workspaces in-progress.
+- **Reversibility:** medium
+- **Confidence:** high for missing composition boundary; successor must derive exact current public owner contracts rather than invent method names.
+- **Revisit if:** The authority owner or a separately queued feature already ships the exact flows before registration.
+- **Source:** deferred: paired-owner session feature composition — explicit LOOP/user flow-successor policy
+
+## D17: Prove real five-owner integration remotely and remove the probe
+- **Question:** How can actual runtime proof continue without running tests or leaving Quirky/browser processes on the overloaded Mac?
+- **Options:** Keep local smoke; claim mocked calls prove behavior; temporarily adapt the existing real probe to the remote suite runner.
+- **Chose:** Four untracked temporary files adapt the existing isolated native-format provider fixtures and actual daemon/PTY/CLI probe to a remotely built UI bundle. Run through suite.ts, then archive and remove all four before compiler/review/landing.
+- **Why:** The final real remote probe passed1/1file with no retries: ten quota adapters, captured revision/one confirmed external redemption, generated login/status/cancel, Vault consent/index/search/source preservation, Session Info telemetry/MCP/consent and neutral Codex, Dock state, real Handoff paste bytes/locked notice/lineage and live source PTY. Failed probe versions are retained: missing Linux Cursor XDG fixture path, Orca-style rather than namespaced Vault command, an unsuitable stale-prompt Codex readiness fixture, and a too-strict running status pin (working/waiting are live). The positive target reuses Handoff's canonical readiness-capable Gemini fixture; source liveness is verified through the actual host, not an incidental lifecycle label.
+- **Evidence:** postmerge-runtime-liveness/result.json and remote1/1/no-flakes receipt; remote-smoke-source.tar.gz integrity check; all four temporary files removed by owned-path deletion; earlier failed outputs retained in scratch.
+- **Reversibility:** easy
+- **Confidence:** high for exercised real daemon/PTY/native-format/synthetic-provider boundaries; not native OS or unrun visual acceptance.
+- **Revisit if:** Current full affected acceptance or final review identifies a missed boundary.
+- **Source:** assumed — autonomous, operator-compliant actual runtime evidence
+
+## D18: Repair consumer prerequisites without weakening producer contracts
+- **Question:** How should the post-catch-up acceptance failures be resolved?
+- **Options:** Treat the narrower suite as enough; weaken runtime contracts; repair real dependency closures and obsolete fixture assumptions, preserving meaningful boundaries.
+- **Chose:** Accounts and Vault fixtures include the real CLI owner required by Worktree; fake executable discovery uses its owned search directory. Handoff fixtures use the current built-in owner set. Remove source/catalog/default/wording mirrors rather than re-pin them. Preserve stale cursor replacement, exact account/model snapshots, cold restore/admission/history, clipboard refusal and exact destination/no-extra-spawn checks. A PTY reconciliation test cannot infer a manually registered structured runner's death; keep its real terminal lost/kept proof and remove the unrelated unsupported inference.
+- **Why:** The broad postmerge gate failed263files/214pass/49fail. The subsequent six-plugin gate was124files/122pass/2fail: independent Usage app-server traffic invalidated a global request-inventory pin, and the separate Vault resume bootstrap still lacked its real owner closure. Accounts' remaining behavioral assertions passed after removing only that inventory/logging; scripts passed12/12 remotely. Provider metadata tests also exposed that homepage/install bypassed the existing HTTP(S) validator; both now use that validator, with rejection assertions rather than English error pins.
+- **Evidence:** postmerge-affected/check-0.log; post-shell-owned/check-0.log102–104; accounts-discovery-current/result.json; agents/src/core/entry.ts link validation; actual Worktree manifest dependencies; current terminal shell and provider/session contracts.
+- **Reversibility:** easy
+- **Confidence:** high for traced prerequisite failures and completed focused checks; the next full affected gate remains required.
+- **Revisit if:** Full affected acceptance shows a product failure rather than an invalid fixture prerequisite.
+- **Source:** assumed — autonomous, actual remote failure evidence
+
+## D19: Route Darwin-only acceptance to the actual supported host
+- **Question:** Should Linux artifact/simulator refusal be bypassed to make remote acceptance green?
+- **Options:** Weaken production guards; skip the tests; register the exact supported macOS-only files.
+- **Chose:** Add terminal artifacts.test.ts, artifacts-api.test.ts and emulator.test.ts to scripts/test-on-macos.txt with their actual platform reasons. Keep their substantive grant, inode, revision and device-identity checks unchanged; suite.ts runs them on this Mac as the operator explicitly permits.
+- **Why:** Terminal artifacts require Darwin and positive O_NOFOLLOW/O_NONBLOCK constants before grant handling; Simulator preview refuses non-Darwin before invoking xcrun. The retained Linux failures reached those intentional platform gates, not the behavior under test.
+- **Evidence:** terminal/src/artifacts.ts93–95,275–276; terminal/src/emulator.ts20–21,47; postmerge-affected/check-0.log2042–2079,3406–3501; scripts/test-on-macos.txt.
+- **Reversibility:** easy
+- **Confidence:** high for current platform guards; no unrun macOS pass claimed.
+- **Revisit if:** A separately authorized portable safe host implementation changes those guards.
+- **Source:** deferred: platform — Linux/Windows artifact and Simulator implementation
+
 ## Progress
-All source workers returned; maintained repair paths are ready for a source checkpoint and the single roadmap catch-up. Local UI/browser/scene resources are closed. Remote scripts7/7files passed; focused Vault SC15/16 passed only after configured isolated retry (candidate-index timing), not an all-green first attempt. Temporary remote smoke adapter4files is untracked and must never land. Canonical Ask is landed; read all21 incoming logs/186decisions through immutable eb255720 snapshot, then inspect any actual merge delta. Next: integrate current roadmap, run real remote five-owner smoke and full current affected acceptance, remove temporary adapters, fresh compiler/build, one cross-family final review/fix batch, register at most one genuine unbuilt host-flow successor if still needed, and canonical land/owned cleanup.
+Single catch-up bb774ec6 complete, all22 incoming decision logs read. Real remote five-owner integration smoke passed1/1 with no retries; four temporary adapter files archived and removed. Local UI/browser/runtime resources remain closed. Current compiler and packaged build pass. Broader affected gate remains red; six-plugin gate122/124 and focused Accounts1/1 plus scripts12/12 results are retained separately. TerminalConsumerRepair, SessionConsumerRepair and VaultResumeBootstrap finish the remaining real consumer fixtures before the full affected gate and one cross-family final review/fix batch. Register the single genuine unbuilt host-flow successor immediately before canonical landing. No full visual/native or whole-repository passing claim is made.

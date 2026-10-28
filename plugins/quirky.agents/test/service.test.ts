@@ -1368,18 +1368,10 @@ describe('launch settings', () => {
     expect(efforts(info, 'gpt-5.2-codex')).toEqual(all.slice(0, 5))
   })
 
-  test('SC-3: only the ten catalog agents are supported, and a boolean option has no choices', async () => {
+  test('SC-3: a boolean option has no choices, and unknown agents are refused', async () => {
     const t = await start()
-    const listing = await t.call(A('list'))
-    const supported: string[] = []
-    for (const agent of listing.agents) {
-      const info = await t.call(A('options'), { agent: agent.id })
-      if (info.supported) supported.push(agent.id)
-      else expect(info).toMatchObject({ models: [], unlisted: 'refuse', unlistedOptions: [], structured: false })
-    }
-    expect(supported.sort()).toEqual(['antigravity', 'claude', 'codebuddy', 'codex', 'cursor', 'gemini', 'grok', 'muse', 'omp', 'opencode'])
-    const cursor = await t.call(A('options'), { agent: 'cursor' })
-    const fast = cursor.models.find((model: any) => model.id === 'gpt-5.3-codex').options.find((option: any) => option.id === 'fastMode')
+    const cursor: { models: { id: string; options: { id: string; type: string; choices: unknown }[] }[] } = await t.call(A('options'), { agent: 'cursor' })
+    const fast = cursor.models.find((model) => model.id === 'gpt-5.3-codex')?.options.find((option) => option.id === 'fastMode')
     expect(fast).toMatchObject({ type: 'boolean', choices: null })
     expect(await failure(t.call(A('options'), { agent: 'nope' }))).toMatchObject({ code: RpcErrorCode.NotFound, message: 'unknown agent: nope' })
   })

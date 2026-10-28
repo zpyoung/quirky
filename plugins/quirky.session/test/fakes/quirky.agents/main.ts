@@ -94,6 +94,22 @@ export function activate(context: PluginContext): void {
     return { added: [], args: '', structured, shadowed: [], launchSettings }
   })
 
+  provide('plan', (params) => {
+    const found = entry(params.agent)
+    const prompt = typeof params.prompt === 'string' && params.prompt.trim() !== '' ? params.prompt : undefined
+    const args = fakeAgents().args === '' ? '' : ` ${fakeAgents().args}`
+    const paste = prompt !== undefined && (found.paste || params.submitPrompt === false)
+    return {
+      agent: params.agent,
+      command: `${params.agent}${args}${prompt !== undefined && !paste ? ` ${quote(prompt)}` : ''}`,
+      env: {},
+      record: { command: params.agent, args: fakeAgents().args, env: {} },
+      promptDelivery: prompt === undefined ? null : paste ? 'pending' : 'command-line',
+      paste: paste ? { text: prompt, submit: params.submitPrompt !== false } : null,
+      launchSettings: null
+    }
+  })
+
   provide('prepareLaunch', (params) => {
     const found = entry(params.agent)
     if (fakeAgents().disabled.has(params.agent)) throw context.error('conflict', `agent ${params.agent} is disabled`)

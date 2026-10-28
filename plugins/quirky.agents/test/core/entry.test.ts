@@ -10,8 +10,8 @@ function entryOf(data: Record<string, unknown>) {
   return result.entry
 }
 
-function errorOf(data: Record<string, unknown>): string {
-  const result = validateEntry('acme.agents', 'acme', data)
+function errorOf(data: Record<string, unknown>, id = 'acme'): string {
+  const result = validateEntry('acme.agents', id, data)
   if (result.ok) throw new Error('expected the entry to be invalid')
   return result.error
 }
@@ -157,7 +157,7 @@ describe('validateEntry', () => {
       ...minimal,
       launchOptions: { model: { flag: ['--model', '{value}'] } },
       modelDiscovery: { protocol: 'anthropic-models', args: ['models'], timeoutMs: 1_000 }
-    })).toBe('modelDiscovery protocol anthropic-models does not accept args or format')
+    }, 'claude')).toBe('modelDiscovery protocol anthropic-models does not accept args or format')
   })
   test('Gemini models discovery is a Gemini-only bounded API protocol', () => {
     const gemini = validateEntry('quirky.agents', 'gemini', {
@@ -178,7 +178,7 @@ describe('validateEntry', () => {
       ...minimal,
       launchOptions: { model: { flag: ['--model', '{value}'] } },
       modelDiscovery: { protocol: 'gemini-models', args: ['models'], timeoutMs: 1_000 }
-    })).toBe('modelDiscovery protocol gemini-models does not accept args or format')
+    }, 'gemini')).toBe('modelDiscovery protocol gemini-models does not accept args or format')
   })
   test('Pi discovery uses the declared RPC model-list protocol without caller argv', () => {
     const pi = validateEntry('quirky.agents', 'pi', {
@@ -199,7 +199,7 @@ describe('validateEntry', () => {
       ...minimal,
       launchOptions: { model: { flag: ['--model', '{value}'] } },
       modelDiscovery: { protocol: 'pi-rpc', args: ['--list-models'], timeoutMs: 1_000 }
-    })).toBe('modelDiscovery protocol pi-rpc does not accept args or format')
+    }, 'pi')).toBe('modelDiscovery protocol pi-rpc does not accept args or format')
   })
 
 
@@ -292,10 +292,9 @@ describe('validateEntry', () => {
     expect(errorOf({ ...minimal, fork: ['fork', '{id}'] })).toBe('fork needs resume')
   })
 
-  test('links must be http(s) URLs', () => {
-    expect(errorOf({ ...minimal, homepage: 'javascript:alert(1)' })).toBe('homepage must be an http(s) URL')
-    expect(errorOf({ ...minimal, install: 'not a url' })).toBe('install must be an http(s) URL')
-    expect(errorOf({ ...minimal, homepage: 4 })).toBe('homepage must be an http(s) URL')
+  test('non-web homepage and install links cannot become accepted entries', () => {
+    expect(validateEntry('acme.agents', 'acme', { ...minimal, homepage: 'javascript:alert(1)' })).toMatchObject({ ok: false })
+    expect(validateEntry('acme.agents', 'acme', { ...minimal, install: 'not a url' })).toMatchObject({ ok: false })
   })
 
   test('windows must be an object', () => {

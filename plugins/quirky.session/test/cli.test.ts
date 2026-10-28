@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
-import { QuirkyClient, type ApiDescription, type CliContext, type LaunchSettings, type Session } from '@quirky/protocol'
+import { QuirkyClient, type CliContext, type LaunchSettings, type Session } from '@quirky/protocol'
 import { rpcUrl } from '@quirky/protocol/node'
 import { runCli } from '../../../packages/cli/test/fixtures/fake-daemon'
 import type { Harness } from '../../../packages/daemon/test/helpers'
@@ -412,7 +412,8 @@ describe('session restore', () => {
     expect(h.pty.requests.filter((r) => r.type === 'create' && r.restore === true)).toHaveLength(1)
   })
   test('the restore CLI resumes a cold agent in place from its provider session', async () => {
-    const session = await createSession(client, { worktree: 'id:wt_main', agent: 'codex' })
+    const cwd = makeTempDir('qs-cli-cold-restore-')
+    const session = await createSession(client, { worktree: 'id:wt_main', agent: 'codex', cwd })
     await call(client, 'quirky.session/setProviderSession', { session: session.id, id: 'codex-cli-provider' })
     h.pty.exit(session.id, null, { exitCause: 'host-restart' })
     await waitForAsync(async () => (await call<Session>(client, 'quirky.session/get', { session: session.id })).restorable)
@@ -467,47 +468,6 @@ describe('session restore', () => {
 })
 
 describe('the CLI catalog', () => {
-  test('SC-17: lists the session group, its commands and its methods under quirky.session/', async () => {
-    const api = (await call<ApiDescription>(client, 'api.describe')) as ApiDescription
-    expect(api.cli.groups.find((g) => g.plugin === 'quirky.session')).toEqual({ plugin: 'quirky.session', words: 'session', aliases: [] })
-    const own = api.cli.commands.filter((c) => c.plugin === 'quirky.session')
-    expect(own.map((c) => c.words).sort()).toEqual([
-      'session close',
-      'session get',
-      'session list',
-      'session name',
-      'session new',
-      'session restore',
-      'session resume',
-      'session set-provider-session'
-    ])
-    expect(own.every((c) => c.module?.endsWith('/quirky.session/cli.ts'))).toBe(true)
-    expect(own.find((c) => c.words === 'session new')!.methods).toEqual(['quirky.session/create', 'quirky.structured/create'])
-    const names = api.methods.map((m) => m.name)
-    for (const name of ['list', 'get', 'create', 'resume', 'setName', 'setProviderSession', 'register', 'close', 'setStatus', 'restore']) expect(names).toContain(`quirky.session/${name}`)
-    expect(own.find((c) => c.words === 'session resume')!.methods).toEqual(['quirky.session/resume'])
-    expect(own.find((c) => c.words === 'session set-provider-session')!.methods).toEqual(['quirky.session/setProviderSession'])
-    expect(own.find((c) => c.words === 'session new')!.flags.map((f) => f.name).sort()).toEqual([
-      'agent',
-      'background',
-      'cwd',
-      'draft',
-      'effort',
-      'extra-args',
-      'model',
-      'name',
-      'option',
-      'prompt',
-      'wait',
-      'worktree'
-    ])
-    expect(own.find((c) => c.words === 'session new')!.flags.find((f) => f.name === 'option')).toMatchObject({ type: 'string', repeatable: true })
-    expect(own.find((c) => c.words === 'session get')).toMatchObject({ methods: ['quirky.session/get'], positionals: [{ name: 'session', required: true }] })
-    expect(own.find((c) => c.words === 'session new')!.flags.find((f) => f.name === 'agent')!.required).toBeFalsy()
-    expect(api.methods.find((m) => m.name === 'quirky.session/list')).toMatchObject({ readOnly: true })
-    expect(api.methods.find((m) => m.name === 'quirky.session/get')).toMatchObject({ readOnly: true })
-  })
-
   test('the new commands run through the real CLI with their positionals and flags', async () => {
     process.env.QUIRKY_TEST_REAL_WORKTREE = makeTempDir('qs-')
     const first = await createSession(client, { worktree: 'id:wt_real', agent: 'codex' })

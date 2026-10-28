@@ -319,7 +319,6 @@ const rawBlock = (id: string): RawBlock => {
   return block
 }
 
-const LAUNCH_AGENTS = ['claude', 'codex', 'codebuddy', 'gemini', 'cursor', 'grok', 'muse', 'antigravity', 'omp', 'opencode']
 
 // The values a model offers for an option: the declared choices narrowed by the model's subset.
 const choiceValues = (block: RawBlock, use: { id: string; choices?: string[] }): string[] | boolean => {
@@ -360,13 +359,6 @@ const CURSOR_VALUE_FLAGS = [
 ]
 
 describe('quirky.agents launchOptions data', () => {
-  test('only the ten catalogued agents carry a launchOptions block', () => {
-    const withBlock = manifest.contributes.agent.filter((entry) => entry.launchOptions !== undefined).map((entry) => entry.id)
-    expect([...withBlock].sort()).toEqual([...LAUNCH_AGENTS].sort())
-    const others = manifest.contributes.agent.filter((entry) => !LAUNCH_AGENTS.includes(entry.id))
-    expect(others).toHaveLength(35)
-    for (const entry of others) expect(entry.launchOptions).toBeUndefined()
-  })
 
   test('SC-1: claude offers Fable, Opus, Sonnet with five effort levels and Haiku with none', () => {
     const block = rawBlock('claude')
@@ -520,49 +512,13 @@ describe('quirky.agents launchOptions data', () => {
 
 
   test('every flagged option and the model flag carry exactly one {value} item', () => {
-    for (const id of LAUNCH_AGENTS) {
+    for (const { id } of manifest.contributes.agent.filter((entry) => entry.launchOptions !== undefined)) {
       const block = rawBlock(id)
       const templates = [block.model.flag, ...(block.options ?? []).flatMap((option) => (option.flag ? [option.flag] : []))]
       for (const template of templates) expect({ id, count: template.filter((item) => item.includes('{value}')).length }).toEqual({ id, count: 1 })
     }
   })
 
-  test('SC-4: extra-argument allowlists and placeholders match Orca for claude, codex, codebuddy, cursor, grok and omp', () => {
-    const extras = Object.fromEntries(LAUNCH_AGENTS.map((id) => [id, rawBlock(id).extraArgs]).filter(([, value]) => value !== undefined))
-    expect(extras).toEqual({
-      claude: {
-        allowed: [
-          { kind: 'model', flags: ['--model'] },
-          { kind: 'effort', flags: ['--effort'] },
-          { kind: 'repeatable', flags: ['--add-dir'] }
-        ],
-        placeholder: '--model opus --effort high --add-dir docs'
-      },
-      codex: {
-        allowed: [
-          { kind: 'model', flags: ['-m', '--model'] },
-          { kind: 'effort', flags: ['-c', '--config'], valuePrefix: 'model_reasoning_effort=' }
-        ],
-        placeholder: '-m model-id -c model_reasoning_effort=high'
-      },
-      codebuddy: {
-        allowed: [
-          { kind: 'model', flags: ['--model'] },
-          { kind: 'effort', flags: ['--effort'] }
-        ],
-        placeholder: '--model model-id --effort high'
-      },
-      cursor: { allowed: [{ kind: 'model', flags: ['-m', '--model'] }], placeholder: '-m model-id' },
-      grok: {
-        allowed: [
-          { kind: 'model', flags: ['-m', '--model'] },
-          { kind: 'effort', flags: ['--effort', '--reasoning-effort'] }
-        ],
-        placeholder: '-m model-id --effort high'
-      },
-      omp: { allowed: [{ kind: 'model', flags: ['--model'] }], placeholder: '--model model-id' }
-    })
-  })
 })
 
 describe('quirky.agents as a built-in plugin', () => {

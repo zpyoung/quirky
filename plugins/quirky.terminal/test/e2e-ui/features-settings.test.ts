@@ -30,7 +30,7 @@ test(
   'SC-64: canonical terminal URL click settings remain editable in Browser settings',
   async () => {
     const f = await startFeatures()
-    document.querySelector<HTMLElement>('button.gear')!.click()
+    document.querySelector<HTMLElement>('button[aria-label="Settings"]')!.click()
     const group = await until(f, () => [...document.querySelectorAll('[role="dialog"] fieldset.settings-group')].find((fieldset) => fieldset.querySelector('legend')?.textContent === 'Browser'))
     const label = [...group.querySelectorAll('label')].find((candidate) => ownText(candidate).trim() === 'Terminal URL clicks')
     const select = label?.querySelector('select')

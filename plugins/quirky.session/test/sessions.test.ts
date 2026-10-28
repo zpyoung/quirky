@@ -1079,20 +1079,12 @@ describe('exit and reconciliation', () => {
   test('a daemon restart marks sessions the host no longer has as exited and leaves live ones', async () => {
     const lost = await createSession(client, { worktree: 'id:wt_main', agent: 'shell' })
     const kept = await createSession(client, { worktree: 'id:wt_main', agent: 'shell' })
-    const structured = await call<Session>(client, 'quirky.session/register', {
-      worktree: 'id:wt_main',
-      agent: 'claude',
-      kind: 'structured',
-      title: 'Claude'
-    })
-    await call(client, 'quirky.session/setStatus', { session: structured.id, status: 'working' })
     h.pty.sessions.delete(lost.id)
     const again = await restartDaemon(h)
     try {
       const sessions = await call<Session[]>(again.client, 'quirky.session/list')
       expect(sessions.find((s) => s.id === lost.id)).toMatchObject({ status: 'exited' })
       expect(sessions.find((s) => s.id === kept.id)).toMatchObject({ status: 'running' })
-      expect(sessions.find((s) => s.id === structured.id)).toMatchObject({ status: 'exited' })
     } finally {
       await again.stop()
     }
@@ -1310,8 +1302,11 @@ describe('quirky.session/restore', () => {
   })
 
   test('cold restore replays the captured provider ID, launch snapshot and cwd in the same session', async () => {
-    const created = await createSession(client, { worktree: 'id:wt_main', agent: 'codex' })
-    const providerSession = { id: 'codex-provider-17', transcriptPath: '/transcripts/codex-17.jsonl' }
+    const cwd = makeTempDir('qs-cold-restore-')
+    const transcriptPath = join(cwd, 'codex-17.jsonl')
+    writeFileSync(transcriptPath, '')
+    const created = await createSession(client, { worktree: 'id:wt_main', agent: 'codex', cwd })
+    const providerSession = { id: 'codex-provider-17', transcriptPath }
     await call(client, 'quirky.session/setProviderSession', { session: created.id, ...providerSession })
     const launch = { command: 'codex', args: '--model snapshot-model --effort high', env: { CODEX_HOME: '/captured/codex-home', CODEX_PROFILE: 'original' } }
     const launchSettings = {
@@ -1367,10 +1362,11 @@ describe('quirky.session/restore', () => {
     h = await startPluginHarness({ ...SESSION_PLUGINS, fakes: [...SESSION_PLUGINS.fakes, 'quirky.accounts'] })
     ;({ client, events } = await h.connectWithEvents('cli'))
 
-    const session = await createSession(client, { worktree: 'id:wt_main', agent: 'codex' })
+    const cwd = makeTempDir('qs-cold-account-')
+    const session = await createSession(client, { worktree: 'id:wt_main', agent: 'codex', cwd })
     const providerSession = { id: 'codex-account-provider', transcriptPath: null }
     h.pty.emit(session.id, 'retained history')
-    await call(client, 'quirky.session/setProviderSession', { session: session.id, ...providerSession })
+    await call(client, 'quirky.session/setProviderSession', { session: session.id, id: providerSession.id })
     h.pty.exit(session.id, null, { exitCause: 'host-restart' })
     await waitFor(() => changedTo('exited'))
     expect(Buffer.from(h.pty.sessions.get(session.id)!.buffer).toString()).toContain('retained history')
@@ -1394,7 +1390,8 @@ describe('quirky.session/restore', () => {
 
 
   test('an unsupported cold agent restore refuses before spawning and keeps history restorable', async () => {
-    const session = await createSession(client, { worktree: 'id:wt_main', agent: 'aider' })
+    const cwd = makeTempDir('qs-cold-unsupported-')
+    const session = await createSession(client, { worktree: 'id:wt_main', agent: 'aider', cwd })
     h.pty.emit(session.id, 'retained history')
     await call(client, 'quirky.session/setProviderSession', { session: session.id, id: 'aider-provider-session' })
     h.pty.exit(session.id, null, { exitCause: 'host-restart' })
@@ -1408,11 +1405,13 @@ describe('quirky.session/restore', () => {
   })
 
   test('concurrent cold agent restores share one provider launch and warm restores never launch again', async () => {
-    const session = await createSession(client, { worktree: 'id:wt_main', agent: 'claude' })
+    const cwd = makeTempDir('qs-cold-concurrent-')
+    const session = await createSession(client, { worktree: 'id:wt_main', agent: 'claude', cwd })
     await call(client, 'quirky.session/setProviderSession', { session: session.id, id: 'claude-provider-18' })
+    const expectedWarm = await sessionOf(session.id)
     const beforeWarm = h.pty.requests.length
     const warm = await restore(session.id)
-    expect(warm).toEqual(session)
+    expect(warm).toEqual(expectedWarm)
     expect(h.pty.requests.slice(beforeWarm).filter((request) => request.type === 'create')).toEqual([])
     expect(fakeAgents().calls.filter((entry) => entry.method === 'prepareResume')).toEqual([])
 

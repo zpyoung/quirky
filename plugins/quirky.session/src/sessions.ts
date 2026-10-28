@@ -1193,9 +1193,9 @@ export class SessionService {
   }
 
   /**
-   * Brings the records in line with the PTY host's listing. A session the host lost or stored is
-   * exited, and restorable when the host still holds its history. At startup a structured session
-   * has no runner left, so it is finished too.
+   * Brings terminal records in line with the PTY host's listing. A terminal the host lost or stored
+   * is exited, and restorable when the host still holds its history. Nonterminal lifecycle remains
+   * owned by its runner; absence from a PTY listing does not prove that runner exited.
    */
   async reconcile(options: { startup: boolean }): Promise<void> {
     if (options.startup) {

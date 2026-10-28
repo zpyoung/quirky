@@ -153,6 +153,7 @@ test('Codex Open uses the rendered URL and a late refusal leaves the current log
     await Promise.resolve()
     await Promise.resolve()
   })
+  expect(container.textContent).not.toContain('system browser refused invocation')
   expect(buttonByText('Cancel').disabled).toBe(false)
   expect(container.querySelector('[aria-label="Select Codex account Account B"]')?.getAttribute('disabled')).not.toBeNull()
 
