@@ -9,8 +9,11 @@ export async function activate(context: PluginContext): Promise<void> {
   const methods = {
     list: sessions.list,
     get: sessions.get,
+    identity: sessions.identity,
+    pointer: sessions.pointer,
     create: sessions.create,
     resume: sessions.resume,
+    resumeExternal: sessions.resumeExternal,
     setName: sessions.setName,
     setProviderSession: sessions.setProviderSession,
     register: sessions.register,

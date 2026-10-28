@@ -17,6 +17,7 @@ export function PluginSlot({ id, input }: Props) {
     ...(state.model?.activityItems ?? []),
     ...(state.model?.statusBars ?? []),
     ...(state.model?.panels ?? []),
+    ...(state.model?.settingsSections ?? []),
     ...(state.model?.views ?? []),
     ...(state.model?.overlays ?? [])
   ].find((candidate) => candidate.id === id)
@@ -32,11 +33,11 @@ export function PluginSlot({ id, input }: Props) {
     const element = document.createElement('div')
     element.className = 'plugin-slot-body'
     parent.appendChild(element)
-    const unmount = host.mount(id, element, { input })
-    return () => {
-      unmount()
-      element.remove()
-    }
+    const unmount = host.mount(id, element, { input }, {
+      deferCleanup: true,
+      afterCleanup: () => element.remove()
+    })
+    return unmount
   }, [host, id, input, plugin, module])
 
   const statusBar = entry?.kind === 'status-bar'

@@ -277,13 +277,27 @@ export function activateTabBy(ws: Workspace, offset: 1 | -1, order: 'position' |
   return ok(activate(ws, group.id, ids[(current + offset + ids.length) % ids.length]!))
 }
 
-/** Splits pane `paneId`; `leaf` becomes the new second pane, active, and an expanded pane collapses. */
-export function splitPaneOp(ws: Workspace, paneId: string, direction: SplitDirection, leaf: PaneLeaf, ids: IdSource): OpResult {
+/** Splits pane `paneId`; the new leaf becomes active unless `activate` is false, and expanded panes collapse. */
+export function splitPaneOp(
+  ws: Workspace,
+  paneId: string,
+  direction: SplitDirection,
+  leaf: PaneLeaf,
+  ids: IdSource,
+  activate = true
+): OpResult {
   const loc = locatePane(ws, paneId)
   if (!loc) return fail('not-found', `no pane ${paneId}`)
   const root = splitPaneInTree(loc.tab.root, paneId, direction, leaf, ids)
   if (!root.ok) return root
-  return ok(updateTab(ws, loc.tab.id, (tab) => isTerminalTab(tab) ? { ...tab, root: root.value, activePane: leaf.id, expandedPane: null } : tab))
+  return ok(
+    updateTab(ws, loc.tab.id, (tab) => isTerminalTab(tab) ? {
+      ...tab,
+      root: root.value,
+      activePane: activate ? leaf.id : tab.activePane,
+      expandedPane: null
+    } : tab)
+  )
 }
 
 /** Removes a pane; closing a tab's only pane closes the tab (and remembers it when `record` is given). */

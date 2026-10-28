@@ -10,6 +10,7 @@ const model: UiModel = {
   activityItems: [],
   statusBars: [],
   panels: [],
+  settingsSections: [],
   views: [],
   overlays: [],
   commands: [],

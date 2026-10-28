@@ -115,6 +115,7 @@ const settingInfo = object(
     minimum: { type: 'number' },
     maximum: { type: 'number' },
     values: strings,
+    menu: { type: 'string', enum: ['view'], description: 'A boolean setting exposed in the native View menu.' },
     value: { description: 'The current value.' },
     stored: object({ value: {}, valid: boolean() }, ['value', 'valid'])
   },
@@ -174,12 +175,13 @@ const uiModel = object(
     commands: listOf({ type: 'object' }),
     keybindings: listOf(uiKeybinding, 'Registry precedence order: distro bindings first, then plugin bindings.'),
     settings: listOf({ type: 'object' }),
+    settingsSections: listOf({ type: 'object' }),
     menuItems: listOf(uiMenuItem),
     themes: listOf({ type: 'object' }),
     theme: object({ chosen: string(), active: string() }, ['chosen', 'active']),
     modules: { type: 'object', additionalProperties: true }
   },
-  ['sidebarSections', 'statusBars', 'activityItems', 'panels', 'views', 'overlays', 'commands', 'keybindings', 'settings', 'menuItems', 'themes', 'theme', 'modules']
+  ['sidebarSections', 'statusBars', 'activityItems', 'panels', 'views', 'overlays', 'commands', 'keybindings', 'settings', 'settingsSections', 'menuItems', 'themes', 'theme', 'modules']
 )
 const apiDescription = object(
   {
@@ -296,6 +298,7 @@ export const KERNEL_METHOD_SCHEMAS = {
         name: string(),
         protocolVersion: integer(0),
         token: string('The runtime token; required on the unix socket.'),
+        sessionToken: string('The launch-scoped session token; independent from sessionId.'),
         cwd: string(),
         sessionId: string(),
         worktreeId: string()

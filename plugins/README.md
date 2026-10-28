@@ -93,6 +93,39 @@ Codex stop bounds its final pipe cleanup even when an independently detached chi
 output descriptor. Its process group is the execution ownership boundary; it does not adopt
 independently detached services.
 
+## Orchestration core
+
+`quirky.orchestration` provides durable Runs, dependent Tasks, authoritative Dispatch attempts,
+mailboxes, resumable questions and decision gates through `quirky orchestration`.
+Actor-sensitive commands run inside a live Quirky-managed terminal or structured session;
+the kernel verifies its launch credential and process or lease identity. `--from` and
+`--terminal` are equality assertions, not credentials.
+
+```sh
+quirky orchestration run-create --objective "Coordinate the change" --json
+quirky orchestration task-create --spec "Implement the first task" --json
+quirky orchestration check --wait --types worker_done,escalation,question --json
+```
+
+Process every message in a returned Delivery before passing its ID to `check --ack`.
+A lost response replays the same batch; type filters control wakeups, not batch contents.
+`--peek` and `--all` do not consume mail. An `ask` timeout leaves its question pending:
+use the printed `ask --resume` command rather than asking again.
+
+Reuse `--retry-request` for an uncertain mutation and inspect it with `request-show --request`.
+An absent receipt never proves no effect. Rejected worker reports remain auditable and exit
+nonzero; neither an idle pointer nor missing status proves that work finished.
+
+Public session helpers provide exact-incarnation identity, guarded close and idempotent prompt
+submission. Structured `create` accepts `deferStart: true` without a prompt, so authority can attach
+before the first turn. Automatic idle-mailbox nudging is deferred to
+`m6-orchestration-idle-pointer-shutdown`; explicit safe submission and durable mail remain available.
+Worker placement/custody/fleet and headless service coordinators are separate orchestration slices.
+
+See the [contracts](quirky.orchestration/src/contracts.ts),
+[runtime interfaces](quirky.orchestration/src/runtime-contracts.ts) and
+[behavior specification](../docs/quirk/specs/2026-10-27-m6-orchestration-core/logic.md).
+
 ## Shared checks
 
 `quirky.checks` executes local shell commands independently of agent sessions:
@@ -161,3 +194,212 @@ and review actions, file contents, issues, work-item searches, Projects v2, and
 connection-owned refreshes. Use `quirky api --json` for the live method, parameter,
 result, and event contracts. Fixed-cap reads report truncation, partial results, or a limit error;
 only work-item search exposes client `--page` and `--limit`.
+
+Top-level PR conversation comments use `hosting review-conversation`, not issue
+or Project mutation routes:
+
+```sh
+quirky hosting review-conversation --number 7 --action add --body 'Review notes' --json
+quirky hosting review-conversation --number 7 --action edit --comment-id 101 --body 'Updated notes' --json
+quirky hosting review-conversation --number 7 --action delete --comment-id 101 --yes --json
+quirky hosting review-assignees --number 7 --action set --logins jo --logins pat --json
+```
+
+Only deletion requires confirmation. Edits and deletes recheck that the comment
+belongs to that exact PR; assignee `set` replaces the assignment and accepts an empty
+array through `--params` to clear it. `add` and `remove` take at least one login.
+Use `--pr-repo '{"host":"github.com","owner":"team","repo":"project"}'`
+when origin and upstream contain different PRs with the same number.
+
+`quirky git mergePreview --base <full-sha> --head <full-sha> --json` reports
+conflicting paths from existing local commit objects without changing HEAD, refs,
+the index or working files. It never fetches or executes a custom merge driver.
+An unavailable preview reports a reason rather than presenting changed files as
+conflicts. Git may add immutable merge-tree objects to its object database.
+
+`quirky hosting review-stack --number 7 --json` hydrates up to 100 member PRs
+through the provider's stack-membership read. The request number is the selected
+PR; `stack.number` is a distinct stack resource ID, and `stack.entries[].number`
+contains the real member PR numbers. Unsupported or mismatched membership is
+explicitly unavailable, never synthesized from that stack ID. `truncated` reports
+omitted members. Optional `--pr-repo` preserves origin/upstream identity.
+## Plugin settings pages
+
+A UI plugin can opt a declared view into the shell's **Settings → Plugin settings**
+navigation with `"settings": true`:
+
+```json
+{"view": [{"id": "settings", "title": "Hosting settings", "settings": true}]}
+```
+
+Provide the view through the normal public UI API. The Settings link opens its
+effective view ID through `ui.view.open`; it does not import feature code into the
+shell. Disabled or overridden-away views have no link. A view with no active UI
+module is shown disabled, and failed navigation leaves Settings open with an error.
+Ordinary views remain outside Settings unless they explicitly opt in.
+
+## Hosting reviews
+
+`quirky.reviews` owns the active-workspace **Checks** panel, full pull-request
+page, creation composer and hosting settings. It calls the public Hosting, Git,
+Worktree, Tasks and Agents APIs; the renderer never invokes `gh` directly.
+
+```sh
+quirky reviews open --worktree <id> --number 12 --tab conversation --json
+quirky reviews detail-set-tab --worktree <id> --number 12 --tab checks --json
+quirky reviews show-checks --json
+quirky reviews create-open --worktree <id> --json
+quirky reviews settings-open --worktree <id> --json
+quirky reviews state --json
+```
+
+Checks follows the workspace in the active view. PR headers open the shared Tasks
+workspace composer; they do not silently create or switch branches. Provider
+identity remains explicit when origin and upstream reuse a PR number. Merge and
+comment deletion retain kernel confirmation and canonical provider validation;
+queued merge is not displayed as completed merge.
+
+Creation rechecks the exact branch/head and eligibility, pushes first only when
+required, preserves an existing review, and reports a created PR separately from
+failed stack registration. Failed or superseded generation cannot replace another
+head's draft. Settings retain stale observations with an error instead of
+inventing connected accounts or empty budgets.
+
+The live API catalog contains all method schemas and generated command aliases.
+`reviews state` is the full daemon-owned navigation/draft/provider snapshot. Window
+slot reports are bounded summaries pointing to that method, so large comments or
+diffs do not exceed the kernel's 64-KiB report limit.
+
+Other-provider review/create/settings and in-app link routing have explicit
+prerequisite-dependent queue items; current cards and routing never claim those
+unavailable capabilities succeeded. Clipboard/system-browser/focus behavior is
+handed to the native scenario run, not inferred from headless web output.
+## GitHub Tasks
+
+`quirky.tasks` supplies Tasks lists, issue detail/creation, Project tables/boards/roadmaps,
+and the shared workspace composer. Its generated commands use the `tasks` group:
+
+```sh
+quirky tasks open --mode issues --json
+quirky tasks open --mode prs --page 3 --json
+quirky tasks projects --json
+quirky tasks --help
+```
+
+`quirky.tasks/workspace` with `action: "start"` opens the retained composer; it does not
+create a workspace until confirmation. Targets contain `worktree`, `kind` (`issue` or
+`pullRequest`), `number`, and the exact GitHub `url`. Creation delegates to
+`quirky.worktree/create` with that URL as `github`; there is no plain-create fallback.
+Merge uses conditional kernel confirmation and the canonical hosting expected-head guard.
+Ordinary issue edits, reviewer changes and opening the composer do not ask.
+
+The public UI-library exports are `@quirky/plugin-tasks/markdown`
+(`Markdown`, `MarkdownComposer`, `safeHttpUrl`) and
+`@quirky/plugin-tasks/review-navigation` (`openReview`).
+PR navigation calls `quirky.reviews/open` with `{worktree, number, tab?}`;
+`tab` is `conversation`, `checks`, or `files`. Missing contributions produce an error,
+not an issue page pretending to be PR detail.
+
+Task Sources is a contributed Settings view. A boolean setting can also declare
+`"menu": "view"` for a native View-menu toggle backed by the same public setting value.
+Native clipboard, system-browser and focus effects remain pending in the nightly handoff.
+## Mobile pairing
+
+`quirky.mobile` adds the sidebar Mobile flow, **Settings > Mobile**, and the
+`quirky mobile` command group. It pairs direct LAN or tailnet clients with the
+same JSON-RPC API used by the desktop and CLI. The compatible Quirky phone app
+and its signed installation links are not distributed yet; the desktop does
+not redirect users to the incompatible Orca app or its hosted relay.
+
+```sh
+quirky mobile info --json
+quirky mobile state --json
+quirky mobile interfaces --json
+quirky mobile pair --address 192.168.1.20 --json
+quirky mobile devices --json
+quirky mobile revoke <device-uuid>
+quirky mobile configure --restore-fit-ms 60000
+quirky mobile configure --keep-phone-size
+quirky mobile open --settings
+```
+
+Treat the pairing URL and QR as credentials. Regenerating replaces the unscanned
+offer, not already-paired phones. Revocation disconnects the device immediately
+and rejects its next encrypted authentication. Device lists and state reports
+never contain tokens.
+
+Paired phones read the configured machine name and platform through
+`quirky.mobile/info`. Pairing state, generation, configuration and revocation
+remain local administration methods.
+
+The mobile-only listener starts on loopback and widens when a network offer is
+issued or a previously paired phone is restored. Its default port and fallback
+ladder are defined in
+[`transport.ts`](quirky.mobile/src/daemon/transport.ts). The desktop UI, plugin
+assets and agent hooks remain on their separate loopback listener.
+`QUIRKY_MOBILE_PORT` pins a nonzero port (`0` chooses a free test port);
+`QUIRKY_MOBILE_HOST` pins the bind address and prevents widening a pinned loopback
+listener.
+
+A phone's terminal attachment claims input and viewport ownership. Desktop output
+continues while typing is paused. Use **Take back** to restore desktop dimensions,
+or **Restore** after the phone leaves. The default retains phone dimensions until
+restored; Settings offers timed restoration. The corresponding APIs are
+`quirky.terminal/mobileState`, `/takeBack`, `/restoreFit` and `/claim`.
+
+Trusted transport plugins can use the public
+[`PluginContext.clients.accept`](../packages/protocol/src/plugins.ts) API after
+authenticating a peer. The admitted identity is immutable; authorization runs
+before each dispatch, including cached and confirmed calls. Disconnect and plugin
+revocation close its streams and subscriptions. Mobile's v2 channel seals text
+requests and binary terminal output; terminal input uses JSON-RPC, not inbound
+binary commands.
+
+Mobile views accept scriptable page input through `ui.view.open`: `stage`
+(`intro`, `install`, `pair`, `paired`), `platform`, `channel` and `address`.
+Their non-secret stage, choices, devices and error state are readable through
+`ui.state` slot reports. The live method schemas are in `quirky api --json`;
+[the behavior spec](../docs/quirk/specs/2026-10-27-sb-mobile-daemon/logic.md)
+defines the scope and limits.
+## Create a workspace from GitHub
+
+Use the new-workspace dialog's Smart field for `#123` or a GitHub PR/issue URL.
+The GitHub tab lists both kinds of work item and lets you select or clear a source.
+The same creation path is available from the CLI:
+
+```sh
+quirky wt create --repo demo --github '#3' --json
+quirky wt create --repo demo --github 'https://github.com/OWNER/REPO/issues/4' --issue-command skip --json
+```
+
+Replace `demo` and the URL with your registered project and work item. A URL must
+match a configured GitHub remote in that project. An unresolved source fails;
+it is never treated as a plain workspace name.
+
+API callers use `quirky.worktree/create` with `repo` and `github`. Pass the exact
+item URL when it is already known, including from a Tasks or Project row. To inspect
+the fresh source without creating anything, call `quirky.hosting/worktreeSource`
+with a registered `worktree` and `reference`.
+
+A PR checks out its verified head commit and head branch. Fork pushes target the
+contributor's repository, while the compare base remains the PR's base branch.
+Occupied or diverged local branches are refused without a reset. Issues use the
+ordinary base and branch-prefix rules. The source title supplies the default card
+label and lowercase folder slug; `--name` changes the folder, while
+`--display-name` changes the card label. Linked PR/issue identity survives note edits
+and daemon restarts.
+
+### Run a command for a linked issue
+
+Configure **Custom GitHub issue command** in Project Settings, or set `issueCommand`
+in `quirky.yaml` (`orca.yaml` is the fallback). Templates accept `{{issue}}` and
+`{{artifact_url}}`. The command runs in its own terminal, beside Setup when present.
+`--issue-command skip` suppresses it for one creation.
+
+Local configuration follows the project's command-source policy. Shared commands
+need content approval independently of setup. One-time approval pins the displayed
+script hash; changed content needs another decision and is not approved by an
+earlier prompt. CLI/API callers can pin the same content with
+`--trust-issue-command --trust-issue-command-hash <hash-from-error>`, or
+`--trust-setup --trust-setup-hash <hash-from-error>` for setup.
+Trust flags without a hash authorize the current call's script.

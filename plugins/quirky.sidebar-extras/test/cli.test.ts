@@ -42,12 +42,16 @@ describe('sidebar-extras CLI', () => {
       'set',
       '--workspace-activity-window', 'custom',
       '--workspace-activity-custom-days', '3',
-      '--always-show-default-branch-workspace=false'
+      '--always-show-default-branch-workspace=false',
+      '--hide-completed-review-workspaces=true',
+      '--hide-passing-check-workspaces=false'
     ]) as ExtrasState
     expect(changed.preferences).toMatchObject({
       workspaceActivityWindow: 'custom',
       workspaceActivityCustomDays: 3,
-      alwaysShowDefaultBranchWorkspace: false
+      alwaysShowDefaultBranchWorkspace: false,
+      hideCompletedReviewWorkspaces: true,
+      hidePassingCheckWorkspaces: false
     })
     expect(changed).toEqual(await extras<ExtrasState>(env.client, 'state'))
 

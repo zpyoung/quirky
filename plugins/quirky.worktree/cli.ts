@@ -21,8 +21,8 @@ function toggle(args: CliArgs, ctx: CliContext, on: string, off: string): boolea
   return wantsOn ? true : wantsOff ? false : undefined
 }
 
-const worktreeDetails = (ctx: CliContext, worktree: Worktree & { children: string[] }) =>
-  ctx.format.record([
+const worktreeDetails = (ctx: CliContext, worktree: Worktree & { children: string[] }) => {
+  const pairs: [string, string][] = [
     ['id', worktree.id],
     ['name', worktree.name],
     ['display name', worktree.displayName ?? '-'],
@@ -36,19 +36,35 @@ const worktreeDetails = (ctx: CliContext, worktree: Worktree & { children: strin
     ['parent', worktree.parentId ?? '-'],
     ['primary', worktree.isMain ? 'yes' : 'no'],
     ['created by', worktree.createdBy],
-    ['base', worktree.baseRef ?? '-'],
-    ['children', worktree.children.join(', ') || '-']
-  ])
+    ['base', worktree.baseRef ?? '-']
+  ]
+  if (worktree.linkedPR) pairs.push(['linked PR', `#${worktree.linkedPR.number} ${worktree.linkedPR.title} (${worktree.linkedPR.url})`])
+  if (worktree.linkedIssue) pairs.push(['linked issue', `#${worktree.linkedIssue.number} ${worktree.linkedIssue.title} (${worktree.linkedIssue.url})`])
+  if (worktree.pushTarget) pairs.push(['push target', `${worktree.pushTarget.remoteName}/${worktree.pushTarget.branchName}`])
+  pairs.push(['children', worktree.children.join(', ') || '-'])
+  return ctx.format.record(pairs)
+}
 
-/** The lines after a create's record: each warning, the base-fallback notice, then how setup and the agent went. */
+/** The lines after a create's record: warnings, fallback, setup and issue-command outcomes, then the agent. */
 function createNotes(result: WorktreeCreateResult, agent: string | undefined): string[] {
   const lines = [...result.warnings]
   if (result.baseFallback) lines.push(result.baseFallback.message)
+  if (result.worktree.linkedPR) {
+    lines.push(`pull request: #${result.worktree.linkedPR.number} ${result.worktree.linkedPR.title} (${result.worktree.linkedPR.url})`)
+  } else if (result.worktree.linkedIssue) {
+    lines.push(`issue: #${result.worktree.linkedIssue.number} ${result.worktree.linkedIssue.title} (${result.worktree.linkedIssue.url})`)
+  }
+  if (result.worktree.pushTarget) lines.push(`push target: ${result.worktree.pushTarget.remoteName}/${result.worktree.pushTarget.branchName}`)
   const { setup } = result
   if (setup.ran === 'terminal') lines.push(`setup: running in the Setup terminal ${setup.sessionId}`)
   else if (setup.ran === 'daemon') {
     lines.push(setup.timedOut ? 'setup: timed out in the daemon' : setup.exitCode === 0 ? 'setup: ran in the daemon (exit 0)' : `setup: failed in the daemon (exit ${setup.exitCode ?? 'signal'})`)
   }
+  const issueCommand = result.issueCommand
+  if (issueCommand?.ran === 'terminal') lines.push(`issue command: running in the Issue terminal ${issueCommand.sessionId}`)
+  else if (issueCommand?.ran === 'daemon') {
+    lines.push(issueCommand.timedOut ? 'issue command: timed out in the daemon' : issueCommand.exitCode === 0 ? 'issue command: ran in the daemon (exit 0)' : `issue command: failed in the daemon (exit ${issueCommand.exitCode ?? 'signal'})`)
+  } else if (issueCommand?.ran === 'skipped') lines.push('issue command: skipped')
   if (result.agentSessionId) lines.push(`agent: started ${agent ?? 'agent'} in session ${result.agentSessionId}`)
   else if (result.agentPending) lines.push(`agent: ${agent ?? 'agent'} starts when setup finishes`)
   return lines
@@ -140,18 +156,23 @@ const named: CliModule['commands'] = {
       ['name', positionalName ?? flagName],
       ['group', stringFlag(args, 'group')],
       ['base', stringFlag(args, 'base')],
+      ['github', stringFlag(args, 'github')],
       ['branch', stringFlag(args, 'branch')],
       ['branchName', stringFlag(args, 'branch-name')],
       ['displayName', stringFlag(args, 'display-name')],
       ['comment', stringFlag(args, 'comment')],
       ['parent', parent],
       ['setup', stringFlag(args, 'setup')],
+      ['issueCommand', stringFlag(args, 'issue-command')],
+      ['trustSetupHash', stringFlag(args, 'trust-setup-hash')],
+      ['trustIssueCommandHash', stringFlag(args, 'trust-issue-command-hash')],
       ['agent', stringFlag(args, 'agent')],
       ['prompt', stringFlag(args, 'prompt')]
     ]
     const params: Record<string, unknown> = { createdBy: 'cli', ...Object.fromEntries(optional.filter(([, value]) => value !== undefined)) }
     if (noParent) params.noParent = true
     if (args.flags['trust-setup'] === true) params.trustSetup = true
+    if (args.flags['trust-issue-command'] === true) params.trustIssueCommand = true
     if (args.flags['no-fallback'] === true) params.allowLocalBaseFallback = false
     if (args.flags.activate === true) params.activate = true
 

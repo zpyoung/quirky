@@ -78,6 +78,7 @@ export class FakeDaemon {
     commands: [],
     keybindings: [],
     settings: [],
+    settingsSections: [],
     menuItems: [],
     themes: [DEFAULT_THEME],
     theme: { chosen: 'default', active: 'default' },

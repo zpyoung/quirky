@@ -146,9 +146,6 @@ class ClaudeRunner implements StructuredRunner {
   async start(session: Session, prompt?: string, launchOptions: StructuredStartOptions = {}): Promise<void> {
     if (session.agent !== 'claude') throw new Error('structured sessions support claude only')
     const providerSession = launchOptions.providerSession
-    if (prompt === undefined && providerSession === undefined) {
-      throw new Error('a structured Claude session needs an initial prompt or provider session')
-    }
     const providerSessionId = providerSession?.id ?? randomUUID()
     const startup = { stopped: false }
     this.starting.set(session.id, startup)

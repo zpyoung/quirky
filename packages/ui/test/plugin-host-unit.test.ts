@@ -61,6 +61,7 @@ function makeModel(parts: Partial<UiModel> = {}): UiModel {
     activityItems: [],
     statusBars: [],
     panels: [],
+    settingsSections: [],
     views: [],
     overlays: [],
     commands: [],
@@ -73,7 +74,7 @@ function makeModel(parts: Partial<UiModel> = {}): UiModel {
     ...parts
   }
   if (parts.modules) return model
-  const entries = [...model.sidebarSections, ...model.activityItems, ...model.statusBars, ...model.panels, ...model.views, ...model.overlays, ...model.commands]
+  const entries = [...model.sidebarSections, ...model.activityItems, ...model.statusBars, ...model.panels, ...model.settingsSections, ...model.views, ...model.overlays, ...model.commands]
   for (const entry of entries) {
     const module = (model.modules[entry.plugin] ??= { url: urlOf(entry.plugin), provides: [] })
     module.provides.push(entry.id)

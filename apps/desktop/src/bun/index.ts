@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { QuirkyClient } from '@quirky/protocol'
 import { ensureDaemon, quirkyHome, rpcUrl, type RuntimeInfo } from '@quirky/protocol/node'
-import { BrowserView, BrowserWindow, Tray, Utils, app } from 'electrobun/main'
+import { ApplicationMenu, BrowserView, BrowserWindow, Tray, Utils, app, type ApplicationMenuItemConfig } from 'electrobun/main'
 import { maintainConnection } from './connection'
 import { setDockBadge } from './dock'
 import {
@@ -24,6 +24,7 @@ import { daemonUrl, errorPageHtml } from './page'
 import { findRepoRoot, resolveRuntimeEnv, trayDotPath } from './paths'
 import { createNativeBrowserHandlers, type NativeBrowserHostRPC } from './native-browser'
 import { playSound } from './sound'
+import { loadViewMenuSettings, toggleViewMenuSetting, viewMenuSettingFromEvent, type ViewMenuSetting } from './view-menu'
 
 const WINDOW_TITLE = 'Quirky'
 const SETTINGS_VIEW_ID = 'view:quirky.notifications/settings'
@@ -201,6 +202,40 @@ async function refreshShowMenuBarIcon(connected: QuirkyClient): Promise<void> {
   }
 }
 
+const nativeViewMenu: ApplicationMenuItemConfig & { submenu: ApplicationMenuItemConfig[] } = { label: 'View', submenu: [] }
+const applicationMenu: ApplicationMenuItemConfig[] = [
+  { label: 'Quirky', submenu: [{ role: 'about' }, { type: 'divider' }, { role: 'hide' }, { role: 'hideOthers' }, { role: 'showAll' }, { type: 'divider' }, { role: 'quit' }] },
+  { label: 'Edit', submenu: [{ role: 'undo' }, { role: 'redo' }, { type: 'divider' }, { role: 'cut' }, { role: 'copy' }, { role: 'paste' }, { role: 'selectAll' }] },
+  nativeViewMenu,
+  { label: 'Window', submenu: [{ role: 'minimize' }, { role: 'zoom' }, { role: 'close' }] }
+]
+let menuRequest = 0
+function renderApplicationMenu(items: ViewMenuSetting[]): void {
+  nativeViewMenu.submenu = items.map(item => ({ label: item.label, checked: item.checked, action: `view-setting:${encodeURIComponent(item.id)}` }))
+  if (items.length > 0) nativeViewMenu.submenu.push({ type: 'divider' })
+  nativeViewMenu.submenu.push({ role: 'toggleFullScreen' })
+  ApplicationMenu.setApplicationMenu(applicationMenu)
+}
+async function refreshViewMenu(connected: QuirkyClient): Promise<void> {
+  const request = ++menuRequest
+  try {
+    const items = await loadViewMenuSettings((method, params) => connected.callAny(method, params))
+    if (request === menuRequest && client === connected) renderApplicationMenu(items)
+  } catch (error) { console.warn('reading View menu settings failed:', error) }
+}
+ApplicationMenu.on('application-menu-clicked', event => {
+  const setting = viewMenuSettingFromEvent(event)
+  const connected = client
+  if (!setting || !connected) return
+  void toggleViewMenuSetting((method, params) => connected.callAny(method, params), setting)
+    .then(() => refreshViewMenu(connected))
+    .catch(error => {
+      console.warn('updating View menu setting failed:', error)
+      Utils.showNotification({ title: 'Could not update View setting', body: error instanceof Error ? error.message : String(error), silent: true })
+    })
+})
+renderApplicationMenu([])
+
 let latest: RuntimeInfo | null = null
 
 try {
@@ -235,13 +270,17 @@ void maintainConnection({
       const showMenuBarIcon = showMenuBarIconIn(event)
       if (showMenuBarIcon !== null) applyTray({ type: 'showMenuBarIcon', value: showMenuBarIcon })
       if (event.type === 'plugin.changed') void refreshShowMenuBarIcon(connected)
+      if (event.type === 'plugin.changed' || event.type === 'setting.changed') void refreshViewMenu(connected)
       if (shouldRefreshBadge(event)) void badge.refresh()
     })
     void refreshShowMenuBarIcon(connected)
+    void refreshViewMenu(connected)
     void badge.refresh()
   },
   onDisconnected: () => {
     client = null
+    menuRequest++
+    renderApplicationMenu([])
   },
   onError: showError,
   sleep: (ms) => Bun.sleep(ms),

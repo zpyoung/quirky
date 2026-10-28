@@ -3,7 +3,7 @@ import { createRequire } from 'node:module'
 import { dirname, isAbsolute, join, parse, relative, resolve, sep, win32 } from 'node:path'
 import { validateValue, type Schema } from '@quirky/protocol'
 
-type Manifest = { id?: string; main?: string; cli?: string; ui?: string; [key: string]: unknown }
+type Manifest = { id?: string; main?: string; cli?: string; ui?: string; workers?: unknown; [key: string]: unknown }
 const MANIFEST_SCHEMA: Schema = {
   type: 'object',
   properties: { id: { type: 'string' }, main: { type: 'string' }, cli: { type: 'string' }, ui: { type: 'string' } },
@@ -193,6 +193,28 @@ function jsName(entry: string): string {
   return dir ? join(dir, `${name}.js`) : `${name}.js`
 }
 
+function workerEntries(pluginId: string, pluginDir: string, value: unknown): [string, string][] {
+  if (value === undefined) return []
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    throw new Error(`plugin ${pluginId}: workers must be an object of worker names to entry paths`)
+  }
+  const entries: [string, string][] = []
+  for (const [name, entry] of Object.entries(value)) {
+    if (!/^[A-Za-z0-9]+(?:[._-][A-Za-z0-9]+)*$/.test(name)) {
+      throw new Error(`plugin ${pluginId}: worker name '${name}' is not valid`)
+    }
+    if (typeof entry !== 'string' || entry === '') {
+      throw new Error(`plugin ${pluginId}: worker ${name} must name a non-empty entry path`)
+    }
+    const rel = relative(pluginDir, resolve(pluginDir, entry))
+    if (isAbsolute(entry) || win32.isAbsolute(entry) || rel === '' || rel === '..' || rel.startsWith('../') || isAbsolute(rel)) {
+      throw new Error(`plugin ${pluginId}: worker ${name} entry must be root-relative and inside the plugin directory`)
+    }
+    entries.push([name, entry])
+  }
+  return entries
+}
+
 async function bundleEntry(pluginId: string, pluginDir: string, outPluginDir: string, entry: string): Promise<string> {
   const target = jsName(entry)
   const result = await Bun.build({
@@ -270,15 +292,26 @@ export async function bundlePlugins(srcDir: string, outDir: string): Promise<str
     if (validateValue(MANIFEST_SCHEMA, rawManifest, 'plugin manifest')) throw new Error(`plugin ${entry.name}: manifest entry fields are invalid`)
     const manifest = rawManifest as Manifest
     const id = manifest.id ?? entry.name
+    const workers = workerEntries(id, pluginDir, manifest.workers)
     const outPluginDir = join(outDir, entry.name)
     mkdirSync(outPluginDir, { recursive: true })
 
     if (manifest.main) manifest.main = await bundleEntry(id, pluginDir, outPluginDir, manifest.main)
     if (manifest.cli) manifest.cli = await bundleEntry(id, pluginDir, outPluginDir, manifest.cli)
+    const workerOutputs: string[] = []
+    if (manifest.workers !== undefined) {
+      const bundledWorkers: Record<string, string> = {}
+      for (const [name, worker] of workers) {
+        const output = await bundleEntry(id, pluginDir, outPluginDir, worker)
+        bundledWorkers[name] = output
+        workerOutputs.push(output)
+      }
+      manifest.workers = bundledWorkers
+    }
     if (manifest.ui) copyUi(id, pluginDir, outPluginDir, manifest.ui)
     copyNotebookBridge(pluginDir, outPluginDir)
     if (existsSync(join(pluginDir, SOUNDS))) cpSync(join(pluginDir, SOUNDS), join(outPluginDir, SOUNDS), { recursive: true })
-    copyPrivateAssets(id, pluginDir, outPluginDir, manifest, [manifest.main, manifest.cli].filter((name): name is string => typeof name === 'string'))
+    copyPrivateAssets(id, pluginDir, outPluginDir, manifest, [manifest.main, manifest.cli, ...workerOutputs].filter((name): name is string => typeof name === 'string'))
     copyLegalNotices(id, pluginDir, outPluginDir)
 
     writeFileSync(join(outPluginDir, MANIFEST), `${JSON.stringify(manifest, null, 2)}\n`)

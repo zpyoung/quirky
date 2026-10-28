@@ -51,6 +51,8 @@ export type ContributionInfo = {
 export type PluginContext = {
   readonly pluginId: string
   readonly dir: string
+  /** Absolute file URL for a worker entrypoint declared by name in `workers`; throws for undeclared names. */
+  workerEntrypoint(name: string): string
   /** The plugin's private data directory, `<home>/plugin-data/<pluginId>`; it exists (mode 0700). */
   readonly dataDir: string
   /** Writes to the daemon log, prefixed with the plugin ID. */
@@ -85,6 +87,29 @@ export type PluginContext = {
   notify(notification: PluginNotification): void
   /** The kernel's session launch environment and launch-hook pipeline. */
   readonly launch: PluginLaunch
+  /** Admits authenticated remote clients through the same RPC dispatcher and stream lifecycle. */
+  readonly clients: PluginClients
+}
+
+/** Trusted transports authenticate peers before admission; authorization is checked on every call. */
+export type PluginClients = {
+  accept(options: {
+    role: 'mobile'
+    deviceId: string
+    name: string
+    /** Must revalidate the live credential and throw when a method/params is forbidden. */
+    authorize(method: string, params: Record<string, unknown>): void | Promise<void>
+    sendText(text: string): void
+    sendBinary(bytes: Uint8Array): void
+    /** Called when the kernel or plugin revokes this admitted connection. */
+    close(): void
+  }): {
+    readonly id: number
+    /** Receives one decrypted JSON-RPC 2.0 request. */
+    receive(text: string): Promise<void>
+    /** Removes streams and subscriptions exactly once, without calling options.close again. */
+    disconnect(): void
+  }
 }
 
 /** The certainty metadata attached to a rejected `PluginPty.writeAccepted` call. */
@@ -177,11 +202,25 @@ export type PluginNotification = {
   onDismiss?: { command: string; args?: unknown }
 }
 
+
+export type PluginSessionSource = 'terminal_launch' | 'structured_lease' | 'restored_authority'
+
+/** A live session identity assembled from kernel-owned launch authority, never client metadata. */
+export type PluginSessionIdentity = {
+  sessionId: string
+  runtimeEpoch: string
+  processIncarnation: string
+  source: PluginSessionSource
+  live: true
+}
+
+export type PluginSessionAuthority = PluginSessionIdentity
+
 /** The kernel half of launching a session. */
 export type PluginLaunch = {
   readonly shell: string
   readonly binDir: string
-  /** The `QUIRKY_*` and PATH environment for a session; reserved names in `envPatch` are dropped and a `null` value removes the variable. */
+  /** Returns the environment for a terminal process, including a kernel-issued launch token. */
   env(input: {
     sessionId: string
     worktreeId: string
@@ -190,6 +229,14 @@ export type PluginLaunch = {
     /** Absolute path to the trusted plugin shell init file for an interactive shell session. */
     shellInit?: string
   }): Record<string, string>
+  /** Opens a child-process session lease, returning its environment and an idempotent revoker. */
+  openStructuredLease(input: {
+    sessionId: string
+    worktreeId: string
+    agent: string
+  }): { env: Record<string, string>; release(): void }
+  /** Looks up metadata for a currently verified live session without exposing its token. */
+  sessionIdentity(sessionId: string): PluginSessionIdentity | null
   shellArgv(): string[]
   /** True when the configured shell gets Quirky's ready-marker wrapper (zsh or bash). */
   shellReady(): boolean
@@ -236,9 +283,12 @@ export type PluginCaller =
   | {
       role: ClientRole
       name?: string
+      /** Authenticated remote identity; never taken from request params. */
+      deviceId?: string
       cwd?: string
       sessionId?: string
       worktreeId?: string
+      sessionAuthority?: PluginSessionAuthority
       /** Set only for `connection: true` methods. */
       connection?: CallerConnection
     }
@@ -373,6 +423,8 @@ export type PluginManifest = {
   ui?: string
   /** Relative path of the CLI module. */
   cli?: string
+  /** Worker name to root-relative entrypoint, bundled and rewritten to its packaged path by the desktop bundler. */
+  workers?: Record<string, string>
   /** Extra words that reach this plugin's CLI group. */
   cliAliases?: string[]
   /** Defaults to `lazy`. */
