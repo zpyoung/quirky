@@ -5,6 +5,7 @@ import { UI_TOOL_SLOTS } from '@quirky/protocol'
 import { Badge, IconButton, Menu, ToolPanelFrame, type MenuItem } from '../design-system'
 import { usePluginHost, usePluginState } from '../context'
 import { PluginSlot } from '../plugins/PluginSlot'
+import { useRegion } from '../plugins/useRegion'
 import { InboxPanel } from './ShellChrome'
 import { useAttention } from './attention'
 import './tool-shell.css'
@@ -665,6 +666,7 @@ function panelContent(entry: UiToolEntry): ReactNode {
 export function ToolShell({ geometry, sizes, onResizePreview, onResizeCommit }: ToolShellProps) {
   const host = usePluginHost()
   const { model, layout, badges, badgeTitles } = usePluginState()
+  const panelRegion = useRegion('panel')
   const { snapshot: attention } = useAttention()
   const inboxCount = attention.asks !== null && !attention.errors.asks ? attention.asks.length : null
   const toolLayout = layout.tools
@@ -728,7 +730,7 @@ export function ToolShell({ geometry, sizes, onResizePreview, onResizeCommit }: 
           onMove={move}
         />
       ))}
-      <div className="tool-shell__panels">
+      <div className="tool-shell__panels" {...panelRegion}>
         {uniqueOpened.map(({ entry, slot }) => (
           <section className={`tool-shell__panel tool-shell__panel--${slot}`} data-tool-panel={entry.id} key={entry.id}>
             <ToolPanelFrame title={entry.title} onMinimize={() => close(slot)}>
