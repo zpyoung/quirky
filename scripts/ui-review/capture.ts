@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto'
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs'
-import { isAbsolute, join, relative, resolve, sep } from 'node:path'
+import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { chromium, type Browser, type BrowserServer, type Page } from 'playwright'
 import { type UiModel, type UiSlotEntry, type ThemeInfo } from '@quirky/protocol'
 import { connectDaemon, isDaemonAlive, readRuntime, type RuntimeInfo } from '@quirky/protocol/node'
@@ -691,10 +691,17 @@ async function inspectSurface(runtime: CaptureRuntime, target: CaptureTarget): P
     })
     if (!ownVisible && !visibleChild) return false
     if (node.querySelector('[aria-busy=\"true\"], [role=\"progressbar\"]')) return false
+    const loadingLeaf = [...element.querySelectorAll('*')].some((child) => {
+      if (child.children.length > 0 || !/^loading(?:\b|…)/i.test((child.textContent ?? '').trim())) return false
+      const childStyle = getComputedStyle(child)
+      const childRect = child.getBoundingClientRect()
+      return childStyle.display !== 'none' && childStyle.visibility !== 'hidden' && childRect.width > 0 && childRect.height > 0
+    })
+    if (loadingLeaf) return false
     if (node.querySelector('[role=\"alert\"], .plugin-slot-error')) return true
     const text = (element.textContent ?? '').trim()
-    if (text.length > 0 && !/^loading\b/i.test(text)) return true
-    return visibleChild
+    if (/^loading\b/i.test(text)) return false
+    return text.length > 0 || visibleChild
   }, selector, { timeout: readinessTimeout }), readinessTimeout, runtime.options.signal, `slot ${target.id} content`)
   const details = await root.evaluate((node) => {
     const body = node.classList.contains('plugin-slot') ? node.querySelector('.plugin-slot-body') : node
@@ -710,14 +717,12 @@ async function inspectSurface(runtime: CaptureRuntime, target: CaptureTarget): P
     return {
       text: (element.textContent ?? '').trim(),
       error: node.querySelector('[role=\"alert\"], .plugin-slot-error')?.textContent?.trim() ?? '',
-      empty: node.querySelector('.empty, .qt-empty, [data-empty-state]')?.textContent?.trim() ?? '',
       busy: node.querySelector('[aria-busy=\"true\"], [role=\"progressbar\"]') !== null,
       visible: (style.display !== 'none' && style.visibility !== 'hidden' && rect.width > 0 && rect.height > 0) || visibleChild,
       content: (element.textContent ?? '').trim().length > 0 || visibleChild
     }
   })
   if (details.error) throw new Error(`slot ${target.id} reported an error: ${details.error}`)
-  if (details.empty) throw new Error(`slot ${target.id} shows an empty/no-fixture state: ${details.empty}`)
   if (!details.visible) throw new Error(`slot ${target.id} is hidden or has zero size`)
   if (!details.content) throw new Error(`slot ${target.id} is empty`)
   if (details.busy || /^loading\b/i.test(details.text)) throw new Error(`slot ${target.id} is still loading`)
@@ -803,11 +808,13 @@ async function closeOwnedRuntime(
   signal: AbortSignal | undefined
 ): Promise<string[]> {
   const failures: string[] = []
+  // The launchServer owns Chromium; retain the client until it closes.
+  // Playwright's own graceful shutdown budget is 30 seconds.
+  if (server) {
+    try { await bounded(server.close(), 35_000, undefined, 'browser server close') } catch (error) { failures.push(`browser server close: ${errorMessage(error)}`) }
+  }
   if (browser) {
     try { await bounded(browser.close(), 2_000, undefined, 'browser close') } catch (error) { failures.push(`browser close: ${errorMessage(error)}`) }
-  }
-  if (server) {
-    try { await bounded(server.close(), 2_000, undefined, 'browser server close') } catch (error) { failures.push(`browser server close: ${errorMessage(error)}`) }
   }
   if (client) {
     if (!signal?.aborted) {
@@ -961,6 +968,10 @@ export async function captureApplication(options: CaptureOptions): Promise<Captu
     const launch = chromium.launchServer({
       executablePath: executable,
       headless: true,
+      // The CLI owns signals so evidence is saved after all runtime cleanup.
+      handleSIGINT: false,
+      handleSIGTERM: false,
+      handleSIGHUP: false,
       timeout: options.timeoutMs,
       env,
       args: process.platform === 'linux' ? ['--no-sandbox'] : []

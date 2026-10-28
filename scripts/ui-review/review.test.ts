@@ -152,7 +152,7 @@ const assessment = {
   scores: { palette: score, typography: score, spacing: score, components: score, hierarchy: score },
   reasons: ['The target surface and both images were inspected.', 'Spacing and component styling are compared against the approved theme.']
 };
-process.stdout.write('▶ resolved ' + provider + '/' + model + ':high' + String.fromCharCode(10));
+process.stderr.write('  ▶ resolved ' + provider + '/' + model + ':high (alias gemini)' + String.fromCharCode(10));
 process.stdout.write(mode === 'invalid-json' ? '{"targetVisible": true,' + String.fromCharCode(10) : JSON.stringify(assessment) + String.fromCharCode(10));
 `
 }

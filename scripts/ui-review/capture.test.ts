@@ -1,9 +1,12 @@
 import { describe, expect, test } from 'bun:test'
 import type { CaptureTarget } from './contracts'
 import { captureCells, discoverCaptureTargets, selectCaptureTargets } from './capture'
-import type { UiModel } from '@quirky/protocol'
+import type { UiModel, UiSlotEntry } from '@quirky/protocol'
 
-const slot = (id: string, plugin: string, title = id) => ({ id, plugin, title, module: `/plugins/${plugin}/dist/ui.js`, order: 10 })
+const slot = (id: string, plugin: string, title = id): UiSlotEntry => ({
+  id, plugin, title, kind: id.slice(0, id.indexOf(':')) as UiSlotEntry['kind'],
+  module: `/plugins/${plugin}/dist/ui.js`, order: 10
+})
 
 function model(): UiModel {
   return {

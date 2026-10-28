@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto'
 import { constants as fsConstants } from 'node:fs'
-import { lstat, mkdir, open, realpath, writeFile } from 'node:fs/promises'
+import { lstat, mkdir, open, realpath, writeFile, type FileHandle } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { basename, isAbsolute, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -141,7 +141,7 @@ function validatePng(bytes: Buffer, description: string): void {
 
 async function readStableFile(path: string, description: string): Promise<Buffer> {
   const absolutePath = resolve(path)
-  let handle: Awaited<ReturnType<typeof open>> | undefined
+  let handle: FileHandle | undefined
   try {
     handle = await open(absolutePath, fsConstants.O_RDONLY)
     const before = await handle.stat()
@@ -154,7 +154,7 @@ async function readStableFile(path: string, description: string): Promise<Buffer
     return bytes
   } catch (error) {
     if (error instanceof ReviewValidationError) throw error
-    fail(`${description} could not be read as a regular file.`)
+    throw new ReviewValidationError(`${description} could not be read as a regular file.`)
   } finally {
     await handle?.close().catch(() => undefined)
   }
@@ -327,7 +327,7 @@ function parseResolvedModel(stdout: string, stderr: string): ResolvedModel | und
   const cleanStdout = stdout.replace(/\u001b\[[0-?]*[ -/]*[@-~]/g, '')
   const cleanStderr = stderr.replace(/\u001b\[[0-?]*[ -/]*[@-~]/g, '')
   const checkHeader = /^\s*✓\s+[A-Za-z0-9_-]+\s+([A-Za-z][A-Za-z0-9._-]*)\/([A-Za-z0-9][A-Za-z0-9._/-]*)(?::[A-Za-z0-9._-]+)?\s*$/
-  const reviewHeader = /^\s*▶\s+resolved\s+([A-Za-z][A-Za-z0-9._-]*)\/([A-Za-z0-9][A-Za-z0-9._/-]*)(?::[A-Za-z0-9._-]+)?\s*$/i
+  const reviewHeader = /^\s*▶\s+resolved\s+([A-Za-z][A-Za-z0-9._-]*)\/([A-Za-z0-9][A-Za-z0-9._/-]*)(?::[A-Za-z0-9._-]+)?(?:\s+\(alias [A-Za-z0-9_-]+\))?\s*$/i
   const candidates = new Map<string, ResolvedModel>()
   const headerLines = [...responseHeader(cleanStdout).split(/\r?\n/), ...cleanStderr.split(/\r?\n/)]
   for (const line of headerLines) {
@@ -342,7 +342,7 @@ function parseResolvedModel(stdout: string, stderr: string): ResolvedModel | und
 }
 
 function isResolvedIdentityHeader(line: string): boolean {
-  return /^\s*▶\s+resolved\s+[A-Za-z][A-Za-z0-9._-]*\/[A-Za-z0-9][A-Za-z0-9._/-]*(?::[A-Za-z0-9._-]+)?\s*$/i.test(line)
+  return /^\s*▶\s+resolved\s+[A-Za-z][A-Za-z0-9._-]*\/[A-Za-z0-9][A-Za-z0-9._/-]*(?::[A-Za-z0-9._-]+)?(?:\s+\(alias [A-Za-z0-9_-]+\))?\s*$/i.test(line)
 }
 
 function assessmentResponse(stdout: string): string {
@@ -462,7 +462,6 @@ async function runReviewerProcess(args: string[], timeoutMs: number, signal?: Ab
   const stdout = makeOutputCollector(child.stdout)
   const stderr = makeOutputCollector(child.stderr)
   const exited = child.exited
-  let timeout: ReturnType<typeof setTimeout> | undefined
   let abortListener: (() => void) | undefined
   const completion = Promise.all([exited, stdout.done, stderr.done]).then(([exitCode]) => ({ kind: 'exit', exitCode }) as const)
   const waiting: Promise<ProcessOutcome>[] = [completion.then((result) => ({ kind: 'exit', result: {
@@ -472,20 +471,22 @@ async function runReviewerProcess(args: string[], timeoutMs: number, signal?: Ab
     timedOut: false,
     aborted: false
   } }))]
-  waiting.push(new Promise<ProcessOutcome>((resolveTimeout) => {
-    timeout = setTimeout(() => resolveTimeout({ kind: 'timeout' }), timeoutMs)
-  }))
-  if (signal) waiting.push(new Promise<ProcessOutcome>((resolveAbort) => {
-    abortListener = () => resolveAbort({ kind: 'abort' })
+  const timedOut = Promise.withResolvers<ProcessOutcome>()
+  const timeout = setTimeout(() => timedOut.resolve({ kind: 'timeout' }), timeoutMs)
+  waiting.push(timedOut.promise)
+  if (signal) {
+    const aborted = Promise.withResolvers<ProcessOutcome>()
+    abortListener = () => aborted.resolve({ kind: 'abort' })
     signal.addEventListener('abort', abortListener, { once: true })
     if (signal.aborted) abortListener()
-  }))
+    waiting.push(aborted.promise)
+  }
 
   let outcome: ProcessOutcome
   try {
     outcome = await Promise.race(waiting)
   } finally {
-    if (timeout) clearTimeout(timeout)
+    clearTimeout(timeout)
     if (signal && abortListener) signal.removeEventListener('abort', abortListener)
   }
   if (outcome.kind !== 'exit') {

@@ -23,6 +23,7 @@ type OutputPaths = {
   captureProgress: string | null
   reviewReport: string | null
   errorReport: string | null
+  result: string
 }
 
 type UiReviewResult = {
@@ -241,6 +242,7 @@ export async function runUiReview(argv: readonly string[], dependencies: UiRevie
       let manifest: CaptureManifest
 
       if (args.mode === 'manifest') {
+        paths.captureManifest = args.manifestPath
         const parsedManifest: unknown = JSON.parse(await io.readFile(args.manifestPath))
         // reviewManifest is the strict validation boundary for persisted evidence.
         manifest = parsedManifest as CaptureManifest
