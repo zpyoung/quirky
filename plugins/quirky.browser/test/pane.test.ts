@@ -10,6 +10,7 @@ const call = (h: BrowserTestHarness, name: string, params: Record<string, unknow
   h.client.callAny(`quirky.browser/${name}`, params)
 
 function startPageServer() {
+  let reloadRequestCount = 0
   const server = Bun.serve({
     hostname: '127.0.0.1',
     port: 0,
@@ -26,6 +27,12 @@ function startPageServer() {
         })
       }
       if (path === '/page') return new Response(`<!doctype html><title>Pane fixture</title><body style="margin:0"><input id="text" value=""><button id="button">Button</button><p>needle needle needle</p></body>`, { headers: { 'content-type': 'text/html; charset=utf-8' } })
+      if (path === '/reload') {
+        const count = ++reloadRequestCount
+        return new Response(`<!doctype html><title>Reload fixture ${count}</title><body><input id="text"><main id="request">${count}</main></body>`, {
+          headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' }
+        })
+      }
       if (path === '/dialog') return new Response('<!doctype html><title>Dialog fixture</title><main>dialog</main>', { headers: { 'content-type': 'text/html; charset=utf-8' } })
       if (path === '/download') return new Response('owned download contents', {
         headers: { 'content-type': 'application/octet-stream', 'content-disposition': 'attachment; filename="../../safe.txt"' }
@@ -34,7 +41,7 @@ function startPageServer() {
       return new Response('not found', { status: 404 })
     }
   })
-  return { url: server.url.href, stop: () => server.stop(true) }
+  return { url: server.url.href, reloadRequestCount: () => reloadRequestCount, stop: () => server.stop(true) }
 }
 async function startCertificateServer(h: BrowserTestHarness) {
   const keyPath = join(h.home, 'pane-test-key.pem')
@@ -221,6 +228,58 @@ test('Watch leases deliver acknowledged latest frames and typed input/find/zoom/
       })
       expect(ended).toContain('closed')
       await expect(call(h, 'paneFrameAck', { pane: pane.id, watchId: resumed.watchId, sequence: 1 })).rejects.toBeInstanceOf(Error)
+    } finally {
+      unsubscribe()
+    }
+  } finally {
+    fixture.stop()
+    await h.cleanup()
+  }
+}, 90_000)
+
+test('Watch reload and hard reload navigate the bound page while preserving its lease', async () => {
+  const h = await startBrowserHarness()
+  const fixture = startPageServer()
+  const events: QuirkyEvent[] = []
+  try {
+    const worktree = await h.addFolderWorktree('pane-watch-reload')
+    await h.client.call('events.subscribe', {})
+    const unsubscribe = h.client.onEvent((event) => events.push(event))
+    try {
+      const page = await createAgentPage(h, worktree, `${fixture.url}reload`)
+      const pane = await call(h, 'paneOpen', { worktree: `id:${worktree}`, mode: 'watch', page: page.browserPageId }) as { id: string }
+      const watch = await call(h, 'paneWatch', { pane: pane.id }) as { watchId: string }
+      await waitFor(() => events.map(paneFrame).find((frame) => frame?.watchId === watch.watchId))
+
+      expect(fixture.reloadRequestCount()).toBe(1)
+      expect(await call(h, 'eval', {
+        page: page.browserPageId,
+        expression: 'document.querySelector("#request").textContent'
+      })).toEqual({ value: '1' })
+
+      await call(h, 'paneControl', { pane: pane.id, action: 'reload' })
+      expect(fixture.reloadRequestCount()).toBe(2)
+      expect(await call(h, 'eval', {
+        page: page.browserPageId,
+        expression: 'document.querySelector("#request").textContent'
+      })).toEqual({ value: '2' })
+      await call(h, 'paneInput', { pane: pane.id, kind: 'text', text: 'after reload' })
+      expect(await call(h, 'eval', {
+        page: page.browserPageId,
+        expression: 'document.querySelector("#text").value'
+      })).toEqual({ value: 'after reload' })
+
+      await call(h, 'paneControl', { pane: pane.id, action: 'hardReload' })
+      expect(fixture.reloadRequestCount()).toBe(3)
+      expect(await call(h, 'eval', {
+        page: page.browserPageId,
+        expression: 'document.querySelector("#request").textContent'
+      })).toEqual({ value: '3' })
+      await call(h, 'paneInput', { pane: pane.id, kind: 'text', text: 'after hard reload' })
+      expect(await call(h, 'eval', {
+        page: page.browserPageId,
+        expression: 'document.querySelector("#text").value'
+      })).toEqual({ value: 'after hard reload' })
     } finally {
       unsubscribe()
     }

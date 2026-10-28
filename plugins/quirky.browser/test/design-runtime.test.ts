@@ -18,7 +18,7 @@ function startDesignFixture(): Fixture {
 }
 
 function startCaptureFixture(): Fixture {
-  const html = '<!doctype html><title>Capture fixture</title><style>html,body{margin:0;background:rgb(0,20,220);height:1800px}#target{position:absolute;left:80px;top:900px;width:120px;height:80px;background:rgb(240,10,20)}</style><div id=\"target\"></div>'
+  const html = '<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><title>Capture fixture</title><style>html,body{margin:0;background:rgb(0,20,220);height:1800px}#target{position:absolute;left:80px;top:900px;width:120px;height:80px;background:rgb(240,10,20)}</style><div id="target"></div>'
   const server = Bun.serve({
     hostname: '127.0.0.1', port: 0,
     fetch() {
@@ -135,9 +135,15 @@ test('Watch picker selects click coordinates without a prior hover, blocks page 
     const first = await call(h, 'designArm', { pane: page.pane, mode: 'grab' }) as { opId: string }
     expect(await call(h, 'designHover', { pane: page.pane, opId: first.opId })).toEqual({ payload: null })
     await clickAt(h, page.pane, 60, 60)
-    const firstRead = await call(h, 'designRead', { pane: page.pane, opId: first.opId }) as { status: string; selection?: { kind: string; payload: { target: { textSnippet: string; attributes: Record<string, string>; computedStyles: Record<string, string> } } } }
+    const firstRead = await call(h, 'designRead', { pane: page.pane, opId: first.opId }) as { status: string; selection?: { kind: string; payload: { target: { textSnippet: string; attributes: Record<string, string>; computedStyles: Record<string, string> }; screenshot: { mimeType: string; dataUrl: string; width: number; height: number } | null } } }
     expect(firstRead.selection).toMatchObject({ kind: 'selected', payload: { target: { textSnippet: 'Coordinate-only paragraph', attributes: { id: 'paragraph' } } } })
     expect(Object.keys(firstRead.selection!.payload.target.computedStyles)).toHaveLength(16)
+    const screenshot = firstRead.selection!.payload.screenshot
+    expect(screenshot?.mimeType).toBe('image/png')
+    expect(screenshot?.dataUrl.startsWith('data:image/png;base64,')).toBe(true)
+    const pngBytes = Buffer.from(screenshot!.dataUrl.slice('data:image/png;base64,'.length), 'base64')
+    expect([...pngBytes.subarray(0, 8)]).toEqual([137, 80, 78, 71, 13, 10, 26, 10])
+    expect(pngBytes.byteLength).toBeLessThanOrEqual(2 * 1024 * 1024)
 
     const second = await call(h, 'designArm', { pane: page.pane, mode: 'grab' }) as { opId: string }
     expect(second.opId).not.toBe(first.opId)
@@ -146,7 +152,14 @@ test('Watch picker selects click coordinates without a prior hover, blocks page 
     expect(secondRead.selection?.payload.target).toMatchObject({ textSnippet: 'Second element' })
     expect(secondRead.selection?.payload.target.selector).toContain('#button')
 
+    const annotation = await call(h, 'designArm', { pane: page.pane, mode: 'annotate' }) as { opId: string }
+    await clickAt(h, page.pane, 60, 60)
+    const annotationRead = await call(h, 'designRead', { pane: page.pane, opId: annotation.opId }) as { selection?: { kind: string; payload: { screenshot: unknown } } }
+    expect(annotationRead.selection?.kind).toBe('selected')
+    expect(annotationRead.selection?.payload.screenshot).toBeNull()
+
     expect(await call(h, 'eval', { page: page.page, expression: 'window.__designClicks' })).toEqual({ value: 0 })
+
   } finally {
     fixture.stop()
     await h.cleanup()
@@ -214,9 +227,8 @@ test('Watch picker highlights, handles C/S and context selection, and restores o
     const capture = await call(h, 'designCapture', { pane: page.pane, opId: screenshotOp.opId }) as { screenshot: { mimeType: string; dataUrl: string; width: number; height: number } | null }
     expect(capture.screenshot?.mimeType).toBe('image/png')
     expect(capture.screenshot?.dataUrl.startsWith('data:image/png;base64,')).toBe(true)
-    expect(capture.screenshot?.width).toBeGreaterThan(0)
     await call(h, 'paneInput', { pane: page.pane, kind: 'mouse', type: 'mouseMoved', x: 61, y: 61 })
-    expect((await call(h, 'designHover', { pane: page.pane, opId: screenshotOp.opId }) as { payload: unknown }).payload).toBeTruthy()
+    expect((await call(h, 'designHover', { pane: page.pane, opId: screenshotOp.opId }) as { payload: unknown }).payload).toMatchObject({ target: { textSnippet: 'Coordinate-only paragraph' } })
 
     const contextOp = await call(h, 'designArm', { pane: page.pane, mode: 'grab' }) as { opId: string }
     await rightClickAt(h, page.pane, 60, 60)

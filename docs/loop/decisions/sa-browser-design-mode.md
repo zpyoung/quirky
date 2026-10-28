@@ -154,5 +154,71 @@
 - **Revisit if:** parser/compiler finds another contract error
 - **Source:** assumed — autonomous
 
+## D15: Preserve framework close, event and Watch interception contracts
+- **Question:** Actual Browser activation, Watch navigation and pane closure exposed dependency checkpoint defects; which contracts govern?
+- **Options:** weaken registry/terminal contracts; hide failures; adopt the dependency owner's canonical repairs
+- **Chose:** correct fileURLToPath to node:url; wire events omit the contribution-only `event:` prefix; continue owned Fetch.requestPaused outside the page queue and disable interception on Watch stop; paneClose accepts terminal-only tabId, validates provenance and returns true as the public hosted-tab contract requires.
+- **Why:** actual activation failed on the invalid import; active/stopped Watch navigation hung before the request continuation/cleanup; close failed params.tabId. Terminal invokes close hooks with tabId and requires boolean true. Read the owner's repaired candidate and adopted its exact close contract instead of inventing another shape.
+- **Evidence:** actual smoke failures and subsequent Watch/API pass; packages/daemon/src/plugins/events.ts:28–40; terminal layout/service.ts:318–321; read-only dependency candidate pane-service.ts:843–860; Orca lane4 coordination receipts.
+- **Reversibility:** medium (public lifecycle contract)
+- **Confidence:** high for observed roots; full dependency gate still pending
+- **Revisit if:** incoming dependency checkpoint changes the canonical contract
+- **Source:** locked by sa-browser-pane canonical hosted-tab contract
+
+## D16: Separate test-driver defects from actual product results
+- **Question:** Which failed probes establish product defects rather than an invalid harness?
+- **Options:** call every failure a product bug; silently retry; record setup/driver failures with corrected independent observations
+- **Chose:** preserve interrupted/failed runs. Native matcher creation was before its trigger, so reorder assertions; unsupported fake timer declarations replaced with real5s product deadlines and8s test harness caps, without changing product timers. Controlled React inputs use the repository's native setter/focus/input/keyup pattern. Mobile crop fixture declares a real responsive viewport; no arbitrary850px assumption on a scaled980px layout. Run API Chrome tests in their own process, as the suite already does.
+- **Why:** actual diagnostics identified test-only deadlocks/type errors and unrecognized text input; a responsive fixture then passed real DPR2 dimensions and selected-element pixels. Combined multi-file focused run timed out; isolated actual picker passed, so the combined run is not passed off as green.
+- **Evidence:** NativeEvalRepair trace; compiler artifact60; bg10 33pass/3fail; corrected bg15 compiler exit0 and36pass/0fail/189assertions; bg16 actual coordinate picker1pass/7assertions; bg20 scrolled DPR crop1pass/10assertions; existing terminal features-support.ts:465–472.
+- **Reversibility:** easy (fixtures)
+- **Confidence:** high for exercised fixes
+- **Revisit if:** standard per-file affected suite exposes another failure
+- **Source:** assumed — autonomous
+
+## D17: Prove text, pixels and delivery through real isolated processes
+- **Question:** What counts as the feature smoke rather than a mocked forwarding test?
+- **Options:** trust worker unit reports; use real homes/accounts; owned real daemon/PTY/Chrome plus a local recording agent
+- **Chose:** fresh isolated runtime and mock-keychain Chrome, actual CLI/API coordinate selections, rearm, page-click suppression, crop/full PNG and navigation cancellation; actual new-agent argv and existing-agent stdin observation. Preserve authored “password” feedback. The recording OMP is local-only, with isolated HOME/search path; no external model/account is used.
+- **Why:** unit tests alone do not show runtime delivery or captured pixels. New-agent API returned command-line before the recorder file appeared; inspected the actual live session and argv, then tested existing delivery without blindly relaunching it.
+- **Evidence:** actual API/CLI smoke pass (crop544x67/full756x469); visually read PNGs; /tmp/quirky-browser-design.hjsqFr/api-smoke-evidence.json and delivery-evidence.json; real recorder argv/stdin. Failed smoke-only event-filter/rearm/Markdown-escape assertions remain disclosed as harness corrections.
+- **Reversibility:** easy (verification approach)
+- **Confidence:** high for observed API/PTY paths; native surface remains pending nightly
+- **Revisit if:** final synchronized source changes these paths
+- **Source:** assumed — autonomous
+
+## D18: Keep failed UI asset deployment evidence in the same guarded run
+- **Question:** The first actual Browser pane was blank with a404; was the feature bundle missing from the build?
+- **Options:** call it passing; bypass the resource root guard; correct the owned fixture deployment
+- **Chose:** retain the404/blank-pane observations, replace only the run-owned wrapper's external dist symlink with an in-root copy of the actual built bundle, confirm HTTP200 JavaScript128227bytes, and resume the same guarded UI run. Future smoke setup copies assets rather than symlinking out of the plugin root.
+- **Why:** the daemon correctly refused an out-of-root symlink; this was fixture packaging, not established product behavior. No source/public-resource policy was relaxed.
+- **Evidence:** UI run20261028T042907-dbf5 obs3/obs4 and findings; owned wrapper path under /tmp/qdesign-m1JtEi; actual HTTP200 response after copy; passed packaged build23plugins.
+- **Reversibility:** easy (fixture only)
+- **Confidence:** high for the404 root and corrected asset delivery; UI goals still in progress at recording
+- **Revisit if:** the same blank pane persists with the real bundle loaded
+- **Source:** assumed — autonomous
+
+## D19: Finish the original Grab payload image contract without holding a user-waiting lock
+- **Question:** The source attaches a cropped image to Grab payloads; can Watch selection return only text context when capture is supported?
+- **Options:** leave every selection image null; capture every hover; capture the consumed Grab selection outside its page lock
+- **Chose:** attach one bounded real crop after selected Grab read, outside the profile lock; recheck the operation and exact generation before returning. Oversized/unavailable PNG remains null, stale selection does not return success, other capture errors propagate. Force annotation screenshots null again at the host boundary.
+- **Why:** completes the initially named Screenshot/payload contract without lock recursion or continuous hover screenshots.
+- **Evidence:** browser.md:304–306; GrabPayloadImageRepair scoped diff; design runtime PNG-signature/budget/annotation regressions. Runtime verification still gates acceptance.
+- **Reversibility:** medium (payload latency)
+- **Confidence:** source-backed; final runtime test required
+- **Revisit if:** real regression exposes a capture/stale-response race
+- **Source:** locked by browser.md
+
+## D20: Skip the unstarted final review after the actual two-hour point
+- **Question:** Should an unstarted final cross-family campaign begin after the item's night-mode limit?
+- **Options:** start another campaign; call an unrun review green; obey the night rule and keep mandatory behavioral gates
+- **Chose:** skip the unstarted C/S/X final review; preserve that it supplied no assurance. Continue the already-started UI campaign and fix its blocking product findings, exercise the actual source paths, run affected/scripts/type/build gates and land once the dependency permits.
+- **Why:** authoritative claim commitcc75544c is02:45:09Z; observed clock04:47:22Z is past04:45:09Z. LOOP says overdue items skip any unstarted review/dogfood. UI was already started; its errors must not be erased.
+- **Evidence:** integration claim log and actual date command; current LOOP night mode; existing guarded UI run20261028T042907-dbf5.
+- **Reversibility:** easy (later independent review can identify real findings)
+- **Confidence:** high for the timing/rule, no correctness claim
+- **Revisit if:** actual gates or the ongoing UI run find a blocking defect
+- **Source:** locked by docs/loop/LOOP.md
+
 ## Progress
-Source assembled with clean scope barrier; first compiler failed payload syntax (parent restored omitted revision/brace), actual manifest parser reported45missing required flag descriptions (parent corrected metadata). Focused regression run was explicitly canceled after real native evaluate readiness/navigation timeouts, not a pass. NativeEvalRepair owns only native adapter/test root cause while parent repairs browser/docs. Dependency repair merge brought one BrowserPaneWindow line; final gates must bind the resulting tree. Canonical deps remains pending; no review, UI, acceptance or land claimed yet.
+Compiler and36isolated invariants passed; real Watch/CLI/PNG/new+existing PTY smoke passed on the owned runtime. Original screenshot payload attachment added; subsequent runtime file had3pass/1cold identity timeout, not a green file. Actual UI run recovered asset404 but exposed Reload's void-CDP-response navigation bug; BrowserWatchReloadRepair patched driver/tracker and added a real regression, now running as bg30. Visible Watch address action also now commits its draft before conversion; operator's cached older UI uses Enter as its honest route. At04:47:22Z the item is overdue; D20 skips the unstarted final review, not mandatory tests or observed bugs. Dependency still pending, no land/overall completion claim.

@@ -617,7 +617,10 @@ export function BrowserPaneWindow({ context, input }: { context: UiPluginContext
     frameRef.current = null
     setFrame(null)
     setWatchError(null)
+    setEditingAddress(false)
+    setSuggestionsOpen(false)
     try {
+      if (address !== pane.url) await context.call('quirky.browser/paneNavigate', { pane: pane.id, input: address })
       const result = await context.call('quirky.browser/paneWatch', { pane: pane.id })
       const id = typeof result === 'object' && result !== null ? Reflect.get(result, 'watchId') : null
       if (typeof id !== 'string' || id === '') throw new Error('Watch did not return a lease ID')
@@ -639,7 +642,7 @@ export function BrowserPaneWindow({ context, input }: { context: UiPluginContext
       setWatchError(errorText(error))
       setWatchRevision((revision) => revision + 1)
     }
-  }, [context, pane, refresh])
+  }, [address, context, pane, refresh])
 
   const loadAgentPages = useCallback(async () => {
     if (!pane) return

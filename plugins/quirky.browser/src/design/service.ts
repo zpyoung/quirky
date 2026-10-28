@@ -268,6 +268,25 @@ export class DesignService {
         return { opId, status }
       }
       if (result.status === 'expired' || result.status === 'cancelled') this.retire(operation, result.status)
+      if (result.selection && operation.mode === 'grab') {
+        const { screenshot } = await this.designCapture({ pane, opId })
+        if (this.operations.get(opId) !== operation) return { opId, status: this.retiredStatus(pane, opId) }
+        if (this.expired(operation)) return { opId, status: 'expired' }
+        const currentPage = this.currentOperationPage(operation)
+        if (!currentPage) {
+          await this.runGuestOnPage(operation, 'cancel').catch(() => undefined)
+          this.retire(operation, 'cancelled')
+          return { opId, status: this.retiredStatus(pane, opId) }
+        }
+        const stillCurrent = await this.runtime.withPage(currentPage, 'designRead', async (execution) =>
+          this.operations.get(opId) === operation && this.executionMatches(operation, execution))
+        if (!stillCurrent) {
+          this.retire(operation, 'cancelled')
+          return { opId, status: this.retiredStatus(pane, opId) }
+        }
+        if (this.expired(operation)) return { opId, status: 'expired' }
+        result.selection.payload.screenshot = screenshot
+      }
       return result
     } catch (error) {
       if (stalePageError(error)) {
@@ -575,6 +594,7 @@ export class DesignService {
       throw fault('browser_tab_changed', 'browser design guest returned an invalid selection kind')
     }
     const payload = this.clampGuestPayload(rawSelection.payload)
+    if (operation.mode === 'annotate') payload.screenshot = null
     operation.selectionPayload = payload
     return { opId: operation.opId, status: 'armed', selection: { kind: rawSelection.kind as 'selected' | 'context-selected' | 'copy' | 'screenshot', payload } }
   }

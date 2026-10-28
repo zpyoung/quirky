@@ -574,17 +574,32 @@ export class BrowserRuntime {
   private async reloadPage(execution: PageExecution, ignoreCache: boolean): Promise<void> {
     const tracker = this.beginNavigation(execution)
     let match: { frameId: string; loaderId?: string; url?: string } | undefined
+    const timeoutMs = 30_000
+    const startedAt = Date.now()
     try {
-      const response = safeRecord(await execution.cdp.send('Page.reload', { ignoreCache }, execution.binding.sessionId), {
-        type: 'object',
-        properties: { loaderId: { type: 'string' } },
-        additionalProperties: true
-      }, 'reload response')
-      const loaderId = asString(response.loaderId)
-      if (loaderId) {
-        await this.waitForDocumentLoad(tracker, tracker.frameId, loaderId, 30_000)
-        match = { frameId: tracker.frameId, loaderId }
+      await execution.cdp.send('Page.reload', { ignoreCache }, execution.binding.sessionId, timeoutMs)
+      const navigation = await this.waitForNavigationEvent(
+        tracker,
+        (events) => events.find((event) =>
+          event.kind === 'frame' &&
+          event.frameId === tracker.frameId &&
+          event.loaderId !== undefined &&
+          event.loaderId !== tracker.previousLoaderId
+        ),
+        Math.max(0, timeoutMs - (Date.now() - startedAt)),
+        'reload did not navigate to a new main-frame document'
+      )
+      if (navigation.kind !== 'frame' || !navigation.loaderId) {
+        throw fault('browser_tab_changed', 'reload did not establish a new main-frame document')
       }
+      match = { frameId: navigation.frameId, loaderId: navigation.loaderId }
+      const loaded = await this.waitForDocumentLoad(
+        tracker,
+        navigation.frameId,
+        navigation.loaderId,
+        Math.max(0, timeoutMs - (Date.now() - startedAt))
+      )
+      if (loaded.kind === 'loading-failed') throw fault('browser_error', `reload failed: ${loaded.errorText}`)
       await this.pageLocation(execution)
     } finally {
       this.finishNavigation(execution, tracker, match)
