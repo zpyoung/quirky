@@ -450,12 +450,15 @@ test('real CLI and daemon automate native Codex runs, reuse, failures, schedulin
       'scheduled automation create result'
     )
     const scheduledId = stringField(scheduled, 'id', 'scheduled automation create result')
+    // Recurrences follow minute boundaries, but the 60s poll is independently phased from service startup.
+    const nextRunAt = numberField(scheduled, 'nextRunAt', 'scheduled automation create result')
+    const schedulerDeadlineMs = Math.max(0, nextRunAt - Date.now()) + 60_000 + 10_000
     const skipped = record(
       await waitFor(
         'actual scheduler/precheck',
         () => latestRun(client!, scheduledId),
         (value) => isRecord(value) && value.status === 'skipped_precheck',
-        85_000
+        schedulerDeadlineMs
       ),
       'skipped scheduled run'
     )
@@ -490,4 +493,4 @@ test('real CLI and daemon automate native Codex runs, reuse, failures, schedulin
     }
     expect(existsSync(home)).toBe(false)
   }
-}, 150_000)
+}, 180_000)

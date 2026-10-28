@@ -264,5 +264,16 @@
 - **Revisit if:** the public native protocol or CLI changes
 - **Source:** locked by docs/roadmap.md
 
+## D25: Derive the real scheduler acceptance deadline from both clock phases
+- **Question:** Why can the native test see no scheduled row after its fixed85-second wait?
+- **Options:** treat a passing retry as flaky clearance; change the daemon interval; derive the test's bound from the saved due time and independently phased poll
+- **Chose:** keep the real60-second daemon timer unchanged. The test waits through saved nextRunAt plus one complete poll interval and10seconds transport margin; its outer watchdog covers the two possible minutes plus setup/cleanup. Removed the temporary manual-tick failure diagnostic.
+- **Why:** The combined focused gate observed200pass/1timeout and never reached typecheck. A source-backed calculation using the real occurrence function proves a normal counterexample: daemon04:00:57, creation04:01:13, due04:02:00, firsttick04:01:57 (not due), secondtick04:02:57, or104000ms after creation. The original failing run's precise phase was not retained, so that phase is not claimed as observed. An instrumented different-phase run passed201/0/684assertions; it is not by itself proof of flakiness. The inadequate test bound is independently demonstrated.
+- **Evidence:** failed focused prepass; actual nextAutomationOccurrenceAfter calculation; SchedulerIsolation source audit; instrumented six-file run201pass0fail136.88s
+- **Reversibility:** easy
+- **Confidence:** high for the invalid old bound and corrected phase calculation
+- **Revisit if:** scheduler cadence or recurrence alignment changes
+- **Source:** assumed — autonomous
+
 ## Progress
 All original components and the background blocker-fix component are integrated and their owned worktrees removed. Source runtime hash959f4eb8 sent to lane6; optional false-background output now omitted and its incidental default assertion removed. Final native CLI smoke passed and all processes/home were cleaned. One integration catch-up is done. Next: commit final docs/wire cleanup, run the prepared affected prepass once, fix concrete diagnostics, run exactly one final C/S/X review and blocker-fix batch, add the single constrained-flow follow-up, then detach and authoritative queue land. No human asks or second item.
