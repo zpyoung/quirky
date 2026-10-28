@@ -5,6 +5,7 @@ export type { ContextMenuItem, ContextMenuListProps, ContextMenuProps } from './
 export { Toast, Dialog } from './overlays'
 export { EmptyState, FormRow, ToolPanelFrame, InlineAgentCard } from './panels'
 export { uiTokens, type UiTokenName } from './tokens'
+export { ReadOnlyPreview, type ReadOnlyPreviewProps } from './read-only-preview'
 export type {
   BadgeProps,
   ButtonProps,
