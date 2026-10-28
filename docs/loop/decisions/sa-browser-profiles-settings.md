@@ -233,5 +233,35 @@
 - **Revisit if:** the integrated Browser/Terminal/daemon or controller gate fails
 - **Source:** assumed — autonomous, preserving incoming public contracts
 
+## D23: Preserve final roadmap input custody and current-model routing
+- **Question:** Does the single post-dependency roadmap catchup change Browser integration?
+- **Decision:** Preserve exact-incarnation worker input custody and the separate URL/file routing paths. Keep the current-model click-setting refresh and MethodNotFound-only external fallback. Do not promote another item's private-profile UI proof to Default or native-root isolation.
+- **Why:** worker userInput is claimed before human-intent bytes, not inferred from generic writes or query replies. Browser URL clicks remain public Browser API actions; file editor/reveal and blocked Finder dropped-source-path work are separate.
+- **Evidence:** deps bg_40 ready=true; one git merge build/roadmap completed. FinalCatchupContracts read complete m4-editor-drop-open-in-place D1–6/83lines, m5-loops-presets D1–19/212lines, m6-orchestration-workers D1–31/363lines, m5-structured-runner D1–53/591lines and the auto-merged TerminalPaneView/ui-fake/input seams. No concrete Browser/settings/routing/lifecycle conflict. Pre-catchup merged boundary197remote+4macOS files passed with no retries; ownership-safe scripts68pass570asserts and types passed. Final caught-up suite/types/build and actual Watch-profile isolation smoke are running.
+- **Reversibility:** medium (shared lifecycle contracts)
+- **Confidence:** high for reconciliation; final caught-up gates pending
+- **Revisit if:** those gates or actual source smoke fail
+- **Source:** assumed — autonomous, preserving incoming public contracts
+
+## D24: Complete explicit Watch profile transitions before returning
+- **Question:** Why did the final profile smoke receive page=null, and could the visible UI recover?
+- **Decision:** Native profile changes remain metadata-only/Chrome-free. An explicit Watch profile change prepares a real page in the target profile before retiring the old lease, then commits the page/profile/partition together. Preserve hosted identity/address, reject superseded pane/profile/page/mode/URL transitions, and close only the newly prepared orphan on failure.
+- **Why:** paneWatch could lazily rebind a null page, so the first smoke evaluated too early for that old API ordering. But BrowserPaneWindow's effect refuses null pages and the profile menu did not request another lease; a visible Watch stayed blank. Completing the explicit Watch use server-side avoids a new client handoff state machine and works for menu and API callers.
+- **Evidence:** real source smoke FINAL_PROFILE_SWITCH_SMOKE_OK/8.39s: selected B has no A storage, switchback recovers A, hosted identity/address preserved, old ack rejected/new lease distinct, four owned launch commands. New real-Chrome happy-path and deterministic close-during-HTTP-preparation regressions retained. The latter first caught a leaked B page: internal rollback omitted destructive tabClose confirmation and swallowed its error. Cleanup now supplies yes:true and propagates failure.
+- **Reversibility:** medium (explicit Watch transition lifetime)
+- **Confidence:** high for exercised API/storage/lease/rollback paths
+- **Revisit if:** a competing navigation/profile change bypasses the identity guard
+- **Source:** assumed — autonomous, completing the accepted lane8 Watch profile integration
+
+## D25: Verify final compiled Watch switching, not only metadata
+- **Question:** Does the repaired profile menu actually show the selected profile's page?
+- **Decision:** Accept the focused compiled Watch result and keep native storage/deletion and full parity/review limits separate. Retain all earlier failed receipts; the latest Browser boundary is zero-retry, not proof that every historic flake has an attributed cause.
+- **Why:** a checked radio and correct backend metadata do not prove the visible frame changed.
+- **Evidence:** final packaged UI rendered Alpha's blue Owned Alpha storage, selected Beta via the Browser menu and rendered yellow Empty profile, then selected Alpha and restored Owned Alpha. Address unchanged, one Browser tab, pageerrors=[]; screenshots omp-sshots-15b7a5f174d4f018.webp,15b7a62a9914f019.webp,15b7a63ca954f01a.webp personally read. No Native guest/Session clear ran; only fresh UUID Watch profiles. Owned browser closed and daemon exited0. Final Browser suite bg_53:9remote+2macOS files pass/no retries/72.99s. Types bg_51 EXIT0; build bg_52 EXIT0,28plugins/20UI modules. Supersession fixture now has the same90s outer budget as its real-Chrome peers (omitted default5s was too short); no product/condition deadline changed.
+- **Reversibility:** evidence can be extended
+- **Confidence:** high for exercised compiled UI/API behavior, native assurance absent
+- **Revisit if:** the authoritative merged controller gate fails
+- **Source:** assumed — autonomous
+
 ## Progress
-2026-10-28: implementation/Find and f4489799 integrated, source binding fix0713467c committed. All owned verification gates completed: Browser directory bg_34 EXIT0 via configured retries (D20/BLOCKERS retains initial failures), root types bg_35 EXIT0, rebuilt27-plugin artifact bg_36 EXIT0, scripts68pass532asserts and broader affected suite with disclosed Search retry. Focused/compiled UI and actual Chrome occurrence proof recorded; no owned agents/services/browser remain. Waiting for sa-browser-pane dependency controller verdict via bg_37; do not end this turn on pending. Then one roadmap catchup/read new decision logs, recheck changed integration, commit/detach controller land and notes. Native clear/isolation and full parity/final review are not claimed passing.
+2026-10-28: deps ready=true, latest pane repairs merged61e6a525 and the single final roadmap catchup/reconciliation completed. Explicit Watch profile rebind and confirmed orphan cleanup are implemented with real API/storage/lease/stale-completion regressions. Final Browser9remote+2macOS pass with no retries; caught-up broad217remote+5macOS gate passed via disclosed Markdown/shell-path/terminal-search retries; scripts68pass570asserts, current types and28-plugin build pass. Compiled Watch UI Alpha→Beta→Alpha restores isolated data, same address/one tab, no page errors; owned UI/browser/daemon cleaned. Next only: commit final receipts/source, detach and authoritative queue land; handle any actual controller failure and write notes. Native clear/isolation and full parity/final review are not claimed passing.

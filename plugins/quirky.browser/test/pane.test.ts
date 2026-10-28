@@ -4,7 +4,7 @@ import { basename, dirname, join } from 'node:path'
 import { expect, test } from 'bun:test'
 import type { QuirkyEvent } from '@quirky/protocol'
 import { startBrowserHarness, type BrowserTestHarness } from './harness'
-import type { PaneFrame, PaneState } from '../src/pane-contract'
+import type { PaneFrame, PaneState, PaneTab } from '../src/pane-contract'
 type CertificateServer = { port: number; stop(): Promise<void> }
 
 const call = (h: BrowserTestHarness, name: string, params: Record<string, unknown> = {}) =>
@@ -265,6 +265,141 @@ test('Watch leases deliver acknowledged latest frames and typed input/find/zoom/
   } finally {
     fixture.stop()
     await h.cleanup()
+  }
+}, 90_000)
+
+test('profileSet rebinds a Watch pane to isolated managed pages and retires the previous lease', async () => {
+  const h = await startBrowserHarness()
+  const events: QuirkyEvent[] = []
+  try {
+    const worktree = await h.addFolderWorktree('pane-watch-profiles')
+    await h.client.call('events.subscribe', {})
+    const unsubscribe = h.client.onEvent((event) => events.push(event))
+    try {
+      const profileA = ((await call(h, 'profileCreate', { name: 'Owned A' }) as { profile: { id: string } }).profile).id
+      const profileB = ((await call(h, 'profileCreate', { name: 'Owned B' }) as { profile: { id: string } }).profile).id
+      const original = await call(h, 'tabCreate', {
+        worktree: `id:${worktree}`, profile: profileA, url: `${h.fixtureUrl}events`
+      }) as { browserPageId: string }
+      await call(h, 'eval', {
+        page: original.browserPageId,
+        expression: "localStorage.setItem('lane8-profile', 'owned-A'); document.cookie='lane8-cookie=owned-A; path=/'; document.title"
+      })
+      const pane = await call(h, 'paneOpen', {
+        worktree: `id:${worktree}`, mode: 'watch', page: original.browserPageId
+      }) as { id: string; tabId: string; worktreeId: string; url: string }
+      const oldLease = await call(h, 'paneWatch', { pane: pane.id }) as { watchId: string }
+      const oldFrame = await waitFor(() => events.map(paneFrame).find((frame) => frame?.watchId === oldLease.watchId))
+
+      const switched = (await call(h, 'profileSet', { pane: pane.id, profile: profileB }) as { pane: PaneTab }).pane
+      expect(switched).toMatchObject({
+        id: pane.id, tabId: pane.tabId, worktreeId: pane.worktreeId, mode: 'watch', url: pane.url,
+        profileId: profileB, partition: `persist:quirky-browser-${profileB}`,
+        title: 'Events', loading: false, error: null
+      })
+      expect(switched.page).not.toBe(original.browserPageId)
+      const pageB = (await call(h, 'tabShow', { page: switched.page! }) as { tab: { browserPageId: string; worktreeId: string; profileId: string } }).tab
+      expect(pageB).toMatchObject({ browserPageId: switched.page, worktreeId: worktree, profileId: profileB })
+      expect(await call(h, 'eval', { page: switched.page!, expression: "localStorage.getItem('lane8-profile')" })).toEqual({ value: null })
+      expect(await call(h, 'eval', { page: switched.page!, expression: 'document.cookie' })).toEqual({ value: '' })
+      await expect(call(h, 'paneFrameAck', {
+        pane: pane.id, watchId: oldLease.watchId, sequence: oldFrame.sequence
+      })).rejects.toBeInstanceOf(Error)
+
+      const newLease = await call(h, 'paneWatch', { pane: pane.id }) as { watchId: string }
+      expect(newLease.watchId).not.toBe(oldLease.watchId)
+      const newFrame = await waitFor(() => events.map(paneFrame).find((frame) => frame?.watchId === newLease.watchId))
+      const afterSwitch = await call(h, 'paneState') as PaneState
+      const watchedB = afterSwitch.tabs.find((tab) => tab.id === pane.id)!
+      expect(watchedB.page).toBe(switched.page)
+      expect(await call(h, 'paneFrameAck', {
+        pane: pane.id, watchId: newLease.watchId, sequence: newFrame.sequence
+      })).toEqual({ acknowledged: true })
+
+      const restoredSelection = (await call(h, 'profileSet', { pane: pane.id, profile: profileA }) as { pane: PaneTab }).pane
+      expect(restoredSelection).toMatchObject({
+        id: pane.id, tabId: pane.tabId, worktreeId: pane.worktreeId, mode: 'watch', url: pane.url,
+        profileId: profileA, partition: `persist:quirky-browser-${profileA}`,
+        title: 'Events', loading: false, error: null
+      })
+      expect(restoredSelection.page).not.toBe(switched.page)
+      const pageA = (await call(h, 'tabShow', { page: restoredSelection.page! }) as { tab: { browserPageId: string; worktreeId: string; profileId: string } }).tab
+      expect(pageA).toMatchObject({ browserPageId: restoredSelection.page, worktreeId: worktree, profileId: profileA })
+      expect(await call(h, 'eval', { page: restoredSelection.page!, expression: "localStorage.getItem('lane8-profile')" })).toEqual({ value: 'owned-A' })
+      expect(await call(h, 'eval', { page: restoredSelection.page!, expression: 'document.cookie' })).toEqual({ value: 'lane8-cookie=owned-A' })
+      expect(await call(h, 'eval', { page: original.browserPageId, expression: "localStorage.getItem('lane8-profile')" })).toEqual({ value: 'owned-A' })
+      const restoredLease = await call(h, 'paneWatch', { pane: pane.id }) as { watchId: string }
+      const restoredFrame = await waitFor(() => events.map(paneFrame).find((frame) => frame?.watchId === restoredLease.watchId))
+      const afterRestore = await call(h, 'paneState') as PaneState
+      const restored = afterRestore.tabs.find((tab) => tab.id === pane.id)!
+      expect(restored.page).toBe(restoredSelection.page)
+      expect(await call(h, 'paneFrameAck', {
+        pane: pane.id, watchId: restoredLease.watchId, sequence: restoredFrame.sequence
+      })).toEqual({ acknowledged: true })
+      await call(h, 'paneClose', { pane: pane.id })
+    } finally {
+      unsubscribe()
+    }
+  } finally {
+    await h.cleanup()
+  }
+}, 90_000)
+
+test('profileSet closes only its prepared target page when its pane closes during preparation', async () => {
+  const requested = Promise.withResolvers<void>()
+  const released = Promise.withResolvers<void>()
+  let profileLoads = 0
+  const fixture = Bun.serve({
+    hostname: '127.0.0.1',
+    port: 0,
+    async fetch(request) {
+      const path = new URL(request.url).pathname
+      if (path === '/favicon.ico') return new Response(null, { status: 204 })
+      if (path !== '/profile') return new Response('not found', { status: 404 })
+      profileLoads++
+      if (profileLoads === 2) {
+        requested.resolve()
+        await released.promise
+      }
+      return new Response('<!doctype html><title>Profile fixture</title><main>profile</main>', {
+        headers: { 'content-type': 'text/html; charset=utf-8' }
+      })
+    }
+  })
+  let h: BrowserTestHarness | undefined
+  let unsubscribe: (() => void) | undefined
+  let switching: Promise<unknown> | undefined
+  try {
+    h = await startBrowserHarness()
+    const worktree = await h.addFolderWorktree('pane-profile-switch-close')
+    await h.client.call('events.subscribe', {})
+    unsubscribe = h.client.onEvent(() => {})
+    const profileA = ((await call(h, 'profileCreate', { name: 'Close race A' }) as { profile: { id: string } }).profile).id
+    const profileB = ((await call(h, 'profileCreate', { name: 'Close race B' }) as { profile: { id: string } }).profile).id
+    const original = await call(h, 'tabCreate', {
+      worktree: `id:${worktree}`, profile: profileA, url: `${fixture.url}profile`
+    }) as { browserPageId: string }
+    const pane = await call(h, 'paneOpen', {
+      worktree: `id:${worktree}`, mode: 'watch', page: original.browserPageId
+    }) as { id: string }
+    await call(h, 'paneWatch', { pane: pane.id })
+
+    switching = call(h, 'profileSet', { pane: pane.id, profile: profileB })
+    await requested.promise
+    await call(h, 'paneClose', { pane: pane.id })
+    released.resolve()
+    await expect(switching).rejects.toBeInstanceOf(Error)
+
+    const state = await call(h, 'paneState') as PaneState
+    expect(state.tabs.some((tab) => tab.id === pane.id)).toBe(false)
+    const pages = await call(h, 'tabList', { worktree: `id:${worktree}` }) as { tabs: Array<{ browserPageId: string }> }
+    expect(pages.tabs.map((page) => page.browserPageId)).toEqual([original.browserPageId])
+    expect(await call(h, 'eval', { page: original.browserPageId, expression: 'document.title' })).toEqual({ value: 'Profile fixture' })
+  } finally {
+    released.resolve()
+    if (switching) await switching.catch(() => undefined)
+    unsubscribe?.()
+    try { fixture.stop(true) } finally { await h?.cleanup() }
   }
 }, 90_000)
 

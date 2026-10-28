@@ -73,7 +73,7 @@ Page commands support navigation, serializable JavaScript evaluation, accessibil
 
 ## Profiles and Browser settings
 
-The Browser menu lists persistent profiles, marks the pane's selection, and creates isolated profiles. Switching preserves the pane/hosted-tab identity and URL while retiring the old native guest or Watch lease. Native partitions are `persist:quirky-browser-<profile-id>`; Chrome uses a separate owned directory for each profile.
+The Browser menu lists persistent profiles, marks the pane's selection, and creates isolated profiles. Both modes preserve the pane/hosted-tab identity and address. A Watch switch prepares a real page in the selected profile before committing the change and retiring the old lease; creation failure leaves the old selection intact, and original agent pages stay open. Native profile changes do not launch Chrome. Native partitions are `persist:quirky-browser-<profile-id>`; Chrome uses a separate owned directory for each profile.
 
 ```sh
 quirky browser preferences --json
