@@ -5,6 +5,7 @@
   "type": "module",
   "dependencies": {
     "@quirky/protocol": "workspace:*",
+    "@quirky/ui": "workspace:*",
     "@xterm/addon-clipboard": "0.1.0",
     "@xterm/addon-fit": "0.10.0",
     "@xterm/addon-image": "0.8.0",

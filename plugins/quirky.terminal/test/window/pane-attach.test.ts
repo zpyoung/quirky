@@ -1,10 +1,19 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from 'bun:test'
 import { act } from 'react'
-import { bytesToBase64 } from '@quirky/protocol'
+import { bytesToBase64, GRAPHITE_TERMINAL_PALETTES, TERMINAL_ANSI_KEYS, type TerminalAppearanceMode, type TerminalPalette } from '@quirky/protocol'
+import type { ITheme } from '@xterm/xterm'
 import { fakeContext, loadPane, mountPane, paneHandlers, settings, settle, startRecording, stopRecording, terminals, unloadPane, type MountedPane } from './pane-support'
 
 let mounted: MountedPane | null = null
 const text = (value: string) => new TextEncoder().encode(value)
+
+function expectGraphitePalette(theme: ITheme | undefined, appearance: TerminalAppearanceMode, base: Partial<TerminalPalette> = {}) {
+  const expected = GRAPHITE_TERMINAL_PALETTES[appearance]
+  for (const key of ['background', 'foreground', 'cursor', 'cursorAccent', 'selectionBackground', 'selectionForeground'] as const) {
+    expect(theme?.[key]).toBe(base[key] ?? expected[key])
+  }
+  for (const key of TERMINAL_ANSI_KEYS) expect(theme?.[key]).toBe(expected[key])
+}
 
 beforeAll(loadPane)
 afterAll(unloadPane)
@@ -14,6 +23,7 @@ afterEach(async () => {
   mounted = null
   stopRecording()
   document.body.innerHTML = ''
+  document.documentElement.removeAttribute('data-theme')
 })
 
 async function mount(over = {}, handlers = paneHandlers(), settingOverrides = {}) {
@@ -201,15 +211,34 @@ describe('settings apply live', () => {
     expect(host.style.background).toBe('#16181d')
   })
 
-  test('the theme follows the --terminal-* variables of the theme source', async () => {
+  test('the pane follows the complete app palette in place and cleans up its root observer', async () => {
+    document.documentElement.setAttribute('data-theme', 'light')
     const source = document.createElement('div')
     source.style.setProperty('--terminal-background', '#101010')
     document.body.appendChild(source)
-    const { pane } = await mount({ themeSource: source })
-    expect(pane.term().options.theme?.background).toBe('#101010')
+    const { fake, pane } = await mount({ themeSource: source })
+    const terminal = pane.term()
+
+    expectGraphitePalette(terminal.options.theme, 'light', { background: '#101010' })
+    await fake.push(101, 'retained output')
+    await pane.flush()
+
+    document.documentElement.setAttribute('data-theme', 'dark')
+    await settle()
+    expectGraphitePalette(terminal.options.theme, 'dark', { background: '#101010' })
+    expect(terminals).toHaveLength(1)
+    expect(terminal.buffer.active.getLine(0)?.translateToString(true)).toBe('retained output')
+
     source.style.setProperty('--terminal-background', '#202020')
     await settle()
-    expect(pane.term().options.theme?.background).toBe('#202020')
+    expectGraphitePalette(terminal.options.theme, 'dark', { background: '#202020' })
+    const themeBeforeUnmount = terminal.options.theme
+
+    await pane.unmount()
+    mounted = null
+    document.documentElement.setAttribute('data-theme', 'light')
+    await settle()
+    expect(terminal.options.theme).toEqual(themeBeforeUnmount)
   })
 
   test('unicode 11 widths are active before the first write', async () => {
