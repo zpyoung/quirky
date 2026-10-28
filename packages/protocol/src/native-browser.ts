@@ -25,7 +25,12 @@ export type NativeBrowserOptions = {
   onState(state: NativeBrowserState): void
   onPopup?(url: string, userGesture: boolean): void
 }
-export type NativeBrowserHandle = { request(request: NativeBrowserRequest): Promise<NativeBrowserState>; dispose(): void }
+export type NativeBrowserHandle = {
+  request(request: NativeBrowserRequest): Promise<NativeBrowserState>
+  /** Executes in this owned sandboxed guest, returning untrusted JSON; never host authority. */
+  evaluate(script: string): Promise<unknown>
+  dispose(): void
+}
 export type NativeBrowserCapability = {
   readonly available: boolean
   /** Whether the host can confirm native website-data removal completed. */

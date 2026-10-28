@@ -94,6 +94,7 @@ const commentStore = isObject(resources.comments) ? resources.comments : null
 const projectItemStore = isObject(resources.projectItems) ? resources.projectItems : null
 const projectFieldStore = isObject(resources.projectFields) ? resources.projectFields : null
 const issueTypeStore = isObject(resources.issueTypes) ? resources.issueTypes : null
+const repositoryOwnerStore = isObject(resources.repositoryOwners) ? resources.repositoryOwners : {}
 
 function routeDescription(entry) {
   const when = typeof entry.when === 'string' ? entry.when : ''
@@ -113,7 +114,7 @@ function matchesGraphqlField(source, field) {
   const withoutComments = source.replace(/#[^\n\r]*/g, '')
   const withoutStrings = withoutComments.replace(/"(?:\\.|[^"\\])*"/g, '""')
   if (!/^[_A-Za-z][_0-9A-Za-z]*$/.test(field)) return false
-  return new RegExp('(?:^|[\\s{])(?:[A-Za-z_][A-Za-z0-9_]*\\s*:\\s*)?' + field + '\\s*(?=[({])').test(withoutStrings)
+  return new RegExp('(?:^|[\\s{])(?:[A-Za-z_][A-Za-z0-9_]*\\s*:\\s*)?' + field + '\\s*(?=[({}\\s]|$)').test(withoutStrings)
 }
 const responses = Array.isArray(state.responses) ? state.responses : []
 const rule = responses.find((entry) => {
@@ -378,7 +379,10 @@ function variable(name) {
 }
 function projectItem(projectId, itemId) {
   if (!projectItemStore) return null
-  return projectItemStore[projectId + '/' + itemId] ?? projectItemStore[itemId] ?? null
+  return projectItemStore[projectId + '/' + itemId] ??
+    projectItemStore[itemId] ??
+    Object.values(projectItemStore).find((item) => isObject(item) && item.id === itemId) ??
+    null
 }
 function projectFieldConfiguration(projectId, fieldId) {
   for (const project of Object.values(resources.projectViews ?? {})) {
@@ -485,7 +489,7 @@ function dynamicGraphql() {
           project: { id: projectId, owner: { __typename: item.ownerType ?? 'Organization', login: item.owner ?? 'test-owner' } },
           item: {
             id: item.id ?? itemId,
-            project: { id: projectId },
+            project: { id: item.projectId ?? projectId },
             content: {
               __typename: item.kind === 'pullRequest' ? 'PullRequest' : 'Issue',
               number: item.number,
@@ -545,17 +549,64 @@ function dynamicGraphql() {
     }
   }
 
-  if (query.includes('OrganizationIssueTypes') && issueStore && issueTypeStore) {
-    const repoOwner = variable('repoOwner')
-    const repo = variable('repo')
-    const number = Number(variable('number'))
-    const issue = issueStore[issueKey(repoOwner, repo, number)]
-    if (issue) {
-      const ownerType = issue.repositoryOwnerType ?? 'Organization'
-      const owner = { __typename: ownerType, ...(ownerType === 'Organization' ? { issueTypes: { nodes: issueTypeStore[repoOwner] ?? [], pageInfo: { hasNextPage: false } } } : {}) }
-      return { handled: true, value: { data: { repository: { issue: { id: issue.nodeId ?? 'ISSUE_NODE_' + number }, owner } } } }
+  const issueTypeConnectionRequested = matchesGraphqlField(query, 'issueTypes')
+  const repositoryFieldRequested = matchesGraphqlField(query, 'repository')
+  const repositoryOwnerRequested = matchesGraphqlField(query, 'owner') && matchesGraphqlField(query, '__typename')
+  const repositoryOwner = [variable('repoOwner'), variable('repositoryOwner'), variable('owner')]
+    .find((value) => typeof value === 'string' && value.length > 0)
+  const repositoryName = [variable('repo'), variable('repositoryName'), variable('name')]
+    .find((value) => typeof value === 'string' && value.length > 0)
+  const repositoryKey = typeof repositoryOwner === 'string' && typeof repositoryName === 'string'
+    ? repositoryOwner + '/' + repositoryName
+    : null
+  const configuredOwner = repositoryKey === null ? null : repositoryOwnerStore[repositoryKey]
+  const repositoryOwnerMetadata = isObject(configuredOwner)
+    ? configuredOwner
+    : { __typename: typeof configuredOwner === 'string' ? configuredOwner : 'Organization', login: repositoryOwner }
+  const repositoryOwnerType = repositoryOwnerMetadata.__typename ?? repositoryOwnerMetadata.ownerType
+  const repositoryOwnerLogin = typeof repositoryOwnerMetadata.login === 'string'
+    ? repositoryOwnerMetadata.login
+    : repositoryOwner
+  if ((repositoryOwnerRequested && repositoryFieldRequested && repositoryKey !== null) ||
+      (issueTypeConnectionRequested && issueStore && issueTypeStore)) {
+    if (issueTypeConnectionRequested && !issueTypeStore && repositoryOwnerType !== 'User') return { handled: false }
+    const number = Number(variable('number') ?? variable('issueNumber'))
+    const issue = repositoryKey !== null && Number.isSafeInteger(number)
+      ? issueStore?.[issueKey(repositoryOwner, repositoryName, number)]
+      : null
+    const data = {}
+    if (repositoryFieldRequested && repositoryKey !== null) {
+      data.repository = {}
+      if (repositoryOwnerRequested) {
+        data.repository.owner = { __typename: repositoryOwnerType }
+        if (matchesGraphqlField(query, 'login') && typeof repositoryOwnerLogin === 'string') {
+          data.repository.owner.login = repositoryOwnerLogin
+        }
+        call.repositoryOwnerType = repositoryOwnerType
+      }
+      if (matchesGraphqlField(query, 'issue')) {
+        data.repository.issue = issue
+          ? { id: issue.nodeId ?? 'ISSUE_NODE_' + number }
+          : null
+      }
     }
+    if (issueTypeConnectionRequested) {
+      call.issueTypeConnection = true
+      if (repositoryOwnerType === 'Organization') {
+        const catalogOwner = typeof repositoryOwnerLogin === 'string' ? repositoryOwnerLogin : variable('owner')
+        const catalog = issueTypeStore?.[catalogOwner] ?? []
+        const cursor = variable('cursor') ?? variable('after')
+        let page = { nodes: Array.isArray(catalog) ? catalog : [], pageInfo: { endCursor: null, hasNextPage: false } }
+        if (isObject(catalog) && isObject(catalog.pages)) {
+          const pageKey = typeof cursor === 'string' && cursor.length > 0 ? cursor : 'start'
+          if (isObject(catalog.pages[pageKey])) page = catalog.pages[pageKey]
+        }
+        if (isObject(data.repository) && isObject(data.repository.owner)) data.repository.owner.issueTypes = page
+      }
+    }
+    return { handled: true, value: { data } }
   }
+
 
   if (query.includes('mutation SetProjectField') || query.includes('mutation ClearProjectField')) {
     if (projectFieldStore) {
@@ -569,15 +620,21 @@ function dynamicGraphql() {
     }
   }
 
-  if (query.includes('mutation SetIssueType') && issueStore) {
+  if (/^\s*mutation\b/.test(query) && issueStore) {
     const inputValue = isObject(variables.input) ? variables.input : variables
-    for (const issue of Object.values(issueStore)) {
-      if (isObject(issue) && (issue.nodeId ?? '') === inputValue.issueId) {
+    const issueId = inputValue.issueId
+    const issueTypeId = inputValue.issueTypeId
+    if (typeof issueId === 'string' && typeof issueTypeId === 'string') {
+      for (const issue of Object.values(issueStore)) {
+        if (!isObject(issue) || (issue.nodeId ?? '') !== issueId) continue
         const types = issueTypeStore?.[issue.owner ?? 'test-owner'] ?? []
-        const selected = types.find((entry) => isObject(entry) && entry.id === inputValue.issueTypeId)
-        if (selected) issue.issueType = selected
+        const selected = Array.isArray(types)
+          ? types.find((entry) => isObject(entry) && entry.id === issueTypeId)
+          : null
+        if (selected && selected.isEnabled !== false) issue.issueType = selected
+        call.issueTypeWrite = true
         save()
-        return { handled: true, value: { data: { updateIssueIssueType: { issue: { id: inputValue.issueId, issueType: selected ?? null } } } } }
+        return { handled: true, value: { data: { updateIssueIssueType: { issue: { id: issueId, issueType: selected ?? null } } } } }
       }
     }
   }
@@ -2138,3 +2195,245 @@ test('GH30: a malformed Projects item connection is not treated as an empty tabl
   await expectReason(h.call('projectTable', { owner: 'test-owner', ownerType: 'organization', projectNumber: 4 }), 'schema_drift')
 }, 20_000)
 
+function projectIssueFixture(options: {
+  projectId?: string
+  itemId?: string
+  projectOwner?: string
+  projectOwnerType?: 'Organization' | 'User'
+  repositoryOwner?: string
+  repository?: string
+  repositoryOwnerType?: 'Organization' | 'User'
+  issueTypes?: unknown
+  graphql?: unknown[]
+} = {}): Record<string, unknown> {
+  const projectId = options.projectId ?? 'PVT_USER'
+  const itemId = options.itemId ?? 'PVTI_USER'
+  const projectOwner = options.projectOwner ?? 'project-user'
+  const projectOwnerType = options.projectOwnerType ?? 'User'
+  const repositoryOwner = options.repositoryOwner ?? 'content-org'
+  const repository = options.repository ?? 'foreign-repo'
+  const number = 31
+  const issueUrl = `https://github.com/${repositoryOwner}/${repository}/issues/${number}`
+  const issueKey = `${repositoryOwner}/${repository}/${number}`
+  const issueTypes = options.issueTypes === undefined
+    ? {
+        [repositoryOwner]: [
+          { id: 'IT_BUG', name: 'Bug', description: 'A defect', isEnabled: true },
+          { id: 'IT_FEATURE', name: 'Feature', description: 'An enhancement', isEnabled: true },
+          { id: 'IT_DISABLED', name: 'Deprecated', description: 'No longer selectable', isEnabled: false }
+        ]
+      }
+    : options.issueTypes
+  return {
+    ...(options.graphql === undefined ? {} : { graphql: options.graphql }),
+    resources: {
+      issues: {
+        [issueKey]: {
+          number,
+          nodeId: 'ISSUE_NODE_31',
+          owner: repositoryOwner,
+          title: 'Remote project issue',
+          body: 'Issue content outside the local remote',
+          state: 'open',
+          url: issueUrl,
+          issueType: { id: 'IT_OLD', name: 'Legacy' },
+          labels: [],
+          assignees: [],
+          user: { login: 'reporter' }
+        }
+      },
+      projectItems: {
+        [`${projectId}/${itemId}`]: {
+          id: itemId,
+          projectId,
+          projectNumber: 4,
+          owner: projectOwner,
+          ownerType: projectOwnerType,
+          kind: 'issue',
+          number,
+          title: 'Remote project issue',
+          url: issueUrl
+        }
+      },
+      repositoryOwners: {
+        [`${repositoryOwner}/${repository}`]: {
+          __typename: options.repositoryOwnerType ?? 'Organization',
+          login: repositoryOwner
+        }
+      },
+      issueTypes
+    }
+  }
+}
+
+function issueTypeWriteCalls(h: HostingTest): Record<string, unknown>[] {
+  return list(object(h.readState()).calls).map(object).filter((call) => call.issueTypeWrite === true)
+}
+
+test('GH34/P01-P02: user-owned projects use content-organization types and read enabled selections back', async () => {
+  const fixture = projectIssueFixture()
+  const h = await hosting({
+    ...fixture,
+    authStatus: 'Logged in to github.com account ambient-fixture (GH_TOKEN)\nActive account: true\nToken scopes: repo, project, read:org\nLogged in to github.com account bound-fixture (keyring)\nActive account: false\nToken scopes: repo, project, read:org\n',
+    authTokens: { 'bound-fixture': 'bound-user-token' }
+  })
+  await h.call('configure', { account: { host: 'github.com', user: 'bound-fixture' } })
+  const target = { projectId: 'PVT_USER', itemId: 'PVTI_USER' }
+
+  const discovery = object(await h.call('projectItemMutation', { ...target, action: 'updateIssueType' }))
+  expect(discovery.changed).toBe(false)
+  expect(list(discovery.issueTypes).map((value) => {
+    const type = object(value)
+    return [type.id, type.name, type.enabled]
+  })).toEqual([
+    ['IT_BUG', 'Bug', true],
+    ['IT_FEATURE', 'Feature', true],
+    ['IT_DISABLED', 'Deprecated', false]
+  ])
+  expect(issueTypeWriteCalls(h)).toHaveLength(0)
+
+  const byId = object(await h.call('projectItemMutation', { ...target, action: 'updateIssueType', issueTypeId: 'IT_FEATURE' }))
+  expect(byId.changed).toBe(true)
+  expect(issueTypeWriteCalls(h)).toHaveLength(1)
+  const afterId = object(await h.call('projectItemDetails', target))
+  expect([object(object(afterId.item).issueType).id, object(object(afterId.item).issueType).name]).toEqual(['IT_FEATURE', 'Feature'])
+
+  const byName = object(await h.call('projectItemMutation', { ...target, action: 'updateIssueType', issueTypeName: 'bUg' }))
+  expect(byName.changed).toBe(true)
+  expect(issueTypeWriteCalls(h)).toHaveLength(2)
+  const afterName = object(await h.call('projectItemDetails', target))
+  expect([object(object(afterName.item).issueType).id, object(object(afterName.item).issueType).name]).toEqual(['IT_BUG', 'Bug'])
+
+  const state = object(h.readState())
+  const calls = list(state.calls).map(object)
+  expect(calls.some((call) => call.repositoryOwnerType === 'Organization')).toBe(true)
+  const restCalls = calls.filter((call) => typeof call.endpoint === 'string' && call.endpoint.startsWith('repos/'))
+  expect(restCalls.some((call) => call.endpoint === 'repos/content-org/foreign-repo/issues/31')).toBe(true)
+  expect(restCalls.every((call) => String(call.endpoint).includes('content-org/foreign-repo'))).toBe(true)
+  const graphqlInvocations = h.invocations().filter(({ args }) => args.includes('graphql'))
+  expect(graphqlInvocations.length).toBeGreaterThan(0)
+  expect(graphqlInvocations.every(({ env }) => env.GH_TOKEN === 'fixture-ambient-token')).toBe(true)
+}, 20_000)
+
+test('GH34/P03: invalid issue types and mismatched project content fail before a type write', async () => {
+  const fixture = projectIssueFixture()
+  const resources = object(fixture.resources)
+  resources.pulls = {
+    'content-org/foreign-repo/32': {
+      number: 32,
+      nodeId: 'PULL_NODE_32',
+      owner: 'content-org',
+      title: 'Remote pull request',
+      state: 'open',
+      url: 'https://github.com/content-org/foreign-repo/pull/32'
+    }
+  }
+  resources.projectItems = {
+    ...object(resources.projectItems),
+    'PVT_USER/PVTI_PR': {
+      id: 'PVTI_PR',
+      projectId: 'PVT_USER',
+      projectNumber: 4,
+      owner: 'project-user',
+      ownerType: 'User',
+      kind: 'pullRequest',
+      number: 32,
+      url: 'https://github.com/content-org/foreign-repo/pull/32'
+    }
+  }
+  const h = await hosting(fixture)
+  const target = { projectId: 'PVT_USER', itemId: 'PVTI_USER', action: 'updateIssueType' }
+
+  await expectReason(h.call('projectItemMutation', { ...target, issueTypeId: 'IT_DISABLED' }), 'not_found')
+  await expectReason(h.call('projectItemMutation', { ...target, issueTypeName: 'Unknown type' }), 'not_found')
+  await expectReason(h.call('projectItemMutation', {
+    projectId: 'PVT_USER', itemId: 'PVTI_PR', action: 'updateIssueType'
+  }), 'validation_error')
+  await expectReason(h.call('projectItemMutation', {
+    projectId: 'PVT_OTHER', itemId: 'PVTI_USER', action: 'updateIssueType', issueTypeId: 'IT_BUG'
+  }), 'validation_error')
+  await expect(h.call('projectItemMutation', {
+    ...target, issueTypeId: 'IT_BUG', host: 'attacker.example'
+  })).rejects.toThrow()
+
+  expect(issueTypeWriteCalls(h)).toHaveLength(0)
+  const storedIssue = object(object(object(h.readState()).resources).issues)
+  expect(object(storedIssue['content-org/foreign-repo/31']).issueType).toEqual({ id: 'IT_OLD', name: 'Legacy' })
+}, 20_000)
+
+test('GH34/P04: personal-repository emptiness requires authenticated User owner metadata', async () => {
+  for (const project of [
+    { projectId: 'PVT_ORG', itemId: 'PVTI_PERSONAL_ORG', projectOwnerType: 'Organization' as const },
+    { projectId: 'PVT_USER', itemId: 'PVTI_PERSONAL_USER', projectOwnerType: 'User' as const }
+  ]) {
+    const h = await hosting(projectIssueFixture({
+      ...project,
+      repositoryOwner: 'personal-user',
+      repository: 'personal-repo',
+      repositoryOwnerType: 'User',
+      issueTypes: null
+    }))
+    const target = { projectId: project.projectId, itemId: project.itemId }
+    const discovery = object(await h.call('projectItemMutation', { ...target, action: 'updateIssueType' }))
+    expect(discovery.changed).toBe(false)
+    expect(discovery.issueTypes).toEqual([])
+    expect(list(object(h.readState()).calls).map(object).some((call) => call.repositoryOwnerType === 'User')).toBe(true)
+    await expectReason(h.call('projectItemMutation', {
+      ...target, action: 'updateIssueType', issueTypeName: 'Bug'
+    }), 'not_found')
+    expect(issueTypeWriteCalls(h)).toHaveLength(0)
+  }
+}, 20_000)
+
+test('GH34/P05: type catalogs follow cursors and malformed, missing, or denied reads never appear empty', async () => {
+  const paginated = await hosting(projectIssueFixture({
+    issueTypes: {
+      'content-org': {
+        pages: {
+          start: {
+            nodes: [{ id: 'IT_ALPHA', name: 'Alpha', isEnabled: true }],
+            pageInfo: { endCursor: 'next-page', hasNextPage: true }
+          },
+          'next-page': {
+            nodes: [{ id: 'IT_BETA', name: 'Beta', isEnabled: false }],
+            pageInfo: { hasNextPage: false }
+          }
+        }
+      }
+    }
+  }))
+  const target = { projectId: 'PVT_USER', itemId: 'PVTI_USER' }
+  const discovery = object(await paginated.call('projectItemMutation', { ...target, action: 'updateIssueType' }))
+  expect(list(discovery.issueTypes).map((value) => object(value).name)).toEqual(['Alpha', 'Beta'])
+  expect(list(object(paginated.readState()).calls).map(object).filter((call) => call.issueTypeConnection === true).length).toBeGreaterThanOrEqual(2)
+  expect(issueTypeWriteCalls(paginated)).toHaveLength(0)
+
+  const malformedResponses = [
+    {
+      when: 'field:issueTypes',
+      body: {
+        data: {
+          repository: { owner: { __typename: 'Organization', login: 'content-org' }, issue: { id: 'ISSUE_NODE_31' } },
+          organization: { issueTypes: { nodes: null, pageInfo: { hasNextPage: false } } }
+        }
+      }
+    },
+    {
+      when: 'field:issueTypes',
+      body: {
+        data: {
+          repository: { owner: { __typename: 'Organization', login: 'content-org' }, issue: { id: 'ISSUE_NODE_31' } }
+        }
+      }
+    },
+    {
+      when: 'field:issueTypes',
+      error: 'HTTP 403: Resource not accessible by integration; missing project scope'
+    }
+  ]
+  for (const response of malformedResponses) {
+    const unavailable = await hosting(projectIssueFixture({ issueTypes: null, graphql: [response] }))
+    await expect(unavailable.call('projectItemMutation', { ...target, action: 'updateIssueType' })).rejects.toThrow()
+    expect(issueTypeWriteCalls(unavailable)).toHaveLength(0)
+  }
+}, 20_000)

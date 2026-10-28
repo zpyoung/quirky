@@ -877,11 +877,13 @@ export class PaneService {
     if (request.fromTab && (caller.role !== 'plugin' || caller.pluginId !== 'quirky.terminal')) {
       throw fault('invalid_argument', 'fromTab is reserved for the terminal hosted-tab close hook')
     }
-    const tab = this.tabs.get(request.pane)
-    if (!tab) return true
-    if (request.fromTab && request.tabId !== tab.tabId) throw fault('browser_tab_changed', 'pane close came from a stale hosted tab')
     if (!request.fromTab && request.tabId !== undefined) {
       throw fault('invalid_argument', 'tabId is reserved for the terminal hosted-tab close hook')
+    }
+    const tab = this.tabs.get(request.pane)
+    if (!tab) return true
+    if (request.fromTab && request.tabId !== tab.tabId) {
+      throw fault('browser_tab_changed', 'pane close came from a stale hosted tab')
     }
     if (!request.fromTab && tab.tabId) {
       await this.context.call('quirky.terminal/closeTab', { tab: tab.tabId })
