@@ -1,1 +1,6 @@
-[]
+[
+  "quirky.agents",
+  "quirky.agent-status",
+  "quirky.session",
+  "quirky.session-info"
+]

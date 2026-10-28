@@ -1,0 +1,82 @@
+# ui-restyle-agents decisions
+
+## D1: Restyle the four existing feature owners without new behavior
+- **Question:** Brainstorming essential scope, consumer, primary behavior and success criteria.
+- **Options:** Repaint local controls; compose shared components; rebuild feature state and registrations.
+- **Chose:** Public shared components and semantic tokens across all four plugin UI surfaces, preserving IDs, APIs/CLI, state/actions and exact-window routing.
+- **Why:** The approved redesign is a presentation/placement change, not new features. Shared controls prevent another local styling convention.
+- **Evidence:** docs/quirk/specs/2026-10-28-ui-redesign/logic.md:117-119,181,194-202; docs/roadmap.md:19-38,43-53.
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** A consumer-visible flow needs an unavailable public component contract.
+- **Source:** locked by docs/quirk/specs/2026-10-28-ui-redesign/logic.md
+
+## D2: Keep host placement and authoritative status/detail semantics
+- **Question:** Visual layout, density, interaction and responsive gray areas.
+- **Options:** Add plugin chrome/tools; retain registered center views and projected tools; collapse detailed statuses into new daemon states.
+- **Chose:** Existing center views remain views; Session info stays right-bottom; existing sidebar contributions remain projected tools. Comfortable shared rows/forms/cards, semantic presentation-only status mapping, wrapping/scrolling and reachable actions; retain detailed labels, freshness, unread/progress and drafts.
+- **Why:** Shell already owns placement and mount/focus. Detailed statuses and session-info absence/stale data have locked semantics.
+- **Evidence:** packages/daemon/src/plugins/tool-layout.ts:48-62; docs/quirk/specs/2026-10-28-ui-shell-slots/logic.md:36,56; m1-agent-status D3/D4/D16; m3-session-info D3/D4/D6/D18/D21; followup-m3-session-info-parity-20261027 D3/D7.
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** Real narrow-surface smoke shows unreachable actions or status misrepresentation.
+- **Source:** locked by existing shell and feature decision logs
+
+## D3: Preserve loading, error, empty and recovery behavior
+- **Question:** Visual loading-pattern, empty-state, error-state and remaining essential gray areas.
+- **Options:** Cosmetic placeholders/zero-filled telemetry; existing data states with shared presentation.
+- **Chose:** Real loading/empty/error/retry states; missing telemetry never becomes zero; preserve stale values/retry, consent, transient copy feedback and session lifecycle actions. Native text/select/textarea/checkbox controls use shared FormRow/classes/tokens when no equivalent component exists.
+- **Why:** No feature change is authorized, and the shared toolkit intentionally provides FormRow composition.
+- **Evidence:** packages/ui/src/design-system/contracts.ts:8-33; docs/loop/decisions/m3-session-info.md D4/D21; approved parent non-goals.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** Existing form semantics cannot be preserved through the shared composition API.
+- **Source:** assumed — autonomous
+
+## D4: Build-first contracts and three disjoint implementers
+- **Question:** Skill questions, specification format, execution pair, dirty tree, research/review/test gates and decomposition.
+- **Options:** Human questions and research/review campaigns; authoritative build-first with autonomous defaults.
+- **Chose:** One self-reviewed markdown logic spec with final tech contracts, committed before three OpenAI omp-task implementers. Shared exported component contracts already exist; no new schema or API signature. Parent owns lint list/docs/integration, no worker checks or commits, isolated external trees and barrier scope audits. Preserve inherited untracked .quirk/ and .serena/. No reviewer dispatched or alias claimed reachable because formal rounds are forbidden. No human asks.
+- **Why:** Authoritative LOOP build-first overrides normal skill questions/swarms/tech-doc split and review rounds; existing shared API is sufficient. LSP status reports no configured servers.
+- **Evidence:** git show build/roadmap:docs/loop/LOOP.md; skills brainstorming/writing-specs/subagent-driven-development/writing-plans; xd://lsp status; scratch /tmp/quirky-agents25-FNeBJL.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** A necessary shared component expansion needs an explicit parent-owned contract.
+- **Source:** locked by docs/loop/LOOP.md
+
+## D5: Enforce the four plugins without weakening lint
+- **Question:** How do the existing optional plugin lint gates apply to this item?
+- **Options:** Ignore old raw styling; suppress diagnostics; opt in all four and remove violations.
+- **Chose:** Add quirky.agents, quirky.agent-status, quirky.session and quirky.session-info, unioning concurrent additions. No scanner weakening, suppression, violation baseline or private stylesheet. Preserve terminal theme adapter and public shared styles.
+- **Why:** Every area restyle explicitly opts into the scanner; typecheck must enforce the same design system.
+- **Evidence:** scripts/ui-lint-plugins.json; docs/loop/decisions/ui-tokens-and-components.md D2/D10; claimed queue title.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** Typecheck identifies an actual missing semantic token, not a reason to bypass enforcement.
+- **Source:** locked by docs/quirk/specs/2026-10-28-ui-redesign/logic.md
+
+## D6: Narrow real-surface proof with explicit visual limits
+- **Question:** Runtime evidence and screenshot review under build-first.
+- **Options:** Claim approval from typecheck; run prohibited full campaigns; minimal real UI smoke/capture and honest limits.
+- **Chose:** Typecheck gates land. Exercise changed renderer surfaces on isolated real daemon fixtures and inspect both-theme captures where supported. No suite, full dogfood or formal scoring campaign under build-first; capture is not a golden-review pass. Existing ui:review remains the end-phase scoring mechanism, threshold85 unchanged.
+- **Why:** Developer coding contract requires actual surface proof; LOOP forbids broad test/review campaigns. The shell owner records the same boundary.
+- **Evidence:** docs/quirk/specs/2026-10-28-ui-shell-slots/logic.md:48,60; ui-screenshot-review D3/D4/D5/D6/D8; scripts/ui-review/arguments.ts:37-69.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** Authoritative item instructions explicitly enable a scoring campaign.
+- **Source:** locked by docs/loop/LOOP.md
+
+## D7: macOS renderer only, no new platform behavior
+- **Question:** Platform certification and native-only effects.
+- **Options:** Expand into Linux/Windows/native QA; keep current local renderer scope.
+- **Chose:** Build/smoke on macOS only, portable existing React/CSS APIs. Linux/Windows renderer/platform certification remains unperformed; native clipboard/Finder/notifications retain existing owner scenarios.
+- **Why:** LOOP locks platform scope and approved redesign changes no native feature behavior.
+- **Evidence:** docs/loop/LOOP.md platforms; followup-m3-session-info-parity-20261027 D2; approved parent scope.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** Supported platform matrix changes.
+- **Source:** deferred: platform
+
+## Progress
+
+Scope and shared reuse contracts committed before implementation. Next: dispatch three disjoint component worktrees, audit/integrate at barrier, typecheck, actual minimal UI smoke, sole roadmap catch-up, final typecheck and canonical queue land. No suite/review pass claimed.
