@@ -1,0 +1,77 @@
+# Automations core
+
+## Status & amendments
+Approved autonomously under unattended LOOP.md night mode, 2026-10-28. Technical decisions are the final section of this combined spec; separate tech.md/spec review intentionally skipped. Self-review completed against automations.md Data model, Schedules, The scheduler tick, Storage and retention, Run statuses, CLI and Run now/Pause/Edit/Delete. No placeholders or human questions remain.
+
+**Amendments:** None.
+
+## Purpose and conceptual model
+A definition is durable scheduled work. An occurrence is a timestamp in its saved IANA timezone, bounded below by dtstart. An accepted occurrence becomes a durable run before a consumer claims it. Core stops at that pending handoff: it does not launch agents. A later dispatch item owns target resolution, checks execution, structured-session creation/resume and completion observation.
+
+Consumers are CLI users, clients and later plugins. All behavior lives in a built-in plugin using the public API. Definitions and histories survive daemon restart; deleting a definition deletes its history but never workspaces. A definition's enabled flag controls scheduled evaluation, not manual runs.
+
+## Scope and non-goals
+In scope: definitions, schedules, labels, occurrence math/DST, once-per-minute evaluation, missed-run policy, per-definition serialization, run state/history/retention, API and CLI commands.
+Not this slice: target resolution/host ownership and fencing, destination moves, precheck execution, dispatch/reconciliation/session reuse execution, usage attribution, terminal housekeeping, UI/settings/templates/dashboard, OpenClaw/external managers, notifications/native surfaces. Target/source/precheck/launch choices are stored for the dispatch consumer, not executed here. Structured providers Claude/Codex only; raw terminal CLI argument overrides are refused because locked background execution is structured.
+
+## Data flow
+Create validates schedule, zone, required prompt/provider/project identity and workspace policy, calculates nextRunAt, then commits a definition. The scheduler reads enabled due definitions in name order; inside each id's lane it re-reads current state, chooses only the latest elapsed occurrence, writes pending or skipped_missed and advances nextRunAt together. Every committed mutation emits changed with reason definition or run. Manual run enters the same lane but leaves the schedule cursor unchanged. Claim and result methods let dispatch consumers update the same durable run; claims are atomic and only pending runs can become dispatching. No agent process is started by this slice.
+
+## Decisions Locked
+- API/CLI: namespace quirky.automations, group `quirky automations`; list/show/create/edit/remove/run/runs are first-class commands. JSON is the normal schema-driven output; text output names schedule, state, next run and queued run identity. Remove is destructive and supports the kernel --yes convention.
+- Validation/errors: typed invalid-params, not-found and conflict using the public context. Partial edit ignores undefined, explicit null clears nullable fields. Blank trimmed names become Untitled automation; prompts preserve nonblank text. Repeated creationKey returns the original. Unknown supplied fields are rejected rather than ignored.
+- Schedule: documented RRULE subset and POSIX/Vixie five-field cron; input over2048bytes or impossible within9*366days is invalid. Bare N is one value; N/step starts at N and extends to field max. Lexical unrestricted day semantics follow the feature doc. New oversized steps rejected, stored oversized steps remain runnable.
+- Time: saved IANA timezone is authoritative (fix ignored-timezone defect); dtstart is an inclusive lower bound; next is strictly greater than after; latest is inclusive. Missing spring wall minutes skipped; both fall repetitions are distinct instants. No loop after the second fall repetition.
+- Defaults: enabledtrue, grace720minutes, precheck timeout60seconds normalized1..600, Fresh, new_per_run unless workspace supplied; daily/weekdays/weekly time09:00, weeklyMonday. CLI hourlyfixed:00; custom cron required for other minutes. CLI grace0 accepted (fix No grace mismatch). No manual-only schedule; disabled+run is the supported workflow.
+- Pause only flips enabled. Schedule edits reset dtstart to now unless explicit API dtstart supplied; timezone edits recompute nextRunAt. Prompt/name/enable edits do not reset the cursor.
+- Latest-only catch-up; skipped_missed iff lateness > graceMs+120000. Earlier missed occurrences are dropped, never burst-replayed. Scheduled dedupe is by automationId+scheduledFor; distinct manual calls remain distinct even at the same instant.
+- Storage:100final runs per automation, all active rows preserved; monotonically increasing run numbers even after pruning; timestamp-desc/id tie ordering, stable cursor and legacy numeric offset. Mutations are durable before event/ack. Restart prunes existing final rows; active state stays truthful, never fabricated completed.
+- Cross-family review: OpenAI task implementers, verified Gemini high fallback after unavailable Opus/Sonnet probes. One final C/S/X promote/refute round, only blocking findings fixed; record open findings. macOS only.
+
+## Behavior and acceptance scenarios
+Every flow below has daemon API or CLI coverage; algorithm edge tests supplement it. Tests use fresh HOME and QUIRKY_HOME and stop every process.
+
+### AC1: Create, inspect, list and idempotency
+Before: no definitions. Create Weekday audit with prompt P, provider codex, project repo1, weekdays09:00 in America/New_York. After: one enabled row with UUID, saved prompt/zone, null workspace/new_per_run, next occurrence after now and label Weekdays at9:00AM. Show returns the same row; list sorts by name. A repeated creationKey returns its original without overwriting it. Blank name becomes Untitled automation. Empty prompt, unknown provider, invalid zone and malformed schedule fail without rows.
+
+### AC2: Edit, pause, resume and delete
+Before: an enabled definition with cursorT. Edit name/prompt, pause, resume: cursor remainsT and disabled manual runs still work. Schedule edit to daily10:30 resets anchor/cursor; explicit null clears precheck/source/model overrides. Workspace new_per_run clears workspaceId and reuseSession; existing requires workspaceId and clears baseBranch/setup. Delete with --yes removes definition+history, not its existing workspace. Later show/run/edit fails not-found, no orphan rows.
+
+### AC3: Presets and labels
+CLI create/edit accepts --trigger or --schedule (mutually exclusive), hourly/daily/weekdays/weekly or raw schedule. Daily default09:00; weeklydefaultMonday, Sunday0. --time supports H:MM/HH:MM24h; --day onlyweekly; --time forbidden hourly or raw schedule; manual rejected. Cron `0 9 * * 1-5` labels Weekdays at9:00AM; `15 * * * *` hourly:15; unrecognized valid shapes Custom schedule; malformed stored shape Invalid schedule. Precheck timeout requires precheck; empty command clears; enabled/disabled and reuse/fresh pairs conflict. Model/effort use structured override fields and inherit clears on edit; extra-agent-args fails explicitly.
+
+### AC4: Cron dialect and validation defects
+For `5/20 * * * *`, minute values5,25,45; bare5 only5. Ranges/lists/steps, JAN-DEC and weekdaynames, Sunday0/7 and Unicode whitespace work. `0 9 1 * MON` matches day1 ORMonday; wildcard-containing day fields use AND. Reject Feb30, malformed tokens, extra fields, oversized input/steps. A stored `*/90` minute remains runnable at:00 while new input rejected. API schedule inspection exposes validity, description, next and latest for scriptable verification.
+
+### AC5: Timezone/DST correctness
+Before springgap America/New_York2026-03-08, cron02:30 next is Mar9 02:30, never shifted03:30. Fall Nov1 01:30 fires05:30Z and06:30Z; after06:30Z next is Nov2 06:30Z, never equal/backwards (#20154). Daily/hourly/weekly RRULE use identical wall-minute gap/fold policy. Saved zone remains authoritative even under a different daemon TZ. latest never precedes dtstart; a future dtstart gives null latest; exactdtstart occurrence included, exactafter excluded bynext.
+
+### AC6: Tick, missed grace, pause and bad-record isolation
+Before: daily definition cursor in past after many days offline. One evaluation creates only latest due occurrence and advances future; repeated evaluation does not duplicate. At grace+120s exact boundary pending; one millisecond beyond skipped_missed. Grace0 still permits120s jitter. Disabled due definitions skipped until resumed; then same latest-only policy. An unreadable stored schedule creates/folds one skipped_unavailable error per definition; nextRunAt unchanged; a healthy due neighbor still progresses (issue#16303). Tick is nonreentrant; id lanes serialize schedule/manual/claim/edit/delete while different ids progress independently. Scheduler starts immediately on plugin startup, repeats every60000ms and stops on disposal.
+
+### AC7: Manual run and lifecycle
+Paused definition run creates manual/pending with titleName runN, current scheduledFor and structured sessionKind; precheck not executed; cursor unchanged. Concurrent manual requests produce distinct rows/numbers. Atomic claim changes pending to dispatching, stamps startedAt once; second claim cannot double-own. Allowed transitions are pending→dispatching or final-refusal; dispatching→dispatched or final; dispatched→final. Same-state updates can add evidence; terminal status cannot reopen or change to another terminal status. dispatchedAt stamped once, completedAt set on final. Invalid transition/not-found produces conflict/not-found with no partial mutation. Patch semantics preserve absent values, honor null clears; output at most256KiB with truthful truncated flag. Touch lastRunAt/updatedAt on run writes. Result methods do not invent successful execution.
+
+### AC8: History, pruning, restart and event durability
+Create >100final rows plus activepending/dispatching/dispatched: retain100newestfinal and everyactive row; next runNumber remains monotonic; ties stable byid. Runs accepts optional automationid; defaultpage100, limitclamp1..100; timestamp:id cursor and numeric legacyoffset. Pages neither repeat tied rows nor leak another automation; invalid cursor rejected. CLI no pagingflags drains pages25 (shrinks oversized replies); explicit limit/cursor prints onepage+nextcursor. Restart preserves definitions/run state; remove cascades history. Subscribe changed before writes: each received event follows a committed readable change; failed mutations emit nothing.
+
+## Key decisions & rationale
+Recommended: plugin-owned SQLite through openStore plus a calendar engine and a small lane-owning service. Alternative kernel fixed-delay jobs cannot express runtime-created timezone cron (m0-daemon-api D13). Alternative whole JSON blob repeatedly serializes all history and weakens transactional run/cursor updates. Reuse schema-driven CLI plus a thin custom entrypoint only for feature flags/text/paging. No kernel scheduler changes or other-plugin private imports.
+
+## Industry Insights
+No external research swarm under LOOP night mode. Sources are the feature doc and existing public plugin/store/CLI patterns. Prior binding m5-structured-runner D1/D3/D6/D7 require structured background execution and public checks ownership. m0-daemon-api scheduler deliberately reserves cron for M5. No conflict identified.
+
+## Deferred Ideas
+No extra feature scope. Dispatch, targets and UI remain explicitly assigned to separate queue items, not deferred flows from this item. Linux/Windows validation recorded as deferred:platform.
+
+## Glossary
+Occurrence: one scheduled instant. Lane: serialized mutation chain keyed by definitionid, released once core write/handoff finishes. Final: completed or any skipped_* or dispatch_failed. Pending: durable accepted work not yet claimed, not a launched agent. Cursor: history ordering boundary, distinct from nextRunAt schedule cursor.
+
+## Technical decisions and implementation contracts
+Architecture: new `plugins/quirky.automations/`, startup activation; public openStore/emit/error/call only. Discovery is directory-based, no registry edit. Shared exact types in types.ts committed before implementers. No changes to existing exported protocol types, kernel scheduler, protected loop paths or inherited untracked files.
+
+- Schedule slice owns schedule.ts (may split into schedule-*.ts), test/schedule.test.ts. Export `buildAutomationRrule(input: ScheduleBuildInput): string`, `describeAutomationSchedule(rule: string): ScheduleDescription`, `isValidAutomationSchedule(rule: string, timezone?: string): boolean`, `isRunnableAutomationSchedule(rule: string, timezone?: string): boolean`, `nextAutomationOccurrenceAfter(rule: string, dtstart: number, after: number, timezone: string): number`, `latestAutomationOccurrenceAtOrBefore(rule: string, dtstart: number, now: number, timezone: string): number|null`. Invalid math throws, validation returnsfalse. No new dependency required; portable Intl. Optimize calendar/day/field jumps rather than Intl per minute for9years. Match type contracts without editing types.ts.
+- Store slice owns store.ts (may split store-*.ts), test/store.test.ts. Export `migrations: StoreMigration[]` and `createAutomationStore(database: PluginStore): AutomationStore` matching types.ts. Throws recognizable not-found/conflict errors; caller maps via context.error. All writes use database transactions; store has no timers or emitted events. `claimRun` conflicts for nonpending; `foldUnavailable` only folds newest scheduled skipped_unavailable byte-identicalerror, counts occurrences once; scheduled dedupe persists independently of retention. Do not prune pending or manufacture completed. Service transaction uses the public database transaction around createRun+definition.advance; nested transaction implementation must respect existing PluginStore behavior.
+- API/service slice owns main.ts, service.ts, cli.ts, quirky-plugin.json, package.json, README.md, test/api.test.ts, test/service.test.ts, test/cli.test.ts. Imports the named schedule exports and createAutomationStore/migrations. Creates startup timer and disposable service; injectclock into service tests only. API methods list/show/create/edit/remove/run/runs plus schedule (pure public schedule inspector), tick (evaluate actualnow), claim (atomicdurable), updateRun (resultrecord) and changed event. No test-only production methods. Define exact params/results in supported manifest JSON-schema subset; no uniontypearrays/oneOf/anyOf beyond supported schema. Core API stores only identifiers; no resolving targets. Command group supplies documented flag semantics and positionalid with common CLI conventions. Use @quirky/protocol public types. Own-file tests only until orchestrator final affected checks.
+
+Reusable code anchors: packages/protocol/src/plugins.ts PluginContext/PluginStore; plugins/quirky.ledger/src/daemon/store.ts migrations; plugins/quirky.structured/quirky-plugin.json schemas; plugins/quirky.ledger/cli.ts custom CLI; packages/daemon/src/plugins/discover.ts automaticbuiltins; scripts/test-support for isolated daemon harnesses. Final commands: `bun scripts/suite.ts plugins/quirky.automations`, `bun test scripts`, `bun run typecheck`. A real isolated daemon/CLI smoke exercises create/edit/pause/run/history/restart/delete and schedule DST inspector, with every process stopped afterward. No UI/native scenario in core.
