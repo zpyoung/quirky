@@ -178,6 +178,7 @@ files, not this one.
 | medium (public plugin api and presentation behavior) | high for exercised core behavior; exhaustive parity is not claimed | [m2-sidebar-extras D29](decisions/m2-sidebar-extras.md) | Accept audited W2 core components after real API, CLI and mounted-renderer checks | assumed — autonomous |
 | medium (public contribution vocabulary) | high | [m2-sidebar-extras D31](decisions/m2-sidebar-extras.md) | Combine incoming public UI kinds without dropping either feature | assumed — autonomous |
 | medium (retention guard and public deletion semantics) | high for exercised core behavior; queue verification is still required | [m2-sidebar-extras D35](decisions/m2-sidebar-extras.md) | Repair the landing conflict without dropping ledger retention safety | locked by docs/loop/LOOP.md step 7.3; assumed — autonomous (additive merge) |
+| medium (observable drop contract) | high | [m4-editor-drop-open-in-place D2](decisions/m4-editor-drop-open-in-place.md) | Resolve the relevant gray areas without human interaction | assumed — autonomous |
 | medium (contracts span plugin and ui) | high | [m2-editor D1](decisions/m2-editor.md) | Preserve the full queued editor scope | locked by docs/roadmap.md |
 | medium | high | [m2-editor D4](decisions/m2-editor.md) | Extend terminal workspace tabs with hosted editor content | locked by docs/loop/decisions/m1-term-ui.md D39 |
 | medium | high | [m2-editor D6](decisions/m2-editor.md) | Keep every default-able gray area observable and scriptable | locked by docs/roadmap.md |
@@ -731,6 +732,11 @@ files, not this one.
 | easy | high for observed results; no causal claim about the timing variation | [m2-sidebar-extras D34](decisions/m2-sidebar-extras.md) | Keep the passing checks distinct from earlier script fixture timeouts | assumed — autonomous |
 | easy | high for exercised correction; full merged landing verification is pending | [m2-sidebar-extras D36](decisions/m2-sidebar-extras.md) | Verify the corrective merge and retry the normal landing gate | assumed — autonomous |
 | easy | high for this conflict resolution; full landing remains pending | [m2-sidebar-extras D37](decisions/m2-sidebar-extras.md) | Resolve the documentation-only landing race and retry immediately | assumed — autonomous (operator-directed fast landing) |
+| easy (no runtime changes authorized) | high | [m4-editor-drop-open-in-place D1](decisions/m4-editor-drop-open-in-place.md) | Preserve SC-9 and the explicit native-patch approval boundary | locked by queue item m4-editor-drop-open-in-place and docs/loop/decisions/m2-editor.md D19 |
+| easy | high | [m4-editor-drop-open-in-place D3](decisions/m4-editor-drop-open-in-place.md) | Investigate the latest published release rather than upgrade speculatively | assumed — autonomous |
+| easy (no production changes) | high | [m4-editor-drop-open-in-place D4](decisions/m4-editor-drop-open-in-place.md) | Block on the missing native source-path capability | locked by queue item m4-editor-drop-open-in-place |
+| easy | high | [m4-editor-drop-open-in-place D5](decisions/m4-editor-drop-open-in-place.md) | Do not substitute partial routing or an empty public event | assumed — autonomous |
+| easy | high | [m4-editor-drop-open-in-place D6](decisions/m4-editor-drop-open-in-place.md) | Keep the capability audit's verification limits explicit | deferred: platform |
 | easy | high | [fix-ask-regex-budget-20261027 D1](decisions/fix-ask-regex-budget-20261027.md) | Repair the bounded matcher without relaxing the existing budget | assumed — autonomous |
 | easy | high | [fix-ask-regex-budget-20261027 D2](decisions/fix-ask-regex-budget-20261027.md) | Use OpenAI implementers and the reachable Gemini reviewer | assumed — autonomous |
 | easy | high | [fix-ask-regex-budget-20261027 D3](decisions/fix-ask-regex-budget-20261027.md) | Add a sound required-literal preflight, not a replacement regex engine | supersedes m2-ask-parity D32 |

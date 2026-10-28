@@ -856,9 +856,8 @@
       "deps": [
         "m2-editor"
       ],
-      "status": "in-progress",
-      "early": true,
-      "lane": 9
+      "status": "blocked",
+      "early": true
     },
     {
       "id": "m3-accounts-remaining-flows",

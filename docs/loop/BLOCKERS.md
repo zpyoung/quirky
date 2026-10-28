@@ -342,3 +342,18 @@ Registration update: `bun scripts/build-loop/queue.ts add /tmp/quirky-session-in
 - Unchanged failures still awaiting the normal merged retry: Git remote SC-29 wait (five possible predicates; available stack does not identify one), daemon lock five-second test bound, incoming loops-store five-second bound. No speculative producer change, timeout increase or waived assertion was used for these.
 - Operator's45-minute target was not met; the first controller verification alone took1800.57seconds after source submission. No on-time or authoritative landed claim is inferred from a submitted command.
 
+
+## m4-editor-drop-open-in-place: blocked
+
+Stopped at step 3 (brainstorming feasibility). The core SC-9 behavior needs Finder's real source paths, but no supported path-bearing native drop API was found in installed Electrobun 2.0.4 or latest published 2.0.5. The item explicitly requires blocking rather than adding an unapproved native patch/fork.
+
+Evidence:
+- `apps/desktop/hutch.config.ts:6-8` pins 2.0.4. Current `DocumentSurface.tsx:736-766` opens app-private worktree drags in place but imports ordinary `DataTransfer.files`; `transfers.ts:107-126` sends filename/content, not original source identity.
+- The registry latest tag is 2.0.5 (beta is 2.0.5-beta.5): https://registry.npmjs.org/electrobun/latest . The complete release comparison has no non-test changes under the public main SDK, browser or preload: https://github.com/blackboardsh/electrobun/compare/v2.0.4...v2.0.5 . Its macOS native diff adds fullscreen diagnostics, not drop callbacks.
+- Pinned latest webview event factories expose no native-drop/path event: https://github.com/blackboardsh/electrobun/blob/v2.0.5/package/src/sdks/main/events/webviewEvents.ts#L16-L39 . The drop preload checks only `Files` and restores Windows focus: https://github.com/blackboardsh/electrobun/blob/v2.0.5/package/src/preload/externalDropFocus.ts#L7-L40 . The general clipboard's file-format detection is not the drag pasteboard or a source-path extractor.
+- Executed Bun audit imported the installed/latest public event modules under fresh temporary HOME/QUIRKY_HOME, compared the pinned release and searched latest macOS native hooks. Exit 0: identical eleven-entry webview event factories; `changedPublicSdkBrowserPreloadFiles: []`; `nativeDropHooks: []`. This is executable API/source evidence, not a real Finder-drop/native-window test.
+- Corroborating upstream discussion explicitly calls for native bindings for inbound full paths: https://github.com/blackboardsh/electrobun/issues/63#issuecomment-4056077426 . This comment is not treated as official API documentation.
+
+Tried: current installed SDK and app drop/typed-RPC routes; latest published SDK/native/preload/browser sources; complete 2.0.4-to-2.0.5 changes; independent read-only scout; executable public-module/source audit. Rejected basename/content matching, clipboard polling, picker substitution, URI-only partial routing and an empty event scaffold because none supplies genuine Finder identity. No production code, dependency pin or existing drop policy was changed.
+
+Unblock when Electrobun publishes a supported dropped-source-path callback/extractor, or the user explicitly approves a native patch/fork. Then carry real paths through typed shell RPC/public events and prove same-worktree open-in-place versus external collision-safe import with actual Finder drops. Until then m2-editor D19's approved import-all policy remains in force. Decision log: `docs/loop/decisions/m4-editor-drop-open-in-place.md`; archived evidence: lane 9 ignored iteration folder, `editor-drop-feasibility-evidence.tar.gz`.
