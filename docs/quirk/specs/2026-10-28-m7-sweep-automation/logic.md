@@ -97,7 +97,7 @@ Each row covers the named feature-document sections and their edge cases; existi
 
 ## Verification
 
-New behavioral regression tests drive the rendered components and real daemon/window APIs. A built web run uses fresh HOME/QUIRKY_HOME, seeded disabled automation and controlled loop provider fixture. Exercise S1–S4 through visible UI, not API actions during goals. Public summaries and unchanged ledger lifecycle run through real daemon API/CLI. Run affected suites for Automations, Loops, Worktree and direct importers, `bun test scripts`, and `bun run typecheck`; canonical queue land owns the full merged suite. Stop every owned process and delete temporary homes.
+New behavioral regression tests drive the rendered components and real daemon/window APIs. A built web run uses fresh HOME/QUIRKY_HOME, seeded disabled automation and controlled loop provider fixture. Exercise S1–S3 through visible UI, not API actions during goals; S4 uses rendered/headless-window fault and stale-response regressions because no user-visible transport-drop control exists. Public summaries and unchanged ledger lifecycle run through real daemon API/CLI. Run affected suites for Automations, Loops, Worktree and direct importers, `bun test scripts`, and `bun run typecheck`; canonical queue land owns the full merged suite. Stop every owned process and delete temporary homes.
 
 ## Non-goals
 

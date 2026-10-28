@@ -143,5 +143,49 @@
 - **Revisit if:** a consumer regression proves stale labels must preserve an explicit stronger interaction state.
 - **Source:** assumed — autonomous
 
+## D14: Document nullable summary scalars without extending the kernel schema language
+- **Question:** How can required nullable cap/reason fields fit the supported manifest schema subset?
+- **Options:** add union/nullable syntax to the kernel; description-only schemas for the two scalar-or-null fields.
+- **Chose:** strict item object/required fields and supported types elsewhere; pauseReason/maxIterations description-only schemas explicitly document scalar-or-null, with typed store construction and validated sidebar consumption.
+- **Why:** Schema.type accepts only one string; anyOf/type arrays/nullable are rejected. Broad schema growth is unnecessary for a read-only projection and risks unrelated plugin admission.
+- **Evidence:** packages/protocol/src/schema.ts:1-15,47-74; tech.md Data models/schemas.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** the public schema dialect gains native nullable scalars.
+- **Source:** assumed — autonomous
+
+## D15: Correct test readiness and process custody without weakening behavior
+- **Question:** What did centrally executed staged regressions prove?
+- **Options:** accept worker claims; rerun until pass; trace and repair each concrete fixture defect.
+- **Chose:** preserve the four observed menu failures and compact summary assertions. Menu red7tests3pass4fail became green7pass0fail59assertions after the bounded source fix. Summary fixture now waits for actual send, and its new outer watchdog covers its unchanged inner deadlines. The remaining running-loop assertion exposed a test's global onStop releasing the wrong session's held turn; repair ownership, not expected state.
+- **Why:** Initial running publication precedes prompt delivery. Separate capped loops legitimately stop their own fresh sessions, which must not release another held provider turn. Missing method/CLI red was independently observed after readiness repair.
+- **Evidence:** parent bg3/bg4 readiness/framework failures; bg7 actual unknown-method red; bg6 menu remains-open failures; bg9 menu7/0; bg11 summary2pass1fail with actual running row paused/agent-blocked after fixture release; bg12 repaired lifecycle1pass0fail30assertions.
+- **Reversibility:** easy
+- **Confidence:** high for observed boundaries; final owning summary rerun remains pending.
+- **Revisit if:** session-scoped fixture release still changes the running loop before its explicit stop.
+- **Source:** assumed — autonomous
+
+## D16: Wait for the loaded catalog and use an existing focus sentinel in integration
+- **Question:** Why did the new sidebar regressions fail after implementation?
+- **Options:** relax the stale-response/focus expectations; correct the producer and fixture boundaries.
+- **Chose:** sidebar hydration begins only after useTree's initial catalog load, including a legitimate empty catalog, avoiding a second early summary read that bypassed a held stale response. The API fixture creates an inert existing settings-view sentinel before recording active-tab baseline; adding the first tab to an empty group is not treated as a focus regression.
+- **Why:** Rendered green initially4/5 exposed an actual extra initial refresh. The integration fixture failed before loop-report assertions because an empty group's first hosted tab necessarily becomes active. Neither justifies changing session adoption or weakening the tested focus invariant.
+- **Evidence:** bg14 original missing-projection red5/5; bg15 activeTab null/tab-2 fixture witness; bg17 stale-initial loading/available mismatch; bg18 corrected rendered5pass0fail57assertions. Worker scope/HEAD audit showed only six assigned Worktree source paths and two tests.
+- **Reversibility:** easy
+- **Confidence:** high for traced boundaries; integrated API receipt remains required.
+- **Revisit if:** loaded-catalog gating misses reconnect or later catalog changes.
+- **Source:** assumed — autonomous
+
+## D17: Compose the provider before the sidebar's real API acceptance
+- **Question:** How should disjoint source components exercise a true runtime API dependency?
+- **Options:** fake the summary response in the daemon test; merge the accepted provider into the sidebar test worktree.
+- **Chose:** keep source scopes disjoint and rendered red/green independent; after all workers return, parent commits accepted provider, merges that branch into the sidebar worktree, then runs its real daemon/window acceptance before committing the sidebar component.
+- **Why:** The sidebar's real window must call the actual summary method. A test-only mock would not prove integration. Source implementation needs only the already-committed contract; the provider dependency is a runtime acceptance prerequisite.
+- **Evidence:** run-journal.json component scopes; loop-status-api.test.ts public create/hosted view/stop path; all worker HEADs ccc62ee6 at wave barrier.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** scopes overlap or provider composition changes existing methods.
+- **Source:** assumed — autonomous
+
 ## Progress
-Claimed lane1 approximately2026-10-28T10:14Z; branch build/m7-sweep-automation. Full feature docs and binding architecture/roadmap read, three code scouts plus targeted projection-seam survey completed. Specs committed e8e24dec; combined Codex promote/refute review running via /tmp/quirky-automation-sweep.LlsERn/review.py (bg_2). Next: adjudicate spec findings, commit amendments/contracts, stage isolated regressions, centrally prove red then implement three disjoint slices. Inherited .serena/ untouched. No daemon or implementation started. Scratch is /tmp/quirky-automation-sweep.LlsERn; web doctor ready; lsp has no configured servers.
+All implementation/test workers returned and full wave scope/HEAD audit passed; no cross-component source writes or worker commits. Menu accepted component066bc6c4, green7/0/59. Compact provider final whole-file gate running bg19 after lifecycle1/0/30 and separate params/CLI passes; next commit provider and merge it into sidebar worktree for actual API acceptance. Sidebar rendered gate is5/0/57 after catalog-ready repair, API fixture sentinel corrected. Root still has parent-owned spec/decision clarifications only; no source merge/catch-up/build/web service yet. Next: finish integrated API check, commit/merge three components, catch up roadmap/read incoming decisions, required affected/scripts/types/build, built visible smoke, three-lens deep Gemini final round plus one fix batch, staged single completion follow-up, canonical land.
