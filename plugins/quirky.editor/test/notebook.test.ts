@@ -344,6 +344,144 @@ describe('notebook API behavior', () => {
     await notebook(world, bufferId, 'save')
   })
 
+  test.skipIf(!python || process.platform === 'win32')('N1: idle kernel death publishes retained state and restart requires fresh trust', async () => {
+    const document = {
+      cells: [
+        { cell_type: 'code', source: ['import os\nvalue_before_restart = 41\nprint("completed before restart")\nprint(os.environ["QUIRKY_HOME"])\n'], metadata: {}, outputs: [], execution_count: null },
+        { cell_type: 'code', source: ['print(value_before_restart)\n'], metadata: {}, outputs: [], execution_count: null }
+      ],
+      metadata: { draftMarker: 'keep this notebook draft' },
+      nbformat: 4,
+      nbformat_minor: 5
+    }
+    const world = await start({ 'recovery.ipynb': JSON.stringify(document) })
+    const { bufferId } = await world.open('recovery.ipynb')
+
+    const opened = record(await world.call('read', { bufferId, action: 'buffer' }))
+    const initialBuffer = record(opened.buffer)
+    const draft = JSON.stringify({ ...document, metadata: { ...document.metadata, draftOnly: true } })
+    await world.call('draft', { bufferId, content: draft, expectedRevision: initialBuffer.contentRevision })
+    await notebook(world, bufferId, 'select', { python })
+    await notebook(world, bufferId, 'trust')
+    await notebook(world, bufferId, 'start', { python })
+    const firstRun = record(await notebook(world, bufferId, 'run', { index: 0, mode: 'in-place' }))
+    expect(firstRun.status).toBe('ok')
+    const ready = record(await notebook(world, bufferId, 'state'))
+    const bridgePid = kernelPid(ready)
+    const selectedPython = ready.selectedPython
+    const contentRevision = ready.contentRevision
+    const beforeDeath = notebookCells(record(await notebook(world, bufferId, 'parse', { offset: 0, limit: 1, outputLimit: 8 })))[0]!
+    expect(outputs(beforeDeath).map(outputText).join('\n')).toContain('completed before restart')
+    expect(outputs(beforeDeath).map(outputText).join('\n')).toContain(world.harness.home)
+
+    const observer = await world.harness.connect('ui')
+    const events: { type: string }[] = []
+    observer.onEvent((event) => events.push(event))
+    await observer.call('events.subscribe', {})
+    process.kill(-bridgePid, 'SIGKILL')
+    await waitForAsync(async () => events.some((event) => event.type === 'quirky.editor/changed'))
+    await waitForAsync(async () => record(record(await notebook(world, bufferId, 'state')).kernel).status === 'dead')
+    await waitFor(() => processIsGone(bridgePid), 10_000)
+
+    const dead = record(await notebook(world, bufferId, 'state'))
+    expect(dead).toMatchObject({
+      trusted: true,
+      selectedPython,
+      kernel: { status: 'dead', error: expect.any(String) }
+    })
+    expect(dead.contentRevision).toBe(contentRevision)
+    const retained = notebookCells(record(await notebook(world, bufferId, 'parse', { offset: 0, limit: 1, outputLimit: 8 })))[0]!
+    expect(outputs(retained).map(outputText).join('\n')).toContain('completed before restart')
+    const retainedBuffer = record(record(await world.call('read', { bufferId, action: 'buffer' })).buffer)
+    expect(String(retainedBuffer.draft)).toContain('draftOnly')
+
+    const restartObserver = await world.harness.connect('ui')
+    const restartEvents: { type: string }[] = []
+    restartObserver.onEvent((event) => restartEvents.push(event))
+    await restartObserver.call('events.subscribe', {})
+    expect(await notebook(world, bufferId, 'restart')).toEqual({
+      status: 'stopped',
+      trusted: false,
+      outputsKept: true,
+      queueCancelled: true
+    })
+    await waitForAsync(async () => restartEvents.some((event) => event.type === 'quirky.editor/changed'))
+    const stopped = record(await notebook(world, bufferId, 'state'))
+    expect(stopped).toMatchObject({
+      trusted: false,
+      selectedPython,
+      executionCount: null,
+      kernel: { status: 'stopped', executionCount: null }
+    })
+    const restartOutput = notebookCells(record(await notebook(world, bufferId, 'parse', { offset: 0, limit: 1, outputLimit: 8 })))[0]!
+    expect(outputs(restartOutput).map(outputText).join('\n')).toContain('completed before restart')
+    expect(record(await failure(notebook(world, bufferId, 'start', { python }))).message).toMatch(/trust/i)
+    expect(record(await failure(notebook(world, bufferId, 'run', { index: 1 }))).message).toMatch(/trust/i)
+
+    await notebook(world, bufferId, 'trust')
+    const restarted = record(await notebook(world, bufferId, 'start', { python }))
+    expect(restarted.status).toBe('ready')
+    expect(kernelPid(record(await notebook(world, bufferId, 'state')))).not.toBe(bridgePid)
+    expect(record(await notebook(world, bufferId, 'state'))).toMatchObject({
+      trusted: true,
+      selectedPython,
+      executionCount: null,
+      kernel: { status: 'ready', executionCount: null }
+    })
+    const oldVariable = record(await notebook(world, bufferId, 'run', { index: 1, mode: 'in-place' }))
+    expect(oldVariable.status).toBe('error')
+    const missingVariable = notebookCells(record(await notebook(world, bufferId, 'parse', { offset: 1, limit: 1, outputLimit: 8 })))[0]!
+    expect(JSON.stringify(outputs(missingVariable))).toMatch(/NameError|value_before_restart/)
+
+    const shutdownObserver = await world.harness.connect('ui')
+    const shutdownEvents: { type: string }[] = []
+    shutdownObserver.onEvent((event) => shutdownEvents.push(event))
+    await shutdownObserver.call('events.subscribe', {})
+    await notebook(world, bufferId, 'shutdown')
+    await waitForAsync(async () => shutdownEvents.some((event) => event.type === 'quirky.editor/changed'))
+    expect(record(await notebook(world, bufferId, 'state'))).toMatchObject({ trusted: true, kernel: { status: 'stopped' } })
+    await world.call('close', { bufferId, choice: 'discard' })
+    await waitFor(() => processIsGone(restartedPid), 10_000)
+  })
+
+  test.skipIf(!python || process.platform === 'win32')('N1: closing during restart terminates the owned kernel without a stale session', async () => {
+    const world = await start({
+      'race.ipynb': JSON.stringify({
+        cells: [{ cell_type: 'code', source: ['pass\n'], metadata: {}, outputs: [], execution_count: null }],
+        metadata: {},
+        nbformat: 4,
+        nbformat_minor: 5
+      })
+    })
+    const { bufferId, tabId } = await world.open('race.ipynb')
+    await notebook(world, bufferId, 'select', { python })
+    await notebook(world, bufferId, 'trust')
+    await notebook(world, bufferId, 'start', { python })
+    const pid = kernelPid(record(await notebook(world, bufferId, 'state')))
+
+    const [restart, close] = await Promise.allSettled([
+      notebook(world, bufferId, 'restart'),
+      world.call('close', { bufferId, ...(tabId ? { tabId } : {}), choice: 'discard' })
+    ])
+    expect(close.status).toBe('fulfilled')
+    if (close.status !== 'fulfilled') throw close.reason
+    expect(record(close.value).closed).toBe(true)
+    if (restart.status === 'fulfilled') {
+      expect(restart.value).toEqual({
+        status: 'stopped',
+        trusted: false,
+        outputsKept: true,
+        queueCancelled: true
+      })
+    } else {
+      expect(record(restart.reason).code).toBe(RpcErrorCode.NotFound)
+    }
+    await waitFor(() => processIsGone(pid), 10_000)
+    expect(await failure(notebook(world, bufferId, 'state'))).toMatchObject({ code: RpcErrorCode.NotFound })
+    expect(await failure(notebook(world, bufferId, 'restart'))).toMatchObject({ code: RpcErrorCode.NotFound })
+    expect(await failure(notebook(world, bufferId, 'trust'))).toMatchObject({ code: RpcErrorCode.NotFound })
+  })
+
   test.skipIf(!python)('SC-18: interrupt, restart, and closing the owning edit tab clean up the actual kernel process', async () => {
     const world = await start({
       'lifecycle.ipynb': JSON.stringify({ cells: [{ cell_type: 'code', source: ['import time\ntime.sleep(30)\n'], metadata: {}, outputs: [], execution_count: null }], metadata: {}, nbformat: 4, nbformat_minor: 5 })
