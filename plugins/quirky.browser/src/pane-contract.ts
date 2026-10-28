@@ -18,17 +18,17 @@ export const PANE_METHODS = ['paneOpen', 'paneState', 'paneNavigate', 'paneContr
 export type PaneMethod = typeof PANE_METHODS[number]
 /** Every method below is declared by the built-in manifest and generated CLI. */
 export type PaneRequests = {
-  paneOpen: { worktree: string; url?: string; page?: string; mode?: PaneMode; profile?: string }
+  paneOpen: { worktree: string; url?: string; page?: string; mode?: PaneMode; profile?: string; consumer?: string }
   paneState: { worktree?: string }
-  paneNavigate: { pane: string; input: string }
-  paneControl: { pane: string; action: PaneCommand['action'] | 'viewport'; text?: string; forward?: boolean; level?: number; preset?: PaneViewport }
+  paneNavigate: { pane: string; input: string; consumer?: string }
+  paneControl: { pane: string; action: PaneCommand['action'] | 'viewport'; text?: string; forward?: boolean; level?: number; preset?: PaneViewport; consumer?: string }
   paneReport: { pane: string; command?: string; url?: string; title?: string; loading?: boolean; error?: string | null; canGoBack?: boolean; canGoForward?: boolean; findCurrent?: number; findTotal?: number; tabId?: string }
-  paneClose: { pane: string; fromTab?: boolean; tabId?: string }
+  paneClose: { pane: string; fromTab?: boolean; tabId?: string; consumer?: string }
   paneSuggestions: { worktree: string; query: string }
-  paneWatch: { pane: string }
-  paneWatchStop: { pane: string; watchId: string }
-  paneInput: { pane: string; kind: 'mouse' | 'key' | 'text' | 'wheel'; type?: string; x?: number; y?: number; button?: string; key?: string; code?: string; text?: string; deltaX?: number; deltaY?: number; modifiers?: number }
+  paneWatch: { pane: string; consumer?: string }
+  paneWatchStop: { pane: string; watchId: string; consumer?: string }
+  paneInput: { pane: string; kind: 'mouse' | 'key' | 'text' | 'wheel'; type?: string; x?: number; y?: number; button?: string; key?: string; code?: string; text?: string; deltaX?: number; deltaY?: number; modifiers?: number; consumer?: string }
   paneRespond: { pane: string; prompt: string; accept: boolean; text?: string; username?: string; password?: string }
   paneDownload: { pane: string; download: string; action: 'cancel' | 'open' | 'reveal' | 'dismiss' }
-  paneFrameAck: { pane: string; watchId: string; sequence: number }
+  paneFrameAck: { pane: string; watchId: string; sequence: number; consumer?: string }
 }
