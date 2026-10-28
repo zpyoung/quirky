@@ -1,10 +1,6 @@
 import type { FleetRow, FleetSnapshot } from './control-contracts'
 import type { TickTrace } from './contracts'
 
-export type FleetBucket = 'needsYou' | 'lostContact' | 'active' | 'inactive'
-
-export type FleetGroups = Record<FleetBucket, FleetRow[]>
-
 export type StatusPresentation = {
   label: string
   reason?: string
@@ -16,68 +12,6 @@ export type DecisionTraceGroup = {
   lastSeq: number
   count: number
   representative: TickTrace
-}
-
-const urgency = (row: FleetRow): number => {
-  switch (row.status.state) {
-    case 'escalated':
-      return 0
-    case 'parked':
-      return 1
-    case 'unreachable':
-    case 'malformed':
-      return 2
-    case 'held':
-      return row.status.reason === 'tick-error' || row.status.consecutiveErrors > 0 || row.ownerContact === 'unverifiable' ? 2 : 3
-    case 'acting':
-      return 4
-    case 'watching':
-      return row.ownerContact === 'unverifiable' ? 2 : 5
-    case 'terminal':
-      return 6
-    case 'disabled':
-      return 7
-    default:
-      return 8
-  }
-}
-
-/** Sorts urgency first, then most recent successful tick and watcher name. */
-export function sortFleetRows(rows: readonly FleetRow[]): FleetRow[] {
-  return [...rows].sort((a, b) => {
-    const rank = urgency(a) - urgency(b)
-    if (rank !== 0) return rank
-    const aTick = a.lastSuccessfulTickAtMs
-    const bTick = b.lastSuccessfulTickAtMs
-    if (aTick !== bTick) {
-      if (aTick === null) return 1
-      if (bTick === null) return -1
-      return bTick - aTick
-    }
-    return a.name.localeCompare(b.name)
-  })
-}
-
-function awaitingApproval(row: FleetRow): boolean {
-  return row.openEscalations.some((escalation) =>
-    escalation.status === 'open' && (escalation.escalationKind === 'awaiting-approval' || escalation.approvalScope !== undefined)
-  )
-}
-
-/** Assigns one and only one fleet bucket to a row. */
-export function fleetBucket(row: FleetRow): FleetBucket {
-  const { state } = row.status
-  if (state === 'escalated' || state === 'parked' || (state === 'held' && (row.pendingQuestion || awaitingApproval(row)))) return 'needsYou'
-  if (state === 'unreachable' || row.ownerContact === 'unverifiable') return 'lostContact'
-  if (state === 'watching' || state === 'acting' || state === 'held') return 'active'
-  return 'inactive'
-}
-
-/** Groups every fleet row exactly once for sidebar counts and views. */
-export function groupFleetRows(rows: readonly FleetRow[]): FleetGroups {
-  const groups: FleetGroups = { needsYou: [], lostContact: [], active: [], inactive: [] }
-  for (const row of rows) groups[fleetBucket(row)].push(row)
-  return groups
 }
 
 function ageLabel(milliseconds: number): string {

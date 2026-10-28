@@ -15,7 +15,7 @@ import type {
   WatcherWorker
 } from './control-contracts'
 import type { BudgetPolicy, EnrollmentInput, EnrollmentResult, Json, OwnerConfig } from './contracts'
-import { sortFleetRows } from './fleet'
+import { sortFleetRows } from './fleet-selectors'
 
 const PLUGIN_ID = 'quirky.heimdall'
 const ENROLL_METHOD = `${PLUGIN_ID}/enroll`

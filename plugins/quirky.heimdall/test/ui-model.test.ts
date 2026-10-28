@@ -1,7 +1,8 @@
 import { describe, expect, test } from 'bun:test'
 import type { FleetRow, FleetSnapshot } from '../src/control-contracts'
 import type { TickTrace } from '../src/contracts'
-import { acceptFleetSnapshot, groupDecisionTraces, groupFleetRows, statusPresentation, sortFleetRows } from '../src/ui-model'
+import { acceptFleetSnapshot, groupDecisionTraces, statusPresentation } from '../src/ui-model'
+import { groupFleetRows, sortFleetRows } from '../src/fleet-selectors'
 
 function row(overrides: Partial<FleetRow> = {}): FleetRow {
   return {
@@ -106,6 +107,61 @@ describe('Heimdall UI model', () => {
     expect(groups.active.map((item) => item.name)).toEqual(['held-active'])
     expect(groups.inactive.map((item) => item.name)).toEqual(['terminal', 'disabled'])
     expect(Object.values(groups).flat()).toHaveLength(rows.length)
+  })
+
+  test('uses the same urgency, contact, approval, and inactive rules for every fleet view', () => {
+    const pausedWatching = row({ name: 'paused-watching' })
+    pausedWatching.enrollment.paused = true
+    const rows = [
+      pausedWatching,
+      row({
+        name: 'acting-unverifiable',
+        ownerContact: 'unverifiable',
+        status: { state: 'acting', nextPulseAtMs: null, consecutiveErrors: 0, consecutiveGateHolds: 0 },
+        lastSuccessfulTickAtMs: 40
+      }),
+      row({
+        name: 'held-tick-error',
+        status: { state: 'held', reason: 'tick-error', nextPulseAtMs: null, consecutiveErrors: 0, consecutiveGateHolds: 0 },
+        lastSuccessfulTickAtMs: 30
+      }),
+      row({
+        name: 'held-error-count',
+        status: { state: 'held', reason: 'retrying', nextPulseAtMs: null, consecutiveErrors: 1, consecutiveGateHolds: 0 },
+        lastSuccessfulTickAtMs: 20
+      }),
+      row({
+        name: 'detail-error-text',
+        status: { state: 'watching', reason: 'no-action', detail: 'no errors found', nextPulseAtMs: null, consecutiveErrors: 0, consecutiveGateHolds: 0 },
+        lastSuccessfulTickAtMs: 20
+      }),
+      row({
+        name: 'approval-scope',
+        status: { state: 'held', nextPulseAtMs: null, consecutiveErrors: 0, consecutiveGateHolds: 0 },
+        openEscalations: [{
+          escalationId: 'approval',
+          escalationKind: 'review',
+          status: 'open',
+          foldCount: 1,
+          approvalScope: { actionKind: 'edit', contentIdentity: 'source', evidenceKey: 'fingerprint' }
+        }]
+      }),
+      row({ name: 'Z', lastSuccessfulTickAtMs: 10 }),
+      row({ name: 'a', lastSuccessfulTickAtMs: 10 })
+    ]
+
+    expect(sortFleetRows(rows).map((item) => item.name)).toEqual([
+      'acting-unverifiable', 'held-tick-error', 'held-error-count', 'approval-scope',
+      'detail-error-text', 'Z', 'a', 'paused-watching'
+    ])
+
+    const groups = groupFleetRows(rows)
+    expect(groups.needsYou.map((item) => item.name)).toEqual(['approval-scope'])
+    expect(groups.lostContact.map((item) => item.name)).toEqual(['acting-unverifiable'])
+    expect(groups.active.map((item) => item.name)).toEqual([
+      'held-tick-error', 'held-error-count', 'detail-error-text', 'Z', 'a'
+    ])
+    expect(groups.inactive.map((item) => item.name)).toEqual(['paused-watching'])
   })
 
   test('shows tick errors and unverifiable last-confirmed age without dropping the reason', () => {

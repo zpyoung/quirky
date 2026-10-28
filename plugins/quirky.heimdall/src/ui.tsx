@@ -3,7 +3,8 @@ import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, 
 import type { QuirkyEvent, UiPluginContext } from '@quirky/protocol'
 import type { ApprovalScope, TickTrace } from './contracts'
 import type { CommandRequest, CommandResult, FleetAction, FleetRow, FleetSnapshot, OpenEscalation, WatcherCommand, WatcherDetail, WatcherTarget, WatcherWorker } from './control-contracts'
-import { acceptFleetSnapshot, groupDecisionTraces, groupFleetRows, sortFleetRows, statusPresentation } from './ui-model'
+import { groupFleetRows, sortFleetRows } from './fleet-selectors'
+import { acceptFleetSnapshot, groupDecisionTraces, statusPresentation } from './ui-model'
 
 const FLEET_VIEW_ID = 'view:quirky.heimdall/fleet'
 const NAVIGATION_ID = 'sidebar-section:quirky.heimdall/navigation'

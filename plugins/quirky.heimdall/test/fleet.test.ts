@@ -2,7 +2,8 @@ import { describe, expect, test } from 'bun:test'
 import type { PluginContext } from '@quirky/protocol'
 import type { ControlPlane, FleetRow, FleetSnapshot, KernelControlHost, OpenEscalation, WatcherWorker } from '../src/control-contracts'
 import type { Enrollment, Inspection, JournalEntry, KernelStore, RunnerStatus, TickTrace } from '../src/contracts'
-import { createFleetService, fleetBucket, sortFleetRows } from '../src/fleet'
+import { createFleetService } from '../src/fleet'
+import { fleetBucket, sortFleetRows } from '../src/fleet-selectors'
 
 const status = (state: RunnerStatus['state'], reason?: string): RunnerStatus => ({
   state,
@@ -196,7 +197,7 @@ describe('Heimdall fleet projection', () => {
       'watching-new', 'watching-old', 'terminal', 'disabled'
     ])
     expect(rows.map(fleetBucket)).toEqual([
-      'active', 'inactive', 'inactive', 'active', 'active', 'active', 'lostContact', 'lostContact',
+      'active', 'inactive', 'inactive', 'active', 'active', 'active', 'active', 'lostContact',
       'needsYou', 'needsYou', 'needsYou', 'needsYou'
     ])
   })

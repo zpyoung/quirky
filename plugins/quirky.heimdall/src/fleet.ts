@@ -13,12 +13,10 @@ import type {
   WatcherWorker
 } from './control-contracts'
 import type { Enrollment, Inspection, JournalEntry, RunnerStatus, TickTrace } from './contracts'
-
-export type FleetBucket = keyof FleetSnapshot['buckets']
+import { fleetBucket, sortFleetRows } from './fleet-selectors'
 
 const JOURNAL_LIMIT = 200
 const TRACE_LIMIT = 20
-const FAILED_TICK_REASONS = /error/i
 
 type Observation = {
   ownerContact: FleetRow['ownerContact']
@@ -246,54 +244,8 @@ function fallbackStatus(enrollment: Enrollment, inspection: Inspection): RunnerS
   return { state: 'unreachable', reason: 'runner-state-unavailable', nextPulseAtMs: null, consecutiveErrors: 0, consecutiveGateHolds: 0 }
 }
 
-function urgency(row: FleetRow): number {
-  const state = row.status.state
-  if (state === 'escalated') return 0
-  if (state === 'parked') return 1
-  if (
-    state === 'unreachable' || state === 'malformed' || row.ownerContact === 'unverifiable' ||
-    (row.status.reason !== undefined && FAILED_TICK_REASONS.test(row.status.reason)) ||
-    (row.status.detail !== undefined && FAILED_TICK_REASONS.test(row.status.detail))
-  ) return 2
-  if (row.enrollment.paused || state === 'disabled') return 7
-  if (state === 'held') return 3
-  if (state === 'acting') return 4
-  if (state === 'watching') return 5
-  if (state === 'terminal') return 6
-  return 2
-}
-
 function nameOrder(left: string, right: string): number {
   return left < right ? -1 : left > right ? 1 : 0
-}
-
-export function sortFleetRows(rows: FleetRow[]): FleetRow[] {
-  return [...rows].sort((left, right) => {
-    const urgencyOrder = urgency(left) - urgency(right)
-    if (urgencyOrder !== 0) return urgencyOrder
-    if (left.lastSuccessfulTickAtMs !== right.lastSuccessfulTickAtMs) {
-      if (left.lastSuccessfulTickAtMs === null) return 1
-      if (right.lastSuccessfulTickAtMs === null) return -1
-      return right.lastSuccessfulTickAtMs - left.lastSuccessfulTickAtMs
-    }
-    return nameOrder(left.name, right.name)
-  })
-}
-
-export function fleetBucket(row: FleetRow): FleetBucket {
-  const state = row.status.state
-  const approvalPending = row.openEscalations.some((escalation) =>
-    escalation.status === 'open' && (escalation.escalationKind === 'awaiting-approval' || escalation.reason === 'awaiting-approval')
-  )
-  if (state === 'escalated' || state === 'parked' || (state === 'held' && (approvalPending || row.pendingQuestion))) return 'needsYou'
-  if (
-    state === 'unreachable' || state === 'malformed' || row.ownerContact === 'unverifiable' ||
-    (row.status.reason !== undefined && FAILED_TICK_REASONS.test(row.status.reason)) ||
-    (row.status.detail !== undefined && FAILED_TICK_REASONS.test(row.status.detail))
-  ) return 'lostContact'
-  if (row.enrollment.paused || !row.enrollment.enabled || state === 'disabled' || state === 'terminal') return 'inactive'
-  if (state === 'watching' || state === 'acting' || state === 'held') return 'active'
-  return 'inactive'
 }
 
 function observation(row: FleetRow): Observation {

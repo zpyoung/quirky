@@ -346,7 +346,12 @@ async function answerEscalation(host: KernelControlHost, enrollment: Enrollment,
   const patch = parkReason === 'worker-escalation' || parkReason === 'owner-escalation'
     ? { enabled: true, paused: false, parkReason: null, haltReason: null }
     : {}
-  persistMutation(host.store, enrollment, patch, [escalationRevision(latest, 'resolved', { humanReply: body })])
+  const related = [...latestEscalations(host.store.journal(enrollment.watcherId)).values()]
+    .filter(entry => isOpenEscalation(entry) && (
+      entry.escalationId === escalationId || entry.sourceEscalationId === escalationId ||
+      (typeof latest.sourceEscalationId === 'string' && entry.escalationId === latest.sourceEscalationId)))
+    .map(entry => escalationRevision(entry, 'resolved', { humanReply: body }))
+  persistMutation(host.store, enrollment, patch, related)
   return applied(result.appliedAtMs, true, true)
 }
 
@@ -555,11 +560,11 @@ function hasOpenWorkerEscalation(entries: JournalEntry[]): boolean {
 }
 
 function isQuestionEscalationFor(entry: JournalEntry, messageId: string): boolean {
-  if (entry.escalationKind !== 'worker-question') return false
+  if (entry.escalationKind !== 'worker-question' && entry.escalationKind !== 'park-worker-question') return false
   return entry.messageId === messageId
-    || entry.questionId === messageId
+    || entry.sourceMessageId === messageId
+    || entry.sourceEscalationId === `worker-question:${messageId}`
     || entry.escalationId === `worker-question:${messageId}`
-    || entry.escalationId === `park-worker-question:${messageId}`
 }
 
 function latestEscalations(entries: JournalEntry[]): Map<string, JournalEntry> {
@@ -634,10 +639,13 @@ function evidence(evidenceKind: string, payload: Json = {}): JournalAppend {
 }
 
 function persistMutation(store: KernelStore, enrollment: Enrollment, patch: Partial<Enrollment>, entries: JournalAppend[]): void {
-  if (enrollment.commandRevision >= Number.MAX_SAFE_INTEGER) throw new Error('Watcher command revision cannot be incremented safely.')
-  const next = { ...enrollment, ...patch, commandRevision: enrollment.commandRevision + 1 }
   store.transaction(() => {
-    store.save(next)
+    const current = store.get(enrollment.watcherId)
+    if (!current || current.commandRevision !== enrollment.commandRevision ||
+      current.executionHostId !== enrollment.executionHostId || current.schedulerOwner !== enrollment.schedulerOwner ||
+      current.workspaceKey !== enrollment.workspaceKey) throw new Error('Watcher ownership or command revision changed before commit.')
+    if (current.commandRevision >= Number.MAX_SAFE_INTEGER) throw new Error('Watcher command revision cannot be incremented safely.')
+    store.save({ ...current, ...patch, commandRevision: current.commandRevision + 1 })
     for (const entry of entries) store.append(enrollment.watcherId, entry)
   })
 }

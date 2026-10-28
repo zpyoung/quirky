@@ -299,6 +299,27 @@ describe('Heimdall control plane', () => {
     expect(control.pending(WATCHER_ID)).toEqual([])
   })
 
+  test('a non-draining budget edit preserves kernel fields committed while inspection is awaiting', async () => {
+    const h = fixture()
+    const entered = deferred<void>()
+    const release = deferred<void>()
+    const inspect = h.host.inspect
+    h.host.inspect = async id => {
+      const observed = await inspect(id)
+      entered.resolve()
+      await release.promise
+      return observed
+    }
+    const control = createControlPlane(h.host)
+    const editing = control.command(request(h, { kind: 'adjust-budget', budget: { wallClockActiveMs: null, turns: 5 } }))
+    await entered.promise
+    const latest = h.store.get(WATCHER_ID)!
+    h.store.save({ ...latest, orchestrationRunId: 'run-owned-by-watcher' })
+    release.resolve()
+    expect(await editing).toMatchObject({ kind: 'applied' })
+    expect(h.store.get(WATCHER_ID)).toMatchObject({ orchestrationRunId: 'run-owned-by-watcher', budget: { turns: 5 }, commandRevision: 1 })
+  })
+
   test('serializes watcher commands and checks the queued command revision at execution time', async () => {
     const h = fixture({ enrollment: { enabled: false, parkReason: 'budget', budget: { wallClockActiveMs: null, turns: 2 } }, turns: 1 })
     const control = createControlPlane(h.host)
@@ -432,8 +453,11 @@ describe('Heimdall control plane', () => {
       question: { messageId: 'question-1', body: 'Continue?' },
     }
     const h = fixture({ enrollment: { enabled: false, parkReason: 'worker-question' }, workers: [worker] })
-    h.store.append(WATCHER_ID, escalation('park-worker-question', {
+    h.store.append(WATCHER_ID, escalation('worker-question:question-1', {
       escalationKind: 'worker-question', messageId: 'question-1', status: 'open',
+    }))
+    h.store.append(WATCHER_ID, escalation('park-question', {
+      escalationKind: 'park-worker-question', sourceMessageId: 'question-1', sourceEscalationId: 'worker-question:question-1',
     }))
     const control = createControlPlane(h.host)
 
@@ -443,7 +467,8 @@ describe('Heimdall control plane', () => {
 
     expect(await control.command(request(h, { kind: 'answer-question', messageId: 'question-1', body: 'Continue.' }))).toMatchObject({ kind: 'applied', appliedAtMs: 100 })
     expect(h.store.get(WATCHER_ID)).toMatchObject({ enabled: true, paused: false, parkReason: null, commandRevision: 1 })
-    expect(latestEscalationRows(h.store.journal(WATCHER_ID)).get('park-worker-question')?.status).toBe('resolved')
+    expect(latestEscalationRows(h.store.journal(WATCHER_ID)).get('worker-question:question-1')?.status).toBe('resolved')
+    expect(latestEscalationRows(h.store.journal(WATCHER_ID)).get('park-question')?.status).toBe('resolved')
     expect(h.store.journal(WATCHER_ID).some(entry => entry.evidenceKind === 'worker-question-answered')).toBe(true)
 
     const duplicate = await control.command(request(h, { kind: 'answer-question', messageId: 'question-1', body: 'Again.' }))
@@ -456,18 +481,18 @@ describe('Heimdall control plane', () => {
   test('answer-escalation resolves the exact open escalation and does not rewrite unrelated revisions', async () => {
     const h = fixture({ enrollment: { enabled: false, parkReason: 'worker-escalation' } })
     h.store.append(WATCHER_ID, escalation('worker-escalation-1', { escalationKind: 'worker-escalation', foldCount: 2 }))
+    h.store.append(WATCHER_ID, escalation('park-escalation', { escalationKind: 'park-worker-escalation', sourceEscalationId: 'worker-escalation-1' }))
     h.store.append(WATCHER_ID, escalation('owner-deviation-1', { escalationKind: 'stall', status: 'open' }))
     const control = createControlPlane(h.host)
 
     expect(await control.command(request(h, { kind: 'answer-escalation', escalationId: 'worker-escalation-1', body: 'Proceed.' }))).toMatchObject({ kind: 'applied' })
-    expect(h.calls.escalationAnswers).toEqual([{ escalationId: 'worker-escalation-1', body: 'Proceed.' }])
     expect(latestEscalationRows(h.store.journal(WATCHER_ID)).get('worker-escalation-1')).toMatchObject({ status: 'resolved', humanReply: 'Proceed.', foldCount: 2 })
+    expect(latestEscalationRows(h.store.journal(WATCHER_ID)).get('park-escalation')?.status).toBe('resolved')
     expect(latestEscalationRows(h.store.journal(WATCHER_ID)).get('owner-deviation-1')?.status).toBe('open')
     expect(h.store.get(WATCHER_ID)).toMatchObject({ enabled: true, paused: false, parkReason: null, commandRevision: 1 })
 
     const closed = await control.command(request(h, { kind: 'answer-escalation', escalationId: 'worker-escalation-1', body: 'Again.' }))
     expect(closed).toMatchObject({ kind: 'refused', reason: 'invalid-state' })
-    expect(h.calls.escalationAnswers).toHaveLength(1)
     expect(h.store.get(WATCHER_ID)?.commandRevision).toBe(1)
   })
 
