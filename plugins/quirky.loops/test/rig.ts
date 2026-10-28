@@ -7,6 +7,7 @@ import { rpcUrl } from '@quirky/protocol/node'
 import { formatRecord, formatTable } from '../../../packages/cli/src/output'
 import { startHarness, waitForAsync, type Harness } from '../../../packages/daemon/test/helpers'
 import type { LoopConfig, LoopSnapshot } from '../src/types'
+import type { CodexAppServerFixture } from '../../quirky.structured/test/fakes/codex-app-server'
 
 const PLUGINS_ROOT = resolve(import.meta.dir, '../..')
 const PLUGINS = [
@@ -106,7 +107,7 @@ export const loopConfig = (body: string, patch: Partial<LoopConfig> = {}): LoopC
   ...patch
 })
 
-export type LoopRigOptions = { script?: ScriptedTurn; onStop?: (sessionId: string) => void; extraPlugins?: string[] }
+export type LoopRigOptions = { script?: ScriptedTurn; onStop?: (sessionId: string) => void; extraPlugins?: string[]; nativeCodex?: boolean }
 export type LoopRig = {
   home: string
   cwd: string
@@ -116,6 +117,7 @@ export type LoopRig = {
   events: QuirkyEvent[]
   starts: Controller['starts']
   sends: Controller['sends']
+  nativeFixture?: CodexAppServerFixture
   call<T = unknown>(method: string, params?: Record<string, unknown>): Promise<T>
   snapshot(loopId: string): Promise<LoopSnapshot>
   waitForLoop(loopId: string, predicate: (snapshot: LoopSnapshot) => boolean, timeoutMs?: number): Promise<LoopSnapshot>
