@@ -697,8 +697,9 @@
         "m5-loops-core",
         "m5-loops-presets"
       ],
-      "status": "todo",
-      "early": true
+      "status": "in-progress",
+      "early": true,
+      "lane": 1
     },
     {
       "id": "m5-ledger",
