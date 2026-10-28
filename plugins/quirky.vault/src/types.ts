@@ -1,4 +1,5 @@
 // Shared JSON contracts for the vault worker, daemon and window. No runtime imports.
+export type SearchTipState = { id: 'agent-session-search'; seen: boolean }
 export type VaultRole = 'user' | 'assistant' | 'tool' | 'system'
 export type Presence = 'present' | 'missing' | 'unverifiable'
 export type VaultMessage = { role: VaultRole; text: string; timestamp: number | null }
