@@ -202,5 +202,27 @@ The canonical queue add exited0 and the integration queue confirmed exactly one 
 - **Revisit if:** the normal authoritative retry reproduces the timeout
 - **Source:** assumed — autonomous; preserves m3-accounts D35's no-waiver precedent
 
+## D19: Preserve both guides during required land-conflict recovery
+- **Question:** How should the next landing rejection's fresh README conflict be resolved?
+- **Options:** discard Accounts; discard Heimdall fleet/owner; combine the independent feature guides
+- **Chose:** faithful additive combination, committed in merge3354713b
+- **Why:** the second queue attempt stopped before product verification because build/roadmap had advanced. Its only conflict was Accounts versus Heimdall documentation. All five newly incoming decision logs were read in full: loops UI D1–25, Heimdall control D1–15, owner D1–43, hosting sweep D1–12 and terminal sweep D1–20,115 decisions plus trailing verification/Progress. No Accounts conflict was found. SCM option precedence is not an override of Accounts hook authority.
+- **Evidence:** second-land-result.json; exact incoming e51163407a6f2633021b31ce2115e85adf76ae7c; retry-conflict-incoming-decisions.json; specialized conflict resolution preserved both complete sections
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** another authoritative land reports a concrete conflict
+- **Source:** locked by incoming decision logs and LOOP land-failure protocol
+
+## D20: Diagnose the guardian path without guessing or changing the gate
+- **Question:** What should change after the recovery check chain again timed out in script profiling tests?
+- **Options:** guess a guardian fix; weaken deadlines; collect phase evidence, remove instrumentation, then verify the ordinary unchanged path
+- **Chose:** temporary opt-in phase tracing only; no permanent harness, assertion, deadline or retry-policy change
+- **Why:** merge3354713b passed typecheck,58affected files and a full build, then scripts failed66pass/2timeouts (20s profiles-enabled and5s profiles-disabled), with a later blank guardian startup error. The host load observation was421.33/542.58/407.13; that does not identify the failure's cause. The exact traced cases passed827ms and2.81s. A full traced gate passed68tests/580assertions in96.41s with35guardian completions, no termination/cleanup deadlines and no remaining owned PIDs at its termination checkpoints. No failing phase reproduced, so no fix was asserted. All three instrumented source files were restored exactly; parent diff audit passed. The subsequent ordinary gate passed68tests/580assertions in77.26s, followed by actual native C-leg content/focus proof.
+- **Evidence:** guardian-diagnostic/{parent-observations,full-trace-result,investigation-result}.json and raw phase traces; conflict-recovery-check-failure.txt; ordinary final script/C-leg output; all temporary diagnostics remain only in archived scratch
+- **Reversibility:** easy
+- **Confidence:** high for observed executions; historical timeout cause remains unknown
+- **Revisit if:** the unchanged canonical verifier reports another failure
+- **Source:** assumed — autonomous
+
 ## Progress
-The first canonical land was rejected only by the script timeout in D18; no landed claim is made. The required failure-recovery merge brought queue.json only, with no new source or decision logs. Unchanged isolated and complete scripts checks now pass; product gates and prior source checks remain as recorded. Commit this evidence, detach and retry canonical queue land with the full verifier. The one registered complete-acceptance follow-up, native handoffs and explicit review limits remain unchanged.
+Required land-conflict recovery is complete. Merge3354713b preserves both guides and all115 new binding decisions; current typecheck,58affected tests and build passed. Temporary guardian diagnostics left no source changes or policy waivers, and the ordinary complete scripts gate and real native Codex C-leg now pass. Commit this evidence and retry canonical queue land with its full verifier. Exactly one acceptance follow-up remains registered; no complete UI/native parity, fixed timeout root cause or on-time landing claim is made.
