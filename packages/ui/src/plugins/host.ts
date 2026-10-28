@@ -1,4 +1,5 @@
 import { nativeBrowserCapabilityForWindow } from '../native-browser'
+import { UI_TOOL_SLOTS } from '@quirky/protocol'
 import {
   DEFAULT_THEME,
   THEME_TOKENS,
@@ -17,6 +18,8 @@ import {
   type UiPluginModule,
   type UiSlotEntry,
   type UiState,
+  type UiToolResize,
+  type UiToolSlot,
   type WindowRoute,
   type NativeBrowserCapability,
   type DesktopWindowSummary
@@ -394,15 +397,47 @@ export class WindowPluginHost {
     if (current) this.callWindowLayout('ui.window.view.close', { expectedView: current })
   }
 
-  /** Asks the daemon to open panel `id` (closing any other); with no `open`, to toggle it. */
+  /**
+   * Legacy panel controls address their resolved tool in the canonical slot layout whenever the
+   * daemon provides that projection. Older producers retain the panel RPC fallback.
+   */
   togglePanel(id: string, open?: boolean): void {
+    const tools = this.state.model?.tools
+    if (tools !== undefined) {
+      const tool = tools.find((candidate) => candidate.id === id || candidate.aliases.includes(id))
+      if (!tool) return
+      const placement = this.state.layout.tools?.placements[tool.id] ?? tool.defaultSlot
+      if (!(UI_TOOL_SLOTS as readonly string[]).includes(placement)) return
+      const slot = placement as UiToolSlot
+      const current = this.state.layout.tools?.open[slot]
+      const wanted = open ?? current !== tool.id
+      if (wanted) this.openTool(tool.id)
+      else if (current === tool.id) this.closeTool(slot)
+      return
+    }
     const wanted = open ?? this.state.layout.panel !== id
     if (wanted) this.layoutCall('ui.panel.open', { id })
     else if (this.state.layout.panel === id) this.layoutCall('ui.panel.close', {})
   }
 
-  /** Configures one panel's desired geometry through the daemon's public layout API. */
-  configurePanel(id: string, options: { width?: number; activityBarPosition?: 'top' | 'side' }): void {
+  openTool(id: string): void {
+    this.layoutCall('ui.tool.open', { id })
+  }
+
+  closeTool(slot: UiToolSlot): void {
+    this.layoutCall('ui.tool.close', { slot })
+  }
+
+  moveTool(id: string, slot: UiToolSlot): void {
+    this.layoutCall('ui.tool.move', { id, slot })
+  }
+
+  resizeTools(sizes: UiToolResize): void {
+    this.layoutCall('ui.tool.resize', { ...sizes })
+  }
+
+  /** Configures a panel's preserved width through the daemon's legacy layout API. */
+  configurePanel(id: string, options: { width: number }): void {
     this.layoutCall('ui.panel.configure', { id, ...options })
   }
 
