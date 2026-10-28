@@ -143,6 +143,19 @@ function startTurn(message, threadId, text) {
     send({ id, method: 'fixture/unknownRequest', params: { threadId, turnId: turn.id } })
     return
   }
+  if (text.includes('[native question]') || text.includes('[native secret]')) {
+    const id = 'question-' + nextApproval++
+    approvals.set(id, () => finish(threadId, turn))
+    send({
+      id,
+      method: 'item/tool/requestUserInput',
+      params: {
+        threadId, turnId: turn.id,
+        questions: [{ id: 'destination', header: 'Target', question: 'Where next?', isSecret: text.includes('[native secret]'), options: [{ label: 'Local' }, { label: 'Remote' }] }]
+      }
+    })
+    return
+  }
   if (text.includes('[approve twice]')) return ask(threadId, state, 2)
   if (text.includes('[approve]')) return ask(threadId, state, 1)
   if (text.includes('[failed]')) return finish(threadId, turn, 'failed')

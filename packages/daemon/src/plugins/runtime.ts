@@ -336,6 +336,11 @@ export function createPluginRuntime(options: PluginRuntimeOptions): PluginRuntim
           if (!isPlainObject(resolved)) return Promise.reject(invalidParams('params must be an object'))
           return dispatcher.dispatch(method, resolved, { pluginId: id })
         },
+        forward(method, params, caller) {
+          guard()
+          if (!isPlainObject(params)) return Promise.reject(invalidParams('params must be an object'))
+          return dispatcher.forward(id, method, params, caller)
+        },
         createFileResource(options) {
           guard()
           return fileResources.create(id, options, isRevoked)

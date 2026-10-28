@@ -967,6 +967,92 @@ describe('delivery', () => {
   })
 })
 
+describe('provider-owned model discovery', () => {
+  test('only a bounded provider probe replaces the exact local catalog; empty, malformed and failed probes preserve it', async () => {
+    const providerId = 'fixture-model-provider'
+    const t = await start({
+      installed: [providerId],
+      plugins: [agentManifest('fixture.provider', [{
+        id: providerId,
+        label: 'Fixture provider',
+        detect: providerId,
+        launchOptions: {
+          model: { flag: ['--model', '{value}'] },
+          options: [{
+            id: 'effort',
+            label: 'Effort',
+            type: 'select',
+            choices: [{ value: 'low', label: 'Low' }, { value: 'high', label: 'High' }],
+            flag: ['--effort', '{value}']
+          }],
+          models: [{ id: 'seed-model', label: 'Seed model' }]
+        },
+        modelDiscovery: { args: ['models', '--json'], timeoutMs: 1_000, format: 'json' }
+      }])]
+    })
+    const modelPath = join(t.userHome, 'provider-models.json')
+    writeFileSync(modelPath, JSON.stringify({
+      models: [{ id: 'opaque-model-7', label: 'Provider model', options: [{ id: 'effort', choices: ['high'] }] }]
+    }))
+    try {
+      const executable = join(t.bin, providerId)
+      writeFileSync(executable, `#!/bin/sh\ncat '${modelPath}'\n`)
+      chmodSync(executable, 0o755)
+
+      const discovered = await t.call(A('discoverModels'), { agent: providerId, host: 'local' })
+      expect(discovered).toMatchObject({
+        agent: providerId,
+        authoritative: true,
+        models: [{
+          id: 'opaque-model-7',
+          label: 'Provider model',
+          options: [{ id: 'effort', choices: ['high'] }]
+        }]
+      })
+      const updatedOptions = await t.call(A('options'), { agent: providerId })
+      expect(updatedOptions.models.map((model: { id: string }) => model.id)).toEqual(['opaque-model-7'])
+      expect(updatedOptions.models[0].options).toEqual([{ id: 'effort', label: 'Effort', type: 'select', choices: [{ value: 'high', label: 'High' }] }])
+      const resolved = await t.call(A('resolveLaunch'), { agent: providerId, model: 'opaque-model-7', options: { effort: 'high' } })
+      expect(resolved.added).toEqual(['--model', 'opaque-model-7', '--effort', 'high'])
+
+      writeFileSync(modelPath, JSON.stringify({ models: [] }))
+      const empty = await t.call(A('discoverModels'), { agent: providerId, host: 'local' })
+      expect(empty).toMatchObject({ status: 'available', authoritative: false, models: [] })
+      expect((await t.call(A('options'), { agent: providerId })).models.map((model: { id: string }) => model.id)).toEqual(['opaque-model-7'])
+
+      writeFileSync(modelPath, '{malformed')
+      expect(await t.call(A('discoverModels'), { agent: providerId, host: 'local' })).toMatchObject({
+        status: 'unavailable',
+        authoritative: false,
+        models: []
+      })
+      expect((await t.call(A('options'), { agent: providerId })).models.map((model: { id: string }) => model.id)).toEqual(['opaque-model-7'])
+
+      writeFileSync(executable, '#!/bin/sh\nexit 9\n')
+      chmodSync(executable, 0o755)
+      expect(await t.call(A('discoverModels'), { agent: providerId, host: 'local' })).toMatchObject({
+        status: 'unavailable',
+        authoritative: false,
+        models: []
+      })
+      expect((await t.call(A('options'), { agent: providerId })).models.map((model: { id: string }) => model.id)).toEqual(['opaque-model-7'])
+
+      expect(await t.call(A('discoverModels'), { agent: providerId, host: 'remote-unpaired' })).toMatchObject({
+        status: 'unavailable',
+        authoritative: false,
+        models: []
+      })
+      expect(await failure(t.call(A('discoverModels'), {
+        agent: providerId,
+        host: 'local',
+        models: [{ id: 'caller-selected', label: 'Not provider-owned' }]
+      }))).toMatchObject({ code: RpcErrorCode.InvalidParams })
+    } finally {
+      rmSync(modelPath, { force: true })
+    }
+  }, 30_000)
+})
+
 describe('launch settings', () => {
   const efforts = (info: any, model: string) =>
     info.models.find((entry: any) => entry.id === model).options.find((option: any) => option.id === 'effort')?.choices.map((choice: any) => choice.value)

@@ -118,6 +118,7 @@ function agent(id: string, label: string, launchOptions: LaunchCatalog | null, y
     trust: null,
     homepage: null,
     install: null,
+    modelDiscovery: null,
     launchOptions,
     oneShot: null
   }

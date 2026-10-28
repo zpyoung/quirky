@@ -1,4 +1,6 @@
+import { closeSync, openSync, readSync, statSync } from 'node:fs'
 import { join } from 'node:path'
+import { isRecord, readFirstString } from './normalize/shared'
 import { RpcErrorCode, type AgentStatusSummary, type ContributionInfo, type PluginContext, type PtyFact, type QuirkyEvent, type Session } from '@quirky/protocol'
 import { ActivityFeed } from './activity'
 import type { ActivityAcknowledgment, ActivityQuery, ActivityThread } from './activity-types'
@@ -34,11 +36,38 @@ import { classifyTitle, type TitleStatus } from './title'
 import type { RowStore } from './store'
 import type { AgentRow, NormalizerCache, Normalized } from './types'
 import { Waits, type OutputWaitOptions, type OutputWaitResult, type WaitResult } from './waits'
+import { parseProviderTranscriptLine, type ProviderCall, type TranscriptRecord } from './transcript'
 
 /** Rows older than this at startup are dropped instead of restored. */
 const RESTORE_MAX_AGE_MS = 7 * 24 * 3_600_000
 const MAX_PROVIDER_ID = 512
 const CONTROL_CHARACTERS = /[\u0000-\u001f\u007f]/
+
+const TRANSCRIPT_POLL_MS = 100
+const TRANSCRIPT_POLL_WINDOW_MS = 10_000
+const TRANSCRIPT_INITIAL_TAIL_BYTES = 256 * 1024
+const TRANSCRIPT_READ_BYTES = 128 * 1024
+const TRANSCRIPT_TOTAL_BYTES = 1024 * 1024
+const TRANSCRIPT_LINE_BYTES = 64 * 1024
+
+type TranscriptSource = 'codex' | 'muse'
+type TranscriptFence = { providerId: string; transcriptPath: string; turnStartedAt: number }
+type TranscriptPoll = TranscriptFence & {
+  source: TranscriptSource
+  prompt: string
+  agentPid: number | null
+  agentStart: string | null
+  startedAt: number
+  offset: number
+  bytesRead: number
+  initialized: boolean
+  discardFirstLine: boolean
+  partial: string
+  active: boolean
+  calls: Map<string, ProviderCall>
+}
+type OscTurn = { providerId: string; turnId: string; turnStartedAt: number }
+type TranscriptOwner = { session: Session; row: AgentRow }
 
 /** One hook, as the daemon delivered it or as the spool replays it. */
 export type HookInput = {
@@ -51,6 +80,10 @@ export type HookInput = {
   /** The time of the evidence; defaults to now. */
   at?: number
   replay?: boolean
+  /** The producer's current turn and provider file; checked before every polled event is applied. */
+  transcript?: TranscriptFence
+  /** An authenticated private provider prompt after the owning session ID changed. */
+  providerReplacement?: boolean
 }
 
 export type ListedRow = AgentStatusSummary & { sessionId: string; agent: string }
@@ -87,6 +120,9 @@ export class AgentStatusService {
   private readonly caches = new Map<string, NormalizerCache>()
   private readonly records = new Map<string, ProgramStatusRecords>()
   private readonly timers = new Set<ReturnType<typeof setTimeout>>()
+  private readonly transcriptPolls = new Map<string, TranscriptPoll>()
+  private readonly transcriptTimers = new Map<string, ReturnType<typeof setTimeout>>()
+  private readonly oscTurns = new Map<string, OscTurn>()
   private readonly programRetries = new Map<string, ReturnType<typeof setTimeout>>()
   private readonly escapes = new Map<string, { turn: string; count: number }>()
   private readonly titles = new Map<string, string>()
@@ -98,6 +134,7 @@ export class AgentStatusService {
   private readonly matcher = new Matcher()
   private readonly sampler: ScreenSampler
   private readonly screen: ScreenDeps
+  private stopped = false
 
   constructor(
     private readonly context: PluginContext,
@@ -138,9 +175,13 @@ export class AgentStatusService {
 
   /** Cancels the waits still pending and stops the matcher; the service takes no more work afterwards. */
   shutdown(): void {
+    this.stopped = true
     for (const timer of this.timers) clearTimeout(timer)
     this.timers.clear()
     this.programRetries.clear()
+    this.transcriptTimers.clear()
+    this.transcriptPolls.clear()
+    this.oscTurns.clear()
     this.matcher.dispose()
   }
 
@@ -167,6 +208,8 @@ export class AgentStatusService {
       this.escapes.delete(sessionId)
       this.titles.delete(sessionId)
       this.sampler.forget(sessionId)
+      this.cancelTranscriptPoll(sessionId)
+      this.oscTurns.delete(sessionId)
       this.cancelProgramRetry(sessionId)
       this.context.emit('changed', { sessionId, row: null })
     })
@@ -183,6 +226,11 @@ export class AgentStatusService {
       if (message?.type === 'report') void this.enqueue(sessionId, () => this.handleReport(sessionId, message.report))
     } else if (fact.kind === 'prompt') {
       void this.enqueue(sessionId, () => this.handlePrompt(sessionId))
+    } else {
+      const privateFact = fact as unknown as { kind?: unknown; payload?: unknown }
+      if (privateFact.kind === 'agent-status' && isRecord(privateFact.payload)) {
+        void this.enqueue(sessionId, () => this.handlePrivateStatus(sessionId, privateFact.payload as Record<string, unknown>))
+      }
     }
   }
 
@@ -438,10 +486,71 @@ export class AgentStatusService {
       return null
     }
   }
+  private async handlePrivateStatus(sessionId: string, payload: Record<string, unknown>): Promise<void> {
+    const session = await this.findSession(sessionId)
+    if (!session || session.kind !== 'terminal' || session.status === 'exited' || (session.agent !== 'codex' && session.agent !== 'muse')) return
+    const providerId = session.providerSession?.id
+    if (!providerId || !validProviderId(providerId)) return
+    const reportedProvider = readFirstString(payload, ['provider_session_id', 'providerSessionId', 'session_id', 'sessionId'])
+    if (reportedProvider !== undefined && reportedProvider !== providerId) return
+    const event = readFirstString(payload, ['hook_event_name', 'event', 'eventName'])
+    if (!event) return
+
+    const row = this.rows.get(session.id)
+    if (row && row.agent !== session.agent) return
+    if (!row && event !== 'UserPromptSubmit') return
+    const pidValue = payload.agent_pid ?? payload.agentPid ?? payload.pid
+    if (pidValue !== undefined && (typeof pidValue !== 'number' || !Number.isInteger(pidValue) || pidValue <= 0)) return
+    const agentPid = typeof pidValue === 'number' ? pidValue : undefined
+    const agentStart = readFirstString(payload, ['agent_start', 'agentStart', 'pstart'])
+    if (row && agentPid !== undefined && row.lead.agentPid !== null && row.lead.agentPid !== agentPid) return
+    if (row && agentStart !== undefined && row.lead.agentStart !== null && row.lead.agentStart !== agentStart) return
+
+    const turnId = readFirstString(payload, ['turn_id', 'turnId'])
+    if (turnId && (turnId.length > MAX_PROVIDER_ID || CONTROL_CHARACTERS.test(turnId))) return
+    const previousTurn = this.oscTurns.get(session.id)
+    if (
+      row &&
+      turnId !== undefined &&
+      event !== 'UserPromptSubmit' &&
+      previousTurn?.providerId === providerId &&
+      previousTurn.turnStartedAt === row.turnStartedAt &&
+      previousTurn.turnId !== turnId
+    ) return
+
+    await this.handle({
+      source: session.agent,
+      sessionId,
+      payload,
+      event,
+      ...(agentPid !== undefined ? { agentPid } : {}),
+      ...(agentStart !== undefined ? { agentStart } : {}),
+      ...(event === 'UserPromptSubmit' && row && row.lead.providerSession !== providerId ? { providerReplacement: true } : {})
+    })
+    const current = this.rows.get(session.id)
+    if (event === 'UserPromptSubmit' && !turnId) this.oscTurns.delete(session.id)
+    else if (turnId && current?.agent === session.agent && current.lead.providerSession === providerId && current.turnStartedAt !== null) {
+      this.oscTurns.set(session.id, { providerId, turnId, turnStartedAt: current.turnStartedAt })
+    }
+  }
+
 
   private async handle(input: HookInput): Promise<void> {
     const session = await this.findSession(input.sessionId)
     if (!session || session.kind !== 'terminal' || session.status === 'exited') return
+    const fence = input.transcript
+    if (fence) {
+      const row = this.rows.get(session.id)
+      if (
+        !row ||
+        row.agent !== input.source ||
+        session.providerSession?.id !== fence.providerId ||
+        session.providerSession.transcriptPath !== fence.transcriptPath ||
+        row.turnStartedAt !== fence.turnStartedAt ||
+        row.lead.agentPid !== (input.agentPid ?? null) ||
+        row.lead.agentStart !== (input.agentStart ?? null)
+      ) return
+    }
 
     const cache = this.caches.get(session.id) ?? new Map()
     // a nested agent's event is ignored below, and the normalizer must not keep what it learned from it
@@ -455,6 +564,14 @@ export class AgentStatusService {
     const rollBack = () => {
       cache.clear()
       for (const [key, value] of before) cache.set(key, value)
+    }
+    if (normalized && input.providerReplacement) normalized = { ...normalized, movesLead: true }
+    if (normalized && fence) {
+      if (normalized.providerSession && normalized.providerSession.id !== fence.providerId) return rollBack()
+      normalized = {
+        ...normalized,
+        providerSession: normalized.providerSession ?? { id: fence.providerId, transcriptPath: fence.transcriptPath }
+      }
     }
     if (!normalized) {
       this.caches.set(session.id, cache)
@@ -485,14 +602,235 @@ export class AgentStatusService {
     })
     await this.capture(session, normalized)
     // an event that can't start a row leaves the row it would have replaced alone
-    if (starts && row === null) return
-    if (row === known) return
+    if (starts && row === null) {
+      this.cancelTranscriptPoll(session.id)
+      return
+    }
+    if (row === known) {
+      if (row) this.watchTranscript(session, row, normalized.providerSession)
+      return
+    }
 
     if (row) this.attachFacet(row)
     else this.caches.delete(session.id)
     await this.commit(session, row, normalized.newTurn)
-    if (row) this.watchProgram(session.id, row)
+    if (row) {
+      this.watchProgram(session.id, row)
+      this.watchTranscript(session, row, normalized.providerSession)
+    } else this.cancelTranscriptPoll(session.id)
     if (row && settled) this.emitSettled(session, row, settled)
+  }
+
+  private watchTranscript(session: Session, row: AgentRow, provider?: Normalized['providerSession']): void {
+    if (this.stopped) return
+    const source = row.agent === 'codex' || row.agent === 'muse' ? row.agent : null
+    const providerId = provider?.id ?? session.providerSession?.id
+    const transcriptPath = provider?.transcriptPath ?? session.providerSession?.transcriptPath
+    if (
+      session.kind !== 'terminal' ||
+      session.status === 'exited' ||
+      session.agent !== source ||
+      source === null ||
+      !providerId ||
+      !validProviderId(providerId) ||
+      typeof transcriptPath !== 'string' ||
+      transcriptPath === '' ||
+      row.turnStartedAt === null ||
+      row.prompt === ''
+    ) {
+      this.cancelTranscriptPoll(session.id)
+      return
+    }
+    const current = this.transcriptPolls.get(session.id)
+    if (
+      current &&
+      current.source === source &&
+      current.providerId === providerId &&
+      current.transcriptPath === transcriptPath &&
+      current.turnStartedAt === row.turnStartedAt &&
+      current.agentPid === row.lead.agentPid &&
+      current.agentStart === row.lead.agentStart &&
+      current.prompt === row.prompt
+    ) return
+
+    this.cancelTranscriptPoll(session.id)
+    const poll: TranscriptPoll = {
+      source,
+      providerId,
+      transcriptPath,
+      turnStartedAt: row.turnStartedAt,
+      prompt: row.prompt,
+      agentPid: row.lead.agentPid,
+      agentStart: row.lead.agentStart,
+      startedAt: this.now(),
+      offset: 0,
+      bytesRead: 0,
+      initialized: false,
+      discardFirstLine: false,
+      partial: '',
+      active: false,
+      calls: new Map()
+    }
+    this.transcriptPolls.set(session.id, poll)
+    this.scheduleTranscriptPoll(session.id, poll)
+  }
+
+  private cancelTranscriptPoll(sessionId: string): void {
+    const timer = this.transcriptTimers.get(sessionId)
+    if (timer !== undefined) {
+      clearTimeout(timer)
+      this.timers.delete(timer)
+      this.transcriptTimers.delete(sessionId)
+    }
+    this.transcriptPolls.delete(sessionId)
+  }
+
+  private scheduleTranscriptPoll(sessionId: string, poll: TranscriptPoll): void {
+    if (this.stopped || this.transcriptPolls.get(sessionId) !== poll) return
+    const timer = this.after(TRANSCRIPT_POLL_MS, () => {
+      this.transcriptTimers.delete(sessionId)
+      if (!this.stopped && this.transcriptPolls.get(sessionId) === poll) {
+        void this.enqueue(sessionId, () => this.pollTranscript(sessionId, poll))
+      }
+    })
+    this.transcriptTimers.set(sessionId, timer)
+  }
+
+  private async transcriptOwner(sessionId: string, poll: TranscriptPoll): Promise<TranscriptOwner | null> {
+    if (this.stopped || this.transcriptPolls.get(sessionId) !== poll) return null
+    const session = await this.findSession(sessionId)
+    const row = this.rows.get(sessionId)
+    if (
+      !session ||
+      session.kind !== 'terminal' ||
+      session.status === 'exited' ||
+      session.agent !== poll.source ||
+      !row ||
+      row.agent !== poll.source ||
+      row.turnStartedAt !== poll.turnStartedAt ||
+      row.lead.agentPid !== poll.agentPid ||
+      row.lead.agentStart !== poll.agentStart ||
+      (row.lead.providerSession !== null && row.lead.providerSession !== poll.providerId) ||
+      session.providerSession?.id !== poll.providerId ||
+      session.providerSession.transcriptPath !== poll.transcriptPath
+    ) return null
+    return { session, row }
+  }
+
+  private async pollTranscript(sessionId: string, poll: TranscriptPoll): Promise<void> {
+    if (this.stopped || this.transcriptPolls.get(sessionId) !== poll) return
+    if (this.now() - poll.startedAt >= TRANSCRIPT_POLL_WINDOW_MS || poll.bytesRead >= TRANSCRIPT_TOTAL_BYTES) {
+      this.cancelTranscriptPoll(sessionId)
+      return
+    }
+    if (!await this.transcriptOwner(sessionId, poll)) {
+      this.cancelTranscriptPoll(sessionId)
+      return
+    }
+
+    for (const line of this.readTranscriptLines(poll)) {
+      for (const record of parseProviderTranscriptLine(poll.source, line, poll.calls)) {
+        if (!poll.active) {
+          if (record.kind === 'prompt' && record.text === poll.prompt) poll.active = true
+          continue
+        }
+        if (record.kind === 'prompt') {
+          if (record.text !== poll.prompt) {
+            poll.active = false
+            poll.calls.clear()
+          }
+          continue
+        }
+        if (record.kind === 'event') await this.handleTranscriptEvent(sessionId, poll, record)
+        else await this.handleTranscriptMessage(sessionId, poll, record.text)
+        if (this.stopped || this.transcriptPolls.get(sessionId) !== poll) return
+      }
+    }
+
+    if (this.now() - poll.startedAt >= TRANSCRIPT_POLL_WINDOW_MS || poll.bytesRead >= TRANSCRIPT_TOTAL_BYTES) {
+      this.cancelTranscriptPoll(sessionId)
+    } else this.scheduleTranscriptPoll(sessionId, poll)
+  }
+
+  private readTranscriptLines(poll: TranscriptPoll): string[] {
+    let size: number
+    try {
+      const info = statSync(poll.transcriptPath)
+      if (!info.isFile()) return []
+      size = info.size
+    } catch {
+      return []
+    }
+    if (!poll.initialized) {
+      poll.initialized = true
+      if (size > TRANSCRIPT_INITIAL_TAIL_BYTES) {
+        poll.offset = size - TRANSCRIPT_INITIAL_TAIL_BYTES
+        poll.discardFirstLine = true
+      }
+    } else if (size < poll.offset) {
+      poll.offset = 0
+      poll.partial = ''
+      poll.active = false
+      poll.calls.clear()
+      poll.discardFirstLine = false
+    }
+    const amount = Math.min(size - poll.offset, TRANSCRIPT_READ_BYTES, TRANSCRIPT_TOTAL_BYTES - poll.bytesRead)
+    if (amount <= 0) return []
+    let descriptor: number
+    try {
+      descriptor = openSync(poll.transcriptPath, 'r')
+    } catch {
+      return []
+    }
+    const buffer = Buffer.allocUnsafe(amount)
+    let read = 0
+    try {
+      read = readSync(descriptor, buffer, 0, amount, poll.offset)
+    } catch {
+      return []
+    } finally {
+      closeSync(descriptor)
+    }
+    if (read === 0) return []
+    poll.offset += read
+    poll.bytesRead += read
+    let chunk = buffer.subarray(0, read).toString('utf8')
+    if (poll.discardFirstLine) {
+      const boundary = chunk.indexOf('\n')
+      if (boundary === -1) return []
+      chunk = chunk.slice(boundary + 1)
+      poll.discardFirstLine = false
+    }
+    const lines = `${poll.partial}${chunk}`.split('\n')
+    poll.partial = lines.pop() ?? ''
+    if (poll.partial.length > TRANSCRIPT_LINE_BYTES) {
+      poll.partial = ''
+      poll.discardFirstLine = true
+    }
+    return lines.filter((line) => line.length > 0 && line.length <= TRANSCRIPT_LINE_BYTES)
+  }
+
+  private async handleTranscriptEvent(sessionId: string, poll: TranscriptPoll, record: Extract<TranscriptRecord, { kind: 'event' }>): Promise<void> {
+    await this.handle({
+      source: poll.source,
+      sessionId,
+      payload: { ...record.payload, session_id: poll.providerId, transcript_path: poll.transcriptPath },
+      event: record.eventName,
+      transcript: { providerId: poll.providerId, transcriptPath: poll.transcriptPath, turnStartedAt: poll.turnStartedAt },
+      ...(poll.agentPid !== null ? { agentPid: poll.agentPid } : {}),
+      ...(poll.agentStart !== null ? { agentStart: poll.agentStart } : {})
+    })
+  }
+
+  private async handleTranscriptMessage(sessionId: string, poll: TranscriptPoll, text: string): Promise<void> {
+    const owner = await this.transcriptOwner(sessionId, poll)
+    if (!owner) {
+      this.cancelTranscriptPoll(sessionId)
+      return
+    }
+    const row: AgentRow = { ...owner.row, lastAssistantMessage: text }
+    row.detail = readableDetail(row)
+    await this.commit(owner.session, row)
   }
 
   /** Stores the row and its Activity snapshot atomically, sets session status and summary, and announces the change. */

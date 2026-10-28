@@ -322,6 +322,22 @@ describe('canUseTool', () => {
   const canUse = (query: FakeQuery, tool = 'Bash', input: Record<string, unknown> = { command: 'ls' }) =>
     (query.params.options!.canUseTool as any)(tool, input, { signal: new AbortController().signal, toolUseID: 'tu' })
 
+  test('AskUserQuestion returns a typed answer under the original question key, not an allow/deny tool choice', async () => {
+    const query = await begin()
+    const input = { questions: [{ question: 'Choose a destination', options: [{ label: 'Local' }, { label: 'Remote' }] }] }
+    const pending = canUse(query, 'AskUserQuestion', input)
+    await until(() => asks.length === 1)
+    expect(asks[0].spec.questions[0]).toMatchObject({ id: 'q1', question: 'Choose a destination', type: 'select' })
+    asks[0].resolve({ status: 'answered', askId: 'ask_native', answers: { q1: { value: 'o2', label: 'Remote', source: 'option' } }, skipped: [], summary: 'Remote' })
+    expect(await pending).toEqual({ behavior: 'allow', updatedInput: { ...input, answers: { 'Choose a destination': 'Remote' } } })
+  })
+
+  test('a secret native question never creates an Ask or a session-wide permission rule', async () => {
+    const query = await begin()
+    expect(await canUse(query, 'AskUserQuestion', { questions: [{ question: 'Which account?', isSecret: true }] })).toEqual({ behavior: 'deny', message: 'Denied from Quirky' })
+    expect(asks).toEqual([])
+  })
+
   test('asks one select question and allows with the original input', async () => {
     const query = await begin()
     const input = { command: 'rm -rf\n  build' }

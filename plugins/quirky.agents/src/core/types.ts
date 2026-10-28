@@ -82,11 +82,15 @@ export type AgentEntry = {
   trust: TrustPreset | null
   homepage: string | null
   install: string | null
-  /** The model and option catalog; null when the agent takes no launch settings. */
-  launchOptions: LaunchCatalog | null
+  /** Read-only provider-owned model discovery; null when the owner exposes no list command. */
+  modelDiscovery: ModelDiscoverySpec | null
   /** How the agent runs once to produce text; null when it can't. */
   oneShot: OneShotSpec | null
 }
+
+/** A provider-owned, read-only command that lists this agent's models. */
+export type ModelDiscoverySpec = { args: string[]; timeoutMs: number; format: 'json' }
+
 
 /**
  * One item of a one-shot `args` template: a literal argument, or a group of arguments that is

@@ -80,6 +80,7 @@ function waitPattern(context: PluginContext, value: unknown): string {
 }
 
 let service: AgentStatusService | undefined
+let listenerStops: (() => void)[] = []
 
 /** Wires status rows, the shared durable Activity feed, Dashboard queries, hooks and session summaries. */
 export async function activate(context: PluginContext): Promise<void> {
@@ -155,14 +156,17 @@ export async function activate(context: PluginContext): Promise<void> {
 
   await active.hydrate()
   await drainSpool(context.home, (input) => active.ingest(input))
-  context.subscribe((event) => active.onEvent(event))
-  context.subscribe((event) => installer.onEvent(event))
-  context.pty.onFact((sessionId, fact) => active.onFact(sessionId, fact))
-  context.pty.onInput((sessionId, data) => active.onInput(sessionId, data))
+  listenerStops = [
+    context.subscribe((event) => active.onEvent(event)),
+    context.subscribe((event) => installer.onEvent(event)),
+    context.pty.onFact((sessionId, fact) => active.onFact(sessionId, fact)),
+    context.pty.onInput((sessionId, data) => active.onInput(sessionId, data))
+  ]
   installer.begin()
 }
 
 export function deactivate(): void {
+  for (const stop of listenerStops.splice(0)) stop()
   service?.shutdown()
   service = undefined
 }

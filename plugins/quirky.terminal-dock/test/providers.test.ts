@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { PluginContext, Session } from '@quirky/protocol'
 import type { DockQuestion } from '../src/types'
-import { createProviderBridge } from '../src/providers'
+import { questionFromInput } from '../src/providers/questions'
 
 const providerSessionId = 'provider-session-123'
 const sessionId = 'terminal-session-123'
@@ -1135,5 +1135,52 @@ describe('provider bridge from actual transcript and hook evidence', () => {
     expect(result.notice).toContain('cancelled')
     expect(tui.writes).toEqual(['2'])
     bridge.dispose()
+  })
+})
+describe('native provider question conversion', () => {
+  test('preserves Codex question and option IDs and refuses secret question inputs', () => {
+    const identity = {
+      agent: 'codex',
+      providerSession: 'provider-codex-1',
+      requestId: 'codex-question-call-1',
+      turnStartedAt: 10,
+      stateStartedAt: 20,
+      eventAt: 30
+    }
+    const native = {
+      questions: [{
+        id: 'deploy-target',
+        header: 'Target',
+        question: 'Which environment?',
+        options: [{ id: 'production', label: 'Production' }, { id: 'staging', label: 'Staging' }]
+      }]
+    }
+    const converted = questionFromInput(native, identity)
+
+    expect(converted).toMatchObject({
+      id: 'codex:provider-codex-1:codex-question-call-1',
+      questions: [{
+        id: 'deploy-target',
+        prompt: 'Which environment?',
+        choices: [{ value: 'production', label: 'Production' }, { value: 'staging', label: 'Staging' }]
+      }]
+    })
+    expect(questionFromInput({
+      questions: [{ ...native.questions[0], isSecret: true }]
+    }, identity)).toBeNull()
+    expect(questionFromInput({ ...native, isSecret: true }, identity)).toBeNull()
+  })
+
+  test('Claude option values stay answerable even when its native prompt has no provider IDs', () => {
+    const converted = questionFromInput({
+      questions: [{ question: 'Choose a color', options: ['Red', 'Blue'] }]
+    }, { agent: 'claude', providerSession: 'claude-provider-1', requestId: 'tool-use-1' })
+
+    expect(converted?.questions).toEqual([{
+      id: 'q1',
+      prompt: 'Choose a color',
+      choices: [{ value: 'Red', label: 'Red' }, { value: 'Blue', label: 'Blue' }],
+      multiple: false
+    }])
   })
 })

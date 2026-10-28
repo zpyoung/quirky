@@ -9,7 +9,8 @@ import {
   type PromptMode,
   type ReadySignal,
   type SubmitSignal,
-  type TrustPreset
+  type TrustPreset,
+  type ModelDiscoverySpec
 } from './types'
 import { parseLaunchOptions } from './launch-options'
 import { parseOneShot } from './one-shot-spec'
@@ -48,8 +49,8 @@ const KNOWN_FIELDS = new Set([
   'trust',
   'homepage',
   'install',
-  'windows',
   'launchOptions',
+  'modelDiscovery',
   'oneShot'
 ])
 
@@ -91,6 +92,9 @@ function parse(plugin: string, id: string, data: Record<string, unknown>): Agent
   const fork = template(data, 'fork')
   if (fork && !resume) fail('fork needs resume')
   if (data.windows !== undefined && !isPlainObject(data.windows)) fail('windows must be an object')
+  const launchCatalog = data.launchOptions === undefined ? null : launchOptions(data.launchOptions)
+  const discovery = data.modelDiscovery === undefined ? null : modelDiscovery(data.modelDiscovery)
+  if (discovery !== null && launchCatalog === null) fail('modelDiscovery requires launchOptions')
 
   return {
     id,
@@ -120,11 +124,24 @@ function parse(plugin: string, id: string, data: Record<string, unknown>): Agent
     lineSettleMs: positiveInteger(data, 'lineSettleMs') ?? null,
     enterWithPaste: boolean(data, 'enterWithPaste') ?? false,
     trust: oneOf<TrustPreset>(data, 'trust', TRUST_PRESETS) ?? null,
-    homepage: link(data, 'homepage'),
-    install: link(data, 'install'),
-    launchOptions: data.launchOptions === undefined ? null : launchOptions(data.launchOptions),
+    launchOptions: launchCatalog,
+    modelDiscovery: discovery,
     oneShot: data.oneShot === undefined ? null : oneShot(data.oneShot)
   }
+}
+
+function modelDiscovery(value: unknown): ModelDiscoverySpec {
+  if (!isPlainObject(value)) fail('modelDiscovery must be an object')
+  for (const key of Object.keys(value)) if (key !== 'args' && key !== 'timeoutMs' && key !== 'format') fail(`modelDiscovery has an unknown field ${key}`)
+  const args = value.args
+  if (!Array.isArray(args) || args.length === 0 || args.length > 32 || !args.every((item) => typeof item === 'string' && item.trim() !== '' && item.length <= 512 && !/[\u0000-\u001f\u007f]/.test(item))) {
+    fail('modelDiscovery.args must be a list of 1 to 32 non-empty arguments of at most 512 characters')
+  }
+  if (typeof value.timeoutMs !== 'number' || !Number.isInteger(value.timeoutMs) || value.timeoutMs < 1 || value.timeoutMs > 10_000) {
+    fail('modelDiscovery.timeoutMs must be an integer from 1 to 10000')
+  }
+  if (value.format !== 'json') fail('modelDiscovery.format must be one of: json')
+  return { args: [...args] as string[], timeoutMs: value.timeoutMs, format: 'json' }
 }
 
 function oneShot(value: unknown): OneShotSpec {

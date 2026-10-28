@@ -49,6 +49,7 @@ describe('validateEntry', () => {
       homepage: null,
       install: null,
       launchOptions: null,
+      modelDiscovery: null,
       oneShot: null
     })
   })
@@ -109,6 +110,17 @@ describe('validateEntry', () => {
       homepage: 'https://acme.example/docs',
       install: 'https://acme.example/install'
     })
+  })
+
+  test('parses a bounded provider-owned model discovery declaration', () => {
+    const declaration = { args: ['models', '--json'], timeoutMs: 1_000, format: 'json' }
+    expect(entryOf({ ...minimal, modelDiscovery: declaration }).modelDiscovery).toEqual(declaration)
+    expect(errorOf({ ...minimal, modelDiscovery: { ...declaration, timeoutMs: 0 } })).toBe(
+      'modelDiscovery.timeoutMs must be an integer from 1 to 10000'
+    )
+    expect(errorOf({ ...minimal, modelDiscovery: { ...declaration, format: 'yaml' } })).toBe(
+      'modelDiscovery.format must be one of: json'
+    )
   })
 
   test('launch defaults to detect, process defaults to detect, and the submit signal follows the ready signal', () => {

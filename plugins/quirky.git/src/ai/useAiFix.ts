@@ -6,7 +6,11 @@ import type { FixAction, LaunchParams } from './types'
 const STARTED: Readonly<Record<FixAction, string>> = {
   fixCommitFailure: 'Started an AI agent for the commit failure.',
   fixPushFailure: 'Started an AI agent for the push failure.',
-  resolveConflicts: 'Started an AI agent for the conflicts.'
+  resolveConflicts: 'Started an AI agent for the conflicts.',
+  branchSummary: 'Started an AI agent for the branch summary.',
+  pullRequestDetails: 'Started an AI agent for pull-request details.',
+  pullRequestReview: 'Started an AI agent for the pull-request review.',
+  reviewConversation: 'Started an AI agent to draft a pull-request conversation reply.'
 }
 
 export type AiFix = {

@@ -1147,7 +1147,13 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
               />
             )}
             <div className="scm-create-review">
-              <GitHubReviewStatus context={context} lookup={githubReview} />
+              <GitHubReviewStatus
+                context={context}
+                lookup={githubReview}
+                aiEnabled={aiEnabled}
+                busy={aiFix.busy}
+                onLaunch={(action) => setLaunch(action)}
+              />
               {githubReview.kind === 'found' && reviewPushTarget?.key === reviewPushKey && (
                 reviewPushTarget.state === 'loading' ? (
                   <p className="scm-push-target" role="status">Checking the configured push destination for this pull request…</p>

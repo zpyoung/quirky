@@ -29,6 +29,7 @@ export async function activate(context: PluginContext): Promise<void> {
     setPermissions: created.setPermissions,
     plan: created.plan,
     options: created.options,
+    discoverModels: created.discoverModels,
     resolveLaunch: created.resolveLaunch,
     pick: created.pick,
     prepareLaunch: created.prepareLaunch,

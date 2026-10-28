@@ -219,7 +219,8 @@ describe('asks', () => {
     expect((await errorOf(call('create', { spec: { questions: [{ id: 'a', type: 'select', question: 'q' }] } })))?.code).toBe(
       RpcErrorCode.InvalidParams
     )
-    expect((await errorOf(call('cancel', { askId: 'ask_nope' })))?.code).toBe(RpcErrorCode.NotFound)
+    expect(await call('cancel', { askId: 'ask_nope' })).toMatchObject({ status: 'unavailable', askId: 'ask_nope', answers: {}, skipped: [] })
+    expect(await call('wait', { askId: 'ask_nope', timeoutMs: 0 })).toMatchObject({ status: 'unavailable', askId: 'ask_nope', answers: {}, skipped: [] })
     const { askId } = await call('create', { spec })
     expect((await errorOf(call('answer', { askId, answers: 'x' })))?.code).toBe(RpcErrorCode.InvalidParams)
   })
@@ -286,6 +287,64 @@ function approvalOwnerPlugins(): string {
   )
   return builtin
 }
+
+const forwardingPlugins = (): string => {
+  const builtin = askOnlyPluginsDir()
+  writePlugin(
+    builtin,
+    {
+      id: 'quirky.ask-forward-probe',
+      name: 'Ask caller forwarding fixture',
+      version: '1.0.0',
+      main: 'main.ts',
+      dependencies: ['quirky.ask'],
+      contributes: {
+        method: [
+          { id: 'forward', params: { type: 'object', properties: { spec: { type: 'object', additionalProperties: true } }, required: ['spec'] } },
+          { id: 'save', params: { type: 'object' } },
+          { id: 'late', params: { type: 'object' } }
+        ]
+      }
+    },
+    {
+      'main.ts': `
+        import type { PluginCaller, PluginContext } from '@quirky/protocol'
+        type FixtureContext = Pick<PluginContext, 'provide' | 'forward'>
+        let savedCaller: PluginCaller | undefined
+        export function activate(context: FixtureContext) {
+          context.provide('method:quirky.ask-forward-probe/forward', (params: Record<string, unknown>, caller: PluginCaller) =>
+            context.forward('quirky.ask/create', { spec: params.spec }, caller))
+          context.provide('method:quirky.ask-forward-probe/save', (_params: Record<string, unknown>, caller: PluginCaller) => {
+            savedCaller = caller
+            return { saved: true }
+          })
+          context.provide('method:quirky.ask-forward-probe/late', (_params: Record<string, unknown>) => {
+            if (!savedCaller) throw new Error('no forwarded caller was retained')
+            return context.forward('quirky.ask/create', { spec: { questions: [{ id: 'go', type: 'confirm', question: 'Proceed?' }] } }, savedCaller)
+          })
+        }
+      `
+    }
+  )
+  return builtin
+}
+
+describe('kernel-attested forwarding', () => {
+  test('forwards the original session caller only during its method callback', async () => {
+    const harness = await startAsk(undefined, forwardingPlugins())
+    const caller = await connectAs(harness, { sessionId: 'session-forwarded', worktreeId: 'worktree-forwarded' })
+    const registered = await caller.callAny('quirky.ask-forward-probe/forward', { spec: confirmSpec }) as { askId: string }
+    const asks = await asksOf(caller)
+    expect(asks.find((ask) => ask.id === registered.askId)).toMatchObject({
+      sessionId: 'session-forwarded',
+      worktreeId: 'worktree-forwarded'
+    })
+
+    await caller.callAny('quirky.ask-forward-probe/save', {})
+    const late = await errorOf(caller.callAny('quirky.ask-forward-probe/late', {}))
+    expect(late).toMatchObject({ code: RpcErrorCode.Conflict, message: expect.stringContaining('forwarding caller') })
+  })
+})
 
 describe('questions and answers', () => {
   test('SC-1: number and date questions register and come back typed', async () => {
@@ -825,3 +884,27 @@ function fakeClock() {
   }
   return clock
 }
+
+test('a coordinator may explicitly leave a required handoff question unanswered without relaxing card submission validation', () => {
+  const service = new AskService(migratedStore(), errors, noHooks)
+  const questionSpec = { questions: [{ id: 'decision', type: 'text', question: 'Which route?', required: true }] }
+  const registered = service.register(questionSpec, 's_worker', 'wt_1', {
+    requestId: 'required-handoff',
+    handoff: { identity: { runId: 'run_1', dispatchId: 'dispatch_1', workerId: 'dispatch_1', sessionId: 's_worker' }, questionId: 'question_1' }
+  })
+  if (!('askId' in registered)) throw new Error('expected an owned handoff registration')
+  expect(() => service.answer(registered.askId, {}, ['decision'])).toThrow()
+  expect(service.answerHandoff(registered.askId, {}, ['decision'])).toMatchObject({
+    status: 'partial', answers: {}, skipped: ['decision']
+  })
+  const card = service.create(questionSpec, null, null, { checkCredentialText: true })
+  expect(() => service.answer(card.id, {}, ['decision'])).toThrow()
+})
+
+test('registration replay follows the same process incarnation across terminal authority restoration, never a replacement process', () => {
+  const service = new AskService(migratedStore(), errors, noHooks)
+  const ownerIdentity = { sessionId: 's_worker', processIncarnation: 'process_1', source: 'terminal_launch' as const }
+  const first = service.register(confirmSpec, ownerIdentity.sessionId, 'wt_1', { requestId: 'restore-replay', ownerIdentity })
+  expect(service.registration('restore-replay', confirmSpec, 's_worker', 'wt_1', { ...ownerIdentity, source: 'restored_authority' })).toEqual(first)
+  expect(() => service.registration('restore-replay', confirmSpec, 's_worker', 'wt_1', { ...ownerIdentity, processIncarnation: 'process_2' })).toThrow()
+})

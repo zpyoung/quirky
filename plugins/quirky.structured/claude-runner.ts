@@ -1,6 +1,7 @@
 import type { CanUseTool, Options, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk'
 import type { AskEnvelope, Session } from '@quirky/protocol'
 import type { StructuredContext, StructuredStartOptions, StructuredRunner } from './runner'
+import { nativeQuestionAnswers, nativeQuestionPlan } from './native-questions'
 
 export type ClaudeQueryParams = { prompt: AsyncIterable<SDKUserMessage>; options?: Options }
 
@@ -239,6 +240,16 @@ class ClaudeRunner implements StructuredRunner {
       this.context.setStatus(sessionId, 'waiting')
       let envelope: AskEnvelope | null = null
       try {
+        if (toolName === 'AskUserQuestion') {
+          const plan = nativeQuestionPlan(input, 'claude')
+          try {
+            envelope = await this.context.createAsk(plan.spec, sessionId, { nativeQuestion: true })
+          } catch {
+            // Question-only unavailability is returned as explicit non-answer text, never permission.
+          }
+          const answers = Object.fromEntries(Object.entries(nativeQuestionAnswers(plan, envelope)).map(([question, values]) => [question, values.join(', ')]))
+          return { behavior: 'allow', updatedInput: { ...input, answers } }
+        }
         envelope = await this.context.createAsk(
           {
             questions: [

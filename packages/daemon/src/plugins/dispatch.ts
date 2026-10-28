@@ -11,7 +11,7 @@ import {
   type PluginSessionAuthority,
   type Schema
 } from '@quirky/protocol'
-import { DaemonError, internal, invalidParams, unauthorized } from '../errors'
+import { DaemonError, conflict, internal, invalidParams, unauthorized } from '../errors'
 import type { Handlers } from '../methods'
 import { Store } from '../store'
 import type { ClientConn } from '../types'
@@ -25,6 +25,7 @@ import { onConnectionClose, openStream } from './streams'
  * never recorded or confirmed and run with the caller `{ role: 'plugin', pluginId: 'kernel' }`.
  */
 export type DispatchSource = { conn: ClientConn } | { pluginId: string } | { kernel: true }
+type ForwardingBinding = { pluginId: string; source: DispatchSource; active: boolean }
 
 /** What the dispatcher needs from the plugin host. */
 export type DispatchHost = Pick<PluginHost, 'contributions' | 'resolveImplementation'>
@@ -87,6 +88,7 @@ export class Dispatcher {
   private readonly confirmations: Confirmations
   private readonly kernelDescribers: Record<string, KernelDescriber>
   private readonly resolveSessionAuthority?: DispatcherOptions['resolveSessionAuthority']
+  private readonly forwardedCallers = new WeakMap<PluginCaller, ForwardingBinding>()
 
   constructor(
     private readonly handlers: Handlers,
@@ -103,6 +105,15 @@ export class Dispatcher {
       log
     })
   }
+  /** Dispatches with the exact client source bound to a caller from this plugin's active handler. */
+  forward(pluginId: string, method: string, params: Record<string, unknown>, caller: PluginCaller): Promise<unknown> {
+    const binding = this.forwardedCallers.get(caller)
+    if (!binding || binding.pluginId !== pluginId || !binding.active || !('conn' in binding.source)) {
+      throw conflict('forwarding caller is no longer active')
+    }
+    return this.dispatch(method, params, binding.source)
+  }
+
 
   /**
    * Runs `method` and returns its result (`null` for `undefined`). Rejects MethodNotFound for an
@@ -217,12 +228,18 @@ export class Dispatcher {
     const { id, plugin } = target.contribution!
     const implementation = (await this.plugins.resolveImplementation(id)) as MethodHandler
     const sessionAuthority = 'conn' in from ? await this.resolveSessionAuthority?.(from.conn) : undefined
+    const caller = callerOf(from, target.connection, sessionAuthority ?? undefined)
+    const binding = { pluginId: plugin, source: from, active: true }
+    this.forwardedCallers.set(caller, binding)
     try {
-      return await implementation(params, callerOf(from, target.connection, sessionAuthority ?? undefined))
+      return await implementation(params, caller)
     } catch (error) {
       if (error instanceof DaemonError) throw error
       this.log(`method ${target.name} failed in ${plugin}: ${error instanceof Error ? (error.stack ?? error.message) : String(error)}`)
       throw internal(`${plugin}: ${error instanceof Error ? error.message : String(error)}`)
+    } finally {
+      binding.active = false
+      this.forwardedCallers.delete(caller)
     }
   }
 }

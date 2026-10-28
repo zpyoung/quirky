@@ -1,6 +1,19 @@
 import type { GitStatusEntry, Worktree } from '@quirky/protocol'
-import { buildFixCommitFailurePrompt, buildFixPushFailurePrompt, buildResolveConflictsPrompt, renderTemplate } from './ai-prompts'
-import { pickDefaultAgent, recipeAction, saveRecipe, validateRecipeLaunchOptions, type EffectiveRecipe, type RecipeAction } from './ai-recipes'
+import {
+  buildFixCommitFailurePrompt,
+  buildFixPushFailurePrompt,
+  buildResolveConflictsPrompt,
+  renderTemplate
+} from './ai-prompts'
+import {
+  parseLaunchOptions,
+  pickDefaultAgent,
+  recipeAction,
+  saveRecipe,
+  type EffectiveRecipe,
+  type RecipeAction
+} from './ai-recipes'
+import { sourcePrompt } from './ai-source'
 import type { DaemonEnv, Handler } from './env'
 
 type FileEntry = { path: string; status: GitStatusEntry['status']; area: GitStatusEntry['area'] }
@@ -11,13 +24,25 @@ export type CommitFailure = { message: string; summary: string; output: string; 
 /** A push that a hook refused, with the branch and every changed file at that time. */
 export type PushFailure = { branch: string | null; summary: string; output: string; changed: FileEntry[] }
 
-const FIX_ACTIONS = ['fixCommitFailure', 'fixPushFailure', 'resolveConflicts'] as const satisfies readonly RecipeAction[]
+const FIX_ACTIONS = [
+  'fixCommitFailure',
+  'fixPushFailure',
+  'resolveConflicts',
+  'branchSummary',
+  'pullRequestDetails',
+  'pullRequestReview',
+  'reviewConversation'
+] as const satisfies readonly RecipeAction[]
 type FixAction = (typeof FIX_ACTIONS)[number]
 
 const EMPTY_PROMPT: Record<FixAction, string> = {
   fixCommitFailure: 'Commit failure prompt is empty. Update Source Control AI settings.',
   fixPushFailure: 'Push failure prompt is empty. Update Source Control AI settings.',
-  resolveConflicts: 'Conflict resolution prompt is empty. Update Source Control AI settings.'
+  resolveConflicts: 'Conflict resolution prompt is empty. Update Source Control AI settings.',
+  branchSummary: 'Branch summary prompt is empty. Update Source Control AI settings.',
+  pullRequestDetails: 'Pull request details prompt is empty. Update Source Control AI settings.',
+  pullRequestReview: 'Pull request review prompt is empty. Update Source Control AI settings.',
+  reviewConversation: 'Review conversation prompt is empty. Update Source Control AI settings.'
 }
 
 /** The latest refused commit and push of each worktree, kept in memory until one succeeds. */
@@ -86,7 +111,7 @@ function fixAction(env: DaemonEnv, value: unknown): FixAction {
   return recipeAction(env, value, FIX_ACTIONS) as FixAction
 }
 
-/** Orca's prompt for the action, from the held failure or the conflicts in the worktree. */
+/** Builds the prompt from the held failure, conflicts, current branch compare or fresh hosted source. */
 async function basePrompt(env: DaemonEnv, worktree: Worktree, action: FixAction): Promise<string> {
   if (action === 'fixCommitFailure') {
     const held = env.failures.commit(worktree.id)
@@ -97,6 +122,9 @@ async function basePrompt(env: DaemonEnv, worktree: Worktree, action: FixAction)
     const held = env.failures.push(worktree.id)
     if (!held) throw env.errors.reasoned('conflict', 'no-failure', 'There is no push failure to fix.')
     return buildFixPushFailurePrompt({ summary: held.summary, error: held.output, entries: held.changed, worktreePath: worktree.path, branchName: held.branch })
+  }
+  if (action === 'branchSummary' || action === 'pullRequestDetails' || action === 'pullRequestReview' || action === 'reviewConversation') {
+    return sourcePrompt(env, worktree, action)
   }
   const status = await env.readStatus(worktree)
   const unresolved = status.entries.filter((entry) => entry.area === 'conflicts' && entry.conflict?.state === 'unresolved')
@@ -160,9 +188,9 @@ export function aiFixPreview(env: DaemonEnv): Handler {
 }
 
 /**
- * Opens a new agent tab in the worktree whose first prompt asks the agent to fix the held commit
- * or push failure, or to resolve the conflicts. Agent, arguments, template and catalog picks
- * override the action's recipe for this launch. Saving writes the complete effective choices.
+ * Opens a new agent tab with a prompt sourced from the held failure, conflicts, current branch
+ * comparison, or fresh public pull-request details, patches and conversation. Launch options still
+ * flow through the terminal owner; this method does not pre-resolve or mutate hosted comments.
  */
 export function aiFix(env: DaemonEnv): Handler {
   return async (params, caller) => {
@@ -172,9 +200,8 @@ export function aiFix(env: DaemonEnv): Handler {
     const savedRecipe = env.recipes.effective(action, worktree.repoId)
     const agent = await chooseAgent(env, given(params.agent), savedRecipe)
     const recipe = env.recipes.effective(action, worktree.repoId, agent)
-    const launchOptions = await validateRecipeLaunchOptions(
+    const launchOptions = parseLaunchOptions(
       env,
-      agent,
       Object.hasOwn(params, 'launchOptions') ? params.launchOptions : recipe.launchOptions
     )
     const args = typeof params.args === 'string' ? params.args : recipe.args

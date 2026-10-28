@@ -50,6 +50,29 @@
         }
       },
       {
+        "id": "register",
+        "description": "Registers an authenticated caller's question. Active orchestration workers hand off to their exact Run and Dispatch; live background sessions remain pending without requiring an attached window. An unavailable result is not approval.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "spec": { "type": "object", "additionalProperties": true, "description": "The typed Ask specification." },
+            "requestId": { "type": "string", "description": "Stable idempotency key for reconnect and restart retries." },
+            "timeoutMs": { "type": "integer", "minimum": 1, "description": "Maximum lifetime of a coordinator handoff or local Ask." }
+          },
+          "required": ["spec", "requestId"],
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "description": "AskRegistration: {askId} or {status: unavailable, reason}. Unavailable never means consent.",
+          "properties": {
+            "askId": { "type": "string" },
+            "status": { "type": "string", "enum": ["unavailable"] },
+            "reason": { "type": "string" }
+          }
+        }
+      },
+      {
         "id": "wait",
         "description": "Long-polls up to `timeoutMs` (max 60000); returns status `pending` if still unanswered. Up to four waits run concurrently; overflow is a Conflict with `data.reason: runtime_busy`. Disconnect releases the waiter without changing the ask. `timeoutMs: 0` returns the current envelope at once.",
         "readOnly": true,
@@ -79,7 +102,8 @@
                 "answered",
                 "partial",
                 "declined",
-                "timed_out"
+                "timed_out",
+                "unavailable"
               ]
             },
             "askId": {
@@ -99,7 +123,8 @@
             "summary": {
               "type": "string",
               "description": "One line per answered question."
-            }
+            },
+            "reason": { "type": "string", "description": "Why this exact Ask owner became unavailable." }
           },
           "required": [
             "status",
@@ -146,7 +171,8 @@
                 "answered",
                 "partial",
                 "declined",
-                "timed_out"
+                "timed_out",
+                "unavailable"
               ]
             },
             "askId": {
@@ -166,7 +192,8 @@
             "summary": {
               "type": "string",
               "description": "One line per answered question."
-            }
+            },
+            "reason": { "type": "string", "description": "Why this exact Ask owner became unavailable." }
           },
           "required": [
             "status",
@@ -201,7 +228,8 @@
                 "answered",
                 "partial",
                 "declined",
-                "timed_out"
+                "timed_out",
+                "unavailable"
               ]
             },
             "askId": {
@@ -221,7 +249,8 @@
             "summary": {
               "type": "string",
               "description": "One line per answered question."
-            }
+            },
+            "reason": { "type": "string", "description": "Why this exact Ask owner became unavailable." }
           },
           "required": [
             "status",
@@ -275,6 +304,10 @@
               "queued": {
                 "type": "boolean",
                 "description": "Waiting behind an earlier pending ask of the same session."
+              },
+              "handoff": {
+                "type": "boolean",
+                "description": "This Ask is backed by an exact orchestration coordinator question, not a local answer card."
               },
               "partial": {
                 "type": "object",
@@ -356,7 +389,8 @@
                 "answered",
                 "partial",
                 "declined",
-                "timed_out"
+                "timed_out",
+                "unavailable"
               ]
             },
             "askId": {
@@ -376,7 +410,8 @@
             "summary": {
               "type": "string",
               "description": "One line per answered question."
-            }
+            },
+            "reason": { "type": "string", "description": "Why this exact Ask owner became unavailable." }
           },
           "required": [
             "status",
@@ -497,7 +532,7 @@
       {
         "id": "ask",
         "words": "",
-        "summary": "ask the user questions and wait for the answers (same output shape as `orca ask`); --timeout-ms times the ask out with its defaults, --chunk-ms returns a pending envelope after that long",
+        "summary": "register an authenticated Ask with exact-session handoff when dispatched; an unavailable result never means consent; --timeout-ms bounds the Ask and --chunk-ms returns a pending envelope",
         "flags": {
           "spec": {
             "type": "string",
@@ -514,7 +549,7 @@
           }
         },
         "methods": [
-          "quirky.ask/create",
+          "quirky.ask/register",
           "quirky.ask/wait"
         ]
       },

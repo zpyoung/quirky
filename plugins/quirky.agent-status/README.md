@@ -33,3 +33,9 @@ The public view is `view:quirky.agent-status/dashboard`; its input uses the same
 Cards show the Activity prompt and readable detail. Opening one navigates to the exact live session and worktree, then acknowledges only the displayed Activity turn.
 
 This build supports only the in-window view. `UiPluginContext` provides `openView` but no public pop-out/window-creation capability, so there is no pop-out mode and no `window.open` substitute.
+
+## Captured Codex and Muse status
+
+Codex rollout and Muse transcript records supplement their existing hook events when a live terminal session has a captured provider-session ID and transcript path. Polling reads at most a bounded tail and bounded appended bytes for up to ten seconds; missing output, read errors and silence do not mark a turn done. These events and private `agent-status` PTY facts compose with existing title, OSC 7501 and hook evidence; no new producer infers completion from silence.
+
+Private status facts are accepted only for the session's current Codex or Muse provider identity. A supplied turn or process ID that conflicts with the recorded turn/process is ignored; a first event may bind an identity that was not yet known. Replacement providers and stale turns are ignored. Remote status relay is unavailable without an authenticated public host owner, and Claude continues to use its existing statusline, hooks and OSC 7501 paths.

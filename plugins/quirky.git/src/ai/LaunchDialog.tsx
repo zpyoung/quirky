@@ -10,7 +10,11 @@ import { LaunchOptionsEditor } from './LaunchOptionsEditor'
 const TITLES: Readonly<Record<FixAction, string>> = {
   fixCommitFailure: 'Fix Commit Failure With AI',
   fixPushFailure: 'Fix Push Failure With AI',
-  resolveConflicts: 'Resolve Conflicts With AI'
+  resolveConflicts: 'Resolve Conflicts With AI',
+  branchSummary: 'Summarize Branch With AI',
+  pullRequestDetails: 'Summarize Pull Request With AI',
+  pullRequestReview: 'Review Pull Request With AI',
+  reviewConversation: 'Draft Pull Request Conversation Reply'
 }
 
 type Preview = { prompt: string; recipe: Recipe }

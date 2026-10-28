@@ -1,6 +1,7 @@
 import type { AskEnvelope, AskSpec, Session, SessionProviderSession } from '@quirky/protocol'
 import { CodexConnection, type CodexRpcId, type CodexRpcMessage } from './codex-connection'
 import type { StructuredContext, StructuredLaunchOptions, StructuredRunner, StructuredStartOptions } from './runner'
+import { nativeQuestionAnswers, nativeQuestionPlan, type NativeQuestionPlan } from './native-questions'
 
 const CLIENT_INFO = { name: 'quirky', title: 'Quirky', version: '0.1.0' }
 const APPROVAL_POLICY = 'on-request'
@@ -579,10 +580,52 @@ class CodexRunner implements StructuredRunner {
     }
   }
 
+  private async handleNativeQuestion(run: Running, request: { id: CodexRpcId; method: string; params: unknown }): Promise<void> {
+    const params = request.params
+    if (typeof params !== 'object' || params === null || !('threadId' in params) || !('turnId' in params) ||
+      params.threadId !== run.threadId || params.turnId !== run.activeTurnId || run.activeTurnId === null) {
+      run.connection.respondError(request.id, -32602, 'Native question does not belong to the active thread and turn')
+      return
+    }
+    let plan: NativeQuestionPlan
+    try {
+      plan = nativeQuestionPlan(params, 'codex')
+    } catch (error) {
+      run.connection.respondError(request.id, -32602, error instanceof Error ? error.message : String(error))
+      return
+    }
+    const threadId = run.threadId
+    const turnId = run.activeTurnId
+    run.pendingApprovalCount++
+    this.context.setStatus(run.sessionId, 'waiting')
+    try {
+      let envelope: AskEnvelope | null = null
+      try {
+        envelope = await this.context.createAsk(plan.spec, run.sessionId, { nativeQuestion: true })
+      } catch {
+        // This question-only fallback is explicit non-answer text, never tool approval.
+      }
+      if (run.stopped || run.failed) return
+      if (run.threadId !== threadId || run.activeTurnId !== turnId) {
+        run.connection.respondError(request.id, -32000, 'Native question owner changed while awaiting an answer')
+        return
+      }
+      const answers = Object.fromEntries(Object.entries(nativeQuestionAnswers(plan, envelope)).map(([id, values]) => [id, { answers: values }]))
+      run.connection.respond(request.id, { answers })
+    } finally {
+      run.pendingApprovalCount--
+      if (!run.stopped && !run.failed && run.pendingApprovalCount === 0) {
+        if (run.pendingCompletion) this.finishCompletedTurn(run, run.pendingCompletion.turn)
+        else if (run.activeTurnId !== null) this.context.setStatus(run.sessionId, 'working')
+      }
+    }
+  }
+
   private async handleServerRequest(
     run: Running,
     request: { id: CodexRpcId; method: string; params: unknown }
   ): Promise<void> {
+    if (request.method === 'item/tool/requestUserInput') return this.handleNativeQuestion(run, request)
     if (request.method !== 'item/commandExecution/requestApproval' && request.method !== 'item/fileChange/requestApproval') {
       run.connection.respondError(request.id, -32601, `Method not found: ${request.method}`)
       return

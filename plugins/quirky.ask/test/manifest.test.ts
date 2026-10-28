@@ -28,6 +28,7 @@ describe('SC-17/SC-18: quirky.ask as a built-in plugin', () => {
       'quirky.ask/create',
       'quirky.ask/expire',
       'quirky.ask/list',
+      'quirky.ask/register',
       'quirky.ask/updatePartial',
       'quirky.ask/wait'
     ])

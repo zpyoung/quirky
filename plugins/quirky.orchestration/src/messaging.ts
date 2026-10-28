@@ -2,7 +2,7 @@ import { createHash, randomBytes } from 'node:crypto'
 import type { CallerConnection, PluginCaller, PluginContext, PluginStore } from '@quirky/protocol'
 import type {
   AskParams,
-  AskResult,
+  AskHandoffIdentity,
   AcceptedCheckCheckpoint,
   CheckObservationResult,
   CheckParams,
@@ -177,13 +177,15 @@ type AskValue =
       answerMessageId: MessageId
       threadId: string
       timeoutMs: number
+      handoffIdentity?: AskHandoffIdentity
     }
   | {
       state: 'timedOut' | 'cancelled' | 'connectionLost'
       answer: null
       messageId: QuestionId
-      threadId: string
+      threadId: ThreadId
       timeoutMs: number
+      handoffIdentity?: AskHandoffIdentity
     }
 type WaitOutcome = 'message' | 'timeout' | 'connection' | 'fenced' | 'reset'
 type MailboxWaiter = {
@@ -745,6 +747,7 @@ export class OrchestrationMessages implements MessageArrivalPort {
           answer: null,
           messageId: accepted.messageId,
           threadId: accepted.threadId,
+          ...(accepted.handoffIdentity === undefined ? {} : { handoffIdentity: accepted.handoffIdentity }),
           timeoutMs
         }),
         afterCommit: async (accepted) => {
@@ -1543,6 +1546,16 @@ export class OrchestrationMessages implements MessageArrivalPort {
       fail(this.context, 'dispatch_inactive', 'ask requires an active Dispatch owned by the caller')
     }
     this.assertDispatchOwner(dispatch, caller)
+    const handoff = input.includeIdentity === true
+      ? {
+          handoffIdentity: {
+            runId: dispatch.run_id as RunId,
+            dispatchId: dispatch.id as DispatchId,
+            workerId: dispatch.id as DispatchId,
+            sessionId: caller.runtimeSessionId as AskHandoffIdentity['sessionId']
+          }
+        }
+      : {}
     if (input.runId !== undefined && input.runId !== dispatch.run_id) {
       fail(this.context, 'dispatch_run_mismatch', `ask from Dispatch ${dispatch.id} must target Run ${dispatch.run_id}`, {
         dispatchId: dispatch.id,
@@ -1571,7 +1584,8 @@ export class OrchestrationMessages implements MessageArrivalPort {
           messageId: question.message_id as QuestionId,
           answerMessageId: question.answer_message_id as MessageId,
           threadId: message.threadId ?? message.id,
-          timeoutMs
+          timeoutMs,
+          ...handoff
         }
       }
       return {
@@ -1579,7 +1593,8 @@ export class OrchestrationMessages implements MessageArrivalPort {
         answer: null,
         messageId: question.message_id as QuestionId,
         threadId: message.threadId ?? message.id,
-        timeoutMs
+        timeoutMs,
+        ...handoff
       }
     }
 
@@ -1610,7 +1625,7 @@ export class OrchestrationMessages implements MessageArrivalPort {
       caller.runtimeSessionId,
       at
     )
-    return { state: 'cancelled', answer: null, messageId, threadId, timeoutMs }
+    return { state: 'cancelled', answer: null, messageId, threadId, timeoutMs, ...handoff }
   }
 
   private async waitForAnswer(
@@ -1629,6 +1644,7 @@ export class OrchestrationMessages implements MessageArrivalPort {
         messageId,
         answerMessageId: question.answer_message_id as MessageId,
         threadId: accepted.threadId,
+        ...(accepted.handoffIdentity === undefined ? {} : { handoffIdentity: accepted.handoffIdentity }),
         timeoutMs
       }
     }
@@ -1656,6 +1672,7 @@ export class OrchestrationMessages implements MessageArrivalPort {
         messageId,
         answerMessageId: waited.question.answer_message_id as MessageId,
         threadId: accepted.threadId,
+        ...(accepted.handoffIdentity === undefined ? {} : { handoffIdentity: accepted.handoffIdentity }),
         timeoutMs
       }
     }
