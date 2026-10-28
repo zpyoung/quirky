@@ -8,8 +8,14 @@ import { asPluginError, fault } from './runtime/errors'
 import { parseExec } from './runtime/exec'
 import type { BrowserDependencies } from './runtime/dependencies'
 import { BrowserStore, type BrowserPage } from './profiles/store'
+import { PANE_METHODS, type PaneMethod, type PaneTab } from './pane-contract'
+import { PaneService } from './pane-service'
 
-export type BrowserPlugin = { deactivate(): Promise<void> }
+export type BrowserPlugin = {
+  deactivate(): Promise<void>
+  setPaneProfile(paneId: string, profileId: string): Promise<PaneTab>
+  listPanes(): PaneTab[]
+}
 type Worktree = { id: string; name: string; path: string; branch?: unknown }
 
 const WORKTREE_LIST_SCHEMA: Schema = {
@@ -77,11 +83,20 @@ export class BrowserService {
   private readonly store: BrowserStore
   private readonly runtime: BrowserRuntime
   private readonly actions: BrowserActions
+  private readonly panes: PaneService
   private active = true
   constructor(private readonly context: PluginContext, dependencies: BrowserDependencies) {
     this.store = new BrowserStore(context.dataDir)
     this.runtime = new BrowserRuntime(this.store, dependencies, (pageId) => this.actions?.clearPageRefs(pageId))
     this.actions = new BrowserActions(this.store, this.runtime)
+    this.panes = new PaneService(
+      context,
+      this.store,
+      this.runtime,
+      (selector, caller, allowNoScope) => this.resolveWorktreeTarget(selector, undefined, caller, allowNoScope),
+      () => this.listWorktrees(),
+      dependencies.downloadDirectory
+    )
   }
 
   activate(): void {
@@ -89,9 +104,17 @@ export class BrowserService {
       this.context.provide(`method:quirky.browser/${name}`, (params: Record<string, unknown>, caller: PluginCaller) => this.call(name, params, caller))
     }
   }
+  setPaneProfile(paneId: string, profileId: string): Promise<PaneTab> {
+    return this.panes.setPaneProfile(paneId, profileId)
+  }
+
+  listPanes(): PaneTab[] {
+    return this.panes.listPanes()
+  }
 
   async deactivate(): Promise<void> {
     this.active = false
+    await this.panes.deactivate()
     await this.runtime.stopAll()
   }
 
@@ -105,6 +128,7 @@ export class BrowserService {
   }
 
   private async invoke(name: BrowserMethod, params: Record<string, unknown>, caller: PluginCaller): Promise<unknown> {
+    if ((PANE_METHODS as readonly string[]).includes(name)) return await this.panes.call(name as PaneMethod, params, caller)
     switch (name) {
       case 'tabList': return this.tabList(params, caller)
       case 'tabShow': return this.tabShow(params)

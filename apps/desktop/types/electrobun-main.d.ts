@@ -12,13 +12,40 @@ export class BrowserWindow {
     frame: { x?: number; y?: number; width: number; height: number }
     url: string | null
     html: string | null
+    preload?: string | null
+    rpc?: unknown
   })
-  webview: { loadURL(url: string): void; loadHTML(html: string): void }
+  readonly id: number
+  webview: { readonly id: number; loadURL(url: string): void; loadHTML(html: string): void }
   on(name: string, handler: (event: unknown) => void): void
   show(): void
   activate(): void
   isVisible(): boolean
   isMinimized(): boolean
+}
+
+export class BrowserView {
+  readonly id: number
+  readonly windowId: number
+  readonly hostWebviewId?: number
+  readonly sandbox: boolean
+  readonly renderer: 'native' | 'cef'
+  readonly partition: string | null
+  readonly url: string | null
+  readonly navigationRules: string | null
+  readonly allowedProtocols: { views: boolean; appData: boolean }
+  setNavigationRules(rules: string[]): void
+  setPageZoom(factor: number): void
+  getPageZoom(): number
+  remove(): void
+  static getById(id: number): BrowserView | undefined
+  static defineRPC<Schema>(config: unknown): unknown
+}
+
+
+export class Electroview {
+  constructor(options: { rpc: unknown })
+  static defineRPC<Schema>(config: unknown): unknown
 }
 
 export class Tray {

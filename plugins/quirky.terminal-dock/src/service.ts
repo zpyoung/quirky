@@ -140,6 +140,11 @@ function optionNotice(value: unknown): string | null {
   return typeof value === 'string' && value.length > 0 ? value : null
 }
 
+/** Internal integration-fixture hooks; absent from normal plugin activation. */
+export type DockServiceTestHooks = {
+  beforeSubmit?(signal: AbortSignal): Promise<void>
+}
+
 /** Daemon-authoritative dock records and per-terminal acknowledged send queues. */
 export class DockService {
   readonly methods: Record<string, MethodHandler>
@@ -171,7 +176,8 @@ export class DockService {
   constructor(
     private readonly context: PluginContext,
     private readonly store: DockStore,
-    private readonly bridge: ProviderBridge
+    private readonly bridge: ProviderBridge,
+    private readonly testHooks: DockServiceTestHooks = {}
   ) {
     this.methods = {
       get: (params) => this.get(params),
@@ -1302,6 +1308,7 @@ export class DockService {
           operation.phase = phase
           this.announce(binding.pane)
         },
+        ...(this.testHooks.beforeSubmit ? { beforeSubmit: this.testHooks.beforeSubmit } : {}),
         bodyMayHaveBeenWritten: async () => {
           if (this.stopped || operation.controller.signal.aborted || !this.enabled() || operation.restored) {
             throw new Error('Terminal dock send stopped before body dispatch')
