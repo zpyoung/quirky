@@ -112,7 +112,7 @@ test('remote worktree create mutates only the saved owner runtime and refuses un
 
   const cli = spawnCli([
     'worktree', 'create', remoteRepo.id, 'remote-cli-worktree',
-    '--runtime', `runtime:${ownerTarget.id}`, '--json'
+    '--on-runtime', `runtime:${ownerTarget.id}`, '--json'
   ], { home: local.h.home })
   const [stdout, stderr, code] = await Promise.all([
     new Response(cli.stdout).text(),

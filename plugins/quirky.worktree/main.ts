@@ -43,6 +43,7 @@ import type { CleanupSelection, WorktreeControl } from './src/control-types'
 const DEFAULT_WORKTREES_ROOT = '~/quirky/workspaces'
 const ROOT_SETTING = 'setting:quirky.worktree/worktreesRoot'
 const SETTINGS_IMPORTED = 'v1-settings-imported'
+const DESKTOP_CLIENT_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
 type ErrorKind = 'invalid-params' | 'not-found' | 'conflict'
 type Handler = (params: Record<string, any>, caller: PluginCaller) => unknown
@@ -83,6 +84,9 @@ function identityOf(caller: PluginCaller, params: { cwd?: string; worktreeId?: s
   return { ...(cwd ? { cwd } : {}), ...(worktreeId ? { worktreeId } : {}) }
 }
 function originCreatorOf(caller: PluginCaller): WorktreeOriginCreator {
+  if (caller.role === 'ui' && typeof caller.desktopClientId === 'string' && DESKTOP_CLIENT_ID.test(caller.desktopClientId)) {
+    return { creatorKind: 'client', creatorId: caller.desktopClientId, creatorRole: 'ui' }
+  }
   if (caller.role === 'plugin') {
     return { creatorKind: 'plugin', creatorId: caller.pluginId, creatorRole: 'plugin' }
   }
@@ -450,8 +454,9 @@ export async function activate(context: PluginContext): Promise<void> {
         instance_id: string
         creator_kind: string | null
         creator_id: string | null
+        creator_role: string | null
       }>(
-        `SELECT worktrees.id, worktrees.instance_id, worktree_origins.creator_kind, worktree_origins.creator_id
+        `SELECT worktrees.id, worktrees.instance_id, worktree_origins.creator_kind, worktree_origins.creator_id, worktree_origins.creator_role
          FROM worktrees
          LEFT JOIN worktree_origins
            ON worktree_origins.worktree_id = worktrees.id
@@ -472,6 +477,16 @@ export async function activate(context: PluginContext): Promise<void> {
         if (row.creator_kind === 'paired-device' && typeof row.creator_id === 'string' &&
           caller.role === 'mobile' && typeof caller.deviceId === 'string') {
           otherClient = row.creator_id !== caller.deviceId
+        } else if (
+          row.creator_kind === 'client' &&
+          row.creator_role === 'ui' &&
+          typeof row.creator_id === 'string' &&
+          DESKTOP_CLIENT_ID.test(row.creator_id) &&
+          caller.role === 'ui' &&
+          typeof caller.desktopClientId === 'string' &&
+          DESKTOP_CLIENT_ID.test(caller.desktopClientId)
+        ) {
+          otherClient = row.creator_id !== caller.desktopClientId
         }
         return {
           worktreeId: row.id,
