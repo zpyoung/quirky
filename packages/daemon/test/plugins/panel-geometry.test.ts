@@ -102,23 +102,17 @@ afterEach(async () => {
 })
 
 describe('ui.panel.configure', () => {
-  test('stores independent desired widths per panel and one global activity bar position', async () => {
+  test('stores independent desired widths per panel and preserves their numeric bounds', async () => {
     const { caller } = await start()
 
-    const first = await caller.call('ui.panel.configure', { id: OUTLINE, width: 380, activityBarPosition: 'side' })
-    expect(first).toMatchObject({ panelWidths: { [OUTLINE]: 380 }, activityBarPosition: 'side' })
+    const first = await caller.call('ui.panel.configure', { id: OUTLINE, width: 380 })
+    expect(panelWidths(first)).toEqual({ [OUTLINE]: 380 })
 
     const second = await caller.call('ui.panel.configure', { id: HISTORY, width: 460 })
     expect(panelWidths(second)).toEqual({ [OUTLINE]: 380, [HISTORY]: 460 })
-    expect(second.activityBarPosition).toBe('side')
-
-    const third = await caller.call('ui.panel.configure', { id: OUTLINE, activityBarPosition: 'top' })
-    expect(panelWidths(third)).toEqual({ [OUTLINE]: 380, [HISTORY]: 460 })
-    expect(third.activityBarPosition).toBe('top')
 
     const partial = await caller.call('ui.panel.configure', { id: HISTORY, width: 540 })
     expect(panelWidths(partial)).toEqual({ [OUTLINE]: 380, [HISTORY]: 540 })
-    expect(partial.activityBarPosition).toBe('top')
     expect(await layoutOf(caller)).toEqual(partial)
 
     const minimum = await caller.call('ui.panel.configure', { id: OUTLINE, width: 220 })
@@ -130,7 +124,7 @@ describe('ui.panel.configure', () => {
 
   test('rejects invalid, absent, wrong-kind and disabled targets without mutation or layout broadcasts', async () => {
     const { harness, caller } = await start()
-    await caller.call('ui.panel.configure', { id: OUTLINE, width: 350, activityBarPosition: 'side' })
+    await caller.call('ui.panel.configure', { id: OUTLINE, width: 350 })
     const watcher = await harness.connectWithEvents('ui')
 
     await expectRejectedWithoutLayoutChange(caller, watcher.events, { id: OUTLINE }, RpcErrorCode.InvalidParams)
@@ -142,12 +136,6 @@ describe('ui.panel.configure', () => {
       caller,
       watcher.events,
       { id: OUTLINE, width: Number.NaN },
-      RpcErrorCode.InvalidParams
-    )
-    await expectRejectedWithoutLayoutChange(
-      caller,
-      watcher.events,
-      { id: OUTLINE, width: 390, activityBarPosition: 'left' },
       RpcErrorCode.InvalidParams
     )
     await expectRejectedWithoutLayoutChange(
@@ -169,20 +157,19 @@ describe('ui.panel.configure', () => {
     await expectRejectedWithoutLayoutChange(caller, watcher.events, { id: OUTLINE, width: 390 }, RpcErrorCode.NotFound)
   })
 
-  test('persists preferences across restart and drops malformed stored preference values on read', async () => {
+  test('persists panel width preferences across restart and drops malformed stored widths on read', async () => {
     const env = makeEnv()
     const first = await env.start()
     const caller = await first.connect('cli')
 
-    const saved = await caller.call('ui.panel.configure', { id: OUTLINE, width: 375, activityBarPosition: 'side' })
+    const saved = await caller.call('ui.panel.configure', { id: OUTLINE, width: 375 })
     await caller.call('ui.panel.configure', { id: HISTORY, width: 495 })
     expect(saved.panelWidths).toEqual({ [OUTLINE]: 375 })
 
     const restarted = await env.restart()
     const restartedClient = await restarted.connect('cli')
     expect(await layoutOf(restartedClient)).toMatchObject({
-      panelWidths: { [OUTLINE]: 375, [HISTORY]: 495 },
-      activityBarPosition: 'side'
+      panelWidths: { [OUTLINE]: 375, [HISTORY]: 495 }
     })
 
     const index = harnesses.indexOf(restarted)
@@ -204,8 +191,7 @@ describe('ui.panel.configure', () => {
           [PAGE]: 420,
           'panel:acme.geometry/not-a-number': 'wide',
           '': 350
-        },
-        activityBarPosition: 'left'
+        }
       })
     )
     db.close()
@@ -214,6 +200,6 @@ describe('ui.panel.configure', () => {
     const normalizedClient = await normalizedDaemon.connect('cli')
     const normalized = await layoutOf(normalizedClient)
     expect(normalized.panelWidths).toEqual({ [OUTLINE]: 410 })
-    expect(normalized.activityBarPosition).toBeUndefined()
   })
 })
+

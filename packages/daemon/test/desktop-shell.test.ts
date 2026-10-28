@@ -77,23 +77,26 @@ test('auxiliary routes remain daemon-readable, local to their window, and pruned
   })
   const model = await requester.call('ui.contributions', {})
   const view = model.views[0]
+  const nextView = model.views.find((candidate) => candidate.id !== view?.id)
   expect(view).toBeDefined()
+  expect(nextView).toBeDefined()
   const initialLayout = (await requester.call('ui.state', {})).layout
 
   const requestEvent = waitForShellRequest(shell)
+  const firstInput = { filter: { hidden: false }, selectedGroup: 'ready' }
   const resultPending = requester.call('desktop.window.open', {
-    view: view.id, input: { filter: { hidden: false }, selectedGroup: 'ready' }, title: 'Dashboard pop-out'
+    view: view!.id, input: firstInput, title: 'Dashboard pop-out'
   })
   const request = await requestEvent
   expect(request.action).toEqual({
     kind: 'window-open',
-    request: { view: view.id, input: { filter: { hidden: false }, selectedGroup: 'ready' }, title: 'Dashboard pop-out' }
+    request: { view: view!.id, input: firstInput, title: 'Dashboard pop-out' }
   })
   const ownerShellConnId = request.ownerShell.connId
   await shell.call('desktop.shell.reply', { requestId: request.requestId, result: { windowId: 'owned-window-7' } })
   await expect(resultPending).resolves.toEqual({ windowId: 'owned-window-7' })
   expect(await requester.call('desktop.window.list', {})).toEqual([{
-    windowId: 'owned-window-7', view: view.id, input: { filter: { hidden: false }, selectedGroup: 'ready' },
+    windowId: 'owned-window-7', view: view!.id, input: firstInput,
     title: 'Dashboard pop-out', ownerShell: request.ownerShell, attached: false
   }])
 
@@ -103,16 +106,44 @@ test('auxiliary routes remain daemon-readable, local to their window, and pruned
   })).rejects.toThrow(/owner does not match/)
   await auxiliary.call('desktop.window.attach', { windowId: 'owned-window-7', ownerShellConnId })
   await auxiliary.call('ui.window.focused', { focused: true })
-  await auxiliary.call('ui.report', { slot: view.id, state: { shown: true, filter: 'ready' } })
+  await auxiliary.call('ui.report', { slot: view!.id, state: { shown: true, filter: 'ready' } })
+  const auxiliaryConnId = (await auxiliary.call('ui.window.self', {})).connId
+  const attached = await requester.call('ui.window.state', { connId: auxiliaryConnId })
+  expect(attached.layout.tools).toBeUndefined()
+  expect(attached.layout.view).toEqual({ id: view!.id, input: firstInput })
+  expect(attached.layout.viewTabs).toEqual([{ id: view!.id, input: firstInput }])
+  expect(attached.slots.find((slot) => slot.id === view!.id)?.shown).toBe(true)
+  expect(attached.slots.find((slot) => slot.id === view!.id)?.report).toEqual({ shown: true, filter: 'ready' })
+
+  const ownerState = await requester.call('ui.window.state', { connId: ownerShellConnId })
+  expect(ownerState.layout.tools).toEqual(initialLayout.tools)
+  expect(ownerState.layout.view).toEqual(initialLayout.view)
+  expect(ownerState.layout.viewTabs).toEqual(initialLayout.viewTabs)
+
   const nextInput = { filter: { hidden: true }, selectedGroup: 'review' }
-  await auxiliary.call('desktop.window.update', { windowId: 'owned-window-7', view: view.id, input: nextInput })
+  await auxiliary.call('desktop.window.update', {
+    windowId: 'owned-window-7', view: nextView!.id, input: nextInput
+  })
   expect(await requester.call('desktop.window.list', {})).toMatchObject([{
-    windowId: 'owned-window-7', view: view.id, input: nextInput, attached: true
+    windowId: 'owned-window-7', view: nextView!.id, input: nextInput, attached: true
   }])
-  const updatedUiState = await requester.call('ui.state', {})
-  expect(updatedUiState.layout).toEqual(initialLayout)
-  expect(updatedUiState.slots.find((slot) => slot.id === view.id)?.shown).toBe(true)
-  expect(updatedUiState.slots.find((slot) => slot.id === view.id)?.report).toEqual({ shown: true, filter: 'ready' })
+  const updatedAuxiliary = await requester.call('ui.window.state', { connId: auxiliaryConnId })
+  expect(updatedAuxiliary.layout.viewTabs).toEqual([
+    { id: view!.id, input: firstInput },
+    { id: nextView!.id, input: nextInput }
+  ])
+  expect(updatedAuxiliary.layout.tools).toBeUndefined()
+
+  const closedView = await requester.call('ui.window.view.close', {
+    connId: auxiliaryConnId,
+    expectedView: { id: nextView!.id, input: nextInput }
+  })
+  expect(closedView.view).toEqual({ id: view!.id, input: firstInput })
+  expect(closedView.viewTabs).toEqual([{ id: view!.id, input: firstInput }])
+  const unchangedMain = await requester.call('ui.window.state', { connId: ownerShellConnId })
+  expect(unchangedMain.layout.tools).toEqual(initialLayout.tools)
+  expect(unchangedMain.layout.view).toEqual(initialLayout.view)
+  expect(unchangedMain.layout.viewTabs).toEqual(initialLayout.viewTabs)
   const command = model.commands[0]
   expect(command).toBeDefined()
   const otherWindow = await harness.connect('ui')
