@@ -72,8 +72,10 @@ describe('remaining account authority', () => {
       expect(redemptions).toBe(1)
 
       const managed = await add(h, 'codex', 'authority-reset@example.test')
+      const managedId = managed.result?.id
+      if (!managedId) throw new Error('Completed Codex login did not return its account ID')
       const selected = await call<AccountState>(h, 'quirky.accounts/list')
-      expect(selected.active.codex).toBe(managed.result?.id)
+      expect(selected.active.codex).toBe(managedId)
       const stale = await h.client.callAny('quirky.accounts/consumeResetCredit', {
         idempotencyKey: 'old-unspent-reset-after-selection',
         expectedScope: scope

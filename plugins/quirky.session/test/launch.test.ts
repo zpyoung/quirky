@@ -1,6 +1,7 @@
 import { afterEach, expect, test } from 'bun:test'
 import { join } from 'node:path'
 import type { Session } from '@quirky/protocol'
+import type { SessionHomeResult } from '../../quirky.accounts/src/types'
 import { cleanupAll, startAccounts, type AccountsHarness } from '../../quirky.accounts/test/support/index'
 import { makeTempDir, removeTempDirs, writeModulePlugin } from '../../../packages/daemon/test/plugins/fixtures'
 
@@ -21,7 +22,7 @@ test('trusted launch-hook home overrides are effective custom homes, while confi
 
   const configured = await call<Session>(h, 'quirky.session/create', { agent: 'claude', worktree: 'floating', cwd: h.userHome })
   expect(h.harness.pty.sessions.get(configured.id)?.env.CLAUDE_CONFIG_DIR).toBe(configuredHome)
-  expect(await call(h, 'quirky.accounts/sessionHome', { session: configured.id })).toEqual({ provider: 'claude', home: configuredHome })
+  expect(await call<SessionHomeResult>(h, 'quirky.accounts/sessionHome', { session: configured.id })).toEqual({ provider: 'claude', home: configuredHome })
 
   const sourceRoot = makeTempDir()
   const hook = writeModulePlugin(
@@ -37,5 +38,5 @@ test('trusted launch-hook home overrides are effective custom homes, while confi
   const launched = await call<Session>(h, 'quirky.session/create', { agent: 'claude', worktree: 'floating', cwd: h.userHome })
   expect(h.harness.pty.sessions.get(launched.id)?.env.CLAUDE_CONFIG_DIR).toBe(hookHome)
   expect(launched.launch?.env.CLAUDE_CONFIG_DIR).toBe(configuredHome)
-  expect(await call(h, 'quirky.accounts/sessionHome', { session: launched.id })).toEqual({ provider: 'claude', home: hookHome })
+  expect(await call<SessionHomeResult>(h, 'quirky.accounts/sessionHome', { session: launched.id })).toEqual({ provider: 'claude', home: hookHome })
 })
