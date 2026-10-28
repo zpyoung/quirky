@@ -14,6 +14,7 @@ import type { ScmReport } from '../scm'
 import { BlockedCard, CleanState, CompareUnavailable, HugeBanner, OperationCard } from './Cards'
 import { ChangeBaseDialog } from './ChangeBaseDialog'
 import { CommitArea } from './CommitArea'
+import { GitHubReviewStatus, readGitHubReview, useGitHubReview } from './GitHubReview'
 import { useCompare, useSettings, useStatus, useWorktreePath } from './data'
 import { ConfirmDialog, Dialog } from './Dialog'
 import { applyFilter, matchesFilter } from './filter'
@@ -132,6 +133,7 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
   const { status: polled, markersGone } = data
   const [localBusy, setLocalBusy] = useState<GitBusyOp | null>(null)
   const status = useMemo<GitStatus | null>(() => (polled === null ? null : { ...polled, busy: polled.busy ?? localBusy }), [polled, localBusy])
+  const githubReview = useGitHubReview(context, worktree, status)
   const compareTrigger = `${polled?.head ?? ''}|${polled?.upstreamStatus.sha ?? ''}|${settings.compareBase}`
   const compareData = useCompare(context, worktree, compareTrigger, polled !== null)
   const { compare } = compareData
@@ -292,7 +294,18 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
       .catch(() => {})
   }, [capped, worktree, context, offered, notify, refreshAll])
 
-  const ladder: LadderState = { status, message, committing, base: compare?.base ?? null }
+  const reviewGate: LadderState['reviewGate'] =
+    githubReview.kind === 'loading' || githubReview.kind === 'waiting' ? 'loading'
+      : githubReview.kind === 'unavailable' ? 'unavailable'
+        : githubReview.kind === 'found' && githubReview.review.state === 'merged' ? 'merged'
+          : undefined
+  const ladder: LadderState = {
+    status,
+    message,
+    committing,
+    base: compare?.base ?? null,
+    ...(reviewGate === undefined ? {} : { reviewGate })
+  }
   const primary = primaryAction(ladder)
   const menuRows = menuItems(ladder)
   const unresolved = entries.filter((e) => e.conflict?.state === 'unresolved').length
@@ -638,6 +651,8 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
 
   const createReview = async () => {
     if (activeCreateIntent.current !== null || !status || !status.branch || !status.head) return
+    if (githubReview.kind !== 'no-review' || githubReview.target.worktree !== worktree ||
+      githubReview.target.branch !== status.branch || githubReview.target.head !== status.head) return
     const target = worktree
     const branch = status.branch
     const initialHead = status.head
@@ -702,6 +717,15 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
         throw new Error('Push this branch before creating a pull request.')
       }
       if (!stillCurrent()) return
+      const latestReview = await readGitHubReview(context, { worktree: target, branch, head: expectedHead })
+      if (!stillCurrent()) return
+      if (latestReview.kind === 'found') {
+        throw new Error(`Pull request #${latestReview.review.number} is already linked to this branch.`)
+      }
+      if (latestReview.kind !== 'no-review') {
+        const detail = latestReview.kind === 'unavailable' ? ` ${latestReview.message}` : ''
+        throw new Error(`Could not confirm that this branch has no pull request.${detail}`)
+      }
       await context.call('quirky.reviews/createOpen', { worktree: target })
     } catch (error) {
       if (stillCurrent()) {
@@ -745,8 +769,13 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
       : !status.head ? 'Create a commit before creating a pull request.'
         : unresolved > 0 || entries.some((entry) => entry.area === 'conflicts') ? 'Resolve conflicts before creating a pull request.'
           : entries.length > 0 && message.trim() === '' ? MESSAGE_REQUIRED
-            : null
-  const reviewActionDisabled = creatingReview || committing || busy !== null || reviewBlocker !== null
+            : githubReview.kind === 'loading' ? 'Wait for GitHub review lookup before creating a pull request.'
+              : githubReview.kind === 'unavailable' ? 'GitHub review lookup is unavailable. Do not create a duplicate pull request.'
+                : githubReview.kind === 'found' ? `Pull request #${githubReview.review.number} is already linked to this branch.`
+                  : githubReview.kind === 'unsupported' ? 'Pull request creation requires a GitHub repository.'
+                    : null
+  const reviewActionDisabled = creatingReview || committing || busy !== null || githubReview.kind !== 'no-review' || reviewBlocker !== null
+  const showReviewAction = githubReview.kind !== 'found' && githubReview.kind !== 'unsupported'
   const reviewActionLabel = creatingReview ? 'Preparing pull request…'
     : entries.length > 0 ? 'Commit, push & Create PR'
       : reviewNeedsPush ? 'Push & Create PR'
@@ -949,9 +978,12 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
               />
             )}
             <div className="scm-create-review">
-              <button type="button" disabled={reviewActionDisabled} title={reviewBlocker ?? undefined} onClick={() => void createReview()}>
-                {reviewActionLabel}
-              </button>
+              <GitHubReviewStatus context={context} lookup={githubReview} />
+              {showReviewAction && (
+                <button type="button" disabled={reviewActionDisabled} title={reviewBlocker ?? undefined} onClick={() => void createReview()}>
+                  {reviewActionLabel}
+                </button>
+              )}
               {creatingReview && <button type="button" onClick={cancelCreateReview}>Cancel remaining steps</button>}
               {creatingReview && <small>Commit and push finish only on this worktree; the composer opens after both succeed.</small>}
               {createReviewError && <p role="alert">{createReviewError}</p>}
