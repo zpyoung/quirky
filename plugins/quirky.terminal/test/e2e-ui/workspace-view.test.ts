@@ -274,3 +274,69 @@ test(
   },
   SCENARIO_MS
 )
+
+test(
+  'SC-71: opening a requested background structured session selects its transcript without creating a shell',
+  async () => {
+    const ui = await startUi({ view: false })
+    const { h } = ui
+    const session = await h.call<{ id: string }>('quirky.session/register', {
+      worktree: 'main',
+      agent: 'claude',
+      kind: 'structured',
+      title: 'Claude background',
+      background: true
+    })
+    expect(await h.sessionRecord(session.id)).toMatchObject({ kind: 'structured', background: true })
+    expect(tabsOf(await layoutOf(h))).toEqual([])
+
+    await ui.openView({ worktree: 'main', session: session.id })
+    const ws = await ui.waitLayout('the requested structured session adopted', (candidate) => panesOf(candidate).some((pane) => pane.session === session.id))
+    const group = groupsOf(ws)[0]!
+    const tab = tabsOf(ws).find((candidate) => leavesOf(candidate.root).some((pane) => pane.session === session.id))!
+    expect(group.activeTab).toBe(tab.id)
+    expect(tabsOf(ws)).toHaveLength(1)
+    expect((await h.sessionRecords()).map((record) => record.id)).toEqual([session.id])
+    expect(await h.hostRow(session.id)).toBeUndefined()
+
+    const report = await ui.waitView('the requested session active in the worktree view', (view) => view.active === session.id)
+    expect(report.active).toBe(session.id)
+    await ui.el(`[data-session="${session.id}"] .qt-structured-body .structured`)
+    expect(ui.q(`[data-session="${session.id}"] .xterm`)).toBeNull()
+    expect(ui.callsTo('workspace').at(-1)).toEqual({ workspace: 'main' })
+    expect(ui.callsTo('adoptSession').at(-1)).toMatchObject({ group: group.id, session: session.id })
+  },
+  SCENARIO_MS
+)
+
+test(
+  'SC-72: a missing or wrong-worktree session selection stays visible instead of falling back',
+  async () => {
+    const ui = await startUi({ view: false })
+    const { h } = ui
+    await h.ok(['worktree', 'create', 'api', 'other', '--json'])
+    const session = await h.call<{ id: string }>('quirky.session/register', {
+      worktree: 'other',
+      agent: 'claude',
+      kind: 'structured',
+      title: 'Other worktree'
+    })
+
+    await ui.openView({ worktree: 'main', session: 'missing-session' })
+    await waitFor('the missing-session alert', () =>
+      (ui.q('[role="alert"]')?.textContent?.includes('Session missing-session was not found') ? true : undefined)
+    )
+    expect(tabsOf(await layoutOf(h))).toEqual([])
+    expect((await h.sessionRecords()).map((record) => record.id)).toEqual([session.id])
+    expect(ui.q('.qt-workspace')).toBeNull()
+
+    await ui.openView({ worktree: 'main', session: session.id })
+    await waitFor('the wrong-worktree alert', () =>
+      (ui.q('[role="alert"]')?.textContent?.includes('belongs to a different worktree') ? true : undefined)
+    )
+    expect(tabsOf(await layoutOf(h))).toEqual([])
+    expect((await h.sessionRecords()).map((record) => record.id)).toEqual([session.id])
+    expect(ui.q('.qt-workspace')).toBeNull()
+  },
+  SCENARIO_MS
+)

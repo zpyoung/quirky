@@ -2,9 +2,37 @@
   "item": "m4-hosting-ui-tasks",
   "spec": "docs/quirk/specs/2026-10-27-m4-hosting-ui-tasks/logic.md",
   "scenarios": [
-    {"id":"SC10-view-menu","title":"Hide Tasks from the sidebar context menu, then restore it with the real macOS View > Show Tasks Button item; its checkmark follows both the native click and a scripted setting change, and standard Edit menu shortcuts still work.","status":"pending","lastRun":null,"report":null,"summary":null},
-    {"id":"SC25-copy","title":"Copy an issue or Project link in the real macOS window: system clipboard contains the exact GitHub URL; denial shows failure rather than success.","status":"pending","lastRun":null,"report":null,"summary":null},
-    {"id":"SC25-open","title":"Open an issue, repository or Project view on GitHub from the real macOS window: the system browser receives the exact HTTP(S) target without credentials or unrelated navigation.","status":"pending","lastRun":null,"report":null,"summary":null},
-    {"id":"SC09-focus","title":"Start or Resume a linked workspace from Tasks and issue detail: the real Quirky window activates the correct workspace and keyboard focus, without raising a different application.","status":"pending","lastRun":null,"report":null,"summary":null}
+    {
+      "id": "SC10-view-menu",
+      "title": "Hide Tasks from the sidebar context menu, then restore it with the real macOS View > Show Tasks Button item; its checkmark follows both the native click and a scripted setting change, and standard Edit menu shortcuts still work.",
+      "status": "blocked",
+      "lastRun": "2026-10-28",
+      "report": "/Users/zpyoung/orca/workspaces/quirky/native-qa/.quirk/using-apps-like-a-user/runs/20261028T055954-3457/report.md",
+      "summary": "Hide from sidebar and a scripted setting change both move the native View > Show Tasks Button checkmark, but the harness can't click the macOS menu bar to restore through it."
+    },
+    {
+      "id": "SC25-copy",
+      "title": "Copy an issue or Project link in the real macOS window: system clipboard contains the exact GitHub URL; denial shows failure rather than success.",
+      "status": "blocked",
+      "lastRun": "2026-10-28",
+      "report": "/Users/zpyoung/orca/workspaces/quirky/native-qa/.quirk/using-apps-like-a-user/runs/20261028T055954-3457/report.md",
+      "summary": "Needs a GitHub-hosted fixture; the isolated run's repo has no remote or credentials (Tasks: no origin remote)."
+    },
+    {
+      "id": "SC25-open",
+      "title": "Open an issue, repository or Project view on GitHub from the real macOS window: the system browser receives the exact HTTP(S) target without credentials or unrelated navigation.",
+      "status": "blocked",
+      "lastRun": "2026-10-28",
+      "report": "/Users/zpyoung/orca/workspaces/quirky/native-qa/.quirk/using-apps-like-a-user/runs/20261028T055954-3457/report.md",
+      "summary": "Needs a GitHub-hosted fixture; the isolated run's repo has no remote or credentials (Tasks: no origin remote)."
+    },
+    {
+      "id": "SC09-focus",
+      "title": "Start or Resume a linked workspace from Tasks and issue detail: the real Quirky window activates the correct workspace and keyboard focus, without raising a different application.",
+      "status": "blocked",
+      "lastRun": "2026-10-28",
+      "report": "/Users/zpyoung/orca/workspaces/quirky/native-qa/.quirk/using-apps-like-a-user/runs/20261028T055954-3457/report.md",
+      "summary": "Needs a linked GitHub issue workspace; the isolated run's repo has no remote or credentials."
+    }
   ]
 }

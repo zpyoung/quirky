@@ -135,9 +135,13 @@ test('SC-44: the sidebar shows groups, projects, the primary badge and nested ch
 
   chip.click()
   await win.waitFor(() => !card('child', 'api'))
+  await agent.callAny('quirky.worktree/set', { worktree: fixLogin.id, status: 'in-review' })
+  await win.waitFor(() => card('fix-login', 'api')?.querySelector('.tag-status')?.textContent === 'In review')
+  expect(card('child', 'api')).toBeUndefined()
+  await agent.callAny('quirky.worktree/set', { worktree: fixLogin.id, status: 'in-progress' })
+  await win.waitFor(() => card('fix-login', 'api')?.querySelector('.tag-status') === null)
   card('fix-login', 'api')!.querySelector<HTMLElement>('.children-chip')!.click()
   await win.waitFor(() => card('child', 'api'))
-
   const state = await win.waitFor(async () => {
     const next = await report(agent)
     return next?.groups?.length ? next : undefined

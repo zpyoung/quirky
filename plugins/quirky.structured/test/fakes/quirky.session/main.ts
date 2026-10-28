@@ -2,7 +2,7 @@ import type { PluginCaller } from '@quirky/protocol'
 export function activate(context: any) {
   const world = (globalThis as any).__structuredFakes
   world.emitRemoved = (sessionId: string) => context.emit('removed', { sessionId })
-  for (const name of ['register', 'setProviderSession', 'setStatus', 'get', 'list', 'close']) {
+  for (const name of ['register', 'setStatus', 'setProviderSession', 'get', 'list', 'close']) {
     context.provide(`method:quirky.session/${name}`, (params: any) => world.session[name](params, context))
   }
   context.provide('method:quirky.session/identity', (params: Record<string, unknown>) => {

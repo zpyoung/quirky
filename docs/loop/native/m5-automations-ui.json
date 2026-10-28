@@ -1,0 +1,14 @@
+{
+  "item": "m5-automations-ui",
+  "spec": "docs/quirk/specs/2026-10-27-m5-automations-ui/logic.md",
+  "scenarios": [
+    {
+      "id": "SC1-native-menu",
+      "title": "The macOS View menu Show Automations Button checkbox reflects the same setting as Automation settings; toggling either updates sidebar visibility without making the page unreachable from Settings",
+      "status": "pending",
+      "lastRun": null,
+      "report": null,
+      "summary": null
+    }
+  ]
+}

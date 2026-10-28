@@ -86,11 +86,19 @@ describe('decideLinkClick', () => {
     expect(decideLinkClick('path', click(), settings)).toBe('popover')
   })
 
-  test('SC-41: Cmd-click opens and Shift-Cmd-click copies a URL or reveals a path', () => {
-    expect(decideLinkClick('url', click({ metaKey: true }), settings)).toBe('open')
-    expect(decideLinkClick('path', click({ metaKey: true }), settings)).toBe('open')
-    expect(decideLinkClick('url', click({ metaKey: true, shiftKey: true }), settings)).toBe('copy')
-    expect(decideLinkClick('path', click({ metaKey: true, shiftKey: true }), settings)).toBe('reveal')
+  test('SC-41: platform modifier opens URLs directly, while Shift+modifier reveals paths or routes URLs', () => {
+    expect(decideLinkClick('url', click({ metaKey: true }), settings, 'mac')).toBe('open')
+    expect(decideLinkClick('url', click({ metaKey: true, shiftKey: true }), settings, 'mac')).toBe('open')
+    expect(decideLinkClick('path', click({ metaKey: true }), settings, 'mac')).toBe('open')
+    expect(decideLinkClick('path', click({ metaKey: true, shiftKey: true }), settings, 'mac')).toBe('reveal')
+    expect(decideLinkClick('url', click({ ctrlKey: true }), settings, 'other')).toBe('open')
+    expect(decideLinkClick('path', click({ ctrlKey: true, shiftKey: true }), settings, 'other')).toBe('reveal')
+  })
+
+  test('SC-41: only the platform command modifier is interpreted as direct open', () => {
+    expect(decideLinkClick('url', click({ ctrlKey: true }), settings, 'mac')).toBe('none')
+    expect(decideLinkClick('url', click({ metaKey: true }), settings, 'other')).toBe('none')
+    expect(decideLinkClick('url', click({ shiftKey: true }), settings, 'mac')).toBe('none')
   })
 
   test('SC-41: a middle click follows its own setting', () => {
@@ -100,16 +108,16 @@ describe('decideLinkClick', () => {
   })
 
   test('SC-41: Option-click and other buttons do nothing', () => {
-    expect(decideLinkClick('url', click({ altKey: true }), settings)).toBe('none')
-    expect(decideLinkClick('url', click({ altKey: true, metaKey: true }), settings)).toBe('none')
-    expect(decideLinkClick('url', click({ button: 2 }), settings)).toBe('none')
-    expect(decideLinkClick('url', click({ ctrlKey: true }), settings)).toBe('none')
-    expect(decideLinkClick('url', click({ shiftKey: true }), settings)).toBe('none')
+    expect(decideLinkClick('url', click({ altKey: true }), settings, 'mac')).toBe('none')
+    expect(decideLinkClick('url', click({ altKey: true, metaKey: true }), settings, 'mac')).toBe('none')
+    expect(decideLinkClick('url', click({ button: 2 }), settings, 'mac')).toBe('none')
+    expect(decideLinkClick('url', click({ ctrlKey: true }), settings, 'mac')).toBe('none')
+    expect(decideLinkClick('url', click({ shiftKey: true }), settings, 'mac')).toBe('none')
   })
 
   test('SC-41: the plain click setting Open opens and Leave to terminal does nothing', () => {
     expect(decideLinkClick('path', click(), { ...settings, 'link-click': 'open' })).toBe('open')
     expect(decideLinkClick('path', click(), { ...settings, 'link-click': 'terminal' })).toBe('none')
-    expect(decideLinkClick('path', click({ metaKey: true }), { ...settings, 'link-click': 'terminal' })).toBe('open')
+    expect(decideLinkClick('path', click({ metaKey: true }), { ...settings, 'link-click': 'terminal' }, 'mac')).toBe('open')
   })
 })

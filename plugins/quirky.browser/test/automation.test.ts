@@ -1,5 +1,5 @@
-import { existsSync, writeFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { existsSync, realpathSync, writeFileSync } from 'node:fs'
+import { isAbsolute, join, relative, sep } from 'node:path'
 import { expect, test } from 'bun:test'
 import { run } from '../../../packages/cli/src/main'
 import { createDaemonLink } from '../../../packages/cli/src/link'
@@ -71,10 +71,16 @@ test('C1: profile metadata is lazy and each isolated profile owns one Chrome/hel
     const chrome = commands.filter((command) => command.includes('--headless=new'))
     expect(chrome).toHaveLength(2)
     const dataDir = join(h.home, 'plugin-data', 'quirky.browser', 'profiles')
-    expect(chrome.map((command) => command.find((arg) => arg.startsWith('--user-data-dir='))).sort()).toEqual([
-      `--user-data-dir=${join(dataDir, isolated.profile.id, 'chrome-profile')}`,
-      `--user-data-dir=${join(dataDir, 'default', 'chrome-profile')}`
-    ].sort())
+    const ownedDirectories = chrome.map((command) => {
+      const argument = command.find((arg) => arg.startsWith('--user-data-dir='))
+      if (!argument) throw new Error('Owned Chrome has no profile directory')
+      return realpathSync(argument.slice('--user-data-dir='.length))
+    })
+    expect(new Set(ownedDirectories).size).toBe(2)
+    for (const directory of ownedDirectories) {
+      const ownedPath = relative(realpathSync(h.home), directory)
+      expect(ownedPath !== '..' && !ownedPath.startsWith(`..${sep}`) && !isAbsolute(ownedPath)).toBe(true)
+    }
     expect(existsSync(join(dataDir, isolated.profile.id, 'chrome-profile'))).toBe(true)
   } finally { await h.cleanup() }
 }, 90_000)

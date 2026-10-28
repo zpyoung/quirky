@@ -107,6 +107,10 @@ export interface WorkerProjection {
 }
 export interface WorkerFleetRow {
   dispatchId: DispatchId; taskId: TaskId; runId: RunId; workerState: string | null
+  taskTitle: string; displayName: string
+  coordinatorSessionId: string | null; parentSessionId: string | null
+  /** Exact live assignment evidence; false is uncertainty, never proof the worker exited. */
+  currentAssignment: boolean
   dispatchStatus: string; agentTerminalHandle: string | null; terminalState: TerminalState
   resource: TerminalResource | null; projection: WorkerProjection
 }

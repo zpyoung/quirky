@@ -269,9 +269,8 @@
       "deps": [
         "m6-orchestration-workers"
       ],
-      "status": "in-progress",
-      "early": true,
-      "lane": 11
+      "status": "done",
+      "early": true
     },
     {
       "id": "m6-heimdall-control",
@@ -596,9 +595,8 @@
       "deps": [
         "sa-browser-pane"
       ],
-      "status": "in-progress",
-      "early": true,
-      "lane": 8
+      "status": "done",
+      "early": true
     },
     {
       "id": "m5-automations-core",
@@ -651,9 +649,8 @@
       "deps": [
         "m5-automations-core"
       ],
-      "status": "in-progress",
-      "early": true,
-      "lane": 7
+      "status": "done",
+      "early": true
     },
     {
       "id": "m5-automations-ui",
@@ -665,9 +662,8 @@
       "deps": [
         "m5-automations-core"
       ],
-      "status": "in-progress",
-      "early": true,
-      "lane": 6
+      "status": "done",
+      "early": true
     },
     {
       "id": "m5-loops-presets",
@@ -719,9 +715,8 @@
       "deps": [
         "m6-orchestration-workers"
       ],
-      "status": "in-progress",
-      "early": true,
-      "lane": 2
+      "status": "done",
+      "early": true
     },
     {
       "id": "m6-objective-plan",
@@ -886,7 +881,7 @@
         "term-ui.md",
         "worktrees.md"
       ],
-      "status": "todo",
+      "status": "in-progress",
       "title": "Parity sweep for ask.md, cli.md, agent-status.md, launch-settings.md, notifications.md, providers.md, term-daemon.md, term-ui.md, worktrees.md: every remaining flow in these feature docs, except the GitLab, Bitbucket, Gitea/Forgejo and Azure DevOps flows, the Objective runner and the PR sitter, which the user deferred. Find what earlier items left out or deferred, build or fix it, and record anything too large as a follow-up item",
       "deps": [
         "m0-scripting",
@@ -907,7 +902,8 @@
         "fix-flaky-quirky-worktree-window-projects",
         "fix-flaky-pty-host-host",
         "fix-test-cost"
-      ]
+      ],
+      "lane": 7
     },
     {
       "id": "m7-sweep-editor-source-control",
@@ -917,7 +913,7 @@
         "sidebar-extras.md",
         "source-control.md"
       ],
-      "status": "todo",
+      "status": "in-progress",
       "title": "Parity sweep for editor.md, sidebar-extras.md, source-control.md: every remaining flow in these feature docs, except the GitLab, Bitbucket, Gitea/Forgejo and Azure DevOps flows, the Objective runner and the PR sitter, which the user deferred. Find what earlier items left out or deferred, build or fix it, and record anything too large as a follow-up item",
       "deps": [
         "m2-source-control-core",
@@ -926,7 +922,8 @@
         "m2-sidebar-extras",
         "m4-sidebar-review-filters",
         "fix-flaky-quirky-git-files-scenarios"
-      ]
+      ],
+      "lane": 11
     },
     {
       "id": "m7-sweep-sessions",
@@ -956,14 +953,15 @@
         "hosting-api.md",
         "hosting-ui.md"
       ],
-      "status": "todo",
+      "status": "in-progress",
       "title": "Parity sweep for hosting-api.md, hosting-ui.md: every remaining flow in these feature docs, except the GitLab, Bitbucket, Gitea/Forgejo and Azure DevOps flows, the Objective runner and the PR sitter, which the user deferred. Find what earlier items left out or deferred, build or fix it, and record anything too large as a follow-up item",
       "deps": [
         "m4-hosting-api-github",
         "m4-hosting-ui-tasks",
         "m4-hosting-ui-reviews",
         "m4-worktrees-create-from-github"
-      ]
+      ],
+      "lane": 8
     },
     {
       "id": "m7-sweep-automation",
@@ -1050,7 +1048,8 @@
       "deps": [
         "m4-hosting-api-github"
       ],
-      "status": "todo"
+      "status": "in-progress",
+      "lane": 6
     },
     {
       "id": "fix-terminal-dock-unfinished-flows-20261027",
@@ -1400,6 +1399,71 @@
       ],
       "deps": [
         "m5-automations-dispatch"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "fix-native-m1-term-ui-1028",
+      "milestone": "M1",
+      "title": "Fix the native-only failures in m1-term-ui from the 2026-10-28 run: SC-37",
+      "docs": [],
+      "deps": [],
+      "status": "todo"
+    },
+    {
+      "id": "fix-native-m2-editor-1028",
+      "milestone": "M2",
+      "title": "Fix the native-only failures in m2-editor from the 2026-10-28 run: SC-9-native",
+      "docs": [],
+      "deps": [],
+      "status": "todo"
+    },
+    {
+      "id": "fix-native-m3-accounts-1028",
+      "milestone": "M3",
+      "title": "Fix the native-only failures in m3-accounts from the 2026-10-28 run: AC6-AC7-native-link",
+      "docs": [],
+      "deps": [],
+      "status": "todo"
+    },
+    {
+      "id": "fix-native-m3-vault-1028",
+      "milestone": "M3",
+      "title": "Fix the native-only failures in m3-vault from the 2026-10-28 run: SC-18-native-clipboard",
+      "docs": [],
+      "deps": [],
+      "status": "todo"
+    },
+    {
+      "id": "fix-native-sa-browser-agent-1028",
+      "milestone": "Side A",
+      "title": "Fix the native-only failures in sa-browser-agent from the 2026-10-28 run: C2-native-focus",
+      "docs": [],
+      "deps": [],
+      "status": "todo"
+    },
+    {
+      "id": "m5-automations-ui-remote-authorities",
+      "milestone": "M5",
+      "title": "Complete automation UI remote Host selection, authority-preserving host moves, remote list/history availability and SSH/runtime OpenClaw controls after the public host registration-generation/execution/capability APIs land in m5-automations-dispatch-remote-and-args; retain captured-owner fencing and no local fallback",
+      "docs": [
+        "automations.md"
+      ],
+      "deps": [
+        "m5-automations-ui",
+        "m5-automations-dispatch-remote-and-args"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "m5-loops-ui-visible-stop-close-review",
+      "milestone": "M5",
+      "title": "Complete existing loop UI visible Stop (Cancel/After iteration/Now), Close (Cancel/Keep running/Stop), tool-limited setup verdict, and one bounded cross-family review; use unique native fixture conversation ids and retain all shipped tests/guards",
+      "docs": [
+        "fork-loops.md"
+      ],
+      "deps": [
+        "m5-loops-ui"
       ],
       "status": "todo"
     }

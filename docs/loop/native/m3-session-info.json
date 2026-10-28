@@ -5,26 +5,26 @@
     {
       "id": "SC-5",
       "title": "In the real Electrobun window with an isolated local agent/provider ID, Copy ID shows Copied for 1.5 seconds and delivers that provider ID to the macOS clipboard; restore the clipboard afterward.",
-      "status": "pending",
-      "lastRun": null,
-      "report": null,
-      "summary": null
+      "status": "pass",
+      "lastRun": "2026-10-28",
+      "report": "/Users/zpyoung/orca/workspaces/quirky/native-qa/.quirk/using-apps-like-a-user/runs/20261028T050836-d7f3/report.md",
+      "summary": "Copy ID put qa-provider-7f3a on the macOS clipboard, confirmed by pasting into Find files; the 1.5 s Copied label was too brief to capture."
     },
     {
       "id": "SC-7",
       "title": "Focus pane from Session Info activates the real application window and exact target tab/group/pane, flashes it, scrolls to the bottom and routes keyboard input only to that isolated target terminal.",
-      "status": "pending",
-      "lastRun": null,
-      "report": null,
-      "summary": null
+      "status": "blocked",
+      "lastRun": "2026-10-28",
+      "report": "/Users/zpyoung/orca/workspaces/quirky/native-qa/.quirk/using-apps-like-a-user/runs/20261028T050836-d7f3/report.md",
+      "summary": "Seen working (exact Claude tab focused, typed text reached only that pane), but the harness never certified a keystroke act as OBSERVED."
     },
     {
       "id": "SC-9",
       "title": "Reveal transcript opens Finder selecting the captured transcript created under the disposable home, never a caller-supplied alternate path; return focus and close the Finder window created by this run.",
-      "status": "pending",
-      "lastRun": null,
-      "report": null,
-      "summary": null
+      "status": "blocked",
+      "lastRun": "2026-10-28",
+      "report": "/Users/zpyoung/orca/workspaces/quirky/native-qa/.quirk/using-apps-like-a-user/runs/20261028T050836-d7f3/report.md",
+      "summary": "Seen working: Finder opened with exactly the disposable-home transcript selected, but the effect lands outside the Quirky window so the harness can't certify it."
     }
   ]
 }

@@ -10,24 +10,28 @@ import type { SessionIdentity } from '../../src/runtime-contracts'
 
 const now = (): UtcTimestamp => new Date().toISOString()
 
-export const sessionFixture = (overrides: Partial<Session> = {}): Session => ({
-  id: 'worker-session',
-  kind: 'terminal',
-  agent: 'claude',
-  worktreeId: 'wt-main',
-  cwd: '/tmp/worker',
-  title: 'Worker task',
-  status: 'running',
-  createdAt: Date.now(),
-  lastActivityAt: Date.now(),
-  exitCode: null,
-  exitSignal: null,
-  exitCause: null,
-  restorable: false,
-  launchSettings: { agent: overrides.agent ?? 'claude', options: { model: { value: 'sonnet', source: 'explicit' } }, summary: `${overrides.agent ?? 'claude'} · Sonnet` },
-  providerSession: { id: 'provider-session', transcriptPath: '/private/captured/session.jsonl' },
-  ...overrides
-})
+export const sessionFixture = (overrides: Partial<Session> = {}): Session => {
+  const agent = overrides.agent ?? 'claude'
+  const label = agent === 'claude' ? 'Claude' : agent === 'codex' ? 'Codex' : agent === 'qwen-code' ? 'Qwen Code' : agent
+  return {
+    id: 'worker-session',
+    kind: 'terminal',
+    agent,
+    worktreeId: 'wt-main',
+    cwd: '/tmp/worker',
+    title: 'Worker task',
+    status: 'running',
+    createdAt: Date.now(),
+    lastActivityAt: Date.now(),
+    exitCode: null,
+    exitSignal: null,
+    exitCause: null,
+    restorable: false,
+    launchSettings: { agent, options: { model: { value: 'sonnet', source: 'explicit' } }, summary: `${label} · Sonnet` },
+    providerSession: { id: 'provider-session', transcriptPath: '/private/captured/session.jsonl' },
+    ...overrides
+  }
+}
 
 const identityFixture = (session: Session, incarnation = 'incarnation-1', providerId = session.agent): SessionIdentity => ({
   sessionId: session.id,
@@ -137,6 +141,8 @@ export interface HarnessOptions {
   status?: unknown
   boundRunId?: RunId | null
   attention?: { guidance?: boolean; input?: boolean; approval?: boolean; rootCompletion?: boolean }
+  taskOverrides?: readonly Partial<TaskRow>[]
+  coordinatorSessionId?: string | null
 }
 
 export interface Harness {
@@ -155,7 +161,11 @@ export function makeHarness(options: HarnessOptions = {}): Harness {
   const dispatches = options.dispatches ?? [makeDispatch()]
   const records = options.records ?? dispatches.map((dispatch) => makeRecord(dispatch, options.session?.id ?? 'worker-session'))
   const resources = options.resources ?? dispatches.map((dispatch) => makeResource(dispatch, options.session?.id ?? 'worker-session'))
-  const tasks = new Map(dispatches.map((dispatch) => [dispatch.taskId, makeTask(dispatch)]))
+  const taskOverrides = new Map((options.taskOverrides ?? []).filter((task): task is Partial<TaskRow> & { id: TaskId } => typeof task.id === 'string').map((task) => [task.id, task]))
+  const tasks = new Map(dispatches.map((dispatch) => {
+    const task = makeTask(dispatch)
+    return [dispatch.taskId, { ...task, ...taskOverrides.get(dispatch.taskId) }] as const
+  }))
   const calls: Harness['calls'] = []
   const archives = new Map<DispatchId, WorkerArchive>()
   const session = options.session ?? sessionFixture()
@@ -231,7 +241,7 @@ export function makeHarness(options: HarnessOptions = {}): Harness {
     nestedWorkerMaxDepth: 1,
     getDispatch: (id: DispatchId) => dispatches.find((dispatch) => dispatch.id === id) ?? (() => { throw new Error(`missing dispatch ${id}`) })(),
     getTask: (id: TaskId) => tasks.get(id) ?? (() => { throw new Error(`missing task ${id}`) })(),
-    getRun: (id: RunId) => ({ id, objective: 'fixture', coordinatorSessionId: null, coordinatorHistory: [], consumerGeneration: 1, createdAt: now(), updatedAt: now() }),
+    getRun: (id: RunId) => ({ id, objective: 'fixture', coordinatorSessionId: options.coordinatorSessionId ?? null, coordinatorHistory: [], consumerGeneration: 1, createdAt: now(), updatedAt: now() }),
     mutateWorker: async <T extends object>(
       _method: string,
       params: MutationRequest & object,

@@ -5,10 +5,10 @@
     {
       "id": "C2-native-focus",
       "title": "While the real Quirky window has a focused editor or terminal input, run scoped browser tab creation, snapshot, fill, click and viewport screenshot commands through the quirky CLI against an owned headless Chrome fixture page in another worktree. Commands affect only their scoped page; Quirky keeps native focus and subsequent typed text stays in the original focused input. Chrome does not reveal a native window or activate another app. Use fresh temporary QUIRKY_HOME and --use-mock-keychain on the test-owned Chrome; never probe system clipboard or real browser profiles.",
-      "status": "pending",
-      "lastRun": null,
-      "report": null,
-      "summary": null
+      "status": "fail",
+      "lastRun": "2026-10-28",
+      "report": "/Users/zpyoung/orca/workspaces/quirky/native-qa/.quirk/using-apps-like-a-user/runs/20261028T055402-08cf/report.md",
+      "summary": "'quirky browser tab create' fails in the desktop app with 'owned browser CDP transport was lost': the owned headless Chrome exits and macOS says Quirky.app was prevented from modifying apps."
     }
   ]
 }
