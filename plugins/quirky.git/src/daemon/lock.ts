@@ -4,6 +4,7 @@ import type { Errors } from './errors'
 const LABELS: Record<GitBusyOp, string> = {
   push: 'push',
   'force-push': 'force push',
+  switch: 'branch switch',
   pull: 'pull',
   'fast-forward': 'fast-forward',
   fetch: 'fetch',
