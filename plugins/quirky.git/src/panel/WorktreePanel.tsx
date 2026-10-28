@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Button, ContextMenu, Dialog, EmptyState, IconButton, SectionHeader } from '@quirky/ui'
+import type { ContextMenuItem } from '@quirky/ui'
 import type { GitBusyOp, GitChange, GitCommit, GitStatus, GitStatusEntry, UiPluginContext } from '@quirky/protocol'
 import { CommitSparkle } from '../ai/CommitSparkle'
 import type { FixButtonProps } from '../ai/FixSplitButton'
@@ -16,7 +18,7 @@ import { ChangeBaseDialog } from './ChangeBaseDialog'
 import { CommitArea } from './CommitArea'
 import { GitHubReviewStatus, readGitHubReview, useGitHubReview } from './GitHubReview'
 import { useCompare, useSettings, useStatus, useWorktreePath } from './data'
-import { ConfirmDialog, Dialog } from './Dialog'
+import { ConfirmDialog } from './Dialog'
 import { applyFilter, matchesFilter } from './filter'
 import {
   commitTitle,
@@ -31,7 +33,6 @@ import {
 import { BranchRow, Header } from './Header'
 import { HistoryDock } from './HistoryDock'
 import { commitDisabledReason, menuItems, primaryAction, type LadderState, type MenuItemId } from './ladder'
-import { PopupMenu, type MenuEntry } from './Menu'
 import type { Notice } from './Notices'
 import { registerPanel } from './registry'
 import { toastFor, type RemoteAction } from './remote-messages'
@@ -586,7 +587,7 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
     }
   }
 
-  const menuEntries = (item: RowItem): MenuEntry[] => [
+  const menuEntries = (item: RowItem): ContextMenuItem[] => [
     { label: 'View', onSelect: () => openRow(item) },
     { label: 'Copy Path', onSelect: () => void copy(absolute(item.path)) },
     { label: 'Copy Relative Path', onSelect: () => void copy(item.path) },
@@ -1034,14 +1035,16 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
       void doCommit()
     }
   }
+  const openTerminal = () => {
+    void context.executeCommand('command:quirky.session/new-shell').catch((error: unknown) => context.toast('Could not open terminal', messageOf(error)))
+  }
+
 
   if (data.unavailable !== null) {
     return (
-      <div className="scm">
-        <div className="scm-header">
-          <strong>Source control</strong>
-        </div>
-        <p className="muted pad scm-unavailable">{data.unavailable}</p>
+      <div className="ui-stack" data-git-panel ref={root} onKeyDown={onKeyDown} style={{ height: '100%', minHeight: 0, gap: 0 }}>
+        <SectionHeader title="Source control" />
+        <EmptyState message={data.unavailable} action={{ label: 'Retry', onAction: () => void data.refresh() }} />
       </div>
     )
   }
@@ -1052,7 +1055,7 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
   const base = compare?.base ?? null
 
   return (
-    <div className="scm" ref={root} onKeyDown={onKeyDown}>
+    <div className="ui-stack" data-git-panel ref={root} onKeyDown={onKeyDown} style={{ height: '100%', minHeight: 0, gap: 0 }}>
       <Header
         filter={filter}
         filterOpen={filterOpen}
@@ -1081,9 +1084,14 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
           ask={ask}
         />
       )}
-      {data.error && <div className="scm-error">{data.error}</div>}
-      <div className="scm-body">
-        {status === null && data.error === null && <p className="muted pad">Loading…</p>}
+      {data.error && (
+        <div className="ui-cluster" role="alert" style={{ color: 'var(--ui-failing)' }}>
+          <span>{data.error}</span>
+          <Button onClick={() => void data.refresh()}>Retry</Button>
+        </div>
+      )}
+      <div className="ui-stack" data-git-content style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
+        {status === null && data.error === null && <EmptyState message="Loading…" />}
         {status && operation !== 'none' && (
           <OperationCard
             operation={operation}
@@ -1146,7 +1154,7 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
                 fix={fixFor('fixPushFailure')}
               />
             )}
-            <div className="scm-create-review">
+            <div className="ui-stack" data-git-create-review>
               <GitHubReviewStatus
                 context={context}
                 lookup={githubReview}
@@ -1156,11 +1164,11 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
               />
               {githubReview.kind === 'found' && reviewPushTarget?.key === reviewPushKey && (
                 reviewPushTarget.state === 'loading' ? (
-                  <p className="scm-push-target" role="status">Checking the configured push destination for this pull request…</p>
+                  <p className="ui-text-muted" role="status" data-git-push-target>Checking the configured push destination for this pull request…</p>
                 ) : reviewPushTarget.state === 'unavailable' ? (
-                  <p className="scm-push-target" role="alert">{reviewPushTarget.message}</p>
+                  <p role="alert" data-git-push-target style={{ color: 'var(--ui-failing)' }}>{reviewPushTarget.message}</p>
                 ) : (
-                  <p className="scm-push-target" role="status">
+                  <p role="status" data-git-push-target>
                     <strong>{reviewPushTarget.fork ? 'Fork destination' : 'Push destination'}:</strong>{' '}
                     <code>{reviewPushTarget.remote}/{reviewPushTarget.branch}</code>
                     {' · '}{reviewPushTarget.repository.host}/{reviewPushTarget.repository.owner}/{reviewPushTarget.repository.repo}
@@ -1168,20 +1176,20 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
                 )
               )}
               {showReviewAction && (
-                <button type="button" disabled={reviewActionDisabled} title={reviewBlocker ?? undefined} onClick={() => void createReview()}>
+                <Button variant="primary" disabled={reviewActionDisabled} title={reviewBlocker ?? undefined} onClick={() => void createReview()}>
                   {reviewActionLabel}
-                </button>
+                </Button>
               )}
-              {creatingReview && <button type="button" onClick={cancelCreateReview}>Cancel remaining steps</button>}
-              {creatingReview && <small>Commit and push finish only on this worktree; the composer opens after both succeed.</small>}
-              {createReviewError && <p role="alert">{createReviewError}</p>}
+              {creatingReview && <Button onClick={cancelCreateReview}>Cancel remaining steps</Button>}
+              {creatingReview && <small className="ui-text-muted">Commit and push finish only on this worktree; the composer opens after both succeed.</small>}
+              {createReviewError && <p role="alert" style={{ color: 'var(--ui-failing)' }}>{createReviewError}</p>}
             </div>
           </CommitArea>
         )}
         {tooLarge && (
-          <div className="scm-empty">
-            <strong>Search text is too large</strong>
-            <p className="muted">Use a shorter file filter.</p>
+          <div className="ui-stack">
+            <EmptyState message="Search text is too large" />
+            <p className="ui-text-muted">Use a shorter file filter.</p>
           </div>
         )}
         {visibleSections.map(({ section, rows }) => {
@@ -1209,7 +1217,7 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
             </SectionFrame>
           )
         })}
-        {filtering && !tooLarge && visibleSections.length === 0 && branchItems.length === 0 && <p className="muted pad">No files match the filter.</p>}
+        {filtering && !tooLarge && visibleSections.length === 0 && branchItems.length === 0 && <p className="ui-text-muted">No files match the filter.</p>}
         {status && compareMessage !== null && !tooLarge && (
           <CompareUnavailable
             message={compareMessage}
@@ -1218,7 +1226,7 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
             onRetry={() => void compareData.refresh()}
           />
         )}
-        {clean && !filtering && <CleanState base={base} />}
+        {clean && !filtering && <CleanState onOpenTerminal={openTerminal} />}
         {branchItems.length > 0 && !tooLarge && (
           <SectionFrame
             id="branch"
@@ -1245,20 +1253,20 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
         )}
       </div>
       {selected.length > 0 && (
-        <div className="scm-bulk" role="toolbar" aria-label="Selection actions">
+        <div className="ui-cluster" role="toolbar" aria-label="Selection actions">
           <span>{`${selected.length} selected`}</span>
           {!filtering && bulkStage.length > 0 && (
-            <button type="button" onClick={() => void stagePaths(actionPaths(selectedEntries, 'stage', actionContext), true)}>{`Stage (${bulkStage.length})`}</button>
+            <Button onClick={() => void stagePaths(actionPaths(selectedEntries, 'stage', actionContext), true)}>{`Stage (${bulkStage.length})`}</Button>
           )}
           {!filtering && bulkUnstage.length > 0 && (
-            <button type="button" onClick={() => void unstagePaths(actionPaths(selectedEntries, 'unstage'), true)}>{`Unstage (${bulkUnstage.length})`}</button>
+            <Button onClick={() => void unstagePaths(actionPaths(selectedEntries, 'unstage'), true)}>{`Unstage (${bulkUnstage.length})`}</Button>
           )}
-          <button type="button" className="icon-button" aria-label="Clear selection" title="Clear selection" onClick={() => dispatchSelection({ type: 'reset' })}>
+          <IconButton label="Clear selection" title="Clear selection" onClick={() => dispatchSelection({ type: 'reset' })}>
             {'×'}
-          </button>
+          </IconButton>
         </div>
       )}
-      {menu && <PopupMenu x={menu.x} y={menu.y} label={`Actions for ${splitPath(menu.item.path).name}`} items={menuEntries(menu.item)} onClose={() => setMenu(null)} />}
+      {menu && <ContextMenu x={menu.x} y={menu.y} label={`Actions for ${splitPath(menu.item.path).name}`} items={menuEntries(menu.item)} onClose={() => setMenu(null)} />}
       {dialog?.kind === 'confirm' && (
         <ConfirmDialog
           title={dialog.title}
@@ -1276,26 +1284,29 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
         />
       )}
       {dialog?.kind === 'details' && (
-        <Dialog title={dialog.title} onClose={() => setDialog(null)} wide>
-          <pre className="script-preview">{dialog.output}</pre>
-          <div className="dialog-actions">
-            {aiEnabled && (
-              <button
-                type="button"
-                className="primary"
-                disabled={aiFix.busy}
-                onClick={() => {
-                  setDialog(null)
-                  void aiFix.start(dialog.title === 'Commit Failed' ? 'fixCommitFailure' : 'fixPushFailure')
-                }}
-              >
-                Fix with AI
-              </button>
-            )}
-            <button type="button" onClick={() => setDialog(null)}>
-              Close
-            </button>
-          </div>
+        <Dialog
+          open
+          title={dialog.title}
+          onClose={() => setDialog(null)}
+          actions={
+            <div className="ui-cluster" style={{ justifyContent: 'flex-end' }}>
+              {aiEnabled && (
+                <Button
+                  variant="primary"
+                  disabled={aiFix.busy}
+                  onClick={() => {
+                    setDialog(null)
+                    void aiFix.start(dialog.title === 'Commit Failed' ? 'fixCommitFailure' : 'fixPushFailure')
+                  }}
+                >
+                  Fix with AI
+                </Button>
+              )}
+              <Button onClick={() => setDialog(null)}>Close</Button>
+            </div>
+          }
+        >
+          <pre style={{ margin: 0, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{dialog.output}</pre>
         </Dialog>
       )}
       {launch !== null && aiEnabled && (

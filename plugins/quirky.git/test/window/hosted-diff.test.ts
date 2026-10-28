@@ -143,8 +143,8 @@ test('dirty hosted diffs refuse close and are never replaced by another preview'
     const tabs = diffTabs(await terminalWorkspace(world))
     return tabs.find(({ tab }) => record(tab.input).path === 'math.ts') ?? null
   })
-  await world.win.waitFor(() => q('.qgv-file .cm-editor'))
-  const editor = modifiedEditor(EditorView, q('.qgv-file')!)
+  await world.win.waitFor(() => q('[data-git-view-root] .cm-editor'))
+  const editor = modifiedEditor(EditorView, q('[data-diff-editor]')!)
   editor.dispatch({ changes: { from: 0, insert: 'unsaved draft ' } })
   await world.win.waitFor(async () => {
     const current = diffTabs(await terminalWorkspace(world)).find(({ tab }) => tab.id === opened.tab.id)
@@ -188,15 +188,15 @@ test('Markdown diff previews the modified side with an authorized image and rele
     (count, group) => count + (Array.isArray(group.tabs) ? group.tabs.length : 0), 0
   )
   await world.run('open-diff', { path: markdownPath, source: 'unstaged', display: 'preview', preview: true })
-  await world.win.waitFor(() => q('.qgv-markdown-preview img'))
-  const preview = q('.qgv-markdown-preview')!
+  await world.win.waitFor(() => q('[data-git-view-root] [data-markdown-preview] img'))
+  const preview = q('[data-git-view-root] [data-markdown-preview]')!
   expect(text(preview)).toContain('Draft heading')
   expect(text(preview)).toContain('Modified body.')
   expect(text(preview)).not.toContain('Committed heading')
   expect(text(preview)).not.toContain('HEAD body.')
-  expect(q('.qgv-markdown-preview-notice')).not.toBeNull()
+  expect(q('[data-git-view-root] [data-markdown-preview-notice]')).not.toBeNull()
 
-  const hostedPreviewSrc = q('.qgv-markdown-preview img')?.getAttribute('src')
+  const hostedPreviewSrc = q('[data-git-view-root] [data-markdown-preview] img')?.getAttribute('src')
   expect(hostedPreviewSrc).toBeTruthy()
   await expectImageResource(world, hostedPreviewSrc!, imageBytes)
   expect(readFileSync(join(world.dir, markdownPath), 'utf8')).toBe(modifiedText)

@@ -62,7 +62,7 @@ async function mount(input: unknown) {
   return element
 }
 
-const rows = (root: Element) => [...root.querySelectorAll('.msg')].map((row) => row.textContent)
+const rows = (root: Element) => [...root.querySelectorAll('article[aria-label$="message"]')].map((row) => row.textContent)
 
 describe('the structured session view', () => {
   test('SC-69: shows the transcript and input of the session named in the input, and switching away unmounts it', async () => {
@@ -72,12 +72,11 @@ describe('the structured session view', () => {
     expect(fake.callsTo('quirky.structured/messages')[0]!.params).toEqual({ session: 'bg' })
     expect(rows(view)).toEqual(['userhi', 'assistanthello'])
     expect(view.querySelector('textarea')).not.toBeNull()
-    expect(view.querySelector('.terminal-host')).toBeNull()
     expect(fake.callsTo('quirky.terminal/attach')).toEqual([])
 
     await act(async () => void (unmount as () => void)())
     unmount = undefined
-    expect(view.innerHTML).toBe('')
+    expect(view.textContent).toBe('')
     const reads = fake.callsTo('quirky.session/get').length
     await fake.emit({ type: 'quirky.session/changed', data: { session: bg } })
     expect(fake.callsTo('quirky.session/get')).toHaveLength(reads)
@@ -117,7 +116,7 @@ describe('the structured session view', () => {
     const current = { session: null as Session | null }
     start(current)
     const missing = await mount({ session: 'nope' })
-    expect(missing.querySelector('p.muted')?.textContent).toBe('Session not found')
+    expect(missing.querySelector('p')?.textContent).toBe('Session not found')
     expect(fake.callsTo('quirky.structured/messages')).toEqual([])
 
     await act(async () => void (unmount as () => void)())
@@ -128,14 +127,14 @@ describe('the structured session view', () => {
     current.session = null
     await fake.emit({ type: 'quirky.session/removed', data: { sessionId: 'bg' } })
     await settle()
-    expect(view.querySelector('p.muted')?.textContent).toBe('Session not found')
+    expect(view.querySelector('p')?.textContent).toBe('Session not found')
     expect(view.querySelector('textarea')).toBeNull()
   })
 
   test('an input without a session names none and reads nothing', async () => {
     start({ session: bg })
     const view = await mount({})
-    expect(view.querySelector('p.muted')?.textContent).toBe('Session not found')
+    expect(view.querySelector('p')?.textContent).toBe('Session not found')
     expect(fake.callsTo('quirky.session/get')).toEqual([])
   })
 

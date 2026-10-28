@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Repo, Session, UiPluginContext, Worktree } from '@quirky/protocol'
+import { Button, Dialog } from '@quirky/ui'
 import { removeProject } from './actions'
 import { expectedLedgerSnapshots, ledgerRetentionNotice, previewLedgerRemoval, type LedgerRemovalPreview } from './ledger'
 import { repoLabel } from './report'
-import { Dialog } from './Dialog'
 
 type Props = {
   context: UiPluginContext
@@ -52,19 +52,19 @@ export function RemoveProjectDialog({ context, repo, worktrees, sessions, onClos
 
   const retention = ledgerRetentionNotice(preview ?? null)
   return (
-    <Dialog title="Remove Project" onClose={onClose}>
-      <p className="dialog-message">
+    <Dialog open title="Remove Project" onClose={onClose}>
+      <p className="ui-text-muted">
         {`This only removes ${name} from Quirky. It is still on your disk.`}
         {terminals > 0 && ` ${terminals} open ${terminals === 1 ? 'terminal' : 'terminals'} in this project will be closed.`}
       </p>
-      {retention && <p className="dialog-message">{retention}</p>}
-      {preview === undefined && !previewError && <p className="muted">Checking retained ledger records…</p>}
-      {previewError && <p className="error" role="alert">Could not check retained ledger records: {previewError} <button type="button" onClick={() => void loadPreview()}>Retry</button></p>}
-      <div className="dialog-actions">
-        <button type="button" onClick={onClose}>Cancel</button>
-        <button type="button" className="primary" autoFocus disabled={busy || preview === undefined || Boolean(previewError)} onClick={() => void remove()}>
+      {retention && <p className="ui-text-muted">{retention}</p>}
+      {preview === undefined && !previewError && <p className="ui-text-muted" role="status">Checking retained ledger records…</p>}
+      {previewError && <p className="ui-error-text" role="alert">Could not check retained ledger records: {previewError} <Button type="button" onClick={() => void loadPreview()}>Retry</Button></p>}
+      <div className="ui-actions">
+        <Button type="button" onClick={onClose}>Cancel</Button>
+        <Button type="button" variant="destructive" autoFocus disabled={busy || preview === undefined || Boolean(previewError)} onClick={() => void remove()}>
           Remove
-        </button>
+        </Button>
       </div>
     </Dialog>
   )

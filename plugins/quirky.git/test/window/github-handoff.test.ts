@@ -232,7 +232,7 @@ function startFixture(root: string): GitHubFixture {
 
 async function selectWorktree(w: World, worktree: string, branch: string): Promise<void> {
   await w.agent.callAny('ui.view.open', { id: SESSION_VIEW, input: { worktree } })
-  await w.win.waitFor(() => text(q('.scm-branch-name')) === branch)
+  await w.win.waitFor(() => text(q('[data-branch-name]')) === branch)
 }
 function unsetUpstream(path: string, branch: string): void {
   const upstream = git(path, 'for-each-ref', '--format=%(upstream:short)', `refs/heads/${branch}`)
@@ -242,7 +242,7 @@ function unsetUpstream(path: string, branch: string): void {
 function reviewStatus() {
   return q('[data-scm-review-status]')
 }
-const reviewAction = () => q('.scm-create-review button') as HTMLButtonElement | null
+const reviewAction = () => q('[data-git-create-review] button') as HTMLButtonElement | null
 
 async function waitForReviewState(w: World, kind: string, summary?: string) {
   return w.win.waitFor(() => {
@@ -263,7 +263,7 @@ async function waitForPrimary(w: World, label: string, title: string, enabled: b
 async function openGitHubPanel(w: World): Promise<void> {
   await w.agent.callAny('setting.set', { id: 'setting:quirky.agent-status/hooks', value: false })
   await w.agent.callAny('ui.panel.open', { id: PANEL })
-  await w.win.waitFor(() => q('.scm-header'))
+  await w.win.waitFor(() => q('[data-git-panel]'))
 }
 
 test('GitHub Source Control reports current PR status, ignores stale worktree replies, and hands off guarded creation to Reviews', async () => {
@@ -347,7 +347,7 @@ test('GitHub Source Control reports current PR status, ignores stale worktree re
   await waitForReviewState(w, 'no-review', 'No pull request is linked')
   const before = git(preparation.path, 'rev-parse', 'HEAD')
   writeFileSync(join(preparation.path, 'math.ts'), 'a\nB\nc\nd\ne\n')
-  await w.win.waitFor(() => q('.scm-row-main[title="math.ts"]'))
+  await w.win.waitFor(() => q('[data-row-path="math.ts"] button[aria-pressed]'))
   expect(buttonText('Commit, push & Create PR')?.disabled).toBe(true)
   expect(git(preparation.path, 'rev-parse', 'HEAD')).toBe(before)
 

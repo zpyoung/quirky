@@ -1,7 +1,8 @@
-import { useRef, useState, type ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
+import { Button, ContextMenu, FormRow, IconButton } from '@quirky/ui'
+import type { ContextMenuItem } from '@quirky/ui'
 import { messageRows } from './format'
 import type { MenuItem, MenuItemId, PrimaryAction } from './ladder'
-import { PopupMenu, type MenuEntry } from './Menu'
 
 type Props = {
   message: string
@@ -23,56 +24,65 @@ type Props = {
 
 /** The commit message box, the primary split button with its chevron menu, and the cards and error beneath. */
 export function CommitArea({ message, onMessage, locked, primary, menu, spinner, remoteError, onPrimary, onMenu, sparkle, children }: Props) {
-  const chevron = useRef<HTMLButtonElement>(null)
   const [menuAt, setMenuAt] = useState<{ x: number; y: number } | null>(null)
 
-  const openMenu = () => {
-    const box = chevron.current?.getBoundingClientRect()
-    setMenuAt({ x: box?.left ?? 0, y: box?.bottom ?? 0 })
-  }
-  const entries: MenuEntry[] = menu.map((item) => ({
+  const entries: ContextMenuItem[] = menu.map((item) => ({
     label: item.label,
-    disabled: !item.enabled,
+    enabled: item.enabled,
     title: item.title,
     separatorBefore: item.separatorBefore,
     onSelect: () => onMenu(item.id)
   }))
 
   return (
-    <div className="commit-box">
-      <textarea
-        className={sparkle ? 'scm-ai-message' : undefined}
-        rows={messageRows(message)}
-        value={message}
-        placeholder="Message"
-        aria-label="Commit message"
-        disabled={locked}
-        onChange={(event) => onMessage(event.target.value)}
-      />
-      {sparkle}
-      <div className="scm-split">
-        <button type="button" className="primary scm-primary" disabled={!primary.enabled} title={primary.title} onClick={onPrimary}>
-          {spinner === 'primary' && <span className="scm-spinner" aria-hidden="true" />}
-          {primary.label}
-        </button>
-        <button
-          ref={chevron}
-          type="button"
-          className="primary scm-chevron-button"
-          aria-label="More commit and remote actions"
-          aria-haspopup="menu"
-          onClick={openMenu}
+    <div className="ui-stack">
+      <FormRow label="Commit message" htmlFor="source-control-commit-message">
+        <div style={{ position: 'relative' }}>
+          <textarea
+            id="source-control-commit-message"
+            className="ui-text-field__input"
+            style={sparkle ? { paddingInlineEnd: 'var(--ui-space-24)' } : undefined}
+            rows={messageRows(message)}
+            value={message}
+            placeholder="Message"
+            aria-label="Commit message"
+            aria-describedby={remoteError === null ? undefined : 'commit-area-remote-error'}
+            disabled={locked}
+            onChange={(event) => onMessage(event.target.value)}
+          />
+          {sparkle}
+        </div>
+      </FormRow>
+      <div className="ui-cluster" style={{ gap: 0, flexWrap: 'nowrap' }}>
+        <Button
+          data-git-primary
+          variant="primary"
+          style={{ flex: 1 }}
+          disabled={!primary.enabled}
+          title={primary.title}
+          onClick={onPrimary}
         >
-          {spinner === 'chevron' ? <span className="scm-spinner" aria-hidden="true" /> : '▾'}
-        </button>
+          {spinner === 'primary' && <span role="status" aria-label="Action in progress">◌</span>}
+          {primary.label}
+        </Button>
+        <IconButton
+          label="More commit and remote actions"
+          aria-haspopup="menu"
+          onClick={(event) => {
+            const box = event.currentTarget.getBoundingClientRect()
+            setMenuAt({ x: box.left, y: box.bottom })
+          }}
+        >
+          {spinner === 'chevron' ? <span role="status" aria-label="Action in progress">◌</span> : '▾'}
+        </IconButton>
       </div>
       {remoteError !== null && (
-        <p id="commit-area-remote-error" className="scm-remote-error" role="alert">
+        <p id="commit-area-remote-error" role="alert" style={{ color: 'var(--ui-failing)' }}>
           {remoteError}
         </p>
       )}
       {children}
-      {menuAt && <PopupMenu x={menuAt.x} y={menuAt.y} label="Commit and remote actions" items={entries} onClose={() => setMenuAt(null)} />}
+      {menuAt && <ContextMenu x={menuAt.x} y={menuAt.y} label="Commit and remote actions" items={entries} onClose={() => setMenuAt(null)} />}
     </div>
   )
 }

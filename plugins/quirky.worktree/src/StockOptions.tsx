@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { Button, FormRow, IconButton } from '@quirky/ui'
 import type { Repo } from '@quirky/protocol'
 import type { StockWorktreeOptions, WorktreeCardProperty } from './control-types'
 
@@ -42,7 +42,6 @@ export function StockOptions({
   toggleFilteredReveal,
   openCleanup
 }: Props) {
-  const [open, setOpen] = useState(false)
   const toggleProperty = (property: WorktreeCardProperty, checked: boolean) => {
     const next = checked
       ? [...options.showProperties, property]
@@ -68,96 +67,126 @@ export function StockOptions({
     changeProjectOrder(order)
   }
   return (
-    <div className="stock-worktree-controls">
-      <button type="button" aria-label="Workspace options" aria-expanded={open} onClick={() => setOpen((value) => !value)}>
-        Workspace options
-      </button>
-      <button type="button" aria-label="Review worktree cleanup" onClick={openCleanup}>Review cleanup</button>
-      {hiddenSleepingCount > 0 && (
-        <button type="button" aria-label={revealSleeping ? 'Hide sleeping worktrees' : hiddenSleepingLabel(hiddenSleepingCount)} onClick={toggleSleepingReveal}>
-          {revealSleeping ? `Hide ${hiddenSleepingCount} sleeping ${hiddenSleepingCount === 1 ? 'worktree' : 'worktrees'}` : hiddenSleepingLabel(hiddenSleepingCount)}
-        </button>
-      )}
-      {hiddenFilteredCount > 0 && (
-        <button type="button" aria-label={revealFiltered ? 'Hide filtered worktrees' : hiddenFilteredLabel(hiddenFilteredCount)} onClick={toggleFilteredReveal}>
-          {revealFiltered ? `Hide ${hiddenFilteredCount} filtered ${hiddenFilteredCount === 1 ? 'worktree' : 'worktrees'}` : hiddenFilteredLabel(hiddenFilteredCount)}
-        </button>
-      )}
-      {open && (
-        <div className="stock-options-panel" role="group" aria-label="Workspace options">
-          <label>
-            Group by
-            <select aria-label="Group by" value={options.groupBy} onChange={(event) => changeOptions({ groupBy: event.currentTarget.value as StockWorktreeOptions['groupBy'] })}>
-              <option value="project">Project</option>
-              <option value="status">Status</option>
-              <option value="pr">Pull request</option>
-              <option value="none">None</option>
-            </select>
-          </label>
-          <label>
-            Sort by
-            <select aria-label="Sort by" value={options.sortBy} onChange={(event) => changeOptions({ sortBy: event.currentTarget.value as StockWorktreeOptions['sortBy'] })}>
-              <option value="recent">Recent</option>
-              <option value="agent-activity">Agent activity</option>
-              <option value="name">Name</option>
-              <option value="project">Project</option>
-              <option value="manual">Manual</option>
-            </select>
-          </label>
-          {options.groupBy === 'project' && (
-            <>
-              <label>
-                Project order
-                <select aria-label="Project order" value={options.projectOrderBy} onChange={(event) => changeOptions({ projectOrderBy: event.currentTarget.value as StockWorktreeOptions['projectOrderBy'] })}>
+    <div className="ui-stack">
+      <div className="ui-cluster ui-toolbar">
+        {hiddenSleepingCount > 0 && (
+          <Button type="button" aria-label={revealSleeping ? 'Hide sleeping worktrees' : hiddenSleepingLabel(hiddenSleepingCount)} onClick={toggleSleepingReveal}>
+            {revealSleeping ? `Hide ${hiddenSleepingCount} sleeping ${hiddenSleepingCount === 1 ? 'worktree' : 'worktrees'}` : hiddenSleepingLabel(hiddenSleepingCount)}
+          </Button>
+        )}
+        {hiddenFilteredCount > 0 && (
+          <Button type="button" aria-label={revealFiltered ? 'Hide filtered worktrees' : hiddenFilteredLabel(hiddenFilteredCount)} onClick={toggleFilteredReveal}>
+            {revealFiltered ? `Hide ${hiddenFilteredCount} filtered ${hiddenFilteredCount === 1 ? 'worktree' : 'worktrees'}` : hiddenFilteredLabel(hiddenFilteredCount)}
+          </Button>
+        )}
+      </div>
+      <details className="ui-disclosure">
+        <summary>Workspace options</summary>
+        <div className="ui-stack">
+          <div className="ui-form-grid">
+            <FormRow label="Group by" htmlFor="worktree-options-group-by">
+              <select id="worktree-options-group-by" className="ui-text-field__input" aria-label="Group by" value={options.groupBy} onChange={(event) => changeOptions({ groupBy: event.currentTarget.value as StockWorktreeOptions['groupBy'] })}>
+                <option value="project">Project</option>
+                <option value="status">Status</option>
+                <option value="pr">Pull request</option>
+                <option value="none">None</option>
+              </select>
+            </FormRow>
+            <FormRow label="Sort by" htmlFor="worktree-options-sort-by">
+              <select id="worktree-options-sort-by" className="ui-text-field__input" aria-label="Sort by" value={options.sortBy} onChange={(event) => changeOptions({ sortBy: event.currentTarget.value as StockWorktreeOptions['sortBy'] })}>
+                <option value="recent">Recent</option>
+                <option value="agent-activity">Agent activity</option>
+                <option value="name">Name</option>
+                <option value="project">Project</option>
+                <option value="manual">Manual</option>
+              </select>
+            </FormRow>
+            {options.groupBy === 'project' && (
+              <FormRow label="Project order" htmlFor="worktree-options-project-order">
+                <select id="worktree-options-project-order" className="ui-text-field__input" aria-label="Project order" value={options.projectOrderBy} onChange={(event) => changeOptions({ projectOrderBy: event.currentTarget.value as StockWorktreeOptions['projectOrderBy'] })}>
                   <option value="manual">Manual</option>
                   <option value="recent">Recent activity</option>
                 </select>
-              </label>
-              {options.projectOrderBy === 'manual' && repos.map((repo) => {
+              </FormRow>
+            )}
+            <FormRow label="External worktrees by default" htmlFor="worktree-options-external-visibility">
+              <select id="worktree-options-external-visibility" className="ui-text-field__input" aria-label="Default external worktree visibility" value={options.externalVisibilityDefault} onChange={(event) => changeOptions({ externalVisibilityDefault: event.currentTarget.value as StockWorktreeOptions['externalVisibilityDefault'] })}>
+                <option value="hide">Hide</option>
+                <option value="show">Show</option>
+              </select>
+            </FormRow>
+          </div>
+          {options.groupBy === 'project' && options.projectOrderBy === 'manual' && (
+            <div className="ui-stack" role="group" aria-label="Manual project order">
+              <span className="ui-text-muted">Manual project order</span>
+              {repos.map((repo) => {
                 const index = projectOrder.indexOf(repo.id)
+                const name = repo.displayName ?? repo.name
                 return (
-                  <div className="project-order-control" key={repo.id}>
-                    <span>{repo.displayName ?? repo.name}</span>
-                    <button type="button" aria-label={`Move ${repo.displayName ?? repo.name} up`} disabled={index <= 0} onClick={() => moveProject(repo.id, -1)}>↑</button>
-                    <button type="button" aria-label={`Move ${repo.displayName ?? repo.name} down`} disabled={index < 0 || index >= projectOrder.length - 1} onClick={() => moveProject(repo.id, 1)}>↓</button>
+                  <div className="ui-cluster" key={repo.id}>
+                    <span>{name}</span>
+                    <IconButton label={`Move ${name} up`} disabled={index <= 0} onClick={() => moveProject(repo.id, -1)}>↑</IconButton>
+                    <IconButton label={`Move ${name} down`} disabled={index < 0 || index >= projectOrder.length - 1} onClick={() => moveProject(repo.id, 1)}>↓</IconButton>
                   </div>
                 )
               })}
-            </>
+            </div>
           )}
-          <label><input aria-label="Compact cards" type="checkbox" checked={options.compact} onChange={(event) => changeOptions({ compact: event.currentTarget.checked })} />Compact cards</label>
-          <fieldset>
-            <legend>Show properties</legend>
-            {PROPERTIES.map(({ id, label }) => (
-              <label key={id}>
-                <input type="checkbox" aria-label={`Show ${label}`} checked={options.showProperties.includes(id)} onChange={(event) => toggleProperty(id, event.currentTarget.checked)} />
-                {label}
-              </label>
-            ))}
-          </fieldset>
-          <label><input aria-label="Show sleeping" type="checkbox" checked={options.showSleeping} onChange={(event) => changeOptions({ showSleeping: event.currentTarget.checked })} />Show sleeping</label>
-          <label><input aria-label="Hide CLI-created worktrees" type="checkbox" checked={options.hideCliCreated} onChange={(event) => changeOptions({ hideCliCreated: event.currentTarget.checked })} />Hide CLI-created</label>
-          <label><input aria-label="Hide worktrees from other desktop clients" type="checkbox" checked={options.hideOtherClients} onChange={(event) => changeOptions({ hideOtherClients: event.currentTarget.checked })} />Hide worktrees from other desktop clients</label>
-          <label><input aria-label="Hide default branch" type="checkbox" checked={options.hideDefaultBranch} onChange={(event) => changeOptions({ hideDefaultBranch: event.currentTarget.checked })} />Hide default branch</label>
-          <label><input aria-label="Hide detached HEAD" type="checkbox" checked={options.hideDetached} onChange={(event) => changeOptions({ hideDetached: event.currentTarget.checked })} />Hide detached HEAD</label>
-          <label><input aria-label="Hide archived worktrees" type="checkbox" checked={options.hideArchived} onChange={(event) => changeOptions({ hideArchived: event.currentTarget.checked })} />Hide archived</label>
-          <label>
-            External worktrees by default
-            <select aria-label="Default external worktree visibility" value={options.externalVisibilityDefault} onChange={(event) => changeOptions({ externalVisibilityDefault: event.currentTarget.value as StockWorktreeOptions['externalVisibilityDefault'] })}>
-              <option value="hide">Hide</option>
-              <option value="show">Show</option>
-            </select>
-          </label>
-          <fieldset>
-            <legend>Projects</legend>
-            {repos.map((repo) => {
-              const checked = options.filterRepoIds.length === 0 || options.filterRepoIds.includes(repo.id)
-              return <label key={repo.id}><input type="checkbox" aria-label={`Show project ${repo.displayName ?? repo.name}`} checked={checked} onChange={(event) => filterRepo(repo.id, event.currentTarget.checked)} />{repo.displayName ?? repo.name}</label>
-            })}
-          </fieldset>
-          <p className="muted">Other-client filtering hides only worktrees known to come from a different authenticated desktop installation. Unknown, paired-phone, plugin and CLI origins stay visible; remote host filtering remains unavailable without authoritative host identity.</p>
+          <div className="ui-stack">
+            <label className="ui-checkbox-label">
+              <input aria-label="Compact cards" type="checkbox" checked={options.compact} onChange={(event) => changeOptions({ compact: event.currentTarget.checked })} />
+              <span>Compact cards</span>
+            </label>
+            <div className="ui-stack" role="group" aria-label="Show properties">
+              <span className="ui-text-muted">Show properties</span>
+              {PROPERTIES.map(({ id, label }) => (
+                <label className="ui-checkbox-label" key={id}>
+                  <input type="checkbox" aria-label={`Show ${label}`} checked={options.showProperties.includes(id)} onChange={(event) => toggleProperty(id, event.currentTarget.checked)} />
+                  <span>{label}</span>
+                </label>
+              ))}
+            </div>
+            <label className="ui-checkbox-label">
+              <input aria-label="Show sleeping" type="checkbox" checked={options.showSleeping} onChange={(event) => changeOptions({ showSleeping: event.currentTarget.checked })} />
+              <span>Show sleeping</span>
+            </label>
+            <label className="ui-checkbox-label">
+              <input aria-label="Hide CLI-created worktrees" type="checkbox" checked={options.hideCliCreated} onChange={(event) => changeOptions({ hideCliCreated: event.currentTarget.checked })} />
+              <span>Hide CLI-created</span>
+            </label>
+            <label className="ui-checkbox-label">
+              <input aria-label="Hide worktrees from other desktop clients" type="checkbox" checked={options.hideOtherClients} onChange={(event) => changeOptions({ hideOtherClients: event.currentTarget.checked })} />
+              <span>Hide worktrees from other desktop clients</span>
+            </label>
+            <label className="ui-checkbox-label">
+              <input aria-label="Hide default branch" type="checkbox" checked={options.hideDefaultBranch} onChange={(event) => changeOptions({ hideDefaultBranch: event.currentTarget.checked })} />
+              <span>Hide default branch</span>
+            </label>
+            <label className="ui-checkbox-label">
+              <input aria-label="Hide detached HEAD" type="checkbox" checked={options.hideDetached} onChange={(event) => changeOptions({ hideDetached: event.currentTarget.checked })} />
+              <span>Hide detached HEAD</span>
+            </label>
+            <label className="ui-checkbox-label">
+              <input aria-label="Hide archived worktrees" type="checkbox" checked={options.hideArchived} onChange={(event) => changeOptions({ hideArchived: event.currentTarget.checked })} />
+              <span>Hide archived</span>
+            </label>
+            <div className="ui-stack" role="group" aria-label="Projects">
+              <span className="ui-text-muted">Projects</span>
+              {repos.map((repo) => {
+                const checked = options.filterRepoIds.length === 0 || options.filterRepoIds.includes(repo.id)
+                return (
+                  <label className="ui-checkbox-label" key={repo.id}>
+                    <input type="checkbox" aria-label={`Show project ${repo.displayName ?? repo.name}`} checked={checked} onChange={(event) => filterRepo(repo.id, event.currentTarget.checked)} />
+                    <span>{repo.displayName ?? repo.name}</span>
+                  </label>
+                )
+              })}
+            </div>
+          </div>
+          <p className="ui-help-text">Other-client filtering hides only worktrees known to come from a different authenticated desktop installation. Unknown, paired-phone, plugin and CLI origins stay visible; remote host filtering remains unavailable without authoritative host identity.</p>
+          <Button type="button" onClick={openCleanup}>Review cleanup</Button>
         </div>
-      )}
+      </details>
     </div>
   )
 }

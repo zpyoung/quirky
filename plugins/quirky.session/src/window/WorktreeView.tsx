@@ -1,4 +1,5 @@
-import { useEffect, useState, useSyncExternalStore } from 'react'
+import { useEffect, useState, useSyncExternalStore, type CSSProperties } from 'react'
+import { EmptyState } from '@quirky/ui'
 import type { UiPluginContext } from '@quirky/protocol'
 import type { WorktreeSessions } from './model'
 import { SessionTabs } from './SessionTabs'
@@ -23,6 +24,30 @@ function useConnection(context: UiPluginContext): Connection {
   return state
 }
 
+const layout = {
+  display: 'flex',
+  flex: 1,
+  flexDirection: 'column',
+  minHeight: 0,
+  minWidth: 0,
+  color: 'var(--ui-text)',
+  background: 'var(--ui-surface)'
+} satisfies CSSProperties
+
+const header = {
+  display: 'flex',
+  alignItems: 'center',
+  flexWrap: 'wrap',
+  gap: 'var(--ui-space-8)',
+  padding: 'var(--ui-space-8) var(--ui-space-12)',
+  borderBottom: 'var(--ui-border-width) solid var(--ui-border)',
+  minWidth: 0
+} satisfies CSSProperties
+
+const title = { fontSize: 'var(--ui-font-title)', overflowWrap: 'anywhere' } satisfies CSSProperties
+const path = { color: 'var(--ui-muted)', fontSize: 'var(--ui-font-label)', overflowWrap: 'anywhere', minWidth: 0 } satisfies CSSProperties
+const body = { display: 'flex', flex: 1, flexDirection: 'column', minHeight: 0, minWidth: 0 } satisfies CSSProperties
+
 /** A worktree's header, session tabs and the active session. */
 export function WorktreeView({
   context,
@@ -38,28 +63,24 @@ export function WorktreeView({
   const { connected, epoch } = useConnection(context)
 
   return (
-    <>
-      <div className="main-header">
-        <div className="main-title">
-          {worktree ? (
-            <>
-              <strong>{worktree.name}</strong>
-              <span className="muted path">{worktree.path}</span>
-            </>
-          ) : (
-            <span className="muted">{status === 'missing' ? 'Worktree not found' : 'Quirky'}</span>
-          )}
-        </div>
-      </div>
+    <div style={layout}>
+      <header style={header}>
+        {worktree ? (
+          <>
+            <strong style={title}>{worktree.name}</strong>
+            <span style={path}>{worktree.path}</span>
+          </>
+        ) : (
+          <span style={path}>{status === 'missing' ? 'Worktree not found' : 'Quirky'}</span>
+        )}
+      </header>
       {worktree && <SessionTabs context={context} store={store} sessions={sessions} active={active} />}
-      <div className="main-body">
+      <main style={body}>
         {status === 'ready' && !active && (
-          <div className="empty">
-            <p>No sessions in this worktree.</p>
-            <button className="primary" onClick={() => void store.create('shell', '', false)}>
-              New shell
-            </button>
-          </div>
+          <EmptyState
+            message="No sessions in this worktree."
+            action={{ label: 'New shell', onAction: () => void store.create('shell', '', false) }}
+          />
         )}
         {active && (
           <SessionView
@@ -71,7 +92,7 @@ export function WorktreeView({
             onClose={() => void store.close(active)}
           />
         )}
-      </div>
-    </>
+      </main>
+    </div>
   )
 }

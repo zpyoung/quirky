@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { Badge, Button, EmptyState, IconButton, ListRow, SectionHeader } from '@quirky/ui'
 import type { GitConflictKind, GitStatus } from '@quirky/protocol'
 import { DIFF_VIEW_ID, PANEL_ID, type ReviewSnapshot } from '../shared/view-input'
 import { messageOf } from './data'
@@ -107,48 +108,51 @@ export function ConflictReview({ context, input, report, bind, close }: ModeProp
 
   const allResolved = rows !== null && rows.length > 0 && unresolved === 0
   return (
-    <div className="qgv-review">
-      <header className="qgv-bar">
-        <strong className="qgv-title">Conflict review</strong>
-        <span className="qgv-spacer" />
-        <button type="button" onClick={() => void refresh()}>
-          Refresh
-        </button>
-        <button type="button" aria-label="Close" title="Close" onClick={close}>
-          ✕
-        </button>
-      </header>
-      <div className="qgv-split">
-        <nav className="qgv-tree qgv-review-files" aria-label="Files">
-          <h3>Files</h3>
-          {rows !== null && rows.length === 0 && <p className="qgv-muted">No conflicts in this snapshot.</p>}
+    <div className="ui-stack" style={{ flex: 1, minHeight: 0, minWidth: 0, overflow: 'hidden' }}>
+      <SectionHeader
+        title="Conflict review"
+        actions={
+          <div className="ui-cluster">
+            <Button onClick={() => void refresh()}>Refresh</Button>
+            <IconButton label="Close" title="Close" onClick={close}>×</IconButton>
+          </div>
+        }
+      />
+      <div className="ui-cluster" style={{ alignItems: 'stretch', flexWrap: 'nowrap', flex: 1, minHeight: 0, minWidth: 0 }}>
+        <nav aria-label="Files" className="ui-stack" style={{ flex: '0 0 22%', minHeight: 0, overflow: 'auto', padding: 'var(--ui-space-8)' }}>
+          <SectionHeader title="Files" />
+          {rows !== null && rows.length === 0 && <EmptyState message="No conflicts in this snapshot." />}
           {rows?.map((row) => (
-            <div key={row.path} className="qgv-review-row">
-              <span className="qgv-path" title={row.path}>
-                {row.path}
-              </span>
-              <span className={`qgv-badge qgv-badge-${row.state}`}>{BADGE[row.state]}</span>
-              {row.state === 'unresolved' && (
-                <button
-                  type="button"
-                  onClick={() =>
-                    context.openView(DIFF_VIEW_ID, {
-                      worktree,
-                      mode: 'conflict-file',
-                      path: row.path,
-                      review: { entries: snapshot.current ?? [], capturedAt: capturedAt?.getTime() ?? Date.now() }
-                    })
-                  }
-                >
-                  Open
-                </button>
-              )}
+            <div key={row.path} data-path={row.path}>
+              <ListRow
+                title={row.path}
+                status={row.state === 'unresolved' ? 'needs-you' : row.state === 'resolved' ? 'done' : 'idle'}
+                trailing={
+                  <div className="ui-cluster">
+                    <Badge tone={row.state === 'unresolved' ? 'needs-you' : row.state === 'resolved' ? 'accent' : 'neutral'}>{BADGE[row.state]}</Badge>
+                    {row.state === 'unresolved' && (
+                      <Button
+                        onClick={() =>
+                          context.openView(DIFF_VIEW_ID, {
+                            worktree,
+                            mode: 'conflict-file',
+                            path: row.path,
+                            review: { entries: snapshot.current ?? [], capturedAt: capturedAt?.getTime() ?? Date.now() }
+                          })
+                        }
+                      >
+                        Open
+                      </Button>
+                    )}
+                  </div>
+                }
+              />
             </div>
           ))}
         </nav>
-        <div className="qgv-scroll qgv-pad">
+        <div className="ui-stack" style={{ flex: 1, minHeight: 0, minWidth: 0, overflow: 'auto', padding: 'var(--ui-space-12)' }}>
           {error !== null && <ErrorNotice message={error} subject="conflicts" />}
-          {rows === null && error === null && <p className="qgv-muted">Loading conflicts...</p>}
+          {rows === null && error === null && <p className="ui-text-muted">Loading conflicts...</p>}
           {rows !== null && !allResolved && (
             <p>
               {`${unresolved} unresolved conflict${unresolved === 1 ? '' : 's'}`}
@@ -156,16 +160,14 @@ export function ConflictReview({ context, input, report, bind, close }: ModeProp
             </p>
           )}
           {allResolved && (
-            <div className="qgv-notice">
-              <strong>All conflicts resolved</strong>
+            <section className="ui-stack" role="region" aria-label="All conflicts resolved">
+              <Badge tone="accent">All conflicts resolved</Badge>
               <p>This review snapshot no longer has any live unresolved conflicts.</p>
-              <button type="button" onClick={() => context.togglePanel(PANEL_ID, true)}>
-                Source Control
-              </button>
-              <button type="button" onClick={close}>
-                Dismiss
-              </button>
-            </div>
+              <div className="ui-cluster">
+                <Button onClick={() => context.togglePanel(PANEL_ID, true)}>Source Control</Button>
+                <Button onClick={close}>Dismiss</Button>
+              </div>
+            </section>
           )}
         </div>
       </div>

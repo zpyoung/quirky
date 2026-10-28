@@ -1,20 +1,21 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import type { KeyboardEvent as ReactKeyboardEvent } from 'react'
-import type { ListRowProps, MenuProps, SectionHeaderProps, TabsProps, UiStatus } from './contracts'
+import type { ListRowProps, MenuProps, SectionHeaderProps, TabsProps } from './contracts'
 import { classNames } from './shared'
 import { Badge, StatusDot } from './primitives'
 
-export function ListRow({ title, description, status, count, trailing, selected = false, disabled = false, onClick }: ListRowProps) {
+export function ListRow({ title, description, status, progress, count, trailing, mainTitle, mainLabel, compact = false, selected = false, disabled = false, onClick }: ListRowProps) {
   const className = classNames(
     'ui-list-row',
     description !== undefined && description !== null && description !== false && 'ui-list-row--double',
+    compact && 'ui-list-row--compact',
     selected && 'ui-list-row--selected',
     disabled && 'ui-list-row--disabled',
     onClick && 'ui-list-row--interactive',
   )
   const content = (
     <>
-      {status && <span className="ui-list-row__status"><StatusDot status={status} label={`Status: ${status}`} /></span>}
+      {status && <span className="ui-list-row__status"><StatusDot status={status} progress={progress} label={`Status: ${status}`} /></span>}
       <span className="ui-list-row__body">
         <span className="ui-list-row__title">{title}</span>
         {description !== undefined && <span className="ui-list-row__description">{description}</span>}
@@ -31,12 +32,14 @@ export function ListRow({ title, description, status, count, trailing, selected 
           className="ui-list-row__main"
           aria-pressed={selected}
           disabled={disabled}
+          title={mainTitle}
+          aria-label={mainLabel}
           onClick={() => { if (!disabled) onClick() }}
         >
           {content}
         </button>
       ) : (
-        <div className="ui-list-row__main" aria-current={selected ? 'true' : undefined}>
+        <div className="ui-list-row__main" title={mainTitle} aria-label={mainLabel} aria-current={selected ? 'true' : undefined}>
           {content}
         </div>
       )}
@@ -45,10 +48,10 @@ export function ListRow({ title, description, status, count, trailing, selected 
   )
 }
 
-export function SectionHeader({ title, actions }: SectionHeaderProps) {
+export function SectionHeader({ title, titleTooltip, actions, className, ...attributes }: SectionHeaderProps) {
   return (
-    <header className="ui-section-header">
-      <h2 className="ui-section-header__title">{title}</h2>
+    <header {...attributes} className={classNames('ui-section-header', className)}>
+      <h2 className="ui-section-header__title" title={titleTooltip}>{title}</h2>
       {actions !== undefined && <div className="ui-section-header__actions">{actions}</div>}
     </header>
   )
@@ -118,7 +121,7 @@ export function Tabs({ label, items, value, onChange }: TabsProps) {
   )
 }
 
-export function Menu({ label, items }: MenuProps) {
+export function Menu({ label, trigger, items }: MenuProps) {
   const generatedId = useId()
   const [open, setOpen] = useState(false)
   const [activeIndex, setActiveIndex] = useState(-1)
@@ -199,12 +202,13 @@ export function Menu({ label, items }: MenuProps) {
         ref={triggerRef}
         type="button"
         className="ui-menu__trigger"
+        aria-label={label}
         aria-haspopup="menu"
         aria-expanded={open}
         aria-controls={`${generatedId}-menu`}
         onClick={() => { if (open) setOpen(false); else setOpen(true) }}
       >
-        {label}<span className="ui-menu__trigger-icon" aria-hidden="true">⌄</span>
+        {trigger ?? label}{trigger === undefined && <span className="ui-menu__trigger-icon" aria-hidden="true">⌄</span>}
       </button>
       {open && (
         <ul ref={menuRef} id={`${generatedId}-menu`} className="ui-menu__list" role="menu" aria-label={label} tabIndex={-1}>
@@ -214,7 +218,8 @@ export function Menu({ label, items }: MenuProps) {
                 ref={(element) => { itemRefs.current[index] = element }}
                 type="button"
                 className={classNames('ui-menu__item', item.destructive && 'ui-menu__item--destructive')}
-                role="menuitem"
+                role={item.checked === undefined ? 'menuitem' : 'menuitemcheckbox'}
+                aria-checked={item.checked}
                 aria-disabled={item.disabled || undefined}
                 disabled={item.disabled}
                 tabIndex={!item.disabled && index === activeIndex ? 0 : -1}
@@ -225,7 +230,7 @@ export function Menu({ label, items }: MenuProps) {
                 }}
                 onKeyDown={(event) => onItemKeyDown(event, index)}
               >
-                {item.label}
+                {item.checked !== undefined && <span aria-hidden="true">{item.checked ? '✓ ' : '　'}</span>}{item.label}
               </button>
             </li>
           ))}

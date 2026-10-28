@@ -1,5 +1,6 @@
 import { Facet, Prec, StateEffect, StateField, type EditorState, type Extension, type Range, type Text } from '@codemirror/state'
 import { Decoration, EditorView, GutterMarker, ViewPlugin, WidgetType, gutter, keymap, type DecorationSet, type PluginValue } from '@codemirror/view'
+import { uiTokens } from '@quirky/ui'
 import { dragScrollStep, REFERENCE_FRAME_MS } from './drag-scroll'
 import { orderRange, selectionLineRange, type LineRange } from './line-range'
 import type { Note } from './useNotes'
@@ -27,8 +28,7 @@ const setModel = StateEffect.define<NotesModel>()
 const setDrag = StateEffect.define<LineRange | null>()
 const setHover = StateEffect.define<number | null>()
 
-const SAVED_HEIGHT = 88
-const DRAFT_HEIGHT = 152
+const ESTIMATED_HEIGHT = { rowDouble: 0, space16: 0, space4: 0 }
 const CLICK_AFTER_PRESS_MS = 400
 
 /** The end of line `n`, or of the last line when `n` is past the document. */
@@ -54,8 +54,15 @@ class CardWidget extends WidgetType {
   }
 
   toDOM(view: EditorView): HTMLElement {
+    if (ESTIMATED_HEIGHT.rowDouble === 0) {
+      const tokens = getComputedStyle(view.dom)
+      ESTIMATED_HEIGHT.rowDouble = Number.parseFloat(tokens.getPropertyValue(uiTokens.row.double)) || 0
+      ESTIMATED_HEIGHT.space16 = Number.parseFloat(tokens.getPropertyValue(uiTokens.space[16])) || 0
+      ESTIMATED_HEIGHT.space4 = Number.parseFloat(tokens.getPropertyValue(uiTokens.space[4])) || 0
+    }
     const element = document.createElement('div')
-    element.className = 'qgv-note-widget'
+    element.className = 'ui-editor-inline-widget'
+    element.dataset.noteWidget = ''
     if (this.spec.kind === 'saved') element.dataset.noteId = this.spec.note.id
     unmounts.set(element, this.mount(element, this.spec, () => view.requestMeasure()))
     return element
@@ -67,7 +74,9 @@ class CardWidget extends WidgetType {
   }
 
   get estimatedHeight(): number {
-    return this.spec.kind === 'draft' ? DRAFT_HEIGHT : SAVED_HEIGHT
+    return this.spec.kind === 'draft'
+      ? ESTIMATED_HEIGHT.rowDouble * 4 + ESTIMATED_HEIGHT.space16
+      : ESTIMATED_HEIGHT.rowDouble * 2 + ESTIMATED_HEIGHT.space16 + ESTIMATED_HEIGHT.space4
   }
 
   ignoreEvent(): boolean {
@@ -92,7 +101,7 @@ function build(state: EditorState, model: NotesModel, drag: LineRange | null): N
     if (!range) continue
     for (let n = Math.max(1, range.startLine); n <= Math.min(doc.lines, range.line); n++) lit.add(n)
   }
-  for (const n of lit) ranges.push(Decoration.line({ class: 'qgv-note-range' }).range(doc.line(n).from))
+  for (const n of lit) ranges.push(Decoration.line({ class: 'ui-editor-line-accent' }).range(doc.line(n).from))
   return { model, drag, decorations: Decoration.set(ranges, true) }
 }
 
@@ -135,10 +144,11 @@ class AddMarker extends GutterMarker {
   toDOM(): HTMLElement {
     const button = document.createElement('button')
     button.type = 'button'
-    button.className = 'qgv-note-add'
+    button.className = 'ui-button ui-button--secondary ui-icon-button'
     button.title = 'Add note for the AI'
     button.setAttribute('aria-label', 'Add note for the AI')
     button.dataset.line = String(this.line)
+    button.dataset.noteAdd = ''
     button.textContent = '+'
     return button
   }
@@ -148,7 +158,7 @@ class AddMarker extends GutterMarker {
 class SpacerMarker extends GutterMarker {
   toDOM(): HTMLElement {
     const spacer = document.createElement('span')
-    spacer.className = 'qgv-note-spacer'
+    spacer.className = 'ui-editor-gutter-spacer'
     return spacer
   }
 }
@@ -206,7 +216,7 @@ class Interactions implements PluginValue {
   private lineAt(target: EventTarget | null, clientY: number): number {
     const { view } = this
     if (target instanceof Element && view.dom.contains(target)) {
-      const plus = target.closest<HTMLElement>('.qgv-note-add')
+      const plus = target.closest<HTMLElement>('[data-note-add]')
       if (plus) return Number(plus.dataset.line)
       const cell = target.closest(NUMBER_CELL)
       const fromCell = cell ? this.cellLine(cell) : null
@@ -226,7 +236,7 @@ class Interactions implements PluginValue {
   private pressLine(event: PointerEvent): number | null {
     const target = event.target
     if (!(target instanceof Element)) return null
-    const plus = target.closest<HTMLElement>('.qgv-note-add')
+    const plus = target.closest<HTMLElement>('[data-note-add]')
     if (plus) return Number(plus.dataset.line)
     const cell = target.closest(NUMBER_CELL)
     if (!cell) return null
@@ -296,7 +306,7 @@ class Interactions implements PluginValue {
   }
 
   private readonly onClick = (event: MouseEvent): void => {
-    const plus = event.target instanceof Element ? event.target.closest<HTMLElement>('.qgv-note-add') : null
+    const plus = event.target instanceof Element ? event.target.closest<HTMLElement>('[data-note-add]') : null
     if (!plus) return
     event.preventDefault()
     const line = Number(plus.dataset.line)
@@ -311,7 +321,7 @@ class Interactions implements PluginValue {
   private readonly onMove = (event: MouseEvent): void => {
     if (this.drag) return
     const target = event.target
-    if (target instanceof Element && target.closest('.qgv-note-widget')) return
+    if (target instanceof Element && target.closest('[data-note-widget]')) return
     const line = this.lineAt(target, event.clientY)
     if (line !== this.view.state.field(hoverField)) this.view.dispatch({ effects: setHover.of(line) })
   }
@@ -403,7 +413,7 @@ export function notesExtension(config: NotesExtensionOptions): Extension {
     hoverField,
     Prec.high(
       gutter({
-        class: 'qgv-note-gutter',
+        class: 'ui-editor-action-gutter',
         lineMarker(view, block) {
           const hovered = view.state.field(hoverField)
           return hovered !== null && view.state.doc.lineAt(block.from).number === hovered ? new AddMarker(hovered) : null

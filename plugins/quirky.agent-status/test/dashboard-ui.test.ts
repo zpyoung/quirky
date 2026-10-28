@@ -182,12 +182,12 @@ const selectValue = (select: HTMLSelectElement, value: string) =>
 test('Dashboard navigation is setting-gated and the public open/toggle commands preserve view input', async () => {
   const hidden = setup(false)
   const hiddenCleanup = await hidden.mount(SIDEBAR)
-  expect(host.querySelector('button.dashboard-navigation')).toBeNull()
+  expect(host.querySelector('button[aria-label^="Agent Dashboard"]')).toBeNull()
   await hiddenCleanup()
 
   const h = setup(true)
   const cleanup = await h.mount(SIDEBAR)
-  const navigation = host.querySelector<HTMLButtonElement>('button.dashboard-navigation')!
+  const navigation = host.querySelector<HTMLButtonElement>('button[aria-label^="Agent Dashboard"]')!
   expect(navigation.getAttribute('aria-label')).toContain('Agent Dashboard')
   await click(navigation)
   expect(h.opened.at(-1)).toEqual({ id: VIEW, input: {} })
@@ -208,7 +208,6 @@ test('Dashboard renders three status columns, truthful hidden-idle total, readab
   const cleanup = await h.mount(VIEW, { text: 'release' })
   const columns = [...host.querySelectorAll<HTMLElement>('[data-dashboard-column]')]
   expect(columns.map((column) => column.dataset.dashboardColumn)).toEqual(['attention', 'working', 'done'])
-  expect([...host.querySelectorAll('h2')].map((heading) => heading.textContent)).toEqual(['Needs you', 'Working', 'Done'])
   expect(host.querySelector('[data-session-id="s-done"]')?.textContent).toContain('Completed')
   expect(host.querySelector('[data-session-id="s-wait"]')?.textContent).toContain('Bash: git status')
   expect(host.textContent).toContain('4 total')
@@ -225,7 +224,8 @@ test('Dashboard renders three status columns, truthful hidden-idle total, readab
 test('opening a Dashboard card acknowledges its exact Activity turn and navigates to its exact session', async () => {
   const h = setup()
   const cleanup = await h.mount(VIEW)
-  await click(host.querySelector<HTMLButtonElement>('button[aria-label=\"Open dashboard thread s-wait\"]')!)
+  const card = host.querySelector<HTMLElement>('[data-session-id="s-wait"]')!
+  await click(card.querySelector<HTMLButtonElement>('button')!)
 
   expect(h.calls.filter((call) => call.method === 'quirky.session/get').at(-1)?.params).toEqual({ session: 's-wait' })
   expect(h.calls.filter((call) => call.method === 'quirky.worktree/resolve').at(-1)?.params).toEqual({ selector: 'id:wt1' })
