@@ -443,6 +443,7 @@ async function runReviewerProcess(args: string[], timeoutMs: number, signal?: Ab
   try {
     const spawnOptions = {
       cwd,
+      env: process.env,
       stdin: 'ignore' as const,
       stdout: 'pipe' as const,
       stderr: 'pipe' as const
