@@ -10,7 +10,7 @@ import {
   type PluginCaller,
   type Schema
 } from '@quirky/protocol'
-import { DaemonError, internal, invalidParams } from '../errors'
+import { DaemonError, internal, invalidParams, unauthorized } from '../errors'
 import type { Handlers } from '../methods'
 import { Store } from '../store'
 import type { ClientConn } from '../types'
@@ -114,6 +114,14 @@ export class Dispatcher {
     from: DispatchSource,
     options: DispatchOptions = {}
   ): Promise<unknown> {
+    if ('conn' in from && from.conn.authorize) {
+      try {
+        await from.conn.authorize(method, params)
+      } catch {
+        throw unauthorized()
+      }
+      if (from.conn.closed) throw unauthorized()
+    }
     const target = this.find(method)
     if (target.connection && !('conn' in from)) throw invalidParams(`${method} needs a client connection`)
 
@@ -216,10 +224,11 @@ export class Dispatcher {
 function callerOf(from: DispatchSource, withConnection: boolean): PluginCaller {
   if ('pluginId' in from) return { role: 'plugin', pluginId: from.pluginId }
   if ('kernel' in from) return { role: 'plugin', pluginId: KERNEL_PLUGIN_ID }
-  const { role, name, cwd, sessionId, worktreeId } = from.conn
+  const { role, name, deviceId, cwd, sessionId, worktreeId } = from.conn
   return {
     role: role as ClientRole,
     ...(name !== undefined ? { name } : {}),
+    ...(deviceId !== undefined ? { deviceId } : {}),
     ...(cwd !== undefined ? { cwd } : {}),
     ...(sessionId !== undefined ? { sessionId } : {}),
     ...(worktreeId !== undefined ? { worktreeId } : {}),
