@@ -163,7 +163,7 @@ export class UiService {
     return { chosen: theme.chosen, active: theme.active, themes }
   }
 
-  /** Persists the chosen theme and broadcasts `theme.changed`. NotFound unless `id` is `default` or an effective theme. */
+  /** Persists `default` (follow system), the dark/light appearance pins, or an effective plugin theme and broadcasts `theme.changed`. NotFound unless the ID is available. */
   setTheme(id: string): ThemeList {
     if (!this.listThemes().themes.some((theme) => theme.id === id)) throw notFound(`no theme ${id}`)
     this.options.store.setUiState('theme', id)

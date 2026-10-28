@@ -4,7 +4,7 @@ import { FitAddon } from '@xterm/addon-fit'
 import { WebglAddon } from '@xterm/addon-webgl'
 import { base64ToBytes, type UiPluginContext } from '@quirky/protocol'
 import { createInputGate, writeReplay } from './replayGate'
-import { readTerminalColors, type TerminalColors } from './terminalTheme'
+import { readTerminalTheme } from '@quirky/ui/terminal-theme'
 
 type Props = {
   context: UiPluginContext
@@ -38,7 +38,7 @@ export function TerminalPane({ context, themeSource, sessionId, scrollback, inte
     const element = host.current
     if (!element) return
 
-    const initialColors = readTerminalColors(themeSource)
+    const initialColors = readTerminalTheme(themeSource)
     const term = new Terminal({
       scrollback: scrollbackRef.current,
       fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
@@ -95,11 +95,11 @@ export function TerminalPane({ context, themeSource, sessionId, scrollback, inte
         if (!disposed) term.write(`\r\n\x1b[31mCould not attach: ${error.message}\x1b[0m\r\n`)
       })
 
-    let applied: TerminalColors = initialColors
+    let applied = initialColors
     const applyTheme = () => {
       if (disposed) return
-      const next = readTerminalColors(themeSource)
-      if (next.background === applied.background && next.foreground === applied.foreground && next.cursor === applied.cursor) return
+      const next = readTerminalTheme(themeSource)
+      if (JSON.stringify(next) === JSON.stringify(applied)) return
       applied = next
       term.options.theme = { ...next }
     }

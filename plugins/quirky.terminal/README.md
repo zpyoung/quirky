@@ -18,9 +18,11 @@ The group menu offers New Markdown, Open Markdown and Open File in Editor throug
 
 Floating documents use the editor-owned profile notes directory, resolved explicitly by `quirky.editor/documentRoot({worktree:"floating"})`. This does not grant access to HOME or arbitrary files. Markdown, editor and Browser tabs preserve the captured floating group and use their existing public owners and close/resource leases.
 
-## Independent terminal palettes and command tabs
+## Terminal appearance and command tabs
 
-`theme-mode` selects inherited application terminal colors, system light/dark, dark or light. `theme-dark` and `theme-light` choose built-in or custom palettes; the custom settings accept bounded JSON objects of xterm color names and hexadecimal colors. Invalid custom data shows a warning and uses the corresponding default. These settings change terminal colors without changing the application theme.
+Terminal panes follow the app's dark/light appearance by default, using graphite palettes with all 16 ANSI colors. Dark and Light pin terminal panes; System follows the OS independently of the app. Appearance and terminal-setting changes apply to open panes without restarting them. Tango and bounded custom JSON palettes remain available; invalid custom data warns and falls back to the matching graphite palette.
+
+The application Settings theme picker offers Follow system, Dark and Light. The same persisted choices are `quirky theme set default`, `quirky theme set dark` and `quirky theme set light`. Terminal-only overrides use the existing `setting:quirky.terminal/theme-mode` setting (`inherit`, `system`, `dark`, `light`); resetting it restores application following. The Session viewer follows the application, not the terminal-plugin override. Plugin and distro themes remain selectable.
 
 `quirky.terminal/newTab` accepts a shell-only `command`, matching `quirky terminal tab new --command`. Background composition uses `activate:false`; configured default-tab commands retain the existing session exit status. Tab colors accept named presets or safe `#rgb`/`#rrggbb` values through the same API, CLI, persistence and renderer.
 

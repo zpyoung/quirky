@@ -1,6 +1,5 @@
 import { describe, expect, test } from 'bun:test'
 import {
-  DEFAULT_THEME,
   type ContributionInfo,
   type ContributionStatus,
   type PluginInfo,
@@ -658,34 +657,21 @@ describe('warnings', () => {
 })
 
 describe('themes', () => {
-  test('the default theme comes first, then declared themes by title, with colors completed', () => {
-    const { model } = build(
-      [
-        decl('theme', 'acme.solar', 'solar', { title: 'Solar', appearance: 'light', colors: { bg: '#fff', text: '#000' } }),
-        decl('theme', 'acme.solar', 'abyss', { title: 'Abyss', appearance: 'dark' }),
-      ],
-      [plugin('acme.solar')]
-    )
-    expect(model.themes.map((t) => t.id)).toEqual(['default', 'theme:acme.solar/abyss', 'theme:acme.solar/solar'])
-    expect(model.themes[0]).toEqual(DEFAULT_THEME)
-    const solar = model.themes[2]
-    expect(solar).toMatchObject({ plugin: 'acme.solar', title: 'Solar', appearance: 'light' })
-    expect(solar.colors).toEqual({ ...DEFAULT_THEME.colors, bg: '#fff', text: '#000' })
-    expect(model.themes[1].colors).toEqual(DEFAULT_THEME.colors)
-  })
 
   test('a disabled theme is not listed', () => {
     const { model } = build(
       [withStatus(decl('theme', 'acme.solar', 'solar', { title: 'Solar', appearance: 'light' }), 'disabled')],
       [plugin('acme.solar')]
     )
-    expect(model.themes).toEqual([DEFAULT_THEME])
+    expect(model.themes.some((theme) => theme.id === 'theme:acme.solar/solar')).toBe(false)
   })
 
-  test('active is the chosen theme when it is the default or effective, else the default (SC-26)', () => {
+  test('active is the chosen built-in or effective theme, else the default (SC-26)', () => {
     const solar = decl('theme', 'acme.solar', 'solar', { title: 'Solar', appearance: 'light' })
     const plugins = [plugin('acme.solar')]
-    expect(build([solar], plugins, 'default').model.theme).toEqual({ chosen: 'default', active: 'default' })
+    for (const id of ['default', 'dark', 'light']) {
+      expect(build([solar], plugins, id).model.theme).toEqual({ chosen: id, active: id })
+    }
     expect(build([solar], plugins, solar.id).model.theme).toEqual({ chosen: solar.id, active: solar.id })
     expect(build([withStatus(solar, 'disabled')], plugins, solar.id).model.theme).toEqual({
       chosen: solar.id,

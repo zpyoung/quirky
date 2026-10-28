@@ -204,7 +204,7 @@ export type Methods = {
   'setting.reset': { params: { id: string }; result: SettingInfo }
   /** Every available theme with the chosen and the active one. */
   'theme.list': { params: Record<string, never>; result: ThemeList }
-  /** Chooses theme `id` (`default` or a theme ID) and broadcasts `theme.changed`. */
+  /** Chooses `default` (follow system), the `dark` or `light` appearance pin, or a theme ID and broadcasts `theme.changed`. */
   'theme.set': { params: { id: string }; result: ThemeList }
 }
 
