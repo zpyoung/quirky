@@ -2265,6 +2265,16 @@
         "m7-test-triage"
       ],
       "status": "todo"
+    },
+    {
+      "id": "fix-test-scripts-ui-review-1028",
+      "milestone": "M7",
+      "title": "Fix bun test scripts failures found during fix-native-m3-vault-1028: scripts/ui-review/review.test.ts has 12 failures (threshold85 returns error; redaction/low-score/family/visibility/digest/timeout cases return error; repeated manifest() mkdir captures EEXIST); scripts/ui-review/cli.test.ts malformed review-only input returns exit2 without ui-review-error.json (ENOENT at219). Overall113pass13fail945assertions in98.17s on2026-10-28. Preserve actual validation/model/visibility/redaction/error behavior; diagnose before repair, no assertion weakening. Evidence docs/loop/decisions/fix-native-m3-vault-1028.md.",
+      "docs": [],
+      "deps": [
+        "m7-test-triage"
+      ],
+      "status": "todo"
     }
   ]
 }
