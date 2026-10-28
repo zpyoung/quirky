@@ -2,6 +2,7 @@ import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
 import type { RuntimeInfo } from '@quirky/protocol/node'
+import type { DesktopShellBridge } from '@quirky/protocol'
 import type { Connection } from '../../src/connection'
 import type { WindowPluginHost } from '../../src/plugins/host'
 import type { Store } from '../../src/store'
@@ -28,6 +29,8 @@ export type HeadlessWindowOptions = {
   runtime: RuntimeInfo
   /** Extra plugin directories (each holding `<id>/`) searched before the home and the repo's. */
   pluginDirs?: string[]
+  /** Trusted native window operations, absent for browser-shell scenarios. */
+  desktopBridge?: DesktopShellBridge | null
 }
 
 // happy-dom replaces these with versions tied to its window, which stop working once it closes;
@@ -103,6 +106,7 @@ export async function startHeadlessWindow(options: HeadlessWindowOptions): Promi
   const dirs = [...(options.pluginDirs ?? []), join(options.home, 'plugins'), REPO_PLUGINS]
   const shell = createShell({
     where: { hash: `#token=${runtime.token}`, host },
+    desktopBridge: options.desktopBridge,
     initialDelayMs: 50,
     importModule: async (url) => {
       const file = moduleFile(dirs, url)

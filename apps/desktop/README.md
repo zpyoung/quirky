@@ -80,6 +80,18 @@ Supported shells expose public `desktop.folder.pick` and `desktop.window.open/li
 
 These bridges do not provide generic per-window workspace sleep/close routing. Notification permission, click and dismissal callbacks also remain unavailable in the pinned SDK; a void notification call is not delivery proof. Production signed helper/TCC/launchd/admission/upgrade integration still requires an authorized signing identity.
 
+## Terminal clipboard reads
+
+Terminal Paste, ⌘V and right-click paste read text through the trusted desktop window's native
+pasteboard bridge, not WKWebView's permission-gated Web Clipboard API. Plugins use the public
+`UiPluginContext.readClipboardText()` method; clipboard contents do not go through the daemon
+or guest browser webviews. A native read failure stays an error rather than opening a WebKit
+Paste permission callout. Browser shells continue to use the Web Clipboard API.
+
+Acquired text uses the existing terminal paste pipeline: brackets only when the terminal program
+enabled bracketed paste, with the same newline conversion, chunking, size limit and timeout.
+
+
 ## Development mode
 
 ```sh

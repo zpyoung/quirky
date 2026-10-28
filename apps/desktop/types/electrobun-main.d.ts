@@ -58,6 +58,7 @@ export class Tray {
 }
 
 export const Utils: {
+  clipboardReadText(): string | null
   showNotification(options: { title: string; body?: string; subtitle?: string; silent?: boolean }): void
   openFileDialog(options: {
     startingFolder?: string

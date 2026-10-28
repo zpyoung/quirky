@@ -88,7 +88,7 @@ const onPane = (context: UiPluginContext, act: (controller: WorkspaceController,
 
 async function readClipboard(context: UiPluginContext): Promise<string> {
   try {
-    return (await navigator.clipboard?.readText()) ?? ''
+    return await context.readClipboardText()
   } catch (error) {
     context.toast('Could not paste', error instanceof Error ? error.message : String(error))
     return ''
