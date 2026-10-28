@@ -136,9 +136,10 @@ async function openView(env: NavigationEnv, selected: SelectedWindow, worktree: 
   }
 }
 
-function pushHistory(store: PluginStore, selected: SelectedWindow, id: string): void {
+function pushHistory(store: PluginStore, selected: SelectedWindow, id: string, previous?: string | null): void {
   const history = readHistory(store, selected)
   const worktrees = history.worktrees.slice(0, history.index + 1)
+  if (previous !== undefined && previous !== null && worktrees[worktrees.length - 1] !== previous) worktrees.push(previous)
   if (worktrees[worktrees.length - 1] !== id) worktrees.push(id)
   writeHistory(store, selected, { worktrees, index: worktrees.length - 1 })
 }
@@ -152,8 +153,9 @@ export async function navigate(
   const target = targetOf(params.target, env.fail)
   const selected = await selectWindow(env, params.window)
   const { worktree, all } = await env.find(params.worktree, identity)
-  activeWorktree(selected.view, all, env.fail)
+  const previous = activeWorktree(selected.view, all, env.fail)
   await openView(env, selected, worktree, target)
+  pushHistory(env.store, selected, worktree.id, previous)
   return { worktreeId: worktree.id, target }
 }
 
@@ -213,7 +215,7 @@ export async function navigationStep(
   const target = worktrees[next]
   if (!target) throw env.fail('not-found', `There is no ${direction} worktree.`)
   await openView(env, selected, target, 'terminal')
-  pushHistory(env.store, selected, target.id)
+  pushHistory(env.store, selected, target.id, current)
   return { worktreeId: target.id, target: 'terminal' }
 }
 
@@ -227,11 +229,11 @@ export async function navigationIndex(
   }
   const selected = await selectWindow(env, window)
   const listed = await env.list()
-  activeWorktree(selected.view, listed, env.fail)
+  const previous = activeWorktree(selected.view, listed, env.fail)
   const worktrees = navigationOrder(listed, env.options())
   const target = worktrees[value - 1]
   if (!target) throw env.fail('not-found', `Workspace index ${value} is not available.`)
   await openView(env, selected, target, 'terminal')
-  pushHistory(env.store, selected, target.id)
+  pushHistory(env.store, selected, target.id, previous)
   return { worktreeId: target.id, target: 'terminal' }
 }

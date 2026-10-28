@@ -99,6 +99,7 @@ export type PluginHarness = {
   restart(): Promise<{ h: Harness; client: QuirkyClient }>
   /** A client whose initial authenticated hello carries the given connection identity. */
   connectAs(identity: { cwd?: string; worktreeId?: string; sessionId?: string; desktopClientId?: string }, role?: ClientRole): Promise<QuirkyClient>
+  cleanup(): Promise<void>
 }
 
 export type PluginHarnessOptions = {

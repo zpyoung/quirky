@@ -814,7 +814,7 @@ export async function createRemoteWorkspace(env: CreateEnv, params: RemoteCreate
   delete remoteParams.automationProvenanceRequest
   remoteParams.requireGitRepository = true
   return await env.call('quirky.cli/runtimeCall', {
-    runtime: params.runtime,
+    runtime: params.runtime.slice('runtime:'.length),
     method: 'quirky.worktree/create',
     params: remoteParams
   }) as OwnerRuntimeCallResult

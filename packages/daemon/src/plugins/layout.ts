@@ -28,6 +28,7 @@ import {
   type UiToastState,
   type UiWindowInfo,
   type WindowRoute,
+  type WindowRouteState,
 } from '@quirky/protocol'
 import { conflict, invalidParams, notFound } from '../errors'
 import type { Store } from '../store'

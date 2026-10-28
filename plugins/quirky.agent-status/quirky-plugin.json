@@ -1207,15 +1207,6 @@
         "initialDelay": "10s"
       }
     ],
-    "setting": [
-      {
-        "id": "hooks",
-        "type": "boolean",
-        "title": "Agent status hooks",
-        "description": "Shows working, waiting, and done states in Quirky. Turn off to remove Quirky-managed hooks and stop reinstalling them.",
-        "default": true
-      }
-    ],
     "event": [
       {
         "id": "changed",
@@ -1507,6 +1498,13 @@
       }
     ],
     "setting": [
+      {
+        "id": "hooks",
+        "type": "boolean",
+        "title": "Agent status hooks",
+        "description": "Shows working, waiting, and done states in Quirky. Turn off to remove Quirky-managed hooks and stop reinstalling them.",
+        "default": true
+      },
       {
         "id": "dashboard-enabled",
         "type": "boolean",

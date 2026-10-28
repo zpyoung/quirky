@@ -304,7 +304,7 @@ const MAX_ANTHROPIC_MODEL_PAGES = 32
 const MAX_ANTHROPIC_MODELS = 4096
 const ANTHROPIC_EFFORT_LEVELS = ['low', 'medium', 'high', 'xhigh', 'max'] as const
 
-type AnthropicModel = { id: string; label: string; description: null; options: { id: string; choices: string[] }[] }
+type AnthropicModel = { id: string; label: string; options: { id: string; choices: string[] }[] }
 /** Lists the selected account's available Claude API models without exposing credentials or partial pages. */
 export async function runAnthropicModelsProbe(apiKey: string, timeoutMs: number): Promise<ModelProbeResult> {
   if (apiKey.trim() === '') return { ok: false, reason: 'could-not-start' }
@@ -391,7 +391,6 @@ export async function runAnthropicModelsProbe(apiKey: string, timeoutMs: number)
         const model = {
           id: value.id,
           label: value.display_name,
-          description: null,
           options
         }
         pageModels.push(model)
@@ -439,7 +438,7 @@ const MAX_PROVIDER_MODELS = 500
 const MAX_GEMINI_PAGE_TOKEN_LENGTH = 16_384
 const GEMINI_API_KEY_LENGTH = 16_384
 
-type GeminiModel = { id: string; label: string; description: string | null; options: { id: string; choices: string[] }[] }
+type GeminiModel = { id: string; label: string; description?: string; options: { id: string; choices: string[] }[] }
 
 /** Lists Gemini API models using a key from an explicit prepared provider environment. */
 export async function runGeminiModelsProbe(apiKey: string, timeoutMs: number): Promise<ModelProbeResult> {
@@ -520,7 +519,7 @@ export async function runGeminiModelsProbe(apiKey: string, timeoutMs: number): P
         const description = typeof value.description === 'string' && value.description.trim() !== ''
           ? value.description
           : null
-        models.push({ id: value.baseModelId, label: displayName, description, options: [] })
+        models.push({ id: value.baseModelId, label: displayName, ...(description === null ? {} : { description }), options: [] })
       }
 
       if (!Object.hasOwn(page, 'nextPageToken')) {
@@ -571,7 +570,7 @@ const PI_THINKING_LEVELS: Record<string, true> = {
   xhigh: true,
   max: true
 }
-type PiDiscoveredModel = { id: string; label: string; description: null; options: { id: string; choices: string[] }[] }
+type PiDiscoveredModel = { id: string; label: string; options: { id: string; choices: string[] }[] }
 
 /** Queries Pi's declared RPC `get_available_models` operation in a bounded, sessionless process. */
 export async function runPiRpcModelProbe(
@@ -715,7 +714,7 @@ export async function runPiRpcModelProbe(
         const choices = availableLevels.levels.filter((level): level is string => typeof level === 'string')
         if (choices.some((level) => level !== 'off')) options = [{ id: 'effort', choices }]
       }
-      models.push({ id, label, description: null, options })
+      models.push({ id, label, options })
     }
 
     const stdout = JSON.stringify({ models })

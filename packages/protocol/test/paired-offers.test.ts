@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test'
+import type { OwnerCliPairOffer } from '../src/runtime-owner'
 import { parseMobileOffer, parseOwnerCliOffer } from '../src/paired-client/offers'
 
 const ownerOffer = {
@@ -8,7 +9,7 @@ const ownerOffer = {
   publicKeyB64: Buffer.alloc(32, 1).toString('base64'),
   pairedDeviceId: '123e4567-e89b-42d3-a456-426614174000',
   scope: 'owner-cli'
-}
+} satisfies OwnerCliPairOffer
 
 function encodeOffer(value: unknown): string {
   return Buffer.from(JSON.stringify(value)).toString('base64url')

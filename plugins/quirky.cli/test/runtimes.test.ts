@@ -142,7 +142,7 @@ test('owner targets call only the selected remote daemon through saved and one-o
   expect(await local.caller.callAny('quirky.mobile/state', {})).toEqual(localState)
 
   const command = await runCli([
-    'runtime', 'call', '--target', added.id, '--method', 'quirky.mobile/configure',
+    'cli', 'runtime', 'call', '--target', added.id, '--method', 'quirky.mobile/configure',
     '--arguments', JSON.stringify({ machineName: 'Changed through local owner routing command' }), '--json'
   ], { home: local.home })
   expect(command.code).toBe(0)

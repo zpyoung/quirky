@@ -56,9 +56,9 @@ CLI. It uses the existing pinned-key E2EE listener; no relay or second transport
 
 ```sh
 quirky mobile owner-pair --name 'My remote CLI' --address <reachable-address> --confirm --json
-quirky runtime add --name remote --code '<offer from owner-pair>' --json
+quirky cli runtime add --name remote --code '<offer from owner-pair>' --json
 quirky --runtime remote api --json
-quirky runtime call --target remote --method quirky.mobile/state --arguments '{}' --json
+quirky cli runtime call --target remote --method quirky.mobile/state --arguments '{}' --json
 quirky --pairing-code '<offer from owner-pair>' mobile state --json
 quirky mobile owner-grants --json
 quirky mobile owner-revoke '<grant id>' --confirm --json

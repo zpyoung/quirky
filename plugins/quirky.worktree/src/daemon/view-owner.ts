@@ -1,5 +1,5 @@
 import { isAbsolute } from 'node:path'
-import type { WorkspaceViewOwner } from '@quirky/protocol'
+import type { Worktree, WorkspaceViewOwner } from '@quirky/protocol'
 import { matchWorktrees } from '../../selector'
 import type { WorktreeControl } from '../control-types'
 
@@ -17,7 +17,7 @@ function recordOf(value: unknown): Record<string, unknown> | null {
   return typeof value === 'object' && value !== null && !Array.isArray(value) ? value as Record<string, unknown> : null
 }
 
-function resolveSelector(worktrees: WorktreeControl[], selector: string): WorktreeControl | null {
+function resolveSelector(worktrees: WorktreeControl[], selector: string): Worktree | null {
   try {
     const matches = matchWorktrees(worktrees, selector)
     return matches.length === 1 ? matches[0]! : null
@@ -47,7 +47,7 @@ export function resolveWorkspaceViewOwner(viewValue: unknown, worktrees: Worktre
     return { kind: 'unknown' }
   }
 
-  let owner: WorktreeControl | null = null
+  let owner: Worktree | null = null
   for (const selector of selectors) {
     const match = resolveSelector(worktrees, selector)
     if (!match || (owner && (owner.id !== match.id || owner.instanceId !== match.instanceId))) return { kind: 'unknown' }

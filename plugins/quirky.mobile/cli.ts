@@ -124,9 +124,10 @@ export const commands: CliModule['commands'] = {
   },
   async 'owner-pair'(args, context) {
     if (args.positionals.length > 0) throw context.usage('owner-pair accepts only --name, --address, and --confirm')
-    const name = stringFlag(args, 'name', true)
+    const name = stringFlag(args, 'name')
     const address = stringFlag(args, 'address')
-    if (!booleanFlag(args, 'confirm')) throw context.usage('owner-pair requires explicit --confirm')
+    if (!name?.trim()) throw context.usage('owner-pair requires --name')
+    if (args.flags.confirm !== true) throw context.usage('owner-pair requires explicit --confirm')
     const value = await context.call('quirky.mobile/ownerPair', {
       name,
       confirm: true,
@@ -143,7 +144,7 @@ export const commands: CliModule['commands'] = {
   },
   async 'owner-revoke'(args, context) {
     const [grantId] = args.positionals
-    if (!grantId || args.positionals.length !== 1 || Object.keys(args.flags).some((key) => key !== 'confirm') || !booleanFlag(args, 'confirm')) {
+    if (!grantId || args.positionals.length !== 1 || Object.keys(args.flags).some((key) => key !== 'confirm') || args.flags.confirm !== true) {
       throw context.usage('usage: mobile owner-revoke <grantId> --confirm')
     }
     const value = await context.call('quirky.mobile/ownerRevoke', { grantId, confirm: true })

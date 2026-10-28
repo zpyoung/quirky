@@ -1176,10 +1176,10 @@ describe('provider-owned model discovery', () => {
     process.env.GOOGLE_API_KEY = 'fixture-google-ambient-only-key'
     const originalFetch = globalThis.fetch
     let requests = 0
-    globalThis.fetch = (async () => {
+    globalThis.fetch = Object.assign(async () => {
       requests += 1
       return Response.json({ models: [{ name: 'models/should-not-run', baseModelId: 'should-not-run', supportedGenerationMethods: ['generateContent'] }] })
-    }) as typeof fetch
+    }, { preconnect: originalFetch.preconnect })
     try {
       const result = await t.call(A('discoverModels'), { agent: 'gemini', host: 'local' })
       expect(result).toMatchObject({ status: 'unavailable', authoritative: false, models: [] })

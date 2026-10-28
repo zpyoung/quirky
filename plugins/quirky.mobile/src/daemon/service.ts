@@ -721,7 +721,7 @@ export function registerMobileMethods(context: PluginContext, service: MobileSer
     ownerGrants: (_params, caller) => { requireFullOwner(caller); return service.ownerGrants() },
     ownerRevoke: (params, caller) => {
       requireFullOwner(caller)
-      return service.ownerRevoke(params, caller.connection?.id)
+      return service.ownerRevoke(params, caller.role === 'plugin' ? undefined : caller.connection?.id)
     },
     configure: (params, caller) => { requireLocal(caller); return service.configure(params) },
     preferences: () => service.preferences(),

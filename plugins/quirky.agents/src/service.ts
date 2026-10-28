@@ -777,7 +777,9 @@ export class AgentsService {
     const declaration = entry.modelDiscovery
     if (!catalog || !declaration) return this.discoveryFailure(entry.id, 'local', 'the provider does not declare model discovery')
 
-    const fingerprint = JSON.stringify({ plugin: entry.plugin, launch: entry.launch, declaration, catalog })
+    const config = this.configs.get(entry.id)
+    const command = config.command ?? entry.launch
+    const fingerprint = JSON.stringify({ plugin: entry.plugin, launch: command, declaration, catalog })
     let run: ModelProbeResult
     if (declaration.protocol === 'anthropic-models') {
       let prepared: ProviderProbeEnvironment
@@ -804,10 +806,10 @@ export class AgentsService {
       }
       run = await runGeminiModelsProbe(apiKey, declaration.timeoutMs)
     } else {
-      if (!this.detection.installed(entry.id)) return this.discoveryFailure(entry.id, 'local', 'the provider executable is not installed')
-      const launch = tokenize(entry.launch)
+      if (config.command === null && !this.detection.installed(entry.id)) return this.discoveryFailure(entry.id, 'local', 'the provider executable is not installed')
+      const launch = tokenize(command)
       if (!launch.ok || launch.tokens.length === 0) return this.discoveryFailure(entry.id, 'local', 'the provider launch command is invalid')
-      const executable = this.detection.resolveExecutable(launch.tokens[0]!)
+      const executable = this.detection.locate(launch.tokens[0]!)?.path
       if (!executable) return this.discoveryFailure(entry.id, 'local', 'the provider executable could not be resolved')
 
       if (declaration.protocol === 'codex-app-server') {
@@ -873,7 +875,7 @@ export class AgentsService {
     }
     const current = this.catalog.agents.find((candidate) => candidate.id === entry.id)
     const currentFingerprint = current
-      ? JSON.stringify({ plugin: current.plugin, launch: current.launch, declaration: current.modelDiscovery, catalog: current.launchOptions })
+      ? JSON.stringify({ plugin: current.plugin, launch: this.configs.get(entry.id).command ?? current.launch, declaration: current.modelDiscovery, catalog: current.launchOptions })
       : null
     if (currentFingerprint !== fingerprint) {
       return this.discoveryFailure(entry.id, 'local', 'the provider declaration changed during discovery')

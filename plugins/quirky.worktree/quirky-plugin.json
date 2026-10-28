@@ -281,6 +281,10 @@
               "type": "string",
               "description": "A group ID or exact name: creates a folder workspace on its parent folder."
             },
+            "requireGitRepository": {
+              "type": "boolean",
+              "description": "Refuse folder and group targets before mutation; owner-runtime creation requires a genuine Git repository."
+            },
             "host": {
               "type": "string",
               "description": "Exact authenticated peer ID, never a label. A mobile or federation peer is not owner-cli authority and does not authorize remote worktree creation."

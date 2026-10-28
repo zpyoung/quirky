@@ -4,7 +4,7 @@ import {
   RpcErrorCode,
   type ClientRole,
   type PluginInfo,
-  type QuirkyClient,
+  QuirkyClient,
   type QuirkyEvent,
   type UiLayout,
   type UiModel,
