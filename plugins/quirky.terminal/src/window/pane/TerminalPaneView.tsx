@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useImperativeHandle, useRef, useState, type CSSProperties, type Ref } from 'react'
+import { useCallback, useEffect, useImperativeHandle, useRef, useState, type Ref } from 'react'
 import { Terminal, type ILinkHandler, type ITerminalAddon } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import { WebglAddon } from '@xterm/addon-webgl'
@@ -7,6 +7,7 @@ import { WebLinksAddon } from '@xterm/addon-web-links'
 import { Unicode11Addon } from '@xterm/addon-unicode11'
 import { ClipboardAddon, type IBase64, type IClipboardProvider } from '@xterm/addon-clipboard'
 import { RpcError, RpcErrorCode, base64ToBytes, type UiPluginContext } from '@quirky/protocol'
+import type { TerminalPalette } from '@quirky/protocol'
 import { shellEscapePaths } from '../../shell-escape'
 import { pathsFromDrop, readWorktreePathsDrop, resolveWorktreeDropPaths, WORKTREE_PATHS_MIME } from './drop'
 import { trackKittyFlags } from './kitty'
@@ -34,14 +35,6 @@ import { createKittyGraphics } from './kittyGraphics'
 export const MAX_SEARCH_QUERY = 1000
 const LINK_CLICK_SETTING_KEYS = ['link-click', 'link-middle-click'] as const
 
-const SEARCH_DECORATIONS = {
-  matchBackground: '#5c4a00',
-  matchBorder: '#5c4a00',
-  matchOverviewRuler: '#ffcc00',
-  activeMatchBackground: '#c4580e',
-  activeMatchBorder: '#ffcf6b',
-  activeMatchColorOverviewRuler: '#ff9900'
-}
 
 /** xterm highlights at most this many matches; a count at the limit means there may be more. */
 const HIGHLIGHT_LIMIT = 1000
@@ -116,31 +109,11 @@ type Runtime = {
   syncOsc52(): void
   syncExtras(settings: PaneSettings): void
   syncTheme(): void
+  palette(): TerminalPalette
 }
 
 const EMPTY_RESULTS: Results = { index: -1, count: 0 }
 
-const style: Record<string, CSSProperties> = {
-  host: { position: 'absolute', inset: 0, boxSizing: 'border-box', overflow: 'hidden' },
-  screen: { position: 'absolute' },
-  hint: {
-    position: 'absolute',
-    left: 6,
-    bottom: 6,
-    zIndex: 15,
-    maxWidth: 'calc(100% - 12px)',
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
-    whiteSpace: 'nowrap',
-    padding: '2px 8px',
-    borderRadius: 4,
-    background: 'var(--popover, rgba(30, 32, 38, 0.95))',
-    color: 'var(--popover-foreground, #d7dae0)',
-    border: '1px solid var(--border, #3a3d45)',
-    fontSize: 11,
-    pointerEvents: 'none'
-  }
-}
 
 function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
@@ -228,7 +201,20 @@ export function TerminalPaneView(props: TerminalPaneProps) {
       clearHighlights()
       return false
     }
-    const options = { regex: state.regex, caseSensitive: state.caseSensitive, incremental, decorations: SEARCH_DECORATIONS }
+    const palette = rt.palette()
+    const options = {
+      regex: state.regex,
+      caseSensitive: state.caseSensitive,
+      incremental,
+      decorations: {
+        matchBackground: palette.selectionBackground,
+        matchBorder: palette.yellow,
+        matchOverviewRuler: palette.yellow,
+        activeMatchBackground: palette.selectionBackground,
+        activeMatchBorder: palette.blue,
+        activeMatchColorOverviewRuler: palette.blue
+      }
+    }
     const found = guarded(() => (direction === 'next' ? rt.search.findNext(state.query, options) : rt.search.findPrevious(state.query, options)), null)
     if (found === null) setResults(EMPTY_RESULTS)
     return found === true
@@ -760,6 +746,7 @@ export function TerminalPaneView(props: TerminalPaneProps) {
       syncOsc52,
       syncExtras(settingsNow) { graphics.sync(settingsNow['inline-images']); void extras.sync(settingsNow) },
       syncTheme() { applyTheme(true) },
+      palette() { return appliedColors },
       setFont() {
         term.options.fontSize = effectiveFontSize()
         setView((now) => ({ ...now, fontSize: effectiveFontSize() }))
@@ -980,11 +967,13 @@ export function TerminalPaneView(props: TerminalPaneProps) {
     <div
       ref={hostRef}
       data-terminal-pane={sessionId}
-      style={{ ...style.host, opacity: active ? 1 : settings['inactive-pane-opacity'] }}
+      className="terminal-pane-host"
+      style={{ opacity: active ? 1 : settings['inactive-pane-opacity'] }}
     >
       <div
         ref={screenRef}
-        style={{ ...style.screen, left: settings['padding-x'], right: settings['padding-x'], top: settings['padding-y'], bottom: settings['padding-y'] }}
+        className="terminal-pane-screen"
+        style={{ left: settings['padding-x'], right: settings['padding-x'], top: settings['padding-y'], bottom: settings['padding-y'] }}
       />
       <MobileDriverOverlay context={context} sessionId={sessionId} />
       {search ? (
@@ -1005,7 +994,7 @@ export function TerminalPaneView(props: TerminalPaneProps) {
         />
       ) : null}
       {hint ? (
-        <div data-pane-link-hint style={style.hint}>
+        <div data-pane-link-hint className="terminal-pane-link-hint">
           {hint}
         </div>
       ) : null}

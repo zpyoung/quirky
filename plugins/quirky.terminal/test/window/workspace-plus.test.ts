@@ -119,16 +119,16 @@ async function mountWithMenuItems(menuItems: UiMenuItemEntry[]) {
 }
 
 const contributionRow = (view: { element: HTMLElement }, label: string) =>
-  [...view.element.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((el) => el.querySelector('.qt-menu-label')?.textContent === label) ?? null
+  [...view.element.ownerDocument.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((el) => el.querySelector('.qt-menu-label')?.textContent === label) ?? null
 
 const contributionRows = (view: { element: HTMLElement }) =>
-  [...view.element.querySelectorAll<HTMLElement>('[role="menuitem"]')].map((el) => el.querySelector('.qt-menu-label')?.textContent ?? '')
+  [...view.element.ownerDocument.querySelectorAll<HTMLElement>('[role="menuitem"]')].map((el) => el.querySelector('.qt-menu-label')?.textContent ?? '')
 
 const open = (view: MountedWorkspace) => click(view.q('[data-plus="grp-1"]'))
 const rows = (view: MountedWorkspace) => view.last().menu.items.map((item: any) => item.label)
 const row = (view: MountedWorkspace, label: string) =>
-  [...view.element.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((el) => el.querySelector('.qt-menu-label')!.textContent === label)!
-const search = (view: MountedWorkspace) => view.q<HTMLInputElement>('input[aria-label="Search open tabs and agents…"]')!
+  [...view.element.ownerDocument.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((el) => el.querySelector('.qt-menu-label')!.textContent === label)!
+const search = (view: MountedWorkspace) => view.element.ownerDocument.querySelector<HTMLInputElement>('input[aria-label="Search open tabs and agents…"]')!
 
 describe('public tab menu contributions', () => {
   test('shows a contributed row once in the + menu and runs it for that worktree and group', async () => {

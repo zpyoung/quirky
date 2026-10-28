@@ -260,7 +260,7 @@ describe('SC-45 and SC-48: tab groups', () => {
     const items = view.last().menu.items
     expect(view.last().menu).toMatchObject({ kind: 'actions', target: 'grp-2' })
     expect(items.map((item: any) => item.label)).toEqual(['Close Split Pane'])
-    await click([...view.element.querySelectorAll('[role="menuitem"]')].find((el) => el.textContent === 'Close Split Pane')!)
+    await click([...view.element.ownerDocument.querySelectorAll('[role="menuitem"]')].find((el) => el.textContent === 'Close Split Pane')!)
     expect(callsTo(view.fake, 'closeGroup')).toEqual([{ group: 'grp-2' }])
   })
 
