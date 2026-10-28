@@ -451,6 +451,8 @@ files, not this one.
 | medium | high | [m1-worktrees D14](decisions/m1-worktrees.md) | The base is the requested one, else the project's saved base, else the detected default | locked by research/orca-features/worktrees.md |
 | medium | high | [m1-worktrees D49](decisions/m1-worktrees.md) | Project settings are a `quirky.repo` record, set with `repo set` and shown with `repo show` | supersedes nothing; works within m0-ui-api D17 |
 | medium | high | [m1-worktrees D52](decisions/m1-worktrees.md) | Platform-specific parts are logged and built for macOS only | deferred: platform |
+| medium | high | [ui-restyle-agents D1](decisions/ui-restyle-agents.md) | Restyle the four existing feature owners without new behavior | locked by docs/quirk/specs/2026-10-28-ui-redesign/logic.md |
+| medium | high | [ui-restyle-agents D2](decisions/ui-restyle-agents.md) | Keep host placement and authoritative status/detail semantics | locked by existing shell and feature decision logs |
 | medium | high | [fix-test-process-leaks D1](decisions/fix-test-process-leaks.md) | Treat test subprocess ownership as the fix boundary | locked by docs/architecture.md |
 | medium | high | [fix-test-process-leaks D4](decisions/fix-test-process-leaks.md) | Own disposable runs with an external process-scope guardian | assumed — autonomous |
 | medium | high | [fix-test-process-leaks D7](decisions/fix-test-process-leaks.md) | The test guardian requires POSIX process inspection | deferred: platform |
@@ -1841,6 +1843,19 @@ files, not this one.
 | easy | high | [m1-worktrees D69](decisions/m1-worktrees.md) | Final Round 1: accept all eight findings, which collapse to seven defects, and fix them in one batch | assumed — autonomous |
 | easy | high | [m1-worktrees D70](decisions/m1-worktrees.md) | The UI scenarios run as three web batches, each on its own daemon, temp HOME and fixture world | assumed — autonomous |
 | easy | high | [m1-worktrees D72](decisions/m1-worktrees.md) | The UI scenarios pass as a user, with SC-59's tooltip checked by its test because the tool can't hover | assumed — autonomous |
+| easy | high | [ui-restyle-agents D3](decisions/ui-restyle-agents.md) | Preserve loading, error, empty and recovery behavior | assumed — autonomous |
+| easy | high | [ui-restyle-agents D4](decisions/ui-restyle-agents.md) | Build-first contracts and three disjoint implementers | locked by docs/loop/LOOP.md |
+| easy | high | [ui-restyle-agents D5](decisions/ui-restyle-agents.md) | Enforce the four plugins without weakening lint | locked by docs/quirk/specs/2026-10-28-ui-redesign/logic.md |
+| easy | high | [ui-restyle-agents D6](decisions/ui-restyle-agents.md) | Narrow real-surface proof with explicit visual limits | locked by docs/loop/LOOP.md |
+| easy | high | [ui-restyle-agents D7](decisions/ui-restyle-agents.md) | macOS renderer only, no new platform behavior | deferred: platform |
+| easy | high | [ui-restyle-agents D8](decisions/ui-restyle-agents.md) | Integrate only the audited disjoint component deltas | assumed — autonomous |
+| easy | high | [ui-restyle-agents D9](decisions/ui-restyle-agents.md) | Repair actual type diagnostics without repinning incidental tests | assumed — autonomous |
+| easy | high for named observed paths; unexercised boundaries remain unclaimed | [ui-restyle-agents D10](decisions/ui-restyle-agents.md) | Exercise actual contributions while keeping capture and native limits explicit | assumed — autonomous |
+| easy | high for source composition; final caught-up build/typecheck and fresh surface proof remain next | [ui-restyle-agents D11](decisions/ui-restyle-agents.md) | Union concurrent restyles and retain their shared-system ownership | locked by incoming restyle decision logs |
+| easy | high for named current renderer paths; earlier broader smoke retains its pre-catch-up qualification | [ui-restyle-agents D12](decisions/ui-restyle-agents.md) | Verify current source in an explicitly owned browser and preserve failed infrastructure evidence | assumed — autonomous |
+| easy | high for local file/receipt facts | [ui-restyle-agents D13](decisions/ui-restyle-agents.md) | Honor the late structured-surface ownership interjection without duplicate edits | locked by user ownership interjection |
+| easy | high for source ownership; composed compiler gate required before retry | [ui-restyle-agents D14](decisions/ui-restyle-agents.md) | Recover the actual controller conflict by preserving all thirteen opt-ins | locked by docs/loop/LOOP.md failed-land recovery procedure |
+| easy | high for named recovered-source interactions only | [ui-restyle-agents D15](decisions/ui-restyle-agents.md) | Finish recovery with a composed gate and narrow current shared-dialog proof | assumed — autonomous |
 | easy (test-only repair). | high | [fix-test-cli-1028 D1](decisions/fix-test-cli-1028.md) | Repair the current failure without adding obsolete API aliases | assumed — autonomous |
 | easy | high | [fix-test-cli-1028 D2](decisions/fix-test-cli-1028.md) | Prove retained credentials by encrypted use, not JSON encoding | assumed — autonomous |
 | easy | high | [fix-test-cli-1028 D3](decisions/fix-test-cli-1028.md) | Keep removal local and preserve explicit CLI consent | assumed — autonomous |
