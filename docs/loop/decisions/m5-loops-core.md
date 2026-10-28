@@ -255,5 +255,27 @@
 - **Revisit if:** authoritative land's full merged-tree suite exposes another consumer
 - **Source:** assumed — autonomous
 
+## D24: Reconcile loop admission with orchestration leases and durable receipts
+- **Question:** the first authoritative land attempt stopped on concurrent m6-orchestration-core changes to structured lifecycle/send methods, schemas and the plugin guide
+- **Options:** keep only loop guards; keep only orchestration receipts/leases; compose both admission and lifetime contracts
+- **Chose:** one per-session serialized send admission path with startup, exact-incarnation, idle and journal-sequence checks. Preserve operation single-flight and durable completed/uncertain receipt replay; guard veto precedes new receipt reservation and prompt bytes. Existing no-loop-guard fingerprints remain stable; supplied loop guards participate in new payload identity. Keep native lease/deferStart/account-preparation ordering, plugin-owner cleanup on early/late registration and shared awaited stop cleanup. Both guide sections and the union of send schema fields remain.
+- **Why:** losing either side would permit unsafe prompt delivery or duplicate/unauthorized orchestration effects. The integration owner read the complete incoming decision log through D42/Progress and reconciled D28/D30/D31/D39/D42; D41's automatic idle-nudging deferral remains untouched.
+- **Evidence:** authoritative land exit1/conflict result; scoped MergeLoopLeases handoff (only main.ts, manifest, README and guarded-send tests); added combined idle/sequence/incarnation/receipt boundary cases. Merged typing, loop/structured tests and native smoke must pass before the merge is committed.
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** merged verification exposes an admission or receipt incompatibility
+- **Source:** locked by docs/loop/decisions/m6-orchestration-core.md
+
+## D25: Keep shutdown cleanup independent of revoked identity lookups
+- **Question:** merged verification found two deterministic structured-deactivation failures plus timeout failures in the large local combined run
+- **Options:** relax deactivation assertions; query a revoked launch capability during cleanup; use already-held lease revokers while inactive
+- **Chose:** inactive shutdown skips the guarded sessionIdentity lookup and still releases its retained native lease and stops each runner. Active guarded stops retain exact-incarnation checks. Add the incoming required CliContext.requestBase to the loop CLI fixture. No test assertions or condition deadlines were relaxed.
+- **Why:** stopSession's identity lookup ran before provider cleanup and threw after kernel context revocation, leaving the runner untouched. The existing two deactivation regressions now pass2/0, and combined idle/incarnation/sequence/receipt tests pass10/0 with35assertions. The native CLI smoke passes3iterations on the reconciled lease runtime; typecheck passes595/609 unchanged installs. The earlier local156pass/23fail run is not represented as green; remote structured/loops/orchestration verification remains required.
+- **Evidence:** merged local run artefact99; shutdown regressions bg39; guarded-send bg41; native smoke bg34; final typecheck bg38. The short120second typecheck attempt timed out, not a diagnostic success.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** remote verification exposes another lease/owner lifecycle incompatibility
+- **Source:** locked by docs/loop/decisions/m6-orchestration-core.md
+
 ## Progress
-Ready for authoritative land under D18. Source tips95383d97/e0582785/f181908e and the one roadmap catch-up are integrated. All workers are complete; original worktrees removed; no running owned app/daemon from smoke remains. Required affected run was not falsely called green: it found three persistent fixture/caller failures, all repaired and exercised in the20/0consumer gate; scheduler passed its automatic isolated retry. Scripts68/0 and final typecheck pass; native CLI/daemon scripted Codex-protocol smoke passes on the caught-up runtime. Commit these final fixture/docs changes, detach, and run authoritative queue.ts land m5-loops-core without an outer deadline. Its full merged-tree gate is still required before the item is done. No final model-review PASS; native-only scenarios remain pending.
+Reconciled orchestration/loop merge is ready to commit as a recovery checkpoint. Scoped guarded-send10/0 and shutdown2/0 regressions pass, typecheck passes, and native CLI smoke passes. The broad local run was156/23 (not green); run the three relevant directories on the prescribed remote suite after committing, then detach and retry authoritative land only after its result is handled. No worker remains active. Preserve D24/D25 contracts and do not drop native leases/receipts or loop guards. Full merged-tree controller must still pass before item completion; native-only scenarios remain pending.

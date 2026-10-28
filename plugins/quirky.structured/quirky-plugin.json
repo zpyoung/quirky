@@ -10,13 +10,15 @@
     "method": [
       {
         "id": "create",
-        "description": "Starts a structured (no PTY) Claude or Codex conversation, optionally with model and effort picks. Extra arguments are refused.",
+        "description": "Starts a structured (no PTY) Claude or Codex conversation. `deferStart` reserves a live session and lease without an initial turn; otherwise `prompt` is required. Extra arguments are refused.",
         "params": {
           "type": "object",
           "properties": {
             "worktree": { "type": "string", "description": "A worktree selector; defaults to the caller's worktree." },
             "agent": { "type": "string", "enum": ["claude", "codex"], "description": "The structured provider to run." },
             "prompt": { "type": "string" },
+            "deferStart": { "type": "boolean", "description": "Reserve the live structured session and lease without sending an initial turn." },
+            "title": { "type": "string", "description": "Optional session title." },
             "model": { "type": "string", "description": "A model ID from the agent's catalog, 1 to 128 characters." },
             "options": {
               "type": "object",
@@ -25,7 +27,7 @@
             },
             "extraArgs": { "type": "string", "description": "Refused: a structured session has no command line." }
           },
-          "required": ["agent", "prompt"]
+          "required": ["agent"]
         },
         "result": {
           "type": "object",
@@ -114,12 +116,21 @@
         "description": "Stops a structured provider connection without removing its session record or journal.",
         "params": {
           "type": "object",
-          "properties": { "session": { "type": "string" } },
+          "properties": {
+            "session": { "type": "string" },
+            "expectedIncarnation": { "type": "string", "description": "Stops only this exact live lease incarnation." }
+          },
           "required": ["session"]
         },
         "result": {
           "type": "object",
-          "properties": { "ok": { "type": "boolean" } },
+          "properties": {
+            "ok": { "type": "boolean" },
+            "closed": { "type": "boolean" },
+            "sessionId": { "type": "string" },
+            "processIncarnation": { "type": "string" },
+            "reason": { "type": "string", "enum": ["recipient_changed", "recipient_gone"] }
+          },
           "required": ["ok"]
         }
       },
@@ -133,13 +144,18 @@
             "session": { "type": "string" },
             "text": { "type": "string" },
             "requireIdle": { "type": "boolean" },
-            "expectedAfterSeq": { "type": "integer", "minimum": 0 }
+            "expectedAfterSeq": { "type": "integer", "minimum": 0 },
+            "expectedIncarnation": { "type": "string", "description": "When present, sends only to this live structured lease incarnation." },
+            "operationId": { "type": "string", "description": "Optional durable idempotency key for exact retry; reusing it with different input is refused." }
           },
           "required": ["session", "text"]
         },
         "result": {
           "type": "object",
-          "properties": { "ok": { "type": "boolean" } },
+          "properties": {
+            "ok": { "type": "boolean" },
+            "reason": { "type": "string", "enum": ["operation_unknown", "recipient_changed", "recipient_gone"] }
+          },
           "required": ["ok"]
         }
       }

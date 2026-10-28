@@ -17,6 +17,33 @@
           },
           "required": ["agent", "prompt"]
         }
+      },
+      {
+        "id": "pointerSession",
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": { "type": "string" },
+            "status": { "type": "string" }
+          }
+        },
+        "result": { "type": "object", "additionalProperties": true }
+      },
+      {
+        "id": "send",
+        "params": { "type": "object", "additionalProperties": true },
+        "result": { "type": "object", "properties": { "ok": { "type": "boolean" } }, "required": ["ok"] }
+      },
+      {
+        "id": "pointerSends",
+        "readOnly": true,
+        "params": { "type": "object" },
+        "result": { "type": "array", "items": { "type": "object", "additionalProperties": true } }
+      },
+      {
+        "id": "stop",
+        "params": { "type": "object", "additionalProperties": true },
+        "result": { "type": "object", "additionalProperties": true }
       }
     ]
   }
