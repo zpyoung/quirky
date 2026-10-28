@@ -1251,7 +1251,8 @@
       "deps": [
         "m6-heimdall-core"
       ],
-      "status": "todo"
+      "status": "in-progress",
+      "lane": 11
     },
     {
       "id": "m6-orchestration-idle-pointer-shutdown",
