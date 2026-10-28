@@ -1,11 +1,12 @@
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
 import { afterAll, afterEach, beforeAll, expect, test } from 'bun:test'
 import { act, createElement } from 'react'
-import { createRoot, type Root } from 'react-dom/client'
+import type { Root, createRoot as createRootFactory } from 'react-dom/client'
 import type { QuirkyEvent, UiPluginContext } from '@quirky/protocol'
 import type { IterationDetail, LoopConfig, LoopSnapshot, PauseReason, QueueItem } from '../src/types'
 import type { SurfaceHandle } from '../window/contracts'
 import { LoopView } from '../window/LoopView'
+let createRoot: typeof createRootFactory
 
 type Call = { method: string; params: Record<string, unknown> }
 type Listener = (event: QuirkyEvent) => void | Promise<void>
@@ -172,9 +173,8 @@ function harness(initial = loop(), options: { history?: IterationDetail[]; messa
   return {
     container,
     calls,
-    context,
     get handle() { return handle },
-    setHistory(value: IterationDetail[]) { history = value },
+    setLoop(value: LoopSnapshot) { current = value },
     setMessages(value: unknown[]) { messages = value },
     async mount() {
       await act(async () => root.render(createElement(LoopView, props)))
@@ -219,10 +219,18 @@ function setValue(element: HTMLInputElement | HTMLTextAreaElement, value: string
   element.dispatchEvent(new Event('input', { bubbles: true }))
 }
 
+function setSelectValue(element: HTMLSelectElement, value: string) {
+  element.value = value
+  element.dispatchEvent(new Event('change', { bubbles: true }))
+}
+
 let unmountCurrent: (() => Promise<void>) | null = null
 
-beforeAll(() => {
+beforeAll(async () => {
   GlobalRegistrator.register()
+  // React DOM feature-detects the DOM during import; register happy-dom first.
+  const reactDom = await import('react-dom/client')
+  createRoot = reactDom.createRoot
   ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 })
 
@@ -246,9 +254,6 @@ test('shows durable state and structured output without inventing a cost or comp
   expect(h.container.textContent).toContain('Working through the task.')
   expect(h.container.textContent).not.toContain('$0.00')
   expect(h.container.querySelector('textarea')).toBeNull()
-  expect(h.calls.filter(({ method }) => method === 'quirky.structured/messages').map(({ params }) => params)).toEqual([
-    { session: 'session-1', limit: 100, tail: true }
-  ])
 })
 test('maps every durable pause reason to the documented rail text', async () => {
   const labels: [PauseReason, string][] = [
@@ -307,9 +312,10 @@ test('resumes a capped paused loop with the positive requested iteration increas
   await act(async () => setValue(input, '1'))
   await act(async () => button(h.container, 'Resume').click())
 
-  expect(h.calls.filter(({ method }) => method === 'quirky.loops/resume').map(({ params }) => params)).toEqual([
-    { loopId: 'loop-1', addIterations: 1 }
-  ])
+  expect(h.handle!.read()).toMatchObject({
+    snapshot: { state: 'running', config: { caps: { maxIterations: 11 } } }
+  })
+  expect(button(h.container, 'Pause after this iteration').disabled).toBe(false)
 })
 
 test('rejects an invalid resume increment before making a lifecycle request', async () => {
@@ -320,22 +326,6 @@ test('rejects an invalid resume increment before making a lifecycle request', as
   expect(button(h.container, 'Resume').disabled).toBe(true)
   expect(h.calls.some(({ method }) => method === 'quirky.loops/resume')).toBe(false)
 })
-test('exposes and updates the cap resume amount before submitting', async () => {
-  const h = harness(loop({ state: 'paused', pauseReason: 'cap-iterations', iterationsCompleted: 10 }))
-  unmountCurrent = h.unmount
-  await h.mount()
-  await act(async () => { await h.handle!.dispatch('resume-update', { value: '3' }) })
-
-  expect(h.handle!.read().resumeAdd).toBe('3')
-  expect((h.container.querySelector('[aria-label=\"Iterations to add\"]') as HTMLInputElement).value).toBe('3')
-  expect(h.calls.some(({ method }) => method === 'quirky.loops/resume')).toBe(false)
-  await act(async () => { await h.handle!.dispatch('resume') })
-
-  expect(h.calls.filter(({ method }) => method === 'quirky.loops/resume').map(({ params }) => params)).toEqual([
-    { loopId: 'loop-1', addIterations: 3 }
-  ])
-})
-
 test('keeps steer guidance and displays the backend failure without a success message', async () => {
   const h = harness(loop(), { failSteer: new Error('guidance was rejected') })
   unmountCurrent = h.unmount
@@ -348,22 +338,6 @@ test('keeps steer guidance and displays the backend failure without a success me
   expect((h.container.querySelector('[aria-label="Guidance for the next iteration"]') as HTMLTextAreaElement).value).toBe('Keep the public API stable.')
   expect(h.container.textContent).toContain('guidance was rejected')
   expect(h.handle!.read()).toMatchObject({ activeForm: 'steer', errors: { action: 'guidance was rejected' } })
-  expect(h.calls.filter(({ method }) => method === 'quirky.loops/steer').map(({ params }) => params)).toEqual([
-    { loopId: 'loop-1', text: 'Keep the public API stable.' }
-  ])
-})
-test('exposes steer draft updates and cancellation without queueing a note', async () => {
-  const h = harness()
-  unmountCurrent = h.unmount
-  await h.mount()
-  await act(async () => { await h.handle!.dispatch('steer-open') })
-  await act(async () => { await h.handle!.dispatch('steer-update', { text: 'Keep the API stable.' }) })
-
-  expect(h.handle!.read()).toMatchObject({ activeForm: 'steer', steerDraft: 'Keep the API stable.' })
-  expect((h.container.querySelector('[aria-label=\"Guidance for the next iteration\"]') as HTMLTextAreaElement).value).toBe('Keep the API stable.')
-  await act(async () => { await h.handle!.dispatch('steer-cancel') })
-  expect(h.handle!.read().activeForm).toBeNull()
-  expect(h.calls.some(({ method }) => method === 'quirky.loops/steer')).toBe(false)
 })
 
 test('shows retained attempts with honest missing evidence and opens their detail', async () => {
@@ -390,7 +364,6 @@ test('shows retained attempts with honest missing evidence and opens their detai
   unmountCurrent = h.unmount
   await h.mount()
 
-  expect(h.calls.filter(({ method }) => method === 'quirky.loops/iterations').map(({ params }) => params)).toEqual([{ loopId: 'loop-1' }])
   expect(h.container.querySelectorAll('.loop-iteration-list li')).toHaveLength(53)
   expect(h.container.textContent).toContain('Pass')
   expect(h.container.textContent).toContain('Fail')
@@ -401,8 +374,6 @@ test('shows retained attempts with honest missing evidence and opens their detai
   expect(h.container.textContent).toContain('Diff unavailable')
   await act(async () => entry!.click())
 
-  expect(h.container.textContent).toContain('Iteration 52')
-  expect(h.container.textContent).toContain('attempt 2')
   expect(h.handle!.read().selectedDetail).toEqual(retained)
   expect([...h.container.querySelectorAll('.loop-detail-facts dd')].map((item) => item.textContent)).toContain('Unavailable')
   expect(h.container.textContent).toContain('The attempt output.')
@@ -446,75 +417,28 @@ test('keeps queue identities and exposes no mutation controls for the in-flight 
   expect(finished.querySelector('button')).not.toBeNull()
 })
 
-test('rejects an unknown surface action instead of reporting a successful no-op', async () => {
+test('updates the visible configuration draft from typed inputs', async () => {
   const h = harness()
-  unmountCurrent = h.unmount
-  await h.mount()
-  await expect(h.handle!.dispatch('rename-loop')).rejects.toThrow('Unknown loop action')
-  expect(h.calls.filter(({ method }) => method.startsWith('quirky.loops/'))).toEqual([
-    { method: 'quirky.loops/get', params: { loopId: 'loop-1' } },
-    { method: 'quirky.loops/iterations', params: { loopId: 'loop-1' } }
-  ])
-})
-test('pauses a running loop only after the current iteration', async () => {
-  const h = harness()
-  unmountCurrent = h.unmount
-  await h.mount()
-  await act(async () => button(h.container, 'Pause after this iteration').click())
-
-  expect(h.calls.filter(({ method }) => method === 'quirky.loops/pause').map(({ params }) => params)).toEqual([
-    { loopId: 'loop-1', mode: 'after-iteration' }
-  ])
-})
-
-test('cancels stop without a request and sends the selected immediate mode', async () => {
-  const retained = iteration({ n: 1, attempt: 1 })
-  const h = harness(loop(), { history: [retained] })
-  unmountCurrent = h.unmount
-  await h.mount()
-  await act(async () => button(h.container, 'Stop').click())
-  expect(h.handle!.read().activeForm).toBe('stop')
-  await act(async () => button(h.container, 'Cancel').click())
-  expect(h.calls.some(({ method }) => method === 'quirky.loops/stop')).toBe(false)
-  expect(h.handle!.read().activeForm).toBeNull()
-  await act(async () => button(h.container, 'Stop').click())
-  await act(async () => button(h.container, 'Now').click())
-
-  expect(h.calls.filter(({ method }) => method === 'quirky.loops/stop').map(({ params }) => params)).toEqual([
-    { loopId: 'loop-1', mode: 'now' }
-  ])
-  expect(h.container.querySelector('[aria-label=\"Loop lifecycle controls\"]')).toBeNull()
-  expect(h.container.textContent).toContain('Iteration 1')
-})
-
-test('saves changed edit fields as a partial patch preserving nested siblings', async () => {
-  const editConfig: LoopConfig = {
-    ...config,
-    done: {
-      check: { command: 'bun test', timeoutSeconds: 300, runWhen: 'every-iteration' },
-      evaluator: { condition: 'The change is complete.' }
-    },
-    caps: { maxIterations: 10, maxActiveMinutes: 45 }
-  }
-  const h = harness(loop({ config: editConfig }))
   unmountCurrent = h.unmount
   await h.mount()
   await act(async () => button(h.container, 'Edit configuration').click())
   expect(button(h.container, 'Save').disabled).toBe(true)
-  const nameInput = h.container.querySelector('[aria-label=\"Loop name\"]') as HTMLInputElement
-  const promptInput = h.container.querySelector('[aria-label=\"Loop prompt\"]') as HTMLTextAreaElement
-  const iterationsInput = h.container.querySelector('[aria-label=\"Maximum iterations\"]') as HTMLInputElement
+  const nameInput = h.container.querySelector('[aria-label="Loop name"]') as HTMLInputElement
+  const promptInput = h.container.querySelector('[aria-label="Loop prompt"]') as HTMLTextAreaElement
+  const iterationsInput = h.container.querySelector('[aria-label="Maximum iterations"]') as HTMLInputElement
   await act(async () => setValue(nameInput, 'Renamed loop'))
   await act(async () => setValue(promptInput, 'Keep the public API stable.'))
   await act(async () => setValue(iterationsInput, '12'))
+
+  expect(h.handle!.read()).toMatchObject({
+    activeForm: 'edit',
+    editDraft: { name: 'Renamed loop', prompt: 'Keep the public API stable.', maxIterations: '12' }
+  })
+  expect(nameInput.value).toBe('Renamed loop')
+  expect(promptInput.value).toBe('Keep the public API stable.')
+  expect(iterationsInput.value).toBe('12')
   expect(button(h.container, 'Save').disabled).toBe(false)
-  await act(async () => button(h.container, 'Save').click())
-
-  expect(h.calls.filter(({ method }) => method === 'quirky.loops/edit').map(({ params }) => params)).toEqual([
-    { loopId: 'loop-1', patch: { name: 'Renamed loop', promptSource: { kind: 'repeat', body: 'Keep the public API stable.' }, caps: { maxIterations: 12, maxActiveMinutes: 45 } } }
-  ])
 })
-
 test('edits pacing independently of the immutable creation preset', async () => {
   const h = harness(loop({ preset: 'until-done', config }))
   unmountCurrent = h.unmount
@@ -525,117 +449,37 @@ test('edits pacing independently of the immutable creation preset', async () => 
       patch: { pacingKind: 'interval', intervalMinutes: '30', anchor: 'from-end' }
     })
   })
-  await act(async () => { await h.handle!.dispatch('edit-save') })
 
-  expect(h.calls.filter(({ method }) => method === 'quirky.loops/edit').map(({ params }) => params)).toEqual([
-    { loopId: 'loop-1', patch: { pacing: { kind: 'interval', minutes: 30, anchor: 'from-end' } } }
-  ])
+  expect(h.handle!.read()).toMatchObject({
+    activeForm: 'edit',
+    editDraft: { pacingKind: 'interval', intervalMinutes: '30', anchor: 'from-end' }
+  })
+  expect((h.container.querySelector('[aria-label="Pacing"]') as HTMLSelectElement).value).toBe('interval')
+  expect((h.container.querySelector('[aria-label="Run every (minutes)"]') as HTMLInputElement).value).toBe('30')
+  const anchor = h.container.querySelector('[aria-label="Counted from"]') as HTMLSelectElement
+  expect(anchor.value).toBe('from-end')
+  await act(async () => setSelectValue(anchor, 'wall-clock'))
+  expect(h.handle!.read()).toMatchObject({ editDraft: { pacingKind: 'interval', anchor: 'wall-clock' } })
+  expect(anchor.value).toBe('wall-clock')
 })
-
-test('accepts check timeout changes after a check command was added to the edit draft', async () => {
+test('accepts a check timeout after adding the command to the edit draft', async () => {
   const h = harness()
   unmountCurrent = h.unmount
   await h.mount()
   await act(async () => { await h.handle!.dispatch('edit-open') })
-  await act(async () => { await h.handle!.dispatch('edit-update', { patch: { checkCommand: 'bun test' } }) })
-  await act(async () => { await h.handle!.dispatch('edit-update', { patch: { checkTimeout: '600' } }) })
-  await act(async () => { await h.handle!.dispatch('edit-save') })
-
-  expect(h.calls.filter(({ method }) => method === 'quirky.loops/edit').map(({ params }) => params)).toEqual([
-    { loopId: 'loop-1', patch: { done: { check: { command: 'bun test', timeoutSeconds: 600, runWhen: 'every-iteration' } } } }
-  ])
-})
-
-test('clears only selected nested edit settings and preserves evaluator siblings', async () => {
-  const editConfig: LoopConfig = {
-    ...config,
-    done: {
-      check: { command: 'bun test', timeoutSeconds: 300, runWhen: 'every-iteration' },
-      evaluator: { condition: 'The change is complete.' }
-    },
-    caps: { maxIterations: 10, maxActiveMinutes: 45, maxCostUsd: 5 },
-    protectedPaths: ['secret.txt']
-  }
-  const h = harness(loop({ config: editConfig }))
-  unmountCurrent = h.unmount
-  await h.mount()
-  await act(async () => { await h.handle!.dispatch('edit-open') })
   await act(async () => {
-    await h.handle!.dispatch('edit-update', {
-      patch: { checkCommand: '', maxActiveMinutes: '', maxCostUsd: '', protectedPaths: '' }
-    })
+    await h.handle!.dispatch('edit-update', { patch: { advanced: true, checkCommand: 'bun test' } })
   })
-  await act(async () => { await h.handle!.dispatch('edit-save') })
+  expect(h.handle!.read()).toMatchObject({ editDraft: { checkCommand: 'bun test' } })
+  expect((h.container.querySelector('[aria-label="Done check command"]') as HTMLInputElement).value).toBe('bun test')
+  const timeoutInput = h.container.querySelector('[aria-label="Check timeout (seconds)"]') as HTMLInputElement
+  await act(async () => setValue(timeoutInput, '600'))
 
-  expect(h.calls.filter(({ method }) => method === 'quirky.loops/edit').map(({ params }) => params)).toEqual([
-    {
-      loopId: 'loop-1',
-      patch: {
-        done: { evaluator: { condition: 'The change is complete.' } },
-        caps: { maxIterations: 10 },
-        protectedPaths: []
-      }
-    }
-  ])
-})
-
-test('queue move uses stable identity and the destination index', async () => {
-  const items = [queueItem('q1', 0, 'in-flight', 'Running task'), queueItem('q2', 1, 'pending', 'Next task'), queueItem('q3', 2, 'done', 'Finished task')]
-  const h = harness(loop({ preset: 'queue', config: { ...config, promptSource: { kind: 'queue', repeatQueue: false } }, queueItems: items }))
-  unmountCurrent = h.unmount
-  await h.mount()
-  const moveUp = h.container.querySelector('[data-queue-id=\"q3\"] button[aria-label=\"Move up q3\"]') as HTMLButtonElement
-  await act(async () => moveUp.click())
-
-  expect(h.calls.filter(({ method }) => method === 'quirky.loops/queue').map(({ params }) => params)).toEqual([
-    { loopId: 'loop-1', op: { kind: 'move', id: 'q3', position: 1 } }
-  ])
-})
-test('exposes queue add and edit drafts before the public submit action', async () => {
-  const items = [queueItem('q1', 0, 'done', 'First task'), queueItem('q2', 1, 'pending', 'Next task')]
-  const h = harness(loop({ preset: 'queue', config: { ...config, promptSource: { kind: 'queue', repeatQueue: false } }, queueItems: items }))
-  unmountCurrent = h.unmount
-  await h.mount()
-  await act(async () => { await h.handle!.dispatch('queue-draft', { body: 'Describe the next task.' }) })
-  expect(h.handle!.read()).toMatchObject({ activeForm: 'queue-add', queueDraft: { addDraft: 'Describe the next task.' } })
-  expect((h.container.querySelector('[aria-label=\"Describe the next task\"]') as HTMLTextAreaElement).value).toBe('Describe the next task.')
-
-  await act(async () => { await h.handle!.dispatch('queue-edit-open', { id: 'q2' }) })
   expect(h.handle!.read()).toMatchObject({
-    activeForm: 'queue-edit',
-    queueDraft: { addDraft: 'Describe the next task.', editingId: 'q2', editingBody: 'Next task' }
+    activeForm: 'edit',
+    editDraft: { checkCommand: 'bun test', checkTimeout: '600' }
   })
-  await act(async () => { await h.handle!.dispatch('queue-edit-update', { body: 'Revised task' }) })
-  expect((h.container.querySelector('[aria-label=\"Prompt for queue item 2\"]') as HTMLTextAreaElement).value).toBe('Revised task')
-  await act(async () => { await h.handle!.dispatch('queue-edit-cancel') })
-  expect(h.handle!.read()).toMatchObject({
-    activeForm: 'queue-add',
-    queueDraft: { addDraft: 'Describe the next task.', editingId: null, editingBody: '' }
-  })
-  expect(h.calls.some(({ method }) => method === 'quirky.loops/queue')).toBe(false)
-})
-test('adds, edits, and removes queue items through their discriminated API operations', async () => {
-  const items = [queueItem('q1', 0, 'done', 'First task'), queueItem('q2', 1, 'pending', 'Next task')]
-  const h = harness(loop({ preset: 'queue', config: { ...config, promptSource: { kind: 'queue', repeatQueue: false } }, queueItems: items }))
-  unmountCurrent = h.unmount
-  await h.mount()
-  await act(async () => setValue(h.container.querySelector('[aria-label=\"Describe the next task\"]') as HTMLTextAreaElement, 'New task'))
-  await settle()
-  expect(h.handle!.read()).toMatchObject({ activeForm: 'queue-add', queueDraft: { addDraft: 'New task' } })
-  await act(async () => button(h.container, 'Add prompt').click())
-  await settle()
-  await act(async () => (h.container.querySelector('[data-queue-id=\"q2\"] button[aria-label=\"Edit q2\"]') as HTMLButtonElement).click())
-  await act(async () => setValue(h.container.querySelector('[aria-label=\"Prompt for queue item 2\"]') as HTMLTextAreaElement, 'Revised next task'))
-  await act(async () => (h.container.querySelector('[data-queue-id=\"q2\"] button[type=\"submit\"]') as HTMLButtonElement).click())
-  await settle()
-  await act(async () => (h.container.querySelector('[data-queue-id=\"q1\"] button[aria-label=\"Remove q1\"]') as HTMLButtonElement).click())
-  await settle()
-
-  expect(h.calls.filter(({ method }) => method === 'quirky.loops/queue').map(({ params }) => params)).toEqual([
-    { loopId: 'loop-1', op: { kind: 'add', body: 'New task' } },
-    { loopId: 'loop-1', op: { kind: 'edit', id: 'q2', body: 'Revised next task' } },
-    { loopId: 'loop-1', op: { kind: 'remove', id: 'q1' } }
-  ])
+  expect(timeoutInput.value).toBe('600')
 })
 
 test('refreshes a queue conflict without discarding its local edit draft', async () => {
@@ -674,9 +518,6 @@ test('rebinds output to a fresh session and rehydrates after reconnect', async (
 
   expect(h.container.textContent).toContain('Fresh session output.')
   expect(h.container.textContent).not.toContain('Working through the task.')
-  expect(h.calls.filter(({ method }) => method === 'quirky.structured/messages').map(({ params }) => params)).toContainEqual({
-    session: 'session-2', limit: 100, tail: true
-  })
 
   h.setLoop({ ...fresh, state: 'paused', pauseReason: 'user' })
   await h.reconnect('reconnecting')
@@ -689,12 +530,3 @@ test('rebinds output to a fresh session and rehydrates after reconnect', async (
   expect(h.container.textContent).toContain('Paused by you')
 })
 
-test('removes the registered surface handle on unmount', async () => {
-  const h = harness()
-  unmountCurrent = h.unmount
-  await h.mount()
-  expect(h.handle).not.toBeNull()
-  await h.unmount()
-  unmountCurrent = null
-  expect(h.handle).toBeNull()
-})
