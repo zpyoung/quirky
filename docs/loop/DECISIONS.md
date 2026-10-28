@@ -2083,6 +2083,12 @@ files, not this one.
 | easy | high | [m0-daemon-api D41](decisions/m0-daemon-api.md) | The daemon plugin API is kernel, not a built-in plugin | locked by docs/roadmap.md |
 | easy | high | [m0-daemon-api D43](decisions/m0-daemon-api.md) | The final review loop ends after the closure round passes on all three lenses | assumed — autonomous |
 | easy | high | [m0-daemon-api D44](decisions/m0-daemon-api.md) | Every scenario has an API test, and there are no Orca defects to test | locked by docs/loop/LOOP.md |
+| easy (bounded lifecycle/test repair). | high | [fix-test-packages-pty-host-1028 D1](decisions/fix-test-packages-pty-host-1028.md) | Preserve the stop-with-history lifecycle contract | assumed — autonomous |
+| easy (test fixture only). | high | [fix-test-packages-pty-host-1028 D2](decisions/fix-test-packages-pty-host-1028.md) | Exercise scrollback rather than searching the visible screen through history | locked by docs/loop/decisions/m1-term-daemon.md |
+| easy | high | [fix-test-packages-pty-host-1028 D3](decisions/fix-test-packages-pty-host-1028.md) | Verify preserved output, not an incidental newest-page boundary | locked by docs/quirk/specs/2026-10-26-m1-term-daemon/logic.md |
+| easy | high for the reported failure, not all possible scheduling failures. | [fix-test-packages-pty-host-1028 D4](decisions/fix-test-packages-pty-host-1028.md) | Keep the repair test-only and retain existing ownership safeguards | assumed — autonomous |
+| easy | high | [fix-test-packages-pty-host-1028 D5](decisions/fix-test-packages-pty-host-1028.md) | Preserve incoming repairs and their independent evidence boundaries | locked by incoming decision logs |
+| easy | high for the exercised lifecycle and exact failure. | [fix-test-packages-pty-host-1028 D6](decisions/fix-test-packages-pty-host-1028.md) | Land the bounded fixture repair with exercised lifecycle evidence | assumed — autonomous |
 | easy | high | [m2-editor-build-unbuilt-flows D2](decisions/m2-editor-build-unbuilt-flows.md) | Apply unattended build-first workflow | locked by docs/loop/LOOP.md |
 | easy | high | [m2-editor-build-unbuilt-flows D6](decisions/m2-editor-build-unbuilt-flows.md) | Clipboard ranges use source coordinates and quoted TSV | assumed — autonomous |
 | easy | high | [m2-editor-build-unbuilt-flows D8](decisions/m2-editor-build-unbuilt-flows.md) | Three disjoint vertical components share committed contracts | assumed — autonomous |
