@@ -20,6 +20,7 @@ import type {
   WorkerRow,
 } from './src/contracts'
 import { workerCommands } from './src/workers/cli'
+import type { OrchestrationPolicy, OrchestrationSkillStatus } from './src/ui-contracts'
 
 type ObjectValue = Record<string, unknown>
 type ResponseGuard<M extends OrchestrationMethod> = (value: unknown) => value is OrchestrationMethodResult<M>
@@ -476,6 +477,13 @@ async function call<M extends OrchestrationMethod>(
 function output<T>(context: CliContext, value: T, text: string): void {
   context.out.result(value, () => text)
 }
+function skillStatusText(status: OrchestrationSkillStatus): string {
+  return [
+    status.text,
+    ...status.agents.map((agent) => `${agent.label}: ${agent.state}${agent.path ? ` (${agent.path})` : ''}${agent.detail ? ` — ${agent.detail}` : ''}`)
+  ].join('\n')
+}
+
 
 function parseSendTarget(value: string, context: CliContext): ObjectValue {
   if (value.startsWith('run:')) {
@@ -896,6 +904,47 @@ export const commands: CliModule['commands'] = {
       ? `No receipt for ${result.requestId}. Absence does not prove that no effect occurred.`
       : `Request ${result.requestId} is ${result.state}: ${result.interpretation}`
     output(context, result, text)
+  },
+
+  'skill-show': async (_args, context) => {
+    const result = await context.call('quirky.orchestration/skillShow', {})
+    if (!isObject(result) || !isString(result.skill)) throw context.fail('The runtime returned an invalid orchestration skill.')
+    output(context, result, result.skill)
+  },
+
+  'skill-status': async (_args, context) => {
+    const status = await context.call('quirky.orchestration/skillStatus', {}) as OrchestrationSkillStatus
+    output(context, status, skillStatusText(status))
+  },
+
+  'skill-install': async (args, context) => {
+    const agents = stringArrayFlag(args, context, 'agents')
+    const status = await context.call('quirky.orchestration/skillInstall', agents === undefined ? {} : { agents }) as OrchestrationSkillStatus
+    output(context, status, skillStatusText(status))
+  },
+
+  'policy-show': async (_args, context) => {
+    const policy = await context.call('quirky.orchestration/policyShow', {}) as OrchestrationPolicy
+    output(context, policy, `Nested worker depth: ${policy.nestedWorkerMaxDepth}\n${policy.canChange ? 'This unbound client may change the policy.' : 'This session or paired client cannot change the policy.'}`)
+  },
+
+  'policy-set': async (args, context) => {
+    const nestedWorkerMaxDepth = integerFlag(args, context, 'nested-worker-max-depth')
+    if (nestedWorkerMaxDepth === undefined || nestedWorkerMaxDepth < 1) {
+      throw context.usage('--nested-worker-max-depth must be an integer greater than or equal to 1')
+    }
+    const policy = await context.call('quirky.orchestration/policySet', { nestedWorkerMaxDepth }) as OrchestrationPolicy
+    output(context, policy, `Nested worker depth set to ${policy.nestedWorkerMaxDepth}.`)
+  },
+
+  'task-terminal': async (args, context) => {
+    const taskId = stringFlag(args, context, 'task-id')
+    const target = await context.call('quirky.orchestration/taskTerminal', { taskId })
+    if (!isObject(target) || !isString(target.taskId) || !isString(target.dispatchId) ||
+      !isString(target.sessionId) || !isString(target.worktreeId)) {
+      throw context.fail('The runtime returned an invalid task terminal target.')
+    }
+    output(context, target, `Task ${target.taskId} is assigned to session ${target.sessionId} in workspace ${target.worktreeId} (Dispatch ${target.dispatchId}).`)
   },
 
   reset: async (args, context) => {

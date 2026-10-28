@@ -12,6 +12,7 @@ export function WorkspaceView({ controller }: { controller: WorkspaceController 
 
   if (state.status === 'missing') return <p className="qt-muted qt-pad">Worktree not found</p>
   if (state.status === 'error') return <p className="qt-muted qt-pad">Could not load the workspace</p>
+  if (state.selectionError) return <p className="qt-muted qt-pad" role="alert">{state.selectionError}</p>
   if (!workspace || !root) return null
   const reportFocus = (event: ReactFocusEvent<HTMLDivElement>) => {
     noteFocus(controller)

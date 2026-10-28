@@ -342,6 +342,12 @@ Registration update: `bun scripts/build-loop/queue.ts add /tmp/quirky-session-in
 
 - **Verification limit:** no final cross-family review was started. LOOP's expired-item fast path was used after owned checks and typecheck passed (dispatch D26); this is not model-review clearance.
 
+## m5-automations-ui: deferred remote authority surfaces
+
+- **Source decision:** `docs/loop/decisions/m5-automations-ui.md` D15. Local create/edit/list/details/runs and local OpenClaw controls ship; no remote action is redirected to the local machine.
+- **Remaining flow:** remote Host selection, owner-preserving authority moves, remote list/history availability, and remote OpenClaw controls need public host registration-generation, execution, ownership and capability APIs. The editor currently explains local-only authority; raw arguments remain visibly unsupported under the structured-runner contract.
+- **Owner:** the single follow-up `m5-automations-ui-remote-authorities`, dependent on this UI item and `m5-automations-dispatch-remote-and-args`, retains these UI flows until the public prerequisite exists.
+- **Verification limit:** final independent model review was not started under LOOP's expired-item rule (UI D16). Availability probes and criteria preparation are not review clearance. Native View-menu visibility remains pending in `docs/loop/native/m5-automations-ui.json`.
 ## sa-browser-pane: operator-approved narrow landing and existing follow-up ownership
 
 - **Current acceptance:** API/CLI pane lifecycle and navigation only, using the committed `build/sa-browser-pane` and `/tmp/sa-browser-pane.fiGLjz` trees. This supersedes the previous full-scenario acceptance promise; implementation and tests remain preserved and must not be deleted or weakened.
@@ -370,6 +376,10 @@ Registration update: `bun scripts/build-loop/queue.ts add /tmp/quirky-session-in
 - Unchanged failures still awaiting the normal merged retry: Git remote SC-29 wait (five possible predicates; available stack does not identify one), daemon lock five-second test bound, incoming loops-store five-second bound. No speculative producer change, timeout increase or waived assertion was used for these.
 - Operator's45-minute target was not met; the first controller verification alone took1800.57seconds after source submission. No on-time or authoritative landed claim is inferred from a submitted command.
 
+## m5-automations-ui: open review findings
+
+- **LOW — row action menu Escape dismissal unconfirmed** (`plugins/quirky.automations/src/list/AutomationsPage.tsx:1132,1148`). Original guarded campaign20261028T044328-79db observed Escape/Refresh leave the row menu open. Toggle/action navigation remained usable; the final expired-item batch fixed blocking flow/render failures only. No dismissal fix or passing dismissal assertion is claimed.
+- **Tool-only limits:** browser reload hotkeys returned no observable reload in the original campaign. The passing manual-run continuation20261028T061353-1ab4 closed its browser but reported a frontmost-restoration error; later render closure20261028T065201-fe17 ended cleanly with no kept-open windows or cleanup errors. Native menu/focus proof remains pending, not inferred from web screenshots.
 
 ## m4-editor-drop-open-in-place: blocked
 

@@ -5,6 +5,7 @@
   "description": "Durable Runs, task dependencies, Dispatch attempts, mail, questions, and decision gates.",
   "main": "main.ts",
   "cli": "cli.ts",
+  "ui": "dist/ui.js",
   "activation": "lazy",
   "dependencies": ["quirky.session", "quirky.agent-status", "quirky.terminal", "quirky.worktree", "quirky.agents", "quirky.repo"],
   "contributes": {
@@ -2348,6 +2349,22 @@
                         "type": "string",
                         "description": "Task identifier with the task_ prefix; the protocol schema subset cannot express string patterns."
                       },
+                      "taskTitle": {
+                        "type": "string"
+                      },
+                      "displayName": {
+                        "type": "string"
+                      },
+                      "coordinatorSessionId": {
+                        "description": "Coordinator session ID or null."
+                      },
+                      "parentSessionId": {
+                        "description": "Parent session ID or null."
+                      },
+                      "currentAssignment": {
+                        "type": "boolean",
+                        "description": "Whether this row has current assignment evidence from its prompt and terminal resource."
+                      },
                       "runId": {
                         "type": "string",
                         "description": "Run identifier with the run_ prefix; the protocol schema subset cannot express string patterns."
@@ -2805,6 +2822,11 @@
                     "required": [
                       "dispatchId",
                       "taskId",
+                      "taskTitle",
+                      "displayName",
+                      "coordinatorSessionId",
+                      "parentSessionId",
+                      "currentAssignment",
                       "runId",
                       "workerState",
                       "dispatchStatus",
@@ -3464,6 +3486,122 @@
               ],
               "additionalProperties": false
             }
+          },
+          {
+            "id": "skillShow",
+            "description": "Show the version-matched generated orchestration skill.",
+            "readOnly": true,
+            "params": {"type": "object", "properties": {}, "additionalProperties": false},
+            "result": {"type": "object", "properties": {"skill": {"type": "string"}}, "required": ["skill"], "additionalProperties": false}
+          },
+          {
+            "id": "skillStatus",
+            "description": "Compare detected agent skill targets with the current generated orchestration skill.",
+            "readOnly": true,
+            "params": {"type": "object", "properties": {}, "additionalProperties": false},
+            "result": {
+              "type": "object",
+              "properties": {
+                "state": {"type": "string", "enum": ["missing", "stale", "ready", "partial", "error"]},
+                "agents": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {"type": "string"},
+                      "label": {"type": "string"},
+                      "state": {"type": "string", "enum": ["ready", "missing", "stale", "unsupported", "error"]},
+                      "path": {"description": "Native target path, or null when unsupported."},
+                      "detail": {"description": "Additional state detail, or null."}
+                    },
+                    "required": ["id", "label", "state", "path", "detail"],
+                    "additionalProperties": false
+                  }
+                },
+                "installCommand": {"type": "string"},
+                "text": {"type": "string"}
+              },
+              "required": ["state", "agents", "installCommand", "text"],
+              "additionalProperties": false
+            }
+          },
+          {
+            "id": "skillInstall",
+            "description": "Explicitly install or update only the generated orchestration skill in selected detected agent targets.",
+            "params": {
+              "type": "object",
+              "properties": {
+                "agents": {"type": "array", "items": {"type": "string"}, "description": "Optional detected agent IDs; omitted installs every detected supported target."}
+              },
+              "additionalProperties": false
+            },
+            "result": {
+              "type": "object",
+              "properties": {
+                "state": {"type": "string", "enum": ["missing", "stale", "ready", "partial", "error"]},
+                "agents": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {"type": "string"},
+                      "label": {"type": "string"},
+                      "state": {"type": "string", "enum": ["ready", "missing", "stale", "unsupported", "error"]},
+                      "path": {"description": "Native target path, or null when unsupported."},
+                      "detail": {"description": "Additional state detail, or null."}
+                    },
+                    "required": ["id", "label", "state", "path", "detail"],
+                    "additionalProperties": false
+                  }
+                },
+                "installCommand": {"type": "string"},
+                "text": {"type": "string"}
+              },
+              "required": ["state", "agents", "installCommand", "text"],
+              "additionalProperties": false
+            }
+          },
+          {
+            "id": "policyShow",
+            "description": "Read the persisted nested worker depth policy and whether this caller may change it.",
+            "readOnly": true,
+            "params": {"type": "object", "properties": {}, "additionalProperties": false},
+            "result": {"type": "object", "properties": {"nestedWorkerMaxDepth": {"type": "integer"}, "canChange": {"type": "boolean"}}, "required": ["nestedWorkerMaxDepth", "canChange"], "additionalProperties": false}
+          },
+          {
+            "id": "policySet",
+            "description": "Set the persisted nested worker maximum depth from an unbound operator client.",
+            "params": {
+              "type": "object",
+              "properties": {
+                "nestedWorkerMaxDepth": {"type": "integer", "minimum": 1}
+              },
+              "required": ["nestedWorkerMaxDepth"],
+              "additionalProperties": false
+            },
+            "result": {"type": "object", "properties": {"nestedWorkerMaxDepth": {"type": "integer"}, "canChange": {"type": "boolean"}}, "required": ["nestedWorkerMaxDepth", "canChange"], "additionalProperties": false}
+          },
+          {
+            "id": "taskTerminal",
+            "description": "Resolve the exact current task Dispatch target for safe terminal navigation.",
+            "readOnly": true,
+            "params": {
+              "type": "object",
+              "properties": {"taskId": {"type": "string"}},
+              "required": ["taskId"],
+              "additionalProperties": false
+            },
+            "result": {
+              "type": "object",
+              "properties": {
+                "taskId": {"type": "string"},
+                "dispatchId": {"type": "string"},
+                "sessionId": {"type": "string"},
+                "worktreeId": {"type": "string"}
+              },
+              "required": ["taskId", "dispatchId", "sessionId", "worktreeId"],
+              "additionalProperties": false
+            }
           }
       ,
       {
@@ -3817,7 +3955,23 @@
             "methods": [
               "quirky.orchestration/workerRetain"
             ]
-          }
-        ]
+          },
+          {"id": "skill-show", "words": "skill-show", "summary": "print the generated orchestration skill", "flags": {}, "methods": ["quirky.orchestration/skillShow"]},
+          {"id": "skill-status", "words": "skill-status", "summary": "compare installed orchestration skill content with this build", "flags": {}, "methods": ["quirky.orchestration/skillStatus"]},
+          {"id": "skill-install", "words": "skill-install", "summary": "explicitly install or update the orchestration skill", "flags": {"agents": {"type": "json", "param": "agents", "description": "Optional JSON array of detected agent IDs; omitted installs all detected supported targets."}}, "methods": ["quirky.orchestration/skillInstall"]},
+          {"id": "policy-show", "words": "policy-show", "summary": "show the nested worker depth policy", "flags": {}, "methods": ["quirky.orchestration/policyShow"]},
+          {"id": "policy-set", "words": "policy-set", "summary": "set the nested worker depth policy", "flags": {"nested-worker-max-depth": {"type": "integer", "param": "nestedWorkerMaxDepth", "required": true, "description": "Maximum worker dispatch depth; integer at least 1."}}, "methods": ["quirky.orchestration/policySet"]},
+          {"id": "task-terminal", "words": "task-terminal", "summary": "resolve the exact current session and workspace for a Task", "flags": {"task-id": {"type": "string", "param": "taskId", "required": true, "description": "Task ID to navigate."}}, "methods": ["quirky.orchestration/taskTerminal"]}
+        ],
+    "view": [
+      {"id": "settings", "title": "Orchestration", "settings": true}
+    ],
+    "overlay": [
+      {"id": "floating-setup", "title": "Orchestration setup"}
+    ],
+    "command": [
+      {"id": "open-settings", "title": "Open Orchestration settings"},
+      {"id": "dismiss-setup", "title": "Dismiss Orchestration setup"}
+    ]
   }
 }

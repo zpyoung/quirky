@@ -12,7 +12,8 @@ import { pathsFromDrop, readWorktreePathsDrop, resolveWorktreeDropPaths, WORKTRE
 import { trackKittyFlags } from './kitty'
 import { PathChecker, createFileLinkProvider } from './link-provider'
 import { LinkPopover, type PopoverItem } from './LinkPopover'
-import { decideLinkClick, hasCommandModifier, relativeWithinRoot, type LinkKind } from './links'
+import { decideLinkClick, decideTaskLinkClick, hasCommandModifier, relativeWithinRoot, type LinkKind } from './links'
+import { createTaskLinkProvider, openTaskTerminal } from './task-links'
 import { resolveKeyAction } from './keys'
 import { createOsc52Base64, createOsc52Provider, createOsc52QueryGuard } from './osc52'
 import { planPaste, runPaste } from './paste'
@@ -436,6 +437,21 @@ export function TerminalPaneView(props: TerminalPaneProps) {
         else openUrlTarget(target, event)
       } else if (action === 'reveal') openTarget(target, true)
     }
+    const activateTaskLink = (event: MouseEvent, taskId: string) => {
+      if (term.hasSelection()) return
+      const action = decideTaskLinkClick(event, navigator.platform)
+      if (action === 'none') return
+      event.preventDefault()
+      if (action === 'open') {
+        void openTaskTerminal(context, taskId)
+        return
+      }
+      setPopover({
+        x: event.clientX,
+        y: event.clientY,
+        items: [{ label: 'Open task terminal', run: () => void openTaskTerminal(context, taskId) }]
+      })
+    }
     const activateUri = (event: MouseEvent, uri: string) => {
       if (/^file:/i.test(uri)) {
         const path = guarded(() => decodeURIComponent(new URL(uri).pathname), '')
@@ -462,6 +478,12 @@ export function TerminalPaneView(props: TerminalPaneProps) {
         cwd: () => latest.current.cwd,
         hover: setHint,
         activate: (event, link) => activateLink('path', link.path, event, link.line, link.column)
+      })
+    )
+    const taskLinkProvider = term.registerLinkProvider(
+      createTaskLinkProvider(term, {
+        hover: setHint,
+        activate: activateTaskLink
       })
     )
 
@@ -830,6 +852,7 @@ export function TerminalPaneView(props: TerminalPaneProps) {
       host.removeEventListener('dragover', onDragOver)
       host.removeEventListener('drop', onDrop)
       linkProvider.dispose()
+      taskLinkProvider.dispose()
       kitty.dispose()
       disableWebgl()
       guarded(() => term.dispose(), undefined)

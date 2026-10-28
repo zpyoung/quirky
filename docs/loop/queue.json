@@ -662,9 +662,8 @@
       "deps": [
         "m5-automations-core"
       ],
-      "status": "in-progress",
-      "early": true,
-      "lane": 6
+      "status": "done",
+      "early": true
     },
     {
       "id": "m5-loops-presets",
@@ -716,9 +715,8 @@
       "deps": [
         "m6-orchestration-workers"
       ],
-      "status": "in-progress",
-      "early": true,
-      "lane": 2
+      "status": "done",
+      "early": true
     },
     {
       "id": "m6-objective-plan",
@@ -1050,7 +1048,8 @@
       "deps": [
         "m4-hosting-api-github"
       ],
-      "status": "todo"
+      "status": "in-progress",
+      "lane": 6
     },
     {
       "id": "fix-terminal-dock-unfinished-flows-20261027",
@@ -1062,8 +1061,9 @@
       "deps": [
         "m3-terminal-dock"
       ],
-      "status": "todo",
-      "early": true
+      "status": "in-progress",
+      "early": true,
+      "lane": 2
     },
     {
       "id": "m3-vault-parity-completion",
@@ -1453,6 +1453,18 @@
       "deps": [
         "m5-automations-ui",
         "m5-automations-dispatch-remote-and-args"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "m5-loops-ui-visible-stop-close-review",
+      "milestone": "M5",
+      "title": "Complete existing loop UI visible Stop (Cancel/After iteration/Now), Close (Cancel/Keep running/Stop), tool-limited setup verdict, and one bounded cross-family review; use unique native fixture conversation ids and retain all shipped tests/guards",
+      "docs": [
+        "fork-loops.md"
+      ],
+      "deps": [
+        "m5-loops-ui"
       ],
       "status": "todo"
     }
