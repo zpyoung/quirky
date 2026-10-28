@@ -540,6 +540,8 @@ files, not this one.
 | medium | high | [m1-agent-status-scripting D10](decisions/m1-agent-status-scripting.md) | Rows record the evidence that decided them, and explain reads it | assumed — autonomous |
 | medium | high | [m1-agent-status-scripting D19](decisions/m1-agent-status-scripting.md) | Distinct failures are plugin errors with a machine-readable reason | assumed — autonomous |
 | medium | high | [m1-agent-status-scripting D38](decisions/m1-agent-status-scripting.md) | Catching up with build/roadmap brought m1-notifications, m2-source-control-core and m3-terminal-dock; no decision conflicts | assumed — autonomous |
+| medium (visible hierarchy) | high | [ui-restyle-settings D1](decisions/ui-restyle-settings.md) | Keep the approved presentation scope and existing authority | locked by docs/quirk/specs/2026-10-28-ui-redesign/logic.md |
+| medium | high | [ui-restyle-settings D2](decisions/ui-restyle-settings.md) | Preserve security, lifecycle and unavailable-capability semantics | assumed — autonomous |
 | medium | high | [sb-mobile-app D1](decisions/sb-mobile-app.md) | Build the combined phone foundation and workspace/session scope | locked by docs/loop/queue.json |
 | medium | high | [sb-mobile-app D5](decisions/sb-mobile-app.md) | Defer locked native-chat and dictation flows without inventing a replacement API | deferred: interactive native-chat and voice |
 | medium | high | [sb-mobile-app D6](decisions/sb-mobile-app.md) | Resolve Visual, API, Data and Integration gray areas from source | assumed — autonomous |
@@ -2140,6 +2142,15 @@ files, not this one.
 | easy | high | [m1-agent-status-scripting D45](decisions/m1-agent-status-scripting.md) | A later land failed on a quirky.worktree test race; this branch carries that plugin's own fix | assumed — autonomous |
 | easy | high | [m1-agent-status-scripting D46](decisions/m1-agent-status-scripting.md) | The resumed lane verifies the existing final fix batch and proceeds to land | assumed — autonomous |
 | easy | high | [m1-agent-status-scripting D47](decisions/m1-agent-status-scripting.md) | Retry landing after the protected queue tests pass unchanged | locked by docs/loop/LOOP.md |
+| easy | high | [ui-restyle-settings D3](decisions/ui-restyle-settings.md) | Use compiled React for CLI and existing shared presentation contracts | assumed — autonomous |
+| easy | high | [ui-restyle-settings D4](decisions/ui-restyle-settings.md) | Follow build-first with three disjoint isolated implementers | locked by docs/loop/LOOP.md |
+| easy | high | [ui-restyle-settings D5](decisions/ui-restyle-settings.md) | Keep macOS-only proof and portable browser presentation | deferred: platform |
+| easy | high | [ui-restyle-settings D6](decisions/ui-restyle-settings.md) | Integrate only attributed components and remove obsolete presentation consumers | assumed — autonomous |
+| easy | high | [ui-restyle-settings D7](decisions/ui-restyle-settings.md) | Repair compiler-detected integration defects without weakening the gate | assumed — autonomous |
+| easy | high for exercised paths | [ui-restyle-settings D8](decisions/ui-restyle-settings.md) | Record actual presentation proof, not a complete feature acceptance claim | assumed — autonomous |
+| easy | high | [ui-restyle-settings D9](decisions/ui-restyle-settings.md) | Correct smoke-driver assumptions without changing product behavior | assumed — autonomous |
+| easy | high for source composition; final gate/current surface proof next | [ui-restyle-settings D10](decisions/ui-restyle-settings.md) | Union all concurrent restyles and retain the canonical shared interaction owner | locked by incoming ui-restyle decisions |
+| easy | high for named exercised paths only | [ui-restyle-settings D11](decisions/ui-restyle-settings.md) | Verify the caught-up source and close exclusively owned resources | locked by docs/loop/LOOP.md build-first verification boundary |
 | easy | high | [sb-mobile-app D3](decisions/sb-mobile-app.md) | Apply unattended night-mode workflow and isolated worker attribution | locked by docs/loop/LOOP.md |
 | easy | high | [sb-mobile-app D4](decisions/sb-mobile-app.md) | Use OpenAI omp implementers and Gemini review | assumed — autonomous |
 | easy | high | [sb-mobile-app D7](decisions/sb-mobile-app.md) | Reserve the panel extension seam for lane4 after the base lands | assumed — autonomous |
