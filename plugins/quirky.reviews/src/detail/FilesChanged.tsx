@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { Badge, Button, FormRow, ListRow, SectionHeader, StatusDot, TextField } from '@quirky/ui'
 import { Markdown, MarkdownComposer } from '@quirky/plugin-tasks/markdown'
 import type { ReviewsSurfaceProps } from '../contracts'
 import { isRecord, parseCommentsResult, parseFilesResult, reviewContext, type ChangedFile, type ReviewComment } from './data'
@@ -156,23 +157,23 @@ export function FilesChanged(props: ReviewsSurfaceProps) {
   const matchingInlineComments = (path: string, line: number) => comments.filter((comment) =>
     comment.kind === 'review_comment' && comment.path === path && comment.line === line && comment.isOutdated !== true)
 
-  if (owner === null) return <section className="review-files" aria-label="Files changed"><h3>Files changed</h3><p>No pull request is selected.</p></section>
-  if (files === null) return <section className="review-files" aria-label="Files changed">
-    <h3>Files changed</h3>
-    {props.state.detail.loading ? <p role="status">Loading changed files…</p> : <p role="alert">Couldn’t load changed files.</p>}
-    <button type="button" onClick={() => void refreshFiles()}>Retry</button>
+  if (owner === null) return <section className="ui-stack" aria-label="Files changed"><SectionHeader title="Files changed" /><p className="ui-text-muted">No pull request is selected.</p></section>
+  if (files === null) return <section className="ui-stack" aria-label="Files changed">
+    <SectionHeader title="Files changed" />
+    {props.state.detail.loading ? <p role="status" className="ui-text-muted">Loading changed files…</p> : <p role="alert"><StatusDot status="failing" label="Error" /> Couldn’t load changed files.</p>}
+    <Button onClick={() => void refreshFiles()}>Retry</Button>
   </section>
-  if (filesUnavailable) return <section className="review-files" aria-label="Files changed">
-    <h3>Files changed</h3>
-    <p role="alert">Couldn’t load changed files.</p>
-    {props.state.detail.error ? <p role="alert">{props.state.detail.error}</p> : null}
-    <button type="button" onClick={() => void refreshFiles()}>Retry</button>
+  if (filesUnavailable) return <section className="ui-stack" aria-label="Files changed">
+    <SectionHeader title="Files changed" />
+    <p role="alert"><StatusDot status="failing" label="Error" /> Couldn’t load changed files.</p>
+    {props.state.detail.error ? <p role="alert"><StatusDot status="failing" label="Error" /> {props.state.detail.error}</p> : null}
+    <Button onClick={() => void refreshFiles()}>Retry</Button>
   </section>
-  if (files.length === 0) return <section className="review-files" aria-label="Files changed">
-    <h3>Files changed</h3>
-    {props.state.detail.loading ? <p role="status">Loading changed files…</p> : <p>No files changed.</p>}
-    {props.state.detail.error ? <p role="alert">{props.state.detail.error}</p> : null}
-    <button type="button" onClick={() => void refreshFiles()}>Refresh files</button>
+  if (files.length === 0) return <section className="ui-stack" aria-label="Files changed">
+    <SectionHeader title="Files changed" />
+    {props.state.detail.loading ? <p role="status" className="ui-text-muted">Loading changed files…</p> : <p>No files changed.</p>}
+    {props.state.detail.error ? <p role="alert"><StatusDot status="failing" label="Error" /> {props.state.detail.error}</p> : null}
+    <Button onClick={() => void refreshFiles()}>Refresh files</Button>
   </section>
 
   const collapseAll = async () => setFilesView({ collapsedFiles: allFiles.map((file) => file.path) })
@@ -181,99 +182,113 @@ export function FilesChanged(props: ReviewsSurfaceProps) {
     ? filteredFiles
     : filteredFiles.filter((file) => file.path === props.state.detail.selectedFile)
 
-  return <section className="review-files" aria-label="Files changed">
-    <header className="review-files-toolbar">
-      <h3>Files changed</h3>
-      <span>{viewedCount} / {allFiles.length} files viewed{unknownViewedCount > 0 ? `; ${unknownViewedCount} unknown` : ''}</span>
-      <button type="button" aria-expanded={treeVisible} onClick={() => void setFilesView({ treeVisible: !treeVisible })}>{treeVisible ? 'Hide file tree' : 'Show file tree'}</button>
-      <button type="button" onClick={() => void collapseAll()}>Collapse All</button>
-      <button type="button" onClick={() => void expandAll()}>Expand All</button>
-      <label>Diff mode
-        <select value={props.state.detail.diffMode} onChange={(event) => void setFilesView({ diffMode: event.currentTarget.value as 'inline' | 'side-by-side' })}>
+  return <section className="ui-stack" aria-label="Files changed">
+    <SectionHeader title="Files changed" actions={<div className="ui-cluster">
+      <span className="ui-text-muted">{viewedCount} / {allFiles.length} files viewed{unknownViewedCount > 0 ? `; ${unknownViewedCount} unknown` : ''}</span>
+      <Button aria-expanded={treeVisible} onClick={() => void setFilesView({ treeVisible: !treeVisible })}>{treeVisible ? 'Hide file tree' : 'Show file tree'}</Button>
+      <Button onClick={() => void collapseAll()}>Collapse All</Button>
+      <Button onClick={() => void expandAll()}>Expand All</Button>
+      <FormRow label="Diff mode" htmlFor="review-diff-mode">
+        <select id="review-diff-mode" className="ui-text-field__input" value={props.state.detail.diffMode} onChange={(event) => void setFilesView({ diffMode: event.currentTarget.value as 'inline' | 'side-by-side' })}>
           <option value="inline">Inline</option>
           <option value="side-by-side">Side by Side</option>
         </select>
-      </label>
-      <label>Filter files<input value={props.state.detail.fileFilter} onChange={(event) => void setFilesView({ fileFilter: event.currentTarget.value })} /></label>
-      <button type="button" onClick={() => void refreshFiles()}>Refresh files</button>
-    </header>
-    {props.state.detail.error ? <p className="review-error" role="alert">{props.state.detail.error}</p> : null}
-    {error ? <p className="review-error" role="alert">{error}</p> : null}
-    {isRecord(props.state.detail.files) && props.state.detail.files.truncated === true ? <p role="status">Showing the bounded changed-file set returned by the hosting provider.</p> : null}
-    {filteredFiles.length === 0 ? <p role="status">No files match this filter.</p> : <div className="review-files-layout">
-      {treeVisible ? <aside className="review-file-tree" aria-label="Changed files">
-        <ul>{filteredFiles.map((file) => <li key={file.path}>
-          <button type="button" aria-current={props.state.detail.selectedFile === file.path ? 'page' : undefined} onClick={() => void setFilesView({ selectedFile: file.path })}>
-            {file.path} <span>{file.viewed === true ? 'Viewed' : file.viewed === false ? 'Unviewed' : 'Unknown'}</span>
-          </button>
+      </FormRow>
+      <TextField label="Filter files" value={props.state.detail.fileFilter} onChange={(event) => void setFilesView({ fileFilter: event.currentTarget.value })} />
+      <Button onClick={() => void refreshFiles()}>Refresh files</Button>
+    </div>} />
+    {props.state.detail.error ? <p role="alert"><StatusDot status="failing" label="Error" /> {props.state.detail.error}</p> : null}
+    {error ? <p role="alert"><StatusDot status="failing" label="Error" /> {error}</p> : null}
+    {isRecord(props.state.detail.files) && props.state.detail.files.truncated === true ? <p role="status" className="ui-text-muted">Showing the bounded changed-file set returned by the hosting provider.</p> : null}
+    {filteredFiles.length === 0 ? <p role="status" className="ui-text-muted">No files match this filter.</p> : <div className="ui-stack" style={{ minWidth: 0, marginTop: 'var(--ui-space-8)', display: 'grid', gridTemplateColumns: treeVisible ? 'minmax(0, 1fr) minmax(0, 3fr)' : 'minmax(0, 1fr)', gap: 'var(--ui-space-12)' }}>
+      {treeVisible ? <aside className="ui-stack" aria-label="Changed files">
+        <ul className="ui-stack" style={{ listStyle: 'none', padding: 0 }}>{filteredFiles.map((file) => <li key={file.path}>
+          <ListRow title={file.path} description={file.viewed === true ? 'Viewed' : file.viewed === false ? 'Unviewed' : 'Unknown'} selected={props.state.detail.selectedFile === file.path} onClick={() => void setFilesView({ selectedFile: file.path })} />
         </li>)}</ul>
       </aside> : null}
-      <div className="review-file-diffs">
+      <div className="ui-stack" style={{ minWidth: 0 }}>
         {selectedFiles.map((file) => {
           const isCollapsed = collapsed.has(file.path)
           const patch = file.patch === null ? null : parsePatch(file.patch)
           const anchor = inlineAnchor?.path === file.path ? inlineAnchor : null
-          return <article className="review-file-diff" key={file.path}>
-            <header className="review-file-header">
-              <button type="button" aria-expanded={!isCollapsed} onClick={() => {
+          const status = file.status.toLowerCase()
+          const statusTone = status.includes('add') ? 'working' : status.includes('delete') ? 'failing' : status.includes('modify') || status.includes('change') ? 'needs-you' : 'neutral'
+          return <article className="ui-stack" key={file.path} style={{ minWidth: 0 }}>
+            <header className="ui-cluster">
+              <Button aria-expanded={!isCollapsed} onClick={() => {
                 const next = isCollapsed ? props.state.detail.collapsedFiles.filter((path) => path !== file.path) : [...props.state.detail.collapsedFiles, file.path]
                 void setFilesView({ collapsedFiles: next })
-              }}>{isCollapsed ? 'Expand' : 'Collapse'} {file.path}</button>
-              <span>{file.status}</span><span>+{file.additions} / −{file.deletions}</span>
-              <label><input
-                type="checkbox"
-                checked={file.viewed === true}
-                disabled={pendingPath === file.path}
-                onChange={() => void toggleViewed(file)}
-              />Viewed</label>
-              {file.viewed === null ? <small>Viewed state is unavailable.</small> : null}
+              }}>{isCollapsed ? 'Expand' : 'Collapse'} {file.path}</Button>
+              <Badge tone={statusTone}>{file.status}</Badge>
+              <Badge tone="working">+{file.additions}</Badge>
+              <span> / </span>
+              <Badge tone="failing">−{file.deletions}</Badge>
+              <FormRow label="Viewed" htmlFor={`review-viewed-${file.path}`}>
+                <input
+                  id={`review-viewed-${file.path}`}
+                  type="checkbox"
+                  style={{ accentColor: 'var(--ui-accent)' }}
+                  checked={file.viewed === true}
+                  disabled={pendingPath === file.path}
+                  onChange={() => void toggleViewed(file)}
+                />
+              </FormRow>
+              {file.viewed === null ? <span className="ui-text-muted">Viewed state is unavailable.</span> : null}
             </header>
-            {!isCollapsed ? <div className="review-file-content">
+            {!isCollapsed ? <div className="ui-stack" style={{ minWidth: 0 }}>
               {file.isBinary ? <p>Binary file; no text diff is available.</p>
                 : file.patchUnavailable || patch === null ? <p>Patch unavailable for this file.</p>
                   : <>
-                    {patch.truncated ? <p role="status">This patch is truncated to a bounded preview.</p> : null}
+                    {patch.truncated ? <p role="status" className="ui-text-muted">This patch is truncated to a bounded preview.</p> : null}
                     {props.state.detail.diffMode === 'side-by-side'
-                      ? <div className="review-side-by-side" role="table" aria-label={`Side-by-side diff for ${file.path}`}>
-                        {patch.lines.map((line, index) => <div className={`review-diff-line review-diff-${line.kind}`} role="row" key={`${index}:${line.text}`}>
-                          <code role="cell">{line.leftLine === null && line.kind !== 'meta' ? '' : line.text.startsWith('-') && !line.text.startsWith('---') ? line.text.slice(1) : line.text.startsWith('+') && !line.text.startsWith('+++') ? '' : line.text}</code>
-                          <code role="cell">{line.rightLine === null && line.kind !== 'meta' ? '' : line.text.startsWith('+') && !line.text.startsWith('+++') ? line.text.slice(1) : line.text.startsWith('-') && !line.text.startsWith('---') ? '' : line.text}</code>
-                          {line.rightLine !== null ? <div className="review-inline-actions">
-                            <button type="button" disabled={!headValid} onClick={() => setRangeStart({ path: file.path, line: line.rightLine as number })}>Set range start {line.rightLine}</button>
-                            <button type="button" disabled={!headValid} onClick={() => setInlineAnchor({
-                              path: file.path,
-                              line: line.rightLine as number,
-                              startLine: rangeStart?.path === file.path && rangeStart.line <= (line.rightLine as number) ? rangeStart.line : line.rightLine as number,
-                            })}>Comment at {line.rightLine}</button>
-                          </div> : null}
-                        </div>)}
+                      ? <div role="table" aria-label={`Side-by-side diff for ${file.path}`} className="ui-stack">
+                        {patch.lines.map((line, index) => {
+                          const tone = line.kind === 'addition' ? 'working' : line.kind === 'deletion' ? 'failing' : line.kind === 'meta' ? 'accent' : 'neutral'
+                          return <div className="ui-stack" style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 'var(--ui-space-8)' }} role="row" key={`${index}:${line.text}`}>
+                            <code role="cell"><Badge tone={tone}>{line.leftLine === null && line.kind !== 'meta' ? '' : line.text.startsWith('-') && !line.text.startsWith('---') ? line.text.slice(1) : line.text.startsWith('+') && !line.text.startsWith('+++') ? '' : line.text}</Badge></code>
+                            <code role="cell"><Badge tone={tone}>{line.rightLine === null && line.kind !== 'meta' ? '' : line.text.startsWith('+') && !line.text.startsWith('+++') ? line.text.slice(1) : line.text.startsWith('-') && !line.text.startsWith('---') ? '' : line.text}</Badge></code>
+                            {line.rightLine !== null ? <div className="ui-cluster" style={{ gridColumn: '1 / -1' }}>
+                              <Button disabled={!headValid} onClick={() => setRangeStart({ path: file.path, line: line.rightLine as number })}>Set range start {line.rightLine}</Button>
+                              <Button disabled={!headValid} onClick={() => setInlineAnchor({
+                                path: file.path,
+                                line: line.rightLine as number,
+                                startLine: rangeStart?.path === file.path && rangeStart.line <= (line.rightLine as number) ? rangeStart.line : line.rightLine as number,
+                              })}>Comment at {line.rightLine}</Button>
+                            </div> : null}
+                          </div>
+                        })}
                       </div>
-                      : <div className="review-inline-diff">
-                        {patch.lines.map((line, index) => <div className={`review-diff-line review-diff-${line.kind}`} key={`${index}:${line.text}`}>
-                          <span className="review-diff-lines">{line.leftLine ?? ''}{line.rightLine === null ? '' : ` / ${line.rightLine}`}</span>
-                          <code>{line.text}</code>
-                          {line.rightLine !== null ? <div className="review-inline-actions">
-                            <button type="button" disabled={!headValid} onClick={() => setRangeStart({ path: file.path, line: line.rightLine as number })}>Set range start {line.rightLine}</button>
-                            <button type="button" disabled={!headValid} onClick={() => setInlineAnchor({
-                              path: file.path,
-                              line: line.rightLine as number,
-                              startLine: rangeStart?.path === file.path && rangeStart.line <= (line.rightLine as number) ? rangeStart.line : line.rightLine as number,
-                            })}>Comment at {line.rightLine}</button>
-                          </div> : null}
-                        </div>)}
+                      : <div className="ui-stack">
+                        {patch.lines.map((line, index) => {
+                          const tone = line.kind === 'addition' ? 'working' : line.kind === 'deletion' ? 'failing' : line.kind === 'meta' ? 'accent' : 'neutral'
+                          return <div className="ui-cluster" style={{ alignItems: 'start' }} key={`${index}:${line.text}`}>
+                            <Badge tone={tone}>{line.leftLine ?? ''}{line.rightLine === null ? '' : ` / ${line.rightLine}`}</Badge>
+                            <code>{line.text}</code>
+                            {line.rightLine !== null ? <div className="ui-cluster">
+                              <Button disabled={!headValid} onClick={() => setRangeStart({ path: file.path, line: line.rightLine as number })}>Set range start {line.rightLine}</Button>
+                              <Button disabled={!headValid} onClick={() => setInlineAnchor({
+                                path: file.path,
+                                line: line.rightLine as number,
+                                startLine: rangeStart?.path === file.path && rangeStart.line <= (line.rightLine as number) ? rangeStart.line : line.rightLine as number,
+                              })}>Comment at {line.rightLine}</Button>
+                            </div> : null}
+                          </div>
+                        })}
                       </div>}
-                    {patch.lines.some((line) => line.rightLine !== null && matchingInlineComments(file.path, line.rightLine as number).length > 0) ? <section className="review-inline-threads" aria-label="Inline review comments">
+                    {patch.lines.some((line) => line.rightLine !== null && matchingInlineComments(file.path, line.rightLine as number).length > 0) ? <section className="ui-stack" aria-label="Inline review comments">
                       {patch.lines.flatMap((line) => line.rightLine === null ? [] : matchingInlineComments(file.path, line.rightLine).map((comment) =>
-                        <article key={`${String(comment.id)}:${line.rightLine}`}><strong>Line {line.rightLine}</strong><Markdown source={comment.body} /></article>
+                        <article className="ui-stack" key={`${String(comment.id)}:${line.rightLine}`}><strong>Line {line.rightLine}</strong><Markdown source={comment.body} /></article>
                       ))}
                     </section> : null}
                   </>}
-              {anchor ? <form className="review-inline-comment-composer" onSubmit={(event) => { event.preventDefault(); void addInlineComment() }}>
+              {anchor ? <form className="ui-stack" onSubmit={(event) => { event.preventDefault(); void addInlineComment() }}>
                 <label>Comment on {file.path}:{anchor.startLine === anchor.line ? anchor.line : `${anchor.startLine}–${anchor.line}`}</label>
-                {!headValid ? <p role="alert">A verified pull request head is required before commenting.</p> : null}
+                {!headValid ? <p role="alert"><StatusDot status="failing" label="Error" /> A verified pull request head is required before commenting.</p> : null}
                 <MarkdownComposer value={inlineDraft} onChange={setInlineDraft} label="Inline review comment" minRows={3} disabled={!headValid || busyInline} onSubmit={() => void addInlineComment()} />
-                <button type="submit" disabled={!headValid || busyInline || inlineDraft.trim() === ''}>{busyInline ? 'Sending…' : 'Add review comment'}</button>
-                <button type="button" disabled={busyInline} onClick={() => setInlineAnchor(null)}>Cancel</button>
+                <div className="ui-cluster">
+                  <Button variant="primary" type="submit" disabled={!headValid || busyInline || inlineDraft.trim() === ''}>{busyInline ? 'Sending…' : 'Add review comment'}</Button>
+                  <Button disabled={busyInline} onClick={() => setInlineAnchor(null)}>Cancel</Button>
+                </div>
               </form> : null}
               {rangeStart?.path === file.path ? <p>Range starts at line {rangeStart.line}. Choose a later added line to comment on the range.</p> : null}
             </div> : null}

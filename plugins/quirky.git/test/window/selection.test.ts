@@ -12,7 +12,7 @@ test('SC-15: click opens the diff, Shift-click selects a range, Cmd-click toggle
   for (const name of ['a', 'b', 'c', 'd']) w.write(`${name}.ts`, `${name} changed\n`)
   await w.win.waitFor(() => rowOf('d.ts'))
   const selected = async () => (await w.report()).selection
-  const bar = () => q('.scm-bulk')
+  const bar = () => q('[role="toolbar"][aria-label="Selection actions"]')
 
   await click(rowOf('a.ts'))
   await w.win.waitFor(async () => (await openView(w))?.id === DIFF_VIEW)
@@ -44,8 +44,8 @@ test('SC-15: the bulk bar stages the selection through the daemon', async () => 
   await w.win.waitFor(() => rowOf('d.ts'))
   await click(rowOf('a.ts'))
   await click(rowOf('c.ts'), { shiftKey: true })
-  await click(buttonText('Stage (3)', q('.scm-bulk')!))
+  await click(buttonText('Stage (3)', q('[role="toolbar"][aria-label="Selection actions"]')!))
   await w.win.waitFor(() => rowOf('c.ts', 'staged'))
   expect(w.git('diff', '--cached', '--name-only').split('\n')).toEqual(['a.ts', 'b.ts', 'c.ts'])
-  await w.win.waitFor(() => buttonText('Unstage (3)', q('.scm-bulk') ?? document))
+  await w.win.waitFor(() => buttonText('Unstage (3)', q('[role="toolbar"][aria-label="Selection actions"]') ?? document))
 }, SLOW)

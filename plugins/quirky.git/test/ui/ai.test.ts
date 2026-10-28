@@ -105,7 +105,9 @@ const sparkle = (element: HTMLElement) => byLabel(element, 'Generate commit mess
 const stop = (element: HTMLElement) => byLabel(element, 'Stop generating commit message') as HTMLButtonElement | null
 const message = (element: HTMLElement) => byLabel(element, 'Commit message') as HTMLTextAreaElement
 const dialog = () => q(document.body, '[role="dialog"]')
-const primary = (element: HTMLElement) => q(element, '.scm-primary') as HTMLButtonElement
+const dialogTitle = () => dialog()?.querySelector('h2')?.textContent ?? dialog()?.getAttribute('aria-label')
+const menuFor = (root: ParentNode, label: string) => qa(root, 'button[aria-haspopup="menu"]').find((button) => button.getAttribute('aria-label') === label) ?? null
+const primary = (element: HTMLElement) => q(element, '[data-git-primary]') as HTMLButtonElement
 
 const up = (ahead: number, behind: number) => ({ hasUpstream: true, name: 'origin/zoe/feat', sha: 'b'.repeat(40), ahead, behind, behindPatchEquivalent: null })
 
@@ -166,7 +168,7 @@ describe('NA-24: the sparkle button', () => {
     await click(sparkle(element))
     expect(sparkle(element)?.disabled).toBe(true)
     expect(sparkle(element)?.title).toBe('Generating commit message…')
-    expect(q(sparkle(element)!, '.scm-spinner')).not.toBeNull()
+    expect(q(sparkle(element)!, '[role="img"][aria-label="Generating commit message"]')).not.toBeNull()
     expect(stop(element)?.title).toBe('Generating commit message. Click to stop.')
 
     await click(stop(element))
@@ -197,7 +199,7 @@ describe('NA-25: generating a message', () => {
   test('with no recipe the sparkle opens the Generate Commit Message dialog, which runs once and saves nothing', async () => {
     const { fake, element, unmount } = await open()
     await click(sparkle(element))
-    expect(dialog()?.getAttribute('aria-label')).toBe('Generate Commit Message')
+    expect(dialogTitle()).toBe('Generate Commit Message')
     expect(dialog()?.textContent).toContain('Choose the agent and command template for this run.')
     expect((byLabel(dialog()!, 'Agent') as HTMLSelectElement).value).toBe('claude')
     expect((byLabel(dialog()!, 'Command template') as HTMLTextAreaElement).value).toBe('{basePrompt}')
@@ -382,11 +384,10 @@ describe('NA-33: AI Fix on the Commit blocked card', () => {
   test('the card has the split button, whose primary starts the default agent and toasts', async () => {
     const { fake, element, unmount } = await open(commitBlocked())
     await blockCommit(element)
-    const card = q(element, '.scm-card-blocked')!
-    const fix = byLabel(card, 'Start the default AI agent to fix this commit failure')
+    const fix = byLabel(element, 'Start the default AI agent to fix this commit failure')
     expect(fix?.textContent).toBe('AI Fix')
     expect(fix?.title).toBe('Fix commit failure with AI')
-    expect(byLabel(card, 'Choose an agent for this commit failure')).not.toBeNull()
+    expect(menuFor(element, 'Choose an agent for this commit failure')).not.toBeNull()
 
     await click(fix)
     expect(fake.called('quirky.git/aiFix').map((c) => c.params)).toEqual([{ worktree: 'feat', action: 'fixCommitFailure' }])
@@ -410,9 +411,9 @@ describe('NA-33: AI Fix on the Commit blocked card', () => {
   test('the Commit Failed details have "Fix with AI" beside Close', async () => {
     const { fake, element, unmount } = await open(commitBlocked())
     await blockCommit(element)
-    await click(buttonText(q(element, '.scm-card-blocked')!, 'Details'))
-    expect(dialog()?.getAttribute('aria-label')).toBe('Commit Failed')
-    expect(qa(dialog()!, '.dialog-actions button').map((b) => b.textContent)).toEqual(['Fix with AI', 'Close'])
+    await click(buttonText(element, 'Details'))
+    expect(dialogTitle()).toBe('Commit Failed')
+    expect(qa(dialog()!, 'footer button').map((b) => b.textContent)).toEqual(['Fix with AI', 'Close'])
     await click(buttonText(dialog()!, 'Fix with AI'))
     expect(fake.called('quirky.git/aiFix').map((c) => c.params)).toEqual([{ worktree: 'feat', action: 'fixCommitFailure' }])
     expect(dialog()).toBeNull()
@@ -425,8 +426,9 @@ describe('NA-33: AI Fix on the Commit blocked card', () => {
       f.settings['ai-enabled'] = false
     })
     await blockCommit(element)
-    expect(q(element, '.scm-ai-fix')).toBeNull()
-    await click(buttonText(q(element, '.scm-card-blocked')!, 'Details'))
+    expect(byLabel(element, 'Start the default AI agent to fix this commit failure')).toBeNull()
+    expect(menuFor(element, 'Choose an agent for this commit failure')).toBeNull()
+    await click(buttonText(element, 'Details'))
     expect(buttonText(dialog()!, 'Fix with AI')).toBeUndefined()
     unmount()
   })
@@ -443,20 +445,19 @@ describe('NA-35: AI Fix on the Push blocked card', () => {
   test('the card starts an agent for the push failure', async () => {
     const { fake, element, unmount } = await open(pushBlocked)
     await click(primary(element))
-    const card = q(element, '.scm-card-blocked')!
-    expect(card.textContent).toContain('Push blocked')
-    await click(byLabel(card, 'Start the default AI agent to fix this push failure'))
+    expect(element.textContent).toContain('Push blocked')
+    await click(byLabel(element, 'Start the default AI agent to fix this push failure'))
     expect(fake.called('quirky.git/aiFix').map((c) => c.params)).toEqual([{ worktree: 'feat', action: 'fixPushFailure' }])
     expect(fake.toasts).toEqual([['Started an AI agent for the push failure.', '']])
-    expect(byLabel(card, 'Choose an agent for this push failure')).not.toBeNull()
+    expect(menuFor(element, 'Choose an agent for this push failure')).not.toBeNull()
     unmount()
   })
 
   test('the Push Failed details have "Fix with AI"', async () => {
     const { fake, element, unmount } = await open(pushBlocked)
     await click(primary(element))
-    await click(buttonText(q(element, '.scm-card-blocked')!, 'Details'))
-    expect(dialog()?.getAttribute('aria-label')).toBe('Push Failed')
+    await click(buttonText(element, 'Details'))
+    expect(dialogTitle()).toBe('Push Failed')
     await click(buttonText(dialog()!, 'Fix with AI'))
     expect(fake.called('quirky.git/aiFix').map((c) => c.params)).toEqual([{ worktree: 'feat', action: 'fixPushFailure' }])
     unmount()
@@ -468,10 +469,9 @@ describe('NA-36: Resolve with AI on the conflict card', () => {
 
   test('shows with unresolved conflicts and starts an agent for the conflicts', async () => {
     const { fake, element, unmount } = await open((f) => void (f.status = statusOf([conflict('a.ts')], { operation: 'merge' })))
-    const card = q(element, '.scm-card-conflict')!
-    const resolve = buttonText(card, 'Resolve with AI')
+    const resolve = buttonText(element, 'Resolve with AI')
     expect(resolve).toBeDefined()
-    expect(byLabel(card, 'Choose an agent to resolve these conflicts')).not.toBeNull()
+    expect(menuFor(element, 'Choose an agent to resolve these conflicts')).not.toBeNull()
     await click(resolve)
     expect(fake.called('quirky.git/aiFix').map((c) => c.params)).toEqual([{ worktree: 'feat', action: 'resolveConflicts' }])
     expect(fake.toasts).toEqual([['Started an AI agent for the conflicts.', '']])
@@ -499,7 +499,7 @@ describe('NA-37: Customize launch', () => {
       configure(f)
     })
     await blockCommit(mounted.element)
-    await click(byLabel(mounted.element, 'Choose an agent for this commit failure'))
+    await click(menuFor(mounted.element, 'Choose an agent for this commit failure'))
     await click(buttonText(document.body, 'Customize launch...'))
     return mounted
   }
@@ -512,7 +512,7 @@ describe('NA-37: Customize launch', () => {
 
   test('the chevron offers Customize launch... and the dialog is prefilled from the preview', async () => {
     const { fake, unmount } = await openLaunch()
-    expect(dialog()?.getAttribute('aria-label')).toBe('Fix Commit Failure With AI')
+    expect(dialogTitle()).toBe('Fix Commit Failure With AI')
     expect(dialog()?.textContent).toContain('Review and edit the full command input before starting an agent.')
     expect(fake.called('quirky.git/aiFixPreview')[0]?.params).toEqual({ worktree: 'feat', action: 'fixCommitFailure' })
     expect(field('Agent').value).toBe('claude')
@@ -534,16 +534,16 @@ describe('NA-37: Customize launch', () => {
       })
     })
     await click(primary(push.element))
-    await click(byLabel(push.element, 'Choose an agent for this push failure'))
+    await click(menuFor(push.element, 'Choose an agent for this push failure'))
     await click(buttonText(document.body, 'Customize launch...'))
-    expect(dialog()?.getAttribute('aria-label')).toBe('Fix Push Failure With AI')
+    expect(dialogTitle()).toBe('Fix Push Failure With AI')
     push.unmount()
     document.body.innerHTML = ''
 
     const conflicts = await open((f) => void (f.status = statusOf([entry('a.ts', 'conflicts', 'modified', { conflict: { kind: 'both_modified', state: 'unresolved' } })], { operation: 'merge' })))
-    await click(byLabel(conflicts.element, 'Choose an agent to resolve these conflicts'))
+    await click(menuFor(conflicts.element, 'Choose an agent to resolve these conflicts'))
     await click(buttonText(document.body, 'Customize launch...'))
-    expect(dialog()?.getAttribute('aria-label')).toBe('Resolve Conflicts With AI')
+    expect(dialogTitle()).toBe('Resolve Conflicts With AI')
     conflicts.unmount()
   })
 
@@ -691,9 +691,9 @@ describe('NA-37: Customize launch', () => {
     await click(buttonText(dialog()!, 'Cancel'))
     expect(dialog()).toBeNull()
     expect(fake.called('quirky.git/aiFix')).toEqual([])
-    await click(byLabel(document.body, 'Choose an agent for this commit failure'))
+    await click(menuFor(document.body, 'Choose an agent for this commit failure'))
     await click(buttonText(document.body, 'Customize launch...'))
-    await press(window, 'Escape')
+    await press(dialog()!, 'Escape')
     expect(dialog()).toBeNull()
     unmount()
   })

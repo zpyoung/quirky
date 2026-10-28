@@ -56,21 +56,21 @@ afterEach(() => {
   mounted = null
 })
 
-const counter = (root: ParentNode) => root.querySelector('.qgv-counter')?.textContent
+const counter = (root: ParentNode) => root.querySelector('[aria-label^="Conflict "], [aria-label="0 conflicts"]')?.textContent
 const view = (root: ParentNode) => s.EditorView.findFromDOM(root.querySelector('.cm-editor') as HTMLElement)!
 
 describe('quirky.git conflict file view', () => {
   test('SC-44: shows the banner, the 1 / 2 counter and tinted marker lines with their labels', async () => {
     const { element, report } = await openFile()
     expect(fake.callsTo('quirky.git/conflictFile')[0].params).toEqual({ worktree: 'w1', path: 'math.ts' })
-    expect(element.querySelector('.qgv-banner')?.textContent).toContain('Unresolved conflict · Both modified')
+    expect(element.querySelector('[role="status"]')?.textContent).toContain('Unresolved conflict · Both modified')
     expect(counter(element)).toBe('1 / 2')
     expect(report()).toMatchObject({ mode: 'conflict-file', path: 'math.ts', conflicts: 2, currentConflict: 1 })
-    expect(element.querySelectorAll('.qg-conflict-marker').length).toBe(7)
-    expect(element.querySelectorAll('.qg-conflict-current').length).toBe(2)
-    expect(element.querySelectorAll('.qg-conflict-base').length).toBe(1)
-    expect(element.querySelectorAll('.qg-conflict-incoming').length).toBe(2)
-    const labels = [...element.querySelectorAll('.qg-conflict-label')].map((l) => l.textContent)
+    expect(element.querySelectorAll('.ui-editor-conflict-marker').length).toBe(7)
+    expect(element.querySelectorAll('.ui-editor-conflict-current').length).toBe(2)
+    expect(element.querySelectorAll('.ui-editor-conflict-base').length).toBe(1)
+    expect(element.querySelectorAll('.ui-editor-conflict-incoming').length).toBe(2)
+    const labels = [...element.querySelectorAll('.ui-editor-conflict-label')].map((l) => l.textContent)
     expect(labels).toEqual([
       'Current change',
       'Incoming change',
@@ -123,7 +123,7 @@ describe('quirky.git conflict file view', () => {
     await settle()
     expect(counter(element)).toBe('0 / 0')
     expect(byLabel(element, 'Next conflict')?.disabled).toBe(true)
-    expect(element.querySelectorAll('.qg-conflict-marker').length).toBe(0)
+    expect(element.querySelectorAll('.ui-editor-conflict-marker').length).toBe(0)
   })
 
   test('SC-44: a "deleted by them" file asks whether to keep it', async () => {
@@ -174,10 +174,10 @@ describe('quirky.git conflict file view', () => {
     act(() => editor.dispatch({ changes: { from: 0, insert: 'x' } }))
     await act(async () => void (await fake.run('save')))
     await settle()
-    expect(element.querySelector('.qgv-stale')).not.toBeNull()
+    expect(element.querySelector('[role="alert"]')).not.toBeNull()
     expect(report().stale).toBe(true)
     await click(byText(element, 'Overwrite'))
-    expect(element.querySelector('.qgv-stale')).toBeNull()
+    expect(element.querySelector('[role="alert"]')).toBeNull()
     expect(fake.callsTo('quirky.git/save').map((c) => 'expected' in c.params)).toEqual([true, false])
   })
 
@@ -192,7 +192,7 @@ describe('quirky.git conflict file view', () => {
     fake.handlers['quirky.git/conflictFile'] = () => conflictFile({ content: 'fresh\n', hash: 'h5' })
     await click(byText(element, 'Reload from Disk'))
     expect(view(element).state.sliceDoc()).toBe('fresh\n')
-    expect(element.querySelector('.qgv-stale')).toBeNull()
+    expect(element.querySelector('[role="alert"]')).toBeNull()
   })
 
   test('a refresh that finds the file changed on disk under a draft flags it stale', async () => {
@@ -249,10 +249,10 @@ describe('quirky.git conflict review view', () => {
   test('SC-45: lists the conflicts as Unresolved with the count and the snapshot time', async () => {
     fake.handlers['quirky.git/status'] = () => status([conflict('a.ts'), conflict('b.ts')])
     const { element, report } = await openReview()
-    const rows = [...element.querySelectorAll('.qgv-review-row')].map((r) => r.textContent)
+    const rows = [...element.querySelectorAll('nav[aria-label="Files"] [data-path]')].map((r) => r.textContent)
     expect(rows).toEqual(['a.tsUnresolvedOpen', 'b.tsUnresolvedOpen'])
     expect(element.textContent).toMatch(/2 unresolved conflicts · Snapshot captured at .+\./)
-    expect(element.querySelector('h3')?.textContent).toBe('Files')
+    expect(element.querySelector('nav[aria-label="Files"] h2')?.textContent).toBe('Files')
     expect(report()).toMatchObject({ mode: 'conflicts', conflicts: 2 })
   })
 
@@ -286,7 +286,7 @@ describe('quirky.git conflict review view', () => {
     fake.handlers['quirky.git/conflictFile'] = () => ({ content: null })
     mounted = mountView(fake, { worktree: 'w1', mode: 'conflicts', review })
     await settle()
-    expect([...mounted.element.querySelectorAll('.qgv-review-row')].map((r) => r.textContent)).toEqual(['a.tsResolved', 'b.tsGone'])
+    expect([...mounted.element.querySelectorAll('nav[aria-label="Files"] [data-path]')].map((r) => r.textContent)).toEqual(['a.tsResolved', 'b.tsGone'])
     expect(mounted.element.textContent).toContain('All conflicts resolved')
   })
 
@@ -294,7 +294,7 @@ describe('quirky.git conflict review view', () => {
     fake.handlers['quirky.git/status'] = () => status([conflict('a.ts')])
     mounted = mountView(fake, { worktree: 'w1', mode: 'conflicts', review: { entries: 'nope', capturedAt: 'x' } })
     await settle()
-    expect([...mounted.element.querySelectorAll('.qgv-review-row')].map((r) => r.textContent)).toEqual(['a.tsUnresolvedOpen'])
+    expect([...mounted.element.querySelectorAll('nav[aria-label="Files"] [data-path]')].map((r) => r.textContent)).toEqual(['a.tsUnresolvedOpen'])
   })
 
   test('SC-45: a reopened review that still has conflicts shows the original capture time', async () => {
@@ -316,7 +316,7 @@ describe('quirky.git conflict review view', () => {
       return { path: 'b.ts', kind: 'both_modified', state: 'resolved_locally', content: null, hash: null, operation: 'merge' }
     }
     await click(byText(element, 'Refresh'))
-    const rows = [...element.querySelectorAll('.qgv-review-row')].map((r) => r.textContent)
+    const rows = [...element.querySelectorAll('nav[aria-label="Files"] [data-path]')].map((r) => r.textContent)
     expect(rows).toEqual(['a.tsResolved', 'b.tsGone'])
     expect(element.textContent).toContain('All conflicts resolved')
     expect(element.textContent).toContain('This review snapshot no longer has any live unresolved conflicts.')
@@ -334,7 +334,7 @@ describe('quirky.git conflict review view', () => {
     fake.handlers['quirky.git/status'] = () => status([{ path: 'b.ts', area: 'staged', status: 'deleted' }])
     fake.handlers['quirky.git/conflictFile'] = () => ({ content: 'same\n' })
     await click(byText(element, 'Refresh'))
-    expect([...element.querySelectorAll('.qgv-review-row')].map((r) => r.textContent)).toEqual(['a.tsResolved', 'b.tsGone'])
+    expect([...element.querySelectorAll('nav[aria-label="Files"] [data-path]')].map((r) => r.textContent)).toEqual(['a.tsResolved', 'b.tsGone'])
   })
 
   test('SC-45: a conflict resolved locally counts as resolved; the snapshot keeps its files', async () => {
@@ -342,7 +342,7 @@ describe('quirky.git conflict review view', () => {
     const { element } = await openReview()
     fake.handlers['quirky.git/status'] = () => status([conflict('a.ts', 'resolved_locally'), conflict('new.ts')])
     await click(byText(element, 'Refresh'))
-    expect([...element.querySelectorAll('.qgv-review-row')].map((r) => r.textContent)).toEqual(['a.tsResolved'])
+    expect([...element.querySelectorAll('nav[aria-label="Files"] [data-path]')].map((r) => r.textContent)).toEqual(['a.tsResolved'])
   })
 
   test('SC-45: with no conflicts at open the snapshot says so', async () => {

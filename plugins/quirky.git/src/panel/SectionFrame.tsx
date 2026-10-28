@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import { Badge, IconButton, SectionHeader } from '@quirky/ui'
 import type { RowButton } from './Rows'
 
 type Props = {
@@ -18,31 +19,36 @@ type Props = {
 /** A collapsible section: heading with its count, the header buttons, and the rows. */
 export function SectionFrame({ id, heading, count, title, note, collapsed, onToggle, buttons, children }: Props) {
   return (
-    <section className="scm-section" data-section={id}>
-      <header className="scm-section-head" title={title}>
-        <button type="button" className="scm-section-toggle" aria-expanded={!collapsed} onClick={onToggle}>
-          <span className="scm-chevron" aria-hidden="true">
-            {collapsed ? '▸' : '▾'}
-          </span>
-          <span className="scm-section-title">{heading}</span>
-          <span className="scm-count">{count}</span>
-        </button>
-        <span className="scm-section-actions">
-          {buttons.map((b) => (
-            <button
-              key={b.label}
-              type="button"
-              className={`icon-button${b.destructive ? ' scm-destructive' : ''}`}
-              title={b.label}
-              aria-label={b.label}
-              onClick={b.run}
+    <section className="ui-stack" data-section={id} title={title} style={{ gap: 'var(--ui-space-4)' }}>
+      <SectionHeader
+        title={heading}
+        actions={
+          <div className="ui-cluster">
+            <span data-section-count><Badge label={`${count} ${count === 1 ? 'file' : 'files'}`}>{count}</Badge></span>
+            <IconButton
+              label={`${collapsed ? 'Expand' : 'Collapse'} ${heading}`}
+              title={`${collapsed ? 'Expand' : 'Collapse'} ${heading}`}
+              aria-expanded={!collapsed}
+              onClick={onToggle}
             >
-              {b.glyph}
-            </button>
-          ))}
-        </span>
-      </header>
-      {note !== undefined && <p className="scm-section-note">{note}</p>}
+              {collapsed ? '▸' : '▾'}
+            </IconButton>
+            {buttons.map((button) => (
+              <IconButton
+                key={button.label}
+                label={button.label}
+                title={button.label}
+                data-section-action
+                variant={button.destructive ? 'destructive' : 'secondary'}
+                onClick={button.run}
+              >
+                {button.glyph}
+              </IconButton>
+            ))}
+          </div>
+        }
+      />
+      {note !== undefined && <span data-section-note><Badge tone="needs-you" label={note}>{note}</Badge></span>}
       {!collapsed && children}
     </section>
   )
