@@ -83,6 +83,7 @@ function contextFor(
   const calls: Call[] = []
   const lines: string[] = []
   const ctx: CliContext = {
+    requestBase: crypto.randomUUID(),
     call: async (method, params = {}) => {
       calls.push({ method, params })
       return await response(method, params)

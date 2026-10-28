@@ -10,7 +10,10 @@ export interface WatcherWorker { identity: WorkerIdentity; state: 'live' | 'exit
 export interface OpenEscalation { escalationId: string; escalationKind: string; status: string; foldCount: number; reason?: string; detail?: string; approvalScope?: ApprovalScope; [key: string]: unknown }
 export interface FleetAction { watcherId: string; watcherName: string; attemptId: string; atMs: number; actionKind: string; state: 'attempted' | 'running' | 'settled'; effect?: 'landed' | 'not-landed' | 'indeterminate'; reason?: string }
 export type WatcherCommand =
-  | { kind: 'pause' | 'resume' | 'disarm' | 'delete' }
+  | { kind: 'pause' }
+  | { kind: 'resume' }
+  | { kind: 'disarm' }
+  | { kind: 'delete' }
   | { kind: 'approve'; escalationId: string; scope: ApprovalScope }
   | { kind: 'adjust-budget'; budget: BudgetPolicy }
   | { kind: 'set-concurrency'; maxConcurrency: number }

@@ -152,7 +152,7 @@ export function WorktreesSection({ context, report, requests }: Props) {
           .filter((row) => row.worktree.id === target.id)
           .flatMap((row) => row.descendants)
           .map((id) => worktrees.find((w) => w.id === id))
-          .filter((w): w is Worktree => w !== undefined)
+          .filter((w) => w !== undefined)
       : undefined
   const trustRepo = trust ? repos.find((r) => r.id === trust.request.repoId) : undefined
 

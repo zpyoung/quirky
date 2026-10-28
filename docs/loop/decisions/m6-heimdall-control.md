@@ -110,5 +110,38 @@
 - **Revisit if:** owner service responses change their consumed identity or certainty contract
 - **Source:** assumed — autonomous
 
+## D11: Validate commands before opening conditional deletion confirmation
+- **Question:** malformed delete requests reached the daemon's confirmation path before canonical command validation
+- **Options:** confirm invalid requests; duplicate a looser parser; reuse the control plane's canonical parser
+- **Chose:** describeCommand uses exported parseControlRequest. Invalid requests never open an ask and return invalid-command; valid delete retains single-use exact confirmation. Preserve ordinary awaiting-approval as Held: only verdict escalate records Escalated.
+- **Why:** a public invalid-delete regression first returned confirmation-required, then passed after the shared preflight. The real public control suite exercises exact approval, lifecycle, budget, flags, fences and confirmation cancellation without model calls.
+- **Evidence:** control-acceptance.test.ts; observed12pass98assertions2.40s before owner composition; runner verdict branch retained through ccbfa0cb/f1f29443
+- **Reversibility:** easy
+- **Confidence:** high for exercised public boundaries
+- **Revisit if:** describeCommand and command accept different request shapes
+- **Source:** assumed — autonomous
+
+## D12: Compose genuine dependency authority and preserve landed persistence history
+- **Question:** old dependency ancestry conflicted with canonical session/structured migrations and actual owner resource lifetime
+- **Options:** duplicate stores or fabricate service authority; compose real checkpoints and preserve canonical state
+- **Chose:** real orchestration ancestry7f789885, owner348efc61 through ccbfa0cb, then owner/core f1f29443. Preserve session badge migration8 and append pointer migration9; structured journal1 and receipt migration2; Session.launchSettings remains the only native launch replay snapshot. Scoped owner lifetimes stay in memory. Owner release must settle before deleting its enrollment, and uncertainty retains the row. Only owner-answer-sent maps to applied; plane owns revision/save/unpark.
+- **Why:** metadata cannot forge an attested worker or prove a stopped child. Renumbering landed migrations loses persisted state. Full public response metadata must not invalidate an otherwise exact consumed Run/question/receipt projection.
+- **Evidence:** session127pass386assertions; protocol12pass240assertions; merged structured/Claude56pass212assertions; owner/public-control62pass420assertions; control-host canonical receipt regressions. Actual backend proof currently reports core.listDispatches.bind activation failure, assigned to core rather than bypassed.
+- **Reversibility:** medium
+- **Confidence:** high for observed persistence/native/public boundaries; worker backend acceptance not yet passing
+- **Revisit if:** dependency catch-up changes canonical authority or persistence ownership
+- **Source:** assumed — autonomous
+
+## D13: Apply the aged-item rule without claiming an unrun dogfood campaign
+- **Question:** whether to begin the unstarted final review and seven-goal UI campaign after this item exceeded two hours
+- **Options:** start another campaign; follow the current night-mode exception while retaining actual-surface smoke
+- **Chose:** skip unstarted full review/dogfood under the aged-item rule. Run a bounded actual web-surface smoke required by the coding workflow: fresh isolated quirkyd, real built-in UI, public fixture kind, visible fleet/detail/glyphs/explanation and Pause. Keep native banners pending. No seven-goal likeuser verdict or final-review pass is claimed.
+- **Why:** current LOOP explicitly skips those unstarted campaigns for aged items, not implementation or verification. The minimal surface showed pushed fleet/counters/glyphs, verbatim operator-edit explanation and positive Pause feedback followed by Resume enabled/Pause disabled, with no frontend errors. Browser full-page screenshot wrapper stalled; a direct owned-CDP viewport capture succeeded, without an app workaround.
+- **Evidence:** authoritative LOOP Night mode; source claim/spec chronology; /tmp/heimdall-control-fleet.png and /tmp/heimdall-control-paused-detail.png; browser observations. Invalid first fixture setup used reserved built-in namespace under installed plugins; corrected to private real builtins, never relaxed admission.
+- **Reversibility:** easy
+- **Confidence:** high for exercised surface only
+- **Revisit if:** loop policy changes or a required surface fails
+- **Source:** locked by docs/loop/LOOP.md
+
 ## Progress
-Core runtime794266f1 and its import correction are merged. Operator main/manifest/host/lifecycle checkpoint752769fc published; main/service/manifest serial ownership handed to lane12 for the exact owner callback and owner APIs/CLI. Parent will not edit those hubs until its checkpoint. Manifest/nullable owner checks and actual main import pass; focused operator tests42pass192assertions after response/terminal regression fixes. Original component trees removed. Actual orchestration main/manifest/service facade still pending in dependency source; no stub or bypass used. Next: merge real backend and owner checkpoints, run daemon/CLI/worker/UI proof, affected suite/scripts/typecheck, deps-ready/catch-up/incoming decisions and queue land under current night policy. No full-runtime, dogfood, review or completion claim.
+Real owner/core checkpoints through f1f29443 and bounded owner type correction913a63a0 are integrated. Actual build passed and packaged Quirky.app before latest core composition; minimal actual web smoke completed and owned tabs/daemon stopped. Scripts66pass517assertions. First full typecheck found214diagnostics37files: lane10 repairs control/UI/package/worktree/notification/native-fixture types, owner published its correction, core owns remaining core/orchestration corrections. Native worker and notification acceptance now fail the same genuine backend activation defect core.listDispatches.bind; no fake backend or principal used. Next: integrate core correction, prove actual worker question/answer/stop and notifications, scoped suite, corrected typecheck/build, deps-ready, single roadmap catch-up/incoming decisions and queue land. No full dogfood/review/completion claim.

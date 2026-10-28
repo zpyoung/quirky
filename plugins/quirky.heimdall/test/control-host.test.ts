@@ -9,13 +9,13 @@ function fixture() {
     watcherId: 'watcher', kind: 'objective', workspaceKey: 'local::/isolated', workspacePath: '/isolated',
     executionHostId: 'local', schedulerOwner: 'local', kindPayload: {}, enabled: true, paused: false, commandRevision: 0,
     capabilities: {}, budget: { wallClockActiveMs: null, turns: null }, coordinator: { handle: 'coordinator', paneKey: 'pane' },
-    orchestrationRunId: 'run-owned', createdAtMs: 0, terminalAtMs: null, parkReason: 'worker-question', haltReason: null
+    orchestrationRunId: 'run_owned', createdAtMs: 0, terminalAtMs: null, parkReason: 'worker-question', haltReason: null
   }
   const view: ServiceRunDetail = {
-    run: { id: 'run-owned', objective: 'Fixture worker', coordinatorSessionId: null, coordinatorHistory: [], consumerGeneration: 1,
+    run: { id: 'run_owned', objective: 'Fixture worker', coordinatorSessionId: null, coordinatorHistory: [], consumerGeneration: 1,
       createdAt: '2026-10-27T00:00:00.000Z', updatedAt: '2026-10-27T00:00:00.000Z', serviceOwner: { pluginId: 'quirky.heimdall', key: 'watcher' } },
-    workers: [{ dispatchId: 'dispatch', sessionId: 'session', processIncarnation: 'incarnation', state: 'live', lastContactAtMs: 0 }],
-    questions: [{ messageId: 'question', runId: 'run-owned', dispatchId: 'dispatch', askerSessionId: 'session', status: 'pending',
+    workers: [{ dispatchId: 'ctx_dispatch', sessionId: 'session', processIncarnation: 'incarnation', state: 'live', lastContactAtMs: 0 }],
+    questions: [{ messageId: 'msg_question', runId: 'run_owned', dispatchId: 'ctx_dispatch', askerSessionId: 'session', status: 'pending',
       answerMessageId: null, answerBody: null, answeredByGeneration: null, createdAt: '2026-10-27T00:00:00.000Z', answeredAt: null, closedAt: null, body: 'Continue?' }]
   }
   let wrongReplyIdentity = false
@@ -24,12 +24,12 @@ function fixture() {
     if (method === 'quirky.orchestration/serviceReply') {
       view.questions[0]!.status = 'answered'
       view.questions[0]!.answerBody = String(params.body)
-      return { kind: 'question_answer', messageId: wrongReplyIdentity ? 'another-question' : 'question', answerMessageId: 'answer', threadId: 'thread', duplicate: false,
+      return { kind: 'question_answer', messageId: wrongReplyIdentity ? 'msg_another' : 'msg_question', answerMessageId: 'msg_answer', threadId: 'thread', duplicate: false,
         mutation: { requestId: params.requestId, replayed: false } }
     }
     if (method === 'quirky.orchestration/serviceWorkerStop') {
       view.workers[0]!.state = 'exited'
-      return { dispatchId: 'dispatch', state: 'stopped', processAction: 'closed_agent_terminal', mutation: { requestId: params.requestId, replayed: false } }
+      return { dispatchId: 'ctx_dispatch', state: 'stopped', processAction: 'closed_agent_terminal', mutation: { requestId: params.requestId, replayed: false } }
     }
     throw new Error(`Unexpected owner operation ${method}`)
   }
@@ -43,21 +43,21 @@ function fixture() {
 describe('owner service response certainty', () => {
   test('accepts full public run/question rows and a receipt-backed exact answer', async () => {
     const t = fixture()
-    expect(await t.host.answerQuestion(t.enrollment, 'question', 'Proceed')).toMatchObject({ kind: 'applied' })
+    expect(await t.host.answerQuestion(t.enrollment, 'msg_question', 'Proceed')).toMatchObject({ kind: 'applied' })
     expect(t.view.questions[0]).toMatchObject({ status: 'answered', answerBody: 'Proceed' })
-    expect(await t.host.answerQuestion(t.enrollment, 'question', 'Again')).toMatchObject({ kind: 'refused', reason: 'question-already-answered' })
+    expect(await t.host.answerQuestion(t.enrollment, 'msg_question', 'Again')).toMatchObject({ kind: 'refused', reason: 'question-already-answered' })
   })
 
   test('accepts a full exact-worker stop receipt without classifying the confirmed effect as unknown', async () => {
     const t = fixture()
-    expect(await t.host.stopWorker(t.enrollment, { dispatchId: 'dispatch', sessionId: 'session', processIncarnation: 'incarnation' })).toMatchObject({ kind: 'applied' })
+    expect(await t.host.stopWorker(t.enrollment, { dispatchId: 'ctx_dispatch', sessionId: 'session', processIncarnation: 'incarnation' })).toMatchObject({ kind: 'applied' })
     expect(t.view.workers[0]!.state).toBe('exited')
   })
 
   test('a reply for another question never confirms this answer even after the remote mutation', async () => {
     const t = fixture()
     t.mismatchReply()
-    expect(await t.host.answerQuestion(t.enrollment, 'question', 'Proceed')).toMatchObject({ kind: 'indeterminate' })
+    expect(await t.host.answerQuestion(t.enrollment, 'msg_question', 'Proceed')).toMatchObject({ kind: 'indeterminate' })
     expect(t.view.questions[0]!.status).toBe('answered')
   })
 })
