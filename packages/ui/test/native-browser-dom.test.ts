@@ -1,10 +1,15 @@
-import { afterAll, beforeAll, expect, test } from 'bun:test'
+import { afterAll, beforeAll, expect, test, vi } from 'bun:test'
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
 import { act, createElement, useState } from 'react'
 import type { Root } from 'react-dom/client'
 import { createElectrobunNativeBrowserAdapter, createNativeBrowserCapability } from '../src/native-browser'
 
-type GuestView = HTMLElement & { emitState(detail: unknown): void }
+type GuestView = HTMLElement & {
+  emitState(detail: unknown): void
+  emitEvent(name: string, detail: unknown): void
+  onExecute?: (script: string) => void
+  lastExecution?: string
+}
 let announceGuest: ((guest: GuestView) => void) | undefined
 let createRoot: (element: HTMLElement) => Root
 beforeAll(async () => {
@@ -15,6 +20,8 @@ beforeAll(async () => {
   class GuestElement extends HTMLElement {
     webviewId = 7
     listeners = new Map<string, Set<(event: CustomEvent) => void>>()
+    onExecute?: (script: string) => void
+    lastExecution?: string
     connectedCallback() {
       const announce = announceGuest
       announceGuest = undefined
@@ -33,23 +40,31 @@ beforeAll(async () => {
     reload() { throw new Error('not exercised by this DOM fixture') }
     goBack() { throw new Error('not exercised by this DOM fixture') }
     goForward() { throw new Error('not exercised by this DOM fixture') }
-    executeJavascript(script: string) { window.eval(script) }
-    emitState(detail: unknown) {
-      for (const listener of this.listeners.get('host-message') ?? []) listener(new CustomEvent('host-message', { detail }))
+    executeJavascript(script: string) {
+      this.lastExecution = script
+      this.onExecute?.(script)
+      window.eval(script)
     }
+    emitEvent(name: string, detail: unknown) {
+      for (const listener of this.listeners.get(name) ?? []) listener(new CustomEvent(name, { detail }))
+    }
+    emitState(detail: unknown) { this.emitEvent('host-message', detail) }
   }
   customElements.define('electrobun-webview', GuestElement)
 })
 afterAll(() => GlobalRegistrator.unregister())
 
-async function mountGuest() {
+async function mountGuest(claimGate?: Promise<void>) {
   const element = document.createElement('div')
   document.body.append(element)
   const mounted = Promise.withResolvers<GuestView>()
   const released = Promise.withResolvers<void>()
   announceGuest = mounted.resolve
   const capability = createNativeBrowserCapability(createElectrobunNativeBrowserAdapter({
-    async claimNativeBrowserView() { return { zoomFactor: 1 } },
+    async claimNativeBrowserView() {
+      if (claimGate) await claimGate
+      return { zoomFactor: 1 }
+    },
     async setNativeBrowserZoom({ level }) { return { zoomFactor: Math.pow(1.2, level) } },
     async releaseNativeBrowserView() { released.resolve(); return { released: true } }
   }))
@@ -62,7 +77,7 @@ async function mountGuest() {
   if (!guest || !preload) throw new Error('native adapter did not attach its real guest program')
   ;(window as Window & { __electrobunSendToHost?: (detail: unknown) => void }).__electrobunSendToHost = (detail) => guest.emitState(detail)
   window.eval(preload)
-  return { handle, async cleanup() { handle.dispose(); await released.promise; element.remove() } }
+  return { handle, guest, async cleanup() { handle.dispose(); await released.promise; element.remove() } }
 }
 
 test('finding text does not replace framework-owned nodes or break a later page update', async () => {
@@ -108,5 +123,165 @@ test('real DOM find moves forward, wraps backward, and clears its selection', as
   } finally {
     await guest.cleanup()
     paragraph.remove()
+  }
+})
+
+test('native evaluation returns bounded JSON for synchronous and asynchronous guest results', async () => {
+  const guest = await mountGuest()
+  try {
+    await expect(guest.handle.evaluate('({ answer: 42 })')).resolves.toEqual({ answer: 42 })
+    await expect(guest.handle.evaluate('Promise.resolve({ source: "guest" })')).resolves.toEqual({ source: 'guest' })
+    await expect(guest.handle.evaluate('throw new Error("guest failure")')).rejects.toThrow(/guest failure/)
+    const nonAsciiError = 'é'.repeat(1024)
+    await expect(guest.handle.evaluate(`throw new Error(${JSON.stringify(nonAsciiError)})`)).rejects.toThrow('é'.repeat(512))
+    await expect(guest.handle.evaluate('x'.repeat(64 * 1024 + 1))).rejects.toThrow(/script.*limit/i)
+    await expect(guest.handle.evaluate('JSON.stringify("x".repeat(300000))')).rejects.toThrow(/result.*limit/i)
+  } finally {
+    await guest.cleanup()
+  }
+})
+
+test('native evaluation matches guest and request identity and rejects on navigation', async () => {
+  const guest = await mountGuest()
+  try {
+    const dispatched = Promise.withResolvers<string>()
+    guest.guest.onExecute = dispatched.resolve
+    const pending = guest.handle.evaluate('new Promise(() => {})')
+    const invocation = await dispatched.promise
+    const requestId = invocation.match(/__quirkyNativeBrowserEvaluate\?\.\("([^"]+)"/)?.[1]
+    expect(requestId).toBeTruthy()
+    guest.guest.emitState({
+      type: 'quirky-native-browser-evaluation-result', requestId: 'stale-request-id', ok: true, resultJson: '"forged"'
+    })
+    const impostor = document.createElement('electrobun-webview') as GuestView
+    impostor.emitState({
+      type: 'quirky-native-browser-evaluation-result', requestId, ok: true, resultJson: '"wrong guest"'
+    })
+    guest.guest.emitState({
+      type: 'quirky-native-browser-evaluation-result', requestId, ok: true, resultJson: '"actual"'
+    })
+    await expect(pending).resolves.toBe('actual')
+
+    const nextDispatch = Promise.withResolvers<string>()
+    guest.guest.onExecute = nextDispatch.resolve
+    const navigating = guest.handle.evaluate('new Promise(() => {})')
+    const navigationRejection = expect(navigating).rejects.toThrow(/navigation/i)
+    const nextInvocation = await nextDispatch.promise
+    const nextRequestId = nextInvocation.match(/__quirkyNativeBrowserEvaluate\?\.\("([^"]+)"/)?.[1]
+    guest.guest.emitEvent('will-navigate', { url: 'https://example.test/next' })
+    await navigationRejection
+
+    guest.guest.emitEvent('did-navigate', { url: 'https://example.test/next' })
+    const freshDispatch = Promise.withResolvers<string>()
+    guest.guest.onExecute = freshDispatch.resolve
+    const fresh = guest.handle.evaluate('new Promise(() => {})')
+    const freshInvocation = await freshDispatch.promise
+    const freshRequestId = freshInvocation.match(/__quirkyNativeBrowserEvaluate\?\.\("([^"]+)"/)?.[1]
+    guest.guest.emitState({
+      type: 'quirky-native-browser-evaluation-result', requestId: nextRequestId, ok: true, resultJson: '\"late\"'
+    })
+    guest.guest.emitState({
+      type: 'quirky-native-browser-evaluation-result', requestId: freshRequestId, ok: true, resultJson: '\"current\"'
+    })
+    await expect(fresh).resolves.toBe('current')
+    const samePageDispatch = Promise.withResolvers<string>()
+    guest.guest.onExecute = samePageDispatch.resolve
+    const samePageEvaluation = guest.handle.evaluate('new Promise(() => {})')
+    const samePageRejection = expect(samePageEvaluation).rejects.toThrow(/navigation/i)
+    await samePageDispatch.promise
+    guest.guest.emitEvent('did-navigate', { url: 'https://example.test/next' })
+    await samePageRejection
+  } finally {
+    await guest.cleanup()
+  }
+})
+test('guest loading state does not cancel evaluation while the adapter is becoming ready', async () => {
+  const claim = Promise.withResolvers<void>()
+  const guest = await mountGuest(claim.promise)
+  try {
+    const pending = guest.handle.evaluate('({ safe: true })')
+    const result = expect(pending).resolves.toEqual({ safe: true })
+    guest.guest.emitState({
+      type: 'quirky-native-browser-state',
+      url: 'about:blank',
+      title: 'Current document',
+      loading: true,
+      findCurrent: 0,
+      findTotal: 0
+    })
+    claim.resolve()
+    await result
+  } finally {
+    claim.resolve()
+    await guest.cleanup()
+  }
+})
+
+test('native navigation while the adapter is becoming ready cannot dispatch a stale evaluation', async () => {
+  const claim = Promise.withResolvers<void>()
+  const guest = await mountGuest(claim.promise)
+  let executed = false
+  guest.guest.onExecute = () => { executed = true }
+  const pending = guest.handle.evaluate('({ stale: true })')
+  const rejection = expect(pending).rejects.toThrow(/navigation/i)
+
+  guest.guest.emitEvent('will-navigate', { url: 'https://example.test/next' })
+  await rejection
+  guest.guest.emitState({
+    type: 'quirky-native-browser-state',
+    url: 'about:blank',
+    title: 'Departing document',
+    loading: false,
+    findCurrent: 0,
+    findTotal: 0
+  })
+  claim.resolve()
+  await guest.handle.request({ action: 'zoom', level: 0 })
+  expect(executed).toBe(false)
+  await guest.cleanup()
+})
+
+test('native evaluation deadline includes guest readiness', async () => {
+  const claim = Promise.withResolvers<void>()
+  const guest = await mountGuest(claim.promise)
+  try {
+    vi.useFakeTimers()
+    const pending = guest.handle.evaluate('({ ready: true })')
+    const rejection = expect(pending).rejects.toThrow(/timed out/i)
+    await vi.advanceTimersByTimeAsync(5000)
+    await rejection
+  } finally {
+    vi.useRealTimers()
+    claim.resolve()
+    await guest.cleanup()
+  }
+})
+
+
+test('native evaluation rejects pending work when its browser view is disposed', async () => {
+  const guest = await mountGuest()
+  const dispatched = Promise.withResolvers<string>()
+  guest.guest.onExecute = dispatched.resolve
+  const pending = guest.handle.evaluate('new Promise(() => {})')
+  const rejection = expect(pending).rejects.toThrow(/disposed/i)
+  await dispatched.promise
+  await guest.cleanup()
+  await rejection
+})
+
+test('native evaluation times out when guest work never settles', async () => {
+  const guest = await mountGuest()
+  try {
+    vi.useFakeTimers()
+    const dispatched = Promise.withResolvers<string>()
+    guest.guest.onExecute = dispatched.resolve
+    const pending = guest.handle.evaluate('new Promise(() => {})')
+    const rejection = expect(pending).rejects.toThrow(/timed out/i)
+    await dispatched.promise
+    await vi.advanceTimersByTimeAsync(5000)
+    await rejection
+  } finally {
+    vi.useRealTimers()
+    await guest.cleanup()
   }
 })
