@@ -13,7 +13,7 @@
     {
       "id": "AC6-AC7-native-link",
       "title": "With isolated HOME/QUIRKY_HOME and a fixture native Claude/Codex sign-in command, verify Copy sign-in link uses the macOS clipboard and Open invokes the system browser for exactly the displayed approved authorize URL. Cancel the owned fixture login and return focus to Quirky. Never authenticate a real account or grant access to the user's credentials.",
-      "status": "fail",
+      "status": "pending",
       "lastRun": "2026-10-28",
       "report": "/Users/zpyoung/orca/workspaces/quirky/native-qa/.quirk/using-apps-like-a-user/runs/20261028T060850-9953/report.md",
       "summary": "Codex Copy link copies the exact authorize URL and Cancel stops the owned login, but Open does nothing in the desktop window (plain target=_blank link; no system browser)."

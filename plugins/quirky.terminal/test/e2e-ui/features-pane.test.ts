@@ -264,6 +264,11 @@ test(
   async () => {
     const f = await startFeatures()
     const { session } = await firstPane(f)
+    // A mounted/focused pane can still be parsing replay with its input gate muted.
+    // Wait for a shell-computed marker in this xterm, not just the host's ready state.
+    const output = await f.h.run(session, ':')
+    const readyMarker = output.filter((line) => /^@@\d+@@$/.test(line)).at(-1)!
+    await waitForScreen(f, session, readyMarker, (lines) => lines.includes(readyMarker))
     const spaced = '/tmp/a b.txt'
     const plain = '/tmp/c.txt'
     const host = termOf(f, session).element!.closest('[data-terminal-pane]')!
@@ -273,7 +278,7 @@ test(
     expect(drop.defaultPrevented).toBe(true)
     const typed = `'${spaced}' ${plain}`
     await waitFor('the paths at the prompt', async () => ((await f.h.screen(session)).some((line) => line.endsWith(typed)) ? true : undefined))
-    await Bun.sleep(300)
+    // The echoed paths prove delivery; the exact write below proves no Enter was sent.
     const rows = await f.h.screen(session)
     expect(rows.filter((line) => line.includes(typed))).toHaveLength(1)
     expect(rows.some((line) => line.includes('command not found') || line.includes('no such file'))).toBe(false)

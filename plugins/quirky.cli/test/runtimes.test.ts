@@ -1,6 +1,9 @@
 import { afterEach, beforeEach, expect, test } from 'bun:test'
-import { readFileSync, rmSync, statSync, symlinkSync } from 'node:fs'
+import { statSync, symlinkSync } from 'node:fs'
 import { join, resolve } from 'node:path'
+import { RpcErrorCode } from '@quirky/protocol'
+import { runCli } from '../../../packages/cli/test/fixtures/fake-daemon'
+import { createPairedDaemonLink } from '../../../packages/cli/src/paired-link'
 import { savedRuntimeStorePath } from '@quirky/protocol/node'
 import { makeTempHome, startHarness, type Harness } from '../../../packages/daemon/test/helpers'
 import { makeTempDir, removeTempDirs } from '../../../packages/daemon/test/plugins/fixtures'
@@ -53,15 +56,15 @@ test('saved paired runtime APIs retain private offers but never return credentia
   expect(code).not.toBeNull()
   const offer = JSON.parse(Buffer.from(code!, 'base64url').toString('utf8')) as { deviceToken: string }
 
-  const added = await caller.callAny('quirky.cli/runtime.add', { name: 'Build desktop', pairingCode: pairing.pairingUrl }) as {
+  const added = await caller.callAny('quirky.cli/runtimeAdd', { name: 'Build desktop', pairingCode: pairing.pairingUrl }) as {
     id: string; name: string; pairedDeviceId: string
   }
   expect(added).toMatchObject({ name: 'Build desktop' })
   expect(added).not.toHaveProperty('pairingCode')
-  const listed = await caller.callAny('quirky.cli/runtime.list', {}) as { runtimes: unknown[] }
-  const shown = await caller.callAny('quirky.cli/runtime.show', { selector: added.id })
-  const status = await caller.callAny('quirky.cli/runtime.status', {})
-  for (const safeView of [listed, shown, status]) {
+  const listed = await caller.callAny('quirky.cli/runtimeList', {}) as { runtimes: unknown[] }
+  const shown = await caller.callAny('quirky.cli/runtimeShow', { selector: added.id })
+  const status = await caller.callAny('quirky.cli/runtimeStatus', {})
+  for (const safeView of [added, listed, shown, status]) {
     expect(JSON.stringify(safeView)).not.toContain(pairing.pairingUrl)
     expect(JSON.stringify(safeView)).not.toContain(code!)
     expect(JSON.stringify(safeView)).not.toContain(offer.deviceToken)
@@ -70,18 +73,104 @@ test('saved paired runtime APIs retain private offers but never return credentia
 
   const file = savedRuntimeStorePath(home)
   expect((statSync(file).mode & 0o777)).toBe(0o600)
-  const stored = readFileSync(file, 'utf8')
-  expect(stored).toContain(pairing.pairingUrl)
-  expect(stored).toContain(offer.deviceToken)
 
-  await caller.callAny('quirky.cli/runtime.remove', { selector: added.id, yes: true })
-  expect(await caller.callAny('quirky.cli/runtime.list', {})).toEqual({ runtimes: [] })
-  expect(readFileSync(file, 'utf8')).not.toContain(offer.deviceToken)
+  const savedLink = createPairedDaemonLink(home, { kind: 'saved', selector: added.id }, {})
+  try {
+    expect(await savedLink.callAny('quirky.mobile/api', {})).toEqual(
+      await caller.callAny('quirky.mobile/api', {})
+    )
+  } finally {
+    savedLink.close()
+  }
+
+  await caller.callAny('quirky.cli/runtimeRemove', { selector: added.id, yes: true })
+  expect(await caller.callAny('quirky.cli/runtimeList', {})).toEqual({ runtimes: [] })
+  const removedLink = createPairedDaemonLink(home, { kind: 'saved', selector: added.id }, {})
+  try {
+    await expect(removedLink.callAny('quirky.mobile/api', {})).rejects.toMatchObject({ code: RpcErrorCode.Conflict })
+  } finally {
+    removedLink.close()
+  }
 })
 
 test('a malformed pairing offer is rejected before any saved runtime is written', async () => {
   const { home, caller } = await start()
-  await expect(caller.callAny('quirky.cli/runtime.add', { name: 'broken', pairingCode: 'not-a-pairing-offer' })).rejects.toThrow(/Pairing/)
-  expect(await caller.callAny('quirky.cli/runtime.list', {})).toEqual({ runtimes: [] })
+  await expect(caller.callAny('quirky.cli/runtimeAdd', { name: 'broken', pairingCode: 'not-a-pairing-offer' })).rejects.toMatchObject({ code: RpcErrorCode.InvalidParams })
+  expect(await caller.callAny('quirky.cli/runtimeList', {})).toEqual({ runtimes: [] })
   expect(() => statSync(savedRuntimeStorePath(home))).toThrow()
+})
+
+test('owner targets call only the selected remote daemon through saved and one-off encrypted links', async () => {
+  const local = await start()
+  const remote = await start()
+  const paired = await remote.caller.callAny('quirky.mobile/ownerPair', {
+    name: 'Remote owner',
+    confirm: true,
+    address: '127.0.0.1'
+  }) as { offer: string; grant: { grantId: string }; endpoint: string }
+  const added = await local.caller.callAny('quirky.cli/runtimeAdd', {
+    name: 'Owner target',
+    pairingCode: paired.offer
+  }) as { id: string; endpoint: string; pairedDeviceId: string; grantId: string; scope: string }
+  expect(added).toMatchObject({
+    scope: 'owner-cli',
+    grantId: paired.grant.grantId,
+    endpoint: paired.endpoint,
+    pairedDeviceId: paired.grant.grantId
+  })
+  expect(JSON.stringify(added)).not.toContain(paired.offer)
+  expect(JSON.stringify(await local.caller.callAny('quirky.cli/runtimeList', {}))).not.toContain(paired.offer)
+
+  const localState = await local.caller.callAny('quirky.mobile/state', {}) as { machineName: string }
+  const remoteState = await remote.caller.callAny('quirky.mobile/state', {}) as { machineName: string }
+  const routed = await local.caller.callAny('quirky.cli/runtimeCall', {
+    runtime: added.id,
+    method: 'quirky.mobile/state',
+    params: {}
+  }) as { runtime: { id: string; grantId: string; endpoint: string }; result: { machineName: string } }
+  expect(routed.runtime).toMatchObject({ id: added.id, grantId: paired.grant.grantId, endpoint: paired.endpoint })
+  expect(routed.result).toEqual(remoteState)
+  expect(await local.caller.callAny('quirky.mobile/state', {})).toEqual(localState)
+
+  const savedLink = createPairedDaemonLink(local.home, { kind: 'saved', selector: added.id }, {})
+  try {
+    const fullApi = await savedLink.callAny('api.describe', {}) as { methods: { name: string }[] }
+    expect(fullApi.methods.some(({ name }) => name === 'quirky.mobile/ownerPair')).toBe(true)
+    await savedLink.callAny('quirky.mobile/configure', { machineName: 'Changed through saved owner' }, { requestId: 'owner-saved-route' })
+  } finally {
+    savedLink.close()
+  }
+  expect(await remote.caller.callAny('quirky.mobile/state', {})).toMatchObject({ machineName: 'Changed through saved owner' })
+  expect(await local.caller.callAny('quirky.mobile/state', {})).toEqual(localState)
+
+  const oneOff = createPairedDaemonLink(local.home, { kind: 'pairing', pairingCode: paired.offer }, {})
+  try {
+    await oneOff.callAny('quirky.mobile/configure', { machineName: 'Changed through one-off owner' }, { requestId: 'owner-one-off-route' })
+  } finally {
+    oneOff.close()
+  }
+  expect(await remote.caller.callAny('quirky.mobile/state', {})).toMatchObject({ machineName: 'Changed through one-off owner' })
+  expect(await local.caller.callAny('quirky.mobile/state', {})).toEqual(localState)
+
+  const command = await runCli([
+    'cli', 'runtime', 'call', '--target', added.id, '--method', 'quirky.mobile/configure',
+    '--arguments', JSON.stringify({ machineName: 'Changed through local owner routing command' }), '--json'
+  ], { home: local.home })
+  expect(command.code).toBe(0)
+  expect(await remote.caller.callAny('quirky.mobile/state', {})).toMatchObject({ machineName: 'Changed through local owner routing command' })
+  expect(await local.caller.callAny('quirky.mobile/state', {})).toEqual(localState)
+
+  const phonePair = await remote.caller.callAny('quirky.mobile/pair', { address: '127.0.0.1' }) as {
+    pairingUrl: string
+  }
+  const phoneAdded = await local.caller.callAny('quirky.cli/runtimeAdd', {
+    name: 'Phone target',
+    pairingCode: phonePair.pairingUrl
+  }) as { id: string; scope: string }
+  expect(phoneAdded.scope).toBe('mobile')
+  await expect(local.caller.callAny('quirky.cli/runtimeCall', {
+    runtime: phoneAdded.id,
+    method: 'quirky.mobile/state',
+    params: {}
+  })).rejects.toThrow(/owner/i)
 })

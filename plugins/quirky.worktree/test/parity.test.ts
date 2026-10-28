@@ -44,20 +44,20 @@ describe('remaining workspace options are durable and truthful', () => {
     const w = await start()
     world = w
     const defaults = await call(w.t.client, 'quirky.worktree/options') as StockWorktreeOptions
-    expect(defaults).toMatchObject({ groupBy: 'project', sortBy: 'recent', projectOrderBy: 'manual', hideCliCreated: false, hideDefaultBranch: false, hideDetached: false })
+    expect(defaults).toMatchObject({ groupBy: 'project', sortBy: 'recent', projectOrderBy: 'manual', hideCliCreated: false, hideDefaultBranch: false, hideDetached: false, hideOtherClients: false })
     expect(defaults.showProperties).toContain('branch')
 
     const chosen = await call(w.t.client, 'quirky.worktree/setOptions', {
       groupBy: 'pr', sortBy: 'agent-activity', projectOrderBy: 'recent', hideCliCreated: true,
-      hideDefaultBranch: true, hideDetached: true, filterRepoIds: [w.repo.id], showProperties: ['branch', 'notes', 'pullRequest']
+      hideDefaultBranch: true, hideDetached: true, hideOtherClients: true, filterRepoIds: [w.repo.id], showProperties: ['branch', 'notes', 'pullRequest']
     }) as StockWorktreeOptions
-    expect(chosen).toMatchObject({ groupBy: 'pr', sortBy: 'agent-activity', projectOrderBy: 'recent', hideCliCreated: true, hideDefaultBranch: true, hideDetached: true, filterRepoIds: [w.repo.id], showProperties: ['branch', 'notes', 'pullRequest'] })
+    expect(chosen).toMatchObject({ groupBy: 'pr', sortBy: 'agent-activity', projectOrderBy: 'recent', hideCliCreated: true, hideDefaultBranch: true, hideDetached: true, hideOtherClients: true, filterRepoIds: [w.repo.id], showProperties: ['branch', 'notes', 'pullRequest'] })
     await w.t.restart()
     expect(await call(w.t.client, 'quirky.worktree/options')).toEqual(chosen)
 
-    const cliResult = await cli(w, ['worktree', 'options', '--group-by', 'status', '--sort-by', 'project', '--hide-cli-created', '--hide-default-branch', '--hide-detached', '--json'])
+    const cliResult = await cli(w, ['worktree', 'options', '--group-by', 'status', '--sort-by', 'project', '--hide-cli-created', '--hide-default-branch', '--hide-detached', '--hide-other-clients', '--json'])
     expect(cliResult.code).toBe(0)
-    expect(JSON.parse(cliResult.stdout)).toMatchObject({ groupBy: 'status', sortBy: 'project', hideCliCreated: true, hideDefaultBranch: true, hideDetached: true })
+    expect(JSON.parse(cliResult.stdout)).toMatchObject({ groupBy: 'status', sortBy: 'project', hideCliCreated: true, hideDefaultBranch: true, hideDetached: true, hideOtherClients: true })
     await expect(call(w.t.client, 'quirky.worktree/setOptions', { hideOtherClient: true })).rejects.toThrow(/unknown/i)
   })
 

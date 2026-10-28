@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useId, useRef, useState } from 'react'
+import { Badge, Button, EmptyState, FormRow, SectionHeader, StatusDot } from '@quirky/ui'
 import type { ChangeEvent } from 'react'
 import type { BrowserFamily, ImportJob, ImportSource, ImportSummary } from '../cookies/types'
 import type { DetectedBrowser } from '../cookies/sources'
@@ -6,6 +7,14 @@ import type { CookieImportPanelProps } from '../preferences/contract'
 
 const POLL_INTERVAL_MS = 500
 const BROWSER_FAMILIES: readonly BrowserFamily[] = ['chrome', 'edge', 'arc', 'chromium', 'comet', 'helium', 'firefox', 'safari']
+const IMPORT_PANEL_STYLE = { display: 'grid', gap: 'var(--ui-space-8)', minWidth: 0, color: 'var(--ui-text)', fontSize: 'var(--ui-font-body)', background: 'var(--ui-surface)', border: 'var(--ui-border-width) solid var(--ui-border)', borderRadius: 'var(--ui-radius-control)', padding: 'var(--ui-space-8)' } as const
+const IMPORT_COPY_STYLE = { color: 'var(--ui-muted)', fontSize: 'var(--ui-font-body)', lineHeight: 1.4, margin: 0, overflowWrap: 'anywhere' } as const
+const IMPORT_MESSAGE_STYLE = { margin: 0, overflowWrap: 'anywhere' } as const
+const IMPORT_SUMMARY_STYLE = { display: 'grid', gap: 'var(--ui-space-6)', minWidth: 0, background: 'var(--ui-selected)', border: 'var(--ui-border-width) solid var(--ui-border)', borderRadius: 'var(--ui-radius-control)', padding: 'var(--ui-space-8)' } as const
+const IMPORT_SOURCES_STYLE = { display: 'grid', gap: 'var(--ui-space-8)', minWidth: 0 } as const
+const IMPORT_SOURCE_GROUP_STYLE = { display: 'grid', gap: 'var(--ui-space-8)', minWidth: 0, margin: 0, padding: 'var(--ui-space-8)', border: 'var(--ui-border-width) solid var(--ui-border)', borderRadius: 'var(--ui-radius-control)' } as const
+const IMPORT_SOURCE_BUTTONS_STYLE = { display: 'grid', gap: 'var(--ui-space-6)', minWidth: 0 } as const
+const IMPORT_ACTIONS_STYLE = { display: 'flex', flexWrap: 'wrap', gap: 'var(--ui-space-6)', minWidth: 0 } as const
 
 type ImportActivity = {
   target: CookieImportPanelProps['destination']
@@ -64,6 +73,7 @@ function browserSource(browser: DetectedBrowser, profileName: string): ImportSou
 }
 
 export function CookieImportPanel({ context, imports, destination, loadError, onHideHint, onError, onImported }: CookieImportPanelProps) {
+  const fileInputId = useId()
   const [browsers, setBrowsers] = useState<DetectedBrowser[]>([])
   const [detecting, setDetecting] = useState(false)
   const [detectionError, setDetectionError] = useState<string | null>(null)
@@ -274,71 +284,80 @@ export function CookieImportPanel({ context, imports, destination, loadError, on
           : null
   const result = activity?.status === 'succeeded' ? activity.result : undefined
 
-  return <section className="cookie-import-panel" aria-label="Import Cookies">
-    <h3>Import Cookies</h3>
-    <p>Cookies are imported to managed Chrome profile <strong>{currentDestination.label}</strong>. Native browser sessions are separate.</p>
-    <p>Google cookies are excluded from imports. Sign in to Google directly in Quirky.</p>
-    {imports?.reason && <p>{imports.reason}</p>}
-    {loadError && <p role="alert">{loadError}</p>}
-    {error && <p role="alert">{error}</p>}
-    {detectionError && <p role="alert">{detectionError}</p>}
-    {activityLabel && <p role="status" aria-live="polite">{activityLabel}</p>}
-    {activity?.status === 'failed' && <p role="status">Import failed for {activity.target.label}.</p>}
-    {activity?.status === 'succeeded' && result && <div aria-label="Import summary" role="status">
-      <h4>Import complete for {activity.target.label}</h4>
-      <p>Source: {activity.sourceLabel}</p>
-      <p>{result.importedCookies} imported, {result.skippedCookies} skipped, {result.totalCookies} total.</p>
-      <ul>
+  return <section aria-label="Import Cookies" style={IMPORT_PANEL_STYLE}>
+    <SectionHeader title="Import Cookies" />
+    <p style={IMPORT_COPY_STYLE}>Cookies are imported to managed Chrome profile <strong>{currentDestination.label}</strong>. Native browser sessions are separate.</p>
+    <p style={IMPORT_COPY_STYLE}>Google cookies are excluded from imports. Sign in to Google directly in Quirky.</p>
+    {imports?.reason && <p style={IMPORT_COPY_STYLE}>{imports.reason}</p>}
+    {loadError && <p className="ui-error-text" role="alert" style={IMPORT_MESSAGE_STYLE}>{loadError}</p>}
+    {error && <p className="ui-error-text" role="alert" style={IMPORT_MESSAGE_STYLE}>{error}</p>}
+    {detectionError && <p className="ui-error-text" role="alert" style={IMPORT_MESSAGE_STYLE}>{detectionError}</p>}
+    {activityLabel && <p role="status" aria-live="polite" style={IMPORT_MESSAGE_STYLE}><StatusDot status={activity?.status === 'failed' ? 'failing' : 'working'} label={activity?.status === 'failed' ? 'Import failed' : 'Import in progress'} /> {activityLabel}</p>}
+    {activity?.status === 'failed' && <p role="status" style={IMPORT_MESSAGE_STYLE}>Import failed for {activity.target.label}.</p>}
+    {activity?.status === 'succeeded' && result && <div aria-label="Import summary" role="status" style={IMPORT_SUMMARY_STYLE}>
+      <h3 style={{ fontSize: 'var(--ui-font-body)', margin: 0 }}>Import complete for {activity.target.label}</h3>
+      <p style={IMPORT_COPY_STYLE}>Source: {activity.sourceLabel}</p>
+      <p style={IMPORT_MESSAGE_STYLE}><Badge tone="working">{result.importedCookies}</Badge> imported, <Badge>{result.skippedCookies}</Badge> skipped, <Badge>{result.totalCookies}</Badge> total.</p>
+      <ul style={{ display: 'grid', gap: 'var(--ui-space-4)', margin: 0, paddingInlineStart: 'var(--ui-space-16)' }}>
         <li>{result.googleCookiesSkipped ?? 0} Google cookies skipped</li>
         <li>{result.partitionSkippedCookies ?? 0} partitioned cookies skipped</li>
       </ul>
-      <p>Destination: managed Chrome profile {activity.target.label}. Native browser sessions remain separate.</p>
-      {result.warning && <div aria-label="Import warnings">
-        <p>Engine warning: {result.warning.code}</p>
-        {result.warning.reasons?.map((reason, index) => <p key={`${index}-${reason}`}>{reason}</p>)}
+      <p style={IMPORT_COPY_STYLE}>Destination: managed Chrome profile {activity.target.label}. Native browser sessions remain separate.</p>
+      {result.warning && <div aria-label="Import warnings" style={{ display: 'grid', gap: 'var(--ui-space-4)' }}>
+        <p style={IMPORT_MESSAGE_STYLE}>Engine warning: {result.warning.code}</p>
+        {result.warning.reasons?.map((reason, index) => <p key={`${index}-${reason}`} style={IMPORT_COPY_STYLE}>{reason}</p>)}
       </div>}
     </div>}
-    <div aria-label="Detected cookie sources">
-      {detecting && <p role="status">Detecting installed browsers…</p>}
-      {!detecting && !detectionError && browsers.length === 0 && <p>No supported browsers were found.</p>}
+    <div aria-label="Detected cookie sources" style={IMPORT_SOURCES_STYLE}>
+      {detecting && <p role="status" style={IMPORT_MESSAGE_STYLE}><StatusDot status="working" label="Detecting installed browsers" /> Detecting installed browsers…</p>}
+      {!detecting && !detectionError && browsers.length === 0 && <EmptyState message="No supported browsers were found." />}
       {browsers.map((browser) => browser.profiles.length === 1
-        ? <button
+        ? <Button
           key={browser.family}
           type="button"
           disabled={busy || !available}
           onClick={() => importBrowserProfile(browser, browser.profiles[0]!.name)}
-        >From {browser.label}</button>
-        : <fieldset key={browser.family}>
-          <legend>{browser.label}</legend>
+        >From {browser.label}</Button>
+        : <fieldset key={browser.family} style={IMPORT_SOURCE_GROUP_STYLE}>
+          <legend style={{ color: 'var(--ui-text)', fontSize: 'var(--ui-font-label)', fontWeight: 600 }}>{browser.label}</legend>
           {browser.profiles.length === 0
-            ? <p>No profiles were found.</p>
-            : browser.profiles.map((profile) => <button
+            ? <p style={IMPORT_COPY_STYLE}>No profiles were found.</p>
+            : <div style={IMPORT_SOURCE_BUTTONS_STYLE}>{browser.profiles.map((profile) => <Button
               key={profile.name}
               type="button"
               disabled={busy || !available}
               onClick={() => importBrowserProfile(browser, profile.name)}
-            >{browser.label} — {profile.label}</button>)}
+            >{browser.label} — {profile.label}</Button>)}</div>}
         </fieldset>)}
     </div>
-    <button type="button" disabled={busy || detecting} onClick={() => void detectSources()}>{detecting ? 'Refreshing browsers…' : 'Refresh browsers'}</button>
-    <button type="button" disabled={busy || !available} onClick={() => setFileDialogOpen(true)}>From File</button>
-    <button type="button" onClick={() => {
-      void contextRef.current.executeCommand('command:quirky.browser/browserSettings').catch((cause: unknown) => {
-        const message = errorMessage(cause, 'Browser Settings could not be opened.')
-        reportError(message)
-      })
-    }}>Browser Settings…</button>
-    {onHideHint && <button type="button" onClick={() => callbacksRef.current.onHideHint?.()}>Hide Hint</button>}
-    {fileDialogOpen && <div role="dialog" aria-modal="true" aria-label="Import Cookies">
-      <h4>Import Cookies</h4>
-      <p>Choose a JSON file. Its selected bytes are read in this window and sent as cookie data to managed Chrome.</p>
-      <label>Choose JSON file<input
-        type="file"
-        accept="application/json,.json"
-        disabled={busy}
-        onChange={handleFileChange}
-      /></label>
-      <button type="button" disabled={busy} onClick={() => setFileDialogOpen(false)}>Cancel</button>
+    <div style={IMPORT_ACTIONS_STYLE}>
+      <Button type="button" disabled={busy || detecting} onClick={() => void detectSources()}>{detecting ? 'Refreshing browsers…' : 'Refresh browsers'}</Button>
+      <Button type="button" disabled={busy || !available} onClick={() => setFileDialogOpen(true)}>From File</Button>
+      <Button type="button" onClick={() => {
+        void contextRef.current.executeCommand('command:quirky.browser/browserSettings').catch((cause: unknown) => {
+          const message = errorMessage(cause, 'Browser Settings could not be opened.')
+          reportError(message)
+        })
+      }}>Browser Settings…</Button>
+      {onHideHint && <Button type="button" onClick={() => callbacksRef.current.onHideHint?.()}>Hide Hint</Button>}
+    </div>
+    {fileDialogOpen && <div className="ui-dialog-backdrop" role="dialog" aria-modal="true" aria-label="Import Cookies">
+      <section className="ui-dialog">
+        <SectionHeader title="Import Cookies" />
+        <p style={IMPORT_COPY_STYLE}>Choose a JSON file. Its selected bytes are read in this window and sent as cookie data to managed Chrome.</p>
+        <FormRow label="Choose JSON file" htmlFor={fileInputId}>
+          <input
+            id={fileInputId}
+            type="file"
+            accept="application/json,.json"
+            disabled={busy}
+            onChange={handleFileChange}
+          />
+        </FormRow>
+        <div style={IMPORT_ACTIONS_STYLE}>
+          <Button type="button" disabled={busy} onClick={() => setFileDialogOpen(false)}>Cancel</Button>
+        </div>
+      </section>
     </div>}
   </section>
 }

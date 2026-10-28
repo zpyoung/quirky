@@ -25,6 +25,7 @@ export type NativeBrowserHostRPC = {
         params: { viewId: number; owner: string }
         response: { released: true }
       }
+      readClipboardText: { params: {}; response: string }
       pickFolder: { params: FolderPickerRequest; response: FolderPickerResult }
       openWindow: { params: DesktopWindowOpenRequest; response: DesktopWindowResult }
       closeWindow: { params: { windowId: string }; response: DesktopWindowCloseResult }

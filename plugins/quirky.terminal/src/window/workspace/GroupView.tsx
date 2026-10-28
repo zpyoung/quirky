@@ -1,4 +1,5 @@
 import { useRef, type DragEvent, type MouseEvent as ReactMouseEvent } from 'react'
+import { Badge, Button, EmptyState, IconButton } from '@quirky/ui'
 import { displayTitle } from '../../layout/titles'
 import { dropZone, paneLeaves, roundRatio } from '../../layout/tree'
 import type { DropZone } from '../../layout/tree'
@@ -80,15 +81,15 @@ function TabItem({ controller, state, group, tab, index, others, now }: Common &
     >
       {terminal ? (unread ? <UnreadBell reason={unread} /> : <StatusGlyph session={session} now={now} />) : null}
       {renaming ? (
-        <InlineField label="Tab title" initial={displayTitle(tab)} className="qt-rename" onCommit={(value) => void controller.commitRename(value)} onCancel={() => controller.cancelRename()} />
+        <InlineField label="Tab title" initial={displayTitle(tab)} className="ui-text-field__input qt-rename" onCommit={(value) => void controller.commitRename(value)} onCancel={() => controller.cancelRename()} />
       ) : (
         <span className="qt-tab-title">{title}</span>
       )}
       {Object.entries(session?.badges ?? {}).map(([key, badge]) =>
         badge.command ? (
-          <button
+          <Button
             key={key}
-            type="button"
+            variant="secondary"
             className="qt-badge"
             title={badge.tooltip}
             onClick={(event) => {
@@ -97,18 +98,17 @@ function TabItem({ controller, state, group, tab, index, others, now }: Common &
             }}
           >
             {badge.label}
-          </button>
+          </Button>
         ) : (
           <span key={key} className="qt-badge" title={badge.tooltip}>
-            {badge.label}
+            <Badge>{badge.label}</Badge>
           </span>
         )
       )}
       {terminal && terminal.expandedPane !== null ? (
-        <button
-          type="button"
+        <IconButton
           className="qt-icon qt-collapse"
-          aria-label="Collapse expanded pane"
+          label="Collapse expanded pane"
           title="Collapse expanded pane"
           onClick={(event) => {
             event.stopPropagation()
@@ -116,7 +116,7 @@ function TabItem({ controller, state, group, tab, index, others, now }: Common &
           }}
         >
           <CollapseIcon />
-        </button>
+        </IconButton>
       ) : null}
       {tab.color !== 'none' ? <span className="qt-color" data-color={tab.color} style={{ background: tab.color.startsWith('#') ? tab.color : TAB_COLOR_HEX[tab.color as keyof typeof TAB_COLOR_HEX] }} title={tab.color} /> : null}
       {tab.pinned ? (
@@ -124,10 +124,9 @@ function TabItem({ controller, state, group, tab, index, others, now }: Common &
           <PinIcon />
         </span>
       ) : (
-        <button
-          type="button"
+        <IconButton
           className="qt-icon qt-tab-close"
-          aria-label={`Close ${title}`}
+          label={`Close ${title}`}
           title="Close"
           onClick={(event) => {
             event.stopPropagation()
@@ -135,7 +134,7 @@ function TabItem({ controller, state, group, tab, index, others, now }: Common &
           }}
         >
           <CloseIcon />
-        </button>
+        </IconButton>
       )}
     </div>
   )
@@ -143,26 +142,25 @@ function TabItem({ controller, state, group, tab, index, others, now }: Common &
 
 function EmptyGroup({ controller, group }: { controller: WorkspaceController; group: Group }) {
   const minimize = () => void controller.context.call('quirky.terminal/setFloating', { open: false }).catch(() => {})
+  const newTerminal = () => void controller.newTab({ group: group.id })
   if (controller.floating) {
     return (
       <div className="qt-empty">
-        <button type="button" onClick={() => void controller.newTab({ group: group.id })}>
+        <Button variant="secondary" onClick={newTerminal}>
           <span>New Terminal</span>
           <span className="qt-menu-key">⌘T</span>
-        </button>
-        <button type="button" onClick={minimize}>
+        </Button>
+        <Button variant="secondary" onClick={minimize}>
           <span>Minimize</span>
           <span className="qt-menu-key">⌘W</span>
-        </button>
+        </Button>
       </div>
     )
   }
   return (
     <div className="qt-empty">
-      <p className="qt-muted">No terminals open.</p>
-      <button type="button" className="qt-primary" onClick={() => void controller.newTab({ group: group.id })}>
-        New Terminal
-      </button>
+      <EmptyState message="No terminals open." />
+      <Button variant="primary" onClick={newTerminal}>New Terminal</Button>
     </div>
   )
 }
@@ -233,13 +231,13 @@ function GroupView({ controller, state, group }: Common & { group: Group }) {
             <TabItem key={entry.id} controller={controller} state={state} group={group} tab={entry} index={index} others={others} now={now} />
           ))}
         </div>
-        <button type="button" className="qt-icon qt-plus" data-plus={group.id} aria-label="New tab" title="New tab" aria-haspopup="menu" aria-expanded={menu?.kind === 'plus' && menu.target === group.id} onMouseDown={(event) => event.stopPropagation()} onClick={(event) => toggle('plus', event)}>
+        <IconButton className="qt-icon qt-plus" data-plus={group.id} label="New tab" title="New tab" aria-haspopup="menu" aria-expanded={menu?.kind === 'plus' && menu.target === group.id} onMouseDown={(event) => event.stopPropagation()} onClick={(event) => toggle('plus', event)}>
           +
-        </button>
+        </IconButton>
         {controller.options.stripExtras?.(group)}
-        <button type="button" className="qt-icon qt-actions" data-actions={group.id} aria-label="Pane actions" title="Pane actions" aria-haspopup="menu" aria-expanded={menu?.kind === 'actions' && menu.target === group.id} disabled={!split} onMouseDown={(event) => event.stopPropagation()} onClick={(event) => toggle('actions', event)}>
+        <IconButton className="qt-icon qt-actions" data-actions={group.id} label="Pane actions" title="Pane actions" aria-haspopup="menu" aria-expanded={menu?.kind === 'actions' && menu.target === group.id} disabled={!split} onMouseDown={(event) => event.stopPropagation()} onClick={(event) => toggle('actions', event)}>
           …
-        </button>
+        </IconButton>
       </div>
       <div
         ref={body}

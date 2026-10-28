@@ -25,8 +25,10 @@ function statusBadge(account: AccountSummary, activeId: string | null): { text: 
   ]
 }
 
-function LoginLinkNotice({ store, pending, provider }: { store: AccountsUiStore; pending: PendingLogin | null; provider: ManagedProvider }) {
+function LoginLinkNotice({ context, store, pending, provider }: { context: UiPluginContext; store: AccountsUiStore; pending: PendingLogin | null; provider: ManagedProvider }) {
   const loginCancelling = useStore(store).loginCancelling
+  const [opening, setOpening] = useState(false)
+  const [openError, setOpenError] = useState(false)
   if (!pending || pending.provider !== provider) return null
   const isCodex = provider === 'codex'
   const loginUrl = pending.url
@@ -43,8 +45,19 @@ function LoginLinkNotice({ store, pending, provider }: { store: AccountsUiStore;
           store.notify('Could not copy the link', 'Use the Open link to continue sign-in in your browser.')
         }
       }}>Copy link</button>
-      {isCodex && <a href={loginUrl} target="_blank" rel="noopener noreferrer">Open</a>}
+      {isCodex && <button type="button" disabled={opening} onClick={async () => {
+        setOpening(true)
+        setOpenError(false)
+        try {
+          await context.call('quirky.terminal/openExternal', { target: loginUrl })
+        } catch {
+          setOpenError(true)
+        } finally {
+          setOpening(false)
+        }
+      }}>{opening ? 'Opening…' : 'Open'}</button>}
     </div>}
+    {openError && <p className="status-error" role="alert">Could not open the sign-in link. Try again or use Copy link to open it in your browser.</p>}
     {pending.status === 'pending' && <button type="button" disabled={loginCancelling} onClick={() => void store.cancelLogin()}>{loginCancelling ? 'Cancelling…' : 'Cancel'}</button>}
   </div>
 }
@@ -84,7 +97,7 @@ function AccountRow({ store, provider, account, state }: { store: AccountsUiStor
   </div>
 }
 
-function ManagedAccountsSection({ store, provider }: { store: AccountsUiStore; provider: ManagedProvider }) {
+function ManagedAccountsSection({ context, store, provider }: { context: UiPluginContext; store: AccountsUiStore; provider: ManagedProvider }) {
   const snapshot = useStore(store)
   const state = snapshot.accounts
   const providerName = provider === 'claude' ? 'Claude' : 'Codex'
@@ -116,7 +129,7 @@ function ManagedAccountsSection({ store, provider }: { store: AccountsUiStore; p
         <button type="button" disabled={Boolean(anyPending)} onClick={() => void store.beginLogin('claude')}>{anyPending ? 'Signing in…' : 'Add Account'}</button>
         <details><summary aria-label="More sign-in options">More sign-in options</summary><button type="button" disabled={Boolean(anyPending)} onClick={() => void store.beginLogin('claude', { copyLink: true })}>Copy sign-in link instead</button></details>
       </div> : <button type="button" disabled={Boolean(anyPending)} onClick={() => void store.beginLogin('codex')}>{anyPending ? 'Signing in…' : 'Add Account'}</button>}
-      {pending?.provider === provider && <LoginLinkNotice store={store} pending={pending} provider={provider} />}
+      {pending?.provider === provider && <LoginLinkNotice key={pending.id} context={context} store={store} pending={pending} provider={provider} />}
     </section>
     {provider === 'claude' && <section className="section-card">
       <h3>When you switch accounts while Claude is running</h3>
@@ -261,7 +274,7 @@ function GeminiCliSettings({ context }: { context: UiPluginContext }) {
 
 function SettingsSection({ context, store, id }: { context: UiPluginContext; store: AccountsUiStore; id: string }) {
   const state = useStore(store).accounts
-  if (id === 'claude' || id === 'codex') return <ManagedAccountsSection store={store} provider={id} />
+  if (id === 'claude' || id === 'codex') return <ManagedAccountsSection context={context} store={store} provider={id} />
   if (id === 'gemini') return <GeminiCliSettings context={context} />
   if (id === 'grok' || id === 'cursor') return <ProviderReadOnlySettings store={store} provider={id} />
   if (id === 'credentials') return <MeterCredentials store={store} />

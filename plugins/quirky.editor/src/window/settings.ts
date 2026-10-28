@@ -13,7 +13,6 @@ export type EditorSettings = {
   followSymlinkedDirectories: boolean
   fontZoomLevel: number
   minimap: boolean
-  activityBarPosition: 'top' | 'side'
   sidebarWidth: number
 }
 
@@ -29,14 +28,13 @@ function readEditorSettings(context: UiPluginContext): EditorSettings {
   const followSymlinkedDirectories = context.getSetting('followSymlinkedDirectories')
   const fontZoomLevel = context.getSetting('editorFontZoomLevel')
   const minimap = context.getSetting('editorMinimapEnabled')
-  const activityBarPosition = context.getSetting('activityBarPosition')
   const sidebarWidth = context.getSetting('editorSidebarWidth')
   if (
     typeof autoSave !== 'boolean' || typeof autoSaveDelay !== 'number' || typeof wordWrap !== 'boolean' ||
     typeof fontFamily !== 'string' || typeof previewTabs !== 'boolean' || typeof markdownSpellcheck !== 'boolean' ||
     typeof markdownReviewTools !== 'boolean' || typeof showGitIgnored !== 'boolean' ||
     typeof followSymlinkedDirectories !== 'boolean' || typeof fontZoomLevel !== 'number' || typeof minimap !== 'boolean' ||
-    (activityBarPosition !== 'top' && activityBarPosition !== 'side') || typeof sidebarWidth !== 'number'
+    typeof sidebarWidth !== 'number'
   ) {
     throw new Error('Editor settings are missing or have invalid types.')
   }
@@ -52,7 +50,6 @@ function readEditorSettings(context: UiPluginContext): EditorSettings {
     followSymlinkedDirectories,
     fontZoomLevel,
     minimap,
-    activityBarPosition,
     sidebarWidth
   }
 }

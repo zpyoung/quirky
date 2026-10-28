@@ -1,11 +1,17 @@
 import { useEffect, useId, useRef, useState } from 'react'
+import { Badge, Button } from '@quirky/ui'
 import type { BrowserProfile } from '../profiles/store'
 import type { BrowserPreferencesProps } from '../preferences/contract'
 import { BROWSER_SETTING_IDS, ProfileCreator, errorMessage, profileSourceLabel, useBrowserPreferenceData } from './shared'
 import { CookieImportPanel } from './CookieImportPanel'
 
-const PROFILE_ROWS_STYLE = { display: 'flex', flexDirection: 'column', gap: 4 } as const
-const PROFILE_ROW_STYLE = { display: 'flex', alignItems: 'center', gap: 4 } as const
+const MENU_LAYOUT_STYLE = { display: 'grid', gap: 'var(--ui-space-12)', minWidth: 0, color: 'var(--ui-text)', fontSize: 'var(--ui-font-body)' } as const
+const MENU_CONTENT_STYLE = { display: 'grid', gap: 'var(--ui-space-8)', minWidth: 0 } as const
+const PROFILE_ROWS_STYLE = { display: 'grid', gap: 'var(--ui-space-6)', minWidth: 0, margin: 0, padding: 'var(--ui-space-8)', border: 'var(--ui-border-width) solid var(--ui-border)', borderRadius: 'var(--ui-radius-control)' } as const
+const PROFILE_ROW_STYLE = { alignItems: 'center', display: 'flex', flexWrap: 'wrap', gap: 'var(--ui-space-8)', minWidth: 0, padding: 'var(--ui-space-4)' } as const
+const MENU_ACTIONS_STYLE = { display: 'flex', flexWrap: 'wrap', gap: 'var(--ui-space-6)', minWidth: 0 } as const
+const MENU_MESSAGE_STYLE = { margin: 0, overflowWrap: 'anywhere' } as const
+const PROFILE_SOURCE_STYLE = { color: 'var(--ui-muted)', fontSize: 'var(--ui-font-label)', overflowWrap: 'anywhere' } as const
 
 function profileIdForPane(pane: BrowserPreferencesProps['pane']): string {
   if (pane && 'profileId' in pane && typeof pane.profileId === 'string') return pane.profileId
@@ -81,39 +87,42 @@ export function BrowserProfileMenu(props: BrowserPreferencesProps & { inline?: b
     setSuccessMessage(`Profile "${name}" created.`)
   }
 
-  return <div className="browser-profile-menu">
-    {!inline && <button type="button" aria-expanded={menuOpen} aria-controls={menuId} onClick={() => setMenuOpen((open) => !open)}>Profile: {menuLabel}</button>}
-    {(inline || menuOpen) && <div id={menuId} aria-label="Browser profile menu">
-      {loading && !preferences && <p>Loading browser profiles…</p>}
-      {stateError && <p role="alert">{stateError}</p>}
+  return <div className="browser-profile-menu" style={MENU_LAYOUT_STYLE}>
+    {!inline && <Button type="button" className="ui-menu__trigger" aria-expanded={menuOpen} aria-controls={menuId} onClick={() => setMenuOpen((open) => !open)}>Profile: {menuLabel}</Button>}
+    {(inline || menuOpen) && <div id={menuId} aria-label="Browser profile menu" style={MENU_CONTENT_STYLE}>
+      {loading && !preferences && <p role="status" style={MENU_MESSAGE_STYLE}>Loading browser profiles…</p>}
+      {stateError && <p className="ui-error-text" role="alert" style={MENU_MESSAGE_STYLE}>{stateError}</p>}
       {preferences && <fieldset style={PROFILE_ROWS_STYLE}>
-        <legend>Browser profiles</legend>
+        <legend style={{ color: 'var(--ui-muted)', fontSize: 'var(--ui-font-label)', fontWeight: 600 }}>Browser profiles</legend>
         {profiles.map(({ profile }) => {
           const sourceLabel = profileSourceLabel(profile)
           return <label key={profile.id} style={PROFILE_ROW_STYLE}>
             <input
               type="radio"
+              style={{ appearance: 'auto', accentColor: 'var(--ui-accent)' }}
               name={`browser-profile-${pane?.id ?? 'current'}`}
               aria-label={`Use ${profile.label} profile`}
               checked={profile.id === effectiveSelection}
               disabled={!pane || profileSwitching}
               onChange={() => void selectProfile(profile)}
             />
-            <span>{profile.id === effectiveSelection ? '✓ ' : ''}{profile.label}</span>
-            {sourceLabel && <small>{sourceLabel}</small>}
+            <span style={{ overflowWrap: 'anywhere' }}>{profile.id === effectiveSelection ? '✓ ' : ''}{profile.label}</span>
+            {sourceLabel && <span style={PROFILE_SOURCE_STYLE}>{sourceLabel}</span>}
           </label>
         })}
       </fieldset>}
-      {actionError && <p role="alert">{actionError}</p>}
-      {successMessage && <p role="status">{successMessage}</p>}
-      <button type="button" disabled={loading && !preferences} onClick={() => { setCreateOpen(true); setActionError(null); setSuccessMessage(null) }}>New Profile</button>
-      <button type="button" aria-expanded={importOpen} onClick={() => setImportOpen((open) => !open)}>Import Cookies</button>
+      {actionError && <p className="ui-error-text" role="alert" style={MENU_MESSAGE_STYLE}>{actionError}</p>}
+      {successMessage && <p role="status" style={MENU_MESSAGE_STYLE}>{successMessage}</p>}
+      <div style={MENU_ACTIONS_STYLE}>
+        <Button type="button" variant="primary" disabled={loading && !preferences} onClick={() => { setCreateOpen(true); setActionError(null); setSuccessMessage(null) }}>New Profile</Button>
+        <Button type="button" aria-expanded={importOpen} onClick={() => setImportOpen((open) => !open)}>Import Cookies</Button>
+        <Button type="button" onClick={() => void context.executeCommand('command:quirky.browser/browserSettings').catch((cause: unknown) => {
+          const message = errorMessage(cause)
+          setActionError(message)
+          onError(message)
+        })}>Browser Settings…</Button>
+      </div>
       {importOpen && <CookieImportPanel context={context} imports={preferences?.imports ?? null} destination={{ id: effectiveSelection, label: menuLabel }} loadError={stateError} onHideHint={() => void hideHint()} onError={onError} onImported={refresh} />}
-      <button type="button" onClick={() => void context.executeCommand('command:quirky.browser/browserSettings').catch((cause: unknown) => {
-        const message = errorMessage(cause)
-        setActionError(message)
-        onError(message)
-      })}>Browser Settings…</button>
       {createOpen && <ProfileCreator context={context} onCreated={profileCreated} onCancel={() => setCreateOpen(false)} onError={onError} />}
     </div>}
   </div>
@@ -140,12 +149,12 @@ export function BrowserImportHint(props: BrowserPreferencesProps) {
   }
 
   if (settings.browserImportHintHidden) return null
-  return <aside aria-label="Import browser data hint">
-    <button type="button" aria-expanded={expanded} onClick={() => setExpanded((open) => !open)}>Import browser data</button>
-    {expanded && <div>
-      {stateError && <p role="alert">{stateError}</p>}
-      {actionError && <p role="alert">{actionError}</p>}
-      {loading && !preferences ? <p>Loading cookie import availability…</p> : <CookieImportPanel context={context} imports={preferences?.imports ?? null} destination={hintDestination} loadError={stateError} onHideHint={() => void hideHint()} onError={onError} onImported={refresh} />}
+  return <aside aria-label="Import browser data hint" style={{ ...MENU_CONTENT_STYLE, background: 'var(--ui-surface)', border: 'var(--ui-border-width) solid var(--ui-border)', borderRadius: 'var(--ui-radius-control)', padding: 'var(--ui-space-8)' }}>
+    <Button type="button" className="ui-menu__trigger" aria-expanded={expanded} onClick={() => setExpanded((open) => !open)}>Import browser data</Button>
+    {expanded && <div style={MENU_CONTENT_STYLE}>
+      {stateError && <p className="ui-error-text" role="alert" style={MENU_MESSAGE_STYLE}>{stateError}</p>}
+      {actionError && <p className="ui-error-text" role="alert" style={MENU_MESSAGE_STYLE}>{actionError}</p>}
+      {loading && !preferences ? <p role="status" style={MENU_MESSAGE_STYLE}>Loading cookie import availability…</p> : <CookieImportPanel context={context} imports={preferences?.imports ?? null} destination={hintDestination} loadError={stateError} onHideHint={() => void hideHint()} onError={onError} onImported={refresh} />}
     </div>}
   </aside>
 }

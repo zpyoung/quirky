@@ -49,7 +49,7 @@ test('one-off and saved selections use the encrypted target, never the available
   const first = await runCli(['--pairing-code', pairingCode, 'api', 'call', 'quirky.worktree/list', '--json'], { home: local.home, env: { QUIRKY_RUNTIME: 'missing-ambient', QUIRKY_SESSION_ID: 'local-session', QUIRKY_WORKTREE_ID: 'local-workspace' } })
   expect(first.code).toBe(0)
   expect(JSON.parse(first.stdout)).toEqual([{ id: 'remote-owned-workspace' }])
-  const saved = addSavedRuntimeTarget(local.home, 'Owned peer', pairingCode, { endpoint, pairedDeviceId: DEVICE_ID })
+  const saved = addSavedRuntimeTarget(local.home, 'Owned peer', pairingCode)
   const second = await runCli(['--runtime', saved.id, 'api', 'call', 'quirky.worktree/list', '--json'], { home: local.home, env: { QUIRKY_PAIRING_CODE: 'invalid-ambient-offer' } })
   expect(second.code).toBe(0)
   expect(JSON.parse(second.stdout)).toEqual([{ id: 'remote-owned-workspace' }])

@@ -151,8 +151,29 @@ function modelDiscovery(id: string, value: unknown): ModelDiscoverySpec {
     }
     return { protocol: 'codex-app-server', timeoutMs }
   }
+  if (data.protocol === 'anthropic-models') {
+    if (id !== 'claude') fail('modelDiscovery protocol anthropic-models is only valid for claude')
+    if (Object.hasOwn(data, 'args') || Object.hasOwn(data, 'format')) {
+      fail('modelDiscovery protocol anthropic-models does not accept args or format')
+    }
+    return { protocol: 'anthropic-models', timeoutMs }
+  }
+  if (data.protocol === 'gemini-models') {
+    if (id !== 'gemini') fail('modelDiscovery protocol gemini-models is only valid for gemini')
+    if (Object.hasOwn(data, 'args') || Object.hasOwn(data, 'format')) {
+      fail('modelDiscovery protocol gemini-models does not accept args or format')
+    }
+    return { protocol: 'gemini-models', timeoutMs }
+  }
+  if (data.protocol === 'pi-rpc') {
+    if (id !== 'pi') fail('modelDiscovery protocol pi-rpc is only valid for pi')
+    if (Object.hasOwn(data, 'args') || Object.hasOwn(data, 'format')) {
+      fail('modelDiscovery protocol pi-rpc does not accept args or format')
+    }
+    return { protocol: 'pi-rpc', timeoutMs }
+  }
   if (data.protocol !== undefined && data.protocol !== 'argv-json') {
-    fail('modelDiscovery.protocol must be argv-json or codex-app-server')
+    fail('modelDiscovery.protocol must be one of: argv-json, codex-app-server, anthropic-models, gemini-models, pi-rpc')
   }
   const args: unknown[] = Array.isArray(data.args) ? data.args : fail('modelDiscovery.args must be a list of 1 to 32 non-empty arguments of at most 512 characters')
   if (args.length === 0 || args.length > 32) fail('modelDiscovery.args must be a list of 1 to 32 non-empty arguments of at most 512 characters')

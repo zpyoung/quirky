@@ -1,4 +1,5 @@
 import { useSyncExternalStore, type FocusEvent as ReactFocusEvent } from 'react'
+import { EmptyState } from '@quirky/ui'
 import { GroupTree } from './GroupView'
 import { DialogLayer, MenuLayer } from './Overlays'
 import { noteFocus } from './registry'
@@ -10,9 +11,9 @@ export function WorkspaceView({ controller }: { controller: WorkspaceController 
   const workspace = state.workspace
   const root = workspace ? controller.previewedRoot(workspace.root) : null
 
-  if (state.status === 'missing') return <p className="qt-muted qt-pad">Worktree not found</p>
-  if (state.status === 'error') return <p className="qt-muted qt-pad">Could not load the workspace</p>
-  if (state.selectionError) return <p className="qt-muted qt-pad" role="alert">{state.selectionError}</p>
+  if (state.status === 'missing') return <EmptyState message="Worktree not found" />
+  if (state.status === 'error') return <EmptyState message="Could not load the workspace" />
+  if (state.selectionError) return <div role="alert"><EmptyState message={state.selectionError} /></div>
   if (!workspace || !root) return null
   const reportFocus = (event: ReactFocusEvent<HTMLDivElement>) => {
     noteFocus(controller)

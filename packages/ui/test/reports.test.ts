@@ -39,14 +39,23 @@ const reporter = (slot: string): Reporter => (globalThis as unknown as { __repor
 const slotState = async (env: WindowEnv, id: string) =>
   ((await env.agent.callAny('ui.state', {})) as UiState).slots.find((slot) => slot.id === id)
 
+async function closeTool(env: WindowEnv, id: string): Promise<void> {
+  const state = (await env.agent.callAny('ui.state', {})) as UiState
+  const slot = state.layout.tools?.placements[id]
+  if (!slot) throw new Error(`no tool placement for ${id}`)
+  await env.agent.callAny('ui.tool.close', { slot })
+}
+
 test('a mounted slot reports on mount, and ui.state shows it', async () => {
   const env = await bootWindow(writeNotes)
+  await env.agent.callAny('ui.tool.open', { id: SECTION })
   await env.win.waitFor(async () => (await slotState(env, SECTION))?.report !== undefined)
   expect((await slotState(env, SECTION))?.report).toEqual({ slot: SECTION, n: 1 })
 })
 
 test('SC-42: a later report replaces the earlier one', async () => {
   const env = await bootWindow(writeNotes)
+  await env.agent.callAny('ui.tool.open', { id: SECTION })
   await env.win.waitFor(() => (globalThis as { __reports?: unknown }).__reports)
   reporter(SECTION)({ n: 2 })
   reporter(SECTION)({ n: 3 })
@@ -55,6 +64,7 @@ test('SC-42: a later report replaces the earlier one', async () => {
 
 test('SC-42: a report over the cap is refused, the previous one stays and the plugin is warned', async () => {
   const env = await bootWindow(writeNotes)
+  await env.agent.callAny('ui.tool.open', { id: SECTION })
   await env.win.waitFor(() => (globalThis as { __reports?: unknown }).__reports)
   reporter(SECTION)({ n: 2 })
   await env.win.waitFor(async () => JSON.stringify((await slotState(env, SECTION))?.report) === '{"n":2}')
@@ -70,11 +80,11 @@ test('SC-42: a report over the cap is refused, the previous one stays and the pl
 
 test('SC-42: closing a panel clears its report', async () => {
   const env = await bootWindow(writeNotes)
-  await env.agent.callAny('ui.panel.open', { id: OUTLINE })
+  await env.agent.callAny('ui.tool.open', { id: OUTLINE })
   await env.win.waitFor(async () => (await slotState(env, OUTLINE))?.report !== undefined)
   expect((await slotState(env, OUTLINE))?.report).toEqual({ slot: OUTLINE, n: 1 })
 
-  await env.agent.callAny('ui.panel.close', {})
+  await closeTool(env, OUTLINE)
   await env.win.waitFor(async () => (await slotState(env, OUTLINE))?.report === undefined)
 })
 
@@ -94,10 +104,10 @@ test('SC-42: a view that changes input reports afresh, and closing the view clea
 
 test('a report sent after its slot unmounted is dropped', async () => {
   const env = await bootWindow(writeNotes)
-  await env.agent.callAny('ui.panel.open', { id: OUTLINE })
+  await env.agent.callAny('ui.tool.open', { id: OUTLINE })
   await env.win.waitFor(async () => (await slotState(env, OUTLINE))?.report !== undefined)
   const stale = reporter(OUTLINE)
-  await env.agent.callAny('ui.panel.close', {})
+  await closeTool(env, OUTLINE)
   await env.win.waitFor(async () => (await slotState(env, OUTLINE))?.report === undefined)
 
   stale({ late: true })

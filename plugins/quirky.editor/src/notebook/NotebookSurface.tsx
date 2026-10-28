@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent } from 'react'
+import { Badge, Button, Dialog, EmptyState, ListRow, TextField } from '@quirky/ui'
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import type { SurfaceProps } from '../types'
 import { parseNotebook, serializeNotebook, sourceLines, type NotebookParse } from './document'
 import { base64ImageDataUrl, outputText, parseAnsi, preferredOutput, sanitizeHtml } from './outputs'
@@ -9,9 +10,6 @@ type NotebookRuntimeState = { trusted?: boolean; busy?: boolean; executionCount?
 type Environment = { path: string; name: string; version?: string; source?: string; hasIpykernel?: boolean; externallyManaged?: boolean }
 type TrustRequest = { index: number | null; all: boolean; mode: 'advance' | 'in-place' }
 
-const sourceStyle: CSSProperties = { width: '100%', minHeight: 100, resize: 'vertical', fontFamily: 'monospace' }
-const outputStyle: CSSProperties = { maxHeight: 420, overflow: 'auto', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }
-const imageStyle: CSSProperties = { display: 'block', maxWidth: '100%', maxHeight: 520, objectFit: 'contain' }
 const MAX_CELL_PREVIEW_BYTES = 64 * 1024
 const MAX_CELL_PREVIEW_LINES = 200
 const CELL_PAGE_SIZE = 100
@@ -56,7 +54,7 @@ function outputColor(name: string): string | undefined {
 
 function StreamOutput({ output }: { output: ApiRecord }) {
   const stream = outputText(output)
-  return <pre style={outputStyle} data-output-type={output.output_type === 'error' ? 'error' : output.name === 'stderr' ? 'stderr' : 'stdout'}>
+  return <pre className="notebook-output" data-output-type={output.output_type === 'error' ? 'error' : output.name === 'stderr' ? 'stderr' : 'stdout'}>
     {parseAnsi(stream).map((segment, index) => <span key={index} style={{
       color: segment.style.color ? outputColor(segment.style.color) : undefined,
       backgroundColor: segment.style.backgroundColor ? outputColor(segment.style.backgroundColor) : undefined,
@@ -71,15 +69,15 @@ function MimeOutput({ output }: { output: ApiRecord }) {
   const selected = preferredOutput(output)
   if (!selected) return null
   if (selected.mime === 'text/html' && typeof selected.value === 'string') {
-    return <iframe title="Notebook HTML output" sandbox="" referrerPolicy="no-referrer" srcDoc={sanitizeHtml(selected.value)} style={{ width: '100%', height: 288, border: 0 }} />
+    return <iframe className="notebook-html-output" title="Notebook HTML output" sandbox="" referrerPolicy="no-referrer" srcDoc={sanitizeHtml(selected.value)} />
   }
   if (selected.mime.startsWith('image/')) {
     const src = base64ImageDataUrl(selected.mime, selected.value)
     if (!src) return <p role="status">Image output is too large or malformed.</p>
-    return <img src={src} alt="Notebook output" style={imageStyle} />
+    return <img className="notebook-image-output" src={src} alt="Notebook output" />
   }
   const value = outputText(output)
-  return <pre style={outputStyle} data-output-mime={selected.mime}>{value}</pre>
+  return <pre className="notebook-output" data-output-mime={selected.mime}>{value}</pre>
 }
 
 function CellOutput({ output }: { output: ApiRecord }) {
@@ -109,7 +107,7 @@ export function NotebookSurface(props: SurfaceProps) {
   const [findOpen, setFindOpen] = useState(false)
   const [findQuery, setFindQuery] = useState('')
   const [findIndex, setFindIndex] = useState(-1)
-  const findInput = useRef<HTMLInputElement>(null)
+  const findInputId = useId()
   const cellElements = useRef(new Map<number, HTMLElement>())
   const cellTextareas = useRef(new Map<number, HTMLTextAreaElement>())
   const pendingCellChanges = useRef(new Map<number, string>())
@@ -393,7 +391,7 @@ export function NotebookSurface(props: SurfaceProps) {
     const query = typeof args?.query === 'string' ? args.query : undefined
     setFindOpen(true)
     if (query !== undefined) setFindQuery(query)
-    window.requestAnimationFrame(() => findInput.current?.focus())
+    window.requestAnimationFrame(() => document.getElementById(findInputId)?.focus())
     if (query === undefined || query === '') return { opened: true }
     const matches = findNotebookMatches(query)
     if (matches.length === 0) throw new Error(`No notebook cell contains “${query}”.`)
@@ -412,26 +410,26 @@ export function NotebookSurface(props: SurfaceProps) {
   return <section className="quirky-notebook-surface" aria-label="Notebook" style={{ fontSize: props.fontSize }}>
     <header className="notebook-toolbar">
       <strong>{buffer.name}</strong>
-      <span>{parsed.valid ? `${parsed.cellCount} cells · ${parsed.language}` : 'Notebook parse error'}</span>
-      <button type="button" aria-pressed={sourceMode} onClick={toggleSource}>
+      <Badge tone={parsed.valid ? 'accent' : 'failing'}>{parsed.valid ? `${parsed.cellCount} cells · ${parsed.language}` : 'Notebook parse error'}</Badge>
+      <Button className="editor-viewer-mode-toggle" type="button" aria-pressed={sourceMode} onClick={toggleSource}>
         {sourceMode ? 'Notebook' : 'Source'}
-      </button>
-      <button type="button" onClick={() => void saveNotebook()} disabled={buffer.readOnly || actionBusy}>Save notebook</button>
-      <button type="button" onClick={() => { setFindOpen(true); window.requestAnimationFrame(() => findInput.current?.focus()) }}>Find</button>
+      </Button>
+      <Button type="button" onClick={() => void saveNotebook()} disabled={buffer.readOnly || actionBusy}>Save notebook</Button>
+      <Button type="button" onClick={() => { setFindOpen(true); window.requestAnimationFrame(() => document.getElementById(findInputId)?.focus()) }}>Find</Button>
       {!sourceMode && parsed.valid && parsed.language.startsWith('python') && <>
-        <button type="button" onClick={() => void loadEnvironments()} disabled={actionBusy}>
+        <Button type="button" onClick={() => void loadEnvironments()} disabled={actionBusy}>
           {runtime.selectedPython?.name ? `${runtime.selectedPython.name}${runtime.selectedPython.version ? ` (Python ${runtime.selectedPython.version})` : ''}` : 'Select Kernel'}
-        </button>
-        <button type="button" onClick={() => requestRun({ index: null, all: true, mode: 'in-place' })} disabled={actionBusy || buffer.readOnly}>Run all</button>
-        <button type="button" onClick={() => void mutateNotebook('clear', {})} disabled={actionBusy || buffer.readOnly}>Clear all outputs</button>
-        {runtime.busy && <button type="button" onClick={() => void action('interrupt')} disabled={actionBusy}>Interrupt</button>}
-        {(runtime.kernel?.status === 'ready' || runtime.kernel?.status === 'dead') && <button type="button" onClick={() => void restartKernel()} disabled={actionBusy}>Restart kernel</button>}
+        </Button>
+        <Button type="button" variant="primary" onClick={() => requestRun({ index: null, all: true, mode: 'in-place' })} disabled={actionBusy || buffer.readOnly}>Run all</Button>
+        <Button type="button" variant="destructive" onClick={() => void mutateNotebook('clear', {})} disabled={actionBusy || buffer.readOnly}>Clear all outputs</Button>
+        {runtime.busy && <Button type="button" onClick={() => void action('interrupt')} disabled={actionBusy}>Interrupt</Button>}
+        {(runtime.kernel?.status === 'ready' || runtime.kernel?.status === 'dead') && <Button type="button" onClick={() => void restartKernel()} disabled={actionBusy}>Restart kernel</Button>}
       </>}
     </header>
     {findOpen && <div className="notebook-toolbar" role="search" aria-label="Find in notebook">
-      <input
-        ref={findInput}
-        aria-label="Find in notebook"
+      <TextField
+        id={findInputId}
+        label="Find in notebook"
         value={findQuery}
         onChange={(event) => { setFindQuery(event.currentTarget.value); setFindIndex(-1) }}
         onKeyDown={(event) => {
@@ -445,23 +443,24 @@ export function NotebookSurface(props: SurfaceProps) {
         }}
       />
       <span>{findMatches.length === 10_000 ? '10,000+ matches' : `${findMatches.length} match${findMatches.length === 1 ? '' : 'es'}`}</span>
-      <button type="button" onClick={() => { try { moveFind(-1) } catch (error) { setSourceError(error instanceof Error ? error.message : String(error)) } }} disabled={findMatches.length === 0}>Previous</button>
-      <button type="button" onClick={() => { try { moveFind(1) } catch (error) { setSourceError(error instanceof Error ? error.message : String(error)) } }} disabled={findMatches.length === 0}>Next</button>
-      <button type="button" onClick={() => setFindOpen(false)}>Close</button>
+      <Button type="button" onClick={() => { try { moveFind(-1) } catch (error) { setSourceError(error instanceof Error ? error.message : String(error)) } }} disabled={findMatches.length === 0}>Previous</Button>
+      <Button type="button" onClick={() => { try { moveFind(1) } catch (error) { setSourceError(error instanceof Error ? error.message : String(error)) } }} disabled={findMatches.length === 0}>Next</Button>
+      <Button type="button" onClick={() => setFindOpen(false)}>Close</Button>
     </div>}
 
     {sourceMode ? <textarea
+      className="editor-viewer-source notebook-source"
       aria-label="Notebook source JSON"
-      style={{ ...sourceStyle, minHeight: 420, fontSize: props.fontSize }}
+      style={{ fontSize: props.fontSize }}
       spellCheck={false}
       value={content}
       onChange={(event) => onDraft(event.currentTarget.value)}
     /> : parsed.valid ? <main className="notebook-cells">
-      {cells.length === 0 && <p>Empty notebook</p>}
+      {cells.length === 0 && <EmptyState message="Empty notebook" />}
       {cells.length > CELL_PAGE_SIZE && <nav aria-label="Notebook cell pages">
         <span>Cells {cellOffset + 1}–{visibleCellEnd} of {cells.length}</span>
-        <button type="button" onClick={() => setCellOffset(Math.max(0, cellOffset - CELL_PAGE_SIZE))} disabled={cellOffset === 0}>Previous cells</button>
-        <button type="button" onClick={() => setCellOffset(Math.min(cells.length - 1, cellOffset + CELL_PAGE_SIZE))} disabled={visibleCellEnd >= cells.length}>Next cells</button>
+        <Button type="button" onClick={() => setCellOffset(Math.max(0, cellOffset - CELL_PAGE_SIZE))} disabled={cellOffset === 0}>Previous cells</Button>
+        <Button type="button" onClick={() => setCellOffset(Math.min(cells.length - 1, cellOffset + CELL_PAGE_SIZE))} disabled={visibleCellEnd >= cells.length}>Next cells</Button>
       </nav>}
       {visibleCells.map((cell, visibleIndex) => {
         const index = cellOffset + visibleIndex
@@ -476,33 +475,34 @@ export function NotebookSurface(props: SurfaceProps) {
           else cellElements.current.delete(index)
         }}>
           <div className="notebook-cell-toolbar">
-            <span aria-label="Cell type">{cell.cell_type}</span>
-            {cell.cell_type === 'code' && <span aria-label="Execution count">[{typeof cell.execution_count === 'number' ? cell.execution_count : runtime.busy ? '*' : ' '}]</span>}
-            {cell.cell_type === 'code' && <button type="button" onClick={() => requestRun({ index, all: false, mode: 'in-place' })} disabled={actionBusy || buffer.readOnly}>Run cell</button>}
-            <button type="button" onClick={() => setEditingCell(isEditing ? null : index)} disabled={buffer.readOnly}>{isEditing ? 'Done editing' : 'Edit cell'}</button>
+            <Badge tone="neutral" label={`Cell type: ${cell.cell_type}`}>{cell.cell_type}</Badge>
+            {cell.cell_type === 'code' && <Badge tone={runtime.busy ? 'working' : 'neutral'} label="Execution count">[{typeof cell.execution_count === 'number' ? cell.execution_count : runtime.busy ? '*' : ' '}]</Badge>}
+            {cell.cell_type === 'code' && <Button type="button" onClick={() => requestRun({ index, all: false, mode: 'in-place' })} disabled={actionBusy || buffer.readOnly}>Run cell</Button>}
+            <Button type="button" onClick={() => setEditingCell(isEditing ? null : index)} disabled={buffer.readOnly}>{isEditing ? 'Done editing' : 'Edit cell'}</Button>
             <details>
               <summary>More cell actions</summary>
-              <button type="button" onClick={() => void insertCell(index, 'above', 'code')} disabled={actionBusy || buffer.readOnly}>Insert code above</button>
-              <button type="button" onClick={() => void insertCell(index, 'above', 'markdown')} disabled={actionBusy || buffer.readOnly}>Insert Markdown above</button>
-              <button type="button" onClick={() => void insertCell(index, 'above', 'raw')} disabled={actionBusy || buffer.readOnly}>Insert raw above</button>
-              <button type="button" onClick={() => void insertCell(index, 'below', 'code')} disabled={actionBusy || buffer.readOnly}>Insert code below</button>
-              <button type="button" onClick={() => void insertCell(index, 'below', 'markdown')} disabled={actionBusy || buffer.readOnly}>Insert Markdown below</button>
-              <button type="button" onClick={() => void insertCell(index, 'below', 'raw')} disabled={actionBusy || buffer.readOnly}>Insert raw below</button>
+              <Button type="button" onClick={() => void insertCell(index, 'above', 'code')} disabled={actionBusy || buffer.readOnly}>Insert code above</Button>
+              <Button type="button" onClick={() => void insertCell(index, 'above', 'markdown')} disabled={actionBusy || buffer.readOnly}>Insert Markdown above</Button>
+              <Button type="button" onClick={() => void insertCell(index, 'above', 'raw')} disabled={actionBusy || buffer.readOnly}>Insert raw above</Button>
+              <Button type="button" onClick={() => void insertCell(index, 'below', 'code')} disabled={actionBusy || buffer.readOnly}>Insert code below</Button>
+              <Button type="button" onClick={() => void insertCell(index, 'below', 'markdown')} disabled={actionBusy || buffer.readOnly}>Insert Markdown below</Button>
+              <Button type="button" onClick={() => void insertCell(index, 'below', 'raw')} disabled={actionBusy || buffer.readOnly}>Insert raw below</Button>
             </details>
-            <button type="button" onClick={() => void mutateNotebook('move', { index, direction: 'up' })} disabled={actionBusy || buffer.readOnly || index === 0}>Move up</button>
-            <button type="button" onClick={() => void mutateNotebook('move', { index, direction: 'down' })} disabled={actionBusy || buffer.readOnly || index === cells.length - 1}>Move down</button>
-            <select aria-label="Cell type" value={cell.cell_type} disabled={actionBusy || buffer.readOnly} onChange={(event) => void mutateNotebook('type', { index, cellType: event.currentTarget.value })}>
+            <Button type="button" onClick={() => void mutateNotebook('move', { index, direction: 'up' })} disabled={actionBusy || buffer.readOnly || index === 0}>Move up</Button>
+            <Button type="button" onClick={() => void mutateNotebook('move', { index, direction: 'down' })} disabled={actionBusy || buffer.readOnly || index === cells.length - 1}>Move down</Button>
+            <select className="editor-viewer-select" aria-label="Cell type" value={cell.cell_type} disabled={actionBusy || buffer.readOnly} onChange={(event) => void mutateNotebook('type', { index, cellType: event.currentTarget.value })}>
               <option value="code">Code</option><option value="markdown">Markdown</option><option value="raw">Raw</option>
             </select>
-            {cell.cell_type === 'code' && <button type="button" onClick={() => void mutateNotebook('clear', { index })} disabled={actionBusy || buffer.readOnly}>Clear outputs</button>}
-            <button type="button" onClick={() => void mutateNotebook('delete', { index })} disabled={actionBusy || buffer.readOnly}>Delete cell</button>
+            {cell.cell_type === 'code' && <Button type="button" variant="destructive" onClick={() => void mutateNotebook('clear', { index })} disabled={actionBusy || buffer.readOnly}>Clear outputs</Button>}
+            <Button type="button" variant="destructive" onClick={() => void mutateNotebook('delete', { index })} disabled={actionBusy || buffer.readOnly}>Delete cell</Button>
           </div>
           {isEditing ? <textarea
+            className="editor-viewer-source notebook-cell-editor"
             ref={(element) => {
               if (element) cellTextareas.current.set(index, element)
               else cellTextareas.current.delete(index)
             }}
-            style={{ ...sourceStyle, fontSize: props.fontSize }}
+            style={{ fontSize: props.fontSize }}
             spellCheck={cell.cell_type === 'markdown'}
             value={cellText}
             onKeyDown={cell.cell_type === 'code' ? (event) => onCellKeyDown(event, index) : undefined}
@@ -514,47 +514,64 @@ export function NotebookSurface(props: SurfaceProps) {
             {visibleOutputs.map((output, outputIndex) => <CellOutput key={`${output.output_type}-${outputIndex}`} output={output} />)}
             {outputList.length > outputLimit && <>
               <p role="status">Showing {outputLimit} of {outputList.length} output frames.</p>
-              <button type="button" onClick={() => setOutputLimits((current) => ({ ...current, [index]: outputLimit + OUTPUT_PAGE_SIZE }))}>Show next output frames</button>
+              <Button type="button" onClick={() => setOutputLimits((current) => ({ ...current, [index]: outputLimit + OUTPUT_PAGE_SIZE }))}>Show next output frames</Button>
             </>}
           </div>}
         </article>
       })}
       {cells.length > CELL_PAGE_SIZE && <nav aria-label="Notebook cell pages">
-        <button type="button" onClick={() => setCellOffset(Math.max(0, cellOffset - CELL_PAGE_SIZE))} disabled={cellOffset === 0}>Previous cells</button>
-        <button type="button" onClick={() => setCellOffset(Math.min(cells.length - 1, cellOffset + CELL_PAGE_SIZE))} disabled={visibleCellEnd >= cells.length}>Next cells</button>
+        <Button type="button" onClick={() => setCellOffset(Math.max(0, cellOffset - CELL_PAGE_SIZE))} disabled={cellOffset === 0}>Previous cells</Button>
+        <Button type="button" onClick={() => setCellOffset(Math.min(cells.length - 1, cellOffset + CELL_PAGE_SIZE))} disabled={visibleCellEnd >= cells.length}>Next cells</Button>
       </nav>}
-      <button type="button" onClick={() => { setCellOffset(Math.max(0, Math.floor(cells.length / CELL_PAGE_SIZE) * CELL_PAGE_SIZE)); void insertCell(cells.length, 'below', 'code') }} disabled={actionBusy || buffer.readOnly}>Add code cell</button>
+      <Button type="button" onClick={() => { setCellOffset(Math.max(0, Math.floor(cells.length / CELL_PAGE_SIZE) * CELL_PAGE_SIZE)); void insertCell(cells.length, 'below', 'code') }} disabled={actionBusy || buffer.readOnly}>Add code cell</Button>
     </main> : <div role="alert" className="notebook-error">
-      <p>{parsed.error}</p>
-      <button type="button" onClick={() => onView({ mode: 'source' })}>Open raw source</button>
+      <EmptyState
+        message={parsed.error ?? 'Notebook parse error'}
+        action={{ label: 'Open raw source', onAction: () => onView({ mode: 'source' }) }}
+      />
     </div>}
 
     {environmentChoices.length > 0 && <section className="notebook-kernel-menu" aria-label="Python environments">
       <strong>Recommended and Python on PATH</strong>
       <ul>{environmentChoices.map((environment) => <li key={environment.path}>
-        <button type="button" onClick={() => void selectEnvironment(environment.path)} disabled={actionBusy}>
-          {environment.name}{environment.version ? ` · Python ${environment.version}` : ''} — {environment.path}
-        </button>
+        <ListRow
+          title={`${environment.name}${environment.version ? ` · Python ${environment.version}` : ''}`}
+          description={environment.path}
+          disabled={actionBusy}
+          onClick={() => void selectEnvironment(environment.path)}
+        />
       </li>)}</ul>
-      <button type="button" onClick={() => void browseEnvironment()} disabled={actionBusy}>Browse for Python…</button>
-      <button type="button" onClick={() => setEnvironmentChoices([])}>Cancel</button>
+      <Button type="button" onClick={() => void browseEnvironment()} disabled={actionBusy}>Browse for Python…</Button>
+      <Button type="button" onClick={() => setEnvironmentChoices([])}>Cancel</Button>
     </section>}
 
-    {trustRequest && <div role="dialog" aria-modal="true" aria-labelledby="notebook-trust-title" className="notebook-confirmation">
-      <h2 id="notebook-trust-title">Run Notebook Code?</h2>
+    {trustRequest && <Dialog
+      open
+      title="Run Notebook Code?"
+      closeOnBackdrop={false}
+      onClose={() => { if (!actionBusy) setTrustRequest(null) }}
+      actions={<>
+        <Button type="button" onClick={() => setTrustRequest(null)} disabled={actionBusy}>Cancel</Button>
+        <Button type="button" variant="primary" onClick={() => void grantTrustAndRun()} disabled={actionBusy}>{trustRequest.all ? 'Run all' : 'Run cell'}</Button>
+      </>}
+    >
       <p>Notebook cells execute local Python on this machine from the notebook folder. Only run cells from files you trust.</p>
-      <button type="button" onClick={() => setTrustRequest(null)} disabled={actionBusy}>Cancel</button>
-      <button type="button" onClick={() => void grantTrustAndRun()} disabled={actionBusy}>{trustRequest.all ? 'Run all' : 'Run cell'}</button>
-    </div>}
+    </Dialog>}
 
-    {setupPrompt && <div role="dialog" aria-modal="true" aria-labelledby="notebook-setup-title" className="notebook-confirmation">
-      <h2 id="notebook-setup-title">{setupPrompt === 'venv' ? 'Create a virtual environment?' : 'Install ipykernel?'}</h2>
+    {setupPrompt && <Dialog
+      open
+      title={setupPrompt === 'venv' ? 'Create a virtual environment?' : 'Install ipykernel?'}
+      closeOnBackdrop={false}
+      onClose={() => { if (!actionBusy) setSetupPrompt(null) }}
+      actions={<>
+        <Button type="button" onClick={() => setSetupPrompt(null)} disabled={actionBusy}>Cancel</Button>
+        <Button type="button" variant="primary" onClick={() => void setup(setupPrompt)} disabled={actionBusy}>{setupPrompt === 'venv' ? 'Create .venv' : 'Install'}</Button>
+        {setupPrompt === 'install' && <Button type="button" onClick={() => { setSetupPrompt(null); void loadEnvironments() }}>Use another Python</Button>}
+      </>}
+    >
       <p>{setupPrompt === 'venv' ? 'A workspace .venv will be created and ipykernel installed there.' : 'This installs or upgrades ipykernel in the selected Python environment.'}</p>
-      {setupError && <p role="alert">{setupError}</p>}
-      <button type="button" onClick={() => setSetupPrompt(null)} disabled={actionBusy}>Cancel</button>
-      <button type="button" onClick={() => void setup(setupPrompt)} disabled={actionBusy}>{setupPrompt === 'venv' ? 'Create .venv' : 'Install'}</button>
-      {setupPrompt === 'install' && <button type="button" onClick={() => { setSetupPrompt(null); void loadEnvironments() }}>Use another Python</button>}
-    </div>}
+      {setupError && <p className="ui-error-text" role="alert">{setupError}</p>}
+    </Dialog>}
 
     {runtime.interruptStalled && <p role="status">Not responding. Restart kernel.</p>}
     {sourceError && <p role="alert">{sourceError}</p>}

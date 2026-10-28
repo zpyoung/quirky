@@ -1,5 +1,4 @@
 import { createHash } from 'node:crypto'
-import { isAbsolute, relative, resolve, sep } from 'node:path'
 import { gitApi } from '@quirky/git'
 import type { PluginStore, Repo } from '@quirky/protocol'
 import type {
@@ -19,6 +18,7 @@ import { listGroup, listProject, type ListEnv } from './list'
 import { removeWorktree, type RemoveEnv } from './remove'
 import { rowOf } from './store'
 import { closeWindowView, selectWindow, type SelectedWindow } from './window'
+import { resolveWorkspaceViewOwner } from './view-owner'
 
 const DAY_MS = 24 * 60 * 60 * 1_000
 const CLEANUP_IDLE_MS = 30 * DAY_MS
@@ -209,7 +209,9 @@ function descendantsOf(worktrees: WorktreeControl[], rootId: string): WorktreeCo
   return found
 }
 
-async function sleepTargets(env: ControlEnv, params: SleepParams, identity: CallerIdentity): Promise<WorktreeControl[]> {
+type SleepTargets = { targets: WorktreeControl[]; all: WorktreeControl[] }
+
+async function sleepTargets(env: ControlEnv, params: SleepParams, identity: CallerIdentity): Promise<SleepTargets> {
   if (typeof params.worktree !== 'string' || params.worktree.trim() === '') {
     throw env.fail('invalid-params', 'worktree must be a non-empty selector')
   }
@@ -220,12 +222,13 @@ async function sleepTargets(env: ControlEnv, params: SleepParams, identity: Call
     throw env.fail('invalid-params', 'window must be a positive live UI connection ID')
   }
   const { worktree, all } = await env.find(params.worktree, identity)
-  return params.withDescendants === true ? [worktree, ...descendantsOf(all, worktree.id)] : [worktree]
+  const targets = params.withDescendants === true ? [worktree, ...descendantsOf(all, worktree.id)] : [worktree]
+  return { targets, all }
 }
 
 type SleepInspection = { preview: WorktreeSleepPreview; closeView: boolean; selected: SelectedWindow | null }
 
-async function inspectSleep(env: ControlEnv, targets: WorktreeControl[], window?: unknown): Promise<SleepInspection> {
+async function inspectSleep(env: ControlEnv, targets: WorktreeControl[], all: WorktreeControl[], window?: unknown): Promise<SleepInspection> {
   const blockersById = new Map(targets.map((worktree) => [worktree.id, [] as CleanupBlocker[]]))
   let selected: SelectedWindow | null = null
   let closeView = false
@@ -246,18 +249,15 @@ async function inspectSleep(env: ControlEnv, targets: WorktreeControl[], window?
       for (const blockers of blockersById.values()) addBlocker(blockers, code, `Could not inspect the selected workspace view before sleep: ${message}.`)
     }
   }
-  if (selected?.view !== null && selected !== null) {
-    const view = recordOf(selected.view)
-    const input = recordOf(view?.input)
-    if (!view || (view.id === 'view:quirky.session/worktree' && !input)) {
+  if (selected !== null && selected.view !== null) {
+    const resolution = resolveWorkspaceViewOwner(selected.view, all)
+    if (resolution.kind === 'unknown') {
       for (const blockers of blockersById.values()) {
-        addBlocker(blockers, 'ui-view-unknown', 'The open workspace view does not expose its exact worktree identity.')
+        addBlocker(blockers, 'ui-view-unknown', 'The open workspace view does not have a unique canonical worktree owner.')
       }
-    } else {
-      const activeId = typeof input?.worktree === 'string' ? input.worktree : null
-      const activePath = typeof input?.path === 'string' ? input.path : null
+    } else if (resolution.kind === 'owned') {
       closeView = targets.some((worktree) =>
-        activeId === worktree.id || (activePath !== null && pathIsWithin(worktree.path, activePath))
+        worktree.id === resolution.owner.worktreeId && worktree.instanceId === resolution.owner.instanceId
       )
     }
   }
@@ -284,14 +284,14 @@ export async function previewSleep(
   params: SleepParams,
   identity: CallerIdentity
 ): Promise<WorktreeSleepPreview> {
-  const targets = await sleepTargets(env, params, identity)
-  return (await inspectSleep(env, targets, params.window)).preview
+  const { targets, all } = await sleepTargets(env, params, identity)
+  return (await inspectSleep(env, targets, all, params.window)).preview
 }
 
 async function setSleepState(env: ControlEnv, params: SleepParams, identity: CallerIdentity, sleeping: boolean): Promise<{ worktrees: WorktreeSleepState[] }> {
-  const targets = await sleepTargets(env, params, identity)
+  const { targets, all } = await sleepTargets(env, params, identity)
   if (sleeping) {
-    const inspection = await inspectSleep(env, targets, params.window)
+    const inspection = await inspectSleep(env, targets, all, params.window)
     const blocked = inspection.preview.worktrees.filter((row) => !row.allowed)
     if (blocked.length > 0) {
       const detail = blocked.map((row) => `${row.name}: ${row.blockers.map((blocker) => blocker.detail).join(' ')}`).join(' ')
@@ -353,17 +353,12 @@ async function readSidebarState(env: ControlEnv): Promise<ReadEvidence> {
   return readPublic(env.call, 'quirky.sidebar-extras/state')
 }
 
-function pathIsWithin(root: string, candidate: string): boolean {
-  if (!isAbsolute(candidate)) return false
-  const child = relative(resolve(root), resolve(candidate))
-  return child === '' || (child !== '..' && !child.startsWith(`..${sep}`) && !isAbsolute(child))
-}
 
 function addActiveBlockers(
   worktree: WorktreeControl,
   ui: WindowEvidence,
   sidebar: ReadEvidence,
-  knownWorkspaceIds: ReadonlySet<string>,
+  worktrees: WorktreeControl[],
   blockers: CleanupBlocker[]
 ): unknown[] {
   const identityParts: unknown[] = []
@@ -382,19 +377,21 @@ function addActiveBlockers(
       }
       const view = recordOf(window.layout.view)
       const input = recordOf(view?.input)
-      if (!view || !input) {
-        addBlocker(blockers, 'active-workspace-unknown', `UI connection ${window.connId} has a view without exact workspace input.`)
-        identityParts.push([window.connId, 'view-input-unknown'])
-        continue
-      }
-      const activeId = typeof input.worktree === 'string' ? input.worktree : null
-      const activePath = typeof input.path === 'string' ? input.path : null
-      identityParts.push([window.connId, view.id ?? null, activeId, activePath])
-      if ((activeId !== null && !knownWorkspaceIds.has(activeId)) ||
-        (activeId === null && (activePath === null || !isAbsolute(activePath)))) {
+      const resolution = resolveWorkspaceViewOwner(window.layout.view, worktrees)
+      const activeSelector = typeof input?.worktree === 'string' ? input.worktree : null
+      const activePath = typeof input?.path === 'string' ? input.path : null
+      identityParts.push([
+        window.connId,
+        view?.id ?? null,
+        activeSelector,
+        activePath,
+        resolution.kind,
+        resolution.kind === 'owned' ? [resolution.owner.worktreeId, resolution.owner.instanceId] : null
+      ])
+      if (resolution.kind === 'unknown') {
         addBlocker(blockers, 'active-workspace-unknown', `UI connection ${window.connId} has no resolved canonical workspace owner.`)
-      }
-      if (activeId === worktree.id || (activePath !== null && pathIsWithin(worktree.path, activePath))) {
+      } else if (resolution.kind === 'owned' && resolution.owner.worktreeId === worktree.id &&
+        resolution.owner.instanceId === worktree.instanceId) {
         addBlocker(blockers, 'active-workspace', `This workspace is open in UI connection ${window.connId}.`)
       }
     }
@@ -591,7 +588,6 @@ async function buildCleanupSnapshot(env: ControlEnv): Promise<Snapshot> {
   }))
   const groups = await env.list.groups()
   const worktrees = [...projectWorktrees.flat(), ...groups.flatMap((group) => listGroup(env.list, group))]
-  const knownWorkspaceIds = new Set(worktrees.map((worktree) => worktree.id))
   const repoById = new Map(repos.map((repo) => [repo.id, repo]))
   const childrenById = new Set(worktrees.flatMap((worktree) => worktree.parentId ? [worktree.parentId] : []))
   const [sessionEvidence, ui, editor, sidebar] = await Promise.all([
@@ -628,7 +624,7 @@ async function buildCleanupSnapshot(env: ControlEnv): Promise<Snapshot> {
     if (worktree.cleanupContext.remoteConnected === null) {
       addBlocker(blockers, 'remote-context-unknown', 'The worktree has no authoritative local repo or remote-host connectivity evidence.')
     }
-    fingerprintEvidence.push(addActiveBlockers(worktree, ui, sidebar, knownWorkspaceIds, blockers))
+    fingerprintEvidence.push(addActiveBlockers(worktree, ui, sidebar, worktrees, blockers))
     fingerprintEvidence.push(addEditorBlockers(worktree, editor, blockers))
     if (worktree.kind === 'git') {
       fingerprintEvidence.push(await gitBlockers(env, worktree, repository, blockers))

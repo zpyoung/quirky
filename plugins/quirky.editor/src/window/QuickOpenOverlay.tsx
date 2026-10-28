@@ -1,3 +1,4 @@
+import { Button, Dialog, EmptyState, TextField } from '@quirky/ui'
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import type { UiPluginContext } from '@quirky/protocol'
 import { dismissQuickOpen, useQuickOpenRequest } from './overlayState'
@@ -185,48 +186,60 @@ export function QuickOpenOverlay({ context, report }: { context: UiPluginContext
   const heading = newMarkdown ? 'New Markdown' : markdownOpen ? 'Open Markdown' : 'Go to File'
 
   return (
-    <div className="qe-modal-layer" onMouseDown={(event) => { if (event.target === event.currentTarget) dismissQuickOpen(request.id) }}>
+    <Dialog open title={heading} onClose={() => dismissQuickOpen(request.id)}>
       {newMarkdown ? (
-        <section className="qe-quick-open" role="dialog" aria-modal="true" aria-labelledby="qe-quick-open-title">
-          <h2 id="qe-quick-open-title">{heading}</h2>
-          <input ref={titleInput} aria-label="Document title" placeholder="Title" value={title} onChange={(event) => setTitle(event.currentTarget.value)} onKeyDown={(event) => {
-            if (event.key === 'Escape') { event.preventDefault(); dismissQuickOpen(request.id) }
-          }} />
-          <input aria-label="Search templates" placeholder="Search templates…" value={templateQuery} onChange={(event) => setTemplateQuery(event.currentTarget.value)} />
-          {loading && <p className="muted">Loading Markdown templates…</p>}
+        <div className="qe-quick-open qe-quick-open--markdown-new">
+          <input
+            ref={titleInput}
+            className="ui-text-field__input qe-quick-open__field"
+            aria-label="Document title"
+            placeholder="Title"
+            value={title}
+            onChange={(event) => setTitle(event.currentTarget.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Escape') { event.preventDefault(); dismissQuickOpen(request.id) }
+            }}
+          />
+          <TextField
+            className="qe-quick-open__field"
+            label="Search templates"
+            placeholder="Search templates…"
+            value={templateQuery}
+            onChange={(event) => setTemplateQuery(event.currentTarget.value)}
+          />
+          {loading && <p className="muted" role="status">Loading Markdown templates…</p>}
           {error && <p className="qe-editor-error" role="alert">{error}</p>}
-          <button type="button" onClick={() => void createMarkdown()}>Blank Markdown (untitled.md)</button>
-          {visibleTemplates.length === 0 && templates.length > 0 && <p className="muted">No matching templates.</p>}
+          <Button variant="primary" onClick={() => void createMarkdown()}>Blank Markdown (untitled.md)</Button>
+          {visibleTemplates.length === 0 && templates.length > 0 && <EmptyState message="No matching templates." />}
           <ul className="qe-quick-open-results" aria-label="Markdown templates">
             {visibleTemplates.map((template) => <li key={template.relativePath}>
-              <button type="button" onClick={() => void createMarkdown(template.relativePath)}>
+              <Button onClick={() => void createMarkdown(template.relativePath)}>
                 <span>{template.title}</span>
                 <small>{template.relativePath}</small>
-              </button>
+              </Button>
             </li>)}
           </ul>
-          <button type="button" onClick={() => dismissQuickOpen(request.id)}>Cancel</button>
-        </section>
+          <Button onClick={() => dismissQuickOpen(request.id)}>Cancel</Button>
+        </div>
       ) : (
-        <section className="qe-quick-open" role="dialog" aria-modal="true" aria-labelledby="qe-quick-open-title">
-          <h2 id="qe-quick-open-title">{heading}</h2>
+        <div className="qe-quick-open">
           <input
             ref={input}
+            className="ui-text-field__input qe-quick-open__field"
             aria-label={markdownOpen ? 'Open Markdown' : 'Go to file'}
             placeholder={markdownOpen ? 'Open Markdown…' : 'Go to file...'}
             value={query}
             onChange={(event) => setQuery(event.currentTarget.value)}
             onKeyDown={onKeyDown}
           />
-          {loading && <p className="muted">Searching files…</p>}
+          {loading && <p className="muted" role="status">Searching files…</p>}
           {error && <p className="qe-editor-error" role="alert">{error}</p>}
           {truncated && <p className="muted">More matches may be available.</p>}
-          {markdownOpen && !loading && !error && results.length === 0 && <p className="muted">No matching Markdown documents.</p>}
+          {markdownOpen && !loading && !error && results.length === 0 && <EmptyState message="No matching Markdown documents." />}
           <ul className="qe-quick-open-results" role="listbox" aria-label={markdownOpen ? 'Markdown files' : 'Files'}>
             {results.map((result, index) => (
               <li key={`${result.path}:${result.line ?? ''}:${index}`}>
-                <button
-                  type="button"
+                <Button
                   role="option"
                   aria-selected={index === active}
                   onMouseEnter={() => setActive(index)}
@@ -234,13 +247,13 @@ export function QuickOpenOverlay({ context, report }: { context: UiPluginContext
                 >
                   <span>{result.name}</span>
                   <small>{result.path}{result.line === undefined ? '' : `:${result.line}${result.column === undefined ? '' : `:${result.column}`}`}</small>
-                </button>
+                </Button>
               </li>
             ))}
           </ul>
           <footer><span>↑↓ Move</span><span>Enter Open</span><span>Esc Close</span></footer>
-        </section>
+        </div>
       )}
-    </div>
+    </Dialog>
   )
 }
