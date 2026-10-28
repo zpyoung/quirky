@@ -18,6 +18,7 @@ export type ListRowProps = {
   count?: number
   trailing?: ReactNode
   selected?: boolean
+  compact?: boolean
   disabled?: boolean
   mainTitle?: string
   mainLabel?: string
