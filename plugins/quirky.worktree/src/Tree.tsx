@@ -6,6 +6,8 @@ import { ContextMenu, groupMenu, projectMenu, STATUS_LABELS, workspaceMenu, type
 import { projectSeparatorBoundaries, repoLabel, type DialogState, type GroupNode, type ProjectNode, type TreeModel, type TreeRow } from './report'
 import { StatusDot, UnreadBell } from './StatusDot'
 import { worktreeGlyph } from './status'
+import { OrchestrationRows, type OrchestrationWorkerRow } from './OrchestrationRows'
+import { useOrchestrationRows } from './useOrchestrationRows'
 
 export type TreeProps = {
   context: UiPluginContext
@@ -34,6 +36,7 @@ type CardProps = {
   childCount: number
   collapsed: boolean
   sessions: Session[] | null
+  orchestrationWorkers: readonly OrchestrationWorkerRow[]
   now: number
   selected: boolean
   repoName?: string
@@ -43,7 +46,7 @@ type CardProps = {
   onDragEnd(): void
 }
 
-function WorktreeCard({ context, worktree, depth, childCount, collapsed, sessions, now, selected, repoName, onToggle, onMenu, onDragStart, onDragEnd }: CardProps) {
+function WorktreeCard({ context, worktree, depth, childCount, collapsed, sessions, orchestrationWorkers, now, selected, repoName, onToggle, onMenu, onDragStart, onDragEnd }: CardProps) {
   const open = () => {
     context.openView(SESSION_VIEW, { worktree: worktree.id })
     if (worktree.unread) void setWorktree(context, worktree.id, { unread: false })
@@ -97,6 +100,7 @@ function WorktreeCard({ context, worktree, depth, childCount, collapsed, session
       >
         ⋯
       </button>
+      <OrchestrationRows context={context} workers={orchestrationWorkers} sessions={sessions} worktreeId={worktree.id} />
     </li>
   )
 }
@@ -128,7 +132,7 @@ export function Tree({
   onDropPreviewChange,
   onSeparatorStateChange
 }: TreeProps) {
-  const [folded, setFolded] = useState<ReadonlySet<string>>(new Set())
+  const orchestrationWorkers = useOrchestrationRows(context)
   const [menu, setMenu] = useState<OpenMenu | null>(null)
   const [dropPreview, setDropPreview] = useState<MembershipTarget | null>(null)
   const [stickySections, setStickySections] = useState<ReadonlySet<string>>(new Set())
@@ -307,6 +311,7 @@ export function Tree({
             childCount={row.childCount}
             collapsed={folded.has(worktree.id)}
             sessions={sessions}
+            orchestrationWorkers={worktree.pinned ? [] : orchestrationWorkers}
             now={now}
             selected={worktree.id === selectedId}
             repoName={repoName}
@@ -487,6 +492,7 @@ export function Tree({
                   childCount={0}
                   collapsed={false}
                   sessions={sessions}
+                  orchestrationWorkers={orchestrationWorkers}
                   now={now}
                   selected={worktree.id === selectedId}
                   repoName={repoName}
