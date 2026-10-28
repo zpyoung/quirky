@@ -181,9 +181,9 @@ class ClaudeRunner implements StructuredRunner {
     if (prompt !== undefined) {
       const first = userMessage(prompt, providerSessionId)
       this.context.appendMessage({ sessionId: session.id, role: 'user', text: prompt, data: first })
-      this.context.setStatus(session.id, 'working')
       input.push(first)
     }
+    this.context.setStatus(session.id, prompt === undefined ? 'running' : 'working')
     const run: Running = {
       input,
       providerSessionId,
@@ -207,7 +207,6 @@ class ClaudeRunner implements StructuredRunner {
       })
     }
     this.running.set(session.id, run)
-    if (prompt === undefined) this.context.setStatus(session.id, 'running')
     void this.pump(session.id, run)
   }
 
@@ -286,6 +285,7 @@ class ClaudeRunner implements StructuredRunner {
     let failure: Error | null = null
     try {
       for await (const msg of run.query) {
+        if (run.stopped) break
         await this.journal(sessionId, msg)
       }
     } catch (error) {

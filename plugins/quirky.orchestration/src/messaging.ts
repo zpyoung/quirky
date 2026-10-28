@@ -17,6 +17,7 @@ import type {
   JsonValue,
   MailboxAddress,
   MessageId,
+  MessageArrivalPort,
   MessagePriority,
   MessageRow,
   MessageType,
@@ -26,6 +27,7 @@ import type {
   ReplyParams,
   ReplyResult,
   RunId,
+  CoordinatorAuthority,
   RuntimeCallerEvidence,
   SendParams,
   SendResult,
@@ -40,6 +42,9 @@ import { OrchestrationCore } from './core'
 import { fail } from './errors'
 import { targetIdentity, verifyCaller } from './identity'
 import type { SessionIdentity } from './runtime-contracts'
+import type {
+  ServiceCheckParams, ServiceCoordinatorPrincipal, ServiceQuestionView, ServiceReplyParams, ServiceSendParams,
+} from './services/contracts'
 const DELIVERY_BATCH_SIZE = 50
 const READ_LIMIT_MAX = 100
 const DEFAULT_CHECK_WAIT_MS = 120_000
@@ -77,7 +82,7 @@ type MessageRecord = {
   sequence: number
   id: string
   run_id: string
-  from_session_id: string
+  from_session_id: string | null
   sender_kind: MailboxAddress['kind']
   sender_id: string
   mailbox_kind: MailboxAddress['kind']
@@ -121,7 +126,7 @@ type QuestionRecord = {
 
 type RoutedTarget = { mailbox: MailboxAddress; runId: RunId; warning?: string }
 type SenderContext = {
-  sessionId: string
+  sessionId: string | null
   runId: RunId | null
   coordinatorRunId: RunId | null
   dispatchId: string | null
@@ -144,6 +149,14 @@ type CheckCoreResult = CheckObservationResult & {
   mode: 'consume'
   deliveryId: DeliveryId | null
   replayed: boolean
+}
+type ConsumeCheckParams = MutationRequest & {
+  runId?: RunId
+  ackDeliveryId?: DeliveryId
+  wait?: boolean
+  timeoutMs?: number
+  types?: readonly MessageType[]
+  format?: boolean
 }
 type ReplyValue =
   | {
@@ -179,7 +192,7 @@ type WaitOutcome = 'message' | 'timeout' | 'connection' | 'fenced' | 'reset'
 type MailboxWaiter = {
   id: number
   mailbox: MailboxAddress
-  sessionId: string
+  caller: CoordinatorAuthority
   types: Set<MessageType> | null
   wake(outcome: WaitOutcome): void
 }
@@ -271,7 +284,7 @@ function acceptedCheck(
   return { state: 'accepted', accepted: true, mailbox, runId, consumerGeneration: generation, acknowledged }
 }
 
-export class OrchestrationMessages {
+export class OrchestrationMessages implements MessageArrivalPort {
   private readonly waiters = new Map<string, MailboxWaiter>()
   private readonly askWaiters = new Map<string, Set<AskWaiter>>()
   private readonly arrivalListeners = new Set<(arrival: MessageArrival) => void | Promise<void>>()
@@ -290,12 +303,15 @@ export class OrchestrationMessages {
     this.core.onQuestionsClosed((messageIds) => messageIds.forEach((messageId) => this.notifyQuestion(messageId)))
     this.core.onDispatchSettled((dispatchId) => this.cancelDispatchWaiter(dispatchId))
     this.core.onDispatchFenced((dispatchId) => this.cancelDispatchWaiter(dispatchId))
-    this.core.onMessageCommitted((arrival) => this.notifyCommitted(arrival))
+    this.core.onMessageCommitted((arrival) => this.onCommitted(arrival))
   }
 
   onArrival(listener: (arrival: MessageArrival) => void | Promise<void>): () => void {
     this.arrivalListeners.add(listener)
     return () => this.arrivalListeners.delete(listener)
+  }
+  onCommitted(arrival: MessageArrival): void {
+    this.notifyCommitted(arrival)
   }
 
   onMailboxAvailable(listener: (mailbox: MailboxAddress) => void): () => void {
@@ -357,7 +373,7 @@ export class OrchestrationMessages {
   private cancelRunWaiter(sessionId: string, runId: RunId, outcome: WaitOutcome): void {
     const key = mailboxKey({ kind: 'run', runId })
     const waiter = this.waiters.get(key)
-    if (waiter?.sessionId === sessionId) waiter.wake(outcome)
+    if (waiter && !('kind' in waiter.caller) && waiter.caller.runtimeSessionId === sessionId) waiter.wake(outcome)
   }
 
   private cancelDispatchWaiter(dispatchId: DispatchId): void {
@@ -432,8 +448,62 @@ export class OrchestrationMessages {
       if (heartbeat !== null) return { kind: 'heartbeat' as const, messages, heartbeat, threadId }
       return { kind: 'message' as const, messages, threadId }
     }, { beforeAccept })
-    for (const message of result.messages) {
-      if (!message.read) this.notifyCommitted({ mailbox: message.mailbox, messageId: message.id, type: message.type })
+    if (!result.mutation.replayed) {
+      for (const message of result.messages) {
+        if (!message.read) this.onCommitted({ mailbox: message.mailbox, messageId: message.id, type: message.type })
+      }
+    }
+    return result
+  }
+
+  async sendService(
+    input: ServiceSendParams,
+    caller: ServiceCoordinatorPrincipal
+  ): Promise<Extract<SendResult, { kind: 'message' }>> {
+    this.core.requireCoordinator(caller, input.runId)
+    let target: RoutedTarget | null = null
+    const result = await this.core.mutate('send', input, caller, () => {
+      const resolved = target
+      if (!resolved) fail(this.context, 'lifecycle_conflict', 'service message routing was not resolved before acceptance')
+      const dispatch = this.core.getDispatch(input.dispatchId)
+      if (dispatch.runId !== caller.runId) {
+        fail(this.context, 'dispatch_run_mismatch', `Dispatch ${input.dispatchId} belongs to Run ${dispatch.runId}, not ${caller.runId}`, {
+          dispatchId: input.dispatchId,
+          runId: caller.runId
+        })
+      }
+      if (dispatch.status !== 'pending' && dispatch.status !== 'dispatched') {
+        fail(this.context, 'dispatch_inactive', `Dispatch ${input.dispatchId} is no longer active`, { dispatchId: input.dispatchId, runId: dispatch.runId })
+      }
+      const message = this.insertMessage({
+        runId: caller.runId,
+        fromSessionId: null,
+        sender: { kind: 'run', runId: caller.runId },
+        mailbox: resolved.mailbox,
+        subject: 'Coordinator guidance',
+        body: input.body,
+        type: 'status',
+        priority: 'normal',
+        threadId: null,
+        payload: null,
+        read: false
+      })
+      return { kind: 'message' as const, messages: [message], threadId: null }
+    }, {
+      beforeAccept: async () => {
+        target = await this.resolveDirectTarget({ kind: 'dispatch', dispatchId: input.dispatchId }, null)
+        if (target.runId !== caller.runId) {
+          fail(this.context, 'dispatch_run_mismatch', `Dispatch ${input.dispatchId} belongs to Run ${target.runId}, not ${caller.runId}`, {
+            dispatchId: input.dispatchId,
+            runId: caller.runId
+          })
+        }
+      }
+    })
+    if (!result.mutation.replayed) {
+      for (const message of result.messages) {
+        if (!message.read) this.onCommitted({ mailbox: message.mailbox, messageId: message.id, type: message.type })
+      }
     }
     return result
   }
@@ -479,21 +549,49 @@ export class OrchestrationMessages {
 
     const verified = await verifyCaller(this.context, caller, input)
     const connection = this.requireConnection(caller)
+    return this.consumeCheck(input, verified.evidence, connection)
+  }
+
+  async serviceCheck(
+    input: ServiceCheckParams,
+    caller: ServiceCoordinatorPrincipal
+  ): Promise<CheckResult & { questions: readonly ServiceQuestionView[] }> {
+    const result = await this.consumeCheck(input, caller, undefined)
+    return { ...result, questions: this.serviceQuestions(caller.runId) }
+  }
+
+  serviceQuestions(runId: RunId): readonly ServiceQuestionView[] {
+    return this.store.all<QuestionRecord & { body: string }>(
+      `SELECT q.*, m.body FROM question_threads q
+       JOIN messages m ON m.id = q.message_id
+       WHERE q.run_id = ?
+       ORDER BY q.created_at, q.message_id`,
+      runId
+    ).map((row) => ({ ...questionRow(row), body: row.body }))
+  }
+
+  private async consumeCheck(
+    input: ConsumeCheckParams,
+    caller: CoordinatorAuthority,
+    connection: CallerConnection | undefined
+  ): Promise<CheckResult> {
+    if (input.types !== undefined) this.validateMessageTypes(input.types)
     const timeoutMs = input.timeoutMs ?? DEFAULT_CHECK_WAIT_MS
     if (!Number.isInteger(timeoutMs) || timeoutMs < 0 || timeoutMs > MAX_ASK_WAIT_MS) {
       fail(this.context, 'invalid_argument', 'check timeoutMs must be an integer between 0 and 1800000')
     }
-    const params = input as unknown as MutationRequest & Record<string, unknown>
     let resolvedSnapshot: ConsumerMailbox | null = null
     const wait = input.wait === true
     return this.core.mutate(
       'check',
-      params,
-      verified.evidence,
+      input,
+      caller,
       () => {
-        const resolved = this.resolveConsumerMailbox(verified.evidence, input.runId, false)
+        const resolved = this.resolveConsumerMailbox(caller, input.runId, false)
         resolvedSnapshot = resolved
-        const acknowledged = input.ackDeliveryId ? this.acknowledge(input.ackDeliveryId, resolved.mailbox, resolved.generation) : null
+        const acknowledged = input.ackDeliveryId !== undefined
+          ? this.acknowledge(input.ackDeliveryId, resolved.mailbox, resolved.generation)
+          : null
         if (acknowledged !== null) this.notifyMailboxAvailable(resolved.mailbox)
         const batch = this.nextDelivery(resolved.mailbox, resolved.generation, resolved.runId, wait ? input.types : undefined)
         const messages = batch ? batch.messages : []
@@ -529,7 +627,7 @@ export class OrchestrationMessages {
                 timeoutMs,
                 connection,
                 input.format,
-                verified.evidence.runtimeSessionId
+                caller
               )
             }
           }
@@ -568,11 +666,32 @@ export class OrchestrationMessages {
         }
       }
     )
-    if (result.kind === 'question_answer') {
-      this.notifyQuestion(result.messageId)
-    } else {
-      this.notifyCommitted({ mailbox: result.replyMessage.mailbox, messageId: result.replyMessage.id, type: result.replyMessage.type })
+    if (!result.mutation.replayed) {
+      if (result.kind === 'question_answer') {
+        this.notifyQuestion(result.messageId)
+      } else {
+        this.onCommitted({ mailbox: result.replyMessage.mailbox, messageId: result.replyMessage.id, type: result.replyMessage.type })
+      }
     }
+    return result
+  }
+
+  async replyService(input: ServiceReplyParams, caller: ServiceCoordinatorPrincipal): Promise<ReplyResult> {
+    this.core.requireCoordinator(caller, input.runId)
+    const result = await this.core.mutate('reply', input, caller, () => {
+      const question = this.store.get<QuestionRecord>(
+        `SELECT * FROM question_threads WHERE message_id = ?`,
+        input.messageId
+      )
+      if (!question || question.run_id !== caller.runId) {
+        fail(this.context, 'question_not_found', `question ${input.messageId} does not belong to Run ${caller.runId}`, {
+          messageId: input.messageId,
+          runId: caller.runId
+        })
+      }
+      return this.answerQuestion(question, input, caller)
+    })
+    if (!result.mutation.replayed && result.kind === 'question_answer') this.notifyQuestion(result.messageId)
     return result
   }
 
@@ -596,6 +715,10 @@ export class OrchestrationMessages {
           timeoutMs
         }),
         afterCommit: async (accepted) => {
+          if (input.mode !== 'resume') {
+            const question = this.getMessage(accepted.messageId)
+            this.onCommitted({ mailbox: question.mailbox, messageId: question.id, type: question.type })
+          }
           if (accepted.state === 'answered') return accepted
           return this.waitForAnswer(accepted, verified.evidence, timeoutMs, connection)
         }
@@ -786,7 +909,7 @@ export class OrchestrationMessages {
     return [target]
   }
 
-  private async resolveDirectTarget(target: Exclude<SendParams['to'], GroupAddress | undefined>, senderSessionId: string): Promise<RoutedTarget> {
+  private async resolveDirectTarget(target: Exclude<SendParams['to'], GroupAddress | undefined>, senderSessionId: string | null): Promise<RoutedTarget> {
     if (target.kind === 'run') {
       const run = this.core.getRun(target.runId)
       return { mailbox: target, runId: run.id }
@@ -932,7 +1055,7 @@ export class OrchestrationMessages {
   private insertMessage(input: {
     id?: MessageId
     runId: RunId
-    fromSessionId: string
+    fromSessionId: string | null
     sender: MailboxAddress
     mailbox: MailboxAddress
     subject: string
@@ -1144,9 +1267,9 @@ export class OrchestrationMessages {
     resolved: ConsumerMailbox,
     types: readonly MessageType[] | undefined,
     timeoutMs: number | undefined,
-    connection: CallerConnection,
+    connection: CallerConnection | undefined,
     format: boolean | undefined,
-    sessionId: string
+    caller: CoordinatorAuthority
   ): Promise<CheckCoreResult> {
     if (accepted.deliveryId !== null) return accepted
     const duration = timeoutMs ?? DEFAULT_CHECK_WAIT_MS
@@ -1164,7 +1287,7 @@ export class OrchestrationMessages {
     const waiter: MailboxWaiter = {
       id: this.nextWaiterId++,
       mailbox: resolved.mailbox,
-      sessionId,
+      caller,
       types: types === undefined ? null : new Set(types),
       wake(outcome) {
         if (resolveWake !== null) {
@@ -1178,7 +1301,7 @@ export class OrchestrationMessages {
     }
     this.waiters.set(key, waiter)
     timer = setTimeout(() => waiter.wake('timeout'), duration)
-    unsubscribe = connection.onClose(() => waiter.wake('connection'))
+    if (connection) unsubscribe = connection.onClose(() => waiter.wake('connection'))
 
     const interrupted = (outcome: WaitOutcome): CheckCoreResult | null => {
       if (outcome === 'timeout') return { ...accepted, timedOut: true }
@@ -1256,7 +1379,7 @@ export class OrchestrationMessages {
     return caller.connection
   }
 
-  private answerQuestion(question: QuestionRecord, input: ReplyParams, caller: RuntimeCallerEvidence): ReplyValue {
+  private answerQuestion(question: QuestionRecord, input: ReplyParams, caller: CoordinatorAuthority): ReplyValue {
     if (input.runId !== undefined && input.runId !== question.run_id) {
       fail(this.context, 'dispatch_run_mismatch', `question ${question.message_id} belongs to Run ${question.run_id}, not ${input.runId}`, {
         messageId: question.message_id,
@@ -1294,7 +1417,7 @@ export class OrchestrationMessages {
     }
     const answer = this.insertMessage({
       runId: question.run_id as RunId,
-      fromSessionId: caller.runtimeSessionId,
+      fromSessionId: 'kind' in caller ? null : caller.runtimeSessionId,
       sender: { kind: 'run', runId: run.id },
       mailbox: { kind: 'dispatch', dispatchId: question.dispatch_id as DispatchId },
       subject: 'Re: Question',
@@ -1468,8 +1591,7 @@ export class OrchestrationMessages {
       caller.runtimeSessionId,
       at
     )
-    queueMicrotask(() => this.notifyCommitted({ mailbox: message.mailbox, messageId: message.id, type: 'question' }))
-    return { state: 'cancelled', answer: null, messageId: message.id, threadId: message.threadId ?? message.id, timeoutMs }
+    return { state: 'cancelled', answer: null, messageId, threadId, timeoutMs }
   }
 
   private async waitForAnswer(
@@ -1608,7 +1730,11 @@ export class OrchestrationMessages {
     this.assertDispatchOwner(dispatch, caller)
   }
 
-  private resolveConsumerMailbox(caller: RuntimeCallerEvidence, explicitRunId: RunId | undefined, readOnly: boolean): ConsumerMailbox {
+  private resolveConsumerMailbox(caller: CoordinatorAuthority, explicitRunId: RunId | undefined, readOnly: boolean): ConsumerMailbox {
+    if ('kind' in caller) {
+      const run = this.core.requireCoordinator(caller, explicitRunId)
+      return { mailbox: { kind: 'run', runId: run.id }, runId: run.id, generation: run.consumerGeneration }
+    }
     const active = this.activeDispatchFor(caller.runtimeSessionId)
     if (active) this.assertDispatchOwner(active, caller)
     if (explicitRunId !== undefined) {

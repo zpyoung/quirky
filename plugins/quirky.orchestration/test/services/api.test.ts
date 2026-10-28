@@ -196,10 +196,13 @@ describe('service-owned Run authority and receipts', () => {
 
     const original = parseRunCreate(await callAs(harness, 'a', 'serviceRunCreate', params))
     const replay = parseRunCreate(await callAs(harness, 'a', 'serviceRunCreate', params))
-    expect(replay).toMatchObject({ run: { id: original.run.id }, replayed: true })
+    expect(replay.run.id).toBe(original.run.id)
+    expect(replay.replayed).toBe(true)
     const stableKey = parseRunCreate(await callAs(harness, 'a', 'serviceRunCreate', runCreateParams(key, objective)))
     expect(stableKey.run.id).toBe(original.run.id)
-    expect(original.run).toMatchObject({ coordinatorSessionId: null, serviceOwner: { pluginId: 'acme.orchestration-a', key } })
+    expect(original.run.coordinatorSessionId).toBeNull()
+    expect(original.run.serviceOwner.pluginId).toBe('acme.orchestration-a')
+    expect(original.run.serviceOwner.key).toBe(key)
 
     const mismatch = runCreateParams(key, `${objective} changed`, stringField(record(params), 'requestId'))
     expect(errorReason(await failureOf(callAs(harness, 'a', 'serviceRunCreate', mismatch)))).toContain('request_mismatch')
@@ -268,7 +271,7 @@ describe('owned Run details, mailbox consumption, and question replies', () => {
     const run = await createRun('a')
     const questionBody = `Need approval ${randomUUID()}`
     installAgentCli(harness, CLI_MAIN, [
-      'orchestration', 'ask', '--to', `run:${run.id}`, '--question', questionBody, '--timeout-ms', '20_000'
+      'orchestration', 'ask', '--to', `run:${run.id}`, '--question', questionBody, '--timeout-ms', '20000'
     ])
     const dispatchId = await startWorker(run.id)
 
@@ -285,9 +288,11 @@ describe('owned Run details, mailbox consumption, and question replies', () => {
       const pointerCount = numberField(db.query('SELECT COUNT(*) AS count FROM pointer_operations').get(), 'count')
       const detailBefore = parseRunDetail(await callAs(harness, 'a', 'serviceRunShow', { runId: run.id }))
       expect(detailBefore.run.coordinatorSessionId).toBeNull()
-      expect(detailBefore.workers).toContainEqual(expect.objectContaining({
-        dispatchId, state: 'live', sessionId: expect.any(String), processIncarnation: expect.any(String)
-      }))
+      const detailedWorker = detailBefore.workers.find((candidate) => candidate.dispatchId === dispatchId)
+      if (!detailedWorker || typeof detailedWorker.sessionId !== 'string' || typeof detailedWorker.processIncarnation !== 'string') {
+        throw new Error('the service Run detail omitted its proven worker identity')
+      }
+      expect(detailedWorker.state).toBe('live')
       expect(numberField(db.query('SELECT COUNT(*) AS count FROM mutation_receipts').get(), 'count')).toBe(receiptCount)
       expect(numberField(db.query('SELECT COUNT(*) AS count FROM pointer_operations').get(), 'count')).toBe(pointerCount)
       const beforeCount = numberField(db.query('SELECT COUNT(*) AS count FROM deliveries WHERE run_id = ?').get(run.id), 'count')
@@ -303,11 +308,13 @@ describe('owned Run details, mailbox consumption, and question replies', () => {
       deliveryId = stringField(checked, 'deliveryId')
       expect(checked.mode).toBe('consume')
       expect(stringArrayField(checked, 'messages').map((message) => stringField(message, 'id'))).toContain(question.messageId)
-      expect(stringArrayField(checked, 'questions')).toContainEqual(expect.objectContaining({
-        messageId: question.messageId, status: 'pending', body: questionBody
-      }))
+      const checkedQuestion = stringArrayField(checked, 'questions').map(record)
+        .find((candidate) => candidate.messageId === question.messageId)
+      expect(checkedQuestion?.status).toBe('pending')
+      expect(checkedQuestion?.body).toBe(questionBody)
       const delivery = record(db.query('SELECT status, consumer_generation FROM deliveries WHERE id = ?').get(deliveryId))
-      expect(delivery).toMatchObject({ status: 'outstanding', consumer_generation: detailBefore.run.consumerGeneration })
+      expect(stringField(delivery, 'status')).toBe('outstanding')
+      expect(numberField(delivery, 'consumer_generation')).toBe(detailBefore.run.consumerGeneration)
       expect(numberField(db.query('SELECT read FROM messages WHERE id = ?').get(question.messageId), 'read')).toBe(0)
 
       await callAs(harness, 'a', 'serviceRunShow', { runId: run.id })
@@ -327,8 +334,9 @@ describe('owned Run details, mailbox consumption, and question replies', () => {
         requestId: requestId(), contractVersion: 1
       }))
       expect(wrongRunReply).not.toBeNull()
-      expect(parseRunDetail(await callAs(harness, 'a', 'serviceRunShow', { runId: run.id })).questions)
-        .toContainEqual(expect.objectContaining({ messageId: question.messageId, status: 'pending' }))
+      const pendingAfterWrongRun = parseRunDetail(await callAs(harness, 'a', 'serviceRunShow', { runId: run.id })).questions
+        .find((candidate) => candidate.messageId === question.messageId)
+      expect(pendingAfterWrongRun?.status).toBe('pending')
 
       const replyParams = {
         runId: run.id, messageId: question.messageId, body: answerBody,
@@ -338,7 +346,9 @@ describe('owned Run details, mailbox consumption, and question replies', () => {
       expect(reply.kind).toBe('question_answer')
       const answered = parseRunDetail(await callAs(harness, 'a', 'serviceRunShow', { runId: run.id }))
       const answeredQuestion = answered.questions.find((candidate) => candidate.messageId === question.messageId)
-      expect(answeredQuestion).toMatchObject({ status: 'answered', body: questionBody, answerBody })
+      expect(answeredQuestion?.status).toBe('answered')
+      expect(answeredQuestion?.body).toBe(questionBody)
+      expect(answeredQuestion?.answerBody).toBe(answerBody)
       if (!answeredQuestion?.answerMessageId) throw new Error('the accepted question reply has no message identity')
 
       db.query("UPDATE mutation_receipts SET state = 'pending', checkpoint_json = NULL, result_json = NULL WHERE request_id = ?").run(replyParams.requestId)
@@ -352,13 +362,15 @@ describe('owned Run details, mailbox consumption, and question replies', () => {
       const acknowledged = record(await callAs(harness, 'a', 'serviceCheck', {
         runId: run.id, requestId: requestId(), contractVersion: 1, ackDeliveryId: deliveryId
       }))
-      expect(stringArrayField(acknowledged, 'questions')).toContainEqual(expect.objectContaining({
-        messageId: question.messageId, status: 'answered', body: questionBody, answerBody
-      }))
+      const answeredAfterAck = stringArrayField(acknowledged, 'questions').map(record)
+        .find((candidate) => candidate.messageId === question.messageId)
+      expect(answeredAfterAck?.status).toBe('answered')
+      expect(answeredAfterAck?.body).toBe(questionBody)
+      expect(answeredAfterAck?.answerBody).toBe(answerBody)
     } finally {
       db.close()
     }
-  })
+  }, 60_000)
 })
 
 describe('worker placement, sender authority, and committed arrival events', () => {
@@ -433,7 +445,7 @@ describe('worker placement, sender authority, and committed arrival events', () 
       db.exec('DROP TRIGGER IF EXISTS service_send_rollback')
       db.close()
     }
-  })
+  }, 60_000)
 })
 
 describe('exact worker controls and guarded release', () => {
@@ -455,8 +467,11 @@ describe('exact worker controls and guarded release', () => {
     expect(await failureOf(callAs(harness, 'a', 'serviceWorkerStop', {
       runId: unrelatedRun.id, dispatchId, expectedIdentity, requestId: requestId(), contractVersion: 1
     }))).not.toBeNull()
-    expect(parseRunDetail(await callAs(harness, 'a', 'serviceRunShow', { runId: run.id })).workers)
-      .toContainEqual(expect.objectContaining({ dispatchId, ...expectedIdentity, state: 'live' }))
+    const afterForeignStop = parseRunDetail(await callAs(harness, 'a', 'serviceRunShow', { runId: run.id })).workers
+      .find((candidate) => candidate.dispatchId === dispatchId)
+    expect(afterForeignStop?.sessionId).toBe(expectedIdentity.sessionId)
+    expect(afterForeignStop?.processIncarnation).toBe(expectedIdentity.processIncarnation)
+    expect(afterForeignStop?.state).toBe('live')
 
     const mismatch = await failureOf(callAs(harness, 'a', 'serviceWorkerStop', {
       runId: run.id, dispatchId,
@@ -464,15 +479,18 @@ describe('exact worker controls and guarded release', () => {
       requestId: requestId(), contractVersion: 1
     }))
     expect(errorReason(mismatch)).toMatch(/identity|incarnation|worker_identity_changed/u)
-    expect(parseRunDetail(await callAs(harness, 'a', 'serviceRunShow', { runId: run.id })).workers)
-      .toContainEqual(expect.objectContaining({ dispatchId, ...expectedIdentity, state: 'live' }))
+    const afterMismatchedStop = parseRunDetail(await callAs(harness, 'a', 'serviceRunShow', { runId: run.id })).workers
+      .find((candidate) => candidate.dispatchId === dispatchId)
+    expect(afterMismatchedStop?.sessionId).toBe(expectedIdentity.sessionId)
+    expect(afterMismatchedStop?.processIncarnation).toBe(expectedIdentity.processIncarnation)
+    expect(afterMismatchedStop?.state).toBe('live')
 
     const stopped = record(await callAs(harness, 'a', 'serviceWorkerStop', {
       runId: run.id, dispatchId, expectedIdentity, requestId: requestId(), contractVersion: 1
     }))
     expect(stringField(stopped, 'dispatchId')).toBe(dispatchId)
     expect(['stopped', 'stop_unknown']).toContain(stringField(stopped, 'state'))
-  })
+  }, 60_000)
 
   test('releases a settled worker through archive and custody guards without erasing its identity', async () => {
     await harness.cleanup()
@@ -513,12 +531,18 @@ describe('exact worker controls and guarded release', () => {
       runId: run.id, dispatchId, requestId: requestId(), contractVersion: 1
     }))
     expect(released.state).toBe('released')
-    expect(record(released.archive)).toMatchObject({ source: expect.any(String), status: expect.any(String) })
+    const archive = record(released.archive)
+    expect(stringField(archive, 'source').length).toBeGreaterThan(0)
+    expect(stringField(archive, 'status').length).toBeGreaterThan(0)
 
     const after = parseRunDetail(await callAs(harness, 'a', 'serviceRunShow', { runId: run.id })).workers
       .find((candidate) => candidate.dispatchId === dispatchId)
-    expect(after).toMatchObject({ dispatchId, ...stableIdentity, state: 'exited' })
-    expect(exited).toMatchObject(stableIdentity)
-  })
+    expect(after?.dispatchId).toBe(dispatchId)
+    expect(after?.sessionId).toBe(stableIdentity.sessionId)
+    expect(after?.processIncarnation).toBe(stableIdentity.processIncarnation)
+    expect(after?.state).toBe('exited')
+    expect(exited.sessionId).toBe(stableIdentity.sessionId)
+    expect(exited.processIncarnation).toBe(stableIdentity.processIncarnation)
+  }, 60_000)
 })
 

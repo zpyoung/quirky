@@ -231,5 +231,27 @@
 - **Revisit if:** the unattended loop policy changes
 - **Source:** locked by docs/loop/LOOP.md
 
+## D22: Correct reported owner type errors without replaying the failing full check
+- **Question:** user assigned five owner diagnostics from an observed214-diagnostic/37-file typecheck
+- **Options:** rerun to confirm; assert away nullable state and incomplete fixtures; correct the actual types and narrowing
+- **Chose:** capture a non-null pending value explicitly before deviation updates. Read post-mutation wake deadlines through a typed helper rather than TypeScript's stale pre-await null narrowing or non-null assertions. Construct complete JournalEntry approval facts. Supply the canonical provider transcriptPath, preserving an existing path or null. Publish only these three files as913a63a0 while core/control lanes own their assigned diagnostics.
+- **Why:** optional equality does not narrow its parent object, and TypeScript does not model issueNext mutating state.pending across the call. A double cast would hide fixture drift. No runtime permission or deadline policy changed.
+- **Evidence:** user-reported three runtime/one gate-fixture/one scripted-provider errors; runtime pending guards/deadline helper, complete approval fields and SessionProviderSession contract; source checkpoint913a63a0. Focused post-fix checks pending the component edit barrier.
+- **Reversibility:** easy
+- **Confidence:** high for the exact reported type causes; verification pending
+- **Revisit if:** the integrated typecheck reports another owner diagnostic
+- **Source:** assumed — autonomous
+
+## D23: Keep one public native launch snapshot while integrating the real service facade
+- **Question:** incoming core D25 proposes a third private launch-options migration after preserving journal1/receipts2, conflicting with the user-verified canonical Session.launchSettings replay
+- **Options:** reintroduce an unused private replay table; renumber receipts; retain one canonical public snapshot and preserve genuine provider fixes
+- **Chose:** retain journal migration1 and receipt migration2, no private launch-table/accessors. Resume derives model/effort from Session.launchSettings and prepares the current account environment. Preserve core D25's SDK-init-confirmed native IDs, real resume identity/transcript, current-run guards and honest failed-result status. Integrate df799424's eight actual service providers and worker evidence; publish source separately from runtime acceptance.
+- **Why:** no main caller needs the private table after canonical replay cutover. Keeping two replay stores adds divergence and dead weight, while renumbering an installed receipt migration is unsafe. This supersedes only D25's private launch-table addition, not its provider-identity or receipt ordering invariants.
+- **Evidence:** user canonical snapshot/journal handoff; f1f29443 native composition; native main launchOptionsFromSnapshot; source df799424; incoming core D20–D26 read. User-reported old-core activation failure is ground truth; the new source now implements listDispatches, boundRunId and attentionFor, but actual post-integration activation is not yet verified.
+- **Reversibility:** medium
+- **Confidence:** high for canonical replay and forward receipt order; actual backend acceptance pending
+- **Revisit if:** a real launch option cannot be represented by the public immutable snapshot
+- **Source:** supersedes m6-heimdall-core D25 (private launch-options table only)
+
 ## Progress
-Owner runtime/detector/release/API components are merged and their temporary worktrees removed. API acceptance passed15tests95assertions with actual daemon/CLI, real JSONL children/native history and real publication receipts before latest dependency composition. Core50fb4027 merged as76eb1a28; controlsccbfa0cb merge in progress. NativeCanonicalMerge returned canonical journal/Claude conflict resolutions; RuntimeSchemaMerge resolves protocol/session/orchestration conflicts; OwnerWorkerFinal aligns exact stop receipts and authors actual owner-worker/backend acceptance. Parent resolved native main conflicts preserving canonical launchSettings, indexed lifetimes, leases and Held approval. No final affected suite/scripts/typecheck or land yet. Next: finish merge barrier, run actual owner/worker acceptance and standalone smoke, repair concrete failures, await queue deps ready, merge build/roadmap once/read incoming logs, required gates, docs/notes/commit/detach/queue land. Aged-item policy skips unstarted review/dogfood; no scope silently deferred.
+Owner components and canonical native/control integration are committed throughf1f29443; assigned owner type source corrections through913a63a0. NativeCanonicalMerge and RuntimeSchemaMerge returned; no merge conflicts remain. Parent added an exact owner-human-question/answer API regression (unrun16thcase) and prepared standalone owner API/CLI publication smoke. OwnerWorkerFinal remains active on exact stop receipts and actual owner-worker/backend acceptance. Actual prerequisite still missing: eight service APIs have contracts/handlers/tests but no orchestration main/manifest providers; parent notified core and awaits event-driven publication. A Claude-only structured-worker guard also contradicts the existing Codex fixture; worker owner notified, no concurrent edit. Final affected suite/scripts/typecheck/land not run. Next: component source barrier, reachable owner checks/smokes, integrate real service publication and verify worker flows, deps ready/catch-up once/incoming logs, required gates and land. No fake backend, new review/dogfood campaign or silent scope reduction.

@@ -37,19 +37,28 @@ import type {
   HeartbeatResult,
   WorkerRow,
   WorkerTransitionInput,
-  UUID
+  UUID,
+  CoordinatorAuthority,
+  ServiceRunRow,
 } from './contracts'
 import type { SessionIdentity } from './runtime-contracts'
 import type { DurableMutationOptions, OrchestrationWorkerCore, WorkerLifecyclePort } from './worker-integration'
 import { fail } from './errors'
 
 const MAX_TASK_SPEC_BYTES = 1_214_464
-const MAX_NESTED_DEPTH = 1
+export const MAX_NESTED_DEPTH = 1
 const CIRCUIT_BREAK_FAILURES = 3
 const RECEIPT_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000
 const RECEIPT_MAX_ROWS = 10_000
 const RECEIPT_PRUNE_BATCH = 64
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+const WORKER_MUTATION_METHODS: Record<string, true> = {
+  workerStart: true,
+  workerStop: true,
+  workerAbandon: true,
+  workerRelease: true,
+  workerRetain: true
+}
 
 type RunRecord = {
   id: string
@@ -59,6 +68,8 @@ type RunRecord = {
   consumer_generation: number
   created_at: string
   updated_at: string
+  service_owner_plugin_id: string | null
+  service_owner_key: string | null
 }
 
 type TaskRecord = {
@@ -66,7 +77,9 @@ type TaskRecord = {
   run_id: string
   parent_task_id: string | null
   dependency_task_ids_json: string
-  created_by_session_id: string
+  created_by_session_id: string | null
+  created_by_plugin_id: string | null
+  created_by_kind: 'session' | 'service'
   task_title: string
   display_name: string
   spec: string
@@ -96,6 +109,8 @@ type DispatchRecord = {
   process_incarnation: string | null
   created_at: string
   dispatched_at: string | null
+  creator_plugin_id: string | null
+  creator_kind: 'session' | 'service'
   completed_at: string | null
   last_heartbeat_at: string | null
 }
@@ -202,9 +217,16 @@ function dispatchRow(row: DispatchRecord): DispatchRow {
 function fingerprint(sessionId: string): string {
   return createHash('sha256').update(`quirky-orchestration-caller\0${sessionId}`).digest('hex')
 }
+function serviceFingerprint(pluginId: string): string {
+  return createHash('sha256').update(`quirky-orchestration-service\0${pluginId}`).digest('hex')
+}
 
-function requestDigest(method: string, params: Record<string, unknown>): string {
-  const { requestId: _requestId, ...payload } = params
+function receiptFingerprint(caller: CoordinatorAuthority): string {
+  return 'kind' in caller ? serviceFingerprint(caller.pluginId) : fingerprint(caller.runtimeSessionId)
+}
+
+function requestDigest(method: string, params: object): string {
+  const { requestId: _requestId, ...payload } = params as Record<string, unknown>
   return createHash('sha256').update(canonical({ method, params: payload })).digest('hex')
 }
 
@@ -276,6 +298,54 @@ export class OrchestrationCore implements OrchestrationWorkerCore {
     return row
   }
 
+  listDispatches(): DispatchRow[] {
+    return this.store.all<DispatchRecord>(
+      `SELECT * FROM dispatches ORDER BY created_at, id`
+    ).map(dispatchRow)
+  }
+
+  boundRunId(caller: RuntimeCallerEvidence): RunId | null {
+    this.assertEvidence(caller)
+    return this.getBoundRun(caller.runtimeSessionId)?.id ?? null
+  }
+
+  attentionFor(dispatchId: DispatchId): { guidance: boolean; input: boolean; approval: boolean; rootCompletion: boolean } {
+    const dispatch = this.getDispatchRecord(dispatchId)
+    const task = this.getTaskRecord(dispatch.task_id as TaskId)
+    const guidance = this.store.get<{ id: string }>(
+      `SELECT id FROM messages
+       WHERE mailbox_kind = 'dispatch' AND mailbox_id = ? AND read = 0
+         AND type IN ('status', 'dispatch', 'merge_ready', 'handoff')
+       LIMIT 1`,
+      dispatchId
+    ) !== undefined
+    let input = false
+    let approval = false
+    const pendingQuestions = this.store.all<{ payload_json: string | null }>(
+      `SELECT m.payload_json FROM question_threads q
+       JOIN messages m ON m.id = q.message_id
+       WHERE q.dispatch_id = ? AND q.status = 'pending'`,
+      dispatchId
+    )
+    for (const row of pendingQuestions) {
+      const payload = jsonOf<JsonValue | null>(row.payload_json, null)
+      const options = payload !== null && typeof payload === 'object' && !Array.isArray(payload)
+        ? (payload as Record<string, JsonValue>).options
+        : undefined
+      if (Array.isArray(options) && options.length > 0) approval = true
+      else input = true
+    }
+    if (this.store.get<{ id: string }>(`SELECT id FROM gates WHERE task_id = ? AND status = 'pending' LIMIT 1`, task.id)) {
+      approval = true
+    }
+    return {
+      guidance,
+      input,
+      approval,
+      rootCompletion: task.parent_task_id === null && task.status === 'completed'
+    }
+  }
+
   getTaskRecord(taskId: TaskId): TaskRecord {
     const row = this.store.get<TaskRecord>('SELECT * FROM tasks WHERE id = ?', taskId)
     if (!row) fail(this.context, 'task_not_found', `Task ${taskId} does not exist`, { taskId })
@@ -289,8 +359,40 @@ export class OrchestrationCore implements OrchestrationWorkerCore {
     )
     return row ? runRow(row) : null
   }
+  requireOwnedRun(pluginId: string, runId: RunId): void {
+    const owner = this.store.get<{ service_owner_plugin_id: string | null }>(
+      `SELECT service_owner_plugin_id FROM runs WHERE id = ?`,
+      runId
+    )
+    if (!owner || owner.service_owner_plugin_id !== pluginId) {
+      fail(this.context, 'consumer_fenced', 'service caller does not own the requested Run', { runId })
+    }
+  }
 
-  requireCoordinator(caller: RuntimeCallerEvidence, runId?: RunId): RunRow {
+  getServiceRun(pluginId: string, runId: RunId): ServiceRunRow {
+    this.requireOwnedRun(pluginId, runId)
+    const row = this.store.get<RunRecord>('SELECT * FROM runs WHERE id = ?', runId)
+    if (!row || !row.service_owner_plugin_id || row.service_owner_key === null) {
+      fail(this.context, 'consumer_fenced', 'service caller does not own the requested Run', { runId })
+    }
+    if (row.coordinator_session_id !== null) {
+      fail(this.context, 'lifecycle_conflict', `service-owned Run ${runId} has an unexpected session coordinator`, { runId })
+    }
+    return {
+      ...runRow(row),
+      coordinatorSessionId: null,
+      serviceOwner: { pluginId: row.service_owner_plugin_id, key: row.service_owner_key }
+    }
+  }
+
+  requireCoordinator(caller: CoordinatorAuthority, runId?: RunId): RunRow {
+    if ('kind' in caller) {
+      if (runId !== undefined && runId !== caller.runId) {
+        fail(this.context, 'consumer_fenced', `service coordinator is scoped to ${caller.runId}, not ${runId}`, { runId, boundRunId: caller.runId })
+      }
+      this.requireOwnedRun(caller.pluginId, caller.runId)
+      return this.getRun(caller.runId)
+    }
     this.assertEvidence(caller)
     const bound = this.getBoundRun(caller.runtimeSessionId)
     if (!bound) fail(this.context, 'run_required', 'no Run is bound to this session; create or use a Run first')
@@ -324,9 +426,65 @@ export class OrchestrationCore implements OrchestrationWorkerCore {
     return this.getRun(id)
   }
 
+  serviceRunCreate(
+    params: MutationRequest & { key: string; objective: string },
+    pluginId: string
+  ): Promise<MutationResult<{ run: ServiceRunRow }>> {
+    if (pluginId.trim().length === 0) fail(this.context, 'consumer_fenced', 'service Run creation requires an authenticated plugin principal')
+    return this.mutateWithFingerprint(
+      'runCreate',
+      params,
+      serviceFingerprint(pluginId),
+      () => ({ run: this.createServiceRunRecord(params, pluginId) })
+    )
+  }
+
+  private createServiceRunRecord(
+    params: MutationRequest & { key: string; objective: string },
+    pluginId: string
+  ): ServiceRunRow {
+    const key = params.key
+    const objective = params.objective.trim()
+    if (key.trim().length === 0) fail(this.context, 'invalid_argument', 'Run key must not be empty')
+    if (!objective) fail(this.context, 'invalid_argument', 'Run objective must not be empty')
+    const existing = this.store.get<{ id: string; objective: string }>(
+      `SELECT id, objective FROM runs WHERE service_owner_plugin_id = ? AND service_owner_key = ?`,
+      pluginId,
+      key
+    )
+    if (existing) {
+      if (existing.objective !== objective) {
+        fail(this.context, 'request_mismatch', `service Run key ${key} already names a Run with a different objective`, { runId: existing.id })
+      }
+      return this.getServiceRun(pluginId, existing.id as RunId)
+    }
+    const id = newId('run') as RunId
+    const at = isoNow()
+    this.store.run(
+      `INSERT INTO runs (
+        id, objective, coordinator_session_id, coordinator_history_json, consumer_generation,
+        created_at, updated_at, service_owner_plugin_id, service_owner_key
+      ) VALUES (?, ?, NULL, '[]', 1, ?, ?, ?, ?)`,
+      id,
+      objective,
+      at,
+      at,
+      pluginId,
+      key
+    )
+    return this.getServiceRun(pluginId, id)
+  }
+
   useRun(input: RunUseParams, caller: RuntimeCallerEvidence): RunRow {
     this.assertEvidence(caller)
     const target = this.getRun(input.runId)
+    const serviceOwner = this.store.get<{ service_owner_plugin_id: string | null }>(
+      `SELECT service_owner_plugin_id FROM runs WHERE id = ?`,
+      target.id
+    )
+    if (serviceOwner?.service_owner_plugin_id !== null && serviceOwner?.service_owner_plugin_id !== undefined) {
+      fail(this.context, 'consumer_fenced', `service-owned Run ${target.id} cannot be bound to a session`, { runId: target.id })
+    }
     if (target.id === 'run_unbound') fail(this.context, 'run_not_found', 'run_unbound is a mail-only namespace and cannot be bound')
     const at = isoNow()
     this.unbindSession(caller.runtimeSessionId, at, target.id)
@@ -351,7 +509,7 @@ export class OrchestrationCore implements OrchestrationWorkerCore {
     return this.getRun(target.id)
   }
 
-  createTask(input: Omit<TaskCreateParams, keyof MutationRequest>, caller: RuntimeCallerEvidence): TaskRow {
+  createTask(input: Omit<TaskCreateParams, keyof MutationRequest>, caller: CoordinatorAuthority): TaskRow {
     const run = this.requireCoordinator(caller, input.runId)
     const specBytes = new TextEncoder().encode(input.spec).byteLength
     if (specBytes > MAX_TASK_SPEC_BYTES) {
@@ -380,16 +538,22 @@ export class OrchestrationCore implements OrchestrationWorkerCore {
     const ready = dependencies.every((dependencyId) => this.store.get<{ status: TaskStatus }>('SELECT status FROM tasks WHERE id = ?', dependencyId)?.status === 'completed')
     const at = isoNow()
     const id = newId('task') as TaskId
+    const creatorSessionId = 'kind' in caller ? null : caller.runtimeSessionId
+    const creatorPluginId = 'kind' in caller ? caller.pluginId : null
+    const creatorKind: 'session' | 'service' = 'kind' in caller ? 'service' : 'session'
     this.store.run(
       `INSERT INTO tasks (
         id, run_id, parent_task_id, dependency_task_ids_json, created_by_session_id,
-        task_title, display_name, spec, status, result_json, created_at, completed_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, NULL)`,
+        created_by_plugin_id, created_by_kind, task_title, display_name, spec, status,
+        result_json, created_at, completed_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, NULL)`,
       id,
       run.id,
       input.parentTaskId ?? null,
       jsonText(dependencies),
-      caller.runtimeSessionId,
+      creatorSessionId,
+      creatorPluginId,
+      creatorKind,
       taskTitle,
       displayName,
       input.spec,
@@ -577,8 +741,8 @@ export class OrchestrationCore implements OrchestrationWorkerCore {
     return this.getDispatch(id)
   }
 
-  reserveWorkerDispatch(input: Omit<DispatchAdmissionInput, 'assigneeSessionId'>, caller: RuntimeCallerEvidence): DispatchRow {
-    this.assertEvidence(caller)
+  reserveWorkerDispatch(input: Omit<DispatchAdmissionInput, 'assigneeSessionId'>, caller: CoordinatorAuthority): DispatchRow {
+    this.requireCoordinator(caller, input.runId)
     const admission = this.admit({ ...input, assigneeSessionId: '' }, caller, { allowMissingAssignee: true })
     if (!admission.admitted) {
       fail(this.context, admission.reason, admission.reason === 'nested_worker_depth_exceeded' ? 'nested Dispatch depth exceeds the configured maximum of 1' : 'Task is not startable', {
@@ -591,18 +755,24 @@ export class OrchestrationCore implements OrchestrationWorkerCore {
     const task = this.getTaskRecord(input.taskId)
     const id = newId('ctx') as DispatchId
     const at = isoNow()
+    const creatorSessionId = 'kind' in caller ? null : caller.runtimeSessionId
+    const creatorPluginId = 'kind' in caller ? caller.pluginId : null
+    const creatorKind: 'session' | 'service' = 'kind' in caller ? 'service' : 'session'
+    const creatorDispatchId = 'kind' in caller ? null : this.creatorDispatchId(caller.runtimeSessionId)
     this.store.run(
       `INSERT INTO dispatches (
         id, run_id, task_id, contract_version, status, assignee_session_id,
-        creator_session_id, creator_dispatch_id, retry_of_dispatch_id, depth, failure_count,
-        last_failure, termination_reason, consumer_generation, supervised, runtime_epoch,
-        process_incarnation, created_at, dispatched_at, completed_at, last_heartbeat_at
-      ) VALUES (?, ?, ?, 1, 'pending', NULL, ?, ?, ?, ?, ?, NULL, NULL, 0, 1, NULL, NULL, ?, NULL, NULL, NULL)`,
+        creator_session_id, creator_plugin_id, creator_kind, creator_dispatch_id, retry_of_dispatch_id,
+        depth, failure_count, last_failure, termination_reason, consumer_generation, supervised,
+        runtime_epoch, process_incarnation, created_at, dispatched_at, completed_at, last_heartbeat_at
+      ) VALUES (?, ?, ?, 1, 'pending', NULL, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, 0, 1, NULL, NULL, ?, NULL, NULL, NULL)`,
       id,
       task.run_id,
       task.id,
-      caller.runtimeSessionId,
-      this.creatorDispatchId(caller.runtimeSessionId),
+      creatorSessionId,
+      creatorPluginId,
+      creatorKind,
+      creatorDispatchId,
       admission.retryOfDispatchId,
       admission.depth,
       admission.failureCount,
@@ -613,12 +783,23 @@ export class OrchestrationCore implements OrchestrationWorkerCore {
   }
 
   attachDispatchAuthority(dispatchId: DispatchId, identity: SessionIdentity, caller: RuntimeCallerEvidence): DispatchRow {
-    this.assertEvidence(caller)
+    return this.attachWorkerAuthority(dispatchId, identity, caller)
+  }
+
+
+  attachWorkerAuthority(dispatchId: DispatchId, identity: SessionIdentity, caller: CoordinatorAuthority): DispatchRow {
+    const coordinator = this.requireCoordinator(caller)
     const dispatch = this.getDispatchRecord(dispatchId)
+    if (dispatch.run_id !== coordinator.id) {
+      fail(this.context, 'consumer_fenced', `Dispatch ${dispatchId} does not belong to the coordinator Run`, { dispatchId, runId: coordinator.id })
+    }
     if (!dispatch.supervised || dispatch.status !== 'pending' || dispatch.assignee_session_id !== null) {
       fail(this.context, 'lifecycle_conflict', `Dispatch ${dispatchId} is not awaiting supervised authority`, { dispatchId })
     }
-    if (!identity.live) fail(this.context, 'terminal_not_found', `session ${identity.sessionId} is not live`, { sessionId: identity.sessionId })
+    if (!identity.live || identity.sessionId.trim().length === 0 || identity.runtimeEpoch.trim().length === 0 ||
+      identity.processIncarnation.trim().length === 0) {
+      fail(this.context, 'terminal_not_found', `session ${identity.sessionId} has no exact live identity`, { sessionId: identity.sessionId })
+    }
     const alreadyAssigned = this.store.get<{ id: string }>(
       `SELECT id FROM dispatches WHERE assignee_session_id = ? AND status IN ('pending', 'dispatched') AND id != ? LIMIT 1`,
       identity.sessionId,
@@ -772,16 +953,41 @@ export class OrchestrationCore implements OrchestrationWorkerCore {
 
   async mutate<T extends object>(
     method: MutatingOrchestrationMethod,
-    params: MutationRequest & Record<string, unknown>,
-    caller: RuntimeCallerEvidence,
+    params: MutationRequest & object,
+    caller: CoordinatorAuthority,
     operation: (store: PluginStore) => T,
     options: DurableMutationOptions<T> = {}
   ): Promise<MutationResult<T>> {
-    this.assertEvidence(caller)
+    if ('kind' in caller) this.requireCoordinator(caller)
+    else this.assertEvidence(caller)
+    return this.mutateWithFingerprint(method, params, receiptFingerprint(caller), operation, options)
+  }
+
+  mutateWorker<T extends object>(
+    method: string,
+    params: MutationRequest & object,
+    caller: CoordinatorAuthority,
+    operation: (store: PluginStore) => T,
+    options: DurableMutationOptions<T> = {}
+  ): Promise<MutationResult<T>> {
+    if (!Object.hasOwn(WORKER_MUTATION_METHODS, method)) {
+      fail(this.context, 'invalid_argument', `unsupported worker mutation ${method}`, { method })
+    }
+    if ('kind' in caller) this.requireCoordinator(caller)
+    else this.assertEvidence(caller)
+    return this.mutateWithFingerprint(method, params, receiptFingerprint(caller), operation, options)
+  }
+
+  private mutateWithFingerprint<T extends object>(
+    method: string,
+    params: MutationRequest & object,
+    callerFingerprint: string,
+    operation: (store: PluginStore) => T,
+    options: DurableMutationOptions<T> = {}
+  ): Promise<MutationResult<T>> {
     if (!UUID_RE.test(params.requestId) || params.contractVersion !== 1) {
       fail(this.context, 'invalid_argument', 'mutation request requires a UUID requestId and contractVersion 1')
     }
-    const callerFingerprint = fingerprint(caller.runtimeSessionId)
     const payloadHash = requestDigest(method, params)
     const key = `${callerFingerprint}:${params.requestId}`
     const active = this.activeMutations.get(key)
@@ -842,18 +1048,24 @@ export class OrchestrationCore implements OrchestrationWorkerCore {
   ): void {
     const dispatch = this.getDispatchRecord(dispatchId)
     const fromSessionId = dispatch.assignee_session_id ?? dispatch.creator_session_id
-    if (!fromSessionId) fail(this.context, 'lifecycle_conflict', `Dispatch ${dispatchId} has no session identity for a status message`)
+    const serviceRunSender = fromSessionId === null && dispatch.creator_kind === 'service'
+    if (!fromSessionId && !serviceRunSender) {
+      fail(this.context, 'lifecycle_conflict', `Dispatch ${dispatchId} has no session or service coordinator provenance for a status message`)
+    }
+    const senderKind = serviceRunSender ? 'run' : 'dispatch'
+    const senderId = serviceRunSender ? dispatch.run_id : dispatch.id
     const at = isoNow()
     const messageId = newId('msg') as MessageId
     this.store.run(
       `INSERT INTO messages (
         id, run_id, from_session_id, sender_kind, sender_id, mailbox_kind, mailbox_id,
         subject, body, type, priority, thread_id, payload_json, read, created_at, delivered_at
-      ) VALUES (?, ?, ?, 'dispatch', ?, 'run', ?, ?, ?, ?, ?, NULL, ?, 0, ?, NULL)`,
+      ) VALUES (?, ?, ?, ?, ?, 'run', ?, ?, ?, ?, ?, NULL, ?, 0, ?, NULL)`,
       messageId,
       dispatch.run_id,
       fromSessionId,
-      dispatch.id,
+      senderKind,
+      senderId,
       dispatch.run_id,
       subject,
       body,
@@ -867,7 +1079,14 @@ export class OrchestrationCore implements OrchestrationWorkerCore {
       messageId,
       type
     }
-    queueMicrotask(() => this.messageCommittedListener?.(arrival))
+    queueMicrotask(() => {
+      try {
+        if (!this.store.get<{ id: string }>(`SELECT id FROM messages WHERE id = ?`, messageId)) return
+        this.messageCommittedListener?.(arrival)
+      } catch {
+        // The committed message remains durable even if the store closes before notification.
+      }
+    })
   }
 
   closeWorkerQuestions(dispatchId: DispatchId, at: UtcTimestamp): void {
@@ -909,8 +1128,8 @@ export class OrchestrationCore implements OrchestrationWorkerCore {
 
 
   private async performMutation<T extends object>(
-    method: MutatingOrchestrationMethod,
-    params: MutationRequest & Record<string, unknown>,
+    method: string,
+    params: MutationRequest & object,
     callerFingerprint: string,
     payloadHash: string,
     operation: (store: PluginStore) => T,
@@ -1006,7 +1225,7 @@ export class OrchestrationCore implements OrchestrationWorkerCore {
   }
 
   private existingMutationResult<T extends object>(
-    method: MutatingOrchestrationMethod,
+    method: string,
     params: MutationRequest,
     callerFingerprint: string,
     payloadHash: string
@@ -1051,10 +1270,9 @@ export class OrchestrationCore implements OrchestrationWorkerCore {
 
   private admit(
     input: DispatchAdmissionInput,
-    caller: RuntimeCallerEvidence,
+    caller: CoordinatorAuthority,
     options: { allowMissingAssignee?: boolean } = {}
   ): DispatchAdmissionResult {
-    this.assertEvidence(caller)
     const task = this.getTaskRecord(input.taskId)
     const run = this.requireCoordinator(caller, (input.runId ?? task.run_id) as RunId)
     if (task.run_id !== run.id) fail(this.context, 'dispatch_run_mismatch', `Task ${task.id} belongs to Run ${task.run_id}, not ${run.id}`, { taskId: task.id, runId: run.id })
@@ -1101,7 +1319,7 @@ export class OrchestrationCore implements OrchestrationWorkerCore {
       )
       if (occupied) return { admitted: false, reason: 'task_not_startable', failureCount }
     }
-    const depth = this.creatorDepth(caller.runtimeSessionId) + 1
+    const depth = this.creatorDepth(caller) + 1
     if (depth > MAX_NESTED_DEPTH) {
       return { admitted: false, reason: 'nested_worker_depth_exceeded', attemptedDepth: depth, maximumDepth: MAX_NESTED_DEPTH, failureCount }
     }
@@ -1236,10 +1454,11 @@ export class OrchestrationCore implements OrchestrationWorkerCore {
     }
   }
 
-  private creatorDepth(sessionId: string): number {
+  private creatorDepth(caller: CoordinatorAuthority): number {
+    if ('kind' in caller) return 0
     return this.store.get<{ depth: number }>(
       `SELECT MAX(depth) AS depth FROM dispatches WHERE assignee_session_id = ? AND status IN ('pending', 'dispatched')`,
-      sessionId
+      caller.runtimeSessionId
     )?.depth ?? 0
   }
 

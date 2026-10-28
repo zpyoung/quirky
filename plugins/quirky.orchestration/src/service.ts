@@ -18,11 +18,20 @@ import { OrchestrationMessages } from './messaging'
 import { OrchestrationPointers } from './pointers'
 import { runTaskMethods } from './runs'
 import type { OrchestrationService } from './surface-contracts'
+import { createServiceCoordinator, type OrchestrationServiceCoordinator } from './services/coordinator'
+import { createServiceHandlers } from './services/handlers'
 
 /** Compose the semantic core once around the caller-provided plugin store. */
-export function createOrchestration(context: PluginContext, store: PluginStore): OrchestrationService {
+export type ComposedOrchestrationService = OrchestrationService & { readonly serviceCoordinator: OrchestrationServiceCoordinator }
+export function createOrchestration(context: PluginContext, store: PluginStore): ComposedOrchestrationService {
   const core = new OrchestrationCore(context, store)
   const messages = new OrchestrationMessages(context, core)
+  const serviceCoordinator = createServiceCoordinator(context, core, messages)
+  const serviceHandlers = createServiceHandlers(serviceCoordinator)
+  const removeMessageEvent = messages.onArrival(({ messageId, type }) => {
+    const row = store.get<{ run_id: string }>(`SELECT run_id FROM messages WHERE id = ?`, messageId)
+    if (row) context.emit('message-arrived', { runId: row.run_id, messageId, type })
+  })
   const pointers = new OrchestrationPointers(context, store, core, messages)
   const gates = new OrchestrationGates(core)
   const runMethods = runTaskMethods(
@@ -69,17 +78,20 @@ export function createOrchestration(context: PluginContext, store: PluginStore):
       return gates.list(params, verified.evidence)
     },
     requestShow: runMethods.requestShow,
-    reset: runMethods.reset
+    reset: runMethods.reset,
+    ...serviceHandlers
   } satisfies Record<OrchestrationMethod, MethodHandler>
 
   let disposed = false
   return {
     core,
+    serviceCoordinator,
     methods,
     async dispose() {
       if (disposed) return
       disposed = true
       await pointers.dispose()
+      removeMessageEvent()
       messages.dispose()
       await core.dispose()
     }

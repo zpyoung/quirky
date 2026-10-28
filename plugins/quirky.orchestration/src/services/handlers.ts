@@ -1,4 +1,5 @@
 import type { PluginCaller, PluginContext } from '@quirky/protocol'
+import { fail } from '../errors'
 import type { RunId } from '../contracts'
 import type {
   ServiceCoordinatorPrincipal, ServiceHandler, ServiceMethod, ServiceMethodInputs, ServiceMethodResults
@@ -19,7 +20,7 @@ export interface ServiceCoordinatorPort {
   requireOwnedRun(pluginId: string, runId: RunId): void
   serviceRunCreate(params: ServiceMethodInputs['serviceRunCreate'], pluginId: string): MaybePromise<ServiceMethodResults['serviceRunCreate']>
   /** Rechecks ownership before collecting or returning workers/questions. */
-  serviceRunShow(params: ServiceMethodInputs['serviceRunShow'], pluginId: string): MaybePromise<ServiceMethodResults['serviceRunShow']>
+  serviceRunShow(params: ServiceMethodInputs['serviceRunShow'], pluginId: string, caller: PluginCaller): MaybePromise<ServiceMethodResults['serviceRunShow']>
   serviceWorkerStart(params: ServiceMethodInputs['serviceWorkerStart'], principal: ServiceCoordinatorPrincipal): MaybePromise<ServiceMethodResults['serviceWorkerStart']>
   serviceCheck(params: ServiceMethodInputs['serviceCheck'], principal: ServiceCoordinatorPrincipal): MaybePromise<ServiceMethodResults['serviceCheck']>
   serviceWorkerRelease(params: ServiceMethodInputs['serviceWorkerRelease'], principal: ServiceCoordinatorPrincipal): MaybePromise<ServiceMethodResults['serviceWorkerRelease']>
@@ -34,7 +35,7 @@ export type ServiceMethodHandlers = {
 
 function pluginOwner(context: PluginContext, caller: PluginCaller): string {
   if (caller.role !== 'plugin' || typeof caller.pluginId !== 'string' || caller.pluginId.trim().length === 0) {
-    throw context.error('conflict', 'consumer_fenced: service orchestration methods require a kernel-authenticated plugin caller')
+    fail(context, 'consumer_fenced', 'service orchestration methods require a kernel-authenticated plugin caller')
   }
   return caller.pluginId
 }
@@ -55,7 +56,7 @@ export function createServiceHandlers(port: ServiceCoordinatorPort): ServiceMeth
     serviceRunShow: (params, caller) => {
       const pluginId = pluginOwner(port.context, caller)
       port.requireOwnedRun(pluginId, params.runId)
-      return port.serviceRunShow(params, pluginId)
+      return port.serviceRunShow(params, pluginId, caller)
     },
     serviceWorkerStart: (params, caller) => port.serviceWorkerStart(params, ownedCoordinator(port, caller, params.runId)),
     serviceCheck: (params, caller) => port.serviceCheck(params, ownedCoordinator(port, caller, params.runId)),

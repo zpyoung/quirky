@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import type { PluginContext } from '@quirky/protocol'
 import { openPluginStore } from '../../../packages/daemon/src/plugins/stores'
 import { budgetUsage } from '../src/budget'
+import { createOrchestrationAdapter, orchestrationRequestIdForAttemptFingerprint } from '../src/orchestration'
 import { actionFingerprint, gateAction } from '../src/gate'
 import { createRunner } from '../src/runner'
 import { createKernelStore } from '../src/store'
@@ -16,11 +17,12 @@ import type {
   JournalEntry,
   KernelAction,
   KernelStore,
-  KindRegistry,
+  KernelWorkerObservation,
   OrchestrationPort,
   RunnerOptions,
   Snapshot,
   WatcherKind,
+  WorkerMessage,
   WorkerRequest
 } from '../src/contracts'
 
@@ -74,7 +76,7 @@ function journalEntry(seq: number, kind: string, atMs: number, extra: Record<str
     eventId: `event-${seq}`,
     watcherId: 'watcher-1',
     atMs,
-    class: kind.startsWith('interval-') ? 'observation' : 'fact',
+    class: 'fact',
     origin: 'owner',
     kind,
     resolved: true,
@@ -151,6 +153,7 @@ function orchestration(overrides: Partial<OrchestrationPort> = {}): Orchestratio
   return {
     dispatch: async () => ({ kind: 'indeterminate', requestId: 'request-1' }),
     recover: async () => null,
+    observeWorkers: async () => [],
     mailbox: async () => [],
     acknowledge: async () => undefined,
     release: async () => undefined,
@@ -340,11 +343,11 @@ describe('Heimdall runner gate and budget behavior', () => {
     try {
       await runner.pulse()
       stored.store.append('watcher-1', {
-        kind:'interval-open',class:'observation',origin:'owner',resolved:true,
+        kind:'interval-open',class:'fact',origin:'owner',resolved:true,
         intervalId:'contact-work',cause:'worker-dispatched',generation:'initial:watcher-1',atMs:1_000
       })
       stored.store.append('watcher-1', {
-        kind:'interval-checkpoint',class:'observation',origin:'owner',resolved:true,
+        kind:'interval-checkpoint',class:'fact',origin:'owner',resolved:true,
         intervalId:'contact-work',generation:'initial:watcher-1',checkpointAtMs:2_000,atMs:2_000
       })
       nowMs = 9_000
@@ -453,6 +456,722 @@ describe('Heimdall runner gate and budget behavior', () => {
     }
   })
 
+  test('worker billing follows confirmed contact, excludes unknown gaps, and worker_done settles and releases', async () => {
+    const stored = storage()
+    let nowMs = 1_000
+    let observations: KernelWorkerObservation[] = []
+    let messages: WorkerMessage[] = []
+    let releases = 0
+    let recoveries = 0
+    const workerRequest: WorkerRequest = { spec: 'worker task', worktree: '/workspace' }
+    const port = orchestration({
+      recover: async () => { recoveries += 1; return null },
+      dispatch: async () => ({ kind: 'dispatched', dispatchId: 'dispatch-1' }),
+      observeWorkers: async () => observations,
+      mailbox: async () => messages,
+      release: async () => { releases += 1 }
+    })
+    const watcherKind = kind({
+      decide: () => ({ action }),
+      execute: async (_action, context) => {
+        const result = await context.dispatchWorker(workerRequest)
+        return result.kind === 'dispatched' ? { effect: 'landed' } : { effect: 'indeterminate' }
+      }
+    })
+    const options = runnerOptions(stored, watcherKind, { orchestration: port, now: () => nowMs })
+    const current = { ...options.enrollment, orchestrationRunId: 'run_worker' }
+    stored.store.save(current)
+    const runner = createRunner({ ...options, enrollment: current })
+    try {
+      await runner.pulse()
+      expect(currentAttempt(stored.store.journal('watcher-1'))).toMatchObject({ state: 'running', dispatchId: 'dispatch-1' })
+      expect(stored.store.journal('watcher-1').filter((entry) =>
+        entry.kind === 'interval-open' && entry.cause === 'worker-dispatched'
+      )).toHaveLength(0)
+
+      nowMs = 2_000
+      observations = [{
+        dispatchId: 'dispatch-1',
+        sessionId: 'session-worker',
+        processIncarnation: 'process-worker',
+        state: 'live',
+        assignmentActive: true,
+        lastContactAtMs: nowMs
+      }]
+      await runner.pulse()
+      const firstInterval = stored.store.journal('watcher-1').find((entry) =>
+        entry.kind === 'interval-open' && entry.cause === 'worker-dispatched'
+      )
+      expect(firstInterval).toMatchObject({ class: 'fact', atMs: 2_000 })
+      if (!firstInterval || typeof firstInterval.intervalId !== 'string') throw new Error('live worker interval was not opened')
+      stored.store.append('watcher-1', {
+        kind: 'interval-checkpoint',
+        class: 'fact',
+        origin: 'owner',
+        resolved: true,
+        eventId: 'worker-checkpoint-before-contact-loss',
+        intervalId: firstInterval.intervalId,
+        generation: firstInterval.generation as string,
+        checkpointAtMs: 2_500,
+        atMs: 2_500
+      })
+
+      nowMs = 8_000
+      observations = []
+      await runner.pulse()
+      const closed = stored.store.journal('watcher-1').find((entry) =>
+        entry.kind === 'interval-close' && entry.intervalId === firstInterval.intervalId
+      )
+      expect(closed).toMatchObject({ reason: 'contact-lost', checkpointAtMs: 2_500 })
+      expect(budgetUsage(stored.store.journal('watcher-1'), nowMs).activeMs).toBe(500)
+      expect(currentAttempt(stored.store.journal('watcher-1'))).toMatchObject({ state: 'running', dispatchId: 'dispatch-1' })
+      expect(runner.status()).toMatchObject({ state: 'held', reason: 'worker-contact-unverifiable' })
+
+      nowMs = 9_000
+      observations = [{
+        dispatchId: 'dispatch-1',
+        sessionId: 'session-worker',
+        processIncarnation: 'process-worker',
+        state: 'live',
+        assignmentActive: true,
+        lastContactAtMs: nowMs
+      }]
+      await runner.pulse()
+      const workerIntervals = stored.store.journal('watcher-1').filter((entry) =>
+        entry.kind === 'interval-open' && entry.cause === 'worker-dispatched'
+      )
+      expect(workerIntervals).toHaveLength(2)
+      expect(workerIntervals[1]).toMatchObject({ class: 'fact', atMs: 9_000 })
+      expect(budgetUsage(stored.store.journal('watcher-1'), nowMs).activeMs).toBe(500)
+
+      nowMs = 10_000
+      await runner.pulse()
+      expect(budgetUsage(stored.store.journal('watcher-1'), nowMs).activeMs).toBe(1_500)
+
+      nowMs = 11_000
+      messages = [{
+        id: 'worker-done-1',
+        type: 'worker_done',
+        dispatchId: 'dispatch-1',
+        body: 'completed',
+        outcome: 'succeeded'
+      }]
+      await runner.pulse()
+      expect(currentAttempt(stored.store.journal('watcher-1'))).toMatchObject({ state: 'settled', effect: 'landed' })
+      expect(releases).toBe(1)
+      expect(budgetUsage(stored.store.journal('watcher-1'), nowMs).activeMs).toBe(2_500)
+      expect(runner.status()).not.toMatchObject({ reason: 'worker-contact-unverifiable' })
+      expect(recoveries).toBe(0)
+    } finally {
+      await runner.shutdown(0)
+    }
+  })
+
+  test('a live worker without an active supervised assignment stops billing but remains unresolved', async () => {
+    const stored = storage()
+    let nowMs = 1_000
+    let assignmentActive = true
+    let executions = 0
+    let releases = 0
+    const workerRequest: WorkerRequest = { spec: 'worker task', worktree: '/workspace' }
+    const port = orchestration({
+      dispatch: async () => ({ kind: 'dispatched', dispatchId: 'dispatch-inactive' }),
+      observeWorkers: async () => [{
+        dispatchId: 'dispatch-inactive',
+        sessionId: 'session-inactive',
+        processIncarnation: 'process-inactive',
+        state: 'live',
+        assignmentActive,
+        lastContactAtMs: nowMs
+      }],
+      release: async () => { releases += 1 }
+    })
+    const watcherKind = kind({
+      decide: () => ({ action }),
+      execute: async (_action, context) => {
+        executions += 1
+        await context.dispatchWorker(workerRequest)
+        return { effect: 'landed' }
+      },
+      pace: () => 'stopped'
+    })
+    const options = runnerOptions(stored, watcherKind, { orchestration: port, now: () => nowMs })
+    const current = { ...options.enrollment, orchestrationRunId: 'run-inactive' }
+    stored.store.save(current)
+    const runner = createRunner({ ...options, enrollment: current })
+    try {
+      await runner.pulse()
+      nowMs = 2_000
+      await runner.pulse()
+      nowMs = 2_500
+      await runner.pulse()
+
+      assignmentActive = false
+      nowMs = 8_000
+      await runner.pulse()
+
+      const journal = stored.store.journal('watcher-1')
+      const interval = journal.find((entry) =>
+        entry.kind === 'interval-open' && entry.cause === 'worker-dispatched'
+      )
+      if (!interval || typeof interval.intervalId !== 'string') throw new Error('active assignment interval was not opened')
+      expect(journal.find((entry) =>
+        entry.kind === 'interval-close' && entry.intervalId === interval.intervalId
+      )).toMatchObject({ reason: 'worker-assignment-inactive', checkpointAtMs: 2_500 })
+      expect(budgetUsage(journal, nowMs).activeMs).toBe(500)
+      expect(currentAttempt(journal)).toMatchObject({ state: 'running', dispatchId: 'dispatch-inactive' })
+      expect(currentAttempt(journal)?.effect).toBeUndefined()
+      expect(journal.some((entry) => entry.evidenceKind === 'worker-assignment-inactive')).toBe(true)
+      expect(runner.status()).toMatchObject({ state: 'held', reason: 'worker-assignment-inactive' })
+      expect(executions).toBe(1)
+      expect(releases).toBe(0)
+    } finally {
+      await runner.shutdown(0)
+    }
+  })
+
+
+  test('the runner refuses to bill a live worker without a complete identity tuple', async () => {
+    const stored = storage()
+    let nowMs = 1_000
+    let observation: KernelWorkerObservation = {
+      dispatchId: 'dispatch-identity',
+      sessionId: 'session-identity',
+      processIncarnation: 'process-identity',
+      state: 'live',
+      assignmentActive: true,
+      lastContactAtMs: nowMs
+    }
+    let releases = 0
+    const workerRequest: WorkerRequest = { spec: 'worker task', worktree: '/workspace' }
+    const port = orchestration({
+      observeWorkers: async () => [observation],
+      release: async () => { releases += 1 }
+    })
+    const watcherKind = kind({
+      decide: () => ({ action }),
+      pace: () => 'stopped'
+    })
+    const options = runnerOptions(stored, watcherKind, { orchestration: port, now: () => nowMs })
+    const current = { ...options.enrollment, orchestrationRunId: 'run-identity' }
+    stored.store.save(current)
+    stored.store.append('watcher-1', {
+      kind: 'attempt',
+      class: 'fact',
+      origin: 'owner',
+      resolved: false,
+      eventId: 'attempt-live-identity',
+      attemptId: 'attempt-live-identity',
+      fingerprint: 'fingerprint-live-identity',
+      action,
+      state: 'running',
+      requestId: 'request-live-identity',
+      workerRequest,
+      dispatchId: 'dispatch-identity'
+    })
+    const runner = createRunner({ ...options, enrollment: current })
+    try {
+      await runner.pulse()
+      nowMs = 1_500
+      await runner.pulse()
+      observation = { ...observation, sessionId: null, lastContactAtMs: nowMs }
+      nowMs = 2_000
+      await runner.pulse()
+
+      const journal = stored.store.journal('watcher-1')
+      const interval = journal.find((entry) =>
+        entry.kind === 'interval-open' && entry.cause === 'worker-dispatched'
+      )
+      if (!interval || typeof interval.intervalId !== 'string') throw new Error('valid live proof did not open an interval')
+      expect(journal.find((entry) =>
+        entry.kind === 'interval-close' && entry.intervalId === interval.intervalId
+      )).toMatchObject({ reason: 'contact-lost', checkpointAtMs: 1_500 })
+      expect(budgetUsage(journal, nowMs).activeMs).toBe(500)
+      expect(currentAttempt(journal)).toMatchObject({ state: 'running', dispatchId: 'dispatch-identity' })
+      expect(currentAttempt(journal)?.effect).toBeUndefined()
+      expect(runner.status()).toMatchObject({ state: 'held', reason: 'worker-contact-unverifiable' })
+      expect(releases).toBe(0)
+    } finally {
+      await runner.shutdown(0)
+    }
+  })
+
+  test('the service adapter rejects live evidence without a complete identity before billing', async () => {
+    const stored = storage()
+    let nowMs = 1_000
+    let runShows = 0
+    const workerRequest: WorkerRequest = { spec: 'worker task', worktree: '/workspace' }
+    const fingerprint = 'fingerprint-adapter-live-identity'
+    const requestId = orchestrationRequestIdForAttemptFingerprint(fingerprint)
+    const current = enrollment({ orchestrationRunId: 'run-adapter-identity' })
+    stored.store.save(current)
+    stored.store.append('watcher-1', {
+      kind: 'attempt',
+      class: 'fact',
+      origin: 'owner',
+      resolved: false,
+      eventId: 'attempt-adapter-live-identity',
+      attemptId: 'attempt-adapter-live-identity',
+      fingerprint,
+      action,
+      state: 'running',
+      requestId,
+      workerRequest,
+      dispatchId: 'dispatch-adapter-identity',
+      generation: 'initial:watcher-1'
+    })
+    const context = {
+      ...stored.context,
+      call: async (method: string, params: Record<string, unknown> = {}) => {
+        if (method === 'quirky.orchestration/serviceWorkerStart') {
+          return {
+            runId: 'run-adapter-identity',
+            dispatchId: 'dispatch-adapter-identity',
+            state: 'ready',
+            mutation: { requestId: params.requestId, replayed: true }
+          }
+        }
+        if (method === 'quirky.orchestration/serviceCheck') {
+          return {
+            mode: 'consume',
+            runId: 'run-adapter-identity',
+            messages: [],
+            questions: [],
+            count: 0,
+            acknowledged: null,
+            timedOut: false,
+            cancelled: false,
+            connectionLost: false,
+            deliveryId: null,
+            replayed: false,
+            mutation: { requestId: params.requestId, replayed: false }
+          }
+        }
+        if (method === 'quirky.orchestration/serviceRunShow') {
+          runShows += 1
+          return {
+            run: { id: 'run-adapter-identity' },
+            workers: [{
+              dispatchId: 'dispatch-adapter-identity',
+              sessionId: null,
+              processIncarnation: 'process-fixture',
+              state: 'live',
+              assignmentActive: true,
+              lastContactAtMs: nowMs
+            }],
+            questions: []
+          }
+        }
+        throw new Error(`unexpected method ${method}`)
+      },
+      subscribe: () => () => {},
+      log: () => {}
+    } as unknown as PluginContext
+    const adapter = createOrchestrationAdapter(context, stored.store, () => {})
+    const watcherKind = kind({
+      decide: () => ({ action: null, reason: 'waiting' }),
+      pace: () => 'stopped'
+    })
+    const runner = createRunner({
+      context,
+      store: stored.store,
+      registry: registry(watcherKind),
+      orchestration: adapter,
+      enrollment: current,
+      now: () => nowMs
+    })
+    try {
+      await runner.pulse()
+      const journal = stored.store.journal('watcher-1')
+      expect(runShows).toBe(1)
+      expect(journal.some((entry) => entry.kind === 'interval-open' && entry.cause === 'worker-dispatched')).toBe(false)
+      expect(budgetUsage(journal, nowMs).activeMs).toBe(0)
+      expect(currentAttempt(journal)).toMatchObject({ state: 'running', dispatchId: 'dispatch-adapter-identity' })
+      expect(currentAttempt(journal)?.effect).toBeUndefined()
+      expect(runner.status().state).toBe('held')
+      expect(runner.status().reason).toBe('tick-error')
+      expect(runner.status().detail?.includes('complete process identity')).toBe(true)
+    } finally {
+      await runner.shutdown(0)
+      adapter.dispose()
+    }
+  })
+
+  test('unknown worker replies replay the stable request before pending mailbox messages are acknowledged', async () => {
+    const stored = storage()
+    const fingerprint = 'fingerprint-replayed-worker'
+    const requestId = orchestrationRequestIdForAttemptFingerprint(fingerprint)
+    const workerRequest: WorkerRequest = { spec: 'worker task', worktree: '/workspace' }
+    const messages: WorkerMessage[] = [
+      {
+        id: 'status-before-recovery',
+        type: 'status',
+        body: 'Worker status'
+      },
+      {
+        id: 'done-before-recovery',
+        type: 'worker_done',
+        dispatchId: 'dispatch-recovered',
+        body: 'completed',
+        outcome: 'succeeded'
+      },
+      {
+        id: 'question-before-recovery',
+        type: 'question',
+        dispatchId: 'dispatch-recovered',
+        body: 'Need approval?'
+      },
+      {
+        id: 'escalation-before-recovery',
+        type: 'escalation',
+        dispatchId: 'dispatch-recovered',
+        body: 'Worker needs help.'
+      }
+    ]
+    let recoveryReady = false
+    let releases = 0
+    const calls: string[] = []
+    const acknowledged: string[] = []
+    const acknowledgeBatches: string[][] = []
+    const port = orchestration({
+      recover: async (_enrollment, attempt) => {
+        calls.push('recover')
+        expect(attempt.requestId).toBe(requestId)
+        expect(attempt.dispatchId).toBeUndefined()
+        return recoveryReady
+          ? { kind: 'dispatched', dispatchId: 'dispatch-recovered' }
+          : { kind: 'indeterminate', requestId, detail: 'worker start is still unknown' }
+      },
+      mailbox: async () => {
+        calls.push('mailbox')
+        return messages
+      },
+      acknowledge: async (_enrollment, handled) => {
+        calls.push('acknowledge')
+        const ids = handled.map((message) => message.id)
+        acknowledgeBatches.push(ids)
+        if (ids.length === messages.length) acknowledged.push(...ids)
+      },
+      release: async () => {
+        calls.push('release')
+        releases += 1
+      }
+    })
+    const options = runnerOptions(stored, kind({
+      decide: () => ({ action: null, reason: 'waiting' }),
+      pace: () => 'stopped'
+    }), { orchestration: port })
+    const current = { ...options.enrollment, orchestrationRunId: 'run-replay' }
+    stored.store.save(current)
+    stored.store.append('watcher-1', {
+      kind: 'attempt',
+      class: 'fact',
+      origin: 'owner',
+      resolved: false,
+      eventId: 'attempt-before-ready-receipt',
+      attemptId: 'attempt-before-ready-receipt',
+      fingerprint,
+      action,
+      state: 'settled',
+      effect: 'indeterminate',
+      reason: 'worker start reply was lost',
+      requestId,
+      workerRequest,
+      generation: 'initial:watcher-1'
+    })
+    const runner = createRunner({ ...options, enrollment: current })
+    try {
+      await runner.pulse()
+      expect(acknowledged).toEqual([])
+      expect(acknowledgeBatches).toEqual([['status-before-recovery']])
+      expect(releases).toBe(0)
+      expect(calls).toEqual(['recover', 'mailbox', 'acknowledge'])
+      expect(currentAttempt(stored.store.journal('watcher-1'))).toMatchObject({
+        state: 'settled',
+        effect: 'indeterminate',
+        requestId
+      })
+
+      recoveryReady = true
+      await runner.pulse()
+
+      expect(calls).toEqual([
+        'recover', 'mailbox', 'acknowledge',
+        'recover', 'mailbox', 'release', 'acknowledge'
+      ])
+      expect(acknowledgeBatches[1]).toEqual(messages.map((message) => message.id))
+      expect(acknowledged).toEqual(messages.map((message) => message.id))
+      expect(currentAttempt(stored.store.journal('watcher-1'))).toMatchObject({
+        state: 'settled',
+        effect: 'landed',
+        dispatchId: 'dispatch-recovered',
+        requestId
+      })
+      expect(stored.store.get('watcher-1')).toMatchObject({ enabled: false, parkReason: 'worker-escalation' })
+    } finally {
+      await runner.shutdown(0)
+    }
+  })
+  test('a live worker observation reopens billing in the current budget generation', async () => {
+    const stored = storage()
+    let nowMs = 1_000
+    let recoveries = 0
+    const workerRequest: WorkerRequest = { spec: 'worker task', worktree: '/workspace' }
+    const port = orchestration({
+      recover: async () => {
+        recoveries += 1
+        return { kind: 'dispatched', dispatchId: 'dispatch-generation' }
+      },
+      observeWorkers: async () => [{
+        dispatchId: 'dispatch-generation',
+        sessionId: 'session-generation',
+        processIncarnation: 'process-generation',
+        state: 'live',
+        assignmentActive: true,
+        lastContactAtMs: nowMs
+      }]
+    })
+    const options = runnerOptions(stored, kind(), { orchestration: port, now: () => nowMs })
+    const current = { ...options.enrollment, orchestrationRunId: 'run_generation' }
+    stored.store.save(current)
+    stored.store.append('watcher-1', {
+      kind: 'attempt',
+      class: 'fact',
+      origin: 'owner',
+      resolved: false,
+      eventId: 'attempt-generation-worker',
+      attemptId: 'attempt-generation-worker',
+      fingerprint: 'fingerprint-generation-worker',
+      action,
+      state: 'running',
+      requestId: 'request-generation-worker',
+      workerRequest,
+      generation: 'initial:watcher-1'
+    })
+    const runner = createRunner({ ...options, enrollment: current })
+    try {
+      await runner.pulse()
+      expect(recoveries).toBe(1)
+      const initialIntervals = stored.store.journal('watcher-1').filter((entry) =>
+        entry.kind === 'interval-open' && entry.cause === 'worker-dispatched'
+      )
+      expect(initialIntervals).toHaveLength(1)
+      expect(initialIntervals[0]?.generation).toBe('initial:watcher-1')
+      expect(initialIntervals[0]?.atMs).toBe(1_000)
+
+      stored.store.append('watcher-1', {
+        kind: 'evidence',
+        class: 'fact',
+        origin: 'owner',
+        resolved: true,
+        eventId: 'generation-after-worker-start',
+        evidenceKind: 'budget-generation',
+        generation: 'generation-after-worker-start'
+      })
+      nowMs = 2_000
+      await runner.pulse()
+
+      const journal = stored.store.journal('watcher-1')
+      const oldInterval = journal.find((entry) =>
+        entry.kind === 'interval-open' && entry.cause === 'worker-dispatched' &&
+        entry.generation === 'initial:watcher-1'
+      )
+      if (!oldInterval || typeof oldInterval.intervalId !== 'string') throw new Error('old generation interval was not opened')
+      expect(journal.find((entry) =>
+        entry.kind === 'interval-close' && entry.intervalId === oldInterval.intervalId
+      )).toMatchObject({ reason: 'generation-reset', checkpointAtMs: 1_000 })
+      const currentIntervals = journal.filter((entry) =>
+        entry.kind === 'interval-open' && entry.cause === 'worker-dispatched' &&
+        entry.generation === 'generation-after-worker-start'
+      )
+      expect(currentIntervals).toHaveLength(1)
+      expect(currentIntervals[0]?.atMs).toBe(2_000)
+      const turns = journal.filter((entry) => entry.kind === 'turn')
+      expect(turns).toHaveLength(1)
+      expect(turns[0]?.dispatchId).toBe('dispatch-generation')
+      expect(turns[0]?.generation).toBe('initial:watcher-1')
+      expect(budgetUsage(journal, nowMs).activeMs).toBe(0)
+      expect(budgetUsage(journal, nowMs).turns).toBe(0)
+
+      nowMs = 3_000
+      await runner.pulse()
+      expect(budgetUsage(stored.store.journal('watcher-1'), nowMs)).toMatchObject({ activeMs: 1_000, turns: 0 })
+    } finally {
+      await runner.shutdown(0)
+    }
+  })
+
+  test('an explicit coordinator fence parks without resolving or repeating an action', async () => {
+    const stored = storage()
+    let executions = 0
+    let dispatches = 0
+    let releases = 0
+    const fence = Object.assign(
+      new Error('consumer_fenced: service caller does not own the requested Run'),
+      { data: { reason: 'consumer_fenced', runId: 'run_owner' } }
+    )
+    const workerRequest: WorkerRequest = { spec: 'worker task', worktree: '/workspace' }
+    const port = orchestration({
+      dispatch: async () => { dispatches += 1; throw fence },
+      release: async () => { releases += 1 }
+    })
+    const watcherKind = kind({
+      decide: () => ({ action }),
+      execute: async (_action, context) => {
+        executions += 1
+        const result = await context.dispatchWorker(workerRequest)
+        expect(result).toMatchObject({ kind: 'indeterminate', reason: 'coordinator-seat-lost' })
+        return { effect: 'not-landed', reason: 'the caller must not settle a fenced request' }
+      }
+    })
+    const options = runnerOptions(stored, watcherKind, { orchestration: port })
+    const current = { ...options.enrollment, orchestrationRunId: 'run_owner' }
+    stored.store.save(current)
+    const runner = createRunner({ ...options, enrollment: current })
+    try {
+      await runner.pulse()
+      await runner.pulse()
+      const journal = stored.store.journal('watcher-1')
+      const parked = stored.store.get('watcher-1')
+      expect(parked?.enabled).toBe(false)
+      expect(parked?.parkReason).toBe('coordinator-seat-lost')
+      expect(parked?.haltReason?.startsWith('consumer_fenced:')).toBe(true)
+      expect(runner.status().state).toBe('parked')
+      expect(runner.status().reason).toBe('coordinator-seat-lost')
+      expect(journal.some((entry) =>
+        entry.kind === 'escalation' && entry.escalationId === 'park-coordinator-seat-lost' &&
+        entry.reason === 'coordinator-seat-lost'
+      )).toBe(true)
+      expect(currentAttempt(journal)).toMatchObject({ state: 'settled', effect: 'indeterminate' })
+      expect(currentAttempt(journal)?.effect).not.toBe('not-landed')
+      expect(journal.some((entry) => entry.kind === 'attempt-resolved')).toBe(false)
+      expect(executions).toBe(1)
+      expect(dispatches).toBe(1)
+      expect(releases).toBe(0)
+    } finally {
+      await runner.shutdown(0)
+    }
+  })
+
+  test('a recovery fence persists an indeterminate attempt and coordinator park', async () => {
+    const stored = storage()
+    let recoveries = 0
+    const workerRequest: WorkerRequest = { spec: 'worker task', worktree: '/workspace' }
+    const port = orchestration({
+      recover: async () => {
+        recoveries += 1
+        return {
+          kind: 'indeterminate',
+          requestId: 'request-recovery',
+          reason: 'coordinator-seat-lost',
+          detail: 'consumer_fenced: service caller does not own the requested Run'
+        }
+      }
+    })
+    const options = runnerOptions(stored, kind(), { orchestration: port })
+    const current = { ...options.enrollment, orchestrationRunId: 'run_owner' }
+    stored.store.save(current)
+    stored.store.append('watcher-1', {
+      kind: 'attempt',
+      class: 'fact',
+      origin: 'owner',
+      resolved: false,
+      eventId: 'attempt-before-recovery-fence',
+      attemptId: 'attempt-recovery-fence',
+      fingerprint: 'fingerprint-recovery-fence',
+      action,
+      state: 'running',
+      requestId: 'request-recovery',
+      workerRequest
+    })
+    const runner = createRunner({ ...options, enrollment: current })
+    try {
+      await runner.pulse()
+      const journal = stored.store.journal('watcher-1')
+      expect(recoveries).toBe(1)
+      expect(stored.store.get('watcher-1')).toMatchObject({
+        enabled: false,
+        parkReason: 'coordinator-seat-lost'
+      })
+      expect(currentAttempt(journal)).toMatchObject({ state: 'settled', effect: 'indeterminate', resolved: false })
+      expect(journal.some((entry) => entry.kind === 'attempt-resolved')).toBe(false)
+    } finally {
+      await runner.shutdown(0)
+    }
+  })
+
+  test('an observation fence closes work at its checkpoint and keeps the attempt unresolved', async () => {
+    const stored = storage()
+    let nowMs = 1_000
+    let observations = 0
+    let fenceObservation = false
+    let releases = 0
+    const fence = Object.assign(new Error('owner denied this request'), {
+      data: { reason: 'consumer_fenced', runId: 'run_owner' }
+    })
+    const workerRequest: WorkerRequest = { spec: 'worker task', worktree: '/workspace' }
+    const port = orchestration({
+      observeWorkers: async () => {
+        observations += 1
+        if (fenceObservation) throw fence
+        return [{
+          dispatchId: 'dispatch-observation',
+          sessionId: 'session-observation',
+          processIncarnation: 'process-observation',
+          state: 'live',
+          assignmentActive: true,
+          lastContactAtMs: nowMs
+        }]
+      },
+      release: async () => { releases += 1 }
+    })
+    const options = runnerOptions(stored, kind(), { orchestration: port, now: () => nowMs })
+    const current = { ...options.enrollment, orchestrationRunId: 'run_owner' }
+    stored.store.save(current)
+    stored.store.append('watcher-1', {
+      kind: 'attempt',
+      class: 'fact',
+      origin: 'owner',
+      resolved: false,
+      eventId: 'attempt-before-observation-fence',
+      attemptId: 'attempt-observation-fence',
+      fingerprint: 'fingerprint-observation-fence',
+      action,
+      state: 'running',
+      requestId: 'request-observation',
+      workerRequest,
+      dispatchId: 'dispatch-observation'
+    })
+    const runner = createRunner({ ...options, enrollment: current })
+    try {
+      await runner.pulse()
+      nowMs = 2_000
+      await runner.pulse()
+      fenceObservation = true
+      nowMs = 9_000
+      await runner.pulse()
+      const journal = stored.store.journal('watcher-1')
+      expect(observations).toBe(3)
+      expect(stored.store.get('watcher-1')).toMatchObject({
+        enabled: false,
+        parkReason: 'coordinator-seat-lost'
+      })
+      const workerInterval = journal.find((entry) =>
+        entry.kind === 'interval-open' && entry.cause === 'worker-dispatched'
+      )
+      if (!workerInterval || typeof workerInterval.intervalId !== 'string') throw new Error('live worker interval was not opened')
+      expect(journal.find((entry) =>
+        entry.kind === 'interval-close' && entry.intervalId === workerInterval.intervalId
+      )).toMatchObject({ reason: 'contact-lost', checkpointAtMs: 2_000 })
+      expect(budgetUsage(journal, nowMs).activeMs).toBe(1_000)
+      expect(currentAttempt(journal)).toMatchObject({ state: 'settled', effect: 'indeterminate', resolved: false })
+      expect(journal.some((entry) => entry.kind === 'attempt-resolved')).toBe(false)
+      expect(releases).toBe(0)
+    } finally {
+      await runner.shutdown(0)
+    }
+  })
+
 
   test('restart resolves uncertainty from a live snapshot and never blindly replays an external attempt', async () => {
     const stored = storage()
@@ -548,12 +1267,22 @@ describe('Heimdall runner gate and budget behavior', () => {
     const stored = storage()
     const messageId = 'question-1'
     const options = runnerOptions(stored, kind())
+    stored.store.save({ ...options.enrollment, orchestrationRunId: 'run-question' })
+    stored.store.append('watcher-1', {
+      kind: 'attempt', class: 'fact', origin: 'owner', resolved: false,
+      attemptId: 'question-attempt', fingerprint: actionFingerprint(action), action,
+      state: 'running', dispatchId: 'dispatch-question', generation: 'initial:watcher-1'
+    })
     seedWorkerPark(stored, 'worker-question', messageId)
     const runner = createRunner({
       ...options,
       enrollment: stored.store.get('watcher-1') ?? options.enrollment,
       orchestration: orchestration({
-        mailbox: async () => [{ id: messageId, type: 'question', body: 'answered', resolved: true }]
+        mailbox: async () => [{ id: messageId, type: 'question', dispatchId: 'dispatch-question', body: 'answered', resolved: true }],
+        observeWorkers: async () => [{
+          dispatchId: 'dispatch-question', sessionId: 'question-worker', processIncarnation: 'question-process',
+          state: 'live', assignmentActive: true, lastContactAtMs: 1_000
+        }]
       })
     })
     try {

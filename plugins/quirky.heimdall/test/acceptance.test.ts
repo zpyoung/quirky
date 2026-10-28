@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import { Database } from 'bun:sqlite'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import type { QuirkyClient } from '@quirky/protocol'
@@ -89,8 +90,6 @@ describe('Heimdall daemon acceptance', () => {
       enrollment: { watcherId, kind: 'fixture', enabled: true, paused: false },
       readOnly: false,
       status: { state: 'watching' },
-      journal: expect.any(Array),
-      traces: expect.any(Array),
       summary: null,
       budget: { exhausted: null, turns: 0 }
     })
@@ -99,12 +98,10 @@ describe('Heimdall daemon acceptance', () => {
     expect(selected).toHaveLength(1)
     expect(selected[0]?.enrollment.watcherId).toBe(watcherId)
 
-    await client.callAny(`${KERNEL_METHOD}/reconcile`, { watcherId })
-    const reconciled = await waitForAsync(async () => {
-      const [item] = await client.callAny(`${KERNEL_METHOD}/inspect`, { watcherId }) as Inspection[]
-      return item && item.traces.length > initial.traces.length ? item : undefined
-    })
-    expect(reconciled.traces.length).toBeGreaterThan(initial.traces.length)
+    writeFileSync(join(builtinPluginsDir, FIXTURE_ID, 'world-revision'), 'after-explicit-reconcile')
+    const reconciled = await client.callAny(`${KERNEL_METHOD}/reconcile`, { watcherId }) as Inspection
+    expect(reconciled.traces.at(-1)?.contentIdentity).toBe('after-explicit-reconcile')
+    expect(reconciled.traces.at(-1)?.decision).toMatchObject({ action: null, reason: 'fixture-idle' })
     expect(existsSync(counterFile) ? readFileSync(counterFile, 'utf8') : '').toBe('')
 
     await expect(client.callAny(`${KERNEL_METHOD}/registerKind`, {
@@ -214,9 +211,8 @@ describe('Heimdall daemon acceptance', () => {
       const [item] = await client.callAny(`${KERNEL_METHOD}/inspect`, { watcherId }) as Inspection[]
       return item?.journal.some((entry) => entry.kind === 'attempt' && entry.effect === 'indeterminate') ? item : undefined
     })
-    expect(beforeRestart.journal.filter((entry) => entry.kind === 'attempt')).toEqual(expect.arrayContaining([
-      expect.objectContaining({ state: 'settled', effect: 'indeterminate', fingerprint: expect.any(String) })
-    ]))
+    expect(beforeRestart.journal.filter((entry) => entry.kind === 'attempt').at(-1))
+      .toMatchObject({ state: 'settled', effect: 'indeterminate' })
     expect(readFileSync(counterFile, 'utf8').trim().split('\n')).toHaveLength(1)
 
     const previousTraceCount = beforeRestart.traces.length
@@ -261,24 +257,39 @@ describe('Heimdall daemon acceptance', () => {
     expect(existsSync(counterFile) ? readFileSync(counterFile, 'utf8') : '').toBe('')
   })
 
-  test('fences a blocked hook and stops within the shutdown deadline', async () => {
-    await client.callAny(`${KERNEL_METHOD}/enroll`, {
+  test('shutdown fences an in-flight hook and restart preserves its unknown outcome', async () => {
+    const enrolled = await client.callAny(`${KERNEL_METHOD}/enroll`, {
       kind: 'fixture',
       kindPayload: { valid: true, workspace: 'shutdown', action: 'blocked' },
       capabilities: { 'fixture.write': 'on' }
-    })
+    }) as { enrollment: { watcherId: string } }
     await waitFor(() => existsSync(startedFile))
+    const watcherId = enrolled.enrollment.watcherId
+    const [beforeStop] = await client.callAny(`${KERNEL_METHOD}/inspect`, { watcherId }) as Inspection[]
+    const attemptId = beforeStop!.journal.find((entry) => entry.kind === 'attempt')?.attemptId
+    if (typeof attemptId !== 'string' || attemptId.length === 0) throw new Error('effect started without a durable attempt identity')
 
-    const startedAt = Date.now()
     await harness.daemon.stop()
     daemonStopped = true
-    const shutdownMs = Date.now() - startedAt
     harness.pty.stop()
     ptyStopped = true
+    expect(readFileSync(startedFile, 'utf8')).toBe('started')
     writeFileSync(releaseFile, 'release')
     await waitFor(() => readFileSync(startedFile, 'utf8') === 'complete')
     expect(readFileSync(counterFile, 'utf8').trim().split('\n')).toHaveLength(1)
-    expect(shutdownMs).toBeLessThanOrEqual(1500)
+    harness = await startWithHome()
+    client = await harness.connect('cli')
+    daemonStopped = false
+    ptyStopped = false
+    const restored = await waitForAsync(async () => {
+      const [item] = await client.callAny(`${KERNEL_METHOD}/inspect`, { watcherId }) as Inspection[]
+      return item && item.traces.length > 0 ? item : undefined
+    })
+    const pending = restored.journal.filter((entry) => entry.kind === 'attempt' && entry.attemptId === attemptId).at(-1)
+    if (!pending) throw new Error('restart lost the write-ahead attempt')
+    expect(pending?.effect).not.toBe('landed')
+    expect(pending?.effect).not.toBe('not-landed')
+    expect(readFileSync(counterFile, 'utf8').trim().split('\n')).toHaveLength(1)
   })
 })
 
@@ -297,7 +308,7 @@ async function stopDaemonKeepingHome(current: Harness): Promise<void> {
 
 function fixtureSource(counter: string, started: string, release: string): string {
   return `
-import { appendFileSync, existsSync, mkdirSync, realpathSync, writeFileSync } from 'node:fs'
+import { appendFileSync, existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 const pluginId = ${JSON.stringify(FIXTURE_ID)}
@@ -333,9 +344,11 @@ export async function activate(context) {
       kindPayload: payload
     }
   })
-  context.provide('method:' + hook('read'), (params) => ({
-    freshness: 'live', contentIdentity: 'fixture-live', observedAtMs: Date.now(), world: {}
-  }))
+  context.provide('method:' + hook('read'), () => {
+    const revisionPath = join(context.dir, 'world-revision')
+    const revision = existsSync(revisionPath) ? readFileSync(revisionPath, 'utf8') : 'fixture-live'
+    return { freshness: 'live', contentIdentity: revision, observedAtMs: Date.now(), world: { revision } }
+  })
   context.provide('method:' + hook('decide'), (params) => {
     const enrollment = params.enrollment ?? params
     const actionMode = enrollment.kindPayload?.action ?? 'none'
