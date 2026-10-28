@@ -5,7 +5,6 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
   RpcErrorCode,
-  type ApiDescription,
   type QuirkyClient,
   type QuirkyEvent,
   type RpcError,
@@ -87,6 +86,7 @@ afterEach(async () => {
 const call = (method: string, params: Record<string, unknown> = {}) => client.callAny(method, params) as Promise<any>
 const create = (prompt = 'fix the bug') =>
   call('quirky.structured/create', { worktree: 'main', agent: 'claude', prompt }) as Promise<Session>
+
 const createAgent = (agent: string, prompt = 'fix the bug', extra: Record<string, unknown> = {}) =>
   call('quirky.structured/create', { worktree: 'main', agent, prompt, ...extra }) as Promise<Session>
 
@@ -428,8 +428,8 @@ try {
   })
 
   test('validates agent, worktree and session kind', async () => {
-    expect(await failure(call('quirky.structured/create', { worktree: 'main', agent: 'gemini', prompt: 'x' }))).toMatchObject({
-      code: RpcErrorCode.InvalidParams
+    expect(await failure(call('quirky.structured/create', { worktree: 'main', agent: 'pi', prompt: 'x' }))).toMatchObject({
+      code: RpcErrorCode.InvalidParams,
     })
     expect(await failure(call('quirky.structured/create', { worktree: 'nope', agent: 'claude', prompt: 'x' }))).toMatchObject({
       code: RpcErrorCode.NotFound
@@ -469,9 +469,8 @@ try {
       message: 'quirky.structured: session is not running'
     })
   })
+
 })
-
-
 
 describe('a runner that fails to start', () => {
   test('leaves a system message and marks the session exited', async () => {
@@ -910,7 +909,6 @@ describe('the Codex runner inside the plugin', () => {
     expect(fixture.requests()).toEqual([])
   })
 })
-
 describe('deactivating the plugin', () => {
   test('stops a started Claude runner and denies its pending permission prompt', async () => {
     const queries: FakeQuery[] = []

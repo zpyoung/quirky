@@ -1,4 +1,5 @@
 import { parseContributionId, validateValue, type PluginCaller, type PluginContext } from '@quirky/protocol'
+import { join } from 'node:path'
 import type {
   Enrollment,
   EnrollmentInput,
@@ -17,6 +18,8 @@ import { createKindRegistry } from './registry'
 import { createKernelStore } from './store'
 import { createOrchestrationAdapter } from './orchestration'
 import { createRunner } from './runner'
+import { createOwnerDriver } from './owner/driver'
+import type { OwnerController } from './owner/contracts'
 
 const SHUTDOWN_DRAIN_MS = 1500
 
@@ -25,6 +28,7 @@ export interface KernelService {
   readonly context: PluginContext
   readonly store: KernelStore
   readonly registry: KindRegistry
+  readonly owner: OwnerController
   start(): Promise<void>
   registerKind(descriptor: KindRegistration, caller: PluginCaller): Promise<{ registered: true; kind: string }>
   enroll(input: EnrollmentInput): Promise<EnrollmentResult>
@@ -63,7 +67,8 @@ export function createKernelService(context: PluginContext, now: () => number = 
     })
   }
   const orchestration = createOrchestrationAdapter(context, store, wake)
-  const options: KernelOptions = { context, store, registry, orchestration, now, onChanged: changed }
+  const owner = createOwnerDriver({ context, store, registry, reportDirectory: join(context.dataDir, 'owner-reports'), now, wake })
+  const options: KernelOptions = { context, store, registry, orchestration, now, onChanged: changed, owner }
 
   function startRunner(enrollment: Enrollment): Runner | undefined {
     if (stopped || store.readOnly || enrollment.terminalAtMs !== null) return undefined
@@ -237,14 +242,16 @@ export function createKernelService(context: PluginContext, now: () => number = 
   function shutdown(): Promise<void> {
     if (shutdownPromise) return shutdownPromise
     stopped = true
+    const ownerShutdown = owner.shutdown()
     orchestration.dispose()
     wakesBeforeRestore.clear()
     const startedAt = Date.now()
     const activeRunners = [...runners.values()]
     runners.clear()
-    shutdownPromise = Promise.allSettled(activeRunners.map((runner) =>
-      runner.shutdown(Math.max(0, SHUTDOWN_DRAIN_MS - (Date.now() - startedAt)))
-    )).then((results) => {
+    shutdownPromise = Promise.allSettled([
+      ownerShutdown,
+      ...activeRunners.map((runner) => runner.shutdown(Math.max(0, SHUTDOWN_DRAIN_MS - (Date.now() - startedAt))))
+    ]).then((results) => {
       for (const result of results) {
         if (result.status === 'rejected') context.log(`watcher shutdown failed: ${errorMessage(result.reason)}`)
       }
@@ -257,6 +264,7 @@ export function createKernelService(context: PluginContext, now: () => number = 
     context,
     store,
     registry,
+    owner: owner.controller,
     start,
     registerKind,
     enroll,

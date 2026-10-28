@@ -120,43 +120,41 @@ describe('start', () => {
     expect(queries[1].params.options).not.toHaveProperty('effort')
   })
 
-  test('persists its native ID before the first turn and resumes without creating a new conversation', async () => {
+  test('persists the native init ID and resumes that conversation', async () => {
     await runner.start(session, 'first prompt')
-    expect(providerSessions).toEqual([{ sessionId: 's_1', id: expect.any(String), transcriptPath: null }])
+    const initialQuery = queries[0]
+    await until(() => initialQuery?.written.length === 1)
+    const nativeSessionId = initialQuery.written[0]?.session_id
+    if (typeof nativeSessionId !== 'string' || nativeSessionId.length === 0) {
+      throw new Error('Claude user turn did not carry a session ID')
+    }
+    expect(providerSessions).toEqual([])
+    initialQuery.emit({ type: 'system', subtype: 'init', session_id: nativeSessionId })
+    await until(() => providerSessions.length === 1)
+    expect(providerSessions).toEqual([{ sessionId: 's_1', id: nativeSessionId, transcriptPath: null }])
 
     const resumedSession = {
       ...session,
       id: 's_2',
-      providerSession: { id: 'native-claude-id', transcriptPath: '/tmp/native.jsonl' }
+      providerSession: { id: nativeSessionId, transcriptPath: null }
     }
     await runner.start(resumedSession, undefined, {
       model: 'sonnet',
-      providerSession: { id: 'native-claude-id', transcriptPath: '/tmp/native.jsonl' }
+      providerSession: { id: nativeSessionId, transcriptPath: null }
     })
-    expect(queries[1].params.options?.resume).toBe('native-claude-id')
+    expect(queries[1].params.options?.resume).toBe(nativeSessionId)
     expect(queries[1].params.options).not.toHaveProperty('sessionId')
     expect(queries[1].params.options?.model).toBe('sonnet')
     expect(providerSessions.at(-1)).toEqual({
       sessionId: 's_2',
-      id: 'native-claude-id',
-      transcriptPath: '/tmp/native.jsonl'
+      id: nativeSessionId,
+      transcriptPath: null
     })
     await runner.send('s_2', 'continue later')
     await until(() => queries[1].written.length === 1)
-    expect(queries[1].written[0]).toMatchObject({ session_id: 'native-claude-id', message: { content: 'continue later' } })
-  })
-
-  test('opens a native session without submitting an initial model turn', async () => {
-    await runner.start(session, undefined, { env: { QUIRKY_SESSION_ID: session.id, QUIRKY_SESSION_TOKEN: 'test-token' } })
-    expect(providerSessions).toEqual([{ sessionId: session.id, id: expect.any(String), transcriptPath: null }])
-    expect(messages).toEqual([])
-    expect(statuses).toEqual(['running'])
-
-    await runner.send(session.id, 'first custody-recorded turn')
-    await until(() => queries[0]?.written.length === 1)
-    expect(queries[0]?.written[0]).toMatchObject({
-      session_id: providerSessions[0]?.id,
-      message: { content: 'first custody-recorded turn' }
+    expect(queries[1].written[0]).toMatchObject({
+      session_id: nativeSessionId,
+      message: { content: 'continue later' }
     })
   })
 
@@ -278,13 +276,13 @@ describe('status', () => {
     expect(statuses).toEqual(['working', 'done', 'working'])
   })
 
-
   test('failed results exit without publishing a successful done state', async () => {
     const query = await begin()
     query.emit({ type: 'result', subtype: 'error_api_error', result: 'provider failed', is_error: true })
     await until(() => statuses.includes('exited'))
     expect(statuses).not.toContain('done')
   })
+
   test('exited when the query ends', async () => {
     const query = await begin()
     query.end()

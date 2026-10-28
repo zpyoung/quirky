@@ -1,12 +1,4 @@
-import type {
-  AskEnvelope,
-  AskSpec,
-  Session,
-  SessionProviderSession,
-  SessionStatus,
-  StructuredMessage,
-  StructuredRole
-} from '@quirky/protocol'
+import type { AskEnvelope, AskSpec, Session, SessionProviderSession, SessionStatus, StructuredMessage, StructuredRole } from '@quirky/protocol'
 
 /** A message a runner journals; the plugin assigns `seq` and, unless given, `at`. */
 export type NewStructuredMessage = {
@@ -17,7 +9,7 @@ export type NewStructuredMessage = {
   at?: number
 }
 
-/** What the plugin gives a runner to report progress, persist native identity and resolve provider executables. */
+/** What the plugin gives a runner to journal, report status, ask questions, persist provider identity and resolve executables. */
 export type StructuredContext = {
   /** Stores the message and emits `quirky.structured/message`. */
   appendMessage(msg: NewStructuredMessage): StructuredMessage
@@ -25,7 +17,7 @@ export type StructuredContext = {
   setStatus(sessionId: string, status: SessionStatus): void
   /** Creates an ask and resolves with its final envelope once it is answered or cancelled. */
   createAsk(spec: AskSpec, sessionId: string): Promise<AskEnvelope>
-  /** Stores a native session ID before its first turn is started. */
+  /** Stores a native provider session ID before the first turn is started. */
   setProviderSession(sessionId: string, providerSession: SessionProviderSession): Promise<void>
   /** The user's `claude` executable, found through their login shell. */
   resolveClaudePath(): Promise<string>

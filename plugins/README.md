@@ -121,7 +121,6 @@ Timeout/cancel sends TERM to the process group, then KILL after a two-second gra
 including descendants retaining output pipes. Plugin shutdown cancels and awaits active checks.
 Completed IDs can be reused; cancelling an unknown/completed ID returns `cancelled: false`.
 Process-tree cleanup is verified on macOS; Windows requires separate process-tree support.
-
 ## GitHub hosting
 
 `quirky.hosting` provides GitHub's API and generated `quirky hosting` commands. It

@@ -64,6 +64,7 @@ function createAndImportV1(home: string): StoreMigration {
   }
 }
 
+
 /** The migrations of the plugin's store, for `context.openStore`. */
 export function journalMigrations(home: string): StoreMigration[] {
   return [createAndImportV1(home), (store) => store.exec(CREATE_SEND_RECEIPTS_TABLE)]
@@ -127,7 +128,6 @@ export class Journal {
       operationId
     )
   }
-
   /** Stores a message under the next `seq` of its session. */
   append(input: { sessionId: string; role: StructuredRole; text: string; data?: unknown; at: number }): StructuredMessage {
     const seq = this.store.transaction(() => {

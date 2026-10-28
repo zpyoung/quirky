@@ -229,8 +229,7 @@
         "m1-launch-settings",
         "m1-agent-status"
       ],
-      "status": "in-progress",
-      "lane": 12
+      "status": "done"
     },
     {
       "id": "m6-orchestration-core",
@@ -300,8 +299,9 @@
       "deps": [
         "m6-heimdall-core"
       ],
-      "status": "todo",
-      "early": true
+      "status": "in-progress",
+      "early": true,
+      "lane": 12
     },
     {
       "id": "fix-flaky-quirky-worktree-window-projects",

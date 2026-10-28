@@ -34,7 +34,8 @@
                 "preflight": { "type": "string" },
                 "pace": { "type": "string" },
                 "stop": { "type": "string" },
-                "reconcile": { "type": "string" }
+                "reconcile": { "type": "string" },
+                "ownerAction": { "type": "string" }
               },
               "required": ["authorize", "read", "decide", "execute"],
               "additionalProperties": false
@@ -110,6 +111,48 @@
           "additionalProperties": false
         },
         "result": { "type": "object", "additionalProperties": true }
+      },
+      {
+        "id": "ownerInspect",
+        "description": "Reads the optional owner's durable conversation, issued report and intervention state.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": { "watcherId": { "type": "string" } },
+          "required": ["watcherId"],
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "sessionId": { "description": "The owner's structured session ID, or null." },
+            "pending": { "description": "The current issued report identity and phase, or null." }
+          },
+          "required": ["sessionId", "pending"],
+          "additionalProperties": true
+        }
+      },
+      {
+        "id": "ownerReady",
+        "description": "Accepts the current privately issued owner report; effects still wait for both capability gates and write-ahead execution.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "watcherId": { "type": "string" },
+            "reportKey": { "type": "string", "description": "The opaque issued report key, at most 128 characters." }
+          },
+          "required": ["watcherId", "reportKey"],
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "kind": { "type": "string", "enum": ["accepted", "refused"] },
+            "reason": { "type": "string" }
+          },
+          "required": ["kind"],
+          "additionalProperties": false
+        }
       },
       {
         "id": "fleet",
@@ -2922,6 +2965,25 @@
           }
         ],
         "flags": {}
+      },
+      {
+        "id": "owner-ready",
+        "summary": "submit the currently issued owner report",
+        "methods": ["quirky.heimdall/ownerReady"],
+        "positionals": [],
+        "flags": {
+          "watcher-id": { "type": "string", "description": "The exact watcher ID.", "required": true },
+          "report-key": { "type": "string", "description": "The opaque key issued with this report path.", "required": true }
+        }
+      },
+      {
+        "id": "owner-inspect",
+        "summary": "print the durable owner state as JSON",
+        "methods": ["quirky.heimdall/ownerInspect"],
+        "positionals": [],
+        "flags": {
+          "watcher-id": { "type": "string", "description": "The exact watcher ID.", "required": true }
+        }
       },
       {
         "id": "debug",
