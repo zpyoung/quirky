@@ -277,7 +277,7 @@ describe('sidebar-extras API', () => {
       hideCompletedReviewWorkspaces: false,
       hidePassingCheckWorkspaces: false
     })
-    expect(corrupt.preferences).toEqual({
+    expect(corrupt.preferences).toMatchObject({
       workspaceActivityWindow: 'all',
       workspaceActivityCustomDays: 30,
       alwaysShowDefaultBranchWorkspace: true,

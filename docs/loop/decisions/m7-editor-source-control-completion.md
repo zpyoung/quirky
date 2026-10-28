@@ -242,5 +242,27 @@
 - **Revisit if:** supported-platform runs provide evidence.
 - **Source:** deferred: platform
 
+## D23: Preserve both additive sidebar test blocks in the single catch-up
+- **Question:** How should the one roadmap catch-up conflict and new preference field be composed?
+- **Options:** drop our edge tests or incoming automation test; keep both with correct closures and target only corrupted fields.
+- **Chose:** merge3a6fd20b keeps quiet-aging/first/sticky separator tests plus incoming durable automation-attribution filtering. The merged compiler found the corrupt-preference assertion pinned the entire old preferences shape; retain its six corrupted-field recovery assertions as a partial object match rather than add a new incidental automation default. No production policy, deadline or consumer assertion was removed.
+- **Why:** new independent preferences must not invalidate an older corruption-recovery contract or make it assert unrelated defaults.
+- **Evidence:** sole conflict sidebar-extras-ui.test.ts:1283–1376; bg13/artifact55; final merged root/mobile typecheck bg15 exited0 in23.23s. Caught-up actual API/CLI smoke bg14 exited0 in3.54s with both cleanup markers.
+- **Reversibility:** easy
+- **Confidence:** high for the composed compiler/runtime paths; suites remain unrun
+- **Revisit if:** end-phase acceptance identifies a real interaction.
+- **Source:** assumed — autonomous
+
+## D24: Preserve the complete immutable incoming decision inventory
+- **Question:** Did newly landed decisions alter this item's implementation contract?
+- **Options:** trust the initial partial MERGE_HEAD read; enumerate the committed merge's immutable second parent and finish all missing reads.
+- **Chose:** enumerate1f03ec3f...3a6fd20b^2 and read all14incoming logs in full. Preserve editor unbuilt-flow ownership, notebook restart trust revocation and exact viewer-resource leases; automation durable attribution/client preferences; local native structured-option authority; blocked remote host generation/filesystem boundaries; Browser native/profile/import owners and unavailable controls; Mobile method ceilings and phone authority. No incoming contract requires another source change.
+- **Why:** committing the merge removed MERGE_HEAD before the scout finished; an immutable ref supplies an auditable complete set instead of substituting an advancing roadmap tip.
+- **Evidence:** exact immutable diff inventory and IncomingCompletionLocks completed receipts: m2-editor-build-unbuilt-flows; m4-hosting-ui-review-browser-routing; m5-automations-dispatch-remote-and-args; m5-loops-ui-visible-stop-close-review; m6-heimdall-host-power; m6-orchestration-idle-pointer-shutdown; m7-ledger-remote-host-flows; m7-sweep-automation-completion; sa-browser-agent-extras; sa-browser-pane-native-host-controls; sa-browser-pane-workspace-preview; sa-browser-profile-import-ui; sb-mobile-app-panels; sb-mobile-app-panels-unbuilt-flows.
+- **Reversibility:** easy
+- **Confidence:** high for the complete inventory and stated ownership boundaries
+- **Revisit if:** canonical landing imports a conflicting contract or type failure.
+- **Source:** locked by the incoming decision logs listed above
+
 ## Progress
-Implementation and source repairs are ready for the single roadmap catch-up. All workers and finite checks returned. Root/mobile typecheck bg12 passed; actual daemon/API/CLI and exact-target Git smokes passed (D21), bounded UI surface proof retained(D17). Owned UI browser/runtime stopped; all component trees removed. Single implementation-only detached-image follow-up added through canonical queue controller. No suites/reviews/dogfood campaign or native acceptance claimed. Commit source/docs, merge build/roadmap once, read incoming binding logs, run merged typecheck, detach and canonical land exactly this item.
+Ready for canonical landing. Single roadmap catch-up3a6fd20b and all14incoming decision logs are integrated/read(D24). Final merged root/mobile typecheck bg15 and actual API/CLI smoke bg14 passed; exact-target Git and bounded surface evidence remain scoped in D17/D21. All workers/checks/services returned/stopped, component worktrees removed, no suite/review/dogfood campaign or native pass claimed. Commit the corruption assertion/evidence, detach and submit canonical queue land. After its actual receipt, retain evidence and update loop notes; end exactly this item, not the global queue.
