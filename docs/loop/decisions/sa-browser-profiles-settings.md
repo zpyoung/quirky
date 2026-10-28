@@ -203,5 +203,25 @@
 - **Revisit if:** native tab_new no longer guarantees a newly created target or integrated acceptance fails
 - **Source:** assumed — autonomous
 
+## D20: Accept the runner's success without erasing its flakes
+- **Question:** Does the repaired affected directory gate now pass?
+- **Decision:** Record the runner's successful configured retry, retain the initial failures as medium open findings in BLOCKERS.md, and claim no zero-flaky or proven load-cause result.
+- **Why:** automatic retry is part of the canonical runner, not permission to suppress assertions, raise deadlines or discard its initial errors.
+- **Evidence:** bg_34 EXIT0/433.82s:9remote files pass initially; initial macOS automation C1/C2 helper/switch failures and Watch frame-readiness failure; configured isolated retries automation6pass76asserts and pane3pass77asserts. Root types bg_35 EXIT0/66.85s; rebuilt artifact bg_36 EXIT0/30.24s,27plugins/20UI modules. Existing icon and release.baseUrl warnings retained. Required scripts68pass532asserts; broader affected220remote files/3macOS pass with the separately recorded Search readiness retry.
+- **Reversibility:** evidence can be extended
+- **Confidence:** high for exercised results, residual flakes unattributed
+- **Revisit if:** the final roadmap integration gate fails
+- **Source:** assumed — autonomous
+
+## D21: Preflight every native handoff before touching Default
+- **Question:** Can the native run safely start a Browser pane or system route under only QUIRKY_HOME?
+- **Decision:** Create two fresh UUID profiles through public profileCreate before opening any Native pane; use explicit paneOpen.profile. Keep deletion blocked when clear completion is unavailable and never bypass its guard. In-app openLink currently omits profile and selects Default, so its native portion requires separate storage-root isolation proof; OS launch also requires an owned isolated browser/session, not the user's profile. Otherwise mark those native portions blocked rather than passing.
+- **Why:** opening a Default guest can touch shared native state even before clearing. HOME/QUIRKY_HOME does not prove native storage-root relocation, and a public API routing receipt does not establish OS launch.
+- **Evidence:** controller.ts117 opens Native pane without a profile override; the accepted paneOpen default is Default. Native handoff JSON parses with all3 scenarios pending and now names these prerequisites explicitly. No native Session clear ran.
+- **Reversibility:** easy when public native storage-root/completion support is proven
+- **Confidence:** high for the safety rule; isolation remains unproven
+- **Revisit if:** the native completion/storage-root follow-up or owned OS test environment supplies evidence
+- **Source:** assumed — autonomous, applying the accepted lane4 native safety ruling
+
 ## Progress
-2026-10-28: preferences, Find73d57ae3 and dependency f4489799 integrated; verified receipts/spec/C5 inventory cleanup committed33494cfa. Fresh-target binding repair D19 applied, runtime investigator completed/cleaned; no timeout changes or weakened challenge. Integrated Browser directory suite bg_34 running; updated root types bg_35 EXIT0. Earlier final build27plugins/20UI modules/scripts pass, non-Browser affected suite passes with one configured readiness retry. Packaged real Chrome Find and actual compiled profile/menu/Settings navigation exercised; all owned UI runtimes/browser closed. Dependency deps wait bg_33 returned pending pane; continue waiting in this turn. Next: collect integrated Browser gate/fix real findings, rebuild changed artifact, dependency ready, one final roadmap catchup/read decisions, controller land and notes. No native clear/isolation, full parity campaign or final-review pass claimed.
+2026-10-28: implementation/Find and f4489799 integrated, source binding fix0713467c committed. All owned verification gates completed: Browser directory bg_34 EXIT0 via configured retries (D20/BLOCKERS retains initial failures), root types bg_35 EXIT0, rebuilt27-plugin artifact bg_36 EXIT0, scripts68pass532asserts and broader affected suite with disclosed Search retry. Focused/compiled UI and actual Chrome occurrence proof recorded; no owned agents/services/browser remain. Waiting for sa-browser-pane dependency controller verdict via bg_37; do not end this turn on pending. Then one roadmap catchup/read new decision logs, recheck changed integration, commit/detach controller land and notes. Native clear/isolation and full parity/final review are not claimed passing.
