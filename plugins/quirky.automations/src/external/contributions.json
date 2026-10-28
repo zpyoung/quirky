@@ -1,0 +1,164 @@
+{
+  "method": [
+    {
+      "id": "externalList",
+      "description": "Lists bounded OpenClaw cron jobs for the requested local authority. Unsupported remote hosts fail closed.",
+      "readOnly": true,
+      "params": {
+        "type": "object",
+        "properties": {
+          "hostId": { "type": "string", "description": "Authority host; only local is currently supported." },
+          "noCache": { "type": "boolean", "description": "Bypass the 30-second local discovery cache." }
+        },
+        "additionalProperties": false
+      },
+      "result": {
+        "type": "object",
+        "properties": {
+          "managers": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": { "type": "string", "enum": ["openclaw:local"] },
+                "provider": { "type": "string", "enum": ["openclaw"] },
+                "hostId": { "type": "string", "enum": ["local"] },
+                "label": { "type": "string" },
+                "status": { "type": "string", "enum": ["ready", "unavailable"] },
+                "canManage": { "type": "boolean" },
+                "error": { "description": "Actionable error text, or null." },
+                "jobs": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": { "type": "string" },
+                      "name": { "type": "string" },
+                      "schedule": { "type": "string" },
+                      "enabled": { "type": "boolean" },
+                      "state": { "type": "string" },
+                      "promptPreview": { "type": "string" },
+                      "nextRunAt": { "description": "ISO timestamp or null." },
+                      "lastRunAt": { "description": "ISO timestamp or null." },
+                      "lastStatus": { "description": "Status string or null." },
+                      "lastError": { "description": "Error string or null." },
+                      "runCount": { "description": "Non-negative integer or null." },
+                      "runs": { "type": "array", "items": { "type": "object", "additionalProperties": true } }
+                    },
+                    "required": ["id", "name", "schedule", "enabled", "state", "promptPreview", "nextRunAt", "lastRunAt", "lastStatus", "lastError", "runCount", "runs"],
+                    "additionalProperties": false
+                  }
+                },
+                "owner": {
+                  "type": "object",
+                  "properties": {
+                    "provider": { "type": "string", "enum": ["openclaw"] },
+                    "hostId": { "type": "string", "enum": ["local"] },
+                    "generation": { "type": "string", "description": "Captured CLI and jobs-file identity." }
+                  },
+                  "required": ["provider", "hostId", "generation"],
+                  "additionalProperties": false
+                }
+              },
+              "required": ["id", "provider", "hostId", "label", "status", "canManage", "error", "jobs", "owner"],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": ["managers"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "id": "externalAction",
+      "description": "Performs a fixed-argv OpenClaw cron action after local owner and job-ID revalidation. Only delete requires destructive confirmation.",
+      "destructive": true,
+      "confirm": "Delete the selected OpenClaw automation?",
+      "describe": "externalActionDescribe",
+      "params": {
+        "type": "object",
+        "properties": {
+          "owner": {
+            "type": "object",
+            "properties": {
+              "provider": { "type": "string", "description": "Must be openclaw; unsupported providers are refused." },
+              "hostId": { "type": "string", "description": "Must be local; unsupported remote hosts are refused without local fallback." },
+              "generation": { "type": "string" }
+            },
+            "required": ["provider", "hostId", "generation"],
+            "additionalProperties": false
+          },
+          "jobId": { "type": "string", "description": "OpenClaw ID matching ^[A-Za-z0-9][A-Za-z0-9._:-]*$." },
+          "action": { "type": "string", "enum": ["pause", "resume", "run", "delete"] }
+        },
+        "required": ["owner", "jobId", "action"],
+        "additionalProperties": false
+      },
+      "result": {
+        "type": "object",
+        "properties": { "ok": { "type": "boolean" } },
+        "required": ["ok"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "id": "externalActionDescribe",
+      "description": "Returns a current-job deletion confirmation, or null for reversible actions; performs no external process.",
+      "readOnly": true,
+      "params": {
+        "type": "object",
+        "properties": {
+          "owner": {
+            "type": "object",
+            "properties": {
+              "provider": { "type": "string", "description": "Must be openclaw; unsupported providers are refused." },
+              "hostId": { "type": "string", "description": "Must be local; unsupported remote hosts are refused without local fallback." },
+              "generation": { "type": "string" }
+            },
+            "required": ["provider", "hostId", "generation"],
+            "additionalProperties": false
+          },
+          "jobId": { "type": "string" },
+          "action": { "type": "string", "enum": ["pause", "resume", "run", "delete"] }
+        },
+        "required": ["owner", "jobId", "action"],
+        "additionalProperties": false
+      },
+      "result": { "description": "Deletion confirmation text, or null for a non-delete action." }
+    }
+  ],
+  "cli-command": [
+    {
+      "id": "external-list",
+      "words": "external list",
+      "summary": "list local OpenClaw cron jobs",
+      "flags": {
+        "host-id": { "type": "string", "description": "Authority host; only local is currently supported." },
+        "no-cache": { "type": "boolean", "description": "Bypass the 30-second discovery cache." }
+      },
+      "methods": ["quirky.automations/externalList"]
+    },
+    {
+      "id": "external-action",
+      "words": "external action",
+      "summary": "pause, resume, run, or delete a captured local OpenClaw job",
+      "flags": {
+        "owner": { "type": "json", "required": true, "description": "Captured owner object returned by external list." },
+        "job-id": { "type": "string", "required": true, "description": "OpenClaw job ID." },
+        "action": { "type": "string", "required": true, "enum": ["pause", "resume", "run", "delete"], "description": "Action to perform; delete requires confirmation." }
+      },
+      "methods": ["quirky.automations/externalAction"]
+    },
+    {
+      "id": "external-action-describe",
+      "words": "external action-describe",
+      "summary": "show the captured OpenClaw job deletion confirmation text",
+      "flags": {
+        "owner": { "type": "json", "required": true, "description": "Captured owner object returned by external list." },
+        "job-id": { "type": "string", "required": true, "description": "OpenClaw job ID." },
+        "action": { "type": "string", "required": true, "enum": ["pause", "resume", "run", "delete"], "description": "Action to describe." }
+      },
+      "methods": ["quirky.automations/externalActionDescribe"]
+    }
+  ]
+}
