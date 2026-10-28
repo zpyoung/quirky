@@ -2,6 +2,7 @@ import type { ActivityPreferences } from './useSidebarActivity'
 import type { MembershipTarget } from './membership'
 import type { AgentDisplayState, GitHubWorktreeLink, ProjectGroup, Repo, Session, Worktree, WorktreePushTarget, WorktreeStatus } from '@quirky/protocol'
 import { worktreeGlyph, worktreeStatus, type DisplayStatus } from './status'
+import type { StockWorktreeOptions } from './control-types'
 import type { LoopReport, LoopStatusSnapshot } from './loop-status'
 
 /** A create the window has sent and not yet seen finish; shown as a pending row under its project. */
@@ -13,6 +14,7 @@ export type DialogState =
   | { kind: 'update' | 'parent' | 'base-fallback'; worktreeId: string }
   | { kind: 'delete'; worktreeId: string; withDescendants: boolean }
   | { kind: 'trust'; repoId: string }
+  | { kind: 'cleanup' }
   | { kind: 'project-settings' | 'remove-project'; repoId: string }
   | { kind: 'add-project' }
   | { kind: 'import'; path: string }
@@ -279,6 +281,8 @@ export type WorkspaceReport = {
   linkedIssue?: GitHubWorktreeLink
   pushTarget?: WorktreePushTarget
   loop?: LoopReport
+  sleeping: boolean
+  manualOrder: number
 }
 
 export type ProjectReport = { id: string; name: string; kind: 'git' | 'folder'; worktrees: WorkspaceReport[] }
@@ -304,6 +308,10 @@ export type WorktreesReport = {
   separators: SeparatorReport
   dropPreview: DropPreviewReport | null
   loops?: { status: LoopStatusSnapshot['status']; error: string | null }
+  stockOptions?: StockWorktreeOptions
+  stockHiddenIds?: string[]
+  stockHiddenCount?: number
+  revealSleeping?: boolean
 }
 
 export type ReportInput = {
@@ -354,6 +362,8 @@ export function buildReport(input: ReportInput): WorktreesReport {
       depth,
       pending: false,
       removing: worktree.removing,
+      sleeping: 'sleeping' in worktree && worktree.sleeping === true,
+      manualOrder: 'manualOrder' in worktree && typeof worktree.manualOrder === 'number' ? worktree.manualOrder : 0,
       selected: worktree.id === selectedId,
       ...(loop ? {
         loop: {
@@ -388,6 +398,8 @@ export function buildReport(input: ReportInput): WorktreesReport {
         depth: 0,
         pending: true,
         removing: false,
+        sleeping: false,
+        manualOrder: 0,
         selected: false
       }))
     ]
