@@ -110,5 +110,27 @@
 - **Revisit if:** a new UI flow changes control behavior; cache expiry event correctness is independently exercised by the hosting regression.
 - **Source:** assumed — autonomous
 
+## D11: Close the single final review round without unverified clearance claims
+- **Question:** which findings survive the required cross-family correctness/compliance/failure review?
+- **Options:** treat every promoted claim as true; use independent refutation and deterministic gates on the fixed source artifact.
+- **Chose:** Gemini high, standard-depth promote/fresh-refute for C/S/X over the three changed plugins. All three gates PASS with zero retained blocking/advisory findings, limitations or questions. C1 was refuted because null account and absent binding both normalize to null. X1 was refuted because its quoted location did not contain the claimed loop; its unmeasured latency assertion did not establish the proposed HIGH severity. S promoted no claims.
+- **Why:** only reproducible/source-resolved claims justify a blocking fix. Both raised claims were suppressed (2/2), so this is explicitly limited assurance, not a clean-bill/completeness claim. The fixed scope excludes incoming editor code, author rationale and lockfile content; no source changed during review.
+- **Evidence:** target075de4d..e405617b; artifact3e11610dacc01b3372c4a11826baa839eda7416a41209d8d6f560d8425ec225b; C/S/X gate and manifest outputs in lane scratch. S refutation initially failed before dispatch on OS argv size; retry used the same source-only artifact instead of an empty-claims full-range fallback. The retry completed as a real fresh dispatch; no JSON or verdict was fabricated.
+- **Reversibility:** easy
+- **Confidence:** medium
+- **Revisit if:** an actual consumer workload exposes latency or another evidence-backed defect.
+- **Source:** assumed — autonomous
+
+## D12: Preserve truthful verification scope and retain consumer-visible regression assertions
+- **Question:** what proves the corrections after the first two affected-suite failures?
+- **Options:** rerun unchanged checks repeatedly; claim a failed suite green; rerun only the corrected remaining file plus typecheck, then use the full landing gate.
+- **Chose:** second affected suite passed58/59files, including hosting expiry/replacement and worktree UI tests. Its only remaining failure was a new incidental negative diagnostic pin: an empty head correctly reported malformed data. Deleted that pin while retaining all conservative visibility/reason assertions. Live final prepass then passed the corrected file (4tests/92assertions) and full typecheck. Build passed; scripts passed68tests/532assertions. Full integration verification belongs to queue.ts land.
+- **Why:** the test-only correction cannot change production behavior, and pinning incidental error absence would contradict the diagnostic contract. No59/59 single-run claim is made.
+- **Evidence:** affected-fixed run58passed/1failed; e405617b test-only correction; live prepass tree7a043dc3cfd1844ebe206679708a580d2753e4e8 command exit0; build-fixed exit0; scripts exit0.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** the full landing gate reports an affected regression.
+- **Source:** assumed — autonomous
+
 ## Progress
-Claimed item; dependencies ready. Brainstorm defaults and combined logic spec self-reviewed. Shared cache-result type and public cache method schema committed before dispatch. Next: three disjoint implementation components (hosting cache, extras API/projection, worktree UI), integrate after barrier, run targeted/affected tests, one Gemini review, web dogfood and real daemon/CLI smoke, catch up once then land. Scratch /tmp/quirky-review-filters-lane7.78cxh2. Never stage inherited untracked paths.
+Implementation, scoped fixes, one roadmap catch-up, source contract validation, real daemon/CLI smoke, all three guarded UI goals, and one final cross-family review round are complete. All workers and runtime/browser smoke processes returned; disposable runtime home removed. No accepted blocking finding remains. Ready for the normal detached queue.ts land m4-sidebar-review-filters gate. Native-only scenarios: none. Inherited .serena/ and test-migrated.test.ts remain untouched.
