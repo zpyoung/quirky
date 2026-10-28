@@ -123,7 +123,9 @@ export type PluginHarnessOptions = {
 export async function startPluginHarness(options: PluginHarnessOptions = {}): Promise<PluginHarness> {
   const builtinPluginsDir = makeTempDir('qp-')
   mkdirSync(builtinPluginsDir, { recursive: true })
-  for (const id of options.plugins ?? ['quirky.repo', 'quirky.worktree']) {
+  const plugins = new Set(options.plugins ?? ['quirky.repo', 'quirky.worktree'])
+  if (plugins.has('quirky.worktree')) plugins.add('quirky.cli')
+  for (const id of plugins) {
     if (id === 'quirky.repo' && options.repoGroupCreateBarrier) {
       installRepoGroupCreateBarrierPlugin(builtinPluginsDir, options.repoGroupCreateBarrier.id)
     } else {
