@@ -656,6 +656,18 @@ files, not this one.
 | medium | high | [m6-heimdall-control D7](decisions/m6-heimdall-control.md) | Preserve typed owner config and reserve owner runtime integration | assumed — autonomous |
 | medium | high for source mapping; public runtime proof still pending core integration | [m6-heimdall-control D8](decisions/m6-heimdall-control.md) | Translate CLI creation flags from the actual source contract, not inferred payload names | locked by docs/roadmap.md |
 | medium | high for observed persistence/native/public boundaries; worker backend acceptance not yet passing | [m6-heimdall-control D12](decisions/m6-heimdall-control.md) | Compose genuine dependency authority and preserve landed persistence history | assumed — autonomous |
+| medium | high | [sb-mobile-app-panels D1](decisions/sb-mobile-app-panels.md) | Own every enumerated panel and direct-host notification flow | locked by docs/loop/queue.json |
+| medium | high | [sb-mobile-app-panels D2](decisions/sb-mobile-app-panels.md) | Resolve all relevant gray areas using source-grounded defaults | assumed — autonomous |
+| medium | high | [sb-mobile-app-panels D5](decisions/sb-mobile-app-panels.md) | Add notification-only replay rather than grant general daemon events | assumed — autonomous |
+| medium | high | [sb-mobile-app-panels D6](decisions/sb-mobile-app-panels.md) | Extend Git's public contract for guarded branch switching | assumed — autonomous |
+| medium | high | [sb-mobile-app-panels D8](decisions/sb-mobile-app-panels.md) | Keep native background push separate from direct foreground subscriptions | deferred: native background push service |
+| medium | high | [sb-mobile-app-panels D9](decisions/sb-mobile-app-panels.md) | Respect absent non-GitHub Tasks provider prerequisites | deferred: non-GitHub Tasks providers |
+| medium | high | [sb-mobile-app-panels D10](decisions/sb-mobile-app-panels.md) | Require a real terminal artifact producer before exposing outside-worktree edits | deferred: terminal artifact authority prerequisite |
+| medium | high | [sb-mobile-app-panels D11](decisions/sb-mobile-app-panels.md) | Keep configured environments out of phone metadata at the producer | supersedes sb-mobile-app D13 (catalog field installed, not available); assumed — autonomous |
+| medium | high for fixture correction, unknown for earlier home effects | [sb-mobile-app-panels D14](decisions/sb-mobile-app-panels.md) | Correct process-fixture isolation without guessing at user-state rollback | assumed — autonomous |
+| medium | high | [sb-mobile-app-panels D18](decisions/sb-mobile-app-panels.md) | Complete the route/bridge cutover and translate resolved history scopes | assumed — autonomous |
+| medium | high | [sb-mobile-app-panels D19](decisions/sb-mobile-app-panels.md) | Require the native authenticated transcript proof before any RPC or binary data | assumed — autonomous |
+| medium | high | [sb-mobile-app-panels D21](decisions/sb-mobile-app-panels.md) | Compose the single catch-up without regressing the panel ceiling or connection lease | locked by docs/loop/LOOP.md; supersedes the pending catch-up step in D20 |
 | medium | high | [m3-session-info D1](decisions/m3-session-info.md) | Build the local session inspection flows, not adjacent agent extras | locked by docs/roadmap.md |
 | medium | high | [m3-session-info D5](decisions/m3-session-info.md) | Statusline consent changes only future launch overlays | locked by docs/roadmap.md |
 | medium | high | [m3-session-info D6](decisions/m3-session-info.md) | Correlate every rich value to the active provider session | assumed — autonomous |
@@ -2209,6 +2221,15 @@ files, not this one.
 | easy | high for the identified setup and dispatch semantics; final native acceptance not yet passing | [m6-heimdall-control D14](decisions/m6-heimdall-control.md) | Require an acknowledged dispatch, not merely a live process or completed work | assumed — autonomous |
 | easy | high for the exercised complete native worker-control flow | [m6-heimdall-control D15](decisions/m6-heimdall-control.md) | Exercise a blocking Ask rather than invent a pending one-way message | locked by docs/roadmap.md |
 | easy | high | [m6-heimdall-control D16](decisions/m6-heimdall-control.md) | Verify observable settlement rather than incidental exit metadata or callback timing | assumed — autonomous |
+| easy | high | [sb-mobile-app-panels D3](decisions/sb-mobile-app-panels.md) | Use night-mode autonomous workflow and isolated implementations | locked by docs/loop/LOOP.md |
+| easy | high | [sb-mobile-app-panels D4](decisions/sb-mobile-app-panels.md) | Pair OpenAI omp workers with Gemini reviewer | assumed — autonomous |
+| easy | high | [sb-mobile-app-panels D7](decisions/sb-mobile-app-panels.md) | Bind subscription cancellation to an authenticated device and generation | assumed — autonomous |
+| easy | high | [sb-mobile-app-panels D12](decisions/sb-mobile-app-panels.md) | Use bounded draft transfers and authoritative workspace outcomes | assumed — autonomous |
+| easy | high | [sb-mobile-app-panels D13](decisions/sb-mobile-app-panels.md) | Audit and integrate complete component source before surface verification | assumed — autonomous |
+| easy | high | [sb-mobile-app-panels D15](decisions/sb-mobile-app-panels.md) | Repair both advertised CLI and guarded confirmation contracts | assumed — autonomous |
+| easy | high | [sb-mobile-app-panels D16](decisions/sb-mobile-app-panels.md) | Prepare private-branch panel admission before the base queue item lands | supersedes sb-mobile-app D7 (private-branch admission timing only) |
+| easy | high | [sb-mobile-app-panels D17](decisions/sb-mobile-app-panels.md) | Apply the already-over-two-hours completion rule without overstating verification | locked by docs/loop/LOOP.md |
+| easy | high | [sb-mobile-app-panels D20](decisions/sb-mobile-app-panels.md) | Land with typecheck only under the operator's build-first cutover | supersedes sb-mobile-app-panels D17; locked by docs/loop/LOOP.md |
 | easy | high | [m3-session-info D2](decisions/m3-session-info.md) | Use the existing right-column panel slot without a shortcut | locked by docs/loop/decisions/m0-ui-api.md |
 | easy | high | [m3-session-info D3](decisions/m3-session-info.md) | Keep view state in the daemon and default only Live activity open | locked by docs/roadmap.md |
 | easy | high | [m3-session-info D4](decisions/m3-session-info.md) | Show missing, waiting, refreshing, stale and error states honestly | locked by external session-info.md |
