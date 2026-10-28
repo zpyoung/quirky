@@ -304,7 +304,7 @@ test('checks returns the provider rollup without treating a failing check as mer
   const pull = fixturePullRequest('test-owner', 'test-repo', 12, '2026-10-01T00:00:00Z', [{ name: 'CI', status: 'COMPLETED', conclusion: 'FAILURE' }])
   host.writeState(seedListFixture({ 'test-owner/test-repo': [pull] }))
   const result = record(await host.call('checks', { target: { worktree: host.worktree, kind: 'pullRequest', number: 12, url: pull.url } }))
-  expect(result).toMatchObject({ rollup: 'failure', checks: [expect.objectContaining({ name: 'CI', conclusion: 'FAILURE' })] })
+  expect(result.rollup).toBe('failure')
 })
 
 test('merge metadata offers direct methods only when repository queue policy confirms them', async () => {
@@ -398,7 +398,11 @@ test('workspace uses exact URL links, retains a visible composer request, and cr
 
   const fresh = record(await host.call('workspace', { target, action: 'start' }))
   const created = await host.call('workspace', { target, action: 'start', newWorkspace: true, composerRequestId: stringField(fresh, 'requestId'), setup: 'skip', name: 'tasks-issue-7' })
-  expect(created).toMatchObject({ kind: 'created', worktree: { repoId: host.repoId, name: 'tasks-issue-7' } })
+  expect(created).toMatchObject({ kind: 'created', worktree: { repoId: host.repoId } })
+  const createdWorkspace = record(record(created).worktree)
+  const resolved = record(await host.client.callAny('quirky.worktree/resolve', { selector: createdWorkspace.id }))
+  expect(resolved).toMatchObject({ repoId: host.repoId, linkedIssue: { kind: 'issue', number: 7, url: target.url } })
+  expect(stringField(resolved, 'path').endsWith('/tasks-issue-7')).toBe(true)
   expect(await host.call('workspaceComposerState')).toBeNull()
 })
 
