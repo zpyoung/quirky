@@ -53,9 +53,12 @@
         "readOnly": true,
         "params": {
           "type": "object",
+          "additionalProperties": false,
           "properties": {
             "session": { "type": "string" },
-            "afterSeq": { "type": "integer", "minimum": 0 }
+            "afterSeq": { "type": "integer", "minimum": 0 },
+            "limit": { "type": "integer", "minimum": 1, "maximum": 1000 },
+            "tail": { "type": "boolean" }
           },
           "required": ["session"]
         },
@@ -125,9 +128,12 @@
         "description": "Sends a message to a structured session.",
         "params": {
           "type": "object",
+          "additionalProperties": false,
           "properties": {
             "session": { "type": "string" },
-            "text": { "type": "string" }
+            "text": { "type": "string" },
+            "requireIdle": { "type": "boolean" },
+            "expectedAfterSeq": { "type": "integer", "minimum": 0 }
           },
           "required": ["session", "text"]
         },

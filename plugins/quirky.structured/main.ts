@@ -6,6 +6,7 @@ import type {
   MethodHandler,
   PluginCaller,
   PluginContext,
+  PluginInfo,
   Session,
   SessionProviderSession,
   SessionStatus,
@@ -34,6 +35,8 @@ type LiveSession = {
   status: SessionStatus
   lastAssistantMessage: string | null
   owner: OwnerToken
+  ownerPluginId: string | null
+  hasSent: boolean
   stopping: boolean
 }
 
@@ -185,9 +188,35 @@ export function activate(context: PluginContext): void {
   const agentRunners = new Map<StructuredAgent, StructuredRunner>()
   const runnerBySession = new Map<string, StructuredRunner>()
   const startTasks = new Map<string, Promise<void>>()
+  const sendTails = new Map<string, Promise<void>>()
   let statusQueue: Promise<void> = Promise.resolve()
   const ensureActive = (): void => {
     if (!active) throw new Error('structured plugin is deactivated')
+  }
+  const ownerPluginFor = async (caller: PluginCaller): Promise<string | null> => {
+    if (caller.role !== 'plugin') return null
+    try {
+      const plugins = await context.call('plugin.list') as PluginInfo[]
+      return Array.isArray(plugins) && plugins.some((plugin) => plugin.id === caller.pluginId)
+        ? caller.pluginId
+        : null
+    } catch (error) {
+      context.log(`could not identify structured session owner: ${error instanceof Error ? error.message : String(error)}`)
+      return null
+    }
+  }
+
+  const enqueueSend = async <T>(sessionId: string, operation: () => Promise<T>): Promise<T> => {
+    const previous = sendTails.get(sessionId) ?? Promise.resolve()
+    const next = Promise.withResolvers<void>()
+    sendTails.set(sessionId, next.promise)
+    await previous
+    try {
+      return await operation()
+    } finally {
+      next.resolve()
+      if (sendTails.get(sessionId) === next.promise) sendTails.delete(sessionId)
+    }
   }
 
   const releaseOwnerToken = (token: OwnerToken): void => {
@@ -223,7 +252,7 @@ export function activate(context: PluginContext): void {
   const setStatus = (sessionId: string, status: SessionStatus): void => {
     const entry = live.get(sessionId)
     if (!active || !entry) return
-    if (entry.stopping && (status === 'done' || status === 'waiting')) return
+    if (entry.stopping && status !== 'exited') return
     const changed = entry.status !== status
     entry.status = status
     if (status === 'exited') {
@@ -478,6 +507,7 @@ export function activate(context: PluginContext): void {
   }
 
   const create: MethodHandler = async (params, caller) => {
+    const ownerPluginId = await ownerPluginFor(caller)
     if (!isStructuredAgent(params.agent)) {
       throw context.error('invalid-params', 'structured sessions support only the claude or codex agent')
     }
@@ -556,6 +586,8 @@ export function activate(context: PluginContext): void {
       status: registered.status,
       lastAssistantMessage: null,
       owner: token,
+      ownerPluginId,
+      hasSent: false,
       stopping: false
     })
     ownersBySession.set(registered.id, token)
@@ -569,7 +601,8 @@ export function activate(context: PluginContext): void {
     return registered
   }
 
-  const resume: MethodHandler = async (params) => {
+  const resume: MethodHandler = async (params, caller) => {
+    const ownerPluginId = await ownerPluginFor(caller)
     const unsupported = Object.keys(params).find((key) => key !== 'session' && key !== 'prompt')
     if (unsupported !== undefined) throw context.error('invalid-params', `structured resume does not support ${unsupported}`)
     if (typeof params.prompt !== 'undefined' && typeof params.prompt !== 'string') {
@@ -691,6 +724,8 @@ export function activate(context: PluginContext): void {
       status: registered.status,
       lastAssistantMessage: null,
       owner: token,
+      ownerPluginId,
+      hasSent: false,
       stopping: false
     })
     try {
@@ -709,34 +744,99 @@ export function activate(context: PluginContext): void {
   }
 
   const messages: MethodHandler = async (params) => {
+    const unsupported = Object.keys(params).find((key) => !['session', 'afterSeq', 'limit', 'tail'].includes(key))
+    if (unsupported !== undefined) throw context.error('invalid-params', `structured messages does not support ${unsupported}`)
     const session = await requireStructured(params.session as string)
-    return journal.list(session.id, (params.afterSeq as number | undefined) ?? 0)
+    const afterSeq = params.afterSeq ?? 0
+    if (!Number.isInteger(afterSeq) || (afterSeq as number) < 0) throw context.error('invalid-params', 'afterSeq must be a non-negative integer')
+    const limit = params.limit
+    if (limit !== undefined && (!Number.isInteger(limit) || (limit as number) < 1 || (limit as number) > 1000)) {
+      throw context.error('invalid-params', 'limit must be an integer from 1 to 1000')
+    }
+    const tail = params.tail
+    if (tail !== undefined && typeof tail !== 'boolean') throw context.error('invalid-params', 'tail must be a boolean')
+    return journal.list(session.id, afterSeq as number, limit as number | undefined, tail === true)
   }
 
   const send: MethodHandler = async (params) => {
+    const unsupported = Object.keys(params).find((key) => !['session', 'text', 'requireIdle', 'expectedAfterSeq'].includes(key))
+    if (unsupported !== undefined) throw context.error('invalid-params', `structured send does not support ${unsupported}`)
+    if (typeof params.requireIdle !== 'undefined' && typeof params.requireIdle !== 'boolean') {
+      throw context.error('invalid-params', 'requireIdle must be a boolean')
+    }
+    const expectedAfterSeq = params.expectedAfterSeq
+    if (expectedAfterSeq !== undefined && (!Number.isInteger(expectedAfterSeq) || (expectedAfterSeq as number) < 0)) {
+      throw context.error('invalid-params', 'expectedAfterSeq must be a non-negative integer')
+    }
     const session = await requireStructured(params.session as string)
     if (!isStructuredAgent(session.agent)) throw context.error('conflict', `structured sessions cannot send to provider ${session.agent}`)
-    await startTasks.get(session.id)
-    ensureActive()
-    const runner = runnerBySession.get(session.id) ?? runnerFor(session.agent)
-    await runner.send(session.id, params.text as string)
-    return { ok: true }
+    return enqueueSend(session.id, async () => {
+      await startTasks.get(session.id)
+      ensureActive()
+      const entry = live.get(session.id)
+      const rejectGuard = (reason: 'agent-busy' | 'stale-evidence'): never => {
+        const error = context.error('conflict', `structured send refused: ${reason}`)
+        Object.assign(error, { data: { reason } })
+        throw error
+      }
+      if (params.requireIdle === true && (
+        !entry ||
+        entry.stopping ||
+        !(entry.status === 'done' || (entry.status === 'running' && !entry.hasSent))
+      )) {
+        rejectGuard('agent-busy')
+      }
+      if (expectedAfterSeq !== undefined) {
+        const latestSeq = journal.list(session.id, 0, 1, true)[0]?.seq ?? 0
+        if (latestSeq !== expectedAfterSeq) rejectGuard('stale-evidence')
+      }
+      if (entry) entry.hasSent = true
+      const runner = runnerBySession.get(session.id) ?? runnerFor(session.agent)
+      if (entry?.stopping) rejectGuard('agent-busy')
+      await runner.send(session.id, params.text as string)
+      return { ok: true }
+    })
+  }
+
+  const stopSession = async (sessionId: string): Promise<void> => {
+    const entry = live.get(sessionId)
+    if (entry?.stopping || entry?.status === 'exited') return
+    if (entry) entry.stopping = true
+    const runner = runnerBySession.get(sessionId)
+    try {
+      await runner?.stop(sessionId)
+    } finally {
+      await cancelPendingAsks(sessionId)
+      setStatus(sessionId, 'exited')
+      releaseOwner(sessionId)
+      runnerBySession.delete(sessionId)
+    }
   }
 
   const stop: MethodHandler = async (params) => {
     const session = await requireStructured(params.session as string)
-    const entry = live.get(session.id)
-    if (entry) entry.stopping = true
-    const runner = runnerBySession.get(session.id)
-    try {
-      await runner?.stop(session.id)
-    } finally {
-      await cancelPendingAsks(session.id)
-      setStatus(session.id, 'exited')
-      releaseOwner(session.id)
-      runnerBySession.delete(session.id)
-    }
+    await stopSession(session.id)
     return { ok: true }
+  }
+
+  const reconcileOwnedSessions = async (): Promise<void> => {
+    if (!active) return
+    try {
+      const plugins = await context.call('plugin.list') as PluginInfo[]
+      const activeIds = new Set(plugins.filter((plugin) => plugin.state === 'active').map((plugin) => plugin.id))
+      const abandoned = [...live].filter(([, entry]) =>
+        entry.ownerPluginId !== null && !activeIds.has(entry.ownerPluginId) && !entry.stopping && entry.status !== 'exited'
+      )
+      await Promise.all(abandoned.map(async ([sessionId]) => {
+        try {
+          await stopSession(sessionId)
+        } catch (error) {
+          context.log(`could not stop structured session ${sessionId} after its owner was disabled: ${error instanceof Error ? error.message : String(error)}`)
+        }
+      }))
+    } catch (error) {
+      context.log(`could not reconcile structured session owners: ${error instanceof Error ? error.message : String(error)}`)
+    }
   }
 
   context.provide('method:quirky.structured/create', create)
@@ -745,6 +845,9 @@ export function activate(context: PluginContext): void {
   context.provide('method:quirky.structured/send', send)
   context.provide('method:quirky.structured/stop', stop)
 
+  context.subscribe((event) => {
+    if (active && event.type === 'plugin.changed') void reconcileOwnedSessions()
+  })
   const release = async (sessionId: string): Promise<void> => {
     const runner = runnerBySession.get(sessionId)
     await runner?.stop(sessionId).catch(() => undefined)
