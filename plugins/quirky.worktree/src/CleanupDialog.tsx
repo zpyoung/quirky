@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { UiPluginContext } from '@quirky/protocol'
+import { Badge, Button, Dialog } from '@quirky/ui'
 import type { CleanupCandidate, CleanupRemovalResult, CleanupSelection } from './control-types'
-import { Dialog } from './Dialog'
 
 type Preview = { generatedAt: number; candidates: CleanupCandidate[] }
 type Props = { context: UiPluginContext; onClose(): void }
@@ -99,22 +99,22 @@ export function CleanupDialog({ context, onClose }: Props) {
   }
 
   return (
-    <Dialog title="Review worktree cleanup" onClose={() => { if (!busy) onClose() }} wide>
-      <section className="cleanup-dialog">
+    <Dialog open title="Review worktree cleanup" onClose={() => { if (!busy) onClose() }} size="wide">
+      <section className="ui-stack">
         <header>
-          <p>Inspect current blockers before permanently deleting selected local worktrees.</p>
+          <p className="ui-text-muted">Inspect current blockers before permanently deleting selected local worktrees.</p>
         </header>
-        <div className="cleanup-actions">
-          <button type="button" disabled={busy || ignoredCount === 0} onClick={() => void restore()}>Restore ignored suggestions</button>
-          <button type="button" disabled={busy || loading} onClick={() => void refresh()}>Refresh preview</button>
+        <div className="ui-toolbar">
+          <Button type="button" disabled={busy || ignoredCount === 0} onClick={() => void restore()}>Restore ignored suggestions</Button>
+          <Button type="button" disabled={busy || loading} onClick={() => void refresh()}>Refresh preview</Button>
         </div>
-        {loading && <p className="muted" role="status">Checking current worktree safety…</p>}
-        {error && <p className="cleanup-error" role="alert">{error}</p>}
-        {!loading && !error && candidates.length === 0 && <p className="muted">No idle cleanup candidates.</p>}
-        <ul className="cleanup-candidates">
+        {loading && <p className="ui-text-muted" role="status">Checking current worktree safety…</p>}
+        {error && <p className="ui-error-text" role="alert">{error}</p>}
+        {!loading && !error && candidates.length === 0 && <p className="ui-text-muted">No idle cleanup candidates.</p>}
+        <ul className="ui-tree ui-stack">
           {candidates.map((candidate) => (
-            <li key={candidate.worktreeId} className={candidate.eligible ? 'cleanup-candidate eligible' : 'cleanup-candidate blocked'}>
-              <label className="cleanup-candidate-select">
+            <li key={candidate.worktreeId} className="ui-tree-item ui-stack">
+              <label className="ui-checkbox-label">
                 <input
                   type="checkbox"
                   aria-label={`Select ${candidate.name}`}
@@ -122,34 +122,34 @@ export function CleanupDialog({ context, onClose }: Props) {
                   disabled={busy || loading || !candidate.eligible || candidate.ignored}
                   onChange={(event) => toggleSelected(candidate, event.currentTarget.checked)}
                 />
-                <span className="cleanup-candidate-name">{candidate.name}</span>
+                <span>{candidate.name}</span>
               </label>
-              <span className="cleanup-candidate-reason">{candidate.reason === 'idle-clean' ? 'Idle for at least 30 days' : candidate.reason}</span>
+              <span className="ui-text-muted">{candidate.reason === 'idle-clean' ? 'Idle for at least 30 days' : candidate.reason}</span>
               {candidate.blockers.length > 0 && (
-                <ul className="cleanup-blockers">
-                  {candidate.blockers.map((blocker, index) => <li key={`${blocker.code}:${index}`}><strong>{blocker.code}</strong>: {blocker.detail}</li>)}
+                <ul className="ui-tree">
+                  {candidate.blockers.map((blocker, index) => <li className="ui-tree-item" key={`${blocker.code}:${index}`}><strong>{blocker.code}</strong>: {blocker.detail}</li>)}
                 </ul>
               )}
               {candidate.ignored
-                ? <span className="cleanup-ignored">Ignored</span>
-                : <button type="button" disabled={busy || loading} onClick={() => void ignore(candidate)}>Ignore {candidate.name}</button>}
+                ? <Badge>Ignored</Badge>
+                : <Button type="button" disabled={busy || loading} onClick={() => void ignore(candidate)}>Ignore {candidate.name}</Button>}
             </li>
           ))}
         </ul>
         {results.length > 0 && (
-          <ul className="cleanup-results" aria-label="Cleanup results">
+          <ul className="ui-tree" aria-label="Cleanup results">
             {results.map((result) => (
-              <li key={result.worktreeId} className={result.removed ? 'cleanup-result removed' : 'cleanup-result failed'}>
+              <li key={result.worktreeId} className="ui-tree-item">
                 {result.removed ? `Removed ${result.worktreeId}` : `Kept ${result.worktreeId}: ${result.error ?? 'not removed'}`}
               </li>
             ))}
           </ul>
         )}
-        <footer>
-          <button type="button" disabled={busy} onClick={onClose}>Close</button>
-          <button type="button" disabled={busy || selectedCandidates.length === 0} onClick={() => void removeSelected()}>
+        <footer className="ui-actions">
+          <Button type="button" disabled={busy} onClick={onClose}>Close</Button>
+          <Button type="button" variant="destructive" disabled={busy || selectedCandidates.length === 0} onClick={() => void removeSelected()}>
             Delete selected
-          </button>
+          </Button>
         </footer>
       </section>
     </Dialog>
