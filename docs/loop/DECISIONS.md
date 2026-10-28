@@ -62,6 +62,7 @@ files, not this one.
 | hard | high | [m6-orchestration-core D4](decisions/m6-orchestration-core.md) | Keep Quirky session identity, not Orca pane compatibility | locked by docs/loop/decisions/m1-agent-status.md |
 | hard | high | [m6-orchestration-core D7](decisions/m6-orchestration-core.md) | Match FIFO replay and generation-fenced acknowledgements | locked by research/orca-features/orchestration.md |
 | hard (cross-feature api and user scope). | high | [m7-sweep-orchestration D2](decisions/m7-sweep-orchestration.md) | Preserve the locked plugin/API architecture and explicit kind exclusions | locked by docs/roadmap.md |
+| hard (requires authorized product scope change) | high | [sb-mobile-chat-voice-native-ruling D2](decisions/sb-mobile-chat-voice-native-ruling.md) | A follow-up is not an authorized native-chat or dictation ruling | locked by docs/architecture.md |
 | hard | high | [m1-worktrees D5](decisions/m1-worktrees.md) | Extend `quirky.repo` and `quirky.worktree` in place, with one create path and one remove path | assumed — autonomous |
 | hard | high | [m1-worktrees D7](decisions/m1-worktrees.md) | Worktree IDs stay v1's path hash; extra folder workspaces get random IDs | assumed — autonomous |
 | hard (sensitive data already read cannot be unread). | high | [m3-vault D5](decisions/m3-vault.md) | Consent controls index creation; disabling preserves it and clear disables before deletion | locked by docs/roadmap.md |
@@ -355,6 +356,9 @@ files, not this one.
 | medium | high | [m7-sweep-orchestration D8](decisions/m7-sweep-orchestration.md) | Inventory larger parity work without duplicating existing queue owners | deferred: remaining orchestration and Heimdall parity |
 | medium | high for integrated source attribution; tests and real-worker/ui execution unverified. | [m7-sweep-orchestration D13](decisions/m7-sweep-orchestration.md) | Integrate the audited complete projection slice and preserve test execution limits | assumed — autonomous |
 | medium | high | [m7-sweep-orchestration D15](decisions/m7-sweep-orchestration.md) | Register only one follow-up for genuinely unbuilt product flows | deferred: unbuilt orchestration and Heimdall flows; supersedes D8's gate-policy follow-up proposal |
+| medium | high | [sb-mobile-chat-voice-native-ruling D3](decisions/sb-mobile-chat-voice-native-ruling.md) | Preserve Native identity instead of substituting an engine or host screenshot | locked by docs/loop/decisions/sb-mobile-app-prerequisites.md |
+| medium | high | [sb-mobile-chat-voice-native-ruling D4](decisions/sb-mobile-chat-voice-native-ruling.md) | Resolve interaction, authorization, data and lifecycle gray areas fail-closed | assumed — autonomous |
+| medium | high for current inspected contracts and exclusions; no native/runtime behavior pass claimed | [sb-mobile-chat-voice-native-ruling D5](decisions/sb-mobile-chat-voice-native-ruling.md) | Current producers do not remove either prerequisite | assumed — autonomous |
 | medium | high | [m5-loops-presets D1](decisions/m5-loops-presets.md) | Extend core's plugin, not its pending branch | locked by docs/loop/LOOP.md |
 | medium | high | [m5-loops-presets D3](decisions/m5-loops-presets.md) | Queue identity and atomic claim govern mutation | locked by research/orca-features/fork-loops.md |
 | medium | high | [m5-loops-presets D4](decisions/m5-loops-presets.md) | Resume approves one iteration; pacing never catches up | assumed — autonomous |
@@ -1474,6 +1478,8 @@ files, not this one.
 | easy (test fence and inventory). | high | [m7-sweep-orchestration D11](decisions/m7-sweep-orchestration.md) | Incorporate both independent specification-review findings before implementation | assumed — autonomous |
 | easy | high | [m7-sweep-orchestration D12](decisions/m7-sweep-orchestration.md) | Land current implementation under the operator's build-first directive | locked by docs/loop/LOOP.md Build first, test at the end; supersedes D9's current test-gate plan |
 | easy | high for these exact observations only. | [m7-sweep-orchestration D14](decisions/m7-sweep-orchestration.md) | Preserve incoming decisions and exact observed landing evidence | assumed — autonomous |
+| easy | high | [sb-mobile-chat-voice-native-ruling D1](decisions/sb-mobile-chat-voice-native-ruling.md) | Own only the prerequisite-dependent remainder | locked by docs/loop/LOOP.md |
+| easy (requeue the preserved branch after a real prerequisite changes) | high | [sb-mobile-chat-voice-native-ruling D6](decisions/sb-mobile-chat-voice-native-ruling.md) | Block the complete remainder without a duplicate follow-up or product mutation | locked by docs/loop/LOOP.md |
 | easy | high | [m5-loops-presets D2](decisions/m5-loops-presets.md) | Autonomously accept one combined specification | locked by docs/loop/LOOP.md |
 | easy | high | [m5-loops-presets D5](decisions/m5-loops-presets.md) | Keep strict public contracts and preset defaults | locked by research/orca-features/fork-loops.md |
 | easy | high | [m5-loops-presets D6](decisions/m5-loops-presets.md) | OpenAI implementers and reachable Gemini reviewer | assumed — autonomous |

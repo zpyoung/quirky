@@ -1461,8 +1461,20 @@
       "deps": [
         "sb-mobile-app-prerequisites"
       ],
+      "status": "blocked"
+    },
+    {
+      "id": "m7-orchestration-worker-federation",
+      "milestone": "M7",
+      "title": "Implement remote worker federation over the real paired-daemon transport: worker-start --on with exact remote/new-top-level placement, home Task/Dispatch and host service-owned Run/Dispatch attachment/custody mappings; durable ordered bidirectional coordinator mail, blocking ask/reply and worker status/completion relay with home-authoritative kind preflight and settlement before host acceptance; peer capability/pair revision/fingerprint/host and process incarnation fencing; real remote show/read/output archives, fleet pagination and uncertainty, stop/release/retain and task navigation to an actual viewer. These worker flows remain unbuilt after the LOOP build-first item cutover, not externally blocked or verified. Reuse quirky.orchestration peerList/peerStatus/peerCall, private pairing/listener and owner-only serviceRegisterSubmissionPreflight, plus existing local worker lifecycle; no forged RuntimeCallerEvidence, local fallback, disconnected tables or advertised stub capabilities. Preserve core D9 and existing pointer/shutdown and host-power queue ownership; exclude Objective/PR sitter/non-GitHub. Product implementation only, not verification or debugging.",
+      "docs": [
+        "orchestration.md"
+      ],
+      "deps": [
+        "m7-orchestration-heimdall-unbuilt-flows"
+      ],
       "status": "in-progress",
-      "lane": 3
+      "lane": 5
     },
     {
       "id": "m7-test-triage",
@@ -1486,7 +1498,7 @@
         "sb-mobile-app-panels-unbuilt-flows",
         "m7-diff-markdown-local-images",
         "m7-terminal-runtime-native-and-worktree-parity",
-        "sb-mobile-chat-voice-native-ruling"
+        "m7-orchestration-worker-federation"
       ],
       "status": "todo"
     },
@@ -1686,19 +1698,6 @@
       ],
       "status": "todo",
       "early": true
-    },
-    {
-      "id": "m7-orchestration-worker-federation",
-      "milestone": "M7",
-      "title": "Implement remote worker federation over the real paired-daemon transport: worker-start --on with exact remote/new-top-level placement, home Task/Dispatch and host service-owned Run/Dispatch attachment/custody mappings; durable ordered bidirectional coordinator mail, blocking ask/reply and worker status/completion relay with home-authoritative kind preflight and settlement before host acceptance; peer capability/pair revision/fingerprint/host and process incarnation fencing; real remote show/read/output archives, fleet pagination and uncertainty, stop/release/retain and task navigation to an actual viewer. These worker flows remain unbuilt after the LOOP build-first item cutover, not externally blocked or verified. Reuse quirky.orchestration peerList/peerStatus/peerCall, private pairing/listener and owner-only serviceRegisterSubmissionPreflight, plus existing local worker lifecycle; no forged RuntimeCallerEvidence, local fallback, disconnected tables or advertised stub capabilities. Preserve core D9 and existing pointer/shutdown and host-power queue ownership; exclude Objective/PR sitter/non-GitHub. Product implementation only, not verification or debugging.",
-      "docs": [
-        "orchestration.md"
-      ],
-      "deps": [
-        "m7-orchestration-heimdall-unbuilt-flows"
-      ],
-      "status": "in-progress",
-      "lane": 5
     }
   ]
 }
