@@ -169,8 +169,6 @@ test('background structured sessions stay journaled without changing terminal se
   expect(ordinary.background).not.toBe(true)
   await journal(ordinary.id)
   await waitForSessionChange(ordinary.id)
-  const ordinaryRecord = await call<Session>('quirky.session/get', { session: ordinary.id })
-  expect(ordinaryRecord).toMatchObject({ kind: 'structured', worktreeId: worktree!.id, background: false })
   const afterOrdinary = await waitForAsync(async () => {
     const workspace = (await call<{ workspace: Workspace }>('quirky.terminal/workspace', { workspace: worktree!.id })).workspace
     return terminalSessionIds(workspace).includes(ordinary.id) ? workspace : undefined

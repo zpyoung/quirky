@@ -70,7 +70,7 @@ const toSession = (row: Row): Session => ({
   exitSignal: row.exit_signal,
   exitCause: row.exit_cause,
   restorable: row.restorable === 1,
-  background: row.background === 1,
+  ...(row.background === 1 ? { background: true } : {}),
   launch: parseJson<SessionLaunch>(row.launch),
   providerSession: parseJson<SessionProviderSession>(row.provider_session),
   promptDelivery: row.prompt_delivery,

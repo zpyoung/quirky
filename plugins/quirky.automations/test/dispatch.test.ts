@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from 'bun:test'
 import type { AutomationDefinition, AutomationRun } from '../types'
 import { createAutomationDispatcher } from '../dispatch'
 import type { AutomationDispatcher } from '../dispatch-contract'
-import type { DispatchHarness, ScriptedCheckResult } from './dispatch-harness'
+import type { DispatchHarness, ScriptedCheckResult, ScriptedSession } from './dispatch-harness'
 import {
   createDispatchHarness,
   makeCheckResult,
@@ -447,7 +447,7 @@ describe('automation run dispatcher', () => {
       id: 's_durable', kind: 'structured' as const, agent: 'claude', worktreeId: 'wt-existing',
       cwd: '/repo-a/work', title: 'Claude', status: 'done' as const, createdAt: now, lastActivityAt: now,
       exitCode: null, exitSignal: null, exitCause: null, restorable: false, launchSettings: null
-    }
+    } satisfies ScriptedSession
     harness.sessions.set(session.id, session)
     harness.appendMessage(session.id, 'assistant', 'durable output')
     harness.appendMessage(session.id, 'result', 'complete', { type: 'result', subtype: 'success', is_error: false })
