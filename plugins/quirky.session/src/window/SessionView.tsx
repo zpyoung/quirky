@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import type { Session, UiPluginContext } from '@quirky/protocol'
 import { ExitedBar } from './ExitedBar'
 import { StructuredView } from './StructuredView'
@@ -57,13 +57,23 @@ function useRestoreAttempt(session: Session): number {
   return attempt
 }
 
+const sessionLayout = {
+  display: 'flex',
+  flex: 1,
+  flexDirection: 'column',
+  minHeight: 0,
+  minWidth: 0,
+  color: 'var(--ui-text)',
+  background: 'var(--ui-surface)'
+} satisfies CSSProperties
+
 export function SessionView({ context, themeSource, session, connected, onClose }: Props) {
   const scrollback = useScrollback(context)
   const attempt = useRestoreAttempt(session)
   if (session.kind === 'structured') return <StructuredView context={context} session={session} />
 
   return (
-    <div className="session-view">
+    <div style={sessionLayout}>
       {connected && (
         <TerminalPane
           key={`${session.id}:${attempt}`}

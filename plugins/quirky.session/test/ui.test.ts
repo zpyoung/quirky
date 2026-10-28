@@ -4,6 +4,7 @@ import { GlobalRegistrator } from '@happy-dom/global-registrator'
 import { bytesToBase64, GRAPHITE_TERMINAL_PALETTES, TERMINAL_ANSI_KEYS, RpcError, RpcErrorCode, type AgentDisplayState, type AgentStatusSummary, type QuirkyEvent, type TerminalAppearanceMode, type TerminalPalette } from '@quirky/protocol'
 import type { ITheme } from '@xterm/xterm'
 import { resetSessionMemory } from '../src/window/model'
+import { sessionStatusPresentation } from '../src/window/StatusDot'
 import manifest from '../quirky-plugin.json'
 import {
   agentInfo,
@@ -15,7 +16,8 @@ import {
   sessionHandlers,
   settle,
   WORKTREE,
-  type FakeContext
+  type FakeContext,
+  type Mounted
 } from './ui-fake'
 
 const VIEW = 'view:quirky.session/worktree'
@@ -23,7 +25,7 @@ const shell1 = session({ id: 's1', title: 'Shell 1', createdAt: 1 })
 const claude = session({ id: 's2', title: 'Claude 1', agent: 'claude', status: 'working', createdAt: 2 })
 
 let fake: FakeContext
-let mounted: Awaited<ReturnType<typeof mountView>> | null = null
+let mounted: Mounted | null = null
 
 beforeAll(async () => {
   GlobalRegistrator.register()
@@ -102,9 +104,10 @@ describe('the worktree view', () => {
   test('shows the worktree name and path above the session tabs', async () => {
     start()
     const view = await open({ worktree: WORKTREE.id })
-    expect(view.element.querySelector('.main-title strong')?.textContent).toBe('main')
-    expect(view.element.querySelector('.main-title .path')?.textContent).toBe('/tmp/work/main')
-    expect(view.tabs().map((tab) => tab.textContent)).toEqual(['Shell 1×', 'Claude 1×'])
+    expect(view.element.textContent).toContain('main')
+    expect(view.element.textContent).toContain('/tmp/work/main')
+    expect(view.tabs()[0]!.textContent).toContain('Shell 1')
+    expect(view.tabs()[1]!.textContent).toContain('Claude 1')
     expect(fake.callsTo('quirky.worktree/resolve')[0]!.params).toEqual({ selector: WORKTREE.id })
     expect(fake.callsTo('quirky.session/list')[0]!.params).toEqual({ worktree: WORKTREE.id })
   })
@@ -188,7 +191,7 @@ describe('the worktree view', () => {
     expect(fake.opened).toEqual([{ id: VIEW, input: { worktree: WORKTREE.id, session: 's2' } }])
   })
 
-  test('an unread session shows an amber bell in place of its status dot, labelled by reason', async () => {
+  test('unread sessions keep their reason visible without losing the active status cue', async () => {
     const labels = { agent: 'Unread agent completion', bell: 'Unread bell', notification: 'Unread notification' } as const
     start([
       session({ id: 's1', title: 'Shell 1', createdAt: 1, unread: 'bell' }),
@@ -196,15 +199,17 @@ describe('the worktree view', () => {
       session({ id: 's3', title: 'Claude 2', agent: 'claude', createdAt: 3, unread: 'notification' }),
       session({ id: 's4', title: 'Shell 2', createdAt: 4 })
     ])
-    const view = await open({ worktree: WORKTREE.id, session: 's4' })
-    const bells = view.tabs().map((tab) => tab.querySelector('.glyph-unread'))
-    expect(bells.map((bell) => bell?.getAttribute('aria-label') ?? null)).toEqual([labels.bell, labels.agent, labels.notification, null])
-    for (const bell of bells.slice(0, 3)) expect(bell!.getAttribute('role')).toBe('img')
-    expect(view.tabs()[0]!.querySelector('.dot, .glyph:not(.glyph-unread)')).toBeNull()
-    expect(view.tabs()[3]!.querySelector('.dot')).not.toBeNull()
+    const view = await open({ worktree: WORKTREE.id, session: 's1' })
+    expect(view.tabs()[0]!.textContent).toContain(labels.bell)
+    expect(view.tabs()[1]!.textContent).toContain(labels.agent)
+    expect(view.tabs()[2]!.textContent).toContain(labels.notification)
+    const unread = view.element.querySelector('[role="status"] [role="img"]')!
+    expect(unread.getAttribute('aria-label')).toBe(labels.bell)
+    expect(unread.getAttribute('role')).toBe('img')
 
     await fake.emit({ type: 'quirky.session/changed', data: { session: session({ id: 's1', title: 'Shell 1', createdAt: 1, unread: null }) } })
-    expect(view.tabs()[0]!.querySelector('.glyph-unread')).toBeNull()
+    expect(view.tabs()[0]!.textContent).not.toContain(labels.bell)
+    expect(view.element.querySelector('[role="status"] [role="img"]')!.getAttribute('aria-label')).toBe('running')
   })
 
   test('marks the active tab selected', async () => {
@@ -231,7 +236,8 @@ describe('the worktree view', () => {
     start([], { 'quirky.session/create': () => session({ id: 'new' }) })
     const view = await open({ worktree: WORKTREE.id })
     expect(view.element.textContent).toContain('No sessions in this worktree.')
-    await view.click(view.element.querySelector('.empty button')!)
+    const newShell = [...view.element.querySelectorAll('button')].find((button) => button.textContent === 'New shell')!
+    await view.click(newShell)
     expect(fake.callsTo('quirky.session/create')[0]!.params).toEqual({ worktree: WORKTREE.id, agent: 'shell' })
     expect(fake.opened.at(-1)).toEqual({ id: VIEW, input: { worktree: WORKTREE.id, session: 'new' } })
   })
@@ -283,17 +289,18 @@ describe('keeping tabs current', () => {
 })
 
 describe('new sessions', () => {
-  const menuLabels = (view: Awaited<ReturnType<typeof mountView>>) =>
-    [...view.element.querySelectorAll('[role="menuitem"]')].map((entry) => entry.textContent)
+  const newSessionTrigger = (view: Mounted) =>
+    [...view.element.querySelectorAll<HTMLButtonElement>('button[aria-haspopup="menu"]')]
+      .find((button) => button.textContent?.includes('New session'))!
 
-  const openMenu = async (view: Awaited<ReturnType<typeof mountView>>) => {
-    await view.click(view.element.querySelector('[aria-label="New session"]')!)
+  const openMenu = async (view: Mounted) => {
+    await view.click(newSessionTrigger(view))
     await settle()
     return () => [...view.element.querySelectorAll('[role="menuitem"]')].map((entry) => entry.textContent)
   }
 
-  const pickFromMenu = async (view: Awaited<ReturnType<typeof mountView>>, label: string) => {
-    await view.click(view.element.querySelector('[aria-label="New session"]')!)
+  const pickFromMenu = async (view: Mounted, label: string) => {
+    await view.click(newSessionTrigger(view))
     await settle()
     const item = [...view.element.querySelectorAll('[role="menuitem"]')].find((entry) => entry.textContent === label)!
     await view.click(item)
@@ -415,7 +422,7 @@ describe('new sessions', () => {
     start([shell1], { 'quirky.agents/list': () => listing })
     const view = await open({ worktree: WORKTREE.id })
     expect((await openMenu(view))()).toEqual(['Shell', 'Codex', 'Manage agents'])
-    await view.click(view.element.querySelector('[aria-label="New session"]')!)
+    await view.click(newSessionTrigger(view))
     listing = agentListing([agentInfo('goose', 'Goose')])
     expect((await openMenu(view))()).toEqual(['Shell', 'Goose', 'Manage agents'])
   })
@@ -439,7 +446,7 @@ describe('new sessions', () => {
     start([shell1])
     const view = await open({ worktree: WORKTREE.id })
     await openMenu(view)
-    await view.click(view.element.querySelector('[aria-label="New session"]')!)
+    await view.click(newSessionTrigger(view))
     const before = fake.callsTo('quirky.agents/list').length
     await fake.emit({ type: 'quirky.agents/changed', data: {} } as QuirkyEvent)
     await settle()
@@ -457,13 +464,15 @@ describe('new sessions', () => {
 })
 
 describe('closing sessions', () => {
-  const closeButton = (view: Awaited<ReturnType<typeof mountView>>, title: string) =>
-    view.element.querySelector(`[aria-label="Close ${title}"]`)!
+  const closeSession = async (view: Mounted, title: string) => {
+    const button = view.element.querySelector(`[aria-label="Close ${title}"]`)!
+    await view.click(button)
+  }
 
   test('a running session is closed after the person confirms', async () => {
     start([shell1], { 'quirky.session/close': () => ({ ok: true }) })
     const view = await open({ worktree: WORKTREE.id })
-    await view.click(closeButton(view, 'Shell 1'))
+    await closeSession(view, 'Shell 1')
     expect(fake.confirms).toEqual([{ title: 'Close session', body: '"Shell 1" is still running. Close it?', confirmLabel: 'Close' }])
     expect(fake.callsTo('quirky.session/close')[0]!.params).toEqual({ session: 's1' })
   })
@@ -472,14 +481,14 @@ describe('closing sessions', () => {
     start([shell1], { 'quirky.session/close': () => ({ ok: true }) })
     fake.state.confirmAnswer = false
     const view = await open({ worktree: WORKTREE.id })
-    await view.click(closeButton(view, 'Shell 1'))
+    await closeSession(view, 'Shell 1')
     expect(fake.callsTo('quirky.session/close')).toEqual([])
   })
 
   test('an exited session closes without asking', async () => {
     start([session({ id: 's1', title: 'Shell 1', status: 'exited', exitCode: 0 })], { 'quirky.session/close': () => ({ ok: true }) })
     const view = await open({ worktree: WORKTREE.id })
-    await view.click(closeButton(view, 'Shell 1'))
+    await closeSession(view, 'Shell 1')
     expect(fake.confirms).toEqual([])
     expect(fake.callsTo('quirky.session/close')).toHaveLength(1)
   })
@@ -487,8 +496,9 @@ describe('closing sessions', () => {
   test('the exited bar shows the exit code and closes the session', async () => {
     start([session({ id: 's1', status: 'exited', exitCode: 3 })], { 'quirky.session/close': () => ({ ok: true }) })
     const view = await open({ worktree: WORKTREE.id })
-    expect(view.element.querySelector('.exited-bar')?.textContent).toContain('exited (code 3)')
-    await view.click(view.element.querySelector('.exited-bar button')!)
+    expect(view.element.textContent).toContain('exited (code 3)')
+    const close = [...view.element.querySelectorAll('button')].find((button) => button.textContent === 'Close')!
+    await view.click(close)
     expect(fake.callsTo('quirky.session/close')[0]!.params).toEqual({ session: 's1' })
   })
 })
@@ -653,7 +663,7 @@ describe('terminal pane', () => {
     await fake.emit({ type: 'quirky.session/changed', data: { session: { ...shell1, status: 'exited', exitCode: 0, restorable: false } } })
     await settle()
     expect(fake.callsTo('quirky.terminal/attach')).toHaveLength(1)
-    expect(mounted!.element.querySelector('.exited-bar')).not.toBeNull()
+    expect(mounted!.element.textContent).toContain('exited')
   })
 
   test('SC-42: an attach that is not live writes the final screen and sends no typed input', async () => {
@@ -663,7 +673,7 @@ describe('terminal pane', () => {
     expect(writes).toEqual(['bye'])
     await act(async () => terminals[0]!.input('ls'))
     expect(fake.callsTo('quirky.terminal/write')).toEqual([])
-    expect(mounted!.element.querySelector('.exited-bar')).not.toBeNull()
+    expect(mounted!.element.textContent).toContain('exited')
   })
 
   test('SC-42: a running session whose attach is not live stays read only', async () => {
@@ -771,11 +781,11 @@ describe('structured sessions', () => {
     })
     const view = await open({ worktree: WORKTREE.id })
     expect(fake.callsTo('quirky.structured/messages')[0]!.params).toEqual({ session: 'bg' })
-    expect([...view.element.querySelectorAll('.msg')].map((row) => row.textContent)).toEqual(['userhi', 'assistanthello'])
+    expect([...view.element.querySelectorAll('article[aria-label$="message"]')].map((row) => row.textContent)).toEqual(['userhi', 'assistanthello'])
     await fake.emit({ type: 'quirky.structured/message', data: { message: message(4, 'assistant', 'more') } })
-    expect(view.element.querySelectorAll('.msg')).toHaveLength(3)
+    expect(view.element.querySelectorAll('article[aria-label$="message"]')).toHaveLength(3)
     await fake.emit({ type: 'quirky.structured/message', data: { message: { ...message(9, 'assistant', 'other'), sessionId: 'else' } } })
-    expect(view.element.querySelectorAll('.msg')).toHaveLength(3)
+    expect(view.element.querySelectorAll('article[aria-label$="message"]')).toHaveLength(3)
   })
 
   test('sends a follow-up with Enter', async () => {
@@ -829,7 +839,7 @@ describe('structured sessions', () => {
       await fake.emit({ type: 'plugin.changed' })
       await settle()
       expect(fake.callsTo('quirky.structured/messages')).toHaveLength(2)
-      expect([...view.element.querySelectorAll('.msg')].map((row) => row.textContent)).toEqual(['userhi'])
+      expect([...view.element.querySelectorAll('article[aria-label$="message"]')].map((row) => row.textContent)).toEqual(['userhi'])
       expect(view.element.querySelector('textarea')).not.toBeNull()
       expect(view.element.textContent).not.toContain('Structured sessions are off')
     })
@@ -846,7 +856,7 @@ describe('structured sessions', () => {
   })
 })
 
-describe('agent status glyphs', () => {
+describe('agent status presentation', () => {
   const MIN = 60_000
   const summary = (display: AgentDisplayState, label: string, over: Partial<AgentStatusSummary> = {}): AgentStatusSummary => ({
     state: display === 'done' || display === 'failed' || display === 'interrupted' ? 'done' : 'working',
@@ -859,74 +869,77 @@ describe('agent status glyphs', () => {
     restoredUnconfirmed: false,
     ...over
   })
-  const glyphOf = (view: Awaited<ReturnType<typeof open>>, index = 0) =>
-    view.tabs()[index]!.querySelector('.glyph') as HTMLElement | null
+  const statusOf = (view: Mounted) =>
+    view.element.querySelector('[role="status"] [role="img"]') as HTMLElement | null
 
-  const states: [AgentDisplayState, string][] = [
-    ['working', 'Working'],
-    ['monitoring', 'Monitoring background tasks'],
-    ['waiting', 'Waiting for input'],
-    ['permission', 'Needs attention'],
-    ['blocked', 'Blocked'],
-    ['failed', 'Failed'],
-    ['interrupted', 'Interrupted'],
-    ['done', 'Done'],
-    ['unverifiable', 'No recent update'],
-    ['idle', 'Idle'],
-    ['unconfirmed', "Couldn't confirm"]
+  const states: [AgentDisplayState, string, string][] = [
+    ['working', 'Working', 'working'],
+    ['monitoring', 'Monitoring background tasks', 'working'],
+    ['waiting', 'Waiting for input', 'needs-you'],
+    ['permission', 'Needs attention', 'needs-you'],
+    ['blocked', 'Blocked', 'needs-you'],
+    ['failed', 'Failed', 'failing'],
+    ['interrupted', 'Interrupted', 'idle'],
+    ['done', 'Done', 'done'],
+    ['unverifiable', 'No recent update', 'idle'],
+    ['idle', 'Idle', 'idle'],
+    ['unconfirmed', "Couldn't confirm", 'queued']
   ]
 
-  for (const [display, label] of states) {
-    test(`SC-34: ${display} draws glyph-${display} with the label "${label}"`, async () => {
-      start([session({ id: 's1', status: 'working', agentStatus: summary(display, label) })])
+  for (const [display, label, category] of states) {
+    test(`SC-34: ${display} keeps its detailed status label and semantic category`, async () => {
+      const current = session({ id: 's1', status: 'working', agentStatus: summary(display, label) })
+      start([current])
       const view = await open({ worktree: WORKTREE.id })
-      const glyph = glyphOf(view)!
-      expect(glyph.className).toBe(`glyph glyph-${display}`)
-      expect(glyph.getAttribute('title')).toBe(label)
-      expect(glyph.getAttribute('aria-label')).toBe(label)
-      expect(view.tabs()[0]!.querySelector('.dot')).toBeNull()
+      const status = statusOf(view)!
+      expect(status.getAttribute('aria-label')).toBe(label)
+      expect(status.parentElement?.getAttribute('title')).toBe(label)
+      expect(view.tabs()[0]!.textContent).toContain(label)
+      expect(sessionStatusPresentation(current, Date.now()).status).toBe(category)
       expect((view.lastReport() as { tabs: object[] }).tabs[0]).toMatchObject({ status: 'working', display, label })
     })
   }
 
-  test('a session with no summary keeps the coarse dot and reports no display', async () => {
-    start([session({ id: 's1', status: 'waiting' })])
+  test('a session with no summary keeps its coarse status label and reports no display', async () => {
+    const current = session({ id: 's1', status: 'waiting' })
+    start([current])
     const view = await open({ worktree: WORKTREE.id })
-    expect(view.tabs()[0]!.querySelector('.dot-waiting')).not.toBeNull()
-    expect(glyphOf(view)).toBeNull()
+    expect(statusOf(view)?.getAttribute('aria-label')).toBe('waiting')
+    expect(view.tabs()[0]!.textContent).toContain('waiting')
+    expect(sessionStatusPresentation(current, Date.now()).status).toBe('needs-you')
     expect((view.lastReport() as { tabs: object[] }).tabs[0]).not.toHaveProperty('display')
   })
 
-  test('the glyph follows the session events', async () => {
+  test('the active status indicator follows session events', async () => {
     const s1 = session({ id: 's1', status: 'working', agentStatus: summary('working', 'Working') })
     start([s1])
     const view = await open({ worktree: WORKTREE.id })
-    expect(glyphOf(view)!.className).toContain('glyph-working')
+    expect(statusOf(view)?.getAttribute('aria-label')).toBe('Working')
     await fake.emit({ type: 'quirky.session/changed', data: { session: { ...s1, status: 'waiting', agentStatus: summary('waiting', 'Waiting for input') } } })
-    expect(glyphOf(view)!.className).toContain('glyph-waiting')
-    expect(glyphOf(view)!.getAttribute('aria-label')).toBe('Waiting for input')
+    expect(statusOf(view)?.getAttribute('aria-label')).toBe('Waiting for input')
     await fake.emit({ type: 'quirky.session/changed', data: { session: { ...s1, status: 'done', agentStatus: summary('done', 'Done') } } })
-    expect(glyphOf(view)!.className).toContain('glyph-done')
+    expect(statusOf(view)?.getAttribute('aria-label')).toBe('Done')
   })
 
-  test('SC-36: progress replaces the spinner and the question icon with a ring', async () => {
+  test('progress remains visible for active states with progress indicators', async () => {
     start([
       session({ id: 's1', status: 'working', agentStatus: summary('working', 'Working', { progress: 60 }) }),
       session({ id: 's2', status: 'waiting', agentStatus: summary('waiting', 'Waiting for input', { progress: 25 }) }),
-      session({ id: 's3', status: 'working', agentStatus: summary('monitoring', 'Monitoring background tasks', { progress: 50 }) }),
-      session({ id: 's4', status: 'done', agentStatus: summary('done', 'Done', { progress: 100 }) })
+      session({ id: 's3', status: 'waiting', agentStatus: summary('permission', 'Needs attention', { progress: 70 }) }),
+      session({ id: 's4', status: 'working', agentStatus: summary('monitoring', 'Monitoring background tasks', { progress: 50 }) }),
+      session({ id: 's5', status: 'done', agentStatus: summary('done', 'Done', { progress: 100 }) })
     ])
     const view = await open({ worktree: WORKTREE.id })
-    expect(glyphOf(view, 0)!.className).toBe('glyph glyph-working glyph-ring')
-    expect(glyphOf(view, 0)!.style.getPropertyValue('--progress')).toBe('60%')
-    expect(glyphOf(view, 1)!.className).toBe('glyph glyph-waiting glyph-ring')
-    expect(glyphOf(view, 1)!.style.getPropertyValue('--progress')).toBe('25%')
-    expect(glyphOf(view, 0)!.getAttribute('aria-label')).toBe('Working')
-    expect(glyphOf(view, 2)!.className).toBe('glyph glyph-monitoring')
-    expect(glyphOf(view, 3)!.className).toBe('glyph glyph-done')
+    expect(view.tabs()[0]!.textContent).toContain('60%')
+    expect(view.tabs()[1]!.textContent).toContain('25%')
+    expect(view.tabs()[2]!.textContent).toContain('70%')
+    expect(view.tabs()[3]!.textContent).not.toContain('50%')
+    expect(view.tabs()[4]!.textContent).not.toContain('100%')
+    expect(statusOf(view)?.getAttribute('aria-label')).toBe('Working')
+    expect(view.element.querySelector('[role="status"]')?.textContent).toContain('60%')
   })
 
-  test('an unfinished state with no evidence for 30 minutes decays, and a done one does not', async () => {
+  test('an unfinished state with no evidence for 30 minutes becomes stale, while done remains done', async () => {
     const stale = Date.now() - 31 * MIN
     start([
       session({ id: 's1', status: 'working', agentStatus: summary('working', 'Working', { evidenceAt: stale }) }),
@@ -935,15 +948,13 @@ describe('agent status glyphs', () => {
       session({ id: 's4', status: 'exited', agentStatus: summary('working', 'Working', { evidenceAt: stale }) })
     ])
     const view = await open({ worktree: WORKTREE.id })
-    expect(glyphOf(view, 0)!.className).toBe('glyph glyph-unverifiable')
-    expect(glyphOf(view, 0)!.getAttribute('title')).toBe('No recent update')
-    expect(glyphOf(view, 1)!.className).toBe('glyph glyph-unverifiable')
-    expect(glyphOf(view, 2)!.className).toBe('glyph glyph-done')
-    expect(glyphOf(view, 3)!.className).toBe('glyph glyph-idle')
-    expect(glyphOf(view, 3)!.getAttribute('aria-label')).toBe('Idle')
+    expect(statusOf(view)?.getAttribute('aria-label')).toBe('No recent update')
+    expect(view.tabs()[1]!.textContent).toContain('No recent update')
+    expect(view.tabs()[2]!.textContent).toContain('Done')
+    expect(view.tabs()[3]!.textContent).toContain('Idle')
   })
 
-  test('a one-minute tick shows decay with no event', async () => {
+  test('a one-minute tick shows decay without a session event', async () => {
     const realNow = Date.now
     const realSetInterval = globalThis.setInterval
     const ticks: (() => void)[] = []
@@ -958,10 +969,10 @@ describe('agent status glyphs', () => {
       const t0 = realNow()
       start([session({ id: 's1', status: 'working', agentStatus: summary('working', 'Working', { evidenceAt: t0 - 29 * MIN }) })])
       const view = await open({ worktree: WORKTREE.id })
-      expect(glyphOf(view)!.className).toBe('glyph glyph-working')
+      expect(statusOf(view)?.getAttribute('aria-label')).toBe('Working')
       Date.now = () => t0 + 2 * MIN
       await act(async () => ticks.forEach((tick) => tick()))
-      expect(glyphOf(view)!.className).toBe('glyph glyph-unverifiable')
+      expect(statusOf(view)?.getAttribute('aria-label')).toBe('No recent update')
     } finally {
       Date.now = realNow
       globalThis.setInterval = realSetInterval
