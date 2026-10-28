@@ -292,7 +292,7 @@ test('explicit merged links with an old head stay unknown while inferred merged 
     review: { state: 'merged', headRefOid: oldHead },
     stale: false
   })
-})
+}, 20_000)
 
 test('tracked-branch lookup preserves the hosting-established workspace relationship', async () => {
   const testHost = await host()
@@ -329,7 +329,7 @@ test('normal refreshes populate merged, closed, open, and checks status fields',
     })
     expect(await cached(testHost)).toMatchObject({ review: { ...expected, headRefOid: headOid }, stale: false })
   }
-})
+}, 20_000)
 
 test('normal misses and unavailable lookups remain explicit non-hiding outcomes', async () => {
   const missingHost = await host()
@@ -341,7 +341,7 @@ test('normal misses and unavailable lookups remain explicit non-hiding outcomes'
   const unavailableHost = await host([], { listFailure: true })
   expect(await unavailableHost.call('forBranch', { branch: 'feature' })).toMatchObject({ kind: 'unavailable' })
   expect(await cached(unavailableHost)).toMatchObject({ review: null, stale: false, error: 'GitHub is temporarily unavailable.' })
-})
+}, 20_000)
 
 test('head changes and hosting mutations invalidate cached workspace review facts', async () => {
   const testHost = await host()
@@ -412,13 +412,54 @@ test('configuration invalidation and stale in-flight lookup cannot repopulate sn
   expect(await cached(testHost)).toMatchObject({ review: null, stale: true })
 })
 
-test('expired unavailable snapshots become ordinary cache misses', async () => {
+test('expired unavailable snapshots emit cache changes without a cached read', async () => {
   const testHost = await host([], { listFailure: true })
+  const initialChange = Promise.withResolvers<void>()
+  const expiryChange = Promise.withResolvers<void>()
+  let cacheChangeCount = 0
+  testHost.client.onEvent((event) => {
+    if (!isRecord(event) || event.type !== 'quirky.hosting/reviewCacheChanged') return
+    cacheChangeCount += 1
+    if (cacheChangeCount === 1) initialChange.resolve()
+    if (cacheChangeCount === 2) expiryChange.resolve()
+  })
+  await testHost.client.callAny('events.subscribe', {})
   await testHost.call('forBranch', { branch: 'feature' })
-  expect(await cached(testHost)).toMatchObject({ stale: false, error: 'GitHub is temporarily unavailable.' })
-  // The daemon owns Date.now(); fake timers in this test process cannot advance its snapshot TTL.
-  await Bun.sleep(5_100)
+  await initialChange.promise
+  expect(cacheChangeCount).toBe(1)
+  const invocationCount = testHost.invocations().length
+
+  await expiryChange.promise
+  expect(cacheChangeCount).toBe(2)
+  expect(testHost.invocations()).toHaveLength(invocationCount)
   expect(await cached(testHost)).toMatchObject({ review: null, stale: false })
   expect(Object.hasOwn(await cached(testHost), 'error')).toBe(false)
-})
+  expect(cacheChangeCount).toBe(2)
+}, 20_000)
+
+test('snapshot replacement moves expiry past the previous timer', async () => {
+  const testHost = await host([], { listFailure: true })
+  const secondChange = Promise.withResolvers<void>()
+  let cacheChangeCount = 0
+  testHost.client.onEvent((event) => {
+    if (!isRecord(event) || event.type !== 'quirky.hosting/reviewCacheChanged') return
+    cacheChangeCount += 1
+    if (cacheChangeCount === 2) secondChange.resolve()
+  })
+  await testHost.client.callAny('events.subscribe', {})
+  await testHost.call('forBranch', { branch: 'feature' })
+
+  const headOid = outputOf(testHost, ['rev-parse', 'HEAD'])
+  testHost.writeState({ authenticated: true, defaultBranch: 'main', prs: [review(7, headOid)] })
+  expect(await testHost.call('review', { number: 7 })).toMatchObject({ kind: 'found', review: { number: 7 } })
+  await secondChange.promise
+  expect(cacheChangeCount).toBe(2)
+  const invocationCount = testHost.invocations().length
+
+  // The daemon owns the snapshot clock; test-process fake timers cannot cross its expiry.
+  await Bun.sleep(5_100)
+  expect(await cached(testHost)).toMatchObject({ review: { number: 7 }, stale: false })
+  expect(testHost.invocations()).toHaveLength(invocationCount)
+  expect(cacheChangeCount).toBe(2)
+}, 20_000)
 

@@ -66,5 +66,49 @@
 - **Revisit if:** supported platform/pairing ownership changes.
 - **Source:** deferred: platform
 
+## D7: Repair schema-subset and fixture defects without narrowing acceptance
+- **Question:** what caused the first affected-suite, smoke and typecheck failures?
+- **Options:** waive failing scenarios; enlarge the public schema language; repair new declarations and fixtures to existing contracts.
+- **Chose:** remove unsupported maxItems/minLength/maxLength and nullable type arrays from the hosting declaration, retain handler bounds and description-only nullability; remove unsupported maxItems from the controlled cache fixture. Activate the lazy extras plugin before opening its corrupt-state fixture database. Add the test report's missing hiddenIds field and assert absent child-chip behavior without distinguishing null from undefined. CLI smoke uses established --flag=false syntax.
+- **Why:** the manifest validator accepts scalar schema types and a fixed keyword subset; invalid declarations removed the entire hosting API. These were implementation/fixture defects, not reasons to weaken any review-filter flow.
+- **Evidence:** first affected run49/59files passed; typecheck two TS2339 errors; real daemon first smoke unknown forBranch; packages/protocol/src/schema.ts:1–30,47–59; affected.log failure output in lane scratch.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** the public schema subset gains genuine nullable unions or array/string bounds.
+- **Source:** assumed — autonomous
+
+## D8: Expire cached review visibility through hosting-owned one-shot events
+- **Question:** how does a quiet sidebar stop hiding a row once its usable review snapshot expires?
+- **Options:** ignore until another event; add sidebar polling; hosting-owned one-shot expiry notification.
+- **Chose:** one earliest-expiry hosting timer, removing expired snapshots and publishing existing reviewCacheChanged events, with replacement/invalidation/disposal cancellation. No provider calls and no new polling loop.
+- **Why:** plugin validation traced All plus Hide passing checks retaining the last renderer projection indefinitely after the cache TTL, while a fresh API projection would retain the row. Cache ownership is the correct expiration boundary.
+- **Evidence:** plugins/quirky.hosting/src/pr-review.ts snapshot TTL/cachedForWorktree; plugins/quirky.worktree/src/useSidebarActivity.ts activity timer; ValidateReviewPlugins P2 finding (source-derived, not claimed runtime reproduction).
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** a normal hosting event can supersede a newer snapshot or an expired row stays hidden.
+- **Source:** assumed — autonomous
+
+## D9: Preserve incoming editor contracts and existing refresh behavior
+- **Question:** does the single roadmap catch-up or hosting refresh require extra scope?
+- **Options:** change unrelated editor/refresh behavior; retain compatible incoming contracts.
+- **Chose:** retain the clean M2 editor merge; scout read all D1–D44 and found no conflicts. Keep existing refresh.ts call semantics; its ordinary forBranch path populates snapshots, but it does not currently pass the private noCache option. No claim that every refresh forces noCache.
+- **Why:** public API/report/freshness/process-isolation constraints align; modifying unrelated fetch pacing is outside the review-filter requirement.
+- **Evidence:** git merge build/roadmap result; ReadIncomingDecisions handoff; hosting refresh.ts callPR; ReviewHosting handoff.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** an acceptance flow cannot populate a current snapshot through normal lookup/refresh.
+- **Source:** assumed — autonomous
+
+## D10: Verify the real daemon and a bounded guarded web campaign
+- **Question:** what actual surface evidence covers the new user flows?
+- **Options:** rely only on controlled API fixtures; exercise real hosting/extras/CLI and built web controls in disposable state.
+- **Chose:** ProcessScope-owned real daemon plus isolated HOME/QUIRKY_HOME and controlled upstream gh executable; normal hosting lookup populated real snapshots, while filter toggles/projections/CLI made no additional gh/auth calls. Web dogfood used the real daemon URL, web/yours/unattended, seven guarded actions.
+- **Why:** the smoke proved combined API visibility and generated CLI flags; RF01/RF02/RF04 visibly proved independent toggles, conflicting-row retention, badge1/3, and Clear restoring All/off/off/badge0.
+- **Evidence:** scratch smoke.ts completed exit0 and removed its home; normal lookup9gh invocations unchanged during projection/CLI; .quirk/using-apps-like-a-user/runs/20261028T004455-f045/report.md: three pass, no findings/gates, no overrides, nothing kept open, no cleanup errors.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** a new UI flow changes control behavior; cache expiry event correctness is independently exercised by the hosting regression.
+- **Source:** assumed — autonomous
+
 ## Progress
 Claimed item; dependencies ready. Brainstorm defaults and combined logic spec self-reviewed. Shared cache-result type and public cache method schema committed before dispatch. Next: three disjoint implementation components (hosting cache, extras API/projection, worktree UI), integrate after barrier, run targeted/affected tests, one Gemini review, web dogfood and real daemon/CLI smoke, catch up once then land. Scratch /tmp/quirky-review-filters-lane7.78cxh2. Never stage inherited untracked paths.

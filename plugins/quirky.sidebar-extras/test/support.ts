@@ -32,7 +32,7 @@ function writeFakeHostingPlugin(directory: string): void {
           readOnly: true,
           params: {
             type: 'object',
-            properties: { worktrees: { type: 'array', items: { type: 'string' }, maxItems: 1000 } },
+            properties: { worktrees: { type: 'array', items: { type: 'string' } } },
             required: ['worktrees'],
             additionalProperties: false
           },
@@ -49,7 +49,7 @@ function writeFakeHostingPlugin(directory: string): void {
           params: {
             type: 'object',
             properties: {
-              workspaces: { type: 'array', items: { type: 'object' } },
+              workspaces: { type: 'array', items: {} },
               error: { type: 'string' }
             },
             required: ['workspaces'],

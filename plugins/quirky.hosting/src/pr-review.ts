@@ -569,34 +569,76 @@ export function createPRLookup(env: HostingEnv): PRLookup {
     fetchedAt: number
     expiresAt: number
   }
-  type StaleSnapshot = { expiresAt: number }
+  type StaleSnapshot = { repoId: string; expiresAt: number }
 
   const resultCache = new Map<string, CachedLookup>()
   const reviewCache = new Map<string, ReviewSnapshot>()
   const staleSnapshots = new Map<string, StaleSnapshot>()
   let cacheGeneration = 0
+  let reviewExpiryTimer: ReturnType<typeof setTimeout> | undefined
+  let reviewExpiryAt: number | undefined
+  let disposed = false
 
   const emitReviewCacheChanged = (worktreeId: string, repoId: string): void => {
     env.context.emit('reviewCacheChanged', { worktreeId, repoId })
   }
-  const markSnapshotStale = (worktreeId: string, expiresAt: number): void => {
+  const markSnapshotStale = (worktreeId: string, repoId: string, expiresAt: number): void => {
     if (expiresAt <= Date.now()) return
     staleSnapshots.delete(worktreeId)
-    staleSnapshots.set(worktreeId, { expiresAt })
+    staleSnapshots.set(worktreeId, { repoId, expiresAt })
     while (staleSnapshots.size > REVIEW_CACHE_CAPACITY) {
       const oldest = staleSnapshots.keys().next().value
       if (oldest === undefined) break
       staleSnapshots.delete(oldest)
     }
   }
+  const scheduleReviewExpiryTimer = (): void => {
+    if (disposed) return
+    let nextExpiry: number | undefined
+    for (const snapshot of reviewCache.values()) {
+      if (nextExpiry === undefined || snapshot.expiresAt < nextExpiry) nextExpiry = snapshot.expiresAt
+    }
+    for (const snapshot of staleSnapshots.values()) {
+      if (nextExpiry === undefined || snapshot.expiresAt < nextExpiry) nextExpiry = snapshot.expiresAt
+    }
+    if (nextExpiry === undefined) {
+      if (reviewExpiryTimer !== undefined) clearTimeout(reviewExpiryTimer)
+      reviewExpiryTimer = undefined
+      reviewExpiryAt = undefined
+      return
+    }
+    if (reviewExpiryTimer !== undefined && reviewExpiryAt === nextExpiry) return
+    if (reviewExpiryTimer !== undefined) clearTimeout(reviewExpiryTimer)
+    reviewExpiryAt = nextExpiry
+    reviewExpiryTimer = setTimeout(() => {
+      reviewExpiryTimer = undefined
+      reviewExpiryAt = undefined
+      if (disposed) return
+      const now = Date.now()
+      for (const [worktreeId, snapshot] of reviewCache) {
+        if (snapshot.expiresAt > now) continue
+        reviewCache.delete(worktreeId)
+        staleSnapshots.delete(worktreeId)
+        emitReviewCacheChanged(worktreeId, snapshot.repoId)
+      }
+      for (const [worktreeId, snapshot] of staleSnapshots) {
+        if (snapshot.expiresAt > now) continue
+        staleSnapshots.delete(worktreeId)
+        emitReviewCacheChanged(worktreeId, snapshot.repoId)
+      }
+      scheduleReviewExpiryTimer()
+    }, Math.max(0, Math.min(nextExpiry - Date.now(), 2_147_000_000)))
+    reviewExpiryTimer.unref()
+  }
 
   const clearReviewCache = (scope: Scope): void => {
     for (const [worktreeId, snapshot] of reviewCache) {
       if (snapshot.repoId !== scope.worktree.repoId) continue
       reviewCache.delete(worktreeId)
-      markSnapshotStale(worktreeId, snapshot.expiresAt)
+      markSnapshotStale(worktreeId, snapshot.repoId, snapshot.expiresAt)
       emitReviewCacheChanged(worktreeId, snapshot.repoId)
     }
+    scheduleReviewExpiryTimer()
   }
 
   const resolveExact = async (scope: Scope, repositories: IdentityValue[], number: number, fresh = false): Promise<PRRead | null> => {
@@ -791,6 +833,7 @@ export function createPRLookup(env: HostingEnv): PRLookup {
       if (oldest === undefined) break
       reviewCache.delete(oldest)
     }
+    scheduleReviewExpiryTimer()
     if (!previous || snapshotSignature(previous) !== snapshotSignature(snapshot)) {
       emitReviewCacheChanged(entry.worktreeId, snapshot.repoId)
     }
@@ -826,12 +869,9 @@ export function createPRLookup(env: HostingEnv): PRLookup {
     if (!snapshot) {
       const staleSnapshot = staleSnapshots.get(worktree.id)
       if (staleSnapshot && staleSnapshot.expiresAt > Date.now()) return { ...ordinaryMiss, stale: true }
-      staleSnapshots.delete(worktree.id)
       return ordinaryMiss
     }
     if (snapshot.expiresAt <= Date.now()) {
-      reviewCache.delete(worktree.id)
-      staleSnapshots.delete(worktree.id)
       return ordinaryMiss
     }
 
@@ -840,7 +880,7 @@ export function createPRLookup(env: HostingEnv): PRLookup {
       configuration = env.configuration(worktree)
     } catch {
       reviewCache.delete(worktree.id)
-      markSnapshotStale(worktree.id, snapshot.expiresAt)
+      markSnapshotStale(worktree.id, snapshot.repoId, snapshot.expiresAt)
       return { ...ordinaryMiss, stale: true, error: 'Hosting configuration could not be verified.' }
     }
     const currentScope = { ...snapshot.scope, worktree }
@@ -859,7 +899,7 @@ export function createPRLookup(env: HostingEnv): PRLookup {
       snapshot.scopeKey === currentScopeKey
     if (!identityMatches) {
       reviewCache.delete(worktree.id)
-      markSnapshotStale(worktree.id, snapshot.expiresAt)
+      markSnapshotStale(worktree.id, snapshot.repoId, snapshot.expiresAt)
       return { ...ordinaryMiss, stale: true }
     }
     return { ...snapshot.entry }
@@ -949,6 +989,10 @@ export function createPRLookup(env: HostingEnv): PRLookup {
     clearReviewCache(scope)
   })
   env.onDispose(() => {
+    disposed = true
+    if (reviewExpiryTimer !== undefined) clearTimeout(reviewExpiryTimer)
+    reviewExpiryTimer = undefined
+    reviewExpiryAt = undefined
     cacheGeneration += 1
     resultCache.clear()
     reviewCache.clear()

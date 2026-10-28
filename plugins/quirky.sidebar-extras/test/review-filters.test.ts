@@ -76,99 +76,105 @@ describe('sidebar review filter projection API', () => {
     const closed = await createWorktree(env.client, project.repo.id, 'closed')
     const success = await createWorktree(env.client, project.repo.id, 'success')
     const failure = await createWorktree(env.client, project.repo.id, 'failure')
-    const pending = await createWorktree(env.client, project.repo.id, 'pending')
-    const neutral = await createWorktree(env.client, project.repo.id, 'neutral')
-    const missing = await createWorktree(env.client, project.repo.id, 'missing')
-    const stale = await createWorktree(env.client, project.repo.id, 'stale')
-    const wrongInstance = await createWorktree(env.client, project.repo.id, 'wrong-instance')
-    const wrongBranch = await createWorktree(env.client, project.repo.id, 'wrong-branch')
-    const inferredMerged = await createWorktree(env.client, project.repo.id, 'inferred-merged')
-    const missingHead = await createWorktree(env.client, project.repo.id, 'missing-head')
-    const emptyHead = await createWorktree(env.client, project.repo.id, 'empty-head')
-    const malformed = await createWorktree(env.client, project.repo.id, 'malformed')
-    const rowError = await createWorktree(env.client, project.repo.id, 'row-error')
+    const probe = await createWorktree(env.client, project.repo.id, 'probe')
     const folder = await createFolderProject(env.client)
+    const client = env.client
 
-    const entries = [
+    const baseEntries = [
       cacheEntry(project.main, cachedReview(project.main, 'merged', 'neutral')),
       cacheEntry(merged, cachedReview(merged, 'merged', 'failure')),
       cacheEntry(closed, cachedReview(closed, 'closed', 'neutral')),
       cacheEntry(success, cachedReview(success, 'open', 'success')),
-      cacheEntry(failure, cachedReview(failure, 'open', 'failure')),
-      cacheEntry(pending, cachedReview(pending, 'draft', 'pending')),
-      cacheEntry(neutral, cachedReview(neutral, 'open', 'neutral')),
-      cacheEntry(missing, null),
-      cacheEntry(stale, null, { stale: true }),
-      cacheEntry(wrongInstance, cachedReview(wrongInstance, 'merged', 'success'), { instanceId: 'replaced-instance' }),
-      cacheEntry(wrongBranch, cachedReview(wrongBranch, 'closed', 'success'), { branch: 'replaced-branch' }),
-      cacheEntry(inferredMerged, cachedReview(inferredMerged, 'merged', 'failure'), { headOid: 'current-local-head' }),
-      cacheEntry(missingHead, cachedReview(missingHead, 'merged', 'success'), { headOid: null }),
-      cacheEntry(emptyHead, cachedReview(emptyHead, 'merged', 'success'), { headOid: '' }),
-      cacheEntry(malformed, { state: 'merged', checksStatus: 'success' }),
-      cacheEntry(rowError, null, { stale: true, error: 'local identity read failed' }),
-      cacheEntry(folder.primary, cachedReview(folder.primary, 'merged', 'success'))
+      cacheEntry(failure, cachedReview(failure, 'open', 'failure'))
     ]
-    await setFakeHostingCache(env.client, entries)
+    const projectProbe = async (entry: Record<string, unknown>) => {
+      await setFakeHostingCache(client, [...baseEntries, entry])
+      return extras<ActivityProjection>(client, 'projection')
+    }
 
-    const off = await extras<ActivityProjection>(env.client, 'projection')
+    await setFakeHostingCache(client, [
+      ...baseEntries,
+      cacheEntry(probe, cachedReview(probe, 'draft', 'pending'))
+    ])
+    const off = await extras<ActivityProjection>(client, 'projection')
     expect(off.reviewHiddenIds).toEqual([])
     expect(off.reviewHiddenCount).toBe(0)
-    expect(await fakeHostingCalls(env.client)).toEqual([])
+    expect(await fakeHostingCalls(client)).toEqual([])
 
-    await extras(env.client, 'activate', { worktree: project.main.id })
-    await extras(env.client, 'set', { hideCompletedReviewWorkspaces: true })
-    const completed = await extras<ActivityProjection>(env.client, 'projection')
-    expect(ids(completed.reviewHiddenIds)).toEqual(ids([project.main.id, merged.id, closed.id, inferredMerged.id]))
+    await extras(client, 'activate', { worktree: project.main.id })
+    await extras(client, 'set', { hideCompletedReviewWorkspaces: true })
+    const completed = await extras<ActivityProjection>(client, 'projection')
+    expect(ids(completed.reviewHiddenIds)).toEqual(ids([project.main.id, merged.id, closed.id]))
     expect(completed.visibleIds).not.toContain(project.main.id)
     expect(completed.visibleIds).not.toContain(merged.id)
     expect(completed.visibleIds).not.toContain(closed.id)
     expect(completed.visibleIds).toContain(success.id)
     expect(completed.visibleIds).toContain(failure.id)
-    expect(completed.visibleIds).toContain(pending.id)
-    expect(completed.visibleIds).toContain(neutral.id)
-    expect(completed.visibleIds).toContain(missing.id)
-    expect(completed.visibleIds).toContain(stale.id)
-    expect(completed.visibleIds).toContain(wrongInstance.id)
-    expect(completed.visibleIds).toContain(wrongBranch.id)
-    expect(completed.visibleIds).not.toContain(inferredMerged.id)
-    expect(completed.visibleIds).toContain(missingHead.id)
-    expect(completed.visibleIds).toContain(emptyHead.id)
-    expect(completed.visibleIds).toContain(malformed.id)
-    expect(completed.visibleIds).toContain(rowError.id)
+    expect(completed.visibleIds).toContain(probe.id)
     expect(completed.visibleIds).toContain(folder.primary.id)
     expect(completed.filterCount).toBe(1)
     expect(completed.hiddenCount).toBe(0)
-    expect(row(completed, stale.id).reviewReason).toBe('unknown')
-    expect(row(completed, malformed.id).reviewReason).toBe('unknown')
-    expect(row(completed, wrongInstance.id).reviewReason).toBe('unknown')
-    expect(row(completed, wrongBranch.id).reviewReason).toBe('unknown')
-    expect(row(completed, inferredMerged.id).reviewReason).toBe('completed')
-    expect(row(completed, missingHead.id).reviewReason).toBe('unknown')
-    expect(row(completed, emptyHead.id).reviewReason).toBe('unknown')
-    expect(row(completed, rowError.id)).toMatchObject({
-      reviewReason: 'unknown',
-      reviewError: 'local identity read failed'
-    })
-    const cacheCall = (await fakeHostingCalls(env.client)).at(-1)!
-    expect(cacheCall.worktrees).toHaveLength(16)
+    const cacheCall = (await fakeHostingCalls(client)).at(-1)!
     expect(cacheCall.worktrees).toContain(project.main.id)
+    expect(cacheCall.worktrees).toContain(probe.id)
     expect(cacheCall.worktrees).not.toContain(folder.primary.id)
     expect(new Set(cacheCall.worktrees).size).toBe(cacheCall.worktrees.length)
 
-    await extras(env.client, 'set', {
+    await extras(client, 'set', {
       hideCompletedReviewWorkspaces: false,
       hidePassingCheckWorkspaces: true
     })
-    const passing = await extras<ActivityProjection>(env.client, 'projection')
+    const passing = await extras<ActivityProjection>(client, 'projection')
     expect(ids(passing.reviewHiddenIds)).toEqual(ids([success.id]))
     expect(passing.visibleIds).toContain(project.main.id)
     expect(passing.visibleIds).toContain(merged.id)
     expect(passing.visibleIds).toContain(closed.id)
     expect(passing.visibleIds).toContain(failure.id)
-    expect(passing.visibleIds).toContain(pending.id)
-    expect(passing.visibleIds).toContain(neutral.id)
+    expect(passing.visibleIds).toContain(probe.id)
     expect(passing.visibleIds).toContain(folder.primary.id)
     expect(passing.filterCount).toBe(1)
+
+    await extras(client, 'set', {
+      hideCompletedReviewWorkspaces: true,
+      hidePassingCheckWorkspaces: true
+    })
+    const neutral = await projectProbe(cacheEntry(probe, cachedReview(probe, 'open', 'neutral')))
+    expect(neutral.visibleIds).toContain(probe.id)
+    expect(neutral.reviewHiddenIds).not.toContain(probe.id)
+
+    const expectProbeUnknown = async (entry: Record<string, unknown>, error?: string) => {
+      const projection = await projectProbe(entry)
+      expect(projection.visibleIds).toContain(probe.id)
+      expect(projection.reviewHiddenIds).not.toContain(probe.id)
+      const projectedProbe = row(projection, probe.id)
+      expect(projectedProbe.reviewReason).toBe('unknown')
+      if (error === undefined) {
+        expect(projectedProbe.reviewError).toBeUndefined()
+      } else {
+        expect(projectedProbe.reviewError).toBe(error)
+      }
+    }
+
+    await expectProbeUnknown(cacheEntry(probe, null))
+    await expectProbeUnknown(cacheEntry(probe, cachedReview(probe, 'merged', 'success'), { stale: true }))
+    await expectProbeUnknown(cacheEntry(probe, cachedReview(probe, 'merged', 'success'), { instanceId: 'replaced-instance' }))
+    await expectProbeUnknown(cacheEntry(probe, cachedReview(probe, 'closed', 'success'), { branch: 'replaced-branch' }))
+    await expectProbeUnknown(cacheEntry(probe, cachedReview(probe, 'merged', 'success'), { headOid: null }))
+    await expectProbeUnknown(cacheEntry(probe, cachedReview(probe, 'merged', 'success'), { headOid: '' }))
+    await expectProbeUnknown(cacheEntry(probe, { state: 'merged', checksStatus: 'success' }))
+    await expectProbeUnknown(
+      cacheEntry(probe, null, { stale: true, error: 'local identity read failed' }),
+      'local identity read failed'
+    )
+
+    const inferredMerged = await projectProbe(cacheEntry(
+      probe,
+      cachedReview(probe, 'merged', 'failure'),
+      { headOid: 'different-local-head' }
+    ))
+    expect(inferredMerged.reviewHiddenIds).toContain(probe.id)
+    expect(inferredMerged.visibleIds).not.toContain(probe.id)
+    expect(row(inferredMerged, probe.id).reviewReason).toBe('completed')
   })
 
   test('unions activity and review visibility while keeping their hidden counts independent', async () => {

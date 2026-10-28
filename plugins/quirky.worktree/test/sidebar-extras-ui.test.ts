@@ -56,6 +56,7 @@ type RendererReport = {
   projects: { id: string; worktrees: { id: string; depth: number }[] }[]
   dialog: { kind: string; worktreeId?: string; withDescendants?: boolean; action?: string; groupId?: string } | null
   appliedFilter: Preferences | null
+  hiddenIds: string[]
   hiddenCount: number
   reviewHiddenIds: string[]
   reviewHiddenCount: number
@@ -1100,7 +1101,7 @@ test('review filters use server preferences, compose with activity, and clear in
   expect(h.world.preferences.hideCompletedReviewWorkspaces).toBe(true)
   expect(checkboxFor('Hide merged/closed reviews')?.checked).toBe(true)
   expect(card('child')).toBeUndefined()
-  expect(childChip('feature')).toBeUndefined()
+  expect(childChip('feature')).toBeFalsy()
   expect(lastReport(h).hiddenIds).toContain('w-child')
   expect(lastReport(h).reviewHiddenIds).toEqual(['w-child'])
   expect(lastReport(h).reviewHiddenCount).toBe(1)

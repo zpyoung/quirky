@@ -247,6 +247,7 @@ describe('sidebar-extras API', () => {
 
   test('hydrates absent and corrupt review flags as disabled for legacy clients', async () => {
     env = await boot()
+    await extras(env.client, 'state')
     const store = new Database(join(env.harness.home, 'plugin-data', 'quirky.sidebar-extras', 'store.db'))
     try {
       const insert = store.query('INSERT INTO preferences (client, value) VALUES (?, ?)')
