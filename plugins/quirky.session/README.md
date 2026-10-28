@@ -41,3 +41,7 @@ Use `quirky session wake <worktree>` to retry partial recovery. A failed session
 Missing or syntactically invalid provider IDs, unsupported providers and unavailable launch folders refuse before a PTY is spawned. The record stays exited/restorable and the host history is retained; inspect it with `quirky terminal history <session>` rather than silently replacing the agent with a shell. Provider IDs continue to come from the existing hook capture path. A syntactically valid but stale provider ID has no separate public existence-check API; the provider CLI remains authoritative when the restore process starts.
 
 The terminal pane Fork command is `command:quirky.terminal/fork-agent-session({ session })`. It accepts the exact pane session ID, refuses shells and stale/mismatched sessions, then calls `quirky.session/resume({ session, fork: true })` and opens only the distinct returned session. The public session resolver remains authoritative for provider support and fork-ID validation.
+
+## Desktop presentation
+
+Session views use shared tabs, menus, prompt dialogs, status dots and controls in both host themes. Detailed status, progress, unread reasons, close actions and shortcuts remain available. The terminal plugin's effective worktree view normally takes precedence; disabling it exposes the session plugin's fallback view without a second registration path. Session Info remains a separate right-bottom tool, with History and Transcript as center views; its accordion state and inspection/actions remain daemon-owned.

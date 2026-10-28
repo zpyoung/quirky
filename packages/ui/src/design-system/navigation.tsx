@@ -121,7 +121,7 @@ export function Tabs({ label, items, value, onChange }: TabsProps) {
   )
 }
 
-export function Menu({ label, items }: MenuProps) {
+export function Menu({ label, trigger, items }: MenuProps) {
   const generatedId = useId()
   const [open, setOpen] = useState(false)
   const [activeIndex, setActiveIndex] = useState(-1)
@@ -202,12 +202,13 @@ export function Menu({ label, items }: MenuProps) {
         ref={triggerRef}
         type="button"
         className="ui-menu__trigger"
+        aria-label={label}
         aria-haspopup="menu"
         aria-expanded={open}
         aria-controls={`${generatedId}-menu`}
         onClick={() => { if (open) setOpen(false); else setOpen(true) }}
       >
-        {label}<span className="ui-menu__trigger-icon" aria-hidden="true">⌄</span>
+        {trigger ?? label}{trigger === undefined && <span className="ui-menu__trigger-icon" aria-hidden="true">⌄</span>}
       </button>
       {open && (
         <ul ref={menuRef} id={`${generatedId}-menu`} className="ui-menu__list" role="menu" aria-label={label} tabIndex={-1}>
@@ -217,7 +218,8 @@ export function Menu({ label, items }: MenuProps) {
                 ref={(element) => { itemRefs.current[index] = element }}
                 type="button"
                 className={classNames('ui-menu__item', item.destructive && 'ui-menu__item--destructive')}
-                role="menuitem"
+                role={item.checked === undefined ? 'menuitem' : 'menuitemcheckbox'}
+                aria-checked={item.checked}
                 aria-disabled={item.disabled || undefined}
                 disabled={item.disabled}
                 tabIndex={!item.disabled && index === activeIndex ? 0 : -1}
@@ -228,7 +230,7 @@ export function Menu({ label, items }: MenuProps) {
                 }}
                 onKeyDown={(event) => onItemKeyDown(event, index)}
               >
-                {item.label}
+                {item.checked !== undefined && <span aria-hidden="true">{item.checked ? '✓ ' : '　'}</span>}{item.label}
               </button>
             </li>
           ))}

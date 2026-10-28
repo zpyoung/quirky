@@ -178,5 +178,16 @@ Recovery verification: merge541e682f passed fresh `bun run typecheck && bun pack
 - **Revisit if:** existing end-phase or final visual-review acceptance finds a regression
 - **Source:** assumed — autonomous
 
+## D17: Converge rich menu geometry and preserve all shared interaction regressions
+- **Question:** the third actual controller conflict brings Agents and Git shared presentation changes
+- **Options:** discard either menu authority or test family; retain duplicate placement effects; combine the canonical owner and additive feature metadata
+- **Chose:** required recovery from roadmapffe0a5f197faa7951f4e749c958633be1b737523. Read ui-restyle-agents D1–D15/Progress and ui-restyle-git D1–D18/Progress completely. Union all18plugin enrollments and both shared layout blocks with their own closing braces. Keep Git menu headings/title/icon/detail/badge/groups, disabled hover behavior and capture-phase outside dismissal, plus terminal swatches. Remove duplicate title typing. One root placement effect combines Git viewport-height fitting with measured clamp/ResizeObserver; nested submenu flip/fit remains Git-owned. Preserve wide/top-stack Dialog regressions and new semantic ContextMenu/Menu-checkbox/Popover interactions; remove only field/decorative-copy assertions. Existing test implementer explicitly owned only the parent shared test file; no worker checks/commits.
+- **Why:** metadata and terminal color content are independent; losing either would change feature behavior. Two simultaneous DOM/state placement authorities would fight after a merge. Additive CSS/test conflicts also require explicit closure rather than blind concatenation. No product state, API, shortcut, linter exemption or timeout changes are needed.
+- **Evidence:** third canonical refusal exit1/1.18s; exact four conflicted files plus semantic duplicate title/effect inspection; two complete incoming logs; delegated one-file stopped barrier and no-conflicts receipt
+- **Reversibility:** medium
+- **Confidence:** high for composition; current compiler/build and narrow menu proof remain next
+- **Revisit if:** the composed typecheck or actual menu root/submenu boundary fails
+- **Source:** locked by docs/loop/LOOP.md failed-land retry procedure
+
 ## Progress
-Ready for authoritative land: recovery6b5b15ad preserves all shared fields, refs, progress, wide/fixed-footer/top-stack dialog behavior and semantic tests. Fresh full typecheck/UIlint+UI build passed30.94s, and final current-source menu/input/nested-trust/dark/light proof is D16. Every worker/check finished; all four component worktrees removed, browser attachments released and exact owned stable browser service stopped. Final private daemon/PTY scope exited0 with homeRemoved:true. Commit this receipt, detach and retry canonical queue land. Preserve earlier validation/native/isolation qualifications, add no verification follow-up item, and remove owned scratch only after actual success.
+Third required controller recovery D17 is resolved; no worker is active. Commit the composed metadata/layout/test/enforcement merge, rerun current typecheck/UI build and narrowly exercise the current canonical menu through the stable testing shell, then detach/retry canonical land. Earlier final-source wide/nested-trust and theme proof remains D16 with its exact source boundary; no suite, native or model-score claim. All previous owned runtime scopes remain stopped.

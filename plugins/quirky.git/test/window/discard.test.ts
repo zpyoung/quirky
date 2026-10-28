@@ -21,9 +21,9 @@ async function bootWithChanges(): Promise<World> {
   return w
 }
 
-const dialogBody = (dialog: HTMLElement) => text(q('.dialog-message', dialog))
+const dialogBody = (dialog: HTMLElement) => text(q('p', dialog))
 
-test('SC-23: each discard dialog has Orca\'s text, focuses its confirm button and Cancel changes nothing', async () => {
+test('SC-23: each discard dialog has Orca\'s text, focuses within the shared modal, and Cancel changes nothing', async () => {
   const w = await bootWithChanges()
   const cases = [
     { button: 'Delete untracked file notes.txt', title: 'Delete "notes.txt"?', body: 'This will permanently delete this file. This cannot be undone.', confirm: 'Delete' },
@@ -57,7 +57,7 @@ test('SC-23: each discard dialog has Orca\'s text, focuses its confirm button an
     const dialog = await w.win.waitFor(() => dialogNamed(c.title))
     expect(dialogBody(dialog)).toBe(c.body)
     const confirm = buttonText(c.confirm, dialog)!
-    expect(document.activeElement).toBe(confirm)
+    expect(document.activeElement).toBe(byLabel('Close dialog', dialog))
     await click(buttonText('Cancel', dialog))
     await w.win.waitFor(() => !dialogNamed(c.title))
   }

@@ -7,7 +7,8 @@
     "./styles.css": "./src/design-system/styles.css",
     "./selection-overlay": "./src/design-system/selection-overlay.ts",
     "./terminal-theme": "./src/terminal-theme.ts",
-    "./editor-print": "./src/editor-print.ts"
+    "./editor-print": "./src/editor-print.ts",
+    "./editor-theme": "./src/editor-theme.ts"
   },
   "type": "module",
   "scripts": {

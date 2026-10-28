@@ -1,10 +1,11 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from 'bun:test'
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
-import { act, createElement as h, type ReactNode } from 'react'
+import { act, createElement as h, createRef, useState, type ReactNode } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import {
   Badge,
   Button,
+  ContextMenu,
   Dialog,
   EmptyState,
   FormRow,
@@ -12,6 +13,7 @@ import {
   InlineAgentCard,
   ListRow,
   Menu,
+  Popover,
   SectionHeader,
   StatusDot,
   Tabs,
@@ -298,6 +300,75 @@ describe('shared graphite components', () => {
     expect(document.activeElement).not.toBe(container.querySelector('#submit-create'))
     await key(document.activeElement!, 'Escape')
     expect(calls).toEqual(['outer'])
+  })
+
+  test('context menus skip headings and disabled rows before selecting an enabled nested item', async () => {
+    const actions: string[] = []
+    function Example() {
+      const [open, setOpen] = useState(true)
+      return open ? <ContextMenu x={0} y={0} label="File actions" onClose={() => setOpen(false)} items={[
+        { label: 'Destinations', heading: true },
+        { label: 'Unavailable', enabled: false, onSelect: () => actions.push('disabled') },
+        { label: 'Send to', submenu: [
+          { label: 'Unavailable target', enabled: false, onSelect: () => actions.push('disabled target') },
+          { label: 'Agent', onSelect: () => actions.push('agent') },
+        ] },
+      ]} /> : null
+    }
+    await render(<Example />)
+    const parent = document.querySelector<HTMLElement>('[role="menu"][aria-label="File actions"]')!
+    expect(parent.querySelector('[role="presentation"]')).not.toBeNull()
+    expect(parent.querySelector('[role="menuitem"][aria-disabled="true"]')).not.toBeNull()
+
+    await key(parent, 'ArrowDown')
+    await key(parent, 'ArrowRight')
+    const child = document.querySelector<HTMLElement>('[role="menu"][aria-label="Send to"]')!
+    expect(child.querySelector('[role="menuitem"][aria-disabled="true"]')).not.toBeNull()
+    await key(child, 'ArrowDown')
+    await key(child, 'Enter')
+    expect(actions).toEqual(['agent'])
+    expect(document.querySelector('[role="menu"]')).toBeNull()
+  })
+
+  test('menu checkbox actions expose current state and restore trigger focus', async () => {
+    function Example() {
+      const [checked, setChecked] = useState(false)
+      return <Menu label="Diff options" items={[
+        { id: 'wrap', label: 'Word Wrap', checked, onAction: () => setChecked((value) => !value) },
+        { id: 'copy', label: 'Copy', onAction: () => {} },
+      ]} />
+    }
+    await render(<Example />)
+    const trigger = container.querySelector('button[aria-haspopup="menu"]')!
+    await click(trigger)
+    expect(container.querySelector('[role="menuitemcheckbox"]')?.getAttribute('aria-checked')).toBe('false')
+    expect(container.querySelector('[role="menuitem"]')).not.toBeNull()
+    await click(container.querySelector('[role="menuitemcheckbox"]')!)
+    expect(document.activeElement).toBe(trigger)
+    await click(trigger)
+    expect(container.querySelector('[role="menuitemcheckbox"]')?.getAttribute('aria-checked')).toBe('true')
+  })
+
+  test('popover interaction stays nonmodal and outside interaction dismisses it', async () => {
+    const anchor = createRef<HTMLButtonElement>()
+    const calls: string[] = []
+    function Example() {
+      const [open, setOpen] = useState(true)
+      return <><button ref={anchor}>Notes</button><button>Outside</button>
+        <Popover open={open} label="AI notes" anchor={anchor} onClose={() => { calls.push('close'); setOpen(false) }}>
+          <Button onClick={() => calls.push('copy')}>Copy</Button>
+        </Popover></>
+    }
+    await render(<Example />)
+    const dialog = document.querySelector('[role="dialog"][aria-label="AI notes"]')!
+    expect(dialog.hasAttribute('aria-modal')).toBe(false)
+    await act(async () => { dialog.dispatchEvent(new Event('pointerdown', { bubbles: true })) })
+    await click(dialog.querySelector('button')!)
+    expect(calls).toEqual(['copy'])
+    const outside = [...container.querySelectorAll('button')].find((button) => button.textContent === 'Outside')!
+    await act(async () => { outside.dispatchEvent(new Event('pointerdown', { bubbles: true })) })
+    expect(calls).toEqual(['copy', 'close'])
+    expect(document.querySelector('[role="dialog"][aria-label="AI notes"]')).toBeNull()
   })
 
   test('toasts dismiss on expiration and expiration never invokes the action', async () => {

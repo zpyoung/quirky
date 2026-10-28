@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Session, UiPluginContext } from '@quirky/protocol'
+import { Button, EmptyState, ListRow, TextField, ToolPanelFrame } from '@quirky/ui'
 import { formatTimestamp } from './format'
 
 type Props = { context: UiPluginContext; input?: unknown }
-const VIEW_STYLE = { display: 'flex', flexDirection: 'column', flex: '1', minHeight: '0', minWidth: '0', padding: '1rem', gap: '0.75rem', color: 'var(--text, inherit)' } as const
-const BUTTON_STYLE = { font: 'inherit', color: 'inherit', cursor: 'pointer' } as const
-
+const VIEW_STYLE = { display: 'flex', flexDirection: 'column', flex: '1', minHeight: '0', minWidth: '0', overflowY: 'auto', overflowWrap: 'anywhere' } as const
+const CONTENT_STYLE = { display: 'flex', flexDirection: 'column', gap: 'var(--ui-space-12)', minWidth: '0', overflowWrap: 'anywhere' } as const
+const ACTIONS_STYLE = { display: 'flex', flexWrap: 'wrap', gap: 'var(--ui-space-4)', minWidth: '0' } as const
 function initialQuery(input: unknown): string {
   if (input === null || typeof input !== 'object' || Array.isArray(input) || !('query' in input)) return ''
   const query = input.query
@@ -89,35 +90,47 @@ export function HistoryView({ context, input }: Props) {
 
   return (
     <main aria-label="Session history" style={VIEW_STYLE}>
-      <header>
-        <h1 style={{ margin: '0 0 0.65rem', fontSize: '1.1rem' }}>Session history</h1>
-        <label style={{ display: 'grid', gap: '0.3rem' }}>
-          <span>Search sessions</span>
-          <input aria-label="Search session history" type="search" value={query} onChange={(event) => setQuery(event.currentTarget.value)} />
-        </label>
-      </header>
-      {loading && <p role="status">Searching session history…</p>}
-      {error && <div role="alert"><p>Could not load session history: {error}</p><button type="button" aria-label="Retry" style={BUTTON_STYLE} onClick={() => void load(query)}>Retry</button></div>}
-      {!loading && !error && records.length === 0 && <p role="status">No matching sessions.</p>}
-      {!loading && !error && records.length > 0 && <ol aria-label="Session results" style={{ overflowY: 'auto', minHeight: '0', margin: 0, paddingLeft: '1.5rem' }}>
-        {records.map((record) => <li key={record.id} data-session={record.id} style={{ padding: '0.6rem 0', borderBottom: '1px solid var(--border, #2b2f3a)' }}>
-          <article>
-            <h2 style={{ margin: '0 0 0.25rem', fontSize: '0.95rem', overflowWrap: 'anywhere' }}>{record.title || record.agent}</h2>
-            <p style={{ margin: '0.2rem 0', color: 'var(--muted, #8a909e)' }}>{record.agent} · {record.status}{formatTimestamp(record.lastActivityAt) ? ` · ${formatTimestamp(record.lastActivityAt)}` : ''}</p>
-            <p style={{ margin: '0.2rem 0', overflowWrap: 'anywhere' }}>Quirky ID: {record.id}</p>
-            {record.providerSession?.id && <p style={{ margin: '0.2rem 0', overflowWrap: 'anywhere' }}>Provider ID: {record.providerSession.id}</p>}
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.45rem', paddingTop: '0.45rem' }}>
-              <button type="button" aria-label={`Resume ${record.id}`} style={BUTTON_STYLE} onClick={() => void runAction('resume', record.id)}>Resume</button>
-              <button type="button" aria-label={`Fork ${record.id}`} style={BUTTON_STYLE} onClick={() => void runAction('fork', record.id)}>Fork</button>
-              <button type="button" aria-label={`Copy resume command ${record.id}`} style={BUTTON_STYLE} onClick={() => void runAction('copy-resume-command', record.id)}>{copied === record.id ? 'Copied' : 'Copy resume command'}</button>
-            </div>
-            {(['resume', 'fork', 'copy-resume-command'] as const).map((name) => {
-              const rowError = actionErrors[`${record.id}:${name}`]
-              return rowError ? <p key={name} role="alert">{rowError}</p> : null
-            })}
-          </article>
-        </li>)}
-      </ol>}
+      <ToolPanelFrame title="Session history">
+        <div style={CONTENT_STYLE}>
+          <TextField
+            id="session-history-search"
+            aria-label="Search session history"
+            label="Search sessions"
+            type="search"
+            value={query}
+            onChange={(event) => setQuery(event.currentTarget.value)}
+          />
+          {loading && <p role="status">Searching session history…</p>}
+          {error && <div role="alert" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--ui-space-8)', minWidth: '0', overflowWrap: 'anywhere' }}>
+            <p>Could not load session history: {error}</p>
+            <Button aria-label="Retry" onClick={() => void load(query)}>Retry</Button>
+          </div>}
+          {!loading && !error && records.length === 0 && <EmptyState message="No matching sessions." />}
+          {!loading && !error && records.length > 0 && <ol aria-label="Session results" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--ui-space-8)', listStyle: 'none', margin: '0', minWidth: '0', padding: '0' }}>
+            {records.map((record) => <li key={record.id} data-session={record.id} style={{ minWidth: '0' }}>
+              <article style={{ display: 'flex', flexDirection: 'column', gap: 'var(--ui-space-4)', minWidth: '0' }}>
+                <ListRow
+                  title={record.title || record.agent}
+                  description={<span style={{ display: 'flex', flexDirection: 'column', gap: 'var(--ui-space-2)', minWidth: '0', overflowWrap: 'anywhere' }}>
+                    <span>{record.agent} · {record.status}{formatTimestamp(record.lastActivityAt) ? ` · ${formatTimestamp(record.lastActivityAt)}` : ''}</span>
+                    <span>Quirky ID: {record.id}</span>
+                    {record.providerSession?.id && <span>Provider ID: {record.providerSession.id}</span>}
+                  </span>}
+                />
+                <div style={ACTIONS_STYLE}>
+                  <Button aria-label={`Resume ${record.id}`} variant="primary" onClick={() => void runAction('resume', record.id)}>Resume</Button>
+                  <Button aria-label={`Fork ${record.id}`} onClick={() => void runAction('fork', record.id)}>Fork</Button>
+                  <Button aria-label={`Copy resume command ${record.id}`} onClick={() => void runAction('copy-resume-command', record.id)}>{copied === record.id ? 'Copied' : 'Copy resume command'}</Button>
+                </div>
+                {(['resume', 'fork', 'copy-resume-command'] as const).map((name) => {
+                  const rowError = actionErrors[`${record.id}:${name}`]
+                  return rowError ? <p key={name} role="alert" style={{ overflowWrap: 'anywhere' }}>{rowError}</p> : null
+                })}
+              </article>
+            </li>)}
+          </ol>}
+        </div>
+      </ToolPanelFrame>
     </main>
   )
 }

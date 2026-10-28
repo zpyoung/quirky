@@ -14,6 +14,12 @@ export type ContextMenuItem = {
   checked?: boolean
   submenu?: ContextMenuItem[]
   onSelect?: () => void
+  /** Noninteractive group caption; unlike a separator this carries readable content. */
+  heading?: boolean
+  icon?: ReactNode
+  detail?: string
+  badge?: string | number
+  separatorBefore?: boolean
 }
 
 export type ContextMenuListProps = {
