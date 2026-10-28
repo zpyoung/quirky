@@ -211,7 +211,8 @@ async function resolveWorkspace(
 
 async function newCommand(context: UiPluginContext, raw: unknown): Promise<{ opened: true; workspace: string; group?: string }> {
   const args = argsOf(raw)
-  onlyKeys(args, ['workspace', 'group'], 'new')
+  onlyKeys(args, ['workspace', 'group', 'worktree'], 'new')
+  void optionalText(args.worktree, 'worktree')
   assertSetupReplaceable()
   const target = await resolveWorkspace(context, args.workspace, args.group)
   assertSetupReplaceable()

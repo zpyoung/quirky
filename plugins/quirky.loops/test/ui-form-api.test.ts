@@ -221,7 +221,11 @@ async function startFixture(): Promise<void> {
 }
 
 async function openSetup(workspaceId = currentRig().worktree.id): Promise<Record<string, unknown>> {
-  await uiCommand('new', { workspace: workspaceId, ...(workspaceId === currentRig().worktree.id && activeGroupId ? { group: activeGroupId } : {}) })
+  await uiCommand('new', {
+    worktree: currentRig().worktree.id,
+    workspace: workspaceId,
+    ...(workspaceId === currentRig().worktree.id && activeGroupId ? { group: activeGroupId } : {})
+  })
   return waitForSetup()
 }
 
