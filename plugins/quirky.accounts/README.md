@@ -15,3 +15,11 @@ orca accounts prepare-provider-env --agent codex --cwd "$PWD" --home-overrides '
 ## Native sign-in links
 
 Codex sign-in's **Open** button sends the displayed, approved authorize URL through the public `quirky.terminal/openExternal` system-handler API rather than a webview popup. While the handoff is pending, **Copy link** and **Cancel** remain available. A failed handoff shows a recoverable error; retrying does not restart sign-in or change the URL.
+
+If cancelling sign-in fails, the pending login remains visible and status polling continues. A later native sign-in completion can still add the account; a successful cancellation or a superseding login cannot be undone by a delayed status response.
+
+## Account-switch restart eligibility
+
+Usage and pane restart controls apply only to terminal sessions. Background and structured runners keep their recorded account identity, but are not offered a terminal restart they cannot execute. Their original account home remains available through `quirky.accounts/sessionHome`; selecting a new account does not relabel a running process.
+
+Codex continuation carries the accumulated native rollout into the selected managed home before replacing the old terminal. Removing an earlier account after a successful continuation does not make a later account depend on that removed home's transcript path.
