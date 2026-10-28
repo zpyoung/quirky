@@ -16,6 +16,6 @@ test('an inherited property is not a capability grant, while an explicit same-na
   const snapshot: Snapshot = { freshness:'live',contentIdentity:'revision',observedAtMs:0,world:null }
   const input = { enrollment,action,snapshot,journal:[],budget:{ activeMs:0,turns:0,exhausted:null } }
   expect(gateAction(input)).toEqual({ verdict:'hold',reason:'capability-off' })
-  enrollment.capabilities = { constructor:'on' }
+  enrollment.capabilities = { constructor: 'on' as const }
   expect(gateAction(input)).toEqual({ verdict:'allow' })
 })

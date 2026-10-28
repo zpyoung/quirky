@@ -12,6 +12,7 @@ import type {
   DispatchId,
   GroupAddress,
   HeartbeatResult,
+  InboxMessageRow,
   InboxParams,
   InboxResult,
   JsonValue,
@@ -39,6 +40,7 @@ import type {
   WorkerReportResult
 } from './contracts'
 import { OrchestrationCore } from './core'
+import type { DurableMutationOptions } from './worker-integration'
 import { fail } from './errors'
 import { targetIdentity, verifyCaller } from './identity'
 import type { SessionIdentity } from './runtime-contracts'
@@ -126,7 +128,7 @@ type QuestionRecord = {
 
 type RoutedTarget = { mailbox: MailboxAddress; runId: RunId; warning?: string }
 type SenderContext = {
-  sessionId: string | null
+  sessionId: string
   runId: RunId | null
   coordinatorRunId: RunId | null
   dispatchId: string | null
@@ -150,14 +152,9 @@ type CheckCoreResult = CheckObservationResult & {
   deliveryId: DeliveryId | null
   replayed: boolean
 }
-type ConsumeCheckParams = MutationRequest & {
-  runId?: RunId
-  ackDeliveryId?: DeliveryId
-  wait?: boolean
-  timeoutMs?: number
-  types?: readonly MessageType[]
-  format?: boolean
-}
+type ConsumeCheckParams =
+  | Extract<CheckParams, { mode: 'consume' }>
+  | (ServiceCheckParams & { format?: boolean })
 type ReplyValue =
   | {
       kind: 'question_answer'
@@ -392,8 +389,9 @@ export class OrchestrationMessages implements MessageArrivalPort {
     let sender: SenderContext | null = null
     let targets: RoutedTarget[] | null = null
     const beforeAccept = async (): Promise<void> => {
-      sender = this.senderContext(verified.evidence, type === 'worker_done' || type === 'heartbeat')
-      targets = await this.resolveTargets(input, type, sender, verified.evidence, payload)
+      const resolvedSender = this.senderContext(verified.evidence, type === 'worker_done' || type === 'heartbeat')
+      sender = resolvedSender
+      targets = await this.resolveTargets(input, type, resolvedSender, verified.evidence, payload)
     }
     const params = input as unknown as MutationRequest & Record<string, unknown>
     const result = await this.core.mutate('send', params, verified.evidence, () => {
@@ -547,6 +545,8 @@ export class OrchestrationMessages implements MessageArrivalPort {
       }
     }
 
+    if (input.mode !== 'consume') fail(this.context, 'invalid_argument', 'consume check mode is required')
+
     const verified = await verifyCaller(this.context, caller, input)
     const connection = this.requireConnection(caller)
     return this.consumeCheck(input, verified.evidence, connection)
@@ -582,7 +582,30 @@ export class OrchestrationMessages implements MessageArrivalPort {
     }
     let resolvedSnapshot: ConsumerMailbox | null = null
     const wait = input.wait === true
-    return this.core.mutate(
+    const options: DurableMutationOptions<CheckCoreResult> | undefined = wait
+      ? {
+          acceptedCheckpoint: (accepted) => {
+            const resolved = resolvedSnapshot
+            if (!resolved) fail(this.context, 'lifecycle_conflict', 'check accepted before its mailbox was resolved')
+            return acceptedCheck(resolved.mailbox, resolved.runId, resolved.generation, accepted.acknowledged)
+          },
+          afterCommit: async (accepted) => {
+            const resolved = resolvedSnapshot
+            if (!resolved) fail(this.context, 'lifecycle_conflict', 'check lost its mailbox after acceptance')
+            if (accepted.deliveryId !== null) return accepted
+            return this.waitForMailbox(
+              accepted,
+              resolved,
+              input.types,
+              timeoutMs,
+              connection,
+              input.format,
+              caller
+            )
+          }
+        }
+      : undefined
+    return this.core.mutate<CheckCoreResult>(
       'check',
       input,
       caller,
@@ -596,7 +619,7 @@ export class OrchestrationMessages implements MessageArrivalPort {
         const batch = this.nextDelivery(resolved.mailbox, resolved.generation, resolved.runId, wait ? input.types : undefined)
         const messages = batch ? batch.messages : []
         return {
-          mode: 'consume' as const,
+          mode: 'consume',
           runId: resolved.runId,
           messages,
           count: messages.length,
@@ -609,29 +632,7 @@ export class OrchestrationMessages implements MessageArrivalPort {
           ...(input.format ? { formatted: messages.map(formatMessage).join('\\n\\n') } : {})
         }
       },
-      wait
-        ? {
-            acceptedCheckpoint: (accepted) => {
-              const resolved = resolvedSnapshot
-              if (!resolved) fail(this.context, 'lifecycle_conflict', 'check accepted before its mailbox was resolved')
-              return acceptedCheck(resolved.mailbox, resolved.runId, resolved.generation, accepted.acknowledged)
-            },
-            afterCommit: async (accepted) => {
-              const resolved = resolvedSnapshot
-              if (!resolved) fail(this.context, 'lifecycle_conflict', 'check lost its mailbox after acceptance')
-              if (accepted.deliveryId !== null) return accepted
-              return this.waitForMailbox(
-                accepted,
-                resolved,
-                input.types,
-                timeoutMs,
-                connection,
-                input.format,
-                caller
-              )
-            }
-          }
-        : undefined
+      options
     )
   }
 
@@ -1023,26 +1024,6 @@ export class OrchestrationMessages implements MessageArrivalPort {
     return targets
   }
 
-  private senderContext(caller: RuntimeCallerEvidence): SenderContext {
-    const sessionId = caller.runtimeSessionId
-    const bound = this.core.getBoundRun(sessionId)
-    const active = this.core.store.get<{ id: string; run_id: string }>(
-      `SELECT id, run_id FROM dispatches WHERE assignee_session_id = ? AND status IN ('pending', 'dispatched') ORDER BY depth DESC, created_at DESC, id DESC LIMIT 1`,
-      sessionId
-    )
-    const sender: MailboxAddress = bound
-      ? { kind: 'run', runId: bound.id }
-      : active
-        ? { kind: 'dispatch', dispatchId: active.id as MessageRow['sender'] extends { kind: 'dispatch'; dispatchId: infer D } ? D : never }
-        : { kind: 'session', sessionId }
-    return {
-      sessionId,
-      runId: bound?.id ?? (active?.run_id as RunId | undefined) ?? null,
-      coordinatorRunId: bound?.id ?? null,
-      dispatchId: active?.id ?? null,
-      sender
-    }
-  }
 
   private messageSender(type: MessageType, payload: JsonValue | null, sender: SenderContext): MailboxAddress {
     if ((type === 'worker_done' || type === 'heartbeat') && payload !== null && typeof payload === 'object' && !Array.isArray(payload)) {
@@ -1473,6 +1454,7 @@ export class OrchestrationMessages implements MessageArrivalPort {
       runId: sender.runId ?? unboundRunId,
       fromSessionId: caller.runtimeSessionId,
       sender: sender.sender,
+      mailbox: target.mailbox,
       subject: `Re: ${original.subject}`,
       body: input.body,
       type: 'status',

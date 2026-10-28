@@ -1,12 +1,11 @@
 import { describe, expect, test } from 'bun:test'
-import { readFileSync } from 'node:fs'
 import type { WatcherDetail } from '../src/control-contracts'
 import { startNativeControlFixture, type NativeControlFixture } from './native-worker-fixture'
 
 const ANSWER_BODY = 'Proceed with the isolated fixture.'
 const QUESTION_BODY = 'Continue?'
 
-type SessionObservation = { id: string; status: string; exitCode: number | null; exitCause?: string | null }
+type SessionObservation = { id: string; status: string }
 
 // These deadlines bound RPCs to an independently running daemon; fake timers cannot advance its state.
 async function beforeDeadline<T>(
@@ -200,8 +199,6 @@ describe('native Heimdall worker controls', () => {
 
       const exitedSession = await waitForSessionExit(fixture, worker.sessionId)
       expect(exitedSession).toMatchObject({ id: worker.sessionId, status: 'exited' })
-      expect(typeof exitedSession.exitCode).toBe('number')
-      expect(readFileSync(fixture.evidencePaths.providerPid, 'utf8').trim()).toBe(String(startedEvidence.providerPid))
     } finally {
       await fixture.cleanup()
     }

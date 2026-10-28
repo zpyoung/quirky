@@ -1,7 +1,7 @@
-import type { DispatchId, DispatchRow, DispatchStatus, DispatchTransitionInput, JsonValue, ResetMode, RuntimeCallerEvidence, TaskRow, UtcTimestamp, WorkerRow, WorkerState, WorkerTransitionInput } from '../contracts'
+import type { DispatchId, DispatchRow, DispatchStatus, DispatchTransitionInput, JsonValue, MutationCheckpoint, ResetMode, RuntimeCallerEvidence, TaskRow, UtcTimestamp, WorkerRow, WorkerState, WorkerTransitionInput } from '../contracts'
 import type { PluginStore } from '@quirky/protocol'
 import type {
-  CoordinatorEvidence, TerminalResource, WorkerArchive, WorkerControlParams, WorkerControlResult, WorkerCore,
+  CoordinatorEvidence, ServiceCoordinatorEvidence, TerminalResource, WorkerArchive, WorkerControlParams, WorkerControlResult, WorkerCore,
   WorkerLifecycle, WorkerObservation, WorkerOutput, WorkerRecord, WorkerRepository, WorkerRuntime,
   WorkerUserInputParams
 } from '../worker-contracts'
@@ -36,6 +36,10 @@ function isExactCaller(record: WorkerRecord, dispatch: DispatchRow, caller: Runt
     caller.runtimeSessionId === dispatch.assigneeSessionId &&
     caller.attestation.runtimeEpoch === record.processRuntimeEpoch &&
     caller.attestation.processIncarnation === record.processIncarnation
+}
+
+function isServiceCoordinator(caller: CoordinatorEvidence): caller is ServiceCoordinatorEvidence {
+  return 'kind' in caller && caller.kind === 'service'
 }
 function observationEvidence(observation: WorkerObservation): JsonValue {
   return {
@@ -127,6 +131,16 @@ export function createWorkerLifecycle(
     }
     core.requireCoordinator(caller, dispatch.runId)
   }
+  const acceptedWorkerControlCheckpoint = (dispatchId: DispatchId): MutationCheckpoint => {
+    const dispatch = core.getDispatch(dispatchId)
+    return {
+      state: 'accepted',
+      accepted: true,
+      runId: dispatch.runId,
+      taskId: dispatch.taskId,
+      dispatchId: dispatch.id,
+    }
+  }
 
   const updateState = (dispatchId: DispatchId, expectedState: WorkerState, nextState: WorkerState): WorkerRecord => {
     if (!canChangeWorkerState(expectedState, nextState)) {
@@ -175,6 +189,17 @@ export function createWorkerLifecycle(
       ? 'dispatched'
       : blockedWhenAlone ? 'blocked' : 'ready'
     if (task.status !== nextState) core.transitionTask({ taskId: task.id, expectedState: task.status, nextState, at: utcNow() })
+  }
+
+  const setTaskAfterStopFence = (dispatch: DispatchRow): void => {
+    const task = core.getTask(dispatch.taskId)
+    const nextState = otherActiveAttempt(task.id, dispatch.id) ? 'dispatched' : 'blocked'
+    if (task.status === nextState) return
+    if (nextState === 'blocked') {
+      core.blockTaskForWorkerStop({ taskId: task.id, dispatchId: dispatch.id, at: utcNow() })
+    } else {
+      core.transitionTask({ taskId: task.id, expectedState: task.status, nextState, at: utcNow() })
+    }
   }
 
   const setControlDispatchFence = (dispatch: DispatchRow, reason: 'stopped' | 'abandoned'): void => {
@@ -502,7 +527,7 @@ export function createWorkerLifecycle(
       const dispatch = core.getDispatch(params.dispatchId)
       authorizeControl(params, caller, dispatch)
       const resource = repo.resource(params.dispatchId)
-      const serviceCaller = 'kind' in caller && caller.kind === 'service'
+      const serviceCaller = isServiceCoordinator(caller)
       if (serviceCaller && !params.expectedIdentity) {
         throw core.context.error('invalid-params', 'Service worker-stop requires the exact expected terminal identity.')
       }
@@ -554,7 +579,7 @@ export function createWorkerLifecycle(
       } else if (current.state === 'stop_unknown') {
         current = repo.update(params.dispatchId, { runtimeEpoch: runtime.epoch, stage: 'stopping', updatedAt: utcNow() }, 'stop_unknown')
       }
-      setTaskAfterFence(dispatch, true)
+      setTaskAfterStopFence(dispatch)
       return {
         shouldAttempt: true,
         result: controlResult(params.dispatchId, current.state, 'unknown')
@@ -708,7 +733,7 @@ export function createWorkerLifecycle(
       updateState(params.dispatchId, worker.state, 'abandoned')
       updateStage(params.dispatchId, 'abandoned', {
         stage: 'abandoned',
-        lastError: `${worker.lastError ? `${worker.lastError}\\n` : ''}Abandoned by ${caller.kind === 'service' ? caller.pluginId : caller.callerSessionId}.`
+        lastError: `${worker.lastError ? `${worker.lastError}\\n` : ''}Abandoned by ${isServiceCoordinator(caller) ? caller.pluginId : caller.callerSessionId}.`
       })
       setControlDispatchFence(dispatch, 'abandoned')
       const resource = repo.resource(params.dispatchId)
@@ -937,7 +962,7 @@ export function createWorkerLifecycle(
         return { takenOver: true }
       }
       if (resource.ownershipState !== 'owned' || resource.releaseState === 'releasing' ||
-        resource.releaseState === 'released' || resource.ownershipState === 'released') return { takenOver: false }
+        resource.releaseState === 'released') return { takenOver: false }
       repo.putResource({
         ...resource,
         ownershipState: 'user_owned',
@@ -970,6 +995,7 @@ export function createWorkerLifecycle(
         return prepared.result
       },
       {
+        acceptedCheckpoint: accepted => acceptedWorkerControlCheckpoint(accepted.dispatchId),
         afterCommit: (accepted) => attempt.shouldAttempt ? coalesceStopEffect(params.dispatchId) : accepted
       }
     ))
@@ -999,6 +1025,7 @@ export function createWorkerLifecycle(
           : controlResult(params.dispatchId, 'release_pending', 'none')
       },
       {
+        acceptedCheckpoint: accepted => acceptedWorkerControlCheckpoint(accepted.dispatchId),
         afterCommit: (accepted) => {
           const preparation = attempt.preparation
           if (!preparation) return accepted

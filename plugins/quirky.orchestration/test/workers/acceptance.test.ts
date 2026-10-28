@@ -162,10 +162,12 @@ test('a certified unexpected worker exit records its cause and wakes the coordin
   const worker = await startWorker(h)
   const started = h.events(worker.session).find((event) => event.type === 'started')
   if (!started || typeof started.pid !== 'number') throw new Error('the isolated worker has no owned process receipt')
+  const expectedResource = worker.shown.terminalResource
+  if (!expectedResource) throw new Error('the accepted worker has no terminal resource')
   const before = await h.fixture.call('quirky.session/identity', { session: worker.session }) as { sessionId: string; processIncarnation: string; live: boolean }
   expect(before.sessionId).toBe(worker.session)
   expect(before.live).toBe(true)
-  expect(before.processIncarnation).toBe(worker.shown.terminalResource?.processIncarnation)
+  expect(before.processIncarnation).toBe(expectedResource.processIncarnation)
   process.kill(started.pid, 'SIGTERM')
   const failed = await eventually(
     () => h.fixture.call('quirky.orchestration/workerShow', { dispatchId: worker.receipt.dispatchId }) as Promise<WorkerShowResult>,

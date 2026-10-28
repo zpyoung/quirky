@@ -237,7 +237,9 @@ describe('Heimdall daemon acceptance', () => {
     const heldId = held.enrollment.watcherId
     const heldInspection = await waitForAsync(async () => {
       const [item] = await client.callAny(`${KERNEL_METHOD}/inspect`, { watcherId: heldId }) as Inspection[]
-      return item?.traces.some((trace) => trace.gate?.reason === 'capability-off') ? item : undefined
+      return item?.traces.some((trace) =>
+        trace.gate && trace.gate.verdict !== 'allow' && trace.gate.reason === 'capability-off'
+      ) ? item : undefined
     })
     expect(heldInspection.traces.at(-1)?.gate).toMatchObject({ verdict: 'hold', reason: 'capability-off' })
 

@@ -262,6 +262,7 @@ export function createRunner(options: RunnerOptions): Runner & { withControl<T>(
       workerRequest?: WorkerRequest
       requestId?: string
       dispatchId?: string
+      replayCount?: number
       clearEffect?: boolean
       clearReason?: boolean
       [key: string]: unknown
@@ -776,7 +777,7 @@ export function createRunner(options: RunnerOptions): Runner & { withControl<T>(
   ): Promise<void> {
     trace.gate = verdict
     if (verdict.verdict === 'allow') return
-    const detail = verdict.verdict === 'allow' ? undefined : verdict.detail
+    const detail = verdict.detail
     abandon(action, 'gate-hold', detail ?? verdict.reason, version, {
       gateReason: verdict.reason,
       ...(detail ? { gateDetail: detail } : {})
@@ -1523,7 +1524,7 @@ export function createRunner(options: RunnerOptions): Runner & { withControl<T>(
         updateStatus('acting')
         const controller = new AbortController()
         activeAbort = controller
-        let workerState: WorkerDispatchState | null = null
+        const workerState: { current: WorkerDispatchState | null } = { current: null }
         let workerRequestValue: WorkerRequest | null = null
         let workerPromise: Promise<DispatchResult> | null = null
         const dispatchWorker = (request: WorkerRequest): Promise<DispatchResult> => {
@@ -1539,7 +1540,7 @@ export function createRunner(options: RunnerOptions): Runner & { withControl<T>(
               const reason = commit?.verdict.verdict === 'allow' ? 'runner-stopped' : commit?.verdict.reason ?? 'runner-stopped'
               const detail = commit && commit.verdict.verdict !== 'allow' ? commit.verdict.detail : undefined
               const refused: DispatchResult = { kind: 'refused', reason, ...(detail ? { detail } : {}) }
-              workerState = { result: refused, requestId, request }
+              workerState.current = { result: refused, requestId, request }
               return refused
             }
             if (hasUnresolvedExternalAttempt(commit.journal, attemptId)) {
@@ -1548,7 +1549,7 @@ export function createRunner(options: RunnerOptions): Runner & { withControl<T>(
                 reason: 'unresolved-attempt',
                 detail: 'Another external attempt remains unresolved.'
               }
-              workerState = { result: refused, requestId, request }
+              workerState.current = { result: refused, requestId, request }
               return refused
             }
             const prepared = attemptRevision(
@@ -1568,7 +1569,7 @@ export function createRunner(options: RunnerOptions): Runner & { withControl<T>(
             )
             if (!prepared || !isCurrent(version)) {
               const unknown: DispatchResult = { kind: 'indeterminate', requestId, detail: 'Runner was fenced before dispatch.' }
-              workerState = { result: unknown, requestId, request }
+              workerState.current = { result: unknown, requestId, request }
               return unknown
             }
             const finalCommit = commitGate(selectedAction, snapshot as Snapshot, stopPredicateFired, version, attemptId)
@@ -1581,13 +1582,13 @@ export function createRunner(options: RunnerOptions): Runner & { withControl<T>(
                 ? 'Another external attempt remains unresolved.'
                 : finalCommit?.verdict.detail
               const refused: DispatchResult = { kind: 'refused', reason, ...(detail ? { detail } : {}) }
-              workerState = { result: refused, requestId, request }
+              workerState.current = { result: refused, requestId, request }
               return refused
             }
             const latestEnrollment = store.get(watcherId)
             if (!latestEnrollment || latestEnrollment.terminalAtMs !== null) {
               const refused: DispatchResult = { kind: 'refused', reason: 'runner-stopped' }
-              workerState = { result: refused, requestId, request }
+              workerState.current = { result: refused, requestId, request }
               return refused
             }
             let dispatchResult: DispatchResult
@@ -1601,7 +1602,7 @@ export function createRunner(options: RunnerOptions): Runner & { withControl<T>(
                 ...(isCoordinatorSeatLostError(error) ? { reason: 'coordinator-seat-lost' } : {})
               }
             }
-            workerState = { result: dispatchResult, requestId, request }
+            workerState.current = { result: dispatchResult, requestId, request }
             if (!isCurrent(version)) return dispatchResult
             if (dispatchResult.kind === 'dispatched') {
               const latest = latestAttempts(store.journal(watcherId)).find((candidate) => candidate.attemptId === attemptId) ?? prepared
@@ -1643,9 +1644,10 @@ export function createRunner(options: RunnerOptions): Runner & { withControl<T>(
           }
         }
         if (!isCurrent(version)) { trace.exitPath = 'suspended'; break }
+        const completedWorkerState = workerState.current
 
-        if (workerState?.result.kind === 'indeterminate' && workerState.result.reason === 'coordinator-seat-lost') {
-          const detail = workerState.result.detail ?? 'The coordinator no longer owns the requested orchestration Run.'
+        if (completedWorkerState?.result.kind === 'indeterminate' && completedWorkerState.result.reason === 'coordinator-seat-lost') {
+          const detail = completedWorkerState.result.detail ?? 'The coordinator no longer owns the requested orchestration Run.'
           parkCoordinatorSeatLost(detail, version)
           trace.decision = { action: null, reason: 'coordinator-seat-lost', detail }
           trace.exitPath = 'parked'
@@ -1653,17 +1655,17 @@ export function createRunner(options: RunnerOptions): Runner & { withControl<T>(
         }
 
         if (executeFailed) {
-          if (workerState?.result.kind !== 'dispatched') {
+          if (completedWorkerState?.result.kind !== 'dispatched') {
             let failure: { effect?: unknown; failureClass?: unknown; noEffect?: unknown } = {}
             if (typeof executionError === 'object' && executionError !== null) {
               failure = executionError as { effect?: unknown; failureClass?: unknown; noEffect?: unknown }
             }
             const positiveNoEffect = failure.effect === 'not-landed' || failure.failureClass === 'not-landed' || failure.noEffect === true
-            const effect: ExecuteResult['effect'] = workerState?.result.kind === 'refused'
+            const effect: ExecuteResult['effect'] = completedWorkerState?.result.kind === 'refused'
               ? 'not-landed'
               : positiveNoEffect ? 'not-landed' : 'indeterminate'
-            const reason = workerState?.result.kind === 'refused'
-              ? workerState.result.reason
+            const reason = completedWorkerState?.result.kind === 'refused'
+              ? completedWorkerState.result.reason
               : errorText(executionError)
             const latest = latestAttempts(store.journal(watcherId)).find((candidate) => candidate.attemptId === attemptId) ?? initialAttempt
             appendResolution(latest, {
@@ -1678,7 +1680,7 @@ export function createRunner(options: RunnerOptions): Runner & { withControl<T>(
         if (!result) throw new Error('Executor returned no result.')
 
         const latestAfterExecute = latestAttempts(store.journal(watcherId)).find((candidate) => candidate.attemptId === attemptId) ?? initialAttempt
-        if (workerState?.result.kind === 'dispatched' || (latestAfterExecute.state === 'running' && latestAfterExecute.dispatchId)) {
+        if (completedWorkerState?.result.kind === 'dispatched' || (latestAfterExecute.state === 'running' && latestAfterExecute.dispatchId)) {
           actionCompleted = true
           trace.exitPath = 'acted'
           current = store.get(watcherId)
@@ -1706,20 +1708,20 @@ export function createRunner(options: RunnerOptions): Runner & { withControl<T>(
           break
         }
 
-        const settledEffect = workerState?.result.kind === 'refused'
+        const settledEffect = completedWorkerState?.result.kind === 'refused'
           ? 'not-landed'
-          : workerState?.result.kind === 'indeterminate' ? 'indeterminate' : result.effect
-        const settledReason = workerState?.result.kind === 'refused'
-          ? workerState.result.reason
-          : workerState?.result.kind === 'indeterminate' ? workerState.result.detail : result.reason
+          : completedWorkerState?.result.kind === 'indeterminate' ? 'indeterminate' : result.effect
+        const settledReason = completedWorkerState?.result.kind === 'refused'
+          ? completedWorkerState.result.reason
+          : completedWorkerState?.result.kind === 'indeterminate' ? completedWorkerState.result.detail : result.reason
         const currentJournal = store.journal(watcherId)
         const currentAttempt = latestAttempts(currentJournal).find((candidate) => candidate.attemptId === attemptId) ?? initialAttempt
         if (settledEffect === 'indeterminate') {
           const reason = settledReason ??
-            (workerState?.result.kind === 'indeterminate' ? workerState.result.detail : undefined) ??
+            (completedWorkerState?.result.kind === 'indeterminate' ? completedWorkerState.result.detail : undefined) ??
             'Executor outcome is indeterminate'
           appendResolution(currentAttempt, { effect: 'indeterminate', reason }, {
-            source: workerState?.result.kind === 'indeterminate' ? 'orchestration-unknown' : 'executor-result'
+            source: completedWorkerState?.result.kind === 'indeterminate' ? 'orchestration-unknown' : 'executor-result'
           }, version)
           closeInterval(actionIntervalId, 'settled', now(), version)
           trace.error = reason

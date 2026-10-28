@@ -281,6 +281,12 @@ describe('worker lifecycle', () => {
         expect(f.repo.get(f.dispatch.id)?.state).toBe('stopping')
         expect(f.core.getDispatch(f.dispatch.id).consumerGeneration).toBe(2)
         expect(f.core.getTask(f.task.id).status).toBe('blocked')
+        expect(f.lifecycle.acceptReport(f.store, {
+          dispatchId: f.dispatch.id,
+          outcome: 'succeeded',
+          caller: exactCaller(f.worker),
+          at: '2026-10-27T00:00:01.000Z'
+        })).toBeNull()
         expect(f.closeQuestionCalls).toContain(f.dispatch.id)
       })
 
@@ -305,6 +311,18 @@ describe('worker lifecycle', () => {
       authority: 'kernel_plugin'
     } as const
     try {
+      let manualTransitionError: unknown
+      try {
+        f.core.transitionTask({
+          taskId: f.task.id,
+          expectedState: 'dispatched',
+          nextState: 'blocked',
+          at: '2026-10-27T00:00:01.000Z'
+        })
+      } catch (error) {
+        manualTransitionError = error
+      }
+      expect(manualTransitionError).toMatchObject({ code: 'task_not_startable' })
       await expect(f.lifecycle.stop(controlParams(f.dispatch.id, 'service-stop-missing-identity'), service))
         .rejects.toThrow('exact expected terminal identity')
       expect(f.repo.get(f.dispatch.id)?.state).toBe('ready')
@@ -317,6 +335,8 @@ describe('worker lifecycle', () => {
       }, service)
 
       expect(result.state).toBe('stopped')
+      expect(result.processAction).toBe('closed_agent_terminal')
+      expect(f.core.getTask(f.task.id).status).toBe('blocked')
       expect(f.closed).toHaveLength(1)
     } finally {
       f.close()
@@ -351,6 +371,13 @@ describe('worker lifecycle', () => {
       expect(f.repo.get(f.dispatch.id)?.state).toBe('stop_unknown')
       expect(results[0].state).toBe('stop_unknown')
       expect(results[1].state).toBe('stop_unknown')
+      expect(results[0].processAction).toBe('unknown')
+      expect(results[1].processAction).toBe('unknown')
+      expect(f.repo.resource(f.dispatch.id)).toMatchObject({
+        ownershipState: 'owned',
+        sessionId: f.worker.sessionId,
+        processIncarnation: f.worker.processIncarnation
+      })
       expect(f.core.getTask(f.task.id).status).toBe('blocked')
       expect(f.core.getDispatch(f.dispatch.id).status).toBe('dispatched')
       expect(f.lifecycle.hasLiveForTask(f.store, f.task.id)).toBe(true)

@@ -7,10 +7,11 @@ import type {
   DispatchShowParams,
   JsonValue,
   MutationCheckpoint,
+  MutatingOrchestrationMethod,
   MutationReceiptRow,
   OrchestrationMethod,
-  RequestShowResult,
   RequestShowParams,
+  RequestShowResult,
   ResetParams,
   ResetMode,
   RunCreateParams,
@@ -33,10 +34,22 @@ import { callerSessionId, targetIdentity, verifyCaller } from './identity'
 import type { SessionIdentity, SessionPointerResult } from './runtime-contracts'
 const PAGE_DEFAULT = 100
 const PAGE_MAX = 100
-type RunTaskMethod = Exclude<
+type RunTaskMethod = Extract<
   OrchestrationMethod,
-  'send' | 'check' | 'reply' | 'inbox' | 'ask' | 'gateCreate' | 'gateResolve' | 'gateList'
+  | 'runCreate'
+  | 'runUse'
+  | 'runCurrent'
+  | 'runList'
+  | 'runShow'
+  | 'taskCreate'
+  | 'taskList'
+  | 'taskUpdate'
+  | 'dispatch'
+  | 'dispatchShow'
+  | 'requestShow'
+  | 'reset'
 >
+type DispatchAcceptedResult = { dryRun: false; dispatch: DispatchRow; preamble?: string }
 
 function encodeCursor(row: RunRow): string {
   return Buffer.from(JSON.stringify({ createdAt: row.createdAt, id: row.id }), 'utf8').toString('base64url')
@@ -261,14 +274,14 @@ export function runTaskMethods(
       const acceptedOptions = params.inject
         ? {
             beforeAccept,
-            acceptedCheckpoint: (accepted: { dispatch: DispatchRow }): AcceptedDispatchCheckpoint => ({
+            acceptedCheckpoint: (accepted: DispatchAcceptedResult): AcceptedDispatchCheckpoint => ({
               state: 'accepted',
               accepted: true,
               runId: accepted.dispatch.runId,
               taskId: accepted.dispatch.taskId,
               dispatchId: accepted.dispatch.id
             }),
-            async afterCommit(accepted: { dispatch: DispatchRow }): Promise<{ dispatch: DispatchRow; dryRun: false; preamble?: string }> {
+            async afterCommit(accepted: DispatchAcceptedResult): Promise<DispatchAcceptedResult> {
               const recipient = identity
               if (!injectionText || !recipient) fail(context, 'operation_unknown', 'Dispatch was accepted but its injection preamble or recipient was not recorded')
               const sent = (await context.call('quirky.session/pointer', {
