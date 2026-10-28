@@ -3,7 +3,10 @@ import type { JournalEntry, KernelAction } from '../src/contracts'
 import type { OwnerEnrollment } from '../src/owner/contracts'
 import { gateOwnerAction, ownerApprovalScope } from '../src/owner/gate'
 const action: KernelAction = { kind: 'merge', capability: 'merge', visibility: 'external', contentIdentity: 'sha1', evidenceKey: 'review1', ownerReportKey: 'report1', preparedCommitSha: 'commit1' }
-const approval = (scope: object, status = 'approved', seq = 1) => ({ kind: 'approval', seq, status, approvalScope: scope }) as JournalEntry
+const approval = (scope: object, status = 'approved', seq = 1): JournalEntry => ({
+  kind: 'approval', seq, status, approvalScope: scope, eventId: `approval-${seq}`,
+  watcherId: 'owner-gate-watcher', atMs: seq, class: 'fact', origin: 'client', resolved: true
+})
 
 test('native approval cannot authorize a separate gated owner intervention', () => {
   const enrollment = { ownerInterventionCapability: 'gated' } as OwnerEnrollment

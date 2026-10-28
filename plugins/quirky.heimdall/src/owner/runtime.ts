@@ -383,6 +383,11 @@ export function createOwnerController(host: OwnerRuntimeHost): OwnerController {
     return host.store.journal(watcherId)
   }
 
+  function pendingWakeDeadline(state: OwnerRuntimeState): number | undefined {
+    const pending = state.pending
+    return pending ? pending.lastWakeAtMs + OWNER_STALL_THRESHOLD_MS : undefined
+  }
+
   function append(
     watcherId: string,
     kind: string,
@@ -1722,8 +1727,9 @@ export function createOwnerController(host: OwnerRuntimeHost): OwnerController {
           state.queue.push(fact.escalationId)
           stateChanged = true
         }
-        if (state.pending?.deviationId === fact?.escalationId && fact && !fact.resolved && JSON.stringify(state.pending.deviation) !== JSON.stringify(fact.deviation)) {
-          state.pending.deviation = fact.deviation
+        const pending = state.pending
+        if (pending && fact && pending.deviationId === fact.escalationId && !fact.resolved && JSON.stringify(pending.deviation) !== JSON.stringify(fact.deviation)) {
+          pending.deviation = fact.deviation
           stateChanged = true
         }
       }
@@ -1768,7 +1774,7 @@ export function createOwnerController(host: OwnerRuntimeHost): OwnerController {
     if (!isActive(enrollment)) return { handled: stateChanged || state.pending !== null, reason: 'owner work is paused or disarmed' }
     if (state.pending?.phase === 'deferred') {
       const error = await deliverPending(watcherId, enrollment, state, config, Boolean(state.sessionId && state.instanceId !== instanceId))
-      return { handled: true, ...(error ? { reason: error } : { nextCheckAtMs: state.pending!.lastWakeAtMs + OWNER_STALL_THRESHOLD_MS }) }
+      return { handled: true, ...(error ? { reason: error } : { nextCheckAtMs: pendingWakeDeadline(state) }) }
     }
     if (state.pending?.phase === 'issuing') {
       const detail = recordUncertainty(watcherId, state, 'recover-owner-turn', new Error('an earlier create, send, or resume has an unknown outcome'))
@@ -1790,7 +1796,7 @@ export function createOwnerController(host: OwnerRuntimeHost): OwnerController {
           if (renewalError) return { handled: true, reason: renewalError }
           const deliveryError = await deliverPending(watcherId, enrollment, state, config, recovering)
           if (deliveryError) return { handled: true, reason: deliveryError }
-          return { handled: true, nextCheckAtMs: state.pending!.lastWakeAtMs + OWNER_STALL_THRESHOLD_MS }
+          return { handled: true, nextCheckAtMs: pendingWakeDeadline(state) }
         }
       } catch (error) {
         if (shuttingDown) return { handled: true, reason: 'owner controller is shutting down' }
@@ -1800,14 +1806,14 @@ export function createOwnerController(host: OwnerRuntimeHost): OwnerController {
       if (recovering) {
         const error = await deliverPending(watcherId, enrollment, state, config, true)
         if (error) return { handled: true, reason: error }
-        return { handled: true, nextCheckAtMs: state.pending!.lastWakeAtMs + OWNER_STALL_THRESHOLD_MS }
+        return { handled: true, nextCheckAtMs: pendingWakeDeadline(state) }
       }
       return silenceStep(watcherId, enrollment, state, nowMs(host))
     }
     if (state.pending === null && state.queue.length > 0) {
       const error = await issueNext(watcherId, enrollment, snapshot, config, state)
       if (error) return { handled: true, reason: error }
-      return { handled: true, nextCheckAtMs: state.pending ? state.pending.lastWakeAtMs + OWNER_STALL_THRESHOLD_MS : undefined }
+      return { handled: true, nextCheckAtMs: pendingWakeDeadline(state) }
     }
     if (stateChanged) persistState(watcherId, state)
     return { handled: stateChanged }
