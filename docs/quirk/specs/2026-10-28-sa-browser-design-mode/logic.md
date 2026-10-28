@@ -11,6 +11,8 @@ Design tools describe the exact page a person is viewing. Grab copies bounded el
 ## Scope and non-goals
 All three parts of sa-browser-design-mode are included together. Browser profiles, cookie import, hosted artifacts and general browser automation remain their existing items. Linux/Windows native integration is deferred: platform. The pinned public Electrobun SDK exposes executeJavascript but no page snapshot/capture operation; Native text picking and annotations are reachable, while Native cropped screenshots and Draw require a supported snapshot capability. Watch implements both image flows through CDP. This explicit SDK boundary is recorded in the decision log/BLOCKERS; the inherited operator freeze forbids another browser queue item. No desktop screen capture, private FFI, DOM rasterization approximation, or silent Native-to-Chrome replacement.
 
+Interactive agent delivery targets terminal panes; structured background sessions remain background-only. Native chat is dropped by the locked architecture, not a missing delivery implementation.
+
 ## Key decisions & rationale
 Use injected guest picker plus host-side validation and the existing browser pane. Alternatives: a cross-origin iframe cannot inspect arbitrary pages; moving all browsing to Chrome violates the locked engine separation. Keep extraction and formatting shared between Native and Watch, but treat all guest data as untrusted. Use the existing public agent/terminal APIs rather than importing another plugin's internals. Clipboard permission failure is visible and leaves the selection/notes intact.
 

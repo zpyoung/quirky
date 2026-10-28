@@ -220,5 +220,90 @@
 - **Revisit if:** actual gates or the ongoing UI run find a blocking defect
 - **Source:** locked by docs/loop/LOOP.md
 
+## D21: Integrate lane4's narrowed acceptance without shrinking design mode
+- **Question:** Does the operator's pane scope cut establish Watch UI acceptance or remove this item's three design flows?
+- **Options:** attribute all Watch behavior to lane4; silently drop design flows; retain this item's acceptance and separately prove its required Watch subset
+- **Chose:** merge published f4489799 as5d1853f4, retain Native/public/profile seams, all design schemas/CLI/runtime/UI code, and the no-review/no-newqueue ruling. Lane4 D23 remains API/CLI lifecycle/navigation only; existing host-controls/events/preview owners retain their broader handoffs. This item's Watch design acceptance is separate and is not inherited as a pass.
+- **Why:** the user explicitly narrowed the dependency, not Grab/Annotate/Draw. The scout read incoming locks and found no removed required method; boolean paneClose/tabId is the concrete changed contract.
+- **Evidence:** priority user update; IncomingPaneScopeLocks; sa-browser-pane D23–D25; merge5d1853f4. Conflict resolution preserved our8design CLI entries and Mac runtime test route while taking canonical helper/menu/test-report and Fetch/Security teardown repairs.
+- **Reversibility:** medium (acceptance ownership)
+- **Confidence:** high for scope/merge, no broad Watch guarantee
+- **Revisit if:** actual required design paths cannot pass on the retained source
+- **Source:** locked by priority operator ruling and sa-browser-pane D23
+
+## D22: Fix the actual frame-consumer transition and rerun only the original acceptance campaign
+- **Question:** Why did Watch expire after one real successful Grab, and how can fixed code be exercised without bypassing the guarded tool?
+- **Options:** extend the frame lease; ACK undecoded data; fix loaded-frame identity; mutate the old page outside the guard
+- **Chose:** record the loaded frame identity in the shared validated acknowledgment path, sharing it with the ACK identity. Previously it was never recorded, so a following frame was deferred forever. Preserve failed run20261028T042907-dbf5; apply product fixes and use fresh guarded fix-then-rerun windows for the same original goals. Do not use private page actions or call an old report green.
+- **Why:** the real report showed Copied then a missing-ACK lease failure. The existing browser had cached its imported module and the guarded tool has no application-navigation/reload action; LOOP Verify6 explicitly requires fixing product failures and rerunning. “Dogfood once” is one acceptance campaign, not permission to ship a known failure.
+- **Evidence:** original obs41–43 and report; BrowserPaneWindow loadedFrameRef/acknowledgeFrame; successful new bundle deployment hash; UI rerun20261028T050642-b31f. The original end used keep_open:false but left its browser; parent closed only that named session successfully. No foreground/clipboard restoration claim is inferred from the tool's partial cleanup.
+- **Reversibility:** easy (consumer state and verification procedure)
+- **Confidence:** high for the source transition and failing-before observation; corrected full UI matrix still gates land
+- **Revisit if:** the fresh campaign still exposes a frame stall
+- **Source:** assumed — autonomous under LOOP Verify6
+
+## D23: Crop full-viewport PNG pixels locally rather than changing the live compositor
+- **Question:** Why did Grab turn the visible Watch pane into the selected element's crop?
+- **Options:** viewport-reset or screencast retries; direct CDP clipping; full screenshot and local bitmap crop
+- **Chose:** no CDP clip. Capture a full viewport, then crop pixels with pngjs7.0.0 (@types/pngjs6.0.5), scaling by bitmap width/window.innerWidth. Bound decode to32million pixels, clip offscreen rectangles, fail closed above2MiB, and never downscale. Keep overlay restoration and exact generation checks. Package the dependency's MIT license through the existing asset convention.
+- **Why:** the guarded rerun visibly retained a cropped frame and pointer/lease failures after Grab; the source requirement captures a viewport bitmap then crops, avoiding compositor side effects. A small pure-JS codec is simpler and more portable than custom PNG encoding or native image dependencies.
+- **Evidence:** rerun cropped-frame observations and original intermittent post-crop pointer error; BrowserPngCropRepair; installed registry versions; design/png.ts and pixel/budget regressions; pngjs LICENSE.
+- **Reversibility:** medium (capture implementation)
+- **Confidence:** high for the observed clip side effect; final real Watch capture regression required
+- **Revisit if:** screenshot capture still changes the displayed Watch viewport
+- **Source:** locked by browser.md Screenshot contract
+
+## D24: Preserve armed keyboard and Native overlay semantics
+- **Question:** Why did toolbar-focused C/Escape have no visible effect, and how does S remain useful after text copy?
+- **Options:** require an undocumented focus click; globally intercept editable input; honor armed noneditable shortcuts before toolbar exclusions
+- **Chose:** armed C/S run before toolbar exclusions; editable inputs and ordinary copy retain precedence. Escape invalidates an in-flight arm as well as an active picker. Retain only the last copied selection for the documented immediate-S handoff, tied to the same pane/page/lease/viewport identity; explicit rearm, cancel or navigation clears it. C still requires an actual hover. Native does not advertise unavailable screenshot output. Mark Native annotation pins/tray with the existing public native-mask attribute.
+- **Why:** the fresh report showed missing no-hover feedback and Escape during rearm. Source inspection also showed automatic rearm discarded the image associated with the just-copied text. Native layers cannot be covered with z-index alone.
+- **Evidence:** rerun F1/F2; DesignWindow shortcut ordering/copy state; native-browser default mask contract; pending native N-COPY/N-LIFETIME scenarios.
+- **Reversibility:** easy (window-only state)
+- **Confidence:** source-backed; actual shortcut rerun and Native nightly remain required
+- **Revisit if:** real interaction steals ordinary editing or exposes stale selection data
+- **Source:** locked by browser.md design interaction and sa-browser-pane Native mask contract
+
+## D25: Consume the authoritative lifecycle dependency
+- **Question:** Which pane source and acceptance may this item rely on?
+- **Options:** retain published checkpoint; consume the now-landed authoritative source.
+- **Chose:** consume the authoritative source.
+- **Why:** dependency lifecycle repairs are landed and must not be reimplemented here.
+- **Decision:** Merge build/roadmap after the operator's authoritative land verdict for sa-browser-pane and m6-orchestration-workers (pane1b6153b7, helper538881c2). Preserve the pre-creation target-ID snapshot, exact new-target/session challenge and fail-closed binding. Preserve headless Page.bringToFront immediately before helper tab selection; this is not OS focus.
+- **Evidence:** Operator reports643 remote and5Mac files,5configured isolated retries, scripts68/0/570 and merged types passing. Those are dependency-owner results, not this item's final merged-tree verification.
+- **Scope:** Lifecycle/navigation API+CLI only; no inherited Native/full-UI, screencast or profile-composition claim. No new queue items or unstarted review.
+- **Confidence:** authoritative land plus source-backed merge; changed-source gates remain required.
+- **Reversibility:** hard (dependency identity/security contract)
+- **Revisit if:** the exact owned target cannot be proved.
+- **Source:** locked by operator land verdict and sa-browser-pane D23–D34
+
+## D26: Keep privacy and fixture costs explicit
+- **Question:** What did the final invariant checks expose?
+- **Options:** weaken limits/extend timeouts; repair privacy order and fixture cost.
+- **Chose:** repair privacy order and fixture cost.
+- **Why:** privacy precedes truncation and real image boundaries must remain unchanged.
+- **Decision:** Scan guest strings for secret markers before truncation, both guest- and host-side. Preserve authored feedback separately. The new long-prefix secret regression failed before that repair. Remove the positive mock-formatter/clipboard echo assertion; keep the observable right-click/no-auto-copy boundary and actual runtime/UI clipboard evidence.
+- **Decision:** Isolate every mounted UI fixture with afterEach cleanup. Restore required cancellation fixture behavior so failed assertions cannot leak roots or poison later cases.
+- **Decision:** Keep the PNG test's5s limit. A valid noisy-image boundary fixture exceeded it only under concurrent compilation; cheaper uncompressed fixture generation preserves the same production rejection path and passed4tests/13assertions in179ms. Do not raise timeouts or lower image fidelity.
+- **Confidence:** observed failure and focused passing fixture; final combined gate remains required.
+- **Evidence:** failing-before artifact294; focused PNG run4pass/13assertions/179ms; design-payload.test.ts and design-ui.test.ts.
+- **Reversibility:** easy (validation and isolated fixtures)
+- **Revisit if:** final source gates reject the same boundaries.
+- **Source:** assumed — autonomous
+
+## D27: Bound images without destructive editing or invented chat
+- **Question:** Do Grab and full Draw need the same transport limit, and what agent surface is supported?
+- **Options:** reuse Grab's2MiB ceiling for full Draw; use the existing transport ceiling with decoded-pixel bounds.
+- **Chose:** separate Grab and full-image limits, reject destructive overflow, and retain the locked terminal delivery surface.
+- **Why:** a full viewport is larger than one element; neither earlier marks nor engine/session separation may be silently discarded.
+- **Decision:** Grab remains2MiB encoded; full Draw uses the existing50MiB encoded transport allowance, with the32M decoded-pixel ceiling. PNG crops are actual pixels, never downscaled approximations. At the shape limit reject a new mark visibly rather than evicting earlier work.
+- **Decision:** New/existing interactive delivery is terminal-based. Native chat is explicitly dropped in docs/architecture.md; structured background sessions do not gain interactive chat or automatic foregrounding.
+- **Evidence:** Run20261028T050642-b31f passed Annotate, all7Markup tools and lifetime goals. Send success passed but refusal was not safely reachable in that run; Grab repairs required a bounded rerun. Its end reported frontmost-restore cleanup failure with no kept-open browser; no restoration claim is made.
+- **Next:** Fresh current-daemon/current-PTY runtime, bounded original Grab/refusal regressions, affected gates and canonical land. Preserve both earlier reports rather than relabeling partial outcomes.
+- **Reversibility:** medium (image boundaries); hard (locked agent architecture)
+- **Confidence:** source-backed; Native-only behavior remains pending nightly.
+- **Revisit if:** the public SDK adds snapshot support or actual bounded image delivery fails.
+- **Source:** locked by docs/architecture.md and browser.md; assumed — autonomous image budget
+
 ## Progress
-Compiler and36isolated invariants passed; real Watch/CLI/PNG/new+existing PTY smoke passed on the owned runtime. Original screenshot payload attachment added; subsequent runtime file had3pass/1cold identity timeout, not a green file. Actual UI run recovered asset404 but exposed Reload's void-CDP-response navigation bug; BrowserWatchReloadRepair patched driver/tracker and added a real regression, now running as bg30. Visible Watch address action also now commits its draft before conversion; operator's cached older UI uses Enter as its honest route. At04:47:22Z the item is overdue; D20 skips the unstarted final review, not mandatory tests or observed bugs. Dependency still pending, no land/overall completion claim.
+Authoritative pane/helper landed and build/roadmap merged; incoming locks inspected. bg43 merged typecheck and latest20-module UI build passed. Old daemon/PTY fixtures stopped; current owned BrowserDesignFinalRuntime22297 uses fresh /tmp/qdesign-Lqhva8 with only recording fake OMP on runtimePATH. Guarded final regression20261028T070420-ee9d proved first Grab copy/full frame and actual stale-target Send refusal with note retained. A second copy produced identical visible Copied state and then no-hover feedback; its clipboard outcome is under diagnosis, since successful automatic rearm also clears hover. RepeatedGrabRepair owns isolated diagnosis; no speculative repair. Run2's three passing flows and partials remain recorded. Final affected suite/scripts/types/build must bind a clean committed tree, then queue-controlled land. Unstarted review skipped under D20; no newqueue. Stop owned runtime and archive/remove scratch after complete verification/land.

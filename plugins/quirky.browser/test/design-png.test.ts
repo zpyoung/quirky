@@ -11,7 +11,8 @@ function screenshot(width: number, height: number, pixels: Buffer): DesignScreen
   image.width = width
   image.height = height
   image.data = pixels
-  const png = PNG.sync.write(image)
+  // Keep noisy fixture encoding cheap; the production crop still uses its normal encoder.
+  const png = PNG.sync.write(image, { filterType: 0, deflateLevel: 0 })
   return {
     mimeType: 'image/png',
     dataUrl: PNG_DATA_URL_PREFIX + png.toString('base64'),
@@ -82,8 +83,8 @@ test('returns null for malformed PNG data and images above the decode pixel limi
 })
 
 test('rejects an encoded crop above 2 MiB rather than downscaling it', () => {
-  const width = 1_600
-  const height = 1_000
+  const width = 900
+  const height = 800
   const pixels = Buffer.allocUnsafe(width * height * 4)
   let state = 0x12345678
   for (let offset = 0; offset < pixels.length; offset += 4) {
@@ -97,5 +98,5 @@ test('rejects an encoded crop above 2 MiB rather than downscaling it', () => {
   }
   const image = screenshot(width, height, pixels)
 
-  expect(cropViewportPng(image, width, { x: 0, y: 0, width: 800, height })).toBeNull()
+  expect(cropViewportPng(image, width, { x: 0, y: 0, width: 875, height })).toBeNull()
 })

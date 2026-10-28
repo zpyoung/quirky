@@ -557,7 +557,7 @@ export function DesignWindow({ context, pane, nativeHandle, pageHost, nativePage
       if (!navigator.clipboard?.writeText) throw new Error('Text clipboard access is unavailable.')
       await navigator.clipboard.writeText(formatted.text)
       if (stillCurrent()) {
-        copiedSelectionRef.current = { identity: expectedIdentity ?? identityOf(currentPaneRef.current, currentWatchRef.current, currentFrameSizeRef.current), payload }
+        copiedSelectionRef.current = { identity: expectedIdentity ?? identityOf(currentPaneRef.current, currentWatchRef.current, currentFrameSizeRef.current), payload: { ...payload, screenshot: null } }
         setCopyError(null)
         setSelectionMenu(null)
         if (rearm) void startOperation('grab', true)
@@ -636,7 +636,7 @@ export function DesignWindow({ context, pane, nativeHandle, pageHost, nativePage
       return
     }
     try {
-      const screenshot = screenshotOf(payload.screenshot) ?? await capture(operation, payload.target.rectViewport)
+      const screenshot = await capture(operation, payload.target.rectViewport)
       if (!isCurrent()) return
       if (!screenshot) {
         onMessage('No screenshot available for this element.', 'error')
@@ -718,7 +718,7 @@ export function DesignWindow({ context, pane, nativeHandle, pageHost, nativePage
 
   const handleKeyboard = useCallback((event: KeyboardEvent) => {
     const target = currentPaneRef.current
-    if (!focused || !target || !usablePage || event.isComposing || event.key === 'Process' || event.key === 'Dead' || editableHostTarget(event.target)) return
+    if (!focused || !target || !usablePage || event.isComposing || event.key === 'Process' || event.key === 'Dead') return
     const op = operationRef.current
     if (markupScreenshot) return
     if (event.key === 'Escape' && (op || armPendingRef.current || draft || selectionMenu)) {
@@ -727,6 +727,7 @@ export function DesignWindow({ context, pane, nativeHandle, pageHost, nativePage
       void runActionRef.current('cancel')
       return
     }
+    if (editableHostTarget(event.target)) return
     if (op?.mode === 'grab' && !event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey && (event.key.toLowerCase() === 'c' || event.key.toLowerCase() === 's')) {
       event.preventDefault()
       event.stopPropagation()

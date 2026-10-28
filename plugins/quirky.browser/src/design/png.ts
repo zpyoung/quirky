@@ -9,7 +9,7 @@ const MAX_DECODE_PIXELS = 32_000_000
 const BASE64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
 
 function base64ByteLength(value: string): number | null {
-  if (value.length === 0 || value.length % 4 !== 0 || !/^(?:[A-Za-z\d+/]{4})*(?:[A-Za-z\d+/]{2}==|[A-Za-z\d+/]{3}=)?$/.test(value)) return null
+  if (value.length === 0 || value.length % 4 !== 0 || !/^[A-Za-z\d+/]*={0,2}$/.test(value)) return null
   const padding = value.endsWith('==') ? 2 : value.endsWith('=') ? 1 : 0
   return value.length * 3 / 4 - padding
 }
