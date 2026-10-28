@@ -16,11 +16,11 @@ function OverlayMount({ entry }: { entry: UiSlotEntry }) {
   useEffect(() => {
     const target = element.current
     if (!target) return
-    const unmount = host.mount(id, target)
-    return () => {
-      unmount()
-      target.replaceChildren()
-    }
+    const unmount = host.mount(id, target, undefined, {
+      deferCleanup: true,
+      afterCleanup: () => target.replaceChildren()
+    })
+    return unmount
   }, [host, id, plugin, module])
 
   return <div ref={element} data-plugin-overlay={id} />

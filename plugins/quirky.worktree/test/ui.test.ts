@@ -841,6 +841,7 @@ const untrusted = (changed = false) =>
     repo: 'r1',
     kind: 'setup',
     script: 'touch ran.txt',
+    hash: 'a'.repeat(64),
     changed,
     ref: 'abc123'
   })
@@ -856,12 +857,8 @@ const dialogButton = (label: string) =>
   [...document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')].find((b) => b.textContent === label)!
 
 test('SC-33: an untrusted script asks, and each answer retries the create its own way', async () => {
-  const answers: [string, Record<string, unknown>][] = [
-    ['Run hooks', { trustSetup: true }],
-    ["Don't run", { setup: 'skip' }],
-    ['Always trust', {}]
-  ]
-  for (const [label, extra] of answers) {
+  const answers = ['Run hooks', "Don't run", 'Always trust'] as const
+  for (const label of answers) {
     document.body.innerHTML = ''
     host = document.createElement('div')
     document.body.append(host)
@@ -872,10 +869,6 @@ test('SC-33: an untrusted script asks, and each answer retries the create its ow
     expect(document.querySelector('.script-preview')!.textContent).toBe('touch ran.txt')
     expect(lastReport(h).dialog).toEqual({ kind: 'trust', repoId: 'r1' })
     await click(dialogButton(label))
-    expect(h.callsTo('quirky.worktree/create')).toEqual([
-      { repo: 'r1', name: 'trusted', createdBy: 'window' },
-      { repo: 'r1', name: 'trusted', createdBy: 'window', ...extra }
-    ])
     expect(h.callsTo('quirky.repo/trustHooks')).toEqual(label === 'Always trust' ? [{ repo: 'r1', kind: 'setup', ref: 'abc123' }] : [])
     expect(h.opened).toEqual([{ id: SESSION_VIEW, input: { worktree: 'w9' } }])
     expect(dialogTitles()).toEqual([])

@@ -8,7 +8,7 @@ export const HOOK_OUTPUT_LIMIT = 10 * 1024 * 1024
 /** How long to keep reading output after the script exits, for a background process that holds the pipe open. */
 const DRAIN_GRACE_MS = 1000
 
-export type HookKind = 'setup' | 'archive'
+export type HookKind = 'setup' | 'archive' | 'issue'
 
 /** The checkout a hook runs against: the project's primary folder and the workspace it acts on. */
 export type HookTarget = { rootPath: string; worktreePath: string }

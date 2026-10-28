@@ -1,0 +1,57 @@
+{
+  "id": "quirky.mobile",
+  "name": "Mobile Test Transport",
+  "version": "0.0.0",
+  "main": "main.ts",
+  "activation": "startup",
+  "contributes": {
+    "method": [
+      {
+        "id": "state",
+        "description": "Test-only public mobile state used by terminal lease tests.",
+        "readOnly": true,
+        "params": { "type": "object" },
+        "result": {
+          "type": "object",
+          "properties": { "autoRestoreFitMs": { "description": "Null disables auto-restore; a positive value is a millisecond delay." } },
+          "required": ["autoRestoreFitMs"],
+          "additionalProperties": true
+        }
+      },
+      {
+        "id": "configure",
+        "description": "Test-only auto-restore configuration.",
+        "params": { "type": "object", "properties": { "autoRestoreFitMs": { "description": "Null disables auto-restore; a positive value is a millisecond delay." } } },
+        "result": { "type": "object", "additionalProperties": true }
+      },
+      {
+        "id": "testAdmit",
+        "description": "Admits a deterministic test phone through PluginContext.clients.",
+        "params": { "type": "object", "properties": { "slot": { "type": "string" } }, "required": ["slot"] },
+        "result": { "type": "object", "properties": { "connected": { "type": "boolean" } }, "required": ["connected"] }
+      },
+      {
+        "id": "testCall",
+        "description": "Calls a terminal method through a test mobile client's admitted RPC connection.",
+        "params": {
+          "type": "object",
+          "properties": { "slot": { "type": "string" }, "method": { "type": "string" }, "params": { "type": "object", "additionalProperties": true } },
+          "required": ["slot", "method"]
+        },
+        "result": { "type": "object", "additionalProperties": true }
+      },
+      {
+        "id": "testDisconnect",
+        "description": "Disconnects a test mobile client through its admitted connection lifecycle.",
+        "params": { "type": "object", "properties": { "slot": { "type": "string" } }, "required": ["slot"] },
+        "result": { "type": "object", "properties": { "ok": { "type": "boolean" } }, "required": ["ok"] }
+      },
+      {
+        "id": "testRevoke",
+        "description": "Invokes the admitted transport close and disconnect lifecycle used by device revocation.",
+        "params": { "type": "object", "properties": { "slot": { "type": "string" } }, "required": ["slot"] },
+        "result": { "type": "object", "properties": { "ok": { "type": "boolean" } }, "required": ["ok"] }
+      }
+    ]
+  }
+}

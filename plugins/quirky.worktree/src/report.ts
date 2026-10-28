@@ -1,6 +1,6 @@
 import type { ActivityPreferences } from './useSidebarActivity'
 import type { MembershipTarget } from './membership'
-import type { AgentDisplayState, ProjectGroup, Repo, Session, Worktree, WorktreeStatus } from '@quirky/protocol'
+import type { AgentDisplayState, GitHubWorktreeLink, ProjectGroup, Repo, Session, Worktree, WorktreePushTarget, WorktreeStatus } from '@quirky/protocol'
 import { worktreeGlyph, worktreeStatus, type DisplayStatus } from './status'
 
 /** A create the window has sent and not yet seen finish; shown as a pending row under its project. */
@@ -274,6 +274,9 @@ export type WorkspaceReport = {
   pending: boolean
   removing: boolean
   selected: boolean
+  linkedPR?: GitHubWorktreeLink
+  linkedIssue?: GitHubWorktreeLink
+  pushTarget?: WorktreePushTarget
 }
 
 export type ProjectReport = { id: string; name: string; kind: 'git' | 'folder'; worktrees: WorkspaceReport[] }
@@ -335,6 +338,9 @@ export function buildReport(input: ReportInput): WorktreesReport {
       primary: worktree.isMain,
       status: sessions === null ? null : worktreeStatus(sessions, worktree.id),
       ...(glyph?.kind === 'agent' ? { display: glyph.display, label: glyph.label } : {}),
+      ...(worktree.linkedPR ? { linkedPR: worktree.linkedPR } : {}),
+      ...(worktree.linkedIssue ? { linkedIssue: worktree.linkedIssue } : {}),
+      ...(worktree.pushTarget ? { pushTarget: worktree.pushTarget } : {}),
       ...(repoName ? { repoName } : {}),
       workspaceStatus: worktree.status,
       pinned: worktree.pinned,

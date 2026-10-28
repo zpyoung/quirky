@@ -5,6 +5,10 @@ export type ClientConn = {
   id: number
   role: ClientRole | null
   name?: string
+  /** Authenticated identity for a client admitted by a trusted plugin. */
+  readonly deviceId?: string
+  /** Revalidates admitted-client access before every RPC dispatch. */
+  authorize?: (method: string, params: Record<string, unknown>) => void | Promise<void>
   subscribed: boolean
   closed: boolean
   transport: 'websocket' | 'socket'

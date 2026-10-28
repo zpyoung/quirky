@@ -1,0 +1,9 @@
+{
+  "item": "m4-hosting-ui-reviews",
+  "spec": "docs/quirk/specs/2026-10-27-m4-hosting-ui-reviews/logic.md",
+  "scenarios": [
+    { "id": "R01-copy", "title": "Copy a PR link and a check log excerpt from the native window; paste into a disposable editor and verify exact Unicode text; denied clipboard access shows error rather than success", "status": "pending", "lastRun": null, "report": null, "summary": null },
+    { "id": "R08-routing", "title": "Open a PR number and stack node with the system link destination without losing the selected review; requested unavailable in-app routing reports an error rather than falsely opening another destination", "status": "pending", "lastRun": null, "report": null, "summary": null },
+    { "id": "R09-focus", "title": "Fix/Resolve review agent dialog keeps keyboard focus scoped; Escape cancels only the dialog and Cmd+Enter launches once; closing restores prior Tasks/workspace focus", "status": "pending", "lastRun": null, "report": null, "summary": null }
+  ]
+}
