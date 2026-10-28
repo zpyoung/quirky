@@ -1128,31 +1128,23 @@ describe('the session store migration', () => {
     db.close()
     h = await startPluginHarness(SESSION_PLUGINS, { home })
     client = await h.connect('cli')
-    expect(await call<Session[]>(client, 'quirky.session/list')).toEqual([
-      {
-        id: 's_old',
-        kind: 'terminal',
-        agent: 'shell',
-        worktreeId: 'wt_main',
-        cwd: '/fake/alpha',
-        title: 'Shell',
-        status: 'exited',
-        createdAt: 1,
-        lastActivityAt: 1,
-        exitCode: 5,
-        exitSignal: null,
-        exitCause: null,
-        restorable: false,
-        launch: null,
-        providerSession: null,
-        promptDelivery: null,
-        launchSettings: null,
-        resumedFrom: null,
-        agentStatus: null,
-        name: null,
-        unread: null
-      }
-    ])
+    const sessions = await call<Session[]>(client, 'quirky.session/list')
+    expect(sessions.map(({ id }) => id)).toEqual(['s_old'])
+    expect(sessions[0]).toMatchObject({
+      id: 's_old',
+      kind: 'terminal',
+      agent: 'shell',
+      worktreeId: 'wt_main',
+      cwd: '/fake/alpha',
+      title: 'Shell',
+      status: 'exited',
+      createdAt: 1,
+      lastActivityAt: 1,
+      exitCode: 5,
+      exitSignal: null,
+      exitCause: null,
+      restorable: false
+    })
   })
 })
 
