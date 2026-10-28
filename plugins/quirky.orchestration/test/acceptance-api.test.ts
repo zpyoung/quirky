@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import { HOOK_TOKEN_HEADER } from '@quirky/protocol'
-import { waitForAsync } from '../../../packages/daemon/test/helpers'
+import { waitFor, waitForAsync } from '../../../packages/daemon/test/helpers'
 import { Database } from 'bun:sqlite'
 import { join } from 'node:path'
 import type {
@@ -572,7 +572,9 @@ describe('quirky.orchestration daemon API acceptance', () => {
     })
     expect(failedAttempt.dispatch).toMatchObject({ status: 'failed', failureCount: 0 })
     expect(failedAttempt.worker).toBeNull()
-    expect(workerFailure.report.task.result).toMatchObject({ kind: 'worker_report', outcome: 'failed' })
+    const workerFailureTaskResult = workerFailure.report.task.result
+    if (workerFailureTaskResult?.kind !== 'worker_report') throw new Error('expected a worker report task result')
+    expect(workerFailureTaskResult).toMatchObject({ kind: 'worker_report', outcome: 'failed' })
   }, 30_000)
 
   test('AC6 a default worker message resolves through its exact active Dispatch Run', async () => {
@@ -1085,6 +1087,23 @@ describe('quirky.orchestration daemon API acceptance', () => {
     expect((await call<{ gates: GateRow[] }>(coordinator, GATE_LIST, { runId: run.id, taskId: b.task.id, status: 'resolved' })).gates).toHaveLength(1)
   }, 30_000)
 
+  test('an unsupported mutation contract leaves the bound Run and durable ledger unchanged', async () => {
+    const coordinator = await fixture.createParty('coordinator')
+    const valid = await createRun(coordinator, 'valid contract before rejection')
+    const requestId = crypto.randomUUID()
+    await expect(call(coordinator, RUN, {
+      requestId,
+      contractVersion: 2,
+      objective: 'unsupported contract version'
+    })).rejects.toBeInstanceOf(Error)
+    const listed = await call<{ runs: RunRow[] }>(coordinator, RUN_LIST, { limit: 100 })
+    expect(listed.runs).toEqual([valid.run])
+    const current = await call<{ run: RunRow | null }>(coordinator, RUN_CURRENT)
+    expect(current.run?.id).toBe(valid.run.id)
+    const receipt = await call<RequestShowResult>(coordinator, REQUEST_SHOW, { requestId })
+    expect(receipt).toEqual({ requestId, state: 'absent', interpretation: 'absence_does_not_prove_no_effect' })
+  })
+
   test('AC12 durable receipts join concurrent retries, fence mismatched requests, and survive reconnect/restart', async () => {
     const coordinator = await fixture.createParty('coordinator')
     const requestId = crypto.randomUUID()
@@ -1113,8 +1132,12 @@ describe('quirky.orchestration daemon API acceptance', () => {
     expect(receipt).toMatchObject({ state: 'completed', interpretation: 'completed_and_replayable' })
 
     const absentId = crypto.randomUUID()
-    const absent = await call<{ state: string; interpretation: string }>(reconnected, REQUEST_SHOW, { requestId: absentId })
-    expect(absent).toEqual({ state: 'absent', interpretation: 'absence_does_not_prove_no_effect' })
+    const absent = await call<RequestShowResult>(reconnected, REQUEST_SHOW, { requestId: absentId })
+    expect(absent).toEqual({
+      requestId: absentId,
+      state: 'absent',
+      interpretation: 'absence_does_not_prove_no_effect'
+    })
 
     const task = await createTask(reconnected, first.run.id, 'survives restart')
     const messageReceipt = await send(reconnected, {
@@ -1146,7 +1169,7 @@ describe('quirky.orchestration daemon API acceptance', () => {
       ...askRequest,
       mode: 'question' as const,
       question: 'keep pending through checkpoint',
-      timeoutMs: 600
+      timeoutMs: 1500
     }
     const pendingAsk = ownPending(call<AskResult>(worker, ASK, askParams))
     try {
@@ -1245,6 +1268,7 @@ describe('quirky.orchestration daemon API acceptance', () => {
       state: 'absent',
       interpretation: 'absence_does_not_prove_no_effect'
     })
+
   }, 60_000)
 
   test('AC12 unresolved receipt saturation refuses effects with mutation_ledger_full', async () => {
@@ -1287,6 +1311,7 @@ describe('quirky.orchestration daemon API acceptance', () => {
 
     const messagesReset = await call<{ mode: string; mutation: MutationMarker }>(coordinator, RESET, {
       ...mutation(),
+      yes: true,
       mode: 'messages'
     })
     expect(messagesReset.mode).toBe('messages')
@@ -1302,7 +1327,7 @@ describe('quirky.orchestration daemon API acceptance', () => {
       subject: 'mail survives tasks reset',
       body: 'preserve this'
     })
-    await rejected(call(coordinator, RESET, mutation()))
+    await rejected(call(coordinator, RESET, { ...mutation(), yes: true }))
     const questionTask = await createTask(coordinator, run.id, 'question closes on task reset')
     const questionDispatch = await createDispatch(coordinator, run.id, questionTask.task.id, worker.id)
     const questionRequest = mutation()
@@ -1313,7 +1338,7 @@ describe('quirky.orchestration daemon API acceptance', () => {
       timeoutMs: 1000
     }))
     try {
-      const questionReceipt = await waitForAcceptedRequest(coordinator, questionRequest.requestId)
+      const questionReceipt = await waitForAcceptedRequest(worker, questionRequest.requestId)
       const questionId = questionReceipt.receipt?.checkpoint?.messageId
       expect(questionId).toBeTruthy()
       expect(questionDispatch.dispatch.taskId).toBe(questionTask.task.id)

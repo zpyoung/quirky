@@ -27,7 +27,7 @@ const floatingEvents = (h: E2eHarness) => h.events.filter((event) => event.type 
 test(
   'SC-55: showing the floating workspace and opening a terminal in it',
   async () => {
-    const h = await startE2e()
+    const h = await startE2e({ cleanShell: true })
     const dir = realpathSync(mkdtempSync('/tmp/qf-'))
     scratch.push(dir)
     expect(await state(h)).toEqual({ enabled: true, open: false, maximized: false, bounds: null, button: null })
@@ -101,7 +101,7 @@ test(
 test(
   'SC-57: the floating workspace survives a daemon restart',
   async () => {
-    const h = await startE2e()
+    const h = await startE2e({ cleanShell: true })
     await h.json<FloatingState>(['terminal', 'floating', 'show'])
     await h.json<FloatingState>(['terminal', 'floating', 'maximize'])
     await h.json<FloatingState>(['terminal', 'floating', 'bounds', '--x', '40', '--y', '30', '--width', '800', '--height', '500'])

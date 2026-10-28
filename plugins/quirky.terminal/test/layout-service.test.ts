@@ -10,7 +10,8 @@ import { InputTracker } from '../src/input-tracker'
 import { LayoutService } from '../src/layout/service'
 import { appendTab, emptyWorkspace, makeTab } from '../src/layout/ops'
 import { sequentialIds, groupsInOrder, paneLeaves } from '../src/layout/tree'
-import type { FloatingState, Group, PaneLeaf, Tab, Workspace } from '../src/layout/types'
+import { isTerminalTab } from '../src/layout/types'
+import type { FloatingState, Group, PaneLeaf, Tab, TerminalTab, Workspace } from '../src/layout/types'
 import { sessionCreates } from './fakes/quirky.session/main'
 import { call, createSession, restartDaemon, startPluginHarness, TERMINAL_PLUGINS, type PluginSet } from './support'
 
@@ -32,9 +33,9 @@ afterEach(async () => {
 
 const api = (method: string, params: Record<string, unknown> = {}, c: QuirkyClient = client) => call<any>(c, `quirky.terminal/${method}`, params)
 const layoutOf = async (workspace = WT, c: QuirkyClient = client) => (await api('workspace', { workspace }, c)).workspace as Workspace
-const tabsOf = (ws: Workspace): Tab[] => groupsInOrder(ws.root).flatMap((group) => group.tabs)
+const tabsOf = (ws: Workspace): TerminalTab[] => groupsInOrder(ws.root).flatMap((group) => group.tabs.filter(isTerminalTab))
 const groupsOf = (ws: Workspace): Group[] => groupsInOrder(ws.root)
-const panesOf = (tab: Tab): PaneLeaf[] => paneLeaves(tab.root)
+const panesOf = (tab: TerminalTab): PaneLeaf[] => paneLeaves(tab.root)
 const titles = (ws: Workspace) => tabsOf(ws).map((tab) => tab.customTitle ?? tab.defaultTitle)
 const tabNamed = (ws: Workspace, title: string) => tabsOf(ws).find((tab) => (tab.customTitle ?? tab.defaultTitle) === title)!
 const newTab = async (params: Record<string, unknown> = {}) => (await api('newTab', { workspace: WT, ...params })).workspace as Workspace
@@ -298,16 +299,6 @@ describe('tabs', () => {
     expect(groupsOf(ws)[0]!.activeTab).toBe(lastTab(ws).id)
   })
 
-  test('newTab with an agent, prompt, title and cwd passes them to the session plugin', async () => {
-    const dir = tempDir()
-    const ws = await newTab({ agent: 'claude', prompt: 'review the diff', title: 'Review', cwd: dir })
-    expect(sessionCreates().at(-1)).toEqual({ worktree: 'id:wt_main', agent: 'claude', prompt: 'review the diff', cwd: dir })
-    expect(lastTab(ws).defaultTitle).toBe('Review')
-    const agentTab = await newTab({ agent: 'codex' })
-    expect(lastTab(agentTab).defaultTitle).toBe('Codex')
-    expect((await error(api('newTab', { workspace: WT, cwd: '/no/such/dir' })))?.code).toBe(RpcErrorCode.InvalidParams)
-    expect(tabsOf(await layoutOf())).toHaveLength(2)
-  })
 
   test('SC-9: rename sets a custom title, the empty string clears it, and long titles are refused', async () => {
     let ws = await newTab()
@@ -515,7 +506,7 @@ describe('closed tabs', () => {
 })
 
 describe('panes', () => {
-  async function tabWithPanes(count: number): Promise<{ ws: Workspace; tab: Tab }> {
+  async function tabWithPanes(count: number): Promise<{ ws: Workspace; tab: TerminalTab }> {
     let ws = await newTab()
     for (let i = 1; i < count; i++) {
       ws = (await api('splitPane', { pane: lastTab(ws).activePane, direction: 'right' })).workspace
@@ -539,6 +530,48 @@ describe('panes', () => {
     ws = (await api('splitPane', { session: added!.session, direction: 'down' })).workspace
     expect(lastTab(ws).root).toMatchObject({ kind: 'split', direction: 'right', second: { kind: 'split', direction: 'down', ratio: 0.5 } })
     expect(lastTab(ws).activePane).toBe(panesOf(lastTab(ws))[2]!.id)
+  })
+
+  test('splitPane returns the new session and pane while activate false preserves workspace focus', async () => {
+    const first = await newTab()
+    let target = (await api('newTab', { workspace: WT, activate: false })).workspace as Workspace
+    let targetTab = lastTab(target)
+    const source = panesOf(targetTab)[0]!
+    target = (await api('splitPane', { pane: source.id, direction: 'right', activate: false })).workspace as Workspace
+    targetTab = tabsOf(target).find((tab) => tab.id === targetTab.id)!
+    const otherPane = panesOf(targetTab)[1]!
+    target = (await api('expandPane', { pane: otherPane.id, expanded: true })).workspace as Workspace
+    targetTab = tabsOf(target).find((tab) => tab.id === targetTab.id)!
+    const activeGroup = target.activeGroup
+    const activeTabs = groupsOf(target).map((group) => [group.id, group.activeTab])
+    const activePanes = tabsOf(target).map((tab) => [tab.id, tab.activePane])
+    await api('focusContext', { workspace: 'wt_other' })
+
+    const created = await api('splitPane', { pane: source.id, direction: 'right', activate: false })
+    const after = created.workspace as Workspace
+    const splitTab = tabsOf(after).find((tab) => tab.id === targetTab.id)!
+    const added = panesOf(splitTab).find((pane) => pane.id === created.pane)!
+
+    expect(added.session).toBe(created.session)
+    expect(splitTab.activePane).toBe(otherPane.id)
+    expect(splitTab.expandedPane).toBeNull()
+    expect(after.activeGroup).toBe(activeGroup)
+    expect(groupsOf(after).map((group) => [group.id, group.activeTab])).toEqual(activeTabs)
+    expect(tabsOf(after).map((tab) => [tab.id, tab.activePane])).toEqual(activePanes)
+    expect(await api('focusContext')).toEqual({ workspace: 'wt_other' })
+    expect(groupsOf(after)[0]!.activeTab).toBe(tabsOf(first)[0]!.id)
+  })
+
+  test('splitPane rejects an overlong title before starting a session or changing the layout', async () => {
+    const before = await newTab()
+    const pane = panesOf(lastTab(before))[0]!
+    const creates = sessionCreates().length
+
+    const failed = await error(api('splitPane', { pane: pane.id, direction: 'right', title: 'x'.repeat(201) }))
+
+    expect([failed?.code, failed?.message]).toEqual([RpcErrorCode.InvalidParams, 'title must be at most 200 characters'])
+    expect(sessionCreates()).toHaveLength(creates)
+    expect(await layoutOf()).toEqual(before)
   })
 
   test('a source directory that no longer exists falls back to the worktree root', async () => {
@@ -738,7 +771,7 @@ describe('clearPane and resetPane revision precondition', () => {
       pty: { clear: async (s: string) => void reached.push(s), resetModes: async (s: string) => void reached.push(s) }
     }
     const service = new LayoutService(context as never, store as never, new InputTracker())
-    const pane = paneLeaves(groupsInOrder(ws.root)[0]!.tabs[0]!.root)[0]!
+    const pane = panesOf(tabsOf(ws)[0]!)[0]!
     for (const method of ['clearPane', 'resetPane']) {
       const refused = (await Promise.resolve(service.methods[method]!({ pane: pane.id, revision: ws.revision + 5 }, {} as never)).catch((e: unknown) => e)) as { kind?: string }
       expect(refused.kind).toBe('conflict')

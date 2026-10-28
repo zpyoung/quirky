@@ -52,6 +52,7 @@ describe('quirky orchestration generated CLI acceptance', () => {
     )
     expect(created.run.coordinatorSessionId).toBe(coordinator.id)
     expect(created.mutation.replayed).toBe(false)
+    expect(created.mutation.requestId).toMatch(/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/)
 
     const replay = await cliJson<{ run: RunRow; mutation: { requestId: string; replayed: boolean } }>(
       coordinator,
@@ -96,9 +97,9 @@ describe('quirky orchestration generated CLI acceptance', () => {
       '--run',
       created.run.id,
       '--spec',
-      'CSV dependency input',
-      '--dependency-task-ids',
-      `${first.task.id},${second.task.id}`
+      'multiple dependency input',
+      '--deps',
+      JSON.stringify([first.task.id, second.task.id])
     ])
     expect(csvTask.task.dependencyTaskIds).toEqual([first.task.id, second.task.id])
     const jsonTask = await cliJson<{ task: TaskRow }>(coordinator, [
@@ -107,7 +108,7 @@ describe('quirky orchestration generated CLI acceptance', () => {
       created.run.id,
       '--spec',
       'JSON dependency input',
-      '--dependency-task-ids',
+      '--deps',
       JSON.stringify([first.task.id])
     ])
     expect(jsonTask.task.dependencyTaskIds).toEqual([first.task.id])
@@ -150,9 +151,9 @@ describe('quirky orchestration generated CLI acceptance', () => {
       'CLI Run address',
       '--body',
       'to Run mailbox',
-      '--task',
+      '--task-id',
       first.task.id,
-      '--dispatch',
+      '--dispatch-id',
       dispatch.dispatch.id,
       '--files-modified',
       'src/a.ts,src/b.ts'
@@ -193,7 +194,7 @@ describe('quirky orchestration generated CLI acceptance', () => {
       'invalid mixed payload',
       '--payload',
       JSON.stringify({ raw: true }),
-      '--task',
+      '--task-id',
       first.task.id,
       '--retry-request',
       crypto.randomUUID(),
@@ -221,8 +222,7 @@ describe('quirky orchestration generated CLI acceptance', () => {
 
     const check = await cliJson<{ mode: string; messages: { type: string }[] }>(coordinator, [
       'check',
-      '--mode',
-      'peek',
+      '--peek',
       '--run',
       created.run.id,
       '--types',
@@ -482,7 +482,7 @@ describe('quirky orchestration generated CLI acceptance', () => {
       '--retry-request',
       crypto.randomUUID(),
       '--json'
-    ])
+    ], { processTimeoutMs: 3_000 })
     expectCliFailure(unconfirmed)
     expect((await call<InboxResult>(coordinator, 'quirky.orchestration/inbox', {
       full: true,

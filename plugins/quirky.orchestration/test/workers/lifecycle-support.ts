@@ -41,6 +41,7 @@ export type LifecycleFixture = {
 type FixtureOptions = {
   state?: WorkerRecord['state']
   runtimeEpoch?: string
+  workerRuntimeEpoch?: string
   processIncarnation?: string | null
   dispatchStatus?: DispatchRow['status']
   taskStatus?: TaskRow['status']
@@ -155,7 +156,7 @@ export function createLifecycleFixture(options: FixtureOptions = {}): LifecycleF
     lastError: null,
     createdAt: now,
     updatedAt: now,
-    runtimeEpoch: epoch,
+    runtimeEpoch: options.workerRuntimeEpoch ?? epoch,
     processIncarnation: incarnation,
     processRuntimeEpoch: processEpoch,
     mode: 'terminal',
@@ -192,6 +193,21 @@ export function createLifecycleFixture(options: FixtureOptions = {}): LifecycleF
   const closeQuestionCalls: DispatchId[] = []
   let registeredPort: Parameters<WorkerCore['registerWorkerPort']>[0] | null = null
   let registrationCount = 0
+  const transitionDispatch = (input: DispatchTransitionInput): DispatchRow => {
+    const current = dispatches.get(input.dispatchId)
+    if (!current || current.status !== input.expectedState) throw new Error('dispatch state compare-and-set failed')
+    const failureClass = 'failureClass' in input ? input.failureClass : null
+    const next: DispatchRow = {
+      ...current,
+      status: input.nextState,
+      failureCount: failureClass === 'infrastructure' ? current.failureCount + 1 : current.failureCount,
+      lastFailure: 'failureReason' in input ? input.failureReason ?? current.lastFailure : current.lastFailure,
+      completedAt: input.nextState === 'dispatched' ? null : input.at
+    }
+    dispatches.set(input.dispatchId, next)
+    registeredPort?.settleDispatch(store, input.dispatchId, next.status, input.at)
+    return next
+  }
   const identityFor = (record: WorkerRecord): SessionIdentity | null =>
     record.processIncarnation === null || record.sessionId === null || record.processRuntimeEpoch === null ? null : ({
       sessionId: record.sessionId,
@@ -219,6 +235,7 @@ export function createLifecycleFixture(options: FixtureOptions = {}): LifecycleF
       error: (_kind: string, message: string) => new Error(message)
     } as unknown as PluginContext,
     store,
+    nestedWorkerMaxDepth: 1,
     registerWorkerPort(port: Parameters<WorkerCore['registerWorkerPort']>[0]) {
       registrationCount += 1
       if (registrationCount > 1) throw new Error('worker port registered more than once')
@@ -229,8 +246,8 @@ export function createLifecycleFixture(options: FixtureOptions = {}): LifecycleF
       return {
         id: runId,
         objective: 'Lifecycle test',
-        coordinatorSessionId: 'coordinator-session',
-        coordinatorHistory: ['coordinator-session'],
+        coordinatorSessionId: null,
+        coordinatorHistory: [],
         consumerGeneration: 1,
         createdAt: now,
         updatedAt: now
@@ -261,7 +278,12 @@ export function createLifecycleFixture(options: FixtureOptions = {}): LifecycleF
       if (current.status !== input.nextState && registeredPort?.hasLiveForTask(store, input.taskId)) {
         throw Object.assign(new Error('Task has a live supervised worker'), { code: 'task_not_startable' })
       }
-      const next: TaskRow = { ...current, status: input.nextState, result: input.result ?? current.result }
+      const next: TaskRow = {
+        ...current,
+        status: input.nextState,
+        result: input.result === undefined ? current.result : input.result,
+        completedAt: input.nextState === 'completed' ? input.at : null,
+      }
       tasks.set(input.taskId, next)
       return next
     },
@@ -340,43 +362,81 @@ export function createLifecycleFixture(options: FixtureOptions = {}): LifecycleF
     },
     closeWorkerQuestions(dispatchId: DispatchId) { closeQuestionCalls.push(dispatchId) },
     reportWorkerDone(input: WorkerDoneReportInput, reportCaller: RuntimeCallerEvidence): WorkerReportResult {
-      const currentDispatch = dispatches.get(input.dispatchId)
-      const currentTask = tasks.get(input.taskId)
-      if (!currentDispatch || !currentTask || !registeredPort) return { status: 'rejected', reason: 'unknown_dispatch', audited: true }
-      if (currentDispatch.taskId !== input.taskId) return { status: 'rejected', reason: 'task_dispatch_mismatch', audited: true }
-      if (currentDispatch.status !== 'dispatched' || currentTask.status !== 'dispatched') return { status: 'rejected', reason: 'inactive_dispatch', audited: true }
-      const accepted = registeredPort.acceptReport(store, {
-        dispatchId: input.dispatchId,
-        outcome: input.outcome,
-        caller: reportCaller,
-        at: now
+      return store.transaction(() => {
+        const currentDispatch = dispatches.get(input.dispatchId)
+        if (!currentDispatch) return { status: 'rejected', reason: 'unknown_dispatch', audited: true }
+        const currentTask = tasks.get(input.taskId)
+        if (!currentTask) return { status: 'rejected', reason: 'unknown_task', audited: true }
+        if (currentDispatch.taskId !== input.taskId) return { status: 'rejected', reason: 'task_dispatch_mismatch', audited: true }
+        if (currentDispatch.assigneeSessionId === null || reportCaller.callerSessionId !== currentDispatch.assigneeSessionId) {
+          return { status: 'rejected', reason: 'sender_not_assignee', audited: true }
+        }
+        const currentWorker = repo.get(currentDispatch.id)
+        if (reportCaller.runtimeSessionId !== currentDispatch.assigneeSessionId || !currentWorker ||
+          currentWorker.processIncarnation !== reportCaller.attestation.processIncarnation ||
+          currentWorker.processRuntimeEpoch !== reportCaller.attestation.runtimeEpoch) {
+          return { status: 'rejected', reason: 'worker_identity_changed', audited: true }
+        }
+        const latest = [...dispatches.values()]
+          .filter(candidate => candidate.taskId === currentDispatch.taskId)
+          .sort((left, right) => left.createdAt.localeCompare(right.createdAt) || left.id.localeCompare(right.id))
+          .at(-1)
+        if (latest?.id !== currentDispatch.id) return { status: 'rejected', reason: 'stale_dispatch', audited: true }
+        if (currentDispatch.status === 'completed' || currentDispatch.status === 'failed' || currentDispatch.status === 'circuit_broken') {
+          const priorResult = currentTask.result
+          if (priorResult?.kind === 'worker_report' && priorResult.dispatchId === currentDispatch.id && priorResult.outcome === input.outcome) {
+            return { status: 'duplicate', task: currentTask, dispatch: currentDispatch, worker: repo.get(currentDispatch.id) }
+          }
+          return { status: 'rejected', reason: 'inactive_dispatch', audited: true }
+        }
+        if (currentDispatch.status !== 'pending' && currentDispatch.status !== 'dispatched') {
+          return { status: 'rejected', reason: 'dispatch_inactive', audited: true }
+        }
+        if (currentTask.status !== 'dispatched' && currentTask.status !== 'blocked') {
+          return { status: 'rejected', reason: 'inactive_dispatch', audited: true }
+        }
+        if (!registeredPort) throw new Error('worker lifecycle port is not registered')
+        if (currentWorker.state === 'stopping' || (currentWorker.state === 'stop_unknown' && currentWorker.stage === 'stopping') ||
+          currentWorker.state === 'stopped' || currentWorker.state === 'abandoned') {
+          return { status: 'rejected', reason: 'dispatch_inactive', audited: true }
+        }
+        const accepted = registeredPort.acceptReport(store, {
+          dispatchId: input.dispatchId,
+          outcome: input.outcome,
+          caller: reportCaller,
+          at: now
+        })
+        if (!accepted) return { status: 'rejected', reason: 'worker_identity_changed', audited: true }
+        const reportResult: NonNullable<TaskRow['result']> = {
+          kind: 'worker_report',
+          outcome: input.outcome,
+          messageId: input.messageId,
+          dispatchId: input.dispatchId,
+          reportedBy: reportCaller.runtimeSessionId,
+          subject: input.subject,
+          body: input.body,
+          completedBy: reportCaller.runtimeSessionId,
+          filesModified: [...(input.filesModified ?? [])],
+          reportPath: input.reportPath ?? null,
+          completedAt: now
+        }
+        const nextState = input.outcome === 'succeeded' ? 'completed' : 'failed'
+        const settledDispatch = currentDispatch.status === 'pending'
+          ? input.outcome === 'succeeded'
+            ? this.transitionDispatch({ dispatchId: currentDispatch.id, expectedState: 'pending', nextState: 'completed', at: now })
+            : this.transitionDispatch({ dispatchId: currentDispatch.id, expectedState: 'pending', nextState: 'failed', failureClass: 'worker_report', failureReason: 'worker_report', at: now })
+          : input.outcome === 'succeeded'
+            ? this.transitionDispatch({ dispatchId: currentDispatch.id, expectedState: 'dispatched', nextState: 'completed', at: now })
+            : this.transitionDispatch({ dispatchId: currentDispatch.id, expectedState: 'dispatched', nextState: 'failed', failureClass: 'worker_report', failureReason: 'worker_report', at: now })
+        const settledTask = this.transitionTask({
+          taskId: currentTask.id,
+          expectedState: currentTask.status,
+          nextState: nextState === 'completed' ? 'completed' : 'failed',
+          result: reportResult,
+          at: now
+        })
+        return { status: 'accepted', task: settledTask, dispatch: settledDispatch, worker: accepted }
       })
-      if (!accepted) return { status: 'rejected', reason: 'worker_identity_changed', audited: true }
-      const reportResult: TaskRow['result'] = {
-        kind: 'worker_report',
-        outcome: input.outcome,
-        messageId: input.messageId,
-        dispatchId: input.dispatchId,
-        reportedBy: reportCaller.callerSessionId,
-        subject: input.subject,
-        body: input.body,
-        completedBy: reportCaller.callerSessionId,
-        filesModified: input.filesModified ?? [],
-        reportPath: input.reportPath ?? null,
-        completedAt: now
-      }
-      const transition: DispatchTransitionInput = input.outcome === 'succeeded'
-        ? { dispatchId: input.dispatchId, expectedState: 'dispatched', nextState: 'completed', at: now }
-        : { dispatchId: input.dispatchId, expectedState: 'dispatched', nextState: 'failed', failureClass: 'worker_report', at: now }
-      this.transitionDispatch(transition)
-      const updatedTask: TaskRow = {
-        ...currentTask,
-        status: input.outcome === 'succeeded' ? 'completed' : 'failed',
-        result: reportResult,
-        completedAt: now
-      }
-      tasks.set(input.taskId, updatedTask)
-      return { status: 'accepted', task: updatedTask, dispatch: dispatches.get(input.dispatchId)!, worker: accepted }
     },
     recordHeartbeat(_input: WorkerHeartbeatInput, _heartbeatCaller: RuntimeCallerEvidence) {
       return { status: 'accepted', lastHeartbeatAt: now }

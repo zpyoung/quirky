@@ -2,13 +2,18 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import { rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { Database } from 'bun:sqlite'
-import { QuirkyClient, RpcErrorCode, type LaunchSettings, type QuirkyEvent, type RpcError, type Session } from '@quirky/protocol'
+import { QuirkyClient, RpcErrorCode, type LaunchSettings, type QuirkyEvent, type RpcError, type Session, type StructuredMessage } from '@quirky/protocol'
 import { rpcUrl } from '@quirky/protocol/node'
 import type { Harness } from '../../../packages/daemon/test/helpers'
-import { makeTempHome, waitFor } from '../../../packages/daemon/test/helpers'
+import { makeTempHome, waitFor, waitForAsync } from '../../../packages/daemon/test/helpers'
 import { makeTempDir, removeTempDirs } from '../../../packages/daemon/test/plugins/fixtures'
 import { fakeAgents, resetFakeAgents } from './fakes/quirky.agents/main'
 import { CLAUDE_SETTINGS } from './fakes/quirky.agent-status/main'
+import { createClaudeRunner, type ClaudeQueryParams } from '../../quirky.structured/claude-runner'
+import { createCodexRunner } from '../../quirky.structured/codex-runner'
+import type { StructuredRunner, StructuredRunnerFactory } from '../../quirky.structured/runner'
+import { createCodexAppServerFixture, isolatedProviderEnvironment } from '../../quirky.structured/test/fakes/codex-app-server'
+import { FakeQuery } from '../../quirky.structured/test/fakes/fake-query'
 import {
   call,
   createSession,
@@ -17,13 +22,62 @@ import {
   SESSION_PLUGINS,
   startPluginHarness,
   writeV1Sessions,
-  type V1Session
+  type V1Session,
+  type PluginSet
 } from './support'
 
 let h: Harness
 let client: QuirkyClient
 let events: QuirkyEvent[]
 let folder: string
+
+const globals = globalThis as typeof globalThis & { __QUIRKY_TEST_STRUCTURED_RUNNER__?: StructuredRunnerFactory }
+const STRUCTURED_SESSION_PLUGINS: PluginSet = {
+  real: ['quirky.session', 'quirky.structured', 'quirky.ask'],
+  fakes: ['quirky.worktree', 'quirky.agents', 'quirky.agent-status']
+}
+
+function structuredRunnerFactory(
+  home: string,
+  executable: string,
+  claudeQueries: FakeQuery[]
+): StructuredRunnerFactory {
+  return (context) => {
+    const claude = createClaudeRunner(
+      { ...context, resolveClaudePath: async () => '/fake/claude' },
+      {
+        query: (params: ClaudeQueryParams) => {
+          const query = new FakeQuery(params)
+          claudeQueries.push(query)
+          return query
+        }
+      }
+    )
+    const codex = createCodexRunner(
+      { ...context, resolveCodexPath: async () => executable },
+      { env: isolatedProviderEnvironment(home) }
+    )
+    const runners = new Map<string, StructuredRunner>()
+    const runnerFor = (sessionId: string): StructuredRunner => {
+      const runner = runners.get(sessionId)
+      if (!runner) throw new Error(`no structured runner for ${sessionId}`)
+      return runner
+    }
+    return {
+      start(session, prompt, options) {
+        const runner = session.agent === 'codex' ? codex : claude
+        runners.set(session.id, runner)
+        return runner.start(session, prompt, options)
+      },
+      send(sessionId, text) {
+        return runnerFor(sessionId).send(sessionId, text)
+      },
+      stop(sessionId) {
+        return runnerFor(sessionId).stop(sessionId)
+      }
+    }
+  }
+}
 
 beforeEach(async () => {
   resetFakeAgents()
@@ -34,6 +88,7 @@ beforeEach(async () => {
 })
 afterEach(async () => {
   delete process.env.QUIRKY_TEST_REAL_WORKTREE
+  delete globals.__QUIRKY_TEST_STRUCTURED_RUNNER__
   await h.cleanup()
   removeTempDirs()
 })
@@ -332,16 +387,23 @@ describe('SC-35: resume and fork are refused where they can not work', () => {
     expect(creates()).toBe(before)
   })
 
-  test('a structured session can not be resumed', async () => {
+  test('structured resume rejects provider and fork overrides without starting a terminal', async () => {
     const structured = await call<Session>(client, 'quirky.session/register', {
       worktree: 'id:wt_real',
       agent: 'claude',
       kind: 'structured',
       title: 'Claude'
     })
-    expect((await failure(resume({ session: structured.id, providerSession: 'x' }))).message).toBe(
-      `session ${structured.id} is not a terminal session`
-    )
+    const before = creates()
+    expect(await failure(resume({ session: structured.id, providerSession: 'native-thread' }))).toMatchObject({
+      code: RpcErrorCode.InvalidParams,
+      message: 'structured sessions do not support providerSession overrides'
+    })
+    expect(await failure(resume({ session: structured.id, fork: true }))).toMatchObject({
+      code: RpcErrorCode.Conflict,
+      message: 'structured sessions do not support fork'
+    })
+    expect(creates()).toBe(before)
   })
 
   test('an unknown session is NotFound', async () => {
@@ -353,5 +415,136 @@ describe('SC-35: resume and fork are refused where they can not work', () => {
       const error = await failure(v1.callAny('quirky.session/resume', { session: 's_gone', providerSession: 'x' }))
       expect(error.message).toBe('unknown agent: vanished')
     })
+  })
+})
+
+describe('structured provider resume', () => {
+  test('resumes Claude and Codex across a daemon restart without creating new provider conversations', async () => {
+    await h.cleanup()
+    h = await startPluginHarness(STRUCTURED_SESSION_PLUGINS)
+    ;({ client, events } = await h.connectWithEvents('cli'))
+    const home = h.home
+    const fixture = createCodexAppServerFixture(home)
+    const claudeQueries: FakeQuery[] = []
+    globals.__QUIRKY_TEST_STRUCTURED_RUNNER__ = structuredRunnerFactory(home, fixture.executable, claudeQueries)
+
+    const createStructured = (agent: string, prompt: string, model: string, effort: string) =>
+      call<Session>(client, 'quirky.structured/create', {
+        worktree: 'id:wt_real',
+        agent,
+        prompt,
+        model,
+        options: { effort }
+      })
+    const claude = await createStructured('claude', 'initial Claude turn', 'opus', 'high')
+    const codex = await createStructured('codex', 'initial Codex turn', 'gpt-5.5', 'xhigh')
+    const [oldClaude, oldCodex] = await waitForAsync(async () => {
+      const [claudeSession, codexSession] = await Promise.all([
+        call<Session>(client, 'quirky.session/get', { session: claude.id }),
+        call<Session>(client, 'quirky.session/get', { session: codex.id })
+      ])
+      return claudeSession.providerSession?.id && codexSession.providerSession?.id ? [claudeSession, codexSession] : null
+    })
+    expect(oldClaude).toMatchObject({
+      worktreeId: 'wt_real',
+      cwd: folder,
+      launchSettings: { agent: 'claude', options: { model: { value: 'opus' }, effort: { value: 'high' } } }
+    })
+    expect(oldCodex).toMatchObject({
+      worktreeId: 'wt_real',
+      cwd: folder,
+      providerSession: { id: 'scripted-thread' },
+      launchSettings: { agent: 'codex', options: { model: { value: 'gpt-5.5' }, effort: { value: 'xhigh' } } }
+    })
+    expect(claudeQueries[0].params.options?.sessionId).toBe(oldClaude.providerSession!.id)
+    expect(oldClaude.providerSession!.id).not.toBe(claude.id)
+    expect(h.pty.requests.some((request) => request.type === 'create')).toBe(false)
+
+    expect(await failure(call(client, 'quirky.structured/resume', { session: codex.id }))).toMatchObject({
+      code: RpcErrorCode.Conflict
+    })
+    await call(client, 'quirky.structured/stop', { session: claude.id })
+    await call(client, 'quirky.structured/stop', { session: codex.id })
+
+    const restarted = await restartDaemon(h, {
+      builtinPluginsDir: makeBuiltinDir(home, STRUCTURED_SESSION_PLUGINS, 'structured-resume-builtins')
+    })
+    try {
+      client = restarted.client
+      const resumedClaude = await call<Session>(client, 'quirky.structured/resume', { session: claude.id })
+      const codexAttempts = await Promise.all([
+        call<Session>(client, 'quirky.session/resume', { session: codex.id }).then(
+          (session) => ({ session }),
+          (error: unknown) => ({ error })
+        ),
+        call<Session>(client, 'quirky.session/resume', { session: codex.id }).then(
+          (session) => ({ session }),
+          (error: unknown) => ({ error })
+        )
+      ])
+      const codexSuccess = codexAttempts.find((attempt): attempt is { session: Session } => 'session' in attempt)
+      const codexConflict = codexAttempts.find((attempt): attempt is { error: unknown } => 'error' in attempt)
+      expect(codexSuccess).toBeDefined()
+      expect(codexConflict?.error).toMatchObject({ code: RpcErrorCode.Conflict })
+      const resumedCodex = codexSuccess!.session
+      await call(client, 'quirky.structured/send', { session: resumedCodex.id, text: 'later Codex turn' })
+      const [resumedClaudeRecord, resumedCodexRecord] = await waitForAsync(async () => {
+        const [claudeRecord, codexRecord] = await Promise.all([
+          call<Session>(client, 'quirky.session/get', { session: resumedClaude.id }),
+          call<Session>(client, 'quirky.session/get', { session: resumedCodex.id })
+        ])
+        return claudeRecord.providerSession?.id && codexRecord.providerSession?.id ? [claudeRecord, codexRecord] : null
+      })
+
+      expect(resumedClaudeRecord.id).not.toBe(claude.id)
+      expect(resumedCodexRecord.id).not.toBe(codex.id)
+      expect(resumedClaudeRecord).toMatchObject({
+        kind: 'structured',
+        agent: 'claude',
+        worktreeId: oldClaude.worktreeId,
+        cwd: folder,
+        resumedFrom: claude.id,
+        launchSettings: oldClaude.launchSettings,
+        providerSession: { id: oldClaude.providerSession!.id }
+      })
+      expect(resumedCodexRecord).toMatchObject({
+        kind: 'structured',
+        agent: 'codex',
+        worktreeId: oldCodex.worktreeId,
+        cwd: folder,
+        resumedFrom: codex.id,
+        launchSettings: oldCodex.launchSettings,
+        providerSession: { id: oldCodex.providerSession!.id }
+      })
+      await waitFor(() => claudeQueries.length === 2)
+      const claudeResume = claudeQueries.find((query) => query.params.options?.resume === oldClaude.providerSession!.id)!
+      expect(claudeResume.params.options).toMatchObject({ model: 'opus', effort: 'high' })
+      expect(claudeResume.params.options).not.toHaveProperty('sessionId')
+
+      await call(client, 'quirky.structured/send', { session: resumedClaude.id, text: 'later Claude turn' })
+      await waitForAsync(async () => (claudeResume.written.length === 1 ? true : null))
+      expect(claudeResume.written[0]).toMatchObject({
+        session_id: oldClaude.providerSession!.id,
+        message: { content: 'later Claude turn' }
+      })
+
+      const resumeCall = fixture.requests().filter((request) => request.method === 'thread/resume').at(-1)
+      expect(resumeCall?.params).toMatchObject({ threadId: oldCodex.providerSession!.id, cwd: folder, model: 'gpt-5.5' })
+      await waitForAsync(async () => {
+        const messages = await call<StructuredMessage[]>(client, 'quirky.structured/messages', { session: resumedCodex.id })
+        return messages.some((message) => message.role === 'assistant' && message.text === 'Codex: later Codex turn')
+      })
+      expect(fixture.requests().filter((request) => request.method === 'turn/start').at(-1)?.params).toMatchObject({
+        threadId: oldCodex.providerSession!.id,
+        input: [{ type: 'text', text: 'later Codex turn' }],
+        model: 'gpt-5.5',
+        effort: 'xhigh'
+      })
+      expect(h.pty.requests.some((request) => request.type === 'create')).toBe(false)
+      await call(client, 'quirky.structured/stop', { session: resumedClaude.id })
+      await call(client, 'quirky.structured/stop', { session: resumedCodex.id })
+    } finally {
+      await restarted.stop()
+    }
   })
 })

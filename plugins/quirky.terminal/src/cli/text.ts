@@ -1,4 +1,5 @@
 import { displayTitle } from '../layout/titles'
+import { isViewTab } from '../layout/types'
 import type { FloatingState, GroupNode, PaneNode, QuickCommand, Tab, Workspace } from '../layout/types'
 
 const indent = (depth: number) => '  '.repeat(depth)
@@ -17,6 +18,10 @@ function paneLines(node: PaneNode, depth: number, activePane: string | null, lin
 function tabLines(tab: Tab, depth: number, active: boolean, lines: string[]): void {
   const color = tab.color === 'none' ? '' : ` ${tab.color}`
   lines.push(`${indent(depth)}tab ${tab.id} ${JSON.stringify(displayTitle(tab))}${color}${active ? ' (active)' : ''}`)
+  if (isViewTab(tab)) {
+    lines.push(`${indent(depth + 1)}view ${tab.viewId} ${JSON.stringify(tab.key)}${tab.preview ? ' (preview)' : ''}`)
+    return
+  }
   paneLines(tab.root, depth + 1, active ? tab.activePane : null, lines)
 }
 

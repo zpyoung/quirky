@@ -476,7 +476,7 @@
       },
       {
         "id": "show",
-        "description": "A project with its settings and effective hooks (the shared file at HEAD merged with the local scripts).",
+        "description": "A project with its settings and effective hooks (the shared file at HEAD merged with local setup, archive and issue-command scripts).",
         "readOnly": true,
         "params": {
           "type": "object",
@@ -554,7 +554,7 @@
                   "description": "start-immediately or wait-for-setup; null when unset."
                 },
                 "commandSource": {
-                  "description": "shared-only, local-only or run-both; null when unset."
+                  "description": "shared-only, local-only or run-both for setup, archive and issue-command scripts; null when unset."
                 },
                 "setupScript": {
                   "type": "string",
@@ -563,6 +563,10 @@
                 "archiveScript": {
                   "type": "string",
                   "description": "The local archive script."
+                },
+                "issueCommand": {
+                  "type": "string",
+                  "description": "The local issue command; empty when unset."
                 }
               },
               "required": [
@@ -582,6 +586,9 @@
                 },
                 "archive": {
                   "description": "The effective archive script as { text, source, badge, shared }, or null."
+                },
+                "issueCommand": {
+                  "description": "The effective issue command as { text, source, badge, shared }, or null."
                 },
                 "agentStartup": {
                   "type": "string",
@@ -671,6 +678,10 @@
             "archiveScript": {
               "type": "string",
               "description": "Local archive script."
+            },
+            "issueCommand": {
+              "type": "string",
+              "description": "Local issue-command script; an empty string clears it."
             }
           },
           "required": [
@@ -741,7 +752,7 @@
                   "description": "start-immediately or wait-for-setup; null when unset."
                 },
                 "commandSource": {
-                  "description": "shared-only, local-only or run-both; null when unset."
+                  "description": "shared-only, local-only or run-both for setup, archive and issue-command scripts; null when unset."
                 },
                 "setupScript": {
                   "type": "string",
@@ -750,6 +761,10 @@
                 "archiveScript": {
                   "type": "string",
                   "description": "The local archive script."
+                },
+                "issueCommand": {
+                  "type": "string",
+                  "description": "The local issue command; empty when unset."
                 }
               },
               "required": [
@@ -769,6 +784,9 @@
                 },
                 "archive": {
                   "description": "The effective archive script as { text, source, badge, shared }, or null."
+                },
+                "issueCommand": {
+                  "description": "The effective issue command as { text, source, badge, shared }, or null."
                 },
                 "agentStartup": {
                   "type": "string",
@@ -806,7 +824,7 @@
       },
       {
         "id": "hooks",
-        "description": "The setup and archive hooks of a project: the hooks file read at `ref` merged with the local scripts by the command-source policy, with trust per shared script.",
+        "description": "The setup, archive and issue-command hooks of a project: the hooks file read at `ref` merged with local scripts by the command-source policy, with trust per shared script.",
         "readOnly": true,
         "params": {
           "type": "object",
@@ -835,6 +853,9 @@
             },
             "archive": {
               "description": "The effective archive script as { text, source, badge, shared }, or null."
+            },
+            "issueCommand": {
+              "description": "The effective issue command as { text, source, badge, shared }, or null."
             },
             "agentStartup": {
               "type": "string",
@@ -865,7 +886,7 @@
       },
       {
         "id": "trustHooks",
-        "description": "Approves the shared setup and archive scripts now at a ref (default HEAD), so they may run.",
+        "description": "Approves the shared setup, archive, and issue-command scripts now at a ref (default HEAD), so they may run.",
         "params": {
           "type": "object",
           "properties": {
@@ -879,6 +900,7 @@
               "enum": [
                 "setup",
                 "archive",
+                "issue",
                 "all"
               ]
             },
@@ -955,7 +977,7 @@
                   "description": "start-immediately or wait-for-setup; null when unset."
                 },
                 "commandSource": {
-                  "description": "shared-only, local-only or run-both; null when unset."
+                  "description": "shared-only, local-only or run-both for setup, archive and issue-command scripts; null when unset."
                 },
                 "setupScript": {
                   "type": "string",
@@ -964,6 +986,10 @@
                 "archiveScript": {
                   "type": "string",
                   "description": "The local archive script."
+                },
+                "issueCommand": {
+                  "type": "string",
+                  "description": "The local issue command; empty when unset."
                 }
               },
               "required": [
@@ -983,6 +1009,9 @@
                 },
                 "archive": {
                   "description": "The effective archive script as { text, source, badge, shared }, or null."
+                },
+                "issueCommand": {
+                  "description": "The effective issue command as { text, source, badge, shared }, or null."
                 },
                 "agentStartup": {
                   "type": "string",
@@ -1039,6 +1068,9 @@
               "parentPath": {
                 "description": "Folder the group was scanned from; null for a hand-made group."
               },
+              "parentId": {
+                "description": "Parent project group, or null."
+              },
               "collapsed": {
                 "type": "boolean"
               },
@@ -1063,6 +1095,7 @@
               "id",
               "name",
               "collapsed",
+              "parentId",
               "order",
               "createdFrom",
               "repoIds"
@@ -1071,8 +1104,22 @@
         }
       },
       {
+        "id": "groupDeletedIds",
+        "description": "Durable IDs of groups deleted from this repository store.",
+        "readOnly": true,
+        "params": {
+          "type": "object"
+        },
+        "result": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      {
         "id": "groupCreate",
-        "description": "Creates an empty group.",
+        "description": "Creates an empty group, optionally nested under another group.",
         "params": {
           "type": "object",
           "properties": {
@@ -1082,6 +1129,10 @@
             "parentPath": {
               "type": "string",
               "description": "Folder the group stands for."
+            },
+            "parent": {
+              "type": "string",
+              "description": "A parent group ID or exact name."
             }
           },
           "required": [
@@ -1099,6 +1150,9 @@
             },
             "parentPath": {
               "description": "Folder the group was scanned from; null for a hand-made group."
+            },
+            "parentId": {
+              "description": "Parent project group, or null."
             },
             "collapsed": {
               "type": "boolean"
@@ -1123,6 +1177,72 @@
           "required": [
             "id",
             "name",
+            "parentId",
+            "collapsed",
+            "order",
+            "createdFrom",
+            "repoIds"
+          ]
+        }
+      },
+      {
+        "id": "groupSetParent",
+        "description": "Sets or clears a group's parent after rejecting missing, self and cyclic parents.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "group": {
+              "type": "string",
+              "description": "A group ID or exact name."
+            },
+            "parent": {
+              "description": "A parent group ID or exact name, or null to make this a root group."
+            }
+          },
+          "required": [
+            "group",
+            "parent"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "parentPath": {
+              "description": "Folder the group was scanned from; null for a hand-made group."
+            },
+            "parentId": {
+              "description": "Parent project group, or null."
+            },
+            "collapsed": {
+              "type": "boolean"
+            },
+            "order": {
+              "type": "number"
+            },
+            "createdFrom": {
+              "type": "string",
+              "enum": [
+                "manual",
+                "folder-scan"
+              ]
+            },
+            "repoIds": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "required": [
+            "id",
+            "name",
+            "parentId",
             "collapsed",
             "order",
             "createdFrom",
@@ -1161,6 +1281,9 @@
             "parentPath": {
               "description": "Folder the group was scanned from; null for a hand-made group."
             },
+            "parentId": {
+              "description": "Parent project group, or null."
+            },
             "collapsed": {
               "type": "boolean"
             },
@@ -1184,6 +1307,7 @@
           "required": [
             "id",
             "name",
+            "parentId",
             "collapsed",
             "order",
             "createdFrom",
@@ -1193,7 +1317,7 @@
       },
       {
         "id": "groupDelete",
-        "description": "Deletes a group; its projects stay, ungrouped.",
+        "description": "Deletes a group and every descendant, preserving repository and worktree state.",
         "params": {
           "type": "object",
           "properties": {
@@ -1261,6 +1385,9 @@
             "parentPath": {
               "description": "Folder the group was scanned from; null for a hand-made group."
             },
+            "parentId": {
+              "description": "Parent project group, or null."
+            },
             "collapsed": {
               "type": "boolean"
             },
@@ -1284,6 +1411,7 @@
           "required": [
             "id",
             "name",
+            "parentId",
             "collapsed",
             "order",
             "createdFrom",
@@ -1323,6 +1451,9 @@
             "parentPath": {
               "description": "Folder the group was scanned from; null for a hand-made group."
             },
+            "parentId": {
+              "description": "Parent project group, or null."
+            },
             "collapsed": {
               "type": "boolean"
             },
@@ -1346,6 +1477,7 @@
           "required": [
             "id",
             "name",
+            "parentId",
             "collapsed",
             "order",
             "createdFrom",
@@ -1384,6 +1516,9 @@
             "parentPath": {
               "description": "Folder the group was scanned from; null for a hand-made group."
             },
+            "parentId": {
+              "description": "Parent project group, or null."
+            },
             "collapsed": {
               "type": "boolean"
             },
@@ -1407,6 +1542,7 @@
           "required": [
             "id",
             "name",
+            "parentId",
             "collapsed",
             "order",
             "createdFrom",
@@ -1635,7 +1771,7 @@
           },
           "command-source": {
             "type": "string",
-            "description": "which setup and archive scripts run (empty returns to inherited)",
+            "description": "which setup, archive and issue-command scripts run (empty returns to inherited)",
             "enum": [
               "shared-only",
               "local-only",
@@ -1650,6 +1786,10 @@
           "archive-script": {
             "type": "string",
             "description": "local archive script (empty clears)"
+          },
+          "issue-command": {
+            "type": "string",
+            "description": "local issue-command script (empty clears)"
           }
         },
         "methods": [
@@ -1669,10 +1809,11 @@
         "flags": {
           "kind": {
             "type": "string",
-            "description": "which scripts to trust (default all)",
+            "description": "which scripts to trust, including the issue command (default all)",
             "enum": [
               "setup",
               "archive",
+              "issue",
               "all"
             ]
           },
@@ -1708,10 +1849,39 @@
           "parent-path": {
             "type": "string",
             "description": "folder the group stands for"
+          },
+          "parent": {
+            "type": "string",
+            "description": "parent group ID or exact name"
           }
         },
         "methods": [
           "quirky.repo/groupCreate"
+        ]
+      },
+      {
+        "id": "group-set-parent",
+        "words": "group set-parent",
+        "summary": "set or clear a project group's parent",
+        "positionals": [
+          {
+            "name": "group",
+            "description": "the group (ID or name)",
+            "required": true
+          }
+        ],
+        "flags": {
+          "parent": {
+            "type": "string",
+            "description": "parent group ID or exact name"
+          },
+          "no-parent": {
+            "type": "boolean",
+            "description": "make this a root group"
+          }
+        },
+        "methods": [
+          "quirky.repo/groupSetParent"
         ]
       },
       {

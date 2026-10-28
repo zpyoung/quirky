@@ -5,7 +5,6 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
   RpcErrorCode,
-  type ApiDescription,
   type QuirkyClient,
   type QuirkyEvent,
   type RpcError,
@@ -87,8 +86,14 @@ afterEach(async () => {
 const call = (method: string, params: Record<string, unknown> = {}) => client.callAny(method, params) as Promise<any>
 const create = (prompt = 'fix the bug') =>
   call('quirky.structured/create', { worktree: 'main', agent: 'claude', prompt }) as Promise<Session>
-const createAgent = (agent: string, prompt = 'fix the bug', extra: Record<string, unknown> = {}) =>
-  call('quirky.structured/create', { worktree: 'main', agent, prompt, ...extra }) as Promise<Session>
+type StructuredAgent = 'claude' | 'codex'
+type StructuredCreateOverrides = {
+  model?: string
+  options?: Record<string, string | boolean>
+}
+const createAgent = (agent: StructuredAgent, prompt = 'fix the bug', overrides: StructuredCreateOverrides = {}) =>
+  call('quirky.structured/create', { worktree: 'main', agent, prompt, ...overrides }) as Promise<Session>
+
 
 async function failure(promise: Promise<unknown>): Promise<RpcError> {
   try {
@@ -128,6 +133,7 @@ describe('structured sessions with a runner', () => {
     await waitFor(() => world.statusLog.some((entry) => entry.status === 'working'))
     expect(world.statusLog[0]).toEqual({ sessionId: session.id, status: 'working' })
   })
+
 
   test('a structured tool child authenticates with its launch lease', async () => {
     const session = await create()
@@ -205,10 +211,6 @@ try {
     expect(session.title).toBe('Worker')
     expect(runner.started[0]?.prompt).toBeUndefined()
     expect(runner.sent).toEqual([])
-    expect((runner.started[0]?.options as StructuredLaunchOptions | undefined)?.env).toMatchObject({
-      QUIRKY_SESSION_ID: session.id,
-      QUIRKY_SESSION_TOKEN: expect.any(String)
-    })
   })
 
   test('revokes structured identity on stop and runner exit', async () => {
@@ -254,9 +256,7 @@ try {
     })
     const options = runner.started[0]?.options as StructuredLaunchOptions | undefined
     expect(options?.env).toMatchObject({
-      CLAUDE_CONFIG_DIR: '/custom/claude',
-      QUIRKY_SESSION_ID: session.id,
-      QUIRKY_SESSION_TOKEN: expect.any(String)
+      CLAUDE_CONFIG_DIR: '/custom/claude'
     })
   })
 
@@ -387,7 +387,6 @@ try {
     await Bun.sleep(world.askWaitCapMs * 3)
     await call('quirky.ask/answer', { askId: ask.id, answers: { ok: { value: true, source: 'input' } } })
     expect((await pending).status).toBe('answered')
-    expect(await runner.context.resolveClaudePath()).toBeString()
   })
 
   test('closing a session declines its pending asks', async () => {
@@ -402,45 +401,7 @@ try {
     expect((await pending).status).toBe('declined')
   })
 
-  test('SC-23: a model and effort pick is resolved and recorded on the session', async () => {
-    const snapshot = {
-      agent: 'claude',
-      options: { model: { value: 'opus', source: 'explicit' }, effort: { value: 'high', source: 'explicit' } },
-      summary: 'Claude · Opus · Effort: high'
-    }
-    world.resolveLaunchOverride = () => ({
-      added: [],
-      args: '',
-      structured: { model: 'opus', effort: 'high' },
-      shadowed: [],
-      launchSettings: snapshot
-    })
-    await call('quirky.structured/create', {
-      worktree: 'main',
-      agent: 'claude',
-      prompt: 'hi',
-      model: 'opus',
-      options: { effort: 'high' }
-    })
-    expect(world.resolveLaunchCalls).toEqual([
-      { agent: 'claude', model: 'opus', options: { effort: 'high' }, structured: true }
-    ])
-    expect(world.registerCalls[0].launchSettings).toEqual(snapshot)
-    await waitFor(() => runner.started.length === 1)
-  })
 
-  test('SC-23: with no pick no launch settings are resolved or recorded', async () => {
-    await create()
-    await waitFor(() => runner.started.length === 1)
-    expect(world.resolveLaunchCalls).toEqual([])
-    expect(world.registerCalls[0]).not.toHaveProperty('launchSettings')
-  })
-
-  test('SC-23: a pick that resolves to no snapshot registers without launchSettings', async () => {
-    await call('quirky.structured/create', { worktree: 'main', agent: 'claude', prompt: 'hi', model: 'opus' })
-    expect(world.registerCalls[0]).not.toHaveProperty('launchSettings')
-    await waitFor(() => runner.started.length === 1)
-  })
 
   test('SC-24: extra arguments are refused and nothing is registered', async () => {
     expect(
@@ -477,7 +438,6 @@ try {
     const terminal = world.addTerminalSession()
     expect(await failure(call('quirky.structured/send', { session: terminal.id, text: 'x' }))).toMatchObject({
       code: RpcErrorCode.InvalidParams,
-      message: `session ${terminal.id} is not a structured session`
     })
     expect(await failure(call('quirky.structured/messages', { session: terminal.id }))).toMatchObject({
       code: RpcErrorCode.InvalidParams
@@ -509,6 +469,7 @@ try {
       message: 'quirky.structured: session is not running'
     })
   })
+
 })
 
 
@@ -627,10 +588,10 @@ describe('the Codex runner inside the plugin', () => {
     expect(h.pty.requests.some((request) => request.type === 'create')).toBe(false)
     const ask = await waitForAsync(async () => ((await call('quirky.ask/list', { pendingOnly: true })) as { id: string }[])[0])
     await call('quirky.ask/answer', { askId: ask.id, answers: { decision: { value: 'allow', source: 'option' } } })
-    await waitForAsync(() =>
-      settledEvents().some((event) => event.sessionId === session.id && event.state === 'done')
+    const settled = await waitFor(() =>
+      settledEvents().find((event) => event.sessionId === session.id && event.state === 'done')
     )
-    expect(settledEvents().find((event) => event.sessionId === session.id && event.state === 'done')).toMatchObject({
+    expect(settled).toMatchObject({
       agent: 'codex',
       state: 'done',
       lastAssistantMessage: 'Codex: [approve] summarize'

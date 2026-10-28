@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, test } from 'bun:test'
-import { chmodSync, existsSync, realpathSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, mkdirSync, realpathSync, writeFileSync } from 'node:fs'
 import { basename, join, resolve } from 'node:path'
 import type { QuirkyClient, Repo, Session, UiState, Worktree, WorktreeCreateResult } from '@quirky/protocol'
 import { builtinsDir, makeTempHome, startHarness, type Harness } from '../../../packages/daemon/test/helpers'
@@ -12,6 +12,8 @@ import { button, click, dialogNamed, dialogs, field, modEnter, pressEscape, setS
 const SIDEBAR = 'sidebar-section:quirky.worktree/worktrees'
 const SESSION_VIEW = 'view:quirky.session/worktree'
 const NEW_WORKTREE = 'command:quirky.worktree/new-worktree'
+const CREATE_MORE_AGENT_ID = 'worktree-create-more'
+const CREATE_MORE_AGENT_LABEL = 'Worktree Create More Test Agent'
 const CREATE = 'New workspace'
 const FALLBACK = 'Workspace created from a local base'
 const SLOW = 40_000
@@ -76,6 +78,39 @@ async function openCreate(w: World, project: Project): Promise<HTMLElement> {
   await w.win.waitFor(() => field(dialog, 'Name')?.placeholder)
   return dialog
 }
+async function installCreateMoreAgent(w: World): Promise<void> {
+  const path = join(scratch(), 'create-more-agent-plugin')
+  mkdirSync(path, { recursive: true })
+  writeFileSync(
+    join(path, 'quirky-plugin.json'),
+    JSON.stringify({
+      id: 'acme.agents',
+      name: 'Acme test agents',
+      version: '1.0.0',
+      description: 'Agent provider for the Create more dialog test.',
+      contributes: {
+        agent: [
+          {
+            id: CREATE_MORE_AGENT_ID,
+            label: CREATE_MORE_AGENT_LABEL,
+            detect: '/bin/cat',
+            launch: '/bin/cat',
+            prompt: 'flag-prompt'
+          }
+        ]
+      }
+    })
+  )
+  await w.agent.callAny('plugin.install', { path, yes: true })
+  await w.win.waitFor(async () => {
+    const listing = (await w.agent.callAny('quirky.agents/list', {})) as {
+      agents?: { id: string; installed: boolean; enabled: boolean }[]
+    }
+    const agent = listing.agents?.find((candidate) => candidate.id === CREATE_MORE_AGENT_ID)
+    return agent?.installed && agent.enabled ? agent : undefined
+  })
+}
+
 
 const closed = (w: World, title: string) => w.win.waitFor(() => !dialogNamed(title))
 
@@ -150,14 +185,21 @@ test('SC-25: a window create shows a pending row, then opens the result only if 
 test('SC-26: Create more keeps the dialog open and resets it', async () => {
   const w = await boot()
   const api = await addProject(w, 'api')
+  await installCreateMoreAgent(w)
   await repoSet(w.agent, 'api', { setupScript: 'echo hi', setupPolicy: 'ask' })
   const dialog = await openCreate(w, api)
 
   await click(field(dialog, 'Create more')!)
   expect(field(dialog, 'Create more')!.checked).toBe(true)
   await setText(field(dialog, 'Name')!, 'one')
-  await setSelect(field<HTMLSelectElement>(dialog, 'Agent')!, 'claude')
-  await setText(field<HTMLTextAreaElement>(dialog, 'Prompt')!, 'say hi')
+  const agentSelect = await w.win.waitFor(() => {
+    const select = field<HTMLSelectElement>(dialog, 'Agent')
+    return select && [...select.options].some((option) => option.value === CREATE_MORE_AGENT_ID) ? select : undefined
+  })
+  expect([...agentSelect.options].find((option) => option.value === CREATE_MORE_AGENT_ID)?.textContent).toBe(CREATE_MORE_AGENT_LABEL)
+  await setSelect(agentSelect, CREATE_MORE_AGENT_ID)
+  const prompt = await w.win.waitFor(() => field<HTMLTextAreaElement>(dialog, 'Prompt'))
+  await setText(prompt, 'say hi')
   await expandAdvanced(dialog)
   expect(button(dialog, 'Create')!.disabled).toBe(true)
   await click(button(dialog, 'Run setup now')!)
@@ -166,7 +208,16 @@ test('SC-26: Create more keeps the dialog open and resets it', async () => {
 
   const one = await named(w, 'one')
   await w.win.waitFor(async () => (await sessionsOf(w.agent, one.id)).some((s) => s.title === 'Setup'))
-  await w.win.waitFor(async () => (await sessionsOf(w.agent, one.id)).some((s) => s.agent === 'claude'))
+  await w.win.waitFor(async () => (await sessionsOf(w.agent, one.id)).some((s) => s.agent === CREATE_MORE_AGENT_ID))
+  await w.win.waitFor(() =>
+    w.harness.pty.requests.some(
+      (request) =>
+        request.type === 'create' &&
+        request.argv.join('\n').includes('/bin/cat') &&
+        request.argv.join('\n').includes('--prompt') &&
+        request.argv.join('\n').includes('say hi')
+    )
+  )
   await w.win.waitFor(() => field(dialog, 'Name')!.value === '' && !field<HTMLSelectElement>(dialog, 'Agent')!.value)
   expect(dialogNamed(CREATE)).toBe(dialog)
   expect(field(dialog, 'Create more')!.checked).toBe(true)
@@ -181,6 +232,7 @@ test('creating from an existing branch hides the base and passes the branch', as
   const api = await addProject(w, 'api')
   git(api.dir, 'branch', 'feat')
   const dialog = await openCreate(w, api)
+  await click(button(dialog, 'Branch')!)
   expect(field(dialog, 'Base')).toBeDefined()
   await setText(field(dialog, 'Existing branch')!, 'feat')
   expect(field(dialog, 'Base')).toBeUndefined()
@@ -228,6 +280,7 @@ test('a failed create toasts, keeps the dialog open and clears the pending row',
   const w = await boot()
   const api = await addProject(w, 'api')
   const dialog = await openCreate(w, api)
+  await click(button(dialog, 'Branch')!)
   await setText(field(dialog, 'Existing branch')!, 'ghost')
   await click(button(dialog, 'Create')!)
   await w.win.waitFor(() => toastTitles().includes('Could not create worktree'))

@@ -7,13 +7,20 @@ Status: autonomously approved design under current LOOP.md; shared contracts com
 
 **Amendments:** 2026-10-27 — initial combined specification, self-reviewed against the selected feature-doc sections. Iteration16 — current early-item protocol permits implementation against prerequisite branches before they land; independent public runtime seams are specified in `src/runtime-contracts.ts`.
 
+Operator sprint amendment: this landing excludes **automatic idle-mailbox scheduling only**.
+Its intact AC9 acceptance and implementation are preserved at `checkpoint/m6-core-idle-pointer`
+(commit69083459), assigned to `m6-orchestration-idle-pointer-shutdown`. The scheduler times out
+during daemon teardown. AC9 below remains the unweakened follow-up contract; explicit safe
+`session/pointer`, idempotent driving prompts and all durable mail/wait/question/gate flows remain
+in scope. Review/dogfood not already started is skipped under the operator's landing instruction.
+
 ## Purpose
 Give coordinators and workers a durable, scriptable namespace for supervised work without introducing an automatic scheduler. A coordinator owns a Run, creates dependent Tasks, and handles durable messages, questions and gates. A Dispatch is one authoritative attempt, never merely a copied Task ID.
 
 ## Scope and non-goals
 The queue item combines Part 1 (database, DAG, run/task CLI, authority, idempotency, reset, constants) and Part 2 (mail, questions, gates, coordinator-loop steps 4 and 6). Neither part excludes what the other includes.
 
-In scope: run-create/use/current/list/show; task-create/list/update; low-level dispatch attachment and inspection needed to exercise worker authority; dispatch/worker transition contracts, circuit breaker and nesting admission; send/check/reply/inbox/ask; gate-create/resolve/list; request-show/reset; idle mailbox pointers. Expose the same behavior through public plugin methods and the generated `quirky orchestration` CLI.
+In scope: run-create/use/current/list/show; task-create/list/update; low-level dispatch attachment and inspection needed to exercise worker authority; dispatch/worker transition contracts, circuit breaker and nesting admission; send/check/reply/inbox/ask; gate-create/resolve/list; request-show/reset; explicit safe session prompt/pointer submission. Automatic idle-mailbox scheduling is deferred by the operator amendment above. Expose the shipped behavior through public plugin methods and the generated `quirky orchestration` CLI.
 
 Not in this item: worker-start and placement, worker show/read/list/stop/abandon/retain/release UI/fleet workflows, process custody/archive management, federation, legacy adoption/compatibility, old automatic scheduler, skill-install/settings UI, feature-wall/onboarding, task terminal links, sidebar nesting. The default depth cap is enforced here; the later settings slice owns its UI. An escalation message does not automatically fail a Task or create a gate. No retired coordinator commands or legacy tombstones are introduced.
 

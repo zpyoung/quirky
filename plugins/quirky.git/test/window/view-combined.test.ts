@@ -55,10 +55,10 @@ test('SC-62: View all opens a combined diff with lazy sections, a Load diff for 
     expect(buttonText('Copy path', big)).toBeDefined()
     expect(buttonText('Open diff', big)).toBeDefined()
 
-    await click(buttonText('Collapse All'))
+    await click(buttonText('Collapse All', q('.qgv-toolbar')!))
     await w.win.waitFor(async () => (await w.viewReport())?.collapsed === true)
-    expect(buttonText('Expand All')).toBeDefined()
-    await click(buttonText('Expand All'))
+    expect(buttonText('Expand All', q('.qgv-toolbar')!)).toBeDefined()
+    await click(buttonText('Expand All', q('.qgv-toolbar')!))
     await w.win.waitFor(async () => (await w.viewReport())?.collapsed === false)
 
     await click(buttonText('Side by Side'))

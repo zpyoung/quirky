@@ -178,7 +178,7 @@ function textOrEmpty(value: unknown): string {
 
 function namesFromConnection(value: unknown): string[] {
   const direct = array(value)
-  if (direct.every((item) => typeof item === 'string')) return direct.filter((item): item is string => typeof item === 'string')
+  if (Array.isArray(value) && direct.every((item) => typeof item === 'string')) return direct.filter((item): item is string => typeof item === 'string')
   const connection = record(value)
   const nodes = Array.isArray(value) ? direct : array(connection?.nodes)
   return nodes.flatMap((node) => {
@@ -195,12 +195,12 @@ function stateValueFromRaw(raw: Record<string, unknown>): unknown {
 }
 
 function stateFromRaw(raw: Record<string, unknown>, isPullRequest: boolean, isDraft: boolean, stateValue: unknown = raw.state): WorkItemState {
-  if (isDraft) return 'draft'
   const state = typeof stateValue === 'string' ? stateValue.toLowerCase() : ''
-  if (state === 'merged' || raw.merged === true || (typeof raw.mergedAt === 'string' && raw.mergedAt.length > 0)) return 'merged'
-  if (state === 'open' || state === 'opened') return 'open'
+  const mergedAt = raw.mergedAt ?? raw.merged_at ?? record(raw.pull_request)?.merged_at
+  if (state === 'merged' || raw.merged === true || (typeof mergedAt === 'string' && mergedAt.length > 0)) return 'merged'
   if (state === 'closed') return 'closed'
-  if (isPullRequest && state === 'draft') return 'draft'
+  if (isDraft || (isPullRequest && state === 'draft')) return 'draft'
+  if (state === 'open' || state === 'opened') return 'open'
   return 'unknown'
 }
 
@@ -225,7 +225,7 @@ export function mapWorkItem(value: unknown, fallback: { identity: Identity; kind
   const kind: WorkItemKind = pullRequest ? 'pullRequest' : 'issue'
   const title = textOrEmpty(raw.title)
   const stateValue = stateValueFromRaw(raw)
-  const isDraft = raw.isDraft === true || raw.is_draft === true || (kind === 'pullRequest' && String(stateValue ?? '').toLowerCase() === 'draft')
+  const isDraft = kind === 'pullRequest' && (raw.isDraft === true || raw.is_draft === true || raw.draft === true || String(stateValue ?? '').toLowerCase() === 'draft')
   const url = nonEmptyString(raw.html_url) ?? nonEmptyString(raw.url) ?? `https://${fallback.identity.host}/${fallback.identity.owner}/${fallback.identity.repo}/${kind === 'issue' ? 'issues' : 'pull'}/${number}`
   const authorObject = record(raw.author) ?? record(raw.user) ?? record(raw.creator)
   const author = nonEmptyString(authorObject?.login) ?? nonEmptyString(raw.author)

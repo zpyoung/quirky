@@ -70,6 +70,7 @@ export class FakeDaemon {
   readonly jobRuns = new Map<string, JobRun>()
   readonly ui: UiModel = {
     sidebarSections: [],
+    activityItems: [],
     statusBars: [],
     panels: [],
     views: [],
@@ -77,6 +78,7 @@ export class FakeDaemon {
     commands: [],
     keybindings: [],
     settings: [],
+    settingsSections: [],
     menuItems: [],
     themes: [DEFAULT_THEME],
     theme: { chosen: 'default', active: 'default' },
@@ -295,6 +297,8 @@ export class FakeDaemon {
     const list =
       kind === 'sidebar-section'
         ? this.ui.sidebarSections
+        : kind === 'activity-item'
+          ? this.ui.activityItems
         : kind === 'status-bar'
           ? this.ui.statusBars
           : kind === 'panel'
@@ -330,7 +334,15 @@ export class FakeDaemon {
       ...overrides
     }
     this.settings.push(setting)
-    this.ui.settings.push({ id: setting.id, plugin, type: setting.type, title: setting.title, default: setting.default })
+    this.ui.settings.push({
+      id: setting.id,
+      plugin,
+      type: setting.type,
+      title: setting.title,
+      default: setting.default,
+      ...(setting.category !== undefined ? { category: setting.category } : {}),
+      ...(setting.section !== undefined ? { section: setting.section } : {})
+    })
     return setting
   }
 

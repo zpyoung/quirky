@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test'
 import type { ProjectGroup, Repo, Session, Worktree } from '@quirky/protocol'
-import { buildReport, type ReportInput } from '../src/report'
+import { buildReport, projectSeparatorBoundaries, type ReportInput } from '../src/report'
 
 const WORKTREE_DEFAULTS = {
   kind: 'git',
@@ -15,7 +15,9 @@ const WORKTREE_DEFAULTS = {
   baseRef: null,
   keepBranch: false,
   removing: false,
-  groupId: null
+  groupId: null,
+  projectGroupId: null,
+  lastActivityAt: 0
 } as const
 
 const repo = (id: string, name: string, extra: Partial<Repo> = {}): Repo => ({
@@ -37,6 +39,7 @@ const worktree = (id: string, repoId: string, name: string, extra: Partial<Workt
   head: 'abc',
   isMain: false,
   name,
+  instanceId: id,
   ...WORKTREE_DEFAULTS,
   ...extra
 })
@@ -48,6 +51,7 @@ const group = (id: string, name: string, repoIds: string[], extra: Partial<Proje
   collapsed: false,
   order: 0,
   createdFrom: 'manual',
+  parentId: null,
   repoIds,
   ...extra
 })
@@ -77,6 +81,12 @@ const input = (extra: Partial<ReportInput>): ReportInput => ({
   pending: [],
   dialog: null,
   ...extra
+})
+
+test('separator projection excludes leading and sticky boundaries', () => {
+  const sections = ['pinned', 'group:team', 'repo:notes', 'repo:web']
+  expect(projectSeparatorBoundaries(sections, new Set(['repo:notes']), true)).toEqual(['group:team'])
+  expect(projectSeparatorBoundaries(sections, new Set(), false)).toEqual([])
 })
 
 test('SC-44: the report nests children under their parent with depth, and the primary comes first', () => {
@@ -232,4 +242,33 @@ test('a worktree drawn from an agent summary also reports its display and label'
   expect(fix).toMatchObject({ id: 'w2', status: 'working' })
   expect(fix).not.toHaveProperty('display')
   expect(fix).not.toHaveProperty('label')
+})
+test('the report preserves linked GitHub identity and PR push metadata separately from notes', () => {
+  const linkedPR = {
+    provider: 'github' as const,
+    kind: 'pullRequest' as const,
+    number: 3,
+    title: 'Reword the README',
+    url: 'https://github.com/acme/api/pull/3',
+    repository: { host: 'github.com', owner: 'acme', repo: 'api' }
+  }
+  const linkedIssue = {
+    provider: 'github' as const,
+    kind: 'issue' as const,
+    number: 4,
+    title: 'Add a multiply function',
+    url: 'https://github.com/acme/api/issues/4',
+    repository: { host: 'github.com', owner: 'acme', repo: 'api' }
+  }
+  const pushTarget = { remoteName: 'pr-acme-api', branchName: 'feat/conflict', maintainerCanModify: false }
+  const report = buildReport(input({
+    repos: [repo('r1', 'api')],
+    worktrees: [
+      worktree('w-pr', 'r1', 'Reword the README', { linkedPR, pushTarget, comment: 'Editable note' }),
+      worktree('w-issue', 'r1', 'Add a multiply function', { linkedIssue })
+    ]
+  }))
+  expect(report.projects[0]!.worktrees[0]).toMatchObject({ linkedPR, pushTarget })
+  expect(report.projects[0]!.worktrees[0]).not.toHaveProperty('linkedIssue')
+  expect(report.projects[0]!.worktrees[1]).toMatchObject({ linkedIssue })
 })

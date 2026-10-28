@@ -28,6 +28,7 @@ import {
   uiOpenView,
   uiRun,
   uiSidebar,
+  uiConfigurePanel,
   uiState
 } from './ui'
 import type { Command, Context } from './types'
@@ -68,6 +69,7 @@ export const COMMANDS: Command[] = [
   uiOpenView,
   uiCloseView,
   uiOpenPanel,
+  uiConfigurePanel,
   uiClosePanel,
   uiSidebar,
   uiFocus,

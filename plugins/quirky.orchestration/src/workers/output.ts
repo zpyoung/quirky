@@ -71,6 +71,10 @@ type AgentEvidence = {
 }
 type TerminalCapture = { content: string; truncated: boolean }
 
+function outputError(context: WorkerRuntime['context'], kind: 'invalid-params' | 'conflict', reason: string): Error {
+  return Object.assign(context.error(kind, reason), { data: { reason } })
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
 }
@@ -211,7 +215,7 @@ function newMetadata(
 function parseReadCursor(value: string | undefined, dispatchId: DispatchId, context: WorkerRuntime['context']): ReadCursor | null {
   if (value === undefined) return null
   if (value.length > MAX_CURSOR_CHARS || !value.startsWith(READ_CURSOR_PREFIX)) {
-    throw context.error('invalid-params', 'cursor_invalid')
+    throw outputError(context, 'invalid-params', 'cursor_invalid')
   }
   try {
     const decoded: unknown = JSON.parse(Buffer.from(value.slice(READ_CURSOR_PREFIX.length), 'base64url').toString('utf8'))
@@ -238,7 +242,7 @@ function parseReadCursor(value: string | undefined, dispatchId: DispatchId, cont
       fallbackReason
     }
   } catch {
-    throw context.error('invalid-params', 'cursor_invalid')
+    throw outputError(context, 'invalid-params', 'cursor_invalid')
   }
 }
 
@@ -252,23 +256,23 @@ function validateCursorPosition(snapshot: SourceSnapshot, cursor: ReadCursor | n
   if (!cursor) return
   if (cursor.source !== snapshot.source || cursor.archived !== snapshot.archived) throw sourceChanged(runtime)
   if (cursor.source === 'terminal') {
-    if (cursor.messageIndex !== 0 || cursor.offset > snapshot.content.length) throw runtime.context.error('invalid-params', 'cursor_invalid')
+    if (cursor.messageIndex !== 0 || cursor.offset > snapshot.content.length) throw outputError(runtime.context, 'invalid-params', 'cursor_invalid')
     if (cursor.offset > 0 && cursor.offset < snapshot.content.length) {
       const next = snapshot.content.charCodeAt(cursor.offset)
-      if (next >= 0xdc00 && next <= 0xdfff) throw runtime.context.error('invalid-params', 'cursor_invalid')
+      if (next >= 0xdc00 && next <= 0xdfff) throw outputError(runtime.context, 'invalid-params', 'cursor_invalid')
     }
     return
   }
-  if (cursor.messageIndex > snapshot.messages.length) throw runtime.context.error('invalid-params', 'cursor_invalid')
+  if (cursor.messageIndex > snapshot.messages.length) throw outputError(runtime.context, 'invalid-params', 'cursor_invalid')
   if (cursor.messageIndex === snapshot.messages.length) {
-    if (cursor.offset !== 0) throw runtime.context.error('invalid-params', 'cursor_invalid')
+    if (cursor.offset !== 0) throw outputError(runtime.context, 'invalid-params', 'cursor_invalid')
     return
   }
   const message = snapshot.messages[cursor.messageIndex]
-  if (cursor.offset > message.text.length) throw runtime.context.error('invalid-params', 'cursor_invalid')
+  if (cursor.offset > message.text.length) throw outputError(runtime.context, 'invalid-params', 'cursor_invalid')
   if (cursor.offset > 0 && cursor.offset < message.text.length) {
     const next = message.text.charCodeAt(cursor.offset)
-    if (next >= 0xdc00 && next <= 0xdfff) throw runtime.context.error('invalid-params', 'cursor_invalid')
+    if (next >= 0xdc00 && next <= 0xdfff) throw outputError(runtime.context, 'invalid-params', 'cursor_invalid')
   }
 }
 function sourceContentPrefixHash(snapshot: SourceSnapshot, messageIndex: number, offset: number): string {
@@ -589,6 +593,42 @@ async function loadTerminalTail(runtime: WorkerRuntime, sessionId: string): Prom
   return { content: safeTail(output, MAX_TERMINAL_ARCHIVE_CHARS), truncated }
 }
 
+function terminalReadLines(value: unknown): string[] | null {
+  if (!isRecord(value) || !Array.isArray(value.lines)
+    || typeof value.cols !== 'number' || !Number.isSafeInteger(value.cols) || value.cols < 1
+    || typeof value.rows !== 'number' || !Number.isSafeInteger(value.rows) || value.rows < 1
+    || typeof value.alt !== 'boolean') return null
+  const lines: string[] = []
+  for (const line of value.lines) {
+    if (typeof line !== 'string') return null
+    lines.push(line)
+  }
+  return lines
+}
+
+async function loadTerminalArchiveTail(runtime: WorkerRuntime, sessionId: string): Promise<TerminalCapture | null> {
+  let raw: unknown
+  try {
+    raw = await runtime.context.pty.read(sessionId, 0)
+  } catch {
+    return null
+  }
+  const lines = terminalReadLines(raw)
+  if (!lines) return null
+  const screen = pageText(lines, MAX_TERMINAL_ARCHIVE_CHARS)
+  const history = await loadTerminalTail(runtime, sessionId)
+  if (!history) return null
+  const combined = history.content.length > 0 && screen.text.length > 0
+    ? `${history.content}\n${screen.text}`
+    : `${history.content}${screen.text}`
+  const content = safeTail(combined, MAX_TERMINAL_ARCHIVE_CHARS)
+  return {
+    content,
+    truncated: history.truncated || screen.truncated || content.length < combined.length
+  }
+}
+
+
 function makeArchive(
   dispatchId: DispatchId,
   resource: TerminalResource | null,
@@ -743,13 +783,14 @@ async function loadTerminal(
   dispatchId: DispatchId,
   record: WorkerRecord | null,
   resource: TerminalResource | null,
-  identity: SessionIdentity | null
+  identity: SessionIdentity | null,
+  loadTail: typeof loadTerminalTail = loadTerminalTail
 ): Promise<SourceSnapshot> {
   if (!record || !resource || !identity) {
     const metadata = newMetadata(dispatchId, resource, record, 'terminal', identity, { exact: false })
     return { source: 'terminal', sessionId: resource?.sessionId ?? null, archived: false, sourceExact: false, fallbackReason: null, sourceIdentity: opaqueSourceIdentity(metadata), content: '', messages: [], clipped: false, warnings: ['terminal_lease_unavailable'] }
   }
-  const capture = await loadTerminalTail(runtime, identity.sessionId)
+  const capture = await loadTail(runtime, identity.sessionId)
   if (!capture) {
     const metadata = newMetadata(dispatchId, resource, record, 'terminal', identity, { exact: false })
     return { source: 'terminal', sessionId: identity.sessionId, archived: false, sourceExact: false, fallbackReason: null, sourceIdentity: opaqueSourceIdentity(metadata), content: '', messages: [], clipped: false, warnings: ['terminal_history_unreadable'] }
@@ -954,7 +995,7 @@ function buildTerminalResult(
 }
 
 function sourceChanged(runtime: WorkerRuntime): Error {
-  return runtime.context.error('conflict', 'source_changed')
+  return outputError(runtime.context, 'conflict', 'source_changed')
 }
 
 function fallbackForNoSource(source: ReadSource, dispatchId: DispatchId, record: WorkerRecord | null, resource: TerminalResource | null): SourceSnapshot {
@@ -976,14 +1017,14 @@ function fallbackForNoSource(source: ReadSource, dispatchId: DispatchId, record:
 
 function cursorLimit(value: number | undefined, runtime: WorkerRuntime): number {
   if (value === undefined) return DEFAULT_MESSAGE_LIMIT
-  if (!Number.isSafeInteger(value) || value < 1) throw runtime.context.error('invalid-params', 'invalid_limit')
+  if (!Number.isSafeInteger(value) || value < 1) throw outputError(runtime.context, 'invalid-params', 'invalid_limit')
   return Math.min(MAX_MESSAGE_LIMIT, value)
 }
 
 function requestSource(value: WorkerReadParams['source'], runtime: WorkerRuntime): ReadSource | 'auto' {
   if (value === undefined || value === 'auto') return 'auto'
   if (value === 'transcript' || value === 'terminal') return value
-  throw runtime.context.error('invalid-params', 'invalid_source')
+  throw outputError(runtime.context, 'invalid-params', 'invalid_source')
 }
 
 async function sourceFromRequested(
@@ -1031,7 +1072,7 @@ export function createWorkerOutput(core: WorkerCore, repo: WorkerRepository, run
     if (transcript.kind === 'ready') {
       return makeArchive(dispatchId, resource, 'transcript', transcript.snapshot.content, transcript.metadata, 'captured')
     }
-    const terminal = await loadTerminal(runtime, dispatch, dispatchId, record, resource, identity)
+    const terminal = await loadTerminal(runtime, dispatch, dispatchId, record, resource, identity, loadTerminalArchiveTail)
     const content = terminal.sourceExact ? terminal.content : ''
     const metadata = newMetadata(dispatchId, resource, record, 'terminal', identity, { exact: terminal.sourceExact, truncated: terminal.clipped, fallbackReason: transcript.reason })
     const status = !terminal.sourceExact ? 'unavailable' : content.length === 0 ? 'empty' : 'captured'

@@ -1,5 +1,5 @@
 import type { UiCommandEntry, UiKeybinding, UiLayout, UiModel, UiSlotEntry } from '@quirky/protocol'
-import { UsageError, takePositionals } from '../args'
+import { flagInt, flagString, UsageError, takePositionals } from '../args'
 import { formatGeneric } from '../format'
 import { formatTable } from '../output'
 import type { Command } from './types'
@@ -31,6 +31,7 @@ function commandTable(items: UiCommandEntry[]): string {
 function renderModel(model: UiModel): string {
   const sections: [string, unknown[], () => string][] = [
     ['SIDEBAR', model.sidebarSections, () => slotTable(model.sidebarSections)],
+    ['ACTIVITY ITEMS', model.activityItems, () => slotTable(model.activityItems)],
     ['STATUS BARS', model.statusBars, () => slotTable(model.statusBars)],
     ['PANELS', model.panels, () => slotTable(model.panels)],
     ['VIEWS', model.views, () => slotTable(model.views)],
@@ -160,6 +161,38 @@ export const uiOpenPanel: Command = {
     const [id] = takePositionals(args, ['id'])
     const layout = await ctx.rpc.call('ui.panel.open', { id })
     ctx.out.result(layout, () => layoutLines(layout).join('\n'))
+  }
+}
+
+export const uiConfigurePanel: Command = {
+  name: 'ui configure-panel',
+  summary: 'configure a panel width and/or the global activity bar position',
+  positionals: [{ name: 'id', description: 'the effective panel contribution ID', required: true }],
+  flags: {
+    width: { type: 'integer', description: 'desired panel width in pixels (220–4096)' },
+    'activity-bar-position': { type: 'string', enum: ['top', 'side'], description: 'global panel activity-bar position' }
+  },
+  methods: ['ui.panel.configure'],
+  plugin: null,
+  async run(args, ctx) {
+    const [id] = takePositionals(args, ['id'])
+    const width = flagInt(args, 'width')
+    const activityBarPosition = flagString(args, 'activity-bar-position')
+    if (width === undefined && activityBarPosition === undefined) {
+      throw new UsageError('provide --width and/or --activity-bar-position')
+    }
+    const layout = await ctx.rpc.call('ui.panel.configure', {
+      id,
+      ...(width === undefined ? {} : { width }),
+      ...(activityBarPosition === undefined ? {} : { activityBarPosition: activityBarPosition as 'top' | 'side' })
+    })
+    ctx.out.result(layout, () =>
+      [
+        ...layoutLines(layout),
+        `panel width ${id}: ${layout.panelWidths?.[id] ?? '-'}`,
+        `activity bar position: ${layout.activityBarPosition ?? '-'}`
+      ].join('\n')
+    )
   }
 }
 

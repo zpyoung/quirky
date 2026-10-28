@@ -53,21 +53,23 @@ process.on('SIGHUP', () => { control.stop(); process.exit(0) })
 await import(${JSON.stringify(native.executable)})
 `)
     chmodSync(codex, 0o755)
+    // Use the public refresh after installing the fake Codex binary.
     await fixture.call('quirky.agents/refresh', {})
     await fixture.call('quirky.agents/setEnabled', { agent: 'codex', enabled: true })
     const coordinator = await fixture.call('quirky.session/create', { worktree: `path:${fixture.repo}`, agent: 'claude', title: 'Fixture coordinator' }) as Session
     await eventually(() => existsSync(join(fixture.home, 'worker-fixture', `${coordinator.id}.events.jsonl`)), Boolean, 'coordinator process to start')
-    const cli = async (session: string, args: string[], timeout = 30_000): Promise<CliResult> => {
+    const cli = async (session: string, args: string[], timeout = 60_000): Promise<CliResult> => {
       const id = crypto.randomUUID()
       const dir = join(fixture.home, 'worker-fixture')
       appendFileSync(join(dir, `${session}.requests.jsonl`), JSON.stringify({ id, args: [...args, '--json'] }) + '\n')
       const reply = join(dir, `${id}.reply.json`)
-      return eventually(
+      const result = await eventually(
         () => existsSync(reply) ? JSON.parse(readFileSync(reply, 'utf8')) as CliResult : null,
-        (value) => value !== null,
+        value => value !== null,
         `launched ${session} CLI ${args.join(' ')}`,
-        timeout
-      ).then((value) => value!)
+        timeout,
+      )
+      return result!
     }
     return {
       fixture,
@@ -76,7 +78,7 @@ await import(${JSON.stringify(native.executable)})
       cli,
       async callAs<T>(session: string, verb: string, flags: string[] = []): Promise<T> {
         const result = await cli(session, ['orchestration', verb, ...flags])
-        if (result.code !== 0) throw new Error(`orchestration ${verb} exit ${result.code}: ${result.stderr || result.stdout}`)
+        if (result.code !== 0) throw new Error(`orchestration ${verb} exit ${result.code}: ${result.stderr}\n${result.stdout}`)
         try { return JSON.parse(result.stdout) as T } catch { throw new Error(`orchestration ${verb} did not return JSON: ${result.stdout}`) }
       },
       async session(id: string): Promise<Session> {

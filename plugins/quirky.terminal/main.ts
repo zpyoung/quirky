@@ -15,7 +15,7 @@ export async function activate(context: PluginContext): Promise<void> {
   const terminal = new TerminalService(context, inputs)
   const layoutStore = new LayoutStore(store)
   const layoutService = new LayoutService(context, layoutStore, inputs)
-  const quickCommands = new QuickCommandService(context, layoutStore, layoutService, inputs)
+  const quickCommands = new QuickCommandService(context, layoutStore, layoutService, inputs, terminal)
   service = terminal
   layout = layoutService
 
@@ -33,12 +33,17 @@ export async function activate(context: PluginContext): Promise<void> {
     kill: terminal.kill,
     killAll: terminal.killAll,
     restartHost: terminal.restartHost,
+    mobileState: terminal.mobileState,
+    takeBack: terminal.takeBack,
+    restoreFit: terminal.restoreFit,
+    claim: terminal.claim,
     ...layoutService.methods,
     ...quickCommands.methods
   }
   for (const [name, handler] of Object.entries(methods)) context.provide(`method:${context.pluginId}/${name}`, handler)
 
   context.pty.onData(terminal.onData)
+  context.pty.onExit(terminal.onExit)
   context.pty.onFact((sessionId, fact) => {
     const event = factEvent(sessionId, fact)
     if (event) context.emit(event.name, event.data)

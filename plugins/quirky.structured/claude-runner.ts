@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto'
 import type { CanUseTool, Options, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk'
 import type { AskEnvelope, Session } from '@quirky/protocol'
 import type { StructuredContext, StructuredRunner, StructuredStartOptions } from './runner'
@@ -63,19 +62,19 @@ function createInputStream(): InputStream {
 type Running = {
   query: ClaudeQuery
   input: InputStream
-  providerSessionId: string
+  providerSessionId: string | undefined
   providerSessionKnown: boolean
   stopped: boolean
   ended: boolean
 }
 
-function userMessage(text: string, claudeSessionId: string): SDKUserMessage {
+function userMessage(text: string, providerSessionId?: string): SDKUserMessage {
   return {
     type: 'user',
     message: { role: 'user', content: text },
     parent_tool_use_id: null,
-    session_id: claudeSessionId
-  } as SDKUserMessage
+    ...(providerSessionId === undefined ? {} : { session_id: providerSessionId })
+  }
 }
 
 function environmentOf(patch: Record<string, string | null>): Record<string, string> {
@@ -147,17 +146,18 @@ class ClaudeRunner implements StructuredRunner {
   async start(session: Session, prompt?: string, launchOptions: StructuredStartOptions = {}): Promise<void> {
     if (session.agent !== 'claude') throw new Error('structured sessions support claude only')
     const providerSession = launchOptions.providerSession
-    const providerSessionId = providerSession?.id ?? randomUUID()
+    const providerSessionId = providerSession?.id
     const startup = { stopped: false }
     this.starting.set(session.id, startup)
     try {
+      // Load this provider only when the runtime provider registry selects Claude, not for Codex sessions.
       const query = this.deps.query ?? (await import('@anthropic-ai/claude-agent-sdk')).query
       if (startup.stopped) return
       const pathToClaudeCodeExecutable = await this.context.resolveClaudePath()
       if (startup.stopped) return
       if (providerSession !== undefined) {
         await this.context.setProviderSession(session.id, {
-          id: providerSessionId,
+          id: providerSession.id,
           transcriptPath: providerSession.transcriptPath ?? null
         })
         if (startup.stopped) return
@@ -174,15 +174,15 @@ class ClaudeRunner implements StructuredRunner {
     query: NonNullable<ClaudeRunnerDeps['query']>,
     pathToClaudeCodeExecutable: string,
     launchOptions: StructuredStartOptions,
-    providerSessionId: string
+    providerSessionId: string | undefined
   ): void {
     const input = createInputStream()
-    if (prompt !== undefined) {
+    if (prompt !== undefined && prompt !== '') {
       const first = userMessage(prompt, providerSessionId)
       this.context.appendMessage({ sessionId: session.id, role: 'user', text: prompt, data: first })
       input.push(first)
     }
-    this.context.setStatus(session.id, prompt === undefined ? 'running' : 'working')
+    this.context.setStatus(session.id, prompt === undefined || prompt === '' ? 'running' : 'working')
     const run: Running = {
       input,
       providerSessionId,
@@ -194,9 +194,7 @@ class ClaudeRunner implements StructuredRunner {
         options: {
           cwd: session.cwd,
           pathToClaudeCodeExecutable,
-          ...(launchOptions.providerSession === undefined
-            ? { sessionId: providerSessionId }
-            : { resume: providerSessionId }),
+          ...(launchOptions.providerSession === undefined ? {} : { resume: launchOptions.providerSession.id }),
           permissionMode: 'default',
           canUseTool: this.canUseTool(session.id),
           ...(launchOptions.env !== undefined ? { env: environmentOf(launchOptions.env) } : {}),
@@ -366,6 +364,9 @@ class ClaudeRunner implements StructuredRunner {
         }
         return
       }
+      case 'rate_limit_event':
+        append('system', 'Claude rate limit event', msg)
+        return
       default:
         append('system', String(msg?.type ?? 'event'), msg)
     }

@@ -271,12 +271,10 @@ describe('worker lifecycle', () => {
   })
 
   test('startup reconciliation marks a stranded start unknown and leaves unrequested custody alone', () => {
-    const f = createLifecycleFixture({ state: 'ready' })
+    const f = createLifecycleFixture({ state: 'starting', workerRuntimeEpoch: 'old-epoch' })
     try {
-      f.repo.update(f.dispatch.id, { state: 'starting', runtimeEpoch: 'old-epoch' }, 'ready')
-      f.repo.reconcile('new-epoch')
-
       expect(f.repo.get(f.dispatch.id)).toMatchObject({ state: 'start_unknown', runtimeEpoch: 'old-epoch' })
+
       expect(f.repo.resource(f.dispatch.id)).toMatchObject({ ownershipState: 'owned', releaseState: 'not_requested' })
       expect(f.closed).toHaveLength(0)
     } finally {
@@ -284,10 +282,8 @@ describe('worker lifecycle', () => {
     }
   })
   test('a stranded stop becomes stop_unknown on restart and can be retried with fresh exact evidence', async () => {
-    const f = createLifecycleFixture({ state: 'ready' })
+    const f = createLifecycleFixture({ state: 'stopping', workerRuntimeEpoch: 'old-epoch' })
     try {
-      f.repo.update(f.dispatch.id, { state: 'stopping', stage: 'stopping', runtimeEpoch: 'old-epoch' }, 'ready')
-      f.repo.reconcile('new-epoch')
       expect(f.repo.get(f.dispatch.id)?.state).toBe('stop_unknown')
       f.setCloseHandler(() => {
         expect(f.repo.get(f.dispatch.id)).toMatchObject({ state: 'stop_unknown', stage: 'stopping' })

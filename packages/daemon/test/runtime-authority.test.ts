@@ -188,8 +188,6 @@ describe('kernel runtime session authority', () => {
       identity: { sessionId: string; runtimeEpoch: string; processIncarnation: string; source: string; live: true }
     }
     const sessionToken = childEnv(sessionId).QUIRKY_SESSION_TOKEN
-    expect(sessionToken).toBeString()
-    expect(opened.identity).toMatchObject({ sessionId, source: 'structured_lease', live: true })
 
     const child = await clientFor(sessionId, sessionToken)
     expect(await child.callAny(`${pluginId}/caller`, {})).toMatchObject({

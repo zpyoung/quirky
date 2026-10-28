@@ -713,6 +713,9 @@ export const commands: CliModule['commands'] = {
     if (result.kind === 'worker_report' && result.report.status === 'rejected') {
       throw context.fail(`Worker report rejected: ${result.report.reason}`)
     }
+    if (result.kind === 'heartbeat' && result.heartbeat.status === 'rejected') {
+      throw context.fail(`Heartbeat rejected: ${result.heartbeat.reason}`)
+    }
   },
 
   check: async (args, context) => {

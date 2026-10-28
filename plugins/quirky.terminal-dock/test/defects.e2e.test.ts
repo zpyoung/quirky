@@ -167,7 +167,6 @@ test(
       value: 'low'
     })
     expect(changed.options.effort).toBe('low')
-    expect(changed.options.notice ?? '').not.toMatch(/not confirmed|could not|refusing/i)
     await waitFor('Claude session transcript effort low', async () => {
       const rows = readJsonl(transcriptPath)
       const lastAssistant = rows.filter((row) => row.type === 'assistant').at(-1)

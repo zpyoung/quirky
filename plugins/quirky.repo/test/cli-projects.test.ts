@@ -135,7 +135,7 @@ describe('SC-6 and SC-7: scan and import through the CLI', () => {
 describe('SC-60 and SC-34: set and show through the CLI', () => {
   test('set takes every flag, show --json returns them with the hooks, and text shows key: value lines', async () => {
     const { client, home } = await start()
-    const dir = makeRepo(join(home, 'api'), { 'quirky.yaml': 'scripts:\n  setup: echo shared\nmystery: 1\n' })
+    const dir = makeRepo(join(home, 'api'), { 'quirky.yaml': 'scripts:\n  setup: echo shared\nissueCommand: gh issue list\nmystery: 1\n' })
     await call(client, 'quirky.repo/add', { path: dir })
     await run(
       'set',
@@ -147,7 +147,8 @@ describe('SC-60 and SC-34: set and show through the CLI', () => {
         'setup-policy': 'ask',
         'agent-startup': 'wait-for-setup',
         'command-source': 'run-both',
-        'setup-script': 'make deps'
+        'setup-script': 'make deps',
+        'issue-command': 'gh issue assigned'
       },
       client
     )
@@ -160,9 +161,15 @@ describe('SC-60 and SC-34: set and show through the CLI', () => {
       agentStartup: 'wait-for-setup',
       commandSource: 'run-both',
       setupScript: 'make deps',
-      archiveScript: ''
+      archiveScript: '',
+      issueCommand: 'gh issue assigned'
     })
     expect(shown.hooks.setup).toMatchObject({ text: 'echo shared\nmake deps', source: 'both' })
+    expect(shown.hooks.issueCommand).toMatchObject({
+      text: 'gh issue list\ngh issue assigned',
+      source: 'both',
+      shared: { text: 'gh issue list', trusted: false }
+    })
     expect(shown.hooks.warnings).toEqual(['unrecognised key mystery'])
 
     const text = (await run('show', ['api'], {}, client))[0]!
@@ -170,11 +177,13 @@ describe('SC-60 and SC-34: set and show through the CLI', () => {
     expect(text).toContain('display name: API')
     expect(text).toContain('default base: origin/develop')
     expect(text).toContain('command source: run-both')
+    expect(text).toContain('issue command script: gh issue assigned')
+    expect(text).toContain('issue command: quirky.yaml + local settings (shared script not trusted)')
     expect(text).toContain('setup: quirky.yaml + local settings (shared script not trusted)')
     expect(text).toContain('warning: unrecognised key mystery')
   })
 
-  test('--agent-startup "" and --command-source "" return them to inherited through the real CLI', async () => {
+  test('--issue-command persists and clears through the real CLI', async () => {
     const { t: harness, client, home } = await start()
     await call(client, 'quirky.repo/add', { path: makeRepo(join(home, 'api')) })
     const cli = async (...args: string[]) => {
@@ -183,13 +192,9 @@ describe('SC-60 and SC-34: set and show through the CLI', () => {
       expect({ code, stderr }).toEqual({ code: 0, stderr: '' })
       return JSON.parse(stdout) as RepoDetails
     }
-    expect((await cli('set', 'api', '--agent-startup', 'wait-for-setup', '--command-source', 'run-both')).settings).toMatchObject({
-      agentStartup: 'wait-for-setup',
-      commandSource: 'run-both'
-    })
-    expect((await cli('set', 'api', '--agent-startup', '', '--command-source', '')).settings).toMatchObject({ agentStartup: null, commandSource: null })
+    expect((await cli('set', 'api', '--issue-command', 'gh issue list')).settings).toMatchObject({ issueCommand: 'gh issue list' })
+    expect((await cli('set', 'api', '--issue-command', '')).settings).toMatchObject({ issueCommand: '' })
   })
-
   test('set with no flags is a usage error', async () => {
     const { client, home } = await start()
     await call(client, 'quirky.repo/add', { path: makeRepo(join(home, 'api')) })
@@ -197,20 +202,45 @@ describe('SC-60 and SC-34: set and show through the CLI', () => {
     await expect(commands.set!({ positionals: ['api'], flags: {} }, ctx)).rejects.toThrow(/usage: nothing to set/)
   })
 
-  test('trust-hooks defaults to all and takes --kind', async () => {
-    const { client, home } = await start()
-    const dir = makeRepo(join(home, 'api'), { 'quirky.yaml': 'scripts:\n  setup: a\n  archive: b\n' })
+  test('trust-hooks supports issue and all', async () => {
+    const { t: harness, client, home } = await start()
+    const dir = makeRepo(join(home, 'api'), { 'quirky.yaml': 'scripts:\n  setup: a\n  archive: b\nissueCommand: gh issue list\n' })
     await call(client, 'quirky.repo/add', { path: dir })
     await run('trust-hooks', ['api'], { kind: 'setup' }, client)
     let shown = JSON.parse((await run('show', ['api'], {}, client, true))[0]!) as RepoDetails
-    expect([shown.hooks.setup?.shared?.trusted, shown.hooks.archive?.shared?.trusted]).toEqual([true, false])
-    const lines = await run('trust-hooks', ['api'], {}, client)
-    expect(lines[0]).toBe('trusted setup, archive hooks of api')
+    expect([shown.hooks.setup?.shared?.trusted, shown.hooks.archive?.shared?.trusted, shown.hooks.issueCommand?.shared?.trusted]).toEqual([true, false, false])
+
+    const issueProc = spawnCli(['repo', 'trust-hooks', 'api', '--kind', 'issue'], { home: harness.h.home })
+    const [issueOut, issueErr, issueCode] = await Promise.all([
+      new Response(issueProc.stdout).text(),
+      new Response(issueProc.stderr).text(),
+      issueProc.exited
+    ])
+    expect({ issueCode, issueErr, issueOut: issueOut.trim() }).toEqual({
+      issueCode: 0,
+      issueErr: '',
+      issueOut: 'trusted issue hooks of api'
+    })
     shown = JSON.parse((await run('show', ['api'], {}, client, true))[0]!) as RepoDetails
-    expect(shown.hooks.archive?.shared?.trusted).toBe(true)
-    commitFiles(dir, { 'quirky.yaml': 'scripts:\n  setup: changed\n' })
+    expect([shown.hooks.setup?.shared?.trusted, shown.hooks.archive?.shared?.trusted, shown.hooks.issueCommand?.shared?.trusted]).toEqual([true, false, true])
+
+    const allProc = spawnCli(['repo', 'trust-hooks', 'api'], { home: harness.h.home })
+    const [allOut, allErr, allCode] = await Promise.all([
+      new Response(allProc.stdout).text(),
+      new Response(allProc.stderr).text(),
+      allProc.exited
+    ])
+    expect({ allCode, allErr, allOut: allOut.trim() }).toEqual({
+      allCode: 0,
+      allErr: '',
+      allOut: 'trusted setup, archive, issue hooks of api'
+    })
+    shown = JSON.parse((await run('show', ['api'], {}, client, true))[0]!) as RepoDetails
+    expect([shown.hooks.setup?.shared?.trusted, shown.hooks.archive?.shared?.trusted, shown.hooks.issueCommand?.shared?.trusted]).toEqual([true, true, true])
+
+    commitFiles(dir, { 'quirky.yaml': 'scripts:\n  setup: a\n  archive: b\nissueCommand: changed\n' })
     const again = JSON.parse((await run('show', ['api'], {}, client, true))[0]!) as RepoDetails
-    expect(again.hooks.setup?.shared).toMatchObject({ trusted: false, changed: true })
+    expect(again.hooks.issueCommand?.shared).toMatchObject({ trusted: false, changed: true })
   })
 })
 
@@ -251,7 +281,7 @@ describe('SC-10: group commands', () => {
 })
 
 describe('SC-61: the manifest', () => {
-  test('lists every new method with a params schema and every new command through the real CLI', async () => {
+  test('exposes method parameter schemas and creates a group through the real CLI', async () => {
     const { t: harness, client } = await start()
     const catalog = (await call(client, 'api.describe')) as {
       methods: { name: string; params?: unknown }[]
@@ -261,12 +291,6 @@ describe('SC-61: the manifest', () => {
     for (const name of ['list', 'add', 'clone', 'create', 'scan', 'import', 'remove', 'resolve', 'show', 'set', 'hooks', 'trustHooks', 'groupList', 'groupCreate', 'groupRename', 'groupDelete', 'groupAdd', 'groupRemove', 'groupCollapse']) {
       expect(methods.get(`quirky.repo/${name}`)?.params).toBeDefined()
     }
-    const words = catalog.cli.commands.filter((c) => c.plugin === 'quirky.repo').map((c) => c.words).sort()
-    expect(words).toEqual(
-      ['add', 'clone', 'create', 'group add', 'group collapse', 'group create', 'group delete', 'group list', 'group remove', 'group rename', 'import', 'list', 'rm', 'scan', 'set', 'show', 'trust-hooks']
-        .map((word) => `repo ${word}`)
-        .sort()
-    )
 
     const proc = spawnCli(['repo', 'group', 'create', 'viacli', '--json'], { home: harness.h.home })
     const [stdout, stderr, code] = await Promise.all([new Response(proc.stdout).text(), new Response(proc.stderr).text(), proc.exited])

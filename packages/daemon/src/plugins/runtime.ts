@@ -3,14 +3,18 @@ import { join } from 'node:path'
 import {
   isReservedLaunchEnv,
   KERNEL_METHOD_SCHEMAS,
+  RpcErrorCode,
   type LaunchHookInput,
+  type PluginContext,
   type PluginStore,
   type StoreMigration
 } from '@quirky/protocol'
 import { conflict, invalidParams, notFound } from '../errors'
+import { createRpcHandler, nextConnId } from '../rpc-handler'
 import { buildSessionEnv, commandArgv, shellArgv, shellKind } from '../launch'
 import { createHandlers } from '../methods'
 import type { Core } from '../service'
+import type { ClientConn } from '../types'
 import type { Store } from '../store'
 import type { RuntimeSessionAuthority } from '../session-authority'
 import { fillConfirm } from './confirm'
@@ -24,6 +28,7 @@ import { LayoutService } from './layout'
 import { createPtyApi } from './pty-api'
 import { Scheduler } from './scheduler'
 import { openPluginStore, pluginDataDir } from './stores'
+import { FileResourceRegistry } from '../file-resources'
 import { UiService } from './ui-service'
 
 export type PluginRuntimeOptions = {
@@ -49,6 +54,7 @@ type LaunchInput = Omit<LaunchHookInput, 'env' | 'args' | 'jsonArgs'>
 
 export type PluginRuntime = {
   extension: ContextExtension
+  fileResources: FileResourceRegistry
   dispatcher: Dispatcher
   events: PluginEvents
   scheduler: Scheduler
@@ -120,8 +126,12 @@ export function createPluginRuntime(options: PluginRuntimeOptions): PluginRuntim
         `${confirmText('distro.install', params)}\n\n${renderDistroInspection(await distros.inspect(String(params.path)))}`
     }
   })
+  // Admitted clients are already authenticated by their owner; this WebSocket handler does not use the socket token.
+  const admittedRpcHandler = createRpcHandler({ dispatcher, rpcToken: '', log })
+  const admittedByPlugin = new Map<string, Set<() => void>>()
   const openedStores = new Map<string, OpenedStore>()
   const ptyApis = new Map<string, { revoke(): void }>()
+  const fileResources = new FileResourceRegistry()
 
   const buildEnv = (input: {
     sessionId: string
@@ -154,6 +164,106 @@ export function createPluginRuntime(options: PluginRuntimeOptions): PluginRuntim
       ptyApis.set(id, ptyApi)
 
       return {
+        clients: {
+          accept: (clientOptions: Parameters<PluginContext['clients']['accept']>[0]) => {
+            guard()
+            const conn: ClientConn = {
+              id: nextConnId(),
+              role: 'mobile',
+              name: clientOptions.name,
+              deviceId: clientOptions.deviceId,
+              authorize: async (method, params) => {
+                if (conn.closed || isRevoked()) throw new Error('client owner is no longer active')
+                await clientOptions.authorize(method, params)
+                if (conn.closed || isRevoked()) throw new Error('client owner is no longer active')
+              },
+              subscribed: false,
+              closed: false,
+              transport: 'websocket',
+              streams: new Map(),
+              nextStreamId: 1,
+              streamClosers: new Map(),
+              sendText(text) {
+                if (conn.closed) return
+                try {
+                  clientOptions.sendText(text)
+                } catch {
+                  revoke()
+                  log(`admitted client ${conn.id} send callback failed; disconnecting`)
+                }
+              },
+              sendBinary(bytes) {
+                if (conn.closed) return
+                try {
+                  clientOptions.sendBinary(bytes)
+                } catch {
+                  revoke()
+                  log(`admitted client ${conn.id} send callback failed; disconnecting`)
+                }
+              }
+            }
+            Object.defineProperties(conn, {
+              role: { writable: false, configurable: false },
+              name: { writable: false, configurable: false },
+              deviceId: { writable: false, configurable: false }
+            })
+
+            let connected = true
+            let connections = admittedByPlugin.get(id)
+            if (connections === undefined) {
+              connections = new Set()
+              admittedByPlugin.set(id, connections)
+            }
+            const ownerConnections = connections
+            const disconnect = () => {
+              if (!connected) return
+              connected = false
+              ownerConnections.delete(revoke)
+              if (ownerConnections.size === 0 && admittedByPlugin.get(id) === ownerConnections) {
+                admittedByPlugin.delete(id)
+              }
+              try {
+                core.removeClient(conn)
+              } catch (error) {
+                log(`admitted client ${conn.id} cleanup failed: ${error instanceof Error ? error.message : String(error)}`)
+              }
+            }
+            const revoke = () => {
+              if (!connected) return
+              try {
+                disconnect()
+              } finally {
+                try {
+                  clientOptions.close()
+                } catch {
+                  log(`admitted client ${conn.id} transport close callback failed`)
+                }
+              }
+            }
+            ownerConnections.add(revoke)
+            core.addClient(conn)
+
+            return {
+              id: conn.id,
+              async receive(text) {
+                if (conn.closed || isRevoked()) return
+                try {
+                  await admittedRpcHandler(conn, text)
+                } catch (error) {
+                  log(`admitted client ${conn.id} RPC handler failed: ${error instanceof Error ? error.message : String(error)}`)
+                  conn.sendText(
+                    JSON.stringify({
+                      jsonrpc: '2.0',
+                      id: null,
+                      error: { code: RpcErrorCode.Internal, message: 'internal error' }
+                    })
+                  )
+                }
+              },
+              disconnect
+            }
+          }
+        },
         dataDir,
         home,
         pty: ptyApi.api,
@@ -220,7 +330,11 @@ export function createPluginRuntime(options: PluginRuntimeOptions): PluginRuntim
           if (!isPlainObject(resolved)) return Promise.reject(invalidParams('params must be an object'))
           return dispatcher.dispatch(method, resolved, { pluginId: id })
         },
-        openStore(migrations: StoreMigration[]) {
+        createFileResource(options) {
+          guard()
+          return fileResources.create(id, options, isRevoked)
+        },
+        openStore(migrations: StoreMigration[], options?: { newerVersion?: 'read-only' }) {
           guard()
           if (opened) {
             if (opened.migrations !== migrations.length) {
@@ -229,7 +343,7 @@ export function createPluginRuntime(options: PluginRuntimeOptions): PluginRuntim
             return opened.store
           }
           // the handle stays usable inside deactivate; extension.revoke closes it afterwards
-          const created = openPluginStore({ home, pluginId: id, migrations, isActive: () => true })
+          const created = openPluginStore({ home, pluginId: id, migrations, isActive: () => true, newerVersion: options?.newerVersion })
           opened = { ...created, migrations: migrations.length }
           openedStores.set(id, opened)
           return opened.store
@@ -251,7 +365,12 @@ export function createPluginRuntime(options: PluginRuntimeOptions): PluginRuntim
         }
       }
     },
-    revoke(pluginId) {
+    async revoke(pluginId) {
+      const admitted = admittedByPlugin.get(pluginId)
+      if (admitted !== undefined) {
+        for (const revoke of [...admitted]) revoke()
+      }
+      await fileResources.revokePlugin(pluginId)
       events.removeAll(pluginId)
       options.sessionAuthority.releasePlugin(pluginId)
       scheduler.revokePlugin(pluginId)
@@ -277,5 +396,5 @@ export function createPluginRuntime(options: PluginRuntimeOptions): PluginRuntim
     }
   }
 
-  return { extension, dispatcher, events, scheduler, layout, distros, prepareLaunch }
+  return { extension, dispatcher, events, scheduler, layout, distros, fileResources, prepareLaunch }
 }

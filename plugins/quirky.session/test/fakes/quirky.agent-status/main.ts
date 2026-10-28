@@ -4,7 +4,6 @@ import type { LaunchHookInput, PluginContext } from '@quirky/protocol'
 export const CLAUDE_SETTINGS = {
   hooks: { SessionStart: [{ hooks: [{ type: 'command', command: 'fake-statusline-hook' }] }] }
 }
-
 type PointerState = 'idle' | 'working' | 'blocked' | 'unknown' | 'exited'
 let pointerState: PointerState = 'unknown'
 let pointerQuiet = true
@@ -22,7 +21,7 @@ export function setPointerQuiet(quiet: boolean): void {
   pointerQuiet = quiet
 }
 
-/** Adds launch arguments and a script-state result for session pointer regressions. */
+/** Adds launch arguments, script-state results, JSON settings, and Codex notify arguments for the test fake. */
 export function activate(context: PluginContext): void {
   context.provide('launch-hook:quirky.agent-status/agent-hooks', (launch: LaunchHookInput) => {
     if (launch.agent === 'claude') return { jsonArgs: { '--settings': CLAUDE_SETTINGS } }

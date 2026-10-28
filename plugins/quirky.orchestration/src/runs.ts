@@ -32,6 +32,7 @@ import { OrchestrationCore, type ReceiptRecord } from './core'
 import { fail } from './errors'
 import { callerSessionId, targetIdentity, verifyCaller } from './identity'
 import type { SessionIdentity, SessionPointerResult } from './runtime-contracts'
+
 const PAGE_DEFAULT = 100
 const PAGE_MAX = 100
 type RunTaskMethod = Extract<

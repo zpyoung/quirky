@@ -15,8 +15,8 @@ import type { LayoutStore, UnreadableRow } from './store'
 import { displayTitle, nextTerminalTitle } from './titles'
 import { findGroup, findPane, paneLeaves } from './tree'
 import type { GroupSide, TreeError } from './tree'
-import { FLOATING_WORKSPACE, TITLE_MAX } from './types'
-import type { ClosedTab, Edge, FloatingState, PaneLeaf, SplitDirection, Tab, Workspace } from './types'
+import { FLOATING_WORKSPACE, isTerminalTab, isViewTab, TITLE_MAX } from './types'
+import type { ClosedTab, Edge, FloatingState, PaneLeaf, SplitDirection, Tab, TerminalTab, ViewTab, Workspace } from './types'
 
 type Params = Record<string, unknown>
 
@@ -36,6 +36,8 @@ export type NewTabSpec = {
   prompt?: string
   extraArgs?: string
   title?: string
+  model?: string
+  options?: Record<string, string | boolean>
   quickCommand?: string
   activate?: boolean
   revision?: number
@@ -86,7 +88,10 @@ export class LayoutService {
     this.counter = counter
     this.floatingStored = store.floating()
     for (const workspace of this.workspaces.values()) {
-      for (const leaf of ops.workspaceTabs(workspace).flatMap((tab) => paneLeaves(tab.root))) if (leaf.typed) inputs.mark(leaf.session)
+      for (const tab of ops.workspaceTabs(workspace)) {
+        if (!isTerminalTab(tab)) continue
+        for (const leaf of paneLeaves(tab.root)) if (leaf.typed) inputs.mark(leaf.session)
+      }
     }
     inputs.onFirstMark((session) => this.enqueueBackground(async () => this.persistTyped(session), 'input record'))
   }
@@ -94,6 +99,10 @@ export class LayoutService {
   /** The RPC methods of the plugin's layout half, by method name. */
   readonly methods: Record<string, MethodHandler> = {
     workspace: (params, caller) => this.queued(() => this.workspace(params, caller)),
+    groupInfo: (params) => this.queued(() => this.groupInfo(params)),
+    adoptSession: (params) => this.queued(() => this.adoptSession(params)),
+    openViewTab: (params, caller) => this.queued(() => this.openViewTab(params, caller)),
+    rekeyViewTabs: (params, caller) => this.queued(() => this.rekeyViewTabs(params, caller)),
     newTab: (params, caller) => this.queued(() => this.newTab(params, caller)),
     openSession: (params, caller) => this.queued(() => this.openSession(params, caller)),
     closeTab: (params) => this.queued(() => this.closeTab(params)),
@@ -226,6 +235,42 @@ export class LayoutService {
     return this.queued(() => this.addTab(workspaceId, spec))
   }
 
+  private groupInfo(params: Params): { workspace: string } {
+    const group = params.group as string
+    return { workspace: this.ownerOf('group', group).id }
+  }
+
+  private async adoptSession(params: Params): Promise<{ workspace: Workspace }> {
+    const groupId = params.group as string
+    const workspace = this.ownerOf('group', groupId)
+    const session = await this.session(params.session as string)
+    if (!isTabbed(session)) throw this.context.error('conflict', `session ${session.id} cannot be placed in a terminal tab`)
+    if (session.worktreeId !== workspace.id) {
+      throw this.context.error('conflict', `session ${session.id} belongs to ${session.worktreeId}, not workspace ${workspace.id}`)
+    }
+
+    let bound: { groupId: string; tabId: string } | undefined
+    for (const current of this.workspaces.values()) {
+      const location = ops.locateSession(current, session.id)
+      if (!location) continue
+      if (bound) throw this.context.error('conflict', `session ${session.id} is already present in multiple tabs`)
+      if (current.id !== workspace.id) {
+        throw this.context.error('conflict', `session ${session.id} is already bound to workspace ${current.id}`)
+      }
+      bound = { groupId: location.group.id, tabId: location.tab.id }
+    }
+
+    if (bound?.groupId === groupId) return { workspace }
+    const ids = this.ids()
+    if (bound) {
+      const moved = this.unwrap(ops.moveTabToGroup(workspace, bound.tabId, groupId))
+      return { workspace: this.commit(workspace, moved, ids) }
+    }
+    const tab = ops.makeTab(ids, { defaultTitle: session.title, session: session.id, now: this.now() })
+    const appended = this.unwrap(ops.appendTab(workspace, groupId, tab))
+    return { workspace: this.commit(workspace, appended, ids) }
+  }
+
   private queued<T>(work: () => T | Promise<T>): Promise<T> {
     const run = this.tail.then(() => {
       if (this.closed) throw this.context.error('conflict', 'quirky.terminal is shut down')
@@ -255,6 +300,30 @@ export class LayoutService {
       throw this.context.error('conflict', `workspace ${ws.id} is at revision ${ws.revision}`)
     }
   }
+
+  private async requireEffectiveContribution(kind: 'view' | 'command' | 'method', id: string): Promise<void> {
+    if (kind === 'view' || kind === 'command') {
+      const model = (await this.context.call('ui.contributions', {})) as { views?: { id: string }[]; commands?: { id: string }[] }
+      const entries = kind === 'view' ? model.views : model.commands
+      if (!Array.isArray(entries) || !entries.some((entry) => entry.id === id)) {
+        throw this.context.error('not-found', `no effective ${kind} ${id}`)
+      }
+      return
+    }
+    const declarations = (await this.context.call('plugin.contributions', { kind })) as { id: string }[]
+    if (!Array.isArray(declarations) || !declarations.some((declaration) => declaration.id === id)) {
+      throw this.context.error('not-found', `no effective ${kind} ${id}`)
+    }
+  }
+
+  private async ensureViewsClosable(tabs: readonly Tab[]): Promise<void> {
+    for (const tab of tabs) {
+      if (!isViewTab(tab) || tab.closeMethod === undefined) continue
+      const result = await this.context.call(tab.closeMethod, { ...(tab.closeParams ?? {}), tabId: tab.id })
+      if (result !== true) throw this.context.error('conflict', `view tab ${tab.id} refused to close`)
+    }
+  }
+
 
   private now(): string {
     return new Date().toISOString()
@@ -304,12 +373,12 @@ export class LayoutService {
     return saved
   }
 
-  /** A tab whose active pane changed shows that pane's latest title. */
+  /** A terminal tab whose active pane changed shows that pane's latest title. */
   private syncLiveTitles(prev: Workspace, next: Workspace): Workspace {
-    const before = new Map(ops.workspaceTabs(prev).map((tab) => [tab.id, tab.activePane]))
+    const before = new Map(ops.workspaceTabs(prev).filter(isTerminalTab).map((tab) => [tab.id, tab.activePane]))
     let current = next
     for (const tab of ops.workspaceTabs(next)) {
-      if (before.get(tab.id) === tab.activePane) continue
+      if (!isTerminalTab(tab) || before.get(tab.id) === tab.activePane) continue
       const leaf = findPane(tab.root, tab.activePane)
       const title = (leaf && this.titles.get(leaf.session)?.trim()) || null
       if (title !== tab.liveTitle) current = ops.setLiveTitle(current, tab.id, title)
@@ -348,7 +417,16 @@ export class LayoutService {
   /** Starts a session in a workspace's worktree (or the floating one) through the session plugin. */
   private async startSession(
     workspaceId: string,
-    spec: { agent: string; prompt?: string; extraArgs?: string; cwd?: StartCwd }
+    spec: {
+      agent: string
+      prompt?: string
+      extraArgs?: string
+      title?: string
+      command?: string
+      model?: string
+      options?: Record<string, string | boolean>
+      cwd?: StartCwd
+    }
   ): Promise<Session> {
     const create = (cwd: string | undefined) =>
       this.context.call('quirky.session/create', {
@@ -356,6 +434,10 @@ export class LayoutService {
         agent: spec.agent,
         ...(spec.prompt === undefined ? {} : { prompt: spec.prompt }),
         ...(spec.extraArgs === undefined || spec.extraArgs.trim() === '' ? {} : { extraArgs: spec.extraArgs }),
+        ...(spec.title === undefined ? {} : { title: spec.title }),
+        ...(spec.model === undefined ? {} : { model: spec.model }),
+        ...(spec.options === undefined ? {} : { options: spec.options }),
+        ...(spec.command === undefined ? {} : { command: spec.command }),
         ...(cwd === undefined ? {} : { cwd })
       }) as Promise<Session>
     const cwd = spec.cwd ?? (workspaceId === FLOATING_WORKSPACE ? { path: this.floatingCwd() ?? '', soft: true } : undefined)
@@ -378,8 +460,8 @@ export class LayoutService {
     await this.closeSessions([sessionId]).catch((error) => this.context.log(`could not close session ${sessionId}: ${messageOf(error)}`))
   }
 
-  /** What `reopenTab` needs to start the tab again: its titles, colour, agent and the directory its first pane's session started in. */
-  private async closedRecord(tab: Tab): Promise<ClosedTab> {
+  /** What `reopenTab` needs to start a terminal tab again. */
+  private async closedRecord(tab: TerminalTab): Promise<ClosedTab> {
     const leaf = paneLeaves(tab.root)[0]!
     const session = await this.session(leaf.session).catch(() => null)
     return {
@@ -420,6 +502,207 @@ export class LayoutService {
     return { workspace: this.workspaces.get(id)! }
   }
 
+  private async openViewTab(params: Params, caller: PluginCaller): Promise<{ workspace: Workspace; tab: string }> {
+    const viewId = params.viewId
+    const key = params.key
+    const title = params.title
+    if (typeof viewId !== 'string' || !viewId.startsWith('view:')) throw this.context.error('invalid-params', 'viewId must be a declared view ID')
+    if (typeof key !== 'string' || key === '') throw this.context.error('invalid-params', 'key is required')
+    if (typeof title !== 'string') throw this.context.error('invalid-params', 'title is required')
+    const cleanTitle = title.trim()
+    if (cleanTitle.length > TITLE_MAX) throw this.context.error('invalid-params', `title must be at most ${TITLE_MAX} characters`)
+    if (params.preview !== undefined && typeof params.preview !== 'boolean') throw this.context.error('invalid-params', 'preview must be a boolean')
+    if (params.activate !== undefined && typeof params.activate !== 'boolean') throw this.context.error('invalid-params', 'activate must be a boolean')
+    if (params.reuse !== undefined && typeof params.reuse !== 'boolean') throw this.context.error('invalid-params', 'reuse must be a boolean')
+    const inputValue = params.input
+    if (inputValue !== undefined && (typeof inputValue !== 'object' || inputValue === null || Array.isArray(inputValue))) {
+      throw this.context.error('invalid-params', 'input must be an object')
+    }
+    const closeParamsValue = params.closeParams
+    if (closeParamsValue !== undefined && (typeof closeParamsValue !== 'object' || closeParamsValue === null || Array.isArray(closeParamsValue))) {
+      throw this.context.error('invalid-params', 'closeParams must be an object')
+    }
+    const closeCommand = params.closeCommand
+    if (closeCommand !== undefined) {
+      if (typeof closeCommand !== 'string' || !closeCommand.startsWith('command:')) {
+        throw this.context.error('invalid-params', 'closeCommand must be a declared command ID')
+      }
+      await this.requireEffectiveContribution('command', closeCommand)
+    }
+    const closeMethod = params.closeMethod
+    if (closeMethod !== undefined) {
+      if (typeof closeMethod !== 'string' || closeMethod.startsWith('method:') || !closeMethod.includes('/')) {
+        throw this.context.error('invalid-params', 'closeMethod must be a method name')
+      }
+      await this.requireEffectiveContribution('method', `method:${closeMethod}`)
+    }
+    await this.requireEffectiveContribution('view', viewId)
+
+    const workspaceId =
+      params.group !== undefined && params.workspace === undefined
+        ? this.ownerOf('group', params.group as string).id
+        : await this.resolveWorkspace(params.workspace, caller)
+    const ws = this.ensure(workspaceId)
+    this.checkRevision(ws, params.revision)
+    const groupId = params.group === undefined ? ws.activeGroup : (params.group as string)
+    const group = findGroup(ws.root, groupId)
+    if (!group) throw this.context.error('not-found', `no group ${groupId}`)
+
+    const activate = params.activate !== false
+    const replaceId = params.replace === undefined ? undefined : params.replace as string
+    const suppliedInput = inputValue as Record<string, unknown> | undefined
+    const suppliedCloseParams = closeParamsValue as Record<string, unknown> | undefined
+    const ids = this.ids()
+    if (replaceId === undefined && params.reuse !== false) {
+      const existing = ops.workspaceTabs(ws).find((tab) => isViewTab(tab) && tab.viewId === viewId && tab.key === key)
+      if (existing && isViewTab(existing)) {
+        const oldGroup = ops.locateTab(ws, existing.id)!.group.id
+        let next = ws
+        if (params.group !== undefined && oldGroup !== groupId) {
+          next = this.unwrap(ops.moveTabToGroup(next, existing.id, groupId))
+          if (!activate) next = { ...next, activeGroup: ws.activeGroup }
+        }
+        next = this.unwrap(ops.updateViewTab(next, existing.id, (tab) => ({
+          ...tab,
+          title: cleanTitle,
+          ...(suppliedInput === undefined ? {} : { input: suppliedInput }),
+          ...(closeCommand === undefined ? {} : { closeCommand }),
+          ...(closeMethod === undefined ? {} : { closeMethod }),
+          ...(suppliedCloseParams === undefined ? {} : { closeParams: suppliedCloseParams }),
+          ...(params.preview === undefined ? {} : { preview: params.preview as boolean })
+        })))
+        if (activate) next = this.unwrap(ops.activateTab(next, existing.id))
+        const saved = this.commit(ws, next, ids)
+        return { workspace: saved, tab: existing.id }
+      }
+    }
+
+    if (replaceId !== undefined) {
+      const location = ops.locateTab(ws, replaceId)
+      if (!location) throw this.context.error('not-found', `no tab ${replaceId}`)
+      if (!isViewTab(location.tab) || location.tab.pinned || !location.tab.preview) {
+        throw this.context.error('invalid-params', 'replace must target an existing unpinned preview view tab')
+      }
+      await this.ensureViewsClosable([location.tab])
+      const replaced = this.unwrap(ops.updateViewTab(ws, replaceId, (tab) => ({
+        kind: 'view',
+        id: tab.id,
+        viewId,
+        key,
+        ...(suppliedInput === undefined ? {} : { input: suppliedInput }),
+        title: cleanTitle,
+        color: tab.color,
+        pinned: tab.pinned,
+        preview: params.preview === true,
+        ...(closeCommand === undefined ? {} : { closeCommand: closeCommand as string }),
+        ...(closeMethod === undefined ? {} : { closeMethod: closeMethod as string }),
+        ...(suppliedCloseParams === undefined ? {} : { closeParams: suppliedCloseParams }),
+        createdAt: tab.createdAt
+      })))
+      let next = replaced
+      if (params.group !== undefined && location.group.id !== groupId) {
+        next = this.unwrap(ops.moveTabToGroup(next, replaceId, groupId))
+        if (!activate) next = { ...next, activeGroup: ws.activeGroup }
+      }
+      if (activate) next = this.unwrap(ops.activateTab(next, replaceId))
+      const saved = this.commit(ws, next, ids)
+      return { workspace: saved, tab: replaceId }
+    }
+
+    const tab: ViewTab = {
+      kind: 'view',
+      id: ids.next('tab'),
+      viewId,
+      key,
+      ...(suppliedInput === undefined ? {} : { input: suppliedInput }),
+      title: cleanTitle,
+      color: 'none',
+      pinned: false,
+      preview: params.preview === true,
+      ...(closeCommand === undefined ? {} : { closeCommand: closeCommand as string }),
+      ...(closeMethod === undefined ? {} : { closeMethod: closeMethod as string }),
+      ...(suppliedCloseParams === undefined ? {} : { closeParams: suppliedCloseParams }),
+      createdAt: this.now()
+    }
+    const next = this.unwrap(ops.appendTab(ws, groupId, tab, activate))
+    return { workspace: this.commit(ws, next, ids), tab: tab.id }
+  }
+
+  private async rekeyViewTabs(params: Params, caller: PluginCaller): Promise<{ workspace: Workspace }> {
+    const viewId = params.viewId
+    if (typeof viewId !== 'string' || !viewId.startsWith('view:')) throw this.context.error('invalid-params', 'viewId must be a declared view ID')
+    const changes = params.changes
+    if (!Array.isArray(changes)) throw this.context.error('invalid-params', 'changes must be an array')
+    await this.requireEffectiveContribution('view', viewId)
+    const workspaceId = await this.resolveWorkspace(params.workspace, caller)
+    const ws = this.ensure(workspaceId)
+    this.checkRevision(ws, params.revision)
+    if (changes.length === 0) return { workspace: ws }
+
+    const updates: { tab: string; key: string; input?: Record<string, unknown>; title?: string; preview?: boolean }[] = []
+    const byTab = new Map<string, (typeof updates)[number]>()
+    for (const raw of changes) {
+      if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) throw this.context.error('invalid-params', 'each change must be an object')
+      const change = raw as Record<string, unknown>
+      if (typeof change.tab !== 'string' || typeof change.key !== 'string' || change.key === '') {
+        throw this.context.error('invalid-params', 'each change requires tab and key')
+      }
+      if (byTab.has(change.tab)) throw this.context.error('invalid-params', `tab ${change.tab} appears more than once`)
+      const location = ops.locateTab(ws, change.tab)
+      if (!location) throw this.context.error('not-found', `no view tab ${change.tab} in workspace ${ws.id}`)
+      if (!isViewTab(location.tab) || location.tab.viewId !== viewId) {
+        throw this.context.error('invalid-params', `tab ${change.tab} is not a ${viewId} view`)
+      }
+      let input: Record<string, unknown> | undefined
+      if (change.input !== undefined) {
+        if (typeof change.input !== 'object' || change.input === null || Array.isArray(change.input)) {
+          throw this.context.error('invalid-params', 'input must be an object')
+        }
+        input = change.input as Record<string, unknown>
+      }
+      let title: string | undefined
+      if (change.title !== undefined) {
+        if (typeof change.title !== 'string') throw this.context.error('invalid-params', 'title must be a string')
+        title = change.title.trim()
+        if (title.length > TITLE_MAX) throw this.context.error('invalid-params', `title must be at most ${TITLE_MAX} characters`)
+      }
+      if (change.preview !== undefined && typeof change.preview !== 'boolean') {
+        throw this.context.error('invalid-params', 'preview must be a boolean')
+      }
+      const update = {
+        tab: change.tab,
+        key: change.key,
+        ...(input === undefined ? {} : { input }),
+        ...(title === undefined ? {} : { title }),
+        ...(change.preview === undefined ? {} : { preview: change.preview as boolean })
+      }
+      updates.push(update)
+      byTab.set(change.tab, update)
+    }
+
+    const identities = new Map<string, string>()
+    for (const tab of ops.workspaceTabs(ws)) {
+      if (!isViewTab(tab) || tab.viewId !== viewId) continue
+      const key = byTab.get(tab.id)?.key ?? tab.key
+      const other = identities.get(key)
+      if (other !== undefined && other !== tab.id) throw this.context.error('conflict', `view key ${key} is already used by tab ${other}`)
+      identities.set(key, tab.id)
+    }
+
+    const ids = this.ids()
+    let next = ws
+    for (const update of updates) {
+      next = this.unwrap(ops.updateViewTab(next, update.tab, (tab) => ({
+        ...tab,
+        key: update.key,
+        ...(update.input === undefined ? {} : { input: update.input }),
+        ...(update.title === undefined ? {} : { title: update.title }),
+        ...(update.preview === undefined ? {} : { preview: update.preview })
+      })))
+    }
+    return { workspace: this.commit(ws, next, ids) }
+  }
+
   private async newTab(params: Params, caller: PluginCaller): Promise<{ workspace: Workspace; session: string } & NewTabIds> {
     const id =
       params.group !== undefined && params.workspace === undefined
@@ -432,6 +715,8 @@ export class LayoutService {
       ...(params.prompt === undefined ? {} : { prompt: params.prompt as string }),
       ...(params.extraArgs === undefined ? {} : { extraArgs: params.extraArgs as string }),
       ...(params.title === undefined ? {} : { title: params.title as string }),
+      ...(params.model === undefined ? {} : { model: params.model as string }),
+      ...(params.options === undefined ? {} : { options: params.options as Record<string, string | boolean> }),
       ...(params.quickCommand === undefined ? {} : { quickCommand: params.quickCommand as string }),
       ...(params.activate === undefined ? {} : { activate: params.activate as boolean }),
       ...(params.revision === undefined ? {} : { revision: params.revision as number })
@@ -506,6 +791,9 @@ export class LayoutService {
       agent,
       ...(spec.prompt === undefined ? {} : { prompt: spec.prompt }),
       ...(spec.extraArgs === undefined ? {} : { extraArgs: spec.extraArgs }),
+      ...(title === undefined || title === '' ? {} : { title }),
+      ...(spec.model === undefined ? {} : { model: spec.model }),
+      ...(spec.options === undefined ? {} : { options: spec.options }),
       ...(spec.cwd === undefined ? {} : { cwd: { path: spec.cwd, soft: false } })
     })
     try {
@@ -522,7 +810,7 @@ export class LayoutService {
   }
 
   private defaultTitles(ws: Workspace): string[] {
-    return ops.workspaceTabs(ws).map((tab) => tab.defaultTitle)
+    return ops.workspaceTabs(ws).filter(isTerminalTab).map((tab) => tab.defaultTitle)
   }
 
   private async closeTab(params: Params): Promise<{ workspace: Workspace }> {
@@ -548,14 +836,17 @@ export class LayoutService {
     })
   }
 
-  /** Ends the sessions of the tabs, then removes the tabs and remembers them for reopening. */
+  /** Ends only terminal sessions; hosted views are checked before any affected tab is removed. */
   private async removeTabs(ws: Workspace, tabIds: readonly string[]): Promise<{ workspace: Workspace }> {
     const tabs = tabIds.map((id) => ops.locateTab(ws, id)!.tab)
-    const records = await Promise.all(tabs.map((tab) => this.closedRecord(tab)))
-    await this.closeSessions(tabs.flatMap((tab) => paneLeaves(tab.root).map((leaf) => leaf.session)))
+    await this.ensureViewsClosable(tabs)
+    const terminalTabs = tabs.filter(isTerminalTab)
+    const records = await Promise.all(terminalTabs.map((tab) => this.closedRecord(tab)))
+    const recordById = new Map(terminalTabs.map((tab, index) => [tab.id, records[index]!]))
+    await this.closeSessions(terminalTabs.flatMap((tab) => paneLeaves(tab.root).map((leaf) => leaf.session)))
     const ids = this.ids()
     let next = ws
-    for (const [index, tab] of tabs.entries()) next = this.unwrap(ops.removeTab(next, tab.id, records[index]!))
+    for (const tab of tabs) next = this.unwrap(ops.removeTab(next, tab.id, recordById.get(tab.id) ?? null))
     return { workspace: this.commit(ws, next, ids) }
   }
 
@@ -628,17 +919,33 @@ export class LayoutService {
     }
   }
 
-  private async splitPane(params: Params): Promise<{ workspace: Workspace }> {
+  private async splitPane(params: Params): Promise<{ workspace: Workspace; session: string; pane: string }> {
     const { ws, loc } = this.paneTarget(params)
     this.checkRevision(ws, params.revision)
+    if (params.title !== undefined && typeof params.title !== 'string') throw this.context.error('invalid-params', 'title must be a string')
+    const title = typeof params.title === 'string' ? params.title.trim() : undefined
+    if (title !== undefined && title.length > TITLE_MAX) {
+      throw this.context.error('invalid-params', `title must be at most ${TITLE_MAX} characters`)
+    }
+    if (params.command !== undefined && typeof params.command !== 'string') {
+      throw this.context.error('invalid-params', 'command must be a string')
+    }
+    if (params.activate !== undefined && typeof params.activate !== 'boolean') {
+      throw this.context.error('invalid-params', 'activate must be a boolean')
+    }
     const source = await this.session(loc.pane.session).catch(() => null)
     const path = this.cwds.get(loc.pane.session) ?? source?.cwd
-    const session = await this.startSession(ws.id, { agent: 'shell', ...(path ? { cwd: { path, soft: true } } : {}) })
+    const session = await this.startSession(ws.id, {
+      agent: 'shell',
+      ...(title ? { title } : {}),
+      ...(params.command === undefined ? {} : { command: params.command as string }),
+      ...(path ? { cwd: { path, soft: true } } : {})
+    })
     try {
       const ids = this.ids()
       const leaf: PaneLeaf = { kind: 'pane', id: ids.next('pane'), session: session.id, title: null, exit: null }
-      const next = this.unwrap(ops.splitPaneOp(ws, loc.pane.id, params.direction as SplitDirection, leaf, ids))
-      return { workspace: this.commit(ws, next, ids) }
+      const next = this.unwrap(ops.splitPaneOp(ws, loc.pane.id, params.direction as SplitDirection, leaf, ids, params.activate !== false))
+      return { workspace: this.commit(ws, next, ids), session: session.id, pane: leaf.id }
     } catch (error) {
       await this.closeQuietly(session.id)
       throw error
@@ -721,9 +1028,13 @@ export class LayoutService {
       : this.context.error('not-found', `no ${kind} ${id}`)
   }
 
-  private closeGroup(params: Params): { workspace: Workspace } {
+  private async closeGroup(params: Params): Promise<{ workspace: Workspace }> {
     const groupId = params.group as string
     const ws = this.ownerOf('group', groupId)
+    this.checkRevision(ws, params.revision)
+    const group = findGroup(ws.root, groupId)
+    if (!group) throw this.context.error('not-found', `no group ${groupId}`)
+    await this.ensureViewsClosable(group.tabs)
     return this.edit(ws, params, () => ops.closeGroupOp(ws, groupId))
   }
 
@@ -785,7 +1096,7 @@ export class LayoutService {
     return lines.length > 0 ? lines.join('\n') : null
   }
 
-  private closeTargets(params: Params): { tab: Tab; leaf: PaneLeaf }[] {
+  private closeTargets(params: Params): { tab: TerminalTab; leaf: PaneLeaf }[] {
     if (params.pane !== undefined || params.session !== undefined) {
       const { loc } = this.paneTarget(params)
       return [{ tab: loc.tab, leaf: loc.pane }]
@@ -794,7 +1105,7 @@ export class LayoutService {
     const tabId = params.tab as string
     const ws = this.ownerOf('tab', tabId)
     const tabs = params.which === undefined ? [ops.locateTab(ws, tabId)!.tab] : this.tabsFor(ws, tabId, params.which as string)
-    return tabs.flatMap((tab) => paneLeaves(tab.root).map((leaf) => ({ tab, leaf })))
+    return tabs.flatMap((tab) => (isTerminalTab(tab) ? paneLeaves(tab.root).map((leaf) => ({ tab, leaf })) : []))
   }
 
   private readOrSetFocusContext(params: Params): { workspace: string | null } {
@@ -887,8 +1198,11 @@ export class LayoutService {
   /** The workspace with `typed` set on panes whose session got input before the pane existed. */
   private withTyped(ws: Workspace): Workspace {
     let next = ws
-    for (const leaf of ops.workspaceTabs(ws).flatMap((tab) => paneLeaves(tab.root))) {
-      if (!leaf.typed && this.inputs.has(leaf.session)) next = this.unwrap(ops.setPaneTyped(next, leaf.id))
+    for (const tab of ops.workspaceTabs(ws)) {
+      if (!isTerminalTab(tab)) continue
+      for (const leaf of paneLeaves(tab.root)) {
+        if (!leaf.typed && this.inputs.has(leaf.session)) next = this.unwrap(ops.setPaneTyped(next, leaf.id))
+      }
     }
     return next
   }

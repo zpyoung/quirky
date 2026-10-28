@@ -3,7 +3,7 @@ import { createRequire } from 'node:module'
 import { dirname, isAbsolute, join, parse, relative, resolve, sep, win32 } from 'node:path'
 import { validateValue, type Schema } from '@quirky/protocol'
 
-type Manifest = { id?: string; main?: string; cli?: string; ui?: string; [key: string]: unknown }
+type Manifest = { id?: string; main?: string; cli?: string; ui?: string; workers?: unknown; [key: string]: unknown }
 const MANIFEST_SCHEMA: Schema = {
   type: 'object',
   properties: { id: { type: 'string' }, main: { type: 'string' }, cli: { type: 'string' }, ui: { type: 'string' } },
@@ -193,6 +193,28 @@ function jsName(entry: string): string {
   return dir ? join(dir, `${name}.js`) : `${name}.js`
 }
 
+function workerEntries(pluginId: string, pluginDir: string, value: unknown): [string, string][] {
+  if (value === undefined) return []
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    throw new Error(`plugin ${pluginId}: workers must be an object of worker names to entry paths`)
+  }
+  const entries: [string, string][] = []
+  for (const [name, entry] of Object.entries(value)) {
+    if (!/^[A-Za-z0-9]+(?:[._-][A-Za-z0-9]+)*$/.test(name)) {
+      throw new Error(`plugin ${pluginId}: worker name '${name}' is not valid`)
+    }
+    if (typeof entry !== 'string' || entry === '') {
+      throw new Error(`plugin ${pluginId}: worker ${name} must name a non-empty entry path`)
+    }
+    const rel = relative(pluginDir, resolve(pluginDir, entry))
+    if (isAbsolute(entry) || win32.isAbsolute(entry) || rel === '' || rel === '..' || rel.startsWith('../') || isAbsolute(rel)) {
+      throw new Error(`plugin ${pluginId}: worker ${name} entry must be root-relative and inside the plugin directory`)
+    }
+    entries.push([name, entry])
+  }
+  return entries
+}
+
 async function bundleEntry(pluginId: string, pluginDir: string, outPluginDir: string, entry: string): Promise<string> {
   const target = jsName(entry)
   const result = await Bun.build({
@@ -214,8 +236,25 @@ function copyUi(pluginId: string, pluginDir: string, outPluginDir: string, ui: s
   if (!existsSync(from)) {
     throw new Error(`plugin ${pluginId}: ${ui} is missing; run \`bun run build\` to produce the plugin UI modules`)
   }
-  mkdirSync(dirname(join(outPluginDir, ui)), { recursive: true })
-  cpSync(from, join(outPluginDir, ui))
+  const relativeDirectory = dirname(ui)
+  if (relativeDirectory === '.') {
+    mkdirSync(dirname(join(outPluginDir, ui)), { recursive: true })
+    cpSync(from, join(outPluginDir, ui))
+    return
+  }
+  const sourceDirectory = join(pluginDir, relativeDirectory)
+  const outputDirectory = join(outPluginDir, relativeDirectory)
+  mkdirSync(dirname(outputDirectory), { recursive: true })
+  cpSync(sourceDirectory, outputDirectory, { recursive: true })
+}
+
+function copyNotebookBridge(pluginDir: string, outPluginDir: string): void {
+  const relativePath = 'src/notebook/kernel-bridge.py'
+  const from = join(pluginDir, relativePath)
+  if (!existsSync(from)) return
+  const to = join(outPluginDir, relativePath)
+  mkdirSync(dirname(to), { recursive: true })
+  cpSync(from, to)
 }
 
 const LEGAL_NOTICE_NAME = /^(?:licen[cs]e|notice)(?:[._-].*)?$/i
@@ -231,8 +270,13 @@ function copyLegalNotices(pluginId: string, pluginDir: string, outPluginDir: str
 }
 
 /**
- * Writes a self-contained copy of each plugin and its declared private native assets. Entry
- * dependencies are bundled; test sources and node_modules remain behind.
+ * Writes a self-contained copy of every plugin under `srcDir` into `outDir`, replacing whatever
+ * was there. Each copy holds the rewritten manifest; `main` and `cli` bundled to `.js` with their
+ * dependencies inlined; generated UI asset tree and any `sounds/` directory; the plugin-local
+ * runtime bridge `src/notebook/kernel-bridge.py` when present; declared private package assets;
+ * and legal notices. Other sources, `test/` and `node_modules/` stay behind.
+ * A manifest that names a UI module which has not been built fails the whole bundle. Returns the
+ * bundled plugin IDs.
  */
 export async function bundlePlugins(srcDir: string, outDir: string): Promise<string[]> {
   rmSync(outDir, { recursive: true, force: true })
@@ -248,14 +292,26 @@ export async function bundlePlugins(srcDir: string, outDir: string): Promise<str
     if (validateValue(MANIFEST_SCHEMA, rawManifest, 'plugin manifest')) throw new Error(`plugin ${entry.name}: manifest entry fields are invalid`)
     const manifest = rawManifest as Manifest
     const id = manifest.id ?? entry.name
+    const workers = workerEntries(id, pluginDir, manifest.workers)
     const outPluginDir = join(outDir, entry.name)
     mkdirSync(outPluginDir, { recursive: true })
 
     if (manifest.main) manifest.main = await bundleEntry(id, pluginDir, outPluginDir, manifest.main)
     if (manifest.cli) manifest.cli = await bundleEntry(id, pluginDir, outPluginDir, manifest.cli)
+    const workerOutputs: string[] = []
+    if (manifest.workers !== undefined) {
+      const bundledWorkers: Record<string, string> = {}
+      for (const [name, worker] of workers) {
+        const output = await bundleEntry(id, pluginDir, outPluginDir, worker)
+        bundledWorkers[name] = output
+        workerOutputs.push(output)
+      }
+      manifest.workers = bundledWorkers
+    }
     if (manifest.ui) copyUi(id, pluginDir, outPluginDir, manifest.ui)
+    copyNotebookBridge(pluginDir, outPluginDir)
     if (existsSync(join(pluginDir, SOUNDS))) cpSync(join(pluginDir, SOUNDS), join(outPluginDir, SOUNDS), { recursive: true })
-    copyPrivateAssets(id, pluginDir, outPluginDir, manifest, [manifest.main, manifest.cli].filter((name): name is string => typeof name === 'string'))
+    copyPrivateAssets(id, pluginDir, outPluginDir, manifest, [manifest.main, manifest.cli, ...workerOutputs].filter((name): name is string => typeof name === 'string'))
     copyLegalNotices(id, pluginDir, outPluginDir)
 
     writeFileSync(join(outPluginDir, MANIFEST), `${JSON.stringify(manifest, null, 2)}\n`)

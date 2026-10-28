@@ -2,10 +2,11 @@ import { describe, expect, test } from 'bun:test'
 import type { Session } from '@quirky/protocol'
 import { InputTracker } from '../src/input-tracker'
 import { LayoutService } from '../src/layout/service'
-import { emptyWorkspace, makeTab, appendTab, normalize, workspaceTabs } from '../src/layout/ops'
+import { emptyWorkspace, makeTab, appendTab, normalize, workspaceTabs as allWorkspaceTabs } from '../src/layout/ops'
 import { reconcileWorkspace } from '../src/layout/reconcile'
 import { CounterIds, parseWorkspace } from '../src/layout/store'
 import { groupsInOrder, paneLeaves, splitPane } from '../src/layout/tree'
+import { isTerminalTab } from '../src/layout/types'
 import type { Workspace } from '../src/layout/types'
 
 const NOW = '2026-10-27T00:00:00.000Z'
@@ -61,6 +62,8 @@ function withTabsFrom(start: number, ...sessionIds: string[]): Workspace {
   return ws
 }
 
+
+const workspaceTabs = (ws: Workspace) => allWorkspaceTabs(ws).filter(isTerminalTab)
 const sessionsOf = (ws: Workspace) => workspaceTabs(ws).flatMap((tab) => paneLeaves(tab.root).map((leaf) => leaf.session))
 
 describe('adopting sessions', () => {
@@ -75,16 +78,28 @@ describe('adopting sessions', () => {
     expect(group!.activeTab).toBe(workspaceTabs(result.workspace).at(-1)!.id)
   })
 
-  test('shell tabs take the lowest free number, other agents and structured sessions their session title', () => {
+  test('background structured sessions never adopt a terminal pane or change its active tab', () => {
+    const ws = withTabs('interactive')
+    const result = reconcile(ws, {
+      sessions: [
+        session('interactive', { agent: 'claude', title: 'Interactive Claude' }),
+        session('background', { kind: 'structured', agent: 'codex', title: 'Background loop', createdAt: 2 })
+      ]
+    })
+    expect(result.workspace).toEqual(ws)
+    expect(sessionsOf(result.workspace)).toEqual(['interactive'])
+    expect(result.closeSessions).toEqual([])
+  })
+
+  test('shell tabs take the lowest free number and other terminal agents keep their session title', () => {
     const result = reconcile(emptyWorkspace('wt', new CounterIds(0)), {
       sessions: [
         session('s1', { createdAt: 1 }),
         session('s2', { createdAt: 2, agent: 'claude', title: 'Claude' }),
-        session('s3', { createdAt: 3, kind: 'structured', agent: 'claude', title: 'Claude 2' }),
         session('s4', { createdAt: 4 })
       ]
     })
-    expect(workspaceTabs(result.workspace).map((tab) => tab.defaultTitle)).toEqual(['Terminal 1', 'Claude', 'Claude 2', 'Terminal 2'])
+    expect(workspaceTabs(result.workspace).map((tab) => tab.defaultTitle)).toEqual(['Terminal 1', 'Claude', 'Terminal 2'])
   })
 
   test('a shell session created with its own title keeps it, and the session plugin\'s own Shell titles take the number', () => {
@@ -225,7 +240,10 @@ describe('repairing a loaded workspace', () => {
     expect(fixed.activeGroup).toBe(repaired!.id)
     expect(repaired!.activeTab).toBe(group!.tabs[1]!.id)
     expect(repaired!.recent).toEqual([group!.tabs[1]!.id])
-    for (const tab of repaired!.tabs) expect([tab.activePane, tab.expandedPane]).toEqual([paneLeaves(tab.root)[0]!.id, null])
+    for (const tab of repaired!.tabs) {
+      if (!isTerminalTab(tab)) throw new Error(`expected terminal tab ${tab.id}`)
+      expect([tab.activePane, tab.expandedPane]).toEqual([paneLeaves(tab.root)[0]!.id, null])
+    }
   })
 })
 

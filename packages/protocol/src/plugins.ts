@@ -51,6 +51,8 @@ export type ContributionInfo = {
 export type PluginContext = {
   readonly pluginId: string
   readonly dir: string
+  /** Absolute file URL for a worker entrypoint declared by name in `workers`; throws for undeclared names. */
+  workerEntrypoint(name: string): string
   /** The plugin's private data directory, `<home>/plugin-data/<pluginId>`; it exists (mode 0700). */
   readonly dataDir: string
   /** Writes to the daemon log, prefixed with the plugin ID. */
@@ -63,8 +65,14 @@ export type PluginContext = {
   subscribe(listener: (event: QuirkyEvent) => void | Promise<void>): () => void
   /** Invokes a daemon or plugin method as this plugin. */
   call(method: string, params?: Record<string, unknown>): Promise<unknown>
-  /** Opens this plugin's private SQLite store, applying any migrations it has not yet run. */
-  openStore(migrations: StoreMigration[]): PluginStore
+  /** Creates a same-origin opaque capability URL for an authorized local file. */
+  createFileResource(options: {
+    path: string
+    contentType: string
+    disposition?: 'inline' | 'attachment'
+  }): Promise<{ url: string; revoke(): void }>
+  /** Opens this plugin's private SQLite store; opt in to read-only access when its schema is newer than this build. */
+  openStore(migrations: StoreMigration[], options?: { newerVersion?: 'read-only' }): PluginStore
   /** The current value of a setting: a short name in this plugin's own namespace, or a full setting ID. */
   getSetting(name: string): unknown
   /** The raw stored value of any setting ID, declared or not, or undefined when none is stored. */
@@ -79,6 +87,29 @@ export type PluginContext = {
   notify(notification: PluginNotification): void
   /** The kernel's session launch environment and launch-hook pipeline. */
   readonly launch: PluginLaunch
+  /** Admits authenticated remote clients through the same RPC dispatcher and stream lifecycle. */
+  readonly clients: PluginClients
+}
+
+/** Trusted transports authenticate peers before admission; authorization is checked on every call. */
+export type PluginClients = {
+  accept(options: {
+    role: 'mobile'
+    deviceId: string
+    name: string
+    /** Must revalidate the live credential and throw when a method/params is forbidden. */
+    authorize(method: string, params: Record<string, unknown>): void | Promise<void>
+    sendText(text: string): void
+    sendBinary(bytes: Uint8Array): void
+    /** Called when the kernel or plugin revokes this admitted connection. */
+    close(): void
+  }): {
+    readonly id: number
+    /** Receives one decrypted JSON-RPC 2.0 request. */
+    receive(text: string): Promise<void>
+    /** Removes streams and subscriptions exactly once, without calling options.close again. */
+    disconnect(): void
+  }
 }
 
 /** The certainty metadata attached to a rejected `PluginPty.writeAccepted` call. */
@@ -261,6 +292,8 @@ export type PluginCaller =
   | {
       role: ClientRole
       name?: string
+      /** Authenticated remote identity; never taken from request params. */
+      deviceId?: string
       cwd?: string
       sessionId?: string
       worktreeId?: string
@@ -277,6 +310,8 @@ export type StoreValue = string | number | bigint | boolean | null | Uint8Array
 export type PluginStore = {
   /** The number of migrations applied so far. */
   readonly version: number
+  /** True when opened against a newer schema with read-only access; every SQL statement is enforced read-only by SQLite. */
+  readonly readOnly?: boolean
   /** Runs one statement that modifies data. */
   run(sql: string, ...params: StoreValue[]): { changes: number; lastInsertRowid: number }
   /** The first matching row, or null. */
@@ -399,6 +434,8 @@ export type PluginManifest = {
   ui?: string
   /** Relative path of the CLI module. */
   cli?: string
+  /** Worker name to root-relative entrypoint, bundled and rewritten to its packaged path by the desktop bundler. */
+  workers?: Record<string, string>
   /** Extra words that reach this plugin's CLI group. */
   cliAliases?: string[]
   /** Defaults to `lazy`. */

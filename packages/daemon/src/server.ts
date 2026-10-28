@@ -1,6 +1,7 @@
 import { HOOK_PATH_PREFIX, HOOK_TOKEN_HEADER, RPC_PATH } from '@quirky/protocol'
 import { HEALTH_PATH } from '@quirky/protocol/node'
 import { servePluginFile } from './plugin-files'
+import { FILE_RESOURCE_ROUTE, type FileResourceRegistry } from './file-resources'
 import { nextConnId, type RpcHandler, tokensMatch } from './rpc-handler'
 import type { Core } from './service'
 import { serveStatic } from './static'
@@ -19,6 +20,8 @@ export type ServerOptions = {
   uiDir: string
   /** Maps a plugin ID to the directory its `/plugins/<id>/` files come from, or null for none. */
   pluginFile: (pluginId: string) => { dir: string } | null
+  /** Serves activation-scoped file capabilities. */
+  fileResources: FileResourceRegistry
   log: (message: string) => void
 }
 
@@ -101,6 +104,9 @@ export function startServer(options: ServerOptions) {
       if (url.pathname.startsWith(HOOK_PATH_PREFIX)) {
         if (request.method !== 'POST') return json({ error: 'method not allowed' }, 405)
         return handleHook(request, url)
+      }
+      if (url.pathname.startsWith(FILE_RESOURCE_ROUTE)) {
+        return options.fileResources.serve(request, url.pathname)
       }
       if (request.method === 'GET' || request.method === 'HEAD') {
         if (url.pathname.startsWith('/plugins/')) {

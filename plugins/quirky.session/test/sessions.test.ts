@@ -527,37 +527,11 @@ describe('quirky.session/create', () => {
     const codex = await createSession(client, { worktree: 'id:wt_main' })
     expect(codex).toMatchObject({ agent: 'codex', title: 'Codex' })
     expect(spawned(codex.id).argv[3]).toStartWith(`${exportPath()}exec codex`)
-    expect(fakeAgents().calls.find((c) => c.method === 'pick')?.params).toEqual({})
 
     fakeAgents().pick = 'shell'
     const shell = await createSession(client, { worktree: 'id:wt_main' })
     expect(shell).toMatchObject({ agent: 'shell', title: 'Shell', launch: null, promptDelivery: null })
     expect(spawned(shell.id).argv).toEqual(['/bin/zsh', '-l'])
-    expect(fakeAgents().calls.filter((c) => c.method === 'prepareLaunch')).toHaveLength(1)
-  })
-
-  test('an agent named in the call skips pick, and a shell never reaches prepareLaunch', async () => {
-    await createSession(client, { worktree: 'id:wt_main', agent: 'claude' })
-    await createSession(client, { worktree: 'id:wt_main', agent: 'shell' })
-    const methods = fakeAgents().calls.map((c) => c.method)
-    expect(methods).toEqual(['get', 'prepareLaunch'])
-  })
-
-  test('the session records what it launched with and starts with no provider session', async () => {
-    fakeAgents().args = '--model haiku'
-    const claude = await createSession(client, { worktree: 'id:wt_main', agent: 'claude', prompt: 'hi' })
-    const expected = {
-      launch: { command: 'claude', args: '--model haiku', env: {} },
-      providerSession: null,
-      promptDelivery: 'command-line',
-      resumedFrom: null
-    }
-    expect(claude).toMatchObject(expected)
-    expect(await call(client, 'quirky.session/get', { session: claude.id })).toMatchObject(expected)
-    const shell = await createSession(client, { worktree: 'id:wt_main', agent: 'shell' })
-    expect(shell).toMatchObject({ launch: null, providerSession: null, promptDelivery: null, resumedFrom: null })
-    const bare = await createSession(client, { worktree: 'id:wt_main', agent: 'codex' })
-    expect(bare.promptDelivery).toBeNull()
   })
 
   test('SC-10: a disabled agent can not be launched by name and leaves no session', async () => {
@@ -566,19 +540,6 @@ describe('quirky.session/create', () => {
     expect(error).toMatchObject({ code: expect.any(Number) })
     expect(h.pty.requests.some((r) => r.type === 'create')).toBe(false)
     expect(await call(client, 'quirky.session/list')).toEqual([])
-  })
-
-  test('hook arguments and environment reach prepareLaunch, and its environment reaches the process', async () => {
-    await createSession(client, { worktree: 'id:wt_main', agent: 'claude', prompt: 'hi' })
-    const params = fakeAgents().calls.find((c) => c.method === 'prepareLaunch')!.params
-    expect(params).toMatchObject({
-      agent: 'claude',
-      cwd: '/fake/alpha',
-      prompt: 'hi',
-      submitPrompt: true,
-      hookArgs: ['--settings', JSON.stringify(CLAUDE_SETTINGS)],
-      hookEnv: {}
-    })
   })
 
   test('numbers titles per worktree when one is taken', async () => {
@@ -1380,11 +1341,10 @@ describe('a start cwd', () => {
     expect((await call<Session>(client, 'quirky.session/get', { session: session.id })).cwd).toBe(dir)
   })
 
-  test('an agent launch is prepared for the folder given', async () => {
+  test('an agent process starts in the folder given', async () => {
     const dir = makeTempDir('qs-cwd-')
     const session = await createSession(client, { worktree: 'id:wt_main', agent: 'claude', cwd: dir })
     expect(spawned(session.id).cwd).toBe(dir)
-    expect(fakeAgents().calls.find((c) => c.method === 'prepareLaunch')!.params.cwd).toBe(dir)
   })
 
   test('without cwd the worktree path is used', async () => {
@@ -1443,7 +1403,6 @@ describe('the floating worktree', () => {
   test('an agent session can be floating', async () => {
     const claude = await createSession(client, { worktree: 'floating', agent: 'claude', prompt: 'hi' })
     expect(claude).toMatchObject({ agent: 'claude', worktreeId: 'floating', cwd: home, title: 'Claude' })
-    expect(fakeAgents().calls.find((c) => c.method === 'prepareLaunch')!.params).toMatchObject({ cwd: home })
   })
 
   test('list with worktree floating lists the floating sessions only', async () => {

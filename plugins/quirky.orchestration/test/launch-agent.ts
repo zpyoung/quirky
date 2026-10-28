@@ -1,5 +1,6 @@
 import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
+import type { CliProcess, CliResult } from './fixture'
 
 if (process.argv.slice(2).includes('--version') || process.argv.slice(2).includes('-v')) {
   process.stdout.write('Claude Code 2.1.80 (isolated orchestration provider fixture)\n')
@@ -12,13 +13,14 @@ const cli = process.env.WORKER_TEST_CLI
 if (!home || !session || !cli || !process.env.QUIRKY_SESSION_TOKEN) {
   throw new Error('launch agent requires its kernel-issued session environment')
 }
+const cliPath = cli
 
 const root = join(home, 'orchestration-terminal')
 mkdirSync(root, { recursive: true })
 const requests = join(root, `${session}.requests.jsonl`)
 appendFileSync(join(root, `${session}.events.jsonl`), JSON.stringify({ type: 'started', sessionId: session, pid: process.pid }) + '\n')
 writeFileSync(join(root, `${session}.ready`), 'ready')
-const children = new Set<Bun.Subprocess>()
+const children = new Set<CliProcess>()
 let consumed = 0
 let running = false
 
@@ -33,8 +35,9 @@ async function drainRequests(cli: string): Promise<void> {
       if (!/^[a-zA-Z0-9-]+$/.test(request.id) || !Array.isArray(request.args)) {
         throw new Error('invalid launch-agent CLI request')
       }
-      const child = Bun.spawn([process.execPath, cli, ...request.args], {
+      const child = Bun.spawn([process.execPath, cliPath, ...request.args], {
         env: process.env,
+        stdin: 'ignore',
         cwd: process.cwd(),
         stdout: 'pipe',
         stderr: 'pipe'

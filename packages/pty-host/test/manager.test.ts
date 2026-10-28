@@ -261,11 +261,12 @@ describe('facts', () => {
       `printf '\\033]0;t2\\033\\\\'`,
       `printf '\\033]133;D;4\\007'`,
       `printf '\\033]7;file://host/tmp\\007'`,
+      'printf "\\nfacts-done\\n"',
       'sleep 30'
     ].join('; ')
     await manager.create(params('f', sh(script)))
     await waitFor(() => facts.length >= 5, 5000, 'facts')
-    await Bun.sleep(100)
+    await readUntil(manager, 'f', 0, (lines) => lines.includes('facts-done'))
     expect(facts).toEqual([
       { type: 'fact', sessionId: 'f', fact: { kind: 'bell' } },
       { type: 'fact', sessionId: 'f', fact: { kind: 'title', title: 't1' } },
@@ -301,8 +302,8 @@ describe('facts', () => {
     const seen: PtyEvent[] = []
     const stop = manager.onFact((event) => seen.push(event))
     stop()
-    await manager.create(params('f', sh(`printf '\\007'; sleep 30`)))
-    await Bun.sleep(300)
+    await manager.create(params('f', sh(`printf '\\007'; printf 'listener-done\\n'; sleep 30`)))
+    await readUntil(manager, 'f', 0, (lines) => lines.includes('listener-done'))
     expect(seen).toEqual([])
   })
 })

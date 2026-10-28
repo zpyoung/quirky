@@ -1,0 +1,22 @@
+{
+  "item": "m5-loops-core",
+  "spec": "docs/quirk/specs/2026-10-27-m5-loops-core/logic.md",
+  "scenarios": [
+    {
+      "id": "L20-native",
+      "title": "With temporary HOME and QUIRKY_HOME and notifications enabled, a background Until-done loop shows the macOS Loop completed, Loop reached its cap and Loop needs you banners with its loop name/detail; disabling notifications suppresses the banners. Use scripted isolated native provider fixtures, never real account homes. The daemon API tests cover policy decisions; this checks only actual system presentation.",
+      "status": "pending",
+      "lastRun": null,
+      "report": null,
+      "summary": null
+    },
+    {
+      "id": "L03-native-focus",
+      "title": "Start an Until-done background loop while an unrelated terminal tab is active; keep that tab focused through a fresh-session iteration and crash retry. Neither creation nor replacement conversation may change active tab, window, keyboard focus or foreground application. Run only in fresh temporary HOME and QUIRKY_HOME.",
+      "status": "pending",
+      "lastRun": null,
+      "report": null,
+      "summary": null
+    }
+  ]
+}
