@@ -243,6 +243,10 @@
               "type": "boolean",
               "description": "Shorthand for source staged."
             },
+            "compareAgainstHead": {
+              "type": "boolean",
+              "description": "For source unstaged, compare HEAD to the working file rather than index; used by editor Changes. Other sources reject this option."
+            },
             "source": {
               "type": "string",
               "description": "Which sides to read; defaults to staged when `staged` is set, else unstaged.",
@@ -555,11 +559,53 @@
         }
       },
       {
+        "id": "pushTarget",
+        "description": "Resolve a fresh validated configured GitHub destination for a linked review or push-before-PR. Never adds a remote or guesses a head repository.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": { "type": "string" },
+            "purpose": { "type": "string", "enum": ["review", "creation"] }
+          },
+          "required": ["purpose"],
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "ready": { "type": "boolean" },
+            "reason": { "type": "string" },
+            "message": { "type": "string" },
+            "remote": { "type": "string" },
+            "branch": { "type": "string" },
+            "localBranch": { "type": "string" },
+            "localHead": { "type": "string" },
+            "headOid": { "type": "string" },
+            "number": { "type": "integer", "minimum": 1 },
+            "fork": { "type": "boolean" },
+            "repository": {
+              "type": "object",
+              "properties": { "host": { "type": "string" }, "owner": { "type": "string" }, "repo": { "type": "string" } },
+              "required": ["host", "owner", "repo"],
+              "additionalProperties": false
+            }
+          },
+          "required": ["ready"],
+          "additionalProperties": false
+        }
+      },
+      {
         "id": "push",
         "description": "Pushes HEAD to its push remote, publishing the branch when it has no upstream.",
         "params": {
           "type": "object",
           "properties": {
+            "purpose": {
+              "type": "string",
+              "enum": ["review", "creation"],
+              "description": "Require a fresh validated GitHub review or creation-head target immediately before pushing."
+            },
             "worktree": {
               "type": "string",
               "description": "Worktree selector (id, name, branch, path: or current); defaults to the caller's worktree."
@@ -598,6 +644,11 @@
         "params": {
           "type": "object",
           "properties": {
+            "purpose": {
+              "type": "string",
+              "enum": ["review", "creation"],
+              "description": "Require a fresh validated GitHub head target before the lease-guarded push."
+            },
             "worktree": {
               "type": "string",
               "description": "Worktree selector (id, name, branch, path: or current); defaults to the caller's worktree."

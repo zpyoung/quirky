@@ -21,6 +21,14 @@ export type DiffViewInput = {
   area?: 'staged' | 'unstaged' | 'untracked' | 'branch' | 'all'
   commit?: string
   title?: string
+  /** Replaceable preview by default; permanent opens cannot replace an existing permanent tab. */
+  preview?: boolean
+  /** Open in a new right-hand group rather than replace the focused group's preview. */
+  split?: boolean
+  /** Exact existing destination group when the caller supplies one. */
+  groupId?: string
+  /** Markdown diff preview renders only the modified side. */
+  display?: 'source' | 'preview'
   /** The note whose card a `file` view scrolls into view once its diff has loaded. */
   noteId?: string
   /** The review a `conflicts` view resumes, or the one a `conflict-file` view returns to on close. */
