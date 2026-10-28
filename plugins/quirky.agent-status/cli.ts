@@ -1,4 +1,4 @@
-import { RpcError, type CliArgs, type CliContext, type CliModule } from '@quirky/protocol'
+import { RpcError, type CliArgs, type CliContext, type CliModule, type OwnerRuntimeCallResult } from '@quirky/protocol'
 import type { Explanation } from './src/explain'
 import type { ActivityThread } from './src/activity-types'
 import type { DashboardBucket, DashboardSnapshot } from './src/dashboard-types'
@@ -64,6 +64,35 @@ function hostLine(host: StatusHostIdentity): string {
   if (host.kind === 'local') return 'Host: local'
   return `Host: ${host.id} (${host.label ?? host.id}) · fingerprint=${host.fingerprint ?? 'unknown'} · pairingRevision=${host.pairingRevision ?? 'unknown'} · incarnation=${host.incarnation ?? 'unknown'}`
 }
+function runtimeSelector(host: string, ctx: CliContext): string | null {
+  if (!host.startsWith('runtime:')) return null
+  const selector = host.slice('runtime:'.length)
+  if (selector === '' || selector.trim() !== selector || selector.length > 2048 || /[\u0000-\u001f\u007f]/.test(selector)) {
+    throw ctx.usage('--host runtime selector must name a saved owner target')
+  }
+  return selector
+}
+
+function ownerRuntimeCall(value: unknown): value is OwnerRuntimeCallResult {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false
+  const result = value as Record<string, unknown>
+  const runtime = result.runtime
+  return Object.hasOwn(result, 'result') &&
+    typeof runtime === 'object' && runtime !== null && !Array.isArray(runtime) &&
+    typeof (runtime as Record<string, unknown>).id === 'string' &&
+    typeof (runtime as Record<string, unknown>).name === 'string'
+}
+
+function runtimeSummary(runtime: OwnerRuntimeCallResult['runtime']): string {
+  return `Runtime: ${runtime.name} (${runtime.id})`
+}
+
+async function callOwnerRuntime(ctx: CliContext, host: string, method: string, params: Record<string, unknown>): Promise<unknown> {
+  const runtime = runtimeSelector(host, ctx)
+  if (runtime === null) throw ctx.usage('--host must start with runtime: for an owner operation')
+  return ctx.call('quirky.cli/runtimeCall', { runtime, method, params })
+}
+
 
 
 function agentArg(positionals: string[]): { agent: string } | Record<string, never> {
@@ -359,6 +388,16 @@ export const commands: CliModule['commands'] = {
       ctx.out.result(entries, () => entries.map((entry) => agentLine(entry.agent, entry.status, entry.message)).join('\n'))
       return
     }
+    const runtime = runtimeSelector(host, ctx)
+    if (runtime !== null) {
+      const result = await callOwnerRuntime(ctx, host, 'quirky.agent-status/hooksStatus', {}) as OwnerRuntimeCallResult
+      const entries = result.result as StatusEntry[]
+      ctx.out.result(result, () => [
+        runtimeSummary(result.runtime),
+        ...entries.map((entry) => agentLine(entry.agent, entry.status, entry.message))
+      ].join('\n'))
+      return
+    }
     const result = (await ctx.call('quirky.agent-status/hooksStatusOnHost', { host })) as {
       host: StatusHostIdentity
       result: StatusEntry[]
@@ -367,24 +406,42 @@ export const commands: CliModule['commands'] = {
   },
 
   async 'hooks-setup'(args, ctx) {
-    const entries = (await ctx.call('quirky.agent-status/hooksSetup', agentArg(args.positionals))) as SetupEntry[]
-    ctx.out.result(entries, () =>
-      formatChanges(
-        entries,
-        entries.map((entry) => agentLine(entry.agent, entry.status, entry.note, entry.message)),
-        ctx
-      )
-    )
+    const host = args.flags.host
+    const params = agentArg(args.positionals)
+    let result: unknown
+    if (host === undefined || host === 'local') {
+      result = await ctx.call('quirky.agent-status/hooksSetup', host === 'local' ? { ...params, host } : params)
+    } else {
+      if (typeof host !== 'string' || runtimeSelector(host, ctx) === null) {
+        throw ctx.usage('hook setup supports local or runtime:<saved owner selector> only')
+      }
+      result = await callOwnerRuntime(ctx, host, 'quirky.agent-status/hooksSetup', params)
+    }
+    const entries = (ownerRuntimeCall(result) ? result.result : result) as SetupEntry[]
+    ctx.out.result(result, () => {
+      const text = formatChanges(entries, entries.map((entry) => agentLine(entry.agent, entry.status, entry.note, entry.message)), ctx)
+      return ownerRuntimeCall(result) ? `${runtimeSummary(result.runtime)}\n${text}` : text
+    })
   },
 
   async 'hooks-remove'(args, ctx) {
-    const entries = (await ctx.call('quirky.agent-status/hooksRemove', agentArg(args.positionals))) as RemoveEntry[]
-    ctx.out.result(entries, () =>
-      formatChanges(
-        entries,
-        entries.map((entry) => agentLine(entry.agent, entry.changed.length > 0 ? 'removed' : 'nothing to remove', entry.message)),
-        ctx
-      )
-    )
+    const host = args.flags.host
+    const params = agentArg(args.positionals)
+    let result: unknown
+    if (host === undefined || host === 'local') {
+      result = await ctx.call('quirky.agent-status/hooksRemove', host === 'local' ? { ...params, host } : params)
+    } else {
+      if (typeof host !== 'string' || runtimeSelector(host, ctx) === null) {
+        throw ctx.usage('hook removal supports local or runtime:<saved owner selector> only')
+      }
+      result = await callOwnerRuntime(ctx, host, 'quirky.agent-status/hooksRemove', params)
+    }
+    const entries = (ownerRuntimeCall(result) ? result.result : result) as RemoveEntry[]
+    ctx.out.result(result, () => {
+      const text = formatChanges(entries, entries.map((entry) =>
+        agentLine(entry.agent, entry.changed.length > 0 ? 'removed' : 'nothing to remove', entry.message)
+      ), ctx)
+      return ownerRuntimeCall(result) ? `${runtimeSummary(result.runtime)}\n${text}` : text
+    })
   }
 }

@@ -47,7 +47,6 @@ export function parseCodexAppServerModels(stdout: string, catalog: LaunchCatalog
     return {
       id: model.id,
       label,
-      description: null,
       options: choices.length === 0 ? [] : [{ id: 'effort', choices }]
     }
   })

@@ -19,4 +19,5 @@ export * from './terminal-artifacts'
 
 export * from './desktop-capabilities'
 export * from './window-routes'
+export * from './runtime-owner'
 export * from './terminal-theme'

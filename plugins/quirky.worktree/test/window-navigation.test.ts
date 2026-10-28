@@ -1,3 +1,4 @@
+import { join } from 'node:path'
 import { afterEach, expect, test } from 'bun:test'
 import type { QuirkyClient, Repo, UiLayout, UiState, Worktree, WorktreeCreateResult } from '@quirky/protocol'
 import { makeHomeWithoutAutoHooks } from '../../../packages/daemon/test/helpers'
@@ -7,7 +8,7 @@ import { git, isolateGitConfig, makeRepo } from '../../quirky.repo/test/git-fixt
 import { startPluginHarness, type PluginHarness } from '../../quirky.repo/test/harness'
 
 const { scratch } = isolateGitConfig()
-const controlPlugins = ['quirky.repo', 'quirky.worktree', 'quirky.session', 'quirky.terminal', 'quirky.git']
+const controlPlugins = ['quirky.repo', 'quirky.worktree', 'quirky.session', 'quirky.terminal', 'quirky.git', 'quirky.cli']
 
 type World = { harness: PluginHarness; root: string; repo: Repo }
 let world: World | undefined
@@ -159,6 +160,149 @@ test('sleep resolves explicit view selectors before parking and refuses unknown 
   const worktrees = await call(w.harness.client, 'quirky.worktree/list') as Array<{ id: string; sleeping: boolean }>
   expect(worktrees.find((row) => row.id === unknown.id)?.sleeping).toBe(false)
   expect((await layoutFor(ui, connId!)).view).not.toBeNull()
+})
+
+test('sleep resolves name, branch, and absolute path owners through canonical worktree matching', async () => {
+  const w = await start()
+  world = w
+  const ui = await w.harness.connectAs({}, 'ui')
+  const [connId] = await connIds(w.harness.client)
+  const byName = await create(w.harness.client, w.repo.id, 'sleep-by-name')
+  const byBranch = await create(w.harness.client, w.repo.id, 'sleep-by-branch')
+  const byPath = await create(w.harness.client, w.repo.id, 'sleep-by-path')
+  const byPathSelector = await create(w.harness.client, w.repo.id, 'sleep-by-path-selector')
+  const cases = [
+    { worktree: byName, id: 'view:quirky.session/worktree', input: { worktree: `name:${byName.name}` } },
+    { worktree: byBranch, id: 'view:quirky.git/diff', input: { worktree: `branch:${byBranch.branch}`, path: 'src/index.ts' } },
+    { worktree: byPath, id: 'view:quirky.session/worktree', input: { path: join(byPath.path, 'nested', 'file.ts') } },
+    { worktree: byPathSelector, id: 'view:quirky.session/worktree', input: { worktree: `path:${join(byPathSelector.path, 'nested')}` } }
+  ]
+
+  for (const item of cases) {
+    await call(ui, 'ui.window.view.open', { connId, id: item.id, input: item.input })
+    await call(w.harness.client, 'quirky.worktree/sleep', { worktree: item.worktree.id, window: connId })
+    expect((await layoutFor(ui, connId!)).view).toBeNull()
+    const listed = await call(w.harness.client, 'quirky.worktree/list') as Array<{ id: string; sleeping: boolean }>
+    expect(listed.find((row) => row.id === item.worktree.id)?.sleeping).toBe(true)
+    await call(w.harness.client, 'quirky.worktree/wake', { worktree: item.worktree.id })
+  }
+})
+
+test('sleep leaves unrelated non-workspace views open', async () => {
+  const w = await start()
+  world = w
+  const ui = await w.harness.connectAs({}, 'ui')
+  const [connId] = await connIds(w.harness.client)
+  const target = await create(w.harness.client, w.repo.id, 'sleep-unrelated-view')
+  await call(ui, 'ui.window.view.open', {
+    connId,
+    id: 'view:quirky.cli/settings',
+    input: { worktree: 'id:wt_missing' }
+  })
+
+  await call(w.harness.client, 'quirky.worktree/sleep', { worktree: target.id, window: connId })
+  expect((await layoutFor(ui, connId!)).view?.id).toBe('view:quirky.cli/settings')
+  const listed = await call(w.harness.client, 'quirky.worktree/list') as Array<{ id: string; sleeping: boolean }>
+  expect(listed.find((row) => row.id === target.id)?.sleeping).toBe(true)
+})
+
+test('sleep refuses ambiguous and malformed known view owners before changing state', async () => {
+  const w = await start()
+  world = w
+  const ui = await w.harness.connectAs({}, 'ui')
+  const [connId] = await connIds(w.harness.client)
+  const target = await create(w.harness.client, w.repo.id, 'sleep-owner-target')
+  const duplicateA = await create(w.harness.client, w.repo.id, 'duplicate-owner-a')
+  const duplicateB = await create(w.harness.client, w.repo.id, 'duplicate-owner-b')
+  await call(w.harness.client, 'quirky.worktree/set', { worktree: duplicateA.id, displayName: 'duplicate-owner' })
+  await call(w.harness.client, 'quirky.worktree/set', { worktree: duplicateB.id, displayName: 'duplicate-owner' })
+  const unresolvedViews = [
+    { worktree: 'name:duplicate-owner' },
+    { worktree: 'id:wt_missing' },
+    { path: 'relative/workspace/path' }
+  ]
+
+  for (const input of unresolvedViews) {
+    await call(ui, 'ui.window.view.open', { connId, id: 'view:quirky.session/worktree', input })
+    await expect(call(w.harness.client, 'quirky.worktree/sleep', {
+      worktree: target.id,
+      window: connId
+    })).rejects.toThrow(/could not sleep/i)
+    expect((await layoutFor(ui, connId!)).view).not.toBeNull()
+    const listed = await call(w.harness.client, 'quirky.worktree/list') as Array<{ id: string; sleeping: boolean }>
+    expect(listed.find((row) => row.id === target.id)?.sleeping).toBe(false)
+  }
+})
+
+test('history and next/previous/index resolve active selectors without crossing windows', async () => {
+  const w = await start()
+  world = w
+  const [first, second] = await Promise.all([w.harness.connectAs({}, 'ui'), w.harness.connectAs({}, 'ui')])
+  const [firstId, secondId] = await connIds(w.harness.client)
+  const rows = await call(w.harness.client, 'quirky.worktree/list') as Worktree[]
+  const primary = rows.find((row) => row.isMain)!
+  const alpha = await create(w.harness.client, w.repo.id, 'selector-alpha')
+  const beta = await create(w.harness.client, w.repo.id, 'selector-beta')
+  await call(w.harness.client, 'quirky.worktree/setOptions', { sortBy: 'name' })
+
+  await call(w.harness.client, 'quirky.worktree/navigate', { worktree: primary.id, window: firstId })
+  await call(w.harness.client, 'quirky.worktree/navigate', { worktree: `name:${alpha.name}`, window: firstId })
+  await call(w.harness.client, 'quirky.worktree/navigate', { worktree: beta.id, window: secondId })
+  await call(first, 'ui.window.view.open', {
+    connId: firstId,
+    id: 'view:quirky.session/worktree',
+    input: { worktree: `id:${alpha.id}` }
+  })
+  await call(w.harness.client, 'quirky.worktree/navigationBack', { window: firstId })
+
+  expect(viewWorktree(await layoutFor(first, firstId!))).toBe(primary.id)
+  expect(viewWorktree(await layoutFor(second, secondId!))).toBe(beta.id)
+  expect(await call(w.harness.client, 'quirky.worktree/navigationState', { window: firstId }))
+    .toEqual({ worktrees: [primary.id, alpha.id], index: 0 })
+  expect(await call(w.harness.client, 'quirky.worktree/navigationState', { window: secondId }))
+    .toEqual({ worktrees: [beta.id], index: 0 })
+
+  await call(first, 'ui.window.view.open', {
+    connId: firstId,
+    id: 'view:quirky.session/worktree',
+    input: { path: primary.path }
+  })
+  await call(w.harness.client, 'quirky.worktree/navigationForward', { window: firstId })
+  expect(viewWorktree(await layoutFor(first, firstId!))).toBe(alpha.id)
+
+  await call(first, 'ui.window.view.open', {
+    connId: firstId,
+    id: 'view:quirky.session/worktree',
+    input: { worktree: `branch:${alpha.branch}` }
+  })
+  const previous = await call(w.harness.client, 'quirky.worktree/navigationMove', { direction: 'previous', window: firstId }) as { worktreeId: string }
+  expect(previous.worktreeId).toBe(primary.id)
+  await call(first, 'ui.window.view.open', {
+    connId: firstId,
+    id: 'view:quirky.session/worktree',
+    input: { worktree: `id:${primary.id}` }
+  })
+  const next = await call(w.harness.client, 'quirky.worktree/navigationMove', { direction: 'next', window: firstId }) as { worktreeId: string }
+  expect(next.worktreeId).toBe(alpha.id)
+
+  await call(first, 'ui.window.view.open', {
+    connId: firstId,
+    id: 'view:quirky.session/worktree',
+    input: { worktree: `name:${alpha.name}` }
+  })
+  const indexed = await call(w.harness.client, 'quirky.worktree/navigationIndex', { index: 2, window: firstId }) as { worktreeId: string }
+  expect(indexed.worktreeId).toBe(alpha.id)
+  expect(viewWorktree(await layoutFor(second, secondId!))).toBe(beta.id)
+
+  const before = await call(w.harness.client, 'quirky.worktree/navigationState', { window: firstId })
+  await call(first, 'ui.window.view.open', {
+    connId: firstId,
+    id: 'view:quirky.session/worktree',
+    input: { worktree: 'id:wt_missing' }
+  })
+  await expect(call(w.harness.client, 'quirky.worktree/navigationIndex', { index: 1, window: firstId })).rejects.toThrow(/owner|workspace|selector/i)
+  expect(await call(w.harness.client, 'quirky.worktree/navigationState', { window: firstId })).toEqual(before)
+  expect((await layoutFor(first, firstId!)).view?.input).toEqual({ worktree: 'id:wt_missing' })
 })
 
 test('compare-and-close refuses a stale inspected view without closing the newly selected view', async () => {

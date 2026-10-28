@@ -92,8 +92,9 @@ export function createDaemonLink(connect: () => Promise<RpcLinkClient>, options:
     await get()
   }
 
-  const needsYes = (method: string) =>
-    options.yes === true && (isKernelDestructive(method) || destructive.has(method) || options.isDestructive?.(method) === true)
+  const isDestructive = (method: string) =>
+    isKernelDestructive(method) || destructive.has(method) || options.isDestructive?.(method) === true
+  const needsYes = (method: string) => options.yes === true && isDestructive(method)
 
   const nextRequestId = (method: string) => {
     const k = (counts.get(method) ?? 0) + 1
@@ -116,7 +117,7 @@ export function createDaemonLink(connect: () => Promise<RpcLinkClient>, options:
         })
       } catch (error) {
         if (!isConnectionLost(error)) throw error
-        if (resends >= MAX_RESENDS) throw new ConnectionLostError(base)
+        if (method === 'quirky.cli/runtimeCall' || isDestructive(method) || resends >= MAX_RESENDS) throw new ConnectionLostError(base)
         // the daemon may have run the call, so an unreachable daemon here still owes the user the base
         await reconnect().catch(() => {
           throw new ConnectionLostError(base)

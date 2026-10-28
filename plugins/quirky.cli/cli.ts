@@ -3,7 +3,7 @@ import { resolve } from 'node:path'
 import type { CliArgs, CliContext, CliModule } from '@quirky/protocol'
 
 type InstalledCommandStatus = { path: string; target: string | null; state: 'missing' | 'managed' | 'foreign'; profileHome: string }
-type RuntimeSummary = { id: string; name: string; endpoint: string; pairedDeviceId: string; createdAt: number; lastUsedAt: number | null }
+type RuntimeSummary = { id: string; name: string; endpoint: string; pairedDeviceId: string; scope: 'mobile' | 'owner-cli'; grantId?: string; createdAt: number; lastUsedAt: number | null }
 type ProfileLauncherStatus = { name: string; path: string; target: string | null; state: 'missing' | 'managed' | 'foreign'; profileHome: string }
 
 function stringFlag(args: CliArgs, context: CliContext, name: string, required = false): string | undefined {
@@ -44,7 +44,7 @@ function statusText(status: InstalledCommandStatus): string {
 }
 
 function runtimeText(runtime: RuntimeSummary): string {
-  return `${runtime.name}  id=${runtime.id}  ${runtime.endpoint}  pairedDeviceId=${runtime.pairedDeviceId}`
+  return `${runtime.name}  id=${runtime.id}  ${runtime.endpoint}  scope=${runtime.scope}  ${runtime.scope === 'owner-cli' ? `grantId=${runtime.grantId}` : `pairedDeviceId=${runtime.pairedDeviceId}`}`
 }
 
 function profileText(profile: ProfileLauncherStatus): string {
@@ -124,6 +124,22 @@ export const commands: CliModule['commands'] = {
   async runtimeShow(args, context) {
     const runtime = await context.call('quirky.cli/runtimeShow', { selector: stringFlag(args, context, 'selector', true) }) as RuntimeSummary
     output(context, runtime, runtimeText(runtime))
+  },
+
+  async runtimeCall(args, context) {
+    if (args.positionals.length > 0) throw context.usage('runtime-call accepts only --target, --method, and optional --arguments')
+    const runtime = stringFlag(args, context, 'target', true)!
+    const method = stringFlag(args, context, 'method', true)!
+    const encodedParams = stringFlag(args, context, 'arguments')
+    let params: Record<string, unknown> | undefined
+    if (encodedParams !== undefined) {
+      let parsed: unknown
+      try { parsed = JSON.parse(encodedParams) as unknown } catch { throw context.usage('--arguments must be valid JSON') }
+      if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) throw context.usage('--arguments must encode a JSON object')
+      params = parsed as Record<string, unknown>
+    }
+    const result = await context.call('quirky.cli/runtimeCall', { runtime, method, ...(params === undefined ? {} : { params }) })
+    output(context, result, JSON.stringify(result, null, 2))
   },
 
   async runtimeRemove(args, context) {
