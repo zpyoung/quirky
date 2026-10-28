@@ -23,7 +23,6 @@ export type FixtureItem = {
   requestedReviewers?: string[] | null
   reviews?: { author: string | null; state: string }[] | null
   reviewAssignees?: string[] | null
-  participantsTruncated?: boolean
 }
 
 export type ListFixtureState = {
@@ -47,7 +46,9 @@ const statePath = join(fixtureDir, 'state.json')
 const loaded = JSON.parse(readFileSync(statePath, 'utf8'))
 const state = loaded && typeof loaded === 'object' && !Array.isArray(loaded) ? loaded : {}
 const args = process.argv.slice(2)
-const inputText = process.env.QUIRKY_TEST_GH_INPUT ?? ''
+const inputIndex = args.indexOf('--input')
+const inputText = process.env.QUIRKY_TEST_GH_INPUT ??
+  (inputIndex >= 0 && args[inputIndex + 1] === '-' ? readFileSync(0, 'utf8') : '')
 const request = inputText ? JSON.parse(inputText) : null
 const isObject = (value) => typeof value === 'object' && value !== null && !Array.isArray(value)
 const requestObject = isObject(request) ? request : {}
@@ -63,6 +64,7 @@ for (let index = 0; index < args.length; index += 1) {
   if (separator > 0) variables[fieldValue.slice(0, separator)] = parseValue(fieldValue.slice(separator + 1))
 }
 const graphqlVariables = isObject(variables.variables) ? { ...variables.variables, ...variables } : variables
+if (typeof requestObject.query === 'string') graphqlVariables.query = requestObject.query
 const calls = Array.isArray(state.calls) ? state.calls : []
 calls.push({ args, variables: graphqlVariables, input: request })
 state.calls = calls
@@ -122,6 +124,19 @@ if (args[0] === 'pr' && args[1] === 'edit') {
     if (option === '--add-reviewer') item.requestedReviewers = [...new Set([...(item.requestedReviewers ?? []), ...logins])]
     else item.requestedReviewers = (item.requestedReviewers ?? []).filter((login) => !logins.includes(login))
   }
+  save()
+  emit('')
+}
+if (args[0] === 'pr' && args[1] === 'merge') {
+  const number = Number(args[2])
+  const repo = repoArgument()
+  const items = Array.isArray(state.items?.[repo]) ? state.items[repo] : []
+  const item = items.find((entry) => entry.kind === 'pullRequest' && entry.number === number)
+  if (!item) fail('pull request not found')
+  const expectedHeadIndex = args.indexOf('--match-head-commit')
+  const expectedHead = expectedHeadIndex >= 0 ? args[expectedHeadIndex + 1] : null
+  if (typeof expectedHead !== 'string' || expectedHead !== (item.headRefOid ?? 'a'.repeat(40))) fail('The pull request head changed')
+  item.state = 'merged'
   save()
   emit('')
 }
