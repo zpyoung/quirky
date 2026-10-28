@@ -1600,7 +1600,8 @@
         "m7-terminal-provider-host-and-worktree-remainder",
         "fix-desktop-startup-imports"
       ],
-      "status": "todo"
+      "status": "in-progress",
+      "lane": 8
     },
     {
       "id": "m7-sweep-sessions",
