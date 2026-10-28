@@ -1,7 +1,8 @@
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
 import { afterAll, afterEach, beforeAll, expect, test } from 'bun:test'
-import type { ProjectGroup, QuirkyEvent, Repo, UiLayout, UiPluginContext, Worktree } from '@quirky/protocol'
+import type { ProjectGroup, QuirkyEvent, Repo, UiLayout, UiPluginContext, WorkspaceOriginView } from '@quirky/protocol'
 import { act } from 'react'
+import type { WorktreeControl } from '../src/control-types'
 
 const SLOT = 'sidebar-section:quirky.worktree/worktrees'
 const LOOP_VIEW = 'view:quirky.loops/loop'
@@ -17,7 +18,7 @@ const REPO: Repo = {
   groupId: null
 }
 
-const WORKTREE_DEFAULTS = {
+const WORKTREE_DEFAULTS: Omit<WorktreeControl, 'id' | 'repoId' | 'path' | 'branch' | 'head' | 'isMain' | 'name' | 'instanceId'> = {
   kind: 'git',
   displayName: null,
   comment: '',
@@ -32,8 +33,17 @@ const WORKTREE_DEFAULTS = {
   removing: false,
   groupId: null,
   projectGroupId: null,
-  lastActivityAt: 1
-} as const
+  lastActivityAt: 1,
+  manualOrder: 0,
+  sleeping: false,
+  sleepChangedAt: null,
+  references: [],
+  archivedAt: null,
+  cleanupContext: { archivedAt: null, volatile: null, remoteConnected: null },
+  externalVisible: true,
+  externalVisibility: 'show',
+  externalInboxSuppressed: false
+}
 
 type LoopState = 'running' | 'needs-you' | 'paused'
 type LoopSummaryFixture = {
@@ -65,7 +75,8 @@ type Call = { method: string; params: Record<string, unknown> }
 type Deferred<T> = { promise: Promise<T>; resolve(value: T): void; reject(error: unknown): void }
 
 type World = {
-  worktrees: Worktree[]
+  worktrees: WorktreeControl[]
+  origins: WorkspaceOriginView[]
   summaries: LoopSummaryFixture[]
   summaryFailure: Error | null
   summaryGates: Deferred<LoopSummaryFixture[]>[]
@@ -73,7 +84,7 @@ type World = {
   layouts: Map<string, unknown | Error>
 }
 
-function worktree(id: string, unread = false): Worktree {
+function worktree(id: string, unread = false): WorktreeControl {
   return {
     id,
     repoId: REPO.id,
@@ -192,6 +203,7 @@ async function flush(): Promise<void> {
 function setup(ids: string[], unreadIds: string[] = []) {
   const world: World = {
     worktrees: ids.map((id) => worktree(id, unreadIds.includes(id))),
+    origins: ids.map((worktreeId) => ({ worktreeId, automation: null, otherClient: null })),
     summaries: [],
     summaryFailure: null,
     summaryGates: [],
@@ -212,6 +224,10 @@ function setup(ids: string[], unreadIds: string[] = []) {
     async call(method: string, params: Record<string, unknown> = {}): Promise<unknown> {
       calls.push({ method, params })
       switch (method) {
+        case 'ui.window.self':
+          return { connId: 1 }
+        case 'quirky.worktree/origins':
+          return [...world.origins]
         case 'quirky.repo/list':
           return [REPO]
         case 'quirky.repo/groupList':

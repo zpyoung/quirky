@@ -2,7 +2,7 @@ import { afterEach, beforeEach, expect, test } from 'bun:test'
 import { existsSync, mkdirSync, realpathSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { ProjectGroup, QuirkyClient, Repo, RepoDetails, Session, UiState, Worktree, WorktreeCreateResult } from '@quirky/protocol'
-import { builtinsDir, makeTempHome, startHarness, type Harness } from '../../../packages/daemon/test/helpers'
+import { builtinsDir, makeHomeWithoutAutoHooks, startHarness, type Harness } from '../../../packages/daemon/test/helpers'
 import { makeTempDir, removeTempDirs } from '../../../packages/daemon/test/plugins/fixtures'
 import { startHeadlessWindow, type HeadlessWindow } from '../../../packages/ui/test/fixtures/headless-window'
 import { commitFiles, failure, git, isolateGitConfig, makeRepo } from '../../quirky.repo/test/git-fixtures'
@@ -29,7 +29,7 @@ afterEach(async () => {
 
 /** A real daemon with the real repo, worktree, session and git plugins, and a headless window on it. */
 async function boot(): Promise<World> {
-  const harness = await startHarness({ home: makeTempHome('qwp-'), builtinPluginsDir: builtinsDir() })
+  const harness = await startHarness({ home: makeHomeWithoutAutoHooks('qwp-'), builtinPluginsDir: builtinsDir() })
   const agent = await harness.connect('cli', 'setup')
   const root = realpathSync(makeTempDir('qwp-root-'))
   await agent.callAny('setting.set', { id: 'setting:quirky.worktree/worktreesRoot', value: root })
@@ -232,8 +232,8 @@ test('SC-9: Remove Project closes terminals, leaves folders and forgets metadata
     const action = button(dialog, 'Remove')
     return action && !action.disabled ? action : undefined
   }))
-  await closed(w, 'Remove Project')
   await w.win.waitFor(async () => (await repos(w.agent)).length === 0)
+  await closed(w, 'Remove Project')
   await w.win.waitFor(async () => (await sessions(w.agent)).length === 0)
   expect(existsSync(dir)).toBe(true)
   expect(existsSync(fix.path)).toBe(true)

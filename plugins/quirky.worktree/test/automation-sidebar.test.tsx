@@ -1,7 +1,8 @@
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
 import { afterAll, afterEach, beforeAll, beforeEach, expect, test } from 'bun:test'
-import type { ProjectGroup, QuirkyEvent, Repo, Session, UiLayout, UiPluginContext, Worktree, WorktreeAutomationProvenance } from '@quirky/protocol'
+import type { ProjectGroup, QuirkyEvent, Repo, Session, UiLayout, UiPluginContext, WorkspaceOriginView, WorktreeAutomationProvenance } from '@quirky/protocol'
 import { RpcErrorCode } from '@quirky/protocol'
+import type { WorktreeControl } from '../src/control-types'
 import type { WorkspaceReport, WorktreesReport } from '../src/report'
 
 const SLOT = 'sidebar-section:quirky.worktree/worktrees'
@@ -18,17 +19,20 @@ const provenance: WorktreeAutomationProvenance = {
   hostId: 'local'
 }
 
-const DEFAULTS = {
+const DEFAULTS: Omit<WorktreeControl, 'id' | 'repoId' | 'path' | 'branch' | 'head' | 'isMain' | 'name' | 'instanceId'> = {
   kind: 'git', displayName: null, comment: '', status: 'in-progress', pinned: false, unread: false,
   parentId: null, createdAt: 0, createdBy: 'api', baseRef: null, keepBranch: false, removing: false,
-  groupId: null, projectGroupId: null, lastActivityAt: 0
-} as const
+  groupId: null, projectGroupId: null, lastActivityAt: 0,
+  manualOrder: 0, sleeping: false, sleepChangedAt: null, references: [], archivedAt: null,
+  cleanupContext: { archivedAt: null, volatile: null, remoteConnected: null },
+  externalVisible: true, externalVisibility: 'show', externalInboxSuppressed: false
+}
 
 type RunPage = { runs: { id: string; automationId: string }[]; nextCursor: string | null }
 type Call = { method: string; params: Record<string, unknown> }
 type Deferred<T> = { promise: Promise<T>; resolve(value: T): void; reject(error: unknown): void }
 type World = {
-  worktrees: Worktree[]
+  worktrees: WorktreeControl[]
   calls: Call[]
   navigations: Record<string, unknown>[]
   definitionFailure: Error & { code?: number } | null
@@ -82,11 +86,11 @@ function deferred<T>(): Deferred<T> {
 }
 
 const repo: Repo = { id: 'repo-1', name: 'repo', path: '/repo', addedAt: 1, kind: 'git', displayName: null, groupId: null }
-const automationWorktree = (id = 'wt-auto', name = 'auto-recorded', extra: Partial<Worktree> = {}): Worktree => ({
+const automationWorktree = (id = 'wt-auto', name = 'auto-recorded', extra: Partial<WorktreeControl> = {}): WorktreeControl => ({
   id, repoId: repo.id, path: `/worktrees/${id}`, branch: name, head: 'abc', isMain: false, name,
   instanceId: `instance-${id}`, ...DEFAULTS, automationProvenance: provenance, ...extra
 })
-const ordinaryWorktree = (id = 'wt-api', name = 'auto-user-created'): Worktree => ({
+const ordinaryWorktree = (id = 'wt-api', name = 'auto-user-created'): WorktreeControl => ({
   id, repoId: repo.id, path: `/worktrees/${id}`, branch: name, head: 'def', isMain: false, name,
   instanceId: `instance-${id}`, ...DEFAULTS
 })
@@ -118,6 +122,13 @@ function setup() {
     async call(method: string, params: Record<string, unknown> = {}) {
       world.calls.push({ method, params })
       switch (method) {
+        case 'ui.window.self': return { connId: 1 }
+        case 'quirky.worktree/origins':
+          return world.worktrees.map((item) => ({
+            worktreeId: item.id,
+            automation: item.automationProvenance?.kind === 'created-by-automation',
+            otherClient: null
+          }))
         case 'quirky.repo/list': return [repo]
         case 'quirky.repo/groupList': return [] as ProjectGroup[]
         case 'quirky.worktree/list': return [...world.worktrees]
