@@ -5,7 +5,7 @@
  */
 import { cpSync, existsSync, mkdirSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
-import { bundlePlugins } from './bundle-plugins'
+import { bundleMobilePlugins } from './bundle-mobile'
 
 const root = join(import.meta.dir, '..', '..', '..')
 const resources = join(import.meta.dir, '..', 'resources')
@@ -57,13 +57,11 @@ if (existsSync(assetsDir)) {
   skip(assetsDir)
 }
 
-const pluginsDir = join(root, 'plugins')
-if (existsSync(pluginsDir)) {
-  const ids = await bundlePlugins(pluginsDir, join(resources, 'plugins'))
-  console.log(`bundled ${ids.length} plugins -> resources/plugins`)
+const plugins = await bundleMobilePlugins(root, join(resources, 'plugins'))
+if (plugins === null) {
+  skip(join(root, 'plugins'))
 } else {
-  rmSync(join(resources, 'plugins'), { recursive: true, force: true })
-  skip(pluginsDir)
+  console.log(`bundled ${plugins.length} plugins -> resources/plugins`)
 }
 
 if (strict && missing > 0) {

@@ -6,6 +6,7 @@
   "main": "main.ts",
   "ui": "dist/ui.js",
   "cli": "cli.ts",
+  "staticAssets": ["assets/mobile"],
   "activation": "startup",
   "contributes": {
     "method": [
@@ -234,6 +235,179 @@
         }
       },
       {
+        "id": "preferences",
+        "description": "Read the phone-owned auto-restore delay without exposing desktop mobile settings.",
+        "readOnly": true,
+        "params": { "type": "object", "properties": {}, "additionalProperties": false },
+        "result": {
+          "type": "object",
+          "properties": { "autoRestoreFitMs": {} },
+          "required": ["autoRestoreFitMs"],
+          "additionalProperties": false
+        }
+      },
+      {
+        "id": "updatePreferences",
+        "description": "Update only the phone's auto-restore delay.",
+        "params": {
+          "type": "object",
+          "properties": { "autoRestoreFitMs": {} },
+          "required": ["autoRestoreFitMs"],
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "properties": { "autoRestoreFitMs": {} },
+          "required": ["autoRestoreFitMs"],
+          "additionalProperties": false
+        }
+      },
+      {
+        "id": "agentCatalog",
+        "description": "Read safe launcher labels and availability without exposing configured commands or credentials.",
+        "readOnly": true,
+        "params": { "type": "object", "properties": {}, "additionalProperties": false },
+        "result": {
+          "type": "object",
+          "properties": {
+            "defaultAgent": { "description": "The configured default launcher ID, or null; runtime type is string|null." },
+            "agents": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": { "type": "string" },
+                  "label": { "type": "string" },
+                  "installed": { "type": "boolean" },
+                  "enabled": { "type": "boolean" },
+                  "isDefault": { "type": "boolean" },
+                  "resumable": { "type": "boolean" }
+                },
+                "required": ["id", "label", "installed", "enabled", "isDefault", "resumable"],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": ["defaultAgent", "agents"],
+          "additionalProperties": false
+        }
+      },
+      {
+        "id": "bundleManifest",
+        "description": "Read the packaged, immutable Quirky mobile page bundle manifest.",
+        "readOnly": true,
+        "params": { "type": "object", "properties": {}, "additionalProperties": false },
+        "result": {
+          "type": "object",
+          "properties": {
+            "manifest": {
+              "type": "object",
+              "properties": {
+                "v": { "type": "integer", "enum": [1] },
+                "shellVersion": { "type": "integer", "enum": [1] },
+                "buildId": { "type": "string" },
+                "assets": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "path": { "type": "string" },
+                      "bytes": { "type": "integer", "minimum": 1, "maximum": 10485760 },
+                      "sha256": { "type": "string" },
+                      "contentType": { "type": "string" }
+                    },
+                    "required": ["path", "bytes", "sha256", "contentType"],
+                    "additionalProperties": false
+                  }
+                },
+                "totalBytes": { "type": "integer", "minimum": 1, "maximum": 33554432 },
+                "routes": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "kind": { "type": "string", "enum": ["workspaces", "session"] },
+                      "path": { "type": "string" },
+                      "grants": {
+                        "type": "array",
+                        "items": { "type": "string", "enum": ["rpc", "terminal", "storage", "navigate", "clipboard.read", "clipboard.write", "externalLink", "haptics"] }
+                      }
+                    },
+                    "required": ["kind", "path", "grants"],
+                    "additionalProperties": false
+                  }
+                }
+              },
+              "required": ["v", "shellVersion", "buildId", "assets", "totalBytes", "routes"],
+              "additionalProperties": false
+            },
+            "chunkBytes": { "type": "integer", "minimum": 1, "maximum": 262144 },
+            "rangeBytes": { "type": "integer", "minimum": 1, "maximum": 131072 }
+          },
+          "required": ["manifest", "chunkBytes", "rangeBytes"],
+          "additionalProperties": false
+        }
+      },
+      {
+        "id": "bundleChunk",
+        "description": "Read one bounded identity-encoded page-bundle chunk by manifest path.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": {
+            "buildId": { "type": "string" },
+            "path": { "type": "string" },
+            "offset": { "type": "integer", "minimum": 0 }
+          },
+          "required": ["buildId", "path", "offset"],
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "buildId": { "type": "string" },
+            "path": { "type": "string" },
+            "offset": { "type": "integer" },
+            "data": { "type": "string" },
+            "encoding": { "type": "string", "enum": ["identity", "gzip"] },
+            "eof": { "type": "boolean" },
+            "sha256": { "type": "string" }
+          },
+          "required": ["buildId", "path", "offset", "data", "encoding", "eof", "sha256"],
+          "additionalProperties": false
+        }
+      },
+      {
+        "id": "bundleRange",
+        "description": "Read a bounded page-bundle range with optional gzip compression.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": {
+            "buildId": { "type": "string" },
+            "path": { "type": "string" },
+            "offset": { "type": "integer", "minimum": 0 },
+            "gzip": { "type": "boolean" }
+          },
+          "required": ["buildId", "path", "offset"],
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "buildId": { "type": "string" },
+            "path": { "type": "string" },
+            "offset": { "type": "integer" },
+            "data": { "type": "string" },
+            "encoding": { "type": "string", "enum": ["identity", "gzip"] },
+            "eof": { "type": "boolean" },
+            "sha256": { "type": "string" }
+          },
+          "required": ["buildId", "path", "offset", "data", "encoding", "eof", "sha256"],
+          "additionalProperties": false
+        }
+      },
+      {
         "id": "open",
         "description": "Open the Mobile page or its settings view.",
         "params": {
@@ -295,6 +469,29 @@
           "custom-address": { "type": "string", "repeatable": true, "description": "a reachable custom pairing address" }
         },
         "methods": ["quirky.mobile/configure"]
+      },
+      { "id": "bundle-manifest", "summary": "read the packaged Quirky mobile page bundle manifest", "methods": ["quirky.mobile/bundleManifest"] },
+      { "id": "agent-catalog", "summary": "read safe mobile agent launcher metadata", "methods": ["quirky.mobile/agentCatalog"] },
+      {
+        "id": "bundle-chunk",
+        "summary": "read one bounded page bundle chunk",
+        "flags": {
+          "build-id": { "type": "string", "description": "the current bundle build ID" },
+          "path": { "type": "string", "description": "an exact asset path from the bundle manifest" },
+          "offset": { "type": "number", "description": "the chunk-aligned byte offset" }
+        },
+        "methods": ["quirky.mobile/bundleChunk"]
+      },
+      {
+        "id": "bundle-range",
+        "summary": "read one bounded page bundle range, optionally gzipped",
+        "flags": {
+          "build-id": { "type": "string", "description": "the current bundle build ID" },
+          "path": { "type": "string", "description": "an exact asset path from the bundle manifest" },
+          "offset": { "type": "number", "description": "the byte offset" },
+          "gzip": { "type": "boolean", "description": "gzip the returned range" }
+        },
+        "methods": ["quirky.mobile/bundleRange"]
       },
       {
         "id": "open",
