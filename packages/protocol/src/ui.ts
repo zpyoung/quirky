@@ -300,6 +300,8 @@ export type UiPluginContext = {
   readonly pluginId: string
   /** Writes to the window log, prefixed with the plugin ID. */
   log(message: string): void
+  /** Reads plain text from this window's clipboard: native desktop pasteboard, Web Clipboard API otherwise. */
+  readClipboardText(): Promise<string>
   /** Registers the implementation of a code-backed contribution this plugin declares; throws for any other ID. */
   provide(contributionId: string, implementation: unknown): void
   /** Invokes a daemon or plugin method. */

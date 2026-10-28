@@ -1,6 +1,6 @@
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:test'
-import type { AgentDisplayState, AgentStatusSummary, ProjectGroup, QuirkyEvent, Repo, Session, UiLayout, UiPluginContext, Worktree } from '@quirky/protocol'
+import type { AgentDisplayState, AgentStatusSummary, ProjectGroup, QuirkyEvent, Repo, Session, UiLayout, UiPluginContext, Worktree, WorkspaceOriginView } from '@quirky/protocol'
 import { RpcErrorCode } from '@quirky/protocol'
 import { DEFAULT_STOCK_OPTIONS, type CleanupCandidate, type CleanupRemovalResult, type StockWorktreeOptions } from '../src/control-types'
 
@@ -127,6 +127,8 @@ type World = {
   /** The branch a remove reports as kept. */
   keptBranch: { name: string; head: string } | null
   options: StockWorktreeOptions
+  origins: WorkspaceOriginView[]
+  desktopClientId: string | null
   cleanupCandidates: CleanupCandidate[]
   cleanupResults: CleanupRemovalResult[]
   folderPickResult: { cancelled: boolean; paths: string[] }
@@ -149,6 +151,8 @@ function setup(layout: UiLayout = { view: null, panel: null, sidebar: true, focu
     confirmDelete: true,
     keptBranch: null,
     options: { ...DEFAULT_STOCK_OPTIONS, filterRepoIds: [], showProperties: [...DEFAULT_STOCK_OPTIONS.showProperties] },
+    origins: [],
+    desktopClientId: null,
     cleanupCandidates: [
       { worktreeId: 'w2', name: 'fix-login', fingerprint: 'fix-fingerprint', reason: 'idle-clean', ignored: false, eligible: true, blockers: [] },
       { worktreeId: 'w1', name: 'main', fingerprint: 'main-fingerprint', reason: 'idle-clean', ignored: false, eligible: false, blockers: [{ code: 'main-worktree', detail: 'Primary worktrees cannot be deleted.' }] }
@@ -177,7 +181,9 @@ function setup(layout: UiLayout = { view: null, panel: null, sidebar: true, focu
       calls.push({ method, params })
       switch (method) {
         case 'ui.window.self':
-          return { connId: 1 }
+          return { connId: 1, ...(world.desktopClientId === null ? {} : { desktopClientId: world.desktopClientId }) }
+        case 'quirky.worktree/origins':
+          return [...world.origins]
         case 'quirky.worktree/availableHosts':
           return { hosts: [] }
         case 'quirky.worktree/prefetchCreate':
@@ -1338,6 +1344,47 @@ test('PR grouping, CLI-origin filtering and filtered-row reveal change the works
   expect(rowOf('fix-login', 'api')).toBeNull()
   await click(host.querySelector('button[aria-label="Show 1 filtered worktree"]')!)
   expect(rowOf('fix-login', 'api')).not.toBeNull()
+  await unmount()
+})
+test('hide other desktop clients filters only known different creators for an authenticated installation', async () => {
+  const h = setup()
+  h.world.desktopClientId = '00000000-0000-4000-8000-000000000005'
+  h.world.worktrees.push(
+    wt('w4', 'r2', 'phone-origin'),
+    wt('w5', 'r2', 'automation-origin')
+  )
+  h.world.origins = [
+    { worktreeId: 'w1', automation: null, otherClient: null },
+    { worktreeId: 'w2', automation: false, otherClient: true },
+    { worktreeId: 'w3', automation: false, otherClient: false },
+    { worktreeId: 'w4', automation: false, otherClient: null },
+    { worktreeId: 'w5', automation: true, otherClient: null }
+  ]
+  const unmount = await h.mountInto(host)
+  await click(host.querySelector('button[aria-label="Workspace options"]')!)
+  await click(host.querySelector('input[aria-label="Hide worktrees from other desktop clients"]')!)
+  expect(rowOf('fix-login', 'api')).toBeNull()
+  expect(rowOf('main', 'api')).not.toBeNull()
+  expect(rowOf('main', 'web')).not.toBeNull()
+  expect(rowOf('phone-origin', 'web')).not.toBeNull()
+  expect(rowOf('automation-origin', 'web')).not.toBeNull()
+  await click(host.querySelector('button[aria-label="Show 1 filtered worktree"]')!)
+  expect(rowOf('fix-login', 'api')).not.toBeNull()
+  await unmount()
+})
+
+test('identityless UI leaves even classified-looking rows visible', async () => {
+  const h = setup()
+  h.world.options.hideOtherClients = true
+  h.world.origins = [
+    { worktreeId: 'w1', automation: null, otherClient: null },
+    { worktreeId: 'w2', automation: false, otherClient: true },
+    { worktreeId: 'w3', automation: false, otherClient: true }
+  ]
+  const unmount = await h.mountInto(host)
+  expect(rowOf('fix-login', 'api')).not.toBeNull()
+  expect(rowOf('main', 'web')).not.toBeNull()
+  expect(lastReport(h).stockFilteredHiddenIds).toEqual([])
   await unmount()
 })
 test('workspace board renders project-defined status labels for matching worktrees', async () => {

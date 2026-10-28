@@ -408,16 +408,40 @@ describe('SC-20: a remote base that cannot be fetched falls back to the local br
     expect(unreachable.message).toBe('Could not refresh base ref "origin/nope" from "origin". Check your network and try again.')
   })
 
-  test('an existing remote-tracking base is used as is and refreshed in the background', async () => {
+  test('an existing remote-tracking base is used without waiting for its background refresh', async () => {
     const { dir, origin } = await startApi()
     const pusher = makeProject(join(scratch(), 'pusher'), { origin })
     commitFiles(pusher, { 'b.txt': 'two\n' })
     git(pusher, 'push', '-q', 'origin', 'main')
+    const updated = git(pusher, 'rev-parse', 'HEAD')
     const stale = git(dir, 'rev-parse', 'origin/main')
-    const made = await create({ repo: 'api', name: 'stale', base: 'origin/main' })
-    expect(made.baseFallback).toBeUndefined()
-    expect(made.worktree.baseRef).toBe('origin/main')
-    await waitFor(() => (git(dir, 'rev-parse', 'origin/main') !== stale ? true : undefined), 5000)
+    const real = gitApi()
+    const releaseRefresh = Promise.withResolvers<void>()
+    let refresh: Promise<boolean> | undefined
+    useTestGit({
+      ...real,
+      fetchRemote: (...args: Parameters<typeof real.fetchRemote>) => {
+        refresh = releaseRefresh.promise.then(() => real.fetchRemote(...args))
+        return refresh
+      }
+    })
+    try {
+      const made = await create({ repo: 'api', name: 'stale', base: 'origin/main' })
+      expect(made.baseFallback).toBeUndefined()
+      expect(made.worktree.baseRef).toBe('origin/main')
+      expect(git(made.worktree.path, 'rev-parse', 'HEAD')).toBe(stale)
+      expect(git(dir, 'rev-parse', 'origin/main')).toBe(stale)
+      releaseRefresh.resolve()
+      expect(await refresh).toBe(true)
+      expect(git(dir, 'rev-parse', 'origin/main')).toBe(updated)
+    } finally {
+      releaseRefresh.resolve()
+      try {
+        await refresh
+      } finally {
+        useTestGit(null)
+      }
+    }
   })
 })
 

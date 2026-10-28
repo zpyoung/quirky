@@ -40,6 +40,7 @@ export type HostDeps = {
   /** Dismisses the toast keyed `key` and runs its `onDismiss`, for the daemon's `ui.toast.dismiss`; nothing happens when none has it. */
   dismissToast?(key: string): void
   log(message: string): void
+  readClipboardText?: () => Promise<string>
   nativeBrowser?: NativeBrowserCapability
   /** Window focus, reported to the daemon so it can pick the window a routed command runs in. */
   windowFocus?: { hasFocus(): boolean; subscribe(listener: (focused: boolean) => void): () => void }
@@ -898,6 +899,10 @@ export class WindowPluginHost {
         session.provided.set(contributionId, implementation)
       }),
       call: live((method: string, params?: Record<string, unknown>) => this.deps.call(method, params ?? {})),
+      readClipboardText: live(async () => {
+        if (this.deps.readClipboardText) return this.deps.readClipboardText()
+        return (await navigator.clipboard?.readText()) ?? ''
+      }),
       subscribe: live((listener: (event: QuirkyEvent) => void | Promise<void>) => {
         session.listeners.add(listener)
         return () => {

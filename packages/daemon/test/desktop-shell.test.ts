@@ -101,6 +101,10 @@ test('auxiliary routes remain daemon-readable, local to their window, and pruned
   }])
 
   const auxiliary = await harness.connect('ui')
+  await auxiliary.call('desktop.shell.capabilities', {
+    directoryPicker: false, auxiliaryWindows: true, revealItem: false,
+    notifications: { permission: false, click: false, dismiss: false }
+  })
   await expect(auxiliary.call('desktop.window.attach', {
     windowId: 'owned-window-7', ownerShellConnId: ownerShellConnId + 1
   })).rejects.toThrow(/owner does not match/)
@@ -133,6 +137,11 @@ test('auxiliary routes remain daemon-readable, local to their window, and pruned
     { id: nextView!.id, input: nextInput }
   ])
   expect(updatedAuxiliary.layout.tools).toBeUndefined()
+  const updatedUiState = await requester.call('ui.state', {})
+  expect(updatedUiState.layout.view).toEqual({ id: nextView!.id, input: nextInput })
+  expect(updatedUiState.slots.find((slot) => slot.id === nextView!.id)?.shown).toBe(true)
+  expect(updatedUiState.slots.find((slot) => slot.id === view!.id)?.shown).toBe(false)
+  expect(updatedUiState.slots.find((slot) => slot.id === view!.id)?.report).toEqual({ shown: true, filter: 'ready' })
 
   const closedView = await requester.call('ui.window.view.close', {
     connId: auxiliaryConnId,
@@ -158,11 +167,12 @@ test('auxiliary routes remain daemon-readable, local to their window, and pruned
   })
   const routed = await ownerRequest
   expect(routed.id).toBe(command.id)
+  const activationEvent = waitForShellRequest(auxiliary)
   await shell.call('ui.command.reply', { requestId: routed.requestId, result: { opened: true } })
-  const activationRequest = await waitForShellRequest(auxiliary)
+  const activationRequest = await activationEvent
   expect(activationRequest.action).toEqual({ kind: 'window-activate-owner', request: { windowId: 'owned-window-7' } })
   await auxiliary.call('desktop.shell.reply', { requestId: activationRequest.requestId, result: { activated: true } })
-  await expect(ownerCommand).resolves.toEqual({ result: { opened: true }, activated: true })
+  expect(await ownerCommand).toEqual({ result: { opened: true }, activated: true })
   expect(wrongOwnerReceivedCommand).toBe(false)
 
   const nativeDesktop = await harness.connect('desktop')

@@ -138,6 +138,70 @@ describe('validateEntry', () => {
       modelDiscovery: { protocol: 'codex-app-server', timeoutMs: 1_000 }
     })).toBe('modelDiscovery protocol codex-app-server is only valid for codex')
   })
+  test('Anthropic models discovery is a Claude-only API protocol without caller-supplied argv', () => {
+    const claude = validateEntry('quirky.agents', 'claude', {
+      ...minimal,
+      launchOptions: { model: { flag: ['--model', '{value}'] } },
+      modelDiscovery: { protocol: 'anthropic-models', timeoutMs: 8_000 }
+    })
+    expect(claude).toMatchObject({
+      ok: true,
+      entry: { modelDiscovery: { protocol: 'anthropic-models', timeoutMs: 8_000 } }
+    })
+    expect(errorOf({
+      ...minimal,
+      launchOptions: { model: { flag: ['--model', '{value}'] } },
+      modelDiscovery: { protocol: 'anthropic-models', timeoutMs: 1_000 }
+    })).toBe('modelDiscovery protocol anthropic-models is only valid for claude')
+    expect(errorOf({
+      ...minimal,
+      launchOptions: { model: { flag: ['--model', '{value}'] } },
+      modelDiscovery: { protocol: 'anthropic-models', args: ['models'], timeoutMs: 1_000 }
+    })).toBe('modelDiscovery protocol anthropic-models does not accept args or format')
+  })
+  test('Gemini models discovery is a Gemini-only bounded API protocol', () => {
+    const gemini = validateEntry('quirky.agents', 'gemini', {
+      ...minimal,
+      launchOptions: { model: { flag: ['--model', '{value}'] } },
+      modelDiscovery: { protocol: 'gemini-models', timeoutMs: 1_000 }
+    })
+    expect(gemini).toMatchObject({
+      ok: true,
+      entry: { modelDiscovery: { protocol: 'gemini-models', timeoutMs: 1_000 } }
+    })
+    expect(errorOf({
+      ...minimal,
+      launchOptions: { model: { flag: ['--model', '{value}'] } },
+      modelDiscovery: { protocol: 'gemini-models', timeoutMs: 1_000 }
+    })).toBe('modelDiscovery protocol gemini-models is only valid for gemini')
+    expect(errorOf({
+      ...minimal,
+      launchOptions: { model: { flag: ['--model', '{value}'] } },
+      modelDiscovery: { protocol: 'gemini-models', args: ['models'], timeoutMs: 1_000 }
+    })).toBe('modelDiscovery protocol gemini-models does not accept args or format')
+  })
+  test('Pi discovery uses the declared RPC model-list protocol without caller argv', () => {
+    const pi = validateEntry('quirky.agents', 'pi', {
+      ...minimal,
+      launchOptions: { model: { flag: ['--model', '{value}'] } },
+      modelDiscovery: { protocol: 'pi-rpc', timeoutMs: 1_000 }
+    })
+    expect(pi).toMatchObject({
+      ok: true,
+      entry: { modelDiscovery: { protocol: 'pi-rpc', timeoutMs: 1_000 } }
+    })
+    expect(errorOf({
+      ...minimal,
+      launchOptions: { model: { flag: ['--model', '{value}'] } },
+      modelDiscovery: { protocol: 'pi-rpc', timeoutMs: 1_000 }
+    })).toBe('modelDiscovery protocol pi-rpc is only valid for pi')
+    expect(errorOf({
+      ...minimal,
+      launchOptions: { model: { flag: ['--model', '{value}'] } },
+      modelDiscovery: { protocol: 'pi-rpc', args: ['--list-models'], timeoutMs: 1_000 }
+    })).toBe('modelDiscovery protocol pi-rpc does not accept args or format')
+  })
+
 
   test('launch defaults to detect, process defaults to detect, and the submit signal follows the ready signal', () => {
     const entry = entryOf({ ...minimal, detect: 'qwen', readySignal: 'codex-composer-prompt' })

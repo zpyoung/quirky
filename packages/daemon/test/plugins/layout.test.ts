@@ -4,12 +4,13 @@ import {
   RpcErrorCode,
   type ClientRole,
   type PluginInfo,
-  type QuirkyClient,
+  QuirkyClient,
   type QuirkyEvent,
   type UiLayout,
   type UiModel,
   type UiState
 } from '@quirky/protocol'
+import { rpcUrl } from '@quirky/protocol/node'
 import type { ClientConn } from '../../src/types'
 import { LayoutService } from '../../src/plugins/layout'
 import { makeTempHome, startHarness, waitFor, waitForAsync, type Harness } from '../helpers'
@@ -227,6 +228,44 @@ test('ui.window.self returns only the calling live UI connection ID', async () =
   expect(nonWindow.code).toBe(RpcErrorCode.InvalidParams)
 })
 
+test('authenticated UI desktop identity is stable through window self and PluginCaller', async () => {
+  const env = makeEnv()
+  writePlugin(join(env.home, 'plugins'), {
+    id: 'acme.identity',
+    name: 'acme.identity',
+    version: '1.0.0',
+    main: 'main.ts',
+    contributes: {
+      method: [{
+        id: 'desktopClientId',
+        description: 'returns the authenticated desktop client identity',
+        params: { type: 'object', properties: {}, additionalProperties: false },
+        result: {
+          type: 'object',
+          properties: { desktopClientId: { type: 'string' } },
+          required: ['desktopClientId'],
+          additionalProperties: false
+        }
+      }]
+    }
+  }, {
+    'main.ts': "import type { PluginCaller, PluginContext } from '@quirky/protocol'\nexport function activate(context: PluginContext) { context.provide('method:acme.identity/desktopClientId', (_params: Record<string, unknown>, caller: PluginCaller) => { if (!caller.desktopClientId) throw context.error('conflict', 'desktop client identity unavailable'); return { desktopClientId: caller.desktopClientId } }) }"
+  })
+  const harness = await env.start()
+  const desktopClientId = '123e4567-e89b-42d3-a456-426614174000'
+  const client = await QuirkyClient.connect(rpcUrl(harness.runtime), {
+    role: 'ui',
+    name: 'identity-test',
+    desktopClientId,
+    subscribe: true
+  })
+  try {
+    expect(await client.call('ui.window.self', {})).toMatchObject({ connId: expect.any(Number), desktopClientId })
+    expect(await client.callAny('acme.identity/desktopClientId', {})).toEqual({ desktopClientId })
+  } finally {
+    client.close()
+  }
+})
 describe('exact window routes', () => {
   test('view updates and shared layout events preserve independent per-window navigation', async () => {
     const { harness, caller } = await start()

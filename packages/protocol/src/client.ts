@@ -42,6 +42,8 @@ export type ClientHello = {
   cwd?: string
   sessionId?: string
   worktreeId?: string
+  /** Stable first-party UI installation identity; accepted only for an authenticated `ui` hello. */
+  desktopClientId?: string
 }
 
 /** What the JSON-RPC core needs from a connection: send one JSON text, close. */
@@ -164,7 +166,8 @@ export class QuirkyClient {
         ...(hello.sessionToken !== undefined ? { sessionToken: hello.sessionToken } : {}),
         ...(hello.cwd !== undefined ? { cwd: hello.cwd } : {}),
         ...(hello.sessionId !== undefined ? { sessionId: hello.sessionId } : {}),
-        ...(hello.worktreeId !== undefined ? { worktreeId: hello.worktreeId } : {})
+        ...(hello.worktreeId !== undefined ? { worktreeId: hello.worktreeId } : {}),
+        ...(hello.desktopClientId !== undefined ? { desktopClientId: hello.desktopClientId } : {})
       })
       if (hello.subscribe) await this.call('events.subscribe', {})
     } catch (error) {

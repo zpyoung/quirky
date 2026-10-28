@@ -34,6 +34,7 @@ export type Handlers = { [M in MethodName]: Handler<M> }
 
 const ROLES: readonly ClientRole[] = ['desktop', 'ui', 'cli', 'mobile']
 const OK = { ok: true } as const
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
 function str(params: Params, key: string): string {
   const value = params[key]
@@ -203,7 +204,7 @@ export function createHandlers(
   const { layout, distros } = services
   return {
     'client.hello': async (params, conn) => {
-      if (conn.deviceId !== undefined) {
+      if (conn.role !== null) {
         const version = int(params, 'protocolVersion', 0)
         if (version !== PROTOCOL_VERSION) {
           throw conflict(`protocol version mismatch: daemon speaks ${PROTOCOL_VERSION}, client ${version}`)
@@ -215,12 +216,20 @@ export function createHandlers(
         throw invalidParams(`role must be one of ${ROLES.join(', ')}`)
       }
       const name = optStr(params, 'name')
+      const desktopClientId = optStr(params, 'desktopClientId')
+      if (desktopClientId !== undefined) {
+        if (role !== 'ui') throw invalidParams('desktopClientId is only accepted for role ui')
+        if (!UUID.test(desktopClientId)) throw invalidParams('desktopClientId must be a UUID')
+      }
       const version = int(params, 'protocolVersion', 0)
       if (version !== PROTOCOL_VERSION) {
         throw conflict(`protocol version mismatch: daemon speaks ${PROTOCOL_VERSION}, client ${version}`)
       }
       conn.role = role as ClientRole
       conn.name = name
+      if (desktopClientId !== undefined) {
+        Object.defineProperty(conn, 'desktopClientId', { value: desktopClientId, enumerable: true, writable: false, configurable: false })
+      }
       conn.cwd = optStr(params, 'cwd')
       conn.sessionId = optStr(params, 'sessionId')
       conn.sessionToken = optStr(params, 'sessionToken')

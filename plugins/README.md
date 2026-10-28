@@ -882,6 +882,11 @@ supports nested/empty details sections, collapsible headings and `[[document lin
 unsupported forms still open in Source mode rather than silently losing content.
 Document-link completion is keyboard-accessible and does not run during IME composition.
 
+Explorer **Copy Path** copies the exact absolute path; **Copy Relative Path** is relative
+to the worktree even when Explorer displays a subfolder. Multi-selection copies one path
+per line without shell quoting. Row drags into a terminal retain worktree ownership and
+insert shell-escaped paths; **Open in Terminal** uses the selected directory directly.
+
 The buffer's optional `diskWritable` is advisory effective OS access, separate from the
 format's `readOnly` capability. A readable non-writable Markdown file can keep drafts and
 local review notes. The actual save is authoritative: denial retains the draft and dirty
