@@ -362,7 +362,7 @@
         "args": {
           "type": "object",
           "additionalProperties": false,
-          "properties": { "workspace": { "type": "string" }, "group": { "type": "string" } }
+          "properties": { "worktree": { "type": "string" }, "workspace": { "type": "string" }, "group": { "type": "string" } }
         }
       },
       {

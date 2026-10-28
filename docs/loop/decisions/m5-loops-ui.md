@@ -266,6 +266,18 @@
 - **Revisit if:** the required post-merge gate identifies a concrete integration failure.
 - **Source:** assumed — autonomous, within operator-directed merge
 
+## D25: Declare canonical context at both command-validation boundaries
+- **Question:** the required post-merge gate rejected every actual setup invocation with `args.worktree is not allowed`, before the corrected window handler ran.
+- **Options:** remove strict validation or drop canonical context from the test; declare the legitimate optional key in the command manifest.
+- **Chose:** add optional string worktree to the New command's args properties while retaining additionalProperties:false, the window handler's exact allowlist, and workspace/group placement authority. Keep all six setup tests and their full behavior assertions using canonical context.
+- **Why:** the manifest and window handler are separate input boundaries; both must represent the published tab-menu contract. Removing the supplied context or loosening unknown-key validation would hide the real consumer-visible failure.
+- **Evidence:** required affected gate bg41:306/307 remote files passed, both macOS-only files passed; sole failing file ui-form-api.test.ts rejected the same legitimate key in all six cases. The manifest omitted worktree despite the handler accepting it.
+- **Verification:** post-merge typecheck passed (49.79s, frozen lock unchanged). After the declaration fix, targeted actual daemon/window setup verification passed6/0 with115 assertions in19.82s. No test or assertion was removed or weakened, and no second broad affected/typecheck campaign was run; authoritative land owns the full merge-result gates.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** targeted setup verification or authoritative land identifies a remaining concrete blocker.
+- **Source:** assumed — autonomous
+
 ## Progress
-Operator wrap is active. Implemented source and exercised flows were committed as ff81a3b7, then current roadmap merged as fa9e3ada with the canonical tab-menu contract. Native CLI/window smoke covers cap/focus/steer/edit/resume/history and Cancel/Keep/Stop close semantics. Real API/window tests cover setup presets, validation, folder eligibility, server refusal, queue editing, archived output and late paused Stop. Visible run20261028T071503-520f passed observe/adjust/queue; Stop/Close remain unverified after correcting fixture identity collision. Setup's earlier functional completion remains tool-partial due UNSETTLED pass-guard behavior. Sole queued follow-up m5-loops-ui-visible-stop-close-review and BLOCKERS own those remaining verifications and the unstarted final review. The isolated native runtime printed LOOP_UI_BROWSER_CLEANUP_OK; the owned final browser session was explicitly closed, without touching another lane's browser. Next: commit the narrow canonical-context correction, run required affected/typecheck gate once, detach and authoritative queue land. No test is skipped or weakened and no complete visible-UI or code-review PASS is asserted.
+Ready for authoritative land. Implemented source/evidence is committed through80d05f35; final command declaration correction closes the only required affected-gate failure. Required post-merge typecheck passed;306/307 remote affected files and both macOS-only files passed, then the sole failing setup file passed6/0 with115 assertions after the strict manifest fix. Earlier native CLI/window smoke covers cap/focus/steer/edit/resume/history and Cancel/Keep/Stop close semantics. Visible run20261028T071503-520f passed observe/adjust/queue; remaining visible Stop/Close, tool-partial setup finalization and unstarted final review belong solely to queued m5-loops-ui-visible-stop-close-review and BLOCKERS. Runtime and owned browser cleanup completed. Next: commit this final declaration/evidence, detach, and canonical queue.ts land m5-loops-ui. No complete visible-UI or code-review PASS is asserted.
 
