@@ -238,10 +238,11 @@ async function waitForReviewState(w: World, kind: string, summary?: string) {
 async function waitForPrimary(w: World, label: string, title: string, enabled: boolean): Promise<void> {
   const reported = await w.win.waitFor(async () => {
     const value = (await w.report())?.primary
-    return value?.label === label && value.title === title ? value : undefined
+    const shown = primary()
+    return value?.label === label && value.title === title && value.enabled === enabled &&
+      text(shown) === label && shown.title === title && shown.disabled === !enabled ? value : undefined
   })
   expect(reported).toEqual({ label, enabled, title })
-  expect(primary().disabled).toBe(!enabled)
 }
 
 async function openGitHubPanel(w: World): Promise<void> {

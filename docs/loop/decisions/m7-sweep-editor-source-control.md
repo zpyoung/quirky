@@ -154,5 +154,27 @@
 - **Revisit if:** a durable cross-owner transaction requirement is approved.
 - **Source:** assumed — autonomous
 
+## D15: Preserve the single catch-up's routing and exact-session contracts
+- **Question:** Do the newly landed decision logs conflict with this sweep?
+- **Options:** retain the old integration base; preserve the incoming public contracts and verify the merged consumer scope.
+- **Chose:** one clean merge after87eff05f. Read every entry in Automations D1–D29, Orchestration UI D1–D15 and Browser profiles/settings D1–D25. Preserve event-time canonical URL routing with MethodNotFound-only fallback, ordinary rich-click editing, exact-session/dispatch navigation without replacement shells, canonical hosted-tab close results, `act`-based headless teardown, atomic fixture replies and the explicit unavailable native-profile operations.
+- **Why:** these contracts extend adjacent owners without changing our editor buffer/note identities or authorizing native path guesses. No contradiction with the sweep spec was found.
+- **Evidence:** complete incoming-log scout report ParityIncomingBindings; caught-up diffs for MarkdownSurface, terminal workspace controller and headless-window fixture; caught-up actual daemon smoke passed9.62s and full typecheck passed31.48s.
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** the merged affected or landing gate reports a concrete failure.
+- **Source:** locked by docs/loop/decisions/m5-automations-ui.md, docs/loop/decisions/m6-orchestration-ui.md and docs/loop/decisions/sa-browser-profiles-settings.md
+
+## D16: Observe the published and visible primary state in one polling boundary
+- **Question:** Why did the caught-up GitHub window regression fail once despite its isolated pass?
+- **Options:** weaken the disabled-state assertion; extend a deadline; compare the report and visible control in one observation.
+- **Chose:** the existing wait now requires matching label, tooltip, enabled report and visible button state together, then asserts that captured report. Removed the separate live disabled read after the asynchronous report wait.
+- **Why:** the old helper could accept an earlier enabled report and then inspect a newer loading control after canonical cache refresh. The consumer requirement is coherent matching state, not two observations separated by a render.
+- **Evidence:** caught-up affected suite162remote+1Mac passed with isolated retries for GitHub handoff and Reviews create cancellation; GitHub failure was expected false/received true at the separate disabled read; the same file passed alone. The Reviews cancellation timeout passed its own isolated rerun without changes.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** the revised coherent observation fails.
+- **Source:** assumed — autonomous
+
 ## Progress
-Implementation components are committed/merged, all workers returned and their temporary worktrees removed. Parent integrated workspaceNotes composition and Markdown shelf navigation. Final actual quirkyd/CLI smoke passed Save As, cleanup, mixed note read/format, closed-buffer persistence, owner reserve/release and Markdown settlement through Git clear, with owned teardown. Guarded built-web campaign20261028T094037-5992 reports all five goals pass, no test overrides or cleanup errors; F1's initial shortcut/discoverability claim was resolved by the existing Rich toolbar, and the unnecessary duplicate Explorer control was removed. Final full build passed; scripts68tests/572assertions passed; full typecheck passed. Broad affected gate passed131/138 remote files plus1Mac; corrected21-file scope passed14 with7 concrete failures, and final repaired7/7 passed with no flaky rerun. The source fixes therefore cover every originally failing file; no whole-suite pass is claimed before land. One completion follow-up is queued; native Finder remains independently blocked. Next: commit owned source/docs, one roadmap catch-up/read incoming decisions and queue land. Do not start a second item.
+Ready for detached queue land. One roadmap catch-up is complete and all incoming decisions are preserved (D15). Post-catch-up affected suite passed162remote+1Mac files with two isolated retries; the own GitHub observation race was then repaired (D16), and its targeted remote file passed without a retry. Post-catch-up actual daemon/CLI smoke and full typecheck passed; full build, scripts68tests572assertions and all five guarded web goals are exercised evidence. All workers, browser and process scopes returned; owned component worktrees/homes were removed. One explicit completion follow-up is queued; native Finder remains independently blocked. Commit this evidence, detach and run the authoritative queue land. No second normal catch-up, new review campaign, repeated green preflight or second work item. Only a concrete landing conflict/failure reopens repair.
