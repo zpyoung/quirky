@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ChangeEvent, type ClipboardEvent, type CSSProperties, type DragEvent, type KeyboardEvent, type ReactNode, type SyntheticEvent, type UIEvent } from 'react'
+import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type ChangeEvent, type ClipboardEvent, type CSSProperties, type DragEvent, type KeyboardEvent, type ReactNode, type SyntheticEvent, type UIEvent } from 'react'
 import type { UiPluginContext } from '@quirky/protocol'
+import { Badge, Button, EmptyState, FormRow, IconButton, SectionHeader } from '@quirky/ui'
 import type { DockAttachment, DockOptions, DockQuestion, DockState, PickerItem, SendResult } from '../types'
 
 const PLUGIN_METHOD = 'quirky.terminal-dock/'
@@ -811,8 +812,8 @@ export function Composer({ context, pane, session, registerActions }: Props) {
         </div>
         <div className="qtd-action-buttons">
           <input ref={fileRef} className="qtd-file-input" type="file" multiple aria-label="Attach files" disabled={state === null || !state.enabled} onChange={onFileChange} />
-          <button type="button" className="qtd-attach" aria-label="Attach file" disabled={state === null || !state.enabled} onClick={() => fileRef.current?.click()}>Attach</button>
-          <button type="button" className="qtd-send" aria-label={shouldStop ? 'Stop' : 'Send'} disabled={state === null || !state.enabled || !shouldStop && sendDisabled} onClick={() => shouldStop ? void stop() : void send()}>{shouldStop ? 'Stop' : 'Send'}</button>
+          <Button type="button" className="qtd-attach" aria-label="Attach file" disabled={state === null || !state.enabled} onClick={() => fileRef.current?.click()}>Attach</Button>
+          <Button type="button" className="qtd-send" variant={shouldStop ? 'destructive' : 'primary'} aria-label={shouldStop ? 'Stop' : 'Send'} disabled={state === null || !state.enabled || !shouldStop && sendDisabled} onClick={() => shouldStop ? void stop() : void send()}>{shouldStop ? 'Stop' : 'Send'}</Button>
         </div>
       </div>
     </div>
@@ -833,37 +834,58 @@ function QuestionCard({ question, answers, answering, disabled, onAnswer, onSubm
   onSubmit(): void
   onInteract(action: 'collapse' | 'expand' | 'dismiss'): void
 }) {
+  const idPrefix = useId()
   const collapsed = question.collapsed
   return (
-    <section className={`qtd-question-card${collapsed ? ' qtd-question-card__collapsed' : ''}`} role="region" aria-label={question.kind === 'permission' ? 'Pending permission' : 'Pending question'}>
-      <header className="qtd-question-card__header">
-        <div><strong>{question.title}</strong><span className="qtd-question-kind">{question.kind === 'permission' ? 'Permission request' : 'Agent question'}</span></div>
-        <button type="button" aria-label={collapsed ? 'Expand question' : 'Collapse question'} disabled={disabled} onClick={() => onInteract(collapsed ? 'expand' : 'collapse')}>{collapsed ? 'Expand question' : 'Collapse question'}</button>
-        <button type="button" aria-label="Dismiss question" disabled={disabled} onClick={() => onInteract('dismiss')}>Dismiss</button>
-      </header>
+    <section className="qtd-question-card" role="region" aria-label={question.kind === 'permission' ? 'Pending permission' : 'Pending question'}>
+      <SectionHeader
+        title={question.title}
+        actions={
+          <>
+            <Badge tone={question.kind === 'permission' ? 'needs-you' : 'accent'}>{question.kind === 'permission' ? 'Permission request' : 'Agent question'}</Badge>
+            <Button type="button" variant="secondary" aria-label={collapsed ? 'Expand question' : 'Collapse question'} disabled={disabled} onClick={() => onInteract(collapsed ? 'expand' : 'collapse')}>{collapsed ? 'Expand question' : 'Collapse question'}</Button>
+            <Button type="button" variant="secondary" aria-label="Dismiss question" disabled={disabled} onClick={() => onInteract('dismiss')}>Dismiss</Button>
+          </>
+        }
+      />
       {!collapsed && <div className="qtd-question-card__content">
         {question.questions.map((item, questionIndex) => (
-          <fieldset key={`${question.id}-${questionIndex}`} className="qtd-question-prompt">
-            <legend>{item.prompt}</legend>
-            {item.choices.length > 0 ? item.choices.map((choice) => {
-              const checked = answers[questionIndex]?.includes(choice.value) ?? false
-              return <label key={choice.value} className="qtd-question-choice">
-                <input
-                  type={item.multiple ? 'checkbox' : 'radio'}
-                  name={`qtd-${question.id}-${questionIndex}`}
-                  aria-label={choice.label}
-                  checked={checked}
-                  disabled={disabled}
-                  onChange={() => onAnswer(questionIndex, choice.value, item.multiple)}
-                />
-                <span>{choice.label}</span>
-              </label>
-            }) : question.kind === 'question' ? (
-              <textarea aria-label={item.prompt} disabled={disabled} value={answers[questionIndex]?.[0] ?? ''} onChange={(event) => onAnswer(questionIndex, event.currentTarget.value, false)} />
-            ) : <p>A permission answer is unavailable because the agent supplied no safe choices.</p>}
-          </fieldset>
+          item.choices.length > 0 ? (
+            <fieldset key={`${question.id}-${questionIndex}`} className="qtd-question-prompt">
+              <legend>{item.prompt}</legend>
+              {item.choices.map((choice) => {
+                const checked = answers[questionIndex]?.includes(choice.value) ?? false
+                return <label key={choice.value} className="qtd-question-choice">
+                  <input
+                    type={item.multiple ? 'checkbox' : 'radio'}
+                    name={`qtd-${question.id}-${questionIndex}`}
+                    aria-label={choice.label}
+                    checked={checked}
+                    disabled={disabled}
+                    onChange={() => onAnswer(questionIndex, choice.value, item.multiple)}
+                  />
+                  <span>{choice.label}</span>
+                </label>
+              })}
+            </fieldset>
+          ) : question.kind === 'question' ? (
+            <FormRow key={`${question.id}-${questionIndex}`} label={item.prompt} htmlFor={`${idPrefix}-answer-${questionIndex}`}>
+              <textarea
+                className="ui-text-field__input qtd-question-answer"
+                aria-label={item.prompt}
+                disabled={disabled}
+                value={answers[questionIndex]?.[0] ?? ''}
+                onChange={(event) => onAnswer(questionIndex, event.currentTarget.value, false)}
+              />
+            </FormRow>
+          ) : (
+            <fieldset key={`${question.id}-${questionIndex}`} className="qtd-question-prompt">
+              <legend>{item.prompt}</legend>
+              <p>A permission answer is unavailable because the agent supplied no safe choices.</p>
+            </fieldset>
+          )
         ))}
-        <button type="button" className="qtd-question-submit" disabled={disabled || answering || !answersComplete(question, answers)} onClick={onSubmit}>{answering ? 'Answering…' : 'Submit answer'}</button>
+        <Button type="button" className="qtd-question-submit" variant="primary" disabled={disabled || answering || !answersComplete(question, answers)} onClick={onSubmit}>{answering ? 'Answering…' : 'Submit answer'}</Button>
       </div>}
     </section>
   )
@@ -875,11 +897,11 @@ function PickerMenu({ picker, onChoose, onSelect }: { picker: PickerState; onCho
     <div className="qtd-picker" role="listbox" aria-label={label} aria-busy={picker.status === 'loading'}>
       {picker.status === 'loading' && <div className="qtd-picker__state" role="status">Loading {picker.kind === 'slash' ? 'commands and skills' : 'workspace files'}…</div>}
       {picker.status === 'error' && <div className="qtd-picker__state" role="alert">Could not load {picker.kind === 'slash' ? 'commands and skills' : 'workspace files'}: {picker.error}</div>}
-      {picker.status === 'ready' && picker.items.length === 0 && <div className="qtd-picker__state" role="status">{picker.kind === 'slash' ? 'No commands or skills found.' : 'No matching workspace files.'}</div>}
+      {picker.status === 'ready' && picker.items.length === 0 && <div className="qtd-picker__state" role="status"><EmptyState message={picker.kind === 'slash' ? 'No commands or skills found.' : 'No matching workspace files.'} /></div>}
       {picker.status === 'ready' && picker.items.map((item, index) => (
-        <button key={item.id} type="button" role="option" aria-selected={index === picker.selected} className={`qtd-picker__item${index === picker.selected ? ' qtd-picker__item--active' : ''}`} onMouseEnter={() => onSelect(index)} onClick={() => onChoose(item)}>
+        <Button key={item.id} type="button" role="option" aria-selected={index === picker.selected} className={`qtd-picker__item${index === picker.selected ? ' qtd-picker__item--active' : ''}`} onMouseEnter={() => onSelect(index)} onClick={() => onChoose(item)}>
           <span>{item.label}</span>{item.detail && <small>{item.detail}</small>}
-        </button>
+        </Button>
       ))}
       {picker.status === 'ready' && picker.truncated && <div className="qtd-picker__state">More results are available; refine the query.</div>}
     </div>
@@ -891,7 +913,7 @@ function AttachmentChip({ attachment, disabled, onRemove }: { attachment: DockAt
     <span className="qtd-attachments__chip" title={attachment.path} role="listitem">
       <span aria-hidden="true">{attachment.image ? 'Image' : 'File'}</span>
       <span>{attachment.name}</span>
-      <button type="button" className="qtd-attachments__remove" aria-label={`Remove ${attachment.name}`} disabled={disabled} onClick={onRemove}>Remove</button>
+      <IconButton label={`Remove ${attachment.name}`} className="qtd-attachments__remove" disabled={disabled} onClick={onRemove}>×</IconButton>
     </span>
   )
 }
@@ -901,6 +923,7 @@ function SessionOption({ state, kind, onChange }: {
   kind: 'model' | 'effort' | 'permission'
   onChange(kind: 'model' | 'effort' | 'permission', event: ChangeEvent<HTMLSelectElement>): void
 }) {
+  const id = useId()
   const labels = { model: 'Model', effort: 'Effort', permission: 'Permission' }
   const current = state?.options[kind] ?? ''
   const choices = state?.options.choices[kind] ?? []
@@ -911,13 +934,14 @@ function SessionOption({ state, kind, onChange }: {
       ? `${labels[kind]} ${current} is reported but is not in the advertised session choices.`
       : undefined
   return (
-    <label className="qtd-control-option">
-      <span>{labels[kind]}</span>
-      <select aria-label={labels[kind]} aria-description={description} title={description} value={current} disabled={disabled} onChange={(event) => onChange(kind, event)}>
-        {current === '' && <option value="">Not reported</option>}
-        {current !== '' && !choices.includes(current) && <option value={current}>{current} (current)</option>}
-        {choices.map((choice) => <option key={choice} value={choice}>{choice}</option>)}
-      </select>
-    </label>
+    <div className="qtd-control-option">
+      <FormRow label={labels[kind]} htmlFor={`${id}-${kind}`}>
+        <select className="ui-text-field__input qtd-option-select" aria-label={labels[kind]} aria-description={description} title={description} value={current} disabled={disabled} onChange={(event) => onChange(kind, event)}>
+          {current === '' && <option value="">Not reported</option>}
+          {current !== '' && !choices.includes(current) && <option value={current}>{current} (current)</option>}
+          {choices.map((choice) => <option key={choice} value={choice}>{choice}</option>)}
+        </select>
+      </FormRow>
+    </div>
   )
 }
