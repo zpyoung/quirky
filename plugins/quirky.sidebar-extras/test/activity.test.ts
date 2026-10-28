@@ -100,7 +100,7 @@ describe('workspace activity projection', () => {
     })
   })
 
-  test('uses maximum activity and departure recency before creation and repository fallbacks', async () => {
+  test('keeps workspaces at the inclusive cutoff for every activity window', async () => {
     env = await boot()
     const currentEnv = env
     const testClock = fakeClock(BASE)
@@ -108,63 +108,115 @@ describe('workspace activity projection', () => {
 
     await testClock.run(async () => {
       const project = await createGitProject(currentEnv.client)
-      const feature = await createWorktree(currentEnv.client, project.repo.id, 'visited')
+      const feature = await createWorktree(currentEnv.client, project.repo.id, 'window-boundary')
       const initial = await extras<ActivityProjection>(currentEnv.client, 'projection')
-      const initialWorktrees = await call<{ id: string; createdAt: number; lastActivityAt: number }[]>(
-        currentEnv.client,
-        'quirky.worktree/list'
-      )
-      const initialRepo = (await call<{ id: string; addedAt: number }[]>(currentEnv.client, 'quirky.repo/list'))
-        .find((repo) => repo.id === project.repo.id)!
-      const initialFeature = initialWorktrees.find((item) => item.id === feature.id)!
-      expect(row(initial, feature.id).activityAt).toBe(Math.max(
-        initialFeature.lastActivityAt,
-        initialFeature.createdAt,
-        initialRepo.addedAt
-      ))
+      const activityAt = row(initial, feature.id).activityAt
+      expect(activityAt).toBeGreaterThan(0)
 
-      await extras(currentEnv.client, 'activate', { worktree: project.main.id })
-      testClock.set(BASE + 10)
-      await extras(currentEnv.client, 'activate', { worktree: feature.id })
-      testClock.set(BASE + 20)
-      await extras(currentEnv.client, 'activate', { worktree: null })
-      testClock.set(BASE + 30)
-      const session = await call<{ worktreeId: string; lastActivityAt: number }>(
-        currentEnv.client,
-        'quirky.session/create',
-        { worktree: `id:${project.main.id}`, agent: 'shell' }
-      )
+      const windows = [
+        { window: 'today', days: 1 },
+        { window: 'custom', days: 4 },
+        { window: 'week', days: 7 },
+        { window: 'month', days: 30 }
+      ] as const
+      for (const { window, days } of windows) {
+        await extras(currentEnv.client, 'set', {
+          workspaceActivityWindow: window,
+          ...(window === 'custom' ? { workspaceActivityCustomDays: days } : {})
+        })
+        testClock.set(activityAt + days * DAY)
+        const onBoundary = await extras<ActivityProjection>(currentEnv.client, 'projection')
+        expect(onBoundary.visibleIds).toContain(feature.id)
+        expect(row(onBoundary, feature.id).reason).toBe('recent')
 
-      const state = await extras<ExtrasState>(currentEnv.client, 'state')
-      const worktrees = await call<{ id: string; instanceId: string; repoId: string; createdAt: number; lastActivityAt: number }[]>(
-        currentEnv.client,
-        'quirky.worktree/list'
-      )
-      const sessions = await call<{ worktreeId: string; lastActivityAt: number }[]>(currentEnv.client, 'quirky.session/list')
-      const repos = await call<{ id: string; addedAt: number }[]>(currentEnv.client, 'quirky.repo/list')
-      const projection = await extras<ActivityProjection>(currentEnv.client, 'projection')
-      const featureStored = worktrees.find((item) => item.id === feature.id)!
-      const mainStored = worktrees.find((item) => item.id === project.main.id)!
-      const visitKey = `${feature.id}@${feature.instanceId}`
-      expect(row(projection, feature.id).activityAt).toBe(Math.max(
-        featureStored.lastActivityAt,
-        state.visits[visitKey] ?? 0,
-        state.exits[visitKey] ?? 0,
-        featureStored.createdAt,
-        repos.find((repo) => repo.id === featureStored.repoId)!.addedAt
-      ))
-      expect(row(projection, feature.id).activityAt).toBe(state.exits[visitKey])
-      expect(row(projection, project.main.id).activityAt).toBe(Math.max(
-        mainStored.lastActivityAt,
-        Math.max(...sessions.filter((item) => item.worktreeId === project.main.id).map((item) => item.lastActivityAt)),
-        state.visits[`${project.main.id}@${mainStored.instanceId}`] ?? 0,
-        state.exits[`${project.main.id}@${mainStored.instanceId}`] ?? 0,
-        mainStored.createdAt,
-        repos.find((repo) => repo.id === mainStored.repoId)!.addedAt
-      ))
-      expect(row(projection, project.main.id).activityAt).toBe(session.lastActivityAt)
+        testClock.set(activityAt + days * DAY + 1)
+        const oneMillisecondPast = await extras<ActivityProjection>(currentEnv.client, 'projection')
+        expect(oneMillisecondPast.hiddenIds).toContain(feature.id)
+        expect(row(oneMillisecondPast, feature.id).reason).toBe('old')
+      }
     })
   })
+  test('keeps old workspaces hidden when positive visit activity precedes newer fallbacks', async () => {
+    env = await boot()
+    const currentEnv = env
+    const testClock = fakeClock(BASE)
+    clock = testClock
+
+    await testClock.run(async () => {
+      const project = await createGitProject(currentEnv.client)
+      const visited = await createWorktree(currentEnv.client, project.repo.id, 'visited-before-fallbacks')
+      const creationOnly = await createWorktree(currentEnv.client, project.repo.id, 'creation-fallback')
+      const repositoryOnly = await createWorktree(currentEnv.client, project.repo.id, 'repository-fallback')
+
+      const activated = await extras<ExtrasState>(currentEnv.client, 'activate', { worktree: visited.id })
+      const visitKey = `${visited.id}@${activated.active!.instanceId}`
+      testClock.set(BASE + 10)
+      const departed = await extras<ExtrasState>(currentEnv.client, 'activate', { worktree: null })
+      const visitAt = departed.visits[visitKey]
+      const departureAt = departed.exits[visitKey]
+      expect(departureAt).toBeGreaterThan(visitAt)
+
+      const repoAddedAt = BASE + 3 * DAY
+      const visitedCreatedAt = BASE + 5 * DAY
+      const creationOnlyAt = BASE + 6 * DAY
+      expect(repoAddedAt).toBeGreaterThan(departureAt)
+      expect(visitedCreatedAt).toBeGreaterThan(departureAt)
+      const worktreeStore = new Database(join(currentEnv.harness.home, 'plugin-data', 'quirky.worktree', 'store.db'))
+      const repoStore = new Database(join(currentEnv.harness.home, 'plugin-data', 'quirky.repo', 'store.db'))
+      try {
+        worktreeStore.query('UPDATE worktrees SET created_at = ?, last_activity_at = 0 WHERE id = ?')
+          .run(visitedCreatedAt, visited.id)
+        worktreeStore.query('UPDATE worktrees SET created_at = ?, last_activity_at = 0 WHERE id = ?')
+          .run(creationOnlyAt, creationOnly.id)
+        worktreeStore.query('UPDATE worktrees SET created_at = 0, last_activity_at = 0 WHERE id = ?')
+          .run(repositoryOnly.id)
+        repoStore.query('UPDATE repos SET added_at = ? WHERE id = ?').run(repoAddedAt, project.repo.id)
+      } finally {
+        worktreeStore.close()
+        repoStore.close()
+      }
+
+      const worktrees = await call<{ id: string; createdAt: number; lastActivityAt: number }[]>(
+        currentEnv.client,
+        'quirky.worktree/list'
+      )
+      const repository = (await call<{ id: string; addedAt: number }[]>(currentEnv.client, 'quirky.repo/list'))
+        .find((repo) => repo.id === project.repo.id)!
+      expect(worktrees.find((worktree) => worktree.id === visited.id)).toMatchObject({
+        createdAt: visitedCreatedAt,
+        lastActivityAt: 0
+      })
+      expect(worktrees.find((worktree) => worktree.id === creationOnly.id)).toMatchObject({
+        createdAt: creationOnlyAt,
+        lastActivityAt: 0
+      })
+      expect(worktrees.find((worktree) => worktree.id === repositoryOnly.id)).toMatchObject({
+        createdAt: 0,
+        lastActivityAt: 0
+      })
+      expect(repository.addedAt).toBe(repoAddedAt)
+
+      await extras(currentEnv.client, 'set', { workspaceActivityWindow: 'today' })
+      testClock.set(departureAt + DAY + 1)
+      const oldVisited = await extras<ActivityProjection>(currentEnv.client, 'projection')
+      expect(row(oldVisited, visited.id).activityAt).toBe(departureAt)
+      expect(oldVisited.hiddenIds).toContain(visited.id)
+      expect(row(oldVisited, visited.id).reason).toBe('old')
+
+      testClock.set(repoAddedAt + DAY + 1)
+      const oldRepositoryFallback = await extras<ActivityProjection>(currentEnv.client, 'projection')
+      expect(row(oldRepositoryFallback, repositoryOnly.id).activityAt).toBe(repoAddedAt)
+      expect(oldRepositoryFallback.hiddenIds).toContain(repositoryOnly.id)
+      expect(row(oldRepositoryFallback, repositoryOnly.id).reason).toBe('old')
+
+      testClock.set(creationOnlyAt + DAY + 1)
+      const oldCreationFallback = await extras<ActivityProjection>(currentEnv.client, 'projection')
+      expect(row(oldCreationFallback, creationOnly.id).activityAt).toBe(creationOnlyAt)
+      expect(oldCreationFallback.hiddenIds).toContain(creationOnly.id)
+      expect(row(oldCreationFallback, creationOnly.id).reason).toBe('old')
+    })
+  })
+
 
   test('uses live runtime facts conservatively and keeps folder workspaces outside the sleeping sweep', async () => {
     env = await boot()
@@ -179,6 +231,7 @@ describe('workspace activity projection', () => {
     expect(liveOnly.hiddenIds).toContain(sleeping.id)
     expect(row(liveOnly, project.main.id)).toMatchObject({ live: false, reason: 'main' })
     expect(row(liveOnly, sleeping.id)).toMatchObject({ live: false, reason: 'sleeping' })
+    expect(row(liveOnly, sleeping.id).error).toBeUndefined()
     expect(row(liveOnly, folder.primary.id).reason).toBe('folder')
     expect(liveOnly.hiddenCount).toBe(1)
 
@@ -194,6 +247,41 @@ describe('workspace activity projection', () => {
     expect(unavailable.visibleIds).toContain(folder.primary.id)
     expect(row(unavailable, folder.primary.id).reason).toBe('folder')
   })
+  test('treats a missing optional session-list contribution as absent runtime evidence', async () => {
+    env = await boot()
+    const project = await createGitProject(env.client)
+    const sleeping = await createWorktree(env.client, project.repo.id, 'session-list-absent')
+    await extras(env.client, 'set', { workspaceActivityWindow: 'live-only' })
+    await call(env.client, 'plugin.disable', { id: 'method:quirky.session/list' })
+
+    const projection = await extras<ActivityProjection>(env.client, 'projection')
+    expect(projection.hiddenIds).toContain(sleeping.id)
+    expect(row(projection, sleeping.id)).toMatchObject({ live: false, reason: 'sleeping' })
+    expect(row(projection, sleeping.id).error).toBeUndefined()
+  })
+
+  test('keeps non-main workspaces visible when the enabled session provider fails', async () => {
+    env = await boot()
+    const project = await createGitProject(env.client)
+    const sleeping = await createWorktree(env.client, project.repo.id, 'session-list-failed')
+    await extras(env.client, 'set', { workspaceActivityWindow: 'live-only' })
+
+    const sessionStore = new Database(join(env.harness.home, 'plugin-data', 'quirky.session', 'store.db'))
+    try {
+      sessionStore.query('DROP TABLE sessions').run()
+    } finally {
+      sessionStore.close()
+    }
+
+    const projection = await extras<ActivityProjection>(env.client, 'projection')
+    expect(projection.visibleIds).toContain(sleeping.id)
+    expect(row(projection, sleeping.id)).toMatchObject({
+      live: null,
+      reason: 'unknown',
+      error: expect.stringContaining('no such table: sessions')
+    })
+  })
+
   test('counts only fresh canonical agent evidence when terminal liveness is unavailable', async () => {
     env = await boot({ agentStatus: true })
     const project = await createGitProject(env.client)
@@ -212,11 +300,13 @@ describe('workspace activity projection', () => {
     }, 5_000)
     expect(status).toMatchObject({ state: 'working', display: 'working', evidenceAt: expect.any(Number) })
     env.harness.pty.sessions.delete(session.id)
+    env.harness.pty.failRequests('list', 'PTY runtime provider unavailable')
 
     await extras(env.client, 'set', { workspaceActivityWindow: 'live-only' })
     const fresh = await extras<ActivityProjection>(env.client, 'projection')
     expect(fresh.visibleIds).toContain(feature.id)
     expect(row(fresh, feature.id)).toMatchObject({ live: true, reason: 'live' })
+    env.harness.pty.failRequests('list', null)
 
     const statusStore = new Database(join(env.harness.home, 'plugin-data', 'quirky.agent-status', 'store.db'))
     try {
@@ -243,6 +333,21 @@ describe('workspace activity projection', () => {
       reason: 'unknown',
       error: expect.stringContaining('PTY runtime provider unavailable')
     })
+    env.harness.pty.failRequests('list', null)
+    const failedStatusStore = new Database(join(env.harness.home, 'plugin-data', 'quirky.agent-status', 'store.db'))
+    try {
+      failedStatusStore.query('DROP TABLE rows').run()
+    } finally {
+      failedStatusStore.close()
+    }
+    const failedAgentProvider = await extras<ActivityProjection>(env.client, 'projection')
+    expect(failedAgentProvider.visibleIds).toContain(feature.id)
+    expect(row(failedAgentProvider, feature.id)).toMatchObject({
+      live: null,
+      reason: 'unknown',
+      error: expect.stringContaining('no such table: rows')
+    })
+
   })
 
 
