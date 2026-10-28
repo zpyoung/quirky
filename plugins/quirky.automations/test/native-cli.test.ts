@@ -239,6 +239,7 @@ test('real CLI and daemon automate native Codex runs, reuse, failures, schedulin
       async () => existsSync(runtimePath) ? runtimeInfo(parseJson(readFileSync(runtimePath, 'utf8'), 'daemon runtime')) : null,
       (value): value is RuntimeInfo => value !== null
     )
+    if (runtime === null) throw new Error('Daemon runtime was not published')
     client = await QuirkyClient.connect(rpcUrl(runtime), { role: 'cli' })
 
     const projectLocation = join(home, 'projects')

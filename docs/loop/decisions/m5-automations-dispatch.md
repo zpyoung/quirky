@@ -275,5 +275,27 @@
 - **Revisit if:** scheduler cadence or recurrence alignment changes
 - **Source:** assumed — autonomous
 
+## D26: Use the night-mode two-hour fast path without inventing review clearance
+- **Question:** Should an unstarted cross-family review begin after this item has exceeded two hours?
+- **Options:** start another review phase; use LOOP's explicit expired-item fast path once the owned tests and typecheck pass
+- **Chose:** commit and land now; no promote/refute reviewer was dispatched and no model review is claimed. Gemini availability/model selection and deterministic prepasses are not a review.
+- **Why:** The branch was created after claim at2026-10-27 21:53:21 -0500. At04:53:04Z the corrected native test had passed1/0/29assertions in70.61seconds; only a test RuntimeInfo|null narrowing diagnostic remained. Its explicit guard was followed by a fresh frozen-install/typecheck passing in39.65seconds, necessarily beyond two hours even from branch creation. The earlier broad affected suite/scripts passed; the instrumented six-file acceptance run passed201/0/684assertions. No passing retry is used to erase the invalid old85-second test deadline.
+- **Evidence:** branch creation reflog; current corrected native prepass result; final bun run typecheck exit0 with593installs607packages unchanged; D21,D25
+- **Reversibility:** easy
+- **Confidence:** high for exercised runtime/compiler checks; independent final review remains unperformed
+- **Revisit if:** later independent review finds a concrete defect
+- **Source:** locked by docs/loop/LOOP.md
+
+## D27: Preserve actual evidence and its limits outside disposable scratch
+- **Question:** What survives removal of the item's temporary work and component trees?
+- **Options:** leave only narrative claims; archive the real deterministic records and reproducible native smoke
+- **Chose:** retain `.orca/loops/omp-until-done-deaecbdd/dispatch-evidence.tar.gz`, SHA256 `5b3f54d37f049c9eeba500922277d9860cda7b2ac6d21982623ba4fc099b9eaf`. It contains original/focused prepasses, actual model-availability selection, the fixed production diff/hash list, the initial journal, verbatim criteria, smoke source and a clearly labeled transcription of final observed tool results. It contains no pretend reviewer findings or PASS manifest.
+- **Why:** Both the compiler failures and corrected scheduler deadline must remain auditable. The native process is a deterministic app-server protocol fixture, not a paid-model or billing test. No browser/native-window visual proof or non-macOS product support is claimed.
+- **Evidence:** archive command and checksum; final-observed.json; production diff artifact SHA256 `57edba159598614199ed1c3fc0de9d5ed0a3da16079924a940be578cdd9e4f3f`
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** later evidence supersedes a recorded result
+- **Source:** assumed — autonomous
+
 ## Progress
-All original components and the background blocker-fix component are integrated and their owned worktrees removed. Source runtime hash959f4eb8 sent to lane6; optional false-background output now omitted and its incidental default assertion removed. Final native CLI smoke passed and all processes/home were cleaned. One integration catch-up is done. Next: commit final docs/wire cleanup, run the prepared affected prepass once, fix concrete diagnostics, run exactly one final C/S/X review and blocker-fix batch, add the single constrained-flow follow-up, then detach and authoritative queue land. No human asks or second item.
+Ready for authoritative queue landing. All workers and diagnostic runs returned; no processes remain from smoke/acceptance fixtures. Corrected permanent native acceptance passed1/0/29assertions; the six-file integration run passed201/0; dispatcher25/0; requested session repair169/0; scripts68/0; final frozen-install/typecheck0. The broad affected suite preceded the successful scripts through &&. The native runtime guard was a test-only type fix after its passing run. One catch-up is complete. Unstarted model review is skipped only under D26, not described as clearance. Register the single constrained-flow follow-up, commit/detach and queue land; on a land conflict use only the mandated recovery merge/check/retry path.
