@@ -60,13 +60,13 @@ function isPlainRecord(value: unknown): value is Record<string, unknown> {
   return prototype === Object.prototype || prototype === null
 }
 
-function validTree(value: unknown, depth = 0): boolean {
+function validTree(value: unknown, depth = 0, rejectIdentityFields = true): boolean {
   if (depth > 8) return false
   if (typeof value === 'string') return utf8ByteLength(value) <= MAX_TEXT_BYTES
-  if (Array.isArray(value)) return value.length <= 2048 && value.every((item) => validTree(item, depth + 1))
+  if (Array.isArray(value)) return value.length <= 2048 && value.every((item) => validTree(item, depth + 1, rejectIdentityFields))
   if (isPlainRecord(value)) {
     const keys = Object.keys(value)
-    return keys.length <= 256 && keys.every((key) => !Object.hasOwn(FORBIDDEN_FIELDS, key) && validTree(value[key], depth + 1))
+    return keys.length <= 256 && keys.every((key) => (!rejectIdentityFields || !Object.hasOwn(FORBIDDEN_FIELDS, key)) && validTree(value[key], depth + 1, rejectIdentityFields))
   }
   return value === null || typeof value === 'boolean' || (typeof value === 'number' && Number.isFinite(value))
 }
@@ -96,7 +96,9 @@ function validPageSpecificParams(method: string, params: Record<string, unknown>
   if (method === 'quirky.session/setName') return boundedString(params, 'session') && typeof params.name === 'string' && params.name.length <= 128
   if (method === 'quirky.session/close' || method === 'quirky.terminal/describeClose' || method === 'quirky.terminal/clear' || method === 'quirky.terminal/snapshot' || method === 'quirky.terminal/mobileState') return boundedString(params, 'session')
   if (method === 'quirky.ask/list') return typeof params.pendingOnly === 'boolean'
-  if (method === 'quirky.ask/answer') return boundedString(params, 'askId') && isPlainRecord(params.answers) && Object.keys(params.answers).length <= 100 && (params.skipped === undefined || typeof params.skipped === 'boolean')
+  if (method === 'quirky.ask/answer') return boundedString(params, 'askId') && isPlainRecord(params.answers) && Object.keys(params.answers).length <= 100 &&
+    (params.skipped === undefined || (Array.isArray(params.skipped) && params.skipped.length <= 100 &&
+      params.skipped.every((id) => typeof id === 'string' && id.length > 0 && id.length <= 1024)))
   if (method === 'quirky.terminal/attach') return boundedString(params, 'session') && viewport(params) && (params.historyLines === undefined || (Number.isSafeInteger(params.historyLines) && (params.historyLines as number) >= 0 && (params.historyLines as number) <= 10000))
   if (method === 'quirky.terminal/detach') return Number.isSafeInteger(params.streamId) && (params.streamId as number) > 0
   if (method === 'quirky.terminal/claim' || method === 'quirky.terminal/resize') return boundedString(params, 'session') && viewport(params)
@@ -115,7 +117,7 @@ export function validatePageRpc(method: unknown, params: unknown, grants: readon
   if (typeof method !== 'string' || !Object.hasOwn(PAGE_METHOD_PARAMS, method)) throw new Error('Quirky method is unavailable to page apps')
   if (!grants.includes('rpc')) throw new Error('page route does not have the rpc grant')
   if (method.startsWith('quirky.terminal/') && !grants.includes('terminal')) throw new Error('page route does not have the terminal grant')
-  if (!isPlainRecord(params) || !validTree(params) || Object.keys(params).some((key) => !PAGE_METHOD_PARAMS[method]!.includes(key)) || !validPageSpecificParams(method, params)) {
+  if (!isPlainRecord(params) || !validTree(params, 0, false) || Object.keys(params).some((key) => !PAGE_METHOD_PARAMS[method]!.includes(key)) || !validPageSpecificParams(method, params)) {
     throw new Error('page RPC parameters are invalid')
   }
   const serialized = JSON.stringify({ method, params })

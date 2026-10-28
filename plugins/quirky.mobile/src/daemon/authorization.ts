@@ -23,12 +23,20 @@ const PARAMS: Readonly<Record<string, readonly string[]>> = {
   'quirky.worktree/remove': ['worktree', 'yes'],
   'quirky.worktree/set': ['worktree', 'pinned', 'expectedInstanceId'],
   'quirky.session/list': ['worktree'],
-  'quirky.session/create': ['worktree', 'agent', 'cols', 'rows'],
+  'quirky.session/get': ['session'],
+  'quirky.session/resume': ['session', 'fork'],
+  'quirky.session/restore': ['session'],
+  'quirky.session/create': ['worktree', 'agent', 'prompt', 'submitPrompt', 'waitForPrompt', 'title', 'name', 'cols', 'rows'],
   'quirky.session/setName': ['session', 'name'],
   'quirky.session/close': ['session'],
+  'quirky.agent-status/list': ['worktree'],
+  'quirky.agent-status/get': ['session', 'at'],
+  'quirky.agent-status/explain': ['session', 'at'],
+  'quirky.agent-status/wait': ['session', 'until', 'timeoutMs'],
+  'quirky.agent-status/waitOutput': ['session', 'pattern', 'ignoreCase', 'lines', 'timeoutMs'],
   'quirky.ask/list': ['pendingOnly'],
   'quirky.ask/answer': ['askId', 'answers', 'skipped'],
-  'quirky.terminal/attach': ['session', 'cols', 'rows', 'historyLines'],
+  'quirky.terminal/attach': ['session', 'cols', 'rows', 'historyLines', 'claim'],
   'quirky.terminal/detach': ['streamId'],
   'quirky.terminal/describeClose': ['session'],
   'quirky.terminal/clear': ['session'],
@@ -37,9 +45,10 @@ const PARAMS: Readonly<Record<string, readonly string[]>> = {
   'quirky.terminal/claim': ['session', 'cols', 'rows'],
   'quirky.terminal/read': ['session', 'lines'],
   'quirky.terminal/snapshot': ['session'],
+  'quirky.terminal/history': ['session', 'lines', 'before', 'format'],
   'quirky.terminal/write': ['session', 'data'],
   'quirky.terminal/send': ['session', 'text', 'enter'],
-  'quirky.terminal/resize': ['session', 'cols', 'rows']
+  'quirky.terminal/resize': ['session', 'cols', 'rows', 'claim']
 }
 
 const FORBIDDEN_KEYS: Readonly<Record<string, true>> = {
@@ -137,24 +146,46 @@ function checkMethodSpecific(method: string, params: Record<string, unknown>): v
   }
   if (method === 'quirky.session/list' && params.worktree !== undefined && !boundedString(params.worktree)) throw new MobileAuthorizationError('invalid mobile worktree selector')
   if (method === 'quirky.session/create' &&
-    (!boundedString(params.worktree) || !boundedString(params.agent) || !validViewport(params))) {
-    throw new MobileAuthorizationError('invalid mobile session creation parameters')
+    ((params.cols !== undefined && (!Number.isInteger(params.cols) || (params.cols as number) < 1 || (params.cols as number) > 1000)) ||
+      (params.rows !== undefined && (!Number.isInteger(params.rows) || (params.rows as number) < 1 || (params.rows as number) > 500)))) {
+    throw new MobileAuthorizationError('invalid mobile session dimensions')
   }
   if (method === 'quirky.session/setName' &&
-    (!boundedString(params.session) || typeof params.name !== 'string' || params.name.length > 128)) {
+    (!boundedString(params.session) || (params.name !== null && (typeof params.name !== 'string' || params.name.length > 128)))) {
     throw new MobileAuthorizationError('invalid mobile session name')
   }
   if (method === 'quirky.session/close' || method === 'quirky.terminal/describeClose' ||
-    method === 'quirky.terminal/clear' || method === 'quirky.terminal/mobileState' ||
-    method === 'quirky.terminal/snapshot') {
+    method === 'quirky.terminal/clear' || method === 'quirky.terminal/snapshot') {
     if (!boundedString(params.session)) throw new MobileAuthorizationError('invalid mobile terminal session')
   }
-  if (method === 'quirky.ask/list' && typeof params.pendingOnly !== 'boolean') throw new MobileAuthorizationError('pendingOnly must be boolean')
+  if (method === 'quirky.terminal/mobileState' && params.session !== undefined && !boundedString(params.session)) {
+    throw new MobileAuthorizationError('invalid mobile terminal session')
+  }
+  if (method === 'quirky.ask/list' && params.pendingOnly !== undefined && typeof params.pendingOnly !== 'boolean') throw new MobileAuthorizationError('pendingOnly must be boolean')
   if (method === 'quirky.ask/answer' &&
     (!boundedString(params.askId) || !isPlainRecord(params.answers) || Object.keys(params.answers).length > 100 ||
-      (params.skipped !== undefined && typeof params.skipped !== 'boolean'))) {
+      (params.skipped !== undefined && (!Array.isArray(params.skipped) || params.skipped.length > 100 || params.skipped.some((id) => !boundedString(id)))))) {
     throw new MobileAuthorizationError('invalid ask answer map')
   }
+  if (method === 'quirky.agent-status/wait' && params.timeoutMs !== undefined &&
+    (!Number.isInteger(params.timeoutMs) || (params.timeoutMs as number) < 0 || (params.timeoutMs as number) > 60_000)) {
+    throw new MobileAuthorizationError('invalid mobile wait timeout')
+  }
+  if (method === 'quirky.agent-status/waitOutput') {
+    if (typeof params.pattern !== 'string' || params.pattern.length > 256 ||
+      /\([^)]*[+*][^)]*\)[+*{]/.test(params.pattern) || /(?:\.\*|\.\+){2}/.test(params.pattern)) {
+      throw new MobileAuthorizationError('unsafe mobile regular expression')
+    }
+    if (params.timeoutMs !== undefined &&
+      (!Number.isInteger(params.timeoutMs) || (params.timeoutMs as number) < 0 || (params.timeoutMs as number) > 60_000)) {
+      throw new MobileAuthorizationError('invalid mobile wait timeout')
+    }
+    if (params.lines !== undefined && (!Number.isInteger(params.lines) || (params.lines as number) < 0 || (params.lines as number) > 2000)) {
+      throw new MobileAuthorizationError('invalid mobile output line limit')
+    }
+  }
+  if ((method === 'quirky.terminal/attach' || method === 'quirky.terminal/resize') &&
+    params.claim !== undefined && typeof params.claim !== 'boolean') throw new MobileAuthorizationError('claim must be boolean')
   if (method === 'quirky.terminal/attach' &&
     (!boundedString(params.session) || !validViewport(params) ||
       (params.historyLines !== undefined && (!Number.isInteger(params.historyLines) || (params.historyLines as number) < 0 || (params.historyLines as number) > 10000)))) {

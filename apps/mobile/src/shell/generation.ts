@@ -234,6 +234,12 @@ export async function createGenerationStore(fs: BundleFileSystem, root: string, 
     return highest
   }
 
+  async function touch(hostId: string, at: number): Promise<void> {
+    const hostPath = await hostDirectory(hostId)
+    await fs.createDirectory(hostPath)
+    await fs.writeFile(joinPath(hostPath, 'host.json'), encodeUtf8(JSON.stringify({ hostId, lastUsedAt: at })))
+  }
+
   return {
     async getActive(hostId) {
       const hostPath = await hostDirectory(hostId)
@@ -245,7 +251,7 @@ export async function createGenerationStore(fs: BundleFileSystem, root: string, 
           const installed = await verifyGeneration(hostPath, value.generationKey, value.buildId)
           if (installed) {
             const active = { ...installed, activatedAt: value.activatedAt as number }
-            await this.touch(hostId, now())
+            await touch(hostId, now())
             return active
           }
         } catch {
@@ -320,11 +326,7 @@ export async function createGenerationStore(fs: BundleFileSystem, root: string, 
       }
     },
 
-    async touch(hostId, at) {
-      const hostPath = await hostDirectory(hostId)
-      await fs.createDirectory(hostPath)
-      await fs.writeFile(joinPath(hostPath, 'host.json'), encodeUtf8(JSON.stringify({ hostId, lastUsedAt: at })))
-    },
+    touch,
 
     async pruneHosts(keepHostId, maxHosts) {
       if (!Number.isSafeInteger(maxHosts) || maxHosts < 1) throw new Error('mobile cache host limit is invalid')

@@ -6,7 +6,6 @@
   "main": "main.ts",
   "ui": "dist/ui.js",
   "cli": "cli.ts",
-  "staticAssets": ["assets/mobile"],
   "activation": "startup",
   "contributes": {
     "method": [

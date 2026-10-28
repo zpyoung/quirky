@@ -289,7 +289,7 @@ export type PluginCaller =
       sessionId?: string
       worktreeId?: string
       sessionAuthority?: PluginSessionAuthority
-      /** Set only for `connection: true` methods. */
+      /** Set for `connection: true` methods and authenticated mobile callers bound to a live transport. */
       connection?: CallerConnection
     }
   | { role: 'plugin'; pluginId: string }

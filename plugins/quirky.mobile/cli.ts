@@ -25,7 +25,7 @@ function bundleReadArgs(args: CliArgs, context: CliContext, withGzip: boolean): 
   }
 }
 
-const named: CliModule['commands'] = {
+export const commands: CliModule['commands'] = {
   async info(args, context) {
     noArgs(args, context)
     const value = await context.call('quirky.mobile/info', {})
@@ -91,21 +91,21 @@ const named: CliModule['commands'] = {
     })
     context.out.result(value, () => JSON.stringify(value, null, 2))
   },
-  async bundleManifest(args, context) {
+  async 'bundle-manifest'(args, context) {
     noArgs(args, context)
     const value = await context.call('quirky.mobile/bundleManifest', {})
     context.out.result(value, () => JSON.stringify(value, null, 2))
   },
-  async agentCatalog(args, context) {
+  async 'agent-catalog'(args, context) {
     noArgs(args, context)
     const value = await context.call('quirky.mobile/agentCatalog', {})
     context.out.result(value, () => JSON.stringify(value, null, 2))
   },
-  async bundleChunk(args, context) {
+  async 'bundle-chunk'(args, context) {
     const value = await context.call('quirky.mobile/bundleChunk', bundleReadArgs(args, context, false))
     context.out.result(value, () => JSON.stringify(value, null, 2))
   },
-  async bundleRange(args, context) {
+  async 'bundle-range'(args, context) {
     const value = await context.call('quirky.mobile/bundleRange', bundleReadArgs(args, context, true))
     context.out.result(value, () => JSON.stringify(value, null, 2))
   },
@@ -115,15 +115,9 @@ const named: CliModule['commands'] = {
     const value = await context.call('quirky.mobile/open', { ...(args.flags.settings === undefined ? {} : { settings: args.flags.settings }) })
     context.out.result(value, () => 'opened Mobile')
   },
-  async openSettings(args, context) {
+  async 'open-settings'(args, context) {
     noArgs(args, context)
     const value = await context.call('quirky.mobile/open', { settings: true })
     context.out.result(value, () => 'opened Mobile settings')
   }
-}
-
-/** CLI names and method aliases share the same implementation. */
-export const commands: CliModule['commands'] = {
-  ...named,
-  ...Object.fromEntries(Object.entries(named).map(([name, run]) => [`cli-command:quirky.mobile/${name.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`)}`, run]))
 }

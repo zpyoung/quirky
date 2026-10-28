@@ -108,7 +108,7 @@ function checkJsonTree(value: unknown, depth = 0): void {
   }
   if (!isPlainRecord(value) || Object.keys(value).length > 256) throw new MobileRpcError('params', 'RPC parameters must be plain JSON objects')
   for (const [key, item] of Object.entries(value)) {
-    if (Object.hasOwn(FORBIDDEN_PARAM_KEYS, key)) throw new MobileRpcError('params', 'RPC parameters cannot supply caller or credential identity')
+    if (Object.hasOwn(FORBIDDEN_PARAM_KEYS, key) && depth === 0) throw new MobileRpcError('params', 'RPC parameters cannot supply caller or credential identity')
     if (key.length > 256) throw new MobileRpcError('params', 'RPC parameter name is too large')
     checkJsonTree(item, depth + 1)
   }
@@ -214,8 +214,11 @@ class MobileRpcClient implements MobileRpc {
     this.socket = socket
     socket.binaryType = 'arraybuffer'
     const opened = deferred<void>()
-    this.readyGate = deferred<void>()
-    this.pairingProof = deferred<void>()
+    const readyGate = this.readyGate = deferred<void>()
+    const pairingProof = this.pairingProof = deferred<void>()
+    // Either handshake gate can be rejected before its sequential await is active.
+    void readyGate.promise.catch(() => {})
+    void pairingProof.promise.catch(() => {})
     const timeoutError = new MobileRpcError('timeout', 'Desktop connection timed out')
     const openTimer = setTimeout(() => opened.reject(timeoutError), connectTimeoutMs)
     let handshakeTimer: ReturnType<typeof setTimeout> | undefined
@@ -257,7 +260,8 @@ class MobileRpcClient implements MobileRpc {
       }, handshakeTimeoutMs)
       socket.send(JSON.stringify(hello))
       await Promise.race([this.readyGate.promise, this.aborted.promise])
-      await Promise.race([this.pairingProof.promise, this.aborted.promise])
+      await Promise.race([pairingProof.promise, this.aborted.promise])
+      if (this.stopped) throw new MobileRpcError('closed', 'Connection closed')
       this.authenticated = true
       this.setState({ phase: 'connected', attempts: 0, connectedAt: Date.now(), message: 'Encrypted direct connection' })
       this.touchActivity()
@@ -420,6 +424,22 @@ class MobileRpcClient implements MobileRpc {
   private acceptText(text: string): void {
     let value: unknown
     try { value = JSON.parse(text) as unknown } catch { throw new MobileRpcError('protocol', 'Desktop sent invalid encrypted JSON') }
+    const proof = this.pairingProof
+    if (proof) {
+      if (isRecord(value) && exactKeys(value, ['type', 'v', 'transcriptHashB64']) &&
+        value.type === 'e2ee_authenticated' && value.v === 2 &&
+        this.schedule && value.transcriptHashB64 === encodeBase64(this.schedule.transcriptHash)) {
+        this.pairingProof = null
+        proof.resolve()
+        return
+      }
+      if (isRecord(value) && exactKeys(value, ['type', 'error']) && value.type === 'e2ee_error' &&
+        isRecord(value.error) && exactKeys(value.error, ['code']) &&
+        (value.error.code === 'bad_proof' || value.error.code === 'unauthorized' || value.error.code === 'registry_unavailable')) {
+        throw new MobileRpcError('auth-failed', 'Desktop rejected encrypted pairing')
+      }
+      throw new MobileRpcError('protocol', 'Desktop sent an invalid encrypted authentication response')
+    }
     if (!isRecord(value) || value.jsonrpc !== '2.0') throw new MobileRpcError('protocol', 'Desktop sent an invalid JSON-RPC message')
     if (Object.hasOwn(value, 'method')) {
       if (!exactKeys(value, ['jsonrpc', 'method', 'params']) || value.method !== 'event' ||

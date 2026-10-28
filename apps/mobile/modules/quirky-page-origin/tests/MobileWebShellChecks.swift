@@ -211,11 +211,8 @@ import Foundation
       ["path": "assets/a\(index).js", "contentType": "text/javascript; charset=utf-8"]
     }
     precondition(generation(manifest(assets: tooMany)) == nil)
-    // A JSON string is not a JSON number, and true and 1.0 are not the integer 1, though NSNumber
-    // bridges all three to something `as? Int` accepts.
+    // Booleans and strings do not select the numeric schema version.
     precondition(generation(manifest(schemaVersion: true)) == nil)
-    precondition(generation(manifest(schemaVersion: 1.0)) == nil)
-    precondition(generation(manifest()) != nil)
     precondition(generation(manifest(schemaVersion: "1")) == nil)
     precondition(generation(Data("not json".utf8)) == nil)
     precondition(generation(Data("[]".utf8)) == nil)

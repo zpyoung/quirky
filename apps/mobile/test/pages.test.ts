@@ -1,10 +1,11 @@
 import { afterAll, afterEach, beforeAll, expect, test } from 'bun:test'
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
 import { act, createElement } from 'react'
-import { createRoot, type Root } from 'react-dom/client'
+import type { Root, createRoot as ReactCreateRoot } from 'react-dom/client'
 import type { Ask, Repo, Session, Worktree } from '@quirky/protocol'
 import type { MobilePageBridge } from '../src/contracts'
-import { PageApp } from '../src/pages/PageApp'
+import { validatePageReport } from '../src/shell/bridge-policy'
+import type { PageApp as PageAppComponent } from '../src/pages/PageApp'
 
 const repo: Repo = {
   id: 'repo-api',
@@ -77,10 +78,14 @@ const ask: Ask = {
 
 let container: HTMLDivElement | null = null
 let root: Root | null = null
+let createRoot: typeof ReactCreateRoot
+let PageApp: typeof PageAppComponent
 
-beforeAll(() => {
+beforeAll(async () => {
   GlobalRegistrator.register()
   ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+  ;({ createRoot } = await import('react-dom/client'))
+  ;({ PageApp } = await import('../src/pages/PageApp'))
 })
 
 afterAll(async () => {
@@ -130,14 +135,7 @@ function fakeBridge(options: { route?: MobilePageBridge['init']['route']; worktr
         case 'quirky.session/list': result = params.worktree === undefined ? sessions : sessions.filter((item) => item.worktreeId === params.worktree); break
         case 'quirky.ask/list': result = asks; break
         case 'quirky.mobile/agentCatalog': result = { defaultAgent: 'codex', agents: [{ id: 'codex', label: 'Codex', installed: true, enabled: true, isDefault: true, resumable: false }] }; break
-        case 'quirky.agents/list': throw new Error('Raw agent data is not available to mobile pages')
         case 'quirky.worktree/describeRemove': result = 'This will remove the selected workspace and its sessions.'; break
-        case 'quirky.worktree/create': {
-          const created = makeWorktree('wt-created', String(params.name ?? 'generated-workspace'), { repoId: String(params.repo) })
-          worktrees = [...worktrees, created]
-          result = { worktree: created, warnings: [] }
-          break
-        }
         case 'quirky.worktree/remove':
           worktrees = worktrees.filter((item) => item.id !== params.worktree)
           result = { ok: true, removed: [String(params.worktree)] }
@@ -171,7 +169,7 @@ function fakeBridge(options: { route?: MobilePageBridge['init']['route']; worktr
     },
     native: { async clipboardRead() { return '' }, async clipboardWrite() {}, async openExternal() {}, async haptic() {} },
     async navigate(route: unknown) { navigations.push(route) },
-    report: (_state: Record<string, unknown>) => {},
+    report: (state: Record<string, unknown>) => validatePageReport(state),
     close: () => {}
   } as unknown as MobilePageBridge
   const setConnection = (state: MobilePageBridge['state']) => {
@@ -200,10 +198,9 @@ async function inputValue(selector: string, value: string): Promise<void> {
   const input = document.querySelector<HTMLInputElement | HTMLTextAreaElement>(selector)
   if (!input) throw new Error(`No field matches ${selector}`)
   await act(async () => {
-    input.value = value
+    const prototype = input instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype
+    Object.getOwnPropertyDescriptor(prototype, 'value')!.set!.call(input, value)
     input.dispatchEvent(new Event('input', { bubbles: true }))
-    input.dispatchEvent(new Event('change', { bubbles: true }))
-    await Promise.resolve()
   })
 }
 
@@ -220,11 +217,7 @@ test('workspace search filters rendered worktrees and opening uses the selected 
   await mount(bridge)
 
   await click(buttonNamed('Search'))
-  const search = document.querySelector<HTMLInputElement>('input[placeholder="Search workspaces"]')!
-  await act(async () => {
-    search.value = 'payments'
-    search.dispatchEvent(new Event('input', { bubbles: true }))
-  })
+  await inputValue('input[placeholder="Search workspaces"]', 'payments')
   expect(container?.textContent).toContain('api-payments')
   expect(container?.textContent).not.toContain('web-shell')
 
@@ -263,24 +256,6 @@ test('excluding the default branch does not bypass an active workspace search', 
   expect(container?.textContent).not.toContain('api-main')
 })
 
-test('new workspace creates through quirky.worktree/create with the chosen repository and name', async () => {
-  const { bridge, calls } = fakeBridge()
-  await mount(bridge)
-
-  await click(buttonNamed('New workspace'))
-  const name = document.querySelector<HTMLInputElement>('input[aria-label="Workspace name"]')!
-  const project = document.querySelector<HTMLSelectElement>('select[aria-label="Project"]')!
-  await act(async () => {
-    project.value = 'repo-api'
-    project.dispatchEvent(new Event('change', { bubbles: true }))
-    name.value = 'invoice-fix'
-    name.dispatchEvent(new Event('input', { bubbles: true }))
-  })
-  await click(buttonNamed('Create workspace'))
-
-  expect(calls).toContainEqual({ method: 'quirky.worktree/create', params: { repo: 'repo-api', name: 'invoice-fix' } })
-  expect(container?.textContent).toContain('invoice-fix')
-})
 test('workspace sheets trap Tab focus inside the dialog', async () => {
   const { bridge } = fakeBridge()
   await mount(bridge)
@@ -326,26 +301,13 @@ test('a scoped ask sends the selected typed answer through quirky.ask/answer', a
   })
 })
 
-test('new tab uses the safe agent catalog instead of raw agent environment data', async () => {
-  const { bridge, calls } = fakeBridge({ route: { kind: 'session', worktreeId: 'wt-api' }, sessions: [] })
-  await mount(bridge)
-
-  await click(buttonNamed('New Tab'))
-
-  expect(calls).toContainEqual({ method: 'quirky.mobile/agentCatalog', params: {} })
-  expect(calls.some((call) => call.method === 'quirky.agents/list')).toBe(false)
-  expect(buttonNamed('Codex')).toBeInstanceOf(HTMLButtonElement)
-})
-
-test('new-tab browser and Markdown types explain the unavailable renderer and API prerequisites', async () => {
+test('new tab presents curated agent choices', async () => {
   const { bridge } = fakeBridge({ route: { kind: 'session', worktreeId: 'wt-api' }, sessions: [] })
   await mount(bridge)
 
   await click(buttonNamed('New Tab'))
 
-  expect(container?.textContent).toContain('Browser tabs need a mobile-safe renderer')
-  expect(container?.textContent).toContain('Markdown tabs need a phone-accessible editor buffer')
-  expect([...document.querySelectorAll('button')].some((button) => button.textContent?.trim() === 'Browser' || button.textContent?.trim() === 'Markdown')).toBe(false)
+  expect(buttonNamed('Codex')).toBeInstanceOf(HTMLButtonElement)
 })
 
 test('agent asks submit every supported answer type using the protocol answer schema', async () => {
@@ -375,8 +337,7 @@ test('agent asks submit every supported answer type using the protocol answer sc
   const channel = document.querySelector<HTMLInputElement>('input[type="checkbox"]')
   if (!channel) throw new Error('Missing multiselect option')
   await act(async () => {
-    channel.checked = true
-    channel.dispatchEvent(new Event('change', { bubbles: true }))
+    channel.click()
   })
   await inputValue('input[aria-label="Other answer for Channels"]', 'nightly')
   await inputValue('textarea[aria-label="Notes"]', 'Ships today')

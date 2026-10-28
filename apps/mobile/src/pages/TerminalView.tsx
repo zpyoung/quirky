@@ -71,10 +71,29 @@ export const TerminalView = forwardRef<TerminalViewHandle, Props>(function Termi
     const current = terminal.current
     const fit = fitAddon.current
     if (current && fit) {
+      if (current.element) {
+        current.element.style.transform = ''
+        current.element.style.width = ''
+        current.element.style.height = ''
+      }
       try { fit.fit() } catch { /* the terminal is temporarily hidden or has no measured cells */ }
       return boundedDimensions(current.cols, current.rows)
     }
     return { cols: 80, rows: 24 }
+  }, [])
+
+  const scaleViewer = useCallback(() => {
+    const current = terminal.current
+    const element = current?.element
+    if (!current || !element) return
+    const proposed = fitAddon.current?.proposeDimensions()
+    const scale = canDriveRef.current && modeRef.current === 'phone'
+      ? 1
+      : Math.min(1, (proposed && proposed.cols > 0 ? proposed.cols : current.cols) / current.cols)
+    element.style.transformOrigin = 'top left'
+    element.style.transform = scale < 1 ? `scale(${scale})` : ''
+    element.style.width = scale < 1 ? `${100 / scale}%` : ''
+    element.style.height = scale < 1 ? `${100 / scale}%` : ''
   }, [])
 
   useImperativeHandle(forwardedRef, () => ({
@@ -169,7 +188,11 @@ export const TerminalView = forwardRef<TerminalViewHandle, Props>(function Termi
     const container = host.current
     if (!container) return
     const resize = () => {
-      if (modeRef.current !== 'phone' || !mountedRef.current) return
+      if (!mountedRef.current) return
+      if (modeRef.current !== 'phone' || !canDriveRef.current) {
+        scaleViewer()
+        return
+      }
       const current = terminal.current
       if (!current) return
       const previous = { cols: current.cols, rows: current.rows }
@@ -193,19 +216,21 @@ export const TerminalView = forwardRef<TerminalViewHandle, Props>(function Termi
       observer?.disconnect()
       window.removeEventListener('resize', resize)
     }
-  }, [bridge, fit, session.id, connected, canDrive, displayMode])
+  }, [bridge, fit, scaleViewer, session.id, connected, canDrive, displayMode])
 
   useLayoutEffect(() => {
     const current = terminal.current
     if (!current) return
     current.options.fontSize = Math.max(8, Math.min(28, 14 * textScale))
     current.options.disableStdin = !pageActive || !canDrive || displayMode !== 'phone'
-    if (displayMode === 'desktop' && lease?.desktopCols && lease.desktopRows) {
-      current.resize(...Object.values(boundedDimensions(lease.desktopCols, lease.desktopRows)) as [number, number])
-    } else if (displayMode === 'phone') {
+    if (displayMode === 'phone' && canDrive) {
       fit()
+    } else if (lease) {
+      const dimensions = boundedDimensions(lease.cols, lease.rows)
+      current.resize(dimensions.cols, dimensions.rows)
     }
-  }, [pageActive, canDrive, displayMode, textScale, lease?.desktopCols, lease?.desktopRows, fit])
+    scaleViewer()
+  }, [pageActive, canDrive, displayMode, textScale, lease?.cols, lease?.rows, fit, scaleViewer])
 
   useEffect(() => {
     if (!mountedRef.current || !connectedRef.current) {
@@ -244,6 +269,9 @@ export const TerminalView = forwardRef<TerminalViewHandle, Props>(function Termi
         removeStream = bridge.onStream(attached.streamId, (bytes) => {
           if (mountedRef.current && connectedRef.current) terminal.current?.write(bytes)
         })
+        const actual = boundedDimensions(attached.cols, attached.rows)
+        terminal.current?.resize(actual.cols, actual.rows)
+        scaleViewer()
         terminal.current?.reset()
         if (attached.replay) terminal.current?.write(decodeReplay(attached.replay))
         setLive(attached.live)
@@ -264,7 +292,7 @@ export const TerminalView = forwardRef<TerminalViewHandle, Props>(function Termi
       if (streamId.current === attachedStreamId) streamId.current = null
       if (attachedStreamId !== null) void bridge.call('quirky.terminal/detach', { streamId: attachedStreamId }).catch(() => {})
     }
-  }, [bridge, session.id, session.status, session.restorable, connected, fit, refreshLease, onRestored])
+  }, [bridge, session.id, session.status, session.restorable, connected, fit, scaleViewer, refreshLease, onRestored])
 
   return (
     <div className="qp-terminal-wrap" aria-label={`Terminal ${session.title}`}>

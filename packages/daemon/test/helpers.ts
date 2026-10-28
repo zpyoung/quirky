@@ -62,7 +62,7 @@ export function sharedBuiltinDir(dir: string): string {
   const key = links.map(([name, target]) => `${name}>${target}`).join('\n')
   let shared = sharedBuiltinDirs.get(key)
   if (shared === undefined) {
-    const root = join(tmpdir(), `qbi-${process.pid}-${sharedBuiltinDirs.size}`)
+    const root = mkdtempSync(join(tmpdir(), `qbi-${process.pid}-`))
     if (sharedBuiltinDirs.size === 0) process.once('exit', () => { for (const d of sharedBuiltinDirs.values()) rmSync(join(d, '..'), { recursive: true, force: true }) })
     shared = join(root, 'builtin')
     mkdirSync(shared, { recursive: true })

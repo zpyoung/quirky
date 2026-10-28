@@ -8,19 +8,20 @@ describe('mobile RPC authorization', () => {
       'quirky.mobile/bundleManifest', 'quirky.mobile/bundleChunk', 'quirky.mobile/bundleRange', 'quirky.mobile/agentCatalog',
       'quirky.repo/list', 'quirky.repo/groupList', 'quirky.worktree/list', 'quirky.worktree/show', 'quirky.worktree/create',
       'quirky.worktree/describeRemove', 'quirky.worktree/remove', 'quirky.worktree/set',
-      'quirky.session/list', 'quirky.session/create', 'quirky.session/setName', 'quirky.session/close',
-      'quirky.ask/list', 'quirky.ask/answer', 'quirky.terminal/attach', 'quirky.terminal/detach', 'quirky.terminal/mobileState',
-      'quirky.terminal/claim', 'quirky.terminal/read', 'quirky.terminal/snapshot', 'quirky.terminal/write',
+      'quirky.session/list', 'quirky.session/get', 'quirky.session/create', 'quirky.session/resume', 'quirky.session/restore', 'quirky.session/setName', 'quirky.session/close',
+      'quirky.agent-status/wait', 'quirky.ask/list', 'quirky.ask/answer', 'quirky.terminal/attach', 'quirky.terminal/detach', 'quirky.terminal/mobileState',
+      'quirky.agent-status/list', 'quirky.agent-status/get', 'quirky.agent-status/explain', 'quirky.agent-status/waitOutput',
+      'quirky.terminal/claim', 'quirky.terminal/read', 'quirky.terminal/snapshot', 'quirky.terminal/history', 'quirky.terminal/write',
       'quirky.terminal/send', 'quirky.terminal/resize', 'quirky.terminal/describeClose', 'quirky.terminal/clear',
       'quirky.terminal/displayMode'
     ]) expect(Object.hasOwn(MOBILE_METHOD_ALLOWLIST, method)).toBe(true)
     for (const method of [
-      'quirky.agents/list', 'quirky.agent-status/list', 'quirky.git/status', 'quirky.accounts/list', 'quirky.hosting/files',
+      'quirky.agents/list', 'quirky.agents/prepareResume', 'events.subscribe', 'quirky.mobile/admin', 'quirky.git/status', 'quirky.accounts/list', 'quirky.hosting/files',
       'quirky.mobile/pair', 'daemon.stop', 'plugin.install', 'plugin.disable', 'distro.install',
       'settings.update', 'ui.command.run', 'quirky.terminal/restartHost', 'quirky.terminal/killAll',
       'quirky.git/forcePush', 'quirky.terminal/takeBack', 'quirky.terminal/restoreFit', 'quirky.agents/configure',
       'quirky.agent-status/send', 'quirky.ask/cancel', 'quirky.files/read',
-      'quirky.worktree/listAll', 'quirky.worktree/resolve', 'quirky.session/get', 'quirky.session-info/sections'
+      'quirky.worktree/listAll', 'quirky.worktree/resolve', 'quirky.session-info/sections'
     ]) expect(Object.hasOwn(MOBILE_METHOD_ALLOWLIST, method)).toBe(false)
     expect(() => assertMobileCallAllowed('quirky.mobile/agentCatalog', {})).not.toThrow()
     expect(() => assertMobileCallAllowed('quirky.agents/list', {})).toThrow()
@@ -88,5 +89,23 @@ describe('mobile RPC authorization', () => {
     expect(() => assertMobileCallAllowed('quirky.worktree/set', { worktree: 'worktree-1', pinned: true, expectedInstanceId: 'instance-1' })).not.toThrow()
     expect(() => assertMobileCallAllowed('quirky.worktree/set', { worktree: 'worktree-1', status: 'done' })).toThrow()
     expect(() => assertMobileCallAllowed('quirky.ask/list', { pendingOnly: false })).not.toThrow()
+  })
+
+  test('restores bounded safe session and output consumers', () => {
+    expect(() => assertMobileCallAllowed('quirky.session/get', { session: 'session-1' })).not.toThrow()
+    expect(() => assertMobileCallAllowed('quirky.session/get', { session: 'session-1', launch: { env: { SECRET: 'private' } } })).toThrow()
+    expect(() => assertMobileCallAllowed('quirky.session/resume', { session: 'session-1', fork: true })).not.toThrow()
+    expect(() => assertMobileCallAllowed('quirky.session/restore', { session: 'session-1' })).not.toThrow()
+    expect(() => assertMobileCallAllowed('quirky.agent-status/list', { worktree: 'worktree-1' })).not.toThrow()
+    expect(() => assertMobileCallAllowed('quirky.agent-status/get', { session: 'session-1', at: Date.now() })).not.toThrow()
+    expect(() => assertMobileCallAllowed('quirky.agent-status/explain', { session: 'session-1' })).not.toThrow()
+    expect(() => assertMobileCallAllowed('quirky.agent-status/waitOutput', { session: 'session-1', pattern: 'ready', ignoreCase: true, lines: 2000, timeoutMs: 60_000 })).not.toThrow()
+    expect(() => assertMobileCallAllowed('quirky.agent-status/waitOutput', { session: 'session-1', pattern: '(a+)+', timeoutMs: 60_000 })).toThrow()
+    expect(() => assertMobileCallAllowed('quirky.agent-status/waitOutput', { session: 'session-1', pattern: 'ready', lines: 2001 })).toThrow()
+    expect(() => assertMobileCallAllowed('quirky.agent-status/waitOutput', { session: 'session-1', pattern: 'ready', timeoutMs: 60_001 })).toThrow()
+    expect(() => assertMobileCallAllowed('quirky.agent-status/wait', { session: 'session-1', until: ['exited'], timeoutMs: 60_000 })).not.toThrow()
+    expect(() => assertMobileCallAllowed('quirky.agent-status/wait', { session: 'session-1', until: ['exited'], timeoutMs: 60_001 })).toThrow()
+    expect(() => assertMobileCallAllowed('quirky.terminal/history', { session: 'session-1', lines: 200, before: 'cursor', format: 'text' })).not.toThrow()
+    expect(() => assertMobileCallAllowed('quirky.terminal/history', { session: 'session-1', raw: true })).toThrow()
   })
 })

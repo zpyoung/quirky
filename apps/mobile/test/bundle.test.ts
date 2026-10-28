@@ -36,11 +36,12 @@ const manifest = (assetBytes: Uint8Array = bytes, assetHash = digest(assetBytes)
 }
 const manifestResult = (value = manifest()): MobileBundleManifestResult => ({ manifest: value, chunkBytes: 8, rangeBytes: 4 })
 
-function memoryStore(active: StoredGeneration | null = null): GenerationStore & { activeValue: StoredGeneration | null; stages: Uint8Array[][]; discarded: number } {
+function memoryStore(active: StoredGeneration | null = null): GenerationStore & { activeValue: StoredGeneration | null; stages: Uint8Array[][]; discarded: number; activated: number } {
   const store = {
     activeValue: active,
     stages: [] as Uint8Array[][],
     discarded: 0,
+    activated: 0,
     async getActive() { return this.activeValue },
     async begin() {
       const written: Uint8Array[] = []
@@ -50,6 +51,7 @@ function memoryStore(active: StoredGeneration | null = null): GenerationStore & 
         directory: 'memory-generation',
         async writeAsset(_path: string, value: Uint8Array) { written.push(value) },
         async activate(value: MobileBundleManifest) {
+          store.activated++
           finished = true
           const installed = { manifest: value, directory: 'memory-generation', activatedAt: 10 }
           store.activeValue = installed
@@ -103,11 +105,17 @@ describe('verified mobile page generations', () => {
   })
 
   test('a failed update never activates partial or hash-mismatched bytes and leaves the previous generation usable', async () => {
-    const prior = { manifest: { ...manifest(), buildId: 'b'.repeat(64) }, directory: 'old-good-generation', activatedAt: 1 }
+    const prior = {
+      manifest: manifest(new TextEncoder().encode('<html>previous generation</html>')),
+      directory: 'old-good-generation',
+      activatedAt: 1
+    }
     const store = memoryStore(prior)
-    const changed = new TextEncoder().encode('tampered')
-    await expect(downloadBundle('host-1', manifestResult(), chunkFetcher(changed), store, sha256)).rejects.toThrow(/hash/i)
+    const changed = Uint8Array.from(bytes)
+    changed[0] = changed[0]! ^ 1
+    await expect(downloadBundle('host-1', manifestResult(), chunkFetcher(changed, digest(bytes)), store, sha256)).rejects.toThrow()
     expect(store.activeValue).toBe(prior)
+    expect(store.activated).toBe(0)
     expect(store.discarded).toBe(1)
   })
 

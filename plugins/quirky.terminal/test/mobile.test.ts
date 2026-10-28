@@ -236,6 +236,10 @@ describe('mobile terminal driver leases through the daemon API', () => {
     await expectConflict(phone('phone-a', 'quirky.terminal/write', { session: shell.id, data: 'watch only' }))
     await call(desktop, 'quirky.terminal/resize', { session: shell.id, cols: 132, rows: 40 })
     expect(ptySize()).toEqual({ cols: 132, rows: 40 })
+    const watching = await phone('phone-a', 'quirky.terminal/mobileState', { session: shell.id }) as {
+      terminals: { cols: number; rows: number; driver: unknown; controlledByCaller: boolean }[]
+    }
+    expect(watching.terminals).toMatchObject([{ cols: 132, rows: 40, driver: null, controlledByCaller: false }])
 
     await phone('phone-a', 'quirky.terminal/displayMode', { session: shell.id, mode: 'phone', cols: 60, rows: 22 })
     expect(ptySize()).toEqual({ cols: 60, rows: 22 })

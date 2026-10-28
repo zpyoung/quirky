@@ -21,8 +21,8 @@ export function PageApp({ bridge }: PageAppProps) {
   const [route, setRoute] = useState<MobileRoute>(bridge.init.route)
   const [connection, setConnection] = useState<MobileConnectionState>(bridge.state ?? bridge.init.connectionState)
   const [visible, setVisible] = useState(() => typeof document === 'undefined' || document.visibilityState !== 'hidden')
-  const [workspaceLayout, setWorkspaceLayout] = useState<Record<string, unknown>>({})
-  const [sessionLayout, setSessionLayout] = useState<Record<string, unknown>>({})
+  const [workspaceLayout, setWorkspaceLayout] = useState<Record<string, unknown> | null>(null)
+  const [sessionLayout, setSessionLayout] = useState<Record<string, unknown> | null>(null)
   const connected = connection.phase === 'connected'
   const active = connected && visible
   const rpcGranted = bridge.init.grants.includes('rpc')
@@ -41,8 +41,10 @@ export function PageApp({ bridge }: PageAppProps) {
   const reportSessionLayout = useCallback((state: Record<string, unknown>) => setSessionLayout(state), [])
 
   useEffect(() => {
+    const layout = route.kind === 'workspaces' ? workspaceLayout : sessionLayout
+    if (layout === null) return
     const state: Record<string, unknown> = { route: route.kind, connectionPhase: connection.phase, stale: !active }
-    Object.assign(state, route.kind === 'workspaces' ? workspaceLayout : sessionLayout)
+    Object.assign(state, layout)
     if (route.kind === 'session') {
       state.worktreeId = route.worktreeId
       if (route.sessionId !== undefined) state.sessionId = route.sessionId

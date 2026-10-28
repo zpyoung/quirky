@@ -1,7 +1,10 @@
 import { describe, expect, test } from 'bun:test'
-import type { MobileBundleManifest, MobileConnectionState, MobilePageInit, MobileRpc } from '../src/contracts'
+import type { MobileConnectionState, MobilePageInit, MobileRpc } from '../src/contracts'
 import { createBridgeHost } from '../src/shell/bridge-host'
 import { createPageBridge, type PageBridgePort } from '../src/shell/page-bridge'
+import { builtinsDir, startHarness } from '../../../packages/daemon/test/helpers'
+import type { Harness } from '../../../packages/daemon/test/helpers'
+import { createMobileRpc } from '../src/transport/client'
 
 const state = (phase: MobileConnectionState['phase'] = 'connected'): MobileConnectionState => ({ phase, attempts: 0 })
 const init: MobilePageInit = {
@@ -15,279 +18,338 @@ const init: MobilePageInit = {
   connectionState: state()
 }
 
-function fakeRpc(initialState = state()) {
-  const calls: [string, Record<string, unknown>][] = []
+type RpcImplementation = <T>(method: string, params: Record<string, unknown>) => Promise<T>
+type Envelope = Record<string, unknown>
+type EnvelopeTransform = (message: Envelope) => Envelope[]
+type RpcHarness = {
+  rpc: MobileRpc
+  calls: string[]
+  readonly eventSubscriptionCalls: number
+  readonly streamSubscriptionCount: number
+  readonly streamCleanupCalls: number
+  emitEvent(event: string, data: unknown): void
+  emitState(next: MobileConnectionState): void
+  emitStream(streamId: number, bytes: Uint8Array): void
+}
+
+
+function deferred<T>() {
+  return Promise.withResolvers<T>()
+}
+
+function fakeRpc(initialState = state(), implementation?: RpcImplementation): RpcHarness {
+  const calls: string[] = []
   const events = new Set<(event: { event: string; data: unknown }) => void>()
-  let eventSubscriptionCalls = 0
   const states = new Set<(next: MobileConnectionState) => void>()
   const streams = new Map<number, (bytes: Uint8Array) => void>()
+  let eventSubscriptionCalls = 0
+  let streamCleanupCalls = 0
   let currentState = initialState
   const rpc: MobileRpc = {
     get state() { return currentState },
-    async call(method, params = {}) {
-      calls.push([method, params])
-      if (method === 'quirky.terminal/attach') return { streamId: 9 }
-      return { ok: true }
+    async call<T>(method: string, params = {}) {
+      calls.push(method)
+      if (implementation) return implementation<T>(method, params)
+      if (method === 'quirky.terminal/attach') return { streamId: 9 } as T
+      return { ok: true } as T
     },
     onEvent(handler) { eventSubscriptionCalls++; events.add(handler); return () => events.delete(handler) },
     onState(handler) { states.add(handler); return () => states.delete(handler) },
-    onStream(streamId, handler) { streams.set(streamId, handler); return () => streams.delete(streamId) },
+    onStream(streamId, handler) {
+      streams.set(streamId, handler)
+      return () => { streams.delete(streamId); streamCleanupCalls++ }
+    },
     close() {}
   }
   return {
     rpc,
     calls,
     get eventSubscriptionCalls() { return eventSubscriptionCalls },
+    get streamSubscriptionCount() { return streams.size },
+    get streamCleanupCalls() { return streamCleanupCalls },
     emitEvent(event: string, data: unknown) { for (const handler of events) handler({ event, data }) },
     emitState(next: MobileConnectionState) { currentState = next; for (const handler of states) handler(next) },
     emitStream(streamId: number, bytes: Uint8Array) { streams.get(streamId)?.(bytes) }
   }
 }
 
-function hostHarness(overrides: Partial<Parameters<typeof createBridgeHost>[0]> = {}) {
-  const sent: Record<string, unknown>[] = []
-  const rpc = fakeRpc()
+function bridgeHarness(options: { init?: MobilePageInit; rpc?: RpcHarness } = {}) {
+  const pageInit = options.init ?? init
+  const rpc = options.rpc ?? fakeRpc()
+  const pageListeners = new Set<(json: string) => void>()
   const reports: Record<string, unknown>[] = []
+  const navigations: unknown[] = []
+  const storage = new Map<string, string>()
+  const openedExternalUrls: string[] = []
+  let pageTransform: EnvelopeTransform = (message) => [message]
+  let hostTransform: EnvelopeTransform = (message) => [message]
+
   const host = createBridgeHost({
-    init,
+    init: pageInit,
     rpc: rpc.rpc,
-    storage: { get: async () => null, set: async () => {}, remove: async () => {} },
-    native: { clipboardRead: async () => 'clipboard', clipboardWrite: async () => {}, openExternal: async () => {}, haptic: async () => {} },
-    sendToPage: async (json) => { sent.push(JSON.parse(json) as Record<string, unknown>) },
-    onNavigate: () => {},
-    rememberWorkspace: async () => {},
-    onReport: (report) => reports.push(report),
-    ...overrides
+    storage: {
+      async get(key) { return storage.get(key) ?? null },
+      async set(key, value) { storage.set(key, value) },
+      async remove(key) { storage.delete(key) }
+    },
+    native: {
+      async clipboardRead() { return 'clipboard' },
+      async clipboardWrite() {},
+      async openExternal(url) { openedExternalUrls.push(url) },
+      async haptic() {}
+    },
+    sendToPage(json) {
+      const message = JSON.parse(json) as Envelope
+      for (const delivery of hostTransform(message)) {
+        const encoded = JSON.stringify(delivery)
+        for (const listener of pageListeners) listener(encoded)
+      }
+    },
+    onNavigate(route) { navigations.push(route) },
+    async rememberWorkspace() {},
+    onReport(report) { reports.push(report) }
   })
-  return { host, rpc, sent, reports }
-}
 
-function pagePort() {
-  const sent: Record<string, unknown>[] = []
-  const listeners = new Set<(json: string) => void>()
-  const port: PageBridgePort = {
-    postMessage: (json) => { sent.push(JSON.parse(json) as Record<string, unknown>) },
-    subscribe: (handler) => { listeners.add(handler); return () => listeners.delete(handler) }
+  const createPage = (nextInit: MobilePageInit = pageInit) => {
+    const port: PageBridgePort = {
+      postMessage(json) {
+        const message = JSON.parse(json) as Envelope
+        for (const delivery of pageTransform(message)) host.receive(JSON.stringify(delivery))
+      },
+      subscribe(handler) { pageListeners.add(handler); return () => pageListeners.delete(handler) }
+    }
+    return createPageBridge(port, nextInit)
   }
+  const page = createPage()
+  host.receive(JSON.stringify({ v: 1, kind: 'ready' }))
+
   return {
-    port,
-    sent,
-    emit(message: Record<string, unknown>) { for (const listener of listeners) listener(JSON.stringify(message)) }
+    page,
+    host,
+    rpc,
+    createPage,
+    reports,
+    navigations,
+    openedExternalUrls,
+    setPageTransform(transform: EnvelopeTransform) { pageTransform = transform },
+    setHostTransform(transform: EnvelopeTransform) { hostTransform = transform }
   }
 }
 
-const hostEnvelope = (kind: string, body: Record<string, unknown> = {}) => JSON.stringify({ v: 1, kind, sessionId: init.sessionId, ...body })
-
-describe('mobile page bridge authorization', () => {
-  test('forwards only page-consumer RPC calls with the active session and route grants', async () => {
-    const { host, rpc, sent } = hostHarness()
-    host.receive(JSON.stringify({ v: 1, kind: 'ready' }))
-    expect(sent[0]?.kind).toBe('init')
-    host.receive(hostEnvelope('call', { requestId: 'r1', method: 'quirky.terminal/write', params: { session: 'session-1', data: 'hello' } }))
-    await Promise.resolve()
-    expect(rpc.calls).toEqual([['quirky.terminal/write', { session: 'session-1', data: 'hello' }]])
-    expect(sent.at(-1)).toMatchObject({ kind: 'reply', requestId: 'r1', ok: true })
-
-    host.receive(hostEnvelope('call', { requestId: 'r2', method: 'daemon.stop', params: {} }))
-    await Promise.resolve()
-    expect(rpc.calls).toHaveLength(1)
-    expect(sent.at(-1)).toMatchObject({ kind: 'reply', requestId: 'r2', ok: false })
+describe('mobile page bridge consumers', () => {
+  test('page RPC consumers await successful results from the paired bridge host', async () => {
+    const pair = bridgeHarness()
+    await expect(pair.page.call('quirky.worktree/list', {})).resolves.toEqual({ ok: true })
+    pair.page.close()
+    pair.host.close()
   })
 
-  test('workspaces cannot exercise session-only clipboard methods', async () => {
+  test('page RPC consumers receive sanitized host errors', async () => {
+    const rpc = fakeRpc(state(), async <T>(): Promise<T> => { throw new Error('token=private-value daemon failed') })
+    const pair = bridgeHarness({ rpc })
+    await expect(pair.page.call('quirky.worktree/list', {})).rejects.toThrow('[redacted] daemon failed')
+    pair.page.close()
+    pair.host.close()
+  })
+
+  test('workspace pages lack clipboard grants and the host rejects tampered native actions', async () => {
     const workspaceInit: MobilePageInit = {
       ...init,
       route: { kind: 'workspaces' },
       grants: ['rpc', 'storage', 'navigate', 'terminal', 'externalLink']
     }
-    const page = pagePort()
-    const bridge = createPageBridge(page.port, workspaceInit)
-    await expect(bridge.native.clipboardRead()).rejects.toThrow(/grant/i)
-    expect(page.sent).toEqual([])
-    bridge.close()
+    const pair = bridgeHarness({ init: workspaceInit })
+
+    await expect(pair.page.native.clipboardRead()).rejects.toThrow(/grant/i)
+    pair.setPageTransform((message) => message.kind === 'storage'
+      ? [{ v: 1, kind: 'native', sessionId: message.sessionId, requestId: message.requestId, action: 'clipboardRead' }]
+      : [message])
+    await expect(pair.page.storage.get('workspace-secret')).rejects.toThrow(/unavailable/i)
+    expect(pair.rpc.calls).toEqual([])
+    pair.page.close()
+    pair.host.close()
   })
 
-  test('rejects mutations from both bridge ends while disconnected and forwards trusted state changes', async () => {
-    const disconnected = state('reconnecting')
-    const downRpc = fakeRpc(disconnected)
-    const { host, sent } = hostHarness({ init: { ...init, connectionState: disconnected }, rpc: downRpc.rpc })
-    host.receive(JSON.stringify({ v: 1, kind: 'ready' }))
-    host.receive(hostEnvelope('call', { requestId: 'write-1', method: 'quirky.terminal/write', params: { session: 'session-1', data: 'x' } }))
-    await Promise.resolve()
-    expect(sent.at(-1)).toMatchObject({ kind: 'reply', requestId: 'write-1', ok: false })
-    expect(downRpc.calls).toEqual([])
-
-    const page = pagePort()
-    const bridge = createPageBridge(page.port, { ...init, connectionState: disconnected })
-    await expect(bridge.call('quirky.terminal/write', { session: 'session-1', data: 'x' })).rejects.toThrow(/connected/i)
-    expect(page.sent).toEqual([])
-    bridge.close()
+  test('session consumers retain the external-link grant for safe web URLs', async () => {
+    const pair = bridgeHarness()
+    await pair.page.native.openExternal('https://example.test/guide')
+    expect(pair.openedExternalUrls).toEqual(['https://example.test/guide'])
+    await expect(pair.page.native.openExternal('file:///etc/passwd')).rejects.toThrow(/http\(s\)/i)
+    pair.page.close()
+    pair.host.close()
   })
 
-  test('the page client resolves replies, refuses event subscriptions, and updates state/stream listeners', async () => {
-    const page = pagePort()
-    const bridge = createPageBridge(page.port, init)
-    const stateValues: MobileConnectionState[] = []
-    const streamValues: Uint8Array[] = []
-    expect(bridge.state).toEqual(state('connected'))
-    bridge.onState((next) => stateValues.push(next))
-    expect(stateValues).toEqual([state('connected')])
-    const stopStream = bridge.onStream(9, (value) => streamValues.push(value))
+  test('the host denies raw agent and administrative RPC methods', async () => {
+    const pair = bridgeHarness()
+    await expect(pair.page.call('quirky.agents/list', {})).rejects.toThrow(/unavailable/i)
 
-    const pending = bridge.call<{ ok: boolean }>('quirky.worktree/list', {}, { requestId: 'request-1' })
-    expect(page.sent[0]).toMatchObject({ kind: 'call', sessionId: init.sessionId, requestId: 'request-1', method: 'quirky.worktree/list' })
-    page.emit({ v: 1, kind: 'reply', sessionId: init.sessionId, requestId: 'request-1', ok: true, result: { ok: true } })
-    await expect(pending).resolves.toEqual({ ok: true })
-
-    page.emit({ v: 1, kind: 'event', sessionId: init.sessionId, event: 'quirky.worktree/changed', data: { worktreeId: 'worktree-1' } })
-    page.emit({ v: 1, kind: 'stream', sessionId: init.sessionId, streamId: 9, data: 'AQI=' })
-    page.emit({ v: 1, kind: 'state', sessionId: init.sessionId, state: state('disconnected') })
-    page.emit({ v: 1, kind: 'stream', sessionId: init.sessionId, streamId: 9, data: 'AwQ=' })
-    expect(stateValues).toEqual([state('connected'), state('disconnected')])
-    expect(streamValues).toEqual([new Uint8Array([1, 2])])
-    expect(page.sent.some((message) => message.kind === 'stream-unsubscribe' && message.streamId === 9)).toBe(true)
-    stopStream()
-    bridge.close()
-  })
-
-  test('rebind rejects an in-flight request from the old RPC without replaying it', async () => {
-    const old = fakeRpc()
-    const next = fakeRpc()
-    let finish!: (value: unknown) => void
-    const oldRpc: MobileRpc = {
-      ...old.rpc,
-      async call<T>(method: string, params = {}) {
-        old.calls.push([method, params])
-        const deferred = Promise.withResolvers<T>()
-        finish = deferred.resolve as (value: unknown) => void
-        return deferred.promise
-      }
+    for (const method of ['quirky.agents/list', 'daemon.stop']) {
+      pair.setPageTransform((message) => message.kind === 'call' ? [{ ...message, method }] : [message])
+      await expect(pair.page.call('quirky.worktree/list', {})).rejects.toThrow()
     }
-    const { host, sent } = hostHarness({ rpc: oldRpc })
-    host.receive(JSON.stringify({ v: 1, kind: 'ready' }))
-    host.receive(hostEnvelope('call', { requestId: 'old-request', method: 'quirky.terminal/write', params: { session: 'session-1', data: 'x' } }))
-    await Promise.resolve()
-
-    host.setRpc(next.rpc)
-
-    expect(sent.filter((message) => message.requestId === 'old-request')).toHaveLength(1)
-    expect(sent.at(-1)).toMatchObject({ kind: 'reply', requestId: 'old-request', ok: false })
-    expect(old.calls).toEqual([['quirky.terminal/write', { session: 'session-1', data: 'x' }]])
-    expect(next.calls).toEqual([])
-    finish({ ok: true })
-    await Promise.resolve()
-    expect(sent.filter((message) => message.requestId === 'old-request')).toHaveLength(1)
-    host.close()
+    expect(pair.rpc.calls).toEqual([])
+    pair.page.close()
+    pair.host.close()
   })
 
-  test('forwards domain-shaped RPC results without guessing which response fields are secrets', async () => {
-    const base = fakeRpc()
-    const result = { token: 'producer-approved domain value', nested: { credentials: ['public descriptor'] } }
-    const rpc: MobileRpc = {
-      ...base.rpc,
-      async call<T>() { return result as T }
+  test('both bridge ends ignore messages from another session', async () => {
+    const pair = bridgeHarness()
+    pair.setPageTransform((message) => message.kind === 'call'
+      ? [{ ...message, sessionId: 'another-mount', method: 'daemon.stop' }, message]
+      : [message])
+    await expect(pair.page.call('quirky.worktree/list', {})).resolves.toEqual({ ok: true })
+
+    pair.setPageTransform((message) => [message])
+    pair.setHostTransform((message) => message.kind === 'reply' && message.ok === true
+      ? [{ ...message, sessionId: 'another-mount', result: { spoofed: true } }, message]
+      : [message])
+    await expect(pair.page.call('quirky.worktree/list', {})).resolves.toEqual({ ok: true })
+    expect(pair.rpc.calls).toHaveLength(2)
+    pair.page.close()
+    pair.host.close()
+  })
+
+  test('page events remain unavailable and reports contain only bounded layout state', () => {
+    const pair = bridgeHarness()
+    expect(() => pair.page.onEvent(() => {})).toThrow(/unavailable/i)
+    pair.rpc.emitEvent('daemon.secret', { token: 'must not be forwarded' })
+    expect(pair.rpc.eventSubscriptionCalls).toBe(0)
+
+    const report = {
+      route: 'session', worktreeId: 'worktree-1', sessionId: 'session-1', tabSessionIds: ['session-1'],
+      selectedSessionId: 'session-1', terminalVisible: true, dockOpen: false, sheetOpen: false,
+      displayMode: 'phone', connectionPhase: 'connected', stale: false
     }
-    const { host, sent } = hostHarness({ rpc })
-    host.receive(JSON.stringify({ v: 1, kind: 'ready' }))
-    host.receive(hostEnvelope('call', { requestId: 'domain-result', method: 'quirky.worktree/list', params: {} }))
-    await Promise.resolve()
-    await Promise.resolve()
-    expect(sent.at(-1)).toMatchObject({ kind: 'reply', requestId: 'domain-result', ok: true, result })
-    host.close()
+    pair.page.report(report)
+    expect(pair.reports).toEqual([report])
+    expect(() => pair.page.report({ ...report, terminalText: 'private terminal output' })).toThrow()
+    expect(pair.reports).toEqual([report])
+    pair.page.close()
+    pair.host.close()
   })
 
-  test('rejects the raw agent list instead of forwarding effective environment metadata', async () => {
-    const { host, rpc, sent } = hostHarness()
-    host.receive(JSON.stringify({ v: 1, kind: 'ready' }))
-    host.receive(hostEnvelope('call', { requestId: 'agent-list', method: 'quirky.agents/list', params: {} }))
-    await Promise.resolve()
-    expect(rpc.calls).toEqual([])
-    expect(sent.at(-1)).toMatchObject({ kind: 'reply', requestId: 'agent-list', ok: false })
-    host.close()
+  test('disconnect state reaches consumers and blocks mutations on both bridge ends', async () => {
+    const pair = bridgeHarness()
+    const states: MobileConnectionState[] = []
+    pair.page.onState((next) => states.push(next))
+    pair.rpc.emitState(state('reconnecting'))
+
+    expect(pair.page.state).toEqual(state('reconnecting'))
+    expect(states).toEqual([state('connected'), state('reconnecting')])
+    await expect(pair.page.call('quirky.terminal/write', { session: 'session-1', data: 'x' })).rejects.toThrow(/connected/i)
+
+    const stalePage = pair.createPage(init)
+    await expect(stalePage.call('quirky.terminal/write', { session: 'session-1', data: 'x' })).rejects.toThrow(/connected/i)
+    expect(pair.rpc.calls).toEqual([])
+    stalePage.close()
+    pair.page.close()
+    pair.host.close()
   })
 
-  test('never subscribes to daemon events and accepts only bounded non-content layout reports', () => {
-    const { host, rpc, sent, reports } = hostHarness()
-    host.receive(JSON.stringify({ v: 1, kind: 'ready' }))
-    rpc.emitEvent('daemon.secret', { token: 'never forward' })
-    rpc.emitEvent('quirky.session/changed', { worktreeId: 'worktree-1' })
-    expect(rpc.eventSubscriptionCalls).toBe(0)
-    expect(sent.filter((message) => message.kind === 'event')).toHaveLength(0)
+  test('rebind rejects an old in-flight consumer request without replaying it', async () => {
+    const started = deferred<void>()
+    const result = deferred<unknown>()
+    const settled = deferred<void>()
+    const oldRpc = fakeRpc(state(), async <T>() => {
+      started.resolve()
+      try { return await result.promise as T } finally { settled.resolve() }
+    })
+    const nextRpc = fakeRpc()
+    const pair = bridgeHarness({ rpc: oldRpc })
+    const request = pair.page.call('quirky.worktree/list', {})
+    await started.promise
 
-    const report = { route: 'session', worktreeId: 'worktree-1', sessionId: 'session-1', tabSessionIds: ['session-1'], selectedSessionId: 'session-1', terminalVisible: true, dockOpen: false, sheetOpen: false, displayMode: 'phone', connectionPhase: 'connected', stale: false }
-    host.receive(hostEnvelope('report', { state: report }))
-    expect(reports).toEqual([report])
-    host.receive(hostEnvelope('report', { state: { ...report, terminalText: 'secret terminal contents' } }))
-    expect(reports).toHaveLength(1)
+    pair.host.setRpc(nextRpc.rpc)
+    await expect(request).rejects.toThrow(/connection changed/i)
+    result.resolve({ ok: true })
+    await settled.promise
+
+    expect(oldRpc.calls).toHaveLength(1)
+    expect(nextRpc.calls).toEqual([])
+    pair.page.close()
+    pair.host.close()
   })
 
-  test('native external-link actions require a granted safe web URL', async () => {
-    const { host, sent } = hostHarness()
-    host.receive(JSON.stringify({ v: 1, kind: 'ready' }))
-    host.receive(hostEnvelope('native', { requestId: 'native-1', action: 'openExternal', url: 'file:///etc/passwd' }))
-    await Promise.resolve()
-    expect(sent.at(-1)).toMatchObject({ kind: 'reply', requestId: 'native-1', ok: false })
+  test('disconnect cleans up host stream subscriptions and page listeners', async () => {
+    const pair = bridgeHarness()
+    const attached = await pair.page.call<{ streamId: number }>('quirky.terminal/attach', { session: 'session-1', cols: 80, rows: 24 })
+    const received: Uint8Array[] = []
+    pair.page.onStream(attached.streamId, (bytes) => received.push(bytes))
+    expect(pair.rpc.streamSubscriptionCount).toBe(1)
+
+    pair.rpc.emitStream(attached.streamId, new Uint8Array([1, 2]))
+    pair.rpc.emitState(state('reconnecting'))
+    expect(pair.rpc.streamCleanupCalls).toBe(1)
+    pair.rpc.emitStream(attached.streamId, new Uint8Array([3, 4]))
+    expect(received).toEqual([new Uint8Array([1, 2])])
+    pair.page.close()
+    pair.host.close()
   })
 
-  test('rejects bridge calls when the isolated native origin cannot deliver a message', async () => {
-    const port: PageBridgePort = {
-      postMessage: () => Promise.reject(new Error('page origin is unavailable')),
-      subscribe: () => () => {}
-    }
-    const bridge = createPageBridge(port, init)
-    await expect(bridge.call('quirky.worktree/list', {})).rejects.toThrow('page origin is unavailable')
-    bridge.close()
-  })
-  test('limits the number of concurrent per-mount page requests', async () => {
-    const page = pagePort()
-    const bridge = createPageBridge(page.port, init)
+  test('page clients enforce their concurrent request capacity', async () => {
+    const rpc = fakeRpc(state(), async <T>() => new Promise<T>(() => {}))
+    const pair = bridgeHarness({ rpc })
     const pending = Array.from({ length: 128 }, (_, index) =>
-      bridge.call('quirky.worktree/list', {}, { requestId: `bounded-${index}` })
+      pair.page.call('quirky.worktree/list', {}, { requestId: `client-${index}` })
     )
-    await expect(bridge.call('quirky.worktree/list', {})).rejects.toThrow(/limit/i)
-    bridge.close()
-    await Promise.allSettled(pending)
+    const excess = pair.page.call('quirky.worktree/list', {})
+    const pendingResults = Promise.allSettled(pending)
+    const excessResult = expect(excess).rejects.toThrow(/limit/i)
+    pair.page.close()
+    pair.host.close()
+    await pendingResults
+    await excessResult
   })
-  test('bounds the native bridge host pending request map per page mount', async () => {
-    const base = fakeRpc()
-    const rpc: MobileRpc = {
-      ...base.rpc,
-      async call<T>(method, params = {}) {
-        base.calls.push([method, params])
-        return await new Promise<T>(() => {})
-      }
-    }
-    const { host, sent } = hostHarness({ rpc })
-    host.receive(JSON.stringify({ v: 1, kind: 'ready' }))
-    for (let index = 0; index < 129; index++) {
-      host.receive(hostEnvelope('call', {
-        requestId: `flood-${index}`,
-        method: 'quirky.worktree/list',
-        params: {}
-      }))
-    }
-    await Promise.resolve()
-    expect(base.calls).toHaveLength(128)
-    expect(sent.find((message) => message.requestId === 'flood-128')).toMatchObject({ kind: 'reply', ok: false })
-    host.close()
-  })
-  test('forwards destructive workspace removal only with the explicit narrow confirmation packet', async () => {
-    const { host, rpc, sent } = hostHarness()
-    host.receive(JSON.stringify({ v: 1, kind: 'ready' }))
-    host.receive(hostEnvelope('call', { requestId: 'remove-unconfirmed', method: 'quirky.worktree/remove', params: { worktree: 'worktree-1' } }))
-    await Promise.resolve()
-    expect(rpc.calls).toEqual([])
-    expect(sent.at(-1)).toMatchObject({ requestId: 'remove-unconfirmed', ok: false })
 
-    host.receive(hostEnvelope('call', { requestId: 'remove-confirmed', method: 'quirky.worktree/remove', params: { worktree: 'worktree-1', yes: true } }))
-    await Promise.resolve()
-    expect(rpc.calls).toEqual([['quirky.worktree/remove', { worktree: 'worktree-1', yes: true }]])
-    expect(sent.at(-1)).toMatchObject({ requestId: 'remove-confirmed', ok: true })
-
-    host.receive(hostEnvelope('call', { requestId: 'remove-forced', method: 'quirky.worktree/remove', params: { worktree: 'worktree-1', yes: true, force: true } }))
-    await Promise.resolve()
-    expect(rpc.calls).toHaveLength(1)
-    expect(sent.at(-1)).toMatchObject({ requestId: 'remove-forced', ok: false })
-    host.close()
+  test('the host enforces its pending request capacity across page clients', async () => {
+    const rpc = fakeRpc(state(), async <T>() => new Promise<T>(() => {}))
+    const pair = bridgeHarness({ rpc })
+    const pending = Array.from({ length: 128 }, (_, index) =>
+      pair.page.call('quirky.worktree/list', {}, { requestId: `host-${index}` })
+    )
+    const secondPage = pair.createPage()
+    const excess = secondPage.call('quirky.worktree/list', {}, { requestId: 'host-overflow' })
+    const pendingResults = Promise.allSettled(pending)
+    const excessResult = expect(excess).rejects.toThrow(/limit/i)
+    secondPage.close()
+    pair.page.close()
+    pair.host.close()
+    await pendingResults
+    await excessResult
   })
 })
+
+test('the page bridge answers a real encrypted question with a role ID and skipped-ID array', async () => {
+  const oldPort = process.env.QUIRKY_MOBILE_PORT
+  process.env.QUIRKY_MOBILE_PORT = '0'
+  let harness: Harness | undefined
+  let phone: MobileRpc | undefined
+  let pair: ReturnType<typeof bridgeHarness> | undefined
+  try {
+    harness = await startHarness({ builtinPluginsDir: builtinsDir() })
+    const local = await harness.connect('cli')
+    const pairing = await local.callAny('quirky.mobile/pair', { address: '127.0.0.1' }) as { pairingUrl: string }
+    const offer = JSON.parse(Buffer.from(new URL(pairing.pairingUrl).searchParams.get('code')!, 'base64url').toString())
+    phone = await createMobileRpc({ endpoint: offer.endpoint, publicKeyB64: offer.publicKeyB64, token: offer.deviceToken })
+    pair = bridgeHarness({
+      rpc: fakeRpc(state(), <T>(method: string, params: Record<string, unknown> = {}) => phone!.call<T>(method, params))
+    })
+    const { askId } = await local.callAny('quirky.ask/create', {
+      spec: { questions: [{ id: 'role', type: 'text', question: 'Which role should review this change?' }] }
+    }) as { askId: string }
+    await pair.page.call('quirky.ask/answer', {
+      askId,
+      answers: { role: { value: 'reviewer', source: 'input' } },
+      skipped: []
+    })
+    const answered = await local.callAny('quirky.ask/wait', { askId, timeoutMs: 0 })
+    expect(answered).toMatchObject({ status: 'answered', answers: { role: { value: 'reviewer', source: 'input' } } })
+  } finally {
+    pair?.page.close()
+    pair?.host.close()
+    phone?.close()
+    await harness?.cleanup()
+    if (oldPort === undefined) delete process.env.QUIRKY_MOBILE_PORT
+    else process.env.QUIRKY_MOBILE_PORT = oldPort
+  }
+}, 20_000)
