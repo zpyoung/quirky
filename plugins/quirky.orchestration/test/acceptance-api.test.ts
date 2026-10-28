@@ -957,10 +957,14 @@ describe('quirky.orchestration daemon API acceptance', () => {
       return inputs.length >= 2 ? inputs : undefined
     }, 8000)
     expect(pointerInputs.every((input) => input.sessionId === worker.id)).toBe(true)
-    expect(pointerInputs.map((input) => input.text).join('')).toContain(`quirky orchestration check --run ${run.id}`)
     expect(pointerInputs.map((input) => input.text).join('')).not.toContain('private report body')
     const inbox = await call<InboxResult>(coordinator, INBOX, { full: true, limit: 100 })
     expect(inbox.messages.find((message) => message.id === mail.messages[0]?.id)?.read).toBe(false)
+    const command = pointerInputs.map((input) => input.text).join('')
+      .replace(/\u001b\[(?:200|201)~/g, '').trim().split(/\s+/)
+    const checked = await fixture.runCli(worker, [...command.slice(1), '--json'])
+    expect(checked.code).toBe(0)
+    expect(checked.stdout).toContain(mail.messages[0]!.id)
   }, 20_000)
 
   test('AC10 timed-out questions resume by their original ID, answer once, and reject conflicts', async () => {

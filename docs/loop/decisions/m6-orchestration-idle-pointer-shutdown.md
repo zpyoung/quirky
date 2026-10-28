@@ -66,5 +66,38 @@
 - **Revisit if:** another platform is authorized
 - **Source:** deferred: platform
 
+## D7: Repair proven fixture response truncation rather than weakening AC9
+- **Question:** Why did the first restored daemon smoke stall before the pointer assertion?
+- **Options:** skip live status proof; increase timeouts; preserve every output byte across fake-host socket backpressure.
+- **Chose:** Queue framed output per fake PTY connection and drain partial writes in order across replies/errors/data/events; add an actual transport-burst regression. Keep intact AC9 assertions/timeouts. Retain the separate scheduler disposal fence.
+- **Why:** Narrow instrumented smoke established status explanation awaiting snapshot, with earlier list response id16 of5194bytes accepted only2917bytes. The fixture discarded2277bytes, then emitted snapshot id17 into the incomplete prior frame. Status/scheduler RPCs therefore could not settle. Bounded scheduler disposal did let daemon teardown finish in the instrumented failure run; it does not repair truncated transport or justify weakening acceptance.
+- **Evidence:** smoke diagnostics artifact31: `fake write 16 5194 2917`, no received16/17, snapshot reply17; screen sampler read/list completed before unresolved snapshot; after cleanup plugin stop completed. Earlier uninstrumented smokes timed out120s/60s; instrumented RPC deadline failed after8s and cleaned up.
+- **Reversibility:** easy
+- **Confidence:** high for this demonstrated fixture hang; historical checkpoint's exact bytes were not recorded
+- **Revisit if:** corrected fixture still stalls the full command-only hint smoke
+- **Source:** assumed — autonomous
+
+## D8: Execute the hint command instead of preserving an incorrect substring pin
+- **Question:** The restored AC9 string expectation requested Dispatch `check --run R`, but does the worker actually receive its mail with that command?
+- **Options:** change locked mailbox precedence; keep a command that fails; preserve full safety behavior and execute the captured mailbox-correct command.
+- **Chose:** Run hints remain Run-qualified; Dispatch hints use unqualified check exactly as checkpoint commandFor and the feature doc specify. Keep the original AC9 target/privacy/unread assertions and20-second timeout; replace its mistaken substring assertion with actual CLI execution and exact message receipt. Original checkpoint remains unchanged for review.
+- **Why:** After transport repair, real automatic text/Enter arrived only at the worker and mail stayed unread, but CLI `check --run R` returned exit1 `run_required`. Explicit Run selects coordinator authority by design; changing that would break an existing lock. A passing string assertion would not be a working nudge. This strengthens behavioral acceptance rather than reducing it.
+- **Evidence:** actual smoke artifact36; orchestration.md:421,463-467; messaging.ts:1752-1773; checkpoint commandFor only appends --run for Run mailboxes.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** an explicitly authorized public mailbox selector changes
+- **Source:** supersedes m6-orchestration-idle-pointer-shutdown D4's Dispatch command choice; locked by research/orca-features/orchestration.md
+
+## D9: Keep exact smoke evidence and defer permanent test execution
+- **Question:** What runtime behavior and ownership have actually been demonstrated?
+- **Options:** infer a whole-suite pass; record only the exercised boundaries.
+- **Chose:** Accepted scoped component0a909d1b after HEAD/path audit, merged it and removed its worktree/branch. Parent reused the existing identity validator, preserved one-shot quiet retry, and removed new mock-forwarding/internal-map test pins. A second task repaired only the fake PTY fixture and wrote its transport regression; it ran no checks or commits.
+- **Why:** Real daemon/API/CLI smoke now receives command-only text and separate Enter at the idle Dispatch assignee, keeps its mail unread, executes the captured command with exit0 and exact message receipt, and marks read only on explicit ack. Shutdown during the next Enter gap returned61ms; one already-admitted session operation later rejected on revoked context and logged a handled method error. No lifecycle-timeout or closed-orchestration-store error was observed.
+- **Evidence:** smoke artifact38 exit0 in2.34s. Separate SQLite-backed scheduler smoke exercised unresolved identity, status and submission, each with late resolve and reject: all six disposed in<1ms rounded0, zero late store accesses or further RPCs, original attempted phase retained. Root/mobile typecheck passed24.42s initially and22.90s after fixture repair; final post-command-correction merge gate still required.
+- **Reversibility:** easy
+- **Confidence:** high for exercised smoke paths only; permanent regressions remain unrun
+- **Revisit if:** end-phase acceptance/suites find a concrete failure
+- **Source:** assumed — autonomous
+
 ## Progress
-Scope investigation and self-reviewed single spec complete. Shared public contracts already exist and remain unchanged. Next: commit this preparation, dispatch one isolated implementer for restoration/lifecycle fencing and written regressions; parent runs smoke/typecheck after returned-work barrier, catches up once, records incoming decisions and lands via canonical queue.
+Implementation and narrow smoke proof complete; no permanent tests, suites, review or UI dogfood ran. All implementers returned; component worktree removed. Next: commit the exact returned source/tests/docs, catch up once with build/roadmap, read incoming decision logs, run final typecheck and land with the canonical absolute queue command. Preserve the original checkpoint and all AC9 safety behavior; D8 documents the strengthened executable-command migration.

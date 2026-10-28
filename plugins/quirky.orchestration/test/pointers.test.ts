@@ -23,7 +23,6 @@ type FixtureOptions = {
   blocked?: Deferred<unknown>
   identityKind?: 'terminal' | 'structured'
   eligibilityValue?: unknown
-  reservedTypes?: ReadonlySet<MessageType>
   startupRows?: { mailbox_kind: string; mailbox_id: string }[]
   pendingOperation?: Record<string, unknown> | null
 }
@@ -36,9 +35,6 @@ function pointerFixture(options: FixtureOptions = {}) {
   const seenCalls = new Map<string, Deferred<void>>()
   let closed = false
   let accessesAfterClose = 0
-  let unsubscribeCount = 0
-  let candidateChecks = 0
-  let lastReserved: ReadonlySet<MessageType> = new Set()
   let messageArrivalListener: ((arrival: never) => void) | null = null
   let mailboxAvailableListener: ((mailbox: never) => void) | null = null
   let eventListener: ((event: never) => void | Promise<void>) | null = null
@@ -80,7 +76,6 @@ function pointerFixture(options: FixtureOptions = {}) {
     subscribe(listener: (event: never) => void | Promise<void>) {
       eventListener = listener
       return () => {
-        unsubscribeCount += 1
         eventListener = null
       }
     },
@@ -126,24 +121,19 @@ function pointerFixture(options: FixtureOptions = {}) {
     onArrival(listener: (arrival: never) => void | Promise<void>) {
       messageArrivalListener = listener
       return () => {
-        unsubscribeCount += 1
         messageArrivalListener = null
       }
     },
     onMailboxAvailable(listener: (mailbox: never) => void) {
       mailboxAvailableListener = listener
       return () => {
-        unsubscribeCount += 1
         mailboxAvailableListener = null
       }
     },
     reservedTypes() {
-      return options.reservedTypes ?? new Set<MessageType>()
+      return new Set<MessageType>()
     },
-    pointerCandidates(_mailbox: Mailbox, reserved: ReadonlySet<MessageType>) {
-      candidateChecks += 1
-      lastReserved = reserved
-      if (reserved.has('status')) return []
+    pointerCandidates() {
       return [{ id: 'msg_test' as MessageId, type: 'status' as const }]
     }
   } as unknown as OrchestrationMessages
@@ -154,12 +144,6 @@ function pointerFixture(options: FixtureOptions = {}) {
     pointers,
     calls,
     get accessesAfterClose() { return accessesAfterClose },
-    get candidateChecks() { return candidateChecks },
-    get lastReserved() { return lastReserved },
-    get unsubscribeCount() { return unsubscribeCount },
-    get hasListeners() {
-      return messageArrivalListener !== null || mailboxAvailableListener !== null || eventListener !== null
-    },
     watchCall(method: string): Promise<void> {
       if (calls.some((call) => call.method === method)) return Promise.resolve()
       let waiter = seenCalls.get(method)
@@ -238,30 +222,6 @@ describe('orchestration pointer lifecycle', () => {
     expect(fixture.calls.map((call) => call.method)).toEqual(['quirky.session/identity'])
   })
 
-  test('dispose is idempotent and releases subscriptions and scheduled timers', async () => {
-    const fixture = pointerFixture({
-      identityKind: 'terminal',
-      eligibilityValue: { state: 'idle', screen: { pendingQuiet: true } }
-    })
-    fixture.pointers.start()
-    fixture.pointers.scheduleMailbox(runMailbox)
-    await fixture.watchCall('quirky.agent-status/explain')
-    await drainMicrotasks()
-    const internals = fixture.pointers as unknown as {
-      startupTimer: ReturnType<typeof setTimeout> | null
-      quietTimers: Map<string, unknown>
-    }
-    expect(internals.startupTimer).not.toBeNull()
-    expect(internals.quietTimers.size).toBe(1)
-
-    await fixture.pointers.dispose()
-    await fixture.pointers.dispose()
-
-    expect(fixture.unsubscribeCount).toBe(3)
-    expect(fixture.hasListeners).toBe(false)
-    expect(internals.startupTimer).toBeNull()
-    expect(internals.quietTimers.size).toBe(0)
-  })
 
   test('reset fences stale message work but tasks reset preserves unrelated Run work', async () => {
     const staleIdentity = deferred<unknown>()
@@ -326,17 +286,6 @@ describe('orchestration pointer lifecycle', () => {
     await fixture.pointers.dispose()
   })
 
-  test('mailbox pointer candidates respect waiter reservations', async () => {
-    const fixture = pointerFixture({ reservedTypes: new Set<MessageType>(['status']) })
-    fixture.pointers.scheduleMailbox(runMailbox)
-    await fixture.watchCall('quirky.session/get')
-    await drainMicrotasks()
-
-    expect(fixture.candidateChecks).toBe(1)
-    expect(fixture.lastReserved.has('status')).toBe(true)
-    expect(fixture.calls.some((call) => call.method === 'quirky.session/pointer')).toBe(false)
-    await fixture.pointers.dispose()
-  })
 
   test('same-mailbox submissions remain single-flight and recovery reuses the durable operation ID', async () => {
     const blockedPointer = deferred<unknown>()

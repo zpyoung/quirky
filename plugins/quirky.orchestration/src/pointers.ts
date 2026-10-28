@@ -9,6 +9,7 @@ import type {
   RunId
 } from './contracts'
 import type { OrchestrationCore } from './core'
+import { targetIdentity } from './identity'
 import type { OrchestrationMessages } from './messaging'
 import type { SessionIdentity } from './runtime-contracts'
 type PointerFence = { lifecycle: number; tasks: number; sequence: number }
@@ -253,7 +254,6 @@ export class OrchestrationPointers {
     const timer = setTimeout(() => {
       if (this.quietTimers.get(key) !== timer) return
       this.quietTimers.delete(key)
-      this.quietRetryArmed.delete(key)
       if (this.isCurrent(fence, mailbox)) this.scheduleMailbox(mailbox)
     }, QUIET_RECHECK_MS)
     timer.unref()
@@ -417,42 +417,18 @@ export class OrchestrationPointers {
     }
     if (sessionId === null || !this.isCurrent(fence, mailbox)) return null
 
-    let value: unknown
+    let identity: SessionIdentity
     try {
-      value = await this.context.call('quirky.session/identity', { session: sessionId })
+      identity = await targetIdentity(this.context, sessionId)
     } catch (error) {
       if (!this.isCurrent(fence, mailbox)) return null
       throw error
     }
     if (!this.isCurrent(fence, mailbox)) return null
-    const identity = this.sessionIdentity(value, sessionId)
     if (!identity || (expectedIncarnation !== null && identity.processIncarnation !== expectedIncarnation)) return null
     return identity
   }
 
-  private sessionIdentity(value: unknown, expectedSessionId: string): SessionIdentity | null {
-    if (typeof value !== 'object' || value === null || Array.isArray(value)) return null
-    const candidate = value as Record<string, unknown>
-    if (
-      Object.keys(candidate).length !== 8 ||
-      typeof candidate.sessionId !== 'string' ||
-      candidate.sessionId.trim().length === 0 ||
-      candidate.sessionId !== expectedSessionId ||
-      candidate.live !== true ||
-      typeof candidate.runtimeEpoch !== 'string' ||
-      candidate.runtimeEpoch.trim().length === 0 ||
-      typeof candidate.processIncarnation !== 'string' ||
-      candidate.processIncarnation.trim().length === 0 ||
-      (candidate.source !== 'terminal_launch' && candidate.source !== 'structured_lease' && candidate.source !== 'restored_authority') ||
-      (candidate.kind !== 'terminal' && candidate.kind !== 'structured') ||
-      (candidate.providerId !== null && typeof candidate.providerId !== 'string') ||
-      typeof candidate.worktreeId !== 'string' ||
-      candidate.worktreeId.trim().length === 0
-    ) {
-      return null
-    }
-    return value as SessionIdentity
-  }
 
   private async isEligible(mailbox: PointerMailbox, identity: SessionIdentity, fence: PointerFence): Promise<boolean> {
     if (!this.isCurrent(fence, mailbox)) return false
@@ -639,14 +615,7 @@ export class OrchestrationPointers {
 
   private commandFor(mailbox: PointerMailbox, fence: PointerFence): string | null {
     if (!this.isCurrent(fence, mailbox)) return null
-    const runId = mailbox.kind === 'run'
-      ? mailbox.runId
-      : this.store.get<{ run_id: string }>(
-        `SELECT run_id FROM dispatches WHERE id = ?`,
-        mailbox.dispatchId
-      )?.run_id
-    if (!this.isCurrent(fence, mailbox) || typeof runId !== 'string' || runId.length === 0) return null
-    return `quirky orchestration check --run ${runId}`
+    return `quirky orchestration check${mailbox.kind === 'run' ? ` --run ${mailbox.runId}` : ''}`
   }
 
 
