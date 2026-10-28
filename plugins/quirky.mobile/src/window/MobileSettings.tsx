@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
+import { Badge, Button, FormRow, SectionHeader, SelectField, TextField, ToolPanelFrame } from '@quirky/ui'
 import type { MobilePairingResult, UiPluginContext } from '@quirky/protocol'
 import { createPairing } from './api'
 import { DeviceList } from './DeviceList'
-import { MobileStyles } from './MobileStyles'
 import { NetworkPicker } from './NetworkPicker'
 import { PairingPanel } from './PairingPanel'
 import { MOBILE_PAGE_ID } from './MobilePage'
@@ -139,69 +139,79 @@ export function MobileSettings({ context, report }: { context: UiPluginContext; 
     }
   }
 
-  if (mobile.loading && mobile.state === null) return <main className="mobile-root"><MobileStyles /><p role="status">Loading Mobile settings…</p></main>
+  if (mobile.loading && mobile.state === null) {
+    return <main className="ui-stack"><p role="status">Loading Mobile settings…</p></main>
+  }
   if (mobile.state === null) {
     return (
-      <main className="mobile-root">
-        <MobileStyles />
-        <h1 className="mobile-title">Mobile</h1>
-        <p className="mobile-error" role="alert">Unable to load Mobile settings: {mobile.error ?? 'The daemon returned no state.'}</p>
-        <button className="mobile-button" type="button" onClick={() => void mobile.refresh()}>Try again</button>
+      <main className="ui-stack">
+        <SectionHeader title="Mobile" />
+        <p className="ui-error-text" role="alert">Unable to load Mobile settings: {mobile.error ?? 'The daemon returned no state.'}</p>
+        <div className="ui-cluster"><Button onClick={() => void mobile.refresh()}>Try again</Button></div>
       </main>
     )
   }
 
   return (
-    <main className="mobile-root">
-      <MobileStyles />
-      <header className="mobile-header">
-        <div>
-          <h1 className="mobile-title">Mobile</h1>
-          <p className="mobile-description">Control terminals and agents from your phone.</p>
-        </div>
-        <button className="mobile-button" type="button" onClick={() => context.openView(MOBILE_PAGE_ID)}>Open Mobile page</button>
-      </header>
-      {mobile.error && <p className="mobile-error" role="alert">Could not refresh Mobile state: {mobile.error}</p>}
-      {actionError && <p className="mobile-error" role="alert">{actionError}</p>}
+    <main className="ui-stack">
+      <div className="ui-stack">
+        <SectionHeader title="Mobile" actions={<Button onClick={() => context.openView(MOBILE_PAGE_ID)}>Open Mobile page</Button>} />
+        <p className="ui-text-muted">Control terminals and agents from your phone.</p>
+      </div>
+      {mobile.error && <p className="ui-error-text" role="alert">Could not refresh Mobile state: {mobile.error}</p>}
+      {actionError && <p className="ui-error-text" role="alert">{actionError}</p>}
 
-      <section className="mobile-card">
-        <h2>Desktop identity</h2>
-        <label className="mobile-field">
-          Machine name
-          <input name="machineName" maxLength={128} value={machineName} onChange={(event) => setMachineName(event.target.value)} />
-        </label>
-        <button className="mobile-button" type="button" disabled={!machineName.trim() || machineName === mobile.state.machineName} onClick={() => void saveMachineName()}>Save machine name</button>
-        <label className="mobile-field">
-          <span>Show Mobile in the sidebar</span>
-          <input type="checkbox" checked={mobile.state.showMobileButton} onChange={(event) => void toggleSidebar(event.target.checked)} />
-        </label>
-      </section>
-
-      <section className="mobile-card">
-        <h2>Pair a phone</h2>
-        <p className="mobile-muted">Generate a QR code, then scan it in Quirky Mobile under Pair Desktop.</p>
-        <div role="group" aria-label="How the phone reaches this computer">
-          <p><strong>LAN</strong> <span className="mobile-muted">Selected · no account needed</span></p>
-          <p className="mobile-callout">Quirky Relay isn’t available in this build. Use LAN.</p>
+      <ToolPanelFrame title="Desktop identity">
+        <div className="ui-stack">
+          <TextField
+            label="Machine name"
+            name="machineName"
+            maxLength={128}
+            value={machineName}
+            onChange={(event) => setMachineName(event.target.value)}
+          />
+          <div className="ui-cluster">
+            <Button disabled={!machineName.trim() || machineName === mobile.state.machineName} onClick={() => void saveMachineName()}>Save machine name</Button>
+          </div>
+          <FormRow label="Show Mobile in the sidebar" htmlFor="mobile-sidebar-visibility">
+            <input
+              id="mobile-sidebar-visibility"
+              type="checkbox"
+              checked={mobile.state.showMobileButton}
+              onChange={(event) => void toggleSidebar(event.target.checked)}
+            />
+          </FormRow>
         </div>
-        <NetworkPicker
-          interfaces={mobile.state.interfaces}
-          customAddresses={mobile.state.customAddresses}
-          selectedAddress={selectedAddress}
-          busy={busy}
-          onSelect={setSelectedAddress}
-          onRefresh={refreshInterfaces}
-          onAdd={addAddress}
-          onRemove={removeAddress}
-        />
-        <PairingPanel offer={offer} busy={busy} error={null} buttonLabel="Generate QR code" onGenerate={generate} />
-        <label className="mobile-field">
-          When you leave the mobile app
-          <select aria-label="When you leave the mobile app" value={mobile.state.autoRestoreFitMs === null ? 'keep' : String(mobile.state.autoRestoreFitMs)} onChange={(event) => void changeAutoRestore(event.target.value)}>
+      </ToolPanelFrame>
+
+      <ToolPanelFrame title="Pair a phone">
+        <div className="ui-stack">
+          <p className="ui-text-muted">Generate a QR code, then scan it in Quirky Mobile under Pair Desktop.</p>
+          <div role="group" aria-label="How the phone reaches this computer" className="ui-stack">
+            <p><strong>LAN</strong> <span className="ui-text-muted">Selected · no account needed</span></p>
+            <p><Badge tone="needs-you">Relay unavailable</Badge> Quirky Relay isn’t available in this build. Use LAN.</p>
+          </div>
+          <NetworkPicker
+            interfaces={mobile.state.interfaces}
+            customAddresses={mobile.state.customAddresses}
+            selectedAddress={selectedAddress}
+            busy={busy}
+            onSelect={setSelectedAddress}
+            onRefresh={refreshInterfaces}
+            onAdd={addAddress}
+            onRemove={removeAddress}
+          />
+          <PairingPanel offer={offer} busy={busy} error={null} buttonLabel="Generate QR code" onGenerate={generate} />
+          <SelectField
+            label="When you leave the mobile app"
+            aria-label="When you leave the mobile app"
+            value={mobile.state.autoRestoreFitMs === null ? 'keep' : String(mobile.state.autoRestoreFitMs)}
+            onChange={(event) => void changeAutoRestore(event.target.value)}
+          >
             {AUTO_RESTORE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-          </select>
-        </label>
-      </section>
+          </SelectField>
+        </div>
+      </ToolPanelFrame>
 
       <DeviceList context={context} devices={mobile.state.devices} onChanged={async () => { await mobile.refreshDevices() }} />
     </main>
