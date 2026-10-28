@@ -7,6 +7,8 @@ export interface FederationPeerPrincipal {
   peerId: string
   fingerprint: string
   pairingRevision: number
+  /** Source daemon incarnation verified against the pinned peer's live status. */
+  incarnation: string
 }
 
 /** Distinct remote authority: it is never a RuntimeCallerEvidence. */
@@ -54,6 +56,8 @@ export type FederationInboundHandler = (method: string, params: Record<string, u
 export interface FederationEngine {
   home(dispatchId: DispatchId): FederationBinding | null
   host(dispatchId: DispatchId): FederationBinding | null
+  /** Rechecks persisted binding and returns distinct authority only after exact host attachment. */
+  reportAuthority(binding: FederationBinding): FederationReportAuthority
   hostForCaller(caller: RuntimeCallerEvidence): FederationBinding | null
   bindings(side?: 'home' | 'host'): readonly FederationBinding[]
   assertBinding(binding: FederationBinding): Promise<void>
@@ -61,6 +65,7 @@ export interface FederationEngine {
   start(params: WorkerStartParams, caller: CoordinatorAuthority): Promise<MutationResult<WorkerStartReceipt>>
   /** Actual host worker pipelines, scoped by validated attachment and owning service Run. */
   hostShow(binding: FederationBinding): Promise<WorkerShowResult>
+  hostList(binding: FederationBinding, params: WorkerListParams): Promise<WorkerListResult>
   hostRead(binding: FederationBinding, params: WorkerReadParams): Promise<WorkerReadResult>
   hostControl(binding: FederationBinding, action: 'stop' | 'release' | 'retain' | 'abandon', params: WorkerControlParams): Promise<MutationResult<WorkerControlResult>>
 }
