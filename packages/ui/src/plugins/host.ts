@@ -104,7 +104,10 @@ type Runtime = {
 type MountHandle = {
   readonly id: string
   readonly plugin: string
+  readonly module: UiSlotEntry['module']
   cleanup?: () => void
+  afterCleanup?: () => void
+  finishRelease?: () => void
   released: boolean
   /** The last state the slot reported, sent again after a reconnect. */
   report?: { state: unknown }
@@ -254,18 +257,40 @@ export class WindowPluginHost {
    * Mounts contribution `id` into `element`, loading its plugin's module first if needed. The
    * returned function cleans the mount up and is safe to call more than once. Failures end up in
    * `slots[id]`, never as a throw.
+   * React-owned mounts can defer disposal until their parent commit has completed.
    */
-  mount(id: string, element: HTMLElement, props?: { input?: unknown }): () => void {
+  mount(
+    id: string,
+    element: HTMLElement,
+    props?: { input?: unknown },
+    options?: { deferCleanup?: boolean; afterCleanup?: () => void }
+  ): () => void {
     const entry = this.state.model ? findSlot(this.state.model, id) : undefined
     if (!entry) {
       this.setSlot(id, { status: 'error', message: `no contribution ${id}` })
-      return () => this.setSlot(id, null)
+      let released = false
+      return () => {
+        if (released) return
+        released = true
+        const finish = () => {
+          options?.afterCleanup?.()
+          this.setSlot(id, null)
+        }
+        if (options?.deferCleanup) queueMicrotask(finish)
+        else finish()
+      }
     }
-    const handle: MountHandle = { id, plugin: entry.plugin, released: false }
+    const handle: MountHandle = {
+      id,
+      plugin: entry.plugin,
+      module: entry.module,
+      afterCleanup: options?.afterCleanup,
+      released: false
+    }
     this.mounts.add(handle)
     this.setSlot(id, { status: 'loading' })
     void this.runMount(handle, entry, element, props)
-    return () => this.release(handle)
+    return () => this.release(handle, options?.deferCleanup ?? false)
   }
 
   /**
@@ -418,6 +443,8 @@ export class WindowPluginHost {
     }
     if (this.stopped) return
     const settings = snapshot.map((s) => (newer.has(s.id) ? { ...s, value: newer.get(s.id)! } : s))
+    // Tear down nested plugin roots before React sees slots whose containers are disappearing.
+    this.releaseStaleMounts(model)
     this.commit({ model, settings, themeVariables: themeVariablesOf(model) })
     await this.reconcile(model)
   }
@@ -427,10 +454,6 @@ export class WindowPluginHost {
     const badges = Object.entries(this.state.badges).filter(onPanel)
     if (badges.length !== Object.keys(this.state.badges).length) {
       this.commit({ badges: Object.fromEntries(badges), badgeTitles: Object.fromEntries(Object.entries(this.state.badgeTitles).filter(onPanel)) })
-    }
-    for (const handle of [...this.mounts]) {
-      const entry = findSlot(model, handle.id)
-      if (!entry || entry.plugin !== handle.plugin) this.release(handle)
     }
     for (const handle of [...this.embedded]) {
       const entry = model.views.find((view) => view.id === handle.id)
@@ -443,6 +466,13 @@ export class WindowPluginHost {
     }
     await Promise.all(departed.map((id) => this.deactivate(id)))
     this.startEnabled(model)
+  }
+
+  private releaseStaleMounts(model: UiModel): void {
+    for (const handle of [...this.mounts]) {
+      const entry = findSlot(model, handle.id)
+      if (!entry || entry.plugin !== handle.plugin || entry.module !== handle.module) this.release(handle)
+    }
   }
 
   /** Whether the daemon's model lists a UI module for the plugin, i.e. it is enabled and has code-backed UI. */
@@ -494,9 +524,10 @@ export class WindowPluginHost {
       return
     }
     const cleanupFn = typeof cleanup === 'function' ? (cleanup as () => void) : undefined
-    // a breach inside the mount function already released the handle and wrote the slot's error
+    // A breach or concurrent disposal may release the handle during the mount callback.
     if (handle.released || this.runtimes.get(entry.plugin)?.session !== session) {
-      this.runCleanup(handle.plugin, cleanupFn)
+      if (handle.released && handle.finishRelease) handle.cleanup = cleanupFn
+      else this.runCleanup(handle.plugin, cleanupFn)
       return
     }
     handle.cleanup = cleanupFn
@@ -554,22 +585,29 @@ export class WindowPluginHost {
     }
   }
 
-  private release(handle: MountHandle): void {
+  private release(handle: MountHandle, deferCleanup = false): void {
+    if (handle.released) {
+      if (!deferCleanup) handle.finishRelease?.()
+      return
+    }
     handle.released = true
-    this.mounts.delete(handle)
-    const cleanup = handle.cleanup
-    handle.cleanup = undefined
-    if (cleanup) {
-      try {
-        cleanup()
-      } catch (error) {
-        this.deps.log(`${handle.plugin}: cleanup failed: ${messageOf(error)}`)
+    const finish = () => {
+      if (handle.finishRelease !== finish) return
+      handle.finishRelease = undefined
+      this.mounts.delete(handle)
+      const cleanup = handle.cleanup
+      handle.cleanup = undefined
+      this.runCleanup(handle.plugin, cleanup)
+      this.runCleanup(handle.plugin, handle.afterCleanup)
+      handle.afterCleanup = undefined
+      if (![...this.mounts].some((other) => other.id === handle.id && !other.released)) {
+        this.setSlot(handle.id, null)
+        if (handle.report) this.callQuietly('ui.report', { slot: handle.id, state: null })
       }
     }
-    if (![...this.mounts].some((other) => other.id === handle.id)) {
-      this.setSlot(handle.id, null)
-      if (handle.report) this.callQuietly('ui.report', { slot: handle.id, state: null })
-    }
+    handle.finishRelease = finish
+    if (deferCleanup) queueMicrotask(finish)
+    else finish()
   }
 
   private requireCommand(id: string): UiCommandEntry {
@@ -742,6 +780,10 @@ export class WindowPluginHost {
     runtime.session = undefined
     for (const handle of [...this.mounts]) {
       if (handle.plugin !== session.pluginId) continue
+      if (handle.released) {
+        this.release(handle)
+        continue
+      }
       this.mounts.delete(handle)
       handle.released = true
       const cleanup = handle.cleanup
