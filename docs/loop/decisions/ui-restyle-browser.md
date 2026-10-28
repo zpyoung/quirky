@@ -44,5 +44,27 @@
 - **Revisit if:** operator phase policy changes
 - **Source:** locked by docs/loop/LOOP.md
 
+## D5: Supply a shared DOM-only selection-overlay primitive
+- **Question:** the existing guest picker constructs local stylesheet chrome inside a closed shadow root, beyond the three React slices
+- **Options:** leave unthemed plugin CSS in a serialized program; move Browser-specific selectors wholesale; shared minimal DOM selection component with canonical token sheet
+- **Chose:** public @quirky/ui/selection-overlay expression constructs only host/shadow/surface/highlight/label with canonical tokens.css and generic token-based selection presentation. Browser keeps ownership markers, payload redaction, geometry, events, cancellation and lifetime
+- **Why:** an external guest world cannot mount the app's React component tree or inherit its token sheet. This is an actual missing reusable DOM primitive, not a relocation of pane/design selectors. Source Browser calls only the public UI subpath
+- **Evidence:** plugins/quirky.browser/src/design/guest.ts:339–355 original local style construction; packages/ui/src/design-system/selection-overlay.ts; additive package export
+- **Reversibility:** easy
+- **Confidence:** medium until actual bundled picker smoke
+- **Revisit if:** the guest program is not self-contained after bundling or the external document interferes with owned geometry
+- **Source:** assumed — autonomous
+
+## D6: Keep platform assurance bounded to macOS
+- **Question:** native/system browser and cross-platform visual acceptance
+- **Options:** infer native/other OS behavior; exercise this Mac's built renderer and preserve existing native handoffs
+- **Chose:** macOS owned Chromium smoke only; no WKWebView/default-profile storage or clipboard write to the user's session. Linux/Windows font/control/viewport acceptance remains unexercised
+- **Why:** locked platform scope and existing native SDK limitations do not change in a presentation-only restyle
+- **Evidence:** docs/loop/LOOP.md What is already decided; Browser README Native boundaries
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** supported platform scope expands
+- **Source:** deferred: platform
+
 ## Progress
 Combined spec self-reviewed against SC1–SC5 and approved parent. Shared TextField ref contract is additive and forwarded by existing React19 implementation. Next commit contracts/spec then dispatch3disjoint UI slices in external worktrees. No business API changes or new flows.
