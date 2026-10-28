@@ -89,9 +89,12 @@ export type AgentEntry = {
   oneShot: OneShotSpec | null
 }
 
-/** A provider-owned, read-only command that lists this agent's models. */
+/** A bounded, provider-owned model source; only real provider protocols are named here. */
 export type ModelDiscoverySpec =
   | { protocol: 'codex-app-server'; timeoutMs: number }
+  | { protocol: 'anthropic-models'; timeoutMs: number }
+  | { protocol: 'gemini-models'; timeoutMs: number }
+  | { protocol: 'pi-rpc'; timeoutMs: number }
   | { protocol?: 'argv-json'; args: string[]; timeoutMs: number; format: 'json' }
 
 

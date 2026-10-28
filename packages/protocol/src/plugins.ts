@@ -114,18 +114,21 @@ export type PluginHostPower = {
 }
 
 /** Trusted transports authenticate peers before admission; authorization is checked on every call. */
+type PluginClientAdmission = {
+  name: string
+  /** Must revalidate the live credential and throw when a method/params is forbidden. */
+  authorize(method: string, params: Record<string, unknown>): void | Promise<void>
+  sendText(text: string): void
+  sendBinary(bytes: Uint8Array): void
+  /** Called when the kernel or plugin revokes this admitted connection. */
+  close(): void
+}
+
 export type PluginClients = {
-  accept(options: {
-    role: 'mobile'
-    deviceId: string
-    name: string
-    /** Must revalidate the live credential and throw when a method/params is forbidden. */
-    authorize(method: string, params: Record<string, unknown>): void | Promise<void>
-    sendText(text: string): void
-    sendBinary(bytes: Uint8Array): void
-    /** Called when the kernel or plugin revokes this admitted connection. */
-    close(): void
-  }): {
+  accept(options:
+    | (PluginClientAdmission & { role: 'mobile'; deviceId: string })
+    | (PluginClientAdmission & { role: 'cli'; ownerGrantId: string })
+  ): {
     readonly id: number
     /** Receives one decrypted JSON-RPC 2.0 request. */
     receive(text: string): Promise<void>
@@ -318,11 +321,15 @@ export type PluginCaller =
       name?: string
       /** Authenticated remote identity; never taken from request params. */
       deviceId?: string
+      /** Distinct durable full-owner credential identity; never taken from request params. */
+      ownerGrantId?: string
+      /** Stable first-party UI installation identity, sourced only from authenticated UI hello. */
+      desktopClientId?: string
       cwd?: string
       sessionId?: string
       worktreeId?: string
       sessionAuthority?: PluginSessionAuthority
-      /** Set for `connection: true` methods and authenticated mobile callers bound to a live transport. */
+      /** Set for `connection: true` methods and authenticated remote clients bound to a live transport. */
       connection?: CallerConnection
     }
   | { role: 'plugin'; pluginId: string }

@@ -162,6 +162,82 @@
         }
       },
       {
+        "id": "ownerPair",
+        "description": "Create a separately confirmed full-owner CLI grant over the authenticated E2EE listener.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "name": { "type": "string" },
+            "confirm": { "type": "boolean" },
+            "address": { "type": "string" }
+          },
+          "required": ["name", "confirm"],
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "available": { "type": "boolean" },
+            "endpoint": { "type": "string" },
+            "offer": { "type": "string" },
+            "grant": {
+              "type": "object",
+              "properties": {
+                "grantId": { "type": "string" },
+                "name": { "type": "string" },
+                "endpoint": { "type": "string" },
+                "scope": { "type": "string", "enum": ["owner-cli"] },
+                "createdAt": { "type": "number" }
+              },
+              "required": ["grantId", "name", "endpoint", "scope", "createdAt"],
+              "additionalProperties": false
+            }
+          },
+          "required": ["available", "endpoint", "offer", "grant"],
+          "additionalProperties": false
+        }
+      },
+      {
+        "id": "ownerGrants",
+        "description": "List safe metadata for separately issued full-owner CLI grants.",
+        "readOnly": true,
+        "params": { "type": "object", "properties": {}, "additionalProperties": false },
+        "result": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "grantId": { "type": "string" },
+              "name": { "type": "string" },
+              "endpoint": { "type": "string" },
+              "scope": { "type": "string", "enum": ["owner-cli"] },
+              "createdAt": { "type": "number" }
+            },
+            "required": ["grantId", "name", "endpoint", "scope", "createdAt"],
+            "additionalProperties": false
+          }
+        }
+      },
+      {
+        "id": "ownerRevoke",
+        "description": "Explicitly revoke an owner CLI grant and close its active E2EE connections.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "grantId": { "type": "string" },
+            "confirm": { "type": "boolean" }
+          },
+          "required": ["grantId", "confirm"],
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "properties": { "revoked": { "type": "boolean" } },
+          "required": ["revoked"],
+          "additionalProperties": false
+        }
+      },
+      {
         "id": "devices",
         "description": "List durably paired mobile devices; pending offers are excluded.",
         "readOnly": true,
@@ -623,6 +699,24 @@
           "rotate": { "type": "boolean", "description": "replace the pending offer without affecting paired devices" }
         },
         "methods": ["quirky.mobile/pair"]
+      },
+      {
+        "id": "owner-pair",
+        "summary": "create a separately confirmed full-owner CLI grant",
+        "flags": {
+          "name": { "type": "string", "description": "Safe owner grant name.", "required": true },
+          "address": { "type": "string", "description": "Reachable host, host:port, IPv6 literal or ws(s)/http(s) endpoint." },
+          "confirm": { "type": "boolean", "description": "Required explicit confirmation to issue full-owner access." }
+        },
+        "methods": ["quirky.mobile/ownerPair"]
+      },
+      { "id": "owner-grants", "summary": "list safe full-owner CLI grant metadata", "methods": ["quirky.mobile/ownerGrants"] },
+      {
+        "id": "owner-revoke",
+        "summary": "explicitly revoke a full-owner CLI grant",
+        "positionals": [{ "name": "grant-id", "description": "the owner grant UUID", "required": true }],
+        "flags": { "confirm": { "type": "boolean", "description": "Required explicit confirmation to revoke the grant." } },
+        "methods": ["quirky.mobile/ownerRevoke"]
       },
       { "id": "devices", "summary": "list paired mobile devices", "methods": ["quirky.mobile/devices"] },
       {
