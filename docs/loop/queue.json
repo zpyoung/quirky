@@ -1740,6 +1740,16 @@
       "status": "todo"
     },
     {
+      "id": "fix-flaky-terminal-features-pane",
+      "milestone": "M1",
+      "title": "Fix the flaky plugins/quirky.terminal/test/e2e-ui/features-pane.test.ts, a macOS-only test (scripts/test-on-macos.txt) that failed in 4 runs and passed when rerun alone (see <git common dir>/build-loop/flakes.log). Find the timing assumption with quirk:systematic-debugging from the logged failures, without generating CPU load on the Mac, and fix the test or the code it exposes",
+      "docs": [
+        "term-ui.md"
+      ],
+      "deps": [],
+      "status": "done"
+    },
+    {
       "id": "m7-test-triage",
       "milestone": "M7",
       "title": "End-phase test triage: run bun scripts/suite.ts packages apps plugins, bun test scripts and bun run typecheck on build/roadmap, and add one fix-test-<area>-<MMDD> item per failing package, app or plugin (naming its failing files and tests) so the lanes split the debugging; change no code",
@@ -1848,16 +1858,6 @@
       "lane": 1
     },
     {
-      "id": "fix-flaky-terminal-features-pane",
-      "milestone": "M1",
-      "title": "Fix the flaky plugins/quirky.terminal/test/e2e-ui/features-pane.test.ts, a macOS-only test (scripts/test-on-macos.txt) that failed in 4 runs and passed when rerun alone (see <git common dir>/build-loop/flakes.log). Find the timing assumption with quirk:systematic-debugging from the logged failures, without generating CPU load on the Mac, and fix the test or the code it exposes",
-      "docs": [
-        "term-ui.md"
-      ],
-      "deps": [],
-      "status": "todo"
-    },
-    {
       "id": "fix-flaky-pty-host-clear",
       "milestone": "M1",
       "title": "Fix the flaky packages/pty-host/test/clear.test.ts: it failed 3 times in full-suite runs today (15:28, 22:47, 23:11 UTC). Find out with quirk:systematic-debugging whether a wait is too short under load or the clear races with output, reproduce it under CPU load on the test host, and fix the code or the test",
@@ -1865,7 +1865,8 @@
         "term-daemon.md"
       ],
       "deps": [],
-      "status": "todo"
+      "status": "in-progress",
+      "lane": 11
     },
     {
       "id": "sb-mobile-settings-visibility",
@@ -1877,7 +1878,8 @@
       "deps": [
         "sb-mobile-daemon"
       ],
-      "status": "todo"
+      "status": "in-progress",
+      "lane": 2
     },
     {
       "id": "fix-native-m1-term-ui-1028",
@@ -1885,7 +1887,8 @@
       "title": "Fix the native-only failures in m1-term-ui from the 2026-10-28 run: SC-37",
       "docs": [],
       "deps": [],
-      "status": "todo"
+      "status": "in-progress",
+      "lane": 5
     },
     {
       "id": "fix-native-m2-editor-1028",
