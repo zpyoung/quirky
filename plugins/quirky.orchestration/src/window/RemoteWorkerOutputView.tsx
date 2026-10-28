@@ -1,5 +1,4 @@
 import { Badge, Button, EmptyState, ListRow, SectionHeader, ToolPanelFrame } from '@quirky/ui'
-import '@quirky/ui/styles.css'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { UiPluginContext } from '@quirky/protocol'
 import type { DispatchId } from '../contracts'

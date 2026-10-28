@@ -176,12 +176,12 @@ describe('SC-36 and SC-37: editing detaches and regenerating reattaches', () => 
     const v = overlay.view
     const fresh = overlay.last().preview.text
     const mutableControls = () => [
-      v.q<HTMLButtonElement>('[role="combobox"][aria-label="Worktree"]')!,
-      v.q<HTMLSelectElement>('select[aria-label="Agent"]')!,
-      v.q<HTMLSelectElement>('select[aria-label="Relationship"]')!,
-      v.q<HTMLInputElement>('[role="group"][aria-label="Content"] input[type="checkbox"]')!,
-      v.q<HTMLSelectElement>('select[aria-label="Reusable template"]')!,
-      v.q<HTMLTextAreaElement>('textarea[aria-label="Steering note"]')!,
+      v.q('[role="combobox"][aria-label="Worktree"]') as HTMLButtonElement,
+      v.q('select[aria-label="Agent"]') as HTMLSelectElement,
+      v.q('select[aria-label="Relationship"]') as HTMLSelectElement,
+      v.q('[role="group"][aria-label="Content"] input[type="checkbox"]') as HTMLInputElement,
+      v.q('select[aria-label="Reusable template"]') as HTMLSelectElement,
+      v.q('textarea[aria-label="Steering note"]') as HTMLTextAreaElement,
     ]
     expect(mutableControls().map((control) => control.disabled)).toEqual([false, false, false, false, false, false])
 

@@ -1,4 +1,8 @@
 [
   "quirky.terminal",
-  "quirky.terminal-dock"
+  "quirky.terminal-dock",
+  "quirky.orchestration",
+  "quirky.heimdall",
+  "quirky.handoff",
+  "quirky.loops"
 ]

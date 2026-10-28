@@ -544,6 +544,7 @@
   overflow: auto;
   padding: var(--ui-space-16);
   position: fixed;
+  pointer-events: auto;
   isolation: isolate;
   z-index: 1000;
 }
@@ -836,6 +837,12 @@
 
 .ui-select-field {
   appearance: auto;
+}
+
+.ui-stack input[type='checkbox'],
+.ui-stack input[type='radio'] {
+  accent-color: var(--ui-accent);
+  margin: 0;
 }
 
 .ui-readout {

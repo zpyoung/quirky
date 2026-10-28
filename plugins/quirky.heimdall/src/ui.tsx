@@ -1,5 +1,4 @@
 import { Badge, Button, EmptyState, InlineAgentCard, ListRow, SectionHeader, TextArea, TextField, ToolPanelFrame } from '@quirky/ui'
-import '@quirky/ui/styles.css'
 import { createRoot } from 'react-dom/client'
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import type { QuirkyEvent, UiPluginContext } from '@quirky/protocol'

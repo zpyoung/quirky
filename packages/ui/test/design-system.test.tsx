@@ -140,11 +140,11 @@ describe('shared graphite components', () => {
       <TextArea label="Unavailable" name="disabled" defaultValue="not submitted" disabled />
     </form>)
     const form = container.querySelector('form')!
-    const instructions = form.querySelector('textarea[name="instructions"]')!
+    const instructions = form.querySelector<HTMLTextAreaElement>('textarea[name="instructions"]')!
     const agent = form.querySelector('select')!
     expect(Object.fromEntries(new FormData(form))).toEqual({ instructions: 'first line\nsecond line', agent: 'codex' })
     expect([...form.querySelectorAll('label')].map((label) => label.control)).toEqual([
-      instructions, agent, form.querySelector('textarea[name="disabled"]'),
+      instructions, agent, form.querySelector<HTMLTextAreaElement>('textarea[name="disabled"]'),
     ])
     expect(instructions.getAttribute('aria-invalid')).toBe('true')
     const describedIds = instructions.getAttribute('aria-describedby')!.split(' ')

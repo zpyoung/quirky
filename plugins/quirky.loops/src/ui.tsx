@@ -1,5 +1,4 @@
 import { Button, Dialog } from '@quirky/ui'
-import '@quirky/ui/styles.css'
 import { useEffect, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import type { UiPluginContext } from '@quirky/protocol'
