@@ -4,10 +4,11 @@ import { mkdirSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { RpcErrorCode } from '@quirky/protocol'
 import { E2eHarness, waitFor, type E2eOptions } from '../e2e-support'
-import type { FloatingState, GroupNode, PaneLeaf, PaneNode, Tab, Workspace } from '../../src/layout/types'
+import { isTerminalTab, isViewTab } from '../../src/layout/types'
+import type { FloatingState, GroupNode, PaneLeaf, PaneNode, Tab, TerminalTab, Workspace } from '../../src/layout/types'
 
 export { E2eHarness, cleanupAll, descendantsOf, isAlive, plain, waitFor } from '../e2e-support'
-export type { FloatingState, GroupNode, PaneLeaf, PaneNode, Tab, Workspace }
+export type { FloatingState, GroupNode, PaneLeaf, PaneNode, Tab, TerminalTab, Workspace }
 
 type Group = Extract<GroupNode, { kind: 'group' }>
 type EnvPatchable = { daemonEnv(): Record<string, string> }
@@ -70,7 +71,7 @@ export function groupsOf(ws: Workspace): Group[] {
   return out
 }
 
-export const tabsOf = (ws: Workspace): Tab[] => groupsOf(ws).flatMap((group) => group.tabs)
+export const tabsOf = (ws: Workspace): TerminalTab[] => groupsOf(ws).flatMap((group) => group.tabs.filter(isTerminalTab))
 
 export const leavesOf = (node: PaneNode): PaneLeaf[] => (node.kind === 'pane' ? [node] : [...leavesOf(node.first), ...leavesOf(node.second)])
 
@@ -86,12 +87,12 @@ export function groupShape(node: GroupNode): unknown {
   return node.kind === 'group' ? node.tabs.map(tabTitle) : [node.direction, node.ratio, groupShape(node.first), groupShape(node.second)]
 }
 
-/** What a tab's label reads: custom title, else the shell's live title, else the default. */
-export const tabTitle = (tab: Tab): string => tab.customTitle || tab.liveTitle || tab.defaultTitle
+/** What a tab's label reads: custom title/live title for terminals, or the hosted view's title. */
+export const tabTitle = (tab: Tab): string => (isViewTab(tab) ? tab.title : tab.customTitle || tab.liveTitle || tab.defaultTitle)
 
-export function findTab(ws: Workspace, id: string): Tab {
+export function findTab(ws: Workspace, id: string): TerminalTab {
   const found = tabsOf(ws).find((tab) => tab.id === id)
-  if (!found) throw new Error(`no tab ${id} in ${JSON.stringify(tabsOf(ws).map((tab) => tab.id))}`)
+  if (!found) throw new Error(`no terminal tab ${id} in ${JSON.stringify(tabsOf(ws).map((tab) => tab.id))}`)
   return found
 }
 
@@ -133,7 +134,7 @@ export async function waitReady(h: E2eHarness, session: string): Promise<void> {
   await waitFor(`a ready shell for ${session}`, async () => (await h.hostRow(session))?.shellState === 'ready')
 }
 
-export type Opened = { tab: Tab; pane: PaneLeaf; session: string; workspace: Workspace }
+export type Opened = { tab: TerminalTab; pane: PaneLeaf; session: string; workspace: Workspace }
 
 /**
  * Opens a tab with `quirky terminal tab new` (extra words after `new`) and returns it once its

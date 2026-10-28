@@ -435,3 +435,7 @@ Acceptance bar: `bun run test`, `bun test scripts` (except the queue-state test 
 - Schemas and a generated CLI for the new methods (m0-scripting).
 - A real-browser test of the window; the host is tested without a DOM (logic D28).
 - `when` clauses, chord sequences, user rebinding, setting scopes, bottom panels (logic Scope & non-goals).
+
+## Subsequent public layout addition (2026-10-27)
+
+M2's public per-panel width and activity-bar-position usage is documented in the [M2 editor panel contract](../2026-10-27-m2-editor/tech.md#generic-panel-geometry).

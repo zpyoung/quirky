@@ -3,7 +3,8 @@ import { QuirkyClient, RpcErrorCode, type PluginEvent } from '@quirky/protocol'
 import { rpcUrl } from '@quirky/protocol/node'
 import { waitFor, waitForAsync, type Harness } from '../../../packages/daemon/test/helpers'
 import { groupsInOrder, paneLeaves } from '../src/layout/tree'
-import type { QuickCommand, Workspace } from '../src/layout/types'
+import { isTerminalTab } from '../src/layout/types'
+import type { QuickCommand, TerminalTab, Workspace } from '../src/layout/types'
 import { sessionCreates } from './fakes/quirky.session/main'
 import { call, createSession, restartDaemon, startPluginHarness, TERMINAL_PLUGINS } from './support'
 
@@ -24,7 +25,7 @@ const add = async (fields: Record<string, unknown>) => (await api('addQuickComma
 const all = async () => (await api('quickCommands', { all: true })).commands as QuickCommand[]
 const error = async (promise: Promise<unknown>) => (await promise.then(() => null, (e: unknown) => e)) as (Error & { code?: number }) | null
 const typed = (sessionId: string) => h.pty.inputs.filter((input) => input.sessionId === sessionId).map((input) => input.text).join('')
-const tabsOf = (ws: Workspace) => groupsInOrder(ws.root).flatMap((group) => group.tabs)
+const tabsOf = (ws: Workspace): TerminalTab[] => groupsInOrder(ws.root).flatMap((group) => group.tabs.filter(isTerminalTab))
 
 describe('SC-50: limits and normalization', () => {
   test('SC-50: the 41st command is refused, a duplicate label gets -2, and text is trimmed', async () => {

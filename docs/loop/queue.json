@@ -366,8 +366,7 @@
       "deps": [
         "m1-worktrees"
       ],
-      "status": "in-progress",
-      "lane": 4
+      "status": "done"
     },
     {
       "id": "m2-sidebar-extras",
@@ -592,7 +591,8 @@
       "deps": [
         "sa-browser-agent"
       ],
-      "status": "todo"
+      "status": "in-progress",
+      "lane": 4
     },
     {
       "id": "sa-browser-profiles-settings",
