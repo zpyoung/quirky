@@ -143,5 +143,27 @@
 - **Revisit if:** loop policy changes or a required surface fails
 - **Source:** locked by docs/loop/LOOP.md
 
+## D14: Require an acknowledged dispatch, not merely a live process or completed work
+- **Question:** the real child question fixture first mistook an attached failed-start process for active work, then incorrectly waited for a completed work effect
+- **Options:** widen default-Run lookup or add an explicit recipient; trust liveness alone; require the existing positive ready-dispatch acknowledgment
+- **Chose:** keep default worker Run routing and exact authentication unchanged. Trigger the real child CLI only when a live exact session/incarnation matches the running attempt's persisted dispatchId. The adapter writes that association only after a ready receipt; running work remains unresolved until its outcome is known. Positive rejected starts fail setup rather than being treated as ready.
+- **Why:** the child inspector proved matching expected/actual/assignee session IDs but Dispatch status failed, so run_required was not an authentication or resolver defect. Owner checkpoint42791478 fixes worker_start reaching the native startup barrier while preserving mailbox-pointer refusal. The held Codex fixture can opt into real input-driven assistant commentary without completing its turn; no timer, fake status or production observer bypass.
+- **Evidence:** actual child diagnostic artifact235; orchestration.ts ready-only dispatch mapping; runner.ts applyDispatchResult; isolated fixture checkpointa5489be7; unchanged-default Codex/protocol/host26pass291assertions. Final worker question/stop scenario remains under verification.
+- **Reversibility:** easy
+- **Confidence:** high for the identified setup and dispatch semantics; final native acceptance not yet passing
+- **Revisit if:** ready acknowledgment and exact live identity disagree
+- **Source:** assumed — autonomous
+
+## D15: Exercise a blocking Ask rather than invent a pending one-way message
+- **Question:** the native fixture sent a question-type message, then expected the blocking-question thread projection to expose it
+- **Options:** widen the backend projection and invent lifecycle state; create a real blocking Ask through the attested child CLI
+- **Chose:** actual child orchestration ask, atomically record its started identity before it exits, answer through Heimdall, then require the child CLI's exact answered message ID and body. Keep serviceRunShow's non-consuming question-thread projection unchanged. Pending-only UI rows may disappear after answer; positive service-backed journal evidence and the worker's received answer prove closure.
+- **Why:** source orchestration.md explicitly defines ask as the only worker question path. send --type question creates a one-way message but no question_threads row; changing the projection alone would not create answer authority. The apparent missing projection was our fixture error, not consumption deleting a pending Ask.
+- **Evidence:** source orchestration.md:477–488; messaging.ts send/beginAsk/serviceQuestions/answerQuestion; actual parked one-way message artifact256 and read-only trace. No backend projection workaround applied.
+- **Reversibility:** easy
+- **Confidence:** high for the source distinction; corrected end-to-end Ask scenario under verification
+- **Revisit if:** a real pending Ask disappears from the owned read projection
+- **Source:** locked by docs/roadmap.md
+
 ## Progress
-Real owner/core checkpoints through f1f29443 and bounded owner type correction913a63a0 are integrated. Actual build passed and packaged Quirky.app before latest core composition; minimal actual web smoke completed and owned tabs/daemon stopped. Scripts66pass517assertions. First full typecheck found214diagnostics37files: lane10 repairs control/UI/package/worktree/notification/native-fixture types, owner published its correction, core owns remaining core/orchestration corrections. Native worker and notification acceptance now fail the same genuine backend activation defect core.listDispatches.bind; no fake backend or principal used. Next: integrate core correction, prove actual worker question/answer/stop and notifications, scoped suite, corrected typecheck/build, deps-ready, single roadmap catch-up/incoming decisions and queue land. No full dogfood/review/completion claim.
+Actual df799424/e410 service facade, owner4bb85a56 and native startup correction42791478 are integrated. Production build passes and packages Quirky.app39.23s; minimal actual web smoke completed and owned resources stopped. Notifications3pass4assertions; shared consumer fixtures166pass737assertions; own operator42pass192assertions; scripts66pass517assertions. Required scoped run:297/309remote files passed,12failed; Mac terminal passed runner-owned isolated retry after load failures. Shared migration/resume/auth/schema fixture failures repaired without weakening consumer invariants. Latest full types138diagnostics28files; own remaining three fixture diagnostics corrected, core owns the remaining core/orchestration fixes. Native flow now has a positively ready exact worker; fixture is being corrected to actual blocking Ask rather than one-way send. Next: complete real worker answer/stop proof, integrate core type/runtime corrections, rerun affected failures and final types, await deps-ready, single roadmap catch-up/read decisions, and queue land. No full dogfood/review/completion claim.

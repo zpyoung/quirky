@@ -14,7 +14,7 @@ function fixture() {
   const view: ServiceRunDetail = {
     run: { id: 'run_owned', objective: 'Fixture worker', coordinatorSessionId: null, coordinatorHistory: [], consumerGeneration: 1,
       createdAt: '2026-10-27T00:00:00.000Z', updatedAt: '2026-10-27T00:00:00.000Z', serviceOwner: { pluginId: 'quirky.heimdall', key: 'watcher' } },
-    workers: [{ dispatchId: 'ctx_dispatch', sessionId: 'session', processIncarnation: 'incarnation', state: 'live', lastContactAtMs: 0 }],
+    workers: [{ dispatchId: 'ctx_dispatch', sessionId: 'session', processIncarnation: 'incarnation', state: 'live', assignmentActive: true, lastContactAtMs: 0 }],
     questions: [{ messageId: 'msg_question', runId: 'run_owned', dispatchId: 'ctx_dispatch', askerSessionId: 'session', status: 'pending',
       answerMessageId: null, answerBody: null, answeredByGeneration: null, createdAt: '2026-10-27T00:00:00.000Z', answeredAt: null, closedAt: null, body: 'Continue?' }]
   }
@@ -29,6 +29,7 @@ function fixture() {
     }
     if (method === 'quirky.orchestration/serviceWorkerStop') {
       view.workers[0]!.state = 'exited'
+      view.workers[0]!.assignmentActive = false
       return { dispatchId: 'ctx_dispatch', state: 'stopped', processAction: 'closed_agent_terminal', mutation: { requestId: params.requestId, replayed: false } }
     }
     throw new Error(`Unexpected owner operation ${method}`)

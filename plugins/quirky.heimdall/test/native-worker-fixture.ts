@@ -53,6 +53,7 @@ export type NativeControlFixture = {
   }
   enrollQuestionWorker(): Promise<EnrolledQuestionWorker>
   readQuestionEvidence(): Promise<NativeQuestionEvidence>
+  waitForQuestionResult(): Promise<NativeQuestionEvidence>
   runCli(args: string[]): Promise<{ stdout: string; stderr: string; code: number }>
   cleanup(): Promise<void>
 }
@@ -199,15 +200,13 @@ const nativeSendQuestion = () => {
   if (nativeQuestionStarted || !fs.existsSync(nativeQuestionTrigger)) return;
   nativeQuestionStarted = true;
   nativeQuestionWatcher.close();
-  const child = spawn(nativeQuestionBun, [nativeQuestionCli, 'orchestration', 'send', '--type', 'question', '--subject', 'Fixture', '--body', 'Continue?', '--json'], {
+  const child = spawn(nativeQuestionBun, [nativeQuestionCli, 'orchestration', 'ask', '--question', 'Continue?', '--timeout-ms', '120000', '--json'], {
     cwd: process.cwd(), env: process.env, stdio: ['ignore', 'pipe', 'pipe']
   });
   let stdout = '';
   let stderr = '';
-  let recorded = false;
-  const record = (code, spawnError) => {
-    if (recorded) return;
-    recorded = true;
+  let spawnError;
+  const writeEvidence = code => {
     const temporaryResult = nativeQuestionResult + '.tmp';
     fs.writeFileSync(temporaryResult, JSON.stringify({
       providerPid: process.pid,
@@ -215,7 +214,7 @@ const nativeSendQuestion = () => {
       sessionTokenPresent: typeof process.env.QUIRKY_SESSION_TOKEN === 'string' && process.env.QUIRKY_SESSION_TOKEN.length > 0,
       cliPid: child.pid ?? null,
       code, stdout, stderr,
-      ...(spawnError ? { spawnError: String(spawnError) } : {})
+      ...(spawnError ? { spawnError } : {})
     }), { mode: 0o600 });
     fs.renameSync(temporaryResult, nativeQuestionResult);
   };
@@ -223,8 +222,9 @@ const nativeSendQuestion = () => {
   child.stderr.setEncoding('utf8');
   child.stdout.on('data', chunk => { stdout += chunk; });
   child.stderr.on('data', chunk => { stderr += chunk; });
-  child.once('error', error => record(null, error));
-  child.once('close', code => record(code, null));
+  child.once('spawn', () => writeEvidence(null));
+  child.once('error', error => { spawnError = String(error); writeEvidence(null); });
+  child.once('close', code => writeEvidence(code));
 };
 const nativeQuestionWatcher = fs.watch(${JSON.stringify(dirname(options.triggerPath))}, { persistent: false }, (_event, filename) => {
   if (!filename || String(filename) === ${JSON.stringify(basename(options.triggerPath))}) nativeSendQuestion();
@@ -330,7 +330,7 @@ export async function startNativeControlFixture(): Promise<NativeControlFixture>
     installControlFixture(builtinDir)
     scope = createProcessScope(home)
 
-    const codex = createCodexAppServerFixture(providerHome)
+    const codex = createCodexAppServerFixture(providerHome, { heldPrefix: 'Working on the isolated operator fixture.' })
     installQuestionInstrumentation({
       executable: codex.executable,
       triggerPath,
@@ -470,7 +470,9 @@ export async function startNativeControlFixture(): Promise<NativeControlFixture>
         const attached = await waitForReady<AttachedWorker>(`live structured worker attachment for ${watcherId}`, WORKER_READY_TIMEOUT_MS, async (): Promise<ReadyObservation<AttachedWorker>> => {
           const detail = await client!.callAny('quirky.heimdall/detail', { target: { watcherId } }) as WatcherDetail | null
           if (!detail) return { ready: false, observed: 'public detail returned null before worker attachment' }
-          const startAttempt = detail.journal.findLast(entry => entry.kind === 'attempt')
+          let attemptIndex = detail.journal.length - 1
+          while (attemptIndex >= 0 && detail.journal[attemptIndex]?.kind !== 'attempt') attemptIndex--
+          const startAttempt = detail.journal[attemptIndex]
           if (startAttempt?.resolved && startAttempt.effect === 'not-landed') {
             throw new Error(`worker start was positively rejected: ${JSON.stringify({ status: detail.status, attemptId: startAttempt.attemptId, reason: startAttempt.reason, detail: startAttempt.detail })}`)
           }
@@ -479,7 +481,7 @@ export async function startNativeControlFixture(): Promise<NativeControlFixture>
             typeof candidate.identity.sessionId === 'string' &&
             typeof candidate.identity.processIncarnation === 'string'
           )
-          if (worker && startAttempt?.resolved && startAttempt.effect === 'landed') {
+          if (worker && startAttempt?.state === 'running' && startAttempt.dispatchId === worker.identity.dispatchId) {
             const sessionId = worker.identity.sessionId
             const processIncarnation = worker.identity.processIncarnation
             if (typeof sessionId === 'string' && typeof processIncarnation === 'string') {
@@ -523,8 +525,8 @@ export async function startNativeControlFixture(): Promise<NativeControlFixture>
           if (!detail) return { ready: false, observed: 'public detail returned null while waiting for worker question' }
           if (existsSync(questionSendPath)) {
             const evidence = JSON.parse(readFileSync(questionSendPath, 'utf8')) as NativeQuestionEvidence
-            if (evidence.code !== 0) {
-              throw new Error(`actual worker orchestration send CLI exited ${evidence.code}\nidentity: ${JSON.stringify({ expectedSessionId: attached.sessionId, actualSessionId: evidence.sessionId, tokenPresent: evidence.sessionTokenPresent })}\nstdout:\n${evidence.stdout}\nstderr:\n${evidence.stderr}${evidence.spawnError ? `\nspawn error: ${evidence.spawnError}` : ''}`)
+            if (evidence.spawnError || (evidence.code !== null && evidence.code !== 0)) {
+              throw new Error(`actual worker orchestration ask CLI exited ${evidence.code}\nidentity: ${JSON.stringify({ expectedSessionId: attached.sessionId, actualSessionId: evidence.sessionId, tokenPresent: evidence.sessionTokenPresent })}\nstdout:\n${evidence.stdout}\nstderr:\n${evidence.stderr}${evidence.spawnError ? `\nspawn error: ${evidence.spawnError}` : ''}`)
             }
           }
           const worker = detail.workers.find(candidate =>
@@ -546,7 +548,7 @@ export async function startNativeControlFixture(): Promise<NativeControlFixture>
         })
         const evidence = JSON.parse(readFileSync(questionSendPath, 'utf8')) as NativeQuestionEvidence
         if (evidence.sessionId !== attached.sessionId || !evidence.sessionTokenPresent) {
-          throw new Error(`worker question CLI did not inherit the attached worker lease identity: ${JSON.stringify({ sessionId: evidence.sessionId, sessionTokenPresent: evidence.sessionTokenPresent })}`)
+          throw new Error(`worker question ask CLI did not inherit the attached worker lease identity: ${JSON.stringify({ sessionId: evidence.sessionId, sessionTokenPresent: evidence.sessionTokenPresent })}`)
         }
         return {
           watcherId,
@@ -580,6 +582,18 @@ export async function startNativeControlFixture(): Promise<NativeControlFixture>
       async readQuestionEvidence() {
         if (!existsSync(questionSendPath)) throw new Error(`worker question evidence does not exist: ${questionSendPath}`)
         return JSON.parse(readFileSync(questionSendPath, 'utf8')) as NativeQuestionEvidence
+      },
+      async waitForQuestionResult() {
+        return waitForReady<NativeQuestionEvidence>('actual worker orchestration ask CLI result', COMMAND_TIMEOUT_MS, async (): Promise<ReadyObservation<NativeQuestionEvidence>> => {
+          if (!existsSync(questionSendPath)) {
+            return { ready: false, observed: 'actual worker orchestration ask CLI has not started' }
+          }
+          const evidence = JSON.parse(readFileSync(questionSendPath, 'utf8')) as NativeQuestionEvidence
+          if (evidence.code !== null || evidence.spawnError) {
+            return { ready: true, value: evidence, observed: `actual ask CLI finished with code=${evidence.code}` }
+          }
+          return { ready: false, observed: `actual ask CLI pid=${evidence.cliPid ?? 'unknown'} is waiting for its answer` }
+        })
       },
       runCli,
       cleanup

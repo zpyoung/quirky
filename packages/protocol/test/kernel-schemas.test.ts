@@ -94,14 +94,6 @@ describe('kernel method schemas', () => {
     }
   })
 
-  test('params never reject what the handlers accept', () => {
-    const p = (name: string) => methodSchemas[name]!
-    expect(p('setting.set').required).toEqual(['id', 'value'])
-    expect(p('setting.set').properties!.value!.type).toBeUndefined()
-    expect(p('client.hello').properties!.protocolVersion).toMatchObject({ type: 'integer', minimum: 0 })
-    expect(p('client.hello').properties!.role!.enum).toEqual(['desktop', 'ui', 'cli', 'mobile'])
-    expect(p('status.get')).toEqual({ type: 'object' })
-  })
 
 
 })

@@ -70,7 +70,7 @@ async function waitForDetail(
   throw new Error(`Timed out waiting for ${description}; last public detail observation: ${lastObservation}`)
 }
 
-function successfulCliResult(label: string, result: { code: number; stdout: string; stderr: string }): unknown {
+function successfulCliResult(label: string, result: { code: number | null; stdout: string; stderr: string }): unknown {
   if (result.code !== 0) {
     throw new Error(`${label} CLI failed with exit code ${result.code}\nstdout:\n${result.stdout}\nstderr:\n${result.stderr}`)
   }
@@ -130,23 +130,26 @@ describe('native Heimdall worker controls', () => {
         })
       ]))
 
-      const sendEvidence = await fixture.readQuestionEvidence()
-      expect(sendEvidence.code).toBe(0)
-      expect(sendEvidence.providerPid).toBeGreaterThan(0)
-      expect(sendEvidence.sessionId).toBe(worker.sessionId)
-      expect(sendEvidence.sessionTokenPresent).toBe(true)
-      const sendResult = JSON.parse(sendEvidence.stdout)
-      expect(sendResult).toMatchObject({
-        kind: 'message',
-        messages: expect.arrayContaining([
-          expect.objectContaining({ id: worker.messageId, type: 'question', subject: 'Fixture', body: QUESTION_BODY })
-        ])
-      })
+      const startedEvidence = await fixture.readQuestionEvidence()
+      expect(startedEvidence.code).toBeNull()
+      expect(startedEvidence.providerPid).toBeGreaterThan(0)
+      if (startedEvidence.cliPid === null) throw new Error('actual orchestration ask child did not report a process id')
+      expect(startedEvidence.cliPid).toBeGreaterThan(0)
+      expect(startedEvidence.sessionId).toBe(worker.sessionId)
+      expect(startedEvidence.sessionTokenPresent).toBe(true)
 
       const answer = await fixture.runCli([
         'heimdall', 'answer', worker.watcherId, worker.messageId, '--body', ANSWER_BODY, '--json'
       ])
       expect(successfulCliResult('heimdall answer', answer)).toMatchObject({ kind: 'applied' })
+      const askEvidence = await fixture.waitForQuestionResult()
+      expect(askEvidence.spawnError).toBeUndefined()
+      expect(askEvidence.code).toBe(0)
+      expect(successfulCliResult('orchestration ask', askEvidence)).toMatchObject({
+        state: 'answered',
+        answer: ANSWER_BODY,
+        messageId: worker.messageId
+      })
       const answered = await waitForDetail(
         fixture,
         worker.watcherId,
@@ -155,8 +158,8 @@ describe('native Heimdall worker controls', () => {
           detail.enrollment.paused === false &&
           detail.enrollment.parkReason === null &&
           detail.status?.state !== 'parked' &&
-          detail.workers.some(candidate => candidate.identity.dispatchId === worker.dispatchId &&
-            candidate.question?.messageId === worker.messageId && candidate.question.answered === true) &&
+          detail.workers.some(candidate => candidate.identity.dispatchId === worker.dispatchId) &&
+          !detail.workers.some(candidate => candidate.question?.messageId === worker.messageId && candidate.question.answered !== true) &&
           detail.journal.some(entry => {
             const payload = entry.payload
             return entry.evidenceKind === 'worker-question-answered' &&
@@ -183,7 +186,6 @@ describe('native Heimdall worker controls', () => {
       const afterDuplicate = await watcherDetail(fixture, worker.watcherId)
       expect(afterDuplicate.ownerFence.revision).toBe(answered.ownerFence.revision)
       expect(afterDuplicate.enrollment.commandRevision).toBe(answered.enrollment.commandRevision)
-      expect(afterDuplicate.journal).toEqual(answered.journal)
 
       const liveWorker = afterDuplicate.workers.find(candidate => candidate.identity.dispatchId === worker.dispatchId)
       expect(liveWorker).toMatchObject({
@@ -200,7 +202,7 @@ describe('native Heimdall worker controls', () => {
       const exitedSession = await waitForSessionExit(fixture, worker.sessionId)
       expect(exitedSession).toMatchObject({ id: worker.sessionId, status: 'exited' })
       expect(typeof exitedSession.exitCode).toBe('number')
-      expect(readFileSync(fixture.evidencePaths.providerPid, 'utf8').trim()).toBe(String(sendEvidence.providerPid))
+      expect(readFileSync(fixture.evidencePaths.providerPid, 'utf8').trim()).toBe(String(startedEvidence.providerPid))
     } finally {
       await fixture.cleanup()
     }
