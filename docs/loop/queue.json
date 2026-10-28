@@ -1221,8 +1221,7 @@
       "deps": [
         "sa-browser-pane"
       ],
-      "status": "in-progress",
-      "lane": 7
+      "status": "blocked"
     },
     {
       "id": "m4-hosting-ui-tasks-complete-remaining-flows",
