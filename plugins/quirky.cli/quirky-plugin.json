@@ -2,7 +2,7 @@
   "id": "quirky.cli",
   "name": "CLI and Runtime Profiles",
   "version": "0.1.0",
-  "description": "Owns external command launchers, profile-pinned commands, and saved paired runtime metadata.",
+  "description": "Owns external command launchers, profile-pinned commands, saved paired runtime metadata, and authenticated owner-host identity.",
   "main": "main.ts",
   "ui": "ui.js",
   "cli": "cli.ts",
@@ -75,14 +75,38 @@
         "result": { "type": "object", "properties": { "id": { "type": "string" }, "name": { "type": "string" }, "endpoint": { "type": "string" }, "pairedDeviceId": { "type": "string" }, "scope": { "type": "string", "enum": ["mobile", "owner-cli"] }, "grantId": { "type": "string" }, "createdAt": { "type": "number" }, "lastUsedAt": {} }, "required": ["id", "name", "endpoint", "pairedDeviceId", "scope", "createdAt", "lastUsedAt"], "additionalProperties": false }
       },
       {
+        "id": "hostIdentity",
+        "description": "Returns this authenticated daemon's durable host ID and current activation generation without credentials.",
+        "readOnly": true,
+        "params": { "type": "object", "properties": {}, "additionalProperties": false },
+        "result": {
+          "type": "object",
+          "properties": { "hostId": { "type": "string" }, "generation": { "type": "string" } },
+          "required": ["hostId", "generation"],
+          "additionalProperties": false
+        }
+      },
+      {
         "id": "runtimeCall",
-        "description": "Calls an exact remote method through an owner-cli scoped saved target; never falls back to this daemon.",
+        "description": "Calls an exact remote method through an owner-cli scoped saved target; optional host-generation and saved-target pins are checked before forwarding.",
         "params": {
           "type": "object",
           "properties": {
             "runtime": { "type": "string" },
             "method": { "type": "string" },
-            "params": { "type": "object", "additionalProperties": true }
+            "params": { "type": "object", "additionalProperties": true },
+            "expectedHost": {
+              "type": "object",
+              "properties": { "hostId": { "type": "string" }, "generation": { "type": "string" } },
+              "required": ["hostId", "generation"],
+              "additionalProperties": false
+            },
+            "expectedRuntime": {
+              "type": "object",
+              "properties": { "id": { "type": "string" }, "endpoint": { "type": "string" }, "grantId": { "type": "string" } },
+              "required": ["id", "endpoint", "grantId"],
+              "additionalProperties": false
+            },
           },
           "required": ["runtime", "method"],
           "additionalProperties": false
@@ -153,6 +177,7 @@
       { "id": "runtimeShow", "words": "runtime show", "summary": "show one saved paired runtime", "flags": { "selector": { "type": "string", "description": "Saved runtime ID or name.", "required": true } }, "methods": ["quirky.cli/runtimeShow"] },
       { "id": "runtimeRemove", "words": "runtime remove", "summary": "remove one saved paired runtime", "flags": { "selector": { "type": "string", "description": "Saved runtime ID or name.", "required": true } }, "methods": ["quirky.cli/runtimeRemove"] },
       { "id": "runtimeStatus", "words": "runtime status", "summary": "show saved paired runtime status", "methods": ["quirky.cli/runtimeStatus"] },
+      { "id": "hostIdentity", "words": "runtime host-identity", "summary": "show this daemon's authenticated owner host ID and activation generation", "methods": ["quirky.cli/hostIdentity"] },
       {
         "id": "runtimeCall",
         "words": "runtime call",
