@@ -1182,7 +1182,7 @@ function ProjectFieldCell(props: {
     return <select aria-label="Issue type" style={inputStyle} value={String(currentType?.id ?? '')} onFocus={() => props.onLoadIssueTypes(props.item)} onChange={(event) => {
       const selected = choices.find((candidate) => candidate.id === event.currentTarget.value)
       if (selected) void props.onIssueTypeEdit(props.item, { id: selected.id, name: String(selected.name ?? selected.id) })
-    }}><option value="" disabled>{currentType?.name ? String(currentType.name) : 'Choose issue type'}</option>{choices.map((option) => <option key={option.id} value={option.id}>{String(option.name ?? option.id)}</option>)}</select>
+    }}><option value="" disabled>Choose issue type</option>{currentType !== null && !choices.some((option) => option.id === currentType.id) && <option value={String(currentType.id)}>{String(currentType.name ?? currentType.id)}</option>}{choices.map((option) => <option key={option.id} value={option.id}>{String(option.name ?? option.id)}</option>)}</select>
   }
   if (type === 'MULTI_SELECT') {
     const raw = fieldValue(props.item, props.field.id)
