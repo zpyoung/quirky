@@ -2,7 +2,7 @@ import { useSyncExternalStore } from 'react'
 import { createRoot } from 'react-dom/client'
 import type { UiPluginContext } from '@quirky/protocol'
 import { SessionsPanel, type SessionsReport } from './window/SessionsPanel'
-import { paneMenuContributions, paneMenuQuickCommands, reportQuickCommandsMenu, sessionCommands, terminalCommands, watchMenuContributions, watchQuickCommands, type MenuContributionSource, type QuickCommandSource } from './window/commands'
+import { paneMenuContributions, paneMenuQuickCommands, plusMenuContributions, reportQuickCommandsMenu, sessionCommands, terminalCommands, watchMenuContributions, watchQuickCommands, type MenuContributionSource, type QuickCommandSource } from './window/commands'
 import { mountFloatingOverlay } from './window/floating'
 import { QuickCommandsStripButton, mountQuickCommandsPanel } from './window/quick-commands'
 import { mountWorkspace, type WorkspaceOptions } from './window/workspace'
@@ -36,7 +36,8 @@ function workspaceSlots(context: UiPluginContext, workspace: string, source: Qui
   return {
     ...(workspace === FLOATING_WORKSPACE ? {} : { stripExtras: (group: Group) => <StripQuickCommands context={context} workspace={workspace} group={group} source={source} /> }),
     paneMenuExtras: (pane) => paneMenuQuickCommands(context, source, pane.id),
-    paneMenuContributions: (pane, session) => paneMenuContributions(context, contributions, pane, session)
+    paneMenuContributions: (pane, session) => paneMenuContributions(context, contributions, pane, session),
+    plusMenuContributions: (group) => plusMenuContributions(context, contributions, workspace, group.id)
   }
 }
 

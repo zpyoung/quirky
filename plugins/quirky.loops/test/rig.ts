@@ -106,7 +106,7 @@ export const loopConfig = (body: string, patch: Partial<LoopConfig> = {}): LoopC
   ...patch
 })
 
-export type LoopRigOptions = { script?: ScriptedTurn; onStop?: (sessionId: string) => void }
+export type LoopRigOptions = { script?: ScriptedTurn; onStop?: (sessionId: string) => void; extraPlugins?: string[] }
 export type LoopRig = {
   home: string
   cwd: string
@@ -166,7 +166,7 @@ printf '%s\\n' 'VERDICT: not-met' 'REASON: isolated evaluator fixture'
   }
 
   try {
-    for (const pluginId of PLUGINS) symlinkSync(join(PLUGINS_ROOT, pluginId), join(builtinPluginsDir, pluginId))
+    for (const pluginId of new Set([...PLUGINS, ...(options.extraPlugins ?? [])])) symlinkSync(join(PLUGINS_ROOT, pluginId), join(builtinPluginsDir, pluginId))
     const start = async () => startHarness({ home, builtinPluginsDir })
     harness = await start()
     const setupClient = await harness.connect('cli')

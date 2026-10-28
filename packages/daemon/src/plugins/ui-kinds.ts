@@ -7,6 +7,7 @@ import {
   parseWhen,
   THEME_COLOR_RE,
   TERMINAL_PANE_MENU,
+  TERMINAL_PLUS_MENU,
   THEME_TOKENS,
   UI_KINDS,
   type SettingDeclaration,
@@ -78,7 +79,9 @@ function checkKeybinding(label: string, entry: Entry, errors: string[]): void {
 
 function checkMenuItem(label: string, entry: Entry, errors: string[]): void {
   if (entry.menu === undefined) errors.push(`${label}: menu is required`)
-  else if (entry.menu !== TERMINAL_PANE_MENU) errors.push(`${label}: menu must be ${TERMINAL_PANE_MENU}`)
+  else if (entry.menu !== TERMINAL_PANE_MENU && entry.menu !== TERMINAL_PLUS_MENU) {
+    errors.push(`${label}: menu must be ${TERMINAL_PANE_MENU} or ${TERMINAL_PLUS_MENU}`)
+  }
 
   const command = entry.command
   if (command === undefined) errors.push(`${label}: command is required`)
@@ -88,13 +91,17 @@ function checkMenuItem(label: string, entry: Entry, errors: string[]): void {
 
   const when = entry.when
   if (when !== undefined) {
+    if (entry.menu === TERMINAL_PLUS_MENU) errors.push(`${label}: when is only supported for ${TERMINAL_PANE_MENU}`)
     if (!isRecord(when)) errors.push(`${label}: when must be an object`)
     else {
       for (const field of Object.keys(when)) if (field !== 'agent') errors.push(`${label}: unknown condition \`${field}\` in when`)
       if (when.agent !== undefined && when.agent !== 'any') errors.push(`${label}: when.agent must be any`)
     }
   }
-  if (entry.after !== undefined && entry.after !== 'quick-commands') errors.push(`${label}: after must be quick-commands`)
+  if (entry.after !== undefined) {
+    if (entry.menu === TERMINAL_PLUS_MENU) errors.push(`${label}: after is only supported for ${TERMINAL_PANE_MENU}`)
+    else if (entry.after !== 'quick-commands') errors.push(`${label}: after must be quick-commands`)
+  }
 }
 
 function checkValues(label: string, values: unknown, errors: string[]): string[] | null {
