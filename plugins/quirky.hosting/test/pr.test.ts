@@ -209,7 +209,7 @@ if (command === 'auth' && args[1] === 'status') {
           mergeCommitAllowed: true,
           rebaseMergeAllowed: true,
           squashMergeAllowed: true,
-          autoMergeAllowed: true,
+          autoMergeAllowed: state.autoMergeAllowed !== false,
           defaultBranchRef: { name: state.defaultBranch ?? 'main' },
           mergeQueue: state.mergeQueueRequired ? { id: 'QUEUE_test' } : null,
           ref: { rules: { nodes: rules } }
@@ -1454,3 +1454,47 @@ describe('quirky.hosting PR mutations', () => {
     expect(testHost.readState()).toMatchObject({ prs: [{ state: 'OPEN' }] })
   }, 20_000)
 })
+
+test('Tasks review metadata exposes queue and auto-merge capabilities and refuses a disabled enable before mutation', async () => {
+  const instance = await host(fixtureState({ prs: [pr({ updatedAt: '2026-10-27T18:00:00Z', additions: 3, deletions: 1, changedFiles: 2, reviewRequests: [{ login: 'waiting-reviewer' }], reviews: [{ author: { login: 'reviewer' }, state: 'CHANGES_REQUESTED' }], assignees: [{ login: 'owner' }] })], mergeQueueRequired: true, autoMergeAllowed: false }))
+  const lookup = recordOf(await instance.call('review', { number: 7 }))
+  const review = recordOf(lookup.review)
+  expect(review.updatedAt).toBe('2026-10-27T18:00:00Z')
+  expect(review.mergeMetadataKnown).toBe(true)
+  expect(review.mergeQueueRequired).toBe(true)
+  expect(review.autoMergeAllowed).toBe(false)
+  expect([review.additions, review.deletions, review.changedFiles]).toEqual([3, 1, 2])
+  expect(review.requestedReviewers).toEqual(['waiting-reviewer'])
+  expect(review.reviews).toEqual([{ author: 'reviewer', state: 'CHANGES_REQUESTED' }])
+  expect(review.assignees).toEqual(['owner'])
+  const before = instance.invocations().length
+  const failure = await rejection(instance.call('autoMerge', { number: 7, expectedHead: 'a'.repeat(40), method: 'squash', action: 'enable' }))
+  expect(recordOf(failure.data).reason).toBe('auto_merge_disabled')
+  expect(instance.invocations().slice(before).some(entry => entry.args.some(arg => arg.includes('EnableHostingPullRequestAutoMerge')) || entry.args.includes('--auto'))).toBe(false)
+}, 20_000)
+
+test('unavailable review capability reads remain unknown instead of advertising direct merge or auto-merge', async () => {
+  const instance = await host(fixtureState({ prs: [pr()], mergeMetadataAvailable: false }))
+  const lookup = recordOf(await instance.call('review', { number: 7 }))
+  const review = recordOf(lookup.review)
+  expect(review.updatedAt).toBeNull()
+  expect(review.mergeMetadataKnown).toBe(false)
+  expect(review.mergeQueueRequired).toBeNull()
+  expect(review.autoMergeAllowed).toBeNull()
+}, 20_000)
+
+test('work-item state keeps closed precedence over the draft flag', async () => {
+  const instance = await host(fixtureState({ prs: [pr({ number: 9, state: 'CLOSED', isDraft: true })] }))
+  const item = recordOf(await instance.call('workItem', { kind: 'pullRequest', number: 9 }))
+  expect(item.state).toBe('closed')
+  expect(item.isDraft).toBe(true)
+}, 20_000)
+
+test('PR detail exposes existing requested reviewers and reviewed state without an empty fallback', async () => {
+  const instance = await host(fixtureState({ prs: [pr({ reviewRequests: [{ login: 'alice' }], reviews: [{ author: { login: 'bob' }, state: 'APPROVED' }], assignees: [{ login: 'maintainer' }] })] }))
+  const detail = recordOf(await instance.call('workItemDetails', { kind: 'pullRequest', number: 7 }))
+  expect(detail.requestedReviewers).toEqual(['alice'])
+  expect(detail.reviews).toEqual([{ author: 'bob', state: 'APPROVED' }])
+  expect(detail.assignees).toEqual(['maintainer'])
+  expect(detail.participantsTruncated).toBe(false)
+}, 20_000)

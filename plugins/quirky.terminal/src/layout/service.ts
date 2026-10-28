@@ -422,6 +422,7 @@ export class LayoutService {
       prompt?: string
       extraArgs?: string
       title?: string
+      command?: string
       model?: string
       options?: Record<string, string | boolean>
       cwd?: StartCwd
@@ -436,6 +437,7 @@ export class LayoutService {
         ...(spec.title === undefined ? {} : { title: spec.title }),
         ...(spec.model === undefined ? {} : { model: spec.model }),
         ...(spec.options === undefined ? {} : { options: spec.options }),
+        ...(spec.command === undefined ? {} : { command: spec.command }),
         ...(cwd === undefined ? {} : { cwd })
       }) as Promise<Session>
     const cwd = spec.cwd ?? (workspaceId === FLOATING_WORKSPACE ? { path: this.floatingCwd() ?? '', soft: true } : undefined)
@@ -917,17 +919,33 @@ export class LayoutService {
     }
   }
 
-  private async splitPane(params: Params): Promise<{ workspace: Workspace }> {
+  private async splitPane(params: Params): Promise<{ workspace: Workspace; session: string; pane: string }> {
     const { ws, loc } = this.paneTarget(params)
     this.checkRevision(ws, params.revision)
+    if (params.title !== undefined && typeof params.title !== 'string') throw this.context.error('invalid-params', 'title must be a string')
+    const title = typeof params.title === 'string' ? params.title.trim() : undefined
+    if (title !== undefined && title.length > TITLE_MAX) {
+      throw this.context.error('invalid-params', `title must be at most ${TITLE_MAX} characters`)
+    }
+    if (params.command !== undefined && typeof params.command !== 'string') {
+      throw this.context.error('invalid-params', 'command must be a string')
+    }
+    if (params.activate !== undefined && typeof params.activate !== 'boolean') {
+      throw this.context.error('invalid-params', 'activate must be a boolean')
+    }
     const source = await this.session(loc.pane.session).catch(() => null)
     const path = this.cwds.get(loc.pane.session) ?? source?.cwd
-    const session = await this.startSession(ws.id, { agent: 'shell', ...(path ? { cwd: { path, soft: true } } : {}) })
+    const session = await this.startSession(ws.id, {
+      agent: 'shell',
+      ...(title ? { title } : {}),
+      ...(params.command === undefined ? {} : { command: params.command as string }),
+      ...(path ? { cwd: { path, soft: true } } : {})
+    })
     try {
       const ids = this.ids()
       const leaf: PaneLeaf = { kind: 'pane', id: ids.next('pane'), session: session.id, title: null, exit: null }
-      const next = this.unwrap(ops.splitPaneOp(ws, loc.pane.id, params.direction as SplitDirection, leaf, ids))
-      return { workspace: this.commit(ws, next, ids) }
+      const next = this.unwrap(ops.splitPaneOp(ws, loc.pane.id, params.direction as SplitDirection, leaf, ids, params.activate !== false))
+      return { workspace: this.commit(ws, next, ids), session: session.id, pane: leaf.id }
     } catch (error) {
       await this.closeQuietly(session.id)
       throw error

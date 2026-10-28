@@ -1,11 +1,13 @@
 import type { Worktree } from '@quirky/protocol'
 import type { Handler, HostingConfiguration, HostingEnv, Scope } from './env'
 import { isRecord, nonEmptyString, parseBranch, parseOid, parsePositiveInteger, parseIdentity, sameIdentity, providerReason, type IdentityValue } from './pr-data'
+import { reviewParticipants, type ReviewParticipants } from './review-participants'
 import type { CachedReviewsResult, CachedWorkspaceReview } from './cached-review-types'
 
 const LOOKUP_FIELDS = [
   'id', 'number', 'title', 'body', 'state', 'url', 'isDraft', 'updatedAt', 'mergeable', 'reviewDecision', 'mergeStateStatus',
-  'autoMergeRequest', 'baseRefName', 'headRefName', 'baseRefOid', 'headRefOid', 'headRepositoryOwner', 'headRepository', 'statusCheckRollup'
+  'autoMergeRequest', 'baseRefName', 'headRefName', 'baseRefOid', 'headRefOid', 'headRepositoryOwner', 'headRepository', 'statusCheckRollup',
+  'additions', 'deletions', 'changedFiles', 'reviewRequests', 'reviews', 'assignees'
 ].join(',')
 const FOUND_TTL = 120_000
 const ACTIVE_TTL = 60_000
@@ -46,6 +48,7 @@ export type Review = {
   url: string
   title: string
   body: string
+  updatedAt: string | null
   state: ReviewState
   headRefName: string
   baseRefName: string
@@ -58,9 +61,15 @@ export type Review = {
   autoMergeRequest: unknown
   stack: unknown
   mergeMethods: unknown
+  mergeQueueRequired: boolean | null
+  autoMergeAllowed: boolean | null
+  mergeMetadataKnown: boolean
+  additions?: number
+  deletions?: number
+  changedFiles?: number
   headRepositoryOwner?: { login: string }
   headRepository?: { name: string; owner?: { login: string } }
-}
+} & ReviewParticipants
 
 export type Lookup =
   | { kind: 'found'; review: Review; fetchedAt: number }
@@ -71,6 +80,7 @@ export type PRMergeMetadata = {
   known: boolean
   defaultBranch: string | null
   mergeQueueRequired: boolean | null
+  autoMergeAllowed: boolean | null
   mergeMethods: { default: string | null; allowed: string[] }
   rules: unknown[]
 }
@@ -195,8 +205,11 @@ function reviewFromRaw(raw: Record<string, unknown>, repository: IdentityValue, 
     parsedUrl.pathname.toLowerCase() !== expectedPath.toLowerCase()) return undefined
   const url = `${parsedUrl.origin}${expectedPath}`
 
+  const providerUpdatedAt = raw.updatedAt ?? raw.updated_at
   const review: Review = {
+    ...reviewParticipants(raw),
     provider: 'github', number, url, title, body, state, headRefName, baseRefName, headRefOid, baseRefOid,
+    updatedAt: typeof providerUpdatedAt === 'string' && Number.isFinite(Date.parse(providerUpdatedAt)) ? providerUpdatedAt : null,
     mergeable: mergeability(raw), checksStatus: checksStatus(raw),
     reviewDecision: Object.hasOwn(raw, 'reviewDecision') && (
       raw.reviewDecision === null ||
@@ -205,7 +218,14 @@ function reviewFromRaw(raw: Record<string, unknown>, repository: IdentityValue, 
     mergeStateStatus: typeof raw.mergeStateStatus === 'string' ? raw.mergeStateStatus : 'UNKNOWN',
     autoMergeRequest: raw.autoMergeRequest ?? null,
     stack,
-    mergeMethods: metadata.mergeMethods
+    mergeMethods: metadata.mergeMethods,
+    mergeQueueRequired: metadata.mergeQueueRequired,
+    autoMergeAllowed: metadata.autoMergeAllowed,
+    mergeMetadataKnown: metadata.known
+  }
+  for (const key of ['additions', 'deletions', 'changedFiles'] as const) {
+    const count = raw[key]
+    if (typeof count === 'number' && Number.isSafeInteger(count) && count >= 0) review[key] = count
   }
   if (isRecord(raw.headRepositoryOwner) && typeof raw.headRepositoryOwner.login === 'string') {
     review.headRepositoryOwner = { login: raw.headRepositoryOwner.login }
@@ -245,7 +265,7 @@ function metadataFromResponse(value: unknown): PRMergeMetadata {
   const root = isRecord(value) && isRecord(value.data) ? value.data : value
   const repository = isRecord(root) && isRecord(root.repository) ? root.repository : undefined
   if (!repository) {
-    return { known: false, defaultBranch: null, mergeQueueRequired: null, mergeMethods: { default: null, allowed: [] }, rules: [] }
+    return { known: false, defaultBranch: null, mergeQueueRequired: null, autoMergeAllowed: null, mergeMethods: { default: null, allowed: [] }, rules: [] }
   }
   const defaultBranch = isRecord(repository.defaultBranchRef) && typeof repository.defaultBranchRef.name === 'string'
     ? repository.defaultBranchRef.name
@@ -268,6 +288,7 @@ function metadataFromResponse(value: unknown): PRMergeMetadata {
     known,
     defaultBranch,
     mergeQueueRequired: queue === null || isRecord(queue) ? queueRequired : null,
+    autoMergeAllowed: typeof repository.autoMergeAllowed === 'boolean' ? repository.autoMergeAllowed : null,
     mergeMethods: { default: defaultMethod, allowed },
     rules
   }
@@ -291,11 +312,11 @@ async function readMetadata(env: HostingEnv, scope: Scope, repository: IdentityV
   try {
     return fresh ? await load() : await env.cache(key, 10 * 60_000, load)
   } catch {
-    return { known: false, defaultBranch: null, mergeQueueRequired: null, mergeMethods: { default: null, allowed: [] }, rules: [] }
+    return { known: false, defaultBranch: null, mergeQueueRequired: null, autoMergeAllowed: null, mergeMethods: { default: null, allowed: [] }, rules: [] }
   }
 }
 
-function normalizeRestPull(raw: Record<string, unknown>): Record<string, unknown> | undefined {
+export function normalizeRestPull(raw: Record<string, unknown>): Record<string, unknown> | undefined {
   const head = isRecord(raw.head) ? raw.head : undefined
   const base = isRecord(raw.base) ? raw.base : undefined
   const headRefName = head ? parseBranch(head.ref) : undefined

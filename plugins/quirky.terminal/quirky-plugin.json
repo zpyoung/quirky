@@ -104,6 +104,10 @@
               "minimum": 0,
               "maximum": 10000,
               "description": "Lines of scrollback to put in front of the screen in the replay."
+            },
+            "claim": {
+              "type": "boolean",
+              "description": "Explicitly reclaim the viewport after a local take-back."
             }
           },
           "required": [
@@ -253,6 +257,10 @@
             "rows": {
               "type": "integer",
               "minimum": 1
+            },
+            "claim": {
+              "type": "boolean",
+              "description": "Explicitly reclaim this terminal's viewport."
             }
           },
           "required": [
@@ -1320,6 +1328,18 @@
                 "down"
               ]
             },
+            "title": {
+              "type": "string",
+              "description": "Optional title for the new shell session."
+            },
+            "command": {
+              "type": "string",
+              "description": "Optional trusted shell command to start in the new pane."
+            },
+            "activate": {
+              "type": "boolean",
+              "description": "Whether to focus the new pane (default true); false preserves existing pane and workspace focus."
+            },
             "revision": {
               "type": "integer",
               "description": "Fails with a conflict naming the current revision when the workspace is at another one."
@@ -1335,10 +1355,20 @@
             "workspace": {
               "type": "object",
               "description": "The whole workspace after the change, with its new revision."
+            },
+            "session": {
+              "type": "string",
+              "description": "The ID of the newly created shell session."
+            },
+            "pane": {
+              "type": "string",
+              "description": "The ID of its newly bound pane."
             }
           },
           "required": [
-            "workspace"
+            "workspace",
+            "session",
+            "pane"
           ]
         }
       },
@@ -2263,6 +2293,84 @@
         }
       },
       {
+        "id": "mobileState",
+        "description": "Read current phone driver and phone-fit state. Mobile callers see only sessions they have attached to.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": {
+            "session": { "type": "string", "description": "Limit the result to one session." }
+          }
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "terminals": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "session": { "type": "string" },
+                  "driver": { "description": "Null when unowned; otherwise the authenticated device, connection and name." },
+                  "phoneFit": { "type": "boolean" },
+                  "cols": { "type": "integer" },
+                  "rows": { "type": "integer" },
+                  "desktopCols": { "description": "Saved desktop cols, or null before one is reported." },
+                  "desktopRows": { "description": "Saved desktop rows, or null before one is reported." }
+                },
+                "required": ["session", "driver", "phoneFit", "cols", "rows", "desktopCols", "desktopRows"]
+              }
+            }
+          },
+          "required": ["terminals"]
+        }
+      },
+      {
+        "id": "takeBack",
+        "description": "Local-only: release phone input ownership and immediately restore the saved desktop viewport. Omit session for all terminals.",
+        "params": {
+          "type": "object",
+          "properties": { "session": { "type": "string", "description": "One session; omitted means all." } }
+        },
+        "result": {
+          "type": "object",
+          "properties": { "ok": { "type": "boolean" } },
+          "required": ["ok"]
+        }
+      },
+      {
+        "id": "restoreFit",
+        "description": "Local-only: restore the saved desktop viewport after phone-fit. Omit session for all terminals.",
+        "params": {
+          "type": "object",
+          "properties": { "session": { "type": "string", "description": "One session; omitted means all." } }
+        },
+        "result": {
+          "type": "object",
+          "properties": { "ok": { "type": "boolean" } },
+          "required": ["ok"]
+        }
+      },
+      {
+        "id": "claim",
+        "description": "Explicitly reclaim a phone terminal after a local take-back, or set a local automation viewport.",
+        "connection": true,
+        "params": {
+          "type": "object",
+          "properties": {
+            "session": { "type": "string" },
+            "cols": { "type": "integer", "minimum": 1, "maximum": 1000 },
+            "rows": { "type": "integer", "minimum": 1, "maximum": 500 }
+          },
+          "required": ["session", "cols", "rows"]
+        },
+        "result": {
+          "type": "object",
+          "properties": { "ok": { "type": "boolean" } },
+          "required": ["ok"]
+        }
+      },
+      {
         "id": "runQuickCommand",
         "description": "Runs a quick command in a pane, or in a new tab (an agent command in a new agent tab).",
         "params": {
@@ -2438,6 +2546,32 @@
         "description": "The saved quick commands changed.",
         "data": {
           "type": "object"
+        }
+      },
+      {
+        "id": "mobileChanged",
+        "description": "A phone driver or phone-fit hold changed; the payload contains nonsecret terminal lease state.",
+        "data": {
+          "type": "object",
+          "properties": {
+            "terminals": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "session": { "type": "string" },
+                  "driver": { "description": "Null when unowned; otherwise the authenticated device, connection and name." },
+                  "phoneFit": { "type": "boolean" },
+                  "cols": { "type": "integer" },
+                  "rows": { "type": "integer" },
+                  "desktopCols": { "description": "Saved desktop cols, or null before one is reported." },
+                  "desktopRows": { "description": "Saved desktop rows, or null before one is reported." }
+                },
+                "required": ["session", "driver", "phoneFit", "cols", "rows", "desktopCols", "desktopRows"]
+              }
+            }
+          },
+          "required": ["terminals"]
         }
       },
       {
@@ -2870,6 +3004,38 @@
         ]
       },
       {
+        "id": "mobile-state",
+        "words": "mobile-state",
+        "summary": "inspect active phone drivers and phone-fit terminal sizes",
+        "positionals": [{ "name": "session", "description": "limit to one session; omitted means all", "required": false }],
+        "methods": ["quirky.terminal/mobileState"]
+      },
+      {
+        "id": "take-back",
+        "words": "take-back",
+        "summary": "take back phone-driven terminal input and restore desktop size",
+        "positionals": [{ "name": "session", "description": "limit to one session; omitted means all", "required": false }],
+        "methods": ["quirky.terminal/takeBack"]
+      },
+      {
+        "id": "restore-fit",
+        "words": "restore-fit",
+        "summary": "restore phone-fit terminals to their saved desktop size",
+        "positionals": [{ "name": "session", "description": "limit to one session; omitted means all", "required": false }],
+        "methods": ["quirky.terminal/restoreFit"]
+      },
+      {
+        "id": "claim",
+        "words": "claim",
+        "summary": "explicitly claim a phone terminal or set a local viewport",
+        "positionals": [
+          { "name": "session", "description": "terminal session ID", "required": true },
+          { "name": "cols", "description": "terminal columns (1–1000)", "required": true },
+          { "name": "rows", "description": "terminal rows (1–500)", "required": true }
+        ],
+        "methods": ["quirky.terminal/claim"]
+      },
+      {
         "id": "layout",
         "words": "layout",
         "summary": "print the tab and pane tree of a worktree's terminal workspace; --json prints the workspace",
@@ -3159,6 +3325,18 @@
               "right",
               "down"
             ]
+          },
+          "title": {
+            "type": "string",
+            "description": "title for the new shell session (at most 200 characters)"
+          },
+          "command": {
+            "type": "string",
+            "description": "a shell command to run instead of an interactive shell"
+          },
+          "activate": {
+            "type": "boolean",
+            "description": "whether to focus the new pane (default true; use --activate=false to preserve focus)"
           }
         },
         "methods": [

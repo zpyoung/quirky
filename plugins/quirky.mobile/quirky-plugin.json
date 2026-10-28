@@ -1,0 +1,308 @@
+{
+  "id": "quirky.mobile",
+  "name": "Mobile",
+  "version": "0.1.0",
+  "description": "Pair phones with Quirky over a direct encrypted connection.",
+  "main": "main.ts",
+  "ui": "dist/ui.js",
+  "cli": "cli.ts",
+  "activation": "startup",
+  "contributes": {
+    "method": [
+      {
+        "id": "info",
+        "description": "Read the configured desktop name and platform from a paired phone.",
+        "readOnly": true,
+        "params": { "type": "object", "properties": {}, "additionalProperties": false },
+        "result": {
+          "type": "object",
+          "properties": {
+            "machineName": { "type": "string" },
+            "platform": { "type": "string" },
+            "deviceScope": { "type": "string", "enum": ["mobile"] }
+          },
+          "required": ["machineName", "platform", "deviceScope"],
+          "additionalProperties": false
+        }
+      },
+      {
+        "id": "state",
+        "description": "Read the non-secret mobile pairing and listener state.",
+        "readOnly": true,
+        "params": { "type": "object", "properties": {}, "additionalProperties": false },
+        "result": {
+          "type": "object",
+          "properties": {
+            "machineName": { "type": "string" },
+            "showMobileButton": { "type": "boolean" },
+            "onboardingSeen": { "type": "boolean" },
+            "autoRestoreFitMs": {},
+            "customAddresses": { "type": "array", "items": { "type": "string" } },
+            "interfaces": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "name": { "type": "string" },
+                  "address": { "type": "string" },
+                  "family": { "type": "string", "enum": ["IPv4", "IPv6"] },
+                  "kind": { "type": "string", "enum": ["tailscale", "lan", "virtual"] }
+                },
+                "required": ["name", "address", "family", "kind"],
+                "additionalProperties": false
+              }
+            },
+            "devices": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "deviceId": { "type": "string" },
+                  "name": { "type": "string" },
+                  "pairedAt": { "type": "number" },
+                  "lastSeenAt": { "type": "number" }
+                },
+                "required": ["deviceId", "name", "pairedAt", "lastSeenAt"],
+                "additionalProperties": false
+              }
+            },
+            "listener": {
+              "type": "object",
+              "properties": {
+                "available": { "type": "boolean" },
+                "host": {},
+                "port": {}
+              },
+              "required": ["available", "host", "port"],
+              "additionalProperties": false
+            },
+            "relay": { "type": "string", "enum": ["unavailable"] }
+          },
+          "required": ["machineName", "showMobileButton", "onboardingSeen", "autoRestoreFitMs", "customAddresses", "interfaces", "devices", "listener", "relay"],
+          "additionalProperties": false
+        }
+      },
+      {
+        "id": "interfaces",
+        "description": "List the current ranked and usable network interfaces.",
+        "readOnly": true,
+        "params": { "type": "object", "properties": {}, "additionalProperties": false },
+        "result": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": { "type": "string" },
+              "address": { "type": "string" },
+              "family": { "type": "string", "enum": ["IPv4", "IPv6"] },
+              "kind": { "type": "string", "enum": ["tailscale", "lan", "virtual"] }
+            },
+            "required": ["name", "address", "family", "kind"],
+            "additionalProperties": false
+          }
+        }
+      },
+      {
+        "id": "pair",
+        "description": "Create or reuse a pending direct mobile pairing offer.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "address": { "type": "string" },
+            "rotate": { "type": "boolean" }
+          },
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "available": { "type": "boolean" },
+            "pairingUrl": { "type": "string" },
+            "endpoint": { "type": "string" },
+            "deviceId": { "type": "string" },
+            "connectionMode": { "type": "string", "enum": ["local-only"] },
+            "qrDataUrl": {},
+            "qrSize": {},
+            "qrError": { "type": "string", "enum": ["encoding_failed"] },
+            "reason": { "type": "string", "enum": ["invalid_advertised_endpoint", "network_exposure_failed", "device_registry_unavailable", "e2ee_key_unavailable", "websocket_unavailable"] },
+            "guidance": { "type": "string" }
+          },
+          "required": ["available"],
+          "additionalProperties": false
+        }
+      },
+      {
+        "id": "devices",
+        "description": "List durably paired mobile devices; pending offers are excluded.",
+        "readOnly": true,
+        "params": { "type": "object", "properties": {}, "additionalProperties": false },
+        "result": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "deviceId": { "type": "string" },
+              "name": { "type": "string" },
+              "pairedAt": { "type": "number" },
+              "lastSeenAt": { "type": "number" }
+            },
+            "required": ["deviceId", "name", "pairedAt", "lastSeenAt"],
+            "additionalProperties": false
+          }
+        }
+      },
+      {
+        "id": "revoke",
+        "description": "Durably revoke a paired mobile device and close all its connections.",
+        "params": {
+          "type": "object",
+          "properties": { "deviceId": { "type": "string" } },
+          "required": ["deviceId"],
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "properties": { "revoked": { "type": "boolean" } },
+          "required": ["revoked"],
+          "additionalProperties": false
+        }
+      },
+      {
+        "id": "configure",
+        "description": "Persist mobile display, address, and terminal-fit preferences.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "machineName": { "type": "string" },
+            "showMobileButton": { "type": "boolean" },
+            "onboardingSeen": { "type": "boolean" },
+            "autoRestoreFitMs": {},
+            "customAddresses": { "type": "array", "items": { "type": "string" } }
+          },
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "machineName": { "type": "string" },
+            "showMobileButton": { "type": "boolean" },
+            "onboardingSeen": { "type": "boolean" },
+            "autoRestoreFitMs": {},
+            "customAddresses": { "type": "array", "items": { "type": "string" } },
+            "interfaces": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "name": { "type": "string" },
+                  "address": { "type": "string" },
+                  "family": { "type": "string", "enum": ["IPv4", "IPv6"] },
+                  "kind": { "type": "string", "enum": ["tailscale", "lan", "virtual"] }
+                },
+                "required": ["name", "address", "family", "kind"],
+                "additionalProperties": false
+              }
+            },
+            "devices": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "deviceId": { "type": "string" },
+                  "name": { "type": "string" },
+                  "pairedAt": { "type": "number" },
+                  "lastSeenAt": { "type": "number" }
+                },
+                "required": ["deviceId", "name", "pairedAt", "lastSeenAt"],
+                "additionalProperties": false
+              }
+            },
+            "listener": {
+              "type": "object",
+              "properties": {
+                "available": { "type": "boolean" },
+                "host": {},
+                "port": {}
+              },
+              "required": ["available", "host", "port"],
+              "additionalProperties": false
+            },
+            "relay": { "type": "string", "enum": ["unavailable"] }
+          },
+          "required": ["machineName", "showMobileButton", "onboardingSeen", "autoRestoreFitMs", "customAddresses", "interfaces", "devices", "listener", "relay"],
+          "additionalProperties": false
+        }
+      },
+      {
+        "id": "open",
+        "description": "Open the Mobile page or its settings view.",
+        "params": {
+          "type": "object",
+          "properties": { "settings": { "type": "boolean" } },
+          "additionalProperties": false
+        },
+        "result": { "type": "object" }
+      }
+    ],
+    "event": [
+      {
+        "id": "changed",
+        "description": "Mobile pairing or safe settings changed; reload state to see current values.",
+        "data": { "type": "object", "properties": {}, "additionalProperties": false }
+      }
+    ],
+    "sidebar-section": [
+      { "id": "mobile", "title": "Mobile", "order": 5 }
+    ],
+    "view": [
+      { "id": "page", "title": "Mobile" },
+      { "id": "settings", "title": "Mobile settings" }
+    ],
+    "command": [
+      { "id": "open", "title": "Open Mobile" },
+      { "id": "open-settings", "title": "Open Mobile Settings" }
+    ],
+    "cli-command": [
+      { "id": "info", "summary": "read this desktop's mobile identity", "methods": ["quirky.mobile/info"] },
+      { "id": "state", "summary": "show mobile pairing and listener state", "methods": ["quirky.mobile/state"] },
+      { "id": "interfaces", "summary": "list ranked mobile pairing addresses", "methods": ["quirky.mobile/interfaces"] },
+      {
+        "id": "pair",
+        "summary": "generate a direct mobile pairing QR and copyable URL",
+        "flags": {
+          "address": { "type": "string", "description": "reachable host, host:port, IPv6 literal or ws(s)/http(s) endpoint" },
+          "rotate": { "type": "boolean", "description": "replace the pending offer without affecting paired devices" }
+        },
+        "methods": ["quirky.mobile/pair"]
+      },
+      { "id": "devices", "summary": "list paired mobile devices", "methods": ["quirky.mobile/devices"] },
+      {
+        "id": "revoke",
+        "summary": "revoke a paired mobile device immediately",
+        "positionals": [{ "name": "device", "description": "the paired device UUID", "required": true }],
+        "methods": ["quirky.mobile/revoke"]
+      },
+      {
+        "id": "configure",
+        "summary": "configure persisted mobile preferences",
+        "flags": {
+          "machine-name": { "type": "string", "description": "the computer name phones see" },
+          "show-mobile-button": { "type": "boolean", "description": "show the Mobile sidebar button" },
+          "hide-mobile-button": { "type": "boolean", "description": "hide the Mobile sidebar button" },
+          "onboarding-seen": { "type": "boolean", "description": "mark the one-time sidebar badge as seen" },
+          "keep-phone-size": { "type": "boolean", "description": "keep phone terminal dimensions after disconnect" },
+          "restore-fit-ms": { "type": "number", "description": "restore desktop terminal dimensions after this many milliseconds" },
+          "custom-address": { "type": "string", "repeatable": true, "description": "a reachable custom pairing address" }
+        },
+        "methods": ["quirky.mobile/configure"]
+      },
+      {
+        "id": "open",
+        "summary": "open the Mobile page or settings",
+        "flags": { "settings": { "type": "boolean", "description": "open Mobile settings instead of the page" } },
+        "methods": ["quirky.mobile/open"]
+      },
+      { "id": "open-settings", "summary": "open Mobile settings", "methods": ["quirky.mobile/open"] }
+    ]
+  }
+}

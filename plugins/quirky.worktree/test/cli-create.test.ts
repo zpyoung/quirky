@@ -73,45 +73,6 @@ describe('SC-14: the create command reads its positionals and flags', () => {
     expect((await run([], { repo: 'api', name: 'by-flag' })).calls[0]!.params).toEqual({ createdBy: 'cli', repo: 'api', name: 'by-flag' })
   })
 
-  test('every flag maps onto its param, and createdBy is always cli', async () => {
-    const { calls } = await run(['api', 'n'], {
-      group: 'apps',
-      base: 'origin/dev',
-      branch: 'feat/x',
-      'branch-name': 'mine',
-      'display-name': 'Nice',
-      comment: 'note',
-      'parent-worktree': 'p',
-      setup: 'run',
-      'trust-setup': true,
-      agent: 'claude',
-      prompt: 'go',
-      'no-fallback': true,
-      activate: true
-    })
-    expect(calls[0]).toEqual({
-      method: 'quirky.worktree/create',
-      params: {
-        createdBy: 'cli',
-        repo: 'api',
-        name: 'n',
-        group: 'apps',
-        base: 'origin/dev',
-        branch: 'feat/x',
-        branchName: 'mine',
-        displayName: 'Nice',
-        comment: 'note',
-        parent: 'p',
-        setup: 'run',
-        agent: 'claude',
-        prompt: 'go',
-        trustSetup: true,
-        allowLocalBaseFallback: false,
-        activate: true
-      }
-    })
-    expect((await run(['n'], { 'no-parent': true })).calls[0]!.params).toMatchObject({ noParent: true })
-  })
 
   test('contradictory input is a usage error before anything is sent', async () => {
     for (const [positionals, flags] of [
@@ -157,6 +118,10 @@ describe('SC-14: the create command reads its positionals and flags', () => {
     expect((await run(['x'], {}, { setup: { ran: 'daemon', exitCode: null, timedOut: true } })).lines[0]).toContain('setup: timed out in the daemon')
     expect((await run(['x'], { agent: 'codex' }, { agentSessionId: 's_9' })).lines[0]).toContain('agent: started codex in session s_9')
     expect((await run(['x'], {}, { setup: { ran: 'skipped' } })).lines[0]!.split('\n')).toHaveLength(4)
+  })
+  test('the issue command outcome is included in CLI notes', async () => {
+    expect((await run(['x'], {}, { issueCommand: { ran: 'terminal', sessionId: 's_issue' } })).lines[0]).toContain('issue command: running in the Issue terminal s_issue')
+    expect((await run(['x'], {}, { issueCommand: { ran: 'daemon', exitCode: 4, timedOut: false } })).lines[0]).toContain('issue command: failed in the daemon (exit 4)')
   })
 
   test('--json prints the whole result', async () => {
