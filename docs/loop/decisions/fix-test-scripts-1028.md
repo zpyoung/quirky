@@ -55,5 +55,45 @@
 - **Revisit if:** The selected reviewer dispatch fails.
 - **Source:** assumed — autonomous
 
+## D6: Preserve incoming editor/native owners and keep duplicate failure evidence historical
+- **Question:** Does roadmap catch-up change this script repair's scope?
+- **Options:** Reopen editor/Vault native work; rewrite historical blocker entries; retain scoped repair and their independent acceptance boundaries.
+- **Chose:** Read both incoming decision logs in full and retain their owners. No decision conflicts with reviewer environment propagation or malformed-evidence reporting. Historical 13-failure records remain unchanged; this item records their repaired verification.
+- **Why:** fix-native-m2-editor-1028 owns Explorer path exports and native retest; fix-native-m3-vault-1028 owns clipboard reachability and native retest. Both independently observed the same UI-review fixture failures. Neither requires changing application clipboard/native state here.
+- **Evidence:** Single clean git merge build/roadmap after source commit 974ed9ff; docs/loop/decisions/fix-native-m2-editor-1028.md D1–D7; docs/loop/decisions/fix-native-m3-vault-1028.md D1–D7.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** An end-phase test identifies a different defect in this repair's exact subprocess/evidence boundary.
+- **Source:** locked by incoming decision logs
+
+## D7: Adjudicate the bounded independent review against runtime and source evidence
+- **Question:** Which Gemini findings require a fix?
+- **Options:** Apply every suggested change; dismiss every finding because tests pass; accept evidenced gaps and reject contradicted claims.
+- **Chose:** One bounded fix batch: retain every timeout child PID and assert each is terminated; create the CLI fixture's isolated home/config directories. Reject the claimed process.env Proxy failure and claimed eager-deletion leak.
+- **Why:** The actual runtime probe proves direct env:process.env forwarding works, and both full suite runs exercised dynamic modes successfully. Receipt deletion occurs only after cleanup assertions succeed, so failed cleanup retains fallback ownership. However two theme dispatches overwrite the old single-PID receipt; tracking all PIDs improves failure cleanup and detects any first-child leak rather than certifying only the last child.
+- **Evidence:** google/gemini-3.1-pro-preview:high read-only review completed in278.64s; scripts/ui-review/review.ts:656-689; scripts/ui-review/review.test.ts timeout receipt/afterEach; scripts/ui-review/cli.test.ts isolated directory setup; observed probe D2 and green script-suite receipts.
+- **Reversibility:** easy (test fixtures only)
+- **Confidence:** high
+- **Revisit if:** A supported Bun version contradicts the observed environment propagation or an owned child remains alive.
+- **Source:** assumed — autonomous
+
+| Finding | Effective severity | Ruling | Evidence |
+| --- | --- | --- | --- |
+| C1: direct process.env loses dynamic values | High | Rejected | Direct runtime probe forwarded both values; production-backed mode tests pass. |
+| C2: deleting a successful cleanup receipt leaks its child | Medium | Rejected | Deletion follows successful no-live-child assertions; failure retains the receipt. |
+| C3: last-PID overwrite hides the first timeout child | Medium | Accepted, fixed | Append PID receipts; fallback handles all; assertions verify both theme children. No production leak is claimed. |
+| C4: isolated home/config directories are absent | Low | Accepted, fixed | Create all three isolated directories before invoking the CLI path. |
+
+## D8: Keep platform and visual verification claims bounded
+- **Question:** Does portable environment forwarding or headless process verification certify other operating systems or UI styling?
+- **Options:** Infer cross-platform/native/visual approval; retain only observed macOS command and subprocess evidence.
+- **Chose:** macOS/Bun1.4.0 verification only. Linux/Windows runtime propagation and process-tree teardown need platform runs; no visual or native window approval is asserted.
+- **Why:** This item changes developer script subprocess behavior and isolated tests, not application UI. Windows process groups differ from macOS and were not exercised.
+- **Evidence:** Executed script suite, typecheck, runtime probe and actual CLI smoke; scripts/ui-review/review.ts sendOwnedSignal/terminateOwnedProcess.
+- **Reversibility:** easy
+- **Confidence:** high for the verification boundary
+- **Revisit if:** Linux/Windows support is scheduled.
+- **Source:** deferred: platform
+
 ## Progress
-Repairs implemented. `bun test scripts`: 126 pass, 0 fail, 1039 assertions across 12 files (91.78s). Nested suite-runner fixtures deliberately print failing child-suite output; the enclosing suite passed. `bun run typecheck` exited 0. Actual `bun scripts/ui-review.ts --author-family openai --manifest <isolated malformed.json> --output <fresh output>` exited 2, persisted an error review report with zero captures and its diagnostic, and printed errorReport:null. No UI/product feature surface changed; no native scenario applies. Usage spec now documents handled validation reports versus thrown runtime errors and current-environment inheritance. Next: commit, merge roadmap once, inspect incoming binding decisions, bounded independent review, rerun affected gates after any merge/fix, then authoritative queue land. User-owned untracked .serena/ remains untouched.
+Completed implementation, one clean roadmap catch-up and one independent Gemini review plus bounded fixture fix batch. Final `bun test scripts && bun run typecheck` exited 0: 126 pass, 0 fail, 1103 assertions across 12 files (109.16s tests;152.78s combined). Nested suite-runner fixtures deliberately print failing child-suite output; the enclosing suite passed. Both timeout theme children were checked terminated. Earlier actual isolated CLI smoke exited 2 with an error review report, zero captures and retained validation diagnostic; no reviewer or application was launched. Usage spec documents error-report semantics and explicit current-environment inheritance. No application/native surface changed. All owned agents and jobs returned; no accepted review finding remains open. Next: commit receipt and fixture improvements, detach, authoritative queue land, await integration typecheck, remove owned scratch directory and end this one-item iteration. User-owned untracked .serena/ remains untouched.
