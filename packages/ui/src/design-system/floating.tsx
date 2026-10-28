@@ -135,11 +135,11 @@ export function ContextMenu({ x, y, label, items, onClose }: ContextMenuProps) {
       if (root.current?.contains(document.activeElement) || document.activeElement === document.body) previous?.focus()
     }
   }, [])
-  return createPortal(<ContextMenuList items={items} label={label} depth={0} open={open} setOpen={setOpen} onClose={onClose} x={x} y={y} rootRef={root} />, document.body)
+  return <ContextMenuList items={items} label={label} depth={0} open={open} setOpen={setOpen} onClose={onClose} x={x} y={y} rootRef={root} />
 }
 
 /** Nonmodal shared dialog variant anchored to a control, with no focus trap or backdrop. */
-export function Popover({ open, label, anchor, onClose, children }: PopoverProps) {
+export function Popover({ open, label, anchor, boundary, onClose, children }: PopoverProps) {
   const root = useRef<HTMLDivElement>(null)
   const close = useRef(onClose)
   close.current = onClose
@@ -151,17 +151,28 @@ export function Popover({ open, label, anchor, onClose, children }: PopoverProps
       const target = anchor.current
       if (!node || !target) return
       const box = target.getBoundingClientRect()
+      const bound = boundary?.getBoundingClientRect()
+      const left = Math.max(0, bound?.left ?? 0)
+      const right = Math.min(window.innerWidth, bound?.right ?? window.innerWidth)
+      const top = Math.max(0, bound?.top ?? 0)
+      const bottom = Math.min(window.innerHeight, bound?.bottom ?? window.innerHeight)
+      const width = Math.max(0, right - left)
+      const height = Math.max(0, bottom - top)
+      node.style.maxWidth = `${width}px`
+      node.style.maxHeight = `${height}px`
       const size = node.getBoundingClientRect()
       setPosition({
-        left: Math.max(0, Math.min(box.left, window.innerWidth - size.width)),
-        top: Math.max(0, Math.min(box.bottom, window.innerHeight - size.height)),
+        maxWidth: width,
+        maxHeight: height,
+        left: Math.max(left, Math.min(box.left, right - size.width)),
+        top: Math.max(top, Math.min(box.bottom, bottom - size.height)),
       })
     }
     update()
     window.addEventListener('resize', update)
     window.addEventListener('scroll', update, true)
     return () => { window.removeEventListener('resize', update); window.removeEventListener('scroll', update, true) }
-  }, [open, anchor, children])
+  }, [open, anchor, boundary, children])
   useEffect(() => {
     if (!open) return
     const outside = (event: PointerEvent) => {

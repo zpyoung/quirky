@@ -24,7 +24,7 @@ export type SectionHeaderProps = { title: string; actions?: ReactNode }
 export type TabItem = { id: string; label: string; disabled?: boolean; panelId?: string }
 export type TabsProps = { label: string; items: readonly TabItem[]; value: string; onChange: (id: string) => void }
 export type MenuItem = { id: string; label: string; onAction: () => void; disabled?: boolean; destructive?: boolean; checked?: boolean }
-export type MenuProps = { label: string; items: readonly MenuItem[] }
+export type MenuProps = { label: string; trigger?: ReactNode; items: readonly MenuItem[] }
 /** Controlled context-menu variant of Menu; actions and selection remain caller-owned. */
 export type ContextMenuItem = {
   label: string
@@ -42,7 +42,7 @@ export type ContextMenuItem = {
 }
 export type ContextMenuProps = { x: number; y: number; label: string; items: ContextMenuItem[]; onClose(): void }
 /** Nonmodal anchored dialog; outside pointer and Escape dismiss without trapping focus. */
-export type PopoverProps = { open: boolean; label: string; anchor: RefObject<HTMLElement | null>; onClose(): void; children: ReactNode }
+export type PopoverProps = { open: boolean; label: string; anchor: RefObject<HTMLElement | null>; boundary?: HTMLElement | null; onClose(): void; children: ReactNode }
 export type ToastProps = { title: string; description?: ReactNode; status?: UiStatus; action?: UiAction; onDismiss: () => void; durationMs?: number }
 export type DialogProps = { open: boolean; title: string; children: ReactNode; actions?: ReactNode; onClose: () => void; variant?: 'dialog' | 'sheet'; closeOnBackdrop?: boolean }
 export type EmptyStateProps = { message: string; action?: UiAction; icon?: ReactNode }

@@ -118,7 +118,7 @@ export function Tabs({ label, items, value, onChange }: TabsProps) {
   )
 }
 
-export function Menu({ label, items }: MenuProps) {
+export function Menu({ label, trigger, items }: MenuProps) {
   const generatedId = useId()
   const [open, setOpen] = useState(false)
   const [activeIndex, setActiveIndex] = useState(-1)
@@ -199,12 +199,13 @@ export function Menu({ label, items }: MenuProps) {
         ref={triggerRef}
         type="button"
         className="ui-menu__trigger"
+        aria-label={label}
         aria-haspopup="menu"
         aria-expanded={open}
         aria-controls={`${generatedId}-menu`}
         onClick={() => { if (open) setOpen(false); else setOpen(true) }}
       >
-        {label}<span className="ui-menu__trigger-icon" aria-hidden="true">⌄</span>
+        {trigger ?? label}{trigger === undefined && <span className="ui-menu__trigger-icon" aria-hidden="true">⌄</span>}
       </button>
       {open && (
         <ul ref={menuRef} id={`${generatedId}-menu`} className="ui-menu__list" role="menu" aria-label={label} tabIndex={-1}>
