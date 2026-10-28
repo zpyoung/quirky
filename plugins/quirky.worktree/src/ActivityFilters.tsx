@@ -4,9 +4,9 @@ import type { ActivityPreferencePatch, ActivityWindow, SidebarProjection } from 
 const WINDOWS: Array<{ value: ActivityWindow; label: string }> = [
   { value: 'all', label: 'All' },
   { value: 'live-only', label: 'Live only' },
-  { value: 'today', label: 'Today' },
-  { value: 'week', label: 'Week' },
-  { value: 'month', label: 'Month' },
+  { value: 'today', label: 'Past 24 hours' },
+  { value: 'week', label: 'Past 7 days' },
+  { value: 'month', label: 'Past 30 days' },
   { value: 'custom', label: 'Custom' }
 ]
 

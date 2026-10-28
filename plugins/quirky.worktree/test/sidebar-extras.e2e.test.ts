@@ -206,11 +206,9 @@ test('SC-02/08/10/17: real CLI and sidebar share activity preferences, selected 
   expect(initial.preferences.workspaceActivityWindow).toBe('all')
   expect(initial.active).toMatchObject({ worktreeId: feature.id })
 
-  const filter = await win.waitFor(() => [...document.querySelectorAll<HTMLButtonElement>('button')].find(
-    (button) => /workspace options|filters/i.test(button.textContent ?? '') || /workspace options|filters/i.test(button.getAttribute('aria-label') ?? '')
-  ))
+  const filter = await win.waitFor(() => document.querySelector<HTMLButtonElement>('.workspace-activity-controls > button[aria-label="Workspace options"]'))
   filter.click()
-  const week = await win.waitFor(() => [...document.querySelectorAll<HTMLButtonElement>('button')].find((button) => button.textContent?.trim() === 'Week'))
+  const week = await win.waitFor(() => [...document.querySelectorAll<HTMLButtonElement>('button')].find((button) => button.textContent?.trim() === 'Past 7 days'))
   week.click()
   await win.waitFor(async () => {
     const state = (await agent.callAny('quirky.sidebar-extras/state', {})) as { preferences: { workspaceActivityWindow: string } }

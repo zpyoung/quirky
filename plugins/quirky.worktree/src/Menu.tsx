@@ -196,7 +196,7 @@ export function workspaceMenu(
     ...sleepItems,
     del
   ]
-  if (worktree.kind === 'git') {
+  if (worktree.kind === 'git' && repo?.kind === 'git') {
     items.push({
       label: 'New group from worktree…',
       onSelect: () => on.openDialog({
