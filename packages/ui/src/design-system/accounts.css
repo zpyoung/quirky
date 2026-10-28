@@ -213,17 +213,6 @@
   grid-column: 1 / -1;
 }
 
-.accounts-ui .ui-form-row__control select {
-  background: var(--ui-surface);
-  border: var(--ui-border-width) solid var(--ui-border);
-  border-radius: var(--ui-radius-control);
-  color: var(--ui-text);
-  font: inherit;
-  min-width: 0;
-  padding: var(--ui-space-6) var(--ui-space-8);
-  width: 100%;
-}
-
 .accounts-ui input[type='checkbox'] {
   accent-color: var(--ui-accent);
   block-size: var(--ui-icon-size);

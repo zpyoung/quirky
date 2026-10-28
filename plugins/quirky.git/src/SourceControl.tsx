@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { EmptyState, ToolPanelFrame } from '@quirky/ui'
 import type { UiPluginContext } from '@quirky/protocol'
 import { EMPTY_REPORT, worktreeOf, type ScmReport } from './scm'
 import { addNotice, Notices, type Notice, type ShownNotice } from './panel/Notices'
@@ -35,14 +36,11 @@ export function SourceControl({ context, report }: Props) {
   }, [worktree, report, context])
 
   return (
-    <div className="scm-root">
+    <div className="ui-stack" style={{ height: '100%', minHeight: 0, gap: 0, position: 'relative' }}>
       {worktree === null ? (
-        <div className="scm">
-          <div className="scm-header">
-            <strong>Source control</strong>
-          </div>
-          <p className="muted pad">Select a workspace to view changes</p>
-        </div>
+        <ToolPanelFrame title="Source control">
+          <EmptyState message="Select a workspace to view changes" />
+        </ToolPanelFrame>
       ) : (
         <WorktreePanel
           key={worktree}

@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalS
 import { createPortal } from 'react-dom'
 import { createRoot } from 'react-dom/client'
 import type { Session, UiPluginContext } from '@quirky/protocol'
-import { Badge, Button, ContextMenuList, EmptyState, FormRow, IconButton, SectionHeader, Tabs, TextField, type ContextMenuItem } from '@quirky/ui'
+import { Badge, Button, ContextMenuList, EmptyState, FormRow, IconButton, SectionHeader, SelectField, Tabs, TextField, type ContextMenuItem } from '@quirky/ui'
 import { HISTORY_AGENTS } from '../agents'
 import type { HostedSession, ViewState } from '../types'
 import { EvidenceText } from './evidence'
@@ -852,12 +852,10 @@ function HistoryPanel({ context, report }: HistoryPanelProps) {
   return <div className="qvh-root" ref={root} data-narrow={width < 300 ? 'true' : 'false'} data-vault-history onKeyDown={keyDown}>
     <div className="qvh-header">
       <SectionHeader title={width < 300 ? 'Agents' : 'Agent Session History'} actions={<div className="qvh-head-actions">
-        <FormRow label="Host" htmlFor="qvh-host-select">
-          <select id="qvh-host-select" className="qvh-select qvh-host-select" aria-label="History host" value={snapshot.view.host} onChange={(event) => void model.setView({ host: event.currentTarget.value }).catch(() => {})}>
-            <option value="local">Local Mac</option><option value="all">All hosts</option>
-            {snapshot.hostOutcomes.filter((host) => host.hostId !== 'local' && host.hostId !== 'all').map((host) => <option key={host.hostId} value={host.hostId}>{host.label}{host.kind === 'ok' ? '' : ` · ${host.kind}`}</option>)}
-          </select>
-        </FormRow>
+        <SelectField label="Host" id="qvh-host-select" className="qvh-host-select" aria-label="History host" value={snapshot.view.host} onChange={(event) => void model.setView({ host: event.currentTarget.value }).catch(() => {})}>
+          <option value="local">Local Mac</option><option value="all">All hosts</option>
+          {snapshot.hostOutcomes.filter((host) => host.hostId !== 'local' && host.hostId !== 'all').map((host) => <option key={host.hostId} value={host.hostId}>{host.label}{host.kind === 'ok' ? '' : ` · ${host.kind}`}</option>)}
+        </SelectField>
         <IconButton label="View options" aria-expanded={optionsOpen} title="View options" data-vault-adjustment-count={adjustmentCount(snapshot.view)} onClick={() => setOptionsOpen((open) => !open)}>
           <span aria-hidden="true">⛭</span>{adjustmentCount(snapshot.view) ? <Badge tone="accent">{adjustmentCount(snapshot.view)}</Badge> : null}
         </IconButton>
@@ -904,14 +902,12 @@ function HistoryPanel({ context, report }: HistoryPanelProps) {
     {snapshot.list.error ? <div className="qvh-error" role="alert">{snapshot.list.error} <Button onClick={() => snapshot.viewReady ? void model.refreshList(true) : void model.retryView()}>Retry</Button></div> : null}
     <div className="qvh-sortbar">
       <strong>{snapshot.view.query.trim() && snapshot.searchStatus?.enabled ? `${snapshot.search.response?.kind === 'results' ? snapshot.search.response.hits.length : 0} matches` : `${allRows.length} of ${snapshot.list.result?.total ?? 0} sessions`}</strong>
-      <FormRow label="Sort" htmlFor="qvh-sort">
-        <select id="qvh-sort" className="qvh-select" aria-label="Sort sessions" value={snapshot.view.query.trim() && snapshot.searchStatus?.enabled ? snapshot.view.searchSort : snapshot.view.browseSort} onChange={(event) => {
-          if (snapshot.view.query.trim() && snapshot.searchStatus?.enabled) void model.setView({ searchSort: event.currentTarget.value as ViewState['searchSort'] }).catch(() => {})
-          else void model.setView({ browseSort: event.currentTarget.value as ViewState['browseSort'] }).catch(() => {})
-        }}>
-          {snapshot.view.query.trim() && snapshot.searchStatus?.enabled ? <><option value="relevance">Most relevant</option><option value="newest">Newest</option></> : <><option value="updated">Last updated</option><option value="created">Created</option></>}
-        </select>
-      </FormRow>
+      <SelectField label="Sort" id="qvh-sort" aria-label="Sort sessions" value={snapshot.view.query.trim() && snapshot.searchStatus?.enabled ? snapshot.view.searchSort : snapshot.view.browseSort} onChange={(event) => {
+        if (snapshot.view.query.trim() && snapshot.searchStatus?.enabled) void model.setView({ searchSort: event.currentTarget.value as ViewState['searchSort'] }).catch(() => {})
+        else void model.setView({ browseSort: event.currentTarget.value as ViewState['browseSort'] }).catch(() => {})
+      }}>
+        {snapshot.view.query.trim() && snapshot.searchStatus?.enabled ? <><option value="relevance">Most relevant</option><option value="newest">Newest</option></> : <><option value="updated">Last updated</option><option value="created">Created</option></>}
+      </SelectField>
     </div>
     <div className="qvh-list" ref={list} data-vault-virtual-list onScroll={(event) => { setScrollTop(event.currentTarget.scrollTop); setMenuId(null) }}>
       {grouped.entries.length ? <div className="qvh-list-spacer" style={{ height: grouped.totalHeight }}>
@@ -998,11 +994,9 @@ function ViewOptions({ model, snapshot, onClose }: { model: VaultWindowModel; sn
       <FormRow label="Hide empty sessions" htmlFor="qvh-hide-empty"><input id="qvh-hide-empty" type="checkbox" checked={snapshot.view.hideEmptySessions} onChange={(event) => option({ hideEmptySessions: event.currentTarget.checked })} /></FormRow>
     </section>
     <section className="qvh-options-section">
-      <FormRow label="History depth" htmlFor="qvh-history-depth">
-        <select id="qvh-history-depth" className="qvh-select" aria-label="History depth" value={snapshot.view.sessionLimit === null ? 'unlimited' : String(snapshot.view.sessionLimit)} onChange={(event) => option({ sessionLimit: event.currentTarget.value === 'unlimited' ? null : Number(event.currentTarget.value) as 250 | 500 | 1000 })}>
-          <option value="250">250 · Recommended</option><option value="500">500 · May be slower</option><option value="1000">1,000</option><option value="unlimited">Unlimited · Slowest</option>
-        </select>
-      </FormRow>
+      <SelectField label="History depth" id="qvh-history-depth" value={snapshot.view.sessionLimit === null ? 'unlimited' : String(snapshot.view.sessionLimit)} onChange={(event) => option({ sessionLimit: event.currentTarget.value === 'unlimited' ? null : Number(event.currentTarget.value) as 250 | 500 | 1000 })}>
+        <option value="250">250 · Recommended</option><option value="500">500 · May be slower</option><option value="1000">1,000</option><option value="unlimited">Unlimited · Slowest</option>
+      </SelectField>
       <p className="qvh-option-warning">Larger histories can slow the entire app, especially on remote hosts. Unlimited scans all available history.</p>
     </section>
     <section className="qvh-options-section"><Button disabled={adjustmentCount(snapshot.view) === 0} onClick={() => void model.resetView().catch(() => {})}>Reset view</Button></section>

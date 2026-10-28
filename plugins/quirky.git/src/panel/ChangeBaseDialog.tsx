@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
+import { Badge, Button, Dialog, EmptyState, ListRow, TextField } from '@quirky/ui'
 import type { UiPluginContext } from '@quirky/protocol'
-import { Dialog } from './Dialog'
 import { messageOf } from './format'
 
 type Ref = { name: string; kind: 'local' | 'remote' }
@@ -55,31 +55,43 @@ export function ChangeBaseDialog({ context, worktree, current, onClose, onChange
 
   const base = current === null ? null : stripRemote(current)
   return (
-    <Dialog title="Change Base Ref" onClose={onClose} wide>
-      <p className="muted">Pick the branch compare target for this repository.</p>
-      <div className="scm-base-current">
-        <span className="muted">{base === null ? 'No base ref in use' : `Current: ${base}`}</span>
-        <button type="button" disabled={saving} onClick={() => void save({ clear: true })}>
-          Use Primary
-        </button>
-      </div>
-      <input type="text" autoFocus aria-label="Search branches" placeholder="Search branches…" value={query} onChange={(event) => setQuery(event.target.value)} />
-      {error !== null && <p className="form-error">{error}</p>}
-      <ul className="scm-ref-list" role="listbox" aria-label="Branches">
-        {refs.map((ref) => (
-          <li key={`${ref.kind}:${ref.name}`} role="option" aria-selected={ref.name === base}>
-            <button type="button" disabled={saving} data-current={ref.name === base ? '' : undefined} onClick={() => void save({ base: ref.name })}>
-              <span>{ref.name}</span>
-              <span className="muted">{ref.kind}</span>
-            </button>
-          </li>
-        ))}
-        {refs.length === 0 && error === null && <li className="muted scm-pad">No matching branches</li>}
-      </ul>
-      <div className="dialog-actions">
-        <button type="button" onClick={onClose}>
-          Close
-        </button>
+    <Dialog
+      open
+      title="Change Base Ref"
+      onClose={onClose}
+      actions={<Button onClick={onClose}>Close</Button>}
+    >
+      <div className="ui-stack">
+        <p className="ui-text-muted">Pick the branch compare target for this repository.</p>
+        <div className="ui-cluster">
+          <span className="ui-text-muted">{base === null ? 'No base ref in use' : `Current: ${base}`}</span>
+          <Button disabled={saving} onClick={() => void save({ clear: true })}>
+            Use Primary
+          </Button>
+        </div>
+        <TextField
+          label="Search branches"
+          type="text"
+          autoFocus
+          aria-label="Search branches"
+          placeholder="Search branches…"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+        />
+        {error !== null && <p role="alert" style={{ color: 'var(--ui-failing)' }}>{error}</p>}
+        <div className="ui-stack" role="list" aria-label="Branches" style={{ gap: 'var(--ui-space-2)' }}>
+          {refs.map((ref) => (
+            <ListRow
+              key={`${ref.kind}:${ref.name}`}
+              title={ref.name}
+              description={<span className="ui-cluster"><span>{ref.kind}</span>{ref.name === base && <Badge tone="accent">Current</Badge>}</span>}
+              selected={ref.name === base}
+              disabled={saving}
+              onClick={() => void save({ base: ref.name })}
+            />
+          ))}
+          {refs.length === 0 && error === null && <EmptyState message="No matching branches" />}
+        </div>
       </div>
     </Dialog>
   )

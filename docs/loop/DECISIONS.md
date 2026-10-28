@@ -299,6 +299,9 @@ files, not this one.
 | medium | high | [m5-loops-ui D12](decisions/m5-loops-ui.md) | Host-computed opt-in close context closes the spec-review blocker | assumed — autonomous |
 | medium | high | [m5-loops-ui D15](decisions/m5-loops-ui.md) | Host identity removes the serialized close-guard read cycle | assumed — autonomous |
 | medium | high | [m5-loops-ui D24](decisions/m5-loops-ui.md) | Adapt to the landed generic tab-menu contract during the operator merge | assumed — autonomous, within operator-directed merge |
+| medium (visible composition) | high | [ui-restyle-orchestration D1](decisions/ui-restyle-orchestration.md) | Restyle all four desktop plugin surfaces without changing workflow authority | locked by docs/quirk/specs/2026-10-28-ui-redesign/logic.md |
+| medium | high | [ui-restyle-orchestration D2](decisions/ui-restyle-orchestration.md) | Preserve pending, empty, failure, draft and safety behavior | assumed — autonomous |
+| medium (public field types and additive plugin registrations) | high | [ui-restyle-orchestration D12](decisions/ui-restyle-orchestration.md) | Compose the sole roadmap catch-up with all incoming field and plugin contracts | locked by docs/loop/LOOP.md and incoming decision logs |
 | medium (review independence record) | high | [m7-sweep-automation D5](decisions/m7-sweep-automation.md) | Use OpenAI task implementers and verified Gemini reviewer fallback | assumed — autonomous |
 | medium | high | [m7-sweep-automation D8](decisions/m7-sweep-automation.md) | Fix menu dismissal and sidebar loop presentation in three disjoint slices | assumed — autonomous |
 | medium | high for source omissions; remote prerequisite design remains open. | [m7-sweep-automation D9](decisions/m7-sweep-automation.md) | Retain larger newly discovered flows in one completion item | deferred: automation workspace provenance, mobile loop projection and remote ledger ownership |
@@ -368,6 +371,11 @@ files, not this one.
 | medium | high | [m3-handoff D72](decisions/m3-handoff.md) | Remove a transient landing candidate captured by catch-up | locked by docs/loop/LOOP.md |
 | medium | high | [m3-handoff D74](decisions/m3-handoff.md) | Preserve the shipped name migration and append handoff badges after it | locked by docs/loop/decisions/m1-agent-status-scripting.md |
 | medium (a future global tip owner would migrate this state, not duplicate it) | high | [m3-vault-consent-tip-completion D1](decisions/m3-vault-consent-tip-completion.md) | Vault owns its one documented search tip, with a real UI consumer | assumed — autonomous |
+| medium | high | [ui-restyle-git D1](decisions/ui-restyle-git.md) | Apply the approved graphite contract without changing features | locked by docs/quirk/specs/2026-10-28-ui-redesign/logic.md |
+| medium | high | [ui-restyle-git D3](decisions/ui-restyle-git.md) | Preserve lifecycle and recovery while using shared empty/error/form controls | locked by docs/quirk/specs/2026-10-28-ui-redesign/logic.md |
+| medium (additive public presentation apis) | high | [ui-restyle-git D7](decisions/ui-restyle-git.md) | Fill shared-system gaps rather than dropping existing behavior | assumed — autonomous |
+| medium (visibility/polling ownership) | high | [ui-restyle-git D11](decisions/ui-restyle-git.md) | Use six-slot ownership for Checks visibility and respect genuine document visibility | assumed — autonomous |
+| medium (shared presentation contracts) | high | [ui-restyle-git D12](decisions/ui-restyle-git.md) | Compose concurrent exports and converge on the landed shared menu | locked by incoming ui-restyle-terminal decisions |
 | medium (observable address/origin and connection behavior) | high | [sa-browser-localhost-label-routing D1](decisions/sa-browser-localhost-label-routing.md) | Require real worktree routing in both browser engines | locked by docs/loop/decisions/sa-browser-profiles-settings.md |
 | medium (routing scope, origin and ownership contracts) | high for current-code absence; alternatives remain architecture choices, not impossibility claims | [sa-browser-localhost-label-routing D3](decisions/sa-browser-localhost-label-routing.md) | Do not substitute machine-wide or external routing infrastructure | assumed — autonomous |
 | medium | high | [m0-core D8](decisions/m0-core.md) | v1's CLI words stay, with `wt` and `term` as group aliases | assumed — autonomous |
@@ -443,6 +451,8 @@ files, not this one.
 | medium | high | [m1-worktrees D14](decisions/m1-worktrees.md) | The base is the requested one, else the project's saved base, else the detected default | locked by research/orca-features/worktrees.md |
 | medium | high | [m1-worktrees D49](decisions/m1-worktrees.md) | Project settings are a `quirky.repo` record, set with `repo set` and shown with `repo show` | supersedes nothing; works within m0-ui-api D17 |
 | medium | high | [m1-worktrees D52](decisions/m1-worktrees.md) | Platform-specific parts are logged and built for macOS only | deferred: platform |
+| medium | high | [ui-restyle-agents D1](decisions/ui-restyle-agents.md) | Restyle the four existing feature owners without new behavior | locked by docs/quirk/specs/2026-10-28-ui-redesign/logic.md |
+| medium | high | [ui-restyle-agents D2](decisions/ui-restyle-agents.md) | Keep host placement and authoritative status/detail semantics | locked by existing shell and feature decision logs |
 | medium | high | [fix-test-process-leaks D1](decisions/fix-test-process-leaks.md) | Treat test subprocess ownership as the fix boundary | locked by docs/architecture.md |
 | medium | high | [fix-test-process-leaks D4](decisions/fix-test-process-leaks.md) | Own disposable runs with an external process-scope guardian | assumed — autonomous |
 | medium | high | [fix-test-process-leaks D7](decisions/fix-test-process-leaks.md) | The test guardian requires POSIX process inspection | deferred: platform |
@@ -508,6 +518,7 @@ files, not this one.
 | medium | high | [m6-orchestration-idle-pointer-shutdown D1](decisions/m6-orchestration-idle-pointer-shutdown.md) | Restore exactly the deferred automatic hint flow | locked by docs/loop/decisions/m6-orchestration-core.md |
 | medium | high for lifetime dependency; medium for historical hang cause | [m6-orchestration-idle-pointer-shutdown D3](decisions/m6-orchestration-idle-pointer-shutdown.md) | Fence scheduler lifetime rather than wait indefinitely for external work | assumed — autonomous |
 | medium | high | [m6-orchestration-idle-pointer-shutdown D4](decisions/m6-orchestration-idle-pointer-shutdown.md) | Keep existing identity, waiter and consumption authority | locked by research/orca-features/orchestration.md |
+| medium | high | [ui-restyle-ledger D1](decisions/ui-restyle-ledger.md) | Preserve Ledger placement and operation authority | locked by docs/quirk/specs/2026-10-28-ui-redesign/logic.md |
 | medium | high | [m7-editor-source-control-completion D1](decisions/m7-editor-source-control-completion.md) | Complete existing owners without changing the locked platform or exclusions | locked by docs/roadmap.md and docs/architecture.md |
 | medium | high | [m7-editor-source-control-completion D5](decisions/m7-editor-source-control-completion.md) | Preserve the nonoverlapping earlier editor handoff | locked by docs/loop/decisions/m2-editor-complete-remaining-flows.md D20 |
 | medium | high | [m7-editor-source-control-completion D6](decisions/m7-editor-source-control-completion.md) | Commit shared public contracts before three disjoint components | assumed — autonomous |
@@ -529,6 +540,8 @@ files, not this one.
 | medium | high | [m1-agent-status-scripting D10](decisions/m1-agent-status-scripting.md) | Rows record the evidence that decided them, and explain reads it | assumed — autonomous |
 | medium | high | [m1-agent-status-scripting D19](decisions/m1-agent-status-scripting.md) | Distinct failures are plugin errors with a machine-readable reason | assumed — autonomous |
 | medium | high | [m1-agent-status-scripting D38](decisions/m1-agent-status-scripting.md) | Catching up with build/roadmap brought m1-notifications, m2-source-control-core and m3-terminal-dock; no decision conflicts | assumed — autonomous |
+| medium (visible hierarchy) | high | [ui-restyle-settings D1](decisions/ui-restyle-settings.md) | Keep the approved presentation scope and existing authority | locked by docs/quirk/specs/2026-10-28-ui-redesign/logic.md |
+| medium | high | [ui-restyle-settings D2](decisions/ui-restyle-settings.md) | Preserve security, lifecycle and unavailable-capability semantics | assumed — autonomous |
 | medium | high | [sb-mobile-app D1](decisions/sb-mobile-app.md) | Build the combined phone foundation and workspace/session scope | locked by docs/loop/queue.json |
 | medium | high | [sb-mobile-app D5](decisions/sb-mobile-app.md) | Defer locked native-chat and dictation flows without inventing a replacement API | deferred: interactive native-chat and voice |
 | medium | high | [sb-mobile-app D6](decisions/sb-mobile-app.md) | Resolve Visual, API, Data and Integration gray areas from source | assumed — autonomous |
@@ -576,6 +589,7 @@ files, not this one.
 | medium | high | [sa-browser-agent-extras D1](decisions/sa-browser-agent-extras.md) | Recover extras onto the current core, not over it | assumed — autonomous |
 | medium | high | [sa-browser-agent-extras D3](decisions/sa-browser-agent-extras.md) | Preserve later profile and identity ownership | locked by docs/loop/decisions/sa-browser-profiles-settings.md |
 | medium | high | [sa-browser-agent-extras D12](decisions/sa-browser-agent-extras.md) | Reconcile the single roadmap catchup without broadening Native or mobile authority | assumed — autonomous |
+| medium | high | [ui-restyle-tasks D1](decisions/ui-restyle-tasks.md) | Preserve feature behavior and host-owned default slots | locked by docs/quirk/specs/2026-10-28-ui-redesign/logic.md |
 | medium | high | [m0-daemon-api D8](decisions/m0-daemon-api.md) | Method results and errors | assumed — autonomous |
 | medium | high | [m0-daemon-api D10](decisions/m0-daemon-api.md) | Stores migrate forward only, by an ordered list, and refuse a downgrade | assumed — autonomous |
 | medium | high | [m0-daemon-api D24](decisions/m0-daemon-api.md) | Plugin methods use the daemon's token, and any client may call any method | locked by docs/roadmap.md |
@@ -609,6 +623,12 @@ files, not this one.
 | medium (cross-feature integration) | high for the observed conflict; incoming deletion provenance still being traced | [m5-structured-runner D45](decisions/m5-structured-runner.md) | Reconcile a newer integration tip instead of discarding verified m5 work | assumed — autonomous (operator-directed landing continuation) |
 | medium (cross-feature merge composition) | high | [m5-structured-runner D46](decisions/m5-structured-runner.md) | Restore the unlanded candidate removed by handoff's cleanup, not an obsolete feature design | assumed — autonomous (operator-directed feature landing) |
 | medium (shared public launch/ui contracts) | high | [m5-structured-runner D47](decisions/m5-structured-runner.md) | Preserve the three new binding decision logs and their public contracts | locked by docs/loop/decisions/m3-session-info.md |
+| medium | high | [ui-restyle-worktrees D1](decisions/ui-restyle-worktrees.md) | Restyle the existing Worktrees UI owner, not a new repository tool | locked by docs/quirk/specs/2026-10-28-ui-redesign/logic.md |
+| medium (additive public component props) | high | [ui-restyle-worktrees D8](decisions/ui-restyle-worktrees.md) | Extend the actual shared components and remove obsolete local implementations | assumed — autonomous |
+| medium | high | [ui-restyle-worktrees D11](decisions/ui-restyle-worktrees.md) | Reuse the canonical context-menu owner delivered by the sole catch-up | supersedes ui-restyle-worktrees D8 (Menu-extension clause only) |
+| medium | high for observed log entries; prior updater state and exact external-file deltas unknown | [ui-restyle-worktrees D13](decisions/ui-restyle-worktrees.md) | Do not infer complete native browser-state isolation from HOME alone | deferred: platform |
+| medium | high for the explicit union; fresh compiler and scoped current-source proof remain next | [ui-restyle-worktrees D15](decisions/ui-restyle-worktrees.md) | Compose native shared fields and fixed-footer dialogs without losing worktree semantics | locked by docs/loop/LOOP.md failed-land retry procedure |
+| medium | high for composition; current compiler/build and narrow menu proof remain next | [ui-restyle-worktrees D17](decisions/ui-restyle-worktrees.md) | Converge rich menu geometry and preserve all shared interaction regressions | locked by docs/loop/LOOP.md failed-land retry procedure |
 | medium | high | [m3-vault-parity-completion D1](decisions/m3-vault-parity-completion.md) | Finish the queued matrix without reopening the landed core | locked by docs/loop/LOOP.md |
 | medium | high | [m3-vault-parity-completion D6](decisions/m3-vault-parity-completion.md) | Keep platform and unrelated feature ownership boundaries | deferred: platform |
 | medium | high | [m3-vault-parity-completion D10](decisions/m3-vault-parity-completion.md) | Persist child ownership, not caller-supplied source paths | assumed — autonomous |
@@ -981,6 +1001,7 @@ files, not this one.
 | easy | medium | [m0-daemon-api D42](decisions/m0-daemon-api.md) | Final round 1: fix four defects, and narrow the spec's promise about listener timing | assumed — autonomous |
 | easy | medium | [m7-sweep-hosting D8](decisions/m7-sweep-hosting.md) | Keep model findings, autonomous rulings and protocol limits separate | assumed — autonomous |
 | easy | medium | [m5-structured-runner D30](decisions/m5-structured-runner.md) | Diagnose the scripts fixture timeout without weakening its assertion or budget | assumed — autonomous |
+| easy | medium | [ui-restyle-worktrees D4](decisions/ui-restyle-worktrees.md) | Preserve custom identity data while using semantic presentation colors | assumed — autonomous |
 | easy (before dispatch) | medium (large account domain, contract integration risk) | [m3-accounts D13](decisions/m3-accounts.md) | Execute one four-component wave with disjoint scopes | assumed — autonomous |
 | easy | medium | [ui-shell-slots D8](decisions/ui-shell-slots.md) | Bound dimensions and use opaque same-window drag state | assumed — autonomous |
 | easy | medium | [m0-ui-api D11](decisions/m0-ui-api.md) | Commands run in the window, from a command palette or a keybinding | assumed — autonomous |
@@ -1237,6 +1258,16 @@ files, not this one.
 | easy | high | [m5-loops-ui D22](decisions/m5-loops-ui.md) | Keep native conversation ownership strict during UI verification | assumed — autonomous |
 | easy | high | [m5-loops-ui D23](decisions/m5-loops-ui.md) | Preserve explicit component attribution and current public API documentation | assumed — autonomous |
 | easy | high | [m5-loops-ui D25](decisions/m5-loops-ui.md) | Declare canonical context at both command-validation boundaries | assumed — autonomous |
+| easy | high | [ui-restyle-orchestration D3](decisions/ui-restyle-orchestration.md) | Reuse the canonical theme, component and lint authorities | locked by docs/quirk/specs/2026-10-28-ui-redesign/logic.md |
+| easy | high | [ui-restyle-orchestration D4](decisions/ui-restyle-orchestration.md) | Use build-first combined spec and three isolated implementation components | locked by docs/loop/LOOP.md |
+| easy | high | [ui-restyle-orchestration D5](decisions/ui-restyle-orchestration.md) | Verify on this Mac with wholly private runtime state | deferred: platform |
+| easy | high | [ui-restyle-orchestration D6](decisions/ui-restyle-orchestration.md) | Add missing native fields and editor appearance once in the shared system | assumed — autonomous |
+| easy | high | [ui-restyle-orchestration D7](decisions/ui-restyle-orchestration.md) | Quarantine two relative-path edits and reassign their ownership after stopping the writer | assumed — autonomous |
+| easy | high | [ui-restyle-orchestration D8](decisions/ui-restyle-orchestration.md) | Repair the shared appearance and event boundaries exposed by the real build and smoke | assumed — autonomous |
+| easy | high | [ui-restyle-orchestration D9](decisions/ui-restyle-orchestration.md) | Keep liveness distinct from work status and remove incidental assertions | assumed — autonomous |
+| easy | high for the observed tool failure; root cause beyond the boundary remains unproven | [ui-restyle-orchestration D10](decisions/ui-restyle-orchestration.md) | Use a stable owned headless shell after two newer browser transports failed | assumed — autonomous |
+| easy | high for exercised paths; exhaustive acceptance remains unclaimed | [ui-restyle-orchestration D11](decisions/ui-restyle-orchestration.md) | Record minimum surface proof without claiming full acceptance or visual scoring | locked by docs/loop/LOOP.md |
+| easy | high for named observations only | [ui-restyle-orchestration D13](decisions/ui-restyle-orchestration.md) | Finish with fresh composed-source surface proof | assumed — autonomous |
 | easy (follow-up items remain explicit) | high | [m7-sweep-automation D1](decisions/m7-sweep-automation.md) | Audit all three documents; preserve explicit exclusions | locked by docs/roadmap.md |
 | easy | high | [m7-sweep-automation D2](decisions/m7-sweep-automation.md) | Resolve unattended workflow questions locally | locked by docs/loop/LOOP.md |
 | easy | high | [m7-sweep-automation D4](decisions/m7-sweep-automation.md) | Preserve existing follow-up ownership | assumed — autonomous |
@@ -1577,6 +1608,19 @@ files, not this one.
 | easy (resume after the public foundation lands) | high for checked-out declarations and source; no ssh runtime behavior claimed | [m7-ledger-remote-host-flows D1](decisions/m7-ledger-remote-host-flows.md) | Block on missing public host authority | locked by docs/loop/decisions/m7-sweep-automation-completion.md D4,D10 |
 | easy | high | [m7-ledger-remote-host-flows D3](decisions/m7-ledger-remote-host-flows.md) | Keep the remote ledger flow whole and preserve existing owners | assumed — autonomous |
 | easy | high for inspected contracts only | [m7-ledger-remote-host-flows D4](decisions/m7-ledger-remote-host-flows.md) | Resolve unattended design defaults and stop at feasibility | locked by docs/loop/LOOP.md |
+| easy | high | [ui-restyle-git D2](decisions/ui-restyle-git.md) | Restyle the review-owned Checks panel, not a new runner surface | assumed — autonomous |
+| easy | high | [ui-restyle-git D4](decisions/ui-restyle-git.md) | Reuse existing public contracts and split three disjoint implementation scopes | assumed — autonomous |
+| easy | high | [ui-restyle-git D5](decisions/ui-restyle-git.md) | Follow build-first gates and preserve inherited metadata | locked by docs/loop/LOOP.md |
+| easy | high | [ui-restyle-git D6](decisions/ui-restyle-git.md) | Keep state isolated and platform claims macOS-only | deferred: platform |
+| easy | high | [ui-restyle-git D8](decisions/ui-restyle-git.md) | Integrate only the audited source slices at the all-worker barrier | assumed — autonomous |
+| easy | high | [ui-restyle-git D9](decisions/ui-restyle-git.md) | Record the nested-dispatch deviation rather than claiming strict cap compliance | assumed — autonomous |
+| easy | high | [ui-restyle-git D10](decisions/ui-restyle-git.md) | Repair actual build/compiler and renderer boundaries without weakening enforcement | assumed — autonomous |
+| easy | high for explicit final ownership; earlier profile/os credential-store behavior is not independently certified | [ui-restyle-git D13](decisions/ui-restyle-git.md) | Fence final browser proof with a unique profile and explicit CDP | locked by incoming browser-isolation decisions |
+| easy | high for identified source boundary; final actual appearance proof required | [ui-restyle-git D14](decisions/ui-restyle-git.md) | Reconfigure syntax highlighting when the canonical appearance changes | locked by approved redesign appearance behavior |
+| easy | high for exercised paths only; suites, golden85 score, provider/ai, native and foreign-platform acceptance unclaimed | [ui-restyle-git D15](decisions/ui-restyle-git.md) | Finish with current compiler/build and bounded owned-surface proof | locked by docs/loop/LOOP.md build-first verification boundary |
+| easy | high for named owned resources; no assertion that shared browser processes belong exclusively to this lane | [ui-restyle-git D16](decisions/ui-restyle-git.md) | Close owned proof resources without killing a shared browser profile | locked by incoming browser-isolation decisions and operator resource directive |
+| easy | high for the composed gate and fresh minimal surface proof | [ui-restyle-git D17](decisions/ui-restyle-git.md) | Complete the mandatory failed-land recovery without dropping concurrent contracts | locked by docs/loop/LOOP.md failed-land recovery procedure |
+| easy | high for named final owned resources and ui outcomes; earlier os updater behavior remains uncertified | [ui-restyle-git D18](decisions/ui-restyle-git.md) | Bound browser OS-isolation claims and verify the recovery with the testing distribution | locked by incoming ui-restyle-ledger D9 safety evidence |
 | easy (recheck a supported sdk capability when supplied) | high for inspected declarations; no native connection experiment claimed | [sa-browser-localhost-label-routing D2](decisions/sa-browser-localhost-label-routing.md) | The inspected native public SDK still lacks the prerequisite | assumed — autonomous |
 | easy (preserved blocked branch can resume after prerequisite) | high | [sa-browser-localhost-label-routing D4](decisions/sa-browser-localhost-label-routing.md) | Block the whole item rather than ship a Chrome-only fragment | locked by docs/loop/decisions/sa-browser-pane.md |
 | easy | high for unchanged current behavior; not a new ui acceptance claim | [sa-browser-localhost-label-routing D5](decisions/sa-browser-localhost-label-routing.md) | Preserve current unavailable UX and browser isolation | locked by docs/loop/decisions/sa-browser-profiles-settings.md |
@@ -1809,6 +1853,19 @@ files, not this one.
 | easy | high | [m1-worktrees D69](decisions/m1-worktrees.md) | Final Round 1: accept all eight findings, which collapse to seven defects, and fix them in one batch | assumed — autonomous |
 | easy | high | [m1-worktrees D70](decisions/m1-worktrees.md) | The UI scenarios run as three web batches, each on its own daemon, temp HOME and fixture world | assumed — autonomous |
 | easy | high | [m1-worktrees D72](decisions/m1-worktrees.md) | The UI scenarios pass as a user, with SC-59's tooltip checked by its test because the tool can't hover | assumed — autonomous |
+| easy | high | [ui-restyle-agents D3](decisions/ui-restyle-agents.md) | Preserve loading, error, empty and recovery behavior | assumed — autonomous |
+| easy | high | [ui-restyle-agents D4](decisions/ui-restyle-agents.md) | Build-first contracts and three disjoint implementers | locked by docs/loop/LOOP.md |
+| easy | high | [ui-restyle-agents D5](decisions/ui-restyle-agents.md) | Enforce the four plugins without weakening lint | locked by docs/quirk/specs/2026-10-28-ui-redesign/logic.md |
+| easy | high | [ui-restyle-agents D6](decisions/ui-restyle-agents.md) | Narrow real-surface proof with explicit visual limits | locked by docs/loop/LOOP.md |
+| easy | high | [ui-restyle-agents D7](decisions/ui-restyle-agents.md) | macOS renderer only, no new platform behavior | deferred: platform |
+| easy | high | [ui-restyle-agents D8](decisions/ui-restyle-agents.md) | Integrate only the audited disjoint component deltas | assumed — autonomous |
+| easy | high | [ui-restyle-agents D9](decisions/ui-restyle-agents.md) | Repair actual type diagnostics without repinning incidental tests | assumed — autonomous |
+| easy | high for named observed paths; unexercised boundaries remain unclaimed | [ui-restyle-agents D10](decisions/ui-restyle-agents.md) | Exercise actual contributions while keeping capture and native limits explicit | assumed — autonomous |
+| easy | high for source composition; final caught-up build/typecheck and fresh surface proof remain next | [ui-restyle-agents D11](decisions/ui-restyle-agents.md) | Union concurrent restyles and retain their shared-system ownership | locked by incoming restyle decision logs |
+| easy | high for named current renderer paths; earlier broader smoke retains its pre-catch-up qualification | [ui-restyle-agents D12](decisions/ui-restyle-agents.md) | Verify current source in an explicitly owned browser and preserve failed infrastructure evidence | assumed — autonomous |
+| easy | high for local file/receipt facts | [ui-restyle-agents D13](decisions/ui-restyle-agents.md) | Honor the late structured-surface ownership interjection without duplicate edits | locked by user ownership interjection |
+| easy | high for source ownership; composed compiler gate required before retry | [ui-restyle-agents D14](decisions/ui-restyle-agents.md) | Recover the actual controller conflict by preserving all thirteen opt-ins | locked by docs/loop/LOOP.md failed-land recovery procedure |
+| easy | high for named recovered-source interactions only | [ui-restyle-agents D15](decisions/ui-restyle-agents.md) | Finish recovery with a composed gate and narrow current shared-dialog proof | assumed — autonomous |
 | easy (test-only repair). | high | [fix-test-cli-1028 D1](decisions/fix-test-cli-1028.md) | Repair the current failure without adding obsolete API aliases | assumed — autonomous |
 | easy | high | [fix-test-cli-1028 D2](decisions/fix-test-cli-1028.md) | Prove retained credentials by encrypted use, not JSON encoding | assumed — autonomous |
 | easy | high | [fix-test-cli-1028 D3](decisions/fix-test-cli-1028.md) | Keep removal local and preserve explicit CLI consent | assumed — autonomous |
@@ -1997,6 +2054,15 @@ files, not this one.
 | easy | high | [m6-orchestration-idle-pointer-shutdown D8](decisions/m6-orchestration-idle-pointer-shutdown.md) | Execute the hint command instead of preserving an incorrect substring pin | supersedes m6-orchestration-idle-pointer-shutdown D4's Dispatch command choice; locked by research/orca-features/orchestration.md |
 | easy | high for exercised smoke paths only; permanent regressions remain unrun | [m6-orchestration-idle-pointer-shutdown D9](decisions/m6-orchestration-idle-pointer-shutdown.md) | Keep exact smoke evidence and defer permanent test execution | assumed — autonomous |
 | easy | high for the observed type/smoke gates; no suite/ui/native pass claimed | [m6-orchestration-idle-pointer-shutdown D10](decisions/m6-orchestration-idle-pointer-shutdown.md) | Preserve incoming lifecycle decisions and final merged evidence | locked by docs/loop/LOOP.md |
+| easy | high | [ui-restyle-ledger D2](decisions/ui-restyle-ledger.md) | Remove injected CSS rather than relocate legacy widgets | assumed — autonomous |
+| easy | high | [ui-restyle-ledger D3](decisions/ui-restyle-ledger.md) | Keep loading, empty, errors and pending confirmation truthful | assumed — autonomous |
+| easy | high | [ui-restyle-ledger D4](decisions/ui-restyle-ledger.md) | Follow build-first gates with two bounded implementers | locked by docs/loop/LOOP.md |
+| easy | high | [ui-restyle-ledger D5](decisions/ui-restyle-ledger.md) | Retain macOS-only proof and native limits | deferred: platform |
+| easy | high | [ui-restyle-ledger D6](decisions/ui-restyle-ledger.md) | Preserve fixed dialog actions through an opt-in shared contract | locked by docs/loop/decisions/m5-ledger.md |
+| easy | high | [ui-restyle-ledger D7](decisions/ui-restyle-ledger.md) | Replan the misplaced App slice under parent integration ownership | assumed — autonomous |
+| easy | high | [ui-restyle-ledger D8](decisions/ui-restyle-ledger.md) | Report actual renderer proof without claiming a visual score or suite pass | locked by docs/loop/LOOP.md |
+| easy | high | [ui-restyle-ledger D9](decisions/ui-restyle-ledger.md) | Bound browser isolation claims after observing branded Chrome updater behavior | assumed — autonomous |
+| easy | high | [ui-restyle-ledger D10](decisions/ui-restyle-ledger.md) | The sole roadmap catch-up brought no incoming changes | locked by docs/loop/LOOP.md |
 | easy | high | [m7-editor-source-control-completion D2](decisions/m7-editor-source-control-completion.md) | Resolve gray areas autonomously with source-grounded defaults | locked by docs/loop/LOOP.md |
 | easy | high | [m7-editor-source-control-completion D3](decisions/m7-editor-source-control-completion.md) | Author acceptance now and defer execution to the end phase | locked by docs/loop/LOOP.md |
 | easy | high | [m7-editor-source-control-completion D4](decisions/m7-editor-source-control-completion.md) | Preserve unrelated diagnostic metadata | assumed — autonomous |
@@ -2076,6 +2142,15 @@ files, not this one.
 | easy | high | [m1-agent-status-scripting D45](decisions/m1-agent-status-scripting.md) | A later land failed on a quirky.worktree test race; this branch carries that plugin's own fix | assumed — autonomous |
 | easy | high | [m1-agent-status-scripting D46](decisions/m1-agent-status-scripting.md) | The resumed lane verifies the existing final fix batch and proceeds to land | assumed — autonomous |
 | easy | high | [m1-agent-status-scripting D47](decisions/m1-agent-status-scripting.md) | Retry landing after the protected queue tests pass unchanged | locked by docs/loop/LOOP.md |
+| easy | high | [ui-restyle-settings D3](decisions/ui-restyle-settings.md) | Use compiled React for CLI and existing shared presentation contracts | assumed — autonomous |
+| easy | high | [ui-restyle-settings D4](decisions/ui-restyle-settings.md) | Follow build-first with three disjoint isolated implementers | locked by docs/loop/LOOP.md |
+| easy | high | [ui-restyle-settings D5](decisions/ui-restyle-settings.md) | Keep macOS-only proof and portable browser presentation | deferred: platform |
+| easy | high | [ui-restyle-settings D6](decisions/ui-restyle-settings.md) | Integrate only attributed components and remove obsolete presentation consumers | assumed — autonomous |
+| easy | high | [ui-restyle-settings D7](decisions/ui-restyle-settings.md) | Repair compiler-detected integration defects without weakening the gate | assumed — autonomous |
+| easy | high for exercised paths | [ui-restyle-settings D8](decisions/ui-restyle-settings.md) | Record actual presentation proof, not a complete feature acceptance claim | assumed — autonomous |
+| easy | high | [ui-restyle-settings D9](decisions/ui-restyle-settings.md) | Correct smoke-driver assumptions without changing product behavior | assumed — autonomous |
+| easy | high for source composition; final gate/current surface proof next | [ui-restyle-settings D10](decisions/ui-restyle-settings.md) | Union all concurrent restyles and retain the canonical shared interaction owner | locked by incoming ui-restyle decisions |
+| easy | high for named exercised paths only | [ui-restyle-settings D11](decisions/ui-restyle-settings.md) | Verify the caught-up source and close exclusively owned resources | locked by docs/loop/LOOP.md build-first verification boundary |
 | easy | high | [sb-mobile-app D3](decisions/sb-mobile-app.md) | Apply unattended night-mode workflow and isolated worker attribution | locked by docs/loop/LOOP.md |
 | easy | high | [sb-mobile-app D4](decisions/sb-mobile-app.md) | Use OpenAI omp implementers and Gemini review | assumed — autonomous |
 | easy | high | [sb-mobile-app D7](decisions/sb-mobile-app.md) | Reserve the panel extension seam for lane4 after the base lands | assumed — autonomous |
@@ -2177,6 +2252,15 @@ files, not this one.
 | easy | high | [sa-browser-agent-extras D9](decisions/sa-browser-agent-extras.md) | Repair the cookie canonicalizer and dynamic CDP event schemas at their source | assumed — autonomous |
 | easy | high for exercised behavior only | [sa-browser-agent-extras D10](decisions/sa-browser-agent-extras.md) | Separate changed-path proof from deferred suite and native assurance | locked by docs/loop/LOOP.md |
 | easy | high for listed profile/disclosure rendering, no badge-menu/native parity claim | [sa-browser-agent-extras D11](decisions/sa-browser-agent-extras.md) | Verify imported metadata on the built Settings surface without claiming import-menu completion | assumed — autonomous |
+| easy | high | [ui-restyle-tasks D2](decisions/ui-restyle-tasks.md) | Use shared controls and canonical semantic feature layouts | assumed — autonomous |
+| easy | high | [ui-restyle-tasks D3](decisions/ui-restyle-tasks.md) | Execute three isolated source slices under build-first override | locked by docs/loop/LOOP.md |
+| easy | high | [ui-restyle-tasks D4](decisions/ui-restyle-tasks.md) | Stop the barrier and repair attributed cross-worktree contamination | assumed — autonomous |
+| easy | high | [ui-restyle-tasks D5](decisions/ui-restyle-tasks.md) | Export existing shared context-menu CSS once | assumed — autonomous |
+| easy | high | [ui-restyle-tasks D6](decisions/ui-restyle-tasks.md) | Load canonical CSS once through the host build | assumed — autonomous |
+| easy | high | [ui-restyle-tasks D7](decisions/ui-restyle-tasks.md) | Reuse the actual visible automation tool instead of duplicating its editor | assumed — autonomous |
+| easy | high | [ui-restyle-tasks D8](decisions/ui-restyle-tasks.md) | Reset a width flex basis after the editor stacks vertically | assumed — autonomous |
+| easy | high | [ui-restyle-tasks D9](decisions/ui-restyle-tasks.md) | Record bounded real UI proof without claiming suite or golden acceptance | locked by docs/loop/LOOP.md |
+| easy | high | [ui-restyle-tasks D10](decisions/ui-restyle-tasks.md) | Preserve every incoming restyle and gate the composed source | assumed — autonomous |
 | easy | high | [m0-daemon-api D1](decisions/m0-daemon-api.md) | Classify the item as an API design, and run both research phases | assumed — autonomous |
 | easy | high | [m0-daemon-api D2](decisions/m0-daemon-api.md) | Skip the visual companion and the adhd offer, use the standard gray-area set | locked by docs/loop/LOOP.md |
 | easy | high | [m0-daemon-api D3](decisions/m0-daemon-api.md) | Select every gray area that matters for the daemon plugin API | assumed — autonomous |
@@ -2301,6 +2385,16 @@ files, not this one.
 | easy | high for recorded outcomes and index operation | [m5-structured-runner D51](decisions/m5-structured-runner.md) | Preserve all historical snapshot failures and reconcile the actual Git index before committing | assumed — autonomous |
 | easy | high for final exercised integration | [m5-structured-runner D52](decisions/m5-structured-runner.md) | Land the fully reconciled final source after consumer and smoke proof | assumed — autonomous |
 | easy | high | [m5-structured-runner D53](decisions/m5-structured-runner.md) | Use the operator's immediate landing gate ownership | assumed — autonomous (operator-directed verification ownership) |
+| easy | high | [ui-restyle-worktrees D2](decisions/ui-restyle-worktrees.md) | Keep comfortable name-plus-activity rows and preserve rich tree behavior | locked by docs/quirk/specs/2026-10-28-ui-redesign/logic.md |
+| easy | high | [ui-restyle-worktrees D3](decisions/ui-restyle-worktrees.md) | Use shared explicit empty/loading/error/form states | locked by docs/quirk/specs/2026-10-28-ui-redesign/logic.md |
+| easy | high | [ui-restyle-worktrees D5](decisions/ui-restyle-worktrees.md) | Preserve host framing and existing interaction authority | locked by docs/quirk/specs/2026-10-28-ui-redesign/logic.md |
+| easy | high | [ui-restyle-worktrees D6](decisions/ui-restyle-worktrees.md) | Use the explicit build-first override and three disjoint implementers | locked by docs/loop/LOOP.md |
+| easy | high | [ui-restyle-worktrees D7](decisions/ui-restyle-worktrees.md) | Keep macOS proof and user-state boundaries explicit | deferred: platform |
+| easy | high for exercised paths | [ui-restyle-worktrees D9](decisions/ui-restyle-worktrees.md) | Repair observed layout and focus failures at their owners | assumed — autonomous |
+| easy | high within the named paths | [ui-restyle-worktrees D10](decisions/ui-restyle-worktrees.md) | Report exact build-first verification, not screenshot approval | locked by docs/loop/LOOP.md |
+| easy | high for compiler and named runtime paths; no complete model/native/end-phase acceptance claim | [ui-restyle-worktrees D12](decisions/ui-restyle-worktrees.md) | Keep the final compiler and runtime receipts bounded to what ran | locked by docs/loop/LOOP.md build-first boundary |
+| easy | high for composition; fresh recovery typecheck/build is still required | [ui-restyle-worktrees D14](decisions/ui-restyle-worktrees.md) | Preserve additive public props during required failed-land recovery | locked by docs/loop/LOOP.md failed-land retry procedure |
+| easy | high for these final-source boundaries only; no suite/native/golden-score clearance | [ui-restyle-worktrees D16](decisions/ui-restyle-worktrees.md) | Close composed-source interaction proof with the installed stable testing shell | assumed — autonomous |
 | easy | high | [m3-vault-parity-completion D2](decisions/m3-vault-parity-completion.md) | Answer workflow gates autonomously and retain the source defaults | locked by docs/loop/LOOP.md |
 | easy | high | [m3-vault-parity-completion D3](decisions/m3-vault-parity-completion.md) | Use three disjoint vertical components and existing public contracts | assumed — autonomous |
 | easy | high | [m3-vault-parity-completion D4](decisions/m3-vault-parity-completion.md) | Pair OpenAI task implementers with the available Gemini reviewer | locked by docs/loop/LOOP.md |

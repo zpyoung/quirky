@@ -151,6 +151,7 @@
       "version": "0.1.0",
       "dependencies": {
         "@quirky/protocol": "workspace:*",
+        "@quirky/ui": "workspace:*",
         "react": "19.2.0",
         "react-dom": "19.2.0",
       },
@@ -165,6 +166,7 @@
       "version": "0.1.0",
       "dependencies": {
         "@quirky/protocol": "workspace:*",
+        "@quirky/ui": "workspace:*",
         "react": "19.2.0",
         "react-dom": "19.2.0",
       },
@@ -200,6 +202,7 @@
       "version": "0.1.0",
       "dependencies": {
         "@quirky/protocol": "workspace:*",
+        "@quirky/ui": "workspace:*",
         "react": "19.2.0",
         "react-dom": "19.2.0",
       },
@@ -241,6 +244,14 @@
       "version": "0.1.0",
       "dependencies": {
         "@quirky/protocol": "workspace:*",
+        "@quirky/ui": "workspace:*",
+        "react": "19.2.0",
+        "react-dom": "19.2.0",
+      },
+      "devDependencies": {
+        "@happy-dom/global-registrator": "20.14.6",
+        "@types/react": "^19.3.0",
+        "@types/react-dom": "^19.3.0",
       },
     },
     "plugins/quirky.editor": {
@@ -322,6 +333,7 @@
         "@codemirror/view": "^6.43.15",
         "@quirky/git": "workspace:*",
         "@quirky/protocol": "workspace:*",
+        "@quirky/ui": "workspace:*",
         "react": "19.2.0",
         "react-dom": "19.2.0",
       },
@@ -338,6 +350,7 @@
         "@codemirror/state": "^6.7.6",
         "@codemirror/view": "^6.43.15",
         "@quirky/protocol": "workspace:*",
+        "@quirky/ui": "workspace:*",
         "react": "19.2.0",
         "react-dom": "19.2.0",
       },
@@ -353,6 +366,7 @@
       "version": "0.1.0",
       "dependencies": {
         "@quirky/protocol": "workspace:*",
+        "@quirky/ui": "workspace:*",
         "react": "19.2.0",
         "react-dom": "19.2.0",
       },
@@ -374,6 +388,7 @@
       "dependencies": {
         "@quirky/git": "workspace:*",
         "@quirky/protocol": "workspace:*",
+        "@quirky/ui": "workspace:*",
         "react": "19.2.0",
         "react-dom": "19.2.0",
       },
@@ -388,6 +403,7 @@
       "version": "0.1.0",
       "dependencies": {
         "@quirky/protocol": "workspace:*",
+        "@quirky/ui": "workspace:*",
         "react": "19.2.0",
         "react-dom": "19.2.0",
       },
@@ -402,6 +418,7 @@
       "version": "0.1.0",
       "dependencies": {
         "@quirky/protocol": "workspace:*",
+        "@quirky/ui": "workspace:*",
         "qrcode": "1.5.4",
         "react": "19.2.0",
         "react-dom": "19.2.0",
@@ -409,6 +426,7 @@
         "ws": "8.22.0",
       },
       "devDependencies": {
+        "@happy-dom/global-registrator": "20.14.6",
         "@types/qrcode": "1.5.6",
         "@types/react": "^19.3.0",
         "@types/react-dom": "^19.3.0",
@@ -435,6 +453,7 @@
       "version": "0.1.0",
       "dependencies": {
         "@quirky/protocol": "workspace:*",
+        "@quirky/ui": "workspace:*",
         "react": "19.2.0",
         "react-dom": "19.2.0",
       },
@@ -465,6 +484,7 @@
       "dependencies": {
         "@quirky/plugin-tasks": "workspace:*",
         "@quirky/protocol": "workspace:*",
+        "@quirky/ui": "workspace:*",
         "react": "19.2.0",
         "react-dom": "19.2.0",
       },
@@ -498,6 +518,7 @@
       "version": "0.1.0",
       "dependencies": {
         "@quirky/protocol": "workspace:*",
+        "@quirky/ui": "workspace:*",
         "react": "19.2.0",
         "react-dom": "19.2.0",
       },
@@ -512,6 +533,7 @@
       "version": "0.1.0",
       "dependencies": {
         "@quirky/protocol": "workspace:*",
+        "@quirky/ui": "workspace:*",
         "react": "19.2.0",
         "react-dom": "19.2.0",
       },
@@ -534,6 +556,7 @@
       "version": "0.1.0",
       "dependencies": {
         "@quirky/protocol": "workspace:*",
+        "@quirky/ui": "workspace:*",
         "react": "19.2.0",
         "react-dom": "19.2.0",
       },
@@ -2782,6 +2805,12 @@
     "@quirky/plugin-browser/react": ["react@19.2.0", "", {}, "sha512-tmbWg6W31tQLeB5cdIBOicJDJRR2KzXsV7uSK9iNfLWQ5bIZfxuPEHp7M8wiHyHnn0DD1i7w3Zmin0FtkrwoCQ=="],
 
     "@quirky/plugin-browser/react-dom": ["react-dom@19.2.0", "", { "dependencies": { "scheduler": "^0.27.0" }, "peerDependencies": { "react": "^19.2.0" } }, "sha512-UlbRu4cAiGaIewkPyiRGJk0imDN2T3JjieT6spoL2UeSf5od4n5LB/mQ4ejmxhCFT1tYe8IvaFulzynWovsEFQ=="],
+
+    "@quirky/plugin-cli/@types/react": ["@types/react@19.3.0", "", { "dependencies": { "csstype": "^3.2.2" } }, "sha512-N0rFCuH9YoxG9/m61l9MfpJKfmLOVU0em7ipIz6TRgSSkvReLB9vL85GB+yr8Bs5leqpvg96JSwF4ZS1s4viQg=="],
+
+    "@quirky/plugin-cli/react": ["react@19.2.0", "", {}, "sha512-tmbWg6W31tQLeB5cdIBOicJDJRR2KzXsV7uSK9iNfLWQ5bIZfxuPEHp7M8wiHyHnn0DD1i7w3Zmin0FtkrwoCQ=="],
+
+    "@quirky/plugin-cli/react-dom": ["react-dom@19.2.0", "", { "dependencies": { "scheduler": "^0.27.0" }, "peerDependencies": { "react": "^19.2.0" } }, "sha512-UlbRu4cAiGaIewkPyiRGJk0imDN2T3JjieT6spoL2UeSf5od4n5LB/mQ4ejmxhCFT1tYe8IvaFulzynWovsEFQ=="],
 
     "@quirky/plugin-editor/@types/react": ["@types/react@19.3.0", "", { "dependencies": { "csstype": "^3.2.2" } }, "sha512-N0rFCuH9YoxG9/m61l9MfpJKfmLOVU0em7ipIz6TRgSSkvReLB9vL85GB+yr8Bs5leqpvg96JSwF4ZS1s4viQg=="],
 

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Button, EmptyState } from '@quirky/ui'
 import type { Repo, Session, UiLayout, UiPluginContext, Worktree } from '@quirky/protocol'
 import { confirmsDelete, currentWindowId, deleteWorkspace, setWorktree, type CreateRequests, type KeptBranch, type TrustChoice, type TrustRequest } from './actions'
 import { AddProjectDialog } from './AddProjectDialog'
@@ -508,29 +509,41 @@ export function WorktreesSection({ context, report, requests }: Props) {
   const trustRepo = trust ? repos.find((repo) => repo.id === trust.request.repoId) : undefined
 
   return (
-    <>
-      <StockOptions
-        options={stockOptions}
-        repos={repos}
-        projectOrder={projectOrder}
-        hiddenSleepingCount={hiddenSleepingWorktrees.length}
-        hiddenFilteredCount={hiddenFilteredWorktrees.length}
-        revealSleeping={revealSleeping}
-        revealFiltered={revealFiltered}
-        changeOptions={(patch) => void changeStockOptions(patch)}
-        changeProjectOrder={(ids) => void reorderProjects(ids)}
-        toggleSleepingReveal={() => setRevealSleeping((current) => !current)}
-        toggleFilteredReveal={() => setRevealFiltered((current) => !current)}
-        openCleanup={() => setCleanupOpen(true)}
-      />
-      <ActivityFilters
-        projection={currentProjection}
-        error={activity.status === 'error' ? activity.error : null}
-        setPreferences={activity.setPreferences}
-      />
-      <ExternalInbox context={context} repos={repos} worktrees={worktrees} />
-      <button type="button" aria-expanded={boardOpen} onClick={() => setBoardOpen((open) => !open)}>Workspace board</button>
-      <button type="button" aria-expanded={statusEditorOpen} onClick={() => setStatusEditorOpen(true)}>Edit workspace statuses</button>
+    <div className="ui-stack ui-panel-content">
+      <div className="ui-cluster ui-toolbar">
+        {!(loaded && repos.length === 0) && (
+          <Button type="button" variant="primary" onClick={() => setDialog({ kind: 'add-project' })}>
+            Add project
+          </Button>
+        )}
+        <StockOptions
+          options={stockOptions}
+          repos={repos}
+          projectOrder={projectOrder}
+          hiddenSleepingCount={hiddenSleepingWorktrees.length}
+          hiddenFilteredCount={hiddenFilteredWorktrees.length}
+          revealSleeping={revealSleeping}
+          revealFiltered={revealFiltered}
+          changeOptions={(patch) => void changeStockOptions(patch)}
+          changeProjectOrder={(ids) => void reorderProjects(ids)}
+          toggleSleepingReveal={() => setRevealSleeping((current) => !current)}
+          toggleFilteredReveal={() => setRevealFiltered((current) => !current)}
+          openCleanup={() => setCleanupOpen(true)}
+        />
+        <ActivityFilters
+          projection={currentProjection}
+          error={activity.status === 'error' ? activity.error : null}
+          loading={activity.status === 'loading'}
+          setPreferences={activity.setPreferences}
+        />
+        <details className="ui-disclosure">
+          <summary>More workspace tools</summary>
+          <div className="ui-cluster ui-actions">
+            <Button type="button" aria-expanded={boardOpen} onClick={() => setBoardOpen((open) => !open)}>Workspace board</Button>
+            <Button type="button" onClick={() => setStatusEditorOpen(true)}>Edit workspace statuses</Button>
+          </div>
+        </details>
+      </div>
       {boardOpen && (
         <WorktreeBoard
           worktrees={ordered.filter((worktree) => treeVisibleIds.has(worktree.id))}
@@ -545,37 +558,38 @@ export function WorktreesSection({ context, report, requests }: Props) {
           setStatus={(worktree, status) => void setWorktree(context, worktree.id, { status })}
         />
       )}
-      <div className="repo-scroll">
-        {repos.length === 0 && <p className="muted pad">No repositories yet.</p>}
-        <Tree
-          context={context}
-          model={model}
-          groups={groups}
-          sessions={sessions}
-          selectedId={selectedId}
-          automationExpandedId={expandedAutomationId}
-          automationAvailability={automationAvailability}
-          onToggleAutomationDetails={toggleAutomationDetails}
-          now={now}
-          separatorEnabled={separatorEnabled}
-          options={stockOptions}
-          statusDefinitions={statusDefinitions}
-          projectIdentities={projectIdentities}
-          allWorktrees={ordered}
-          onReorder={(ids) => void reorderWorktrees(ids)}
-          openDialog={setDialog}
-          requestDelete={requestDelete}
-          onDropPreviewChange={changeDropPreview}
-          onSeparatorStateChange={changeSeparatorState}
-          loopsByWorktree={loopStatus.byWorktree}
-        />
-      </div>
+      {!loaded && <p className="ui-text-muted" role="status">Loading projects and worktrees…</p>}
+      {loaded && repos.length === 0 && (
+        <EmptyState message="No projects yet." action={{ label: 'Add project', onAction: () => setDialog({ kind: 'add-project' }) }} />
+      )}
+      {loaded && repos.length > 0 && (
+        <div className="ui-scroll ui-grow">
+          <Tree
+            context={context}
+            model={model}
+            groups={groups}
+            sessions={sessions}
+            selectedId={selectedId}
+            automationExpandedId={expandedAutomationId}
+            automationAvailability={automationAvailability}
+            onToggleAutomationDetails={toggleAutomationDetails}
+            now={now}
+            separatorEnabled={separatorEnabled}
+            options={stockOptions}
+            statusDefinitions={statusDefinitions}
+            projectIdentities={projectIdentities}
+            allWorktrees={ordered}
+            onReorder={(ids) => void reorderWorktrees(ids)}
+            openDialog={setDialog}
+            requestDelete={requestDelete}
+            onDropPreviewChange={changeDropPreview}
+            onSeparatorStateChange={changeSeparatorState}
+            loopsByWorktree={loopStatus.byWorktree}
+          />
+        </div>
+      )}
+      {loaded && <ExternalInbox context={context} repos={repos} worktrees={worktrees} />}
       <Notices context={context} kept={kept} onDismiss={dismissKept} />
-      <div className="add-repo">
-        <button type="button" className="add-project" onClick={() => setDialog({ kind: 'add-project' })}>
-          Add project
-        </button>
-      </div>
       {dialog?.kind === 'create' && repos.length > 0 && (
         <CreateDialog
           context={context}
@@ -638,6 +652,6 @@ export function WorktreesSection({ context, report, requests }: Props) {
           setStatusEditorOpen(false)
         }}
       />}
-    </>
+    </div>
   )
 }

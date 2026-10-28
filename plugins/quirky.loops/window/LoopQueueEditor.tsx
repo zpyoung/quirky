@@ -1,3 +1,4 @@
+import { Badge, Button, EmptyState, SectionHeader, TextArea } from '@quirky/ui'
 import type { FormEvent } from 'react'
 import type { QueueItem } from '../src/types'
 
@@ -40,66 +41,64 @@ export function LoopQueueEditor({ items, state, disabled = false, onAction }: Lo
   }
 
   return (
-    <section className="loop-queue" aria-label="Loop queue">
-      <h3>Queue</h3>
-      {orderedItems.length === 0 ? <p className="loop-muted">No prompts queued.</p> : (
-        <ol className="loop-queue-list">
+    <section className="ui-stack" aria-label="Loop queue">
+      <SectionHeader title="Queue" />
+      {orderedItems.length === 0 ? <EmptyState message="No prompts queued." /> : (
+        <ol className="ui-stack">
           {orderedItems.map((item, index) => {
             const inFlight = item.state === 'in-flight'
             const editing = state.editingId === item.id && !inFlight
             const anotherEditActive = state.editingId !== null && state.editingId !== item.id
+            const itemState = inFlight ? 'In progress' : item.state === 'done' ? 'Done' : 'Pending'
+            const stateTone = inFlight ? 'working' : item.state === 'done' ? 'accent' : 'neutral'
             return (
-              <li className={`loop-queue-item loop-queue-${item.state}`} data-queue-id={item.id} key={item.id}>
-                <div className="loop-queue-item-heading">
-                  <span className="loop-queue-state" role="img" aria-label={item.state === 'done' ? 'Done' : inFlight ? 'In progress' : 'Pending'}>
-                    {item.state === 'done' ? '✓' : inFlight ? '→' : '○'}
-                  </span>
-                  <span className="loop-queue-state-label">{inFlight ? 'In progress' : item.state === 'done' ? 'Done' : 'Pending'}</span>
-                  <span className="loop-queue-position">{index + 1}</span>
+              <li className="ui-stack" data-queue-id={item.id} key={item.id}>
+                <div className="ui-cluster">
+                  <Badge tone={stateTone}>{itemState}</Badge>
+                  <span>{index + 1}</span>
                 </div>
                 {editing ? (
-                  <form className="loop-queue-edit" onSubmit={(event) => submitEdit(event, item)}>
-                    <label>
-                      Prompt for queue item {index + 1}
-                      <textarea
-                        aria-label={`Prompt for queue item ${index + 1}`}
-                        value={state.editingBody}
-                        onChange={(event) => { void onAction({ action: 'queue-edit-update', params: { body: event.currentTarget.value } }).catch(() => {}) }}
-                        disabled={disabled}
-                      />
-                    </label>
-                    <div className="loop-queue-actions">
-                      <button type="submit" disabled={disabled || !state.editingBody.trim()}>Save</button>
-                      <button type="button" disabled={disabled} onClick={() => { void onAction({ action: 'queue-edit-cancel', params: {} }).catch(() => {}) }}>Cancel</button>
+                  <form className="ui-stack" onSubmit={(event) => submitEdit(event, item)}>
+                    <TextArea
+                      label={`Prompt for queue item ${index + 1}`}
+                      aria-label={`Prompt for queue item ${index + 1}`}
+                      value={state.editingBody}
+                      onChange={(event) => { void onAction({ action: 'queue-edit-update', params: { body: event.currentTarget.value } }).catch(() => {}) }}
+                      disabled={disabled}
+                    />
+                    <div className="ui-cluster">
+                      <Button type="submit" disabled={disabled || !state.editingBody.trim()}>Save</Button>
+                      <Button type="button" disabled={disabled} onClick={() => { void onAction({ action: 'queue-edit-cancel', params: {} }).catch(() => {}) }}>Cancel</Button>
                     </div>
                   </form>
-                ) : <p className="loop-queue-body">{item.body}</p>}
+                ) : <p>{item.body}</p>}
                 {!inFlight && !editing && (
-                  <div className="loop-queue-actions">
-                    <button
+                  <div className="ui-cluster">
+                    <Button
                       type="button"
                       aria-label={`Move up ${item.id}`}
                       disabled={disabled || anotherEditActive || index === 0}
                       onClick={() => { void onAction({ action: 'queue-move', params: { id: item.id, position: index - 1 } }).catch(() => {}) }}
-                    >Move up</button>
-                    <button
+                    >Move up</Button>
+                    <Button
                       type="button"
                       aria-label={`Move down ${item.id}`}
                       disabled={disabled || anotherEditActive || index === orderedItems.length - 1}
                       onClick={() => { void onAction({ action: 'queue-move', params: { id: item.id, position: index + 1 } }).catch(() => {}) }}
-                    >Move down</button>
-                    <button
+                    >Move down</Button>
+                    <Button
                       type="button"
                       aria-label={`Edit ${item.id}`}
                       disabled={disabled || anotherEditActive}
                       onClick={() => { void onAction({ action: 'queue-edit-open', params: { id: item.id } }).catch(() => {}) }}
-                    >Edit</button>
-                    <button
+                    >Edit</Button>
+                    <Button
                       type="button"
+                      variant="destructive"
                       aria-label={`Remove ${item.id}`}
                       disabled={disabled || anotherEditActive}
                       onClick={() => { void onAction({ action: 'queue-remove', params: { id: item.id } }).catch(() => {}) }}
-                    >Remove</button>
+                    >Remove</Button>
                   </div>
                 )}
               </li>
@@ -107,18 +106,16 @@ export function LoopQueueEditor({ items, state, disabled = false, onAction }: Lo
           })}
         </ol>
       )}
-      <form className="loop-queue-add" onSubmit={submitAdd}>
-        <label>
-          Describe the next task
-          <textarea
-            aria-label="Describe the next task"
-            placeholder="Describe the next task"
-            value={state.addDraft}
-            onChange={(event) => { void onAction({ action: 'queue-draft', params: { body: event.currentTarget.value } }).catch(() => {}) }}
-            disabled={disabled}
-          />
-        </label>
-        <button type="submit" disabled={disabled || !state.addDraft.trim()}>Add prompt</button>
+      <form className="ui-stack" onSubmit={submitAdd}>
+        <TextArea
+          label="Describe the next task"
+          aria-label="Describe the next task"
+          placeholder="Describe the next task"
+          value={state.addDraft}
+          onChange={(event) => { void onAction({ action: 'queue-draft', params: { body: event.currentTarget.value } }).catch(() => {}) }}
+          disabled={disabled}
+        />
+        <Button type="submit" disabled={disabled || !state.addDraft.trim()}>Add prompt</Button>
       </form>
     </section>
   )

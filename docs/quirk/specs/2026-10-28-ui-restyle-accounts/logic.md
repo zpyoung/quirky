@@ -58,6 +58,8 @@ Reuse `packages/ui/src/design-system/contracts.ts`: Button/IconButton/TextField/
 
 No new feature API, protocol type or schema is required. The additive shared button-ref/dismissal contracts preserve existing feature focus and required-choice semantics. Feature-specific geometry that the kit does not express belongs in two centrally linted shared layout files, `packages/ui/src/design-system/accounts.css` and `vault.css`, not private plugin CSS. Use `--ui-*` semantic tokens and existing approved size steps; avoid copying legacy literal styles or introducing arbitrary compatibility primitives. Parent alone integrates these shared files in the shared stylesheet.
 
+The roadmap catch-up adds shared `SelectField`, Dialog wide/scroll-body options and top-dialog focus ownership. Reuse SelectField for all four account/history selects, deleting the now-obsolete custom select presentation, and preserve every incoming shared option/focus guard alongside optional dismissal. Keep Usage's composed panel lifecycle: the incoming shared Popover handles Escape at document capture before a nested reset Dialog can consume it, which would change the already exercised reset-only cancellation behavior.
+
 ### Ownership and invariants
 
 - Accounts component owns `plugins/quirky.accounts/src/ui.tsx`, `src/window/{AccountsSettings,Usage}.tsx`, obsolete `src/window/styles.ts`, and new shared `accounts.css`. Existing store/model/report logic is read-only. Preserve public reporting, generation/timer fences, scope/reset envelopes and native credential/history invariants.
@@ -77,3 +79,5 @@ Catch up once via `git merge build/roadmap`, read incoming decisions, rerun type
 2026-10-28: self-reviewed for parent scope, all contribution coverage, unchanged behavior, disjoint source ownership, truthful verification limits and no placeholder contracts.
 
 2026-10-28 amendment: Compiler evidence required explicit button ref typing; source integration showed required-choice/busy dialogs must not expose an inert close button. Add the two minimal shared contracts above and migrate behavioral UI test selectors to real labeled controls/dialogs, with a third test-only implementer. Actual renderer smoke found a status-item-relative popup width and offscreen measurement overflow; fix those at the shared layout owner rather than weakening assertions.
+
+2026-10-28 catch-up amendment: union incoming styles/lint opt-ins and shared contracts; adopt the newly available SelectField without changing labels, values or callbacks. Retain existing nested-dialog dismissal ordering rather than silently adopting the incompatible capture-phase Popover close behavior.

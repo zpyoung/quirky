@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useSyncExternalStore, type FormEvent } from 'react'
 import type { UiPluginContext } from '@quirky/protocol'
 import { AccountsUiStore, accountSort, ageLabel, credentialLabel, displayIdentity, formatReset, snapshotStatus, windowEntries, type AccountState, type AccountSummary, type CredentialStatus, type ManagedProvider, type PendingLogin } from './model'
-import { Badge, Button, EmptyState, FormRow, ListRow, SectionHeader, Tabs, TextField } from '@quirky/ui'
+import { Badge, Button, EmptyState, FormRow, ListRow, SectionHeader, SelectField, Tabs, TextField } from '@quirky/ui'
 import { meterColor, SnapshotLine, UsagePreferencesControls } from './Usage'
 import { useStableReport, type UiReport } from './report'
 
@@ -150,14 +150,12 @@ function ManagedAccountsSection({ context, store, provider }: { context: UiPlugi
     {provider === 'claude' && <section className="section-card">
       <SectionHeader title="When you switch accounts while Claude is running" />
       <p className="settings-description">Restarting continues each running conversation on the new account.</p>
-      <FormRow label="Claude running-session switch policy" htmlFor="claude-switch-policy">
-        <select id="claude-switch-policy" value={state?.preferences.claudeSwitchPolicy ?? 'ask'} onChange={(event) => {
-          const value = event.currentTarget.value
-          if (value === 'ask' || value === 'always' || value === 'never') void store.setPreferences({ claudeSwitchPolicy: value })
-        }}>
-          <option value="ask">Ask</option><option value="always">Always restart</option><option value="never">Never restart</option>
-        </select>
-      </FormRow>
+      <SelectField label="Claude running-session switch policy" id="claude-switch-policy" value={state?.preferences.claudeSwitchPolicy ?? 'ask'} onChange={(event) => {
+        const value = event.currentTarget.value
+        if (value === 'ask' || value === 'always' || value === 'never') void store.setPreferences({ claudeSwitchPolicy: value })
+      }}>
+        <option value="ask">Ask</option><option value="always">Always restart</option><option value="never">Never restart</option>
+      </SelectField>
     </section>}
   </div>
 }
