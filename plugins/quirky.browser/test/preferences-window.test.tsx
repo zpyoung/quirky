@@ -35,6 +35,7 @@ let state: PreferencesState
 let settings: Record<string, unknown>
 let confirmResult: boolean
 let profileSetHandler: (() => Promise<void>) | null
+let importJobProfile = 'default'
 let settingFailure: Error | null
 
 beforeAll(async () => {
@@ -55,10 +56,12 @@ beforeEach(() => {
   errors = []
   settingFailure = null
   profileSetHandler = null
+  confirmResult = false
+  importJobProfile = 'default'
   state = {
     profiles: [{ profile: DEFAULT_PROFILE, active: true }],
     identity: { selected: 'clean', active: 'clean', restartRequired: false, nativeSupported: false },
-    imports: { available: false, reason: 'The browser cookie import engine is not installed.' },
+    imports: { available: true, destination: 'managed-chrome', nativeSupported: false, reason: 'Cookie imports are stored in managed Chrome, not Native.' },
     localhostLabels: { available: false, reason: 'A reachable worktree host mapping is not configured.' }
   }
   settings = {
@@ -96,6 +99,16 @@ function makeContext(): UiPluginContext {
     },
     call: async (method: string, params?: Record<string, unknown>): Promise<unknown> => {
       calls.push({ method, params })
+      if (method === 'quirky.browser/detectBrowsers') {
+        return { browsers: [{ family: 'firefox', label: 'Firefox', profiles: [{ name: 'default-release', label: 'Default' }] }] }
+      }
+      if (method === 'quirky.browser/importStart') {
+        importJobProfile = String(params?.profile ?? 'default')
+        return { id: 'import-job' }
+      }
+      if (method === 'quirky.browser/importGet') {
+        return { id: String(params?.id ?? 'import-job'), profileId: importJobProfile, status: 'queued', createdAt: 1 }
+      }
       if (method === 'quirky.browser/preferencesState') return structuredClone(state)
       if (method === 'quirky.browser/profileCreate') {
         const name = String(params?.name ?? '').trim()
@@ -211,7 +224,7 @@ test('profile menu marks the pane profile and switches only after the profile AP
   expect(errors).toEqual([])
 })
 
-test('imported Default metadata keeps clear-only maintenance and remains visible in the profile menu', async () => {
+test('imported Default remains visible in profile surfaces and keeps clear-only maintenance', async () => {
   const importedDefault: BrowserProfile = {
     ...DEFAULT_PROFILE,
     scope: 'imported',
@@ -223,8 +236,9 @@ test('imported Default metadata keeps clear-only maintenance and remains visible
 
   expect([...container.querySelectorAll('button')].some((button) => button.textContent?.trim() === 'Clear cookies & site data')).toBe(true)
   expect([...container.querySelectorAll('button')].some((button) => button.textContent?.trim() === 'Remove')).toBe(false)
+  expect(container.querySelector('ul[aria-label="Browser profiles"]')?.textContent).toContain('Default')
   await clickButton('Profile: Default')
-  expect(container.textContent).toContain('Imported from Chrome (Default)')
+  expect(container.querySelector<HTMLInputElement>('input[aria-label="Use Default profile"]')?.checked).toBe(true)
 })
 test('profile switching prevents overlapping requests while the selected profile is pending', async () => {
   state = { ...state, profiles: [{ profile: DEFAULT_PROFILE, active: true }, { profile: REVIEW_PROFILE, active: false }] }
@@ -472,21 +486,18 @@ test('Agent Browser guidance and Shift inversion react to persisted settings', a
   expect(calls).toContainEqual({ method: 'setting.set', params: { id: settingIds.routeInApp, value: true } })
 })
 
-test('import affordances explain unavailable cookies, exclude Google logins, open settings, and persist hiding the hint', async () => {
+test('import controls detect only after expansion, preserve the settings link, and persist hint hiding', async () => {
   const context = makeContext()
   await mount(<><BrowserProfileMenu {...props(context, pane())} /><BrowserImportHint {...props(context)} /></>)
+  expect(calls.filter(({ method }) => method === 'quirky.browser/detectBrowsers')).toHaveLength(0)
 
   await clickButton('Profile: Default')
   await clickButton('Import Cookies')
-  expect(container.textContent).toContain('The browser cookie import engine is not installed.')
-  expect(container.textContent).toContain('Google logins are not imported')
-  expect(container.textContent).toContain('Sign in to Google directly in Quirky')
-
+  expect(calls.filter(({ method }) => method === 'quirky.browser/detectBrowsers')).toHaveLength(1)
   await clickButton('Import Cookies')
   await clickButton('Import browser data')
-  expect(container.textContent).toContain('The browser cookie import engine is not installed.')
-  expect(container.textContent).toContain('Google logins are not imported')
-  expect(container.textContent).toContain('Sign in to Google directly in Quirky')
+  expect(calls.filter(({ method }) => method === 'quirky.browser/detectBrowsers')).toHaveLength(2)
+
   await clickButton('Browser Settings')
   expect(commands).toEqual(['command:quirky.browser/browserSettings'])
   await clickButton('Hide Hint')
@@ -504,6 +515,65 @@ test('import affordances explain unavailable cookies, exclude Google logins, ope
   root = null
   await mount(<BrowserImportHint {...props(context)} />)
   expect(container.querySelector('[aria-label="Import browser data hint"]')).not.toBeNull()
+})
+
+test('Browser Settings import controls target the exact profile row and expand only one panel', async () => {
+  state = { ...state, profiles: [{ profile: DEFAULT_PROFILE, active: true }, { profile: REVIEW_PROFILE, active: false }] }
+  const context = makeContext()
+  await mount(<BrowserSettings {...props(context)} />)
+  const rows = [...container.querySelectorAll('li')]
+  const reviewRow = rows.find((row) => row.querySelector('strong')?.textContent === 'Review')
+  const reviewImport = [...(reviewRow?.querySelectorAll('button') ?? [])].find((button) => button.textContent?.trim() === 'Import Cookies')
+  if (!(reviewImport instanceof HTMLButtonElement)) throw new Error('Missing Review import control')
+  await act(async () => { reviewImport.click(); await settleUI() })
+  expect(calls.filter(({ method }) => method === 'quirky.browser/detectBrowsers')).toHaveLength(1)
+  expect(reviewRow?.querySelector('[aria-label="Import Cookies"]')).not.toBeNull()
+
+  confirmResult = true
+  await clickButton('From Firefox')
+  const start = calls.find(({ method }) => method === 'quirky.browser/importStart')
+  expect(start?.params?.profile).toBe(REVIEW_PROFILE_ID)
+  expect(start?.params?.yes).toBe(true)
+
+  const defaultRow = [...container.querySelectorAll('li')].find((row) => row.querySelector('strong')?.textContent === 'Default')
+  const defaultImport = [...(defaultRow?.querySelectorAll('button') ?? [])].find((button) => button.textContent?.trim() === 'Import Cookies')
+  if (!(defaultImport instanceof HTMLButtonElement)) throw new Error('Missing Default import control')
+  await act(async () => { defaultImport.click(); await settleUI() })
+  expect(defaultRow?.querySelector('[aria-label="Import Cookies"]')).not.toBeNull()
+  expect(reviewRow?.querySelector('[aria-label="Import Cookies"]')).toBeNull()
+  expect(container.querySelectorAll('[aria-label="Import Cookies"]')).toHaveLength(1)
+  expect(calls.filter(({ method }) => method === 'quirky.browser/detectBrowsers')).toHaveLength(2)
+})
+
+test('menu and import hint target their pane profile, while a pane-less hint defaults independently of the active profile', async () => {
+  confirmResult = true
+  const context = makeContext()
+  const reviewPane = { ...pane(), profileId: REVIEW_PROFILE_ID }
+  state = { ...state, profiles: [{ profile: DEFAULT_PROFILE, active: true }, { profile: REVIEW_PROFILE, active: false }] }
+  await mount(<BrowserProfileMenu {...props(context, reviewPane)} />)
+  expect(calls.filter(({ method }) => method === 'quirky.browser/detectBrowsers')).toHaveLength(0)
+  await clickButton('Profile: Review')
+  await clickButton('Import Cookies')
+  await clickButton('From Firefox')
+  expect(calls.find(({ method }) => method === 'quirky.browser/importStart')?.params?.profile).toBe(REVIEW_PROFILE_ID)
+
+  await act(async () => { root?.unmount() })
+  root = null
+  calls = []
+  state = { ...state, profiles: [{ profile: DEFAULT_PROFILE, active: false }, { profile: REVIEW_PROFILE, active: true }] }
+  await mount(<BrowserImportHint {...props(context)} />)
+  await clickButton('Import browser data')
+  await clickButton('From Firefox')
+  expect(calls.find(({ method }) => method === 'quirky.browser/importStart')?.params?.profile).toBe('default')
+
+  await act(async () => { root?.unmount() })
+  root = null
+  calls = []
+  state = { ...state, profiles: [{ profile: DEFAULT_PROFILE, active: true }, { profile: REVIEW_PROFILE, active: false }] }
+  await mount(<BrowserImportHint {...props(context, reviewPane)} />)
+  await clickButton('Import browser data')
+  await clickButton('From Firefox')
+  expect(calls.find(({ method }) => method === 'quirky.browser/importStart')?.params?.profile).toBe(REVIEW_PROFILE_ID)
 })
 
 test('Session & Cookies reports unsupported native clearing without claiming data removal', async () => {
