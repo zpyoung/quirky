@@ -27,6 +27,8 @@ export type ActivityProjection = ExtrasState & {
   hiddenIds: string[]
   hiddenCount: number
   filterCount: number
+  automationHiddenIds: string[]
+  automationHiddenCount: number
   reviewHiddenIds: string[]
   reviewHiddenCount: number
   workspaces: WorkspaceProjection[]
@@ -225,6 +227,7 @@ export async function projectActivity(
   const cutoff = cutoffFor(state, now())
   const visibleIds: string[] = []
   const hiddenIds: string[] = []
+  const automationHiddenIds: string[] = []
   const workspaces: WorkspaceProjection[] = []
   const reviewHiddenIds: string[] = []
   let activityHiddenCount = 0
@@ -279,8 +282,11 @@ export async function projectActivity(
       ...(review?.error === undefined ? {} : { reviewError: review.error })
     })
     if (!visible) activityHiddenCount++
+    const automationHidden = state.preferences.hideAutomationCreated &&
+      worktree.automationProvenance?.kind === 'created-by-automation'
+    if (automationHidden) automationHiddenIds.push(worktree.id)
     if (review?.hidden === true) reviewHiddenIds.push(worktree.id)
-    const combinedVisible = visible && review?.hidden !== true
+    const combinedVisible = visible && review?.hidden !== true && !automationHidden
     const destination = combinedVisible ? visibleIds : hiddenIds
     destination.push(worktree.id)
 
@@ -292,7 +298,10 @@ export async function projectActivity(
     hiddenCount: activityHiddenCount,
     filterCount: (state.preferences.workspaceActivityWindow === 'all' ? 0 : 1) +
       (state.preferences.hideCompletedReviewWorkspaces ? 1 : 0) +
-      (state.preferences.hidePassingCheckWorkspaces ? 1 : 0),
+      (state.preferences.hidePassingCheckWorkspaces ? 1 : 0) +
+      (state.preferences.hideAutomationCreated ? 1 : 0),
+    automationHiddenIds,
+    automationHiddenCount: automationHiddenIds.length,
     reviewHiddenIds,
     reviewHiddenCount: reviewHiddenIds.length,
     workspaces

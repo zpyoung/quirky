@@ -5,6 +5,7 @@ import { isRecord } from './data'
 import { ReviewActions } from '../detail/Actions'
 import { ChecksList } from '../detail/ChecksList'
 import { Comments } from '../detail/Comments'
+import { useReviewLinkRouting } from '../link-routing'
 
 const REFRESH_ENTRY_AGE_MS = 15_000
 const REFRESH_COOLDOWN_MS = 10_000
@@ -775,6 +776,7 @@ function contextTargetLabel(state: ReviewsSurfaceProps['state'], surface: 'check
 
 export function ChecksPanel(props: ReviewsSurfaceProps) {
   const { context, state, refresh } = props
+  const routing = useReviewLinkRouting(context)
   const [layout, setLayout] = useState<UiLayout>(() => context.getLayout())
   const [windowVisible, setWindowVisible] = useState(() => typeof document === 'undefined' || document.visibilityState === 'visible')
   const [actionError, setActionError] = useState<string | null>(null)
@@ -934,10 +936,9 @@ export function ChecksPanel(props: ReviewsSurfaceProps) {
 
   const openLink = useCallback(async (url: string, event?: MouseEvent<HTMLButtonElement>) => {
     if (!activeWorktree) return
-    const isMac = typeof navigator !== 'undefined' && /Mac/i.test(navigator.platform)
-    const invert = Boolean(event?.shiftKey && (isMac ? event.metaKey : event.ctrlKey))
+    const invert = event !== undefined && routing.invert(event)
     await runReviewMethod('openLink', { url, worktree: activeWorktree, ...(invert ? { invert: true } : {}) }, false)
-  }, [activeWorktree, runReviewMethod])
+  }, [activeWorktree, runReviewMethod, routing.invert])
 
   const copyLink = useCallback(async (url: string) => {
     await runReviewMethod('copyText', { text: url }, false)
@@ -1146,7 +1147,7 @@ export function ChecksPanel(props: ReviewsSurfaceProps) {
       <header style={{ padding: '10px 12px', borderBottom: '1px solid var(--border, #2b2f3a)', display: 'grid', gap: 6 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap' }}>
           <span aria-hidden="true">PR</span>
-          <button type="button" style={quietButtonStyle} title="Open on GitHub; Shift+Cmd-click flips the configured destination" onClick={(event) => void openLink(currentReview.url, event)}>#{currentReview.number}</button>
+          <button type="button" style={quietButtonStyle} title={routing.title} onClick={(event) => void openLink(currentReview.url, event)}>#{currentReview.number}</button>
           <span style={statusBadgeStyle(currentReview.state)}>{reviewStateName(currentReview.state)}</span>
           <button type="button" style={quietButtonStyle} aria-label="Copy PR link" onClick={() => void copyLink(currentReview.url)}>Copy link</button>
           <button type="button" style={quietButtonStyle} aria-label="Refresh checks" disabled={active.loading || reviewRetrySeconds !== null} title={reviewRetrySeconds === null ? 'Refresh checks' : `Retry is paused for ${reviewRetrySeconds}s`} onClick={() => void runRefresh('manual')}>{reviewRetrySeconds === null ? 'Refresh' : `Refresh paused (${reviewRetrySeconds}s)`}</button>
@@ -1197,7 +1198,7 @@ export function ChecksPanel(props: ReviewsSurfaceProps) {
             <ol style={{ display: 'flex', gap: 8, listStyle: 'none', padding: 0, margin: '6px 0 0', alignItems: 'center', flexWrap: 'wrap' }}>
               {stack.entries.map((entry) => (
                 <li key={String(entry.number)}>
-                  <button type="button" style={quietButtonStyle} aria-current={entry.number === currentReview.number ? 'page' : undefined}
+                  <button type="button" style={quietButtonStyle} aria-current={entry.number === currentReview.number ? 'page' : undefined} title={routing.title}
                     disabled={typeof entry.url !== 'string'} onClick={(event) => typeof entry.url === 'string' && void openLink(entry.url, event)}>
                     #{String(entry.number)} · {String(entry.title ?? 'Pull request')}
                   </button>

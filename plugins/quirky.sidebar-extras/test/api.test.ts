@@ -42,6 +42,7 @@ describe('sidebar-extras API', () => {
     expect(state.client).toBe('desktop')
     expect(state.preferences.hideCompletedReviewWorkspaces).toBe(false)
     expect(state.preferences.hidePassingCheckWorkspaces).toBe(false)
+    expect(state.preferences.hideAutomationCreated).toBe(false)
     const projection = await extras(watcher.client, 'projection')
     expect(projection).toMatchObject(state)
     expect(changedEvents(watcher.events)).toHaveLength(0)
@@ -121,7 +122,9 @@ describe('sidebar-extras API', () => {
       { hideCompletedReviewWorkspaces: 'true' },
       { hideCompletedReviewWorkspaces: null },
       { hidePassingCheckWorkspaces: 1 },
-      { hidePassingCheckWorkspaces: 'false' }
+      { hidePassingCheckWorkspaces: 'false' },
+      { hideAutomationCreated: 'true' },
+      { hideAutomationCreated: null }
     ]) {
       await expect(extras(env.client, 'set', { workspaceActivityWindow: 'month', ...patch })).rejects.toMatchObject({
         code: RpcErrorCode.InvalidParams

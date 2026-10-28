@@ -7,6 +7,9 @@ import { BrowserRuntime } from './runtime/driver'
 import { asPluginError, fault } from './runtime/errors'
 import { parseExec } from './runtime/exec'
 import type { BrowserDependencies } from './runtime/dependencies'
+import { CookieImporter } from './cookies/importer'
+import { detectBrowsers } from './cookies/sources'
+import type { BrowserFamily, ImportJob, ImportSource } from './cookies/types'
 import { BrowserStore, type BrowserPage } from './profiles/store'
 import { DESIGN_METHODS, type DesignMethod, type DesignRequests } from './design-contract'
 import { DesignService } from './design/service'
@@ -85,19 +88,78 @@ function validateNavigationUrl(url: string): void {
   if (!isAllowedNavigation(url)) throw fault('invalid_argument', 'URL must be absolute HTTP, HTTPS, file, or exactly about:blank')
 }
 
+const BROWSER_FAMILIES = ['chrome', 'edge', 'arc', 'chromium', 'comet', 'helium', 'firefox', 'safari'] as const satisfies readonly BrowserFamily[]
+function hasOnlyKeys(value: Record<string, unknown>, allowed: readonly string[]): boolean {
+  return Object.keys(value).every((key) => allowed.includes(key))
+}
+
+
+function parseImportSource(value: unknown): ImportSource {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) throw fault('invalid_argument', 'source must be an explicit cookie source')
+  const source = value as Record<string, unknown>
+  if (source.kind === 'json') {
+    if (!Array.isArray(source.cookies) || !hasOnlyKeys(source, ['kind', 'cookies'])) {
+      throw fault('invalid_argument', 'JSON cookie source must contain only a cookies array')
+    }
+    return { kind: 'json', cookies: source.cookies }
+  }
+  if (source.kind === 'file') {
+    const path = source.path
+    if (!hasOnlyKeys(source, ['kind', 'path']) || typeof path !== 'string' || !isAbsolute(path)) {
+      throw fault('invalid_argument', 'file cookie source must contain an absolute path only')
+    }
+    return { kind: 'file', path }
+  }
+  if (source.kind === 'browser') {
+    const family = source.family
+    if (!hasOnlyKeys(source, ['kind', 'family', 'profile']) ||
+      typeof family !== 'string' || !BROWSER_FAMILIES.includes(family as BrowserFamily)) {
+      throw fault('invalid_argument', 'browser cookie source family is not supported')
+    }
+    const profile = source.profile
+    if (profile !== undefined && (typeof profile !== 'string' || profile.length === 0)) {
+      throw fault('invalid_argument', 'source profile must be a non-empty string')
+    }
+    return { kind: 'browser', family: family as BrowserFamily, ...(typeof profile === 'string' ? { profile } : {}) }
+  }
+  throw fault('invalid_argument', 'source must be an explicit file, JSON, or browser cookie source')
+}
+
+function identityMode(value: unknown): 'clean' | 'native' {
+  if (value !== 'clean' && value !== 'native') throw fault('invalid_argument', 'mode must be clean or native')
+  return value
+}
+
+const IDENTITY_SETTING_ID = 'setting:quirky.browser/identityMode'
+
+function identityState(selected: unknown, active: 'clean' | 'native') {
+  const mode = identityModeFromSetting(selected)
+  return { mode, active, restartRequired: mode !== active }
+}
+
+function importStatus(value: unknown): ImportJob['status'] | undefined {
+  if (value === undefined) return undefined
+  if (value === 'queued' || value === 'running' || value === 'succeeded' || value === 'failed') return value
+  throw fault('invalid_argument', 'import status is invalid')
+}
+
 export class BrowserService {
   private readonly store: BrowserStore
   private readonly runtime: BrowserRuntime
   private readonly actions: BrowserActions
+  private readonly importer: CookieImporter
+  private readonly activeIdentityMode: 'clean' | 'native'
   private readonly profileLifecycle: ProfileLifecycle
   private preferences?: PreferencesController
   private readonly panes: PaneService
   private readonly design: DesignService
   private active = true
-  constructor(private readonly context: PluginContext, dependencies: BrowserDependencies) {
+  constructor(private readonly context: PluginContext, private readonly dependencies: BrowserDependencies) {
     this.store = new BrowserStore(context.dataDir)
-    this.runtime = new BrowserRuntime(this.store, dependencies, (pageId) => this.actions?.clearPageRefs(pageId), identityModeFromSetting(context.getSetting('identityMode')))
+    this.activeIdentityMode = identityModeFromSetting(context.getSetting('identityMode'))
+    this.runtime = new BrowserRuntime(this.store, dependencies, (pageId) => this.actions?.clearPageRefs(pageId), this.activeIdentityMode)
     this.actions = new BrowserActions(this.store, this.runtime)
+    this.importer = new CookieImporter(this.store, this.runtime, this.dependencies)
     this.profileLifecycle = new ProfileLifecycle(context, this.store, this.runtime, () => this.listPanes())
     this.panes = new PaneService(
       context,
@@ -105,11 +167,10 @@ export class BrowserService {
       this.runtime,
       (selector, caller, allowNoScope) => this.resolveWorktreeTarget(selector, undefined, caller, allowNoScope),
       () => this.listWorktrees(),
-      dependencies.downloadDirectory
+      this.dependencies.downloadDirectory
     )
     this.design = new DesignService(context, this.runtime, () => this.panes.listPanes(), (pageId) => this.store.getPage(pageId))
   }
-
   activate(): void {
     for (const name of BROWSER_METHODS) {
       this.context.provide(`method:quirky.browser/${name}`, (params: Record<string, unknown>, caller: PluginCaller) => this.call(name, params, caller))
@@ -139,6 +200,7 @@ export class BrowserService {
     this.active = false
     this.preferences?.deactivate()
     this.profileLifecycle.deactivate()
+    await this.importer.cancelAll()
     await this.design.deactivate()
     await this.panes.deactivate()
     await this.runtime.stopAll()
@@ -148,7 +210,10 @@ export class BrowserService {
     try {
       if (!this.active) throw fault('browser_error', 'browser plugin is shutting down')
       const result = await this.invoke(name, params, caller)
-      if (name === 'tabCreate' || name === 'tabClose' || name === 'profileCreate' || name === 'paneOpen' || name === 'paneClose') this.context.emit('preferencesChanged', {})
+      if (name === 'tabCreate' || name === 'tabClose' || name === 'profileCreate' || name === 'paneOpen' || name === 'paneClose' ||
+        name === 'tabProfileSet' || name === 'tabProfileUseDefault' || name === 'profileClone' || name === 'importCookies' || name === 'identitySet' || name === 'openUrl') {
+        this.context.emit('preferencesChanged', {})
+      }
       return result
     } catch (error) {
       throw asPluginError(this.context, error)
@@ -179,9 +244,62 @@ export class BrowserService {
       case 'tabClose': return await this.tabClose(params, caller)
       case 'profileList': return { profiles: this.store.listProfiles() }
       case 'profileCreate': return { profile: this.store.createProfile(stringParam(params, 'name')) }
+      case 'tabProfileShow': return await this.tabProfileShow(params, caller)
+      case 'tabProfileSet': return await this.setPageProfile(params, caller, stringParam(params, 'profile'))
+      case 'tabProfileUseDefault': return await this.setPageProfile(params, caller, 'default')
+      case 'profileClone': return await this.profileClone(params)
+      case 'detectBrowsers': return await detectBrowsers(this.dependencies)
+      case 'importCookies': return await this.importer.importCookies(optionalString(params, 'profile'), parseImportSource(params.source))
+      case 'importStart': return this.importer.start(optionalString(params, 'profile'), parseImportSource(params.source))
+      case 'importGet': return this.importer.get(stringParam(params, 'id'))
+      case 'importList': return this.importer.list(optionalString(params, 'profile'), importStatus(params.status))
+      case 'identityGet': return identityState(this.context.getSetting('identityMode'), this.activeIdentityMode)
+      case 'identitySet': {
+        const mode = identityMode(params.mode)
+        await this.context.call('setting.set', { id: IDENTITY_SETTING_ID, value: mode })
+        return identityState(mode, this.activeIdentityMode)
+      }
+      case 'openUrl': return await this.profileLifecycle.withProfileAdmission('default', () => this.createPage({ ...params, profile: 'default' }, caller))
+      case 'dialogAccept': return await this.dialog(params, caller, true)
+      case 'dialogDismiss': return await this.dialog(params, caller, false)
       case 'exec': return await this.exec(params, caller)
       default: return await this.pageAction(name, params, caller)
     }
+  }
+
+  private async tabProfileShow(params: Record<string, unknown>, caller: PluginCaller) {
+    const page = await this.resolvePageTarget(params, caller, false)
+    const profile = this.store.getProfile(page.profileId)
+    return { browserPageId: page.browserPageId, worktreeId: page.worktreeId, profileId: profile.id, profileLabel: profile.label }
+  }
+
+  private async setPageProfile(params: Record<string, unknown>, caller: PluginCaller, profileId: string) {
+    this.store.getProfile(profileId)
+    const page = await this.resolvePageTarget(params, caller, false)
+    const updated = await this.runtime.setPageProfile(page, profileId)
+    const profile = this.store.getProfile(updated.profileId)
+    return { browserPageId: updated.browserPageId, profileId: profile.id, profileLabel: profile.label }
+  }
+
+  private async profileClone(params: Record<string, unknown>) {
+    const sourcePageId = stringParam(params, 'source')
+    const source = this.store.getPage(sourcePageId)
+    const destinationId = stringParam(params, 'profile')
+    const page = await this.runtime.clonePageProfile(source, destinationId)
+    const profile = this.store.getProfile(page.profileId)
+    return {
+      browserPageId: page.browserPageId,
+      sourceBrowserPageId: sourcePageId,
+      profileId: profile.id,
+      profileLabel: profile.label
+    }
+  }
+
+  private async dialog(params: Record<string, unknown>, caller: PluginCaller, accept: boolean) {
+    const page = await this.resolvePageTarget(params, caller, false)
+    const text = accept ? optionalString(params, 'text', true) : undefined
+    await this.runtime.answerDialog(page.browserPageId, accept, text)
+    return accept ? { accepted: true } : { dismissed: true }
   }
 
   private async designMethod(method: DesignMethod, params: Record<string, unknown>): Promise<unknown> {
@@ -299,7 +417,7 @@ export class BrowserService {
   private async pageAction(method: BrowserMethod, params: Record<string, unknown>, caller: PluginCaller): Promise<unknown> {
     if (method === 'goto') validateNavigationUrl(stringParam(params, 'url'))
     const page = await this.resolvePageTarget(params, caller, Object.hasOwn(READ_ONLY_METHODS, method))
-    if (method === 'goto') {
+    if (method === 'goto' || method === 'back' || method === 'forward' || method === 'reload') {
       await this.design.cancelPage(page.browserPageId)
       this.runtime.invalidatePage(page.browserPageId, true)
     }
@@ -311,7 +429,13 @@ export class BrowserService {
     const plan = parseExec(stringParam(params, 'command'))
     if (plan.method === 'goto') validateNavigationUrl(stringParam(plan.params, 'url'))
     const page = await this.resolvePageTarget(params, caller, false)
-    if (plan.method === 'goto') {
+    if (plan.method === 'dialogAccept' || plan.method === 'dialogDismiss') {
+      const accept = plan.method === 'dialogAccept'
+      const text = accept ? optionalString(plan.params, 'text', true) : undefined
+      await this.runtime.answerDialog(page.browserPageId, accept, text)
+      return { command: plan.command, result: accept ? { accepted: true } : { dismissed: true } }
+    }
+    if (plan.method === 'goto' || plan.method === 'back' || plan.method === 'forward' || plan.method === 'reload') {
       await this.design.cancelPage(page.browserPageId)
       this.runtime.invalidatePage(page.browserPageId, true)
     }

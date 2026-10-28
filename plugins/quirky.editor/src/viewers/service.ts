@@ -1,7 +1,7 @@
 import { realpathSync } from 'node:fs'
 import { extname, isAbsolute, relative, sep } from 'node:path'
 import type { MethodHandler } from '@quirky/protocol'
-import type { EditorBuffer, EditorServices, FeatureMethods } from '../types'
+import type { CsvCopyRange, EditorBuffer, EditorServices, FeatureMethods, ViewerResourceParams } from '../types'
 import {
   CSV_MAX_COLUMNS,
   CSV_MAX_RECORD_BYTES,
@@ -21,13 +21,21 @@ import {
   type CsvTable
 } from './csv'
 
-type Action = 'metadata' | 'page' | 'edit' | 'sort' | 'filter' | 'insertRow' | 'deleteRow' | 'insertColumn' | 'deleteColumn' | 'delimiter' | 'copy' | 'paste' | 'save' | 'zoom' | 'find' | 'position' | 'media'
-type ViewerMemory = { pager?: CsvPager; resourceKeys: Map<string, { url: string; revoke: () => void }> }
+type Action = 'metadata' | 'page' | 'edit' | 'sort' | 'filter' | 'insertRow' | 'deleteRow' | 'insertColumn' | 'deleteColumn' | 'delimiter' | 'copy' | 'paste' | 'save' | 'zoom' | 'find' | 'position' | 'media' | 'release'
+type FileResource = { url: string; revoke: () => void }
+type ViewerLease = { active: boolean; resource?: FileResource }
+type ViewerMemory = {
+  pager?: CsvPager
+  resourceKeys: Map<string, FileResource>
+  leases: Map<string, ViewerLease>
+  closed: boolean
+}
+type MediaParams = Extract<ViewerResourceParams, { action: 'media' }>
 type ImageMetadata = { mime: string; width?: number; height?: number; error?: string; previewable: boolean }
 
 const ACTIONS = new Set<Action>([
   'metadata', 'page', 'edit', 'sort', 'filter', 'insertRow', 'deleteRow', 'insertColumn', 'deleteColumn',
-  'delimiter', 'copy', 'paste', 'save', 'zoom', 'find', 'position', 'media'
+  'delimiter', 'copy', 'paste', 'save', 'zoom', 'find', 'position', 'media', 'release'
 ])
 const MAX_FILE_BYTES = 50 * 1024 * 1024
 const MAX_FILTER_LENGTH = 8192
@@ -65,6 +73,12 @@ function object(value: unknown): Record<string, unknown> {
 function stringParam(host: EditorServices, value: unknown, label: string, allowEmpty = false): string {
   if (typeof value !== 'string' || (!allowEmpty && value.length === 0)) error(host, 'invalid-params', `${label} must be a string`)
   return value
+}
+
+function leaseParam(host: EditorServices, value: unknown): string {
+  const leaseId = stringParam(host, value, 'leaseId')
+  if (leaseId.length > 128) error(host, 'invalid-params', 'leaseId must be at most 128 characters')
+  return leaseId
 }
 
 function integerParam(host: EditorServices, value: unknown, label: string, minimum = 0): number {
@@ -298,6 +312,47 @@ function ensureRow(rows: string[][], row: number, columns: number): string[] {
   return cells
 }
 
+function csvCopyRows(host: EditorServices, params: Record<string, unknown>, table: CsvTable): string[][] {
+  const row = params.row === undefined ? undefined : integerParam(host, params.row, 'row')
+  const column = params.column === undefined ? undefined : integerParam(host, params.column, 'column')
+  const hasEndRow = params.endRow !== undefined
+  const hasEndColumn = params.endColumn !== undefined
+  if (hasEndRow !== hasEndColumn) error(host, 'invalid-params', 'copy range requires both endRow and endColumn')
+  if (hasEndRow) {
+    if (row === undefined || column === undefined) error(host, 'invalid-params', 'copy range requires row and column')
+    const range: CsvCopyRange = {
+      row,
+      column,
+      endRow: integerParam(host, params.endRow, 'endRow'),
+      endColumn: integerParam(host, params.endColumn, 'endColumn')
+    }
+    if (range.endRow < range.row || range.endColumn < range.column) error(host, 'invalid-params', 'copy range bounds cannot be reversed')
+    const columns = maxColumns(table.rows)
+    if (range.endRow >= table.rows.length || range.endColumn >= columns) error(host, 'invalid-params', 'copy range is out of bounds')
+    return Array.from({ length: range.endRow - range.row + 1 }, (_, rowOffset) =>
+      Array.from({ length: range.endColumn - range.column + 1 }, (_, columnOffset) =>
+        table.rows[range.row + rowOffset]?.[range.column + columnOffset] ?? ''
+      )
+    )
+  }
+  if (row !== undefined && row >= table.rows.length) error(host, 'invalid-params', 'copy row is out of range')
+  if (row !== undefined) {
+    const values = table.rows[row]!
+    return column === undefined ? [values] : [[values[column] ?? '']]
+  }
+  if (column !== undefined) return table.rows.map((values) => [values[column] ?? ''])
+  return table.rows
+}
+
+function serializeTsv(rows: string[][]): string {
+  return rows.map((row) => row.map((value) => {
+    if (value.length === 0 || value.includes('\t') || value.includes(',') || value.includes(';') || value.includes('|') || value.includes('"') || value.includes('\r') || value.includes('\n')) {
+      return `"${value.replace(/"/g, '""')}"`
+    }
+    return value
+  }).join('\t')).join('\n')
+}
+
 function csvMetadata(buffer: EditorBuffer): Record<string, unknown> {
   if (buffer.size >= CSV_PAGED_BYTES) return {
     ...baseViewerMetadata(buffer), format: 'csv', paged: true, readOnly: true, rows: null, columns: null,
@@ -364,26 +419,63 @@ async function csvPage(
   }
 }
 
-async function createResource(host: EditorServices, buffer: EditorBuffer, memory: ViewerMemory): Promise<Record<string, unknown>> {
+function ensureResourceAcquisition(host: EditorServices, memory: ViewerMemory, leaseId?: string, lease?: ViewerLease): void {
+  if (memory.closed || (leaseId !== undefined && (!lease?.active || memory.leases.get(leaseId) !== lease))) {
+    error(host, 'conflict', 'Viewer resource acquisition is no longer active.')
+  }
+}
+
+async function createResource(
+  host: EditorServices,
+  buffer: EditorBuffer,
+  memory: ViewerMemory,
+  params: MediaParams,
+  lease?: ViewerLease
+): Promise<Record<string, unknown>> {
+  const leaseId = params.leaseId
+  ensureResourceAcquisition(host, memory, leaseId, lease)
   if (buffer.size > MAX_FILE_BYTES) error(host, 'conflict', 'File is too large to preview.')
   const mime = contentType(buffer)
   if (!mime) error(host, 'invalid-params', 'This file type has no safe streaming viewer.')
   if (buffer.kind === 'image') {
     const metadata = await imageMetadata(host, buffer)
+    ensureResourceAcquisition(host, memory, leaseId, lease)
     if (!metadata.previewable) error(host, 'conflict', metadata.error ?? 'Image preview is not safe.')
   }
   if (buffer.external === 'changed') return { changedOnDisk: true, error: 'File changed on disk. Reload before previewing.', size: buffer.size }
   const key = `${mime}:${buffer.path}:${buffer.contentRevision}:${buffer.baseline ?? 'none'}`
-  const known = memory.resourceKeys.get(key)
-  if (known) return { url: known.url, contentType: mime, size: buffer.size, acceptsRanges: true }
+  if (lease === undefined) {
+    const known = memory.resourceKeys.get(key)
+    if (known) return { url: known.url, contentType: mime, size: buffer.size, acceptsRanges: true }
+  }
   const path = await host.path(buffer.worktreeId, buffer.relativePath)
+  ensureResourceAcquisition(host, memory, leaseId, lease)
   const root = realpathSync(buffer.root)
   const canonical = realpathSync(path)
   const relativePath = relative(root, canonical)
   if (relativePath === '..' || relativePath.startsWith(`..${sep}`) || isAbsolute(relativePath)) error(host, 'conflict', 'Viewer path is no longer inside its worktree.')
-  const resource = await host.context.createFileResource({ path: canonical, contentType: mime, disposition: 'inline' })
-  memory.resourceKeys.set(key, resource)
-  return { url: resource.url, contentType: mime, size: buffer.size, acceptsRanges: true }
+  ensureResourceAcquisition(host, memory, leaseId, lease)
+  const created = await host.context.createFileResource({ path: canonical, contentType: mime, disposition: 'inline' })
+  if (memory.closed || (leaseId !== undefined && (!lease?.active || memory.leases.get(leaseId) !== lease))) {
+    created.revoke()
+    error(host, 'conflict', 'Viewer resource acquisition is no longer active.')
+  }
+  let resource = created
+  if (lease) lease.resource = resource
+  else {
+    const known = memory.resourceKeys.get(key)
+    if (known) {
+      resource.revoke()
+      resource = known
+    } else memory.resourceKeys.set(key, resource)
+  }
+  return {
+    url: resource.url,
+    contentType: mime,
+    size: buffer.size,
+    acceptsRanges: true,
+    ...(leaseId === undefined ? {} : { leaseId })
+  }
 }
 
 function imageKind(buffer: EditorBuffer, metadata: ImageMetadata & { bytes: number; zoom: number }): Record<string, unknown> {
@@ -408,10 +500,24 @@ export function createViewerMethods(host: EditorServices): FeatureMethods {
   const mutationLocks = new Map<string, Promise<void>>()
   let disposed = false
 
+  const closeMemory = (bufferId: string, memory: ViewerMemory): void => {
+    if (memory.closed) return
+    memory.closed = true
+    if (memories.get(bufferId) === memory) memories.delete(bufferId)
+    for (const resource of memory.resourceKeys.values()) resource.revoke()
+    memory.resourceKeys.clear()
+    for (const lease of memory.leases.values()) {
+      lease.active = false
+      lease.resource?.revoke()
+      lease.resource = undefined
+    }
+    memory.leases.clear()
+  }
+
   const memoryFor = (bufferId: string): ViewerMemory => {
     let memory = memories.get(bufferId)
     if (!memory) {
-      memory = { resourceKeys: new Map() }
+      memory = { resourceKeys: new Map(), leases: new Map(), closed: false }
       memories.set(bufferId, memory)
     }
     return memory
@@ -427,13 +533,29 @@ export function createViewerMethods(host: EditorServices): FeatureMethods {
 
   const onClose = host.onClose((bufferId) => {
     const memory = memories.get(bufferId)
-    if (!memory) return
-    memories.delete(bufferId)
-    for (const resource of memory.resourceKeys.values()) resource.revoke()
-    memory.resourceKeys.clear()
+    if (memory) closeMemory(bufferId, memory)
   })
 
+  const releaseLease = (request: Extract<ViewerResourceParams, { action: 'release' }>): { released: boolean } => {
+    const memory = memories.get(request.bufferId)
+    const lease = memory?.leases.get(request.leaseId)
+    if (!memory || !lease) return { released: false }
+    memory.leases.delete(request.leaseId)
+    lease.active = false
+    lease.resource?.revoke()
+    lease.resource = undefined
+    return { released: true }
+  }
+
   const mutate = async (bufferId: string, action: Action, params: Record<string, unknown>): Promise<unknown> => {
+    if (action === 'release') {
+      const request: Extract<ViewerResourceParams, { action: 'release' }> = {
+        bufferId,
+        action: 'release',
+        leaseId: leaseParam(host, params.leaseId)
+      }
+      return releaseLease(request)
+    }
     if (action === 'save') return host.save(bufferId, 'user')
     if (action === 'metadata') {
       const buffer = host.get(bufferId)
@@ -526,11 +648,8 @@ export function createViewerMethods(host: EditorServices): FeatureMethods {
       const buffer = host.get(bufferId)
       if (buffer.kind !== 'csv' || buffer.size >= CSV_PAGED_BYTES) error(host, 'conflict', 'Copy is available only for small editable CSV tables.')
       const table = smallCsv(buffer)
-      const row = typeof params.row === 'number' ? integerParam(host, params.row, 'row') : undefined
-      const column = typeof params.column === 'number' ? integerParam(host, params.column, 'column') : undefined
-      if (row !== undefined && row >= table.rows.length) error(host, 'invalid-params', 'copy row is out of range')
-      const rows = row === undefined ? table.rows : [table.rows[row]!]
-      const text = rows.map((values) => column === undefined ? values.join('\t') : values[column] ?? '').join('\n')
+      const rows = csvCopyRows(host, params, table)
+      const text = serializeTsv(rows)
       return { text, rows: rows.length }
     }
     if (action === 'zoom') {
@@ -566,8 +685,37 @@ export function createViewerMethods(host: EditorServices): FeatureMethods {
       return { position: await updateViewer(bufferId, patch) }
     }
     if (action === 'media') {
+      const leaseId = params.leaseId === undefined ? undefined : leaseParam(host, params.leaseId)
+      const request: MediaParams = { bufferId, action: 'media', ...(leaseId === undefined ? {} : { leaseId }) }
       const buffer = host.get(bufferId)
-      return createResource(host, buffer, memoryFor(bufferId))
+      const memory = memoryFor(bufferId)
+      if (leaseId === undefined) return createResource(host, buffer, memory, request)
+      if (memory.leases.has(leaseId)) error(host, 'invalid-params', 'leaseId is already active')
+      const lease: ViewerLease = { active: true }
+      memory.leases.set(leaseId, lease)
+      try {
+        const result = await createResource(host, buffer, memory, request, lease)
+        if (memory.closed || !lease.active || memory.leases.get(leaseId) !== lease) {
+          if (lease.resource) {
+            lease.resource.revoke()
+            lease.resource = undefined
+          }
+          error(host, 'conflict', 'Viewer resource acquisition is no longer active.')
+        }
+        if (typeof result.url !== 'string') {
+          memory.leases.delete(leaseId)
+          lease.active = false
+        }
+        return result
+      } catch (cause) {
+        if (memory.leases.get(leaseId) === lease) memory.leases.delete(leaseId)
+        lease.active = false
+        if (lease.resource) {
+          lease.resource.revoke()
+          lease.resource = undefined
+        }
+        throw cause
+      }
     }
     return undefined
   }
@@ -586,11 +734,7 @@ export function createViewerMethods(host: EditorServices): FeatureMethods {
       if (disposed) return
       disposed = true
       onClose()
-      for (const memory of memories.values()) {
-        for (const resource of memory.resourceKeys.values()) resource.revoke()
-        memory.resourceKeys.clear()
-      }
-      memories.clear()
+      for (const [bufferId, memory] of memories) closeMemory(bufferId, memory)
     }
   }
 }

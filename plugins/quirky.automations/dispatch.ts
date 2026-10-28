@@ -374,6 +374,11 @@ export function createAutomationDispatcher(context: AutomationDispatchContext, h
   const observing = new Set<string>()
   const setupDelays = new Map<ReturnType<typeof setTimeout>, () => void>()
   const activeChecks = new Set<string>()
+  const activeProvenanceCapabilities = new Set<string>()
+  const revokeProvenanceCapability = (dispatchToken: string): void => {
+    if (!activeProvenanceCapabilities.delete(dispatchToken)) return
+    hooks.revokeWorkspaceProvenance(dispatchToken)
+  }
   let disposed = false
   let startTask: Promise<void> | null = null
   let unsubscribe: (() => void) | undefined
@@ -795,11 +800,18 @@ export function createAutomationDispatcher(context: AutomationDispatchContext, h
         activate: false,
         createdBy: 'api'
       }
+      const provenanceRequest = hooks.issueWorkspaceProvenance(runId, target.repoId)
+      activeProvenanceCapabilities.add(provenanceRequest.dispatchToken)
       let created: WorktreeCreateResult
       try {
-        created = await context.call('quirky.worktree/create', params) as WorktreeCreateResult
+        created = await context.call('quirky.worktree/create', {
+          ...params,
+          automationProvenanceRequest: provenanceRequest
+        }) as WorktreeCreateResult
       } catch (error) {
         return finish(runId, 'dispatch_failed', `Could not create the run workspace: ${messageOf(error)}`)
+      } finally {
+        revokeProvenanceCapability(provenanceRequest.dispatchToken)
       }
       const worktree = record(created?.worktree)
       const id = worktree?.id
@@ -984,6 +996,9 @@ export function createAutomationDispatcher(context: AutomationDispatchContext, h
     }
     setupDelays.clear()
     observing.clear()
+    for (const dispatchToken of [...activeProvenanceCapabilities]) {
+      revokeProvenanceCapability(dispatchToken)
+    }
     for (const checkId of activeChecks) {
       void context.call('quirky.checks/cancel', { checkId }).catch(() => {})
     }

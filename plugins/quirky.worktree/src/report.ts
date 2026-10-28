@@ -1,6 +1,6 @@
 import type { ActivityPreferences } from './useSidebarActivity'
 import type { MembershipTarget } from './membership'
-import type { AgentDisplayState, GitHubWorktreeLink, ProjectGroup, Repo, Session, Worktree, WorktreePushTarget, WorktreeStatus } from '@quirky/protocol'
+import type { AgentDisplayState, GitHubWorktreeLink, ProjectGroup, Repo, Session, Worktree, WorktreeAutomationProvenance, WorktreePushTarget, WorktreeStatus } from '@quirky/protocol'
 import { worktreeGlyph, worktreeStatus, type DisplayStatus } from './status'
 import type { LoopReport, LoopStatusSnapshot } from './loop-status'
 
@@ -63,10 +63,20 @@ export type ActivityReport = {
   hiddenIds: string[]
   hiddenCount: number
   filterCount: number
+  automationHiddenIds?: string[]
+  automationHiddenCount?: number
   reviewHiddenIds?: string[]
   reviewHiddenCount?: number
 }
 export type FilterStatus = 'loading' | 'available' | 'missing' | 'error'
+export type AutomationAvailabilityStatus = 'not-checked' | 'checking' | 'available' | 'missing' | 'error' | 'unavailable'
+export type AutomationAvailabilitySnapshot = {
+  worktreeId: string
+  automationId: string
+  runId: string
+  definition: AutomationAvailabilityStatus
+  runHistory: AutomationAvailabilityStatus
+}
 export type DropPreviewReport = MembershipTarget
 
 /** Projects top-level hairline boundaries, excluding the first, host-adjacent, and sticky edges. */
@@ -284,6 +294,15 @@ export type WorkspaceReport = {
   linkedIssue?: GitHubWorktreeLink
   pushTarget?: WorktreePushTarget
   loop?: LoopReport
+  automation?: {
+    provenance: WorktreeAutomationProvenance
+    expanded: boolean
+    availability: { definition: AutomationAvailabilityStatus; runHistory: AutomationAvailabilityStatus }
+    navigation: {
+      automation: { page: 'detail'; automationId: string }
+      run: { page: 'run'; automationId: string; runId: string }
+    }
+  }
 }
 
 export type ProjectReport = { id: string; name: string; kind: 'git' | 'folder'; worktrees: WorkspaceReport[] }
@@ -301,6 +320,8 @@ export type WorktreesReport = {
   visibleIds: string[] | null
   hiddenIds: string[]
   hiddenCount: number
+  automationHiddenIds: string[]
+  automationHiddenCount: number
   reviewHiddenIds: string[]
   reviewHiddenCount: number
   filterCount: number
@@ -323,6 +344,7 @@ export type ReportInput = {
   notices?: NoticeReport[]
   visibleIds?: ReadonlySet<string> | null
   activity?: ActivityReport | null
+  automationAvailability?: AutomationAvailabilitySnapshot | null
   activityStatus?: FilterStatus
   activityError?: string | null
   separators?: SeparatorReport
@@ -340,6 +362,14 @@ export function buildReport(input: ReportInput): WorktreesReport {
   const workspace = ({ worktree, depth, repoName }: TreeRow): WorkspaceReport => {
     const glyph = sessions === null ? null : worktreeGlyph(sessions, worktree.id, now)
     const loop = input.loopStatus?.byWorktree.get(worktree.id)
+    const provenance = worktree.automationProvenance
+    const checkedAutomation = input.automationAvailability
+    const automationAvailability = provenance?.kind === 'created-by-automation' &&
+      checkedAutomation?.worktreeId === worktree.id &&
+      checkedAutomation.automationId === provenance.automationId &&
+      checkedAutomation.runId === provenance.runId
+      ? checkedAutomation
+      : null
     return {
       id: worktree.id,
       name: worktree.name,
@@ -369,6 +399,20 @@ export function buildReport(input: ReportInput): WorktreesReport {
           iterationsCompleted: loop.iterationsCompleted,
           maxIterations: loop.maxIterations,
           label: loop.label
+        }
+      } : {}),
+      ...(provenance?.kind === 'created-by-automation' ? {
+        automation: {
+          provenance,
+          expanded: automationAvailability !== null,
+          availability: {
+            definition: automationAvailability?.definition ?? 'not-checked',
+            runHistory: automationAvailability?.runHistory ?? 'not-checked'
+          },
+          navigation: {
+            automation: { page: 'detail', automationId: provenance.automationId },
+            run: { page: 'run', automationId: provenance.automationId, runId: provenance.runId }
+          }
         }
       } : {})
     }
@@ -417,6 +461,8 @@ export function buildReport(input: ReportInput): WorktreesReport {
     visibleIds: input.visibleIds ? [...input.visibleIds] : null,
     hiddenIds: activity?.hiddenIds ?? [],
     hiddenCount: activity?.hiddenCount ?? 0,
+    automationHiddenIds: activity?.automationHiddenIds ?? [],
+    automationHiddenCount: activity?.automationHiddenCount ?? 0,
     reviewHiddenIds: activity?.reviewHiddenIds ?? [],
     reviewHiddenCount: activity?.reviewHiddenCount ?? 0,
     filterCount: activity?.filterCount ?? 0,

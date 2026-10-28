@@ -1177,6 +1177,95 @@
         }
       },
       {
+        "id": "switchBranch",
+        "description": "Checks out one advertised local or remote branch, but only when the current worktree is clean and no Git operation is active.",
+        "destructive": true,
+        "confirm": "Switch to this branch?",
+        "describe": "describeSwitchBranch",
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string",
+              "description": "Worktree selector (id, name, branch, path: or current); defaults to the caller's worktree."
+            },
+            "branch": {
+              "type": "string",
+              "description": "Exact local or remote branch name returned by quirky.git/branches."
+            },
+            "expectedBranch": {
+              "type": "string",
+              "description": "Current branch observed by the caller; the switch is refused if it has changed."
+            },
+            "expectedHead": {
+              "type": "string",
+              "description": "Current HEAD observed by the caller; the switch is refused if it has changed."
+            }
+          },
+          "required": [
+            "branch"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "previousBranch": {
+              "description": "The previous branch, or null when HEAD was detached."
+            },
+            "branch": {
+              "type": "string",
+              "description": "The checked-out local branch."
+            },
+            "changed": {
+              "type": "boolean",
+              "description": "False when already on the requested branch."
+            },
+            "createdTrackingBranch": {
+              "type": "boolean",
+              "description": "True when a local branch was created from a remote branch."
+            }
+          },
+          "required": [
+            "previousBranch",
+            "branch",
+            "changed",
+            "createdTrackingBranch"
+          ]
+        }
+      },
+      {
+        "id": "describeSwitchBranch",
+        "description": "The exact confirmation text for a branch switch.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string",
+              "description": "Worktree selector (id, name, branch, path: or current); defaults to the caller's worktree."
+            },
+            "branch": {
+              "type": "string",
+              "description": "Exact local or remote branch name returned by quirky.git/branches."
+            },
+            "expectedBranch": {
+              "type": "string",
+              "description": "Optional branch snapshot forwarded by the confirmation dispatcher."
+            },
+            "expectedHead": {
+              "type": "string",
+              "description": "Optional HEAD snapshot forwarded by the confirmation dispatcher."
+            }
+          },
+          "required": [
+            "branch"
+          ]
+        },
+        "result": {
+          "type": "string"
+        }
+      },
+      {
         "id": "history",
         "description": "Recent commits from HEAD, newest first.",
         "readOnly": true,

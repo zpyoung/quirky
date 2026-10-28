@@ -97,6 +97,7 @@ export type ExtrasPreferences = {
   workspaceActivityWindowBeforeLiveOnly: Exclude<ActivityWindow, 'live-only'>
   hideCompletedReviewWorkspaces: boolean
   hidePassingCheckWorkspaces: boolean
+  hideAutomationCreated: boolean
 }
 
 export type ExtrasState = {
@@ -112,6 +113,8 @@ export type ActivityProjection = ExtrasState & {
   hiddenIds: string[]
   hiddenCount: number
   filterCount: number
+  automationHiddenIds: string[]
+  automationHiddenCount: number
   reviewHiddenIds: string[]
   reviewHiddenCount: number
   workspaces: {

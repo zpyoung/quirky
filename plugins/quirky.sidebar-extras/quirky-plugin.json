@@ -46,7 +46,8 @@
                   "enum": ["all", "today", "week", "month", "custom"]
                 },
                 "hideCompletedReviewWorkspaces": { "type": "boolean" },
-                "hidePassingCheckWorkspaces": { "type": "boolean" }
+                "hidePassingCheckWorkspaces": { "type": "boolean" },
+                "hideAutomationCreated": { "type": "boolean" }
               },
               "required": [
                 "workspaceActivityWindow",
@@ -54,7 +55,8 @@
                 "alwaysShowDefaultBranchWorkspace",
                 "workspaceActivityWindowBeforeLiveOnly",
                 "hideCompletedReviewWorkspaces",
-                "hidePassingCheckWorkspaces"
+                "hidePassingCheckWorkspaces",
+                "hideAutomationCreated"
               ],
               "additionalProperties": false
             },
@@ -97,7 +99,8 @@
             "hideSleepingWorkspaces": { "type": "boolean", "description": "Legacy patch: true selects live-only; false restores the remembered non-live window." },
             "showSleepingWorkspaces": { "type": "boolean", "description": "Legacy patch: true restores the remembered window only while live-only is selected." },
             "hideCompletedReviewWorkspaces": { "type": "boolean" },
-            "hidePassingCheckWorkspaces": { "type": "boolean" }
+            "hidePassingCheckWorkspaces": { "type": "boolean" },
+            "hideAutomationCreated": { "type": "boolean" }
           },
           "additionalProperties": false
         },
@@ -113,9 +116,10 @@
                 "alwaysShowDefaultBranchWorkspace": { "type": "boolean" },
                 "workspaceActivityWindowBeforeLiveOnly": { "type": "string", "enum": ["all", "today", "week", "month", "custom"] },
                 "hideCompletedReviewWorkspaces": { "type": "boolean" },
-                "hidePassingCheckWorkspaces": { "type": "boolean" }
+                "hidePassingCheckWorkspaces": { "type": "boolean" },
+                "hideAutomationCreated": { "type": "boolean" }
               },
-              "required": ["workspaceActivityWindow", "workspaceActivityCustomDays", "alwaysShowDefaultBranchWorkspace", "workspaceActivityWindowBeforeLiveOnly", "hideCompletedReviewWorkspaces", "hidePassingCheckWorkspaces"],
+              "required": ["workspaceActivityWindow", "workspaceActivityCustomDays", "alwaysShowDefaultBranchWorkspace", "workspaceActivityWindowBeforeLiveOnly", "hideCompletedReviewWorkspaces", "hidePassingCheckWorkspaces", "hideAutomationCreated"],
               "additionalProperties": false
             },
             "active": {
@@ -154,9 +158,10 @@
                 "alwaysShowDefaultBranchWorkspace": { "type": "boolean" },
                 "workspaceActivityWindowBeforeLiveOnly": { "type": "string", "enum": ["all", "today", "week", "month", "custom"] },
                 "hideCompletedReviewWorkspaces": { "type": "boolean" },
-                "hidePassingCheckWorkspaces": { "type": "boolean" }
+                "hidePassingCheckWorkspaces": { "type": "boolean" },
+                "hideAutomationCreated": { "type": "boolean" }
               },
-              "required": ["workspaceActivityWindow", "workspaceActivityCustomDays", "alwaysShowDefaultBranchWorkspace", "workspaceActivityWindowBeforeLiveOnly", "hideCompletedReviewWorkspaces", "hidePassingCheckWorkspaces"],
+              "required": ["workspaceActivityWindow", "workspaceActivityCustomDays", "alwaysShowDefaultBranchWorkspace", "workspaceActivityWindowBeforeLiveOnly", "hideCompletedReviewWorkspaces", "hidePassingCheckWorkspaces", "hideAutomationCreated"],
               "additionalProperties": false
             },
             "active": {
@@ -194,9 +199,10 @@
                 "alwaysShowDefaultBranchWorkspace": { "type": "boolean" },
                 "workspaceActivityWindowBeforeLiveOnly": { "type": "string", "enum": ["all", "today", "week", "month", "custom"] },
                 "hideCompletedReviewWorkspaces": { "type": "boolean" },
-                "hidePassingCheckWorkspaces": { "type": "boolean" }
+                "hidePassingCheckWorkspaces": { "type": "boolean" },
+                "hideAutomationCreated": { "type": "boolean" }
               },
-              "required": ["workspaceActivityWindow", "workspaceActivityCustomDays", "alwaysShowDefaultBranchWorkspace", "workspaceActivityWindowBeforeLiveOnly", "hideCompletedReviewWorkspaces", "hidePassingCheckWorkspaces"],
+              "required": ["workspaceActivityWindow", "workspaceActivityCustomDays", "alwaysShowDefaultBranchWorkspace", "workspaceActivityWindowBeforeLiveOnly", "hideCompletedReviewWorkspaces", "hidePassingCheckWorkspaces", "hideAutomationCreated"],
               "additionalProperties": false
             },
             "active": {
@@ -210,6 +216,8 @@
             "hiddenIds": { "type": "array", "items": { "type": "string" } },
             "hiddenCount": { "type": "integer", "minimum": 0 },
             "filterCount": { "type": "integer", "minimum": 0 },
+            "automationHiddenIds": { "type": "array", "items": { "type": "string" } },
+            "automationHiddenCount": { "type": "integer", "minimum": 0 },
             "reviewHiddenIds": { "type": "array", "items": { "type": "string" } },
             "reviewHiddenCount": { "type": "integer", "minimum": 0 },
             "workspaces": {
@@ -230,7 +238,7 @@
               }
             }
           },
-          "required": ["client", "preferences", "active", "visits", "exits", "visibleIds", "hiddenIds", "hiddenCount", "filterCount", "reviewHiddenIds", "reviewHiddenCount", "workspaces"],
+          "required": ["client", "preferences", "active", "visits", "exits", "visibleIds", "hiddenIds", "hiddenCount", "filterCount", "automationHiddenIds", "automationHiddenCount", "reviewHiddenIds", "reviewHiddenCount", "workspaces"],
           "additionalProperties": false
         }
       },
@@ -277,9 +285,10 @@
                 "alwaysShowDefaultBranchWorkspace": { "type": "boolean" },
                 "workspaceActivityWindowBeforeLiveOnly": { "type": "string", "enum": ["all", "today", "week", "month", "custom"] },
                 "hideCompletedReviewWorkspaces": { "type": "boolean" },
-                "hidePassingCheckWorkspaces": { "type": "boolean" }
+                "hidePassingCheckWorkspaces": { "type": "boolean" },
+                "hideAutomationCreated": { "type": "boolean" }
               },
-              "required": ["workspaceActivityWindow", "workspaceActivityCustomDays", "alwaysShowDefaultBranchWorkspace", "workspaceActivityWindowBeforeLiveOnly", "hideCompletedReviewWorkspaces", "hidePassingCheckWorkspaces"],
+              "required": ["workspaceActivityWindow", "workspaceActivityCustomDays", "alwaysShowDefaultBranchWorkspace", "workspaceActivityWindowBeforeLiveOnly", "hideCompletedReviewWorkspaces", "hidePassingCheckWorkspaces", "hideAutomationCreated"],
               "additionalProperties": false
             },
             "active": {
@@ -337,7 +346,8 @@
           "hide-sleeping-workspaces": { "type": "boolean", "description": "legacy live-only patch" },
           "show-sleeping-workspaces": { "type": "boolean", "description": "restore the remembered non-live window" },
           "hide-completed-review-workspaces": { "type": "boolean", "description": "hide workspaces with a current merged or closed review" },
-          "hide-passing-check-workspaces": { "type": "boolean", "description": "hide workspaces whose current review checks pass" }
+          "hide-passing-check-workspaces": { "type": "boolean", "description": "hide workspaces whose current review checks pass" },
+          "hide-automation-created": { "type": "boolean", "description": "hide workspaces created by automations" }
         },
         "methods": ["quirky.sidebar-extras/set"]
       },

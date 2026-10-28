@@ -143,6 +143,31 @@ export type ExplorerEntry = {
   error?: string
 }
 
+export type ExplorerNavigationKey = 'ArrowUp' | 'ArrowDown' | 'ArrowLeft' | 'ArrowRight' | 'Home' | 'End' | 'PageUp' | 'PageDown'
+export type ExplorerInteraction = {
+  selectedPaths: string[]
+  focusedPath: string | null
+  selectionAnchor: string | null
+}
+export type ExplorerParams = {
+  worktree?: string
+  action: 'list' | 'refresh' | 'reveal' | 'filter' | 'preferences' | 'navigate' | 'select'
+  path?: string
+  query?: string
+  key?: ExplorerNavigationKey
+  extend?: boolean
+  toggle?: boolean
+  showDotfiles?: boolean
+  showIgnored?: boolean
+  followSymlinkedDirectories?: boolean
+  expanded?: string[]
+  displayRoot?: string
+}
+export type CsvCopyRange = { row: number; column: number; endRow: number; endColumn: number }
+export type ViewerResourceParams =
+  | { bufferId: string; action: 'media'; leaseId?: string }
+  | { bufferId: string; action: 'release'; leaseId: string }
+
 export type SearchMatch = {
   line: number
   column: number
@@ -174,7 +199,7 @@ export type EditorBufferStateInfo = Omit<EditorBufferInfo, 'content' | 'draft' |
 export type EditorState = {
   buffers: EditorBufferStateInfo[]
   tabs: EditorTab[]
-  explorer: { worktreeId: string; showDotfiles: boolean; expanded: string[] }
+  explorer: { worktreeId: string; showDotfiles: boolean; expanded: string[] } & Partial<ExplorerInteraction>
   search: EditorSearchState | null
   quickOpenHistory: { worktreeId: string; paths: string[] }[]
   closeRequests: { bufferId: string; tabId: string; dirty: boolean }[]
