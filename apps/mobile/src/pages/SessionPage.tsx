@@ -892,10 +892,10 @@ export function SessionPage({ bridge, route, connected, onNavigate, onReport }: 
           setSelectedTabIds([])
         }}>{manageTabs ? 'Done' : 'Manage terminal tabs'}</button>
       </div>
-      {tabCreationError && !newTabOpen && <div className="qp-content"><PageError>{tabCreationError}</PageError></div>}
-      {pageError && <div className="qp-content"><PageError>{pageError}</PageError></div>}
-      {actionError && <div className="qp-content"><PageError>{actionError}</PageError></div>}
-      {notice && <div className="qp-content"><div className="qp-error" role="status">{notice}</div></div>}
+      {tabCreationError && !newTabOpen && <div className="qp-content qp-session-feedback"><PageError>{tabCreationError}</PageError></div>}
+      {pageError && <div className="qp-content qp-session-feedback"><PageError>{pageError}</PageError></div>}
+      {actionError && <div className="qp-content qp-session-feedback"><PageError>{actionError}</PageError></div>}
+      {notice && <div className="qp-content qp-session-feedback"><div className="qp-error" role="status">{notice}</div></div>}
       <div className="qp-tabs" role="tablist" aria-label="Workspace tabs">
         {terminalSessions.map((session) => {
           const active = session.id === selectedSession?.id

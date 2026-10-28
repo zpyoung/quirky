@@ -26,6 +26,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .qp-status-dot--stale{background:#e6ac4d}
 .qp-error{padding:10px 12px;margin:8px 0;border:1px solid #71383c;border-radius:10px;background:#321f22;color:#ffdfe0;overflow-wrap:anywhere}
 .qp-content{flex:1;min-height:0;overflow:auto;padding:14px max(12px,env(safe-area-inset-right)) calc(18px + var(--safe-bottom)) max(12px,env(safe-area-inset-left))}
+.qp-session-feedback{flex:none;padding-top:0;padding-bottom:0;overflow:visible}
 .qp-page--workspaces{flex:1;min-height:0;display:flex;flex-direction:column}
 .qp-page--workspaces .qp-content{padding-top:12px}
 .qp-workspace-layout{display:flex;min-height:100%;gap:12px;max-width:1440px;margin:0 auto}
