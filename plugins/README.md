@@ -430,13 +430,24 @@ The live API catalog contains all method schemas and generated command aliases.
 slot reports are bounded summaries pointing to that method, so large comments or
 diffs do not exceed the kernel's 64-KiB report limit.
 
-Review links use Browser's Link Routing setting and Shift+Cmd/Ctrl modifier policy.
-Each PR/Checks action carries its originating worktree, including when the two surfaces
-show different worktrees. API callers can supply `--worktree`; an omitted target is
-inferred only from an unambiguous visible Review/Checks context. Routing failures do
-not silently launch the system browser. Other-provider review/create/settings remain
-explicitly deferred. Clipboard/system-browser/focus and native guest behavior are
-handed to the native scenario run, not inferred from headless web output.
+Review header and Checks stack-member links use Browser's **Link Routing** setting.
+Plain activation follows that setting. On macOS, **Shift+Cmd-click** forces the
+system browser when **Hold Shift** inversion is off; when inversion is on it flips
+the configured destination for that click. Shift+Ctrl alone is not Cmd on macOS.
+The control's tooltip names both destinations and updates with Browser settings.
+Stack buttons open the actual member PR URL, not the stack resource number.
+
+Each PR/Checks action carries its originating worktree, including when the two
+surfaces show different worktrees. Script the same route with
+`quirky reviews open-link --url <https-url> --worktree <id> --invert --json`;
+`--invert` represents the alternate chord, not an unconditional destination flip.
+An omitted worktree is inferred only from an unambiguous visible Review/Checks
+context. Routing failures do not silently launch the system browser.
+Other-provider review/create/settings remain explicitly deferred.
+Clipboard/system-browser/focus and native guest behavior are handed to the native
+scenario run, not inferred from daemon routing receipts. Native runs must establish
+isolated Default storage and a run-owned system-browser session before clicking.
+
 ## GitHub Tasks
 
 `quirky.tasks` supplies Tasks lists, issue detail/creation, Project tables/boards/roadmaps,
