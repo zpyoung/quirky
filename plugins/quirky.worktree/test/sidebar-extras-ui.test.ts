@@ -59,7 +59,7 @@ type Group = ProjectGroup & { parentId: string | null }
 type RendererReport = {
   groups: { id: string; projects: { id: string }[] }[]
   projects: { id: string; worktrees: { id: string; depth: number }[] }[]
-  dialog: { kind: string; worktreeId?: string; withDescendants?: boolean; action?: string; groupId?: string } | null
+  dialog: { kind: string; repoId?: string; worktreeId?: string; withDescendants?: boolean; action?: string; groupId?: string } | null
   appliedFilter: Preferences | null
   hiddenIds: string[]
   hiddenCount: number
@@ -542,6 +542,11 @@ function setup(
           await emit({ type: 'quirky.worktree/changed', data: { repoId: changed.repoId } } as QuirkyEvent)
           return changed
         }
+        case 'quirky.repo/groupCreate': {
+          const created = group(`g-created-${world.groups.length}`, String(params.name), { order: world.groups.length + 1 })
+          world.groups.push(created)
+          return created
+        }
         case 'quirky.repo/groupAdd': {
           const target = world.repos.find((item) => item.id === params.repo)
           if (!target) throw new Error('unknown project')
@@ -1013,10 +1018,71 @@ test('project menu opens the project group dialog', async () => {
   expect(dialog.textContent).toContain('api moves into the new group.')
   expect(lastReport(h).dialog).toMatchObject({ kind: 'group', action: 'new' })
 })
+test('SC-06: a folder workspace row in a Git project creates a group for its project only', async () => {
+  const h = setup()
+  const project = h.world.repos.find((repo) => repo.id === 'r-notes')!
+  project.kind = 'git'
+  const projectBefore = { ...project }
+  const worktreesBefore = h.world.worktrees.filter((worktree) => worktree.repoId === project.id).map((worktree) => ({ ...worktree }))
+  await h.mount()
+
+  const openProjectGroupDialog = async () => {
+    await openCardMenu(h, 'notes')
+    const createProjectGroup = menuItem('New Group from Project…')
+    expect(createProjectGroup).toBeDefined()
+    await h.click(createProjectGroup!)
+    const dialog = document.querySelector<HTMLElement>('[role="dialog"]')
+    expect(dialog).not.toBeNull()
+    expect(lastReport(h).dialog).toMatchObject({ kind: 'group', action: 'new', repoId: project.id })
+    return dialog!
+  }
+
+  const initialGroupCount = h.world.groups.length
+  const cancelled = await openProjectGroupDialog()
+  await h.click([...cancelled.querySelectorAll<HTMLButtonElement>('button')].find((button) => button.textContent?.trim() === 'Cancel')!)
+  expect(h.world.groups).toHaveLength(initialGroupCount)
+  expect(project).toEqual(projectBefore)
+  expect(h.world.worktrees.filter((worktree) => worktree.repoId === project.id)).toEqual(worktreesBefore)
+
+  const dialog = await openProjectGroupDialog()
+  const input = dialog.querySelector<HTMLInputElement>('input[type="text"]')
+  if (!input) throw new Error('project group dialog input was not rendered')
+  await inputValue(input, 'Notes project')
+  const create = [...dialog.querySelectorAll<HTMLButtonElement>('button')]
+    .find((button) => /^create(?: group)?$/i.test(button.textContent?.trim() ?? ''))
+  expect(create).toBeDefined()
+  await h.click(create!)
+
+  const created = h.world.groups.find((group) => group.name === 'Notes project')
+  expect(created).toBeDefined()
+  expect(project).toEqual({ ...projectBefore, groupId: created!.id })
+  expect(h.world.worktrees.filter((worktree) => worktree.repoId === project.id)).toEqual(worktreesBefore)
+  expect(lastReport(h).groups.find((group) => group.id === created!.id)?.projects.some((item) => item.id === project.id)).toBe(true)
+})
+
+test('SC-06: a folder workspace row removes its project group without changing its workspaces', async () => {
+  const h = setup()
+  const project = h.world.repos.find((repo) => repo.id === 'r-notes')!
+  const projectBefore = { ...project }
+  const worktreesBefore = h.world.worktrees.filter((worktree) => worktree.repoId === project.id).map((worktree) => ({ ...worktree }))
+  await h.mount()
+
+  await openCardMenu(h, 'notes')
+  const removeProjectGroup = menuItem('Remove project from group')
+  expect(removeProjectGroup).toBeDefined()
+  await h.click(removeProjectGroup!)
+
+  expect(project).toEqual({ ...projectBefore, groupId: null })
+  expect(h.world.worktrees.filter((worktree) => worktree.repoId === project.id)).toEqual(worktreesBefore)
+  expect(lastReport(h).groups.find((group) => group.id === 'g-team')?.projects.some((item) => item.id === project.id)).toBe(false)
+  expect(card('notes')?.closest('section.repo')).toBe(sectionForRepo('notes'))
+})
 
 
 
-test('SC-02/06: loose membership menus move and remove one worktree, and folder rows offer only project actions', async () => {
+
+
+test('SC-02: loose membership menus move and remove one worktree', async () => {
   const h = setup()
   await h.mount()
 
@@ -1041,11 +1107,6 @@ test('SC-02/06: loose membership menus move and remove one worktree, and folder 
   await h.click(menuItem('Remove worktree from group')!)
   expect(h.world.worktrees.find((item) => item.id === 'w-feature')?.projectGroupId).toBeNull()
   expect(card('feature')?.closest('section.repo')).toBe(sectionForRepo('api'))
-  await openCardMenu(h, 'notes')
-  const labels = menuItems().map((item) => item.textContent?.replace(/\s*▸$/, '').trim())
-  expect(labels).toContain('Move project to group')
-  expect(labels).not.toContain('Add worktree to group')
-  expect(labels).not.toContain('Remove worktree from group')
 })
 
 test('SC-02: moving a Git project moves every repo row without changing loose worktree membership', async () => {
@@ -1182,22 +1243,22 @@ test('SC-06: folder-owned Git worktrees cannot join a group by dragging', async 
   expect(card('folder-git')?.closest('section.group')).toBe(sectionForGroup('Team'))
 })
 
-test('SC-06: unknown repository owners fail closed for worktree membership menus', async () => {
+test('SC-06: unknown repository owners fail closed for project and worktree actions', async () => {
   const h = setup()
   const item = worktree('w-ownerless', 'r-missing', 'ownerless', { projectGroupId: 'g-team' })
   h.world.worktrees.push(item)
   await h.mount()
 
   await openCardMenu(h, 'ownerless')
-  const membershipActions = menuItems()
+  const ownerActions = menuItems()
     .map((menuItem) => menuItem.textContent?.replace(/\s*▸$/, '').trim() ?? '')
-    .filter((label) => /^(new group from worktree|add worktree to group|remove worktree from group)/i.test(label))
+    .filter((label) => /^(new group from worktree|add worktree to group|remove worktree from group|new group from project|move project to group|remove project from group)/i.test(label))
 
   expect({
-    membershipActions,
+    ownerActions,
     membership: item.projectGroupId,
     writes: h.calls.filter((call) => call.method === 'quirky.worktree/set' && call.params.worktree === item.id)
-  }).toEqual({ membershipActions: [], membership: 'g-team', writes: [] })
+  }).toEqual({ ownerActions: [], membership: 'g-team', writes: [] })
 })
 
 test('SC-06: unknown repository owners cannot join a group by dragging', async () => {
