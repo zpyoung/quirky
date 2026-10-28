@@ -141,6 +141,26 @@ describe('Codex app-server runner', () => {
     expect(setup.statuses).toEqual(['working', 'done'])
   })
 
+  test('starts a native thread without an initial turn until the caller is attached', async () => {
+    await setup.runner.start(setup.session, undefined, {
+      env: { QUIRKY_SESSION_ID: setup.session.id, QUIRKY_SESSION_TOKEN: 'test-token' }
+    })
+    expect(setup.fixture.requests().map((request) => request.method)).toEqual([
+      'initialize',
+      'initialized',
+      'thread/start'
+    ])
+    expect(setup.statuses).toEqual(['running'])
+    expect(setup.messages).toEqual([])
+
+    await setup.runner.send(setup.session.id, 'first custody-recorded turn')
+    await until(() => setup.statuses.includes('done'))
+    expect(setup.fixture.requests().filter((request) => request.method === 'turn/start')).toHaveLength(1)
+    expect(setup.messages.filter((message) => message.role === 'user').map((message) => message.text)).toEqual([
+      'first custody-recorded turn'
+    ])
+  })
+
   test('starts later turns with the same model and effort after completion', async () => {
     await setup.runner.start(setup.session, 'first', { model: 'gpt-5.5', effort: 'xhigh' })
     await until(() => setup.statuses.includes('done'))

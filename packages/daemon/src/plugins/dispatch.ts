@@ -8,6 +8,7 @@ import {
   type KernelMethodSchema,
   type MethodHandler,
   type PluginCaller,
+  type PluginSessionAuthority,
   type Schema
 } from '@quirky/protocol'
 import { DaemonError, internal, invalidParams } from '../errors'
@@ -42,6 +43,8 @@ export type DispatcherOptions = {
    */
   kernelDescribers?: Record<string, KernelDescriber>
   now?: () => number
+  /** Revalidates connection session credentials before every plugin method call. */
+  resolveSessionAuthority?: (conn: ClientConn) => Promise<PluginSessionAuthority | null>
 }
 
 const KERNEL_PLUGIN_ID = 'kernel'
@@ -83,6 +86,7 @@ export class Dispatcher {
   private readonly requests: RequestLog
   private readonly confirmations: Confirmations
   private readonly kernelDescribers: Record<string, KernelDescriber>
+  private readonly resolveSessionAuthority?: DispatcherOptions['resolveSessionAuthority']
 
   constructor(
     private readonly handlers: Handlers,
@@ -92,6 +96,7 @@ export class Dispatcher {
   ) {
     const store = options.store ?? new Store(':memory:')
     this.kernelDescribers = options.kernelDescribers ?? {}
+    this.resolveSessionAuthority = options.resolveSessionAuthority
     this.requests = new RequestLog(store, { now: options.now, log })
     this.confirmations = new Confirmations(store, (method, params, from) => this.dispatch(method, params, from), {
       now: options.now,
@@ -203,8 +208,9 @@ export class Dispatcher {
     }
     const { id, plugin } = target.contribution!
     const implementation = (await this.plugins.resolveImplementation(id)) as MethodHandler
+    const sessionAuthority = 'conn' in from ? await this.resolveSessionAuthority?.(from.conn) : undefined
     try {
-      return await implementation(params, callerOf(from, target.connection))
+      return await implementation(params, callerOf(from, target.connection, sessionAuthority ?? undefined))
     } catch (error) {
       if (error instanceof DaemonError) throw error
       this.log(`method ${target.name} failed in ${plugin}: ${error instanceof Error ? (error.stack ?? error.message) : String(error)}`)
@@ -213,7 +219,7 @@ export class Dispatcher {
   }
 }
 
-function callerOf(from: DispatchSource, withConnection: boolean): PluginCaller {
+function callerOf(from: DispatchSource, withConnection: boolean, sessionAuthority?: PluginSessionAuthority): PluginCaller {
   if ('pluginId' in from) return { role: 'plugin', pluginId: from.pluginId }
   if ('kernel' in from) return { role: 'plugin', pluginId: KERNEL_PLUGIN_ID }
   const { role, name, cwd, sessionId, worktreeId } = from.conn
@@ -223,6 +229,7 @@ function callerOf(from: DispatchSource, withConnection: boolean): PluginCaller {
     ...(cwd !== undefined ? { cwd } : {}),
     ...(sessionId !== undefined ? { sessionId } : {}),
     ...(worktreeId !== undefined ? { worktreeId } : {}),
+    ...(sessionAuthority !== undefined ? { sessionAuthority } : {}),
     ...(withConnection
       ? { connection: { id: from.conn.id, transport: from.conn.transport, onClose: (callback) => onConnectionClose(from.conn, callback), openStream: () => openStream(from.conn) } }
       : {})

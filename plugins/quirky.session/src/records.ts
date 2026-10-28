@@ -38,6 +38,39 @@ type Row = {
   name: string | null
   unread: Session['unread']
 }
+export type PointerOperationResult =
+  | { status: 'submitted'; transport: 'terminal_enter' | 'structured_session' }
+  | { status: 'text_only'; reason: 'cursor_no_auto_enter' }
+  | {
+      status: 'deferred'
+      reason: 'not_idle' | 'not_quiescent' | 'blocked_dialog' | 'waiter_reserved' | 'delivery_outstanding' | 'flight_active'
+    }
+  | { status: 'released'; reason: 'recipient_changed' | 'recipient_gone' }
+  | { status: 'outcome_unknown'; attemptedPhase: 'write_attempted' | 'enter_attempted'; retryEnter: false }
+
+export type PointerOperationPhase = 'reserved' | 'write_attempted' | 'enter_attempted' | 'settled'
+export type PointerOperationRecord = {
+  operationId: string
+  sessionId: string
+  expectedIncarnation: string
+  payloadHash: string
+  phase: PointerOperationPhase
+  result: PointerOperationResult | null
+  createdAt: number
+  updatedAt: number
+}
+
+type StoredPointerOperation = {
+  operation_id: string
+  session_id: string
+  expected_incarnation: string
+  payload_hash: string
+  phase: PointerOperationPhase
+  result_json: string | null
+  created_at: number
+  updated_at: number
+}
+
 
 function parseJson<T>(text: string | null): T | null {
   if (text === null) return null
@@ -153,7 +186,23 @@ export function sessionMigrations(home: string): StoreMigration[] {
     },
     (store) => {
       store.exec('ALTER TABLE sessions ADD COLUMN name TEXT')
-    }
+    },
+    (store) => {
+      store.exec(`
+        CREATE TABLE session_pointer_operations (
+          operation_id TEXT PRIMARY KEY,
+          session_id TEXT NOT NULL,
+          expected_incarnation TEXT NOT NULL,
+          payload_hash TEXT NOT NULL,
+          phase TEXT NOT NULL CHECK (phase IN ('reserved', 'write_attempted', 'enter_attempted', 'settled')),
+          result_json TEXT,
+          created_at INTEGER NOT NULL,
+          updated_at INTEGER NOT NULL
+        );
+        CREATE INDEX session_pointer_operations_updated_at ON session_pointer_operations(updated_at)
+      `)
+    },
+
   ]
 }
 
@@ -278,6 +327,78 @@ export class SessionRecords {
       .map((row) => row.id)
     this.store.run("UPDATE sessions SET prompt_delivery = 'not-delivered' WHERE prompt_delivery = 'pending'")
     return ids
+  }
+
+  pointerOperation(operationId: string): PointerOperationRecord | null {
+    const row = this.store.get<StoredPointerOperation>(
+      'SELECT * FROM session_pointer_operations WHERE operation_id = ?',
+      operationId
+    )
+    if (!row) return null
+    return {
+      operationId: row.operation_id,
+      sessionId: row.session_id,
+      expectedIncarnation: row.expected_incarnation,
+      payloadHash: row.payload_hash,
+      phase: row.phase,
+      result: row.result_json === null ? null : (JSON.parse(row.result_json) as PointerOperationResult),
+      createdAt: row.created_at,
+      updatedAt: row.updated_at
+    }
+  }
+
+  reservePointerOperation(
+    input: Omit<PointerOperationRecord, 'phase' | 'result' | 'createdAt' | 'updatedAt'>,
+    now: number
+  ): PointerOperationRecord | null {
+    return this.store.transaction(() => {
+      const existing = this.pointerOperation(input.operationId)
+      if (existing) return existing
+      this.store.run(
+        "DELETE FROM session_pointer_operations WHERE phase = 'settled' AND updated_at < ?",
+        now - 30 * 24 * 60 * 60 * 1000
+      )
+      const count = this.store.get<{ count: number }>('SELECT COUNT(*) AS count FROM session_pointer_operations')!.count
+      if (count >= 10_000) {
+        this.store.run(`
+          DELETE FROM session_pointer_operations
+          WHERE operation_id IN (
+            SELECT operation_id FROM session_pointer_operations
+            WHERE phase = 'settled' ORDER BY updated_at LIMIT 64
+          )
+        `)
+      }
+      const afterPrune = this.store.get<{ count: number }>('SELECT COUNT(*) AS count FROM session_pointer_operations')!.count
+      if (afterPrune >= 10_000) return null
+      this.store.run(
+        `INSERT INTO session_pointer_operations
+          (operation_id, session_id, expected_incarnation, payload_hash, phase, result_json, created_at, updated_at)
+          VALUES (?, ?, ?, ?, 'reserved', NULL, ?, ?)`,
+        input.operationId,
+        input.sessionId,
+        input.expectedIncarnation,
+        input.payloadHash,
+        now,
+        now
+      )
+      return this.pointerOperation(input.operationId)
+    })
+  }
+
+  updatePointerOperation(
+    operationId: string,
+    phase: PointerOperationPhase,
+    result: PointerOperationResult | null,
+    now: number
+  ): PointerOperationRecord | null {
+    this.store.run(
+      'UPDATE session_pointer_operations SET phase = ?, result_json = ?, updated_at = ? WHERE operation_id = ?',
+      phase,
+      result === null ? null : JSON.stringify(result),
+      now,
+      operationId
+    )
+    return this.pointerOperation(operationId)
   }
 
   delete(id: string): void {

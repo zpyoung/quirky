@@ -328,6 +328,7 @@ export function testCli(client: QuirkyClient): { ctx: CliContext; lines: unknown
   return {
     lines,
     ctx: {
+      requestBase: crypto.randomUUID(),
       call: (method, params = {}) => client.callAny(method, params),
       out: {
         json: true,

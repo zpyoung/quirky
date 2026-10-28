@@ -30,14 +30,15 @@ export class ConnectionLost extends Error {
   }
 }
 
-/** Per-call options; `requestId` lets the daemon return the first outcome of a repeated call. */
-export type CallOptions = { requestId?: string }
+/** Per-call options; `requestId` sets the idempotency key and `timeoutMs` bounds local waiting only. */
+export type CallOptions = { requestId?: string; timeoutMs?: number }
 
 export type ClientHello = {
   role: ClientRole
   name?: string
   subscribe?: boolean
   token?: string
+  sessionToken?: string
   cwd?: string
   sessionId?: string
   worktreeId?: string
@@ -160,6 +161,7 @@ export class QuirkyClient {
         name: hello.name,
         protocolVersion: PROTOCOL_VERSION,
         ...(hello.token !== undefined ? { token: hello.token } : {}),
+        ...(hello.sessionToken !== undefined ? { sessionToken: hello.sessionToken } : {}),
         ...(hello.cwd !== undefined ? { cwd: hello.cwd } : {}),
         ...(hello.sessionId !== undefined ? { sessionId: hello.sessionId } : {}),
         ...(hello.worktreeId !== undefined ? { worktreeId: hello.worktreeId } : {})
@@ -185,15 +187,39 @@ export class QuirkyClient {
   }
 
   private send(method: string, params: unknown, options?: CallOptions): Promise<unknown> {
-    if (this.closed) return Promise.reject(new ConnectionLost('quirkyd connection is closed'))
+    if (this.closed) return Promise.reject(new ConnectionLost('quirky daemon connection is closed'))
     const id = this.nextId++
-    return new Promise<unknown>((resolve, reject) => {
-      this.pending.set(id, { resolve, reject })
-      const requestId = options?.requestId
+    const { promise, resolve, reject } = Promise.withResolvers<unknown>()
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const pending: Pending = {
+      resolve(value) {
+        clearTimeout(timer)
+        resolve(value)
+      },
+      reject(error) {
+        clearTimeout(timer)
+        reject(error)
+      }
+    }
+    this.pending.set(id, pending)
+    const requestId = options?.requestId
+    if (options?.timeoutMs !== undefined) {
+      const { timeoutMs } = options
+      timer = setTimeout(() => {
+        if (this.pending.get(id) !== pending) return
+        this.pending.delete(id)
+        pending.reject(new Error(`RPC call timed out after ${timeoutMs} ms`))
+      }, timeoutMs)
+    }
+    try {
       this.transport.send(
         JSON.stringify({ jsonrpc: '2.0', id, method, params, ...(requestId !== undefined ? { requestId } : {}) })
       )
-    })
+    } catch (error) {
+      this.pending.delete(id)
+      pending.reject(error instanceof Error ? error : new Error(String(error)))
+    }
+    return promise
   }
 
   onEvent(handler: (event: QuirkyEvent) => void): () => void {
