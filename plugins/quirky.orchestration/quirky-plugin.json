@@ -5,7 +5,6 @@
   "description": "Durable Runs, task dependencies, Dispatch attempts, mail, questions, and decision gates.",
   "main": "main.ts",
   "cli": "cli.ts",
-  "cliAliases": ["orchestration"],
   "activation": "lazy",
   "dependencies": ["quirky.session", "quirky.agent-status", "quirky.structured"],
   "contributes": {
@@ -138,6 +137,7 @@
         "id": "reset",
         "description": "Destructively reset exactly one orchestration scope. mode is messages, tasks, or all. The kernel requires explicit confirmation; unattended callers use --yes.",
         "destructive": true,
+        "confirm": "Reset the selected orchestration state? This cannot be undone.",
         "params": {"type": "object", "properties": {"mode": {"type": "string", "enum": ["messages", "tasks", "all"]}, "requestId": {"type": "string", "description": "Durable mutation receipt UUID supplied by the caller."}, "contractVersion": {"type": "integer", "enum": [1]}, "from": {"type": "string", "description": "Optional equality assertion for the authenticated session; never authority."}, "terminal": {"type": "string", "description": "Optional equality assertion for the authenticated session; never authority."}}, "required": ["mode", "requestId", "contractVersion"], "additionalProperties": false},
         "result": {"type": "object", "properties": {"mode": {"type": "string", "enum": ["messages", "tasks", "all"]}, "mutation": {"type": "object", "properties": {"requestId": {"type": "string"}, "replayed": {"type": "boolean"}}, "required": ["requestId", "replayed"]}}, "required": ["mode", "mutation"]}
       }

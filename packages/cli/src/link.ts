@@ -33,8 +33,8 @@ export class ConnectionLostError extends Error {
  */
 export interface DaemonLink {
   readonly requestBase: string
-  call<M extends MethodName>(method: M, params: ParamsOf<M>, options?: Pick<CallOptions, 'timeoutMs'>): Promise<ResultOf<M>>
-  callAny(method: string, params: Record<string, unknown>, options?: Pick<CallOptions, 'timeoutMs'>): Promise<unknown>
+  call<M extends MethodName>(method: M, params: ParamsOf<M>, options?: CallOptions): Promise<ResultOf<M>>
+  callAny(method: string, params: Record<string, unknown>, options?: CallOptions): Promise<unknown>
   reconnect(): Promise<void>
   close(): void
 }
@@ -94,9 +94,9 @@ export function createDaemonLink(connect: () => Promise<QuirkyClient>, options: 
   const attempt = async (
     method: string,
     params: Record<string, unknown>,
-    callOptions?: Pick<CallOptions, 'timeoutMs'>
+    callOptions?: CallOptions
   ): Promise<unknown> => {
-    const requestId = nextRequestId(method)
+    const requestId = callOptions?.requestId ?? nextRequestId(method)
     for (let resends = 0; ; resends++) {
       try {
         const client = await get()
@@ -131,7 +131,7 @@ export function createDaemonLink(connect: () => Promise<QuirkyClient>, options: 
   const invoke = async (
     method: string,
     params: Record<string, unknown>,
-    callOptions?: Pick<CallOptions, 'timeoutMs'>
+    callOptions?: CallOptions
   ): Promise<unknown> => {
     const sent = needsYes(method) ? { ...params, yes: true } : params
     let result: unknown
@@ -143,7 +143,10 @@ export function createDaemonLink(connect: () => Promise<QuirkyClient>, options: 
       options.stderr?.(`confirm in Quirky: ${pending.action} (ask ${pending.askId}); or rerun with --yes\n`)
       const envelope = await awaitAnswer(pending.askId)
       if (envelope.status === 'declined') throw new RpcError(RpcErrorCode.Conflict, 'declined')
-      return attempt(method, { ...sent, confirmation: pending.askId }, callOptions)
+      const confirmedOptions = callOptions?.requestId === undefined
+        ? callOptions
+        : { ...callOptions, requestId: randomUUID() }
+      return attempt(method, { ...sent, confirmation: pending.askId }, confirmedOptions)
     }
     if (method === 'api.describe') learnDestructive(result)
     return result

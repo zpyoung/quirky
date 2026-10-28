@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto'
 import type { CliArgs, CliContext, CliModule } from '@quirky/protocol'
 import type {
   AskResult,
@@ -104,9 +105,10 @@ function isTaskRow(value: unknown): value is TaskRow {
 }
 
 function isTaskListRow(value: unknown): value is TaskListRow {
-  return isTaskRow(value) && (value.dispatchId === undefined || (isString(value.dispatchId) && value.dispatchId.startsWith('ctx_'))) &&
+  return isObject(value) &&
+    (value.dispatchId === undefined || (isString(value.dispatchId) && value.dispatchId.startsWith('ctx_'))) &&
     (value.assigneeSessionId === undefined || isString(value.assigneeSessionId)) &&
-    (value.specTruncated === undefined || value.specTruncated === true)
+    (value.specTruncated === undefined || value.specTruncated === true) && isTaskRow(value)
 }
 
 function isDispatchRow(value: unknown): value is DispatchRow {
@@ -430,7 +432,7 @@ async function call<M extends OrchestrationMethod>(
   const requestId = isString(params.requestId) ? params.requestId : undefined
   let result: unknown
   try {
-    result = await context.call(`quirky.orchestration/${method}`, params, options)
+    result = await context.call(`quirky.orchestration/${method}`, params, { ...options, requestId: randomUUID() })
   } catch (error) {
     if (requestId !== undefined && isConnectionLost(error)) {
       throw context.fail(recoveryText(

@@ -62,7 +62,7 @@ export interface OrchestrationWorkerCore extends LifecycleCorePort {
   closeWorkerQuestions(dispatchId: DispatchId, at: UtcTimestamp): void
   mutate<T extends object>(
     method: MutatingOrchestrationMethod,
-    params: MutationRequest & Record<string, unknown>,
+    params: MutationRequest,
     caller: RuntimeCallerEvidence,
     operation: (store: PluginStore) => T,
     options?: DurableMutationOptions<T>,
