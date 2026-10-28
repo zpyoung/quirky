@@ -1068,9 +1068,8 @@
       "deps": [
         "m2-editor"
       ],
-      "status": "in-progress",
-      "early": true,
-      "lane": 6
+      "status": "done",
+      "early": true
     },
     {
       "id": "m3-accounts-overflow-verification",
