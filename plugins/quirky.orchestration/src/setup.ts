@@ -1,6 +1,6 @@
 import type { PluginCaller, PluginContext } from '@quirky/protocol'
-import type { OrchestrationPolicy, OrchestrationPolicySetParams, OrchestrationSkillInstallParams, OrchestrationSkillStatus } from './ui-contracts'
-import type { OrchestrationCore } from './core'
+import type { OrchestrationPolicy, OrchestrationSkillInstallParams, OrchestrationSkillStatus } from './ui-contracts'
+import type { OrchestrationWorkerCore } from './worker-integration'
 import { installOrchestrationSkill, inspectOrchestrationSkill, renderOrchestrationSkill, type DetectedSkillAgent } from './skill'
 import { saveNestedWorkerMaxDepth } from './store'
 
@@ -51,7 +51,7 @@ function requireOperator(context: PluginContext, caller: PluginCaller): void {
   }
 }
 
-export function createSetup(context: PluginContext, core: OrchestrationCore) {
+export function createSetup(context: PluginContext, core: Pick<OrchestrationWorkerCore, 'store' | 'nestedWorkerMaxDepth'>) {
   return {
     skillShow() {
       return { skill: renderOrchestrationSkill() }
@@ -102,7 +102,7 @@ export function createSetup(context: PluginContext, core: OrchestrationCore) {
       if (!isObject(raw) || Object.keys(raw).length !== 1 || !Object.hasOwn(raw, 'nestedWorkerMaxDepth')) {
         throw context.error('invalid-params', 'policySet accepts only nestedWorkerMaxDepth.')
       }
-      const value = (raw as OrchestrationPolicySetParams).nestedWorkerMaxDepth
+      const value = raw.nestedWorkerMaxDepth
       if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 1) {
         throw context.error('invalid-params', 'nestedWorkerMaxDepth must be an integer greater than or equal to 1.')
       }

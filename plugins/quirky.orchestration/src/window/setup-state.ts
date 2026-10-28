@@ -1,5 +1,5 @@
 export const SETUP_DISMISSED_KEY = 'quirky.orchestration.setupDismissed'
-export const SETUP_STATUS_CHANGED_EVENT = 'quirky.orchestration.skill-status-changed'
+export const SETUP_DISMISSED_EVENT = 'quirky.orchestration.setup-dismissed'
 
 export const ORCHESTRATION_EXAMPLES = [
   {
@@ -63,6 +63,10 @@ export function dismissSetup(): void {
   } catch {
     // Keep the mounted overlay dismissible even when browser storage is unavailable.
   }
+}
+
+export function announceSetupDismissed(): void {
+  if (typeof window !== 'undefined') window.dispatchEvent(new Event(SETUP_DISMISSED_EVENT))
 }
 
 export function announceSetupStatusChanged(): void {

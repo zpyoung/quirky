@@ -119,7 +119,7 @@ async function mountSlot(fakeUi: FakeUi, slotId: string): Promise<HTMLElement> {
   if (!mount) throw new Error(`UI module did not provide ${slotId}`)
   const element = document.createElement('div')
   document.body.append(element)
-  let unmount: (() => void) | void
+  let unmount: (() => void) | void = undefined
   await act(async () => { unmount = mount(element, {}) })
   if (typeof unmount === 'function') mounted.push(unmount)
   await act(async () => { await Promise.resolve() })
@@ -283,6 +283,61 @@ describe('orchestration setup UI', () => {
     expect(gate.isCurrent(newer)).toBe(false)
   })
 
+  test('settings serializes install, recheck, and policy operations until each request settles', async () => {
+    const ui = makeFake()
+    const root = await mountSlot(ui, 'view:quirky.orchestration/settings')
+    const originalCall = ui.context.call.bind(ui.context)
+    const deferred = new Map<string, Promise<unknown>>()
+    Object.defineProperty(ui.context, 'call', {
+      configurable: true,
+      value: async (method: string, params: Record<string, unknown> = {}) => {
+        const response = deferred.get(method)
+        if (response) {
+          deferred.delete(method)
+          ui.calls.push({ method, params })
+          return response
+        }
+        return originalCall(method, params)
+      }
+    })
+
+    const depth = root.querySelector('input[aria-label="Nested worker depth"]') as HTMLInputElement | null
+    expect(depth).not.toBeNull()
+
+    const installResponse = Promise.withResolvers<Status>()
+    deferred.set('quirky.orchestration/skillInstall', installResponse.promise)
+    await act(async () => { button(root, 'Install').click() })
+    expect(button(root, 'Installing…').disabled).toBe(true)
+    expect(button(root, 'Re-check').disabled).toBe(true)
+    expect(depth!.disabled).toBe(true)
+    expect(button(root, 'Save depth').disabled).toBe(true)
+    await act(async () => { button(root, 'Save depth').click() })
+    expect(ui.calls.some((call) => call.method === 'quirky.orchestration/policySet')).toBe(false)
+    await act(async () => { installResponse.resolve(missing); await installResponse.promise })
+
+    const statusResponse = Promise.withResolvers<Status>()
+    deferred.set('quirky.orchestration/skillStatus', statusResponse.promise)
+    await act(async () => { button(root, 'Re-check').click() })
+    expect(button(root, 'Install').disabled).toBe(true)
+    expect(depth!.disabled).toBe(true)
+    expect(button(root, 'Save depth').disabled).toBe(true)
+    await act(async () => { button(root, 'Save depth').click() })
+    expect(ui.calls.some((call) => call.method === 'quirky.orchestration/policySet')).toBe(false)
+    await act(async () => { statusResponse.resolve(missing); await statusResponse.promise })
+
+    const policyResponse = Promise.withResolvers<FakeUi['policy']>()
+    deferred.set('quirky.orchestration/policySet', policyResponse.promise)
+    setInput(depth!, '2')
+    await act(async () => { button(root, 'Save depth').click() })
+    expect(button(root, 'Install').disabled).toBe(true)
+    expect(button(root, 'Re-check').disabled).toBe(true)
+    expect(depth!.disabled).toBe(true)
+    await act(async () => { policyResponse.resolve({ nestedWorkerMaxDepth: 2, canChange: true }); await policyResponse.promise })
+    expect(button(root, 'Save depth').disabled).toBe(false)
+    expect(button(root, 'Re-check').disabled).toBe(false)
+    expect(depth!.disabled).toBe(false)
+  })
+
   test('floating overlay ignores stale status responses after a newer refresh', async () => {
     const ui = makeFake({ floating: { enabled: true, open: true } })
     const older = Promise.withResolvers<Status>()
@@ -341,6 +396,37 @@ describe('orchestration setup UI', () => {
     root = await mountSlot(ui, 'overlay:quirky.orchestration/floating-setup')
     expect(root.textContent).not.toContain('Enable orchestration')
     expect(ui.calls.some((call) => call.method === 'quirky.orchestration/skillStatus')).toBe(true)
+  })
+
+
+  test('scriptable dismissal command persists and hides the mounted setup overlay', async () => {
+    localStorage.removeItem('quirky.orchestration.setupDismissed')
+    const ui = makeFake({ floating: { enabled: true, open: true } })
+    const root = await mountSlot(ui, 'overlay:quirky.orchestration/floating-setup')
+    expect(root.textContent).toContain('Enable orchestration')
+
+    await act(async () => {
+      await ui.context.executeCommand('command:quirky.orchestration/dismiss-setup')
+    })
+
+    expect(isSetupDismissed()).toBe(true)
+    expect(root.textContent).not.toContain('Enable orchestration')
+  })
+
+  test('partial coverage hides the overlay when any detected skill is ready', async () => {
+    localStorage.removeItem('quirky.orchestration.setupDismissed')
+    const partialReady: Status = {
+      state: 'partial',
+      agents: [
+        ...ready.agents,
+        { id: 'muse', label: 'Muse', state: 'unsupported', path: null, detail: 'No native skill loader.' }
+      ],
+      installCommand: ready.installCommand,
+      text: 'One agent is ready; another has no native skill loader.'
+    }
+    const ui = makeFake({ status: partialReady, floating: { enabled: true, open: true } })
+    const root = await mountSlot(ui, 'overlay:quirky.orchestration/floating-setup')
+    expect(root.textContent).not.toContain('Enable orchestration')
   })
 
   test('floating affordance rechecks actual coverage after explicit install', async () => {

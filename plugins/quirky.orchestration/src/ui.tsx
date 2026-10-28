@@ -3,11 +3,19 @@ import { createRoot } from 'react-dom/client'
 import type { MountFunction, QuirkyEvent, UiPluginContext } from '@quirky/protocol'
 import type { OrchestrationSkillStatus } from './ui-contracts'
 import { OrchestrationSettings } from './window/OrchestrationSettings'
-import { createLatestRequestGuard, dismissSetup, isSetupDismissed, SETUP_STATUS_CHANGED_EVENT } from './window/setup-state'
+import {
+  announceSetupDismissed,
+  createLatestRequestGuard,
+  dismissSetup,
+  isSetupDismissed,
+  SETUP_DISMISSED_EVENT,
+  SETUP_STATUS_CHANGED_EVENT
+} from './window/setup-state'
 
 const SETTINGS_VIEW_ID = 'view:quirky.orchestration/settings'
 const SETUP_OVERLAY_ID = 'overlay:quirky.orchestration/floating-setup'
 const OPEN_SETTINGS_COMMAND_ID = 'command:quirky.orchestration/open-settings'
+const DISMISS_SETUP_COMMAND_ID = 'command:quirky.orchestration/dismiss-setup'
 
 const buttonStyle = {
   border: '1px solid var(--border, #2b2f3a)',
@@ -68,15 +76,19 @@ function FloatingSetupOverlay({ context, report }: FloatingSetupProps) {
       if (event.type === 'quirky.terminal/floating') void refresh()
     })
     const onSetupStatus = () => { void refresh() }
+    const onSetupDismissed = () => { setDismissed(true) }
     window.addEventListener(SETUP_STATUS_CHANGED_EVENT, onSetupStatus)
+    window.addEventListener(SETUP_DISMISSED_EVENT, onSetupDismissed)
     return () => {
       guard.stop()
       unsubscribe()
       window.removeEventListener(SETUP_STATUS_CHANGED_EVENT, onSetupStatus)
+      window.removeEventListener(SETUP_DISMISSED_EVENT, onSetupDismissed)
     }
   }, [context, guard, refresh])
 
-  const shown = floating?.enabled === true && floating.open && !dismissed && status?.state !== 'ready'
+  const hasReadySkill = status?.agents.some((agent) => agent.state === 'ready') === true
+  const shown = floating?.enabled === true && floating.open && !dismissed && !hasReadySkill
   useEffect(() => { report?.({ shown, floating, status, error: error || null }) }, [shown, floating, status, error, report])
 
   if (!shown) return null
@@ -87,9 +99,12 @@ function FloatingSetupOverlay({ context, report }: FloatingSetupProps) {
       setError(errorText(cause))
     }
   }
-  const dismiss = () => {
-    dismissSetup()
-    setDismissed(true)
+  const dismiss = async () => {
+    try {
+      await context.executeCommand(DISMISS_SETUP_COMMAND_ID)
+    } catch (cause) {
+      setError(errorText(cause))
+    }
   }
 
   return (
@@ -117,7 +132,7 @@ function FloatingSetupOverlay({ context, report }: FloatingSetupProps) {
       <span style={{ color: 'var(--muted, #8a909e)' }}>Set up the skill so agents can coordinate supervised work through Quirky.</span>
       {error && <span role="alert" style={{ color: 'var(--danger, #e5534b)' }}>{error}</span>}
       <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-        <button type="button" style={buttonStyle} onClick={dismiss}>Dismiss</button>
+        <button type="button" style={buttonStyle} onClick={() => void dismiss()}>Dismiss</button>
         <button type="button" style={buttonStyle} onClick={() => void openSettings()}>Enable</button>
       </div>
     </aside>
@@ -145,4 +160,8 @@ export function activate(context: UiPluginContext): void {
   })
 
   context.provide(OPEN_SETTINGS_COMMAND_ID, () => context.openView(SETTINGS_VIEW_ID))
+  context.provide(DISMISS_SETUP_COMMAND_ID, () => {
+    dismissSetup()
+    announceSetupDismissed()
+  })
 }

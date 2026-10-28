@@ -3904,7 +3904,8 @@
       {"id": "floating-setup", "title": "Orchestration setup"}
     ],
     "command": [
-      {"id": "open-settings", "title": "Open Orchestration settings"}
+      {"id": "open-settings", "title": "Open Orchestration settings"},
+      {"id": "dismiss-setup", "title": "Dismiss Orchestration setup"}
     ]
   }
 }
