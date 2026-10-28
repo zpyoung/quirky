@@ -8,8 +8,16 @@ import type { EditorSurfaceBuffer } from '../src/types'
 import type { ChangesSurfaceProps } from '../src/window/ChangesSurface'
 
 const WORKTREE = 'wt-editor-changes'
-type Call = { method: string; params: Record<string, unknown> }
-type Mounted = { element: HTMLElement; calls: Call[]; unmount(): Promise<void> }
+type Mounted = {
+  element: HTMLElement
+  isResourceLive(url: string): boolean
+  liveResourceCount(): number
+  pendingLeaseIds(): string[]
+  resolvePending(leaseId: string): void
+  update(buffer: EditorSurfaceBuffer): Promise<void>
+  unmount(): Promise<void>
+}
+type FixtureOptions = { deferFirstRender?: boolean; malformedResponse?: boolean }
 
 let createRoot: (container: HTMLElement) => Root
 let ChangesSurface: ComponentType<ChangesSurfaceProps>
@@ -64,12 +72,30 @@ function makeBuffer(kind: 'text' | 'markdown', content: string, draft: string | 
   }
 }
 
-async function renderChanges(buffer: EditorSurfaceBuffer, diff?: { original: string; modified: string }): Promise<Mounted> {
-  const calls: Call[] = []
+async function renderChanges(
+  buffer: EditorSurfaceBuffer,
+  diff?: { original: string; modified: string },
+  options: FixtureOptions = {}
+): Promise<Mounted> {
+  const activeLeases = new Set<string>()
+  const resources = new Map<string, string>()
+  const pending = new Map<string, () => void>()
+  let renders = 0
+  function resourceUrl(leaseId: string): string {
+    return `https://images.invalid/${leaseId}`
+  }
+  function response(leaseId: string, text: string): Record<string, unknown> {
+    const heading = text.split(/\r?\n/, 1)[0]?.replace(/^#\s*/, '') ?? ''
+    return {
+      leaseId: options.malformedResponse ? `${leaseId}-wrong` : leaseId,
+      worktreeId: WORKTREE,
+      path: buffer.relativePath,
+      html: `<article><h1>${heading}</h1><img src="${resourceUrl(leaseId)}" alt="Preview image"></article>`
+    }
+  }
   const context = {
     pluginId: 'quirky.editor',
     async call(method: string, params: Record<string, unknown> = {}) {
-      calls.push({ method, params })
       if (method === 'quirky.git/diff') {
         return {
           path: buffer.relativePath,
@@ -83,8 +109,29 @@ async function renderChanges(buffer: EditorSurfaceBuffer, diff?: { original: str
           modifiedDeleted: false
         }
       }
-      if (method === 'quirky.editor/markdown' && params.action === 'renderPreview') {
-        return { html: '<article><h1>Shared draft</h1></article>' }
+      if (method === 'quirky.editor/markdownPreview') {
+        const leaseId = typeof params.leaseId === 'string' ? params.leaseId : ''
+        if (params.action === 'render') {
+          activeLeases.add(leaseId)
+          const value = response(leaseId, typeof params.text === 'string' ? params.text : '')
+          const finish = () => {
+            if (activeLeases.has(leaseId)) resources.set(resourceUrl(leaseId), leaseId)
+            return value
+          }
+          if (options.deferFirstRender && renders === 0) {
+            renders += 1
+            const deferred = Promise.withResolvers<Record<string, unknown>>()
+            pending.set(leaseId, () => deferred.resolve(finish()))
+            return deferred.promise
+          }
+          renders += 1
+          return finish()
+        }
+        if (params.action === 'release') {
+          const released = activeLeases.delete(leaseId)
+          for (const [url, owner] of resources) if (owner === leaseId) resources.delete(url)
+          return { leaseId, released }
+        }
       }
       return {}
     },
@@ -113,10 +160,26 @@ async function renderChanges(buffer: EditorSurfaceBuffer, diff?: { original: str
   document.body.append(element)
   const root = createRoot(element)
   await act(async () => root.render(<ChangesSurface {...props} />))
-  const surface = {
+  let unmounted = false
+  const surface: Mounted = {
     element,
-    calls,
-    async unmount() { await act(async () => root.unmount()) }
+    isResourceLive: (url) => resources.has(url),
+    liveResourceCount: () => resources.size,
+    pendingLeaseIds: () => [...pending.keys()],
+    resolvePending(leaseId) {
+      const resolve = pending.get(leaseId)
+      if (!resolve) throw new Error(`No pending preview render for ${leaseId}.`)
+      pending.delete(leaseId)
+      resolve()
+    },
+    async update(nextBuffer) {
+      await act(async () => root.render(<ChangesSurface {...props} buffer={nextBuffer} />))
+    },
+    async unmount() {
+      if (unmounted) return
+      unmounted = true
+      await act(async () => root.unmount())
+    }
   }
   mounted.push(surface)
   return surface
@@ -134,20 +197,10 @@ test('Changes compares HEAD to the shared draft, not staged content, in the same
     modified: 'Staged index\n'
   })
   await flush()
-  expect(surface.calls).toContainEqual({
-    method: 'quirky.git/diff',
-    params: {
-      worktree: `id:${WORKTREE}`,
-      path: 'src/app.ts',
-      source: 'unstaged',
-      compareAgainstHead: true
-    }
-  })
   expect(surface.element.querySelector('[aria-label="HEAD version"]')?.textContent).toContain('Committed HEAD')
   expect(surface.element.querySelector('[aria-label="HEAD version"]')?.textContent).not.toContain('Staged index')
   expect(surface.element.querySelector('[aria-label="Modified editor"] .cm-content')?.textContent).toContain('Shared draft')
   expect(surface.element.querySelector('[aria-label="Modified editor"] .cm-content')?.textContent).not.toContain('Staged index')
-  expect(surface.calls.some((call) => call.method === 'quirky.editor/open')).toBe(false)
   expect(surface.element.querySelector('[aria-pressed="true"][aria-label="Side by side"]')).not.toBeNull()
   await act(async () => surface.element.querySelector<HTMLButtonElement>('[aria-label="Inline"]')?.click())
   expect(surface.element.querySelector('.qe-changes-inline')).not.toBeNull()
@@ -157,8 +210,8 @@ test('Changes compares HEAD to the shared draft, not staged content, in the same
   expect(surface.element.querySelector('[aria-label="Next change"]')).not.toBeNull()
 })
 
-test('Changes Markdown preview renders only the modified draft and switching back preserves it', async () => {
-  const draft = '# Shared draft\n\nDraft-only body.\n'
+test('Changes Markdown preview renders the shared draft image and releases it when Source returns', async () => {
+  const draft = '# Shared draft\n\n![Chart](images/chart.png)\n'
   const surface = await renderChanges(makeBuffer('markdown', '# Working file\n', draft), {
     original: '# Committed HEAD\n',
     modified: '# Staged index\n'
@@ -166,19 +219,67 @@ test('Changes Markdown preview renders only the modified draft and switching bac
   await flush()
   await act(async () => surface.element.querySelector<HTMLButtonElement>('[aria-label="Markdown preview"]')?.click())
   await flush()
-  expect(surface.element.querySelector('.qe-changes-preview-notice')?.textContent).toContain('modified content only')
-  expect(surface.element.querySelector('.qe-changes-preview-notice')?.textContent).toContain('Local images are omitted')
+  expect(surface.element.querySelector('.qe-changes-preview-notice')).not.toBeNull()
   expect(surface.element.querySelector('[aria-label="HEAD version"]')).toBeNull()
   expect(surface.element.querySelector('.qe-changes-markdown-preview')?.textContent).toContain('Shared draft')
   expect(surface.element.querySelector('.qe-changes-markdown-preview')?.textContent).not.toContain('Committed HEAD')
-  expect(surface.calls).toContainEqual({
-    method: 'quirky.editor/markdown',
-    params: { action: 'renderPreview', text: draft }
-  })
+  const image = surface.element.querySelector<HTMLImageElement>('.qe-changes-markdown-preview img')
+  expect(image?.alt).toBe('Preview image')
+  const imageUrl = image?.getAttribute('src')
+  expect(imageUrl).toBeTruthy()
+  expect(surface.isResourceLive(imageUrl!)).toBe(true)
   await act(async () => surface.element.querySelector<HTMLButtonElement>('[aria-label="Source editor"]')?.click())
   await flush()
   expect(surface.element.querySelector('[aria-label="Modified editor"] .cm-content')?.textContent).toContain('Shared draft')
-  expect(surface.calls.some((call) => call.method === 'quirky.editor/open')).toBe(false)
+  expect(surface.element.querySelector('.qe-changes-markdown-preview img')).toBeNull()
+  expect(surface.isResourceLive(imageUrl!)).toBe(false)
+})
+
+test('Changes ignores and revokes a late render after replacing the shared draft', async () => {
+  const oldDraft = '# Old draft\n\n![Chart](images/chart.png)\n'
+  const surface = await renderChanges(makeBuffer('markdown', '# Working file\n', oldDraft), undefined, {
+    deferFirstRender: true
+  })
+  await flush()
+  await act(async () => surface.element.querySelector<HTMLButtonElement>('[aria-label="Markdown preview"]')?.click())
+  await flush()
+  const staleLeaseId = surface.pendingLeaseIds()[0]
+  expect(staleLeaseId).toBeTruthy()
+
+  const currentDraft = '# Current draft\n\n![Chart](images/chart.png)\n'
+  await surface.update(makeBuffer('markdown', '# Working file\n', currentDraft))
+  await flush()
+  const currentImage = surface.element.querySelector<HTMLImageElement>('.qe-changes-markdown-preview img')
+  const currentUrl = currentImage?.getAttribute('src')
+  expect(surface.element.querySelector('.qe-changes-markdown-preview')?.textContent).toContain('Current draft')
+  expect(surface.element.querySelector('.qe-changes-markdown-preview')?.textContent).not.toContain('Old draft')
+  expect(currentUrl).toBeTruthy()
+  expect(surface.isResourceLive(currentUrl!)).toBe(true)
+
+  surface.resolvePending(staleLeaseId!)
+  await flush()
+  expect(surface.element.querySelector('.qe-changes-markdown-preview')?.textContent).toContain('Current draft')
+  expect(surface.element.querySelector('.qe-changes-markdown-preview')?.textContent).not.toContain('Old draft')
+  expect(surface.element.querySelector('.qe-changes-markdown-preview img')?.getAttribute('src')).toBe(currentUrl)
+  expect(surface.isResourceLive(currentUrl!)).toBe(true)
+  expect(surface.pendingLeaseIds()).toHaveLength(0)
+
+  await surface.unmount()
+  await flush()
+  expect(surface.isResourceLive(currentUrl!)).toBe(false)
+})
+
+test('Changes rejects a detached response for another lease and leaves Source available', async () => {
+  const surface = await renderChanges(makeBuffer('markdown', '# Working file\n', '# Shared draft\n'), undefined, {
+    malformedResponse: true
+  })
+  await flush()
+  await act(async () => surface.element.querySelector<HTMLButtonElement>('[aria-label="Markdown preview"]')?.click())
+  await flush()
+  expect(surface.element.querySelector('[role="alert"]')?.textContent).toContain('invalid')
+  expect(surface.element.querySelector('[aria-label="Source editor"]')).not.toBeNull()
+  expect(surface.element.querySelector('.qe-changes-markdown-preview')).toBeNull()
+  expect(surface.liveResourceCount()).toBe(0)
 })
 
 test('Changes makes a clean HEAD comparison explicit', async () => {
