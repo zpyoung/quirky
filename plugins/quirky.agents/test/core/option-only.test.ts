@@ -51,3 +51,11 @@ test('option-only picks still reject unsupported, composed-only, or malformed ch
   expect(() => validateSelection(agent('claude'), { options: { effort: 'invented' } })).toThrow()
   expect(() => validateSelection(agent('aider'), { options: { effort: 'high' } })).toThrow()
 })
+
+test('a plugin cannot advertise a composed generic pick that needs an explicit model', () => {
+  const cursor = agent('cursor')
+  const catalog = cursor.launchOptions
+  if (!catalog) throw new Error('Cursor needs its launch catalog')
+  const provider = { ...cursor, launchOptions: { ...catalog, unlistedOptions: [{ id: 'thinking', choices: null }] } }
+  expect(() => validateSelection(provider, { options: { thinking: true } })).toThrow()
+})

@@ -68,7 +68,7 @@ export function validateSelection(
     const use = offered.find((candidate) => candidate.id === id)
     const decl = catalog.options.find((candidate) => candidate.id === id)
     const accepted =
-      use && decl
+      use && decl && (model !== null || !decl.composed)
         ? decl.type === 'boolean'
           ? typeof value === 'boolean'
           : typeof value === 'string' &&
