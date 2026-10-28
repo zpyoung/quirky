@@ -421,7 +421,14 @@ function setup(
   const changeMembership = (id: string, patch: Record<string, unknown>) => {
     const found = world.worktrees.find((item) => item.id === id)
     if (!found) throw new Error(`unknown workspace ${id}`)
-    Object.assign(found, patch)
+    const { expectedInstanceId, expectedProjectGroupId, ...domainPatch } = patch
+    if (expectedInstanceId !== undefined && found.instanceId !== expectedInstanceId) {
+      throw new Error(`stale instance guard for workspace ${id}`)
+    }
+    if (expectedProjectGroupId !== undefined && found.projectGroupId !== expectedProjectGroupId) {
+      throw new Error(`stale project-group guard for workspace ${id}`)
+    }
+    Object.assign(found, domainPatch)
     return found
   }
   const context = {
@@ -1163,6 +1170,38 @@ test('SC-02: loose membership menus move and remove one worktree', async () => {
   await h.click(menuItem('Remove worktree from group')!)
   expect(h.world.worktrees.find((item) => item.id === 'w-feature')?.projectGroupId).toBeNull()
   expect(card('feature')?.closest('section.repo')).toBe(sectionForRepo('api'))
+})
+
+test('SC-02/06: a Git worktree with missing group membership stays removable when no groups are available', async () => {
+  const h = setup()
+  h.world.groups = []
+  const repo = h.world.repos.find((item) => item.id === 'r-web')!
+  const lost = h.world.worktrees.find((item) => item.id === 'w-lost')!
+  h.world.repos = [repo]
+  h.world.worktrees = [lost]
+  h.world.sessions = []
+  const repoBefore = structuredClone(repo)
+  const worktreeBefore = structuredClone(lost)
+  await h.mount()
+
+  expect(h.world.groups).toEqual([])
+  expect(repo.kind).toBe('git')
+  expect(lost.kind).toBe('git')
+  expect(lost.projectGroupId).toBe('g-missing')
+  expect(sectionForRepo('web')).toBeDefined()
+  expect(card('lost-group')?.closest('section.repo')).toBe(sectionForRepo('web'))
+
+  await openCardMenu(h, 'lost-group')
+  const remove = menuItem('Remove worktree from group')
+  expect(remove).toBeDefined()
+  await h.click(remove!)
+
+  expect(lost).toEqual({ ...worktreeBefore, projectGroupId: null })
+  expect(h.world.worktrees).toHaveLength(1)
+  expect(h.world.worktrees[0]).toBe(lost)
+  expect(repo).toEqual(repoBefore)
+  expect(h.world.repos[0]).toBe(repo)
+  expect(card('lost-group')?.closest('section.repo')).toBe(sectionForRepo('web'))
 })
 
 test('SC-02: moving a Git project moves every repo row without changing loose worktree membership', async () => {

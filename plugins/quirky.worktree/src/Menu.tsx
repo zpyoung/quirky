@@ -218,9 +218,9 @@ export function workspaceMenu(
           onSelect: () => on.setMembership(worktree, group)
         }))
       })
-      if (worktree.projectGroupId !== null) {
-        items.push({ label: 'Remove worktree from group', onSelect: () => on.setMembership(worktree, null) })
-      }
+    }
+    if (worktree.projectGroupId !== null) {
+      items.push({ label: 'Remove worktree from group', onSelect: () => on.setMembership(worktree, null) })
     }
   }
   if (repo && !(worktree.kind === 'git' && repo.kind === 'git')) {
