@@ -156,22 +156,49 @@ before the first turn. Automatic idle-mailbox nudging is deferred to
 Worker placement, custody and fleet use this same core. Headless service coordinators remain a
 separate orchestration slice; plugin metadata cannot impersonate a session.
 
-**Methods (29):** `runCreate`, `runUse`, `runCurrent`, `runList`, `runShow`, `taskCreate`,
+Settings → Orchestration installs the version-matched `/orchestration` skill, shows actual
+per-agent file coverage, and provides copyable supervised-work prompts. Installation is explicit;
+unsupported loaders and partial failures are reported per agent. The same setup is scriptable:
+
+```sh
+quirky orchestration skill-status --json
+quirky orchestration skill-install --json
+quirky orchestration policy-show --json
+quirky orchestration policy-set --nested-worker-max-depth 2 --json
+```
+
+Run policy changes from an unbound operator client. Session-attested, paired-device and plugin
+callers cannot change the cap, and generic settings do not expose it. The persisted integer
+defaults to 1 and governs future dispatch admission and worker preambles; lowering it does not
+stop admitted workers. This is a policy guard, not a sandbox against other holders of the user token.
+
+Terminal `task_…` links and nested sidebar rows resolve the latest exact assignment through
+`taskTerminal`; `task-terminal --task-id <id> --json` returns the same session/workspace target.
+Context-only Dispatches are navigable too. Reused, released, changed or structured-only sessions
+are refused rather than opening an unrelated terminal. Fleet rows separate task labels and
+lineage from `currentAssignment` confidence; uncertain workers remain visible without stale task
+titles. Physical input transfers existing worker custody to the user, so release retains that
+terminal instead of closing it. The setup affordance's open and dismiss actions are public UI commands.
+
+**Methods (35):** `runCreate`, `runUse`, `runCurrent`, `runList`, `runShow`, `taskCreate`,
 `taskList`, `taskUpdate`, `dispatch`, `dispatchShow`, `send`, `check`, `reply`, `inbox`, `ask`,
 `gateCreate`, `gateResolve`, `gateList`, `requestShow`, `reset`, `workerStart`, `workerShow`,
 `workerRead`, `workerList`, `workerStop`, `workerAbandon`, `workerRelease`, `workerRetain`,
-`workerTerminalUserInput` (internal terminal-custody guard).
+`workerTerminalUserInput` (internal terminal-custody guard), `skillShow`, `skillStatus`,
+`skillInstall`, `policyShow`, `policySet`, `taskTerminal`.
 
-**CLI verbs (28):** `run-create`, `run-use`, `run-current`, `run-list`, `run-show`, `task-create`,
+**CLI verbs (34):** `run-create`, `run-use`, `run-current`, `run-list`, `run-show`, `task-create`,
 `task-list`, `task-update`, `dispatch`, `dispatch-show`, `send`, `check`, `reply`, `inbox`, `ask`,
 `gate-create`, `gate-resolve`, `gate-list`, `request-show`, `reset`, `worker-start`, `worker-show`,
-`worker-read`, `worker-list`, `worker-stop`, `worker-abandon`, `worker-release`, `worker-retain`.
+`worker-read`, `worker-list`, `worker-stop`, `worker-abandon`, `worker-release`, `worker-retain`,
+`skill-show`, `skill-status`, `skill-install`, `policy-show`, `policy-set`, `task-terminal`.
 Use `quirky api --json` for the current method and result schemas.
 
 See the [contracts](quirky.orchestration/src/contracts.ts),
 [runtime interfaces](quirky.orchestration/src/runtime-contracts.ts),
-[core behavior specification](../docs/quirk/specs/2026-10-27-m6-orchestration-core/logic.md) and
-[worker behavior specification](../docs/quirk/specs/2026-10-27-m6-orchestration-workers/logic.md).
+[core behavior specification](../docs/quirk/specs/2026-10-27-m6-orchestration-core/logic.md),
+[worker behavior specification](../docs/quirk/specs/2026-10-27-m6-orchestration-workers/logic.md) and
+[setup and UI specification](../docs/quirk/specs/2026-10-28-m6-orchestration-ui/logic.md).
 
 ## Shared checks
 

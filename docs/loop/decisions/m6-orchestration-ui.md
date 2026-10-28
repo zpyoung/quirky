@@ -99,5 +99,70 @@
 - **Revisit if:** provider-neutral prompt lineage gives stronger exact assignment evidence
 - **Source:** assumed — autonomous
 
+## D10: Repair observed fixture boundaries without weakening product assertions
+- **Question:** focused and affected gates exposed incomplete test contexts, wrong fixture precedence, shared skill targets, DOM initialization order and an IPC publication race
+- **Options:** suppress failures or loosen assertions; repair each producer/fixture boundary
+- **Chose:** declare React UI dependencies; initialize the tested React DOM module after isolated DOM globals; wrap input changes in act; locate controls by accessible name; preserve fixture override precedence; isolate agent search to private executable directories; model a partial failure with an actual blocked target; publish worker fixture replies by same-directory atomic rename. Keep typed policy, navigation, custody and file-content assertions unchanged. Remove wording/schema-wiring tests rather than pin new incidental text.
+- **Why:** the observed empty JSON came from opening the reply file before the writer populated it, not a production timeout. Shared Claude/Codex targets and login PATH differences made the original fixture assumptions invalid. Broader retries, deadline increases and production exception suppression would hide those causes.
+- **Evidence:** focused gates74/15 then87/5; typecheck55 then6 diagnostics; affected remote suite177/183 with2macOS passes; corrected six-file suite6/6 without flaky retries; scripts68/0/568; final isolated setup UI14/0/89; worker acceptance-control.ts atomic publication
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** test fixtures change their explicit file/DOM/process contracts
+- **Source:** assumed — autonomous
+
+## D11: Preserve sidebar workspace layout and isolate actual UI proof
+- **Question:** actual built web UI hid the workspace name when worker rows consumed the same nowrap flex row
+- **Options:** accept screenshot clipping; put workers in an unrelated sidebar; let the existing card wrap its full-basis worker block
+- **Chose:** flexWrap:wrap on the worktree card; keep its existing main-row controls and full-width nested worker block. Verify visually in the existing formal web campaign. Use a private profile with optional editor disabled through public plugin control, retaining the dependency's recorded default-profile editor activation limit.
+- **Why:** worker rows belong below their workspace/coordinator and must not displace the workspace's name or badges. Neither fake DOM tests nor an editor-disabled proof certifies the whole default app profile.
+- **Evidence:** formal run20261028T064737-a890 obs1.png and findingF1; packages/ui styles.css worktree display:flex; Tree.tsx; workers D29
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** worktree card layout or editor activation changes
+- **Source:** assumed — autonomous
+
+## D12: Keep catch-up and review provenance explicit
+- **Question:** incoming roadmap changes and component audit exceptions must not silently widen this item's review claims
+- **Options:** review unrelated incoming code as this item's work; freeze a feature-only baseline and record integration ownership
+- **Chose:** sole catch-up fe99ed38, review baseline its roadmap parentf939c86c59b822506842e054ad35598f916a7a86. Read incoming editor-drop/presets/browser logs; no conflict, and structured/worker logs were unchanged. Scope the sidebar regression extension to window-tree/github-composer fixtures and the observed worker reply harness repair. A link fixer mistakenly wrote its two-line test repair in the parent: transfer that exact patch back into its assigned component, restore parent baseline, then commit/integrate the component only after the barrier. Archive generated Serena metadata before removing all three owned worktrees.
+- **Why:** shared integration changes have their own owners; isolating their commits preserves review scope. The audit found and corrected a real cross-tree write rather than treating the worker report as evidence of isolation.
+- **Evidence:** incoming-decision scout; source/component scope and HEAD checks; link test snapshotsE0B1/B391 and moved patch; metadata archives under private iteration directory
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** integration introduces a conflicting locked decision or another write-scope violation
+- **Source:** assumed — autonomous
+
+## D13: Accept the bounded three-lens review without overstating full-context coverage
+- **Question:** final review findings, exclusions and protocol limits
+- **Options:** report the machine verdict alone; preserve actual dispatch and coverage qualifications
+- **Chose:** one deep final round, C/S/X promote processes concurrent and fresh refute processes concurrent, all actual Gemini3.1Pro high. All three gates PASS with zero findings/blockers/advisories/contests/suppressions; no fix batch or tiebreak required. Preserve raw prompts/responses, model traces, shared resolve/prepass and manifests. Scope is35 code/test paths; bun.lock26lines excluded by hygiene and author reasoning/documents withheld. S/X made no surrounding-file tool calls; C used read-only shell searches beyond the stated reproduction-only convention, so outside-diff consumer coverage is unverified rather than certified.
+- **Why:** empty JSON arrays are actual successful review responses, not missing output. A machine PASS cannot establish coverage absent from its traces. The live prepass ran only the isolated setup UI check14/0/89; broader gates were staged as parent-observed facts, not fabricated reused checks.
+- **Evidence:** private review round-result.json, C/S/X gate.json and manifest.json, evidence-report.json, controller-observations.md; frozen rangef939c86c..aeca4cc4
+- **Reversibility:** easy
+- **Confidence:** medium
+- **Revisit if:** a demonstrated defect or wider context inspection contradicts a cleared claim
+- **Source:** assumed — autonomous
+
+## D14: Keep guarded dogfood limits separate from actual isolated-browser proof
+- **Question:** the guarded campaign could not target quoted prompt-copy references, reload its browser chrome, or type into xterm's opacity-hidden input
+- **Options:** claim a formal pass; change application behavior to satisfy driver quirks; retain the partial report and separately exercise the real surface with an owned browser
+- **Chose:** retain formal run20261028T064737-a890/report.md unchanged: setup/workers partial, policy/task-link/takeover blocked, zero formal goal passes. Record the tool-specific STALE/NO_EFFECT/NOT_VISIBLE limits. Direct inspection found obs55 already says “Nested worker depth set to 2”; a fresh settings mount later displayed2, so the report's unverified persistence does not establish a broken Save operation. Separately use a uniquely owned Chrome profile and CDP endpoint: visibly confirm corrected main/worker layout, physical HUMAN_UI_5 echo and user-owned/retained custody, task-link hover and popover, navigation from the second worker back to the first existing tab with the tab count still3, persisted policy2, and real “Copied prompt” feedback.
+- **Why:** this proves changed behavior without converting tool limitations into a fabricated guarded PASS. An initial shared managed tab worker failed; another convenience browser handle switched to a foreign private test target, so no further interaction or kill was issued against it. A fresh uniquely bound process eliminated that ambiguity.
+- **Evidence:** formal report and obs1/55/63; actual screenshots omp-sshots-15b7a625635ddc97.webp,15b7a635945ddc98.webp,15b7a682bb1ddc9d.webp,15b7a692d15ddc9f.webp,15b7a6b8621ddca1.webp,15b7a6d61e1ddca3.webp; private CDP process28034/profileWGTSaT
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** the guarded driver gains reliable quoted-reference, browser-reload and terminal-input support
+- **Source:** assumed — autonomous
+
+## Final verification evidence
+- Source snapshot: aeca4cc496328a6029c123510245941a6a836caa, unchanged by the later documentation/evidence updates.
+- Affected runner:183 remote files initially177pass/6fail, plus2macOS files passed. The exact6 repaired files then passed6/6 without flaky retries; no all-green initial-run claim.
+- `bun test scripts`:68pass,0fail,568assertions. Its deliberately failing nested verifier fixtures are part of that passing outer suite.
+- Final `bun run typecheck`:exit0. Final `bun run build`:exit0,21pluginUI modules and28bundledplugins; missing macOS icon-source warnings remain explicit.
+- Real smoke service exited0 after actual worker CLI completion and retained release: policy2, three Ready skill entries based on real private files, physical custodyuser_owned/retained/user_takeover, release state retained/processAction:none, same PTY alive after release. The service then cleaned its private daemon, PTY host, providers and temporary homes.
+- Owned uniquely bound CDP tab was closed and Chrome service stopped; the guarded browser session was explicitly closed after its partial report. No browser kill or further input was sent to the unexpectedly foreign convenience target.
+- Raw guarded report is `.quirk/using-apps-like-a-user/runs/20261028T064737-a890/report.md`; actual supplemental proof/receipts/screenshots are in `.quirk/build-loop/m6-orchestration-ui/`. Final review raw artifacts are preserved there as `final-review.tgz`.
+- No native-only product scenario was added or claimed; no new native verification file is needed. D7 retains Linux/Windows verification as explicit platform work.
+
 ## Progress
-Iteration5 contracts/spec committed e02f5a7e; three disjoint implementation trees dispatched. Terminal links and sidebar/fleet have returned authored code/tests; setup/policy/skill remains running. Parent adds the shared navigation endpoint and source-coverage/evidence amendments. No tests/build/dogfood have run yet; only web doctor passed. Next: wait implementation barrier, scope audit, integrate, run focused/affected gates, catch up once, review/dogfood and land.
+Iteration5 is ready for canonical landing: sourceaeca4cc4, bounded final review and corrected affected checks green with the stated qualifications, packaged build/typecheck green, actual isolated-browser and retained-release smoke observed, all dispatched agents and owned verification services finished. No in-scope local feature flow is voluntarily deferred; guarded tool limitations stay explicit rather than becoming false UI passes. Next: commit these documentation/evidence records, detach, run canonical queue.ts land m6-orchestration-ui and wait for its full-merge verdict. Do not claim landed until the queue confirms it.

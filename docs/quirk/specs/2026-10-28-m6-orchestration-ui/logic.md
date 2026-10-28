@@ -1,7 +1,7 @@
 # Orchestration skill and UI
 
 ## Status & amendments
-Status: Approved autonomously under LOOP night mode; technical complexity gate fires (multiple plugin/UI subsystems). One combined specification with technical decisions below replaces a separate tech.md as required by LOOP.
+Status: Implemented; daemon/CLI acceptance and actual isolated-browser smoke verified. Formal guarded UI campaign remains partial/blocked due documented driver limits, not relabelled as passed; decision log D13–D14 records review and UI evidence boundaries. One combined specification with technical decisions replaces separate tech.md under LOOP night mode. The authoritative queue owns the landing verdict.
 
 **Amendments:** 2026-10-28 — initial full queue-item specification.
 
