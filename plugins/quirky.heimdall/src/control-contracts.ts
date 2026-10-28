@@ -6,7 +6,7 @@ export interface WatcherTarget { watcherId: string; connectionId?: string | null
 export type CommandRefusal = 'owner-unreachable' | 'unsupported-capability' | 'owner-conflict' | 'stale-revision' | 'watcher-not-found' | 'invalid-state' | 'question-already-answered' | 'worker-unverifiable' | 'coordinator-seat-lost' | 'invalid-command'
 export type CommandResult = { kind: 'applied'; appliedAtMs: number } | { kind: 'refused'; reason: CommandRefusal; detail: string } | { kind: 'indeterminate'; detail: string }
 export interface WorkerIdentity { dispatchId: string; sessionId?: string; processIncarnation?: string; pid?: number; startTime?: string; terminalHandle?: string }
-export interface WatcherWorker { identity: WorkerIdentity; state: 'live' | 'exited' | 'unverifiable'; title?: string; lastContactAtMs?: number; question?: { messageId: string; body: string; answered?: boolean }; [key: string]: unknown }
+export interface WatcherWorker { identity: WorkerIdentity; state: 'live' | 'exited' | 'unverifiable'; assignmentActive: boolean; title?: string; lastContactAtMs?: number; question?: { messageId: string; body: string; answered?: boolean }; [key: string]: unknown }
 export interface OpenEscalation { escalationId: string; escalationKind: string; status: string; foldCount: number; reason?: string; detail?: string; approvalScope?: ApprovalScope; [key: string]: unknown }
 export interface FleetAction { watcherId: string; watcherName: string; attemptId: string; atMs: number; actionKind: string; state: 'attempted' | 'running' | 'settled'; effect?: 'landed' | 'not-landed' | 'indeterminate'; reason?: string }
 export type WatcherCommand =

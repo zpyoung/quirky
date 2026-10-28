@@ -1,5 +1,7 @@
-import { useCallback, useEffect, useState, type CSSProperties } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import type { MobileConnectionState, MobilePageBridge, MobileRoute, PageAppProps } from '../contracts'
+import { PanelApp, isPanelRoute } from '../panels'
+import { DirectNotifications } from '../panels/activity'
 import { SessionPage } from './SessionPage'
 import { PAGE_CSS } from './styles'
 import { WorkspacesPage } from './WorkspacesPage'
@@ -17,51 +19,121 @@ function connectionLabel(state: MobileConnectionState): { title: string; detail:
   }
 }
 
+function routeWorktreeId(route: MobileRoute): string | undefined {
+  return 'worktreeId' in route && typeof route.worktreeId === 'string' ? route.worktreeId : undefined
+}
+
+function boundedWorktreeId(value: string | undefined): string | undefined {
+  return value && value.length > 0 && value.length <= 1024 && !value.includes('\0') ? value : undefined
+}
+
+function initialPanelReturnRoute(route: MobileRoute): MobileRoute {
+  if (route.kind === 'session') return route
+  const worktreeId = routeWorktreeId(route)
+  return isPanelRoute(route) && worktreeId ? { kind: 'session', worktreeId } : { kind: 'workspaces' }
+}
+
+function panelTitle(route: MobileRoute): string {
+  switch (route.kind) {
+    case 'source-control': return 'Source control'
+    case 'review': return 'Review'
+    case 'files': return 'Files'
+    case 'file-preview': return 'File preview'
+    case 'tasks': return 'Tasks'
+    case 'accounts': return 'Accounts'
+    case 'agent-history': return 'Agent history'
+    case 'notifications': return 'Notifications'
+    case 'workspaces': return 'Workspaces'
+    case 'session': return 'Session'
+  }
+}
+
 export function PageApp({ bridge }: PageAppProps) {
   const [route, setRoute] = useState<MobileRoute>(bridge.init.route)
-  const [connection, setConnection] = useState<MobileConnectionState>(bridge.state ?? bridge.init.connectionState)
+  const routeRef = useRef(route)
+  routeRef.current = route
+  const panelReturnRouteRef = useRef<MobileRoute | null>(null)
+  if (panelReturnRouteRef.current === null) panelReturnRouteRef.current = initialPanelReturnRoute(route)
+  const [connection, setConnection] = useState<MobileConnectionState>(bridge.state)
   const [visible, setVisible] = useState(() => typeof document === 'undefined' || document.visibilityState !== 'hidden')
   const [workspaceLayout, setWorkspaceLayout] = useState<Record<string, unknown> | null>(null)
   const [sessionLayout, setSessionLayout] = useState<Record<string, unknown> | null>(null)
+  const [lastWorktreeId, setLastWorktreeId] = useState(() =>
+    boundedWorktreeId(routeWorktreeId(route)) ?? boundedWorktreeId(bridge.init.host.lastWorktree)
+  )
   const connected = connection.phase === 'connected'
   const active = connected && visible
   const rpcGranted = bridge.init.grants.includes('rpc')
+
   useEffect(() => {
-    setRoute(bridge.init.route)
-    setConnection(bridge.state ?? bridge.init.connectionState)
+    const initialRoute = bridge.init.route
+    setRoute(initialRoute)
+    routeRef.current = initialRoute
+    panelReturnRouteRef.current = initialPanelReturnRoute(initialRoute)
+    setLastWorktreeId(boundedWorktreeId(routeWorktreeId(initialRoute)) ?? boundedWorktreeId(bridge.init.host.lastWorktree))
+    setConnection(bridge.state)
     const stop = bridge.onState((next) => setConnection(next))
     return stop
   }, [bridge])
+
   useEffect(() => {
     const updateVisibility = () => setVisible(document.visibilityState !== 'hidden')
     document.addEventListener('visibilitychange', updateVisibility)
     return () => document.removeEventListener('visibilitychange', updateVisibility)
   }, [])
+
   const reportWorkspaceLayout = useCallback((state: Record<string, unknown>) => setWorkspaceLayout(state), [])
   const reportSessionLayout = useCallback((state: Record<string, unknown>) => setSessionLayout(state), [])
 
+  const navigate = useCallback(async (next: MobileRoute | { kind: 'home' }) => {
+    const previous = routeRef.current
+    await bridge.navigate(next)
+    if (next.kind === 'home') return
+    if (isPanelRoute(next)) {
+      if (!isPanelRoute(previous)) panelReturnRouteRef.current = previous
+    } else {
+      panelReturnRouteRef.current = initialPanelReturnRoute(next)
+    }
+    routeRef.current = next
+    setRoute(next)
+    const worktreeId = boundedWorktreeId(routeWorktreeId(next))
+    if (worktreeId) setLastWorktreeId(worktreeId)
+  }, [bridge])
+
+  const routingBridge = useMemo<MobilePageBridge>(() => ({
+    ...bridge,
+    get state() { return bridge.state },
+    navigate
+  }), [bridge, navigate])
+
   useEffect(() => {
-    const layout = route.kind === 'workspaces' ? workspaceLayout : sessionLayout
+    const layout = route.kind === 'workspaces' ? workspaceLayout : route.kind === 'session' ? sessionLayout : undefined
     if (layout === null) return
     const state: Record<string, unknown> = { route: route.kind, connectionPhase: connection.phase, stale: !active }
-    Object.assign(state, layout)
-    if (route.kind === 'session') {
+    if (route.kind === 'workspaces') {
+      Object.assign(state, workspaceLayout)
+    } else if (route.kind === 'session') {
+      Object.assign(state, sessionLayout)
       state.worktreeId = route.worktreeId
       if (route.sessionId !== undefined) state.sessionId = route.sessionId
+    } else {
+      const worktreeId = routeWorktreeId(route) ??
+        (route.kind === 'notifications' ? boundedWorktreeId(lastWorktreeId) : undefined)
+      if (worktreeId !== undefined) state.worktreeId = worktreeId
+      if (route.kind === 'source-control' && route.tab !== undefined) state.tab = route.tab
+      if ((route.kind === 'review' || route.kind === 'files' || route.kind === 'file-preview') && route.path !== undefined) state.path = route.path
     }
     bridge.report(state)
-  }, [bridge, route, connection.phase, active, workspaceLayout, sessionLayout])
-
-  const navigate = useCallback(async (next: MobileRoute | { kind: 'home' }) => {
-    await bridge.navigate(next)
-    if (next.kind !== 'home') setRoute(next)
-  }, [bridge])
+  }, [bridge, route, connection.phase, active, workspaceLayout, sessionLayout, lastWorktreeId])
 
   const safeAreaStyle = {
     '--safe-top': `${Math.max(0, bridge.init.safeArea.top)}px`,
     '--safe-bottom': `${Math.max(0, bridge.init.safeArea.bottom)}px`
   } as CSSProperties
   const warning = connectionLabel(connection)
+  const panelReturnRoute = panelReturnRouteRef.current!
+  const panelBackLabel = panelReturnRoute.kind === 'session' ? 'Back to session' : 'Back to workspaces'
+  const lastWorktree = boundedWorktreeId(lastWorktreeId) ?? boundedWorktreeId(bridge.init.host.lastWorktree)
 
   return (
     <div className="qp-page" style={safeAreaStyle} data-connection={connection.phase}>
@@ -81,10 +153,28 @@ export function PageApp({ bridge }: PageAppProps) {
       {!rpcGranted ? (
         <div className="qp-content"><div className="qp-error" role="alert">This page bundle does not have the required workspace RPC grant. Update the desktop page bundle to continue.</div></div>
       ) : route.kind === 'workspaces' ? (
-        <WorkspacesPage bridge={bridge} connected={active} onNavigate={navigate} onReport={reportWorkspaceLayout} />
-      ) : (
-        <SessionPage bridge={bridge} route={route} connected={active} onNavigate={navigate} onReport={reportSessionLayout} />
-      )}
+        <WorkspacesPage bridge={routingBridge} connected={active} onNavigate={navigate} onReport={reportWorkspaceLayout} />
+      ) : route.kind === 'session' ? (
+        <SessionPage bridge={routingBridge} route={route} connected={active} onNavigate={navigate} onReport={reportSessionLayout} />
+      ) : isPanelRoute(route) ? (
+        <>
+          <header className="qp-topbar">
+            <button className="qp-button qp-button--quiet" type="button" aria-label={panelBackLabel} onClick={() => void navigate(panelReturnRoute)}>
+              {panelBackLabel}
+            </button>
+            <div className="qp-topbar__titles">
+              <h1>{panelTitle(route)}</h1>
+              <p>{bridge.init.host.personalName || bridge.init.host.name}</p>
+            </div>
+          </header>
+          <div style={{ flex: '1 1 auto', minHeight: 0, overflow: 'auto', overscrollBehavior: 'contain' }}>
+            <PanelApp bridge={routingBridge} route={route} />
+          </div>
+        </>
+      ) : null}
+      {rpcGranted && active ? (
+        <DirectNotifications bridge={routingBridge} viewedWorktree={routeWorktreeId(route) ?? lastWorktree} />
+      ) : null}
     </div>
   )
 }

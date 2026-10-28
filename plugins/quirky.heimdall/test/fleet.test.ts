@@ -251,13 +251,34 @@ describe('Heimdall fleet projection', () => {
     expect(snapshot.buckets).toEqual({ needsYou: 1, lostContact: 1, active: 1, inactive: 3 })
   })
 
+  test('counts only live active assignments and retains every worker in detail and debug', async () => {
+    const row = enrollment('workers')
+    const h = harness([{ enrollment: row, inspection: inspection(row) }])
+    const workers: WatcherWorker[] = [
+      { identity: { dispatchId: 'active-live', sessionId: 'session-active', processIncarnation: 'incarnation-active' }, state: 'live', assignmentActive: true },
+      { identity: { dispatchId: 'inactive-live', sessionId: 'session-inactive', processIncarnation: 'incarnation-inactive' }, state: 'live', assignmentActive: false },
+      { identity: { dispatchId: 'active-unverifiable', sessionId: 'session-unverifiable', processIncarnation: 'incarnation-unverifiable' }, state: 'unverifiable', assignmentActive: true },
+      { identity: { dispatchId: 'inactive-exited', sessionId: 'session-exited', processIncarnation: 'incarnation-exited' }, state: 'exited', assignmentActive: false }
+    ]
+    h.workers.set(row.watcherId, workers)
+
+    const snapshot = await h.service.fleet()
+    const detail = await h.service.detail({ watcherId: row.watcherId })
+    const report = await h.service.debugReport({ watcherId: row.watcherId })
+
+    expect(snapshot.rows[0]?.runningWorkers).toBe(1)
+    expect(detail?.workers).toEqual(workers)
+    expect(report?.workers).toEqual(workers)
+    expect(h.workers.get(row.watcherId)).toEqual(workers)
+  })
+
   test('bounds detail and debug journals and traces while preserving real pending and malformed data', async () => {
     const row = enrollment('watcher', { malformed: 'invalid objective payload' })
     const journal = Array.from({ length: 205 }, (_, i) => journalEntry('watcher', i + 1, { kind: i === 204 ? 'interval-open' : 'evidence' }))
     const traces = Array.from({ length: 25 }, (_, i) => trace('watcher', i + 1))
     const h = harness([{ enrollment: row, inspection: inspection(row, 'malformed', { journal, traces }) }])
     h.pending.set('watcher', ['pause'])
-    h.workers.set('watcher', [{ identity: { dispatchId: 'dispatch-1' }, state: 'live' }])
+    h.workers.set('watcher', [{ identity: { dispatchId: 'dispatch-1' }, state: 'live', assignmentActive: true }])
 
     const detail = await h.service.detail({ watcherId: 'watcher' })
     const report = await h.service.debugReport({ watcherId: 'watcher' })
@@ -265,7 +286,7 @@ describe('Heimdall fleet projection', () => {
     expect(detail?.journal).toHaveLength(200)
     expect(detail?.traces).toHaveLength(20)
     expect(detail?.pendingControls).toEqual(['pause'])
-    expect(detail?.workers).toEqual([{ identity: { dispatchId: 'dispatch-1' }, state: 'live' }])
+    expect(detail?.workers).toEqual([{ identity: { dispatchId: 'dispatch-1' }, state: 'live', assignmentActive: true }])
     expect(report?.ledger).toHaveLength(200)
     expect(report?.traces).toHaveLength(20)
     expect(report?.malformed).toBe('invalid objective payload')

@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from 'bun:test'
-import { readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { DockState, SendResult } from '../src/types'
 import { enableDock, inputBytes, launchFakeClaude, launchShell, paneOf, startDockE2E, connectUi, waitForTuiInput, type DockHarness } from './support'
@@ -96,6 +96,9 @@ test(
     const file = join(harness.repo, 'dock-visible.txt')
     const sourceBytes = Buffer.from('a real workspace attachment\n')
     writeFileSync(file, sourceBytes)
+    const secondFile = join(harness.repo, 'dock-visible-second.txt')
+    const secondSourceBytes = Buffer.from('a second real workspace attachment\n')
+    writeFileSync(secondFile, secondSourceBytes)
     const initial = await get(pane)
     const drafted = (await harness.call('quirky.terminal-dock/set', {
       pane,
@@ -108,14 +111,34 @@ test(
     if (!chip) throw new Error('the real file was not attached')
     expect(readFileSync(chip.path)).toEqual(sourceBytes)
     expect(attached.draft).toBe(drafted.draft)
+    const attachedSecond = (await harness.call('quirky.terminal-dock/attach', { pane, path: secondFile })) as DockState
+    const secondChip = attachedSecond.attachments.find((item) => item.id !== chip.id)
+    if (!secondChip) throw new Error('the second real file was not attached')
+
+    await expect(harness.call('quirky.terminal-dock/attach', {
+      pane,
+      path: 'C:\\fakepath\\missing.png'
+    })).rejects.toThrow('readable regular file')
+    const afterRefusal = await get(pane)
+    expect(afterRefusal.draft).toBe(drafted.draft)
+    expect(afterRefusal.attachments.map((attachment) => attachment.id)).toEqual([chip.id, secondChip.id])
 
     const removed = (await harness.call('quirky.terminal-dock/removeAttachment', {
       pane,
       attachment: chip.id
     })) as DockState
-    expect(removed.attachments).toHaveLength(0)
+    expect(removed.attachments.map((attachment) => attachment.id)).toEqual([secondChip.id])
+    expect(existsSync(file)).toBe(true)
+    expect(existsSync(secondFile)).toBe(true)
     expect(readFileSync(file)).toEqual(sourceBytes)
+    expect(readFileSync(secondFile)).toEqual(secondSourceBytes)
 
+    const removedSecond = (await harness.call('quirky.terminal-dock/removeAttachment', {
+      pane,
+      attachment: secondChip.id
+    })) as DockState
+    expect(removedSecond.attachments).toHaveLength(0)
+    expect(existsSync(secondFile)).toBe(true)
     const sendAttachments = (await harness.call('quirky.terminal-dock/attach', { pane, path: file })) as DockState
     const sendChip = sendAttachments.attachments[0]
     if (!sendChip) throw new Error('the send attachment was not attached')

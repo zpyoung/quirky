@@ -26,6 +26,41 @@ function bundleReadArgs(args: CliArgs, context: CliContext, withGzip: boolean): 
 }
 
 export const commands: CliModule['commands'] = {
+  async 'agent-catalog'(args, context) {
+    noArgs(args, context)
+    const value = await context.call('quirky.mobile/agentCatalog', {})
+    context.out.result(value, () => JSON.stringify(value, null, 2))
+  },
+  async 'notification-poll'(args, context) {
+    if (args.positionals.length > 0) throw context.usage('notification-poll accepts only named flags')
+    const after = args.flags.after
+    const waitMs = args.flags['wait-ms']
+    if (after !== undefined && (typeof after !== 'number' || !Number.isSafeInteger(after) || after < 0)) throw context.usage('--after must be a nonnegative safe integer')
+    if (waitMs !== undefined && (typeof waitMs !== 'number' || !Number.isInteger(waitMs) || waitMs < 0 || waitMs > 25000)) throw context.usage('--wait-ms must be0..25000')
+    const epoch = stringFlag(args, 'epoch')
+    const suppressWorktree = stringFlag(args, 'suppress-worktree')
+    const subscriptionId = stringFlag(args, 'subscription-id')
+    const value = await context.call('quirky.mobile/notificationPoll', {
+      ...(after === undefined ? {} : { after }),
+      ...(waitMs === undefined ? { waitMs: 0 } : { waitMs }),
+      ...(epoch === undefined ? {} : { epoch }),
+      ...(suppressWorktree === undefined ? {} : { suppressWorktree }),
+      ...(subscriptionId === undefined ? {} : { subscriptionId }),
+      ...(args.flags['only-away'] === undefined ? {} : { onlyWhenDesktopAway: args.flags['only-away'] === true })
+    })
+    context.out.result(value, () => JSON.stringify(value, null, 2))
+  },
+  async 'notification-test'(args, context) {
+    noArgs(args, context)
+    const value = await context.call('quirky.mobile/notificationTest', {})
+    context.out.result(value, () => JSON.stringify(value))
+  },
+  async 'notification-cancel'(args, context) {
+    if (args.positionals.length > 0) throw context.usage('notification-cancel accepts only --subscription-id')
+    const subscriptionId = stringFlag(args, 'subscription-id')
+    const value = await context.call('quirky.mobile/notificationCancel', subscriptionId === undefined ? {} : { subscriptionId })
+    context.out.result(value, () => JSON.stringify(value))
+  },
   async info(args, context) {
     noArgs(args, context)
     const value = await context.call('quirky.mobile/info', {})
@@ -96,11 +131,7 @@ export const commands: CliModule['commands'] = {
     const value = await context.call('quirky.mobile/bundleManifest', {})
     context.out.result(value, () => JSON.stringify(value, null, 2))
   },
-  async 'agent-catalog'(args, context) {
-    noArgs(args, context)
-    const value = await context.call('quirky.mobile/agentCatalog', {})
-    context.out.result(value, () => JSON.stringify(value, null, 2))
-  },
+
   async 'bundle-chunk'(args, context) {
     const value = await context.call('quirky.mobile/bundleChunk', bundleReadArgs(args, context, false))
     context.out.result(value, () => JSON.stringify(value, null, 2))

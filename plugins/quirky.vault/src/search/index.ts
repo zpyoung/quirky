@@ -28,7 +28,7 @@ import { sqliteSourcePath } from '../scanner/parsers/sqlite'
  * SOFTWARE.
  */
 
-const SCHEMA_VERSION = 2
+const SCHEMA_VERSION = 3
 const RECONCILE_INTERVAL_MS = 20_000
 const PASS_BUDGET_MS = RECONCILE_INTERVAL_MS / 4
 const FULL_SWEEP_EVERY_CYCLES = 15
@@ -73,7 +73,7 @@ CREATE TABLE IF NOT EXISTS files(
   session_row_id INTEGER,
   state TEXT NOT NULL DEFAULT 'current' CHECK(state IN ('current','due','failed')),
   fail_count INTEGER NOT NULL DEFAULT 0,
-  failed_mtime_ms REAL,
+  failed_signature TEXT,
   pending_signature TEXT,
   pending_mtime_ms REAL,
   pending_size_bytes INTEGER,
@@ -116,7 +116,7 @@ type FileRow = {
   session_row_id: number | null
   state: 'current' | 'due' | 'failed'
   fail_count: number
-  failed_mtime_ms: number | null
+  failed_signature: string | null
   pending_signature: string | null
   pending_mtime_ms: number | null
   pending_size_bytes: number | null
@@ -251,7 +251,7 @@ export function createSearch(options: SearchOptions): VaultSearch {
         }
         markFileSeen(db, candidate.filePath, scanId)
         const row = findFile(db, candidate.filePath)
-        if (row?.state === 'failed' && row.fail_count >= 3 && row.failed_mtime_ms === candidate.mtimeMs) continue
+        if (row?.state === 'failed' && row.fail_count >= 3 && row.failed_signature === candidate.signature) continue
         if (row?.state === 'current' && row.signature === candidate.signature && identityUnchanged(row, candidate)) continue
         markFileDue(db, candidate, scanId)
         eligible.push(candidate)
@@ -523,12 +523,12 @@ function markFileDue(db: Database, candidate: SourceCandidate, scanId: number): 
       .run(candidate.filePath, candidate.root, candidate.agent, info.dev, info.ino, candidate.signature, candidate.mtimeMs, candidate.size, scanId)
     return
   }
-  const changedMtime = current.failed_mtime_ms !== null && current.failed_mtime_ms !== candidate.mtimeMs
+  const changedSignature = current.failed_signature !== null && current.failed_signature !== candidate.signature
   db.prepare(`UPDATE files SET root = ?, agent = ?, dev = ?, ino = ?, state = 'due',
     pending_signature = ?, pending_mtime_ms = ?, pending_size_bytes = ?, last_seen_scan = ?,
-    fail_count = ?, failed_mtime_ms = ? WHERE path = ?`)
+    fail_count = ?, failed_signature = ? WHERE path = ?`)
     .run(candidate.root, candidate.agent, info.dev, info.ino, candidate.signature, candidate.mtimeMs, candidate.size, scanId,
-      changedMtime ? 0 : current.fail_count, changedMtime ? null : current.failed_mtime_ms, candidate.filePath)
+      changedSignature ? 0 : current.fail_count, changedSignature ? null : current.failed_signature, candidate.filePath)
 }
 function identityUnchanged(row: FileRow, candidate: SourceCandidate): boolean {
   const identity = safeFileIdentity(sqliteSourcePath(candidate))
@@ -654,11 +654,11 @@ function publishStage(
     const sessionId = Number(inserted.lastInsertRowid)
     db.prepare('UPDATE messages SET session_row_id = ? WHERE session_row_id = ?').run(sessionId, stageId)
     db.prepare(`INSERT INTO files(path, root, agent, dev, ino, signature, mtime_ms, size_bytes, session_row_id, state,
-        fail_count, failed_mtime_ms, pending_signature, pending_mtime_ms, pending_size_bytes)
+        fail_count, failed_signature, pending_signature, pending_mtime_ms, pending_size_bytes)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'current', 0, NULL, NULL, NULL, NULL)
       ON CONFLICT(path) DO UPDATE SET root=excluded.root, agent=excluded.agent, dev=excluded.dev, ino=excluded.ino,
         signature=excluded.signature, mtime_ms=excluded.mtime_ms, size_bytes=excluded.size_bytes,
-        session_row_id=excluded.session_row_id, state='current', fail_count=0, failed_mtime_ms=NULL,
+        session_row_id=excluded.session_row_id, state='current', fail_count=0, failed_signature=NULL,
         pending_signature=NULL, pending_mtime_ms=NULL, pending_size_bytes=NULL`)
       .run(candidate.filePath, candidate.root, candidate.agent, info.dev, info.ino, candidate.signature,
         candidate.mtimeMs, candidate.size, sessionId)
@@ -711,15 +711,15 @@ function cleanStagingRows(db: Database): void {
 
 function recordFailure(db: Database, candidate: SourceCandidate): void {
   const row = findFile(db, candidate.filePath)
-  const count = row?.failed_mtime_ms === candidate.mtimeMs ? row.fail_count + 1 : 1
-  db.prepare(`INSERT INTO files(path, root, agent, signature, mtime_ms, size_bytes, state, fail_count, failed_mtime_ms,
+  const count = row?.failed_signature === candidate.signature ? row.fail_count + 1 : 1
+  db.prepare(`INSERT INTO files(path, root, agent, signature, mtime_ms, size_bytes, state, fail_count, failed_signature,
       pending_signature, pending_mtime_ms, pending_size_bytes)
     VALUES (?, ?, ?, '', 0, 0, 'failed', ?, ?, ?, ?, ?)
     ON CONFLICT(path) DO UPDATE SET root=excluded.root, agent=excluded.agent, state='failed', fail_count=?,
-      failed_mtime_ms=?, pending_signature=excluded.pending_signature, pending_mtime_ms=excluded.pending_mtime_ms,
+      failed_signature=?, pending_signature=excluded.pending_signature, pending_mtime_ms=excluded.pending_mtime_ms,
       pending_size_bytes=excluded.pending_size_bytes`)
-    .run(candidate.filePath, candidate.root, candidate.agent, count, candidate.mtimeMs, candidate.signature,
-      candidate.mtimeMs, candidate.size, count, candidate.mtimeMs)
+    .run(candidate.filePath, candidate.root, candidate.agent, count, candidate.signature, candidate.signature,
+      candidate.mtimeMs, candidate.size, count, candidate.signature)
 }
 
 function removeIndexedFile(db: Database, path: string): void {

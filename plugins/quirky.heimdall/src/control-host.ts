@@ -3,14 +3,14 @@ import { RpcErrorCode, validateValue, type PluginContext, type Schema } from '@q
 import type { Enrollment, Inspection, KernelStore, Runner } from './contracts'
 import type { CommandResult, KernelControlHost, WatcherWorker, WorkerIdentity } from './control-contracts'
 
-interface ServiceWorkerView { dispatchId: string; sessionId: string | null; processIncarnation: string | null; state: 'live' | 'exited' | 'unverifiable'; lastContactAtMs: number | null }
+interface ServiceWorkerView { dispatchId: string; sessionId: string | null; processIncarnation: string | null; state: 'live' | 'exited' | 'unverifiable'; assignmentActive: boolean; lastContactAtMs: number | null }
 interface ServiceQuestionView { messageId: string; dispatchId: string; body: string; status: 'pending' | 'answered' | 'closed' }
 interface ServiceRunView { run: { id: string }; workers: ServiceWorkerView[]; questions: ServiceQuestionView[] }
 const runViewSchema: Schema = {
   type: 'object', additionalProperties: true, required: ['run', 'workers', 'questions'], properties: {
     run: { type: 'object', additionalProperties: true, required: ['id'], properties: { id: { type: 'string' } } },
-    workers: { type: 'array', items: { type: 'object', additionalProperties: true, required: ['dispatchId', 'sessionId', 'processIncarnation', 'state', 'lastContactAtMs'], properties: {
-      dispatchId: { type: 'string' }, sessionId: {}, processIncarnation: {}, lastContactAtMs: {}, state: { type: 'string', enum: ['live', 'exited', 'unverifiable'] }
+    workers: { type: 'array', items: { type: 'object', additionalProperties: true, required: ['dispatchId', 'sessionId', 'processIncarnation', 'state', 'assignmentActive', 'lastContactAtMs'], properties: {
+      dispatchId: { type: 'string' }, sessionId: {}, processIncarnation: {}, lastContactAtMs: {}, state: { type: 'string', enum: ['live', 'exited', 'unverifiable'] }, assignmentActive: { type: 'boolean' }
     } } },
     questions: { type: 'array', items: { type: 'object', additionalProperties: true, required: ['messageId', 'dispatchId', 'body', 'status'], properties: {
       messageId: { type: 'string' }, dispatchId: { type: 'string' }, body: { type: 'string' }, status: { type: 'string', enum: ['pending', 'answered', 'closed'] }
@@ -114,6 +114,7 @@ export function createControlHost(context: PluginContext, kernel: OperatorKernel
             ...(worker.processIncarnation ? { processIncarnation: worker.processIncarnation } : {})
           },
           state: worker.state,
+          assignmentActive: worker.assignmentActive,
           ...(worker.lastContactAtMs !== null ? { lastContactAtMs: worker.lastContactAtMs } : {}),
           ...(question ? { question: { messageId: question.messageId, body: question.body, answered: false } } : {})
         }

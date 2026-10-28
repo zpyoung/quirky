@@ -318,7 +318,7 @@ export type GitConflictKind =
 export type GitOperation = 'merge' | 'rebase' | 'cherry-pick' | 'none'
 
 /** An operation that holds a worktree's lock while it runs; at most one per worktree. */
-export type GitBusyOp = 'push' | 'force-push' | 'pull' | 'fast-forward' | 'fetch' | 'sync' | 'rebase' | 'continue' | 'abort'
+export type GitBusyOp = 'push' | 'force-push' | 'switch' | 'pull' | 'fast-forward' | 'fetch' | 'sync' | 'rebase' | 'continue' | 'abort'
 
 /** One row of the Source Control panel. A path both staged and changed has two entries. */
 export type GitStatusEntry = {

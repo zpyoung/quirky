@@ -18,9 +18,10 @@ function fixture() {
     questions: [{ messageId: 'msg_question', runId: 'run_owned', dispatchId: 'ctx_dispatch', askerSessionId: 'session', status: 'pending',
       answerMessageId: null, answerBody: null, answeredByGeneration: null, createdAt: '2026-10-27T00:00:00.000Z', answeredAt: null, closedAt: null, body: 'Continue?' }]
   }
+  let serviceResponse: unknown = view
   let wrongReplyIdentity = false
   const call: PluginContext['call'] = async (method, params = {}) => {
-    if (method === 'quirky.orchestration/serviceRunShow') return structuredClone(view)
+    if (method === 'quirky.orchestration/serviceRunShow') return structuredClone(serviceResponse)
     if (method === 'quirky.orchestration/serviceReply') {
       view.questions[0]!.status = 'answered'
       view.questions[0]!.answerBody = String(params.body)
@@ -38,7 +39,13 @@ function fixture() {
   const context = { call } as PluginContext
   const unused = () => { throw new Error('Unexpected kernel mutation in owner adapter') }
   const kernel: OperatorKernel = { store: {} as KernelStore, inspect: unused, runner: unused, changed: unused, reconcile: unused, forgetRunner: unused }
-  return { host: createControlHost(context, kernel), enrollment, view, mismatchReply() { wrongReplyIdentity = true } }
+  return {
+    host: createControlHost(context, kernel),
+    enrollment,
+    view,
+    mismatchReply() { wrongReplyIdentity = true },
+    serviceResponse(value: unknown) { serviceResponse = value }
+  }
 }
 
 describe('owner service response certainty', () => {
@@ -60,5 +67,30 @@ describe('owner service response certainty', () => {
     t.mismatchReply()
     expect(await t.host.answerQuestion(t.enrollment, 'msg_question', 'Proceed')).toMatchObject({ kind: 'indeterminate' })
     expect(t.view.questions[0]!.status).toBe('answered')
+  })
+  test('rejects missing and malformed owner assignment activity but preserves explicit false', async () => {
+    const t = fixture()
+    const missing = { ...t.view.workers[0]! } as { assignmentActive?: boolean }
+    delete missing.assignmentActive
+    t.serviceResponse({ ...t.view, workers: [missing] })
+    await expect(t.host.workers(t.enrollment)).rejects.toThrow()
+
+    for (const activity of [null, 'false', 1, {}]) {
+      t.serviceResponse({
+        ...t.view,
+        workers: [{ ...t.view.workers[0]!, assignmentActive: activity }]
+      })
+      await expect(t.host.workers(t.enrollment)).rejects.toThrow()
+    }
+
+    t.serviceResponse({
+      ...t.view,
+      workers: [{ ...t.view.workers[0]!, assignmentActive: false }]
+    })
+    expect(await t.host.workers(t.enrollment)).toMatchObject([{
+      identity: { dispatchId: 'ctx_dispatch' },
+      state: 'live',
+      assignmentActive: false
+    }])
   })
 })

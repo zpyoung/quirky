@@ -172,6 +172,22 @@ export class HandoffService {
     return { archived: archived as ArchivedSource }
   }
 
+  /** Opens the owner's real window dialog for an archived source supplied by a public integration. */
+  async openArchived(params: Params): Promise<{ opened: true }> {
+    const ref = this.parseSource(params.source)
+    if (!('archived' in ref)) throw this.fail('invalid-params', 'openArchived requires an archived source')
+    const response = await this.call('ui.command.run', {
+      id: 'command:quirky.handoff/open-archived',
+      args: { source: ref }
+    })
+    const result = isRecord(response) ? response.result : undefined
+    if (!isRecord(result) || result.ok !== true) {
+      const reason = isRecord(result) && typeof result.reason === 'string' ? `: ${result.reason}` : ''
+      throw this.fail('conflict', `the handoff dialog did not open${reason}`)
+    }
+    return { opened: true }
+  }
+
   private parseTarget(value: unknown): Target | undefined {
     if (value === undefined || value === null) return undefined
     if (!isRecord(value)) throw this.fail('invalid-params', 'target must be an object')
