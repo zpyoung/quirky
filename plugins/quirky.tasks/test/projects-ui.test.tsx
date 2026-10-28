@@ -126,6 +126,13 @@ function selectedTab(container: HTMLElement, label: string): boolean {
   return [...container.querySelectorAll('[role="tab"]')].some((tab) => tab.textContent?.includes(label) && tab.getAttribute('aria-selected') === 'true')
 }
 
+function dialogByTitle(container: HTMLElement, title: string): HTMLElement | null {
+  return [...container.querySelectorAll<HTMLElement>('[role="dialog"]')].find((dialog) => {
+    const labelledBy = dialog.getAttribute('aria-labelledby')
+    return labelledBy !== null && [...dialog.querySelectorAll('h2')].some((heading) => heading.id === labelledBy && heading.textContent === title)
+  }) ?? null
+}
+
 test('Project Start reports post-create outcomes truthfully and stays linked', async () => {
   const workspaceCalls: Record<string, unknown>[] = []
   const mounted = await mountProjects({ intercept: async (method, params, forward) => {
@@ -155,8 +162,8 @@ test('Project Start reports post-create outcomes truthfully and stays linked', a
 
 
   await clickButton(mounted.container, 'Start work on Improve project table')
-  await waitFor(() => mounted.container.querySelector('[role="dialog"][aria-label="Project item guidance"]')?.textContent?.includes('issue command failed') === true, 'post-create warning')
-  const guidance = mounted.container.querySelector('[role="dialog"][aria-label="Project item guidance"]')?.textContent?.toLowerCase() ?? ''
+  await waitFor(() => dialogByTitle(mounted.container, 'GitHub project item guidance')?.textContent?.includes('issue command failed') === true, 'post-create warning')
+  const guidance = dialogByTitle(mounted.container, 'GitHub project item guidance')?.textContent?.toLowerCase() ?? ''
   expect(guidance).toContain('pending')
   expect(guidance).toContain('not been confirmed')
   expect(guidance).not.toContain('context delivered')
@@ -170,7 +177,7 @@ test('Project Start reports post-create outcomes truthfully and stays linked', a
   await waitFor(() => mounted.toasts.some((toast) => toast.title === 'Workspace setup required'), 'setup decision composer fallback')
   expect(mounted.toasts.find((toast) => toast.title === 'Workspace setup required')?.message).toContain('setup script')
   expect(workspaceCalls[2]).toMatchObject({ action: 'start', target: { number: 9 } })
-  expect(mounted.container.querySelector('[role=\"dialog\"][aria-label=\"Project item guidance\"]')).toBeNull()
+  expect(dialogByTitle(mounted.container, 'GitHub project item guidance')).toBeNull()
 }, 60_000)
 
 test('a delayed older UI selection response cannot replace a newer view or trigger another selection', async () => {
@@ -353,7 +360,7 @@ test('restricted Project rows stay read-only, refresh errors retain rows, and un
   expect(mounted.container.textContent).toContain('Restricted item')
 
   await clickButton(mounted.container, 'Start work on Unknown source issue')
-  const guidance = mounted.container.querySelector<HTMLElement>('[role=\"dialog\"][aria-label=\"Project item guidance\"]')
+  const guidance = dialogByTitle(mounted.container, 'GitHub project item guidance')
   if (!guidance) throw new Error('unknown repository guidance was not rendered')
   expect(guidance.textContent).toContain('Repository not in Quirky')
   const pathInput = guidance.querySelector('input#local-project-repo-path')
@@ -386,3 +393,32 @@ test('restricted Project rows stay read-only, refresh errors retain rows, and un
     }
   })
 }, 60_000)
+
+test('Escape closes the project picker and restores focus without selecting a different project', async () => {
+  let projectSelectionCalls = 0
+  const mounted = await mountProjects({ intercept: async (method, params, forward) => {
+    if (method === 'quirky.tasks/projectSelect') projectSelectionCalls += 1
+    return forward()
+  } })
+  document.body.append(mounted.container)
+  try {
+    const opener = mounted.container.querySelector<HTMLButtonElement>('main button')
+    if (!opener) throw new Error('project chooser was not rendered')
+    await act(async () => {
+      opener.focus()
+      opener.click()
+    })
+    const dialog = mounted.container.querySelector<HTMLElement>('[role="dialog"]')
+    if (!dialog) throw new Error('project picker dialog was not rendered')
+    const closeButton = dialog.querySelector<HTMLElement>('[aria-label="Close dialog"]')
+    if (!closeButton) throw new Error('shared dialog close button was not rendered')
+    await act(async () => {
+      closeButton.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+    })
+    expect(mounted.container.querySelector('[role="dialog"]')).toBeNull()
+    expect(document.activeElement).toBe(opener)
+    expect(projectSelectionCalls).toBe(0)
+  } finally {
+    mounted.container.remove()
+  }
+})

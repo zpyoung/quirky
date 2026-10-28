@@ -1,4 +1,6 @@
 [
+  "quirky.tasks",
+  "quirky.automations",
   "quirky.agents",
   "quirky.agent-status",
   "quirky.browser",
