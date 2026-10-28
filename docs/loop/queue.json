@@ -1882,8 +1882,7 @@
       "deps": [
         "sb-mobile-daemon"
       ],
-      "status": "in-progress",
-      "lane": 2
+      "status": "done"
     },
     {
       "id": "fix-native-m1-term-ui-1028",

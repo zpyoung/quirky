@@ -1233,6 +1233,21 @@ files, not this one.
 | easy | high | [m4-hosting-ui-reviews D21](decisions/m4-hosting-ui-reviews.md) | Verify the packaged surface and keep its report bounded | locked by hosting-ui.md scriptable-state and PR-page requirements |
 | easy | high | [m4-hosting-ui-reviews D23](decisions/m4-hosting-ui-reviews.md) | Delete brittle catalog snapshots instead of extending them | assumed — autonomous; locked by engineering test policy |
 | easy | high | [m4-hosting-ui-reviews D24](decisions/m4-hosting-ui-reviews.md) | Close named dependency failures without changing production semantics | assumed — autonomous; locked by sourced-worktree and provider-normalization contracts |
+| easy | high | [sb-mobile-settings-visibility D1](decisions/sb-mobile-settings-visibility.md) | Diagnose the narrow desktop Settings observation | locked by docs/loop/decisions/sb-mobile-daemon.md |
+| easy | high | [sb-mobile-settings-visibility D2](decisions/sb-mobile-settings-visibility.md) | Preserve layout, density, loading, empty and error behavior unless clipping reproduces | assumed — autonomous |
+| easy | high | [sb-mobile-settings-visibility D3](decisions/sb-mobile-settings-visibility.md) | Separate wheel and keyboard focus from guarded-driver outcomes | assumed — autonomous |
+| easy | high | [sb-mobile-settings-visibility D4](decisions/sb-mobile-settings-visibility.md) | Use only a real run-owned encrypted peer and isolated runtime | locked by docs/loop/LOOP.md |
+| easy | high | [sb-mobile-settings-visibility D5](decisions/sb-mobile-settings-visibility.md) | Record cross-family fallback and investigation-first execution | assumed — autonomous |
+| easy | high | [sb-mobile-settings-visibility D6](decisions/sb-mobile-settings-visibility.md) | End-phase verification and two markdown specs apply | locked by docs/loop/LOOP.md |
+| easy | high | [sb-mobile-settings-visibility D7](decisions/sb-mobile-settings-visibility.md) | Retain the spec review findings and their adjudication | assumed — autonomous |
+| easy | high | [sb-mobile-settings-visibility D8](decisions/sb-mobile-settings-visibility.md) | Account for the unsandboxed review constraint breach | assumed — autonomous |
+| easy | high | [sb-mobile-settings-visibility D9](decisions/sb-mobile-settings-visibility.md) | Expand the reproduction to include the real status-bar owner | assumed — autonomous |
+| easy | high | [sb-mobile-settings-visibility D10](decisions/sb-mobile-settings-visibility.md) | Enforce credential isolation at the macOS process boundary | assumed — autonomous |
+| easy | high | [sb-mobile-settings-visibility D11](decisions/sb-mobile-settings-visibility.md) | Close the clipping investigation without changing working application code | assumed — autonomous |
+| easy | high | [sb-mobile-settings-visibility D12](decisions/sb-mobile-settings-visibility.md) | Preserve the separate visual finding and bound the verification claims | assumed — autonomous |
+| easy | high | [sb-mobile-settings-visibility D13](decisions/sb-mobile-settings-visibility.md) | Preserve incoming authorities and repeat the actual flow after catch-up | locked by the four incoming decision logs |
+| easy | high | [sb-mobile-settings-visibility D14](decisions/sb-mobile-settings-visibility.md) | Keep the caught-up UI success and shared scripts failure distinct | assumed — autonomous |
+| easy | high for review occurrence and bounded observed outcomes; no exhaustive assurance | [sb-mobile-settings-visibility D15](decisions/sb-mobile-settings-visibility.md) | Bound the final independent evidence review | assumed — autonomous |
 | easy (test/fix scope only) | high | [fix-flaky-quirky-worktree-window-projects D1](decisions/fix-flaky-quirky-worktree-window-projects.md) | Treat the load-sensitive failures as a fix item | locked by docs/loop/LOOP.md |
 | easy | high | [fix-flaky-quirky-worktree-window-projects D2](decisions/fix-flaky-quirky-worktree-window-projects.md) | Isolate all process-based experiments and own cleanup | locked by docs/loop/LOOP.md |
 | easy | high for the recorded failure; fresh controlled red/green verification remains pending. | [fix-flaky-quirky-worktree-window-projects D3](decisions/fix-flaky-quirky-worktree-window-projects.md) | Reuse the already-landed condition-based report wait | assumed — autonomous |
