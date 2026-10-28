@@ -34,7 +34,8 @@ function adoptedTitle(session: Session, existingTitles: readonly string[]): stri
   return generated ? nextTerminalTitle(existingTitles) : session.title
 }
 
-const isTabbed = (session: Session) => session.kind === 'terminal' || session.kind === 'structured'
+const isTabbed = (session: Session) =>
+  session.background !== true && (session.kind === 'terminal' || session.kind === 'structured')
 
 /**
  * Brings one workspace in line with the session list: panes whose session is gone are removed,

@@ -484,8 +484,12 @@ export function activate(context: PluginContext): void {
     if (params.extraArgs !== undefined) {
       throw context.error('invalid-params', "Extra arguments can't be applied to a structured session.")
     }
+    const background = params.background
+    if (background !== undefined && typeof background !== 'boolean') {
+      throw context.error('invalid-params', 'background must be a boolean')
+    }
     const unsupported = Object.keys(params).find(
-      (key) => !['worktree', 'agent', 'prompt', 'model', 'options', 'extraArgs'].includes(key)
+      (key) => !['worktree', 'agent', 'prompt', 'model', 'options', 'extraArgs', 'background'].includes(key)
     )
     if (unsupported !== undefined) throw context.error('invalid-params', `structured create does not support ${unsupported}`)
     if (typeof params.prompt !== 'string') throw context.error('invalid-params', 'prompt must be a string')
@@ -515,6 +519,7 @@ export function activate(context: PluginContext): void {
       agent,
       kind: 'structured',
       title,
+      ...(background === undefined ? {} : { background }),
       ...(resolution?.launchSettings ? { launchSettings: resolution.launchSettings } : {})
     })) as Session
     if (!active) return registered
@@ -632,6 +637,7 @@ export function activate(context: PluginContext): void {
         agent,
         kind: 'structured',
         title,
+        ...(old.background === true ? { background: true } : {}),
         ...(old.launchSettings === null || old.launchSettings === undefined ? {} : { launchSettings: old.launchSettings })
       })) as Session
       if (!active) {
