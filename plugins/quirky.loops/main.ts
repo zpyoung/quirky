@@ -299,6 +299,10 @@ export async function activate(context: PluginContext): Promise<void> {
       if (params.worktreeId !== undefined && params.worktree !== undefined) invalid(context, 'use worktree or worktreeId, not both')
       return active.list(params as { worktreeId?: string; worktree?: string })
     },
+    summaries: (params) => {
+      onlyKeys(params, [], 'summaries', context)
+      return active.summaries()
+    },
     get: (params) => {
       onlyKeys(params, ['loopId'], 'get', context)
       return active.get(loopId(params, context))

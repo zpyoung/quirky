@@ -1,5 +1,5 @@
 import type { CliArgs, CliContext, CliModule } from '@quirky/protocol'
-import type { LoopConfig, LoopConfigPatch, LoopPreset, LoopSnapshot, IterationDetail, QueueOperation } from './src/types'
+import type { LoopConfig, LoopConfigPatch, LoopPreset, LoopSnapshot, LoopSummary, IterationDetail, QueueOperation } from './src/types'
 
 type Flags = Record<string, unknown>
 type EditPatch = LoopConfigPatch & { name?: string }
@@ -250,6 +250,12 @@ function loopLine(loop: LoopSnapshot): string {
     ...scheduleSummary(loop)
   ].filter((part): part is string => part !== undefined).join('  ')
 }
+function summaryLine(summary: LoopSummary): string {
+  const count = `${summary.iterationsCompleted}${summary.maxIterations === null ? '' : `/${summary.maxIterations}`}`
+  const reason = summary.pauseReason === null ? '' : `: ${summary.pauseReason}`
+  return `${summary.id}  ${summary.worktreeId}  ${summary.state}${reason}  iterations ${count}`
+}
+
 
 function showText(loop: LoopSnapshot, ctx: CliContext): string {
   const rows: [string, string][] = [
@@ -326,6 +332,13 @@ const named: CliModule['commands'] = {
     const worktree = stringFlag(args.flags, 'worktree', ctx)
     const loops = await ctx.call('quirky.loops/list', worktree === undefined ? {} : { worktree }) as LoopSnapshot[]
     ctx.out.result(loops, () => loops.length === 0 ? 'No loops.' : loops.map(loopLine).join('\n'))
+  },
+  async summaries(args, ctx) {
+    assertNoExtraPositionals(args, 0, ctx)
+    const summaries = await ctx.call('quirky.loops/summaries', {}) as LoopSummary[]
+    ctx.out.result(summaries, () =>
+      summaries.length === 0 ? 'No loop summaries.' : summaries.map(summaryLine).join('\n')
+    )
   },
   async show(args, ctx) {
     assertNoExtraPositionals(args, 1, ctx)

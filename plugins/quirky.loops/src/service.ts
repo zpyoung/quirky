@@ -18,6 +18,7 @@ import type {
   LoopPreset,
   LoopServiceContract,
   LoopSnapshot,
+  LoopSummary,
   LoopTiming,
   PauseReason,
   QueueItem,
@@ -427,6 +428,12 @@ export class LoopService implements LoopServiceContract {
     }
     return this.store.listLoops(worktreeId)
   }
+  async summaries(): Promise<LoopSummary[]> {
+    await this.start()
+    this.requireActive()
+    return this.store.listSummaries()
+  }
+
 
   get(loopId: string): LoopSnapshot {
     this.requireActive()
