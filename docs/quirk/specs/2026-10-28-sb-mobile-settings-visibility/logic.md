@@ -1,5 +1,8 @@
 # Settings Mobile revoke visibility
 
+## Purpose
+Determine whether the existing Settings device action is actually unreachable, rather than treating an unsuccessful driver action as proof of app clipping.
+
 ## Status & amendments
 Status: autonomously approved under docs/loop/LOOP.md; tech spec requested by the loop.
 
