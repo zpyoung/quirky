@@ -1410,6 +1410,14 @@
       "docs": [],
       "deps": [],
       "status": "todo"
+    },
+    {
+      "id": "fix-native-m2-editor-1028",
+      "milestone": "M2",
+      "title": "Fix the native-only failures in m2-editor from the 2026-10-28 run: SC-9-native",
+      "docs": [],
+      "deps": [],
+      "status": "todo"
     }
   ]
 }
