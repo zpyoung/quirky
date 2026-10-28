@@ -132,5 +132,62 @@
 - **Revisit if:** Linux/Windows milestone starts
 - **Source:** deferred: platform
 
+## D13: Add explicit read-only schema access without permitting downgrades
+- **Question:** feature persistence requires read access to a newer loop schema, while the shared store refuses newer versions
+- **Options:** duplicate SQLite ownership in loops; weaken default migration safety; opt-in native read-only handle
+- **Chose:** public `context.openStore(migrations, {newerVersion:'read-only'})` and optional `store.readOnly` flag. Default openStore still refuses newer versions. Opt-in reopens the existing file with SQLite readonly, runs no migrations or mutating journal PRAGMA, and refuses write/transaction methods before callbacks. Even SQL through get/all cannot mutate. Loop recovery/pruning is skipped on readonly stores and mutations fail.
+- **Why:** m0-daemon-api D10's explicit revisit condition is release rollback without data loss. The new loop requirement needs history reads on rollback, not down migrations or writes. This works within its forward-only default and protects user data rather than creating a separate persistence convention.
+- **Evidence:** packages/daemon/src/plugins/stores.ts newer-version refusal; stores.test.ts new regression failed before source change, then30pass/0fail/74assertions; fork-loops.md Persistence and newer-schema edge case; m0-daemon-api D10
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** a future schema removes columns required by old readers
+- **Source:** supersedes m0-daemon-api D10 (explicit read-only opt-in only; default downgrade refusal unchanged)
+
+## D14: Bound structured journal reads and expose native rate-limit evidence
+- **Question:** driver restart/current cursor queries otherwise read unbounded session history, and reset events were not journaled
+- **Options:** fetch all history and slice; add optional SQL-bounded paging and native event data
+- **Chose:** structured/messages gains optional limit1..1000 and tail boolean, ascending results after afterSeq; tail selects newest limited messages. Defaults unchanged. Guard queries latest1. Native rate-limit events are journaled as provider evidence; consumers do not infer reset times or USD from prose/tokens.
+- **Why:** background continue sessions may run indefinitely. API-bound selection keeps loop memory bounded and makes usage-reset safety reachable.
+- **Evidence:** LoopSeams survey; LoopsEngine/LoopsEvidence integration messages; structured/messages/journal.list existing unbounded result
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** structured journal adds a normalized telemetry projection
+- **Source:** assumed — autonomous
+
+## D15: Structured execution owns creating-plugin cleanup after caller revocation
+- **Question:** disabling loops revokes its public call capability before deactivate can stop its provider sessions
+- **Options:** bypass revocation; leave native children alive; structured owner releases registered-plugin children on plugin changes
+- **Chose:** retain kernel revocation order. Structured records creating registered plugin ownership in live session state and stops only that owner's sessions/asks when the owner is unavailable. User/kernel-created sessions are unaffected. Loop shutdown remains best-effort and daemon structured shutdown remains the final process owner.
+- **Why:** m5-structured-runner D13/D19 already establish ownership cleanup rather than weakening revoked capabilities. A background loop must not keep editing after its owning plugin is disabled.
+- **Evidence:** packages/daemon/src/plugins/runtime.ts revocation contract; structured-runner D13/D19; integration acceptance disable-loop scenario
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** plugin lifecycle gains a pre-revocation cleanup phase
+- **Source:** locked by docs/loop/decisions/m5-structured-runner.md
+
+- Persistence coherence inventory: all existing openStore callers in packages/plugins/apps/scripts were enumerated. Existing plugins and runtime/lifecycle/store API tests keep one-argument behavior unchanged; only loops opts in. Optional readOnly does not require fake store writers to add a field.
+
+## D16: Retain core seams for the early presets dependent
+- **Question:** lane5's early m5-loops-presets item has merged the committed core types and needs a stable engine integration point
+- **Options:** implement presets in core; change the core contract speculatively; retain current core contracts and publish completed source
+- **Chose:** retain shared types and until-done-only core scope. Lane5 owns additive queue/interval configuration, queue items, skipped ticks, queue mutation and decision payloads on its own branch. Publish audited complete engine/store/driver/service source after this wave, not partially written workers.
+- **Why:** the priority user interjection explicitly assigns presets to lane5 and asks core to retain current contracts. Disjoint branch ownership avoids competing implementations.
+- **Evidence:** current user interjection; shared contracts95383d97; agents notified
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** dependent integration identifies an incompatible seam
+- **Source:** assumed — autonomous
+
+## D17: Publish an audited source checkpoint while the combined gate is red
+- **Question:** priority lane5 request to overlap dependent integration with core verification
+- **Options:** hold source until all checks pass; publish explicitly unverified audited checkpoint
+- **Chose:** publish the HEAD/scope-audited worker source checkpoint, with initial fixture/import/manifest admission failures disclosed. Keep the core item in progress; no landing or completion claim. Continue engine repairs and full affected verification on this branch; dependent lane merges later fixes before its gates.
+- **Why:** lane5 explicitly requested a committed audited checkpoint and will not copy live worker trees. All original component workers returned and scope/HEAD audit passed at95383d97; checkpoint source is the frozen staged wave, not an in-flight worker copy.
+- **Evidence:** /tmp/quirky-m5-loops-run.0VUATs/wave-audit.json; first integrated gate68pass27fail; plugin admission diagnostics identify invalid CLI positional names/descriptions
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** dependent lane needs a changed engine contract
+- **Source:** assumed — autonomous
+
 ## Progress
-Design combined spec and shared type contracts written. Next commit contracts, create three isolated component worktrees, dispatch implementers against immutable types, audit results and integrate, then run required affected gate and actual API/CLI smoke. Dependency is ready; no pending merge required before implementation. Single focused scout completed; no research swarm. No source implementation yet.
+Contracts95383d97committed. Three isolated implementation components are running at /tmp/quirky-m5-loops-{engine,evidence,integration}, all HEAD95383d97and no commits allowed. Parent added read-only schema opt-in with failing-before/passing-after kernel regression (30tests pass) and native handoff. Next audit worker scopes/HEAD at wave barrier, integrate all, then catch up once and run affected suite/scripts/typecheck plus actual API/CLI smoke and final review. Private journal/review controller /tmp/quirky-m5-loops-run.0VUATs. Baseline isolated real daemon confirmed unknown quirky.loops/list; no real homes were touched.

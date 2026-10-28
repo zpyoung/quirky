@@ -278,6 +278,13 @@
         "@types/react-dom": "^19.3.0"
       }
     },
+    "plugins/quirky.loops": {
+      "name": "@quirky/plugin-loops",
+      "version": "0.1.0",
+      "dependencies": {
+        "@quirky/protocol": "workspace:*"
+      }
+    },
     "plugins/quirky.notifications": {
       "name": "@quirky/plugin-notifications",
       "version": "0.1.0",

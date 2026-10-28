@@ -1,0 +1,386 @@
+{
+  "id": "quirky.loops",
+  "name": "Until-done loops",
+  "version": "0.1.0",
+  "description": "Durable background Claude and Codex loops with independently verified completion and bounded safety holds.",
+  "main": "main.ts",
+  "cli": "cli.ts",
+  "cliAliases": ["loop"],
+  "activation": "startup",
+  "dependencies": ["quirky.worktree", "quirky.structured", "quirky.checks", "quirky.ask", "quirky.session"],
+  "contributes": {
+    "method": [
+      {
+        "id": "create",
+        "description": "Starts a durable until-done loop in the selected worktree. Only Claude and Codex, repeated prompts and on-idle pacing are supported.",
+        "params": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "worktree": { "type": "string", "description": "A worktree selector; defaults to the caller's current worktree." },
+            "worktreeId": { "type": "string", "description": "The worktree ID; mutually exclusive with worktree." },
+            "name": { "type": "string" },
+            "agent": { "type": "string", "enum": ["claude", "codex"] },
+            "preset": { "type": "string", "enum": ["until-done"] },
+            "config": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "promptSource": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": { "kind": { "type": "string", "enum": ["repeat"] }, "body": { "type": "string" } },
+                  "required": ["kind", "body"]
+                },
+                "pacing": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": { "kind": { "type": "string", "enum": ["on-idle"] } },
+                  "required": ["kind"]
+                },
+                "sessionPolicy": { "type": "string", "enum": ["fresh", "continue"] },
+                "done": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "check": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": {
+                        "command": { "type": "string" },
+                        "timeoutSeconds": { "type": "integer", "minimum": 1, "maximum": 600 },
+                        "runWhen": { "type": "string", "enum": ["every-iteration", "on-claim"] }
+                      },
+                      "required": ["command", "timeoutSeconds", "runWhen"]
+                    },
+                    "evaluator": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": { "condition": { "type": "string" } },
+                      "required": ["condition"]
+                    }
+                  }
+                },
+                "caps": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "maxIterations": { "type": "integer", "minimum": 1 },
+                    "maxActiveMinutes": { "type": "integer", "minimum": 1 },
+                    "maxCostUsd": { "type": "number", "minimum": 0 }
+                  }
+                },
+                "noProgress": { "type": "boolean" },
+                "protectedPaths": { "type": "array", "items": { "type": "string" } },
+                "checkpointCommits": { "type": "boolean" },
+                "askBeforeNext": { "type": "boolean" },
+                "resumeAtLimitReset": { "type": "boolean" }
+              },
+              "required": ["promptSource", "pacing", "sessionPolicy", "done", "caps", "noProgress", "checkpointCommits", "askBeforeNext", "resumeAtLimitReset"]
+            },
+            "model": { "type": "string" },
+            "options": { "type": "object", "additionalProperties": true }
+          },
+          "required": ["agent", "config"]
+        },
+        "result": { "type": "object", "description": "The complete durable LoopSnapshot, including config, current phase and recent attempts.", "additionalProperties": true }
+      },
+      {
+        "id": "list",
+        "description": "Lists loops newest-updated first, optionally filtered to a worktree.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": { "worktreeId": { "type": "string" }, "worktree": { "type": "string" } }
+        },
+        "result": { "type": "array", "items": { "type": "object", "description": "A complete LoopSnapshot.", "additionalProperties": true } }
+      },
+      {
+        "id": "get",
+        "description": "Returns one complete durable loop snapshot.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": { "loopId": { "type": "string" } },
+          "required": ["loopId"]
+        },
+        "result": { "type": "object", "description": "A complete LoopSnapshot.", "additionalProperties": true }
+      },
+      {
+        "id": "iterations",
+        "description": "Returns full attempt history oldest first; snapshots include only the latest 50 attempts.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": { "loopId": { "type": "string" }, "limit": { "type": "integer", "minimum": 1 } },
+          "required": ["loopId"]
+        },
+        "result": { "type": "array", "items": { "type": "object", "description": "An iteration attempt with bounded output and evidence.", "additionalProperties": true } }
+      },
+      {
+        "id": "pause",
+        "description": "Pauses after the current iteration; repeated pause is a no-op.",
+        "params": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": { "loopId": { "type": "string" }, "mode": { "type": "string", "enum": ["after-iteration"] } },
+          "required": ["loopId", "mode"]
+        },
+        "result": { "type": "object", "description": "The updated LoopSnapshot.", "additionalProperties": true }
+      },
+      {
+        "id": "resume",
+        "description": "Resumes a paused loop and optionally raises its iteration cap by a positive count.",
+        "params": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": { "loopId": { "type": "string" }, "addIterations": { "type": "integer", "minimum": 1 } },
+          "required": ["loopId"]
+        },
+        "result": { "type": "object", "description": "The updated LoopSnapshot.", "additionalProperties": true }
+      },
+      {
+        "id": "stop",
+        "description": "Stops after the current iteration, or immediately aborts the owned structured session when mode is now.",
+        "params": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": { "loopId": { "type": "string" }, "mode": { "type": "string", "enum": ["after-iteration", "now"] } },
+          "required": ["loopId", "mode"]
+        },
+        "result": { "type": "object", "description": "The updated LoopSnapshot.", "additionalProperties": true }
+      },
+      {
+        "id": "steer",
+        "description": "Queues a non-empty one-shot note for the next actual iteration send.",
+        "params": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": { "loopId": { "type": "string" }, "text": { "type": "string" } },
+          "required": ["loopId", "text"]
+        },
+        "result": { "type": "object", "description": "The updated LoopSnapshot.", "additionalProperties": true }
+      },
+      {
+        "id": "edit",
+        "description": "Changes only named settings for the next iteration; ended loops cannot be edited.",
+        "params": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "loopId": { "type": "string" },
+            "patch": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "name": { "type": "string" },
+                "promptSource": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": { "kind": { "type": "string", "enum": ["repeat"] }, "body": { "type": "string" } },
+                  "required": ["kind", "body"]
+                },
+                "pacing": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": { "kind": { "type": "string", "enum": ["on-idle"] } },
+                  "required": ["kind"]
+                },
+                "sessionPolicy": { "type": "string", "enum": ["fresh", "continue"] },
+                "done": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "check": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": {
+                        "command": { "type": "string" },
+                        "timeoutSeconds": { "type": "integer", "minimum": 1, "maximum": 600 },
+                        "runWhen": { "type": "string", "enum": ["every-iteration", "on-claim"] }
+                      },
+                      "required": ["command", "timeoutSeconds", "runWhen"]
+                    },
+                    "evaluator": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": { "condition": { "type": "string" } },
+                      "required": ["condition"]
+                    }
+                  }
+                },
+                "caps": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "maxIterations": { "type": "integer", "minimum": 1 },
+                    "maxActiveMinutes": { "type": "integer", "minimum": 1 },
+                    "maxCostUsd": { "type": "number", "minimum": 0 }
+                  }
+                },
+                "noProgress": { "type": "boolean" },
+                "protectedPaths": { "type": "array", "items": { "type": "string" } },
+                "checkpointCommits": { "type": "boolean" },
+                "askBeforeNext": { "type": "boolean" },
+                "resumeAtLimitReset": { "type": "boolean" }
+              }
+            }
+          },
+          "required": ["loopId", "patch"]
+        },
+        "result": { "type": "object", "description": "The updated LoopSnapshot.", "additionalProperties": true }
+      }
+    ],
+    "event": [
+      {
+        "id": "changed",
+        "description": "A loop snapshot changed.",
+        "data": { "type": "object", "additionalProperties": true }
+      },
+      {
+        "id": "notification",
+        "description": "A loop notification to pass through the notifications policy.",
+        "data": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "loopId": { "type": "string" },
+            "name": { "type": "string" },
+            "event": { "type": "string", "enum": ["completed", "paused", "cap", "needs-you"] },
+            "reason": { "type": "string" },
+            "detail": { "type": "string" },
+            "sessionId": { "type": "string" },
+            "worktreeId": { "type": "string" }
+          },
+          "required": ["loopId", "name", "event", "worktreeId"]
+        }
+      }
+    ],
+    "cli-command": [
+      {
+        "id": "create",
+        "words": "create",
+        "summary": "start an until-done background loop",
+        "flags": {
+          "agent": { "type": "string", "description": "required: claude or codex" },
+          "worktree": { "type": "string", "description": "worktree selector (default: current)" },
+          "name": { "type": "string", "description": "display name" },
+          "preset": { "type": "string", "description": "only until-done is supported" },
+          "prompt": { "type": "string", "description": "required repeated prompt" },
+          "session": { "type": "string", "description": "fresh (default) or continue" },
+          "check": { "type": "string", "description": "independent completion command" },
+          "check-timeout": { "type": "number", "description": "check timeout seconds, 1 to 600 (default: 300)" },
+          "check-when": { "type": "string", "description": "every-iteration (default) or on-claim" },
+          "evaluator": { "type": "string", "description": "independent evaluator condition" },
+          "max-iterations": { "type": "number", "description": "maximum settled iterations; omitted means unlimited" },
+          "max-minutes": { "type": "number", "description": "maximum active minutes" },
+          "max-cost": { "type": "number", "description": "maximum measurable USD cost" },
+          "no-progress": { "type": "boolean", "description": "pause after three comparable unchanged attempts" },
+          "checkpoint-commits": { "type": "boolean", "description": "checkpoint only files changed by an iteration" },
+          "ask-before-next": { "type": "boolean", "description": "pause for approval before each new iteration" },
+          "resume-at-reset": { "type": "boolean", "description": "resume after an explicit provider reset timestamp" },
+          "protected-path": { "type": "string", "repeatable": true, "description": "protected path or glob (repeatable)" },
+          "model": { "type": "string", "description": "agent model selection" },
+          "effort": { "type": "string", "description": "model effort; requires --model" },
+          "option": { "type": "string", "repeatable": true, "description": "model option KEY=VALUE; requires --model" }
+        },
+        "methods": ["quirky.loops/create"]
+      },
+      {
+        "id": "list",
+        "words": "list",
+        "summary": "list durable loops",
+        "flags": { "worktree": { "type": "string", "description": "filter by worktree selector" } },
+        "methods": ["quirky.loops/list"]
+      },
+      {
+        "id": "show",
+        "words": "show",
+        "summary": "show a loop snapshot",
+        "positionals": [{ "name": "loop", "required": true, "description": "loop ID" }],
+        "methods": ["quirky.loops/get"]
+      },
+      {
+        "id": "get",
+        "words": "get",
+        "summary": "show a loop snapshot",
+        "positionals": [{ "name": "loop", "required": true, "description": "loop ID" }],
+        "methods": ["quirky.loops/get"]
+      },
+      {
+        "id": "iterations",
+        "words": "iterations",
+        "summary": "show full loop attempt history",
+        "positionals": [{ "name": "loop", "required": true, "description": "loop ID" }],
+        "flags": { "limit": { "type": "number", "description": "maximum attempts to show" } },
+        "methods": ["quirky.loops/iterations"]
+      },
+      {
+        "id": "pause",
+        "words": "pause",
+        "summary": "pause after the current iteration",
+        "positionals": [{ "name": "loop", "required": true, "description": "loop ID" }],
+        "methods": ["quirky.loops/pause"]
+      },
+      {
+        "id": "resume",
+        "words": "resume",
+        "summary": "resume a paused loop",
+        "positionals": [{ "name": "loop", "required": true, "description": "loop ID" }],
+        "flags": { "add-iterations": { "type": "number", "description": "raise the iteration cap by this many" } },
+        "methods": ["quirky.loops/resume"]
+      },
+      {
+        "id": "stop",
+        "words": "stop",
+        "summary": "stop after the current iteration, or immediately with --now",
+        "positionals": [{ "name": "loop", "required": true, "description": "loop ID" }],
+        "flags": { "now": { "type": "boolean", "description": "interrupt the current structured turn now" } },
+        "methods": ["quirky.loops/stop"]
+      },
+      {
+        "id": "steer",
+        "words": "steer",
+        "summary": "queue a one-shot note for the next iteration",
+        "positionals": [
+          { "name": "loop", "required": true, "description": "loop ID" },
+          { "name": "text", "required": true, "description": "guidance for the next iteration" }
+        ],
+        "methods": ["quirky.loops/steer"]
+      },
+      {
+        "id": "edit",
+        "words": "edit",
+        "summary": "edit settings applied to the next iteration",
+        "positionals": [{ "name": "loop", "required": true, "description": "loop ID" }],
+        "flags": {
+          "name": { "type": "string", "description": "display name" },
+          "prompt": { "type": "string", "description": "repeated task prompt" },
+          "session": { "type": "string", "description": "fresh or continue" },
+          "check": { "type": "string", "description": "independent completion command" },
+          "check-timeout": { "type": "number", "description": "check timeout seconds, 1 to 600" },
+          "check-when": { "type": "string", "description": "every-iteration or on-claim" },
+          "evaluator": { "type": "string", "description": "independent evaluator condition" },
+          "max-iterations": { "type": "number", "description": "maximum settled iterations" },
+          "max-minutes": { "type": "number", "description": "maximum active minutes" },
+          "max-cost": { "type": "number", "description": "maximum measurable USD cost" },
+          "no-progress": { "type": "boolean", "description": "pause after three comparable unchanged attempts" },
+          "checkpoint-commits": { "type": "boolean", "description": "checkpoint files changed by each iteration" },
+          "ask-before-next": { "type": "boolean", "description": "pause before each new iteration" },
+          "resume-at-reset": { "type": "boolean", "description": "resume after an explicit provider usage reset" },
+          "protected-path": { "type": "string", "repeatable": true, "description": "protected path or glob" },
+          "no-check": { "type": "boolean", "description": "remove the completion check" },
+          "no-evaluator": { "type": "boolean", "description": "remove the evaluator condition" },
+          "no-max-iterations": { "type": "boolean", "description": "remove the iteration cap" },
+          "no-max-minutes": { "type": "boolean", "description": "remove the active-time cap" },
+          "no-max-cost": { "type": "boolean", "description": "remove the cost cap" },
+          "no-protected-paths": { "type": "boolean", "description": "remove all protected paths" }
+        },
+        "methods": ["quirky.loops/get", "quirky.loops/edit"]
+      }
+    ]
+  }
+}

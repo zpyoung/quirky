@@ -198,7 +198,7 @@ export function createPluginRuntime(options: PluginRuntimeOptions): PluginRuntim
           guard()
           return fileResources.create(id, options, isRevoked)
         },
-        openStore(migrations: StoreMigration[]) {
+        openStore(migrations: StoreMigration[], options?: { newerVersion?: 'read-only' }) {
           guard()
           if (opened) {
             if (opened.migrations !== migrations.length) {
@@ -207,7 +207,7 @@ export function createPluginRuntime(options: PluginRuntimeOptions): PluginRuntim
             return opened.store
           }
           // the handle stays usable inside deactivate; extension.revoke closes it afterwards
-          const created = openPluginStore({ home, pluginId: id, migrations, isActive: () => true })
+          const created = openPluginStore({ home, pluginId: id, migrations, isActive: () => true, newerVersion: options?.newerVersion })
           opened = { ...created, migrations: migrations.length }
           openedStores.set(id, opened)
           return opened.store
