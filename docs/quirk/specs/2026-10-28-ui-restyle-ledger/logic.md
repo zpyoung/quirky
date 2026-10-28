@@ -48,3 +48,6 @@ Tool: host-owned slot contribution. Page: existing Ledger center view. Snapshot:
 - Gate: bun run typecheck. Minimum actual changed-surface proof: build UI, mount actual daemon-served Ledger in a fresh isolated HOME/QUIRKY_HOME, inspect dark/light and exercise a form/detail/confirmation/settings path without real state. This is not a full dogfood or golden review campaign.
 - One roadmap catch-up before land; read incoming decisions. Land only through authoritative queue executable.
 - Platform: macOS proof only; Linux/Windows/native-window acceptance remains unexercised.
+
+## Implementation evidence
+Shared controls and token-only layout migration is implemented; `Dialog.scrollBody` preserves fixed actions. Final root typecheck includes canonical Ledger UI lint and all three TypeScript targets; final UI bundle and actual dark/light surface proof are recorded in ui-restyle-ledger decisions D8–D10. Suites, formal review, independent screenshot scoring and native acceptance were not executed under build-first. The App worker path violation and first branded-browser updater side effects remain explicit evidence limitations, not hidden passing checks.

@@ -908,7 +908,7 @@ export function LedgerApp({
     return (
       <section className="ledger-root ledger-panel" aria-label="Ledger panel" style={ledgerStyles.panel}>
         <header className="ledger-panel-header" style={ledgerStyles.actions}>
-          <IconButton label="Refresh ledger" aria-busy={refreshSpinner} className={refreshSpinner ? 'ledger-refreshing' : ''} title={refreshSpinner ? 'Refreshing ledger…' : 'Refresh ledger'} onClick={refresh}>↻</IconButton>
+          <IconButton label="Refresh ledger" aria-busy={refreshSpinner} title={refreshSpinner ? 'Refreshing ledger…' : 'Refresh ledger'} onClick={refresh}>{refreshSpinner ? '…' : '↻'}</IconButton>
           <Button type="button" onClick={openTriage}>Triage</Button>
           <Button type="button" variant="primary" onClick={beginNew}>New</Button>
         </header>
@@ -954,7 +954,7 @@ export function LedgerApp({
             const repoId = currentSummary?.repoId ?? effectiveTarget?.owner?.id
             if (repoId) context.openView(LEDGER_SETTINGS_VIEW_ID, { repoId })
           }}>Ledger settings</Button>}
-          <Button type="button" aria-label="Refresh ledger" aria-busy={refreshSpinner} className={refreshSpinner ? 'ledger-refreshing' : ''} title={refreshSpinner ? 'Refreshing ledger…' : 'Refresh ledger'} onClick={refresh}>Refresh</Button>
+          <Button type="button" aria-label="Refresh ledger" aria-busy={refreshSpinner} title={refreshSpinner ? 'Refreshing ledger…' : 'Refresh ledger'} onClick={refresh}>{refreshSpinner ? 'Refreshing…' : 'Refresh'}</Button>
           <Button type="button" onClick={openTriage}>Triage</Button>
           <Button type="button" variant="primary" onClick={beginNew}>New entry</Button>
           {currentSummary && <Button type="button" variant="destructive" onClick={() => setConfirmation({ kind: 'delete-ledger', ledgerId: currentSummary.ledgerId, revision: currentSummary.revision, entryCount: currentSummary.entryCount })}>Delete ledger</Button>}

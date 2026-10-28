@@ -77,5 +77,38 @@
 - **Revisit if:** attribution finds another modified path.
 - **Source:** assumed — autonomous
 
+## D8: Report actual renderer proof without claiming a visual score or suite pass
+- **Question:** What assurance is available under build-first?
+- **Options:** infer full parity; run prohibited campaigns; report only compiler/build and narrowly exercised renderer evidence.
+- **Chose:** Canonical UI lint/root/mobile/prepared-desktop typecheck passed twice (41.70s, final37.69s); final UI build emitted11host files/25plugin modules. Real daemon-served UI showed populated bottom-left Ledger and targeted page, required-field errors, actual bug creation via form-associated submit, history scrolling with fixed actions, snapshot Delete/Cancel, triage Resolve/Cancel returning with the same selection and exactly one dialog, settings90→30/Saved with canonical readback, filtered empty state, and live dark/light themes. Narrow1000×700 reached all rows through the host scroll region with no document horizontal overflow. Final shared Button rows use block text flow so IDs remain legible; delayed refresh uses shared busy text/ellipsis, not dead plugin animation CSS.
+- **Why:** These are actual changed-surface observations, not a full dogfood campaign, screenshot-model/golden approval, suite or native-window proof. Existing tests were updated for accessible shared labels/semantic footer and authored behavior remains unrun.
+- **Evidence:** bg2/bg4 typecheck, bg3/bg5 UI build; ledger-restyle-l8-smoke and ledger-restyle-l8-final; private ui-restyle-ledger receipts/screenshots. Detail body738px/scroll965px/footer bottom867px within900px viewport; renderer pageerrors=[]; canonical ledger readback3entries/staleAfterDays30.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** end-phase tests or the independent visual gate finds a defect.
+- **Source:** locked by docs/loop/LOOP.md
+
+## D9: Bound browser isolation claims after observing branded Chrome updater behavior
+- **Question:** Did private HOME/user-data-dir prove all branded-browser OS state was isolated?
+- **Options:** conceal updater logs; delete real browser state; stop owned runtime and use the testing-browser distribution.
+- **Chose:** The first uniquely owned Chrome profile exposed GoogleUpdater child logs referencing the real user's Library, including prefs commits. Stopped that owned runtime; did not inspect, delete, restore or otherwise modify the user's Library. No claim that the first browser was fully OS-isolated. Final minimal dark/light and scroll-body proof used installed Playwright Chrome for Testing with a fresh private home/profile, background-network/component-update/breakpad disabled and a new owned CDP endpoint; both exact CDP tabs were released and private process scopes cleaned. Never used the previously prohibited shared app.path handle or other lanes' CDP sessions.
+- **Why:** HOME plus a private browser profile does not override every macOS OS-directory API. Actual updater side effects cannot be undone safely by editing user state; renderer proof and filesystem isolation are different claims.
+- **Evidence:** ledger-restyle-l8-smoke service stderr: GoogleUpdater --install/--wake-all and real-Library prefs commits; final testing-browser readiness and exit receipts.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** another branded/native tool is proposed for isolated verification.
+- **Source:** assumed — autonomous
+
+## D10: The sole roadmap catch-up brought no incoming changes
+- **Question:** Which concurrent decisions constrain the final source?
+- **Options:** repeatedly merge; perform the required one catch-up and preserve existing contracts.
+- **Chose:** After App integration commit ecb71998, git merge build/roadmap returned Already up to date. No incoming source/decision logs or conflicts. Existing Ledger, remote-authority and redesign decisions remain binding; no remote/native capability or follow-up item was added.
+- **Why:** One catch-up is the current loop contract; further merge is reserved for an actual controller failure.
+- **Evidence:** canonical merge output; m5-ledger and m7-ledger-remote-host-flows full read by LedgerBindingConstraints.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** queue land reports a real conflict or type failure.
+- **Source:** locked by docs/loop/LOOP.md
+
 ## Progress
-Combined spec and unchanged public contracts prepared. Next commit layout/dependency contracts, dispatch two isolated bounded source components, parent-owned settings/lint integration, one roadmap catch-up and actual typecheck/minimum surface proof, then authoritative queue land. No suites/review/dogfood/golden score claimed.
+Ready to land after final typecheck37.69s, final UI build and minimal actual dark/light/scroll/form/confirmation/settings proof. Both implementers returned, both temporary trees removed. App provenance violation and first Chrome updater-isolation limit are explicit in D7/D9, not clean-assurance claims. No suite/formal review/dogfood/golden score/native acceptance was run or claimed. Final owned runtime shutdown must finish, then commit all owned source/docs, detach and run authoritative queue land ui-restyle-ledger in this turn. Preserve all unknown untracked diagnostics and other lanes' browser state.

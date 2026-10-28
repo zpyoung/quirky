@@ -13,7 +13,7 @@ export const ledgerStyles = {
   list: { flex: '1 1 auto', minHeight: 0, overflow: 'auto', margin: 0, padding: 0, listStyle: 'none' },
   row: { display: 'flex', flexDirection: 'column', gap: 'var(--ui-space-6)', borderBottom: 'var(--ui-border-width) solid var(--ui-border)', paddingBlock: 'var(--ui-space-8)', minWidth: 0 },
   rowMain: { display: 'flex', alignItems: 'center', gap: 'var(--ui-space-8)', minWidth: 0 },
-  rowTitle: { flex: '1 1 auto', minWidth: 0, overflowWrap: 'anywhere', textAlign: 'left' },
+  rowTitle: { display: 'block', flex: '1 1 auto', minWidth: 0, overflowWrap: 'anywhere', textAlign: 'left' },
   title: { margin: 0, fontSize: 'var(--ui-font-title)', fontWeight: 650 },
   muted: { color: 'var(--ui-muted)' },
   meta: { color: 'var(--ui-muted)', fontSize: 'var(--ui-font-label)', overflowWrap: 'anywhere' },
