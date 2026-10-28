@@ -402,7 +402,7 @@
   justify-content: flex-start;
   width: 100%;
   padding: 0;
-  border-color: transparent;
+  border-color: var(--ui-transparent);
   background: var(--ui-transparent);
   color: var(--ui-text);
   font-size: var(--ui-font-body);
@@ -412,7 +412,7 @@
 }
 
 .qvh-root .qvh-row-title-button.ui-button:hover:not(:disabled) {
-  border-color: transparent;
+  border-color: var(--ui-transparent);
   background: var(--ui-transparent);
   text-decoration: underline;
 }

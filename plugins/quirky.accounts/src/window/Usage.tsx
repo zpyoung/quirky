@@ -310,7 +310,7 @@ function ResetCredit({ store, snapshot, accounts }: { store: AccountsUiStore; sn
     {pendingOffer && <Dialog
       open={Boolean(pendingOffer)}
       title="Reset Codex limits confirmation"
-      onClose={cancelReset}
+      onClose={submitting ? undefined : cancelReset}
       closeOnBackdrop={!submitting}
       actions={<>
         <Button type="button" disabled={submitting} onClick={cancelReset}>Cancel</Button>
@@ -617,7 +617,7 @@ export function AccountSwitchDialog({ store, report }: { store: AccountsUiStore;
   if (!visible.length) return null
   const revisions = new Set(visible.map((session) => session.selectionRevision))
   return <div className="accounts-ui accounts-switch-dialog-root">
-    <Dialog open={visible.length > 0} title={`Switched to ${visible[0]?.selectedLabel ?? 'another account'}`} onClose={() => undefined} closeOnBackdrop={false} actions={<>
+    <Dialog open={visible.length > 0} title={`Switched to ${visible[0]?.selectedLabel ?? 'another account'}`} closeOnBackdrop={false} actions={<>
       <Button type="button" disabled={submitting} onClick={() => void choose('keep')}>Keep as is</Button>
       <Button type="button" variant="primary" disabled={submitting} onClick={() => void choose('restart')}>{visible.length === 1 ? 'Restart session' : `Restart ${visible.length} sessions`}</Button>
     </>}>

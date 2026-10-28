@@ -233,6 +233,33 @@
   min-width: 0;
 }
 
+.accounts-ui .account-list .ui-list-row {
+  flex-wrap: wrap;
+}
+
+.accounts-ui .account-list .ui-list-row__main {
+  flex: 1 1 calc(var(--ui-space-24) * 10);
+}
+
+.accounts-ui .account-list .ui-list-row__trailing {
+  margin-inline-start: auto;
+}
+
+.accounts-ui .account-list .ui-list-row__title {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--ui-space-4);
+}
+
+.accounts-ui .account-list .ui-list-row__description {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.accounts-ui .account-list .ui-list-row__description > span {
+  display: block;
+}
+
 .accounts-ui .account-row-main,
 .accounts-ui .provider-row-main {
   display: flex;
@@ -401,9 +428,9 @@
   display: flex;
   gap: var(--ui-space-4);
   inset-block-start: 0;
-  inset-inline-start: 0;
+  inset-inline-end: 100%;
   pointer-events: none;
-  position: absolute;
+  position: fixed;
   visibility: hidden;
   width: max-content;
 }
@@ -452,7 +479,7 @@
   flex-direction: column;
   gap: var(--ui-space-8);
   left: auto;
-  max-height: calc(100vh - var(--ui-space-24));
+  max-height: calc(100vh - var(--ui-row-double) - var(--ui-space-24));
   max-width: calc(100vw - var(--ui-space-24));
   min-width: 0;
   overflow: auto;
@@ -460,7 +487,7 @@
   position: absolute;
   right: 0;
   top: auto;
-  width: min(100%, calc(100vw - var(--ui-space-24)));
+  width: min(calc(var(--ui-space-24) * 16), calc(100vw - var(--ui-space-24)));
   z-index: 30;
   white-space: normal;
 }

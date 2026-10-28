@@ -54,15 +54,16 @@ None. Golden-model/full feature acceptance and native/platform evidence are exis
 
 ### Shared contracts (committed before implementers)
 
-Reuse `packages/ui/src/design-system/contracts.ts` unchanged: Button/IconButton/TextField/Badge/StatusDot/ListRow/SectionHeader/Tabs/Menu/Dialog/EmptyState/FormRow/ToolPanelFrame/InlineAgentCard. Import only public `@quirky/ui` exports. `Button` preserves native button props; `TextField` preserves input props with a required label; Dialog owns focus/trap/Escape and caller retains close/busy decisions. Existing standard HTML content structures may remain where no special shared control applies, styled only by canonical shared classes/tokens.
+Reuse `packages/ui/src/design-system/contracts.ts`: Button/IconButton/TextField/Badge/StatusDot/ListRow/SectionHeader/Tabs/Menu/Dialog/EmptyState/FormRow/ToolPanelFrame/InlineAgentCard. Import only public `@quirky/ui` exports. `Button` preserves native button props and accepts an optional React19 `ref` to the real button (also inherited by IconButton); `TextField` preserves input props with a required label. Dialog owns focus/trap/Escape; its optional `onClose` is the dismissal capability. Without it, no close control is shown and Escape/backdrop cannot dismiss. Existing callers supplying `onClose` keep their behavior. Required-choice switch dialogs omit it; busy reset confirmations omit it while submitting. Existing standard HTML content structures may remain where no special shared control applies, styled only by canonical shared classes/tokens.
 
-No new exported signatures, protocol types or schemas are required. Feature-specific geometry that the kit does not express belongs in two centrally linted shared layout files, `packages/ui/src/design-system/accounts.css` and `vault.css`, not private plugin CSS. Use `--ui-*` semantic tokens and existing approved size steps; avoid copying legacy literal styles or introducing arbitrary compatibility primitives. Parent alone integrates these shared files in the shared stylesheet.
+No new feature API, protocol type or schema is required. The additive shared button-ref/dismissal contracts preserve existing feature focus and required-choice semantics. Feature-specific geometry that the kit does not express belongs in two centrally linted shared layout files, `packages/ui/src/design-system/accounts.css` and `vault.css`, not private plugin CSS. Use `--ui-*` semantic tokens and existing approved size steps; avoid copying legacy literal styles or introducing arbitrary compatibility primitives. Parent alone integrates these shared files in the shared stylesheet.
 
 ### Ownership and invariants
 
 - Accounts component owns `plugins/quirky.accounts/src/ui.tsx`, `src/window/{AccountsSettings,Usage}.tsx`, obsolete `src/window/styles.ts`, and new shared `accounts.css`. Existing store/model/report logic is read-only. Preserve public reporting, generation/timer fences, scope/reset envelopes and native credential/history invariants.
 - Vault component owns `plugins/quirky.vault/src/window/{HistoryPanel,SearchSettings,evidence}.tsx`, obsolete `src/window/styles.ts`, and new shared `vault.css`. Existing `model.ts`, backend/scanner/search/service/types and public command routing are read-only. Preserve virtualizer measurement/data offsets, keyboard/focus, safe menu mounting and event routing.
 - Parent owns `scripts/ui-lint-plugins.json`, shared stylesheet imports, item docs, smoke driver and integration corrections. Two workers have disjoint files and no semantic dependency; one wave, width two. Worker edits use absolute assigned-worktree prefixes. Workers run no checks/formatters and do not commit.
+- A third, later test-only implementer owns affected Accounts/Vault UI regression selectors and one shared required-choice Dialog behavioral regression. Shared dialogs use `aria-labelledby`, so locate them through their accessible heading, not obsolete private CSS classes. Parent alone owns shared component contracts/implementation. No tests/checks run in the worker.
 - Existing inherited `.serena/` is unrelated and remains untouched. Use private scratch/runtime homes; no real accounts/providers/native auth.
 
 ### Acceptance commands and evidence
@@ -73,4 +74,6 @@ Catch up once via `git merge build/roadmap`, read incoming decisions, rerun type
 
 ## Status & amendments
 
-2026-10-28: self-reviewed for parent scope, all contribution coverage, unchanged behavior, disjoint source ownership, truthful verification limits and no placeholder contracts. No amendments yet.
+2026-10-28: self-reviewed for parent scope, all contribution coverage, unchanged behavior, disjoint source ownership, truthful verification limits and no placeholder contracts.
+
+2026-10-28 amendment: Compiler evidence required explicit button ref typing; source integration showed required-choice/busy dialogs must not expose an inert close button. Add the two minimal shared contracts above and migrate behavioral UI test selectors to real labeled controls/dialogs, with a third test-only implementer. Actual renderer smoke found a status-item-relative popup width and offscreen measurement overflow; fix those at the shared layout owner rather than weakening assertions.

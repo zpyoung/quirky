@@ -1,6 +1,8 @@
 [
+  "quirky.accounts",
   "quirky.browser",
   "quirky.editor",
   "quirky.terminal",
-  "quirky.terminal-dock"
+  "quirky.terminal-dock",
+  "quirky.vault"
 ]

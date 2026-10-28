@@ -37,3 +37,9 @@ Changed account/offer authority returns a public Conflict before provider redemp
 ## Queued Claude restarts
 
 Always queues busy restarts without an Ask modal. Under Ask, accepting Restart closes the choice dialog once the restart is queued; the pane accessory and usage details retain nonmodal progress until idle. If policy changes to Ask or Never before the next selection, the old queued intent is invalidated and cannot authorize a restart on the newly selected account.
+
+## Desktop presentation
+
+Accounts uses the public `@quirky/ui` graphite components and shared dark/light tokens for its settings, Usage status item and popover, session accessory and account-switch dialog. Its existing contribution IDs and account/usage APIs are unchanged; the host still owns placement and settings navigation.
+
+Accounts and Vault are both opted into `scripts/ui-lint-plugins.json`. Run `bun run typecheck` to enforce the shared design system as well as TypeScript contracts. Neither plugin injects its own stylesheet. The restyle's scope and acceptance scenarios are recorded in [`ui-restyle-accounts/logic.md`](../../../docs/quirk/specs/2026-10-28-ui-restyle-accounts/logic.md); the approved reference is the [desktop redesign](../../../docs/quirk/specs/2026-10-28-ui-redesign/logic.md).
