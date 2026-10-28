@@ -329,6 +329,7 @@ files, not this one.
 | medium | high | [m4-sidebar-review-filters D1](decisions/m4-sidebar-review-filters.md) | Deliver only the M4 review-filter slice | locked by docs/roadmap.md |
 | medium | high | [m4-sidebar-review-filters D3](decisions/m4-sidebar-review-filters.md) | Keep one daemon visibility result and add cache-only hosting read | assumed — autonomous |
 | medium | high | [m4-sidebar-review-filters D4](decisions/m4-sidebar-review-filters.md) | Match conservative visibility and preserve activity-only hidden count | locked by sidebar-extras.md |
+| medium | high | [ui-restyle-editor D2](decisions/ui-restyle-editor.md) | Use graphite shared controls and retain canonical host placement | locked by docs/quirk/specs/2026-10-28-ui-redesign/logic.md |
 | medium (scope and acceptance) | high | [sa-browser-pane D1](decisions/sa-browser-pane.md) | Take both queue parts together and answer all design questions autonomously | locked by docs/loop/LOOP.md |
 | medium (public api while unstable) | high | [sa-browser-pane D4](decisions/sa-browser-pane.md) | Use schema-declared pane APIs, bounded history and exact target identity | locked by docs/roadmap.md |
 | medium (requires sdk growth) | high for inspected public api, not proof of private native absence | [sa-browser-pane D5](decisions/sa-browser-pane.md) | Preserve unsupported native page-event flows as explicit SDK follow-ups | deferred: native page-event interception |
@@ -1364,6 +1365,18 @@ files, not this one.
 | easy | high | [m3-accounts-overflow-verification D7](decisions/m3-accounts-overflow-verification.md) | Land immediately under the operator's build-first override | supersedes this item D1/D4/D6 verification schedule under explicit operator decision |
 | easy | high for the measured pre-catchup snapshot; no merged-source acceptance claim | [m3-accounts-overflow-verification D8](decisions/m3-accounts-overflow-verification.md) | Preserve measured defects without claiming a repair | assumed — autonomous |
 | easy | high for observed results only | [m3-accounts-overflow-verification D9](decisions/m3-accounts-overflow-verification.md) | Distinguish completed checks, cancellation and incoming Accounts changes | locked by operator decision and incoming Accounts decisions |
+| easy | high | [ui-restyle-editor D1](decisions/ui-restyle-editor.md) | Preserve editor capabilities while replacing its presentation | locked by docs/quirk/specs/2026-10-28-ui-redesign/logic.md |
+| easy | high | [ui-restyle-editor D3](decisions/ui-restyle-editor.md) | Preserve feature-specific data and failure semantics | assumed — autonomous |
+| easy | high | [ui-restyle-editor D4](decisions/ui-restyle-editor.md) | Opt all editor source into the existing lint gate without exceptions | locked by docs/quirk/specs/2026-10-28-ui-redesign/logic.md |
+| easy | high | [ui-restyle-editor D5](decisions/ui-restyle-editor.md) | Execute one contracts-first wave under build-first | locked by docs/loop/LOOP.md |
+| easy | high | [ui-restyle-editor D6](decisions/ui-restyle-editor.md) | macOS evidence only; portable APIs where inexpensive | deferred: platform |
+| easy | high | [ui-restyle-editor D7](decisions/ui-restyle-editor.md) | Share printable HTML presentation without changing export semantics | assumed — autonomous |
+| easy | high | [ui-restyle-editor D8](decisions/ui-restyle-editor.md) | Keep content colors and engine assets distinct from app chrome | assumed — autonomous |
+| easy | high for named interactions only; full feature/native/golden acceptance unclaimed | [ui-restyle-editor D9](decisions/ui-restyle-editor.md) | Record minimum actual renderer proof without a golden-review claim | assumed — autonomous |
+| easy | high | [ui-restyle-editor D10](decisions/ui-restyle-editor.md) | Fence the smoke browser by an exclusively owned profile and explicit CDP | assumed — autonomous |
+| easy | high for observed process inventory | [ui-restyle-editor D11](decisions/ui-restyle-editor.md) | Keep shutdown evidence truthful and remove only owned leftovers | assumed — autonomous |
+| easy | high | [ui-restyle-editor D12](decisions/ui-restyle-editor.md) | Preserve incoming exact-window, Ask snapshot and shell mount contracts | locked by incoming decision logs |
+| easy | high | [ui-restyle-editor D13](decisions/ui-restyle-editor.md) | Union lint opt-ins after canonical land rejects concurrent restyle composition | locked by docs/loop/LOOP.md failed-land retry procedure |
 | easy (test-only correction) | high | [fix-test-packages-daemon-1028 D1](decisions/fix-test-packages-daemon-1028.md) | Preserve focused-window state; test owner isolation explicitly | assumed — autonomous |
 | easy | high | [fix-test-packages-daemon-1028 D2](decisions/fix-test-packages-daemon-1028.md) | Register the auxiliary native capability and listen before triggering activation | locked by docs/quirk/specs/2026-10-28-m7-terminal-runtime-native-and-worktree-parity/logic.md B3 |
 | easy | high for the demonstrated matcher/await difference; no claim about bun internals | [fix-test-packages-daemon-1028 D3](decisions/fix-test-packages-daemon-1028.md) | Await the deferred same-connection response before applying the matcher | assumed — autonomous |
