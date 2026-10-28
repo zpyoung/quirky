@@ -66,5 +66,71 @@
 - **Revisit if:** a provider fixture again accepts an impossible shape or bypasses a required validation.
 - **Source:** assumed — autonomous; locked by LOOP.md isolated-state and evidence requirements
 
+## D7: Reconcile overlapping queue ownership through committed source only
+- **Question:** another lane claimed the predecessor's API-parity followup while this sweep was building the same two repairs.
+- **Options:** competing rewrites; copy dirty files; share isolated committed implementations and preserve independent acceptance.
+- **Chose:** publish9cc24e68/eafde4d7 and6867676f; lane6 consumed the first two asaae21422/98a52de5 and retained independent regression/fixture work. Publish539aa1c9 for the observed picker correction. No foreign uncommitted source, queue edits or lookup/createOpen contract changes. Lane11 keeps Git panel/Markdown ownership.
+- **Why:** the sweep includes earlier deferred flows, but queue titles overlap. Committed source avoids two incompatible implementations and gives each owner a reviewable baseline.
+- **Evidence:** /tmp/quirky-lane8-hosting-parity-reply.md; accepted terminal messages toterm_db8088c9-c1ce-4c3f-8494-a392afc25805; /tmp/quirky-lane11-hosting-sweep-reply.md. The source-sharing receipt is not another lane's landing or verification result.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** another lane's independent boundary regression exposes a defect in this committed implementation.
+- **Source:** assumed — autonomous
+
+## D8: Keep model findings, autonomous rulings and protocol limits separate
+- **Question:** what did the single final cross-family review actually establish?
+- **Options:** report three clean passes; apply every hypothesis; adjudicate against the contract and retain limitations.
+- **Chose:** actual Gemini high C/S/X promote and fresh refute stages over the frozen21d10e8b source. Reject C1: missing/unloaded source context deliberately refuses rather than choosing another workspace; this is a structured error, not an app crash, and every actual UI caller supplies its target. S1 was refuted because accepted/uncertain provider writes must invalidate stale cache; S2 failed evidence resolution. X promoted no findings.
+- **Why:** an unproven fallback expectation conflicts with the exact-source/fail-closed contract. Machine verdicts do not decide product policy or certify untouched code.
+- **Evidence:** /tmp/quirky-l8-hosting-review/C-gate.json NEEDS_FIXES (C1HIGH/LOWconfidence), S-gate.json PASS/two suppressions, X-gate.json PASS/zero findings; actual CLI prepass passed. C/S context contained code excerpts. Empty X claims made the excerpt tool fall back to877323characters of the full incoming diff; pi-watch hit ARG_MAX before launch. A bounded raw-pi @file retry on the same verified Gemini model completed, but that fallback included unrelated incoming docs/author reasoning. Therefore X refute lacks the intended context withholding despite its machine independence flag. No full independent-review guarantee or second review round is claimed.
+- **Reversibility:** easy
+- **Confidence:** medium
+- **Revisit if:** a concrete missing-context caller or a stronger independent review contradicts this ruling.
+- **Source:** assumed — autonomous
+
+## D9: Preserve the actual selected type before async options load
+- **Question:** why did a successfully saved Bug render blank after Board→Table?
+- **Options:** eager-fetch/focus to conceal the gap; reset the saved value; render its current ID/name until options arrive.
+- **Chose:** render the current option only when absent from loaded choices, keep the empty placeholder for no selection, and avoid duplicates. No new API, cache, focus manipulation or DOM-test framework.
+- **Why:** the controlled select heldTYPE_BUG while its sole placeholder hadvalueempty. The provider and daemon already retained Bug. Loading choices on focus only hid a real display bug.
+- **Evidence:** guarded20261028T093651-8202 obs7 selectedBug, obs11 blank selector (goalFAIL retained). Isolated one-line fix539aa1c9 had unchanged baseline/scope audit and a passing Project API regression. Fresh packaged20261028T095840-a759 passed its exact closure: savedBug visible before focus, Task selected, Board→Table retained visibleTask before refocus. Avatarfixture DNS console/network findings remain in that passing report. No native guest or live GitHub state touched.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** another async-choice control loses a valid current value on remount.
+- **Source:** locked by hosting-ui.md visible field-edit behavior
+
+## D10: Repair the missing provider read rather than suppress its UI error
+- **Question:** why did the first packaged Review smoke show invalid details despite loaded REST review/comments/files?
+- **Options:** ignore/suppress the error; relax detail validation; implement the missing real gh read in the isolated fixture.
+- **Chose:** detailGhSource now implements gh pr view with exact requested JSON fields and host-qualified repository routing. Add a public Review hydration regression. The stronger fixture exposed one existing cross-repository test using source-owner GraphQL content for upstream-owner; provide explicit per-repository fixture responses without weakening source_mismatch or no-mutation assertions.
+- **Why:** workItemDetails legitimately returned null when the fixture returned null for every pr view. Its absence had allowed metadata-only tests to miss the detail read. A source-qualified fake provider must not return another repo's body/identity.
+- **Evidence:**20261028T100136-9f7f obs1 partial setup, no route action; new hydration API case passed1test/2assertions. First corrected Reviews gate4/5 files passed, one source-qualified detail case failed again on isolated retry; that actual failure remains recorded. Faithful runtime20261028T100616-138d rendered author/body/comments, actionable legacy rerun refusal and README patch; its UI Open on host revealed Browser with exactPR12 URL and the same feature workspace. Driver classified that final route UNSETTLED; formal goal remains partial, not manufacturedPASS. Web Native-unavailable disclosure is expected; no GitHub guest rendering is claimed.
+- **Reversibility:** easy
+- **Confidence:** high for traced fixture boundary and observed route
+- **Revisit if:** the final corrected source-qualified gate or normal controller gate fails.
+- **Source:** assumed — autonomous; locked by LOOP.md isolated-state/evidence requirements
+
+## D11: Retain the larger remaining acceptance under its already-queued owners
+- **Question:** does this focused repair/verification sweep establish all25 original Tasks scenarios, Project default-agent readiness and all native effects?
+- **Options:** silently imply exhaustive parity; create duplicate followups; retain exact existing acceptance owners and bounds.
+- **Chose:** do not claim an exhaustive25-flow web or live-provider campaign. Existing m4-hosting-ui-tasks-complete-remaining-flows owns the full built-web list/issue/composer/workspace/Project campaign, especially real Project direct-create/default-agent/ready-gated single context delivery, sticky-all later-repo/deep-link variants and overlapping source/view/write/index/comment-lag boundaries. Existing m4-hosting-api-github-parity is actively extending independent API boundary regressions from this source. Existing m4-hosting-ui-review-browser-routing retains broader stack/modifier/native routing acceptance; this sweep supplies its implemented core rather than silently marking that item done. New native handoff remains pending.
+- **Why:** the item title permits larger remaining flows as followup work. These exact items already exist; adding duplicates would not complete their acceptance. ProjectLaunchSeam found a reachable implementation but no turnkey combined local-bare GitHub/real-PTY/default-agent fixture; separate feature tests are not end-to-end delivery proof. Only exercised outcomes are reported here.
+- **Evidence:** current queue entries and titles read through queue.json; Tasks originalSC01–SC25; BLOCKERS Tasks deferred parity entry; ProjectLaunchSeam source/test map. Current guarded Projects run has SettingsPASS, layoutsPARTIAL because Today visibly scrolled toOctober but driver returnedNO_EFFECT, and the old typeFAIL closed by the separate passing rebuilt run. Larger/native acceptance is not deleted.
+- **Reversibility:** easy
+- **Confidence:** high for recorded ownership and evidence bounds
+- **Revisit if:** the named followup supplies the missing composed acceptance evidence.
+- **Source:** deferred: larger existing Tasks/API/review-routing acceptance, authorized by item title
+
+## D12: Use the final composed checks and retain actual UI/tool bounds
+- **Question:** which verification is current after catchup, the picker fix and faithful provider-fixture corrections?
+- **Options:** reuse historical green claims; rerun the changed boundaries and distinguish every result.
+- **Chose:** one normal roadmap catchup, all incoming Automation and Orchestration UI decisions read; no conflicting Hosting contract. First composed Hosting/Tasks/Reviews/Worktree suite57/57files/no retries; scripts68pass574assertions; root types/build passed. After539aa1c9: Tasks4/4files/no retries, full typecheck and packaged22-UI-module/29-plugin build passed. After source-qualified fixture repair: Reviews5/5files/no retries and final full typecheck passed. All owned model/check/smoke processes returned; each private runtime service exited0 after scope cleanup.
+- **Why:** no source acceptance, visual failure or intermediate gate is relabeled. Model findings and broader/native acceptance remain qualified underD8/D11. A380-second remote Reviews invocation is recorded as a slow-suite advisory, not proof of a load cause: inspect per-file timings and slot wait before optimization; pytest-xdist is not applicable to this Bun suite, and no runner configuration changed.
+- **Evidence:** bg26/27/28/29, bg37/38/36, failedbg40 then correctedbg41, finalbg42. Review/Project/picker reports named inD9/D10; all end reports and actual screenshots read. The first failed Project run intentionally kept its owned browser; it was explicitly closed after the report for unattended cleanup. No goal result was changed to obtain cleanup or a pass. Private review raw data/manifests are archived under `.quirk/build-loop/m7-sweep-hosting/`.
+- **Reversibility:** easy
+- **Confidence:** high for exercised checks and runtime paths; no exhaustive parity/native guarantee
+- **Revisit if:** normal queue-owned merged verification reports a concrete failure or conflict.
+- **Source:** locked by docs/loop/LOOP.md verification and normal landing procedure
+
 ## Progress
-Contracts committed06f3e8cc; three components audited at unchanged HEAD and merged as9cc24e68/eafde4d7/390cdc37. Source acceptance search8pass37assertions, types3pass31assertions, routing1pass35assertions. Actual generated CLI type mutation/readback passed after an interrupted first attempt. Component trees removed. Parent legacy fixture alignment and native handoff are ready. Next: one roadmap catchup/read incoming decisions, affected directories/scripts/types/build, final actual UI proof, record remaining acceptance with existing owners, normal queue land. No combined-gate, full-parity, review or native success claimed.
+Ready for normal land: committed implementations and picker correction verified; generated CLI and actual rebuilt surfaces exercised; final changed-package/type/build gates green with intermediate failures/tool limits retained above. One catchup complete, incoming logs read, no owned agents/jobs/runtime services active, component worktrees removed. Existing larger/native acceptance owners remain explicit. Commit the final fixture/evidence documentation, detach and invoke the authoritative queue.ts land m7-sweep-hosting; wait for the actual controller result in this turn and handle only concrete recovery failures. No second work item.
