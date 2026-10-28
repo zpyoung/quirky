@@ -1,7 +1,8 @@
 import { createRoot } from 'react-dom/client'
 import type { UiPluginContext } from '@quirky/protocol'
 import type { PaneTab } from './pane-contract'
-import { BrowserPaneWindow, focusBrowserAddress, focusBrowserFind, focusedBrowserPane } from './window/BrowserPaneWindow'
+import { setLiveDesignPageKeys, type DesignAction } from './design-window/DesignWindow'
+import { BrowserPaneWindow, focusBrowserAddress, focusBrowserFind, focusedBrowserPane, runFocusedBrowserDesign } from './window/BrowserPaneWindow'
 import { registerPreferencesUi } from './preferences-ui'
 
 const PAGE_VIEW = 'view:quirky.browser/page'
@@ -14,6 +15,26 @@ let deactivateCurrent: (() => void) | null = null
 
 function argsOf(value: unknown): CommandArgs {
   return typeof value === 'object' && value !== null && !Array.isArray(value) ? value as CommandArgs : {}
+}
+function liveDesignPageKeys(value: unknown): string[] | null {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return null
+  const tabs = Reflect.get(value, 'tabs')
+  if (!Array.isArray(tabs)) return null
+  const pageKeys: string[] = []
+  for (const tab of tabs) {
+    if (typeof tab !== 'object' || tab === null || Array.isArray(tab)) continue
+    const id = Reflect.get(tab, 'id')
+    if (typeof id !== 'string' || id === '') continue
+    const mode = Reflect.get(tab, 'mode')
+    const page = Reflect.get(tab, 'page')
+    pageKeys.push(mode === 'watch' && typeof page === 'string' && page !== '' ? page : id)
+  }
+  return pageKeys
+}
+
+function retainOpenDesignPages(value: unknown): void {
+  const pageKeys = liveDesignPageKeys(value)
+  if (pageKeys) setLiveDesignPageKeys(pageKeys)
 }
 
 function worktreeFrom(context: UiPluginContext, args: CommandArgs): string | null {
@@ -71,10 +92,19 @@ async function controlFocused(context: UiPluginContext, action: 'back' | 'forwar
   const level = delta === undefined ? 0 : Math.min(5, Math.max(-3, current.zoom + delta))
   return context.call('quirky.browser/paneControl', { pane, action: 'zoom', level })
 }
+function isDesignAction(value: unknown): value is DesignAction {
+  return value === 'grab' || value === 'annotate' || value === 'draw' || value === 'cancel'
+}
+
 
 function commandHandlers(context: UiPluginContext): Record<string, BrowserCommand> {
   return {
     'new-tab': (args) => openBrowserTab(context, args),
+    design: (raw) => {
+      const action = argsOf(raw).action
+      if (!isDesignAction(action)) return { started: false, reason: 'Design action must be grab, annotate, draw, or cancel.' }
+      return runFocusedBrowserDesign(action)
+    },
     'focus-address': () => {
       focusBrowserAddress()
       return { focused: focusedBrowserPane() !== null }
@@ -104,7 +134,22 @@ export function activate(context: UiPluginContext): void {
   for (const [name, handler] of Object.entries(commandHandlers(context))) {
     context.provide(`command:quirky.browser/${name}`, handler)
   }
+  let paneStateRevision = 0
+  let active = true
+  const unsubscribe = context.subscribe((event) => {
+    if (active && event.type === 'quirky.browser/paneChanged') {
+      paneStateRevision++
+      retainOpenDesignPages(event.data)
+    }
+  })
+  const requestedRevision = paneStateRevision
+  void context.call('quirky.browser/paneState', {}).then((state) => {
+    if (active && paneStateRevision === requestedRevision) retainOpenDesignPages(state)
+  }).catch(() => undefined)
   deactivateCurrent = () => {
+    active = false
+    unsubscribe()
+    setLiveDesignPageKeys([])
     context.setContext('browserFocus', false)
   }
 }

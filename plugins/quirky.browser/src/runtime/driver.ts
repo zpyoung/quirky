@@ -247,6 +247,87 @@ function asString(value: unknown): string | undefined {
 }
 
 
+function windowsKeyCode(value: string): number | undefined {
+  if (value.length === 4 && value.startsWith('Key')) {
+    const letter = value.charCodeAt(3)
+    if (letter >= 65 && letter <= 90) return letter
+  }
+  if (value.length === 6 && value.startsWith('Digit')) {
+    const digit = value.charCodeAt(5)
+    if (digit >= 48 && digit <= 57) return digit
+  }
+  if (value.length === 7 && value.startsWith('Numpad')) {
+    const digit = value.charCodeAt(6)
+    if (digit >= 48 && digit <= 57) return 96 + digit - 48
+  }
+  if (value.length === 1) {
+    const character = value.charCodeAt(0)
+    if ((character >= 65 && character <= 90) || (character >= 48 && character <= 57)) return character
+    if (character >= 97 && character <= 122) return character - 32
+  }
+  switch (value) {
+    case 'Backspace': return 8
+    case 'Tab': return 9
+    case 'Enter':
+    case 'NumpadEnter': return 13
+    case 'Shift':
+    case 'ShiftLeft':
+    case 'ShiftRight': return 16
+    case 'Control':
+    case 'ControlLeft':
+    case 'ControlRight': return 17
+    case 'Alt':
+    case 'AltLeft':
+    case 'AltRight': return 18
+    case 'CapsLock': return 20
+    case 'Escape': return 27
+    case ' ':
+    case 'Space': return 32
+    case 'PageUp': return 33
+    case 'PageDown': return 34
+    case 'End': return 35
+    case 'Home': return 36
+    case 'ArrowLeft': return 37
+    case 'ArrowUp': return 38
+    case 'ArrowRight': return 39
+    case 'ArrowDown': return 40
+    case 'PrintScreen': return 44
+    case 'Insert': return 45
+    case 'Delete': return 46
+    case 'Meta':
+    case 'MetaLeft': return 91
+    case 'MetaRight': return 92
+    case 'ContextMenu': return 93
+    case 'NumLock': return 144
+    case 'ScrollLock': return 145
+    default: return undefined
+  }
+}
+
+function cdpWindowsVirtualKeyCode(key: string, code?: string): number | undefined {
+  const fromCode = code ? windowsKeyCode(code) : undefined
+  return fromCode ?? windowsKeyCode(key)
+}
+
+const MAC_EDIT_COMMANDS: Readonly<Record<number, readonly string[]>> = {
+  65: ['selectAll'],
+  67: ['copy'],
+  86: ['paste'],
+  88: ['cut']
+}
+const MAC_UNDO_COMMANDS = ['undo'] as const
+const MAC_REDO_COMMANDS = ['redo'] as const
+
+function macOSEditingCommands(key: string, modifiers?: number): readonly string[] | undefined {
+  if (process.platform !== 'darwin' || modifiers === undefined || (modifiers & 4) === 0 || (modifiers & 3) !== 0) return undefined
+  const keyCode = windowsKeyCode(key)
+  if (keyCode === undefined) return undefined
+  if (keyCode === 90) return (modifiers & 8) !== 0 ? MAC_REDO_COMMANDS : MAC_UNDO_COMMANDS
+  if ((modifiers & 8) !== 0) return undefined
+  return MAC_EDIT_COMMANDS[keyCode]
+}
+
+
 
 function cdpTransportFailure(error: unknown): boolean {
   const message = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase()
@@ -440,8 +521,14 @@ export class BrowserRuntime {
         params.type = input.type
         params.key = input.key
         if (input.code !== undefined) params.code = input.code
+        const virtualKeyCode = cdpWindowsVirtualKeyCode(input.key, input.code)
+        if (virtualKeyCode !== undefined) params.windowsVirtualKeyCode = virtualKeyCode
         if (input.type === 'char' && input.text !== undefined) params.text = input.text
         if (input.modifiers !== undefined) params.modifiers = input.modifiers
+        if (input.type === 'keyDown') {
+          const commands = macOSEditingCommands(input.key, input.modifiers)
+          if (commands) params.commands = commands
+        }
         await execution.cdp.send('Input.dispatchKeyEvent', params, execution.binding.sessionId)
         return
       }
@@ -609,17 +696,32 @@ export class BrowserRuntime {
   private async reloadPage(execution: PageExecution, ignoreCache: boolean): Promise<void> {
     const tracker = this.beginNavigation(execution)
     let match: { frameId: string; loaderId?: string; url?: string } | undefined
+    const timeoutMs = 30_000
+    const startedAt = Date.now()
     try {
-      const response = safeRecord(await execution.cdp.send('Page.reload', { ignoreCache }, execution.binding.sessionId), {
-        type: 'object',
-        properties: { loaderId: { type: 'string' } },
-        additionalProperties: true
-      }, 'reload response')
-      const loaderId = asString(response.loaderId)
-      if (loaderId) {
-        await this.waitForDocumentLoad(tracker, tracker.frameId, loaderId, 30_000)
-        match = { frameId: tracker.frameId, loaderId }
+      await execution.cdp.send('Page.reload', { ignoreCache }, execution.binding.sessionId, timeoutMs)
+      const navigation = await this.waitForNavigationEvent(
+        tracker,
+        (events) => events.find((event) =>
+          event.kind === 'frame' &&
+          event.frameId === tracker.frameId &&
+          event.loaderId !== undefined &&
+          event.loaderId !== tracker.previousLoaderId
+        ),
+        Math.max(0, timeoutMs - (Date.now() - startedAt)),
+        'reload did not navigate to a new main-frame document'
+      )
+      if (navigation.kind !== 'frame' || !navigation.loaderId) {
+        throw fault('browser_tab_changed', 'reload did not establish a new main-frame document')
       }
+      match = { frameId: navigation.frameId, loaderId: navigation.loaderId }
+      const loaded = await this.waitForDocumentLoad(
+        tracker,
+        navigation.frameId,
+        navigation.loaderId,
+        Math.max(0, timeoutMs - (Date.now() - startedAt))
+      )
+      if (loaded.kind === 'loading-failed') throw fault('browser_error', `reload failed: ${loaded.errorText}`)
       await this.pageLocation(execution)
     } finally {
       this.finishNavigation(execution, tracker, match)
