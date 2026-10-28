@@ -132,5 +132,38 @@
 - **Revisit if:** lane12 publishes a different source-grounded hook contract
 - **Source:** assumed — autonomous
 
+## D13: Repair escaped adapter writes before accepting the wave
+- **Question:** completed component audit found no adapter source in its assigned worktree
+- **Options:** accept escaped main edits; discard code; pause and transfer exact declared-scope output
+- **Chose:** pause writers, obtain adapter's exact physical-path acknowledgement, preserve its six new scoped source/test/manifest files and move them losslessly into the assigned adapter worktree using specialized MV. Runner confirmed correct absolute source; no runner files moved. Preserve unrelated .serena metadata. Require absolute file-tool paths and retain final barrier audit/check gate.
+- **Why:** relative file-tool paths inherited the parent workspace, despite the task naming a separate worktree. Bash cwd does not retarget file tools. Accepting untracked main edits would bypass isolation and attribution; discarding would lose authored work.
+- **Evidence:** adapter HEAD6764039 scope audit returned only .serena/project.local.yml; agent actual pwd/path acknowledgement; move snapshot hashes DBF5/157C/898C/1FCE/8793/0521; /tmp/quirky-heimdall-l11-routing-repair.md
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** another component writes outside its absolute target
+- **Source:** assumed — autonomous
+
+## D14: Preserve Run sender authority for owner-to-worker messages
+- **Question:** lane12 owner message-worker cannot use raw session send without losing Run authority
+- **Options:** raw session input; generic unscoped service send; exact owned-Run dispatch mailbox method
+- **Chose:** serviceSend takes explicit owned runId, dispatchId, body and durable request identity; proves membership, emits a normal mailbox message with canonical Run sender, uses the same receipt store and post-commit arrival pipeline. It cannot spoof worker_done/heartbeat or answer a question implicitly. serviceReply remains exact question handling; generic workerShow/read follows owned-run membership proof.
+- **Why:** service identity is real coordinator authority, not a process/session credential. Message and question semantics must stay distinct.
+- **Evidence:** lane12 follow-up user interjection; services/contracts.ts ServiceSendParams/result; /tmp/quirky-lane12-owner-core-reply.md
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** existing core messaging cannot represent distinct service sender provenance
+- **Source:** assumed — autonomous
+
+## D15: Restore the actual landed Codex resolver omitted by a dependency merge
+- **Question:** lane10 reports desktop build fails because structured/main.ts imports missing ./codex-path
+- **Options:** rerun to reconfirm; invent fallback; restore the real landed dependency module
+- **Chose:** accept the reported failure as ground truth; inspect source/history, restore codex-path.ts exactly from build/roadmap, and include it before core landing. No resolver behavior or provider fallback changed.
+- **Why:** build/m5-structured-runner has already been deleted after landing. The helper exists on build/roadmap from ef16bc50; merging that ancestor reports already-up-to-date, because a later dependency history merge retains deletion2aba9d9c. Restoring the exact committed source repairs the incomplete merge without substituting another implementation.
+- **Evidence:** user lane10 build report; main.ts:17; git full-history path log; source hash46b00aeb0851d2b540b1498d51969e689a3bf33d matches both restored file and build/roadmap blob. No build rerun to reconfirm.
+- **Reversibility:** easy
+- **Confidence:** high for exact source restoration; runtime/build verification remains pending
+- **Revisit if:** final merged dependency build fails after the actual helper is present
+- **Source:** assumed — autonomous
+
 ## Progress
 Iteration4: spec/contracts committed6764039; three disjoint implementation worktrees running, no checks/commits until their wave barrier. Worker dependency query returned ready:false pending m6-orchestration-workers after510s; independent implementation continues. Lanes1+9 approved service authority extension reserved to lane11, parent authored type contracts; actual core/worker runtime still pending. Missing feature/API smoke completed with isolated actual quirkyd and cleanup. Next: accept/audit components after all return, integrate dependency implementation and additive service APIs, exercise AC1-11 including real worker adapter, affected suite/scripts/typecheck, deps-ready/catch-up/final independent review/queue landing. No runtime feature acceptance claim.

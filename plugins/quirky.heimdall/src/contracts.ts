@@ -17,7 +17,10 @@ export interface KernelAction {
 }
 export interface ApprovalScope { actionKind: string; contentIdentity: string; evidenceKey: string; preparedCommitSha?: string }
 export type GateVerdict = { verdict: 'allow' } | { verdict: 'hold' | 'escalate'; reason: string; detail?: string }
-export interface Deviation { kind: string; detail?: string }
+export interface Deviation {
+  kind: string; naturalKey?: string; detail?: string
+  dispatchId?: string; messageId?: string; trigger?: 'idle' | 'silent'
+}
 export type Decision<A extends KernelAction = KernelAction> =
   | { action: A; considered?: string[] }
   | { action: null; reason: string; detail?: string; considered?: string[]; deviation?: Deviation }
@@ -34,12 +37,12 @@ export interface ExecuteContext {
 export type StopResult = { kind: 'terminal'; state: string; reason: string } | { kind: 'park'; reason: ParkReason; detail: string } | null
 export interface EnrollmentInput {
   kind: string; kindPayload: Json; capabilities?: Record<string, CapabilityMode>; budget?: BudgetPolicy
-  owner?: OwnerConfig; ownerInterventionCapability?: CapabilityMode
+  owner?: OwnerConfig | null; ownerInterventionCapability?: CapabilityMode
 }
 export interface AuthorizedEnrollment {
   workspaceKey: string; workspacePath: string; executionHostId: string; schedulerOwner: string
   repoId?: string | null; worktreeId?: string | null; kindPayload: Json; undo?: Json
-  owner?: OwnerConfig; ownerInterventionCapability?: CapabilityMode
+  owner?: OwnerConfig | null; ownerInterventionCapability?: CapabilityMode
 }
 export interface Enrollment extends AuthorizedEnrollment {
   watcherId: string; kind: string; enabled: boolean; paused: boolean; commandRevision: number
@@ -81,9 +84,9 @@ export interface WatcherKind<W = Json, A extends KernelAction = KernelAction> {
   authorizeEnrollment(input: EnrollmentInput): Promise<AuthorizedEnrollment>
   validateEnrollment?(candidate: AuthorizedEnrollment, existing: Enrollment | null): Promise<void> | void
   undoAuthorization?(authorization: AuthorizedEnrollment): Promise<void>
-  describeEnrollment?(enrollment: Enrollment): string
+  describeEnrollment?(enrollment: Enrollment): string | Promise<string>
   read(enrollment: Enrollment, options: { fresh: boolean }): Promise<Snapshot<W>>
-  describeSnapshot?(snapshot: Snapshot<W>): Json
+  describeSnapshot?(snapshot: Snapshot<W>): Json | Promise<Json>
   decide(snapshot: Snapshot<W>, journal: JournalEntry[], enrollment: Enrollment): Decision<A> | Promise<Decision<A>>
   preflight?(action: A, snapshot: Snapshot<W>, journal: JournalEntry[], enrollment: Enrollment): Promise<GateVerdict>
   execute(action: A, context: ExecuteContext): Promise<ExecuteResult>
@@ -96,7 +99,7 @@ export interface WatcherKind<W = Json, A extends KernelAction = KernelAction> {
 /** Serializable public kind registration. All hook references belong to the authenticated declaring plugin. */
 export interface KindRegistration {
   id: string; displayName: string; enrollmentPayloadSchema: Schema
-  hooks: { authorize: string; read: string; decide: string; execute: string; validate?: string; undo?: string; describeSnapshot?: string; resolveOutcome?: string; preflight?: string; pace?: string; stop?: string; reconcile?: string }
+  hooks: { authorize: string; read: string; decide: string; execute: string; validate?: string; undo?: string; describeEnrollment?: string; describeSnapshot?: string; resolveOutcome?: string; preflight?: string; pace?: string; stop?: string; reconcile?: string }
   concurrency?: WatcherKind['concurrency']; pluginId?: string
 }
 export interface KindRegistry {
