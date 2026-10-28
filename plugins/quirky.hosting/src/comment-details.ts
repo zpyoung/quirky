@@ -24,6 +24,8 @@ export type DetailComment = {
   kind: 'issue_comment' | 'review' | 'review_comment';
   id: number | string;
   author: string | null;
+  url: string | null;
+  isBot: boolean | null;
   body: string;
   createdAt: string | null;
   state: string | null;
@@ -48,18 +50,18 @@ const COMMENTS_QUERY = `query HostingComments($owner: String!, $name: String!, $
   repository(owner: $owner, name: $name) {
     pullRequest(number: $number) {
       comments(first: 100) {
-        nodes { id databaseId body createdAt url author { login } reactionGroups { content users { totalCount } viewerHasReacted } }
+        nodes { id databaseId body createdAt url author { login __typename } reactionGroups { content users { totalCount } viewerHasReacted } }
         pageInfo { hasNextPage }
       }
       reviews(first: 100) {
-        nodes { id databaseId body submittedAt url state author { login } reactionGroups { content users { totalCount } viewerHasReacted } }
+        nodes { id databaseId body submittedAt url state author { login __typename } reactionGroups { content users { totalCount } viewerHasReacted } }
         pageInfo { hasNextPage }
       }
       reviewThreads(first: 100) {
         nodes {
           id isResolved path line originalLine startLine originalStartLine
           comments(first: 100) {
-            nodes { id databaseId body createdAt url path line originalLine startLine originalStartLine author { login } reactionGroups { content users { totalCount } viewerHasReacted } }
+            nodes { id databaseId body createdAt url path line originalLine startLine originalStartLine author { login __typename } reactionGroups { content users { totalCount } viewerHasReacted } }
             pageInfo { hasNextPage }
           }
         }
@@ -193,6 +195,20 @@ function pageHasMore(value: unknown): boolean {
   return asRecord(asRecord(value)?.pageInfo)?.hasNextPage === true;
 }
 
+function commentUrl(value: unknown): string | null {
+  if (typeof value !== 'string' || value.length > 8192) return null;
+  try {
+    const url = new URL(value);
+    return ['http:', 'https:'].includes(url.protocol) && !url.username && !url.password ? url.href : null;
+  } catch { return null; }
+}
+
+function botAuthor(value: unknown): boolean | null {
+  const author = asRecord(value);
+  const type = author?.__typename ?? author?.type;
+  return type === 'Bot' ? true : type === 'User' ? false : null;
+}
+
 function mapGraphComment(value: DetailRecord, kind: 'issue_comment' | 'review_comment'): DetailComment | null {
   const id = commentId(value);
   if (id === null) return null;
@@ -200,6 +216,8 @@ function mapGraphComment(value: DetailRecord, kind: 'issue_comment' | 'review_co
     kind,
     id,
     author: nonemptyString(asRecord(value.author)?.login),
+    url: commentUrl(value.url),
+    isBot: botAuthor(value.author),
     body: stringValue(value.body) ?? '',
     createdAt: nonemptyString(value.createdAt),
     state: null,
@@ -242,6 +260,8 @@ function mapGraphReview(value: DetailRecord): DetailComment | null {
     kind: 'review',
     id,
     author: nonemptyString(asRecord(value.author)?.login),
+    url: commentUrl(value.url),
+    isBot: botAuthor(value.author),
     body,
     createdAt: nonemptyString(value.submittedAt),
     state: nonemptyString(value.state),
@@ -263,6 +283,8 @@ function mapRestIssueComment(value: DetailRecord): DetailComment | null {
     kind: 'issue_comment',
     id,
     author: nonemptyString(asRecord(value.user)?.login),
+    url: commentUrl(value.html_url),
+    isBot: botAuthor(value.user),
     body: stringValue(value.body) ?? '',
     createdAt: nonemptyString(value.created_at),
     state: null,
@@ -285,6 +307,8 @@ function mapRestReview(value: DetailRecord): DetailComment | null {
     kind: 'review',
     id,
     author: nonemptyString(asRecord(value.user)?.login),
+    url: commentUrl(value.html_url),
+    isBot: botAuthor(value.user),
     body,
     createdAt: nonemptyString(value.submitted_at),
     state: nonemptyString(value.state),
