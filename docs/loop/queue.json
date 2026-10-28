@@ -1866,7 +1866,8 @@
         "term-daemon.md"
       ],
       "deps": [],
-      "status": "todo"
+      "status": "in-progress",
+      "lane": 11
     },
     {
       "id": "sb-mobile-settings-visibility",
