@@ -2,7 +2,7 @@ import { existsSync, mkdirSync } from 'node:fs'
 import { dirname, isAbsolute, resolve } from 'node:path'
 import { validateValue, type Schema } from '@quirky/protocol'
 import { fault } from './errors'
-import { BrowserRuntime, browserDevice, type JsonValue, type PageExecution } from './driver'
+import { BrowserRuntime, browserDevice, cdpWindowsVirtualKeyCode, macOSEditingCommands, type JsonValue, type PageExecution } from './driver'
 import type { BrowserStore } from '../profiles/store'
 import type { BrowserMethod } from './catalog'
 import type { Cookie, SameSite } from '../cookies/types'
@@ -244,7 +244,25 @@ export class BrowserExtraActions {
     const selector = this.resolveElement(execution, supplied)
     if (method === 'selectAll') {
       await this.callHelper(execution, 'focus', { selector })
-      await this.callHelper(execution, 'press', { key: process.platform === 'darwin' ? 'Meta+a' : 'Control+a' })
+      if (process.platform === 'darwin') {
+        const key = 'a'
+        const code = 'KeyA'
+        const modifiers = 4
+        const virtualKeyCode = cdpWindowsVirtualKeyCode(key, code)
+        const commands = macOSEditingCommands(key, modifiers)
+        const sharedParams = {
+          key, code, modifiers,
+          ...(virtualKeyCode === undefined ? {} : { windowsVirtualKeyCode: virtualKeyCode })
+        }
+        await execution.cdp.send('Input.dispatchKeyEvent', {
+          type: 'keyDown', ...sharedParams, ...(commands ? { commands } : {})
+        }, execution.binding.sessionId)
+        await execution.cdp.send('Input.dispatchKeyEvent', {
+          type: 'keyUp', ...sharedParams
+        }, execution.binding.sessionId)
+      } else {
+        await this.callHelper(execution, 'press', { key: 'Control+a' })
+      }
       return { selected: supplied }
     }
     const fields: Record<string, unknown> = { selector }
@@ -297,7 +315,7 @@ export class BrowserExtraActions {
   private async drag(execution: PageExecution, params: Record<string, unknown>) {
     const from = stringParam(params, 'from')
     const to = stringParam(params, 'to')
-    await this.callHelper(execution, 'drag', { from: this.resolveElement(execution, from), to: this.resolveElement(execution, to) })
+    await this.callHelper(execution, 'drag', { source: this.resolveElement(execution, from), target: this.resolveElement(execution, to) })
     return { dragged: { from, to } }
   }
 
@@ -425,18 +443,18 @@ export class BrowserExtraActions {
     if (method === 'mouseMove') {
       const x = numberParam(params, 'x')
       const y = numberParam(params, 'y')
-      await this.callHelper(execution, 'mouse_move', { x, y })
+      await this.callHelper(execution, 'mousemove', { x, y })
       return { moved: { x, y } }
     }
     if (method === 'mouseDown' || method === 'mouseUp') {
       const button = optionalString(params, 'button') ?? 'left'
       if (!['left', 'right', 'middle'].includes(button)) throw fault('invalid_argument', 'mouse button must be left, right, or middle')
-      await this.callHelper(execution, method === 'mouseDown' ? 'mouse_down' : 'mouse_up', { button })
+      await this.callHelper(execution, method === 'mouseDown' ? 'mousedown' : 'mouseup', { button })
       return { button, down: method === 'mouseDown' }
     }
     const dy = numberParam(params, 'dy')
     const dx = numberParam(params, 'dx', 0)
-    await this.callHelper(execution, 'mouse_wheel', { dx, dy })
+    await this.callHelper(execution, 'wheel', { deltaX: dx, deltaY: dy })
     return { scrolled: { dx, dy } }
   }
 
