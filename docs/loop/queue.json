@@ -1697,6 +1697,26 @@
       ],
       "status": "todo",
       "early": true
+    },
+    {
+      "id": "m7-terminal-provider-host-and-worktree-remainder",
+      "milestone": "M7",
+      "title": "Implement only the still-unbuilt flows in docs/quirk/specs/2026-10-28-m7-terminal-runtime-native-and-worktree-parity/logic.md Landing disposition: actual built-in provider model-list probes, exact automation-host retirement and supported non-local discovery/launch capabilities; authenticated remote status/hook producers composed with the existing peer/federation owner, not a duplicate transport; separately authenticated full-owner remote CLI administration beyond the existing mobile-v2 grant without escalating phone credentials; generic exact per-window workspace navigation/sleep/close routes; authoritative desktop-other-client/host identities, available-host controls and volatile/remote-connectivity cleanup classifiers; prepared checkout pools, remote-host creation, public-owner environment recipe/default-tab composition, custom-status icon/avatar controls and provider-backed tracker defaults; Kitty graphics, independent per-terminal light/dark/custom themes, authorized floating Markdown/editor and any distinct Browser/destination composition not already provided by its owner; distinct branch-name and conversation-name generation through canonical recipes/resolver; native notification permission/click/dismiss only after supported SDK callbacks and production signed terminal-host launchd/TCC/admission/upgrade only after authorized signing/packaging identity. Preserve already landed paired mobile origins/filters, view parking versus explicit stop/history/resume, phone tabs/panels/artifacts/foreground notifications, Browser controls/import/routing/Watch, editor leases, automation provenance/sidebar, dock/native clipboard and host-power/shutdown. Reconcile canonical remote-worker federation and blocked remote-automation/native owners rather than duplicate them. Retain macOS and explicit hosting/Objective/sitter exclusions; source implementation obligations only.",
+      "docs": [
+        "ask.md",
+        "cli.md",
+        "agent-status.md",
+        "launch-settings.md",
+        "notifications.md",
+        "providers.md",
+        "term-daemon.md",
+        "term-ui.md",
+        "worktrees.md"
+      ],
+      "deps": [
+        "m7-terminal-runtime-native-and-worktree-parity"
+      ],
+      "status": "todo"
     }
   ]
 }
