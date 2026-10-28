@@ -812,6 +812,46 @@
       "status": "done"
     },
     {
+      "id": "fix-test-process-leaks",
+      "milestone": "M1",
+      "title": "Fix leaked test processes: test runs and UI passes leave quirkyd daemons and pty-host processes running after the test ends, timed out, or was killed (97 found on 2026-10-27, about 1.9 GB, under the lane worktrees, the integration worktree, agent worktrees and /tmp test folders; pty-hosts outlive their daemon with parent PID 1). Find which harnesses start them without a guaranteed stop (packages/daemon/test/helpers.ts, plugins/*/test support, the e2e harnesses, the like-a-user web pass), make every start paired with a kill of the whole process tree on any exit, make a pty-host exit when its daemon goes away, and add a test that fails if a run leaves one behind",
+      "docs": [
+        "term-daemon.md"
+      ],
+      "deps": [],
+      "status": "done"
+    },
+    {
+      "id": "fix-flaky-quirky-worktree-window-projects",
+      "milestone": "M1",
+      "title": "Fix the flaky plugins/quirky.worktree/test/window-projects.test.ts: it failed under load in 3 full-suite runs on the test host and passed each time it was rerun alone (see <git common dir>/build-loop/flakes.log). Find the timing assumption or shared state with quirk:systematic-debugging, reproduce it under CPU load, and fix the test or the code it exposes",
+      "docs": [
+        "worktrees.md"
+      ],
+      "deps": [],
+      "status": "done"
+    },
+    {
+      "id": "fix-flaky-pty-host-host",
+      "milestone": "M1",
+      "title": "Fix the flaky packages/pty-host/test/host.test.ts: it failed under load in 3 full-suite runs on the test host and passed each time it was rerun alone (see <git common dir>/build-loop/flakes.log). Under load, many tests time out at 5 s, and startHost fails with 'could not start process scope guardian' when the guardian isn't ready within 4 s. Reproduce it under CPU load with quirk:systematic-debugging, and fix the timing assumptions in the test helpers or the code they expose",
+      "docs": [
+        "term-daemon.md"
+      ],
+      "deps": [],
+      "status": "done"
+    },
+    {
+      "id": "fix-test-cost",
+      "milestone": "M1",
+      "title": "Make the test suite cheaper to run. Today every test file starts a real daemon, a pty-host and a login zsh (`zsh -l`), and on the 8-vCPU test host that keeps the load near 21 while four files run. Measure per-file wall time and CPU with `bun run test`, then cut the cost without losing coverage: start non-login shells (`zsh -f`, `bash --noprofile --norc`) in tests that don't exercise shell integration or the login environment, share one daemon and pty-host per test file (beforeAll) where tests don't depend on a fresh one, and drop fixed sleeps in favour of waiting on the event. Keep every scenario test that checks shell integration on a real login shell. Report the before and after suite times in the decision log",
+      "docs": [
+        "term-daemon.md"
+      ],
+      "deps": [],
+      "status": "done"
+    },
+    {
       "id": "m7-sweep-terminal",
       "milestone": "M7",
       "docs": [
@@ -847,6 +887,16 @@
         "fix-flaky-pty-host-host",
         "fix-test-cost"
       ]
+    },
+    {
+      "id": "fix-flaky-quirky-git-files-scenarios",
+      "milestone": "M2",
+      "title": "Fix the flaky plugins/quirky.git/test/scenarios/files.test.ts: it failed under load in 3 full-suite runs on the test host and passed each time it was rerun alone (see <git common dir>/build-loop/flakes.log). Find the timing assumption or shared state with quirky.git:systematic-debugging, reproduce it under CPU load, and fix the test or the code it exposes",
+      "docs": [
+        "source-control.md"
+      ],
+      "deps": [],
+      "status": "done"
     },
     {
       "id": "m7-sweep-editor-source-control",
@@ -1342,56 +1392,6 @@
         "sb-mobile-app-panels"
       ],
       "status": "todo"
-    },
-    {
-      "id": "fix-test-process-leaks",
-      "milestone": "M1",
-      "title": "Fix leaked test processes: test runs and UI passes leave quirkyd daemons and pty-host processes running after the test ends, timed out, or was killed (97 found on 2026-10-27, about 1.9 GB, under the lane worktrees, the integration worktree, agent worktrees and /tmp test folders; pty-hosts outlive their daemon with parent PID 1). Find which harnesses start them without a guaranteed stop (packages/daemon/test/helpers.ts, plugins/*/test support, the e2e harnesses, the like-a-user web pass), make every start paired with a kill of the whole process tree on any exit, make a pty-host exit when its daemon goes away, and add a test that fails if a run leaves one behind",
-      "docs": [
-        "term-daemon.md"
-      ],
-      "deps": [],
-      "status": "done"
-    },
-    {
-      "id": "fix-flaky-quirky-worktree-window-projects",
-      "milestone": "M1",
-      "title": "Fix the flaky plugins/quirky.worktree/test/window-projects.test.ts: it failed under load in 3 full-suite runs on the test host and passed each time it was rerun alone (see <git common dir>/build-loop/flakes.log). Find the timing assumption or shared state with quirk:systematic-debugging, reproduce it under CPU load, and fix the test or the code it exposes",
-      "docs": [
-        "worktrees.md"
-      ],
-      "deps": [],
-      "status": "done"
-    },
-    {
-      "id": "fix-flaky-pty-host-host",
-      "milestone": "M1",
-      "title": "Fix the flaky packages/pty-host/test/host.test.ts: it failed under load in 3 full-suite runs on the test host and passed each time it was rerun alone (see <git common dir>/build-loop/flakes.log). Under load, many tests time out at 5 s, and startHost fails with 'could not start process scope guardian' when the guardian isn't ready within 4 s. Reproduce it under CPU load with quirk:systematic-debugging, and fix the timing assumptions in the test helpers or the code they expose",
-      "docs": [
-        "term-daemon.md"
-      ],
-      "deps": [],
-      "status": "done"
-    },
-    {
-      "id": "fix-flaky-quirky-git-files-scenarios",
-      "milestone": "M2",
-      "title": "Fix the flaky plugins/quirky.git/test/scenarios/files.test.ts: it failed under load in 3 full-suite runs on the test host and passed each time it was rerun alone (see <git common dir>/build-loop/flakes.log). Find the timing assumption or shared state with quirky.git:systematic-debugging, reproduce it under CPU load, and fix the test or the code it exposes",
-      "docs": [
-        "source-control.md"
-      ],
-      "deps": [],
-      "status": "done"
-    },
-    {
-      "id": "fix-test-cost",
-      "milestone": "M1",
-      "title": "Make the test suite cheaper to run. Today every test file starts a real daemon, a pty-host and a login zsh (`zsh -l`), and on the 8-vCPU test host that keeps the load near 21 while four files run. Measure per-file wall time and CPU with `bun run test`, then cut the cost without losing coverage: start non-login shells (`zsh -f`, `bash --noprofile --norc`) in tests that don't exercise shell integration or the login environment, share one daemon and pty-host per test file (beforeAll) where tests don't depend on a fresh one, and drop fixed sleeps in favour of waiting on the event. Keep every scenario test that checks shell integration on a real login shell. Report the before and after suite times in the decision log",
-      "docs": [
-        "term-daemon.md"
-      ],
-      "deps": [],
-      "status": "done"
     },
     {
       "id": "fix-flaky-daemon-pty-client",
