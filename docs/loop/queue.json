@@ -1061,8 +1061,9 @@
       "deps": [
         "m3-terminal-dock"
       ],
-      "status": "todo",
-      "early": true
+      "status": "in-progress",
+      "early": true,
+      "lane": 2
     },
     {
       "id": "m3-vault-parity-completion",
