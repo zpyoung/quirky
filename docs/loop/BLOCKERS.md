@@ -257,3 +257,10 @@ Registration update: `bun scripts/build-loop/queue.ts add /tmp/quirky-session-in
 ## m3-vault: search input readiness during editor catch-up
 
 - **LOW — search input queried before its mount settled** (`plugins/quirky.terminal/test/e2e-ui/features-search.test.ts:179`). The affected editor/terminal/UI/Vault run passed131/132 remote files initially; SC-73 passed a null input to typeInto. Its configured isolated retry passed all5 cases52 assertions, and all3macOS files passed. No producer behavior, assertion, delay or retry rule was changed; this adds evidence to the already-recorded search readiness finding.
+## sa-browser-pane: deferred native page-event interception
+
+- **Owner:** queued `sa-browser-pane-native-events`, dependent on `sa-browser-pane`; authoritative queue add confirmed on 2026-10-28.
+- **Flows:** Native system-webview JavaScript alert/confirm/prompt/beforeunload overlays and fail-closed responses; basic-auth and loopback-only certificate prompts; controlled collision-safe download destination/cancel/shelf actions; opener/postbody-preserving OAuth popups and external-app launch interception.
+- **Outside limit:** pinned public Electrobun SDK exposes native navigation/find/zoom, popup URL metadata and download notifications, but not the synchronous dialog/auth/certificate response handles, native download destination/cancel controls or opener-preserving popup ownership these flows require.
+- **Evidence:** installed `apps/desktop/.hutch/devkit/api/sdks/main/core/BrowserView.ts:44-218,309-374`, `api/preload/webviewTag.ts:12-26,361-402`, `api/sdks/main/events/webviewEvents.ts:1-38`; BrowserNativeHost/BrowserPaneMap public API surveys. These are supported API limitations, not evidence that private native callbacks do not exist.
+- **Unblock:** a supported SDK capability supplying those controls, without private FFI/pointers, global TLS bypass, asynchronous fake synchronous dialogs, or silently replacing native human browsing with Chrome. Reachable Chrome Watch page-event behavior remains owned by this pane item and is not cleared by this deferral.

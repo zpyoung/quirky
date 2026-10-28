@@ -1,0 +1,11 @@
+{
+  "item": "sa-browser-pane",
+  "spec": "docs/quirk/specs/2026-10-28-sa-browser-pane/logic.md",
+  "scenarios": [
+    { "id": "SC1-native", "title": "New Browser Tab hosts a sandboxed system WebKit view in the current worktree without starting Chrome; switching tabs/worktrees destroys the native view and returning restores one view at the retained URL; resize/overlays keep native bounds aligned", "status": "pending", "lastRun": null, "report": null, "summary": null },
+    { "id": "SC2-SC4-native", "title": "Native browser address, Back/Forward/Reload/Stop, same-document navigation and Find previous/next/count/close change the actual embedded page and reflect real state", "status": "pending", "lastRun": null, "report": null, "summary": null },
+    { "id": "SC5-native", "title": "Native browser zoom applies real WebKit page zoom for half-step levels and reset; viewport menu and native geometry stay coherent when resized and shown again", "status": "pending", "lastRun": null, "report": null, "summary": null },
+    { "id": "SC6-native", "title": "Opening an owned local HTML fixture displays its native page; Open source file opens that exact canonical in-worktree file in the editor and unsafe outside-worktree source actions fail visibly", "status": "pending", "lastRun": null, "report": null, "summary": null },
+    { "id": "DF7-focus", "title": "While typing in a real terminal pane, agent browser input and Watch updates never steal macOS window or typing focus; browser-specific shortcuts do not override terminal/editor bindings outside browser focus", "status": "pending", "lastRun": null, "report": null, "summary": null }
+  ]
+}
