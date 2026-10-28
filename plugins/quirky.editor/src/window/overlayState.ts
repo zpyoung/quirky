@@ -4,7 +4,7 @@ import { activeDocument } from './activeDocument'
 import type { EditorState } from './editorState'
 
 export type QuickOpenPurpose = 'files' | 'markdown-open' | 'markdown-new'
-export type QuickOpenRequest = { id: number; context: UiPluginContext; worktree?: string; query: string; purpose: QuickOpenPurpose }
+export type QuickOpenRequest = { id: number; context: UiPluginContext; worktree?: string; group?: string; query: string; purpose: QuickOpenPurpose }
 export type CloseTarget = { bufferId: string; tabId: string; name: string; dirty: boolean; mode: 'edit' | 'preview' }
 export type CloseRequest = {
   id: number
@@ -42,17 +42,17 @@ export function useCloseRequest(): CloseRequest | null {
   return useSyncExternalStore(subscribe, () => closeRequest, () => null)
 }
 
-export function showQuickOpen(context: UiPluginContext, worktree?: string, query = '', purpose: QuickOpenPurpose = 'files'): void {
-  quickOpen = { id: ++nextRequestId, context, worktree, query, purpose }
+export function showQuickOpen(context: UiPluginContext, worktree?: string, query = '', purpose: QuickOpenPurpose = 'files', group?: string): void {
+  quickOpen = { id: ++nextRequestId, context, worktree, group, query, purpose }
   notify()
 }
 
-export function showMarkdownOpen(context: UiPluginContext, worktree?: string): void {
-  showQuickOpen(context, worktree, '', 'markdown-open')
+export function showMarkdownOpen(context: UiPluginContext, worktree?: string, group?: string): void {
+  showQuickOpen(context, worktree, '', 'markdown-open', group)
 }
 
-export function showNewMarkdown(context: UiPluginContext, worktree?: string): void {
-  showQuickOpen(context, worktree, '', 'markdown-new')
+export function showNewMarkdown(context: UiPluginContext, worktree?: string, group?: string): void {
+  showQuickOpen(context, worktree, '', 'markdown-new', group)
 }
 
 export function dismissQuickOpen(id?: number): void {

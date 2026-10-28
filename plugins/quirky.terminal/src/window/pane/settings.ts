@@ -24,6 +24,8 @@ export type PaneSettings = {
   'scroll-sensitivity': number
   'fast-scroll-sensitivity': number
   'gpu-acceleration': 'auto' | 'on' | 'off'
+  'inline-images': boolean
+  ligatures: 'auto' | 'on' | 'off'
   'minimum-contrast': number
   'inactive-pane-opacity': number
   'padding-x': number
@@ -54,6 +56,8 @@ export const DEFAULT_PANE_SETTINGS: PaneSettings = {
   'scroll-sensitivity': 1.15,
   'fast-scroll-sensitivity': 5,
   'gpu-acceleration': 'auto',
+  'inline-images': true,
+  ligatures: 'auto',
   'minimum-contrast': 1,
   'inactive-pane-opacity': 0.9,
   'padding-x': 4,

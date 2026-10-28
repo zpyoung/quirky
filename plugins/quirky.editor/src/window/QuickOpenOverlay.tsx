@@ -125,6 +125,7 @@ export function QuickOpenOverlay({ context, report }: { context: UiPluginContext
       }
       await context.call('quirky.editor/open', {
         worktree: request.worktree,
+        ...(request.group === undefined ? {} : { group: request.group }),
         path: result.path,
         ...(result.line === undefined ? {} : { line: result.line }),
         ...(result.column === undefined ? {} : { column: result.column }),
@@ -149,6 +150,7 @@ export function QuickOpenOverlay({ context, report }: { context: UiPluginContext
       if (!result.path) throw new Error('The Markdown template did not return the created file path.')
       await context.call('quirky.editor/open', {
         worktree: request.worktree,
+        ...(request.group === undefined ? {} : { group: request.group }),
         path: result.path,
         mode: 'rich',
         focus: true,

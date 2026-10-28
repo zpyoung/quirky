@@ -1,11 +1,13 @@
 import {
   checkSettingValue,
+  parseChord,
   parseContributionId,
   type DistroManifest,
   type QuirkyEvent,
   type SettingInfo,
   type ThemeList,
   type UiModel,
+  type UiKeybinding,
   type UiSettingEntry
 } from '@quirky/protocol'
 import { invalidParams, notFound } from '../errors'
@@ -62,6 +64,55 @@ export class UiService {
   /** The model the window renders, built for the chosen theme. */
   contributions(): UiModel {
     return this.build().model
+  }
+
+  /** Every effective shortcut, including user-disabled and shadowed bindings. */
+  listKeybindings(): UiKeybinding[] {
+    return this.contributions().keybindings
+  }
+
+  /** Moves or disables one binding while preserving its declared command and context condition. */
+  setKeybinding(id: string, key: unknown): UiKeybinding[] {
+    if (!this.listKeybindings().some((entry) => entry.id === id)) throw notFound(`no keybinding ${id}`)
+    let canonical: string | null
+    if (key === null) canonical = null
+    else {
+      if (typeof key !== 'string') throw invalidParams('key must be a chord or null')
+      const parsed = parseChord(key)
+      if (!parsed.ok) throw invalidParams(parsed.error)
+      canonical = parsed.chord
+    }
+    const overrides = this.keybindingOverrides()
+    overrides[id] = canonical
+    this.options.store.setUiState('keybindings', overrides)
+    this.options.broadcast({ type: 'ui.keybindings.changed' })
+    return this.listKeybindings()
+  }
+
+  /** Drops only this user override, restoring the current plugin/distro declaration. */
+  resetKeybinding(id: string): UiKeybinding[] {
+    const overrides = this.keybindingOverrides()
+    if (!Object.hasOwn(overrides, id) && !this.listKeybindings().some((entry) => entry.id === id)) {
+      throw notFound(`no keybinding ${id}`)
+    }
+    delete overrides[id]
+    this.options.store.setUiState('keybindings', overrides)
+    this.options.broadcast({ type: 'ui.keybindings.changed' })
+    return this.listKeybindings()
+  }
+
+  private keybindingOverrides(): Record<string, string | null> {
+    const stored = this.options.store.getUiState('keybindings')
+    const overrides: Record<string, string | null> = Object.create(null)
+    if (typeof stored !== 'object' || stored === null || Array.isArray(stored)) return overrides
+    for (const [id, key] of Object.entries(stored)) {
+      if (key === null) overrides[id] = null
+      else if (typeof key === 'string') {
+        const parsed = parseChord(key)
+        if (parsed.ok) overrides[id] = parsed.chord
+      }
+    }
+    return overrides
   }
 
   /** Every effective setting with its current value, optionally only those declared by one plugin. */
@@ -133,7 +184,8 @@ export class UiService {
       plugins: plugins.list(),
       chosenTheme: chosenThemeOf(store.getUiState('theme'), distro),
       distroKeybindings: Object.entries(distro?.keybindings ?? {}).map(([key, command]) => ({ key, command })),
-      distroId: distro?.id ?? null
+      distroId: distro?.id ?? null,
+      keybindingOverrides: this.keybindingOverrides()
     })
   }
 

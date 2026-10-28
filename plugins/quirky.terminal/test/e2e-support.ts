@@ -204,7 +204,11 @@ export class E2eHarness {
 
   private initRepo(): void {
     const git = (...args: string[]) =>
-      execFileSync('git', ['-c', 'user.email=e2e@quirky.test', '-c', 'user.name=e2e', ...args], { cwd: this.repo, stdio: 'ignore' })
+      execFileSync('git', ['-c', 'user.email=e2e@quirky.test', '-c', 'user.name=e2e', ...args], {
+        cwd: this.repo,
+        stdio: 'ignore',
+        env: { PATH: process.env.PATH, HOME: this.home, GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev/null', GIT_TERMINAL_PROMPT: '0' }
+      })
     git('init', '-q', '-b', 'main')
     writeFileSync(join(this.repo, 'README.md'), 'e2e\n')
     git('add', '.')
@@ -213,7 +217,7 @@ export class E2eHarness {
 
   private daemonEnv(): Record<string, string> {
     return {
-      PATH: process.env.PATH ?? '',
+      PATH: `${join(this.home, 'bin')}:${process.env.PATH ?? ''}`,
       HOME: this.home,
       QUIRKY_HOME: this.home,
       SHELL: this.shell,

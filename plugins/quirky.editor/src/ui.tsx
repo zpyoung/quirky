@@ -559,7 +559,7 @@ function commandHandlers(context: UiPluginContext): Record<string, (args?: unkno
     },
     'quick-open': (rawArgs?: unknown) => {
       const args = asRecord(rawArgs)
-      showQuickOpen(context, worktreeFor(context, args), typeof args.query === 'string' ? args.query : '')
+      showQuickOpen(context, worktreeFor(context, args), typeof args.query === 'string' ? args.query : '', 'files', typeof args.group === 'string' ? args.group : undefined)
       return { opened: true }
     },
     search: (rawArgs?: unknown) => {
@@ -614,11 +614,13 @@ function commandHandlers(context: UiPluginContext): Record<string, (args?: unkno
         : context.call('ui.panel.open', { id: EXPLORER_PANEL })
     },
     'new-markdown': (rawArgs?: unknown) => {
-      showNewMarkdown(context, worktreeFor(context, asRecord(rawArgs)))
+      const args = asRecord(rawArgs)
+      showNewMarkdown(context, worktreeFor(context, args), typeof args.group === 'string' ? args.group : undefined)
       return { opened: true, dialog: 'new-markdown' }
     },
     'open-markdown': (rawArgs?: unknown) => {
-      showMarkdownOpen(context, worktreeFor(context, asRecord(rawArgs)))
+      const args = asRecord(rawArgs)
+      showMarkdownOpen(context, worktreeFor(context, args), typeof args.group === 'string' ? args.group : undefined)
       return { opened: true, dialog: 'open-markdown' }
     }
   }

@@ -50,6 +50,7 @@ export function factEvent(sessionId: string, fact: PtyFact): { name: string; dat
       return { name: 'notification', data: { sessionId, title: fact.title, body: fact.body, occasion: fact.occasion } }
     case 'prompt':
     case 'program-status':
+    case 'agent-status':
       return null
   }
 }

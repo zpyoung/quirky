@@ -55,5 +55,82 @@
 - **Revisit if:** Later landings change the exact public owner contracts.
 - **Source:** deferred: platform
 
+## D6: Remap declared bindings at the existing kernel resolution boundary
+- **Question:** How should terminal shortcuts remain user-remappable without a second event interceptor or stale menu hints?
+- **Options:** Plugin-local hardcoded keyboard interception; distro edits; profile overrides at UiService/buildUiModel.
+- **Chose:** Public keybinding.list/set/reset, persisted by binding contribution ID; null disables, reset restores current inheritance. Preserve command/context and Terminal-first policy; explicit user overrides outrank inherited collisions, with deterministic shadowed rows rather than losing entries. Settings and terminal menu hints consume the same effective model; update all windows on ui.keybindings.changed.
+- **Why:** WindowPluginHost already chooses active context-matching bindings from this model. Another listener would leave original bindings live and could leak shortcut bytes into shells.
+- **Evidence:** packages/daemon/src/plugins/ui-model.ts and ui-service.ts; packages/ui/src/plugins/host.ts handleKey; authored keybinding-overrides.test.ts and distro-collision regression (not run).
+- **Reversibility:** medium
+- **Confidence:** high for contract; runtime proof pending
+- **Revisit if:** End-phase keyboard scenarios find a context/precedence mismatch.
+- **Source:** assumed — autonomous
+
+## D7: Build a read-only iOS Simulator tab against the real supported provider
+- **Question:** Can the missing Mobile Emulator tab be implemented without equating it to phone panels or restoring dropped generic computer control?
+- **Options:** Treat phone panels as an emulator; fabricate images; compose an exact selected Xcode simulator screenshot provider.
+- **Chose:** Terminal owns emulators/emulatorFrame and a session-free hosted Mobile Emulator view. Real xcrun simctl list/screenshot, explicit UDID (never booted alias), no device boot/shutdown/control/fallback. Visible tabs poll one second after each completed frame; hidden tabs unmount and stop polling. Bounded child output/timeout, temporary frame files, PNG byte/pixel bounds, truthful unavailable/empty/shutdown/stale-frame/error/refresh states.
+- **Why:** term-ui.md names a preview tab while agents retain their own tools. This is distinct from the shipped mobile companion and does not introduce native chat, a Swift shell or generic computer-use authority. The supported simctl executable is available; no real simulator was read or mutated during source investigation.
+- **Evidence:** xcrun --find simctl exited0 with /Applications/Xcode.app/Contents/Developer/usr/bin/simctl; terminal emulator.ts and EmulatorView.tsx; authored isolated external-provider API test (unrun).
+- **Reversibility:** medium
+- **Confidence:** medium until actual changed-path smoke and nightly native check
+- **Revisit if:** The real SDK/provider cannot return bounded screenshot data for an explicitly selected simulator.
+- **Source:** assumed — autonomous
+
+## D8: Reuse compatible bounded renderer addons and exact public document destinations
+- **Question:** Which rendering/tab composition closes distinct missing flows without invalidating xterm or editor leases?
+- **Options:** Major xterm upgrade/private renderer parser; duplicate document authority; compatible owner-declared addons and public hosted editor commands.
+- **Chose:** xterm5.5-compatible addon-image0.8.0 and ligatures0.9.0, lazy visible-pane load, stale import/unmount fencing, image cache8MiB/pixel1M and input4MiB, initial addon readiness before replay. This addon supports SIXEL and iTerm images, not Kitty graphics; no Kitty support claim. Existing application terminal theme ownership stays unchanged. New/Open Markdown and Open File in Editor preserve exact workspace/group through the public editor picker and existing leased document surface; existing Browser/handoff owners remain.
+- **Why:** Published peer ranges match the pinned xterm. An unmounted addon must not recreate hidden resources, and a tab picker must not silently send a split's document to another group. Floating Markdown/editor has no authorized document root and refuses visibly instead of inventing filesystem authority.
+- **Evidence:** https://registry.npmjs.org/@xterm/addon-image/0.8.0 ; https://registry.npmjs.org/@xterm/addon-ligatures/0.9.0 ; upstream addon public typings at commit9ba6c00a; editor overlayState/QuickOpenOverlay and terminal commands/extras source.
+- **Reversibility:** medium
+- **Confidence:** medium until changed-path browser smoke
+- **Revisit if:** A compatible Kitty-capable addon or public floating-document owner is implemented.
+- **Source:** assumed — autonomous; deferred: Kitty graphics and floating authorized document composition
+
+## D9: Preserve explicit signing and native notification prerequisites
+- **Question:** Do this workstation and pinned SDK provide the outside authority required for production helper/TCC and notification lifecycle claims?
+- **Options:** Invent an ad-hoc production identity; private native SDK patch; retain observed prerequisites and ship reachable public bridges separately.
+- **Chose:** security find-identity -v -p codesigning returned `0 valid identities found` (exit0). Do not claim signed production helper/TCC/admission/upgrade packaging. Predecessor D6's supported SDK audit remains binding: directory chooser exists, showNotification returns void and supplies no permission/click/dismiss utility hooks. No generated/private FFI patch or false banner acknowledgement.
+- **Why:** A public folder/window bridge is reachable engineering; a nonexistent signing credential or SDK callback cannot be supplied by source stubs or success heuristics.
+- **Evidence:** observed security command this iteration; m7-sweep-terminal-completion D6; sa-browser-pane-native-host-controls D3,D6.
+- **Reversibility:** medium for packaging; easy when supported hooks/identity exist
+- **Confidence:** high for observed environment/API limits
+- **Revisit if:** A valid authorized signing identity and supported native lifecycle hooks are available.
+- **Source:** deferred: signed helper identity and supported notification hooks
+
+## D10: Reject incomplete components and continue them within the original width cap
+- **Question:** Can test-only future contracts or merely missing create fields count as shipped work?
+- **Options:** Accept partial reports as complete; label source omissions outside blockers; continue each original component through focused serial recovery while parent finishes shared integration.
+- **Chose:** Reject original A/C incomplete handoffs. Original workers explicitly stopped and acknowledged no further edits. Focused serial retries continue their same worktrees and preserve prior changes, with at most three simultaneous implementers including B. Parent owns native structured/Ask integration and Dashboard consumer files reserved from the status retry. No check, commit or acceptance is inferred from a worker report.
+- **Why:** A3/A4 initially contained tests without implementation, and C4 lacked forwardable fields despite existing public session support. Those are reachable engineering work, not external authority prerequisites or a reason to silently reduce the item.
+- **Evidence:** TerminalAuthority and WorktreeParity incomplete reports and stop acknowledgements; focused ProviderStatusFinish and WorktreeCreateFinish contracts; revised spec ownership.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** A concrete outside authority rather than an unimplemented source field blocks a distinct flow.
+- **Source:** assumed — autonomous
+
+## D11: Native question handoff uses the kernel-issued session lease, not forged plugin identity
+- **Question:** How can an asynchronous Claude/Codex native callback preserve its real worker caller beyond a client handler's forwarding lifetime?
+- **Options:** Forge a PluginCaller; retain expired forwarding objects; connect through the public local client API with the background session's own kernel-issued lease token.
+- **Chose:** The owning structured service uses its live lease credential to open an authenticated local connection only for the native question lifetime. Register a bounded durable typed Ask and use ordinary caller-preserving handoff/wait; close on settlement/exit/shutdown. Ordinary tool approvals keep their existing card path. Preserve native IDs/labels/multiselect/free text; refuse secret requests before Ask creation. Question-only no-answer text is never an approval decision. Codex validates exact active thread/turn on both sides of the await.
+- **Why:** The kernel already issues and verifies these credentials for structured sessions; no new authority source or impersonation API is needed. A stored Ask cannot make an expired provider lease live.
+- **Evidence:** RuntimeSessionAuthority.openStructuredLease/resolveForConnection; public connectDaemon identity option; quirky.structured native-questions, runners and createAsk integration; authored native provider-frame tests (not run).
+- **Reversibility:** hard (caller authority)
+- **Confidence:** high for design; actual runtime proof pending
+- **Revisit if:** A supported public in-process session-scoped call primitive replaces the credentialed local connection without weakening lifetime fences.
+- **Source:** assumed — autonomous
+
+## D12: Preserve exact handoff outcomes across replies and terminal restoration
+- **Question:** Which identity and terminal-state edges must survive the cutover?
+- **Options:** Compare JSON observation-channel snapshots; drop reply attestation; reuse typed owner identity and persist all terminal refusal outcomes.
+- **Chose:** Preserve handoff identity in accepted checkpoints and both immediate/awaited answered results. Replay matches actual session/process incarnation, allowing terminal_launch to become restored_authority without accepting a replacement process. Unknown wait/cancel returns unavailable with no fabricated answer. An absent structured lease is definitive kernel-owner loss; absent/unprobed PTY evidence remains unknown. A coordinator may explicitly leave a required question unanswered as partial without relaxing ordinary card-submit required validation.
+- **Why:** Dropping answer identity would falsely reject a genuine coordinator; comparing observation source would break same-process restart replay; partial/no-answer must not become consent or an endlessly invalid card submit.
+- **Evidence:** parent repairs in dispatcher/orchestration/Ask; authored source-channel restoration, coordinator partial, unknown outcome and native conversion tests (unrun).
+- **Reversibility:** medium
+- **Confidence:** medium until disposable runtime proof
+- **Revisit if:** Actual API/CLI handoff/restart execution contradicts these invariants.
+- **Source:** assumed — autonomous
+
 ## Progress
-Claimed and oriented. Source feature docs, predecessor spec/decisions and locked architecture/roadmap read; targeted scout maps current seams. Next: settle concrete contracts, commit combined spec/shared DTO/schema signatures, dispatch at most three disjoint implementers. No tests, product smoke or typecheck run yet. Do not end before landing or blocking this item; do not claim another item.
+Contract/spec commit740ff1b0 precedes implementation. Parent terminal/render/remap/editor/PTY source and tests authored; original incomplete A/C workers stopped, focused serial recoveries active in their original trees; B CLI/native bridge active. Parent completed native structured caller and Ask integration plus Dashboard public consumers without overlapping retry scopes. No permanent tests, typecheck, build, product smoke, review or dogfood run yet. Next: settle all components, audit scope/HEADs, commit/merge each and immediately remove its worktree, install using existing bun.lock convention, run typecheck and disposable actual API/CLI/web smoke, record exact dispositions/native pending evidence, catch up once/read incoming decisions, typecheck and canonical land. Do not end with work running or claim another queue item.

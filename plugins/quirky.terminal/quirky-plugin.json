@@ -80,6 +80,8 @@
   ],
   "contributes": {
     "method": [
+      {"id":"emulators","description":"List available local Xcode iOS simulators without booting or controlling any device.","params":{"type":"object","properties":{},"additionalProperties":false},"result":{"type":"object","properties":{"available":{"type":"boolean"},"devices":{"type":"array","items":{"type":"object","properties":{"id":{"type":"string"},"name":{"type":"string"},"state":{"type":"string"},"runtime":{"type":"string"}},"required":["id","name","state","runtime"],"additionalProperties":false}},"reason":{"type":"string"}},"required":["available","devices"],"additionalProperties":false}},
+      {"id":"emulatorFrame","description":"Read a bounded PNG preview of one exact booted simulator UDID. Never accepts implicit targets or boots a device.","params":{"type":"object","properties":{"device":{"type":"string"}},"required":["device"],"additionalProperties":false},"result":{"type":"object","properties":{"device":{"type":"string"},"mime":{"type":"string","enum":["image/png"]},"data":{"type":"string","description":"Base64 PNG; at most4MiB decoded."},"capturedAt":{"type":"number"}},"required":["device","mime","data","capturedAt"],"additionalProperties":false}},
       {
         "id": "artifacts",
         "description": "Discover local terminal-output file artifacts, preview through an opaque caller-bound grant, refresh authorization or conditionally save complete text. Never accepts a file path.",
@@ -2687,6 +2689,10 @@
         }
       }
     ],
+    "settings-section": [
+      {"id":"shortcuts","title":"Terminal Shortcuts","description":"Profile-bound command remapping; context and Terminal-first policy are preserved.","order":35}
+    ],
+    "view": [{"id":"emulator","title":"Mobile Emulator","description":"Read-only preview of an explicitly selected Xcode iOS simulator."}],
     "setting": [
       {
         "id": "scrollback",
@@ -2828,6 +2834,21 @@
         "maximum": 10
       },
       {
+        "id": "inline-images",
+        "type": "boolean",
+        "title": "Inline Images",
+        "description": "Render SIXEL and iTerm inline images in visible panes with an 8 MB image cache. Kitty graphics is not supported by this renderer version.",
+        "default": true
+      },
+      {
+        "id": "ligatures",
+        "type": "enum",
+        "title": "Font Ligatures",
+        "description": "Auto enables programming ligatures for known ligature fonts. Loaded only for visible panes.",
+        "default": "auto",
+        "values": ["auto", "on", "off"]
+      },
+      {
         "id": "gpu-acceleration",
         "type": "enum",
         "title": "GPU acceleration",
@@ -2964,6 +2985,8 @@
       }
     ],
     "cli-command": [
+      {"id":"emulators","words":"emulators","summary":"list available local iOS simulators","method":"emulators"},
+      {"id":"emulator-frame","words":"emulator-frame","summary":"capture one exact booted iOS simulator frame","method":"emulatorFrame"},
       {
         "id": "read",
         "words": "read",
@@ -3976,6 +3999,10 @@
       }
     ],
     "command": [
+      {"id":"new-emulator","title":"New Mobile Emulator","args":{"type":"object","properties":{"group":{"type":"string"},"device":{"type":"string"}},"additionalProperties":false}},
+      {"id":"new-markdown","title":"New Markdown","args":{"type":"object","properties":{"group":{"type":"string"}},"additionalProperties":false}},
+      {"id":"open-markdown","title":"Open Markdown","args":{"type":"object","properties":{"group":{"type":"string"}},"additionalProperties":false}},
+      {"id":"open-file","title":"Open File in Editor","args":{"type":"object","properties":{"group":{"type":"string"}},"additionalProperties":false}},
       {
         "id": "manage-sessions",
         "title": "Terminal: Manage Sessions"
@@ -4367,6 +4394,10 @@
       }
     ],
     "menu-item": [
+      {"id":"new-emulator","menu":"quirky.terminal/tab","title":"New Mobile Emulator","command":"new-emulator","after":"quick-commands"},
+      {"id":"new-markdown","menu":"quirky.terminal/tab","title":"New Markdown","command":"new-markdown","after":"quick-commands"},
+      {"id":"open-markdown","menu":"quirky.terminal/tab","title":"Open Markdown","command":"open-markdown","after":"quick-commands"},
+      {"id":"open-file","menu":"quirky.terminal/tab","title":"Open File in Editor","command":"open-file","after":"quick-commands"},
       {
         "id": "fork-agent-session",
         "menu": "quirky.terminal/pane",
@@ -4383,6 +4414,10 @@
       }
     ],
     "keybinding": [
+      {"id":"new-markdown","key":"mod+shift+m","command":"new-markdown","when":"terminalFocus"},
+      {"id":"open-markdown","key":"mod+shift+o","command":"open-markdown","when":"terminalFocus"},
+      {"id":"open-file","key":"mod+p","command":"open-file","when":"terminalFocus"},
+      {"id":"new-emulator","key":"mod+alt+shift+e","command":"new-emulator","when":"terminalFocus"},
       {
         "id": "copy",
         "key": "mod+c",

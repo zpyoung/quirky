@@ -25,6 +25,7 @@ import { fontStack, zoomed, type PaneSettings } from './settings'
 import { readTerminalColors, withAlpha } from './terminalTheme'
 import { ContextLossGuard, loseWebglContext, webglBudget } from './webgl'
 import { MobileDriverOverlay } from './MobileDriverOverlay'
+import { createPaneExtras } from './extras'
 
 /** The most characters a search query may have. */
 export const MAX_SEARCH_QUERY = 1000
@@ -110,6 +111,7 @@ type Runtime = {
   setFont(): void
   refreshWebgl(): void
   syncOsc52(): void
+  syncExtras(settings: PaneSettings): void
 }
 
 const EMPTY_RESULTS: Results = { index: -1, count: 0 }
@@ -335,6 +337,8 @@ export function TerminalPaneView(props: TerminalPaneProps) {
     term.unicode.activeVersion = '11'
     term.loadAddon(searchAddon)
     term.open(screen)
+    const extras = createPaneExtras(term, (title, error) => context.toast(title, messageOf(error)))
+    const extrasReady = extras.sync(initial)
 
     const copyText = (text: string) => void Promise.resolve(navigator.clipboard?.writeText(text)).catch(() => {})
     const openTarget = (target: string, reveal: boolean) => {
@@ -742,6 +746,7 @@ export function TerminalPaneView(props: TerminalPaneProps) {
       copy,
       scheduleFit,
       syncOsc52,
+      syncExtras: extras.sync,
       setFont() {
         term.options.fontSize = effectiveFontSize()
         setView((now) => ({ ...now, fontSize: effectiveFontSize() }))
@@ -789,9 +794,11 @@ export function TerminalPaneView(props: TerminalPaneProps) {
     sentSize.current = { cols: term.cols, rows: term.rows }
 
     const detach = (id: number) => void context.call('quirky.terminal/detach', { streamId: id }).catch(() => {})
-    context
-      .call('quirky.terminal/attach', { session: sessionId, cols: term.cols, rows: term.rows, historyLines: initial.scrollback })
+    void extrasReady.then(() => disposed ? null : context.call('quirky.terminal/attach', {
+      session: sessionId, cols: term.cols, rows: term.rows, historyLines: initial.scrollback
+    }))
       .then((value) => {
+        if (value === null) return
         const result = value as { streamId: number; replay: string; live?: boolean }
         if (disposed) {
           detach(result.streamId)
@@ -855,6 +862,7 @@ export function TerminalPaneView(props: TerminalPaneProps) {
       taskLinkProvider.dispose()
       kitty.dispose()
       disableWebgl()
+      extras.dispose()
       guarded(() => term.dispose(), undefined)
     }
   }, [context, sessionId, themeSource, sendResize])
@@ -864,11 +872,12 @@ export function TerminalPaneView(props: TerminalPaneProps) {
     if (!rt) return
     const { term } = rt
     term.options.fontFamily = fontStack(settings['font-family'])
+    rt.syncExtras(settings)
     term.options.fontWeight = settings['font-weight']
     term.options.fontWeightBold = settings['font-weight-bold']
     term.options.lineHeight = settings['line-height']
     rt.scheduleFit()
-  }, [settings['font-family'], settings['font-weight'], settings['font-weight-bold'], settings['line-height']])
+  }, [settings['font-family'], settings['font-weight'], settings['font-weight-bold'], settings['line-height'], settings['inline-images'], settings.ligatures])
 
   useEffect(() => {
     const rt = runtime.current
