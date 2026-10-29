@@ -109,7 +109,10 @@ async function openCreate(w: World, project: Project): Promise<HTMLElement> {
   const dialog = await w.win.waitFor(() => dialogNamed(CREATE))
   await w.win.waitFor(() => field<HTMLSelectElement>(dialog, 'Project')?.value === project.repo.id)
   await click(button(dialog, 'Name')!)
-  await w.win.waitFor(() => field(dialog, 'Name')?.placeholder)
+  await w.win.waitFor(() =>
+    button(dialog, 'Name')?.getAttribute('aria-selected') === 'true' &&
+    field(dialog, 'Name')?.id === 'create-name'
+  )
   return dialog
 }
 async function installCreateMoreAgent(w: World): Promise<void> {

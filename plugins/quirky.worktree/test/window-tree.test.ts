@@ -180,10 +180,10 @@ test('SC-44: the sidebar reports project and group membership, primary worktrees
   await click(childToggle)
   await win.waitFor(() => !card('child', 'api'))
   await agent.callAny('quirky.worktree/set', { worktree: fixLogin.id, status: 'in-review' })
-  await win.waitFor(async () => (await reportRow(agent, fixLogin.id))?.status === 'in-review')
+  await win.waitFor(async () => (await reportRow(agent, fixLogin.id))?.workspaceStatus === 'in-review')
   expect(card('child', 'api')).toBeUndefined()
   await agent.callAny('quirky.worktree/set', { worktree: fixLogin.id, status: 'in-progress' })
-  await win.waitFor(async () => (await reportRow(agent, fixLogin.id))?.status === null)
+  await win.waitFor(async () => (await reportRow(agent, fixLogin.id))?.workspaceStatus === 'in-progress')
   await click(card('fix-login', 'api')!.querySelector<HTMLButtonElement>('button[aria-expanded]')!)
   await win.waitFor(() => card('child', 'api'))
   const state = await win.waitFor(async () => {
@@ -247,7 +247,7 @@ test('SC-43: status, pin and unread from the card menu', async () => {
   await choose(win, 'In review')
   await win.waitFor(async () => (await listed(agent, fixLogin.id)).status === 'in-review')
 
-  await win.waitFor(async () => (await reportRow(agent, fixLogin.id))?.status === 'in-review')
+  await win.waitFor(async () => (await reportRow(agent, fixLogin.id))?.workspaceStatus === 'in-review')
   await win.waitFor(() => card('fix-login', 'api')?.textContent?.includes('In review'))
   await openMenu(win, 'fix-login', 'api')
   await choose(win, 'Pin')
@@ -256,7 +256,7 @@ test('SC-43: status, pin and unread from the card menu', async () => {
   const pinnedSection = sidebarPanel()!.querySelector<HTMLElement>('[data-top-level-section="pinned"]')!
   expect(sectionHeading(pinnedSection)).toBe('Pinned')
   expect(pinnedSection.nextElementSibling?.getAttribute('data-top-level-section')?.startsWith('repo:')).toBe(true)
-  expect(await reportRow(agent, fixLogin.id)).toMatchObject({ pinned: true, status: 'in-review' })
+  expect(await reportRow(agent, fixLogin.id)).toMatchObject({ pinned: true, workspaceStatus: 'in-review' })
   expect((await report(agent)).pinned).toEqual([fixLogin.id])
 
   await agent.callAny('quirky.worktree/set', { worktree: docs!.id, unread: false })
