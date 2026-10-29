@@ -1,4 +1,4 @@
-import type { CliArgs, CliContext } from '@quirky/protocol'
+import type { CliArgs, CliContext, TerminalTabCounts } from '@quirky/protocol'
 import { isTabColor, TAB_COLORS } from '../layout/types'
 import type { Workspace } from '../layout/types'
 import { atMost, positional, showWorkspace, stringFlag, stringFlags, workspaceParam, type Handler } from './shared'
@@ -55,6 +55,17 @@ export const workspaceCommands: Record<string, Handler> = {
     atMost(args, ctx, 0)
     const { workspace } = (await call(ctx, 'workspace', workspaceParam(args, ctx))) as { workspace: Workspace }
     ctx.out.result(workspace, () => renderWorkspace(workspace))
+  },
+
+  async 'tab-counts'(args, ctx) {
+    atMost(args, ctx, 0)
+    const result = await call(ctx, 'tabCounts', {}) as TerminalTabCounts
+    ctx.out.result(result, () => {
+      const rows: string[][] = []
+      for (const item of result.counts) rows.push([item.worktreeId, String(item.tabCount)])
+      for (const worktreeId of result.unavailableWorktrees) rows.push([worktreeId, 'unavailable'])
+      return ctx.format.table(['WORKTREE', 'TABS'], rows)
+    })
   },
 
   async 'tab-new'(args, ctx) {
