@@ -244,6 +244,7 @@ test('source detection begins only when opened and empty/error states retain fil
   fileRead.resolve(JSON.stringify(cookies))
   await act(async () => { await settle() })
   expect(confirmations).toHaveLength(1)
+  expect(confirmations[0]?.body).toContain(REVIEW.label)
   expect(callsFor('importStart')).toHaveLength(0)
   confirming.resolve(true)
   await waitForText('1 imported')

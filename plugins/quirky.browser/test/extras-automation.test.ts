@@ -117,14 +117,17 @@ test('SC5: history, advanced interactions, signed nth and full-page capture oper
     await call(h.client, 'keyboardInsertText', { page: pageId, text: '@file is literal' })
     expect(await call(h.client, 'get', { page: pageId, what: 'value', element: '#text' })).toEqual({ value: '@file is literal' })
     await call(h.client, 'selectAll', { page: pageId, element: '#text' })
-    expect(await call(h.client, 'eval', { page: pageId, expression: 'document.activeElement.selectionEnd-document.activeElement.selectionStart' })).toEqual({ value: 16 })
+    expect(await call(h.client, 'eval', { page: pageId, expression: '({element:document.activeElement.id,selected:document.activeElement.value.slice(document.activeElement.selectionStart,document.activeElement.selectionEnd)})' })).toEqual({ value: { element: 'text', selected: '@file is literal' } })
     await call(h.client, 'scrollIntoView', { page: pageId, element: '#dragTarget' })
     await call(h.client, 'eval', { page: pageId, expression: 'document.addEventListener(\"mousemove\",event=>document.querySelector(\"#pointer\").textContent=`${event.clientX},${event.clientY}`,{once:true})' })
     await call(h.client, 'mouseMove', { page: pageId, x: 20, y: 20 })
     expect(await call(h.client, 'eval', { page: pageId, expression: 'document.querySelector(\"#pointer\").textContent' })).toEqual({ value: '20,20' })
+    await call(h.client, 'eval', { page: pageId, expression: "window.__extrasMouseEvents=[];const signal=document.createElement('output');signal.id='wheelObserved';signal.hidden=true;document.body.append(signal);document.addEventListener('mousedown',e=>window.__extrasMouseEvents.push({type:'down',button:e.button}));document.addEventListener('mouseup',e=>window.__extrasMouseEvents.push({type:'up',button:e.button}));document.addEventListener('wheel',e=>{window.__extrasMouseEvents.push({type:'wheel',deltaX:e.deltaX,deltaY:e.deltaY});signal.textContent=String(e.deltaX)+','+String(e.deltaY);signal.hidden=false});true" })
     await call(h.client, 'mouseDown', { page: pageId, button: 'left' })
     await call(h.client, 'mouseUp', { page: pageId, button: 'left' })
     await call(h.client, 'mouseWheel', { page: pageId, dy: 40 })
+    await call(h.client, 'wait', { page: pageId, selector: '#wheelObserved', state: 'visible', timeout: 2_000 })
+    expect(await call(h.client, 'eval', { page: pageId, expression: 'window.__extrasMouseEvents' })).toEqual({ value: [{ type: 'down', button: 0 }, { type: 'up', button: 0 }, { type: 'wheel', deltaX: 0, deltaY: 40 }] })
     await call(h.client, 'drag', { page: pageId, from: '#dragSource', to: '#dragTarget' })
     expect(await call(h.client, 'eval', { page: pageId, expression: 'document.querySelector(\"#dragResult\").textContent' })).toEqual({ value: 'dragged' })
     await call(h.client, 'dblclick', { page: pageId, element: '.item' })
@@ -193,13 +196,22 @@ test('SC6-SC7: HAR, multiple intercept patterns, headers, emulation, clipboard a
       return new Response(`body:${url.pathname}`, { headers: { ...cors, 'content-type': 'text/plain' } })
     }
   })
+  const pageServer = Bun.serve({
+    hostname: '127.0.0.1',
+    port: 0,
+    fetch: () => new Response(
+      '<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><title>Events</title><main>Fixture</main>',
+      { headers: { 'content-type': 'text/html; charset=utf-8' } }
+    )
+  })
   let dialogOpened = Promise.withResolvers<void>()
   const h = await startBrowserHarness({ onDialog: () => dialogOpened.resolve() })
   try {
-    const first = await newPage(h)
-    const neighbor = await newPage(h)
-    const pageId = first.browserPageId
     const localBase = responseServer.url.href
+    const pageUrl = pageServer.url.href
+    const first = await newPage(h, undefined, pageUrl)
+    const neighbor = await newPage(h, undefined, pageUrl)
+    const pageId = first.browserPageId
     await call(h.client, 'setHeaders', { page: pageId, headers: JSON.stringify({ 'x-extras': 'header-value' }) })
     expect(await call(h.client, 'eval', { page: pageId, expression: `fetch(${JSON.stringify(`${localBase}echo`)}).then(r=>r.json())` })).toEqual({ value: { value: 'header-value' } })
 
@@ -216,10 +228,10 @@ test('SC6-SC7: HAR, multiple intercept patterns, headers, emulation, clipboard a
     const consoleLog = await call(h.client, 'console', { page: pageId, limit: 1 }) as { entries: Array<{ text: string }> }
     expect(consoleLog.entries).toHaveLength(1)
     expect(consoleLog.entries[0]!.text).toContain('extras-observable-log')
-    const networkLog = await call(h.client, 'network', { page: pageId, limit: 1 }) as { entries: Array<{ url: string; status: number }> }
-    expect(networkLog.entries).toHaveLength(1)
-    expect(networkLog.entries[0]!.url).toBe(`${localBase}capture-two`)
-    expect(networkLog.entries[0]!.status).toBe(200)
+    const networkLog = await call(h.client, 'network', { page: pageId }) as { entries: Array<{ url: string; method: string; status: number }> }
+    expect(networkLog.entries).toEqual(expect.arrayContaining([
+      expect.objectContaining({ url: `${localBase}capture-two`, method: 'GET', status: 200 })
+    ]))
     expect(harEntries.every((entry) => entry.response.content.size > 0)).toBe(true)
 
     await call(h.client, 'interceptEnable', { page: pageId, patterns: ['*intercept-one*', '*intercept-two*'] })
@@ -273,6 +285,7 @@ test('SC6-SC7: HAR, multiple intercept patterns, headers, emulation, clipboard a
   } finally {
     await h.cleanup()
     await responseServer.stop(true)
+    await pageServer.stop(true)
   }
 }, 180_000)
 
