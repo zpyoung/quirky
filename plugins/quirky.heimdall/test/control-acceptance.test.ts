@@ -377,7 +377,10 @@ describe('Heimdall operators through daemon API and real CLI', () => {
   test('foreign targets and unverifiable workers fail closed through public command API', async () => {
     const id = await enroll('authority')
     const current = await detail(id)
-    expect(await call('command', { target: { watcherId: id, connectionId: 'foreign-host' }, expectedOwner: current.ownerFence, command: { kind: 'pause' } })).toMatchObject({ kind: 'refused', reason: 'owner-unreachable' })
+    const foreign = { watcherId: id, connectionId: 'foreign-host', pairingRevision: 1 }
+    expect(await call('command', { target: { watcherId: id, connectionId: 'foreign-host' }, expectedOwner: current.ownerFence, command: { kind: 'pause' } })).toMatchObject({ kind: 'refused', reason: 'invalid-command' })
+    expect(await call('command', { target: foreign, expectedOwner: current.ownerFence, command: { kind: 'pause' } })).toMatchObject({ kind: 'refused', reason: 'owner-conflict' })
+    expect(await call('command', { target: foreign, expectedIncarnation: 'absent-daemon', expectedOwner: current.ownerFence, command: { kind: 'pause' } })).toMatchObject({ kind: 'refused', reason: 'owner-unreachable' })
     expect(await command(id, { kind: 'stop-worker', identity: { dispatchId: 'not-owned', sessionId: 'unknown', processIncarnation: 'unknown' } })).toMatchObject({ kind: 'refused', reason: 'worker-unverifiable' })
     expect((await detail(id)).enrollment.paused).toBe(false)
   })

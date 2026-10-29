@@ -1,4 +1,7 @@
 import { describe, expect, test } from 'bun:test'
+import { mkdtempSync, realpathSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import type { PluginContext, QuirkyEvent } from '@quirky/protocol'
 import { budgetUsage } from '../src/budget'
 import { createRunner } from '../src/runner'
@@ -200,9 +203,14 @@ describe('Heimdall orchestration adapter', () => {
   test('owner-run worker evidence drives billable contact and malformed rows cannot appear live', async () => {
     let nowMs = 1_000
     let lastContactAtMs: unknown = null
-    const enrollment = makeEnrollment({ orchestrationRunId: 'run_fixture' })
+    const workspacePath = realpathSync.native(mkdtempSync(join(tmpdir(), 'heimdall-orchestration-billing-')))
+    const enrollment = makeEnrollment({
+      orchestrationRunId: 'run_fixture',
+      workspaceKey: `fixture-host::${workspacePath}`,
+      workspacePath
+    })
     const store = makeStore(enrollment)
-    const attempt = preparedAttempt()
+    const attempt = preparedAttempt({ spec: 'fixture task', worktree: workspacePath })
     if (!attempt.requestId || !attempt.workerRequest) throw new Error('prepared fixture has no worker replay data')
     store.append(enrollment.watcherId, {
       kind: 'attempt',
@@ -309,8 +317,15 @@ describe('Heimdall orchestration adapter', () => {
       expect(store.journal(enrollment.watcherId).filter((entry) => entry.kind === 'attempt').at(-1))
         .toMatchObject({ state: 'running', dispatchId: 'ctx_fixture' })
     } finally {
-      await runner.shutdown(0)
-      adapter.dispose()
+      try {
+        await runner.shutdown(0)
+      } finally {
+        try {
+          adapter.dispose()
+        } finally {
+          rmSync(workspacePath, { recursive: true, force: true })
+        }
+      }
     }
   })
 
