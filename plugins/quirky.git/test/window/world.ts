@@ -123,6 +123,14 @@ export async function boot(scratch: () => string, options: BootOptions = {}): Pr
   actEnvironment = (globalThis as ActGlobal).IS_REACT_ACT_ENVIRONMENT
   ;(globalThis as ActGlobal).IS_REACT_ACT_ENVIRONMENT = false
   const win = await startHeadlessWindow({ home: harness.home, runtime: harness.runtime })
+  // Happy DOM has no layout; use the terminal acceptance fixture's measured-stage convention.
+  const elementPrototype = Element.prototype
+  const originalRect = elementPrototype.getBoundingClientRect
+  elementPrototype.getBoundingClientRect = function () {
+    return this.matches('.qt-groups, .qt-panes, .qt-body')
+      ? new DOMRect(0, 0, 1024, 768)
+      : originalRect.call(this)
+  }
   globalThis.Response = NativeResponse
   const state = async () => (await agent.callAny('ui.state', {})) as UiState
   const world: World = {
@@ -189,8 +197,12 @@ export async function boot(scratch: () => string, options: BootOptions = {}): Pr
       ...Object.entries(win.host.getState().slots).flatMap(([id, slot]) => (slot.status === 'error' ? [`${id}: ${slot.message}`] : []))
     ],
     async cleanup() {
-      await win.stop()
-      await harness.cleanup()
+      try {
+        await win.stop()
+      } finally {
+        elementPrototype.getBoundingClientRect = originalRect
+        await harness.cleanup()
+      }
     }
   }
   current = world

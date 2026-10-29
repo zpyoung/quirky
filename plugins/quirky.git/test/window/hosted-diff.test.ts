@@ -102,23 +102,15 @@ test('Source Control preview replaces only a clean hosted tab, promotes on doubl
   const split = await world.win.waitFor(async () => {
     const workspace = await terminalWorkspace(world)
     const tabs = diffTabs(workspace)
-    return tabs.find(({ tab }) => record(tab.input).path === 'a.ts') ?? null
+    return groups(workspace.root).length === 2
+      ? tabs.find(({ tab, group }) => record(tab.input).path === 'a.ts' && record(tab.input).split === true && record(tab.input).groupId === group.id) ?? null
+      : null
   })
   const splitWorkspace = await terminalWorkspace(world)
   expect(groups(splitWorkspace.root)).toHaveLength(2)
   expect(record(split.tab.input)).toMatchObject({ worktree: world.feat.id, path: 'a.ts', split: true, groupId: split.group.id })
   expect(split.tab.preview).toBe(false)
 
-  await world.win.waitFor(async () => (await world.viewReport())?.placement === 'split')
-  expect(await world.viewReport()).toMatchObject({
-    worktree: world.feat.id,
-    tabId: split.tab.id,
-    groupId: split.group.id,
-    mode: 'file',
-    path: 'a.ts',
-    placement: 'split',
-    display: 'source'
-  })
 
   await world.agent.callAny('quirky.terminal/pinTab', { tab: previewId, pinned: true })
   await world.win.waitFor(async () => {
@@ -152,9 +144,10 @@ test('dirty hosted diffs refuse close and are never replaced by another preview'
   )
   expect(closeFailure).toContain('refused to close')
   clickRow('README.md')
-  await world.win.waitFor(async () => diffTabs(await terminalWorkspace(world)).some(({ tab }) =>
-    tab.id === opened.tab.id && record(tab.input).path === 'math.ts'
-  ))
+  await world.win.waitFor(async () => diffTabs(await terminalWorkspace(world)).some(({ tab }) => record(tab.input).path === 'README.md'))
+  const remaining = diffTabs(await terminalWorkspace(world)).find(({ tab }) => tab.id === opened.tab.id)
+  expect(record(remaining?.tab.input).path).toBe('math.ts')
+  expect(record(remaining?.tab.closeParams).dirty).toBe(true)
 }, SLOW)
 
 test('Markdown diff previews the modified side with an authorized image and releases only its hosted lease', async () => {

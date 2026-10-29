@@ -31,7 +31,8 @@ test('SC-45: the conflict review lists the snapshot, then Refresh marks a staged
   await w.win.waitFor(async () => (await openView(w))?.id === DIFF_VIEW)
   await w.win.waitFor(() => reviewRows().length === 2)
   expect(reviewRows()).toEqual(['a.tsUnresolvedOpen', 'b.tsUnresolvedOpen'])
-  await w.win.waitFor(async () => (await w.viewReport())?.conflicts === 2)
+  await w.win.waitFor(() => text(q('[data-git-view-root]')!).includes('2 unresolved conflicts'))
+  expect(reviewRows()).toHaveLength(2)
 
   writeFileSync(join(w.dir, 'a.ts'), 'merged\n')
   w.git('add', 'a.ts')

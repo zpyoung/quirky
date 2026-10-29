@@ -143,7 +143,7 @@ test('NA-33: AI Fix on the Commit blocked card opens a Claude tab with the failu
   await click(byLabel('Choose an agent for this commit failure', card))
   await click(buttonText('Customize launch...'))
   const launch = await w.win.waitFor(() => dialogNamed('Fix Commit Failure With AI'))
-  await click(buttonText('Cancel', launch))
+  await click(await w.win.waitFor(() => buttonText('Cancel', launch)))
 
   await click(buttonText('Details', card))
   const details = await w.win.waitFor(() => dialogNamed('Commit Failed'))

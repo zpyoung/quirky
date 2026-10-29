@@ -42,9 +42,10 @@ test('SC-41: a sync that stops on a conflict leads, in the window, to Continue m
 
   const editor = editorIn()
   editor.dispatch({ changes: { from: 0, to: editor.state.doc.length, insert: 'a\nb\nBOTH\nd\ne\n' } })
-  await w.win.waitFor(async () => (await w.viewReport())?.dirty === true)
+  expect(editor.state.sliceDoc()).toBe('a\nb\nBOTH\nd\ne\n')
+  expect(readFileSync(join(w.dir, 'math.ts'), 'utf8')).not.toBe('a\nb\nBOTH\nd\ne\n')
   await modS(editor)
-  await w.win.waitFor(async () => (await w.viewReport())?.dirty === false)
+  await w.win.waitFor(() => readFileSync(join(w.dir, 'math.ts'), 'utf8') === 'a\nb\nBOTH\nd\ne\n')
   expect(readFileSync(join(w.dir, 'math.ts'), 'utf8')).toBe('a\nb\nBOTH\nd\ne\n')
   expect(w.git('status', '--porcelain')).toBe('UU math.ts')
 

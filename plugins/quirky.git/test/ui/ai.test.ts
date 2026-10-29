@@ -754,6 +754,8 @@ describe('NA-40: the Source Control AI defaults view', () => {
   const section = (element: HTMLElement, action: string) => q(element, `[data-action="${action}"]`)!
   const inSection = (element: HTMLElement, action: string, label: string) => {
     const root = section(element, action)
+    const explicitControl = byLabel(root, label)
+    if (explicitControl) return explicitControl as HTMLInputElement & HTMLTextAreaElement & HTMLSelectElement
     const associatedLabel = [...root.querySelectorAll<HTMLLabelElement>('label')].find((candidate) => candidate.textContent?.trim() === label)
     const control = associatedLabel ? document.getElementById(associatedLabel.htmlFor) : null
     return (control && root.contains(control) ? control : null) as HTMLInputElement & HTMLTextAreaElement & HTMLSelectElement

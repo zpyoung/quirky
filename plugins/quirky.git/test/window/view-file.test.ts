@@ -14,6 +14,7 @@ const numbered = (n: number, change: Record<number, string> = {}) =>
   Array.from({ length: n }, (_, i) => change[i + 1] ?? `line ${i + 1}`).join('\n') + '\n'
 
 const FILES = { ...BASE_FILES, 'math.ts': numbered(60) }
+const selectedLine = (editor: EditorView) => editor.state.doc.lineAt(editor.state.selection.main.head).text
 const settingValue = async (w: World, name: string) => ((await w.agent.callAny('setting.get', { id: `setting:quirky.git/${name}` })) as { value: unknown }).value
 
 /** F7 and Shift+F7 reach the plugin through the shell's keybinding handler on window. */
@@ -33,24 +34,24 @@ test('SC-60: the file diff opens titled, scrolled to the first change, moves wit
   w.write('math.ts', numbered(60, { 3: 'line three', 50: 'line fifty' }))
   await w.win.waitFor(() => rowOf('math.ts'))
   await openRow(w, 'math.ts')
+  expect((await openView(w))!.input).toMatchObject({ mode: 'file', source: 'unstaged', path: 'math.ts' })
 
   expect(text(q('[data-git-view-root] h2'))).toBe('math.ts (diff)')
-  const first = await w.win.waitFor(async () => {
-    const r = await w.viewReport()
-    return r?.changes === 2 ? r : undefined
-  })
-  expect(first).toMatchObject({ mode: 'file', source: 'unstaged', path: 'math.ts', changes: 2, currentChange: 1, dirty: false })
+  const editor = modifiedEditor(EditorView)
+  await w.win.waitFor(() => selectedLine(editor) === 'line three')
+  expect((byLabel('Previous change') as HTMLButtonElement).disabled).toBe(false)
+  expect((byLabel('Next change') as HTMLButtonElement).disabled).toBe(false)
   expect(text(q('[data-branch-name]'))).toBe('zoe/feat')
   expect((await w.report()).worktree).toBe(w.feat.id)
 
   await key('F7')
-  await w.win.waitFor(async () => (await w.viewReport())?.currentChange === 2)
+  await w.win.waitFor(() => selectedLine(editor) === 'line fifty')
   await key('F7', { shiftKey: true })
-  await w.win.waitFor(async () => (await w.viewReport())?.currentChange === 1)
+  await w.win.waitFor(() => selectedLine(editor) === 'line three')
   await click(byLabel('Next change'))
-  await w.win.waitFor(async () => (await w.viewReport())?.currentChange === 2)
+  await w.win.waitFor(() => selectedLine(editor) === 'line fifty')
   await click(byLabel('Previous change'))
-  await w.win.waitFor(async () => (await w.viewReport())?.currentChange === 1)
+  await w.win.waitFor(() => selectedLine(editor) === 'line three')
 
   await click(byLabel('Switch to side-by-side diff'))
   await w.win.waitFor(() => qa('[data-git-view-root] [contenteditable]').length === 2)
@@ -80,7 +81,6 @@ test('SC-60: a file without changes disables both arrows', async () => {
   await w.win.waitFor(() => q('[data-git-view-root] h2'))
   await w.win.waitFor(() => (byLabel('Next change') as HTMLButtonElement | null)?.disabled === true)
   expect((byLabel('Previous change') as HTMLButtonElement).disabled).toBe(true)
-  await w.win.waitFor(async () => (await w.viewReport())?.changes === 0)
 }, SLOW)
 
 test('SC-61: an unstaged diff saves with Cmd+S, flags a file rewritten underneath, and offers Overwrite and Reload from Disk', async () => {
@@ -88,24 +88,24 @@ test('SC-61: an unstaged diff saves with Cmd+S, flags a file rewritten underneat
   w.write('math.ts', numbered(60, { 3: 'line three' }))
   await w.win.waitFor(() => rowOf('math.ts'))
   await openRow(w, 'math.ts')
-  await w.win.waitFor(async () => (await w.viewReport())?.changes === 1)
+
   expect(q('[data-git-view-root] [contenteditable="true"]')).not.toBeNull()
 
   let editor = modifiedEditor(EditorView)
   editor.dispatch({ changes: { from: 0, insert: 'mine\n' } })
-  await w.win.waitFor(async () => (await w.viewReport())?.dirty === true)
+  expect(editor.state.sliceDoc().startsWith('mine\nline 1\n')).toBe(true)
+  expect(readFileSync(join(w.dir, 'math.ts'), 'utf8')).toBe(numbered(60, { 3: 'line three' }))
   await modS(editor)
-  await w.win.waitFor(async () => (await w.viewReport())?.dirty === false)
-  expect(readFileSync(join(w.dir, 'math.ts'), 'utf8').startsWith('mine\nline 1\n')).toBe(true)
+  await w.win.waitFor(() => readFileSync(join(w.dir, 'math.ts'), 'utf8').startsWith('mine\nline 1\n'))
 
+  expect(modifiedEditor(EditorView).state.sliceDoc()).toBe(readFileSync(join(w.dir, 'math.ts'), 'utf8'))
   editor = modifiedEditor(EditorView)
   editor.dispatch({ changes: { from: 0, insert: 'again\n' } })
-  await w.win.waitFor(async () => (await w.viewReport())?.dirty === true)
+  expect(editor.state.sliceDoc().startsWith('again\nmine\nline 1\n')).toBe(true)
   writeFileSync(join(w.dir, 'math.ts'), 'agent rewrote this\n')
   await modS(editor)
   const bar = await w.win.waitFor(() => q('[data-git-view-root] [role="alert"]'))
   expect(readFileSync(join(w.dir, 'math.ts'), 'utf8')).toBe('agent rewrote this\n')
-  await w.win.waitFor(async () => (await w.viewReport())?.stale === true)
 
   await click(buttonText('Overwrite', bar))
   await w.win.waitFor(() => !q('[data-git-view-root] [role="alert"]'))
@@ -113,7 +113,7 @@ test('SC-61: an unstaged diff saves with Cmd+S, flags a file rewritten underneat
 
   editor = modifiedEditor(EditorView)
   editor.dispatch({ changes: { from: 0, insert: 'draft\n' } })
-  await w.win.waitFor(async () => (await w.viewReport())?.dirty === true)
+  expect(editor.state.sliceDoc().startsWith('draft\nagain\nmine\n')).toBe(true)
   writeFileSync(join(w.dir, 'math.ts'), 'second rewrite\n')
   await modS(editor)
   const second = await w.win.waitFor(() => q('[data-git-view-root] [role="alert"]'))
@@ -127,7 +127,7 @@ test('SC-61: an unstaged diff saves with Cmd+S, flags a file rewritten underneat
       return false
     }
   })
-  await w.win.waitFor(async () => (await w.viewReport())?.dirty === false)
+  expect(readFileSync(join(w.dir, 'math.ts'), 'utf8')).toBe('second rewrite\n')
   expect(w.problems()).toEqual([])
 }, SLOW)
 
@@ -138,19 +138,20 @@ test('SC-61: Revert Block and revert-change put a block back in the editor only;
   w.git('add', 'README.md')
   await w.win.waitFor(() => rowOf('math.ts') && rowOf('README.md', 'staged'))
   await openRow(w, 'math.ts')
-  await w.win.waitFor(async () => (await w.viewReport())?.changes === 2)
-
-  await w.run('revert-change')
-  await w.win.waitFor(async () => (await w.viewReport())?.dirty === true)
   const editor = modifiedEditor(EditorView)
-  expect(editor.state.sliceDoc()).toContain('\nline 3\n')
-  expect(editor.state.sliceDoc()).not.toContain('line three')
-  expect(readFileSync(join(w.dir, 'math.ts'), 'utf8')).toContain('line three')
-  await w.win.waitFor(async () => (await w.viewReport())?.changes === 1)
+  await w.win.waitFor(() => selectedLine(editor) === 'line three')
+  await w.run('revert-change')
+  await w.win.waitFor(() => editor.state.sliceDoc() === numbered(60, { 50: 'line fifty' }))
+  expect(editor.state.sliceDoc()).toBe(numbered(60, { 50: 'line fifty' }))
+  expect(readFileSync(join(w.dir, 'math.ts'), 'utf8')).toBe(numbered(60, { 3: 'line three', 50: 'line fifty' }))
 
   await click(rowOf('README.md', 'staged'))
-  await w.win.waitFor(async () => (await openView(w))?.input?.path === 'README.md')
-  await w.win.waitFor(async () => (await w.viewReport())?.source === 'staged')
+  await w.win.waitFor(async () => {
+    const view = await openView(w)
+    return view?.input?.mode === 'file' && view.input.source === 'staged' && view.input.path === 'README.md'
+  })
+  expect((await openView(w))!.input).toMatchObject({ mode: 'file', source: 'staged', path: 'README.md' })
+
   await w.win.waitFor(() => q('[data-git-view-root] [contenteditable]'))
   expect(q('[data-git-view-root] [contenteditable="true"]')).toBeNull()
   expect(q('[data-git-view-root] [data-diff-source="Staged"]')).not.toBeNull()

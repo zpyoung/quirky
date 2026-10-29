@@ -109,13 +109,17 @@ test('SC-54: the Commits dock opens a commit\'s combined diff and one of its fil
   await click(q('[data-commit-row] button[aria-pressed]', row))
   await w.win.waitFor(async () => (await openView(w))?.id === DIFF_VIEW)
   expect((await openView(w))!.input).toMatchObject({ mode: 'combined', commit: oid, title: `Commit ${oid.slice(0, 7)}: Touch two files` })
-  await w.win.waitFor(async () => (await w.viewReport())?.mode === 'combined')
+  await w.win.waitFor(() => qa('[data-git-view-root] section[data-path]').length === 2)
+  expect(qa('[data-git-view-root] section[data-path]').map((section) => section.getAttribute('data-path'))).toEqual(['math.ts', 'util.ts'])
 
   await click(byLabel(`Expand commit ${oid.slice(0, 7)}`))
   const file = await w.win.waitFor(() => q('[data-commit-row] [data-row-path="util.ts"] button[aria-pressed]'))
   await click(file)
   await w.win.waitFor(async () => (await openView(w))?.input?.path === 'util.ts')
   expect((await openView(w))!.input).toMatchObject({ mode: 'file', source: 'commit', commit: oid, path: 'util.ts' })
-  await w.win.waitFor(async () => (await w.viewReport())?.source === 'commit')
+  await w.win.waitFor(() => {
+    const title = q('[data-git-view-root] h2')
+    return title !== null && text(title) === 'util.ts (diff)' && q('[data-git-view-root] [data-diff-source="Commit"]') !== null
+  })
   expect(w.problems()).toEqual([])
 }, SLOW)

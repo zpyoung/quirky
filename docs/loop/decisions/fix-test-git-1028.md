@@ -88,5 +88,60 @@
 - **Revisit if:** canonical merge-result typecheck reports a source error rather than inherited ignored output.
 - **Source:** assumed — autonomous
 
+## D9: Finish every composed failure instead of stopping at the baseline inventory
+- **Question:** How should the first caught-up canonical suite's27failed files be handled?
+- **Options:** stop after the original25file inventory; file another owner for unclosed flows; repair all exercised Git failures in this item.
+- **Chose:** second disjoint three-worker repair wave, same ownership boundaries plus API ownership of the newly exercised merge-preview test. Retain all user flows; no production changes. Canonical full suite is the gate rather than worker reports. All workers keptb9d380e9, changes matched their scopes, and copied metadata stayed unstaged. Commits e6fbf495/c51f3905/9176e44c were merged and their worktrees removed.
+- **Why:** first composed suite observed57/84passing files,27failures, no flakes,450.59s; changed controls exposed additional outdated selectors beyond the baseline. A partial repair is not completion.
+- **Evidence:** parent artifact18 full1834line suite output; second all-tree HEAD/path barrier; source candidate bfeef3df; follow-up canonical gate below.
+- **Reversibility:** easy (tests and fixtures only)
+- **Confidence:** high for observed inventory; final gate pending.
+- **Revisit if:** the full composed gate exposes another unresolved consumer path.
+- **Source:** locked by docs/loop/LOOP.md end-phase verification
+
+## D10: Exercise real confirmation consumption and preserve security boundaries
+- **Question:** Why did accepted CLI confirmations still exit1, and why was merge preview's worktree API unavailable?
+- **Options:** add --yes or fake a success; widen production confirmation; supply complete real providers in the fixture.
+- **Chose:** Real quirky.ask provider and public list/answer lifecycle in the Git scenario fixture; answer exactly the newly created pending ask, retaining accept/decline/no-mutation checks and verifying explicit --yes creates no additional ask. Remove obsolete fakeAsks/answerAsk exports and all their consumers. Include quirky.cli in merge-preview's hosting fixture so the worktree plugin's declared dependency can activate.
+- **Why:** the old fake implemented create/wait but not list; current confirmation consumption reads list and maps absence to asks-off. Fixture incompleteness is not a reason to bypass the kernel. The merge fixture omitted a declared plugin dependency.
+- **Evidence:** source-traced kernel confirmation and real Ask methods; test/scenarios/fixture.ts/discard.test.ts; test/merge-preview.test.ts; existing plugin dependency declarations.
+- **Reversibility:** easy (fixture only)
+- **Confidence:** high for source trace; actual confirmation smoke and suites recorded below.
+- **Revisit if:** real confirmation receipt is not consumed exactly once by the exercised CLI.
+- **Source:** assumed — autonomous
+
+## D11: Keep semantic action coverage rather than private rendering copies
+- **Question:** How should the newer restyle's selector/glyph/label failures be repaired without weakening flows?
+- **Options:** restore old classes or re-pin newer text; use existing semantic controls and remove incidental snapshots.
+- **Chose:** Follow labeled inputs, action names, active hosted Git root, contenteditable editor state, alert/status roles and aria-expanded section state. Explicitly close the panel when noPanel is requested instead of assuming a shell default. Resolve Create PR by its actual action, not the first nested button. Delete decoration/class/glyph/size/catalog/chrome/copy-only assertions, preserving conflict parser boundaries, real conflict navigation, editing/save/stale recovery, note selection/send, preview/pin/split/dirty close, badge counts, disabled duplicate prevention, confirmation cancellation and error retry recovery.
+- **Why:** restoring private presentation would create a compatibility layer. Parent rejected replacement decoration-label wording mirrors and empty-array collapse tautologies; each known file section now exercises its actual collapse transition. Hosted-diff tests omitted the existing real-daemon test category argument: use that category's90second outer budget, not Bun's5second unit-test default; no product polling/RPC deadline changed.
+- **Evidence:** second-wave test deltas; test/window/dom.ts/world.ts/hosted-diff.test.ts; test/ui/notes-panel.test.ts/panel-remote.test.ts/view-combined.test.ts; pure/conflict-markers.test.ts.
+- **Reversibility:** easy (test drivers only)
+- **Confidence:** high for intended coverage; final exercised results follow.
+- **Revisit if:** a semantic selector cannot locate the actual active action or a claimed path still fails.
+- **Source:** assumed — autonomous
+
+## D12: Supply headless geometry and respect the intentional embedded-report contract
+- **Question:** Why did valid active hosted tabs still have no rendered Git root, and why would hosted report waits remain invalid?
+- **Options:** change terminal rendering or embedded host reporting; emulate the existing headless stage and assert the actual supported public/visible state.
+- **Chose:** Actual disposable runtime diagnostic found a valid active Git tab, no errors, and an empty qt-groups element. Adopt the terminal acceptance fixture's measured-stage convention in Git world:1024×768 only for terminal groups/panes/body, before opening the workspace, restoring the exact prototype at cleanup. Keep production's zero-size guard and mountView unchanged. Embedded views deliberately have no slot report: use active public tab input, real editor selection/document, rendered controls and persisted file state for hosted flows. SC65 separately exercises the supported explicit top-level ui.view.open report after validating hosted rendering.
+- **Why:** GroupView renders no groups while useBoxSize measures0×0 in Happy DOM. Source host.ts explicitly documents no embedded status/report and calls providers with input only; inventing reports or remounting every hosted flow as a top-level view would hide the contract. A focused worker owned only six content-test files, with parent owning geometry/hosted/action/helper corrections. No production source or public signature changed.
+- **Evidence:** actual hosted diagnostic artifact43, HOSTED_DIAGNOSTIC_CLEANED; plugins/quirky.terminal/src/window/workspace/GroupView.tsx:287-288/useBoxSize.ts; existing test/e2e-ui/support.ts stubLayout; packages/ui/src/plugins/host.ts:129,595-621; focused content-test delta artifact45.
+- **Reversibility:** easy (fixtures and tests)
+- **Confidence:** high for source/runtime boundary; post-repair runtime and suite receipts follow.
+- **Revisit if:** the actual measured fixture still cannot mount its active hosted view.
+- **Source:** locked by existing public embedded mountView contract
+
+## D13: Preserve complete failure evidence and correct asynchronous action readiness
+- **Question:** What did the second composed gate prove, and which remaining test defects did it expose?
+- **Options:** call71passing files complete; rerun failures unchanged; repair their demonstrated driver and ownership errors.
+- **Chose:** Retain second gate71/84pass,13failed,no flakes,598.44s as failed evidence. Fix a missing selector bracket, wait for the preview-backed Cancel action instead of the dialog shell, prefer explicit aria labels where present and associated labels for current native fields, and avoid expecting a folder-unavailable EmptyState to be an alert with arbitrary fake copy. Hosted split waits for both the new group and final tab rekey; dirty-preview replacement waits for the new tab before checking the old dirty one.
+- **Why:** action shell existence and tab existence can precede completion. Earlier predicates could inspect transient state or an existing tab. The expanded real CLI/API smoke passed with confirmed discard and zero pending asks; clean-source full typecheck passed in the same47.48second combined command, so no production security/reporting change is justified.
+- **Evidence:** second complete suite artifact40; expanded smoke/typecheck bg7; corresponding parent driver corrections; no product changes.
+- **Reversibility:** easy (test drivers)
+- **Confidence:** high for the observed failures and exercised smoke, not a final suite claim.
+- **Revisit if:** current acceptance still fails after the demonstrated fixture corrections.
+- **Source:** assumed — autonomous
+
 ## Progress
-Three test-only components audited, committed, merged and removed; sole roadmap catch-up complete. All four agents returned. Canonical full Git+scripts suite and clean-source verification typecheck are running. Actual isolated public CLI/API smoke passed with cleanup and explicit warning/driver limits above. Next: fix any exercised residual failure, complete one deep cross-family review round and accepted-finding batch, update receipts/notes, detach and land exactly fix-test-git-1028 through the canonical absolute controller.
+Second composed suite failed71/84 with13remaining files. Actual runtime diagnostic established headless zero geometry, and source established intentional absence of embedded reports. Focused six-file content migration plus parent fixture/action/hosted corrections are complete and audited; all workers returned. Next: commit current tests/docs, run targeted canonical window/UI checks and the measured runtime diagnostic plus full compiler, then full canonical suites, deep3lens Gemini review and one accepted-finding batch before canonical land. Sole roadmap catch-up remains the only unsolicited merge.
