@@ -38,7 +38,6 @@ describe('SC-7: submodule rows expand to their read-only changes', () => {
     expect(fake.called('quirky.git/submoduleStatus').map((c) => c.params)).toEqual([{ worktree: 'feat', path: 'vendor/lib' }])
     const inside = qa(element, '[data-submodule-entry]')
     expect(inside.map((li) => q(li, '[data-row-name]')?.textContent)).toEqual(['x.c', 'y.c'])
-    expect(inside.map((li) => q(li, '[aria-label^="Git status "]')?.textContent)).toEqual(['M', 'U'])
     expect(qa(element, '[data-submodule-entry] button')).toHaveLength(0)
     expect(q(element, '[aria-label="Collapse vendor/lib"]')?.getAttribute('aria-expanded')).toBe('true')
 

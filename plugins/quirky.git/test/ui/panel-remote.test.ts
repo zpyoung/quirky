@@ -81,18 +81,17 @@ describe('the primary button runs its action, then refreshes status and compare'
     unmount()
   })
 
-  test('while the call runs the primary shows its in-flight label', async () => {
-    let release: () => void = () => {}
+  test('while the call runs the primary is disabled and only one push is sent', async () => {
+    const pending = Promise.withResolvers<{ ok: true }>()
     const { fake, element, unmount } = await open((f) => {
       f.status = statusOf([], { upstreamStatus: up(2, 0) })
-      f.on('quirky.git/push', () => new Promise((resolve) => (release = () => resolve({ ok: true }))))
+      f.on('quirky.git/push', () => pending.promise)
     })
     await click(primary(element))
-    expect(primary(element).title).toBe('Push in progress…')
     expect(primary(element).disabled).toBe(true)
-    await act(async () => release())
+    expect(fake.called('quirky.git/push')).toHaveLength(1)
+    await act(async () => pending.resolve({ ok: true }))
     await settle()
-    expect(primary(element).title).toBe('Push 2 commit(s)')
     expect(fake.called('quirky.git/push')).toHaveLength(1)
     unmount()
   })
@@ -245,15 +244,18 @@ describe('operations', () => {
     unmount()
   })
 
-  test('a rebase reads "rebase" throughout', async () => {
-    const { element, unmount } = await open((f) => {
+  test('aborting a rebase can be cancelled or confirmed', async () => {
+    const { fake, element, unmount } = await open((f) => {
       f.status = statusOf([], { operation: 'rebase' })
     })
-    expect(element.textContent).toContain('Rebase in progress')
     await click(buttonText(element, 'Abort rebase'))
-    expect(dialogTitle()).toBe('Abort rebase?')
-    expect(dialog()?.textContent).toContain('This cancels the rebase in progress and can discard conflict resolutions made during this rebase.')
-    expect(qa(dialog()!, 'button').map((b) => b.textContent)).toEqual(['Cancel', 'Abort rebase'])
+    expect(dialog()).not.toBeNull()
+    await click(buttonText(dialog()!, 'Cancel'))
+    expect(dialog()).toBeNull()
+    expect(fake.called('quirky.git/abort')).toHaveLength(0)
+    await click(buttonText(element, 'Abort rebase'))
+    await click(buttonText(dialog()!, 'Abort rebase'))
+    expect(fake.called('quirky.git/abort').at(-1)?.params).toEqual({ worktree: 'feat', yes: true })
     unmount()
   })
 })

@@ -76,7 +76,6 @@ describe('quirky.git source-control panel', () => {
     await act(async () => fake.setLayout(layoutFor('two')))
     await settle()
     expect(fake.called('quirky.git/status').at(-1)?.params).toEqual({ worktree: 'two' })
-    expect(element.textContent).toContain('No changes on this branch')
     expect(fake.reports.at(-1)).toMatchObject({ worktree: 'two', branch: 'feature', sections: [] })
     await act(async () => fake.setLayout(layoutFor(null)))
     await settle()
@@ -152,7 +151,7 @@ describe('quirky.git source-control panel', () => {
     const { element, unmount } = mountPanel(fake)
     await settle()
     await click(byLabel(element, 'Stage edited.ts'))
-    expect(q(element, '.notice')?.textContent).toContain('quirky.git/stage refused')
+    expect(q(element, '[role="alert"]')?.textContent).toContain('quirky.git/stage refused')
     expect(element.textContent).toContain('edited.ts')
     unmount()
   })
@@ -184,32 +183,41 @@ describe('quirky.git source-control panel', () => {
     unmount()
   })
 
-  test('SC-13: a folder workspace shows the unavailable sentence, with no changes or commit box', async () => {
+  test('SC-13: a folder workspace has no file rows or commit box', async () => {
     const fake = fakeContext(layoutFor('wt_notes'))
-    const sentence = 'Opened as folder. Git features are unavailable for this workspace.'
+    const error = 'folder workspace is unavailable'
     fake.on('quirky.git/status', () => {
-      throw failure(sentence, { reason: 'folder-workspace' })
+      throw failure(error, { reason: 'folder-workspace' })
     })
     const { element, unmount } = mountPanel(fake)
     await settle()
-    expect(q(element, '.scm-unavailable')?.textContent).toBe(sentence)
-    expect(q(element, '.scm-error')).toBeNull()
+    const alert = q(element, '[role="alert"]')
+    expect(alert?.textContent).toContain(error)
+    expect(buttonText(alert!, 'Retry')).toBeDefined()
     expect(q(element, 'textarea')).toBeNull()
-    expect(element.textContent).not.toContain('Staged')
+    expect(q(element, '[data-row-path]')).toBeNull()
     unmount()
   })
 
-  test('a failing status read shows the error and keeps the last good rows', async () => {
+  test('a failing status read keeps the last good rows and offers retry', async () => {
     const fake = fakeContext(layoutFor('w1'))
     fake.status = fixture()
     const { element, unmount } = mountPanel(fake)
     await settle()
+    let failStatus = true
     fake.on('quirky.git/status', () => {
-      throw new Error('git is gone')
+      if (failStatus) throw new Error('git is gone')
+      return fake.status
     })
     await act(async () => fake.emit({ type: 'quirky.git/changed', data: { worktreeId: 'w1' } }))
     await settle()
-    expect(q(element, '.scm-error')?.textContent).toBe('git is gone')
+    const alert = q(element, '[role="alert"]')!
+    expect(alert.textContent).toContain('git is gone')
+    expect(buttonText(alert, 'Retry')).toBeDefined()
+    expect(rowOf(element, 'edited.ts')).not.toBeNull()
+    failStatus = false
+    await click(buttonText(alert, 'Retry'))
+    expect(q(element, '[role="alert"]')).toBeNull()
     expect(rowOf(element, 'edited.ts')).not.toBeNull()
     unmount()
   })

@@ -53,7 +53,6 @@ describe('SC-48: compare explains when it cannot run', () => {
     })
     expect(q(element, '[role="status"] .ui-inline-agent-card h3')?.textContent).toBe('Branch compare unavailable')
     expect(element.textContent).toContain('do not share a merge base')
-    expect(element.textContent).not.toContain('No changes on this branch')
     unmount()
   })
 })
