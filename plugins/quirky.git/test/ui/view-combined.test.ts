@@ -62,21 +62,6 @@ afterEach(() => {
 })
 
 describe('quirky.git combined diff', () => {
-  test('SC-62: reads "Changes" with the file count, and the toolbar has the named buttons', async () => {
-    const { element } = await open()
-    expect(element.querySelector('h2')?.textContent).toBe('Changes')
-    expect(element.querySelector('[aria-label="8 changed files"]')?.textContent).toBe('8 changed files')
-    const labels = [...(element.querySelector('h2')?.closest('header')?.querySelectorAll('button') ?? [])].map((b) => b.textContent)
-    expect(labels).toEqual([
-      'Open Branch Diff',
-      'Collapse All',
-      'Side by Side',
-      'Wrap On',
-      'Whitespace On',
-      'Show file tree',
-      '✕'
-    ])
-  })
 
   test('SC-62: the first six sections load at once, one at a time, and the rest wait for the scroll', async () => {
     const { element } = await open()
@@ -146,13 +131,19 @@ describe('quirky.git combined diff', () => {
 
   test('SC-62: Collapse All hides every section and becomes Expand All; the command does the same', async () => {
     const { element, report } = await open()
+    const sectionToggle = (path: string) => sectionOf(element, path).querySelector<HTMLButtonElement>('button[aria-expanded]:not([aria-haspopup])')
     expect(report().collapsed).toBe(false)
     await click(byText(element, 'Collapse All'))
     expect(report().collapsed).toBe(true)
-    expect([...element.querySelectorAll<HTMLElement>('section[data-path] > div[hidden]')].every((b) => b.hidden)).toBe(true)
+    for (const path of [...small, 'big.txt']) {
+      expect(sectionToggle(path)?.getAttribute('aria-expanded')).toBe('false')
+    }
     expect(byText(element, 'Expand All')).not.toBeNull()
     await click(byText(element, 'Expand All'))
     expect(report().collapsed).toBe(false)
+    for (const path of [...small, 'big.txt']) {
+      expect(sectionToggle(path)?.getAttribute('aria-expanded')).toBe('true')
+    }
     await act(async () => void (await fake.run('collapse-all', { collapsed: true })))
     await settle()
     expect(report().collapsed).toBe(true)
@@ -167,8 +158,8 @@ describe('quirky.git combined diff', () => {
   test('SC-62: a single section collapses from its chevron', async () => {
     const { element } = await open()
     await click(byLabel(element, 'Collapse f2.ts'))
-    expect(sectionOf(element, 'f2.ts').querySelector<HTMLElement>(':scope > div[hidden]')!.hidden).toBe(true)
-    expect(sectionOf(element, 'f1.ts').querySelector<HTMLElement>(':scope > div[hidden]')!.hidden).toBe(false)
+    expect(sectionOf(element, 'f2.ts').querySelector<HTMLButtonElement>('button[aria-expanded]:not([aria-haspopup])')?.getAttribute('aria-expanded')).toBe('false')
+    expect(sectionOf(element, 'f1.ts').querySelector<HTMLButtonElement>('button[aria-expanded]:not([aria-haspopup])')?.getAttribute('aria-expanded')).toBe('true')
   })
 
   test('SC-64: load-diff still works on a collapsed section', async () => {

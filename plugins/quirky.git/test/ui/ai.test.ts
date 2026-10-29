@@ -752,9 +752,12 @@ describe('NA-40: the Source Control AI defaults view', () => {
     return { fake, ...mounted }
   }
   const section = (element: HTMLElement, action: string) => q(element, `[data-action="${action}"]`)!
-  const inSection = (element: HTMLElement, action: string, label: string) =>
-    byLabel(section(element, action), label) as HTMLInputElement & HTMLTextAreaElement & HTMLSelectElement
-
+  const inSection = (element: HTMLElement, action: string, label: string) => {
+    const root = section(element, action)
+    const associatedLabel = [...root.querySelectorAll<HTMLLabelElement>('label')].find((candidate) => candidate.textContent?.trim() === label)
+    const control = associatedLabel ? document.getElementById(associatedLabel.htmlFor) : null
+    return (control && root.contains(control) ? control : null) as HTMLInputElement & HTMLTextAreaElement & HTMLSelectElement
+  }
   test('shows the title, the switch, the custom command and one row per action', async () => {
     const { fake, element, unmount } = await openSettings()
     expect(q(element, 'h2')?.textContent).toBe('Source Control AI defaults')
