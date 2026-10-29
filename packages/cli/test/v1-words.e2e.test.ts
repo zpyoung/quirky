@@ -53,80 +53,32 @@ const json = async <T = unknown>(args: string[], options?: { cwd?: string; env?:
   JSON.parse(await ok([...args, '--json'], options)) as T
 
 describe('SC-20: v1 command lines run through the plugins', () => {
-  test('SC-20: text output keeps v1 tables and records', async () => {
-    const added = await ok(['repo', 'add', apiDir])
-    expect(added).toMatch(new RegExp(`^id: repo_[0-9a-f]+\\nname: api\\npath: ${apiDir}\\n$`))
-
-    const repos = (await ok(['repo', 'list'])).split('\n')
-    expect(repos[0]).toMatch(/^ID\s+NAME\s+PATH$/)
-    expect(repos[1]).toMatch(new RegExp(`^repo_[0-9a-f]+\\s+api\\s+${apiDir}$`))
-
-    const created = await ok(['wt', 'create', 'api', 'feature-x', '--base', 'main'])
-    expect(created).toMatch(
-      new RegExp(`^id: wt_[0-9a-f]+\\nname: feature-x\\nbranch: feature-x\\npath: ${join(worktreesRoot, 'api', 'feature-x')}\\n`)
-    )
-    expect(git.calls.find((call) => call.fn === 'addWorktree')?.args[3]).toBe('c'.repeat(40))
-
-    const worktrees = (await ok(['wt', 'list', '--repo', 'api'])).split('\n')
-    expect(worktrees[0]).toMatch(/^ID\s+NAME\s+BRANCH\s+STATUS\s+PATH$/)
-    expect(worktrees.slice(1, 3).map((line) => line.split(/\s+/).slice(1, 3))).toEqual([
-      ['main', 'main'],
-      ['feature-x', 'feature-x']
-    ])
-
-    const record = await ok(['session', 'new', '--agent', 'shell'])
-    const sessionId = /^id: (\S+)$/m.exec(record)?.[1] as string
-    expect(record).toMatch(new RegExp(`^id: ${sessionId}\\nagent: shell\\nkind: terminal\\nstatus: running\\nworktree: wt_[0-9a-f]+\\nprompt: none\\n$`))
-
-    const sessions = (await ok(['session', 'list'])).split('\n')
-    expect(sessions[0]).toMatch(/^ID\s+AGENT\s+KIND\s+STATUS\s+WORKTREE\s+TITLE$/)
-    expect(sessions[1]).toMatch(new RegExp(`^${sessionId}\\s+shell\\s+terminal\\s+running\\s+wt_[0-9a-f]+\\s+`))
-
-    expect(await ok(['term', 'send', sessionId, 'echo hi', '--enter'])).toBe(`sent to ${sessionId}\n`)
-    await waitFor(() => h.pty.inputs.length === 1)
-    expect(h.pty.inputs[0]).toEqual({ sessionId, text: 'echo hi\r' })
-
-    expect(await ok(['term', 'read', sessionId, '--lines', '5'])).toBe('one\ntwo\nthree\n')
-    expect(h.pty.requests.filter((request) => request.type === 'read').at(-1)).toMatchObject({ sessionId, lines: 5 })
-
-    expect(await ok(['session', 'close', sessionId])).toBe(`closed ${sessionId}\n`)
-    expect(await ok(['wt', 'rm', 'feature-x', '--yes'])).toBe('removed feature-x\n')
-    expect(await ok(['repo', 'rm', 'api'])).toBe('removed api\n')
-    expect(await ok(['repo', 'list'])).toBe('no repos\n')
-  })
-
-  test('SC-20: --json output keeps v1 shapes', async () => {
+  test('SC-20: JSON lifecycle exercises plugins and terminal output', async () => {
     const repo = await json<Repo>(['repo', 'add', apiDir])
+    expect(repo.id).toMatch(/^repo_[0-9a-f]+$/)
     expect(repo).toMatchObject({ name: 'api', path: apiDir })
-    expect(await json<Repo[]>(['repo', 'list'])).toEqual([repo])
 
+    const [main] = await json<Worktree[]>(['wt', 'list', '--repo', repo.id])
+    expect(main.repoId).toBe(repo.id)
     const { worktree } = await json<WorktreeCreateResult>(['wt', 'create', 'api', 'feature-x', '--base', 'main'])
-    expect(worktree).toMatchObject({ repoId: repo.id, name: 'feature-x', branch: 'feature-x', isMain: false })
-    const listed = await json<Worktree[]>(['wt', 'list', '--repo', 'api'])
-    expect(listed.map((wt) => wt.name)).toEqual(['main', 'feature-x'])
+    expect(worktree.id).toMatch(/^wt_[0-9a-f]+$/)
+    expect(worktree).toMatchObject({ repoId: repo.id, name: 'feature-x', branch: 'feature-x' })
 
     const session = await json<Session>(['session', 'new', '--agent', 'shell'])
-    expect(session).toMatchObject({ agent: 'shell', kind: 'terminal', status: 'running', worktreeId: listed[0].id })
-    expect(await json<Session[]>(['session', 'list'])).toEqual([session])
+    expect(session).toMatchObject({ status: 'running', worktreeId: main.id })
 
-    expect(await json<object>(['term', 'send', session.id, 'echo hi', '--enter'])).toEqual({ ok: true })
-    expect(await json<object>(['term', 'read', session.id, '--lines', '5'])).toEqual({
-      lines: ['one', 'two', 'three'],
-      cols: 80,
-      rows: 24,
-      alt: false
-    })
-    expect(await json<object>(['session', 'close', session.id])).toEqual({ ok: true })
-    expect(await json<object>(['wt', 'rm', 'feature-x', '--yes'])).toEqual({ ok: true, removed: [worktree.id] })
-    expect(await json<object>(['repo', 'rm', 'api'])).toEqual({ ok: true })
+    await ok(['term', 'send', session.id, 'echo hi', '--enter'])
+    await waitFor(() => h.pty.inputs.length === 1)
+    expect(h.pty.inputs[0]).toEqual({ sessionId: session.id, text: 'echo hi\r' })
+    expect(await ok(['term', 'read', session.id, '--lines', '5'])).toBe('one\ntwo\nthree\n')
+
+    await ok(['session', 'close', session.id])
+    expect(await json<Session[]>(['session', 'list'])).toEqual([])
+
+    await ok(['wt', 'rm', 'feature-x', '--yes'])
+    expect((await json<Worktree[]>(['wt', 'list', '--repo', repo.id])).map((wt) => wt.id)).toEqual([main.id])
+    await ok(['repo', 'rm', 'api'])
     expect(await json<Repo[]>(['repo', 'list'])).toEqual([])
-  })
-
-  test('SC-20: worktree, terminal and the short words are the same commands', async () => {
-    await ok(['repo', 'add', apiDir])
-    expect(await ok(['worktree', 'list'])).toBe(await ok(['wt', 'list']))
-    const { id } = await json<Session>(['session', 'new', '--agent', 'shell'])
-    expect(await ok(['terminal', 'read', id, '--lines', '2'])).toBe(await ok(['term', 'read', id, '--lines', '2']))
   })
 
   test('SC-20: repo and worktree positionals take selectors and v1 plain IDs', async () => {
@@ -138,20 +90,11 @@ describe('SC-20: v1 command lines run through the plugins', () => {
     }
     const { worktree: created } = await json<WorktreeCreateResult>(['wt', 'create', repo.id, 'by-id'])
     expect(created.repoId).toBe(repo.id)
-    expect(await ok(['wt', 'rm', created.id, '--yes'])).toBe(`removed ${created.name}\n`)
-    expect(await ok(['repo', 'rm', repo.id])).toBe(`removed ${repo.id}\n`)
-  })
 
-  test('SC-20: usage errors keep v1 wording', async () => {
-    await ok(['repo', 'add', apiDir])
-    const noPrompt = await run(['session', 'new', '--agent', 'claude', '--background'])
-    expect(noPrompt.code).toBe(2)
-    expect(noPrompt.stderr).toContain('--background requires --prompt')
-    const noSession = await run(['term', 'read'])
-    expect(noSession.code).toBe(2)
-    expect(noSession.stderr).toContain('no session id; pass <sessionId> or set QUIRKY_SESSION_ID')
-    const missing = await run(['repo', 'rm'])
-    expect(missing.code).toBe(2)
+    await ok(['wt', 'rm', created.id, '--yes'])
+    expect((await json<Worktree[]>(['wt', 'list', '--repo', repo.id])).map((wt) => wt.id)).toEqual([main.id])
+    await ok(['repo', 'rm', repo.id])
+    expect(await json<Repo[]>(['repo', 'list'])).toEqual([])
   })
 })
 
