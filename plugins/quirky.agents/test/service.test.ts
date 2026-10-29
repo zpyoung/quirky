@@ -773,6 +773,16 @@ describe('settingsOverlay', () => {
     expect(result).toEqual({ settings: { statusLine: { command: 'recorded', style: 'file', padding: 4 } } })
   })
 
+  test('plan resolves a relative settings file against the caller cwd', async () => {
+    const t = await start({ installed: ['claude'] })
+    writeFileSync(join(t.userHome, 'worktree-settings.json'), JSON.stringify({ theme: 'worktree' }))
+    await t.call(A('configure'), { agent: 'claude', args: '--settings worktree-settings.json' })
+
+    const plan = await t.call(A('plan'), { agent: 'claude', cwd: t.userHome })
+
+    expect(plan.command).toBe(`claude --settings '${JSON.stringify({ theme: 'worktree' })}'`)
+  })
+
   test('reports malformed settings files as invalid params without changing the file or configuration', async () => {
     const t = await start({ installed: ['claude'] })
     const path = join(t.userHome, 'broken.json')

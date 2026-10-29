@@ -308,7 +308,7 @@ type MergedLaunchArguments = { userArgs: string[]; hookArgs: string[]; foundSett
 function mergeLaunchSettingsArguments(
   userArgs: readonly string[],
   hookArgs: readonly string[],
-  cwd: string,
+  cwd: string | undefined,
   valueFlags: readonly string[]
 ): MergedLaunchArguments {
   const user = parseSettingsArguments(userArgs, cwd, valueFlags)
@@ -354,7 +354,7 @@ export function buildLaunchPlan(input: LaunchPlanInput): LaunchPlan {
   const composed = mergeLaunchSettingsArguments(
     [...base.slice(1), ...userArgs],
     hookArgs,
-    input.cwd ?? process.cwd(),
+    input.cwd,
     valueFlags
   )
   let head: string[]
@@ -539,7 +539,7 @@ export function buildResumePlan(input: ResumePlanInput): {
   const composed = mergeLaunchSettingsArguments(
     [...replay.base.slice(1), ...replay.userArgs],
     input.hookArgs ?? [],
-    input.cwd ?? process.cwd(),
+    input.cwd,
     valueFlags
   )
   const base = [replay.base[0]!, ...composed.userArgs]

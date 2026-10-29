@@ -1,4 +1,4 @@
-import { afterAll, describe, expect, test } from 'bun:test'
+import { afterAll, describe, expect, spyOn, test } from 'bun:test'
 import { chmodSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { PlanError, buildLaunchPlan, buildResumePlan } from '../../src/core/plan'
@@ -903,5 +903,41 @@ describe('launch settings in plans', () => {
     expect(JSON.parse(tokens[settingsAt + 1]!)).toEqual({ statusLine: { command: 'managed' }, theme: 'user' })
     expect(tokens.slice(terminator)).toEqual(['--', '--settings', '{"after":true}'])
     expect(result.record).toEqual(record)
+  })
+})
+
+describe('plans without a working directory', () => {
+  // the daemon's own directory can be deleted under it (an app update moves the bundle aside)
+  const deletedCwd = () => {
+    const cwd = spyOn(process, 'cwd').mockImplementation(() => {
+      throw new Error('ENOENT: process.cwd failed')
+    })
+    return cwd
+  }
+
+  test('a launch plan with no cwd does not read the process directory', () => {
+    const cwd = deletedCwd()
+    try {
+      expect(plan(CLAUDE, 'hi', { hookArgs: ['--settings', '{"a":1}'] }).command).toBe(
+          `claude --dangerously-skip-permissions --settings '{"a":1}' 'hi'`
+      )
+    } finally {
+      cwd.mockRestore()
+    }
+  })
+
+  test('a resume plan with no cwd does not read the process directory', () => {
+    const cwd = deletedCwd()
+    try {
+      const result = buildResumePlan({
+        entry: CLAUDE,
+        record: { command: 'claude', args: '', env: {} },
+        providerSession: { id: 'S', transcriptPath: null },
+        fork: false
+      })
+      expect(result.command).toBe("claude --resume S")
+    } finally {
+      cwd.mockRestore()
+    }
   })
 })
