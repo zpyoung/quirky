@@ -99,5 +99,38 @@
 - **Revisit if:** integration reports a concrete shared-line conflict
 - **Source:** assumed — autonomous
 
+## D10: Drive current live dialogs without weakening revision or retention behavior
+- **Question:** What explains the three Ledger window failures reached after the shared helper repair?
+- **Options:** restore obsolete UI copy; hold detached modal nodes; assume chooser auto-navigation; use current controls and reacquire live dialogs
+- **Chose:** Delete only the exact Source revision sentence assertion; retain the captured-revision concurrent-edit refusal and unchanged persisted fields. After stale triage confirmation, reacquire the newly mounted Operation review dialog with its alert and use that live dialog for approval/resolve. After group removal, explicitly click the existing Open ledger control before reading the detached chooser. Keep every revision, approval, atomic-state, retention and deletion result assertion.
+- **Why:** The second identical broad gate exited1/282.99s,42/69files passed,27failed. Its original SC17/SC11 removal test passed, as did all Ledger API/import files. SC15 failed on copy only; SC17 held a triage element intentionally unmounted while a confirmation exists; group deletion did not promise automatic chooser routing. The later Ledger/scripts gate exited0/85.44s, including all seven window scenarios, but its import CLI file passed only on the configured isolated retry after a5000ms timeout; D11 addresses that independently.
+- **Evidence:** repaired-affected-tests.log:64-125; plugins/quirky.ledger/src/ui/LedgerApp.tsx conditional triage and Open ledger control; logic spec SC11/14/15/17; ledger-tests.log and .result.json
+- **Reversibility:** easy
+- **Confidence:** high for causal modal/control trace and observed results; no retry-free claim for that gate
+- **Revisit if:** current confirmation remount or chooser contract changes
+- **Source:** assumed — autonomous
+
+## D11: Let the real Ledger integration fixture own its bounded test budget
+- **Question:** Why did the otherwise passing16-file Ledger/scripts gate need an import CLI retry?
+- **Options:** change production RPC/CLI deadlines; add retries or relax assertions; apply the established integration-fixture budget
+- **Chose:** Set Bun's default test timeout to60000ms in test/harness.ts, shared by real Ledger daemon/API/CLI fixture consumers. Preserve explicit per-test timeouts and every CLI/API assertion. No production deadline, error handling, retry policy, or validation changes.
+- **Why:** The first import scenario launches many actual CLI processes and hit its old5000ms budget at5830.79ms; teardown killed a dangling process, followed by late exit143 assertion. The canonical isolated retry passed12/12tests. The repository already uses this bounded fixture policy for full-daemon consumers, including Handoff. The observed deadline is below one allowed plugin activation's10000ms bound; exact slow sub-operation is not identified.
+- **Evidence:** ledger-tests.log:7-28, final isolated12/12receipt; plugins/quirky.handoff/test/support.ts setDefaultTimeout; packages/daemon/src/plugins/host.ts activation/deactivation timeout; test/harness.ts real daemon/Git/CLI ownership
+- **Reversibility:** easy
+- **Confidence:** high for observed runner deadline mismatch; no hang-free or performance guarantee
+- **Revisit if:** a budgeted operation still times out or tracing identifies a product hang
+- **Source:** assumed — autonomous
+
+## D12: Reject the unsupported helper regression claim and keep scoped independent review evidence
+- **Question:** Which review findings are actionable for the actual repair?
+- **Options:** blindly expand accessible-name recursion; suppress the High finding; verify it and retain explicit adjudication
+- **Chose:** Gemini's main/README slice returned no findings/PASS. Its helper slice raised High about nested SVG aria-label and suggested HTMLElement-only handling. A throwaway actual DOM smoke proved ordinary headings, hidden-decoration exclusion, labelledby precedence, native associated labels and explicit icon labels. It also compared the immutable baseline: heading names were empty there, and the synthetic SVG-descendant result is unchanged by this fix. A fresh cross-family fixture review rejected that claim as no introduced or required live-consumer regression; the suggested remedy also excludes SVGElement. No recursive-label feature or test-source mirror was added. The final window fixture slice returned no actionable findings/PASS.
+- **Why:** External feedback is evidence to evaluate, not authority to expand this queue item. The review covered successive newly changed slices, not repeated broad discovery rounds. Raw FAIL and subsequent reject adjudication are retained, not relabelled or suppressed. No accepted review finding remains from these slices.
+- **Evidence:** review{,-helper,-window}.{stdout.log,stderr.log,result.json}, exact diff/prompt artifacts; helper-smoke-fixed.log (exit0/0.19s); helper smoke's first import setup attempt failed before assertions and remains helper-smoke.log
+- **Reversibility:** easy
+- **Confidence:** high for concrete smoke/refutation; no browser-complete accessible-name algorithm claim
+- **Revisit if:** a real fixture consumer needs descendant ARIA computation that this delta breaks
+- **Source:** assumed — autonomous
+
 ## Progress
-Ownership registration and one shared test-helper base case are implemented without changing Ledger assertions. Actual private subprocess API/CLI lifecycle smoke passed. Guarded browser removal/retention was observed; optional-details tool limit remains honestly partial. Initial two-file independent Gemini review passed; incremental helper review and identical broad rerun pending. Next: resolve only Ledger's current failures, complete affected gate/review, sole roadmap catch-up/read incoming decisions and typecheck, then commit/detach/canonical land exactly this item.
+All named Ledger behavior tests have passing observations; final import fixture budget correction, its narrow independent review, sole roadmap catch-up/read incoming decisions, final affected proof and typecheck remain. Two broad failed receipts and one flaky green receipt are preserved, not claimed clean. Actual private daemon/API/CLI smoke and guarded browser observations are recorded. Next: commit budget/decisions, finish remaining scoped review, catch up once, run final gates, then detach/canonical land exactly this item and await authoritative receipt.
