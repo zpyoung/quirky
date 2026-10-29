@@ -102,17 +102,51 @@ test('mobile Watch uses real worktree tab identity, bounded frames and connectio
     })
   }
   const selectAllModifier = process.platform === 'darwin' ? 4 : 2
+  const keyRecorder = await call<{ value: boolean }>(first, 'quirky.browser/eval', {
+    page: pane.page,
+    expression: `(() => {
+      const input = document.querySelector('#text')
+      if (!input) return false
+      window.mobileWatchKeyEvents = []
+      input.addEventListener('keydown', () => window.mobileWatchKeyEvents.push('keydown'))
+      input.addEventListener('keyup', () => window.mobileWatchKeyEvents.push('keyup'))
+      return true
+    })()`
+  })
+  expect(keyRecorder.value).toBe(true)
   for (const type of ['keyDown', 'keyUp']) {
     await call(first, 'quirky.mobile/browserWatchInput', {
       worktree, tabId: created.tab.tabId, watchId: created.watchId,
-      kind: 'key', type, key: 'a', code: 'KeyA', modifiers: selectAllModifier
+      kind: 'key', type, key: 'a', modifiers: selectAllModifier
     })
   }
-  expect(await call(first, 'quirky.mobile/browserWatchInput', {
-    worktree, tabId: created.tab.tabId, watchId: created.watchId, kind: 'text', text: 'phone-owned-input'
-  })).toMatchObject({ sent: true })
-  expect(await call(first, 'quirky.browser/eval', { page: pane.page, expression: 'document.querySelector("#text").value' }))
-    .toMatchObject({ value: 'phone-owned-input' })
+  await call(first, 'quirky.mobile/browserWatchInput', {
+    worktree, tabId: created.tab.tabId, watchId: created.watchId, kind: 'key', type: 'char', key: 'x', text: 'x'
+  })
+  const charValue = await call<{ value: string }>(first, 'quirky.browser/eval', {
+    page: pane.page, expression: 'document.querySelector("#text").value'
+  })
+  expect(charValue.value).toBe('x')
+  const keyEvents = await call<{ value: string[] }>(first, 'quirky.browser/eval', {
+    page: pane.page, expression: 'window.mobileWatchKeyEvents'
+  })
+  expect(keyEvents.value).toContain('keydown')
+  expect(keyEvents.value).toContain('keyup')
+
+  for (const type of ['keyDown', 'keyUp']) {
+    await call(first, 'quirky.mobile/browserWatchInput', {
+      worktree, tabId: created.tab.tabId, watchId: created.watchId,
+      kind: 'key', type, key: 'a', modifiers: selectAllModifier
+    })
+  }
+  const longText = 'x'.repeat(4 * 1024 + 1)
+  await call(first, 'quirky.mobile/browserWatchInput', {
+    worktree, tabId: created.tab.tabId, watchId: created.watchId, kind: 'text', text: longText
+  })
+  const longValue = await call<{ value: string }>(first, 'quirky.browser/eval', {
+    page: pane.page, expression: 'document.querySelector("#text").value'
+  })
+  expect(longValue.value).toBe(longText)
   expect(await call(first, 'quirky.mobile/browserWatchControl', {
     worktree, tabId: created.tab.tabId, watchId: created.watchId, action: 'reload'
   })).toMatchObject({ tabId: created.tab.tabId, worktreeId: worktree, kind: 'browser' })

@@ -99,5 +99,60 @@
 - **Revisit if:** an authenticated transport starts deriving authority from method parameters, which would violate the retained token/registry contract
 - **Source:** locked by sb-mobile-app-panels D16 and m7-terminal-owner-provisioning-and-selector-flows D2
 
+## D10: Preserve incoming presentation owners and the orchestration exit-order repair
+- **Question:** What binding changes arrived in catch-up and lane8's direct coordination?
+- **Options:** take over their behavior; ignore their boundaries; preserve each current owner
+- **Chose:** sole roadmap merge reads ui-restyle-ask D1–D12 and ui-restyle-settings D1–D11 completely, including long omitted lines. Preserve shared preview subpath, input authority, pairing/revoke/secret masking and current UI lint enrollment. Reply to lane8 that its synchronous liveness UNKNOWN invalidation before async refresh has no conflict; no RuntimeSessionAuthority or Ask source/API edits here.
+- **Why:** source scopes do not overlap; token-derived mobile credential scope is unrelated to session liveness. Current Mobile desktop UI tests arrive with Settings and are included in post-merge verification.
+- **Evidence:** sole catch-up merge output; both full decision logs; /tmp/quirky-lane8-orchestration-reply.md; incoming direct user instruction naming build/fix-test-orchestration-1028
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** an owning repair reports an actual shared-file or authority conflict
+- **Source:** locked by incoming ui-restyle decisions and lane8 coordination
+
+## D11: Classify generated Mobile page output as build output, not authored plugin UI
+- **Question:** Why did caught-up typecheck fail on ignored assets after the Mobile plugin's lint enrollment?
+- **Options:** remove inherited build files; exempt all assets or disable Mobile lint; exclude exactly the canonical generated bundle directory
+- **Chose:** source collection skips only assets/mobile under quirky.mobile, matching the builder's default destination and explicit gitignore rule. All authored Mobile source and other asset directories remain enforced. Extend the existing runner regression with generated CSS/JS/HTML and real source/SVG violations; delete incidental full-message assertions rather than repin them.
+- **Why:** the13 diagnostics came solely from inherited generated page.css/page.js/index.html. Removing those unrelated files would conceal the normal build→typecheck failure. A blanket assets exclusion would weaken source enforcement. The private collector's optional excluded subdirectory changes no exported API or lint baseline.
+- **Evidence:** actual typecheck exit1/1.87s; apps/mobile/scripts/build-pages.ts89+; .gitignore12; scripts/ui-lint.ts collector and CLI-boundary test. Corrected full UIlint/root/mobile/prepared-desktop typecheck passed39.64s; final focused lint regression plus full typecheck passed45.346s in the review prepass.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** the canonical bundle destination changes
+- **Source:** assumed — autonomous
+
+## D12: Record the completed bounded review and exact current verification
+- **Question:** What evidence establishes completion without claiming universal UI/native or unrelated-area clearance?
+- **Options:** report whole-suite success; run another discovery campaign; one fixed-artifact standard cross-family promote/refute review plus observed gates
+- **Chose:** Gemini standard review over the11 owned source/test/document paths, combined correctness/contract/security mandate. Actual promote199.797s returned[]; fresh-context refute6.942s returned[]. Deterministic claims/merge/gate/manifest all exited0: PASS, full family independence,0 blocking/advisory/suppressed/contested findings,0 limitations/questions/excluded/unreviewed paths. No fix batch was needed. The593-line patch's deep suggestion was explicitly bounded to standard independent promote/refute; no claim of three separate lenses or exhaustive assurance.
+- **Why:** fix items skip feature specs; one bounded final review is the loop's completion bar. Raw prompts/replies, immutable patch, chained prepass/model/gate/manifest are retained, with no author reasoning given to the reviewer and no shell/test tools granted. Current consumer gate passes34remote+1macOS files, flaky[]; final lint regression+typecheck passes. Current caught-up real API/encrypted smoke passed3.37s with45 saved bytes, real index mutation, spoof/owner-method refusal and both homes removed. Known shutdown Worktree deactivation warning remains visible; no pristine-log claim.
+- **Evidence:** review run689cb79bb85a1514 artifact8f5edb917d5a8da89c9a25769ee4aec60091d084e2863588aa5c518020f2923d; canonical Mobile gate94.99s; prepass45.346s; smoke3.37s. Existing Hosting/Tasks repair inventory plus newly queued fix-test-reviews-tool-1028 retains separate consumer failures; canonical deps confirms ready:true. Earlier daemon timeout passed its configured retry and final unmodified run; deadlines unchanged.
+- **Reversibility:** easy
+- **Confidence:** high for exercised boundaries, bounded for review completeness/native behavior
+- **Revisit if:** merge-result typecheck, existing repair owners or native evidence contradicts these results
+- **Source:** assumed — autonomous; deferred: platform for native phone behavior only
+
+## D13: Adjudicate final static Watch contract findings as one bounded fix batch
+- **Question:** Does the separate plugin validator's non-clean static result identify real consumer defects?
+- **Options:** ignore unchanged adjacent code; narrow valid advertised inputs; align the adapter with the existing shared public contract
+- **Chose:** accept V1 (typed Watch input mismatch, effective medium) and V2 (missing method: contribution identity, effective low). Reuse the existing implementer for one fix batch with real Watch regressions authored first, then canonical red/green. Preserve exact connection/lease/frame authorization and all public bounds; no new API or grants.
+- **Why:** source inspection confirms shared admission and Browser accept optional key code, char, up to64KiB text and finite wheel deltas, while the Mobile adapter independently rejects them. Actual host contribution loss includes method: but the classifier omits it. These are existing advertised-contract seams, not new features. The prior formal PASS describes only its fixed pre-batch artifact; it is not relabeled as review of later code.
+- **Evidence:** MobileStructureFinal static findings; protocol mobile-browser.ts53–74; Mobile session-tabs.ts739–756 and89–106; Browser driver.ts605–657; daemon host.ts246–253/dispatch.ts184. V1 runtime regression and final fix evidence follow below; V2's specific activation-race interleaving is not yet exercised.
+- **Reversibility:** easy
+- **Confidence:** high for source mismatches, runtime proof pending
+- **Revisit if:** canonical regressions contradict the shared producer vocabulary
+- **Source:** assumed — autonomous
+
+## D14: Close the accepted batch with real red/green, consumer and frame evidence
+- **Question:** What closes V1/V2 after the original formal review snapshot?
+- **Options:** relabel the earlier PASS; add another discovery campaign; run the required post-batch gates and bounded finding closure
+- **Chose:** shared validator reuse removes the conflicting input restrictions without new grants; exact method:-prefixed contribution matching replaces the broken identity. The real Watch regression first fails initial/retry on optional-code input, then passes in the complete post-batch suite. Static closure reports both findings closed; no new discovery or second formal review.
+- **Why:** the full canonical Mobile/apps-mobile/scripts/workspace-flow/Git-merge gate passes55remote+2macOS files in74.77s, flaky[]. Full UIlint/root/mobile/prepared-desktop typecheck passes45.41s. Independent actual daemon/owned Chromium1148 smoke passes optional-code keys, exact4097-byte value, char insertion, over64KiB rejection and foreign-connection rejection. After frame ACK a fresh bounded JPEG visibly contains typed text; the parent inspected it. Explicit Watch stop and awaited cleanup remove both private homes, exit0/4.85s.
+- **Evidence:** bg11 red exit1/13.65s; bg12 post-batch57files pass; bg13 typecheck exit0; actual smoke4.74s plus fresh-paint extension4.85s; mobile-repair-evidence/watch-input.jpg and final-proof.json beside notes; MobileStructureFinal bounded closure on session-tabs.ts89–106,432–444,739–762. Original review traces remain pre-batch; post-batch delta retained separately.
+- **Reversibility:** easy
+- **Confidence:** high for real exercised Watch/authority/Markdown/consumer paths; source-only for the specific NotFound activation-race interleaving
+- **Revisit if:** a genuine provider activation race contradicts the exact producer identity or canonical land reports a concrete source/type failure
+- **Source:** assumed — autonomous
+
 ## Progress
-Both implementers returned; initial3repairs and newly observed mobile scope/dependency defects are implemented. Actual independent public Markdown and encrypted Stage all/anti-spoof smoke passed with owned cleanup. Temporary diagnostic client hook restored byte-for-byte to its original snapshot. Complete mobile/scripts/Reviews/workspace-flow/Git-merge consumer suite is running; expanded Hosting/Tasks results retained with existing area owners. Next: commit source, sole roadmap catch-up/read incoming decisions, typecheck, bounded cross-family final review/fix and canonical land. No full native/UI dogfood claim.
+Ready for canonical land. All implementers, static validator/closure, tests, compiler and actual smoke processes have returned; no owned daemon/Chrome/PTY/service remains. One bounded fix batch closes both final static findings, with exact pre-review/post-batch qualification retained. Current full Mobile/apps-mobile/scripts/workspace/Git consumers pass55remote+2macOS files/no flakes; full typecheck passes45.41s; actual Watch fresh-frame smoke passes4.85s and private homes removed. Sole roadmap catch-up and incoming decision reads complete. Next: commit source/tests/README/logs, detach, canonical land and await actual merge-result gate; remove owned scratch after success. Separate Hosting/Tasks/Reviews repairs remain named, not a whole-repository pass claim.
