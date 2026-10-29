@@ -66,5 +66,27 @@
 - **Revisit if:** Consumer-visible failures remain after valid prerequisites and exact API requests.
 - **Source:** assumed — autonomous
 
+## D7: Keep the substantive startup regression while consuming the adjacent owner's narrow cleanup
+- **Question:** How do this repair and lane3's published session-sweep fixtures coexist?
+- **Options:** Import the whole unfinished sweep; delete the structured restart behavior assertion; reconcile the narrowly relevant evidence under one owner.
+- **Chose:** Cherry-pick only 666e590a993c40ed62f45808305739be09b32f78 (one Session Info inner-title wording assertion deletion). Inspect fe7ab4f1 and 67ef7782 without importing their unrelated plugin changes. Lane3 freezes further session edits; retain and strengthen the structured startup regression here.
+- **Why:** PTY absence cannot prove structured death during ordinary reconnect. Startup is different: structured leases are memory-only, native runners are daemon-owned, and plugin release cascades through dependents before reactivation. The regression now checks preserved provider/cwd identity after restart and an exact live structured lease surviving ordinary PTY reconnect; existing structured startup-owner coverage protects lazy activation within one lifetime.
+- **Evidence:** Lane3 direct handoff and accepted coordination receipts; packages/daemon/src/session-authority.ts structuredLeases; plugins/quirky.structured/main.ts shutdown; packages/daemon/src/plugins/host.ts release ordering; m7-terminal-runtime-native-and-worktree-parity D12; StructuredStartupInvariant source trace; plugins/quirky.structured/test/startup-owner.test.ts.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** Runtime evidence shows a supported structured owner surviving session-plugin startup.
+- **Source:** assumed — autonomous; locked by m7-terminal-runtime-native-and-worktree-parity D12
+
+## D8: Exercise real retained history rather than assert a fake host's buffer policy
+- **Question:** What did the first post-repair gate reveal beyond the original failures?
+- **Options:** Change production history or relax authorization; modify the shared fake host; verify retained history through the real PTY and remove incidental fake-call echoes.
+- **Chose:** Keep the real sleep/wake history regressions, push their markers into scrollback, declare the fake account preparation DTO's nested fields, and verify cold-agent history independently through an actual PTY. Remove the newly introduced fake-buffer expectation and old mock forwarding assertions, not consumer-visible state/identity checks.
+- **Why:** The fake PTY reconstructs its buffer on restore; that is not the production retained-history implementation. The real runtime smoke proves a first-launch-only marker remains after a second launch of the same agent/session. The gate also exposed new null optional-input spreads and a first-mock-call assertion displaced by the new real CLI restore; those fixtures are corrected without public-schema or timeout changes.
+- **Evidence:** First targeted gate: 3/5 files passed; residual CLI mock-call, fake-buffer and null-input failures. Actual integrated private smoke exits0 in1.74s: same-session Codex-shaped executable restore, two real launches, captured --resume identity, first-launch history retained; structured startup exits while a live terminal survives, descendant stopped by sleep, wake retains history; explicit daemon/PTY/home cleanup.
+- **Reversibility:** easy
+- **Confidence:** high for exercised process/API boundaries; no native provider-service or UI acceptance inferred
+- **Revisit if:** Real PTY history, canonical regressions or merge-result verification disagrees.
+- **Source:** assumed — autonomous
+
 ## Progress
-Canonical baseline completed: 27 selected files, 22 passed and 5 failed (four assigned session files and one prefix-selected Session Info wording assertion). Two isolated fixture components are implementing disjoint repairs; parent restored structured startup reconciliation and corrected the asynchronous launch-update test. No post-repair gate has run. Next: component scope audit, affected tests, actual private runtime smoke, typecheck, bounded independent review, integration catch-up and canonical landing.
+Both isolated fixture components passed authoritative scope/HEAD audits, were committed and merged, and their worktrees were removed after preserving inherited metadata. Production change remains only structured startup finalization. Current source b59fea9c includes the documentation and regression boundaries; the sole roadmap catch-up imported fix-test-mobile-1028 decisions D1-D16, all read and compatible. Full integrated session/structured and typecheck/scripts gates are running; current private actual restart/sleep/wake/cold-agent smoke passes with cleanup. Next: collect gates, perform the bounded independent final review, record evidence and use canonical queue landing.
