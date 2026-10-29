@@ -198,5 +198,16 @@
 - **Revisit if:** composed checks show a source-admission mismatch
 - **Source:** supersedes fix-test-editor-1028 D10
 
+## D19: Retry canonical land with a clean composed gate
+- **Question:** Did convergence on the canonical inventory preserve every affected editor/scripts behavior?
+- **Options:** assume equivalent source is verified; rerun a model campaign; exercise the composed source and retain the bounded review history
+- **Chose:** Commit recovery merge a253d246 and rerun the complete editor/scripts suite plus root typecheck. All 33 remote files and the one macOS-only file passed on the first run; suite-result was ok true with no flaky entries. Root/UI-lint/mobile/prepared-desktop typecheck passed. The combined merge/check command exited 0 in 199.89s. Retry the authoritative land after committing this receipt.
+- **Why:** This exercises the canonical inventory, retained Git-admission regression and all repaired editor flows together. No duplicate lint convention/test, changed production deadline or unaddressed accepted finding remains. The original model round and actual API/web smoke remain correctly scoped to their recorded snapshots; no new independent model/native certification is implied.
+- **Evidence:** source a253d246; .quirk/build-loop/fix-test-editor-1028/final-{tests,types}.log; D18 recovery authority; D16/S1 fix and D17 pre-recovery evidence
+- **Reversibility:** easy
+- **Confidence:** high for the exercised composed gate
+- **Revisit if:** authoritative merge-result typecheck rejects the retry
+- **Source:** assumed — autonomous
+
 ## Progress
-Required failed-land recovery is resolved: use the landed canonical Git inventory only, keep its full behavioral regression, and preserve all incoming Accounts/Mobile/Heimdall/Loops authorities. All four recovery decision logs were read completely. The original accepted S1 remains fixed; its pre-recovery clean gate and historical review/smoke limits are preserved. Next: commit the merge resolution, rerun complete editor/scripts and typecheck on this composed source, then commit the receipt and retry authoritative land without another normal catch-up.
+Ready to retry authoritative land. Recovery merge a253d246 passes the complete affected gate (33/33 remote plus 1/1 macOS file, no retries/flaky entries) and full root typecheck. All eight incoming decision logs across the normal catch-up and required recovery were consumed. The single accepted review finding is fixed; old review and runtime evidence limits remain explicit. All workers/models/runtime/check jobs have returned and component worktrees are removed. Commit this final receipt, detach and retry queue land for this item only, await its complete receipt, then remove only owned scratch/worker branches.
