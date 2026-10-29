@@ -200,9 +200,10 @@ describe('Heimdall orchestration adapter', () => {
   })
 
 
-  test('owner-run worker evidence drives billable contact and malformed rows cannot appear live', async () => {
+  test('certified live worker evidence bills with nullable contact metadata, while exit and malformed rows cannot extend it', async () => {
     let nowMs = 1_000
     let lastContactAtMs: unknown = null
+    let workerState: 'live' | 'exited' = 'live'
     const workspacePath = realpathSync.native(mkdtempSync(join(tmpdir(), 'heimdall-orchestration-billing-')))
     const enrollment = makeEnrollment({
       orchestrationRunId: 'run_fixture',
@@ -237,7 +238,7 @@ describe('Heimdall orchestration adapter', () => {
             dispatchId: 'ctx_fixture',
             sessionId: 'session-fixture',
             processIncarnation: 'process-fixture',
-            state: 'live',
+            state: workerState,
             assignmentActive: true,
             lastContactAtMs
           }]
@@ -276,24 +277,16 @@ describe('Heimdall orchestration adapter', () => {
     })
     try {
       await runner.pulse()
-      expect(runner.status()).toMatchObject({ state: 'held', reason: 'worker-contact-unverifiable' })
-      expect(store.journal(enrollment.watcherId).some((entry) =>
-        entry.kind === 'interval-open' && entry.cause === 'worker-dispatched'
-      )).toBe(false)
-
-      lastContactAtMs = nowMs
-      await runner.pulse()
       expect(store.journal(enrollment.watcherId).some((entry) =>
         entry.kind === 'interval-open' && entry.cause === 'worker-dispatched' && entry.class === 'fact'
       )).toBe(true)
 
       nowMs = 1_500
-      lastContactAtMs = nowMs
       await runner.pulse()
       expect(budgetUsage(store.journal(enrollment.watcherId), nowMs).activeMs).toBe(500)
 
       nowMs = 2_000
-      lastContactAtMs = null
+      workerState = 'exited'
       await runner.pulse()
       expect(budgetUsage(store.journal(enrollment.watcherId), nowMs).activeMs).toBe(500)
       expect(store.journal(enrollment.watcherId).filter((entry) => entry.kind === 'interval-close')).toHaveLength(1)

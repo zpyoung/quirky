@@ -88,5 +88,49 @@
 - **Revisit if:** the targeted four-file gate identifies a current production violation after these preconditions hold
 - **Source:** assumed — autonomous
 
+## D9: Report the integrated pre-review gate and runtime evidence with their actual limits
+- **Question:** What evidence supports this end-phase repair after catching up integration?
+- **Options:** claim zero initial failures or native parity; report exact canonical retry and real-runtime receipts
+- **Chose:** sole catch-up to integration 6bdde8b7 produced source 005adb5e. Read all incoming Ask D1–D12, Settings D1–D11 and Worktrees D1–D17 logs and Progress completely; no Heimdall authority conflict. Final full typecheck/UI lint/root/mobile/prepared desktop passed in 37.43 seconds. Scripts passed 12 files in 49.15 seconds. Heimdall's 27-file canonical suite passed in 99.45 seconds after its configured isolated retries: initial 24 passed/3 failed, then acceptance 7 tests/43 assertions, fleet worker 1/12 and owner 17/113 all passed alone.
+- **Why:** these are the runner's actual outcomes, not proof that under-load startup/deadline behavior was repaired. No retry policy or those three files' startup/owner deadlines were changed. The separate current-source private daemon/API/CLI smoke passed in 7.99 seconds: exact attested worker running count 1 before accepted CLI report and 0 afterward, with the same retained live process. Private process/home cleanup was observed.
+- **Evidence:** canonical final bg13–bg16 outputs; ignored iteration12 verification.json and incoming-decisions.json; watcher fd41cf2f-00a4-4954-bf29-8d6dc20a3ed7, Dispatch ctx_81af3a33238d, incarnation 7c99bcfb-1893-4730-9659-a46b219be8ab
+- **Reversibility:** easy
+- **Confidence:** high for exercised paths; no real OS sleep cycle, UI or native-banner acceptance claim
+- **Revisit if:** the controller or dedicated native run reports a concrete failure
+- **Source:** assumed — autonomous
+
+## D10: Run one bounded independent review and retain its exact snapshot boundary
+- **Question:** Did the repair receive the reachable cross-family review chosen in preflight?
+- **Options:** treat unavailable Opus as a pass; skip independent judgment; use the verified Gemini fallback
+- **Chose:** standard promote/refute in two fresh Gemini contexts, with a focused passing canonical orchestration-file prepass, captured code/README patch only, verbatim task criteria and no author decision rationale. Mechanical gate PASS: zero findings, advisories, suppressions, limitations, questions or excluded/unreviewed paths for snapshot 005adb5e. No source HEAD moved during that review.
+- **Why:** real dispatches and parseable empty arrays establish the review happened. Its PASS means no finding met the review bar on that snapshot, not complete correctness or clearance of the later D11 correction. Initial review harness select-model argument failure was fixed by resuming that stage only, not rerunning successful setup.
+- **Evidence:** ignored review/promote.stdout, refute.stdout, claims.json, gate.json and manifest.json; artifact hash 50fb3d869d8829313254cfd1442e96c6309c6747553e65c37289cfe4846d42ba; Gemini gemini-3.1-pro-preview/high, full cross-family independence
+- **Reversibility:** easy
+- **Confidence:** high for the recorded protocol and scope only
+- **Revisit if:** a concrete counterexample contradicts the reviewed contract
+- **Source:** assumed — autonomous
+
+## D11: Preserve certified liveness when heartbeat metadata is null
+- **Question:** Does a nullable lastContactAtMs invalidate the public service's positively certified live state and exact identity?
+- **Options:** keep the added timestamp-only downgrade; preserve the existing service state contract and remove that unrequested production change
+- **Chose:** preserve state: live with exact identity and active assignment even when lastContactAtMs is null. Remove this repair's temporary worker-evidence.ts downgrade entirely, restoring its prior production behavior. Keep a real billing regression: certified live observations start/extend time, positive exit closes at the last known proof, malformed contact metadata cannot extend it.
+- **Why:** ServiceWorkerView explicitly allows nullable contact metadata alongside evidence-derived liveness (core D11). An absent heartbeat timestamp is not contradictory process evidence. The narrowed regression failed before correction at the missing worker-dispatched interval, both initial and configured retry; only the newly introduced downgrade was removed. This parent-found issue was not a Gemini finding.
+- **Evidence:** quirky.orchestration/src/services/contracts.ts:12-19; docs/loop/decisions/m6-heimdall-core.md D11; actual canonical bg19 failed expected true/received false at orchestration.test.ts interval-open assertion; revised test and production state projection
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** the public service explicitly changes what state: live certifies
+- **Source:** supersedes fix-test-heimdall-1028 D5 (contact-timestamp interpretation only)
+
+## D12: Close the final narrowed repair with fresh consumer-visible proof
+- **Question:** Does the exact D11 correction pass the end-phase gates before submission?
+- **Options:** reuse the pre-correction results; rerun the affected paths and report the current outcomes
+- **Chose:** final canonical Heimdall suite passed all 27 files with zero failures and no retries in 32.16 seconds. Full frozen-install/UI lint/root/mobile/prepared-desktop typecheck passed in 30.98 seconds. Actual private worker API/CLI smoke passed in 7.04 seconds, preserving exact live process identity after the accepted report while running work dropped from 1 to 0. Cleanup printed completion. Integrated scripts remain passed 12 files in 49.15 seconds; no script source or imported script dependency changed afterward.
+- **Why:** D11 now has failing-before/passing-after regression evidence, and the real daemon path is exercised after the source narrowing. Final production change is confined to the Heimdall adapter's public preflight mutation contract; worker liveness projection returns to its original contract.
+- **Evidence:** canonical bg19 red, bg20 27/27 green, bg21 typecheck exit0, bg22 actual smoke/cleanup; watcher a8bd79a2-7a65-462e-9e3f-87e54c14f0aa, Dispatch ctx_3eb909f6e1b1, incarnation 6ed9ccf5-4ad7-42ff-a848-594a5c347e5b
+- **Reversibility:** easy
+- **Confidence:** high for exercised API/CLI, lifecycle, lease, power-binding and owner cases; real OS sleep/native notification/UI acceptance unchanged
+- **Revisit if:** authoritative landing or the existing native handoff reports a concrete failure
+- **Source:** assumed — autonomous
+
 ## Progress
-Repair wave active: all eleven triage entries read, ownership scout completed, three isolated implementers dispatched after snapshots. Parent removed obsolete mock-echo API test and expanded real remote-refusal coverage. No checks executed mid-flight. Reviewer binding is Gemini (cross-family fallback because Opus/Sonnet unavailable). Tests run through bun scripts/suite.ts with fresh private homes and cleanup. No human decisions requested.
+Ready for canonical land. Initial components and later fixture repairs were scope-audited; all implementers and the static validator returned. Three component worktrees were removed after preserving their unknown metadata; parent .serena remains untouched. One integration catch-up completed; all three incoming decision logs read completely. One cross-family standard review completed (D10); parent narrowed an additional contract risk with explicit red/green proof (D11–D12). Current Heimdall 27/27, full typecheck and real private daemon/API/CLI smoke pass; integrated scripts pass. No owned runtime/browser process or review job remains. Commit final correction/evidence, detach and invoke the canonical absolute queue.ts land fix-test-heimdall-1028; await its actual result in this turn. No complete UI/native-cycle or whole-queue completion claim.

@@ -51,13 +51,12 @@ export function workerObservationsFromRun(value: unknown, runId: string): Kernel
       (value.lastContactAtMs !== null && (typeof value.lastContactAtMs !== 'number' || !Number.isFinite(value.lastContactAtMs)))) {
       throw new Error(`worker observation ${value.dispatchId} has an invalid contact time`)
     }
-    const state = value.state === 'live' && value.lastContactAtMs === null ? 'unverifiable' : value.state
     seen.add(value.dispatchId)
     return {
       dispatchId: value.dispatchId,
       sessionId: value.sessionId,
       processIncarnation: value.processIncarnation,
-      state,
+      state: value.state,
       assignmentActive: value.assignmentActive,
       lastContactAtMs: value.lastContactAtMs
     }
