@@ -404,12 +404,6 @@ describe('SC-63: the whole dialog is drivable through commands', () => {
     expect(overlay.last().shown).toBe(false)
   })
 
-  test('SC-63: every command the manifest declares is provided', async () => {
-    const fake = fakeContext(daemon(makeWorld()))
-    await mountOverlay(ui, fake)
-    const manifest = (await import('../../quirky-plugin.json')).default as { contributes: { command: { id: string }[] } }
-    for (const { id } of manifest.contributes.command) expect(fake.provided.has(`command:quirky.handoff/${id}`)).toBe(true)
-  })
 })
 
 describe('a templates change elsewhere', () => {

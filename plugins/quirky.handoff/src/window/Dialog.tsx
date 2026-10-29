@@ -46,10 +46,13 @@ function WorktreeCombobox({
   disabled: boolean
   onOpenChange: (open: boolean) => void
 }) {
-  const [open, setOpen] = useState(false)
   const listboxId = useId()
+  const [open, setOpen] = useState(false)
   const shown = visibleCandidates(snapshot)
   const selected = snapshot.candidates.find((candidate) => candidate.id === snapshot.worktree)
+  const selectedLabel = selected
+    ? selected.remote ? `${selected.hostName ?? selected.remote.owner.hostId} · ${selected.name}` : selected.name
+    : snapshot.target && 'remote' in snapshot.target ? `${snapshot.target.remote.owner.hostId} · unavailable workspace` : null
   const toggle = (next: boolean) => {
     setOpen(next)
     onOpenChange(next)
@@ -69,9 +72,9 @@ function WorktreeCombobox({
         disabled={disabled}
         onClick={() => toggle(!open)}
       >
-        {selected ? selected.name : 'Select a worktree'}
+        {selectedLabel ?? 'Select a worktree'}
       </Button>
-      {selected && <ListRow title={<span className="ui-text-muted">{selected.path}</span>} />}
+      {selected && <ListRow title={<span className="ui-text-muted">{selected.path}{selected.connected === false ? ' · Unavailable' : ''}</span>} />}
       {open && (
         <div className="ui-stack">
           <TextField
@@ -99,8 +102,8 @@ function WorktreeCombobox({
                     toggle(false)
                   }}
                 >
-                  <span>{candidate.id === snapshot.worktree ? '✓ ' : ''}{candidate.name}</span>
-                  <span className="ui-text-muted">{candidate.path}</span>
+                  <span>{candidate.id === snapshot.worktree ? '✓ ' : ''}{candidate.remote ? `${candidate.hostName ?? candidate.remote.owner.hostId} · ` : ''}{candidate.name}</span>
+                  <span className="ui-text-muted">{candidate.path}{candidate.connected === false ? ' · Unavailable' : ''}</span>
                 </Button>
               ))
             )}

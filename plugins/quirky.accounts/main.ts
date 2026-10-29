@@ -1,22 +1,20 @@
-import type { PluginContext } from '@quirky/protocol'
+import type { PluginActivationDisposer, PluginContext } from '@quirky/protocol'
 import { AccountService } from './src/service'
 import { migrations } from './src/store'
 import { UsageService } from './src/usage/index'
 
-let activeService: AccountService | undefined
-
-export function activate(context: PluginContext): void {
+export function activate(context: PluginContext): PluginActivationDisposer {
   const store = context.openStore(migrations)
   const accounts = new AccountService(context, store)
   const usage = new UsageService(context, () => accounts.usageTargets())
   accounts.attachUsageService(usage)
-  activeService = accounts
 
   const methods: Record<string, (params: Record<string, unknown>) => unknown> = {
     list: (params) => accounts.list(params),
     usage: () => accounts.usage(),
     refresh: (params) => accounts.refresh(params),
     inactiveUsage: (params) => accounts.inactiveUsage(params),
+    ownerCall: (params) => accounts.ownerCall(params),
     beginLogin: (params) => accounts.beginLogin(params),
     loginStatus: (params) => accounts.loginStatus(params),
     sessionHome: (params) => accounts.sessionHome(params),
@@ -44,12 +42,11 @@ export function activate(context: PluginContext): void {
   context.provide(`job:${context.pluginId}/usage-refresh`, async ({ signal }: { jobId: string; signal: AbortSignal }) => {
     if (!signal.aborted) await accounts.backgroundUsageRefresh()
   })
-  context.subscribe((event) => accounts.onEvent(event))
+  const unsubscribe = context.subscribe((event) => accounts.onEvent(event))
   accounts.start()
+  return async () => {
+    unsubscribe()
+    await accounts.shutdown()
+  }
 }
 
-export async function deactivate(): Promise<void> {
-  const current = activeService
-  activeService = undefined
-  await current?.shutdown()
-}

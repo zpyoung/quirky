@@ -1,5 +1,5 @@
 export { boundCapture } from './capture'
-export { composeBrief } from './compose'
+export { composeBrief, LOCKED_NOTICE } from './compose'
 export { fenceFor } from './fence'
 export { changedPaths, formatRepoState, statusLines } from './repo-state'
 export { scanSecrets } from './secrets'

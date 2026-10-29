@@ -39,6 +39,21 @@ function hostOf(flags: Flags): string | undefined {
   return typeof flags.host === 'string' ? flags.host : undefined
 }
 
+function remoteWorkspaceFlag(value: unknown, context: CliContext): Record<string, unknown> | undefined {
+  if (value === undefined) return undefined
+  if (typeof value !== 'string') throw context.usage('--remote expects an OwnerSessionWorkspaceRef JSON object')
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(value)
+  } catch {
+    throw context.usage('--remote must contain valid JSON')
+  }
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+    throw context.usage('--remote must contain an OwnerSessionWorkspaceRef JSON object')
+  }
+  return parsed as Record<string, unknown>
+}
+
 function listRequest(args: Args, context: CliContext): Record<string, unknown> {
   const paths = repeated(args.flags.path, 'path', context)
   if (paths.length > 64) throw context.usage('--path accepts at most 64 values')
@@ -172,11 +187,16 @@ const named: CliModule['commands'] = {
   async resume(args, context) {
     const id = args.positionals[0]
     if (id === undefined) throw context.usage('missing <id>')
+    const remote = remoteWorkspaceFlag(args.flags.remote, context)
+    if (remote !== undefined && (args.flags.group !== undefined || args.flags.worktree !== undefined)) {
+      throw context.usage('--remote cannot be combined with --group or --worktree')
+    }
     const result = await context.call('quirky.vault/resume', {
       id,
       ...(args.flags.group === undefined ? {} : { group: args.flags.group }),
       ...(args.flags.worktree === undefined ? {} : { worktree: args.flags.worktree }),
-      ...(args.flags.fork === true ? { fork: true } : {})
+      ...(args.flags.fork === true ? { fork: true } : {}),
+      ...(remote === undefined ? {} : { remote })
     })
     context.out.result(result, () => `resumed ${id}`)
   },

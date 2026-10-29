@@ -36,12 +36,22 @@ let closed = false
 
 const post = (value: WorkerResponse | { event: 'scanProgress' | 'searchStatus'; data: ScanProgress | SearchStatus }) => self.postMessage(value)
 
-function initialize(dataDir: string): Promise<void> {
+function workerEnvironment(value: unknown): Record<string, string | undefined> {
+  if (value === undefined) return { ...process.env }
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) throw new Error('vault worker environment is malformed')
+  const environment: Record<string, string | undefined> = {}
+  for (const [name, entry] of Object.entries(value)) {
+    if (typeof entry === 'string') environment[name] = entry
+  }
+  return environment
+}
+
+function initialize(dataDir: string, environmentValue: unknown): Promise<void> {
   if (initializing) return initializing
+  const env = workerEnvironment(environmentValue)
   initializing = Promise.resolve().then(() => {
-    const env: Record<string, string | undefined> = { ...process.env }
     scanner = createScanner({
-      sourceHome: env.QUIRKY_VAULT_SOURCE_HOME || process.env.HOME || '/',
+      sourceHome: env.QUIRKY_VAULT_SOURCE_HOME || env.HOME || '/',
       dataDir,
       env,
       progress: (value) => post({ event: 'scanProgress', data: value })
@@ -146,7 +156,7 @@ async function handle(request: WorkerRequest): Promise<unknown> {
 
   const dataDir = args.dataDir
   if (typeof dataDir !== 'string' || dataDir === '') throw new Error('dataDir is required')
-  await initialize(dataDir)
+  await initialize(dataDir, args.environment)
   const activeScanner = required(scanner, 'scanner')
   const activeSearch = required(search, 'search index')
 

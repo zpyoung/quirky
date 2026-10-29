@@ -15,14 +15,27 @@ type Started = {
   worktreeCreated: string | null
   delivery: string
 }
+type LineageEnd = {
+  session: string | null
+  agent: string | null
+  executionHost?: { hostId: string; generation: string }
+}
 type LineageRecord = {
   id: string
   relationship: string
-  parent: { session: string | null; agent: string | null }
-  child: { session: string | null; agent: string | null }
+  parent: LineageEnd
+  child: LineageEnd
 }
 
 const flagText = (value: unknown): string | undefined => (typeof value === 'string' ? value : undefined)
+
+function jsonFlag(value: string, label: string, ctx: CliContext): unknown {
+  try {
+    return JSON.parse(value) as unknown
+  } catch {
+    throw ctx.usage(`${label} must be valid JSON`)
+  }
+}
 
 async function sourceOf(args: Parameters<CliModule['commands'][string]>[0], ctx: CliContext): Promise<Record<string, unknown>> {
   const { flags } = args
@@ -31,6 +44,9 @@ async function sourceOf(args: Parameters<CliModule['commands'][string]>[0], ctx:
   if (session !== undefined && agent !== undefined) throw ctx.usage('pass a session or --source-agent, not both')
   if (session !== undefined) return { session }
   if (agent === undefined) throw ctx.usage('missing <session> or --source-agent')
+  const sourceOwner = flagText(flags['source-owner'])
+  const vaultId = flagText(flags['vault-id'])
+  if ((sourceOwner === undefined) !== (vaultId === undefined)) throw ctx.usage('--source-owner and --vault-id must be passed together')
   const archived: Record<string, unknown> = { agent }
   const fields: [string, string][] = [
     ['provider-session', 'providerSessionId'],
@@ -43,6 +59,10 @@ async function sourceOf(args: Parameters<CliModule['commands'][string]>[0], ctx:
     const value = flagText(flags[flag])
     if (value !== undefined) archived[param] = value
   }
+  if (sourceOwner !== undefined && vaultId !== undefined) {
+    archived.owner = jsonFlag(sourceOwner, '--source-owner', ctx)
+    archived.vaultId = vaultId
+  }
   return { archived }
 }
 
@@ -50,7 +70,10 @@ async function controlsOf(args: Parameters<CliModule['commands'][string]>[0], ct
   const { flags } = args
   const worktree = flagText(flags.worktree)
   const created = flagText(flags['new-worktree'])
-  if (worktree !== undefined && created !== undefined) throw ctx.usage('pass --worktree or --new-worktree, not both')
+  const remote = flagText(flags.remote)
+  if ([worktree, created, remote].filter((value) => value !== undefined).length > 1) {
+    throw ctx.usage('pass only one of --worktree, --new-worktree or --remote')
+  }
   const controls: Record<string, unknown> = {
     include: {
       repoState: flags['no-repo-state'] !== true,
@@ -64,6 +87,8 @@ async function controlsOf(args: Parameters<CliModule['commands'][string]>[0], ct
   } else if (created !== undefined) {
     const base = flagText(flags.base)
     controls.target = { create: { name: created, ...(base === undefined ? {} : { base }) } }
+  } else if (remote !== undefined) {
+    controls.target = { remote: jsonFlag(remote, '--remote', ctx) }
   }
   for (const key of ['agent', 'relationship', 'context', 'note'] as const) {
     const value = flagText(flags[key])
@@ -73,6 +98,7 @@ async function controlsOf(args: Parameters<CliModule['commands'][string]>[0], ct
   if (template !== undefined) controls.templateId = template
   return controls
 }
+
 
 function describeCatalog(catalog: Catalog): string {
   return catalog.templates.map((template) => `${template.id}  ${template.name}`).join('\n')
@@ -119,8 +145,32 @@ export const commands: CliModule['commands'] = {
   async resend(args, ctx) {
     const session = args.positionals[0]
     if (session === undefined) throw ctx.usage('missing <session>')
-    const result = (await ctx.call('quirky.handoff/resend', { session })) as { delivery: string }
+    const lineage = flagText(args.flags.lineage)
+    const result = (await ctx.call('quirky.handoff/resend', { session, ...(lineage === undefined ? {} : { lineage }) })) as { delivery: string }
     ctx.out.result(result, () => `delivery: ${result.delivery}`)
+  },
+
+  async 'target-agents'(args, ctx) {
+    const worktree = flagText(args.flags.worktree)
+    const remote = flagText(args.flags.remote)
+    if ((worktree === undefined) === (remote === undefined)) throw ctx.usage('pass exactly one of --worktree or --remote')
+    const target = worktree !== undefined
+      ? { worktree: ((await ctx.call('quirky.worktree/resolve', { selector: worktree })) as { id: string }).id }
+      : { remote: jsonFlag(remote!, '--remote', ctx) }
+    const result = (await ctx.call('quirky.handoff/targetAgents', { target })) as {
+      state: string; list: { id: string; label: string }[]; defaultAgent: string | null
+    }
+    ctx.out.result(result, () => result.list.map((agent) => `${agent.id}  ${agent.label}`).join('\n'))
+  },
+
+  async 'owner-agents'(args, ctx) {
+    const worktree = flagText(args.flags.worktree)
+    const expectedInstanceId = flagText(args.flags['expected-instance-id'])
+    if (worktree === undefined || expectedInstanceId === undefined) throw ctx.usage('pass --worktree and --expected-instance-id')
+    const result = (await ctx.call('quirky.handoff/ownerAgents', { worktree, expectedInstanceId })) as {
+      state: string; list: { id: string; label: string }[]; defaultAgent: string | null
+    }
+    ctx.out.result(result, () => result.list.map((agent) => `${agent.id}  ${agent.label}`).join('\n'))
   },
 
   async lineage(args, ctx) {
@@ -130,14 +180,16 @@ export const commands: CliModule['commands'] = {
       result.records.length === 0
         ? 'no handoffs'
         : ctx.format.table(
-            ['ID', 'RELATIONSHIP', 'FROM', 'TO'],
+            ['ID', 'RELATIONSHIP', 'FROM', 'FROM HOST', 'TO', 'TO HOST'],
             result.records.map((record) => [
               record.id,
               record.relationship,
               `${record.parent.session ?? 'archived'} (${record.parent.agent ?? '?'})`,
-              `${record.child.session ?? 'none'} (${record.child.agent ?? '?'})`
+              record.parent.executionHost?.hostId ?? 'local (legacy)',
+              `${record.child.session ?? 'none'} (${record.child.agent ?? '?'})`,
+              record.child.executionHost?.hostId ?? 'local (legacy)'
             ])
-          )
+    )
     )
   },
 

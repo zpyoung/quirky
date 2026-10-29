@@ -1,4 +1,4 @@
-import type { GitDiff, GitStatus } from '@quirky/protocol'
+import type { GitDiff, GitStatus, OwnerHostIdentity, OwnerSessionHostRef, OwnerSessionWorkspaceRef } from '@quirky/protocol'
 import type { SecretHit, Template, Warning } from '../core'
 import type { ProbeResult } from './probe'
 
@@ -13,12 +13,14 @@ export type ArchivedSource = {
   cwd?: string
   prompt?: string
   lastMessage?: string
+  owner?: OwnerSessionHostRef
+  vaultId?: string
 }
 
-/** A live terminal session by id, or an archived one described by its agent and transcript. */
+/** A live terminal session by id, or an archived source with optional owner-local Vault identity. */
 export type SourceRef = { session: string } | { archived: ArchivedSource }
 
-export type Target = { worktree: string } | { create: { name: string; base?: string } }
+export type Target = { worktree: string } | { remote: OwnerSessionWorkspaceRef } | { create: { name: string; base?: string } }
 
 export type Include = { repoState: boolean; diffBodies: boolean; openEditorTabs: boolean }
 
@@ -54,7 +56,16 @@ export type SourceInfo = {
   busy: boolean
 }
 
-export type Candidate = { id: string; name: string; path: string; kind: 'git' | 'folder'; branch: string | null }
+export type Candidate = {
+  id: string
+  name: string
+  path: string
+  kind: 'git' | 'folder'
+  branch: string | null
+  remote?: OwnerSessionWorkspaceRef
+  hostName?: string
+  connected?: boolean
+}
 
 export type Prefs = {
   lastAgent: string | null
@@ -96,6 +107,10 @@ export type LineageEnd = {
   transcriptPath: string | null
   worktreeId: string | null
   title: string | null
+  /** The authenticated execution host; absent on historical local records. */
+  executionHost?: OwnerHostIdentity
+  /** Producer filesystem instance, when the end names a workspace. */
+  instanceId?: string | null
 }
 
 /** One handoff: the session it continued from, the session it started and how they relate. */

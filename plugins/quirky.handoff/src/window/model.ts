@@ -2,7 +2,8 @@ import type { QuirkyEvent, UiPluginContext } from '@quirky/protocol'
 import type { SecretHit, Template, Warning } from '../core/types'
 import { TEMPLATE_BODY_MAX, TEMPLATE_LIMIT, TEMPLATE_NAME_MAX } from '../core/template'
 import type { ProbeResult } from '../daemon/probe'
-import type { ArchivedSource, Candidate, Controls, Draft, Include, Preview, Relationship, SourceInfo, SourceRef } from '../daemon/types'
+import type { ArchivedSource, Candidate, Controls, Draft, Include, Preview, Relationship, SourceInfo, SourceRef, Target } from '../daemon/types'
+import { isRecord } from '../daemon/guards'
 import { DEBOUNCE_MS, messageOf, NO_CONTEXT_MESSAGE, PLUGIN_ID, reasonOf, STALE_MESSAGE } from './copy'
 
 const METHOD = (name: string) => `${PLUGIN_ID}/${name}`
@@ -14,7 +15,7 @@ const refused = (reason: string): CommandResult => ({ ok: false, reason })
 
 export type ShownWarning = { code: string; message: string }
 export type AgentOption = { id: string; label: string }
-export type Agents = { state: 'loading' | 'ready' | 'failed'; list: AgentOption[] }
+export type Agents = { state: 'loading' | 'ready' | 'failed'; list: AgentOption[]; defaultAgent?: string | null }
 
 /** What the last `preview` answer said about the brief, apart from its text. */
 export type Analysis = {
@@ -37,6 +38,7 @@ export type Snapshot = {
   templates: Template[]
   mode: 'existing' | 'create'
   worktree: string | null
+  target: Target | null
   createName: string
   createBase: string
   agent: string | null
@@ -68,6 +70,7 @@ const CLOSED: Snapshot = {
   templates: [],
   mode: 'existing',
   worktree: null,
+  target: null,
   createName: '',
   createBase: '',
   agent: null,
@@ -112,12 +115,14 @@ export const RELATIONSHIPS: readonly string[] = ['continues', 'reviews', 'branch
 /** The controls as the daemon takes them; a blank new-worktree name stays in the target so a draft keeps it. */
 export function controlsOf(s: Snapshot): Controls {
   const base = s.createBase.trim()
+  const worktree = s.worktree
+  const candidate = worktree === null ? undefined : s.candidates.find((item) => item.id === worktree)
   const target =
     s.mode === 'create'
       ? { create: { name: s.createName, ...(base === '' ? {} : { base }) } }
-      : s.worktree === null
+      : worktree === null
         ? undefined
-        : { worktree: s.worktree }
+        : s.target ?? (candidate?.remote ? { remote: candidate.remote } : { worktree })
   return {
     ...(target ? { target } : {}),
     ...(s.agent ? { agent: s.agent } : {}),
@@ -133,7 +138,7 @@ export function controlsOf(s: Snapshot): Controls {
 export function visibleCandidates(s: Snapshot): Candidate[] {
   const query = s.search.trim().toLowerCase()
   if (query === '') return s.candidates
-  return s.candidates.filter((candidate) => `${candidate.name}\n${candidate.path}`.toLowerCase().includes(query))
+  return s.candidates.filter((candidate) => `${candidate.hostName ?? ''}\n${candidate.name}\n${candidate.path}`.toLowerCase().includes(query))
 }
 
 /** The warnings the strip lists: the daemon's for the brief, then the stale-edit one. */
@@ -202,7 +207,7 @@ type Prepared = {
   source: SourceInfo
   candidates: Candidate[]
   canCreateWorktree: boolean
-  agents: { state: 'ready' | 'failed'; list: AgentOption[] }
+  agents: { state: 'ready' | 'failed'; list: AgentOption[]; defaultAgent?: string | null }
   controls: Controls
   draft: Draft | null
   templates: Template[]
@@ -224,6 +229,8 @@ export class HandoffDialog {
   private opening = 0
   private recapture = false
   private sourceWorking = false
+  private localAgents: Agents = { state: 'failed', list: [] }
+  private targetSequence = 0
 
   constructor(private readonly context: UiPluginContext) {}
 
@@ -240,6 +247,7 @@ export class HandoffDialog {
     this.clearTimer()
     this.sequence += 1
     this.opening += 1
+    this.targetSequence += 1
     this.listeners.clear()
   }
 
@@ -283,25 +291,31 @@ export class HandoffDialog {
 
     this.clearTimer()
     this.sequence += 1
+    this.targetSequence += 1
     this.ref = ref
     this.recapture = false
     this.sourceWorking = prepared.source.busy
     const { controls } = prepared
-    const target = controls.target
+    const target = controls.target ?? (prepared.source.worktreeId !== null && prepared.candidates.some((candidate) =>
+      candidate.id === prepared.source.worktreeId && candidate.remote === undefined
+    ) ? { worktree: prepared.source.worktreeId } : null)
     const restored = prepared.draft?.preview ?? null
     const home = prepared.source.worktreeId
+    this.localAgents = { state: prepared.agents.state, list: prepared.agents.list, defaultAgent: controls.agent ?? null }
     this.snapshot = {
       ...CLOSED,
       shown: true,
       source: { ...prepared.source, canCreateWorktree: prepared.canCreateWorktree },
       candidates: prepared.candidates,
-      agents: { state: prepared.agents.state, list: prepared.agents.list },
+      agents: target && !('create' in target) ? { state: 'loading', list: [] } : this.localAgents,
       templates: prepared.templates,
       mode: target && 'create' in target ? 'create' : 'existing',
-      worktree: target && 'worktree' in target ? target.worktree : prepared.candidates.some((c) => c.id === home) ? home : null,
+      worktree: target && 'remote' in target ? target.remote.mirrorId : target && 'worktree' in target ? target.worktree :
+        prepared.candidates.some((candidate) => candidate.id === home && candidate.remote === undefined) ? home : null,
+      target,
       createName: target && 'create' in target ? target.create.name : '',
       createBase: target && 'create' in target ? (target.create.base ?? '') : '',
-      agent: controls.agent ?? null,
+      agent: target && 'remote' in target ? null : controls.agent ?? null,
       relationship: controls.relationship,
       context: 'focused',
       include: controls.include,
@@ -314,8 +328,54 @@ export class HandoffDialog {
       previewing: true
     }
     for (const listener of [...this.listeners]) listener()
+    if (target && !('create' in target)) void this.refreshTargetAgents(target)
     await this.refresh()
     return ok()
+  }
+
+  private async refreshTargetAgents(target: Target | null): Promise<void> {
+    const attempt = ++this.targetSequence
+    if (target === null || 'create' in target) {
+      const current = this.snapshot.agent
+      const agent = current && this.localAgents.list.some((item) => item.id === current)
+        ? current
+        : this.localAgents.defaultAgent && this.localAgents.list.some((item) => item.id === this.localAgents.defaultAgent)
+          ? this.localAgents.defaultAgent
+          : this.localAgents.list[0]?.id ?? null
+      this.commit({ agents: this.localAgents, agent })
+      return
+    }
+    this.commit({ agents: { state: 'loading', list: [] }, agent: null })
+    try {
+      const result = await this.context.call(METHOD('targetAgents'), { target })
+      if (attempt !== this.targetSequence || !this.snapshot.shown) return
+      if (!isRecord(result) || (result.state !== 'ready' && result.state !== 'failed') || !Array.isArray(result.list)) {
+        throw new Error('The target owner returned an invalid Agent list.')
+      }
+      const detected: AgentOption[] = []
+      for (const item of result.list) {
+        if (!isRecord(item) || typeof item.id !== 'string' || typeof item.label !== 'string') {
+          throw new Error('The target owner returned an invalid Agent list.')
+        }
+        detected.push({ id: item.id, label: item.label })
+      }
+      const list = result.state === 'ready' ? detected : []
+      const agents: Agents = {
+        state: result.state,
+        list,
+        defaultAgent: typeof result.defaultAgent === 'string' ? result.defaultAgent : null
+      }
+      const current = this.snapshot.agent
+      const agent = current && list.some((item) => item.id === current)
+        ? current
+        : agents.defaultAgent && list.some((item) => item.id === agents.defaultAgent)
+          ? agents.defaultAgent
+          : list[0]?.id ?? null
+      this.commit({ agents, agent })
+    } catch {
+      if (attempt !== this.targetSequence || !this.snapshot.shown) return
+      this.commit({ agents: { state: 'failed', list: [], defaultAgent: null }, agent: null })
+    }
   }
 
   /** The preview call for the current controls; `body` makes it an analysis of the edited text. */
@@ -394,6 +454,7 @@ export class HandoffDialog {
     const patch = this.patchFor(name, value)
     if ('reason' in patch) return refused(patch.reason)
     this.commit({ ...patch.patch, error: null })
+    if (name === 'worktree' || name === 'create') void this.refreshTargetAgents(controlsOf(this.snapshot).target ?? null)
     if (name !== 'templateName' && !(name === 'template' && value === 'new')) this.changed(name)
     return ok()
   }
@@ -402,13 +463,27 @@ export class HandoffDialog {
     const s = this.snapshot
     const text = typeof value === 'string' ? value : null
     switch (field) {
-      case 'worktree':
-        if (text === null || !s.candidates.some((candidate) => candidate.id === text)) return { reason: 'unknown-worktree' }
-        return { patch: { worktree: text, mode: 'existing' } }
+      case 'worktree': {
+        const candidate = text === null ? undefined : s.candidates.find((item) => item.id === text)
+        if (!candidate) return { reason: 'unknown-worktree' }
+        return {
+          patch: {
+            worktree: candidate.id,
+            mode: 'existing',
+            target: candidate.remote ? { remote: candidate.remote } : { worktree: candidate.id }
+          }
+        }
+      }
       case 'create':
         if (typeof value !== 'boolean') return { reason: 'invalid-value' }
         if (value && !s.source?.canCreateWorktree) return { reason: 'create-unavailable' }
-        return { patch: { mode: value ? 'create' : 'existing' } }
+        if (value) {
+          const base = s.createBase.trim()
+          return { patch: { mode: 'create', target: { create: { name: s.createName, ...(base === '' ? {} : { base }) } } } }
+        }
+        if (s.worktree === null) return { patch: { mode: 'existing', target: null } }
+        const candidate = s.candidates.find((item) => item.id === s.worktree)
+        return { patch: { mode: 'existing', target: candidate?.remote ? { remote: candidate.remote } : { worktree: s.worktree } } }
       case 'createName':
         return text === null ? { reason: 'invalid-value' } : { patch: { createName: text } }
       case 'createBase':
@@ -605,6 +680,7 @@ export class HandoffDialog {
       const { candidates } = this.snapshot
       patch.mode = 'existing'
       patch.worktree = created.id
+      patch.target = { worktree: created.id }
       patch.createName = ''
       if (!candidates.some((candidate) => candidate.id === created.id)) {
         patch.candidates = [...candidates, { id: created.id, name: created.name, path: created.path, kind: 'git', branch: null }]
@@ -636,6 +712,7 @@ export class HandoffDialog {
     this.clearTimer()
     this.sequence += 1
     this.opening += 1
+    this.targetSequence += 1
     this.ref = null
     this.recapture = false
     this.snapshot = CLOSED

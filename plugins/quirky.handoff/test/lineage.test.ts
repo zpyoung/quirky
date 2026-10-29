@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from 'bun:test'
 import { randomUUID } from 'node:crypto'
-import { RpcErrorCode, type Session } from '@quirky/protocol'
+import { RpcErrorCode, type Session, type Worktree } from '@quirky/protocol'
 import { HandoffRig } from './support'
 
 let rig: HandoffRig
@@ -16,8 +16,8 @@ type Record_ = {
   id: string
   createdAt: number
   relationship: string
-  parent: Record<string, string | null>
-  child: Record<string, string | null>
+  parent: Record<string, unknown>
+  child: Record<string, unknown>
 }
 type Started = { child: { session: string; tab: string; worktreeId: string }; lineageId: string | null }
 
@@ -50,11 +50,22 @@ describe('SC-52: one record holds both ends, and the child fills in later', () =
     const { records } = await lineage({ session: result.child.session })
     expect(records).toHaveLength(1)
     const source = await sessionOf(s.id)
+    const executionHost = await rig.call('quirky.cli/hostIdentity', {}) as { hostId: string; generation: string }
+    const worktree = await rig.call('quirky.worktree/show', { worktree: `id:${s.worktreeId}` }) as Worktree
     expect(records[0]).toEqual({
       id: result.lineageId!,
       createdAt: expect.any(Number),
       relationship: 'reviews',
-      parent: { session: s.id, agent: 'claude', providerSessionId: 'P', transcriptPath: path, worktreeId: s.worktreeId, title: source.title },
+      parent: {
+        session: s.id,
+        agent: 'claude',
+        providerSessionId: 'P',
+        transcriptPath: path,
+        worktreeId: s.worktreeId,
+        title: source.title,
+        executionHost,
+        instanceId: worktree.instanceId
+      },
       child: {
         session: result.child.session,
         agent: 'gemini',
@@ -62,7 +73,9 @@ describe('SC-52: one record holds both ends, and the child fills in later', () =
         transcriptPath: null,
         worktreeId: s.worktreeId,
         title: expect.anything(),
-        tab: result.child.tab
+        tab: result.child.tab,
+        executionHost,
+        instanceId: worktree.instanceId
       }
     })
     expect(await lineage({ session: s.id })).toEqual({ records })

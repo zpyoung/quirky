@@ -91,10 +91,12 @@ export class VaultWorkerClient {
   private closePromise: Promise<void> | undefined
   private keepAlive = false
   private closed = false
+  private environmentSent = false
 
   constructor(
     private readonly entrypoint: string,
-    private readonly onEvent: (event: WorkerEvent) => void
+    private readonly onEvent: (event: WorkerEvent) => void,
+    private readonly environment?: Record<string, string | undefined>
   ) {}
   get started(): boolean {
     return this.worker !== undefined
@@ -114,8 +116,14 @@ export class VaultWorkerClient {
       resolve: (value) => deferred.resolve(value as T),
       reject: deferred.reject
     }
-    if (this.retirement) this.queued.push({ op, args, pending })
-    else this.sendRequest(op, args, pending)
+    const includeEnvironment = this.environment !== undefined &&
+      (!this.environmentSent || this.worker === undefined || this.retirement !== undefined) &&
+      op !== 'cancelList' &&
+      op !== 'close'
+    const requestArgs = includeEnvironment ? { ...args, environment: this.environment } : args
+    if (includeEnvironment) this.environmentSent = true
+    if (this.retirement) this.queued.push({ op, args: requestArgs, pending })
+    else this.sendRequest(op, requestArgs, pending)
     return deferred.promise
   }
 
@@ -149,6 +157,7 @@ export class VaultWorkerClient {
       worker.postMessage({ id, op, args } satisfies WorkerRequest)
       this.touchIdleTimer()
     } catch (error) {
+      this.environmentSent = false
       if (id !== undefined) this.pending.delete(id)
       pending.reject(asError(error))
     }
@@ -156,7 +165,6 @@ export class VaultWorkerClient {
 
   private ensureWorker(): Worker {
     if (this.worker) return this.worker
-    if (this.closed) throw new WorkerRequestError('worker-closed', 'vault worker is closed')
     const worker = new Worker(this.entrypoint, { type: 'module' })
     worker.addEventListener('message', (event: MessageEvent<unknown>) => this.receive(worker, event.data))
     worker.addEventListener('error', (event: ErrorEvent) => this.failWorker(worker, event.message || 'vault worker failed'))
@@ -185,6 +193,7 @@ export class VaultWorkerClient {
     this.pending.delete(value.id)
     const response = value as WorkerResponse
     if (response.error && typeof response.error.kind === 'string' && typeof response.error.message === 'string') {
+      this.environmentSent = false
       pending.reject(new WorkerRequestError(response.error.kind, response.error.message))
     } else {
       pending.resolve(response.result)
@@ -194,6 +203,7 @@ export class VaultWorkerClient {
 
   private failWorker(worker: Worker, message: string): void {
     if (this.worker !== worker) return
+    this.environmentSent = false
     this.worker = undefined
     this.clearIdleTimer()
     worker.terminate()
@@ -228,6 +238,7 @@ export class VaultWorkerClient {
       // An idle worker is disposable; a later request creates a new one.
     }
     this.clearIdleTimer()
+    this.environmentSent = false
     if (this.retirement === retirement) this.retirement = undefined
     if (this.closed) {
       this.rejectQueued(new WorkerRequestError('worker-closed', 'vault worker is shutting down'))

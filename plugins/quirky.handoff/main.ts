@@ -2,13 +2,10 @@ import type { PluginContext } from '@quirky/protocol'
 import { HandoffService } from './src/daemon/service'
 import { migrations } from './src/daemon/store'
 
-let service: HandoffService | undefined
-
-/** Starts the session handoff plugin: its methods, its store, and the transcript path history. */
-export function activate(context: PluginContext): void {
+/** Starts the session handoff services; the returned disposer belongs to this activation only. */
+export function activate(context: PluginContext): () => void {
   const store = context.openStore(migrations)
   const active = new HandoffService(context, store)
-  service = active
 
   const provide = (name: string, handler: (params: Record<string, unknown>) => unknown) =>
     context.provide(`method:quirky.handoff/${name}`, handler)
@@ -16,6 +13,13 @@ export function activate(context: PluginContext): void {
   provide('openArchived', (params) => active.openArchived(params))
   provide('preview', (params) => active.preview(params))
   provide('probe', (params) => active.probe(params))
+  provide('targetAgents', (params) => active.targetAgents(params))
+  provide('ownerAgents', (params) => active.ownerAgents(params))
+  provide('ownerProbe', (params) => active.ownerProbe(params))
+  provide('ownerStart', (params) => active.ownerStart(params))
+  provide('ownerResend', (params) => active.ownerResend(params))
+  provide('ownerDiscard', (params) => active.ownerDiscard(params))
+  provide('ownerJump', (params) => active.ownerJump(params))
   provide('templates', () => active.templates())
   provide('templateMutate', (params) => active.templateMutate(params))
   provide('draft', (params) => active.draft(params))
@@ -25,9 +29,5 @@ export function activate(context: PluginContext): void {
   provide('lineage', (params) => active.lineage(params))
   provide('jump', (params) => active.jump(params))
   active.activate()
-}
-
-export function deactivate(): void {
-  service?.stop()
-  service = undefined
+  return () => active.stop()
 }

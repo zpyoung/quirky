@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { isAbsolute, join, resolve } from 'node:path'
-import type { PluginContext, PluginStore, QuirkyEvent } from '@quirky/protocol'
+import type { OwnerSessionHostRef, PluginContext, PluginStore, QuirkyEvent } from '@quirky/protocol'
 import type {
   AccountSummary,
   AccountPrepareResult,
@@ -19,7 +19,8 @@ import type {
   StaleSession,
   SystemAccount
 } from './types'
-import { DEFAULT_PREFERENCES, DEFAULT_UI_STATE, MANAGED_ID_RE } from './types'
+import { DEFAULT_PREFERENCES, DEFAULT_UI_STATE, MANAGED_ID_RE, OWNER_CALL_OPERATIONS } from './types'
+import type { OwnerCallOperation } from './types'
 import {
   AccountProfiles,
   isProviderAuth,
@@ -62,6 +63,26 @@ const USAGE_LABELS: Record<(typeof USAGE_PROVIDERS)[number], string> = {
   grok: 'Grok',
   cursor: 'Cursor',
   zcode: 'ZCode'
+}
+const OWNER_CALL_METHODS: Record<OwnerCallOperation, string> = {
+  list: 'quirky.accounts/list',
+  usage: 'quirky.accounts/usage',
+  refresh: 'quirky.accounts/refresh',
+  inactiveUsage: 'quirky.accounts/inactiveUsage',
+  select: 'quirky.accounts/select',
+  credentialStatus: 'quirky.accounts/credentialStatus',
+  agentsList: 'quirky.agents/list',
+  agentsRefresh: 'quirky.agents/refresh'
+}
+const OWNER_CALL_PARAM_KEYS: Record<OwnerCallOperation, readonly string[]> = {
+  list: [],
+  usage: [],
+  refresh: ['provider', 'force'],
+  inactiveUsage: ['provider'],
+  select: ['provider', 'accountId'],
+  credentialStatus: [],
+  agentsList: [],
+  agentsRefresh: []
 }
 const MAX_ACCOUNT_LABEL = 100
 const MAX_SESSION_ID = 256
@@ -144,6 +165,132 @@ export class AccountService {
     const provider = this.readManagedProvider(params.provider)
     return this.trackUsage(this.requireUsage().inactive(provider))
   }
+  async ownerCall(params: Record<string, unknown>): Promise<unknown> {
+    if (!hasExactKeys(params, ['owner', 'operation', 'params'])) {
+      this.fail('invalid-params', 'ownerCall accepts only owner, operation, and params.')
+    }
+    const owner = this.readOwnerSessionHostRef(params.owner)
+    const operation = this.readOwnerCallOperation(params.operation)
+    const operationParams = asRecord(params.params)
+    if (!operationParams) this.fail('invalid-params', 'params must be an object.')
+    if (Object.keys(operationParams).some((key) => !OWNER_CALL_PARAM_KEYS[operation].includes(key))) {
+      this.fail('invalid-params', 'params contains an option that is not supported by this owner-call operation.')
+    }
+
+    let currentValue: unknown
+    try {
+      currentValue = await this.context.call('quirky.worktree/remoteHostStatus', { host: owner.hostId })
+    } catch {
+      this.fail('conflict', 'The registered owner is unavailable; no local Accounts data was used.')
+    }
+    const current = asRecord(currentValue)
+    const currentIdentity = asRecord(current?.identity)
+    const currentRuntime = asRecord(current?.runtime)
+    if (
+      !current ||
+      !currentIdentity ||
+      !currentRuntime ||
+      typeof current.id !== 'string' ||
+      typeof currentIdentity.hostId !== 'string' ||
+      typeof currentIdentity.generation !== 'string' ||
+      typeof currentRuntime.id !== 'string' ||
+      typeof currentRuntime.endpoint !== 'string' ||
+      typeof currentRuntime.grantId !== 'string' ||
+      current.id !== owner.hostId ||
+      currentIdentity.hostId !== owner.hostId ||
+      currentIdentity.generation !== owner.identity.generation ||
+      currentRuntime.id !== owner.runtime.id ||
+      currentRuntime.endpoint !== owner.runtime.endpoint ||
+      currentRuntime.grantId !== owner.runtime.grantId
+    ) {
+      this.fail('conflict', 'The registered owner or saved grant changed; no remote Accounts operation was attempted.')
+    }
+    if (current.connected !== true) {
+      this.fail('conflict', 'The registered owner is offline; no local Accounts data was used.')
+    }
+
+    let callValue: unknown
+    try {
+      callValue = await this.context.call('quirky.cli/runtimeCall', {
+        runtime: owner.runtime.id,
+        method: OWNER_CALL_METHODS[operation],
+        params: operationParams,
+        expectedHost: owner.identity,
+        expectedRuntime: owner.runtime
+      })
+    } catch {
+      this.fail('conflict', 'The remote Accounts operation could not be completed; no local result was used.')
+    }
+    const callResult = asRecord(callValue)
+    const returnedRuntime = asRecord(callResult?.runtime)
+    if (
+      !callResult ||
+      !Object.prototype.hasOwnProperty.call(callResult, 'result') ||
+      !returnedRuntime ||
+      returnedRuntime.id !== owner.runtime.id ||
+      returnedRuntime.endpoint !== owner.runtime.endpoint ||
+      returnedRuntime.grantId !== owner.runtime.grantId
+    ) {
+      this.fail('conflict', 'The remote Accounts owner returned an unbound result.')
+    }
+    return operation === 'agentsList' || operation === 'agentsRefresh'
+      ? this.publicOwnerAgentList(callResult.result)
+      : callResult.result
+  }
+
+  private readOwnerSessionHostRef(value: unknown): OwnerSessionHostRef {
+    const record = asRecord(value)
+    if (!record || !hasExactKeys(record, ['hostId', 'identity', 'runtime'])) {
+      this.fail('invalid-params', 'owner must contain only hostId, identity, and runtime.')
+    }
+    const identity = asRecord(record.identity)
+    const runtime = asRecord(record.runtime)
+    if (!identity || !hasExactKeys(identity, ['hostId', 'generation'])) {
+      this.fail('invalid-params', 'owner.identity must contain only hostId and generation.')
+    }
+    if (!runtime || !hasExactKeys(runtime, ['id', 'endpoint', 'grantId'])) {
+      this.fail('invalid-params', 'owner.runtime must contain only id, endpoint, and grantId.')
+    }
+    const hostId = this.readNonempty(record.hostId, 'owner.hostId')
+    const identityHostId = this.readNonempty(identity.hostId, 'owner.identity.hostId')
+    if (hostId !== identityHostId) this.fail('invalid-params', 'owner.hostId must match owner.identity.hostId.')
+    return {
+      hostId,
+      identity: {
+        hostId: identityHostId,
+        generation: this.readNonempty(identity.generation, 'owner.identity.generation')
+      },
+      runtime: {
+        id: this.readNonempty(runtime.id, 'owner.runtime.id'),
+        endpoint: this.readNonempty(runtime.endpoint, 'owner.runtime.endpoint'),
+        grantId: this.readNonempty(runtime.grantId, 'owner.runtime.grantId')
+      }
+    }
+  }
+
+  private readOwnerCallOperation(value: unknown): OwnerCallOperation {
+    if (typeof value === 'string' && (OWNER_CALL_OPERATIONS as readonly string[]).includes(value)) {
+      return value as OwnerCallOperation
+    }
+    this.fail('invalid-params', 'operation is not supported for a remote Accounts owner.')
+  }
+
+  private publicOwnerAgentList(value: unknown): { agents: { id: string; installed: boolean }[] } {
+    const record = asRecord(value)
+    if (!record || !Array.isArray(record.agents)) {
+      this.fail('conflict', 'The remote agent owner returned an incomplete detection result.')
+    }
+    const agents: { id: string; installed: boolean }[] = []
+    for (const candidate of record.agents) {
+      const agent = asRecord(candidate)
+      if (!agent || typeof agent.id !== 'string' || typeof agent.installed !== 'boolean') {
+        this.fail('conflict', 'The remote agent owner returned incomplete detection data.')
+      }
+      agents.push({ id: agent.id, installed: agent.installed })
+    }
+    return { agents }
+  }
+
 
   async beginLogin(params: Record<string, unknown>): Promise<PendingLogin> {
     const mutationGeneration = ++this.userMutationGeneration

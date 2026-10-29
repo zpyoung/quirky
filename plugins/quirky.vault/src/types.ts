@@ -176,3 +176,12 @@ export type ViewState = {
 export type WorkerRequest = { id: number; op: string; args: Record<string, unknown> }
 export type WorkerResponse = { id: number; result?: unknown; error?: { kind: string; message: string } }
 export type WorkerEvent = { event: 'scanProgress' | 'searchStatus'; data: ScanProgress | SearchStatus }
+export type OwnerResumeResult = {
+  id: string
+  kind: 'terminal' | 'structured'
+  agent: string
+  worktreeId: string
+  status: 'starting' | 'running' | 'working' | 'waiting' | 'done' | 'exited'
+  createdAt: number
+}
+export type RemoteResumeResult = OwnerResumeResult & { hostId: string }
