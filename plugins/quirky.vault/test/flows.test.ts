@@ -19,8 +19,8 @@ afterEach(async () => {
   for (const rig of rigs.splice(0).reverse()) await rig.cleanup()
 })
 
-async function start(): Promise<VaultRig> {
-  const rig = await VaultRig.start()
+async function start(options: { isolateVaultModule?: boolean } = {}): Promise<VaultRig> {
+  const rig = await VaultRig.start(options)
   rigs.push(rig)
   return rig
 }
@@ -520,14 +520,14 @@ describe('vault public acceptance flows', () => {
   })
 
   test('real host contributions preserve identity, expose partial availability, redact remote paths, and fail honestly', async () => {
-    const remote = await start()
+    const remote = await start({ isolateVaultModule: true })
     await remote.call('setSearchEnabled', { enabled: true })
     const remoteSearch = results(await remote.call<SearchResponse>('search', {
       query: 'vault-fixture-claude-marker', freshness: 'wait-until-current', filters: { agents: ['claude'] }
     }))
     expect(remoteSearch.hits.some((hit) => hit.sessionId === 'claude-fixture-session')).toBe(true)
 
-    const local = await start()
+    const local = await start({ isolateVaultModule: true })
     const forwarder = createVaultHostForwarder(rpcUrl(remote.h.runtime))
     pluginRoots.push(forwarder.root)
     await local.client.callAny('plugin.install', { path: forwarder.directory, yes: true })
@@ -611,6 +611,17 @@ describe('vault public acceptance flows', () => {
 
 
     await remote.client.callAny('plugin.disable', { id: 'quirky.vault' })
+    await local.call('setSearchEnabled', { enabled: true, host: 'local' })
+
+    const survivingLocalSearch = results(await local.call<SearchResponse>('search', {
+      host: 'local',
+      query: 'vault-fixture-claude-marker',
+      freshness: 'wait-until-current',
+      filters: { agents: ['claude'] }
+    }))
+    const survivingLocalHit = survivingLocalSearch.hits.find((hit) => hit.sessionId === 'claude-fixture-session')
+    if (!survivingLocalHit) throw new Error('local vault stopped serving its source after the remote vault was disabled')
+    expect(survivingLocalHit.source.filePath).toBe(local.fixturePaths.claude)
     const partialAll = await local.call<PublicListResult>('list', {
       host: 'all', agents: ['claude'], unlimited: true
     })

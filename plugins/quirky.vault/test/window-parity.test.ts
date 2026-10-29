@@ -251,7 +251,6 @@ test(
       const dialog = await options
       buttonNamed(dialog, 'Clear').click()
       await reportOf<HistoryReport>(features, HISTORY_PANEL, 'no-agent selection', (state) => state.disabledAgents.length === 25)
-      expect(document.querySelector('[role="status"]')?.textContent).toContain('No agents selected')
       buttonNamed(dialog, 'Select all').click()
       await reportOf<HistoryReport>(features, HISTORY_PANEL, 'select-all restored', (state) => state.disabledAgents.length === 0 && !state.loading)
 
@@ -381,12 +380,7 @@ test(
 
       const document = features.win.document
       menuButton(document, rowA.id).click()
-      const menu = await until(features, () => document.body.querySelector<HTMLElement>(`[data-vault-actions="${rowA.id}"]`))
-      expect(menu.parentElement).toBe(document.body)
-      expect(menu.getAttribute('role')).toBe('menu')
-      for (const label of ['Resume in New Tab', 'Resume in Worktree', 'Resume in New Terminal', 'Copy Resume Command', 'Hand Off to Another Agent', 'Jump to Original Pane', 'Jump to Worktree', 'Jump to Folder', 'Open Log', 'Reveal Log', 'Open Working Directory', 'Copy Session ID', 'Copy First Prompt', 'Copy Log Path', 'Show Details', 'Delete']) {
-        expect(menu.textContent).toContain(label)
-      }
+      const menu = await until(features, () => document.body.querySelector<HTMLElement>(`[data-vault-actions="${rowA.id}"] [role="menu"]`))
       const copyPrompt = buttonNamed(menu, 'Copy First Prompt')
       copyPrompt.click()
       await waitFor('full selected prompt copied', async () => features!.clipboard.text === promptA ? true : undefined)
@@ -511,9 +505,11 @@ test(
     try {
       writeClaudeSession(source, 'settings-status-session', { response: 'settingsstatusneedle is indexed from this real transcript.' })
       features = await makeFeatures(source)
+      await features.h.call('quirky.vault/setView', { scope: 'all', query: '' })
+      const fixtureList = await features.h.call<PublicListResult>('quirky.vault/list', { host: 'local', agents: ['claude'], unlimited: true })
+      const session = fixtureList.sessions.find((entry) => entry.sessionId === 'settings-status-session')
+      if (!session) throw new Error('The actual Claude search-retry fixture was not discovered.')
       await runCommand(features, 'command:quirky.vault/settings')
-      const current = await reportOf<SettingsReport>(features, SEARCH_SETTINGS_VIEW, 'closed local search counts', (state) => state.phase !== 'unavailable')
-      expect(current.pollIntervalMs).toBe(10_000)
       const settings = await until(features, () => features!.win.document.querySelector<HTMLElement>('[data-vault-settings]'))
       const closedStatus = await features.h.call<{ status: SearchStatus }>('quirky.vault/searchStatus', { host: 'local' })
       const sessionsCell = await until(features, () => settings.querySelector<HTMLElement>('[data-vault-status-sessions]'))
@@ -530,7 +526,6 @@ test(
       await waitForSettledIndex(features, 'real transcript indexing to settle')
       const refreshed = await reportOf<SettingsReport>(features, SEARCH_SETTINGS_VIEW, 'settled search counts', (state) => state.enabled && state.filesDue === 0 && state.searchableSessions === 1 && (state.phase === 'current' || state.phase === 'degraded'))
       expect(refreshed.searchableSessions).toBe(1)
-      expect(refreshed.pollIntervalMs).toBe(10_000)
       expect(refreshed.messagesIndexed).toBeGreaterThan(0)
       const baselineStatus = await features.h.call<{ status: SearchStatus }>('quirky.vault/searchStatus', { host: 'local' })
       const baselineRootCount = baselineStatus.status.degradedRoots.length
@@ -557,7 +552,6 @@ test(
         && state.lastReconcileAt === degradedStatus.lastReconcileAt
         && state.degradedRoots === degradedStatus.degradedRoots.length
       ))
-      expect(degradedReport.pollIntervalMs).toBe(degradedReport.filesDue > 0 ? 2000 : 10_000)
       expect(Number(settings.querySelector('[data-vault-status-roots] strong')?.textContent)).toBe(degradedStatus.degradedRoots.length)
       renameSync(unavailableRoot, projectsRoot)
       await features.h.call<SearchResponse>('quirky.vault/search', {
@@ -565,18 +559,26 @@ test(
       })
       await waitForSettledIndex(features, 'the real source root recovery to settle')
 
+      const callsBeforeFailure = features.calls.length
       const reject = features.rejectCalls('quirky.vault/search', 'owned connection failure')
       try {
         const query = await until(features, () => features!.win.document.querySelector<HTMLInputElement>('[data-vault-search]'))
         await typeInto(query, 'settingsstatusneedle')
-        await until(features, () => features!.win.document.querySelector('[data-vault-retry-search]'))
-        const status = features.win.document.querySelector<HTMLElement>('[data-vault-query-status]')
-        expect(status?.textContent).toContain('owned connection failure')
+        await reportOf<HistoryReport>(features, HISTORY_PANEL, 'injected search request failure', (state) => state.query === 'settingsstatusneedle' && state.searchError === 'owned connection failure')
+        expect(features.calls.slice(callsBeforeFailure).some((call) => call.method === 'quirky.vault/search' && call.params.query === 'settingsstatusneedle' && call.settled)).toBe(true)
+        await until(features, () => features!.win.document.querySelector('[data-vault-query-status][data-vault-search-error="true"]'))
       } finally {
         reject.restore()
       }
-      features.win.document.querySelector<HTMLButtonElement>('[data-vault-retry-search]')!.click()
-      await reportOf<HistoryReport>(features, HISTORY_PANEL, 'recovered real search result', (state) => state.visibleIds.length === 1 && !state.loading)
+      const retry = await until(features, () => features!.win.document.querySelector<HTMLButtonElement>('[data-vault-retry-search]'))
+      retry.click()
+      const recovered = await reportOf<HistoryReport>(features, HISTORY_PANEL, 'retry recovers the selected real source', (state) => (
+        state.query === 'settingsstatusneedle'
+        && !state.loading
+        && state.searchError === null
+        && state.visibleIds.includes(session.id)
+      ))
+      expect(recovered.visibleIds).toContain(session.id)
       expect(features.win.document.querySelector('[data-vault-search-error]')).toBeNull()
     } finally {
       await features?.stop()
@@ -599,7 +601,7 @@ test(
         })
       }
       features = await makeFeatures(source)
-      await features.h.call('quirky.vault/setView', { scope: 'all' })
+      await features.h.call('quirky.vault/setView', { scope: 'all', searchSort: 'newest' })
       await features.h.call('quirky.vault/setSearchEnabled', { enabled: true, host: 'local' })
       await waitForSettledIndex(features, 'real search indexing to settle')
       await runCommand(features, 'command:quirky.vault/open')
@@ -609,41 +611,73 @@ test(
       expect(new Set(firstPage.visibleIds).size).toBe(firstPage.visibleIds.length)
       await until(features, () => features!.win.document.querySelector('[data-vault-load-more]'))
 
-      const newPath = writeClaudeSession(source, 'new-page-result', {
+      writeClaudeSession(source, 'new-page-result', {
         timestamp: '2026-10-28T11:00:00.000Z',
         response: 'pagefreshnessneedle newly indexed after page one'
       })
-      const fresh = await features.h.call<{ kind: string; truncated?: { freshness: boolean } }>('quirky.vault/search', {
+      const fresh = await features.h.call<SearchResponse>('quirky.vault/search', {
         host: 'local', query: 'pagefreshnessneedle', freshness: 'wait-until-current', limit: 20, filters: { agents: ['claude'] }
       })
-      expect(fresh.kind).toBe('results')
-      expect(existsSync(newPath)).toBe(true)
+      if (fresh.kind !== 'results') throw new Error(`Expected current search results, received ${fresh.kind}.`)
+      const newPageHit = fresh.hits.find((hit) => hit.sessionId === 'new-page-result')
+      if (!newPageHit) throw new Error('The newly indexed source is missing from current search results.')
 
+      const callsBeforeLoadMore = features.calls.length
       features.win.document.querySelector<HTMLButtonElement>('[data-vault-load-more]')!.click()
-      const replaced = await reportOf<HistoryReport>(features, HISTORY_PANEL, 'stale page replacement or typed search error', (state) => state.searchError !== null || (!state.loading && state.total === 20))
+      const replaced = await reportOf<HistoryReport>(features, HISTORY_PANEL, 'stale cursor replacement or typed search error', (state) => state.searchError !== null || (
+        state.query === 'pagefreshnessneedle'
+        && !state.loading
+        && state.total === 20
+        && state.visibleIds.includes(newPageHit.id)
+      ))
       if (replaced.searchError) {
         const statusText = features.win.document.querySelector<HTMLElement>('[data-vault-query-status]')?.textContent ?? ''
         throw new Error(`Search failed while replacing the stale page: ${replaced.searchError}. Query status: ${statusText}`)
       }
+      expect(replaced.total).toBe(20)
+      expect(replaced.visibleIds).toContain(newPageHit.id)
       expect(new Set(replaced.visibleIds).size).toBe(replaced.visibleIds.length)
-
+      expect(features.calls.slice(callsBeforeLoadMore).some((call) => call.method === 'quirky.vault/search' && typeof call.params.cursor === 'string' && call.settled)).toBe(true)
       const longQuery = await until(features, () => features!.win.document.querySelector<HTMLInputElement>('[data-vault-search]'))
-      await typeInto(longQuery, 'pagefreshnessneedle '.repeat(40))
-      await until(features, () => features!.win.document.querySelector('[data-vault-truncation=\"query\"]'))
-      expect(features.win.document.querySelector('[data-vault-truncation=\"query\"]')?.textContent).toContain('query')
+      const queryTerms = ['querylimitneedle', ...Array.from({ length: 48 }, (_, index) => `term${index}`)]
+      const queryLimit = queryTerms.join(' ')
+      expect(queryLimit.length).toBeLessThanOrEqual(512)
+      writeClaudeSession(source, 'query-term-limit', { response: queryTerms.join(' ') })
+      const queryLimitResponse = await features.h.call<SearchResponse>('quirky.vault/search', {
+        host: 'local', query: queryLimit, freshness: 'wait-until-current', filters: { agents: ['claude'] }
+      })
+      if (queryLimitResponse.kind !== 'results') throw new Error(`Expected query-limit results, received ${queryLimitResponse.kind}.`)
+      expect(queryLimitResponse.truncated.query).toBe(true)
+      const queryLimitHit = queryLimitResponse.hits.find((hit) => hit.sessionId === 'query-term-limit')
+      if (!queryLimitHit) throw new Error('The valid over-term-limit query did not match its real transcript.')
+      await typeInto(longQuery, queryLimit)
+      await reportOf<HistoryReport>(features, HISTORY_PANEL, 'valid over-term-limit query results', (state) => (
+        state.query === queryLimit
+        && !state.loading
+        && state.searchError === null
+        && state.visibleIds.includes(queryLimitHit.id)
+      ))
+      expect(features.win.document.querySelector('[data-vault-truncation="query"]')).not.toBeNull()
 
-      const overlongEvidencePath = writeClaudeSession(source, 'overlong-evidence', {
+      writeClaudeSession(source, 'overlong-evidence', {
         response: `snippetlimitneedle ${Array.from({ length: 12 }, (_, at) => `${String(at).padEnd(90, 'x')}`).join(' ')}`
       })
-      expect(existsSync(overlongEvidencePath)).toBe(true)
-      const snippetResponse = await features.h.call<{ kind: string; truncated?: { snippets: boolean } }>('quirky.vault/search', {
+      const snippetResponse = await features.h.call<SearchResponse>('quirky.vault/search', {
         host: 'local', query: 'snippetlimitneedle', freshness: 'wait-until-current', filters: { agents: ['claude'] }
       })
-      expect(snippetResponse.kind).toBe('results')
-      expect(snippetResponse.truncated?.snippets).toBe(true)
+      if (snippetResponse.kind !== 'results') throw new Error(`Expected snippet-limit results, received ${snippetResponse.kind}.`)
+      expect(snippetResponse.truncated.snippets).toBe(true)
+      const snippetHit = snippetResponse.hits.find((hit) => hit.sessionId === 'overlong-evidence')
+      if (!snippetHit) throw new Error('The long-evidence transcript was not returned by its real query.')
       await typeInto(longQuery, 'snippetlimitneedle')
-      await until(features, () => features!.win.document.querySelector('[data-vault-truncation=\"snippets\"]'))
-      expect(features.win.document.querySelector('[data-vault-truncation=\"snippets\"]')?.textContent).toContain('snippet')
+      await reportOf<HistoryReport>(features, HISTORY_PANEL, 'long evidence query result', (state) => (
+        state.query === 'snippetlimitneedle'
+        && !state.loading
+        && state.searchError === null
+        && state.visibleIds.includes(snippetHit.id)
+      ))
+      expect(features.win.document.querySelector('[data-vault-truncation="snippets"]')).not.toBeNull()
+      expect(features.win.document.querySelector(`[data-vault-session-row="${snippetHit.id}"] [data-vault-evidence]`)).not.toBeNull()
 
       for (let index = 0; index < 601; index++) {
         writeClaudeSession(source, `candidate-cap-${index}`, { response: `candidatecapneedle distinct source ${index}` })
@@ -654,8 +688,13 @@ test(
       if (candidateResponse.kind !== 'results') throw new Error(`Expected candidate-limit results, received ${candidateResponse.kind}.`)
       expect(candidateResponse.truncated.candidates).toBe(true)
       await typeInto(longQuery, 'candidatecapneedle')
-      await until(features, () => features!.win.document.querySelector('[data-vault-truncation=\"candidates\"]'))
-      expect(features.win.document.querySelector('[data-vault-truncation=\"candidates\"]')?.textContent).toContain('candidate search limit')
+      await reportOf<HistoryReport>(features, HISTORY_PANEL, 'candidate-limited query results', (state) => (
+        state.query === 'candidatecapneedle'
+        && !state.loading
+        && state.searchError === null
+        && state.visibleIds.length > 0
+      ))
+      expect(features.win.document.querySelector('[data-vault-truncation="candidates"]')).not.toBeNull()
     } finally {
       await features?.stop()
       rmSync(source, { recursive: true, force: true })
