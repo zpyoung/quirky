@@ -212,3 +212,16 @@ test('Retry after a Native load failure navigates to the retained requested addr
   expect(calls).toContainEqual({ method: 'quirky.browser/paneNavigate', params: { pane: 'pane-1', input: FAILED_URL } })
   expect(calls.some((call) => call.method === 'quirky.browser/paneControl' && call.params?.action === 'reload')).toBe(false)
 })
+
+test('a Native state change during a pending command waits for that command to report it', async () => {
+  await mountWindow()
+  await emitPaneChanged(stateOf(pane({ command: { id: 'command-3', action: 'reload' } })))
+  const before = calls.length
+  await reportNative(nativeState({ url: 'https://example.test/page', loading: true }))
+  const unacknowledged = calls.slice(before).filter((call) => call.method === 'quirky.browser/paneReport' && call.params?.command === undefined)
+  expect(unacknowledged).toEqual([])
+  expect(calls).toContainEqual(expect.objectContaining({
+    method: 'quirky.browser/paneReport',
+    params: expect.objectContaining({ command: 'command-3' })
+  }))
+})

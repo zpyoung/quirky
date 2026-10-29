@@ -604,7 +604,8 @@ export function BrowserPaneWindow({ context, input }: { context: UiPluginContext
       !mountedRef.current || !current || current.mode !== 'native' ||
       (target && (current.id !== target.id || current.profileId !== target.profileId || current.partition !== target.partition))
     ) return
-    if (!command && current.command?.action === 'navigate' && native.url === 'about:blank') return
+    // the daemon rejects an unacknowledged report while a command is pending; that command's own report carries this state
+    if (!command && current.command) return
     void context.call('quirky.browser/paneReport', {
       pane: current.id,
       ...(command ? { command: command.id } : {}),
