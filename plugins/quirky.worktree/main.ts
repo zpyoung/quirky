@@ -429,6 +429,7 @@ export async function activate(context: PluginContext): Promise<void> {
   }
 
   const handlers: Record<string, Handler> = {
+    ownedIds,
     async list(params) {
       await reconcileDeletedGroups()
       if (params.repo === undefined && params.group === undefined) return await listEverything(listEnv, await listRepos())

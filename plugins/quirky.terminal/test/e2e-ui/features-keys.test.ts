@@ -130,7 +130,7 @@ test(
     const splitRevision = split.layout!.revision
 
     // in a text field the same keys are left to the browser, and the others do nothing
-    document.querySelector<HTMLElement>('button.gear')!.click()
+    document.querySelector<HTMLButtonElement>('button[aria-label="Settings"]')!.click()
     const field = await until(f, () => document.querySelector<HTMLInputElement>('[role="dialog"] input:not([type])'))
     field.focus()
     await waitFor('terminal focus to leave', () => (contextKey(f, 'terminalFocus') === false ? true : undefined))

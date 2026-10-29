@@ -2,6 +2,14 @@
 
 This directory holds Quirky's built-in plugins, one per subdirectory, each with a `quirky-plugin.json` manifest. The daemon finds it through `QUIRKY_BUILTIN_PLUGINS_DIR`.
 
+## Removing a project
+
+`quirky repo rm <selector>` forgets the selected project and its settings/group
+membership, but leaves its repository and worktree directories on disk. It closes
+only sessions owned by that project; another project with the same name keeps
+its sessions. If an owned session cannot close, removal fails and the project
+stays available for retry. Re-adding a removed project starts with fresh settings.
+
 ## Terminal workspace
 
 Terminal views stay in the center; **Terminal sessions** and **Quick commands** open
@@ -964,6 +972,11 @@ Purpose-specific `push` and `forcePush` revalidate the exact destination and pri
 snapshot before mutation; a missing or ambiguous head target never falls back to publishing
 another repository. Force push retains its explicit lease and confirmation. No remote is
 created and no public caller-supplied push URL is accepted.
+
+PR-created workspaces retain the explicit PR link, so a base-repository `origin`
+can coexist with a different configured fork push remote. An unlinked branch
+lookup instead requires a PR head matching `origin`; adding a fork remote alone
+does not link that branch. Multiple push URLs on the selected remote are refused.
 
 Sidebar activity reads canonical current agent display evidence; stale rows alone do not
 establish liveness. Quiet time windows refresh without unrelated events, and client-local

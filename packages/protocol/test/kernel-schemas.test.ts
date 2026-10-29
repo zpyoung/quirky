@@ -2,17 +2,6 @@ import { describe, expect, test } from 'bun:test'
 import { CONNECTION_METHODS, KERNEL_EVENT_SCHEMAS, KERNEL_METHOD_SCHEMAS, type KernelMethodSchema, type Schema } from '../src'
 
 
-const EVENT_TYPES = [
-  'notify',
-  'plugin.changed',
-  'setting.changed',
-  'theme.changed',
-  'ui.state.changed',
-  'ui.command.request',
-  'ui.window.changed',
-  'ui.report.changed',
-  'hook.received'
-]
 
 const methodNames = Object.keys(KERNEL_METHOD_SCHEMAS)
 const methodSchemas: Record<string, Schema> = {}
@@ -29,37 +18,15 @@ function walk(schema: Schema): Schema[] {
 
 describe('kernel method schemas', () => {
 
-  test('read-only and destructive methods are flagged', () => {
+  test('destructive methods declare confirmation text and override params', () => {
     const entries = KERNEL_METHOD_SCHEMAS as Record<string, KernelMethodSchema>
-    const readOnly = Object.keys(entries).filter((name) => entries[name]!.readOnly)
-    expect(readOnly.sort()).toEqual(
-      [
-        'status.get', 'plugin.list', 'plugin.contributions', 'plugin.inspect', 'api.describe', 'job.list',
-        'ui.contributions', 'ui.state', 'ui.window.state', 'setting.list', 'setting.get', 'theme.list', 'distro.list',
-        'ui.window.self',
-        'distro.inspect'
-      ].sort()
-    )
     const destructive = Object.keys(entries).filter((name) => entries[name]!.destructive)
-    expect(destructive.sort()).toEqual(['distro.install', 'distro.remove', 'plugin.install', 'plugin.uninstall'])
     for (const name of destructive) {
       expect(entries[name]!.destructive!.confirm, name).not.toBe('')
       expect(Object.keys(entries[name]!.params.properties!), name).toEqual(expect.arrayContaining(['yes', 'confirmation']))
     }
   })
 
-  test('only the hello, subscribe and ui window methods are connection methods', () => {
-    expect([...CONNECTION_METHODS].sort()).toEqual([
-      'ui.window.self',
-      'client.hello',
-      'events.subscribe',
-      'ui.command.reply',
-      'ui.report',
-      'ui.shell.report',
-      'ui.window.activity',
-      'ui.window.focused'
-    ])
-  })
 
   test('every connection method has a schema', () => {
     for (const name of CONNECTION_METHODS) expect(methodNames).toContain(name)
@@ -91,13 +58,6 @@ describe('kernel method schemas', () => {
 })
 
 describe('kernel event schemas', () => {
-  test('cover every event type', () => {
-    expect(Object.keys(KERNEL_EVENT_SCHEMAS).sort()).toEqual([...EVENT_TYPES].sort())
-  })
-
-  test('notify requires desktop', () => {
-    expect(KERNEL_EVENT_SCHEMAS.notify.data.required).toEqual(['title', 'body', 'desktop'])
-  })
 
   test('every entry has object data without a type property', () => {
     for (const [type, entry] of Object.entries(KERNEL_EVENT_SCHEMAS)) {

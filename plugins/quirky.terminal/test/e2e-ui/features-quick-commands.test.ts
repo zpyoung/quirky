@@ -12,6 +12,7 @@ import {
   groupsOf,
   layoutOf,
   leavesOf,
+  press,
   reportOf,
   runCommand,
   startFeatures,
@@ -35,13 +36,11 @@ afterEach(async () => {
 type Panel = { count: number; filter: string; query: string; rows: { id: string; label: string; scope: string }[] }
 type Commands = { commands: QuickCommand[] }
 
-const EMPTY_TEXT = 'No quick commands saved. Run them from the Quick Commands button in the tab bar, or right-click inside any terminal.'
-
 const byText = <T extends Element>(selector: string, text: string): T | undefined => [...document.querySelectorAll<T>(selector)].find((element) => element.textContent?.trim() === text)
 /** The menu row whose label reads `text`, whether or not it has a shortcut or an arrow after it. */
 const menuRow = (scope: string, text: string): HTMLButtonElement | undefined =>
   [...document.querySelectorAll<HTMLElement>(`${scope} .qt-menu-label`)].find((label) => label.textContent === text)?.closest('button') ?? undefined
-const dialog = (title: string) => document.querySelector<HTMLElement>(`[role="dialog"][aria-label="${title}"]`)
+const dialog = () => document.querySelector<HTMLElement>('.qc-dialog [role="dialog"]')
 const field = <T extends Element>(name: string) => document.querySelector<T>(`.qc-dialog [name="${name}"]`)!
 const panelReport = (f: Features, what: string, check: (report: Panel) => boolean = () => true) => reportOf<Panel>(f, QUICK_COMMANDS_PANEL, what, check)
 const addCommand = (f: Features, fields: Record<string, unknown>) => f.h.call<Commands>('quirky.terminal/addQuickCommand', { scope: 'global', ...fields })
@@ -54,16 +53,12 @@ test(
     await f.h.ok(['ui', 'open-panel', QUICK_COMMANDS_PANEL])
     const empty = await panelReport(f, 'the empty panel', (report) => report.count === 0)
     expect(empty).toEqual({ count: 0, filter: 'all', query: '', rows: [] })
-    await waitFor('the empty text', () => (document.querySelector('.qc-empty')?.textContent === EMPTY_TEXT ? true : undefined))
 
     // the dialog preselects Project only when it opens after the panel has found the repo
     await waitFor('the panel to find the repo', () => (f.calls.slice(mark).some((call) => call.method === 'quirky.worktree/resolve' && call.settled) ? true : undefined))
     await Bun.sleep(100)
     byText<HTMLButtonElement>('button', 'Add Command')!.click()
-    await until(f, () => dialog('Add Quick Command'))
-    const open = dialog('Add Quick Command')!
-    expect(open.querySelector('h2')?.textContent).toBe('Add Quick Command')
-    expect(open.querySelector('p')?.textContent).toBe('Saved items appear in the tab bar menu for one-click run.')
+    const open = await until(f, dialog)
     const save = byText<HTMLButtonElement>('.qc-dialog-foot button', 'Save')!
     expect(save.disabled).toBe(true)
     expect(field<HTMLInputElement>('label').maxLength).toBe(80)
@@ -79,8 +74,8 @@ test(
     await typeInto(field('command'), 'echo hello')
     expect(save.disabled).toBe(false)
     const confirm = new KeyboardEvent('keydown', { key: 'Enter', metaKey: true, bubbles: true, cancelable: true })
-    open.dispatchEvent(confirm)
-    await waitFor('the dialog to close', () => (dialog('Add Quick Command') ? undefined : true))
+    field<HTMLTextAreaElement>('command').dispatchEvent(confirm)
+    await waitFor('the dialog to close', () => (dialog() ? undefined : true))
 
     const shown = await panelReport(f, 'the new command', (report) => report.count === 1)
     expect(shown.rows).toEqual([{ id: 'hello', label: 'Hello', scope: 'repo' }])
@@ -124,9 +119,13 @@ test(
     expect(single.textContent).toBe('Command')
     expect(single.title).toBe('Save a quick command for this repo')
     single.click()
-    await until(f, () => dialog('Add Quick Command'))
-    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
-    await waitFor('the dialog to close', () => (dialog('Add Quick Command') ? undefined : true))
+    await until(f, dialog)
+    const labelInput = await until(f, () => {
+      const input = document.querySelector<HTMLInputElement>('.qc-dialog [name="label"]')
+      return input && document.activeElement === input ? input : undefined
+    })
+    await press('escape', labelInput)
+    await waitFor('the dialog to close', () => (dialog() ? undefined : true))
 
     await addCommand(f, { label: 'Hello', command: 'echo hello' })
     const run = await until(f, () => document.querySelector<HTMLButtonElement>('.qc-strip [data-qc-run]'))
@@ -209,9 +208,9 @@ test(
       { label: 'Add Quick Command…', key: null }
     ])
     menuRow('.qt-submenu', 'Add Quick Command…')!.click()
-    await until(f, () => dialog('Add Quick Command'))
+    await until(f, dialog)
     byText<HTMLButtonElement>('.qc-dialog-foot button', 'Cancel')!.click()
-    await waitFor('the dialog to close', () => (dialog('Add Quick Command') ? undefined : true))
+    await waitFor('the dialog to close', () => (dialog() ? undefined : true))
     await closeMenu()
 
     await addCommand(f, { label: 'Hello', command: 'echo hello' })
@@ -270,7 +269,7 @@ test(
     // the Add dialog offers only agents that take the prompt on the command line
     const single = await until(f, () => document.querySelector<HTMLButtonElement>('.qc-strip .qc-single'))
     single.click()
-    await until(f, () => dialog('Add Quick Command'))
+    await until(f, dialog)
     const action = document.querySelector<HTMLInputElement>('.qc-dialog [name="action"][value="agent"]')!
     action.click()
     await waitFor('the agent select to open up', () => (field<HTMLSelectElement>('agent').disabled ? undefined : true))
