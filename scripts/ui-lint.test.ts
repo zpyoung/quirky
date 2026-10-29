@@ -182,3 +182,56 @@ test('root lint scans all UI source, skips fixtures and unopted plugins, and enf
     rmSync(root, { recursive: true, force: true })
   }
 })
+
+test('repository inventory ignores generated artifacts but still enforces tracked and new plugin source', () => {
+  const root = mkdtempSync(join(tmpdir(), 'ui-lint-git-inventory-'))
+  const put = (name: string, content: string) => {
+    const path = join(root, name)
+    mkdirSync(dirname(path), { recursive: true })
+    writeFileSync(path, content)
+  }
+  const git = (...args: string[]) => {
+    const result = Bun.spawnSync(['git', ...args], {
+      cwd: root,
+      env: {
+        PATH: process.env.PATH,
+        HOME: root,
+        QUIRKY_HOME: root,
+        GIT_CONFIG_GLOBAL: '/dev/null',
+        GIT_CONFIG_SYSTEM: '/dev/null',
+        GIT_CONFIG_NOSYSTEM: '1'
+      }
+    })
+    if (result.exitCode !== 0) throw new Error(result.stderr.toString())
+  }
+  const run = () => {
+    const diagnostics: string[] = []
+    const originalError = console.error
+    console.error = (...values: unknown[]) => diagnostics.push(values.join(' '))
+    try {
+      return { status: runUiLint(root), diagnostics }
+    } finally {
+      console.error = originalError
+    }
+  }
+  try {
+    git('init', '--quiet')
+    put('.gitignore', 'plugins/example/generated/\nplugins/example/ignored-source.tsx\n')
+    put('packages/ui/src/prose.ts', 'export const title = "Fixture"')
+    put('scripts/ui-lint-plugins.json', '["example"]')
+    put('plugins/example/generated/page.css', '.card { color: red; padding: 13px; }')
+    expect(run()).toEqual({ status: 0, diagnostics: [] })
+
+    put('plugins/example/ignored-source.tsx', 'export const tracked = <div style={{ color: "red" }} />')
+    git('add', '--force', '--', 'plugins/example/ignored-source.tsx')
+    put('plugins/example/source.tsx', 'export const fresh = <div style={{ color: "red" }} />')
+    const enforced = run()
+    expect(enforced.status).toBe(1)
+    expect(enforced.diagnostics.map((line) => line.match(/^(.*?):\d+:\d+ (ui\/[^:]+):/)?.slice(1))).toEqual([
+      ['plugins/example/ignored-source.tsx', 'ui/no-raw-color'],
+      ['plugins/example/source.tsx', 'ui/no-raw-color']
+    ])
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
+})

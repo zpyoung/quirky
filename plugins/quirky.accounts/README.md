@@ -43,3 +43,5 @@ Always queues busy restarts without an Ask modal. Under Ask, accepting Restart c
 Accounts uses the public `@quirky/ui` graphite components and shared dark/light tokens for its settings, Usage status item and popover, session accessory and account-switch dialog. Its existing contribution IDs and account/usage APIs are unchanged; the host still owns placement and settings navigation.
 
 Accounts and Vault are both opted into `scripts/ui-lint-plugins.json`. Run `bun run typecheck` to enforce the shared design system as well as TypeScript contracts. Neither plugin injects its own stylesheet. The restyle's scope and acceptance scenarios are recorded in [`ui-restyle-accounts/logic.md`](../../../docs/quirk/specs/2026-10-28-ui-restyle-accounts/logic.md); the approved reference is the [desktop redesign](../../../docs/quirk/specs/2026-10-28-ui-redesign/logic.md).
+
+The lint gate checks tracked source and nonignored new source; ignored generated bundles are not source inputs. A tracked file is still checked even if an ignore pattern also matches it. The gate never rewrites generated phone assets or relaxes token/CSS rules.

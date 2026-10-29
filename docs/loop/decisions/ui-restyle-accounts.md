@@ -123,5 +123,38 @@
 
 Evidence limits: no test suite, formal code-review round, full feature dogfood, native-host run or independent golden-model scoring was run. The rapid automation fill/type attempt yielded a shorter controlled Vault query (`n`/`no`); only the actual no-match/Clear transition is proved, not arbitrary full-string typing. No store/model change is inferred or made. Native clipboard/OS dialogs/browser handoff, credentials from real homes, Linux/Windows and full query/virtualizer workloads are not certified by this smoke.
 
+## D12: Compose the sole roadmap merge without dropping shared contracts
+- **Question:** How do concurrent shared-system restyles compose with Accounts/Vault?
+- **Options:** pick one side of the shared conflicts; preserve all additive contracts and canonical owners
+- **Chose:** Sole catch-up target e0b4e9533ac3ee8a36374217cfb7438acb7b5e5c, merge756c0344. ReadIncomingRestyleDecisions read all7incoming logs completely, including raw truncated lines/Progress, covering94decisions; parent recorded seven SHA256 snapshots. Union all style imports/lint IDs; preserve shared SelectField/TextArea/refs, Dialog wide/scrollBody/top-dialog focus ownership plus our optional dismissal, and both regression sets. Replace all4account/history native selects with the newly landed shared SelectField and remove obsolete select rules. Keep Usage's existing composed lifecycle because incoming Popover's document-capture Escape would close Usage before nested reset cancellation could consume it.
+- **Why:** These are additive contracts, not competing authorities. Source conflicts must not drop another area's opt-in or dialog focus guard. No feature store, schema, credential, search-consent or command-routing change is required.
+- **Evidence:** merge conflict/resolution receipts; incoming-decisions.json with seven actual hashes and per-log decision ranges; packages/ui/src/design-system/{contracts,overlays,floating}.tsx/.ts; item spec catch-up amendment
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** Canonical landing finds another concrete integration conflict.
+- **Source:** locked by incoming ui-restyle decisions
+
+## D13: Keep generated phone bundles outside repository source lint
+- **Question:** Why did the caught-up typecheck reject13diagnostics in Mobile assets while its source restyle had passed?
+- **Options:** remove or rewrite inherited generated assets; special-case a plugin/path; correct source inventory using the repository's existing Git convention
+- **Chose:** Canonical lint inventories cached plus nonignored new files through git ls-files --cached --others --exclude-standard, then applies its unchanged rules/exclusions. Tracked files remain enforced even if an ignore pattern matches; ordinary new source is still enforced. Non-Git fixture roots retain filesystem scanning. Git inventory failure fails closed. Child Git uses isolated HOME/QUIRKY_HOME and no inherited Git overrides. Add one authored regression covering ignored generated CSS, force-tracked ignored source and untracked ordinary source; do not run it under build-first.
+- **Why:** git ls-files found no tracked Mobile bundle assets; git check-ignore identifies the explicit generated output directory. apps/mobile/scripts/build-pages.ts:89–133 owns those page.js/page.css/index.html outputs. scripts/suite.ts already uses cached+nonignored inventory. This is a source-versus-build-artifact boundary, not a color/CSS rule exception or a phone restyle. No inherited generated asset was edited or deleted.
+- **Evidence:** failed caught-up typecheck artifact69; git ownership/ignore output; scripts/ui-lint.ts repositorySourceFiles; scripts/ui-lint.test.ts inventory regression; subsequent actual canonical typecheck/UI build exit0/30.25s with all opt-ins retained
+- **Reversibility:** easy
+- **Confidence:** high for observed generated-artifact failure; authored boundary regression UNRUN
+- **Revisit if:** A tracked/new source file escapes the unchanged scanner rules.
+- **Source:** assumed — autonomous
+
+## D14: Verify the composed fields/dialogs and stop owned resources
+- **Question:** What evidence supports the final caught-up source?
+- **Options:** reuse only early screenshots; run prohibited broad campaigns; fresh gate and minimum merged-surface proof
+- **Chose:** Full frozen-install/UIlint/root/mobile/prepared-desktop typecheck plus UI build passed30.25s, emitting11host files/26plugin modules. Reloaded actual composed renderer; all4shared selects mounted, changed/restored Claude policy, Vault sort and history depth through real UI state. New selection toClaudeC still required explicit Keep after Escape; nested Codex reset Escape closed only reset and retained Usage. Current light/dark screenshot+computed-token/overflow proof retained, with no private stylesheet injection; merged light status showed8meters as current snapshots fit. Closed the owned tab, stopped its exclusively owned Chrome service, and graceful synthetic daemon/PTY/provider shutdown exited0.
+- **Why:** The incoming focus stack/native fields are exercised, not inferred from a clean merge. Evidence remains scoped; suites, formal reviews, full dogfood, native coverage and golden-model scoring are still unrun under build-first.
+- **Evidence:** merged-runtime-proof.json, merged-dark-runtime-proof.json, merged-accounts-vault-{light,dark}.png; canonical30.25s command output; browser release/Chrome stop/runtime exit0 receipts
+- **Reversibility:** easy
+- **Confidence:** high for named exercised paths only
+- **Revisit if:** Canonical merge-result typecheck or end-phase visual/behavior acceptance fails.
+- **Source:** locked by docs/loop/LOOP.md
+
 ## Progress
-All three implementers returned and their audited source/tests are integrated; all component worktrees/branches removed with cloned metadata preserved. All required narrow actual-renderer evidence is recorded in D8–D11. Test suites/review/full dogfood/golden scoring remain UNRUN. Next commit parent corrections/docs, catch up roadmap once, read incoming decisions, run final fresh typecheck/UI build and merged renderer check, stop owned browser/runtime, then commit/detach and canonical land. Scratch /tmp/quirky-l11-restyle.V894JJ remains until authoritative land. No flow intentionally deferred and no follow-up added.
+Ready for canonical land. Sole roadmap catch-up756c0344 and all7incoming logs/94decisions read; all source/test components integrated and temporary worktrees/branches removed. Final full typecheck/UI lint/root/mobile/prepared-desktop and UI build passed30.25s after generic generated-artifact inventory repair; fresh composed renderer proof is D14. All agents/check jobs returned; owned tab/Chrome/runtime/PTY/provider processes stopped, runtime exit0. Inherited .serena and ignored Mobile bundle assets remain untouched. No suite/review/full dogfood/native/golden-score approval claim; no unbuilt flow or follow-up. Next commit this receipt and scanner fix, detach, canonical absolute queue.ts land ui-restyle-accounts and await its authoritative verdict; archive compact nonsecret evidence beside lane notes and remove only owned scratch after success.
