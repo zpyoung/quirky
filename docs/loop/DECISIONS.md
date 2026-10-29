@@ -600,6 +600,8 @@ files, not this one.
 | medium | high | [m4-hosting-api-github D19](decisions/m4-hosting-api-github.md) | Authorize Projects routes explicitly without weakening ordinary remote checks | locked by hosting-api.md; supersedes m4-hosting-api-github D5 (Projects transport only) |
 | medium | high | [m4-hosting-api-github D21](decisions/m4-hosting-api-github.md) | Preserve provider lifecycle semantics instead of fixture mistakes | locked by hosting-api.md |
 | medium | high | [m4-hosting-api-github D29](decisions/m4-hosting-api-github.md) | Honor actual provider wire shapes and supported branch routes | locked by hosting-api.md |
+| medium | high | [ui-polish-shell D2](decisions/ui-polish-shell.md) | Use a shared frame-scoped header portal across independent plugin roots | assumed — autonomous |
+| medium | high | [ui-polish-shell D7](decisions/ui-polish-shell.md) | Compose the sole roadmap catch-up with exact owner and tool identities | assumed — autonomous |
 | medium | high | [sa-browser-agent-extras D1](decisions/sa-browser-agent-extras.md) | Recover extras onto the current core, not over it | assumed — autonomous |
 | medium | high | [sa-browser-agent-extras D3](decisions/sa-browser-agent-extras.md) | Preserve later profile and identity ownership | locked by docs/loop/decisions/sa-browser-profiles-settings.md |
 | medium | high | [sa-browser-agent-extras D12](decisions/sa-browser-agent-extras.md) | Reconcile the single roadmap catchup without broadening Native or mobile authority | assumed — autonomous |
@@ -2442,6 +2444,15 @@ files, not this one.
 | easy | high | [m4-hosting-api-github D43](decisions/m4-hosting-api-github.md) | Preserve provenance when the integration comparison is overbroad | assumed — autonomous |
 | easy | high | [m4-hosting-api-github D44](decisions/m4-hosting-api-github.md) | Remove unsafe review experiments and restrict integration access to normal CLI use | locked by operator instruction in this conversation |
 | easy | high | [m4-hosting-api-github D45](decisions/m4-hosting-api-github.md) | Resolve public workspace types without depending on new installation links | assumed — autonomous; blocking landing-environment repair |
+| easy | high | [ui-polish-shell D1](decisions/ui-polish-shell.md) | Apply only the queued three corrections to the approved shell | locked by docs/quirk/specs/2026-10-28-ui-redesign/logic.md |
+| easy | high | [ui-polish-shell D3](decisions/ui-polish-shell.md) | Replace stripe menu triggers with the existing shared context menu | assumed — autonomous |
+| easy | high | [ui-polish-shell D4](decisions/ui-polish-shell.md) | Use one source implementer and cross-family review with isolated runtime proof | assumed — autonomous |
+| easy | high | [ui-polish-shell D5](decisions/ui-polish-shell.md) | Refresh only the two requested shell after images with truthful provenance | deferred: platform |
+| easy | high for observed failure/ownership classification, not a root-cause diagnosis of all26files | [ui-polish-shell D6](decisions/ui-polish-shell.md) | Preserve explicit queued repair ownership while migrating changed UI callers | locked by docs/loop/queue.json fix-test-worktree-1028 |
+| easy | high within the named scenarios | [ui-polish-shell D8](decisions/ui-polish-shell.md) | Report actual guarded UI outcomes and bounded compiler/script proof | assumed — autonomous |
+| easy | high for exercised closure and failing inventory; no single-cause claim for the remaining25files | [ui-polish-shell D9](decisions/ui-polish-shell.md) | Verify the changed contracts without claiming the queued Worktree repair is green | assumed — autonomous |
+| easy | high for image authenticity and source attribution | [ui-polish-shell D10](decisions/ui-polish-shell.md) | Use actual current-renderer captures when the canonical capture selector is obsolete | assumed — autonomous |
+| easy | high for reported outcomes; review is bounded, not exhaustive or whole-suite/golden certification | [ui-polish-shell D11](decisions/ui-polish-shell.md) | Keep scoped code review separate from the failed whole-shell visual score | assumed — autonomous |
 | easy (workflow only) | high | [fix-sc31-first-shell-race D1](decisions/fix-sc31-first-shell-race.md) | Follow the fix-item workflow without new feature specs | locked by docs/loop/LOOP.md |
 | easy (test-only correction) | high | [fix-sc31-first-shell-race D2](decisions/fix-sc31-first-shell-race.md) | Skipping setup does not suppress the window's normal first shell | locked by /Users/zpyoung/PycharmProjects/PERSONAL/quirky/research/orca-features/worktrees.md |
 | easy (test synchronization only) | high | [fix-sc31-first-shell-race D3](decisions/fix-sc31-first-shell-race.md) | Wait for the terminal override's ensured shell before asserting setup was skipped | locked by docs/loop/decisions/m1-term-ui.md |
