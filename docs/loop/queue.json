@@ -2365,6 +2365,21 @@
       ],
       "status": "todo",
       "early": true
+    },
+    {
+      "id": "m7-session-extras-owner-host-flows",
+      "milestone": "M7",
+      "title": "Implement the still-unbuilt paired-owner session-feature flows found by m7-sweep-sessions after canonical host/workspace authority lands: Accounts usage/account state and switch UI scoped to the focused workspace's real owner with remote browser-sign-in gates; a shipped production Vault host contribution and authenticated host-qualified inspection/resume/handoff actions (the current forwarder is test-only), preserving local-first enable-all, redaction, partial availability and no local fallback; Handoff target-host identity, exact-host enabled-agent detection, target-side transcript reachability/probing and cross-host secret-warning/brief delivery/lineage. Reuse canonical full-owner runtime/registered-workspace authority; do not reuse phone or worker-federation credentials, caller paths or synthetic host plugins as authority. SSH/WSL/native-chat/dictation/quarantine and deferred hosting/Objective/sitter remain excluded. These are implementation flows, not a test/verification/review successor.",
+      "docs": [
+        "accounts.md",
+        "ai-vault.md",
+        "handoff.md"
+      ],
+      "deps": [
+        "m7-sweep-sessions",
+        "m7-vm-and-owner-bound-host-workspaces"
+      ],
+      "status": "todo"
     }
   ]
 }
