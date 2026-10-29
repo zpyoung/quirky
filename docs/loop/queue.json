@@ -2369,7 +2369,8 @@
       "title": "UI redesign polish, matching the approved golden screens in docs/quirk/specs/2026-10-28-ui-redesign/logic.md: (1) the Worktrees tool opens as the plain worktree list; move Add project, Workspace options, the activity filter chips/checkboxes, Clear filters and More workspace tools behind one filter/options icon button in the Worktrees panel header; (2) remove the small dropdown chevrons rendered under every stripe icon on the left, right and bottom stripes; (3) the Primary worktree badge uses a neutral badge token, not the indigo accent, which is reserved for selection. Compare against docs/loop/reviews/ui-final-review/images/after/shell/*.png and recapture those after the fix. Use only shared components and tokens; the UI lint check must pass.",
       "docs": [],
       "deps": [],
-      "status": "todo"
+      "status": "in-progress",
+      "lane": 12
     }
   ]
 }
