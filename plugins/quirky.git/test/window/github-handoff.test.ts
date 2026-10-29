@@ -221,7 +221,8 @@ function startFixture(root: string): GitHubFixture {
         '#!/bin/sh',
         'if [ "$1" = "push" ]; then',
         '  shift',
-        `  exec ${quote(realGit)} -c remote.origin.pushurl=${quote(bare)} push "$@"`,
+        '  export GIT_ALLOW_PROTOCOL=file',
+        `  exec ${quote(realGit)} -c ${quote(`url.${bare}.insteadOf=https://github.com/test-owner/test-repo.git`)} push "$@"`,
         'fi',
         `exec ${quote(realGit)} "$@"`
       ].join(String.fromCharCode(10)) + String.fromCharCode(10)

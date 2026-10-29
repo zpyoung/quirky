@@ -141,7 +141,7 @@ test('SC-64: every window command routed through ui.command.run does what its bu
     await w.win.waitFor(() => (q('input[aria-label="Filter files…"]') as HTMLInputElement | null)?.value === 'math')
     expect(qa('[data-row-path]').map((row) => text(q('[data-row-name]', row)!))).toEqual(['math.ts'])
     await w.run('set-filter', { query: '' })
-    await w.win.waitFor(() => (q('input[aria-label="Filter files…"]') as HTMLInputElement | null)?.value === '')
+    await w.win.waitFor(() => q('input[aria-label="Filter files…"]') === null && rowOf('big.txt') !== null)
     await w.run('select', { paths: ['math.ts', 'big.txt'] })
     await w.win.waitFor(() => {
       const selection = q('[role="toolbar"][aria-label="Selection actions"] > span')
