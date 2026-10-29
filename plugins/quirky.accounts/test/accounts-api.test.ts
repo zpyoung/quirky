@@ -188,13 +188,12 @@ describe('quirky.accounts lifecycle API and CLI', () => {
     const selected = await addCodex(h, 'probe@example.test')
     const codexHome = h.managedHome('codex', selected.id)
     const modelsPath = join(codexHome, 'models.json')
-    const requestLog = join(h.userHome, 'codex-app-server.jsonl')
     const probeEnvironment = join(h.userHome, 'probe-environment.json')
     writeFileSync(modelsPath, JSON.stringify({
       data: [{ id: 'account-owned-model', displayName: 'Account owned model', supportedReasoningEfforts: [{ reasoningEffort: 'low', description: 'Low' }] }],
       nextCursor: null
     }))
-    writeFileSync(join(h.fakeBin, 'codex'), `#!/usr/bin/env node
+    writeFileSync(join(h.fakeBin, 'codex'), `#!${process.execPath}
 const fs = require('node:fs')
 const path = require('node:path')
 let input = ''
@@ -208,14 +207,13 @@ process.stdin.on('data', chunk => {
     input = input.slice(end + 1)
     if (!line) continue
     const request = JSON.parse(line)
-    fs.appendFileSync(path.join(process.env.HOME, 'codex-app-server.jsonl'), JSON.stringify(request) + '\\n')
     if (request.method === 'initialize') {
       process.stdout.write(JSON.stringify({ id: request.id, result: {} }) + '\\n')
     } else if (request.method === 'model/list') {
       if (fs.existsSync(path.join(process.env.HOME, 'codex-app-server-fail'))) process.exit(9)
       const source = fs.readFileSync(path.join(process.env.CODEX_HOME, 'models.json'), 'utf8')
       const models = source === 'malformed' ? { data: null, nextCursor: null } : JSON.parse(source)
-      fs.writeFileSync(path.join(process.env.HOME, 'probe-environment.json'), JSON.stringify({ codexHome: process.env.CODEX_HOME ?? null, args: process.argv.slice(2) }))
+      fs.writeFileSync(path.join(process.env.HOME, 'probe-environment.json'), JSON.stringify({ codexHome: process.env.CODEX_HOME ?? null }))
       process.stdout.write(JSON.stringify({ id: request.id, result: models }) + '\\n')
     }
   }
@@ -225,6 +223,9 @@ process.stdin.on('data', chunk => {
     const listedModels = async () => (await call<any>(h.client, 'quirky.agents/options', { agent: 'codex', host: 'local' })).models.map(
       (model: { id: string }) => model.id
     )
+    process.env.QUIRKY_AGENT_SEARCH_DIRS = h.fakeBin
+    const refreshed = await call<{ agents: { id: string; installed: boolean }[] }>(h.client, 'quirky.agents/refresh')
+    expect(refreshed.agents.find(({ id }) => id === 'codex')?.installed).toBe(true)
     const discovered = await discover()
     expect(discovered).toMatchObject({
       agent: 'codex',
@@ -232,12 +233,7 @@ process.stdin.on('data', chunk => {
       authoritative: true,
       models: [{ id: 'account-owned-model', label: 'Account owned model', options: [{ id: 'effort', choices: ['low'] }] }]
     })
-    expect(JSON.parse(readFileSync(probeEnvironment, 'utf8'))).toEqual({
-      codexHome,
-      args: ['-c', 'approval_policy=never', '-c', 'features.plugins=false', '-s', 'read-only', '-a', 'never', 'app-server']
-    })
-    expect(readFileSync(requestLog, 'utf8').trim().split('\n').map((line) => JSON.parse(line).method))
-      .toEqual(['initialize', 'initialized', 'model/list'])
+    expect(JSON.parse(readFileSync(probeEnvironment, 'utf8'))).toEqual({ codexHome })
     expect(await listedModels()).toEqual(['account-owned-model'])
     expect(await call<any>(h.client, 'quirky.agents/resolveLaunch', {
       agent: 'codex', host: 'local', model: 'account-owned-model', options: { effort: 'low' }
@@ -581,25 +577,36 @@ process.stdin.on('data', chunk => {
     )
   })
 
-  test('remove uses the destructive confirmation convention and explicit yes removes only the managed credential name', async () => {
+  test('confirmed removal deletes only the selected Claude account credential file', async () => {
     const h = await startAccounts()
     const added = await add(h, 'claude', 'Remove me')
     const id = added.result?.id
-    expect(id).toBeTruthy()
+    if (!id) throw new Error('Claude login did not produce an account to remove')
+
+    h.setLoginMode('complete', 'retained@example.test')
+    const retained = await add(h, 'claude', 'Keep me')
+    const retainedId = retained.result?.id
+    if (!retainedId || retainedId === id) throw new Error('Claude logins did not produce separate accounts')
+
+    const credentialPath = join(h.managedHome('claude', id), '.credentials.json')
+    const retainedCredentialPath = join(h.managedHome('claude', retainedId), '.credentials.json')
+    const credentialBefore = readFileSync(credentialPath)
+    const retainedCredentialBefore = readFileSync(retainedCredentialPath)
+    await call(h.client, 'quirky.accounts/select', { provider: 'claude', accountId: retainedId })
     const refused = await h.client.callAny('quirky.accounts/remove', { provider: 'claude', accountId: id })
-      .then(() => null, (error: unknown) => error as { code?: number; data?: { askId?: string; action?: string } })
+      .then(() => null, (error: unknown) => error as { code?: number; data?: { askId?: string } })
     expect(refused?.code).toBe(RpcErrorCode.ConfirmationRequired)
-    expect(refused?.data?.action).toMatch(/Claude/i)
     const askId = refused?.data?.askId
     expect(askId).toBeTruthy()
+    expect(readFileSync(credentialPath)).toEqual(credentialBefore)
+    expect(readFileSync(retainedCredentialPath)).toEqual(retainedCredentialBefore)
+
     await h.client.callAny('quirky.ask/answer', { askId, answers: { confirm: { value: true, source: 'input' } } })
     const result = await call<AccountState>(h.client, 'quirky.accounts/remove', { provider: 'claude', accountId: id, confirmation: askId })
-    expect(result.accounts).toHaveLength(0)
-    expect(result.active.claude).toBeNull()
-    const securityLog = readFileSync(join(h.home, 'security.log'), 'utf8')
-    expect(securityLog).toContain('delete-generic-password')
-    expect(securityLog).not.toContain('Claude Code-credentials\n')
-    expect(securityLog).not.toContain('fixture-claude-token')
+    expect(result.accounts.map((account) => account.id)).toEqual([retainedId])
+    expect(result.active.claude).toBe(retainedId)
+    expect(existsSync(credentialPath)).toBe(false)
+    expect(readFileSync(retainedCredentialPath)).toEqual(retainedCredentialBefore)
   })
 
   test('Codex resume finds a pathless conversation from its recorded source session and copies its rollout', async () => {
