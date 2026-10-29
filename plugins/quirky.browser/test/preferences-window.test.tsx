@@ -62,7 +62,7 @@ beforeEach(() => {
     profiles: [{ profile: DEFAULT_PROFILE, active: true }],
     identity: { selected: 'clean', active: 'clean', restartRequired: false, nativeSupported: false },
     imports: { available: true, destination: 'managed-chrome', nativeSupported: false, reason: 'Cookie imports are stored in managed Chrome, not Native.' },
-    localhostLabels: { available: false, reason: 'A reachable worktree host mapping is not configured.' }
+    localhostLabels: { available: true, enabled: false, reason: 'Loopback links get worktree labels.', labels: [] }
   }
   settings = {
     [settingIds.homePage]: '',

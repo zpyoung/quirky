@@ -6,6 +6,7 @@ type NativeBrowserPreloadBridge = {
   claimNativeBrowserView(params: NativeBrowserHostRPC['bun']['requests']['claimNativeBrowserView']['params']): Promise<NativeBrowserHostRPC['bun']['requests']['claimNativeBrowserView']['response']>
   setNativeBrowserZoom(params: NativeBrowserHostRPC['bun']['requests']['setNativeBrowserZoom']['params']): Promise<NativeBrowserHostRPC['bun']['requests']['setNativeBrowserZoom']['response']>
   releaseNativeBrowserView(params: NativeBrowserHostRPC['bun']['requests']['releaseNativeBrowserView']['params']): Promise<NativeBrowserHostRPC['bun']['requests']['releaseNativeBrowserView']['response']>
+  routeNativeBrowserLabels(params: NativeBrowserHostRPC['bun']['requests']['routeNativeBrowserLabels']['params']): Promise<NativeBrowserHostRPC['bun']['requests']['routeNativeBrowserLabels']['response']>
 }
 
 type DesktopRequestBridge = {
@@ -40,7 +41,8 @@ const requests = (rpc as unknown as { request: NativeBrowserPreloadBridge & Desk
 const bridge: NativeBrowserPreloadBridge = {
   claimNativeBrowserView: (params) => requests.claimNativeBrowserView(params),
   setNativeBrowserZoom: (params) => requests.setNativeBrowserZoom(params),
-  releaseNativeBrowserView: (params) => requests.releaseNativeBrowserView(params)
+  releaseNativeBrowserView: (params) => requests.releaseNativeBrowserView(params),
+  routeNativeBrowserLabels: (params) => requests.routeNativeBrowserLabels(params)
 }
 
 const desktopBridge: DesktopShellBridge = {

@@ -3,6 +3,7 @@ import { NATIVE_BROWSER_NAVIGATION_RULES } from '@quirky/protocol'
 import {
   createNativeBrowserHandlers,
   isNativeBrowserNavigationAllowed,
+  type NativeBrowserLabelProxy,
   type NativeBrowserViewPort
 } from '../src/bun/native-browser'
 
@@ -69,15 +70,36 @@ class BrowserViewModel implements NativeBrowserViewPort {
   }
 }
 
-function rig(views: BrowserViewModel[]) {
+function rig(views: BrowserViewModel[], proxySupported = true) {
+  const proxies: Array<[string, NativeBrowserLabelProxy]> = []
   const handlers = createNativeBrowserHandlers({
     getWindow: () => ({ id: 12, webview: { id: 34 } }),
-    getView: (id) => views.find((view) => view.id === id && !view.removed)
+    getView: (id) => views.find((view) => view.id === id && !view.removed),
+    sessionProxy: { supported: () => proxySupported, set: (partition, proxy) => { proxies.push([partition, proxy]) } }
   })
-  return { handlers }
+  return { handlers, proxies }
 }
 
 describe('native browser host bridge model', () => {
+  test('routes only the label domain of an owned view partition through the label proxy', async () => {
+    const child = new BrowserViewModel({ id: 7 })
+    const { handlers, proxies } = rig([child])
+    await expect(handlers.routeLabels({ viewId: 7, owner: 'owner-a', port: 4100 })).rejects.toThrow('not owned')
+    await handlers.claim({ viewId: 7, owner: 'owner-a', partition: PARTITION })
+    await expect(handlers.routeLabels({ viewId: 7, owner: 'owner-b', port: 4100 })).rejects.toThrow('not owned')
+    await expect(handlers.routeLabels({ viewId: 7, owner: 'owner-a', port: 0 })).rejects.toThrow('port')
+    expect(await handlers.routeLabels({ viewId: 7, owner: 'owner-a', port: 4100 })).toEqual({ routed: true })
+    expect(proxies).toEqual([[PARTITION, { type: 'http', host: '127.0.0.1', port: 4100, matchDomains: ['quirky.localhost'] }]])
+  })
+
+  test('reports label routing unsupported instead of loading label hosts without the proxy', async () => {
+    const child = new BrowserViewModel({ id: 7 })
+    const { handlers, proxies } = rig([child], false)
+    await handlers.claim({ viewId: 7, owner: 'owner-a', partition: PARTITION })
+    expect(await handlers.routeLabels({ viewId: 7, owner: 'owner-a', port: 4100 })).toEqual({ routed: false })
+    expect(proxies).toEqual([])
+  })
+
   test('uses fail-closed SDK rules for supported URL protocols', () => {
     for (const url of ['https://example.test/', 'http://127.0.0.1:3000/', 'file:///tmp/index.html', 'about:blank']) {
       expect(isNativeBrowserNavigationAllowed(url)).toBe(true)

@@ -1,4 +1,5 @@
 import {
+  NATIVE_BROWSER_LABEL_DOMAIN,
   NATIVE_BROWSER_NAVIGATION_RULES,
   NATIVE_BROWSER_PARTITION_RE,
   type NativeBrowserCapability,
@@ -37,6 +38,7 @@ export type NativeBrowserShellBridge = {
   claimNativeBrowserView(params: { viewId: number; owner: string; partition: string }): Promise<{ zoomFactor: number }>
   setNativeBrowserZoom(params: { viewId: number; owner: string; level: number }): Promise<{ zoomFactor: number }>
   releaseNativeBrowserView(params: { viewId: number; owner: string }): Promise<{ released: true }>
+  routeNativeBrowserLabels(params: { viewId: number; owner: string; port: number }): Promise<{ routed: boolean }>
 }
 
 type Mount = {
@@ -447,6 +449,7 @@ class ElectrobunNativeBrowserMount implements NativeBrowserAdapterHandle {
   private documentUrl = 'about:blank'
   private documentRevision = 0
   private navigationPending = false
+  private labelProxyPort: number | null = null
   private readonly pendingEvaluations = new Map<string, PendingNativeBrowserEvaluation>()
 
   constructor(
@@ -738,12 +741,24 @@ class ElectrobunNativeBrowserMount implements NativeBrowserAdapterHandle {
 
   private async navigateTo(raw: string): Promise<NativeBrowserState> {
     const target = normalizeUrl(raw)
+    this.requireChild()
+    await this.routeLabel(new URL(target))
     const child = this.requireChild()
     this.expectedNavigation = target
     this.navigationStarted = false
     const completion = this.wait('navigation', target)
     child.loadURL(target)
     return completion
+  }
+
+  /** A label URL names the label proxy's port; the partition must send label hosts there before loading it. */
+  private async routeLabel(url: URL): Promise<void> {
+    if (!url.hostname.endsWith(`.${NATIVE_BROWSER_LABEL_DOMAIN}`) || this.viewId === null) return
+    const port = Number(url.port || 80)
+    if (this.labelProxyPort === port) return
+    const { routed } = await this.bridge.routeNativeBrowserLabels({ viewId: this.viewId, owner: this.owner, port })
+    if (!routed) throw new Error('Localhost worktree labels need macOS 14 or later in the Native pane; open the localhost address instead')
+    this.labelProxyPort = port
   }
 
   private requireChild(): WebviewTag {

@@ -3,9 +3,11 @@ import { asPluginError, fault } from '../runtime/errors'
 import { isValidProfileId, type BrowserProfile } from '../profiles/store'
 import type { PreferencesAdapters, PreferencesState, RegisterPreferences } from './contract'
 import { identityModeFromSetting } from './identity'
+import { baseLabelForWorktree, parseLabelTarget, type LabelWorktree } from '../localhost-labels/labels'
+import { LocalhostLabelProxy } from '../localhost-labels/proxy'
 
 const IMPORT_DESTINATION = 'Cookies are imported into the selected managed Chrome profile for agents and Watch, not the Native system webview.'
-const LOCALHOST_LABELS_UNAVAILABLE = 'Localhost worktree labels are unavailable because no faithful reachable-host mapping is available.'
+const LOCALHOST_LABELS = 'Loopback links opened from a worktree get a <label>.quirky.localhost address that routes to that worktree\'s server. The Native pane routes it through a per-profile proxy, which needs macOS 14 or later.'
 
 type Handler = (params: Record<string, unknown>) => unknown | Promise<unknown>
 
@@ -36,12 +38,35 @@ function assertInactive(adapters: PreferencesAdapters, profileId: string): void 
   }
 }
 
+async function labelWorktree(context: PluginContext, selector: string): Promise<LabelWorktree> {
+  const worktree = await context.call('quirky.worktree/show', { worktree: selector })
+  if (
+    worktree === null || typeof worktree !== 'object' || Array.isArray(worktree) ||
+    !('id' in worktree) || typeof worktree.id !== 'string' || worktree.id.length === 0 ||
+    !('path' in worktree) || typeof worktree.path !== 'string' || worktree.path.length === 0 ||
+    !('isMain' in worktree) || typeof worktree.isMain !== 'boolean'
+  ) {
+    throw fault('browser_error', 'quirky.worktree/show did not return a worktree id, path and isMain')
+  }
+  return { id: worktree.id, path: worktree.path, isMain: worktree.isMain }
+}
+
 function emitPreferencesChanged(context: PluginContext): void {
   context.emit('preferencesChanged', {})
 }
 
 export const registerPreferences: RegisterPreferences = (context, adapters) => {
   let available = true
+  const labels = new LocalhostLabelProxy()
+  const labelsEnabled = () => context.getSetting('localhostWorktreeLabelsEnabled') === true
+  const registerLabel = async (url: string, worktree: string) => {
+    const target = parseLabelTarget(url)
+    if (!target) throw fault('invalid_argument', 'url must be an http URL on localhost or a loopback address with an explicit port')
+    const owner = await labelWorktree(context, worktree)
+    const route = await labels.register(owner.id, baseLabelForWorktree(owner), target)
+    emitPreferencesChanged(context)
+    return route
+  }
   const activeIdentity = identityModeFromSetting(context.getSetting('identityMode'))
 
   const state = (): PreferencesState => {
@@ -56,7 +81,7 @@ export const registerPreferences: RegisterPreferences = (context, adapters) => {
         nativeSupported: false
       },
       imports: { available: true, destination: 'managed-chrome', nativeSupported: false, reason: IMPORT_DESTINATION },
-      localhostLabels: { available: false, reason: LOCALHOST_LABELS_UNAVAILABLE }
+      localhostLabels: { available: true, enabled: labelsEnabled(), reason: LOCALHOST_LABELS, labels: labels.list() }
     }
   }
 
@@ -89,6 +114,13 @@ export const registerPreferences: RegisterPreferences = (context, adapters) => {
       emitPreferencesChanged(context)
       return { deleted: true }
     },
+    localhostLabelRegister: async (params) => {
+      const url = requiredString(params, 'url')
+      const worktree = requiredString(params, 'worktree')
+      if (!labelsEnabled()) throw fault('browser_error', 'Localhost Worktree Labels are off; turn them on in Browser settings')
+      return await registerLabel(url, worktree)
+    },
+    localhostLabelList: () => ({ labels: labels.list() }),
     openLink: async (params) => {
       const url = requiredString(params, 'url')
       const worktree = requiredString(params, 'worktree')
@@ -114,7 +146,8 @@ export const registerPreferences: RegisterPreferences = (context, adapters) => {
         return { route: 'external' }
       }
 
-      const pane = await context.call('quirky.browser/paneOpen', { worktree, url, mode: 'native' })
+      const target = labelsEnabled() && parseLabelTarget(url) ? (await registerLabel(url, worktree)).url : url
+      const pane = await context.call('quirky.browser/paneOpen', { worktree, url: target, mode: 'native' })
       if (pane === null || typeof pane !== 'object' || Array.isArray(pane) ||
         !('id' in pane) || typeof pane.id !== 'string' || pane.id.length === 0 ||
         !('worktreeId' in pane) || typeof pane.worktreeId !== 'string' || pane.worktreeId.length === 0) {
@@ -136,5 +169,10 @@ export const registerPreferences: RegisterPreferences = (context, adapters) => {
     })
   }
 
-  return { deactivate() { available = false } }
+  return {
+    deactivate() {
+      available = false
+      void labels.close()
+    }
+  }
 }

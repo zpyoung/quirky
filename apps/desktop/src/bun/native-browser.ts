@@ -1,4 +1,5 @@
 import {
+  NATIVE_BROWSER_LABEL_DOMAIN,
   NATIVE_BROWSER_NAVIGATION_RULES,
   NATIVE_BROWSER_PARTITION_RE,
   type DesktopRevealRequest,
@@ -24,6 +25,10 @@ export type NativeBrowserHostRPC = {
       releaseNativeBrowserView: {
         params: { viewId: number; owner: string }
         response: { released: true }
+      }
+      routeNativeBrowserLabels: {
+        params: { viewId: number; owner: string; port: number }
+        response: { routed: boolean }
       }
       readClipboardText: { params: {}; response: string }
       pickFolder: { params: FolderPickerRequest; response: FolderPickerResult }
@@ -53,15 +58,20 @@ export type NativeBrowserViewPort = {
   remove(): void
 }
 
+export type NativeBrowserLabelProxy = { type: 'http'; host: '127.0.0.1'; port: number; matchDomains: string[] }
+
 export type NativeBrowserHostDeps = {
   getWindow(): { id: number; webview: { id: number } } | null
   getView(id: number): NativeBrowserViewPort | undefined
+  /** The SDK's per-partition proxy; `supported` is false where the native engine can't route through one. */
+  sessionProxy: { supported(): boolean; set(partition: string, proxy: NativeBrowserLabelProxy): void }
 }
 
 export type NativeBrowserHandlers = {
   claim(params: NativeBrowserHostRPC['bun']['requests']['claimNativeBrowserView']['params']): Promise<{ zoomFactor: number }>
   setZoom(params: NativeBrowserHostRPC['bun']['requests']['setNativeBrowserZoom']['params']): Promise<{ zoomFactor: number }>
   release(params: NativeBrowserHostRPC['bun']['requests']['releaseNativeBrowserView']['params']): Promise<{ released: true }>
+  routeLabels(params: NativeBrowserHostRPC['bun']['requests']['routeNativeBrowserLabels']['params']): Promise<{ routed: boolean }>
   dispose(): void
 }
 
@@ -137,6 +147,14 @@ export function createNativeBrowserHandlers(deps: NativeBrowserHostDeps): Native
       const view = ownedView(params.viewId, params.owner)
       view.setPageZoom(Math.pow(1.2, params.level))
       return { zoomFactor: view.getPageZoom() }
+    },
+    async routeLabels(params) {
+      if (!Number.isInteger(params.port) || params.port < 1 || params.port > 65535) throw new Error('invalid localhost label proxy port')
+      const view = ownedView(params.viewId, params.owner)
+      if (!deps.sessionProxy.supported()) return { routed: false }
+      // the session proxy only ever sees label hosts; every other request in the profile still connects directly
+      deps.sessionProxy.set(view.partition!, { type: 'http', host: '127.0.0.1', port: params.port, matchDomains: [NATIVE_BROWSER_LABEL_DOMAIN] })
+      return { routed: true }
     },
     async release(params) {
       if (!claim) return { released: true }

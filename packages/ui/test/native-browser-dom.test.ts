@@ -66,7 +66,8 @@ async function mountGuest(claimGate?: Promise<void>) {
       return { zoomFactor: 1 }
     },
     async setNativeBrowserZoom({ level }) { return { zoomFactor: Math.pow(1.2, level) } },
-    async releaseNativeBrowserView() { released.resolve(); return { released: true } }
+    async releaseNativeBrowserView() { released.resolve(); return { released: true } },
+    async routeNativeBrowserLabels() { return { routed: true } }
   }))
   const handle = capability.mount(element, {
     id: crypto.randomUUID(), url: 'about:blank', zoom: 0,
@@ -273,3 +274,49 @@ test('native evaluation times out when guest work never settles', async () => {
     await guest.cleanup()
   }
 }, 8000)
+
+test('a label URL loads only after its partition routes label hosts to the label proxy', async () => {
+  for (const routed of [true, false]) {
+    const routes: number[] = []
+    const loads: string[] = []
+    const element = document.createElement('div')
+    document.body.append(element)
+    const mounted = Promise.withResolvers<GuestView>()
+    const released = Promise.withResolvers<void>()
+    announceGuest = mounted.resolve
+    const capability = createNativeBrowserCapability(createElectrobunNativeBrowserAdapter({
+      async claimNativeBrowserView() { return { zoomFactor: 1 } },
+      async setNativeBrowserZoom() { return { zoomFactor: 1 } },
+      async releaseNativeBrowserView() { released.resolve(); return { released: true } },
+      async routeNativeBrowserLabels({ port }) { routes.push(port); return { routed } }
+    }))
+    const handle = capability.mount(element, {
+      id: crypto.randomUUID(), url: 'about:blank', zoom: 0,
+      partition: `persist:quirky-browser-profile_${crypto.randomUUID().replaceAll('-', '')}`, onState() {}
+    })
+    const guest = await mounted.promise
+    // record loads instead of navigating; the requests below never see a completed navigation
+    Object.assign(guest, { loadURL: (url: string) => { loads.push(url) } })
+    try {
+      const label = handle.request({ action: 'navigate', url: 'http://feature-a.quirky.localhost:4100/app' })
+      label.catch(() => undefined)
+      if (routed) {
+        for (let attempt = 0; attempt < 50 && loads.length === 0; attempt += 1) await Bun.sleep(5)
+        expect(routes).toEqual([4100])
+        expect(loads).toEqual(['http://feature-a.quirky.localhost:4100/app'])
+      } else {
+        await expect(label).rejects.toThrow('macOS 14')
+        expect(routes).toEqual([4100])
+        expect(loads).toEqual([])
+        handle.request({ action: 'navigate', url: 'https://example.test/' }).catch(() => undefined)
+        for (let attempt = 0; attempt < 50 && loads.length === 0; attempt += 1) await Bun.sleep(5)
+        expect(routes).toEqual([4100])
+        expect(loads).toEqual(['https://example.test/'])
+      }
+    } finally {
+      handle.dispose()
+      await released.promise
+      element.remove()
+    }
+  }
+})
