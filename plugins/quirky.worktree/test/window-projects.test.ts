@@ -7,9 +7,10 @@ import { makeTempDir, removeTempDirs } from '../../../packages/daemon/test/plugi
 import { startHeadlessWindow, type HeadlessWindow } from '../../../packages/ui/test/fixtures/headless-window'
 import { commitFiles, failure, git, isolateGitConfig, makeRepo } from '../../quirky.repo/test/git-fixtures'
 import { githubUser, useGlobalGitConfig } from './fixtures/repos'
-import { button, click, dialogNamed, field, menuItem, sectionHeadingMatches, setSelect, setText, toastContaining, toastMessages } from './window/dom'
+import { button, click, dialogNamed, field, listRowName, menuItem, sectionHeadingMatches, setSelect, setText, toastContaining, toastMessages } from './window/dom'
 
-const SIDEBAR = 'sidebar-section:quirky.worktree/worktrees'
+const WORKTREES_CONTRIBUTION = 'sidebar-section:quirky.worktree/worktrees'
+const WORKTREES_TOOL = WORKTREES_CONTRIBUTION
 const SLOW = 40_000
 const CONFIRM_DELETE = 'setting:quirky.worktree/confirmDelete'
 
@@ -35,6 +36,10 @@ async function boot(): Promise<World> {
   await agent.callAny('setting.set', { id: 'setting:quirky.worktree/worktreesRoot', value: root })
   const win = await startHeadlessWindow({ home: harness.home, runtime: harness.runtime })
   current = { harness, win, agent, root }
+  await win.waitFor(async () => {
+    const slot = await sidebarSlot(agent)
+    return slot?.shown && slot.report !== undefined ? slot : undefined
+  })
   return current
 }
 
@@ -44,14 +49,30 @@ const groups = async (agent: QuirkyClient) => (await agent.callAny('quirky.repo/
 const worktrees = async (agent: QuirkyClient) => (await agent.callAny('quirky.worktree/list', {})) as Worktree[]
 const sessions = async (agent: QuirkyClient) => (await agent.callAny('quirky.session/list', {})) as Session[]
 const uiState = async (agent: QuirkyClient) => (await agent.callAny('ui.state', {})) as UiState
-const report = async (agent: QuirkyClient): Promise<any> => (await uiState(agent)).slots.find((slot) => slot.id === SIDEBAR)?.report
+const rendererState = async (agent: QuirkyClient): Promise<UiState | undefined> => {
+  const overview = await uiState(agent)
+  const renderers = overview.windows.filter((window) => window.name === 'quirky-ui')
+  if (renderers.length !== 1) return undefined
+  return await agent.callAny('ui.window.state', { connId: renderers[0]!.connId }) as UiState
+}
+const sidebarPanel = (): HTMLElement | undefined =>
+  document.querySelector<HTMLElement>(`[data-tool-panel="${WORKTREES_TOOL}"]`) ?? undefined
+const sidebarElements = <T extends Element>(selector: string): T[] =>
+  [...(sidebarPanel()?.querySelectorAll<T>(selector) ?? [])]
+
+const sidebarSlot = async (agent: QuirkyClient) => {
+  const state = await rendererState(agent)
+  return state?.slots.find((slot) => slot.id === WORKTREES_CONTRIBUTION)
+}
+
+const report = async (agent: QuirkyClient): Promise<any> => (await sidebarSlot(agent))?.report
 const created = async (agent: QuirkyClient, params: Record<string, unknown>) => ((await agent.callAny('quirky.worktree/create', params)) as WorktreeCreateResult).worktree
 const branches = (dir: string) => git(dir, 'branch', '--format=%(refname:short)').split('\n')
 
 const addApi = async (w: World, name = 'api') => {
   const dir = makeRepo(join(scratch(), name))
   const repo = (await w.agent.callAny('quirky.repo/add', { path: dir })) as Repo
-  await w.win.waitFor(() => [...document.querySelectorAll<HTMLElement>('section.repo')].some((section) => sectionHeadingMatches(section, name)))
+  await w.win.waitFor(() => sidebarElements<HTMLElement>('section.repo').some((section) => sectionHeadingMatches(section, name)))
   return { repo, dir }
 }
 
@@ -64,15 +85,16 @@ const reportedDialog = (w: World, kind: string | null) =>
 const closed = (w: World, title: string) => w.win.waitFor(() => !dialogNamed(title))
 
 function card(name: string): HTMLElement | undefined {
-  return [...document.querySelectorAll<HTMLElement>('[data-worktree-id]')].find((row) => row.querySelector('.worktree-name')?.textContent === name)
+  return sidebarElements<HTMLElement>('[data-worktree-id]').find((row) => listRowName(row) === name)
 }
 
-const projectSection = (name: string) => [...document.querySelectorAll<HTMLElement>('section.repo')].find((section) => sectionHeadingMatches(section, name))
-const groupSection = (name: string) => [...document.querySelectorAll<HTMLElement>('section.group')].find((section) => sectionHeadingMatches(section, name))
+const projectSection = (name: string) => sidebarElements<HTMLElement>('section.repo').find((section) => sectionHeadingMatches(section, name))
+const groupSection = (name: string) => sidebarElements<HTMLElement>('section.group').find((section) => sectionHeadingMatches(section, name))
 
 const item = (label: string): HTMLElement | undefined => menuItem(document, label)
 const branchNotice = (): HTMLElement | undefined =>
-  document.querySelector<HTMLElement>('[aria-label="Kept branches"] [role="status"]') ?? undefined
+  sidebarPanel()?.querySelector<HTMLElement>('[aria-label="Kept branches"] [role="status"]') ?? undefined
+
 
 
 async function choose(win: HeadlessWindow, label: string): Promise<void> {
@@ -101,7 +123,10 @@ async function openGroupMenu(win: HeadlessWindow, name: string): Promise<void> {
 
 /** Opens Add project and submits `path` from its field. */
 async function submitPath(w: World, path: string): Promise<HTMLElement> {
-  await click(await w.win.waitFor(() => button(document, 'Add project')))
+  await click(await w.win.waitFor(() => {
+    const panel = sidebarPanel()
+    return panel ? button(panel, 'Add project') : undefined
+  }))
   const dialog = await w.win.waitFor(() => dialogNamed('Add project'))
   await reportedDialog(w, 'add-project')
   await setText(field(dialog, 'Path')!, path)
