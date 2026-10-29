@@ -44,5 +44,27 @@
 - **Revisit if:** Caught-up gates disagree.
 - **Source:** assumed — autonomous
 
+## D5: Preserve the incoming script-review contract and verify the caught-up tree
+- **Question:** Does the sole roadmap catch-up change this repair, and what checks actually ran?
+- **Options:** Reopen adjacent script-review validation behavior; preserve its independent contract and gate this test-only change.
+- **Chose:** Read the full incoming `fix-test-scripts-ui-review-1028` log, preserve its validation/error-artifact boundaries and receipt-only closure; run the canonical scripts suite and full typecheck on the merged tree.
+- **Why:** The catch-up brought only that decision log plus controller-owned queue/index changes. Its real CLI validation smoke and original repair do not conflict with profile opt-in or test-home cleanup. Caught-up scripts returned12/12remote files,0failed,`ok:true,flaky:[]` in36.71s. Full typecheck exited0 in37.34s, including frozen install, UI lint, root/mobile/prepared-desktop TypeScript.
+- **Evidence:** Sole `git merge build/roadmap` after b7c3d46a; docs/loop/decisions/fix-test-scripts-ui-review-1028.md D1-D4 and unabridged Progress; actual commands above. Ignored `.orca/loops/omp-until-done-0f117076/suite-evidence/proof.json` retains the observed receipt, and `smoke-source.tgz` retains diagnostic/review inputs.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** Merge-result typecheck or independent review identifies a conflict.
+- **Source:** locked by incoming decision log
+
+## D6: Accept the bounded independent review without extending its claims
+- **Question:** Did the final cross-family review identify a coverage, capture or lifecycle regression?
+- **Options:** Fix concrete findings; accept no-findings result for this scoped test-only consolidation; treat review prose as proof of historical causation.
+- **Chose:** Accept the no-actionable-findings result; no fix batch required. Do not adopt broader claims about historical causation or arbitrary-load reliability.
+- **Why:** The actual Gemini dispatch returned exit0, `STATUS: PASS` after165.07s using only read/grep/find/ls. It inspected capture, coverage, isolation and lifecycle. The source ordering remains cleanup before stream EOF, as `exec` explicitly requires; review wording loosely describing stream closure/cleanup does not replace that source evidence. Existing integration deadlines remain unchanged, not a newly raised budget.
+- **Evidence:** `pi-watch --alias gemini --tools read,grep,find,ls --require-trailer STATUS` with archived `review.md` input; actual output retained as a receipt under suite-evidence/review.txt. Reviewer did not receive author decision rationale and could not run shell or mutate files.
+- **Reversibility:** easy
+- **Confidence:** high for scoped no-findings result; not an exhaustive audit
+- **Revisit if:** Merge gate or actual consumer behavior contradicts the exercised checks.
+- **Source:** assumed — autonomous
+
 ## Progress
-Implementation complete: only scripts/suite.test.ts and this log changed. Focused runtime diagnostic and canonical remote scripts passed; both task agents returned. Next: commit, merge roadmap once, read incoming decisions, run typecheck and caught-up scripts gate, perform one independent review/fix batch, then detach and land exactly this item. No public API, plugin, UI or native behavior changed; existing specs/native handoffs intentionally unchanged.
+Ready to land. Source test-only consolidation b7c3d46a; sole roadmap catch-up completed and incoming log read fully. Actual smoke verified both profile modes, distinct private homes, exited children and cleanup. Remote scripts passed12/12files before/after catch-up without flakes; full typecheck passed. One independent Gemini review returned PASS/no actionable findings; no accepted findings or fix batch. All agents/jobs returned. No runtime/export/API/schema/plugin/UI/native change or flow deferral; feature docs/specs/native handoffs intentionally unchanged, this log documents the repair. Next: commit final receipt, detach, canonical queue land and await result, remove owned scratch after successful land, retain loop notes and end exactly this item.
