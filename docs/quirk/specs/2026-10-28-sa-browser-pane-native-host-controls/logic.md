@@ -5,6 +5,8 @@ Blocked at brainstorming/technical feasibility on 2026-10-28. The following is t
 
 **Amendments:** None. This item preserves sa-browser-pane D17/D23 and sa-browser-design-mode D33; it does not supersede them.
 
+- 2026-10-29: the core is unblocked by the approved Electrobun fork patch `patch/hard-reload-load-failed` (decision D9). HC1–HC3 are implemented through it; "Technical feasibility" below describes the stock SDK, which still lacks both operations and keeps the unavailable path.
+
 ## Purpose and conceptual model
 A human browses in the owned sandboxed system webview. A Native hard reload must bypass the native engine's cache for the unchanged requested URL. Network/TLS failures must originate in the native engine's navigation-failure callbacks and produce explicit error state, retained requested URL, and retry controls. Watch remains a screencast of the exact existing managed Chrome page, not a substitute Native engine.
 
