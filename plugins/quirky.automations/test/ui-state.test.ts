@@ -1,7 +1,7 @@
 import { afterEach, expect, test } from 'bun:test'
 import { startPluginHarness, type PluginHarness } from '../../quirky.repo/test/harness'
-import type { AutomationUiState } from '../src/ui-contracts'
-import type { UiLayout } from '@quirky/protocol'
+import { AUTOMATIONS_SETTINGS_VIEW, AUTOMATIONS_VIEW, type AutomationUiState } from '../src/ui-contracts'
+import type { UiLayout, UiToolSlot } from '@quirky/protocol'
 import { runCli } from '../../../packages/cli/test/fixtures/fake-daemon'
 
 const fixtures: PluginHarness[] = []
@@ -24,6 +24,58 @@ test('scripted automation navigation retains filters and restores predecessor wi
   await client.callAny('quirky.automations/close', {})
   const after = await client.callAny('ui.state', {}) as { layout: UiLayout }
   expect(after.layout.view).toEqual(before.layout.view)
+}, 20_000)
+
+test('automation tool navigation, editor opening, close, and settings return preserve the center', async () => {
+  const { client } = await boot()
+  const model = await client.callAny('ui.contributions', {}) as {
+    tools?: { id: string; contributionId: string | null }[]
+    views: { id: string }[]
+  }
+  const automationTool = model.tools?.find((tool) => tool.contributionId === AUTOMATIONS_VIEW)
+  const centerView = model.views.find((view) => view.id !== AUTOMATIONS_VIEW && view.id !== AUTOMATIONS_SETTINGS_VIEW)
+  expect(automationTool).toBeDefined()
+  expect(centerView).toBeDefined()
+  if (!automationTool || !centerView) throw new Error('Automation tool and unrelated center view must be contributed')
+
+  const movedSlot: UiToolSlot = 'right-bottom'
+  const center = { id: centerView.id, input: { retained: true } }
+  await client.callAny('ui.tool.move', { id: automationTool.id, slot: movedSlot })
+  await client.callAny('ui.view.open', center)
+  await client.callAny('ui.tool.open', { id: automationTool.id })
+
+  const opened = await client.callAny('ui.state', {}) as { layout: UiLayout }
+  expect(opened.layout.tools?.placements[automationTool.id]).toBe(movedSlot)
+  expect(opened.layout.tools?.open[movedSlot]).toBe(automationTool.id)
+  expect(opened.layout.view).toEqual(center)
+  const viewTabs = structuredClone(opened.layout.viewTabs)
+
+  await client.callAny('quirky.automations/uiNavigate', { query: 'audit', status: 'paused' })
+  let current = await client.callAny('ui.state', {}) as { layout: UiLayout }
+  expect(current.layout.view).toEqual(center)
+  expect(current.layout.viewTabs).toEqual(viewTabs)
+
+  await client.callAny('quirky.automations/openEditor', {})
+  current = await client.callAny('ui.state', {}) as { layout: UiLayout }
+  expect(current.layout.view).toEqual(center)
+  expect(current.layout.viewTabs).toEqual(viewTabs)
+  expect(current.layout.tools?.open[movedSlot]).toBe(automationTool.id)
+  expect((await client.callAny('quirky.automations/uiState', {}) as AutomationUiState).editor).not.toBeNull()
+
+  await client.callAny('quirky.automations/close', {})
+  current = await client.callAny('ui.state', {}) as { layout: UiLayout }
+  expect(current.layout.tools?.open[movedSlot]).toBeNull()
+  expect(current.layout.view).toEqual(center)
+  expect(current.layout.viewTabs).toEqual(viewTabs)
+
+  await client.callAny('ui.tool.open', { id: automationTool.id })
+  await client.callAny('quirky.automations/settings', {})
+  expect((await client.callAny('ui.state', {}) as { layout: UiLayout }).layout.view).toEqual({ id: AUTOMATIONS_SETTINGS_VIEW })
+  await client.callAny('quirky.automations/open', {})
+  current = await client.callAny('ui.state', {}) as { layout: UiLayout }
+  expect(current.layout.view).toEqual(center)
+  expect(current.layout.viewTabs?.some((view) => view.id === AUTOMATIONS_VIEW)).toBe(false)
+  expect(current.layout.tools?.open[movedSlot]).toBe(automationTool.id)
 }, 20_000)
 
 test('invalid navigation is rejected atomically without losing prior selection or filter', async () => {

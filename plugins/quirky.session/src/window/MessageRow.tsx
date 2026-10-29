@@ -23,7 +23,7 @@ const row = {
 } satisfies CSSProperties
 
 const body = { minWidth: 0, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' } satisfies CSSProperties
-const code = { fontFamily: 'var(--ui-font-mono)', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', margin: 0 } satisfies CSSProperties
+const code = { fontFamily: 'ui-monospace, Menlo, monospace', fontSize: 'var(--ui-font-mono)', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', margin: 0 } satisfies CSSProperties
 
 export function MessageRow({ message }: { message: StructuredMessage }) {
   switch (message.role) {
