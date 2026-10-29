@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { isolateGitConfig } from '../../../quirky.repo/test/git-fixtures'
 import { buttonText, click, modifiedEditor, q, qa, rowOf, sectionHeadings, stubIntersectionObserver, text } from './dom'
-import { BASE_FILES, boot, DIFF_VIEW, openView, PANEL, sc1, shutdown, type World } from './world'
+import { BASE_FILES, boot, DIFF_VIEW, openView, PANEL, SESSION_VIEW, sc1, shutdown, type World } from './world'
 
 const { scratch } = isolateGitConfig()
 const SLOW = 120_000
@@ -232,5 +232,14 @@ test('SC-65: the panel report and an explicit top-level diff view report their s
     currentChange: 1,
     dirty: false
   })
+
+  await w.run('open-changes', { area: 'unstaged' })
+  await w.win.waitFor(async () => (await w.state()).layout.view?.id === SESSION_VIEW)
+  const hostedChanges = await w.win.waitFor(async () => {
+    const active = await openView(w)
+    return active?.input?.mode === 'combined' && active.input.area === 'unstaged' ? active : undefined
+  })
+  expect(hostedChanges.input?.worktree).toBe(w.feat.id)
+  await w.win.waitFor(() => q('[data-git-view-root] section[data-path="math.ts"] [role="textbox"]'))
   expect(w.problems()).toEqual([])
 }, SLOW)
