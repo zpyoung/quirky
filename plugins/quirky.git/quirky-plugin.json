@@ -3112,7 +3112,8 @@
       },
       {
         "id": "add-review-note",
-        "title": "Add Review Note"
+        "title": "Add Review Note to Diff",
+        "description": "Open a review note for the selected text in an open diff."
       },
       {
         "id": "send-review-notes",
