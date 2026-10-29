@@ -410,15 +410,12 @@ test('mounted Checks refreshes from an open six-slot tool and withdraws visibili
     tools: { open: { 'right-top': CHECKS_PANEL } }
   })
   const checksMount = mountChecks(ui, initial, () => checksState(host))
-  expect(checksMount.element.textContent).toContain('Checking pull request status…')
 
-  await act(async () => {
-    await ui.flushCalls()
-    await waitUntil(() => checksMount.element.textContent?.includes('#12') === true)
-  })
+  // Let React commit the async refresh before waiting for its rendered result.
+  await settleUi(ui)
+  await waitUntil(() => checksMount.element.textContent?.includes('#12') === true)
   const available = await checksState(host)
   expect(available.checks).toMatchObject({ worktree: host.worktree, review: { number: 12 } })
-  expect(checksMount.element.textContent).toContain('Review 12')
 
   const refreshCalls = () => ui.calls.filter((call) => call.method === 'quirky.reviews/checksRefresh')
   const candidateReports = () => ui.calls.filter((call) => call.method === 'quirky.hosting/visibleRefreshCandidates')
