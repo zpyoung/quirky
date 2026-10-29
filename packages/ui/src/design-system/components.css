@@ -378,6 +378,7 @@
   align-items: center;
   display: flex;
   flex-wrap: wrap;
+  margin-inline-start: auto;
   max-width: 100%;
   gap: var(--ui-space-4);
   min-width: 0;
@@ -459,6 +460,12 @@
   position: absolute;
   top: 100%;
   z-index: 10;
+  width: max-content;
+}
+
+.ui-section-header__actions .ui-menu__list {
+  left: auto;
+  right: 0;
 }
 
 .ui-menu__item {
