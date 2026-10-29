@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import type { UiPluginContext } from '@quirky/protocol'
 import type { RecipeLaunchOptions } from '../daemon/recipe-options'
+import { Button, FormRow } from '@quirky/ui'
 
 type Choice = { value: string; label: string }
 type Option = { id: string; label: string; type: 'select' | 'boolean'; choices: Choice[] | null }
@@ -178,22 +179,24 @@ export function LaunchOptionsEditor({ context, agent, host, value, args, labelPr
     }
   }
 
-  if (agent === 'custom') return <p className="muted scm-ai-hint">Custom command does not support catalog model or option picks.</p>
-  if (agent === '') return <p className="muted scm-ai-hint">Choose an agent to see its model and effort choices.</p>
-  if (catalog === null) return <p className="muted scm-ai-hint">{state.loading ? 'Loading model and effort choices…' : 'Could not load this agent’s launch choices.'}</p>
-  if (!catalog.supported) return <p className="muted scm-ai-hint">This agent does not offer catalog-backed model or option choices.</p>
+  if (agent === 'custom') return <p className="ui-text-muted">Custom command does not support catalog model or option picks.</p>
+  if (agent === '') return <p className="ui-text-muted">Choose an agent to see its model and effort choices.</p>
+  if (catalog === null) return <p className="ui-text-muted">{state.loading ? 'Loading model and effort choices…' : 'Could not load this agent’s launch choices.'}</p>
+  if (!catalog.supported) return <p className="ui-text-muted">This agent does not offer catalog-backed model or option choices.</p>
 
   const options = optionsFor(catalog, model)
   const modelShadowed = rawSets(args, catalog, 'model')
   const staleModel = model !== '' && catalog.unlisted === 'refuse' && !catalog.models.some((listed) => listed.id === model)
+  const modelId = `${listId}-model`
 
   return (
-    <div className="scm-ai-launch-options">
-      <label>
-        {fieldName(labelPrefix, 'Model')}
+    <div className="ui-stack">
+      <FormRow label={fieldName(labelPrefix, 'Model')} htmlFor={modelId}>
         {catalog.unlisted === 'accept' ? (
           <>
             <input
+              id={modelId}
+              className="ui-text-field__input"
               type="text"
               aria-label={fieldName(labelPrefix, 'Model')}
               list={`${listId}-models`}
@@ -216,6 +219,8 @@ export function LaunchOptionsEditor({ context, agent, host, value, args, labelPr
           </>
         ) : (
           <select
+            id={modelId}
+            className="ui-text-field__input"
             aria-label={fieldName(labelPrefix, 'Model')}
             value={model}
             disabled={modelShadowed}
@@ -234,23 +239,25 @@ export function LaunchOptionsEditor({ context, agent, host, value, args, labelPr
             {catalog.models.map((listed) => <option key={listed.id} value={listed.id}>{listed.label}</option>)}
           </select>
         )}
-      </label>
+      </FormRow>
       {catalog.discoverable && (
-        <button type="button" disabled={refreshing} onClick={() => void refreshModels()}>
+        <Button type="button" disabled={refreshing} onClick={() => void refreshModels()}>
           {refreshing ? 'Refreshing models…' : 'Refresh models'}
-        </button>
+        </Button>
       )}
-      {staleModel && <p className="muted scm-ai-hint">Saved model {model} is no longer available.</p>}
-      {refreshMessage && <p className="muted scm-ai-hint">{refreshMessage}</p>}
-      {modelShadowed && <p className="muted scm-ai-hint">Set by CLI arguments</p>}
+      {staleModel && <p className="ui-text-muted">Saved model {model} is no longer available.</p>}
+      {refreshMessage && <p className="ui-text-muted">{refreshMessage}</p>}
+      {modelShadowed && <p className="ui-text-muted">Set by CLI arguments</p>}
       {options.map((option) => {
         const shadowed = rawSets(args, catalog, 'effort') || (modelShadowed && value?.model !== undefined)
         const label = fieldName(labelPrefix, option.label)
+        const id = `${listId}-option-${encodeURIComponent(option.id)}`
         const selected = optionValues[option.id]
         return (
-          <label key={option.id}>
-            {label}
+          <FormRow key={option.id} label={label} htmlFor={id}>
             <select
+              id={id}
+              className="ui-text-field__input"
               aria-label={label}
               value={selected === undefined ? '' : String(selected)}
               disabled={shadowed}
@@ -270,14 +277,14 @@ export function LaunchOptionsEditor({ context, agent, host, value, args, labelPr
                 </>
               ) : (option.choices ?? []).map((choice) => <option key={choice.value} value={choice.value}>{choice.label}</option>)}
             </select>
-            {shadowed && <span className="muted scm-ai-hint">Set by CLI arguments</span>}
-          </label>
+            {shadowed && <span className="ui-text-muted">Set by CLI arguments</span>}
+          </FormRow>
         )
       })}
       {resetLabel && (
-        <button type="button" disabled={value === null || (model === '' && Object.keys(optionValues).length === 0)} onClick={() => onChange(null)}>
+        <Button type="button" disabled={value === null || (model === '' && Object.keys(optionValues).length === 0)} onClick={() => onChange(null)}>
           {resetLabel}
-        </button>
+        </Button>
       )}
     </div>
   )

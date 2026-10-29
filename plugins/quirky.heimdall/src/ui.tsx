@@ -1,11 +1,12 @@
+import { Badge, Button, EmptyState, InlineAgentCard, ListRow, SectionHeader, TextArea, TextField, ToolPanelFrame } from '@quirky/ui'
 import { createRoot } from 'react-dom/client'
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import type { QuirkyEvent, UiPluginContext } from '@quirky/protocol'
+import type { UiStatus, UiTone } from '@quirky/ui'
 import type { ApprovalScope, TickTrace } from './contracts'
 import type { CommandRequest, CommandResult, FleetAction, FleetRow, FleetSnapshot, OpenEscalation, WatcherCommand, WatcherDetail, WatcherTarget, WatcherWorker } from './control-contracts'
 import { groupFleetRows, sortFleetRows } from './fleet-selectors'
 import { acceptFleetSnapshot, groupDecisionTraces, statusPresentation } from './ui-model'
-
 const FLEET_VIEW_ID = 'view:quirky.heimdall/fleet'
 const NAVIGATION_ID = 'sidebar-section:quirky.heimdall/navigation'
 const FLEET_CHANGED_EVENT = 'quirky.heimdall/fleetChanged'
@@ -15,19 +16,6 @@ type MountProps = { input?: unknown; report?(state: unknown): void }
 type Feedback = { command: string; result: CommandResult }
 type BudgetDraft = { activeMinutes: string; turns: string }
 
-const rootStyle: CSSProperties = {
-  boxSizing: 'border-box', display: 'flex', flexDirection: 'column', gap: 12, height: '100%', minHeight: 0,
-  overflow: 'auto', padding: 16, background: 'var(--bg)', color: 'var(--text)', fontFamily: 'inherit'
-}
-const cardStyle: CSSProperties = {
-  background: 'var(--bg-raised)', border: '1px solid var(--border)', borderRadius: 8, padding: 12
-}
-const buttonStyle: CSSProperties = {
-  border: '1px solid var(--border)', borderRadius: 5, background: 'var(--bg-raised)', color: 'var(--text)',
-  padding: '6px 10px', cursor: 'pointer', font: 'inherit'
-}
-const subtleStyle: CSSProperties = { color: 'var(--muted)' }
-const rowStyle: CSSProperties = { borderBottom: '1px solid var(--border)', verticalAlign: 'top' }
 
 function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
@@ -122,22 +110,24 @@ function formatCommandResult(result: CommandResult): string {
   return `Indeterminate · ${result.detail}`
 }
 
-function statusColor(label: string): string {
-  if (label.startsWith('Error') || label.startsWith('Host unreachable') || label === 'Malformed') return 'var(--amber)'
-  if (label === 'Escalated' || label === 'Parked' || label === 'Held') return 'var(--amber)'
-  if (label === 'Acting' || label === 'Watching') return 'var(--green)'
-  return 'var(--muted)'
+function statusForLabel(label: string): UiStatus {
+  if (label.startsWith('Error') || label.startsWith('Host unreachable') || label === 'Malformed') return 'failing'
+  if (label === 'Escalated' || label === 'Parked' || label === 'Held') return 'needs-you'
+  if (label === 'Acting' || label === 'Watching') return 'working'
+  if (label === 'Complete') return 'done'
+  return 'idle'
+}
+
+function badgeTone(status: UiStatus): UiTone {
+  if (status === 'working' || status === 'needs-you' || status === 'failing') return status
+  return status === 'done' ? 'accent' : 'neutral'
 }
 
 function StatusPill({ row, now }: { row: FleetRow; now: number }) {
   const status = statusPresentation(row, now)
   return (
-    <span
-      role="status"
-      title={[status.reason, status.detail].filter(Boolean).join(' · ') || status.label}
-      style={{ display: 'inline-block', border: '1px solid var(--border)', borderRadius: 999, color: statusColor(status.label), padding: '2px 8px', whiteSpace: 'nowrap' }}
-    >
-      {status.label}
+    <span title={[status.reason, status.detail].filter(Boolean).join(' · ') || status.label}>
+      <Badge tone={badgeTone(statusForLabel(status.label))} label={status.label}>{status.label}</Badge>
     </span>
   )
 }
@@ -147,72 +137,55 @@ function BudgetBar({ row }: { row: FleetRow }) {
   const used = row.budget.activeMs
   const percent = limit === null ? 0 : limit === 0 ? 100 : Math.min(100, Math.max(0, (used / limit) * 100))
   const warning = percent >= 80
+  const label = limit === null ? 'Unlimited active-time budget' : `${percent.toFixed(0)}% of active-time budget used`
   return (
-    <div style={{ minWidth: 108 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 6, fontVariantNumeric: 'tabular-nums' }}>
-        <span>{(used / 60_000).toFixed(1)} min</span>
-        <span style={subtleStyle}>{limit === null ? '∞' : `${(limit / 60_000).toFixed(1)} min`}</span>
-      </div>
-      <div aria-label={limit === null ? 'Unlimited active-time budget' : `${percent.toFixed(0)}% of active-time budget used`} style={{ height: 4, marginTop: 4, borderRadius: 4, background: 'var(--border)', overflow: 'hidden' }}>
-        <div style={{ height: '100%', width: `${percent}%`, background: warning ? 'var(--amber)' : 'var(--accent)' }} />
-      </div>
-    </div>
+    <Badge tone={warning ? 'needs-you' : 'neutral'} label={label}>
+      {(used / 60_000).toFixed(1)} / {limit === null ? '∞' : `${(limit / 60_000).toFixed(1)} min`}
+    </Badge>
   )
 }
 
 function FleetTable({ rows, now, selectedId, onSelect }: { rows: readonly FleetRow[]; now: number; selectedId: string | null; onSelect(row: FleetRow): void }) {
-  if (rows.length === 0) return <p style={{ ...cardStyle, margin: 0 }}>No watchers in the fleet.</p>
+  if (rows.length === 0) return <EmptyState message="No watchers in the fleet." />
   return (
-    <div style={{ overflowX: 'auto', border: '1px solid var(--border)', borderRadius: 8 }}>
-      <table style={{ borderCollapse: 'collapse', minWidth: 1120, width: '100%', textAlign: 'left' }}>
-        <thead>
-          <tr>
-            {['Workspace', 'Watcher', 'Activity', 'Phase', 'Status', 'Active time', 'Turns', 'Elapsed', 'Last tick'].map((heading) => (
-              <th key={heading} scope="col" style={{ padding: '9px 10px', background: 'var(--bg-raised)', borderBottom: '1px solid var(--border)', whiteSpace: 'nowrap' }}>{heading}</th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row) => {
-            const key = targetKey(row.target)
-            const selected = key === selectedId
-            const pathName = row.enrollment.workspacePath.split(/[\\/]/).filter(Boolean).at(-1)
-            const workspaceName = row.workspaceName || pathName || 'Workspace'
-            const turnsLimit = row.enrollment.budget.turns
-            return (
-              <tr
-                key={key}
-                aria-selected={selected}
-                tabIndex={0}
-                onClick={() => onSelect(row)}
-                onKeyDown={(event) => {
-                  if (event.key !== 'Enter' && event.key !== ' ') return
-                  event.preventDefault()
-                  onSelect(row)
-                }}
-                style={{ ...rowStyle, cursor: 'pointer', background: selected ? 'var(--bg-active)' : undefined }}
-              >
-                <td style={{ padding: '8px 10px' }}>
-                  <div>{workspaceName}</div>
-                  <div style={subtleStyle}>{row.branch ?? 'Branch unavailable'}</div>
-                  {row.ownerLabel && <div style={subtleStyle}>Remote · {row.ownerLabel}</div>}
-                </td>
-                <td style={{ padding: '8px 10px' }}>
-                  <div>{row.name}</div>
-                  <div style={subtleStyle}>{row.enrollment.kind === 'objective' ? 'Objective watcher' : row.enrollment.kind === 'hosted-review' ? 'Hosted review' : row.enrollment.kind}</div>
-                </td>
-                <td style={{ padding: '8px 10px', whiteSpace: 'nowrap' }}>{row.runningWorkers > 0 ? `${row.runningWorkers} of ${row.maxConcurrency ?? '∞'} running` : 'No active work'}</td>
-                <td style={{ padding: '8px 10px' }}>{row.phase ?? '—'}</td>
-                <td style={{ padding: '8px 10px' }}><StatusPill row={row} now={now} /></td>
-                <td style={{ padding: '8px 10px' }}><BudgetBar row={row} /></td>
-                <td style={{ padding: '8px 10px', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>{row.budget.turns}/{turnsLimit === null ? '∞' : turnsLimit}</td>
-                <td style={{ padding: '8px 10px', whiteSpace: 'nowrap' }}>{duration(now - row.enrollment.createdAtMs)}</td>
-                <td style={{ padding: '8px 10px', whiteSpace: 'nowrap' }}>{timestamp(row.lastSuccessfulTickAtMs)}</td>
-              </tr>
-            )
-          })}
-        </tbody>
-      </table>
+    <div className="ui-stack">
+      {rows.map((row) => {
+        const key = targetKey(row.target)
+        const selected = key === selectedId
+        const pathName = row.enrollment.workspacePath.split(/[\\/]/).filter(Boolean).at(-1)
+        const workspaceName = row.workspaceName || pathName || 'Workspace'
+        const turnsLimit = row.enrollment.budget.turns
+        const status = statusPresentation(row, now)
+        const watcherKind = row.enrollment.kind === 'objective' ? 'Objective watcher' : row.enrollment.kind === 'hosted-review' ? 'Hosted review' : row.enrollment.kind
+        return (
+          <ListRow
+            key={key}
+            selected={selected}
+            status={statusForLabel(status.label)}
+            count={row.runningWorkers > 0 ? row.runningWorkers : undefined}
+            onClick={() => onSelect(row)}
+            title={<><strong>{workspaceName}</strong> · {row.name}</>}
+            description={
+              <span className="ui-stack">
+                <span className="ui-cluster">
+                  <span>{row.branch ?? 'Branch unavailable'}</span>
+                  {row.ownerLabel && <span>Remote · {row.ownerLabel}</span>}
+                  <span>{watcherKind}</span>
+                </span>
+                <span>{row.runningWorkers > 0 ? `${row.runningWorkers} of ${row.maxConcurrency ?? '∞'} running` : 'No active work'} · Phase {row.phase ?? '—'}</span>
+                <span className="ui-cluster">
+                  <span>Status:</span>
+                  <StatusPill row={row} now={now} />
+                  <span>Active time:</span>
+                  <BudgetBar row={row} />
+                  <span>Turns: {row.budget.turns}/{turnsLimit === null ? '∞' : turnsLimit}</span>
+                </span>
+                <span className="ui-text-muted">Elapsed {duration(now - row.enrollment.createdAtMs)} · Last tick {timestamp(row.lastSuccessfulTickAtMs)}</span>
+              </span>
+            }
+          />
+        )
+      })}
     </div>
   )
 }
@@ -220,25 +193,33 @@ function FleetTable({ rows, now, selectedId, onSelect }: { rows: readonly FleetR
 function ActionHistory({ items }: { items: readonly FleetAction[] }) {
   const entries = useMemo(() => [...items].sort((a, b) => b.atMs - a.atMs).slice(0, 30), [items])
   return (
-    <section style={cardStyle} aria-label="Fleet action history">
-      <h2 style={{ fontSize: 15, margin: '0 0 8px' }}>Fleet action history</h2>
-      {entries.length === 0 ? <p style={{ ...subtleStyle, margin: 0 }}>No persisted watcher action attempts yet.</p> : (
-        <ol style={{ margin: 0, paddingLeft: 22, display: 'grid', gap: 8 }}>
-          {entries.map((item) => (
-            <li key={`${targetKey(item.target ?? { watcherId: item.watcherId })}:${item.attemptId}`}>
-              <div><strong>{item.actionKind}</strong> · {item.watcherName} <span style={subtleStyle}>({item.watcherId}){item.ownerLabel ? ` · Remote · ${item.ownerLabel}` : ''}</span></div>
-              <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
-                <span style={subtleStyle}>{timestamp(item.atMs)}</span>
-                <span style={{ border: '1px solid var(--border)', borderRadius: 999, color: item.effect === 'landed' ? 'var(--green)' : item.effect === 'not-landed' ? 'var(--danger)' : item.effect === 'indeterminate' ? 'var(--amber)' : 'var(--muted)', padding: '2px 8px' }}>
-                  {item.state}{item.effect ? ` · ${item.effect}` : ''}
-                </span>
-              </div>
-              {item.reason && <div><strong>Reason:</strong> {item.reason}</div>}
-            </li>
-          ))}
-        </ol>
+    <ToolPanelFrame title="Fleet action history">
+      {entries.length === 0 ? (
+        <EmptyState message="No persisted watcher action attempts yet." />
+      ) : (
+        <div className="ui-stack">
+          {entries.map((item) => {
+            const tone = item.effect === 'landed' ? 'working' : item.effect === 'not-landed' ? 'failing' : item.effect === 'indeterminate' ? 'needs-you' : 'neutral'
+            return (
+              <ListRow
+                key={`${targetKey(item.target ?? { watcherId: item.watcherId })}:${item.attemptId}`}
+                title={<><strong>{item.actionKind}</strong> · {item.watcherName}</>}
+                description={
+                  <span className="ui-stack">
+                    <span className="ui-text-muted">({item.watcherId}){item.ownerLabel ? ` · Remote · ${item.ownerLabel}` : ''}</span>
+                    <span className="ui-cluster">
+                      <span>{timestamp(item.atMs)}</span>
+                      <Badge tone={tone}>{item.state}{item.effect ? ` · ${item.effect}` : ''}</Badge>
+                    </span>
+                    {item.reason && <span><strong>Reason:</strong> {item.reason}</span>}
+                  </span>
+                }
+              />
+            )
+          })}
+        </div>
       )}
-    </section>
+    </ToolPanelFrame>
   )
 }
 
@@ -263,7 +244,8 @@ function NavigationEntry({ context }: { context: UiPluginContext }) {
   useEffect(() => {
     const unsubscribe = context.subscribe((event: QuirkyEvent) => {
       if (event.type !== FLEET_CHANGED_EVENT) return
-      const data = (event as { data?: unknown }).data
+      if (!('data' in event)) return
+      const data = event.data
       if (isFleetSnapshot(data)) accept(data)
     })
     const unsubscribeConnection = context.onConnection((status) => {
@@ -278,25 +260,25 @@ function NavigationEntry({ context }: { context: UiPluginContext }) {
 
   const groups = snapshot ? groupFleetRows(snapshot.rows) : null
   return (
-    <button
-      type="button"
+    <Button
+      className="ui-stack"
+      style={{ width: '100%', alignItems: 'stretch', textAlign: 'left' }}
       onClick={() => context.openView(FLEET_VIEW_ID)}
       aria-label="Open Heimdall fleet"
-      style={{ ...buttonStyle, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 4, width: '100%', textAlign: 'left' }}
     >
       <strong>Heimdall</strong>
-      <span style={{ ...subtleStyle, fontSize: 11 }}>
+      <span className="ui-text-muted">
         Needs you {groups?.needsYou.length ?? 0} · Lost contact {groups?.lostContact.length ?? 0} · Active {groups?.active.length ?? 0}
       </span>
-    </button>
+    </Button>
   )
 }
 
 function DecisionTraceList({ traces }: { traces: readonly TickTrace[] }) {
   const groups = groupDecisionTraces(traces)
-  if (groups.length === 0) return <p style={subtleStyle}>No decision traces yet.</p>
+  if (groups.length === 0) return <EmptyState message="No decision traces yet." />
   return (
-    <div style={{ display: 'grid', gap: 8 }}>
+    <div className="ui-stack">
       {groups.map((group) => {
         const trace = group.representative
         const title = group.count > 1 ? `Tick ${group.firstSeq}–${group.lastSeq} ×${group.count}` : `Tick ${group.firstSeq}`
@@ -308,24 +290,29 @@ function DecisionTraceList({ traces }: { traces: readonly TickTrace[] }) {
           ? trace.gate.verdict === 'allow' ? 'Gate: allow' : `Gate: ${trace.gate.verdict} · ${trace.gate.reason}`
           : 'Gate: no verdict'
         return (
-          <article key={`${group.firstSeq}-${group.lastSeq}`} style={{ ...cardStyle, display: 'grid', gap: 8 }}>
-            <header>
-              <strong>{title}</strong> <span style={subtleStyle}>· {trace.exitPath}</span>
-            </header>
-            {trace.exitPath === 'running' && <strong>Running</strong>}
-            <div style={{ display: 'grid', gap: 8 }}>
-              <div><strong>Saw</strong><pre style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', margin: '4px 0 0', color: 'var(--muted)' }}>{prettyJson(trace.snapshot ?? 'No snapshot recorded')}</pre></div>
+          <ToolPanelFrame
+            key={`${group.firstSeq}-${group.lastSeq}`}
+            title={title}
+            actions={<Badge tone={trace.exitPath === 'running' ? 'working' : 'neutral'}>{trace.exitPath}</Badge>}
+          >
+            <div className="ui-stack">
+              {trace.exitPath === 'running' && <Badge tone="working">Running</Badge>}
               <div>
-                <strong>Decided</strong><div>{decisionText}</div>
-                {action && <pre style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', margin: '4px 0 0', color: 'var(--muted)' }}>{prettyJson(action)}</pre>}
-                {noAction?.detail && <div>{noAction.detail}</div>}
-                {noAction?.deviation?.detail && <div>{noAction.deviation.detail}</div>}
-                <div>{gateText}</div>
-                {trace.gate && trace.gate.verdict !== 'allow' && trace.gate.detail && <div>{trace.gate.detail}</div>}
+                <strong>Saw</strong>
+                <pre className="ui-readout">{prettyJson(trace.snapshot ?? 'No snapshot recorded')}</pre>
               </div>
-              <div><strong>Declined</strong><div>{trace.declined.length > 0 ? trace.declined.join(', ') : 'No phase declined'}</div></div>
+              <div className="ui-stack">
+                <strong>Decided</strong>
+                <span>{decisionText}</span>
+                {action && <pre className="ui-readout">{prettyJson(action)}</pre>}
+                {noAction?.detail && <span>{noAction.detail}</span>}
+                {noAction?.deviation?.detail && <span>{noAction.deviation.detail}</span>}
+                <span>{gateText}</span>
+                {trace.gate && trace.gate.verdict !== 'allow' && trace.gate.detail && <span>{trace.gate.detail}</span>}
+              </div>
+              <div><strong>Declined</strong> · {trace.declined.length > 0 ? trace.declined.join(', ') : 'No phase declined'}</div>
             </div>
-          </article>
+          </ToolPanelFrame>
         )
       })}
     </div>
@@ -340,24 +327,23 @@ function activitySummary(entry: WatcherDetail['journal'][number]): string {
 function ActivityFeed({ detail }: { detail: WatcherDetail }) {
   const entries = useMemo(() => [...detail.journal].sort((a, b) => b.seq - a.seq).slice(0, 30), [detail.journal])
   return (
-    <section style={cardStyle}>
-      <h3 style={{ margin: '0 0 8px', fontSize: 15 }}>Watcher activity · newest first</h3>
-      {entries.length === 0 ? <p style={subtleStyle}>No watcher activity yet.</p> : (
-        <ol style={{ display: 'grid', gap: 6, margin: 0, paddingLeft: 22 }}>
+    <ToolPanelFrame title="Watcher activity · newest first">
+      {entries.length === 0 ? (
+        <EmptyState message="No watcher activity yet." />
+      ) : (
+        <div className="ui-stack">
           {entries.map((entry) => {
             const summary = activitySummary(entry)
             return (
-              <li key={`${entry.seq}-${entry.eventId}`}>
-                <details>
-                  <summary style={{ cursor: 'pointer' }}><strong>{entry.kind}</strong> · #{entry.seq} · {timestamp(entry.atMs)}{summary ? ` · ${summary}` : ''}</summary>
-                  <pre style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', margin: '6px 0', color: 'var(--muted)' }}>{prettyJson(entry)}</pre>
-                </details>
-              </li>
+              <details key={`${entry.seq}-${entry.eventId}`}>
+                <summary><strong>{entry.kind}</strong> · #{entry.seq} · {timestamp(entry.atMs)}{summary ? ` · ${summary}` : ''}</summary>
+                <pre className="ui-readout">{prettyJson(entry)}</pre>
+              </details>
             )
           })}
-        </ol>
+        </div>
       )}
-    </section>
+    </ToolPanelFrame>
   )
 }
 
@@ -372,38 +358,47 @@ function approvalScopeText(scope: ApprovalScope): Array<[string, string]> {
 
 function OpenEscalations({ escalations, onApprove, disabled }: { escalations: readonly OpenEscalation[]; onApprove(escalation: OpenEscalation): void; disabled: boolean }) {
   return (
-    <section style={cardStyle}>
-      <h3 style={{ margin: '0 0 8px', fontSize: 15 }}>Open escalations</h3>
-      {escalations.length === 0 ? <p style={subtleStyle}>No open escalations.</p> : (
-        <div style={{ display: 'grid', gap: 10 }}>
+    <ToolPanelFrame title="Open escalations">
+      {escalations.length === 0 ? (
+        <EmptyState message="No open escalations." />
+      ) : (
+        <div className="ui-stack">
           {escalations.map((escalation) => {
             const scope = escalation.approvalScope
             const canApprove = escalation.status === 'open' && scope !== undefined
             return (
-              <article key={escalation.escalationId} style={{ borderTop: '1px solid var(--border)', paddingTop: 8 }}>
-                <div><strong>{escalation.escalationKind}</strong> · {escalation.status} · fold {escalation.foldCount}</div>
-                {escalation.reason && <div><strong>Reason:</strong> {escalation.reason}</div>}
-                {escalation.detail && <div><strong>Detail:</strong> {escalation.detail}</div>}
-                {scope && (
-                  <div style={{ ...cardStyle, marginTop: 8 }}>
-                    <h4 style={{ margin: '0 0 6px' }}>Exact approval scope</h4>
-                    <dl style={{ display: 'grid', gridTemplateColumns: 'max-content 1fr', gap: '4px 10px', margin: 0 }}>
-                      {approvalScopeText(scope).map(([label, value]) => <div key={label} style={{ display: 'contents' }}><dt style={subtleStyle}>{label}</dt><dd style={{ margin: 0, overflowWrap: 'anywhere' }}>{value}</dd></div>)}
-                    </dl>
-                    <p style={{ color: 'var(--amber)', marginBottom: 0 }}>Approve authorizes only this exact action scope. Changed content, evidence, or prepared commit requires a new approval.</p>
+              <InlineAgentCard
+                key={escalation.escalationId}
+                title={`${escalation.escalationKind} · ${escalation.status}`}
+                status={escalation.status === 'open' ? 'needs-you' : 'idle'}
+                description={
+                  <div className="ui-stack">
+                    <span>Fold {escalation.foldCount}</span>
+                    {escalation.reason && <span><strong>Reason:</strong> {escalation.reason}</span>}
+                    {escalation.detail && <span><strong>Detail:</strong> {escalation.detail}</span>}
+                    {scope && (
+                      <div className="ui-stack">
+                        <strong>Exact approval scope</strong>
+                        <dl className="ui-stack">
+                          {approvalScopeText(scope).map(([label, value]) => (
+                            <div key={label} className="ui-cluster">
+                              <dt>{label}</dt>
+                              <dd style={{ margin: 0, overflowWrap: 'anywhere' }}>{value}</dd>
+                            </div>
+                          ))}
+                        </dl>
+                        <p className="ui-text-muted">Approve authorizes only this exact action scope. Changed content, evidence, or prepared commit requires a new approval.</p>
+                      </div>
+                    )}
                   </div>
-                )}
-                {canApprove && (
-                  <button type="button" style={{ ...buttonStyle, marginTop: 8 }} disabled={disabled} onClick={() => onApprove(escalation)}>
-                    Approve exact action
-                  </button>
-                )}
-              </article>
+                }
+                action={canApprove ? { label: 'Approve exact action', onAction: () => onApprove(escalation), disabled } : undefined}
+              />
             )
           })}
         </div>
       )}
-    </section>
+    </ToolPanelFrame>
   )
 }
 
@@ -434,51 +429,70 @@ function Workers({
     }
   }
   return (
-    <section style={cardStyle}>
-      <h3 style={{ margin: '0 0 8px', fontSize: 15 }}>Workers</h3>
-      {workers.length === 0 ? <p style={subtleStyle}>No workers reported.</p> : (
-        <div style={{ display: 'grid', gap: 10 }}>
+    <ToolPanelFrame title="Workers">
+      {workers.length === 0 ? (
+        <EmptyState message="No workers reported." />
+      ) : (
+        <div className="ui-stack">
           {workers.map((worker) => {
             const identity = worker.identity
             const answer = answers[identity.dispatchId] ?? ''
             const exactProcessIdentity = Boolean(identity.sessionId && identity.processIncarnation)
             const question = worker.question && !worker.question.answered ? worker.question : null
             return (
-              <article key={identity.dispatchId} style={{ borderTop: '1px solid var(--border)', paddingTop: 8 }}>
-                <div><strong>{worker.title ?? identity.dispatchId}</strong> · {worker.state}</div>
-                <div style={subtleStyle}>Dispatch {identity.dispatchId}{identity.sessionId ? ` · Session ${identity.sessionId}` : ''}{identity.processIncarnation ? ` · Process ${identity.processIncarnation}` : ''}{identity.pid !== undefined ? ` · PID ${identity.pid}` : ''}</div>
-                {worker.lastContactAtMs !== undefined && <div style={subtleStyle}>Last contact {timestamp(worker.lastContactAtMs)}</div>}
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 8 }}>
-                  <button
-                    type="button"
-                    style={buttonStyle}
+              <div key={identity.dispatchId} className="ui-stack">
+                <InlineAgentCard
+                  title={worker.title ?? identity.dispatchId}
+                  status={worker.state === 'live' ? 'working' : 'idle'}
+                  description={
+                    <span className="ui-stack">
+                      <span>Dispatch {identity.dispatchId}{identity.sessionId ? ` · Session ${identity.sessionId}` : ''}{identity.processIncarnation ? ` · Process ${identity.processIncarnation}` : ''}{identity.pid !== undefined ? ` · PID ${identity.pid}` : ''}</span>
+                      {worker.lastContactAtMs !== undefined && <span className="ui-text-muted">Last contact {timestamp(worker.lastContactAtMs)}</span>}
+                      <span className="ui-text-muted">{worker.state}</span>
+                    </span>
+                  }
+                />
+                <div className="ui-cluster">
+                  <Button
                     disabled={disabled || worker.state !== 'live' || !exactProcessIdentity}
                     title={!exactProcessIdentity ? 'Exact session and process-incarnation identity is required to stop a worker safely.' : undefined}
                     onClick={() => onCommand({ kind: 'stop-worker', identity }, `Stop worker ${identity.dispatchId}`)}
-                  >Stop</button>
-                  <button type="button" style={buttonStyle} disabled={!canOpenTerminal || !identity.sessionId} title={!canOpenTerminal ? 'Remote worker terminals cannot be opened on this device.' : !identity.sessionId ? 'This worker has no session identity.' : undefined} onClick={() => void openTerminal(worker)}>Open terminal</button>
+                  >Stop</Button>
+                  <Button
+                    disabled={!canOpenTerminal || !identity.sessionId}
+                    title={!canOpenTerminal ? 'Remote worker terminals cannot be opened on this device.' : !identity.sessionId ? 'This worker has no session identity.' : undefined}
+                    onClick={() => void openTerminal(worker)}
+                  >Open terminal</Button>
                 </div>
-                {!exactProcessIdentity && <p style={subtleStyle}>Stop is unavailable until the exact session and process-incarnation identity can be verified.</p>}
+                {!exactProcessIdentity && <p className="ui-text-muted">Stop is unavailable until the exact session and process-incarnation identity can be verified.</p>}
                 {question && (
                   <form
+                    className="ui-stack"
                     onSubmit={(event: FormEvent) => {
                       event.preventDefault()
                       if (!answer.trim()) return
                       onCommand({ kind: 'answer-question', messageId: question.messageId, body: answer }, `Answer worker question ${identity.dispatchId}`)
                     }}
-                    style={{ display: 'grid', gap: 6, marginTop: 8 }}
                   >
                     <div><strong>Question:</strong> {question.body}</div>
-                    <label>Answer<textarea value={answer} onChange={(event) => { const value = event.currentTarget.value; setAnswers((previous) => ({ ...previous, [identity.dispatchId]: value })) }} rows={3} style={{ display: 'block', width: '100%', boxSizing: 'border-box', marginTop: 4, background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--border)', borderRadius: 4, padding: 8, font: 'inherit' }} /></label>
-                    <button type="submit" style={buttonStyle} disabled={disabled || !answer.trim()}>Send answer</button>
+                    <TextArea
+                      id={`worker-answer-${identity.dispatchId}`}
+                      label="Answer"
+                      rows={3}
+                      value={answer}
+                      onChange={(event) => { const value = event.currentTarget.value; setAnswers((previous) => ({ ...previous, [identity.dispatchId]: value })) }}
+                    />
+                    <div className="ui-cluster">
+                      <Button type="submit" disabled={disabled || !answer.trim()}>Send answer</Button>
+                    </div>
                   </form>
                 )}
-              </article>
+              </div>
             )
           })}
         </div>
       )}
-    </section>
+    </ToolPanelFrame>
   )
 }
 
@@ -571,83 +585,120 @@ function WatcherDetailPane({
 
   const currentReason = status?.reason ?? detail.enrollment.haltReason ?? detail.enrollment.parkReason
   return (
-    <section style={{ display: 'grid', gap: 12, minHeight: 0 }}>
-      <header style={{ ...cardStyle, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap' }}>
-        <div>
-          <h2 style={{ margin: 0 }}>{detail.name}</h2>
-          <div style={subtleStyle}>{detail.enrollment.kind} · {isRemoteTarget(detail.target) ? `Remote · Controlled by ${detail.ownerLabel ?? detail.target.connectionId ?? 'paired owner'}` : 'This device'} · {statusSource?.state ?? 'unknown'}</div>
+    <section className="ui-stack">
+      <ToolPanelFrame title={detail.name} actions={<Button onClick={copyDebug}>Copy debug report</Button>}>
+        <div className="ui-stack">
+          <div className="ui-cluster">
+            <Badge>{detail.enrollment.kind}</Badge>
+            <span className="ui-text-muted">{isRemoteTarget(detail.target) ? `Remote · Controlled by ${detail.ownerLabel ?? detail.target.connectionId ?? 'paired owner'}` : 'This device'}</span>
+          </div>
+          <ListRow
+            title="Owner state observed"
+            status={status ? statusForLabel(status.label) : 'idle'}
+            description={`${duration(now - detail.observedAtMs)} ago · ${status?.label ?? statusSource?.state ?? 'Unknown'}`}
+          />
+          <ListRow title="Reason" description={currentReason ?? 'No current reason reported.'} />
+          {status?.detail && <ListRow title="Detail" description={status.detail} />}
+          {detail.enrollment.malformed && <ListRow title="Malformed enrollment" status="failing" description={detail.enrollment.malformed} />}
+          {detail.ownerContact === 'unverifiable' && <p className="ui-text-muted">Owner contact is unverifiable; this is the last confirmed state.</p>}
+          {detail.readOnly && <p className="ui-text-muted">This enrollment is read-only. Controls are unavailable.</p>}
+          {isRemoteTarget(detail.target) && <p className="ui-text-muted">Controls are routed to {detail.ownerLabel ?? 'the paired owner'} and checked against its current host, workspace, watcher revision, and daemon incarnation.</p>}
         </div>
-        <button type="button" style={buttonStyle} onClick={copyDebug}>Copy debug report</button>
-      </header>
-
-      <div style={cardStyle}>
-        <div><strong>Owner state observed</strong> {duration(now - detail.observedAtMs)} ago · {status?.label ?? statusSource?.state ?? 'Unknown'}</div>
-        <div><strong>Reason:</strong> {currentReason ?? 'No current reason reported.'}</div>
-        {status?.detail && <div><strong>Detail:</strong> {status.detail}</div>}
-        {detail.enrollment.malformed && <div><strong>Malformed enrollment:</strong> {detail.enrollment.malformed}</div>}
-        {detail.ownerContact === 'unverifiable' && <div style={{ color: 'var(--amber)' }}>Owner contact is unverifiable; this is the last confirmed state.</div>}
-        {detail.readOnly && <div style={{ color: 'var(--amber)' }}>This enrollment is read-only. Controls are unavailable.</div>}
-        {isRemoteTarget(detail.target) && <div style={subtleStyle}>Controls are routed to {detail.ownerLabel ?? 'the paired owner'} and checked against its current host, workspace, watcher revision, and daemon incarnation.</div>}
-      </div>
+      </ToolPanelFrame>
 
       {feedback && (
-        <div role="status" style={{ ...cardStyle, borderColor: feedback.result.kind === 'applied' ? 'var(--green)' : feedback.result.kind === 'refused' ? 'var(--amber)' : 'var(--danger)' }}>
-          <strong>{feedback.command}:</strong> {formatCommandResult(feedback.result)}
-          {feedback.result.kind === 'indeterminate' && <div>Do not retry automatically; refresh and verify the owner's state before issuing another command.</div>}
+        <div role="status">
+          <InlineAgentCard
+            title={feedback.command}
+            status={feedback.result.kind === 'applied' ? 'done' : feedback.result.kind === 'refused' ? 'needs-you' : 'failing'}
+            description={
+              <span className="ui-stack">
+                <span>{formatCommandResult(feedback.result)}</span>
+                {feedback.result.kind === 'indeterminate' && <span>Do not retry automatically; refresh and verify the owner's state before issuing another command.</span>}
+              </span>
+            }
+          />
         </div>
       )}
-      {controlsPending && <div role="status" style={cardStyle}>A command is pending; additional controls are disabled until it settles.</div>}
-      {!canCommand && !detail.readOnly && !isRemoteTarget(detail.target) && detail.ownerContact !== 'unverifiable' && <div role="alert" style={{ ...cardStyle, color: 'var(--amber)' }}>Controls are unavailable for this malformed enrollment.</div>}
+      {controlsPending && <div role="status"><Badge tone="needs-you">A command is pending; additional controls are disabled until it settles.</Badge></div>}
+      {!canCommand && !detail.readOnly && !isRemoteTarget(detail.target) && detail.ownerContact !== 'unverifiable' && <div role="alert" className="ui-error-text">Controls are unavailable for this malformed enrollment.</div>}
 
-      <section style={cardStyle}>
-        <h3 style={{ margin: '0 0 8px', fontSize: 15 }}>Owner controls</h3>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-          <button type="button" style={buttonStyle} disabled={controlsDisabled || !canResume} onClick={() => onCommand({ kind: 'resume' }, 'Resume watcher')}>Resume</button>
-          <button type="button" style={buttonStyle} disabled={controlsDisabled || !detail.enrollment.enabled || detail.enrollment.paused} onClick={() => onCommand({ kind: 'pause' }, 'Pause watcher')}>Pause</button>
-          <button type="button" style={buttonStyle} disabled={controlsDisabled || !detail.enrollment.enabled} onClick={() => onCommand({ kind: 'disarm' }, 'Disarm watcher')}>Disarm</button>
-          <button type="button" style={{ ...buttonStyle, color: 'var(--danger)' }} disabled={controlsDisabled} onClick={onDelete}>Delete watcher</button>
+      <ToolPanelFrame title="Owner controls">
+        <div className="ui-stack">
+          <div className="ui-cluster">
+            <Button disabled={controlsDisabled || !canResume} onClick={() => onCommand({ kind: 'resume' }, 'Resume watcher')}>Resume</Button>
+            <Button disabled={controlsDisabled || !detail.enrollment.enabled || detail.enrollment.paused} onClick={() => onCommand({ kind: 'pause' }, 'Pause watcher')}>Pause</Button>
+            <Button disabled={controlsDisabled || !detail.enrollment.enabled} onClick={() => onCommand({ kind: 'disarm' }, 'Disarm watcher')}>Disarm</Button>
+            <Button variant="destructive" disabled={controlsDisabled} onClick={onDelete}>Delete watcher</Button>
+          </div>
+          {detail.enrollment.kind === 'objective' && (
+            <form className="ui-stack" onSubmit={applyCap}>
+              <TextField
+                id={`max-concurrency-${detail.target.watcherId}`}
+                label="Max concurrency (1–1,024)"
+                type="number"
+                min={1}
+                max={1024}
+                step={1}
+                value={capDraft}
+                onChange={(event) => setCapDraft(event.currentTarget.value)}
+              />
+              <div className="ui-cluster">
+                <Button type="submit" disabled={controlsDisabled || capDraft === '' || capDraft === String(cap)}>Update cap</Button>
+                <Button type="button" disabled={controlsPending || capDraft === String(cap ?? '')} onClick={() => { setCapDraft(cap === null ? '' : String(cap)); setFormError(null) }}>Cancel</Button>
+              </div>
+            </form>
+          )}
         </div>
-        {detail.enrollment.kind === 'objective' && (
-          <form onSubmit={applyCap} style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'end', gap: 8, marginTop: 12 }}>
-            <label>Max concurrency (1–1,024)
-              <input type="number" min={1} max={1024} step={1} value={capDraft} onChange={(event) => setCapDraft(event.currentTarget.value)} style={{ display: 'block', marginTop: 4, width: 160, boxSizing: 'border-box', background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--border)', borderRadius: 4, padding: 7, font: 'inherit' }} />
-            </label>
-            <button type="submit" style={buttonStyle} disabled={controlsDisabled || capDraft === '' || capDraft === String(cap)}>Update cap</button>
-            <button type="button" style={buttonStyle} disabled={controlsPending || capDraft === String(cap ?? '')} onClick={() => { setCapDraft(cap === null ? '' : String(cap)); setFormError(null) }}>Cancel</button>
-          </form>
-        )}
-      </section>
-      {formError && <div role="alert" style={{ ...cardStyle, color: 'var(--danger)' }}>{formError}</div>}
+      </ToolPanelFrame>
+      {formError && <div role="alert" className="ui-error-text">{formError}</div>}
 
-      <section style={cardStyle}>
-        <h3 style={{ margin: '0 0 8px', fontSize: 15 }}>Budget</h3>
-        <div>Active time: {(detail.budget.activeMs / 60_000).toFixed(1)} min / {detail.enrollment.budget.wallClockActiveMs === null ? '∞' : `${(detail.enrollment.budget.wallClockActiveMs / 60_000).toFixed(1)} min`}</div>
-        <div>Worker turns: {detail.budget.turns} / {detail.enrollment.budget.turns ?? '∞'}</div>
-        {!editingBudget ? (
-          <button type="button" style={{ ...buttonStyle, marginTop: 8 }} disabled={controlsDisabled} onClick={() => { setEditingBudget(true); setFormError(null) }}>Edit budget</button>
-        ) : (
-          <form onSubmit={applyBudget} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 8, marginTop: 12 }}>
-            <label>Active-time limit (minutes)
-              <input type="number" min={0} step="any" placeholder="Unlimited" value={budgetDraft.activeMinutes} onChange={(event) => { const value = event.currentTarget.value; setBudgetDraft((previous) => ({ ...previous, activeMinutes: value })) }} style={{ display: 'block', width: '100%', boxSizing: 'border-box', marginTop: 4, background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--border)', borderRadius: 4, padding: 7, font: 'inherit' }} />
-            </label>
-            <label>Worker-turn limit
-              <input type="number" min={0} step={1} placeholder="Unlimited" value={budgetDraft.turns} onChange={(event) => { const value = event.currentTarget.value; setBudgetDraft((previous) => ({ ...previous, turns: value })) }} style={{ display: 'block', width: '100%', boxSizing: 'border-box', marginTop: 4, background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--border)', borderRadius: 4, padding: 7, font: 'inherit' }} />
-            </label>
-            <div style={{ gridColumn: '1 / -1', ...subtleStyle }}>Leave a limit blank for unlimited (null). Zero is a valid limit and does not resume a parked watcher.</div>
-            <div style={{ display: 'flex', gap: 8, gridColumn: '1 / -1' }}>
-              <button type="submit" style={buttonStyle} disabled={controlsDisabled || budgetDraft.activeMinutes === String(detail.enrollment.budget.wallClockActiveMs === null ? '' : detail.enrollment.budget.wallClockActiveMs / 60_000) && budgetDraft.turns === String(detail.enrollment.budget.turns ?? '')}>Apply budget</button>
-              <button type="button" style={buttonStyle} disabled={controlsPending} onClick={() => {
-                setBudgetDraft({
-                  activeMinutes: detail.enrollment.budget.wallClockActiveMs === null ? '' : String(detail.enrollment.budget.wallClockActiveMs / 60_000),
-                  turns: detail.enrollment.budget.turns === null ? '' : String(detail.enrollment.budget.turns)
-                })
-                setEditingBudget(false)
-                setFormError(null)
-              }}>Cancel</button>
+      <ToolPanelFrame title="Budget">
+        <div className="ui-stack">
+          <ListRow title="Active time" description={`${(detail.budget.activeMs / 60_000).toFixed(1)} min / ${detail.enrollment.budget.wallClockActiveMs === null ? '∞' : `${(detail.enrollment.budget.wallClockActiveMs / 60_000).toFixed(1)} min`}`} />
+          <ListRow title="Worker turns" description={`${detail.budget.turns} / ${detail.enrollment.budget.turns ?? '∞'}`} />
+          {!editingBudget ? (
+            <div className="ui-cluster">
+              <Button disabled={controlsDisabled} onClick={() => { setEditingBudget(true); setFormError(null) }}>Edit budget</Button>
             </div>
-          </form>
-        )}
-      </section>
+          ) : (
+            <form className="ui-stack" onSubmit={applyBudget}>
+              <TextField
+                id="active-time-limit"
+                label="Active-time limit (minutes)"
+                type="number"
+                min={0}
+                step="any"
+                placeholder="Unlimited"
+                value={budgetDraft.activeMinutes}
+                onChange={(event) => { const value = event.currentTarget.value; setBudgetDraft((previous) => ({ ...previous, activeMinutes: value })) }}
+              />
+              <TextField
+                id="worker-turn-limit"
+                label="Worker-turn limit"
+                type="number"
+                min={0}
+                step={1}
+                placeholder="Unlimited"
+                value={budgetDraft.turns}
+                onChange={(event) => { const value = event.currentTarget.value; setBudgetDraft((previous) => ({ ...previous, turns: value })) }}
+              />
+              <p className="ui-text-muted">Leave a limit blank for unlimited (null). Zero is a valid limit and does not resume a parked watcher.</p>
+              <div className="ui-cluster">
+                <Button type="submit" disabled={controlsDisabled || budgetDraft.activeMinutes === String(detail.enrollment.budget.wallClockActiveMs === null ? '' : detail.enrollment.budget.wallClockActiveMs / 60_000) && budgetDraft.turns === String(detail.enrollment.budget.turns ?? '')}>Apply budget</Button>
+                <Button type="button" disabled={controlsPending} onClick={() => {
+                  setBudgetDraft({
+                    activeMinutes: detail.enrollment.budget.wallClockActiveMs === null ? '' : String(detail.enrollment.budget.wallClockActiveMs / 60_000),
+                    turns: detail.enrollment.budget.turns === null ? '' : String(detail.enrollment.budget.turns)
+                  })
+                  setEditingBudget(false)
+                  setFormError(null)
+                }}>Cancel</Button>
+              </div>
+            </form>
+          )}
+        </div>
+      </ToolPanelFrame>
 
       <OpenEscalations escalations={detail.openEscalations} disabled={controlsDisabled} onApprove={(escalation) => {
         const scope = escalation.approvalScope
@@ -656,10 +707,9 @@ function WatcherDetailPane({
 
       <Workers context={context} workers={detail.workers} worktreeId={detail.enrollment.worktreeId} disabled={controlsDisabled} canOpenTerminal={!isRemoteTarget(detail.target)} onCommand={onCommand} />
 
-      <section style={cardStyle}>
-        <h3 style={{ margin: '0 0 8px', fontSize: 15 }}>Decision trace</h3>
+      <ToolPanelFrame title="Decision trace">
         <DecisionTraceList traces={detail.traces} />
-      </section>
+      </ToolPanelFrame>
       <ActivityFeed detail={detail} />
     </section>
   )
@@ -734,7 +784,8 @@ function HeimdallFleet({ context, input }: { context: UiPluginContext; input: un
     void refreshFleet()
     const unsubscribe = context.subscribe((event: QuirkyEvent) => {
       if (event.type !== FLEET_CHANGED_EVENT) return
-      const data = (event as { data?: unknown }).data
+      if (!('data' in event)) return
+      const data = event.data
       if (!isFleetSnapshot(data)) return
       const changed = accept(data)
       if (changed) {
@@ -851,55 +902,62 @@ function HeimdallFleet({ context, input }: { context: UiPluginContext; input: un
   }
 
   return (
-    <main style={rootStyle}>
-      <header style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-          {selectedTarget !== null ? (
-            <button type="button" style={buttonStyle} onClick={() => setSelectedTarget(null)}>Back to fleet</button>
-          ) : (
-            <button type="button" style={buttonStyle} onClick={() => context.closeView()}>Back</button>
+    <main className="ui-stack" style={{ flex: '1 1 auto', minHeight: 0, minWidth: 0, overflow: 'auto' }} aria-label="Heimdall fleet">
+      <ToolPanelFrame
+        title="Heimdall fleet"
+        actions={
+          <div className="ui-cluster">
+            {snapshot && <Badge tone={snapshot.attentionCount > 0 ? 'needs-you' : 'neutral'}>{snapshot.activeCount} active · {snapshot.attentionCount} need attention</Badge>}
+            {selectedTarget !== null
+              ? <Button onClick={() => setSelectedTarget(null)}>Back to fleet</Button>
+              : <Button onClick={() => context.closeView()}>Back</Button>}
+            {selectedTarget === null && <Button disabled={refreshing} onClick={() => void refreshFleet()}>{refreshing ? 'Refreshing…' : 'Refresh fleet'}</Button>}
+          </div>
+        }
+      >
+        <div className="ui-stack">
+          {refreshError && (
+            <div role="alert" className="ui-error-text">
+              Fleet refresh failed; {snapshot ? 'showing the last confirmed snapshot' : 'no confirmed snapshot is available'}: {refreshError}
+            </div>
           )}
-          <h1 style={{ fontSize: 22, margin: 0 }}>Heimdall fleet</h1>
-          {snapshot && <span style={subtleStyle}>{snapshot.activeCount} active · {snapshot.attentionCount} need attention</span>}
-        </div>
-        {selectedTarget === null && <button type="button" style={buttonStyle} disabled={refreshing} onClick={() => void refreshFleet()}>{refreshing ? 'Refreshing…' : 'Refresh fleet'}</button>}
-      </header>
-
-      {refreshError && (
-        <div role="alert" style={{ ...cardStyle, color: 'var(--amber)' }}>
-          Fleet refresh failed; {snapshot ? 'showing the last confirmed snapshot' : 'no confirmed snapshot is available'}: {refreshError}
-        </div>
-      )}
-      {!snapshot && !refreshError && <p style={cardStyle}>Loading Heimdall fleet…</p>}
-      {selectedTarget === null && snapshot && (
-        <>
-          <section style={{ display: 'grid', gap: 8 }}>
-            <h2 style={{ fontSize: 16, margin: 0 }}>Watcher fleet</h2>
-            <FleetTable rows={orderedRows} now={now} selectedId={null} onSelect={(row) => { setFeedback(null); setSelectedTarget(row.target) }} />
-          </section>
-          <ActionHistory items={snapshot?.actionHistory ?? []} />
-        </>
-      )}
-      {selectedTarget !== null && (
-        <>
-          {detailBusy && !detail && <p style={cardStyle}>Loading watcher details…</p>}
-          {detailError && <div role="alert" style={{ ...cardStyle, color: 'var(--danger)' }}><div>Could not load watcher details: {detailError}</div><button type="button" style={{ ...buttonStyle, marginTop: 8 }} onClick={() => void loadDetail(selectedTarget)}>Retry details</button></div>}
-          {detail && (
-            <WatcherDetailPane
-              context={context}
-              detail={detail}
-              row={selectedRow}
-              pending={pending}
-              canCommand={canCommand}
-              feedback={feedback}
-              now={now}
-              onCommand={(command, label) => void submitCommand(command, label)}
-              onDelete={() => void deleteWatcher()}
-            />
+          {!snapshot && !refreshError && <EmptyState message="Loading Heimdall fleet…" />}
+          {selectedTarget === null && snapshot && (
+            <div className="ui-stack">
+              <SectionHeader title="Watcher fleet" />
+              <FleetTable rows={orderedRows} now={now} selectedId={null} onSelect={(row) => { setFeedback(null); setSelectedTarget(row.target) }} />
+              <ActionHistory items={snapshot.actionHistory} />
+            </div>
           )}
-          <ActionHistory items={snapshot?.actionHistory ?? []} />
-        </>
-      )}
+          {selectedTarget !== null && (
+            <div className="ui-stack">
+              {detailBusy && !detail && <EmptyState message="Loading watcher details…" />}
+              {detailError && (
+                <div role="alert" className="ui-stack">
+                  <span className="ui-error-text">Could not load watcher details: {detailError}</span>
+                  <div className="ui-cluster">
+                    <Button onClick={() => void loadDetail(selectedTarget)}>Retry details</Button>
+                  </div>
+                </div>
+              )}
+              {detail && (
+                <WatcherDetailPane
+                  context={context}
+                  detail={detail}
+                  row={selectedRow}
+                  pending={pending}
+                  canCommand={canCommand}
+                  feedback={feedback}
+                  now={now}
+                  onCommand={(command, label) => void submitCommand(command, label)}
+                  onDelete={() => void deleteWatcher()}
+                />
+              )}
+              <ActionHistory items={snapshot?.actionHistory ?? []} />
+            </div>
+          )}
+        </div>
+      </ToolPanelFrame>
     </main>
   )
 }

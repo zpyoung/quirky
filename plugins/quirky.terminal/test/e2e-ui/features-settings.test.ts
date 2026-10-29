@@ -19,22 +19,17 @@ afterEach(stopAll)
 
 const setSetting = (f: Features, name: string, value: string) => f.h.cli(['setting', 'set', `setting:quirky.terminal/${name}`, value])
 
-/** A label's own text, without the text of the select options inside it. */
-const ownText = (label: Element) =>
-  [...label.childNodes]
-    .filter((node) => node.nodeType === Node.TEXT_NODE)
-    .map((node) => node.textContent)
-    .join('')
-
 test(
   'SC-64: canonical terminal URL click settings remain editable in Browser settings',
   async () => {
     const f = await startFeatures()
-    document.querySelector<HTMLElement>('button.gear')!.click()
-    const group = await until(f, () => [...document.querySelectorAll('[role="dialog"] fieldset.settings-group')].find((fieldset) => fieldset.querySelector('legend')?.textContent === 'Browser'))
-    const label = [...group.querySelectorAll('label')].find((candidate) => ownText(candidate).trim() === 'Terminal URL clicks')
-    const select = label?.querySelector('select')
-    if (!(select instanceof HTMLSelectElement)) throw new Error('Terminal URL click control is not available in Browser settings')
+    document.querySelector<HTMLElement>('button[aria-label="Settings"]')!.click()
+    const select = await until(f, () => {
+      const label = [...document.querySelectorAll<HTMLLabelElement>('[role="dialog"] label')]
+        .find((candidate) => candidate.textContent?.trim() === 'Terminal URL clicks')
+      const control = label?.control
+      return control instanceof HTMLSelectElement ? control : undefined
+    })
     flushSync(() => {
       select.value = 'terminal'
       select.dispatchEvent(new Event('change', { bubbles: true }))

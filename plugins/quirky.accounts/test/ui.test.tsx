@@ -2,6 +2,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, expect, test } from 'bun:te
 import { act } from 'react'
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
 import { activate, deactivate } from '../src/ui'
+import { AccountsUiStore } from '../src/window/model'
 import type { QuirkyEvent, UiPluginContext } from '@quirky/protocol'
 import type { Preferences } from '../src/types'
 
@@ -66,6 +67,7 @@ let uiStateValue: { open: boolean; provider: string | null; expanded: 'claude' |
 let usageValue: unknown
 let listResponse: (callNumber: number) => unknown
 let consumeFailures: number
+let consumeReply: unknown | undefined
 let settingValue: unknown
 let agentListing: unknown
 let refreshedAgentListing: unknown
@@ -90,6 +92,7 @@ beforeEach(() => {
   uiStateValue = { open: false, provider: null, expanded: null, settingsSection: null }
   usageValue = emptyUsage
   consumeFailures = 0
+  consumeReply = undefined
   settingValue = false
   preferencesValue = { ...preferences, visibleProviders: [...providers] }
   openedViews = []
@@ -145,7 +148,7 @@ function makeContext(): UiPluginContext {
           consumeFailures -= 1
           throw new Error('fixture failure')
         }
-        return 'reset'
+        return consumeReply === undefined ? { outcome: 'reset', state: usageValue } : consumeReply
       }
       if (method === 'setting.set') {
         if (params?.id === 'setting:quirky.accounts/gemini-cli-oauth-enabled' && typeof params.value === 'boolean') settingValue = params.value
@@ -199,6 +202,24 @@ function buttonByText(name: string): HTMLButtonElement {
   if (!(element instanceof HTMLButtonElement)) throw new Error(`Missing button: ${name}`)
   return element
 }
+function inputByLabel(root: ParentNode, text: string): HTMLInputElement {
+  const label = [...root.querySelectorAll<HTMLLabelElement>('label')].find((candidate) => candidate.textContent?.trim() === text)
+  const input = label?.control
+  if (!(input instanceof HTMLInputElement)) throw new Error(`Missing input: ${text}`)
+  return input
+}
+function dialogByTitle(root: ParentNode, title: string): HTMLElement | null {
+  return [...root.querySelectorAll<HTMLElement>('[role="dialog"][aria-labelledby]')].find((dialog) => {
+    const titleText = (dialog.getAttribute('aria-labelledby') ?? '')
+      .split(/\s+/)
+      .map((id) => dialog.ownerDocument.getElementById(id)?.textContent?.trim())
+      .filter(Boolean)
+      .join(' ')
+    return titleText === title
+  }) ?? null
+}
+
+
 
 
 test('a late account-list response cannot replace a newer selected account in Usage', async () => {
@@ -256,7 +277,7 @@ test('a reset confirmation keeps the displayed Codex scope and request ID across
   expect(container.textContent).toContain('Offer shown for Account A')
   expect(container.textContent).toContain('Account B')
 
-  const confirmation = container.querySelector('[aria-label=\"Reset Codex limits confirmation\"]')
+  const confirmation = dialogByTitle(container, 'Reset Codex limits confirmation')
   if (!(confirmation instanceof HTMLElement)) throw new Error('Missing Codex reset confirmation')
   const reset = [...confirmation.querySelectorAll('button')].find((button) => button.textContent?.trim() === 'Reset now')
   if (!(reset instanceof HTMLButtonElement)) throw new Error('Missing Codex reset confirmation button')
@@ -272,6 +293,22 @@ test('a reset confirmation keeps the displayed Codex scope and request ID across
   expect(redemptions.map((call) => call.params?.expectedScope)).toEqual([scopeA, scopeA])
   expect(redemptions[0]?.params?.idempotencyKey).toBe(redemptions[1]?.params?.idempotencyKey)
 })
+test('the reset consumer rejects a legacy scalar success response', async () => {
+  const scope = { accountId: 'codex-a', accountRevision: 1, offerRevision: 'offer-a' }
+  usageValue = codexUsage(scope)
+  consumeReply = 'reset'
+  const store = new AccountsUiStore(makeContext())
+  try {
+    await expect(store.consumeResetCredit('legacy-reset-request', scope)).resolves.toBe('failed')
+    expect(toastCalls).toContainEqual([
+      'Could not reset Codex limits',
+      'The accounts service returned an unrecognized reset outcome.'
+    ])
+    expect(calls.filter((call) => call.method === 'quirky.accounts/consumeResetCredit')).toHaveLength(1)
+  } finally {
+    store.stop()
+  }
+})
 test('Gemini CLI OAuth credential refresh requires an explicit setting change', async () => {
   listResponse = () => accountState(1, 'Fresh account')
   const context = makeContext()
@@ -283,8 +320,7 @@ test('Gemini CLI OAuth credential refresh requires an explicit setting change', 
   await settle()
 
   await act(async () => { buttonByText('Gemini CLI (legacy)').click() })
-  const checkbox = container.querySelector('[aria-label=\"Allow Gemini CLI OAuth credential refresh\"]')
-  if (!(checkbox instanceof HTMLInputElement)) throw new Error('Missing Gemini OAuth consent toggle')
+  const checkbox = inputByLabel(container, 'Allow Gemini CLI OAuth credential refresh')
   expect(checkbox.checked).toBe(false)
 
   await act(async () => { checkbox.click() })
@@ -336,7 +372,7 @@ test('unconfigured Usage opens setup without expanding the status bar and keeps 
   expect(preferencesValue.hidden).toBe(true)
   const statusBar = container.querySelector('.usage-status-bar')
   if (!(statusBar instanceof HTMLElement)) throw new Error('Missing Usage status bar root')
-  expect(statusBar.style.display).toBe('none')
+  expect(container.querySelector('[aria-label="Open Usage"]')).toBeNull()
 
   const openCommand = provided.get('command:quirky.accounts/open')
   if (typeof openCommand !== 'function') throw new Error('Missing Usage open command')

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProp
 import type { QuirkyEvent, UiPluginContext } from '@quirky/protocol'
 import { TerminalPaneView, type TerminalPaneHandle, type TerminalPaneProps } from '../pane/TerminalPaneView'
 import type { WorkspaceController } from '../workspace/controller'
-import { DEFAULT_GUTTER_ROWS, dockHeight, gutterRowsAfterDrag, RESIZE_HANDLE_HEIGHT_PX, shouldMountDock } from './geometry'
+import { DEFAULT_GUTTER_ROWS, dockHeight, gutterRowsAfterDrag, shouldMountDock } from './geometry'
 import { isDockState, type DockHostReport, type DockState, type DockTransport } from './types'
 
 const COMPOSER_VIEW_ID = 'view:quirky.terminal-dock/composer'
@@ -394,7 +394,6 @@ export function DockHost(props: Props) {
             aria-label="Resize agent composer"
             data-resize-handle
             onMouseDown={beginResize}
-            style={{ flex: `0 0 ${RESIZE_HANDLE_HEIGHT_PX}px`, height: RESIZE_HANDLE_HEIGHT_PX }}
           />
           <div
             ref={composerHost}

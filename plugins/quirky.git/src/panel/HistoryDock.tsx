@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { Badge, Button, EmptyState, IconButton, ListRow, SectionHeader } from '@quirky/ui'
 import type { GitChange, GitCommit, GitHistory, UiPluginContext } from '@quirky/protocol'
 import { messageOf, relativeTime, shortOid } from './format'
 import { Rows, type RowHandlers, type RowItem } from './Rows'
@@ -6,6 +7,7 @@ import { Rows, type RowHandlers, type RowItem } from './Rows'
 const MAX_LIMIT = 200
 const NO_SELECTION: readonly string[] = []
 const NO_DIRS: ReadonlySet<string> = new Set()
+const ROW_STYLE = { gap: 'var(--ui-space-2)', listStyle: 'none', margin: 0, padding: 0 } as const
 
 type Props = {
   context: UiPluginContext
@@ -62,20 +64,20 @@ export function HistoryDock({ context, worktree, open, onToggle, head, onOpenCom
   }
 
   return (
-    <section className="scm-section scm-dock" data-section="history">
-      <header className="scm-section-head">
-        <button type="button" className="scm-section-toggle" aria-expanded={open} onClick={onToggle}>
-          <span className="scm-chevron" aria-hidden="true">
+    <section className="ui-stack" data-section="history" style={{ gap: 'var(--ui-space-4)' }}>
+      <SectionHeader
+        title="Commits"
+        actions={
+          <IconButton label={`${open ? 'Collapse' : 'Expand'} Commits`} aria-expanded={open} onClick={onToggle}>
             {open ? '▾' : '▸'}
-          </span>
-          <span className="scm-section-title">Commits</span>
-        </button>
-      </header>
+          </IconButton>
+        }
+      />
       {open && (
-        <div className="scm-history">
-          {error !== null && <p className="scm-error">{error}</p>}
-          {history !== null && history.commits.length === 0 && <p className="muted scm-pad">No commits yet.</p>}
-          <ul className="scm-rows">
+        <div className="ui-stack" data-history-content>
+          {error !== null && <p role="alert" style={{ color: 'var(--ui-failing)' }}>{error}</p>}
+          {history !== null && history.commits.length === 0 && <EmptyState message="No commits yet." />}
+          <ul className="ui-stack" style={ROW_STYLE}>
             {history?.commits.map((commit) => (
               <CommitRow
                 key={commit.oid}
@@ -88,11 +90,7 @@ export function HistoryDock({ context, worktree, open, onToggle, head, onOpenCom
               />
             ))}
           </ul>
-          {history?.hasMore && (limit ?? 0) < MAX_LIMIT && (
-            <button type="button" className="scm-load-more" onClick={() => setLimit(MAX_LIMIT)}>
-              Load more
-            </button>
-          )}
+          {history?.hasMore && (limit ?? 0) < MAX_LIMIT && <Button onClick={() => setLimit(MAX_LIMIT)}>Load more</Button>}
         </div>
       )}
     </section>
@@ -110,13 +108,13 @@ type CommitRowProps = {
 
 function CommitRow({ commit, expanded, files, onToggle, onOpen, onOpenFile }: CommitRowProps) {
   const items = useMemo<RowItem[]>(
-    () => ('entries' in (files ?? {}) ? (files as { entries: GitChange[] }).entries : []).map((c) => ({ key: c.path, path: c.path, oldPath: c.oldPath, status: c.status, added: c.added, removed: c.removed })),
+    () => ('entries' in (files ?? {}) ? (files as { entries: GitChange[] }).entries : []).map((change) => ({ key: change.path, path: change.path, oldPath: change.oldPath, status: change.status, added: change.added, removed: change.removed })),
     [files]
   )
   const handlers = useMemo<RowHandlers>(
     () => ({
       click: (item) => {
-        const change = (files as { entries: GitChange[] }).entries.find((c) => c.path === item.path)
+        const change = (files as { entries: GitChange[] }).entries.find((entry) => entry.path === item.path)
         if (change) onOpenFile(change)
       },
       contextMenu: () => {},
@@ -127,28 +125,30 @@ function CommitRow({ commit, expanded, files, onToggle, onOpen, onOpenFile }: Co
     [files, onOpenFile]
   )
   return (
-    <li className="scm-commit">
-      <div className="scm-row">
-        <button type="button" className="icon-button" aria-label={`${expanded ? 'Collapse' : 'Expand'} commit ${shortOid(commit.oid)}`} aria-expanded={expanded} onClick={onToggle}>
-          {expanded ? '▾' : '▸'}
-        </button>
-        <button type="button" className="scm-row-main" title={commit.body || commit.subject} onClick={onOpen}>
-          <span className="scm-row-text">
-            <span className="scm-row-line">
-              <span className="scm-row-name">{commit.subject}</span>
-              {commit.refs.map((ref) => (
-                <span key={ref} className="scm-ref">
-                  {ref}
-                </span>
-              ))}
-            </span>
-            <span className="scm-row-sub">{`${shortOid(commit.oid)} · ${commit.author} · ${relativeTime(commit.authoredAt)}`}</span>
+    <li data-commit-row title={commit.body || commit.subject}>
+      <ListRow
+        title={
+          <span className="ui-cluster" style={{ flexWrap: 'nowrap' }}>
+            <span>{commit.subject}</span>
+            {commit.refs.map((ref) => <Badge key={ref} tone="accent" label={`Commit ref ${ref}`}>{ref}</Badge>)}
           </span>
-        </button>
-      </div>
+        }
+        description={`${shortOid(commit.oid)} · ${commit.author} · ${relativeTime(commit.authoredAt)}`}
+        status="done"
+        trailing={
+          <IconButton
+            label={`${expanded ? 'Collapse' : 'Expand'} commit ${shortOid(commit.oid)}`}
+            aria-expanded={expanded}
+            onClick={onToggle}
+          >
+            {expanded ? '▾' : '▸'}
+          </IconButton>
+        }
+        onClick={onOpen}
+      />
       {expanded && files !== undefined && (
         'error' in files ? (
-          <p className="scm-error">{files.error}</p>
+          <p role="alert" style={{ color: 'var(--ui-failing)' }}>{files.error}</p>
         ) : (
           <Rows scope={`commit:${commit.oid}`} items={items} viewMode="list" collapsedDirs={NO_DIRS} onToggleDir={() => {}} selected={NO_SELECTION} handlers={handlers} />
         )

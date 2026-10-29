@@ -1,6 +1,6 @@
 import { existsSync } from 'node:fs'
-import { copyFile, cp, mkdir, readdir, rm } from 'node:fs/promises'
-import { dirname, join, resolve } from 'node:path'
+import { copyFile, mkdir, readdir, rm } from 'node:fs/promises'
+import { join, resolve } from 'node:path'
 
 const root = import.meta.dir
 const dist = process.env.QUIRKY_UI_OUT ? resolve(process.env.QUIRKY_UI_OUT) : join(root, 'dist')
@@ -58,7 +58,7 @@ const pluginBuilds = await Promise.all(
       minify: true,
       splitting: true,
       outdir: outputDirectory,
-      naming: { entry: 'ui.js', chunk: 'chunk-[hash].[ext]', asset: 'asset-[hash].[ext]' },
+      naming: { entry: 'ui.[ext]', chunk: 'chunk-[hash].[ext]', asset: 'asset-[hash].[ext]' },
       external: shared,
       define
     })
@@ -77,14 +77,6 @@ for (const id of pluginIds) {
   if (existsSync(join(pluginDirectory, 'src/viewers/ViewerSurface.tsx'))) {
     const worker = Bun.resolveSync('pdfjs-dist/build/pdf.worker.min.mjs', pluginDirectory)
     await copyFile(worker, join(outputDirectory, 'pdf.worker.min.mjs'))
-  }
-  if (existsSync(join(pluginDirectory, 'src/markdown/MarkdownSurface.tsx'))) {
-    const katexCss = Bun.resolveSync('katex/dist/katex.min.css', pluginDirectory)
-    const katexRoot = dirname(katexCss)
-    const katexOutput = join(outputDirectory, 'katex')
-    await mkdir(katexOutput, { recursive: true })
-    await copyFile(katexCss, join(katexOutput, 'katex.min.css'))
-    await cp(join(katexRoot, 'fonts'), join(katexOutput, 'fonts'), { recursive: true })
   }
 }
 

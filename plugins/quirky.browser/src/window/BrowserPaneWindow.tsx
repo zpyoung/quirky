@@ -1,8 +1,10 @@
 import {
   useCallback,
   useEffect,
+  useId,
   useRef,
   useState,
+  type CSSProperties,
   type ClipboardEvent as ReactClipboardEvent,
   type CompositionEvent as ReactCompositionEvent,
   type KeyboardEvent as ReactKeyboardEvent,
@@ -13,6 +15,7 @@ import type { PaneCommand, PaneDownload, PaneFrame, PanePrompt, PaneState, PaneT
 import { acceptLatestFrame, isTextInputKey, nativePreviewNavigationUrl, nativePreviewReportUrl, paneForView, pointerToFramePoint } from './model'
 import { DesignWindow, type DesignAction } from '../design-window/DesignWindow'
 import { BrowserImportHint, BrowserProfileMenu } from '../preferences-window/BrowserProfileMenu'
+import { Badge, Button, EmptyState, FormRow, IconButton, ListRow, SectionHeader, StatusDot, TextField } from '@quirky/ui'
 
 const WORKTREE_VIEW = 'view:quirky.session/worktree'
 const SEARCH_ENGINES = ['google', 'duckduckgo', 'bing', 'kagi'] as const
@@ -32,53 +35,191 @@ type AgentPage = { browserPageId: string; url: string; title: string; active: bo
 type NativeHandle = NativeBrowserHandle
 type InputArgs = Record<string, unknown>
 
-const styles = `
-.qbp { position:relative; box-sizing:border-box; display:flex; flex-direction:column; width:100%; height:100%; min-width:0; min-height:0; color:var(--text,#d7dae0); background:var(--bg,#16181d); font:13px/1.4 var(--ui-font-family,system-ui,sans-serif); }
-.qbp *, .qbp *::before, .qbp *::after { box-sizing:border-box; }
-.qbp button, .qbp input { color:inherit; font:inherit; }
-.qbp button { min-height:28px; padding:4px 9px; border:1px solid var(--border,#2b2f3a); border-radius:5px; background:var(--bg-raised,#1d2027); cursor:pointer; }
-.qbp button:hover:not(:disabled) { background:var(--bg-hover,#262a33); }
-.qbp button:disabled { opacity:.48; cursor:not-allowed; }
-.qbp button:focus-visible, .qbp input:focus-visible, .qbp [tabindex]:focus-visible { outline:2px solid var(--accent,#4f8ff7); outline-offset:1px; }
-.qbp input { min-width:0; padding:6px 8px; border:1px solid var(--border,#2b2f3a); border-radius:5px; background:var(--bg,#16181d); }
-.qbp-toolbar { position:relative; display:flex; flex:0 0 auto; align-items:center; flex-wrap:wrap; gap:5px; padding:7px 9px; border-bottom:1px solid var(--border,#2b2f3a); background:var(--bg-raised,#1d2027); }
-.qbp-address-wrap { position:relative; display:flex; flex:1 1 260px; min-width:180px; gap:5px; }
-.qbp-address { flex:1 1 auto; width:100%; }
-.qbp-address-popover, .qbp-menu-popover { position:absolute; z-index:20; top:calc(100% + 5px); right:0; display:flex; flex-direction:column; gap:3px; min-width:min(420px,calc(100vw - 24px)); max-height:min(60vh,460px); padding:6px; overflow:auto; border:1px solid var(--border,#2b2f3a); border-radius:7px; background:var(--bg-raised,#1d2027); box-shadow:0 10px 32px #0009; }
-.qbp-address-popover { left:0; right:auto; }
-.qbp-address-popover button, .qbp-menu-popover button { width:100%; text-align:left; white-space:normal; }
-.qbp-suggestion-title { display:block; font-weight:600; overflow-wrap:anywhere; }
-.qbp-suggestion-detail { display:block; color:var(--muted,#8a909e); font-size:11px; overflow-wrap:anywhere; }
-.qbp-details { position:relative; flex:0 0 auto; }
-.qbp-toolbar > .qbp-profile-details { position:static; }
-.qbp-profile-details > .qbp-menu-popover { left:9px; right:auto; width:min(420px,calc(100% - 18px)); min-width:0; }
-.qbp-details > summary { min-height:28px; padding:5px 9px; border:1px solid var(--border,#2b2f3a); border-radius:5px; cursor:pointer; list-style:none; white-space:nowrap; }
-.qbp-details > summary::-webkit-details-marker { display:none; }
-.qbp-mode { display:flex; align-items:center; gap:5px; padding:3px 8px; border:1px solid var(--border,#2b2f3a); border-radius:5px; color:var(--muted,#a4a9b4); white-space:nowrap; }
-.qbp-mode[data-mode="watch"] { color:var(--accent,#83b5ff); }
-.qbp-find { display:flex; flex:0 0 auto; align-items:center; gap:5px; width:100%; padding:5px 9px; border-bottom:1px solid var(--border,#2b2f3a); background:var(--bg-raised,#1d2027); }
-.qbp-find input { flex:1 1 160px; }
-.qbp-find-count { min-width:75px; color:var(--muted,#a4a9b4); text-align:center; }
-.qbp-page { position:relative; display:flex; flex:1 1 auto; align-items:center; justify-content:center; min-width:0; min-height:0; overflow:hidden; background:#101115; }
-.qbp-native-host { flex:0 1 auto; width:100%; height:100%; min-width:0; min-height:0; }
-.qbp-watch-image { display:block; width:100%; height:100%; object-fit:contain; user-select:none; -webkit-user-drag:none; }
-.qbp-overlay { position:absolute; z-index:5; inset:0; display:flex; align-items:center; justify-content:center; padding:18px; overflow:auto; background:color-mix(in srgb,var(--bg,#16181d) 88%,transparent); }
-.qbp-card { width:min(620px,100%); max-height:100%; padding:18px; overflow:auto; border:1px solid var(--border,#343945); border-radius:10px; background:var(--bg-raised,#1d2027); box-shadow:0 16px 48px #0008; }
-.qbp-card h2 { margin:0 0 8px; font-size:17px; }
-.qbp-card p { margin:6px 0 12px; color:var(--muted,#b1b5bd); overflow-wrap:anywhere; }
-.qbp-actions { display:flex; flex-wrap:wrap; gap:7px; margin-top:12px; }
-.qbp-error { color:var(--danger,#e5534b) !important; }
-.qbp-shelf { display:flex; flex:0 0 auto; flex-direction:column; gap:6px; max-height:24vh; padding:7px 9px; overflow:auto; border-top:1px solid var(--border,#2b2f3a); background:var(--bg-raised,#1d2027); }
-.qbp-download { display:flex; align-items:center; flex-wrap:wrap; gap:7px; }
-.qbp-download-name { flex:1 1 180px; min-width:0; overflow-wrap:anywhere; }
-.qbp-download progress { width:100px; }
-.qbp-prompt { display:grid; gap:8px; }
-.qbp-prompt label { display:grid; gap:4px; }
-.qbp-message { flex:0 0 auto; padding:7px 10px; border-bottom:1px solid var(--border,#2b2f3a); overflow-wrap:anywhere; }
-.qbp-message[data-kind="error"] { color:var(--danger,#e5534b); }
-.qbp-history { max-width:420px; }
-.qbp-muted { color:var(--muted,#a4a9b4); }
-`
+const paneStyles = {
+  root: {
+    boxSizing: 'border-box',
+    position: 'relative',
+    display: 'flex',
+    flexDirection: 'column',
+    width: '100%',
+    height: '100%',
+    minWidth: 0,
+    minHeight: 0,
+    color: 'var(--ui-text)',
+    background: 'var(--ui-surface)',
+    fontSize: 'var(--ui-font-body)'
+  },
+  toolbar: {
+    display: 'flex',
+    flex: '0 0 auto',
+    position: 'relative',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 'var(--ui-space-4)',
+    padding: 'var(--ui-space-8) var(--ui-space-12)',
+    borderBottom: 'var(--ui-border-width) solid var(--ui-border)',
+    background: 'var(--ui-rail)',
+    minWidth: 0
+  },
+  toolbarControl: { flex: '0 0 auto' },
+  addressWrap: {
+    position: 'relative',
+    display: 'flex',
+    flex: '1 1 40%',
+    minWidth: 0
+  },
+  addressFieldWrap: { flex: '1 1 auto', minWidth: 0 },
+  addressField: { width: '100%', minWidth: 0 },
+  suggestions: {
+    position: 'absolute',
+    top: '100%',
+    left: 0,
+    right: 0,
+    zIndex: 20,
+    display: 'grid',
+    gap: 'var(--ui-space-4)',
+    width: '100%',
+    maxHeight: '60vh',
+    overflow: 'auto',
+    margin: 0
+  },
+  suggestionTitle: { display: 'block', fontWeight: 600, overflowWrap: 'anywhere' },
+  suggestionDetail: {
+    display: 'block',
+    color: 'var(--ui-muted)',
+    fontSize: 'var(--ui-font-label)',
+    overflowWrap: 'anywhere'
+  },
+  details: { position: 'relative', display: 'flex', flexDirection: 'column', flex: '0 0 auto', minWidth: 0 },
+  profileDetails: { position: 'static', display: 'flex', flexDirection: 'column', flex: '0 0 auto', minWidth: 0 },
+  menuSummary: {
+    display: 'inline-flex',
+    width: 'auto',
+    minWidth: 'var(--ui-row-single)',
+    maxWidth: '100%',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    listStyle: 'none',
+    textAlign: 'left',
+    whiteSpace: 'normal',
+    cursor: 'pointer'
+  },
+  menuPopover: {
+    position: 'static',
+    width: '100%',
+    maxWidth: '100%',
+    maxHeight: '60vh',
+    overflow: 'auto',
+    margin: 'var(--ui-space-4) 0 0'
+  },
+  profilePopover: {
+    position: 'absolute',
+    top: '100%',
+    left: 'var(--ui-space-12)',
+    right: 'auto',
+    zIndex: 20,
+    width: 'min(calc(var(--ui-row-double) * 12), calc(100% - var(--ui-space-24)))',
+    maxHeight: '60vh',
+    overflow: 'auto',
+    margin: 'var(--ui-space-4) 0 0'
+  },
+  historyPopover: {
+    position: 'absolute',
+    top: '100%',
+    left: 'auto',
+    right: 0,
+    zIndex: 20,
+    width: 'min(calc(var(--ui-row-double) * 12), calc(100vw - var(--ui-space-24)))',
+    maxHeight: '60vh',
+    overflow: 'auto',
+    margin: 'var(--ui-space-4) 0 0'
+  },
+  menuItems: { display: 'grid', gap: 'var(--ui-space-4)' },
+  find: {
+    display: 'flex',
+    flex: '0 0 auto',
+    alignItems: 'end',
+    flexWrap: 'wrap',
+    gap: 'var(--ui-space-8)',
+    width: '100%',
+    minWidth: 0,
+    padding: 'var(--ui-space-8) var(--ui-space-12)',
+    borderBottom: 'var(--ui-border-width) solid var(--ui-border)',
+    background: 'var(--ui-rail)'
+  },
+  findField: { flex: '1 1 auto', minWidth: 0 },
+  findInput: { width: '100%', minWidth: 0 },
+  findCount: { color: 'var(--ui-muted)', textAlign: 'center' },
+  message: {
+    display: 'flex',
+    flex: '0 0 auto',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 'var(--ui-space-8)',
+    minWidth: 0,
+    padding: 'var(--ui-space-8) var(--ui-space-12)',
+    borderBottom: 'var(--ui-border-width) solid var(--ui-border)'
+  },
+  messageText: { flex: '1 1 auto', minWidth: 0, overflowWrap: 'anywhere' },
+  errorText: { color: 'var(--ui-failing)', margin: 0, overflowWrap: 'anywhere' },
+  mutedText: { color: 'var(--ui-muted)', margin: 0, overflowWrap: 'anywhere' },
+  helpText: { color: 'var(--ui-muted)', margin: 0, overflowWrap: 'anywhere' },
+  page: {
+    position: 'relative',
+    display: 'flex',
+    flex: '1 1 auto',
+    alignItems: 'center',
+    justifyContent: 'center',
+    minWidth: 0,
+    minHeight: 0,
+    overflow: 'hidden',
+    background: 'var(--ui-rail)'
+  },
+  nativeHost: { flex: '0 1 auto', width: '100%', height: '100%', minWidth: 0, minHeight: 0 },
+  watchImage: {
+    display: 'block',
+    width: '100%',
+    height: '100%',
+    objectFit: 'contain',
+    userSelect: 'none'
+  },
+  overlay: {
+    position: 'absolute',
+    zIndex: 5,
+    inset: 0,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 'var(--ui-space-16)',
+    overflow: 'auto',
+    background: 'var(--ui-scrim)'
+  },
+  card: {
+    width: '100%',
+    maxWidth: 'min(100%, calc(var(--ui-row-double) * 18))',
+    maxHeight: '100%',
+    overflow: 'auto',
+    padding: 'var(--ui-space-16)'
+  },
+  actions: { display: 'flex', flexWrap: 'wrap', gap: 'var(--ui-space-8)' },
+  prompt: { display: 'grid', gap: 'var(--ui-space-8)' },
+  shelf: {
+    display: 'flex',
+    flex: '0 0 auto',
+    flexDirection: 'column',
+    gap: 'var(--ui-space-8)',
+    maxHeight: '24vh',
+    padding: 'var(--ui-space-8) var(--ui-space-12)',
+    overflow: 'auto',
+    borderTop: 'var(--ui-border-width) solid var(--ui-border)',
+    background: 'var(--ui-rail)'
+  },
+  download: { minWidth: 0 },
+  downloadDescription: { display: 'grid', gap: 'var(--ui-space-4)', width: '100%', minWidth: 0 },
+  downloadActions: { display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 'var(--ui-space-4)', minWidth: 0, maxWidth: '100%' },
+  downloadProgress: { width: 'min(100%, 25vw)', minWidth: 0, accentColor: 'var(--ui-accent)' },
+  mode: { display: 'inline-flex', alignItems: 'center', gap: 'var(--ui-space-4)', flex: '0 0 auto' }
+} satisfies Record<string, CSSProperties>
 
 let focusedPaneId: string | null = null
 let focusAddress: (() => void) | null = null
@@ -170,10 +311,14 @@ function imageSource(frame: PaneFrame): string {
 
 export function BrowserPaneWindow({ context, input }: { context: UiPluginContext; input?: unknown }) {
   const requestedPaneId = paneIdFrom(input)
+  const promptFieldsId = useId()
   const rootRef = useRef<HTMLDivElement>(null)
   const paneRef = useRef<PaneTab | null>(null)
   const addressRef = useRef<HTMLInputElement>(null)
   const findRef = useRef<HTMLInputElement>(null)
+  const editingFindRef = useRef(false)
+  const findTextRef = useRef('')
+  const findPaneIdRef = useRef<string | null>(null)
   const nativeHostRef = useRef<HTMLDivElement>(null)
   const frameHostRef = useRef<HTMLDivElement>(null)
   const watchImageRef = useRef<HTMLImageElement | null>(null)
@@ -237,7 +382,11 @@ export function BrowserPaneWindow({ context, input }: { context: UiPluginContext
     setPane(selected)
     if (selected) {
       if (!editingAddress) setAddress(selected.url)
-      setFindText(selected.find.text)
+      if (selected.id !== findPaneIdRef.current || !editingFindRef.current) {
+        findPaneIdRef.current = selected.id
+        findTextRef.current = selected.find.text
+        setFindText(selected.find.text)
+      }
     }
   }, [editingAddress, requestedPaneId])
 
@@ -303,7 +452,11 @@ export function BrowserPaneWindow({ context, input }: { context: UiPluginContext
   useEffect(() => {
     if (pane) {
       if (!editingAddress) setAddress(pane.url)
-      setFindText(pane.find.text)
+      if (pane.id !== findPaneIdRef.current || !editingFindRef.current) {
+        findPaneIdRef.current = pane.id
+        findTextRef.current = pane.find.text
+        setFindText(pane.find.text)
+      }
     }
   }, [pane?.id, pane?.url, pane?.find.text, editingAddress])
   useEffect(() => {
@@ -848,11 +1001,13 @@ export function BrowserPaneWindow({ context, input }: { context: UiPluginContext
     : undefined
   const canUseWatch = pane?.mode === 'watch'
 
+  const activePrompt = pane?.mode === 'watch' ? pane.prompts[0] ?? null : null
   return (
     <div
       ref={rootRef}
       className="qbp"
       data-browser-pane={pane?.id ?? requestedPaneId ?? ''}
+      style={paneStyles.root}
       tabIndex={-1}
       onFocusCapture={() => {
         focusedPaneId = paneRef.current?.id ?? requestedPaneId
@@ -876,66 +1031,73 @@ export function BrowserPaneWindow({ context, input }: { context: UiPluginContext
         }
       }}
     >
-      <style>{styles}</style>
-      <div className="qbp-toolbar" aria-label="Browser controls">
-        <button type="button" aria-label="Back" title="Back" disabled={!pane?.canGoBack} onClick={() => void control('back')}>‹</button>
-        <button type="button" aria-label="Forward" title="Forward" disabled={!pane?.canGoForward} onClick={() => void control('forward')}>›</button>
-        <button
-          type="button"
-          aria-label={pane?.loading ? 'Stop loading' : 'Reload'}
+      <div className="qbp-toolbar" aria-label="Browser controls" style={paneStyles.toolbar}>
+        <IconButton label="Back" title="Back" disabled={!pane?.canGoBack} onClick={() => void control('back')} style={paneStyles.toolbarControl}>‹</IconButton>
+        <IconButton label="Forward" title="Forward" disabled={!pane?.canGoForward} onClick={() => void control('forward')} style={paneStyles.toolbarControl}>›</IconButton>
+        <IconButton
+          label={pane?.loading ? 'Stop loading' : 'Reload'}
           title={pane?.loading ? 'Stop loading' : 'Reload'}
           disabled={!pane}
           onClick={() => void control(pane?.loading ? 'stop' : 'reload')}
-        >{pane?.loading ? 'Stop' : 'Reload'}</button>
-        <div className="qbp-address-wrap">
-          <input
-            ref={addressRef}
-            className="qbp-address"
-            aria-label="Address and search"
-            aria-autocomplete="list"
-            aria-expanded={suggestionsOpen && suggestions.length > 0}
-            value={address}
-            placeholder="Search or enter address"
-            onFocus={() => { setEditingAddress(true); setSuggestionsOpen(true) }}
-            onBlur={() => { window.setTimeout(() => setSuggestionsOpen(false), 120); setEditingAddress(false) }}
-            onChange={(event) => { setAddress(event.target.value); setSuggestionsOpen(true) }}
-            onKeyDown={(event) => {
-              if (event.key === 'ArrowDown' && suggestions.length > 0) {
-                event.preventDefault()
-                setActiveSuggestion((value) => (value + 1) % suggestions.length)
-              } else if (event.key === 'ArrowUp' && suggestions.length > 0) {
-                event.preventDefault()
-                setActiveSuggestion((value) => (value + suggestions.length - 1) % suggestions.length)
-              } else if (event.key === 'Enter') {
-                event.preventDefault()
-                const suggestion = suggestionsOpen ? suggestions[activeSuggestion] : undefined
-                void navigate(suggestion?.url ?? address)
-              } else if (event.key === 'Escape') {
-                setSuggestionsOpen(false)
-                addressRef.current?.blur()
-              }
-            }}
-          />
+          style={paneStyles.toolbarControl}
+        >{pane?.loading ? '■' : '↻'}</IconButton>
+        <div className="qbp-address-wrap" style={paneStyles.addressWrap}>
+          <div style={paneStyles.addressFieldWrap}>
+            <TextField
+              ref={addressRef}
+              className="qbp-address"
+              label="Address and search"
+              aria-label="Address and search"
+              aria-autocomplete="list"
+              aria-expanded={suggestionsOpen && suggestions.length > 0}
+              value={address}
+              placeholder="Search or enter address"
+              style={paneStyles.addressField}
+              onFocus={() => { setEditingAddress(true); setSuggestionsOpen(true) }}
+              onBlur={() => { window.setTimeout(() => setSuggestionsOpen(false), 120); setEditingAddress(false) }}
+              onChange={(event) => { setAddress(event.target.value); setSuggestionsOpen(true) }}
+              onKeyDown={(event) => {
+                if (event.key === 'ArrowDown' && suggestions.length > 0) {
+                  event.preventDefault()
+                  setActiveSuggestion((value) => (value + 1) % suggestions.length)
+                } else if (event.key === 'ArrowUp' && suggestions.length > 0) {
+                  event.preventDefault()
+                  setActiveSuggestion((value) => (value + suggestions.length - 1) % suggestions.length)
+                } else if (event.key === 'Enter') {
+                  event.preventDefault()
+                  const suggestion = suggestionsOpen ? suggestions[activeSuggestion] : undefined
+                  void navigate(suggestion?.url ?? address)
+                } else if (event.key === 'Escape') {
+                  setSuggestionsOpen(false)
+                  addressRef.current?.blur()
+                }
+              }}
+            />
+          </div>
           {suggestionsOpen && suggestions.length > 0 ? (
-            <div className="qbp-address-popover" role="listbox" aria-label="Browser suggestions">
+            <div className="ui-menu__list qbp-address-popover" role="listbox" aria-label="Browser suggestions" style={paneStyles.suggestions}>
               {suggestions.map((suggestion, index) => (
-                <button
-                  type="button"
+                <Button
+                  className="ui-menu__item"
                   role="option"
                   aria-selected={index === activeSuggestion}
                   key={`${suggestion.kind}:${suggestion.url}`}
                   onMouseDown={(event) => event.preventDefault()}
                   onClick={() => applySuggestion(suggestion.url)}
                 >
-                  <span className="qbp-suggestion-title">{suggestion.title || suggestion.url}</span>
-                  <span className="qbp-suggestion-detail">{suggestion.kind} · {suggestion.url}</span>
-                </button>
+                  <span className="qbp-suggestion-title" style={paneStyles.suggestionTitle}>{suggestion.title || suggestion.url}</span>
+                  <span className="qbp-suggestion-detail" style={paneStyles.suggestionDetail}>{suggestion.kind} · {suggestion.url}</span>
+                </Button>
               ))}
             </div>
           ) : null}
         </div>
-        <button type="button" aria-label="Find in page" title="Find in page (Mod+F)" onClick={() => { setFindOpen(true); requestAnimationFrame(() => findRef.current?.focus()) }}>Find</button>
-        <span className="qbp-mode" data-mode={pane?.mode ?? 'native'}>{pane?.mode === 'watch' ? 'Watch' : 'Native'}</span>
+        <Button aria-label="Find in page" title="Find in page (Mod+F)" onClick={() => { setFindOpen(true); requestAnimationFrame(() => findRef.current?.focus()) }} style={paneStyles.toolbarControl}>Find</Button>
+        <span className="qbp-mode" data-mode={pane?.mode ?? 'native'} style={paneStyles.mode}>
+          <Badge tone={pane?.mode === 'watch' ? 'accent' : 'neutral'}>
+            {pane?.mode === 'watch' ? 'Watch' : 'Native'}
+          </Badge>
+        </span>
         <DesignWindow
           context={context}
           pane={pane ? { id: pane.id, mode: pane.mode, page: pane.page, url: pane.url, title: pane.title, loading: pane.loading, error: pane.error, worktreeId: pane.worktreeId } : null}
@@ -949,93 +1111,114 @@ export function BrowserPaneWindow({ context, input }: { context: UiPluginContext
           onMessage={reportDesignMessage}
           actionRef={designActionRef}
         />
-        <details className="qbp-details qbp-profile-details">
-          <summary aria-label="Browser menu">Browser menu</summary>
-          <div className="qbp-menu-popover" role="menu">
+        <details className="qbp-details qbp-profile-details" style={paneStyles.profileDetails}>
+          <summary className="ui-menu__trigger" aria-label="Browser menu" style={paneStyles.menuSummary}>Browser menu</summary>
+          <div className="ui-menu__list qbp-menu-popover" role="menu" style={paneStyles.profilePopover}>
+            <div style={paneStyles.menuItems}>
             <BrowserProfileMenu context={context} pane={pane ?? undefined} inline onError={(text) => setMessage({ text, kind: 'error' })} />
             {pane?.mode === 'watch'
-              ? <button type="button" role="menuitem" onClick={() => void control('hardReload')}>Hard Reload</button>
+              ? <Button className="ui-menu__item" role="menuitem" onClick={() => void control('hardReload')}>Hard Reload</Button>
               : pane?.mode === 'native'
-                ? <span className="qbp-muted">Hard Reload is unavailable in Native mode; ordinary Reload is available.</span>
+                ? <span className="qbp-muted" style={paneStyles.mutedText}>Hard Reload is unavailable in Native mode; ordinary Reload is available.</span>
                 : null}
             {settings.homePage
-              ? <button type="button" role="menuitem" onClick={() => void navigate(settings.homePage)}>Home Page · {settings.homePage}</button>
-              : <span className="qbp-muted">Home page: not set</span>}
-            <button type="button" role="menuitem" onClick={() => void control('zoom', { level: Math.max(-3, zoom - 0.5) })}>Zoom Out</button>
-            <button type="button" role="menuitem" onClick={() => void control('zoom', { level: Math.min(5, zoom + 0.5) })}>Zoom In</button>
-            <button type="button" role="menuitem" onClick={() => void control('zoom', { level: 0 })}>Reset Zoom · {zoomPercent}%</button>
-            <details className="qbp-details">
-              <summary>Viewport · {VIEWPORTS.find((entry) => entry.id === pane?.viewport)?.label ?? 'Default'}</summary>
-              <div className="qbp-menu-popover" role="menu" aria-label="Viewport preset">
+              ? <Button className="ui-menu__item" role="menuitem" onClick={() => void navigate(settings.homePage)}>Home Page · {settings.homePage}</Button>
+              : <span className="qbp-muted" style={paneStyles.mutedText}>Home page: not set</span>}
+            <Button className="ui-menu__item" role="menuitem" onClick={() => void control('zoom', { level: Math.max(-3, zoom - 0.5) })}>Zoom Out</Button>
+            <Button className="ui-menu__item" role="menuitem" onClick={() => void control('zoom', { level: Math.min(5, zoom + 0.5) })}>Zoom In</Button>
+            <Button className="ui-menu__item" role="menuitem" onClick={() => void control('zoom', { level: 0 })}>Reset Zoom · {zoomPercent}%</Button>
+            <details className="qbp-details" style={paneStyles.details}>
+              <summary className="ui-menu__trigger" style={paneStyles.menuSummary}>Viewport · {VIEWPORTS.find((entry) => entry.id === pane?.viewport)?.label ?? 'Default'}</summary>
+              <div className="ui-menu__list qbp-menu-popover" role="menu" aria-label="Viewport preset" style={paneStyles.menuPopover}>
+                <div style={paneStyles.menuItems}>
                 {VIEWPORTS.map((preset) => (
-                  <button key={preset.id} type="button" role="menuitemradio" aria-checked={pane?.viewport === preset.id} onClick={() => void control('viewport', { preset: preset.id })}>
+                  <Button className="ui-menu__item" key={preset.id} role="menuitemradio" aria-checked={pane?.viewport === preset.id} onClick={() => void control('viewport', { preset: preset.id })}>
                     {preset.label}{preset.mobile && pane?.mode === 'native' ? ' · visible size only' : ''}
-                  </button>
+                  </Button>
                 ))}
+                </div>
               </div>
             </details>
-            {pane?.mode === 'native' ? <button type="button" role="menuitem" onClick={() => void startWatchHere()} disabled={watchStarting}>{watchStarting ? 'Starting Watch…' : 'Start Watch in an owned page…'}</button> : null}
-            {pane ? <button type="button" role="menuitem" onClick={() => void loadAgentPages()} disabled={pageListLoading}>{pageListLoading ? 'Loading agent pages…' : 'Watch an agent page…'}</button> : null}
-            {pane && pageList ? <div role="menu" aria-label="Managed pages for Watch">
-              {pageList.length ? pageList.map((entry) => <button key={entry.browserPageId} type="button" role="menuitem" onClick={() => void openWatchPage(entry.browserPageId)}>
-                <span className="qbp-suggestion-title">{entry.title || entry.url || 'Untitled page'}</span>
-                <span className="qbp-suggestion-detail">{entry.active ? 'Active · ' : ''}{entry.url}</span>
-              </button>) : <span className="qbp-muted">No managed pages are available in this worktree.</span>}
+            {pane?.mode === 'native' ? <Button className="ui-menu__item" role="menuitem" onClick={() => void startWatchHere()} disabled={watchStarting}>{watchStarting ? 'Starting Watch…' : 'Start Watch in an owned page…'}</Button> : null}
+            {pane ? <Button className="ui-menu__item" role="menuitem" onClick={() => void loadAgentPages()} disabled={pageListLoading}>{pageListLoading ? 'Loading agent pages…' : 'Watch an agent page…'}</Button> : null}
+            {pane && pageList ? <div role="menu" aria-label="Managed pages for Watch" style={{ display: 'grid', gap: 'var(--ui-space-4)' }}>
+              {pageList.length ? pageList.map((entry) => <Button className="ui-menu__item" key={entry.browserPageId} role="menuitem" onClick={() => void openWatchPage(entry.browserPageId)}>
+                <span className="qbp-suggestion-title" style={paneStyles.suggestionTitle}>{entry.title || entry.url || 'Untitled page'}</span>
+                <span className="qbp-suggestion-detail" style={paneStyles.suggestionDetail}>{entry.active ? 'Active · ' : ''}{entry.url}</span>
+              </Button>) : <EmptyState message="No managed pages are available in this worktree." />}
             </div> : null}
-            {pane?.mode === 'watch' ? <button type="button" role="menuitem" onClick={() => {
+            {pane?.mode === 'watch' ? <Button className="ui-menu__item" role="menuitem" onClick={() => {
               const selector = worktreeSelector(pane.worktreeId)
               context.openView(WORKTREE_VIEW, { worktree: selector })
-            }}>Open worktree view</button> : null}
-            <span className="qbp-muted">Search engine: {settings.searchEngine}</span>
+            }}>Open worktree view</Button> : null}
+            <span className="qbp-muted" style={paneStyles.mutedText}>Search engine: {settings.searchEngine}</span>
+            </div>
           </div>
         </details>
         <BrowserImportHint context={context} pane={pane ?? undefined} onError={(text) => setMessage({ text, kind: 'error' })} />
-        <details className="qbp-details">
-          <summary aria-label="Browser history">History</summary>
-          <div className="qbp-menu-popover qbp-history" role="menu" aria-label="Recent browser history">
+        <details className="qbp-details" style={paneStyles.details}>
+          <summary className="ui-menu__trigger" aria-label="Browser history" style={paneStyles.menuSummary}>History</summary>
+          <div className="ui-menu__list qbp-menu-popover qbp-history" role="menu" aria-label="Recent browser history" style={paneStyles.historyPopover}>
+            <div style={paneStyles.menuItems}>
             {state?.history.length ? state.history.slice(0, 200).map((entry) => (
-              <button key={`${entry.url}:${entry.visitedAt}`} type="button" role="menuitem" onClick={() => void navigate(entry.url)}>
-                <span className="qbp-suggestion-title">{entry.title || entry.url}</span>
-                <span className="qbp-suggestion-detail">{entry.url}</span>
-              </button>
-            )) : <span className="qbp-muted">No browser history yet.</span>}
+              <Button className="ui-menu__item" key={`${entry.url}:${entry.visitedAt}`} role="menuitem" onClick={() => void navigate(entry.url)}>
+                <span className="qbp-suggestion-title" style={paneStyles.suggestionTitle}>{entry.title || entry.url}</span>
+                <span className="qbp-suggestion-detail" style={paneStyles.suggestionDetail}>{entry.url}</span>
+              </Button>
+            )) : <EmptyState message="No browser history yet." />}
+            </div>
           </div>
         </details>
       </div>
 
       {findOpen ? (
-        <div className="qbp-find" role="search" aria-label="Find in page">
-          <input
-            ref={findRef}
-            aria-label="Find text in page"
-            placeholder="Find in page"
-            value={findText}
-            onChange={(event) => {
-              const value = event.target.value
-              setFindText(value)
-              void control('find', { text: value, forward: true })
-            }}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter') { event.preventDefault(); void control('find', { text: findText, forward: !event.shiftKey }) }
-              if (event.key === 'Escape') { event.preventDefault(); setFindOpen(false); void control('find', { text: '' }) }
-            }}
-          />
-          <span className="qbp-find-count" aria-live="polite">{pane?.find.total ? `${pane.find.current} of ${pane.find.total}` : 'No matches'}</span>
-          <button type="button" aria-label="Previous match" onClick={() => void control('find', { text: findText, forward: false })}>↑</button>
-          <button type="button" aria-label="Next match" onClick={() => void control('find', { text: findText, forward: true })}>↓</button>
-          <button type="button" aria-label="Close find" onClick={() => { setFindOpen(false); setFindText(''); void control('find', { text: '' }) }}>Close</button>
+        <div className="qbp-find" role="search" aria-label="Find in page" style={paneStyles.find}>
+          <div style={paneStyles.findField}>
+            <TextField
+              ref={findRef}
+              label="Find text in page"
+              aria-label="Find text in page"
+              placeholder="Find in page"
+              value={findText}
+              style={paneStyles.findInput}
+              onFocus={() => { editingFindRef.current = true }}
+              onBlur={() => { editingFindRef.current = false }}
+              onChange={(event) => {
+                const value = event.target.value
+                findTextRef.current = value
+                setFindText(value)
+                void control('find', { text: value, forward: true })
+              }}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') { event.preventDefault(); void control('find', { text: findTextRef.current, forward: !event.shiftKey }) }
+                if (event.key === 'Escape') { event.preventDefault(); editingFindRef.current = false; setFindOpen(false); void control('find', { text: '' }) }
+              }}
+            />
+          </div>
+          <span className="qbp-find-count" aria-live="polite" style={paneStyles.findCount}>
+            <Badge>{pane?.find.total ? `${pane.find.current} of ${pane.find.total}` : 'No matches'}</Badge>
+          </span>
+          <IconButton label="Previous match" title="Previous match" onClick={() => void control('find', { text: findTextRef.current, forward: false })}>↑</IconButton>
+          <IconButton label="Next match" title="Next match" onClick={() => void control('find', { text: findTextRef.current, forward: true })}>↓</IconButton>
+          <Button aria-label="Close find" onClick={() => { editingFindRef.current = false; findTextRef.current = ''; setFindOpen(false); setFindText(''); void control('find', { text: '' }) }}>Close</Button>
         </div>
       ) : null}
 
-      {message ? <div className="qbp-message" data-kind={message.kind} role={message.kind === 'error' ? 'alert' : 'status'}>{message.text}<button type="button" onClick={() => setMessage(null)} aria-label="Dismiss message">Dismiss</button></div> : null}
-      {pane?.mode === 'watch' && frame && (watchError || pane.error) ? <div className="qbp-message" data-kind="error" role="alert">
-        {watchError ?? pane.error}
-        <button type="button" onClick={() => setWatchRevision((revision) => revision + 1)}>Retry this Watch</button>
+      {message ? <div className="qbp-message" data-kind={message.kind} role={message.kind === 'error' ? 'alert' : 'status'} style={paneStyles.message}>
+        <StatusDot status={message.kind === 'error' ? 'failing' : 'idle'} label={message.kind === 'error' ? 'Browser error' : 'Browser notice'} />
+        <span style={message.kind === 'error' ? { ...paneStyles.messageText, ...paneStyles.errorText } : paneStyles.messageText}>{message.text}</span>
+        <Button onClick={() => setMessage(null)} aria-label="Dismiss message">Dismiss</Button>
+      </div> : null}
+      {pane?.mode === 'watch' && frame && (watchError || pane.error) ? <div className="qbp-message" data-kind="error" role="alert" style={paneStyles.message}>
+        <StatusDot status="failing" label="Watch error" />
+        <span style={{ ...paneStyles.messageText, ...paneStyles.errorText }}>{watchError ?? pane.error}</span>
+        <Button onClick={() => setWatchRevision((revision) => revision + 1)}>Retry this Watch</Button>
       </div> : null}
 
       <div
         ref={attachFrameHost}
         className="qbp-page"
+        style={paneStyles.page}
         aria-label={pane ? `${pane.mode === 'watch' ? 'Watched' : 'Native'} page: ${pane.title || pane.url}` : 'Browser page'}
         tabIndex={canUseWatch ? 0 : -1}
         onPointerDown={onPointerDown}
@@ -1047,86 +1230,123 @@ export function BrowserPaneWindow({ context, input }: { context: UiPluginContext
         onPaste={onPaste}
         onContextMenu={(event) => { if (canUseWatch) event.preventDefault() }}
       >
-        {pane?.mode === 'native' && context.nativeBrowser.available ? <div className="qbp-native-host" ref={nativeHostRef} style={nativeSize} aria-label="Native browser page" /> : null}
+        {pane?.mode === 'native' && context.nativeBrowser.available ? <div className="qbp-native-host" ref={nativeHostRef} style={{ ...paneStyles.nativeHost, ...nativeSize }} aria-label="Native browser page" /> : null}
         {pane?.mode === 'watch' && frame ? <img
           className="qbp-watch-image"
           ref={watchImageRef}
           key={`${frame.watchId}:${frame.sequence}`}
           src={imageSource(frame)}
           alt={`Watched page frame ${frame.width} by ${frame.height}`}
+          draggable={false}
+          style={paneStyles.watchImage}
           onLoad={() => acknowledgeFrame(frame)}
           onError={() => setWatchError('The latest Watch frame could not be decoded.')}
         /> : null}
-        {!pane ? <div className="qbp-overlay"><div className="qbp-card"><h2>Browser pane unavailable</h2><p>The browser pane state could not be loaded for this tab.</p><button type="button" onClick={() => void refresh()}>Retry</button></div></div> : null}
+        {!pane ? <div className="qbp-overlay" style={paneStyles.overlay}><div className="qbp-card ui-tool-panel-frame" style={paneStyles.card}>
+          <SectionHeader title="Browser pane unavailable" />
+          <EmptyState message="The browser pane state could not be loaded for this tab." action={{ label: 'Retry', onAction: () => void refresh() }} />
+        </div></div> : null}
         {pane?.mode === 'native' && !context.nativeBrowser.available ? (
-          <div className="qbp-overlay"><div className="qbp-card">
-            <h2>Native browsing is unavailable here</h2>
-            <p>This web client cannot embed the sandboxed system webview. Watch is explicit: it creates or binds a managed agent page through the browser pane service; it never silently substitutes Chrome.</p>
-            {nativeError ? <p className="qbp-error" role="alert">{nativeError}</p> : null}
-            <div className="qbp-actions">
-              <button type="button" onClick={() => void startWatchHere()} disabled={watchStarting}>{watchStarting ? 'Starting Watch…' : 'Watch this address in an owned page'}</button>
-              <button type="button" onClick={() => void loadAgentPages()} disabled={pageListLoading}>{pageListLoading ? 'Loading pages…' : 'Choose an existing agent page'}</button>
+          <div className="qbp-overlay" style={paneStyles.overlay}><div className="qbp-card ui-tool-panel-frame" style={paneStyles.card}>
+            <SectionHeader title="Native browsing is unavailable here" />
+            <p className="ui-help-text" style={paneStyles.helpText}>This web client cannot embed the sandboxed system webview. Watch is explicit: it creates or binds a managed agent page through the browser pane service; it never silently substitutes Chrome.</p>
+            {nativeError ? <p className="qbp-error ui-error-text" style={paneStyles.errorText} role="alert">{nativeError}</p> : null}
+            <div className="qbp-actions" style={paneStyles.actions}>
+              <Button onClick={() => void startWatchHere()} disabled={watchStarting}>{watchStarting ? 'Starting Watch…' : 'Watch this address in an owned page'}</Button>
+              <Button onClick={() => void loadAgentPages()} disabled={pageListLoading}>{pageListLoading ? 'Loading pages…' : 'Choose an existing agent page'}</Button>
             </div>
-            {pageListError ? <p className="qbp-error" role="alert">{pageListError}</p> : null}
-            {pageList ? <div className="qbp-menu-popover" role="list" aria-label="Managed pages">
-              {pageList.length ? pageList.map((entry) => <button key={entry.browserPageId} type="button" onClick={() => void openWatchPage(entry.browserPageId)}>
-                <span className="qbp-suggestion-title">{entry.title || entry.url || 'Untitled page'}</span>
-                <span className="qbp-suggestion-detail">{entry.active ? 'Active · ' : ''}{entry.url}</span>
-              </button>) : <span className="qbp-muted">No managed pages are available in this worktree.</span>}
+            {pageListError ? <p className="qbp-error ui-error-text" style={paneStyles.errorText} role="alert">{pageListError}</p> : null}
+            {pageList ? <div className="ui-menu__list qbp-menu-popover" role="list" aria-label="Managed pages" style={{ ...paneStyles.menuPopover, ...paneStyles.menuItems }}>
+              {pageList.length ? pageList.map((entry) => <Button className="ui-menu__item" key={entry.browserPageId} onClick={() => void openWatchPage(entry.browserPageId)}>
+                <span className="qbp-suggestion-title" style={paneStyles.suggestionTitle}>{entry.title || entry.url || 'Untitled page'}</span>
+                <span className="qbp-suggestion-detail" style={paneStyles.suggestionDetail}>{entry.active ? 'Active · ' : ''}{entry.url}</span>
+              </Button>) : <EmptyState message="No managed pages are available in this worktree." />}
             </div> : null}
-            <p className="qbp-muted">Native browsing requires the desktop shell. Watch is an explicit opt-in to a managed agent page.</p>
+            <p className="qbp-muted" style={paneStyles.mutedText}>Native browsing requires the desktop shell. Watch is an explicit opt-in to a managed agent page.</p>
           </div></div>
         ) : null}
         {pane?.mode === 'native' && context.nativeBrowser.available && nativeError ? (
-          <div className="qbp-overlay"><div className="qbp-card" role="dialog" aria-modal="false" aria-label="Native browser could not start"><h2>Native browser could not start</h2><p className="qbp-error" role="alert">{nativeError}</p><button type="button" onClick={() => { setNativeError(null); setNativeRetry((revision) => revision + 1) }}>Retry Native Browser</button></div></div>
-        ) : null}
-        {pane?.mode === 'watch' && !frame ? (
-          <div className="qbp-overlay"><div className="qbp-card">
-            <h2>{pane.error ? 'Watch ended' : 'Connecting to Watch'}</h2>
-            <p>{pane.error ?? watchError ?? (pane.page ? 'Connecting to the selected managed page…' : 'This Watch pane has no managed page selected.')}</p>
-            {watchError ? <p className="qbp-error" role="alert">{watchError}</p> : null}
-            {!pane.page ? <button type="button" onClick={() => void loadAgentPages()}>Choose an agent page to Watch</button> : null}
-            {pageListError ? <p className="qbp-error" role="alert">{pageListError}</p> : null}
-            {pageList ? <div className="qbp-menu-popover" role="list" aria-label="Managed pages">
-              {pageList.length ? pageList.map((entry) => <button key={entry.browserPageId} type="button" onClick={() => void openWatchPage(entry.browserPageId)}>
-                <span className="qbp-suggestion-title">{entry.title || entry.url || 'Untitled page'}</span><span className="qbp-suggestion-detail">{entry.url}</span>
-              </button>) : <span className="qbp-muted">No managed pages are available in this worktree.</span>}
-            </div> : null}
-            {pane.error || watchError ? <button type="button" onClick={() => setWatchRevision((revision) => revision + 1)}>Retry this Watch</button> : null}
+          <div className="qbp-overlay" style={paneStyles.overlay}><div className="qbp-card ui-tool-panel-frame" style={paneStyles.card} role="dialog" aria-modal="false" aria-label="Native browser could not start">
+            <SectionHeader title="Native browser could not start" />
+            <p className="qbp-error ui-error-text" style={paneStyles.errorText} role="alert">{nativeError}</p>
+            <Button onClick={() => { setNativeError(null); setNativeRetry((revision) => revision + 1) }}>Retry Native Browser</Button>
           </div></div>
         ) : null}
-        {pane?.mode === 'native' && context.nativeBrowser.available && (pane.url !== 'about:blank' || pane.loading || pane.command !== null || pane.canGoBack || pane.canGoForward) && nativeReady === 0 && !nativeError ? <div className="qbp-overlay"><div className="qbp-card" role="dialog" aria-modal="false" aria-label="Starting native browser"><h2>Starting native browser…</h2><p>Creating the sandboxed system webview.</p></div></div> : null}
-        {nativeState?.error && pane?.mode === 'native' ? <div className="qbp-overlay"><div className="qbp-card" role="dialog" aria-modal="false" aria-label="Page could not load"><h2>Page could not load</h2><p className="qbp-error" role="alert">{nativeState.error}</p><div className="qbp-actions"><button type="button" onClick={() => void control('reload')}>Retry</button><button type="button" onClick={() => setNativeState(null)}>Dismiss</button></div></div></div> : null}
-        {pane?.mode === 'native' && context.nativeBrowser.available && !nativeError && !pane.loading && pane.url === 'about:blank' && !nativeState?.error ? <div className="qbp-overlay" data-quirky-native-mask><div className="qbp-card"><h2>New Tab</h2><p>Type a URL or search above to start browsing.</p><p className="qbp-muted">Home page: {settings.homePage || 'not set'} · Search: {settings.searchEngine}</p></div></div> : null}
-        {pane?.mode === 'watch' && pane.error && frame ? <div className="qbp-overlay"><div className="qbp-card"><h2>Watch ended</h2><p className="qbp-error" role="alert">{pane.error}</p><p>The browser pane will not attach to another page automatically.</p></div></div> : null}
+        {pane?.mode === 'watch' && !frame ? (
+          <div className="qbp-overlay" style={paneStyles.overlay}><div className="qbp-card ui-tool-panel-frame" style={paneStyles.card}>
+            <SectionHeader title={pane.error ? 'Watch ended' : 'Connecting to Watch'} />
+            <EmptyState message={pane.error ?? watchError ?? (pane.page ? 'Connecting to the selected managed page…' : 'This Watch pane has no managed page selected.')} />
+            {watchError ? <p className="qbp-error ui-error-text" style={paneStyles.errorText} role="alert">{watchError}</p> : null}
+            {!pane.page ? <Button onClick={() => void loadAgentPages()}>Choose an agent page to Watch</Button> : null}
+            {pageListError ? <p className="qbp-error ui-error-text" style={paneStyles.errorText} role="alert">{pageListError}</p> : null}
+            {pageList ? <div className="ui-menu__list qbp-menu-popover" role="list" aria-label="Managed pages" style={{ ...paneStyles.menuPopover, ...paneStyles.menuItems }}>
+              {pageList.length ? pageList.map((entry) => <Button className="ui-menu__item" key={entry.browserPageId} onClick={() => void openWatchPage(entry.browserPageId)}>
+                <span className="qbp-suggestion-title" style={paneStyles.suggestionTitle}>{entry.title || entry.url || 'Untitled page'}</span>
+                <span className="qbp-suggestion-detail" style={paneStyles.suggestionDetail}>{entry.url}</span>
+              </Button>) : <EmptyState message="No managed pages are available in this worktree." />}
+            </div> : null}
+            {pane.error || watchError ? <Button onClick={() => setWatchRevision((revision) => revision + 1)}>Retry this Watch</Button> : null}
+          </div></div>
+        ) : null}
+        {pane?.mode === 'native' && context.nativeBrowser.available && (pane.url !== 'about:blank' || pane.loading || pane.command !== null || pane.canGoBack || pane.canGoForward) && nativeReady === 0 && !nativeError ? <div className="qbp-overlay" style={paneStyles.overlay}><div className="qbp-card ui-tool-panel-frame" style={paneStyles.card} role="dialog" aria-modal="false" aria-label="Starting native browser">
+          <SectionHeader title="Starting native browser…" />
+          <EmptyState message="Creating the sandboxed system webview." />
+        </div></div> : null}
+        {nativeState?.error && pane?.mode === 'native' ? <div className="qbp-overlay" style={paneStyles.overlay}><div className="qbp-card ui-tool-panel-frame" style={paneStyles.card} role="dialog" aria-modal="false" aria-label="Page could not load">
+          <SectionHeader title="Page could not load" />
+          <p className="qbp-error ui-error-text" style={paneStyles.errorText} role="alert">{nativeState.error}</p>
+          <div className="qbp-actions" style={paneStyles.actions}>
+            <Button onClick={() => void control('reload')}>Retry</Button>
+            <Button onClick={() => setNativeState(null)}>Dismiss</Button>
+          </div>
+        </div></div> : null}
+        {pane?.mode === 'native' && context.nativeBrowser.available && !nativeError && !pane.loading && pane.url === 'about:blank' && !nativeState?.error ? <div className="qbp-overlay" data-quirky-native-mask style={paneStyles.overlay}><div className="qbp-card ui-tool-panel-frame" style={paneStyles.card}>
+          <SectionHeader title="New Tab" />
+          <EmptyState message="Type a URL or search above to start browsing." />
+          <p className="qbp-muted" style={paneStyles.mutedText}>Home page: {settings.homePage || 'not set'} · Search: {settings.searchEngine}</p>
+        </div></div> : null}
+        {pane?.mode === 'watch' && pane.error && frame ? <div className="qbp-overlay" style={paneStyles.overlay}><div className="qbp-card ui-tool-panel-frame" style={paneStyles.card}>
+          <SectionHeader title="Watch ended" />
+          <p className="qbp-error ui-error-text" style={paneStyles.errorText} role="alert">{pane.error}</p>
+          <p className="ui-help-text" style={paneStyles.helpText}>The browser pane will not attach to another page automatically.</p>
+        </div></div> : null}
       </div>
 
-      {pane?.sourcePath || pane?.preview ? <div className="qbp-message" aria-label="Workspace document actions">
-        {pane.sourcePath ? <button type="button" onClick={() => void openEditor(pane.sourcePath!, 'source')}>Open source file</button> : null}
-        {pane.preview ? <button type="button" onClick={() => void openEditor(pane.preview!.path, 'preview')}>Open in Editor Preview</button> : null}
+      {pane?.sourcePath || pane?.preview ? <div className="qbp-message" aria-label="Workspace document actions" style={paneStyles.message}>
+        {pane.sourcePath ? <Button onClick={() => void openEditor(pane.sourcePath!, 'source')}>Open source file</Button> : null}
+        {pane.preview ? <Button onClick={() => void openEditor(pane.preview!.path, 'preview')}>Open in Editor Preview</Button> : null}
         {pane.mode === 'native' && pane.sourcePath && /\.html?$/i.test(pane.sourcePath) && !pane.preview
-          ? <span className="qbp-muted">Workspace HTML is open directly in Native; resource-backed Browser preview conversion is unavailable.</span>
+          ? <span className="qbp-muted" style={paneStyles.mutedText}>Workspace HTML is open directly in Native; resource-backed Browser preview conversion is unavailable.</span>
           : null}
       </div> : null}
 
-      {pane?.mode === 'watch' && pane.prompts.length ? <div className="qbp-overlay" role="presentation"><div className="qbp-card qbp-prompt" role="dialog" aria-modal="true" aria-label={`${pane.prompts[0]!.kind} from ${pane.prompts[0]!.origin}`}>
-        <h2>{promptTitle(pane.prompts[0]!.kind)}</h2>
-        <p><strong>{pane.prompts[0]!.origin}</strong></p>
-        <p>{pane.prompts[0]!.message}</p>
-        {pane.prompts[0]!.kind === 'prompt' ? <label>Response<input value={(promptValues[pane.prompts[0]!.id] ?? { text: pane.prompts[0]!.defaultValue ?? '', username: '', password: '' }).text} onChange={(event) => updatePrompt(promptValues, setPromptValues, pane.prompts[0]!, { text: event.target.value })} /></label> : null}
-        {pane.prompts[0]!.kind === 'auth' ? <>
-          <label>Username<input autoComplete="username" value={(promptValues[pane.prompts[0]!.id] ?? { text: '', username: '', password: '' }).username} onChange={(event) => updatePrompt(promptValues, setPromptValues, pane.prompts[0]!, { username: event.target.value })} /></label>
-          <label>Password<input type="password" autoComplete="current-password" value={(promptValues[pane.prompts[0]!.id] ?? { text: '', username: '', password: '' }).password} onChange={(event) => updatePrompt(promptValues, setPromptValues, pane.prompts[0]!, { password: event.target.value })} /></label>
-        </> : null}
-        {pane.prompts[0]!.kind === 'certificate' && !pane.prompts[0]!.canProceed ? <p className="qbp-error">Proceed is unavailable for this certificate error. Only eligible loopback addresses can be allowed.</p> : null}
-        <div className="qbp-actions">
-          {pane.prompts[0]!.kind === 'alert' ? <button type="button" onClick={() => void respond(pane.prompts[0]!, true)}>OK</button> : null}
-          {pane.prompts[0]!.kind !== 'alert' ? <button type="button" onClick={() => void respond(pane.prompts[0]!, false)}>{promptDecline(pane.prompts[0]!.kind)}</button> : null}
-          {pane.prompts[0]!.kind !== 'alert' && (pane.prompts[0]!.kind !== 'certificate' || pane.prompts[0]!.canProceed) ? <button type="button" onClick={() => void respond(pane.prompts[0]!, true)}>{promptAccept(pane.prompts[0]!.kind)}</button> : null}
+      {activePrompt ? <div className="qbp-overlay" role="presentation" style={paneStyles.overlay}>
+        <div className="qbp-card qbp-prompt ui-tool-panel-frame" role="dialog" aria-modal="true" aria-label={`${activePrompt.kind} from ${activePrompt.origin}`} style={{ ...paneStyles.card, ...paneStyles.prompt }}>
+          <SectionHeader title={promptTitle(activePrompt.kind)} />
+          <p className="ui-help-text" style={paneStyles.helpText}><strong>{activePrompt.origin}</strong></p>
+          <p style={{ margin: 0, overflowWrap: 'anywhere' }}>{activePrompt.message}</p>
+          {activePrompt.kind === 'prompt' ? <FormRow label="Response" htmlFor={`${promptFieldsId}-response`}>
+            <input id={`${promptFieldsId}-response`} className="ui-text-field__input" value={(promptValues[activePrompt.id] ?? { text: activePrompt.defaultValue ?? '', username: '', password: '' }).text} onChange={(event) => updatePrompt(promptValues, setPromptValues, activePrompt, { text: event.target.value })} />
+          </FormRow> : null}
+          {activePrompt.kind === 'auth' ? <>
+            <FormRow label="Username" htmlFor={`${promptFieldsId}-username`}>
+              <input id={`${promptFieldsId}-username`} className="ui-text-field__input" autoComplete="username" value={(promptValues[activePrompt.id] ?? { text: '', username: '', password: '' }).username} onChange={(event) => updatePrompt(promptValues, setPromptValues, activePrompt, { username: event.target.value })} />
+            </FormRow>
+            <FormRow label="Password" htmlFor={`${promptFieldsId}-password`}>
+              <input id={`${promptFieldsId}-password`} className="ui-text-field__input" type="password" autoComplete="current-password" value={(promptValues[activePrompt.id] ?? { text: '', username: '', password: '' }).password} onChange={(event) => updatePrompt(promptValues, setPromptValues, activePrompt, { password: event.target.value })} />
+            </FormRow>
+          </> : null}
+          {activePrompt.kind === 'certificate' && !activePrompt.canProceed ? <p className="qbp-error ui-error-text" style={paneStyles.errorText}>Proceed is unavailable for this certificate error. Only eligible loopback addresses can be allowed.</p> : null}
+          <div className="qbp-actions" style={{ ...paneStyles.actions, marginTop: 'var(--ui-space-12)' }}>
+            {activePrompt.kind === 'alert' ? <Button onClick={() => void respond(activePrompt, true)}>OK</Button> : null}
+            {activePrompt.kind !== 'alert' ? <Button onClick={() => void respond(activePrompt, false)}>{promptDecline(activePrompt.kind)}</Button> : null}
+            {activePrompt.kind !== 'alert' && (activePrompt.kind !== 'certificate' || activePrompt.canProceed) ? <Button onClick={() => void respond(activePrompt, true)}>{promptAccept(activePrompt.kind)}</Button> : null}
+          </div>
         </div>
-      </div></div> : null}
+      </div> : null}
 
-      {pane?.mode === 'watch' && pane.downloads.length ? <div className="qbp-shelf" aria-label="Downloads">
+      {pane?.mode === 'watch' && pane.downloads.length ? <div className="qbp-shelf" aria-label="Downloads" style={paneStyles.shelf}>
+        <SectionHeader title="Downloads" />
         {pane.downloads.map((download) => <DownloadRow key={download.id} download={download} onAction={(action) => void invoke('paneDownload', { pane: pane.id, download: download.id, action })} />)}
       </div> : null}
     </div>
@@ -1175,17 +1395,29 @@ function updatePrompt(
 function DownloadRow({ download, onAction }: { download: PaneDownload; onAction: (action: 'cancel' | 'open' | 'reveal' | 'dismiss') => void }) {
   const hasProgress = download.state === 'downloading' || download.state === 'paused'
   const percent = download.total && download.total > 0 ? Math.min(100, download.received / download.total * 100) : undefined
+  const description = (
+    <span style={paneStyles.downloadDescription}>
+      {download.error ? <span className="qbp-error" style={paneStyles.errorText}>{download.error}</span> : null}
+      {hasProgress ? <span className="qbp-muted" style={paneStyles.mutedText}>{formatBytes(download.received)}{download.total ? ` / ${formatBytes(download.total)}` : ''}</span> : null}
+      <span className="qbp-download-actions" style={paneStyles.downloadActions}>
+        {percent !== undefined ? <progress aria-label={`${download.name} download progress`} max={100} value={percent} style={paneStyles.downloadProgress} /> : null}
+        {hasProgress ? <Button onClick={() => onAction('cancel')}>Cancel download</Button> : null}
+        {download.state === 'completed' ? <>
+          <Button onClick={() => onAction('open')}>Open</Button>
+          <Button onClick={() => onAction('reveal')}>Show in folder</Button>
+        </> : null}
+        <Button onClick={() => onAction('dismiss')}>Dismiss</Button>
+      </span>
+    </span>
+  )
+  const badgeTone = download.error ? 'failing' : download.state === 'completed' ? 'accent' : hasProgress ? 'working' : 'neutral'
   return (
-    <div className="qbp-download" data-download={download.id}>
-      <span className="qbp-download-name"><strong>{download.name}</strong> · {download.state}{download.error ? ` · ${download.error}` : ''}</span>
-      {hasProgress ? <span>{formatBytes(download.received)}{download.total ? ` / ${formatBytes(download.total)}` : ''}</span> : null}
-      {percent !== undefined ? <progress aria-label={`${download.name} download progress`} max={100} value={percent} /> : null}
-      {hasProgress ? <button type="button" onClick={() => onAction('cancel')}>Cancel download</button> : null}
-      {download.state === 'completed' ? <>
-        <button type="button" onClick={() => onAction('open')}>Open</button>
-        <button type="button" onClick={() => onAction('reveal')}>Show in folder</button>
-      </> : null}
-      <button type="button" onClick={() => onAction('dismiss')}>Dismiss</button>
+    <div className="qbp-download" data-download={download.id} style={paneStyles.download}>
+      <ListRow
+        title={<span className="qbp-download-name"><strong>{download.name}</strong></span>}
+        description={description}
+        trailing={<Badge tone={badgeTone}>{download.state}</Badge>}
+      />
     </div>
   )
 }

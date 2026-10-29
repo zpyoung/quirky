@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { Button } from '@quirky/ui'
 import type { GitDiff, UiPluginContext } from '@quirky/protocol'
+
 import type { NotesBinding } from '../notes/binding'
 import { markComposerUsed, registerComposer, type NoteComposer } from '../notes/composers'
 import type { Note } from '../notes/useNotes'
@@ -60,14 +62,10 @@ const STALE_TEXT = {
 /** The banner for a file that changed on disk under unsaved edits, with the two ways out. */
 export function StaleBar({ variant, onReload, onOverwrite }: { variant: 'file' | 'section'; onReload(): void; onOverwrite(): void }) {
   return (
-    <div className="qgv-stale" role="alert">
+    <div className="ui-cluster" role="alert" style={{ padding: 'var(--ui-space-8)' }}>
       <span>{STALE_TEXT[variant]}</span>
-      <button type="button" onClick={onReload}>
-        Reload from Disk
-      </button>
-      <button type="button" onClick={onOverwrite}>
-        Overwrite
-      </button>
+      <Button onClick={onReload}>Reload from Disk</Button>
+      <Button variant="destructive" onClick={onOverwrite}>Overwrite</Button>
     </div>
   )
 }
@@ -272,20 +270,20 @@ function TextPane({ context, worktree, path, diff, editable, settings, variant, 
   }, [changes, current, dirty, stale, overflow, onState])
 
   return (
-    <div className="qgv-pane">
+    <div className="ui-stack" style={{ flex: 1, minHeight: 0, minWidth: 0 }}>
       {stale && (
         <StaleBar variant={variant} onReload={() => void reload()} onOverwrite={() => void actions.current.overwrite()} />
       )}
       {overflow ? (
-        <div className="qgv-overflow">
+        <div className="ui-stack" role="region" aria-label="This diff is too large to display safely." style={{ padding: 'var(--ui-space-12)' }}>
           <TooLargeNotice tooLarge={overflow} />
           <p>This draft crossed the safe display limit, but it can still be saved.</p>
-          <button type="button" disabled={!dirty} onClick={() => void save(false)}>
+          <Button variant="primary" disabled={!dirty} onClick={() => void save(false)}>
             Save
-          </button>
+          </Button>
         </div>
       ) : (
-        <div className="qgv-host" ref={hostRef} />
+        <div data-diff-editor ref={hostRef} style={{ flex: 1, minHeight: 0, minWidth: 0, overflow: 'auto' }} />
       )}
     </div>
   )

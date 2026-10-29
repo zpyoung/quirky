@@ -5,7 +5,7 @@ import { ConfigFields, draftFromLoop, validateDraft } from './config-form'
 import type { DraftValidation, LoopDraft, LoopViewProps, SurfaceHandle } from './contracts'
 import { LoopIterationDetail, formatDuration, iterationCheckLabel } from './LoopIterationDetail'
 import { LoopQueueEditor, type QueueEditorCommand, type QueueEditorState } from './LoopQueueEditor'
-import { RAIL_STYLES } from './rail-styles'
+import { Badge, Button, Dialog, EmptyState, SectionHeader, TextArea, TextField, ToolPanelFrame } from '@quirky/ui'
 
 type LoopState = LoopSnapshot['state']
 type EditPatch = LoopConfigPatch & { name?: string }
@@ -863,12 +863,14 @@ export function LoopView({ context, loopId, onHandle, report }: LoopViewProps) {
   }, [])
 
   if (loading && loop === null) {
-    return <div className="loop-view-root"><style>{RAIL_STYLES}</style><p role="status">Loading loop…</p></div>
+    return <ToolPanelFrame title="Loop"><p role="status">Loading loop…</p></ToolPanelFrame>
   }
 
   const currentLoop = loop
   const status = currentLoop === null || unverifiable ? 'Unverifiable' : connectionStatus === 'reconnecting' ? 'Reconnecting' : STATE_LABELS[currentLoop.state]
-  const statusClass = currentLoop === null || unverifiable || connectionStatus === 'reconnecting' ? 'loop-state-unverifiable' : `loop-state-${currentLoop.state}`
+  const statusTone = currentLoop === null || unverifiable || connectionStatus === 'reconnecting'
+    ? 'neutral'
+    : currentLoop.state === 'running' ? 'working' : currentLoop.state === 'needs-you' ? 'needs-you' : currentLoop.state === 'completed' ? 'accent' : 'neutral'
   const isReadOnly = currentLoop === null || unverifiable || connectionStatus === 'reconnecting' || ended
   const latestDetail = currentHistory[currentHistory.length - 1] ?? null
   const evidenceDetail = currentLoop?.recentIterations[currentLoop.recentIterations.length - 1] ?? latestDetail
@@ -897,57 +899,70 @@ export function LoopView({ context, loopId, onHandle, report }: LoopViewProps) {
     editValidation.config === null || Object.keys(editValidation.errors).length > 0 || !hasEditChanges
 
   return (
-    <div className="loop-view-root">
-      <style>{RAIL_STYLES}</style>
-      <div className="loop-view-grid">
-        <section className="loop-view-output" aria-label="Loop output">
-          <h2>Output</h2>
+    <div className="ui-stack">
+      <ToolPanelFrame title="Loop output">
+        <div className="ui-stack">
           {currentLoop === null ? (
-            <p className="loop-muted">Loop output is unavailable until its state can be verified.</p>
+            <EmptyState message="Loop output is unavailable until its state can be verified." />
           ) : showSavedOutput ? (
             <>
-              <p className="loop-loop-meta">
+              <p className="ui-text-muted">
                 {savedOutput === null ? 'Saved iteration output' : `Saved iteration ${savedOutput.n}${savedOutput.attempt > 1 ? ` · attempt ${savedOutput.attempt}` : ''} output`}
               </p>
-              {savedOutput?.error && <p className="loop-error" role="alert">{savedOutput.error}</p>}
-              <div className="loop-output-messages" role="log" aria-label="Saved iteration output">
-                {savedOutput?.outputTail ? <article className="loop-output-message"><pre>{savedOutput.outputTail}</pre></article> : <p className="loop-muted">No output recorded for this iteration.</p>}
+              {savedOutput?.error && <p role="alert">{savedOutput.error}</p>}
+              <div className="ui-stack" role="log" aria-label="Saved iteration output">
+                {savedOutput?.outputTail ? <pre className="ui-readout">{savedOutput.outputTail}</pre> : <EmptyState message="No output recorded for this iteration." />}
               </div>
             </>
           ) : currentLoop.sessionId === null ? (
-            <p className="loop-muted">No structured session is attached.</p>
+            <EmptyState message="No structured session is attached." />
           ) : (
             <>
-              <p className="loop-loop-meta">Session {currentLoop.sessionId}</p>
-              {messageError !== null && <p className="loop-error" role="alert">Output unavailable: {messageError}</p>}
+              <p className="ui-text-muted">Session {currentLoop.sessionId}</p>
+              {messageError !== null && <p role="alert">Output unavailable: {messageError}</p>}
               {messageLoading && <p role="status">Loading output…</p>}
-              {!messageLoading && messages.length === 0 && messageError === null && <p className="loop-muted">No messages recorded.</p>}
-              <div className="loop-output-messages" role="log" aria-label="Structured session journal" aria-live="polite">
+              {!messageLoading && messages.length === 0 && messageError === null && <EmptyState message="No messages recorded." />}
+              <div className="ui-stack" role="log" aria-label="Structured session journal" aria-live="polite">
                 {messages.map((message) => {
                   const data = prettyData(message.data)
-                  return <article className="loop-output-message" key={`${message.sessionId}:${message.seq}`}>
-                    <header><strong>{message.role}</strong><time dateTime={new Date(message.at).toISOString()}>{new Date(message.at).toLocaleTimeString()}</time></header>
-                    <pre>{message.text}</pre>
-                    {data !== null && <details><summary>Structured details</summary><pre>{data}</pre></details>}
+                  return <article className="ui-stack" key={`${message.sessionId}:${message.seq}`}>
+                    <div className="ui-cluster">
+                      <strong>{message.role}</strong>
+                      <time dateTime={new Date(message.at).toISOString()}>{new Date(message.at).toLocaleTimeString()}</time>
+                    </div>
+                    <pre className="ui-readout">{message.text}</pre>
+                    {data !== null && <details>
+                      <summary>Structured details</summary>
+                      <pre className="ui-readout">{data}</pre>
+                    </details>}
                   </article>
                 })}
               </div>
             </>
           )}
-        </section>
+        </div>
+      </ToolPanelFrame>
 
-        <aside className="loop-view-rail" aria-label="Loop controls and history">
-          <header className="loop-view-header">
-            <h2>{currentLoop?.name ?? 'Loop unavailable'}</h2>
-            <span className={`loop-state-pill ${statusClass}`}>{status}</span>
-            {currentLoop !== null && <span className="loop-preset-pill">{currentLoop.preset === 'until-done' ? 'Until done' : currentLoop.preset === 'interval' ? 'On an interval' : 'Work through a queue'} · {currentLoop.agent}</span>}
-          </header>
-          {currentLoop !== null && <p className="loop-loop-meta">{currentLoop.sessionId === null ? 'No session' : `Session ${currentLoop.sessionId}`}</p>}
-          {connectionStatus === 'reconnecting' && <p className="loop-status-strip" role="status">Reconnecting to loop state…</p>}
-          {currentLoop === null && !loading && <p className="loop-error" role="alert">{viewError ?? 'Loop state is unavailable.'}</p>}
+      <ToolPanelFrame
+        title={currentLoop?.name ?? 'Loop unavailable'}
+        actions={
+          <div className="ui-cluster">
+            <Badge tone={statusTone}>{status}</Badge>
+            {currentLoop !== null && (
+              <Badge>
+                {currentLoop.preset === 'until-done' ? 'Until done' : currentLoop.preset === 'interval' ? 'On an interval' : 'Work through a queue'} · {currentLoop.agent}
+              </Badge>
+            )}
+          </div>
+        }
+      >
+        <section className="ui-stack" aria-label="Loop controls and history">
+          {currentLoop !== null && <p className="ui-text-muted">{currentLoop.sessionId === null ? 'No session' : `Session ${currentLoop.sessionId}`}</p>}
+          {connectionStatus === 'reconnecting' && <p role="status">Reconnecting to loop state…</p>}
+          {currentLoop === null && !loading && <p role="alert">{viewError ?? 'Loop state is unavailable.'}</p>}
           {currentLoop !== null && <>
-            <p className="loop-phase"><strong>Phase:</strong> {currentLoop.phase === null ? 'No active phase' : PHASE_LABELS[currentLoop.phase]}</p>
-            <div className="loop-status-strip" role="status">
+            <p><strong>Phase:</strong> {currentLoop.phase === null ? 'No active phase' : PHASE_LABELS[currentLoop.phase]}</p>
+            <div role="status">
               {unverifiable
                 ? 'Current loop state could not be verified.'
                 : currentLoop.state === 'paused' && currentLoop.pauseReason !== null
@@ -961,100 +976,123 @@ export function LoopView({ context, loopId, onHandle, report }: LoopViewProps) {
             {currentLoop.pauseDetail !== null && <p><strong>Pause detail:</strong> {currentLoop.pauseDetail}</p>}
             {latestBlocked && <p><strong>Blocked:</strong> {latestBlocked}</p>}
             {latestDecision && <p><strong>Decision:</strong> {latestDecision}</p>}
-            <div className="loop-progress">
+            <div className="ui-cluster">
               {iterationCap === undefined
                 ? <span>{currentLoop.iterationsCompleted} iterations</span>
                 : <><progress max={iterationCap} value={Math.min(currentLoop.iterationsCompleted, iterationCap)} aria-label="Iteration progress" />
                   <span>{currentLoop.state === 'running' ? `Iteration ${currentLoop.iterationsCompleted} of ${iterationCap}` : `${currentLoop.iterationsCompleted} of ${iterationCap} iterations done`}</span></>}
             </div>
-            <p className="loop-progression"><strong>Caps:</strong> {configuredCaps.length === 0 ? 'None configured' : configuredCaps.join(' · ')}</p>
-            <div className="loop-meters">
+            <p><strong>Caps:</strong> {configuredCaps.length === 0 ? 'None configured' : configuredCaps.join(' · ')}</p>
+            <div className="ui-cluster">
               {activeTime !== null && <span>{activeTime}</span>}
               {costMeter !== null && <span>{costMeter}</span>}
             </div>
-            <p className="loop-last-check"><strong>Last check:</strong> {lastCheckLabel(checkDetail)}</p>
-            {currentLoop.nextIterationAt !== null && <p className="loop-next-time"><strong>Next iteration:</strong> {timeLabel(currentLoop.nextIterationAt)}</p>}
+            <p><strong>Last check:</strong> {lastCheckLabel(checkDetail)}</p>
+            {currentLoop.nextIterationAt !== null && <p><strong>Next iteration:</strong> {timeLabel(currentLoop.nextIterationAt)}</p>}
             <p><strong>Skipped ticks:</strong> {currentLoop.skippedTicks}</p>
-            {currentLoop.warnings.length > 0 && <ul className="loop-warnings" aria-label="Warnings">{currentLoop.warnings.map((warning, index) => <li key={`${index}:${warning}`}>{warning}</li>)}</ul>}
+            {currentLoop.warnings.length > 0 && <ul aria-label="Warnings">{currentLoop.warnings.map((warning, index) => <li key={`${index}:${warning}`}>{warning}</li>)}</ul>}
           </>}
 
-          {visibleError !== null && <p className="loop-error" role="alert">{visibleError}</p>}
-          {historyError !== null && <p className="loop-error" role="alert">Iteration history unavailable: {historyError}</p>}
+          {visibleError !== null && <p role="alert">{visibleError}</p>}
+          {historyError !== null && <p role="alert">Iteration history unavailable: {historyError}</p>}
 
-          {currentLoop !== null && !isReadOnly && <div className="loop-controls" aria-label="Loop lifecycle controls">
-            {currentLoop.state === 'running' && <button type="button" disabled={busy !== null} onClick={() => runFromDom('pause')}>Pause after this iteration</button>}
-            {currentLoop.state === 'paused' && <div className="loop-resume-control">
-              {isPausedCap(currentLoop) && <label>Iterations to add
-                <input aria-label="Iterations to add" type="number" min="1" step="1" value={resumeAdd} onChange={(event) => runFromDom('resume-update', { value: event.currentTarget.value })} disabled={busy !== null} />
-                <span>+ {resumeAdd} iterations</span>
-              </label>}
-              <button type="button" disabled={busy !== null || (isPausedCap(currentLoop) && (!Number.isInteger(Number(resumeAdd)) || Number(resumeAdd) < 1))} onClick={() => runFromDom('resume')}>Resume</button>
+          {currentLoop !== null && !isReadOnly && <div className="ui-stack" role="group" aria-label="Loop lifecycle controls">
+            {currentLoop.state === 'running' && <Button disabled={busy !== null} onClick={() => runFromDom('pause')}>Pause after this iteration</Button>}
+            {currentLoop.state === 'paused' && <div className="ui-stack">
+              {isPausedCap(currentLoop) && (
+                <TextField
+                  label="Iterations to add"
+                  aria-label="Iterations to add"
+                  type="number"
+                  min="1"
+                  step="1"
+                  value={resumeAdd}
+                  help={`+ ${resumeAdd} iterations`}
+                  onChange={(event) => runFromDom('resume-update', { value: event.currentTarget.value })}
+                  disabled={busy !== null}
+                />
+              )}
+              <Button disabled={busy !== null || (isPausedCap(currentLoop) && (!Number.isInteger(Number(resumeAdd)) || Number(resumeAdd) < 1))} onClick={() => runFromDom('resume')}>Resume</Button>
             </div>}
-            <button type="button" disabled={busy !== null} onClick={() => runFromDom('stop-open')}>Stop</button>
-            <button type="button" disabled={busy !== null} onClick={() => runFromDom('steer-open')}>Steer</button>
-            <button type="button" disabled={busy !== null} onClick={() => runFromDom('edit-open')}>Edit configuration</button>
+            <Button variant="destructive" disabled={busy !== null} onClick={() => runFromDom('stop-open')}>Stop</Button>
+            <Button disabled={busy !== null} onClick={() => runFromDom('steer-open')}>Steer</Button>
+            <Button disabled={busy !== null} onClick={() => runFromDom('edit-open')}>Edit configuration</Button>
           </div>}
 
-          {stopOpen && !isReadOnly && <section role="dialog" aria-modal="true" aria-labelledby="loop-stop-title" className="loop-form-panel">
-            <h3 id="loop-stop-title">Stop the loop</h3>
+          <Dialog
+            open={stopOpen && !isReadOnly}
+            title="Stop the loop"
+            onClose={() => runFromDom('stop-cancel')}
+            closeOnBackdrop={false}
+            actions={<>
+              <Button disabled={busy !== null} onClick={() => runFromDom('stop', { mode: 'after-iteration' })}>After this iteration</Button>
+              <Button variant="destructive" disabled={busy !== null} onClick={() => runFromDom('stop', { mode: 'now' })}>Now</Button>
+              <Button disabled={busy !== null} onClick={() => runFromDom('stop-cancel')}>Cancel</Button>
+            </>}
+          >
             <p>Choose when the loop should stop.</p>
-            <div className="loop-dialog-actions">
-              <button type="button" disabled={busy !== null} onClick={() => runFromDom('stop', { mode: 'after-iteration' })}>After this iteration</button>
-              <button type="button" disabled={busy !== null} onClick={() => runFromDom('stop', { mode: 'now' })}>Now</button>
-              <button type="button" disabled={busy !== null} onClick={() => runFromDom('stop-cancel')}>Cancel</button>
-            </div>
-          </section>}
+          </Dialog>
 
-          {steerOpen && !isReadOnly && <section role="dialog" aria-modal="true" aria-labelledby="loop-steer-title" className="loop-form-panel loop-rail-form">
-            <h3 id="loop-steer-title">Guidance for the next iteration</h3>
-            <label>Guidance
-              <textarea aria-label="Guidance for the next iteration" value={steerDraft} onChange={(event) => runFromDom('steer-update', { text: event.currentTarget.value })} disabled={busy !== null} />
-            </label>
-            <div className="loop-dialog-actions">
-              <button type="button" disabled={busy !== null || !steerDraft.trim()} onClick={() => runFromDom('steer', { text: steerDraft })}>Send</button>
-              <button type="button" disabled={busy !== null} onClick={() => runFromDom('steer-cancel')}>Cancel</button>
-            </div>
-          </section>}
+          <Dialog
+            open={steerOpen && !isReadOnly}
+            title="Guidance for the next iteration"
+            onClose={() => runFromDom('steer-cancel')}
+            closeOnBackdrop={false}
+            actions={<>
+              <Button disabled={busy !== null || !steerDraft.trim()} onClick={() => runFromDom('steer', { text: steerDraft })}>Send</Button>
+              <Button disabled={busy !== null} onClick={() => runFromDom('steer-cancel')}>Cancel</Button>
+            </>}
+          >
+            <TextArea
+              label="Guidance"
+              aria-label="Guidance for the next iteration"
+              value={steerDraft}
+              onChange={(event) => runFromDom('steer-update', { text: event.currentTarget.value })}
+              disabled={busy !== null}
+            />
+          </Dialog>
 
-          {editDraft !== null && currentLoop !== null && !isReadOnly && <section role="dialog" aria-modal="true" aria-labelledby="loop-edit-title" className="loop-form-panel">
-            <h3 id="loop-edit-title">Edit configuration</h3>
-            <div className="loop-edit-basic loop-rail-form">
-              <label className="loop-field">
-                <span>Name</span>
-                <input
+          <Dialog
+            open={editDraft !== null && currentLoop !== null && !isReadOnly}
+            title="Edit configuration"
+            onClose={() => runFromDom('edit-cancel')}
+            closeOnBackdrop={false}
+            actions={<>
+              <Button disabled={editSaveDisabled} onClick={() => runFromDom('edit-save')}>Save</Button>
+              <Button disabled={busy !== null} onClick={() => runFromDom('edit-cancel')}>Cancel</Button>
+            </>}
+          >
+            {editDraft !== null && currentLoop !== null && (
+              <div className="ui-stack">
+                <TextField
+                  label="Name"
                   aria-label="Loop name"
                   type="text"
                   value={editDraft.name}
                   onChange={(event) => { void dispatchRef.current('edit-update', { patch: { name: event.currentTarget.value } }).catch(() => {}) }}
                   disabled={busy !== null}
+                  error={formErrors.name}
                 />
-                {formErrors.name && <span className="loop-field-error" role="alert">{formErrors.name}</span>}
-              </label>
-              {currentLoop.config.promptSource.kind === 'repeat' && <label className="loop-field">
-                <span>Prompt</span>
-                <textarea
+                {currentLoop.config.promptSource.kind === 'repeat' && <TextArea
+                  label="Prompt"
                   aria-label="Loop prompt"
                   value={editDraft.prompt}
                   onChange={(event) => { void dispatchRef.current('edit-update', { patch: { prompt: event.currentTarget.value } }).catch(() => {}) }}
                   disabled={busy !== null}
+                  error={formErrors.prompt}
+                />}
+                <ConfigFields
+                  draft={editDraft}
+                  onChange={(patch) => { void dispatchRef.current('edit-update', { patch }).catch(() => {}) }}
+                  errors={formErrors}
+                  workspaceKind={currentLoop.workspaceKind}
+                  showCost={currentLoop.costUsd !== null || currentLoop.config.caps.maxCostUsd !== undefined}
+                  editing
+                  disabled={busy !== null}
                 />
-                {formErrors.prompt && <span className="loop-field-error" role="alert">{formErrors.prompt}</span>}
-              </label>}
-            </div>
-            <ConfigFields
-              draft={editDraft}
-              onChange={(patch) => { void dispatchRef.current('edit-update', { patch }).catch(() => {}) }}
-              errors={formErrors}
-              workspaceKind={currentLoop.workspaceKind}
-              showCost={currentLoop.costUsd !== null || currentLoop.config.caps.maxCostUsd !== undefined}
-              editing
-              disabled={busy !== null}
-            />
-            <div className="loop-dialog-actions">
-              <button type="button" disabled={editSaveDisabled} onClick={() => runFromDom('edit-save')}>Save</button>
-              <button type="button" disabled={busy !== null} onClick={() => runFromDom('edit-cancel')}>Cancel</button>
-            </div>
-          </section>}
+              </div>
+            )}
+          </Dialog>
 
           {currentLoop?.preset === 'queue' && <div hidden={selectedDetail !== null || isReadOnly} aria-hidden={selectedDetail !== null || isReadOnly}>
             <LoopQueueEditor
@@ -1064,36 +1102,43 @@ export function LoopView({ context, loopId, onHandle, report }: LoopViewProps) {
               onAction={onQueueAction}
             />
           </div>}
-          {currentLoop?.preset === 'queue' && !selectedDetail && isReadOnly && <section className="loop-queue" aria-label="Loop queue history">
-            <h3>Queue</h3>
-            <ol className="loop-queue-list">{currentLoop.queueItems.map((item) => <li className="loop-queue-item" data-queue-id={item.id} key={item.id}>
-              <span>{item.state === 'in-flight' ? 'In progress' : item.state === 'done' ? 'Done' : 'Pending'}</span><p className="loop-queue-body">{item.body}</p>
+          {currentLoop?.preset === 'queue' && !selectedDetail && isReadOnly && <section className="ui-stack" aria-label="Loop queue history">
+            <SectionHeader title="Queue" />
+            <ol className="ui-stack">{currentLoop.queueItems.map((item) => <li className="ui-stack" data-queue-id={item.id} key={item.id}>
+              <Badge tone={item.state === 'in-flight' ? 'working' : item.state === 'done' ? 'accent' : 'neutral'}>
+                {item.state === 'in-flight' ? 'In progress' : item.state === 'done' ? 'Done' : 'Pending'}
+              </Badge>
+              <p>{item.body}</p>
             </li>)}</ol>
           </section>}
 
           {selectedDetail !== null ? <LoopIterationDetail detail={selectedDetail} onBack={() => runFromDom('back')} /> : (
-            <section className="loop-history" aria-label="Iteration history">
-              <h3>Iterations</h3>
-              {historyError !== null ? <p className="loop-muted">History could not be loaded.</p> : currentHistory.length === 0
-                ? <p className="loop-muted">No finished iterations.</p>
-                : <ol className="loop-iteration-list">{currentHistory.slice().reverse().map((detail) => {
+            <section className="ui-stack" aria-label="Iteration history">
+              <SectionHeader title="Iterations" />
+              {historyError !== null ? <EmptyState message="History could not be loaded." /> : currentHistory.length === 0
+                ? <EmptyState message="No finished iterations." />
+                : <ol className="ui-stack">{currentHistory.slice().reverse().map((detail) => {
                   const duration = detail.endedAt === null ? null : detail.endedAt - detail.startedAt
                   const changes = detail.diff === null ? 'Diff unavailable' : `+${detail.diff.added} / −${detail.diff.removed}`
                   const attempt = detail.attempt > 1 ? ` · Attempt ${detail.attempt}` : ''
                   return <li key={`${detail.n}:${detail.attempt}`}>
-                    <button type="button" className="loop-iteration-entry" aria-label={`Iteration ${detail.n}${attempt}`} onClick={() => runFromDom('iteration', { n: detail.n, attempt: detail.attempt })}>
+                    <Button
+                      aria-label={`Iteration ${detail.n}${attempt}`}
+                      className="ui-stack"
+                      onClick={() => runFromDom('iteration', { n: detail.n, attempt: detail.attempt })}
+                    >
                       <span>#{detail.n}{attempt}</span>
-                      <span className="loop-iteration-entry-meta">{iterationCheckLabel(detail)}</span>
-                      <span className="loop-iteration-entry-meta">{changes}</span>
-                      <span className="loop-iteration-entry-meta">{formatDuration(duration)}</span>
-                    </button>
+                      <span>{iterationCheckLabel(detail)}</span>
+                      <span>{changes}</span>
+                      <span>{formatDuration(duration)}</span>
+                    </Button>
                   </li>
                 })}</ol>}
             </section>
           )}
           {busy !== null && <p role="status">Working…</p>}
-        </aside>
-      </div>
+        </section>
+      </ToolPanelFrame>
     </div>
   )
 }

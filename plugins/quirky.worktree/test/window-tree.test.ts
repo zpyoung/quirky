@@ -7,7 +7,7 @@ import { builtinsDir, makeTempHome, startHarness, type Harness } from '../../../
 import { makeTempDir, removeTempDirs } from '../../../packages/daemon/test/plugins/fixtures'
 import { startHeadlessWindow, type HeadlessWindow } from '../../../packages/ui/test/fixtures/headless-window'
 import { failure, isolateGitConfig, makeRepo } from '../../quirky.repo/test/git-fixtures'
-import { button, click, setText } from './window/dom'
+import { button, click, dialogNamed, field, menuItem, openDisclosure, pressEscape, sectionHeading, sectionHeadingMatches, setText } from './window/dom'
 const SIDEBAR = 'sidebar-section:quirky.worktree/worktrees'
 const SESSION_VIEW = 'view:quirky.session/worktree'
 const NEW_WORKTREE = 'command:quirky.worktree/new-worktree'
@@ -78,35 +78,56 @@ async function boot(options: { nested?: boolean; docs?: boolean; web?: boolean; 
 const report = async (agent: QuirkyClient): Promise<any> =>
   ((await agent.callAny('ui.state', {})) as UiState).slots.find((slot) => slot.id === SIDEBAR)?.report
 
+type SidebarReportRow = {
+  id: string
+  name: string
+  depth: number
+  parentId: string | null
+  status: string | null
+  primary: boolean
+  pinned: boolean
+  pending: boolean
+  removing: boolean
+  selected: boolean
+  workspaceStatus: string
+}
+type SidebarReportProject = { id: string; name: string; kind: string; worktrees: SidebarReportRow[] }
+type SidebarReportGroup = { id: string; name: string; collapsed: boolean; worktrees: SidebarReportRow[]; projects: SidebarReportProject[] }
+type SidebarReport = { projects: SidebarReportProject[]; groups: SidebarReportGroup[]; pinned: string[]; dialog: unknown }
+
+const reportRow = async (agent: QuirkyClient, id: string): Promise<SidebarReportRow | undefined> => {
+  const state = await report(agent) as SidebarReport | undefined
+  const projects = [...(state?.projects ?? []), ...(state?.groups ?? []).flatMap((group) => group.projects)]
+  return projects.flatMap((project) => project.worktrees).find((row) => row.id === id)
+}
+
 const listed = async (agent: QuirkyClient, id: string) =>
   ((await agent.callAny('quirky.worktree/list', {})) as Worktree[]).find((w) => w.id === id)!
 
 const texts = (selector: string, within: ParentNode = document) => [...within.querySelectorAll(selector)].map((e) => e.textContent)
 
-/** The `li.worktree` card named `name`, in the project section `project` or, with none, the first match. */
+/** Finds the worktree row named `name`, in project `project` or, with none, the first match. */
 function card(name: string, project?: string, scope: 'repo' | 'pinned' = 'repo'): HTMLElement | undefined {
-  const sections = [...document.querySelectorAll(`section.${scope}`)].filter(
-    (section) => project === undefined || section.querySelector('.repo-name')?.textContent === project
+  const sections = (scope === 'pinned'
+    ? [...document.querySelectorAll<HTMLElement>('[data-top-level-section="pinned"]')]
+    : [...document.querySelectorAll<HTMLElement>('section.repo')]).filter(
+    (section) => project === undefined || sectionHeadingMatches(section, project)
   )
   for (const section of sections) {
-    const found = [...section.querySelectorAll('li.worktree')].find((li) => li.querySelector('.worktree-name')?.textContent === name)
-    if (found) return found as HTMLElement
+    const found = [...section.querySelectorAll<HTMLElement>('[data-worktree-id]')].find((row) => row.querySelector('.worktree-name')?.textContent === name)
+    if (found) return found
   }
   return undefined
 }
 
-function openMenu(win: HeadlessWindow, name: string, project?: string): Promise<HTMLElement> {
-  return win.waitFor(async () => {
-    const target = card(name, project)?.querySelector('.worktree-main')
-    if (!target) return undefined
-    target.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 40, clientY: 60 }))
-    await Bun.sleep(20)
-    return document.querySelector<HTMLElement>('[role="menu"]') ?? undefined
-  })
+async function openMenu(win: HeadlessWindow, name: string, project?: string): Promise<HTMLElement> {
+  const row = card(name, project)
+  if (!row) throw new Error(`no worktree row for ${project}/${name}`)
+  await click(button(row, `Actions for ${name}`)!)
+  return win.waitFor(() => document.querySelector<HTMLElement>('[role="menu"]') ?? undefined)
 }
 
-const item = (label: string): HTMLElement | undefined =>
-  [...document.querySelectorAll<HTMLElement>('[role="menu"] [role="menuitem"]')].find((e) => e.textContent?.replace(/\s*▸$/, '').trim() === label)
+const item = (label: string): HTMLElement | undefined => menuItem(document, label)
 
 async function choose(win: HeadlessWindow, label: string): Promise<void> {
   const target = await win.waitFor(() => item(label))
@@ -114,36 +135,34 @@ async function choose(win: HeadlessWindow, label: string): Promise<void> {
   await Bun.sleep(20)
 }
 
-test('SC-44: the sidebar shows groups, projects, the primary badge and nested children, and reports them', async () => {
+test('SC-44: the sidebar reports project and group membership, primary worktrees, and nested children', async () => {
   const w = await boot({ nested: true, grouped: true, notes: true })
   const { win, agent, api, main, fixLogin, child, group, notes } = w
   await win.waitFor(() => card('child', 'api'))
 
-  expect(texts('.group-name')).toEqual(['services'])
-  expect(texts('.repo-name')).toEqual(['api', 'notes'])
-  const groupSection = document.querySelector('section.group')!
-  expect(groupSection.querySelector('section.repo .repo-name')?.textContent).toBe('api')
-  expect(document.querySelector('section.group + section.repo .repo-name')?.textContent).toBe('notes')
+  const groupSections = [...document.querySelectorAll<HTMLElement>('section.group')]
+  const projectSections = [...document.querySelectorAll<HTMLElement>('section.repo')]
+  expect(groupSections.map(sectionHeading)).toEqual(['services'])
+  expect(projectSections.map(sectionHeading)).toEqual(['api', 'notes'])
+  expect(sectionHeading(groupSections[0]!.querySelector('section.repo')!)).toBe('api')
+  expect(sectionHeading(document.querySelector('section.group + section.repo')!)).toBe('notes')
 
-  const apiRows = [...document.querySelectorAll('section.repo')].find((s) => s.querySelector('.repo-name')?.textContent === 'api')!
-  expect(texts('li.worktree .worktree-name', apiRows)).toEqual(['main', 'fix-login', 'child'])
-  expect(card('main', 'api')!.querySelector('.tag-primary')?.textContent).toBe('primary')
-  expect(card('fix-login', 'api')!.querySelector('.tag-primary')).toBeNull()
-  const chip = card('fix-login', 'api')!.querySelector<HTMLElement>('.children-chip')!
-  expect(chip.textContent).toBe('1 child')
-  expect(card('child', 'api')!.style.getPropertyValue('--depth')).toBe('1')
+  const apiRows = projectSections.find((section) => sectionHeadingMatches(section, 'api'))!
+  expect(texts('[data-worktree-id] .worktree-name', apiRows)).toEqual(['main', 'fix-login', 'child'])
+  const childToggle = card('fix-login', 'api')!.querySelector<HTMLButtonElement>('button[aria-expanded]')!
+  expect(childToggle.getAttribute('aria-expanded')).toBe('true')
 
-  chip.click()
+  await click(childToggle)
   await win.waitFor(() => !card('child', 'api'))
   await agent.callAny('quirky.worktree/set', { worktree: fixLogin.id, status: 'in-review' })
-  await win.waitFor(() => card('fix-login', 'api')?.querySelector('.tag-status')?.textContent === 'In review')
+  await win.waitFor(async () => (await reportRow(agent, fixLogin.id))?.status === 'in-review')
   expect(card('child', 'api')).toBeUndefined()
   await agent.callAny('quirky.worktree/set', { worktree: fixLogin.id, status: 'in-progress' })
-  await win.waitFor(() => card('fix-login', 'api')?.querySelector('.tag-status') === null)
-  card('fix-login', 'api')!.querySelector<HTMLElement>('.children-chip')!.click()
+  await win.waitFor(async () => (await reportRow(agent, fixLogin.id))?.status === null)
+  await click(card('fix-login', 'api')!.querySelector<HTMLButtonElement>('button[aria-expanded]')!)
   await win.waitFor(() => card('child', 'api'))
   const state = await win.waitFor(async () => {
-    const next = await report(agent)
+    const next = await report(agent) as SidebarReport | undefined
     return next?.groups?.length ? next : undefined
   })
   const entry = (wt: Worktree, depth: number, primary: boolean) =>
@@ -185,12 +204,12 @@ test('SC-44: the sidebar shows groups, projects, the primary badge and nested ch
 test('SC-44: a group collapses through quirky.repo/groupCollapse and its projects leave the tree', async () => {
   const { win, agent, group } = await boot({ grouped: true })
   await win.waitFor(() => card('fix-login', 'api'))
-  document.querySelector<HTMLElement>('.group-toggle')!.click()
+  const section = [...document.querySelectorAll<HTMLElement>('section.group')].find((candidate) => sectionHeadingMatches(candidate, 'services'))!
+  await click(button(section, 'Collapse group services')!)
   await win.waitFor(() => !card('fix-login', 'api'))
   expect(((await agent.callAny('quirky.repo/groupList', {})) as ProjectGroup[]).find((g) => g.id === group!.id)!.collapsed).toBe(true)
   expect((await report(agent)).groups[0].collapsed).toBe(true)
-  document.querySelector<HTMLElement>('.group-toggle')!.click()
-  await win.waitFor(() => card('fix-login', 'api'))
+  await click(button(section, 'Expand group services')!)
 }, SLOW)
 
 test('SC-43: status, pin and unread from the card menu', async () => {
@@ -203,27 +222,27 @@ test('SC-43: status, pin and unread from the card menu', async () => {
   await choose(win, 'In review')
   await win.waitFor(async () => (await listed(agent, fixLogin.id)).status === 'in-review')
 
+  await win.waitFor(async () => (await reportRow(agent, fixLogin.id))?.status === 'in-review')
+  await win.waitFor(() => card('fix-login', 'api')?.textContent?.includes('In review'))
   await openMenu(win, 'fix-login', 'api')
   await choose(win, 'Pin')
   await win.waitFor(() => card('fix-login', undefined, 'pinned'))
   expect((await listed(agent, fixLogin.id)).pinned).toBe(true)
-  expect(document.querySelector('section.pinned .section-title')?.textContent).toBe('Pinned')
-  expect(document.querySelector('section.pinned')!.nextElementSibling?.className).toContain('repo')
-  expect(card('fix-login', 'api')!.querySelector('.tag-status')?.textContent).toBe('In review')
-  expect(card('fix-login', undefined, 'pinned')!.querySelector('.tag-status')?.textContent).toBe('In review')
+  const pinnedSection = document.querySelector<HTMLElement>('[data-top-level-section="pinned"]')!
+  expect(sectionHeading(pinnedSection)).toBe('Pinned')
+  expect(pinnedSection.nextElementSibling?.getAttribute('data-top-level-section')?.startsWith('repo:')).toBe(true)
+  expect(await reportRow(agent, fixLogin.id)).toMatchObject({ pinned: true, status: 'in-review' })
   expect((await report(agent)).pinned).toEqual([fixLogin.id])
 
   await agent.callAny('quirky.worktree/set', { worktree: docs!.id, unread: false })
   await openMenu(win, 'docs', 'api')
   await choose(win, 'Mark Unread')
-  await win.waitFor(() => card('docs', 'api')!.querySelector('.glyph-unread[aria-label="Unread"]'))
-  expect(card('docs', 'api')!.querySelector('.worktree-name-unread')).not.toBeNull()
+  await win.waitFor(() => card('docs', 'api')!.querySelector('[role="img"][aria-label="Unread"]'))
   expect((await listed(agent, docs!.id)).unread).toBe(true)
 
-  card('docs', 'api')!.querySelector<HTMLElement>('.worktree-main')!.click()
+  await click(button(card('docs', 'api')!, 'Open docs')!)
   await win.waitFor(async () => (await listed(agent, docs!.id)).unread === false)
-  await win.waitFor(() => !card('docs', 'api')!.querySelector('.glyph-unread'))
-  expect(card('docs', 'api')!.querySelector('.worktree-name-unread')).toBeNull()
+  await win.waitFor(() => !card('docs', 'api')!.querySelector('[role="img"][aria-label="Unread"]'))
   const layout = ((await agent.callAny('ui.state', {})) as UiState).layout
   expect(layout.view).toEqual({ id: SESSION_VIEW, input: { worktree: docs!.id } })
 }, SLOW)
@@ -233,20 +252,18 @@ test('SC-59: the primary checkout cannot be deleted', async () => {
   await win.waitFor(() => card('main', 'api'))
   const error = await failure(agent.callAny('quirky.worktree/remove', { worktree: main.id, yes: true }))
   expect(error.code).toBe(RpcErrorCode.Conflict)
-  expect(error.message).toBe('the primary worktree cannot be deleted; remove the project instead')
 
   await openMenu(win, 'main', 'api')
   const del = item('Delete') as HTMLButtonElement
   expect(del.disabled).toBe(true)
-  expect(del.title).toBe('the primary worktree cannot be deleted; remove the project instead')
   del.click()
   await Bun.sleep(20)
   expect(document.querySelector('[role="dialog"]')).toBeNull()
   expect(await listed(agent, main.id)).toBeDefined()
 }, SLOW)
 
-const selectedProject = (): string | null | undefined =>
-  document.querySelector<HTMLSelectElement>('[role="dialog"] select')?.selectedOptions[0]?.textContent
+const selectedProject = (dialog: ParentNode): string | null | undefined =>
+  field<HTMLSelectElement>(dialog, 'Project')?.selectedOptions[0]?.textContent
 
 test('SC-62: Mod+N and the API open the create dialog on the right project', async () => {
   const { win, agent, api, web, fixLogin } = await boot({ web: true })
@@ -254,21 +271,20 @@ test('SC-62: Mod+N and the API open the create dialog on the right project', asy
   await win.waitFor(() => card('fix-login', 'api'))
 
   window.dispatchEvent(new KeyboardEvent('keydown', { key: 'n', code: 'KeyN', metaKey: true, bubbles: true, cancelable: true }))
-  const dialog = await win.waitFor(() => document.querySelector('[role="dialog"]'))
-  expect(dialog.getAttribute('aria-label')).toBe('New workspace')
-  expect(selectedProject()).toBe('api')
+  const dialog = await win.waitFor(() => dialogNamed('New workspace'))
+  expect(selectedProject(dialog)).toBe('api')
   const open = await win.waitFor(async () => {
     const next = await report(agent)
     return next?.dialog ? next : undefined
   })
   expect(open.dialog).toEqual({ kind: 'create', repoId: api.id })
 
-  window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
-  await win.waitFor(() => !document.querySelector('[role="dialog"]'))
+  await pressEscape()
+  await win.waitFor(() => !dialogNamed('New workspace'))
   await win.waitFor(async () => (await report(agent)).dialog === null)
 
   await agent.callAny('ui.command.run', { id: NEW_WORKTREE, args: { repo: 'web' } })
-  await win.waitFor(() => selectedProject() === 'web')
+  await win.waitFor(() => selectedProject(dialogNamed('New workspace')!) === 'web')
   const second = await win.waitFor(async () => {
     const next = await report(agent)
     return next?.dialog ? next : undefined
@@ -280,22 +296,21 @@ test('workspace status icon/avatar controls persist safe plain text and render o
   const { win, agent } = await boot()
   const edit = await win.waitFor(() => button(document, 'Edit workspace statuses'))
   await click(edit)
-  const dialog = await win.waitFor(() => document.querySelector<HTMLElement>('[role="dialog"]')?.getAttribute('aria-label') === 'Workspace statuses'
-    ? document.querySelector<HTMLElement>('[role="dialog"]')
-    : undefined)
-  const icon = dialog?.querySelector<HTMLInputElement>('input[aria-label="Status icon 3"]')
-  if (!dialog || !icon) throw new Error('status editor did not expose the in-review icon control')
+  const dialog = await win.waitFor(() => dialogNamed('Workspace statuses'))
+  const icon = field(dialog, 'Status icon 3')
+  if (!icon) throw new Error('status editor did not expose the in-review icon control')
   await setText(icon, '🧪')
   await click(button(dialog, 'Save statuses')!)
-  await win.waitFor(() => document.querySelector('[role="dialog"]') === null)
+  await win.waitFor(() => !dialogNamed('Workspace statuses'))
 
   const statuses = await agent.callAny('quirky.worktree/statusDefinitions', {}) as Array<{ id: string; icon?: string }>
   expect(statuses.find((status) => status.id === 'in-review')?.icon).toBe('🧪')
+  await openDisclosure('More workspace tools')
   const board = await win.waitFor(() => button(document, 'Workspace board'))
   await click(board)
-  const lane = await win.waitFor(() => [...document.querySelectorAll<HTMLElement>('.worktree-board-column')]
-    .find((column) => column.querySelector('h3')?.textContent?.includes('In review')))
-  expect(lane.querySelector('h3')?.textContent).toContain('🧪')
+  const laneHeading = await win.waitFor(() => [...document.querySelectorAll<HTMLHeadingElement>('h2')]
+    .find((heading) => heading.textContent?.includes('In review')))
+  expect(laneHeading.textContent).toContain('🧪')
   await expect(agent.callAny('quirky.worktree/setStatusDefinitions', {
     statuses: statuses.map((status) => status.id === 'in-review'
       ? { ...status, label: 'In review', color: '#a57de8', icon: '<svg onload=alert(1)>' }

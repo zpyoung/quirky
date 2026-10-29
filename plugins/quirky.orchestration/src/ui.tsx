@@ -1,3 +1,4 @@
+import { Button, ToolPanelFrame } from '@quirky/ui'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import type { MountFunction, QuirkyEvent, UiPluginContext } from '@quirky/protocol'
@@ -19,14 +20,6 @@ const SETUP_OVERLAY_ID = 'overlay:quirky.orchestration/floating-setup'
 const OPEN_SETTINGS_COMMAND_ID = 'command:quirky.orchestration/open-settings'
 const DISMISS_SETUP_COMMAND_ID = 'command:quirky.orchestration/dismiss-setup'
 
-const buttonStyle = {
-  border: '1px solid var(--border, #2b2f3a)',
-  borderRadius: 6,
-  background: 'var(--bg-hover, #262a33)',
-  color: 'var(--text, #d7dae0)',
-  padding: '7px 11px',
-  cursor: 'pointer'
-} as const
 
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -114,29 +107,24 @@ function FloatingSetupOverlay({ context, report }: FloatingSetupProps) {
       aria-label="Enable orchestration"
       style={{
         position: 'fixed',
-        right: 16,
-        bottom: 16,
+        insetInlineEnd: 'var(--ui-space-16)',
+        insetBlockEnd: 'var(--ui-space-16)',
         zIndex: 900,
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 10,
-        width: 'min(300px, calc(100vw - 32px))',
-        boxSizing: 'border-box',
-        padding: 14,
-        border: '1px solid var(--border, #2b2f3a)',
-        borderRadius: 8,
-        color: 'var(--text, #d7dae0)',
-        background: 'var(--bg-raised, #1d2027)',
-        boxShadow: '0 8px 28px rgba(0,0,0,.3)'
+        width: 'min(30ch, calc(100vw - 2 * var(--ui-space-16)))'
       }}
     >
-      <strong>Enable orchestration</strong>
-      <span style={{ color: 'var(--muted, #8a909e)' }}>Set up the skill so agents can coordinate supervised work through Quirky.</span>
-      {error && <span role="alert" style={{ color: 'var(--danger, #e5534b)' }}>{error}</span>}
-      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-        <button type="button" style={buttonStyle} onClick={() => void dismiss()}>Dismiss</button>
-        <button type="button" style={buttonStyle} onClick={() => void openSettings()}>Enable</button>
-      </div>
+      <ToolPanelFrame
+        title="Enable orchestration"
+        actions={
+          <div className="ui-cluster">
+            <Button onClick={() => void dismiss()}>Dismiss</Button>
+            <Button variant="primary" onClick={() => void openSettings()}>Enable</Button>
+          </div>
+        }
+      >
+        <p className="ui-text-muted">Set up the skill so agents can coordinate supervised work through Quirky.</p>
+        {error && <p className="ui-error-text" role="alert">{error}</p>}
+      </ToolPanelFrame>
     </aside>
   )
 }

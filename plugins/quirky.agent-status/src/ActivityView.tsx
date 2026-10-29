@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type ChangeEvent, type CSSProperties } from 'react'
+import { Badge, Button, EmptyState, FormRow, InlineAgentCard, ListRow, SectionHeader, StatusDot, TextField, type UiStatus } from '@quirky/ui'
 import type { QuirkyEvent, UiPluginContext } from '@quirky/protocol'
 import type { ActivityQuery, ActivityThread } from './activity-types'
 
@@ -28,24 +29,67 @@ const PAGE_STYLE: CSSProperties = {
   flex: '1 1 auto',
   minHeight: 0,
   minWidth: 0,
-  overflow: 'hidden',
-  color: 'var(--text, inherit)'
+  overflow: 'hidden'
 }
-const TOOLBAR_STYLE: CSSProperties = { display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, padding: 12 }
-const ACTIONS_STYLE: CSSProperties = { display: 'flex', flexWrap: 'wrap', gap: 8 }
-const FILTERS_STYLE: CSSProperties = { display: 'flex', alignItems: 'flex-end', flexWrap: 'wrap', gap: '8px 12px', padding: '0 12px 12px' }
-const FIELD_STYLE: CSSProperties = { display: 'flex', flexDirection: 'column', flex: '1 1 220px', gap: 4, minWidth: 180 }
-const INLINE_FIELD_STYLE: CSSProperties = { display: 'inline-flex', alignItems: 'center', gap: 6 }
-const RESULTS_STYLE: CSSProperties = { flex: '1 1 auto', minHeight: 0, minWidth: 0, overflowY: 'auto', padding: '0 12px 160px', boxSizing: 'border-box' }
-const GROUP_LIST_STYLE: CSSProperties = { display: 'flex', flexDirection: 'column', gap: 12, listStyle: 'none', margin: 0, padding: 0 }
-const GROUP_STYLE: CSSProperties = { display: 'flex', flexDirection: 'column', gap: 8, minWidth: 0 }
-const THREAD_STYLE: CSSProperties = { display: 'flex', flexDirection: 'column', gap: 6, padding: '10px 0', borderBottom: '1px solid var(--border, #7774)' }
-const THREAD_HEADING_STYLE: CSSProperties = { display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 8 }
-const THREAD_OPEN_STYLE: CSSProperties = { display: 'inline-flex', alignItems: 'baseline', flexWrap: 'wrap', gap: 8, padding: 0, border: 0, background: 'transparent', color: 'inherit', font: 'inherit', cursor: 'pointer', textAlign: 'left' }
-const THREAD_CONTEXT_STYLE: CSSProperties = { margin: 0, color: 'var(--muted, #8a909e)' }
-const THREAD_TEXT_STYLE: CSSProperties = { margin: 0, overflowWrap: 'anywhere' }
-const THREAD_ACTIONS_STYLE: CSSProperties = { display: 'flex', flexWrap: 'wrap', gap: 8 }
-const CHILDREN_STYLE: CSSProperties = { display: 'flex', flexDirection: 'column', gap: 4, listStyle: 'none', margin: 0, padding: '4px 0 0 16px' }
+const HEADER_STYLE: CSSProperties = { padding: 'var(--ui-space-12)' }
+const ACTIONS_STYLE: CSSProperties = { display: 'flex', flexWrap: 'wrap', gap: 'var(--ui-space-8)' }
+const FILTERS_STYLE: CSSProperties = {
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 'var(--ui-space-8)',
+  padding: '0 var(--ui-space-12) var(--ui-space-12)'
+}
+const RESULTS_STYLE: CSSProperties = {
+  flex: '1 1 auto',
+  minHeight: 0,
+  minWidth: 0,
+  overflowY: 'auto',
+  padding: '0 var(--ui-space-12) var(--ui-space-16)'
+}
+const THREAD_LIST_STYLE: CSSProperties = {
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 'var(--ui-space-8)',
+  listStyle: 'none',
+  margin: 0,
+  padding: 0
+}
+const CHILDREN_STYLE: CSSProperties = {
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 'var(--ui-space-4)',
+  listStyle: 'none',
+  margin: 0,
+  padding: '0 0 0 var(--ui-space-16)'
+}
+const MESSAGE_STYLE: CSSProperties = {
+  margin: 0,
+  padding: 'var(--ui-space-8) 0',
+  overflowWrap: 'anywhere'
+}
+
+function statusForDisplay(display: ActivityThread['display']): UiStatus {
+  switch (display) {
+    case 'working':
+    case 'monitoring':
+      return 'working'
+    case 'waiting':
+    case 'blocked':
+    case 'permission':
+      return 'needs-you'
+    case 'failed':
+      return 'failing'
+    case 'done':
+      return 'done'
+    case 'interrupted':
+    case 'idle':
+    case 'unconfirmed':
+    case 'unverifiable':
+      return 'idle'
+    default:
+      return 'idle'
+  }
+}
 
 function viewInput(input: unknown): ActivityViewInput {
   const value = typeof input === 'object' && input !== null ? (input as Record<string, unknown>) : {}
@@ -126,17 +170,16 @@ export function ActivityNavigation({ context }: { context: UiPluginContext }) {
   }, [context, refresh])
 
   return (
-    <section className="activity-navigation-section">
-      <button
-        className="activity-navigation"
-        type="button"
-        aria-label={unread > 0 ? `Activity, ${unread} unread` : 'Activity'}
-        onClick={() => void context.executeCommand(`command:${PLUGIN_ID}/openActivity`)}
-      >
-        <span>Activity</span>
-        {unread > 0 ? <span className="activity-unread-count">{unread}</span> : null}
-      </button>
-    </section>
+    <Button
+      className="ui-cluster"
+      style={{ width: '100%', justifyContent: 'flex-start' }}
+      aria-label={unread > 0 ? `Activity, ${unread} unread` : 'Activity'}
+      onClick={() => void context.executeCommand(`command:${PLUGIN_ID}/openActivity`)}
+    >
+      {unread > 0 ? <StatusDot status="needs-you" /> : null}
+      <span>Activity</span>
+      {unread > 0 ? <Badge tone="needs-you">{unread}</Badge> : null}
+    </Button>
   )
 }
 
@@ -230,63 +273,63 @@ export function ActivityView({ context, input }: { context: UiPluginContext; inp
       .catch((cause) => context.toast('Could not open Activity thread', cause instanceof Error ? cause.message : String(cause)))
   }
 
-  const text = draftText
-  const worktree = draftWorktree
   const grouped = groupsFor(threads, view.group)
   const hasFilters = Boolean(view.text?.trim() || view.worktree?.trim() || view.unreadOnly)
 
   return (
-    <main className="activity-view" style={PAGE_STYLE}>
-      <header className="activity-toolbar" style={TOOLBAR_STYLE}>
-        <h1 style={{ margin: 0, fontSize: 20 }}>Activity</h1>
-        <div className="activity-actions" style={ACTIONS_STYLE}>
-          <button type="button" aria-label="Mark all read" disabled={!threads.some((thread) => thread.unread)} onClick={() => void markAllRead()}>
-            Mark all read
-          </button>
-          <button type="button" aria-label="Clear completed activity" onClick={() => void clearCompleted()}>
-            Clear completed
-          </button>
-        </div>
-      </header>
+    <main style={PAGE_STYLE}>
+      <div style={HEADER_STYLE}>
+        <SectionHeader
+          title="Activity"
+          actions={
+            <div style={ACTIONS_STYLE}>
+              <Button aria-label="Mark all read" disabled={!threads.some((thread) => thread.unread)} onClick={() => void markAllRead()}>
+                Mark all read
+              </Button>
+              <Button aria-label="Clear completed activity" variant="destructive" onClick={() => void clearCompleted()}>
+                Clear completed
+              </Button>
+            </div>
+          }
+        />
+      </div>
       <form
-        className="activity-filters"
         style={FILTERS_STYLE}
         onSubmit={(event) => {
           event.preventDefault()
           applyFilters()
         }}
       >
-        <label style={FIELD_STYLE}>
-          Search Activity
-          <input
-            aria-label="Search Activity"
-            type="search"
-            value={draftText}
-            onChange={(event: ChangeEvent<HTMLInputElement>) => setDraftText(event.currentTarget.value)}
-          />
-        </label>
-        <label style={FIELD_STYLE}>
-          Worktree ID
-          <input
-            aria-label="Worktree ID"
-            type="search"
-            value={draftWorktree}
-            onChange={(event: ChangeEvent<HTMLInputElement>) => setDraftWorktree(event.currentTarget.value)}
-          />
-        </label>
-        <label style={INLINE_FIELD_STYLE}>
+        <TextField
+          id="activity-search"
+          label="Search Activity"
+          aria-label="Search Activity"
+          type="search"
+          value={draftText}
+          onChange={(event: ChangeEvent<HTMLInputElement>) => setDraftText(event.currentTarget.value)}
+        />
+        <TextField
+          id="activity-worktree"
+          label="Worktree ID"
+          aria-label="Worktree ID"
+          type="search"
+          value={draftWorktree}
+          onChange={(event: ChangeEvent<HTMLInputElement>) => setDraftWorktree(event.currentTarget.value)}
+        />
+        <FormRow label="Unread only" htmlFor="activity-unread">
           <input
             aria-label="Unread only"
             type="checkbox"
             checked={view.unreadOnly === true}
+            style={{ accentColor: 'var(--ui-accent)' }}
             onChange={(event: ChangeEvent<HTMLInputElement>) => updateView({ unreadOnly: event.currentTarget.checked })}
           />
-          Unread only
-        </label>
-        <label style={FIELD_STYLE}>
-          Group by
+        </FormRow>
+        <FormRow label="Group by" htmlFor="activity-group">
           <select
             aria-label="Group Activity by"
+            className="ui-text-field__input"
+            style={{ appearance: 'auto' }}
             value={view.group}
             onChange={(event: ChangeEvent<HTMLSelectElement>) => updateView({ group: event.currentTarget.value as GroupBy })}
           >
@@ -295,72 +338,85 @@ export function ActivityView({ context, input }: { context: UiPluginContext; inp
             <option value="provider">Provider</option>
             <option value="none">No groups</option>
           </select>
-        </label>
-        <button type="submit" aria-label="Apply Activity filters">
+        </FormRow>
+        <Button type="submit" aria-label="Apply Activity filters" variant="primary">
           Apply
-        </button>
+        </Button>
       </form>
-      {error ? <p className="activity-error" role="alert">{error}</p> : null}
-      {loading && threads.length === 0 ? <p className="activity-loading" role="status">Loading Activity…</p> : null}
-      {!loading && !error && threads.length === 0 ? (
-        <p className="activity-empty" role="status">{hasFilters ? 'No Activity threads match these filters.' : 'No Activity threads yet.'}</p>
-      ) : null}
-      <div className="activity-groups" style={RESULTS_STYLE}>
-        {grouped.map((group) => (
-          <section className="activity-group" data-activity-group={group.key} key={group.key} style={GROUP_STYLE}>
-            {view.group !== 'none' ? <h2 style={{ margin: 0, fontSize: 16 }}>{group.label}</h2> : null}
-            <ul style={GROUP_LIST_STYLE}>
-              {group.threads.map((thread) => {
-                const isExpanded = expanded[thread.sessionId] === true
-                return (
-                  <li className={`activity-thread${thread.unread ? ' unread' : ''}`} data-session-id={thread.sessionId} key={thread.sessionId} style={THREAD_STYLE}>
-                    <div className="activity-thread-heading" style={THREAD_HEADING_STYLE}>
-                      <button type="button" className="activity-thread-open" style={THREAD_OPEN_STYLE} onClick={() => openThread(thread)}>
-                        <span className="activity-thread-name">{thread.sessionName}</span>
-                        <span className="activity-thread-state">{thread.label}</span>
-                      </button>
-                      {thread.unread ? <span className="activity-unread" aria-label="Unread">Unread</span> : null}
-                    </div>
-                    <p className="activity-thread-context" style={THREAD_CONTEXT_STYLE}>
-                      {thread.worktreeName} · {thread.agent} · {thread.live ? 'Available' : 'Unavailable'}
-                    </p>
-                    {thread.prompt ? <p className="activity-thread-prompt" style={THREAD_TEXT_STYLE}>{thread.prompt}</p> : null}
-                    {thread.detail ? <p className="activity-thread-detail" style={THREAD_TEXT_STYLE}>{thread.detail}</p> : null}
-                    <div className="activity-thread-actions" style={THREAD_ACTIONS_STYLE}>
-                      <button type="button" disabled={!thread.unread} onClick={() => void markRead(thread)}>
-                        {thread.unread ? 'Mark read' : 'Read'}
-                      </button>
-                      {thread.children.length > 0 ? (
-                        <button
-                          type="button"
-                          aria-label={`${isExpanded ? 'Hide' : 'Show'} child agents for ${thread.sessionId}`}
-                          aria-expanded={isExpanded}
-                          onClick={() => {
-                            const expanding = !isExpanded
-                            setExpanded((previous) => ({ ...previous, [thread.sessionId]: expanding }))
-                            if (expanding && thread.unread) void markRead(thread)
-                          }}
-                        >
-                          {isExpanded ? 'Hide child agents' : `Show ${thread.children.length} child agents`}
-                        </button>
+      <div style={RESULTS_STYLE}>
+        {error ? <div className="ui-error-text" role="alert" style={MESSAGE_STYLE}>{error}</div> : null}
+        {loading && threads.length === 0 ? <p className="ui-text-muted" role="status" style={MESSAGE_STYLE}>Loading Activity…</p> : null}
+        {!loading && !error && threads.length === 0 ? (
+          <div role="status">
+            <EmptyState message={hasFilters ? 'No Activity threads match these filters.' : 'No Activity threads yet.'} />
+          </div>
+        ) : null}
+        <div className="ui-stack">
+          {grouped.map((group) => (
+            <section className="ui-stack" data-activity-group={group.key} key={group.key}>
+              {view.group !== 'none' ? <SectionHeader title={group.label} /> : null}
+              <ul style={THREAD_LIST_STYLE}>
+                {group.threads.map((thread) => {
+                  const isExpanded = expanded[thread.sessionId] === true
+                  const status = statusForDisplay(thread.display)
+                  return (
+                    <li className="ui-stack" data-session-id={thread.sessionId} key={thread.sessionId}>
+                      <InlineAgentCard
+                        title={thread.sessionName}
+                        status={status}
+                        action={{ label: 'Open', onAction: () => openThread(thread) }}
+                        description={
+                          <div className="ui-stack">
+                            <div className="ui-cluster">
+                              <span>{thread.label}</span>
+                              {thread.unread ? <Badge tone="needs-you" label="Unread">Unread</Badge> : null}
+                              <span>{thread.worktreeName} · {thread.agent} · {thread.live ? 'Available' : 'Unavailable'}</span>
+                            </div>
+                            {thread.prompt ? <span>{thread.prompt}</span> : null}
+                            {thread.detail ? <span>{thread.detail}</span> : null}
+                          </div>
+                        }
+                      />
+                      <div className="ui-cluster">
+                        <Button disabled={!thread.unread} onClick={() => void markRead(thread)}>
+                          {thread.unread ? 'Mark read' : 'Read'}
+                        </Button>
+                        {thread.children.length > 0 ? (
+                          <Button
+                            aria-label={`${isExpanded ? 'Hide' : 'Show'} child agents for ${thread.sessionId}`}
+                            aria-expanded={isExpanded}
+                            onClick={() => {
+                              const expanding = !isExpanded
+                              setExpanded((previous) => ({ ...previous, [thread.sessionId]: expanding }))
+                              if (expanding && thread.unread) void markRead(thread)
+                            }}
+                          >
+                            {isExpanded ? 'Hide child agents' : `Show ${thread.children.length} child agents`}
+                          </Button>
+                        ) : null}
+                      </div>
+                      {isExpanded ? (
+                        <ul style={CHILDREN_STYLE}>
+                          {thread.children.map((child) => (
+                            <li data-child-id={child.id} key={`${child.kind}:${child.id}`}>
+                              <ListRow
+                                title={child.id}
+                                description={`${child.kind} · ${child.state}`}
+                                status={child.state === 'working' ? 'working' : child.state === 'waiting' ? 'needs-you' : 'done'}
+                              />
+                            </li>
+                          ))}
+                        </ul>
                       ) : null}
-                    </div>
-                    {isExpanded ? (
-                      <ul className="activity-children" style={CHILDREN_STYLE}>
-                        {thread.children.map((child) => (
-                          <li data-child-id={child.id} key={`${child.kind}:${child.id}`}>
-                            <span>{child.id}</span> <span>{child.kind}</span> <span>{child.state}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    ) : null}
-                  </li>
-                )
-              })}
-            </ul>
-          </section>
-        ))}
+                    </li>
+                  )
+                })}
+              </ul>
+            </section>
+          ))}
+        </div>
       </div>
     </main>
   )
 }
+
