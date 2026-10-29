@@ -88,5 +88,104 @@
 - **Revisit if:** original-repository worktree listing does not preserve the intended two identities
 - **Source:** assumed — autonomous
 
+## D9: Correct the integration-test budget without changing production deadlines
+- **Question:** Does the full-daemon restart failure justify an arbitrary timeout increase or a fixture contract correction?
+- **Options:** suppress late errors; disable startup plugins; retain a 5-second deadline shorter than one allowed daemon operation; use the existing real-daemon editor test budget and await owned cleanup
+- **Chose:** Use the existing 60-second editor integration-test budget in lifecycle.test.ts, preserving the full shipped builtin set and every lifecycle assertion. Reuse registerIsolatedEditorFixtures before setup-hook registration, restore environment only after cleanup, and clean a partially started fixture/home on setup failure. Do not change production activation, shutdown or RPC deadlines.
+- **Why:** The restart scenario legitimately performs two full daemon startups and a stop; each plugin activation/deactivation is already allowed 10 seconds, and shutdown awaits plugins sequentially. The observed restart test took 6089.65ms against Bun's 5000ms default, followed by cascading hooks/null-fixture/ConnectionLost. The exact slow sub-operation is not identified; no broader runtime-performance fix is claimed. Other real-daemon editor suites already use 60/120-second budgets. Missing process environment isolation is a separate safety boundary, not claimed as the cause of this timeout.
+- **Evidence:** failed caught-up prepass; lifecycle fixture and daemon startup/PluginHost bounds; viewers.test.ts and viewer/notebook acceptance conventions; source commit aac694a1
+- **Reversibility:** easy
+- **Confidence:** high for deadline-contract mismatch; individual operation latency unmeasured
+- **Revisit if:** the bounded fixture still times out or operation-level evidence reveals a hang
+- **Source:** assumed — autonomous
+
+## D10: Exclude ignored generated bundles while retaining authored-source UI enforcement
+- **Question:** How should typecheck handle the actual mobile bundle diagnostics after the integration catch-up?
+- **Options:** remove user-generated artifacts; add mobile/assets or plugin-specific exemptions; apply Git source-admission semantics once for all lint candidates
+- **Chose:** Batch candidate paths through git check-ignore once, excluding only Git-ignored/unindexed output. Indexed sources remain linted even beneath ignored directories. Non-Git fixture trees continue scanning; unexpected Git execution errors fail honestly. Preserve all raw CSS/color/pixel rules and plugin enrollment. Add a behavioral regression for ignored output plus forced-indexed source in the same directory.
+- **Why:** All 13 caught-up UI-lint diagnostics named generated, ignored mobile bundle assets, not tracked plugin source. The recursive source collector ignored Git admission rules while already excluding conventional dist/build output. No user artifact deletion, lint baseline, plugin-specific exception or build-output path migration is needed.
+- **Evidence:** caught-up prepass typecheck output; git ls-files/check-ignore for plugins/quirky.mobile/assets/mobile/{index.html,page.css,page.js}; scripts/ui-lint.test.ts behavior; source commit aac694a1
+- **Reversibility:** easy
+- **Confidence:** high for actual generated-output admission failure
+- **Revisit if:** authored/indexed source is excluded or Git errors silently reduce enforcement
+- **Source:** assumed — autonomous
+
+## D11: Preserve all four incoming restyle authorities
+- **Question:** Do the sole roadmap catch-up's decisions conflict with this repair?
+- **Options:** reopen resolved shared UI ownership; preserve the four incoming contracts and their evidence limits
+- **Chose:** Read ui-restyle-ask D1–D12, ui-restyle-settings D1–D11, ui-restyle-tasks D1–D10 and ui-restyle-worktrees D1–D17 completely, including raw terminal Progress/recovery lines, through the scoped incoming-decisions reader. Preserve inert sanitized Ask previews, feature-owned API/validation/trust authority, canonical host slots, measured menus/stacked-dialog focus, and shared component/token enforcement. No editor-specific diff/cursor/EmptyState contract conflicts were found.
+- **Why:** Those restyles intentionally leave feature ownership and semantics unchanged. Their historical build-first test/review limits remain historical rather than evidence that this end-phase fix is verified. Worktrees' browser Library-access warning also prevents a universal native-state-isolation claim from temporary HOME/profile alone.
+- **Evidence:** sole clean roadmap merge after 01946b2e; ReadEditorIncomingDecisions full-file/raw receipt; four incoming decision logs
+- **Reversibility:** easy
+- **Confidence:** high for consumed contracts; no inherited whole-suite/native pass claim
+- **Revisit if:** canonical landing identifies a concrete integration conflict
+- **Source:** locked by incoming decision logs
+
+## D12: Preserve green runner outcomes and their actual flaky qualifications
+- **Question:** What do the final configured test receipts establish?
+- **Options:** report every file as first-attempt clean; weaken tests to avoid configured retries; retain success with named retry history
+- **Chose:** Source 08c595b9 passed editor/scripts plus typecheck, with core.test.ts initially failing and its configured isolated retry passing. Final canonical-root source 6d2b800a passed the complete 33-remote/1-macOS-file gate: remote initially 32 pass/1 fail, then markdown-acceptance.test.ts's configured isolated retry passed; the macOS-only file passed. Final test command exited 0 in 85.043s; root/UI-lint/mobile/prepared-desktop typecheck exited 0 in 35.764s. Preserve raw logs and both retry histories; do not claim a first-attempt or universal suite pass.
+- **Why:** The runner explicitly treats a successful isolated retry as ok with a flaky inventory. The final initial markdown failure was a 5013.32ms hook timeout; the earlier core failures also followed 5-second timeout/cascade. Their individual slow operations are not diagnosed here, and no assertion is suppressed. The newly reached lint regressions also exposed and corrected an undersized Git diagnostic buffer and a missing required fixture source directory before this green gate.
+- **Evidence:** .quirk/build-loop/fix-test-editor-1028/final-{tests,types}.log; review/prepass.json run bee4c95b76fdd41c; tests-with-core-retry.log and review/prepass-with-core-retry.json; lint-regression-tests.log and review/prepass-lint-regression.json
+- **Reversibility:** easy
+- **Confidence:** high for exercised configured outcomes
+- **Revisit if:** an isolated retry stops passing or operation-level tracing identifies a real lifecycle hang
+- **Source:** assumed — autonomous
+
+## D13: Canonicalize fixture paths and prove actual macOS worktree isolation
+- **Question:** Does a raw mkdtemp spelling match the daemon's canonical worktree identity on macOS?
+- **Options:** compare symlink spellings; bypass identity selection; canonicalize the two fixture roots before registration and assertions
+- **Chose:** Resolve both Explorer fixture roots with realpathSync. An actual macOS daemon API smoke registered one repository, listed two linked worktrees with distinct IDs, expanded/selected the first and independently selected the second, then asserted exact per-worktree expanded/selection state. It printed EXPLORER_MACOS_ISOLATION_OK and EXPLORER_MACOS_SMOKE_CLEANED and exited 0 in 2.90s.
+- **Why:** The earlier real API smoke already demonstrated /var versus /private/var aliasing. Canonical fixture paths preserve the existing production identity authority rather than weakening matching. This makes the repaired linked-worktree test portable to the required macOS path layout.
+- **Evidence:** source 6d2b800a; .quirk/build-loop/fix-test-editor-1028/macos-explorer-smoke.log; final remote/editor regression gate
+- **Reversibility:** easy
+- **Confidence:** high for named API/state assertions
+- **Revisit if:** another supported filesystem alias changes canonical path selection
+- **Source:** assumed — autonomous
+
+## D14: Keep platform and native evidence bounded
+- **Question:** Does portable code or a remote runner receipt certify every platform and native surface?
+- **Options:** infer broad platform/native acceptance; retain only exercised macOS API/web evidence and explicitly defer remaining platform qualification
+- **Chose:** Use portable Node/Git APIs and canonical paths. Keep Linux/Windows platform qualification and real native OS dialogs, focus, clipboard and window behavior outside these macOS API/web receipts; they remain with their platform/native owners. Do not claim that temporary HOME and a unique browser profile prove zero Library access.
+- **Why:** LOOP locks macOS build/qualification scope, and browser controls are not OS-native acceptance. Remote suite execution reports test outcomes, not comprehensive platform approval.
+- **Evidence:** docs/loop/LOOP.md platform/native rules; incoming Worktrees D13; actual isolated API/web receipts and configured suite result
+- **Reversibility:** easy
+- **Confidence:** high for the stated evidence boundary
+- **Revisit if:** supported-platform or native qualification requirements change
+- **Source:** deferred: platform
+
+## D15: Recover review transport without altering or rerolling model findings
+- **Question:** Did the first review runner failure mean Gemini was unavailable or that the review passed?
+- **Options:** synthesize a pass; rerun every model; repair the transport parser and consume the original actual responses
+- **Chose:** Preserve the failed transport receipt and every raw response. Fix only the scratch runner's header parser to accept pi-watch's real `(alias gemini)` suffix, then reuse the first valid recorded promote output for each unchanged prompt/artifact/model triple. Run fresh independent refute calls and the existing deterministic claims/merge/gate/manifest stages. No hand-edited model JSON, skipped lens or new source check is substituted.
+- **Why:** All actual promote processes exited 0 with the selected Google/Gemini high triple; the runner incorrectly returned None from its stricter header regex. Those were successful model calls, not missing reviews or evidence of a clean branch.
+- **Evidence:** review/protocol-output/bee4c95b76fdd41c/receipt-transport-failure.json; untouched promote.attempt{1,2}.{stdout,stderr}.raw and process metadata; completed resumed receipt.json
+- **Reversibility:** easy (throwaway transport only)
+- **Confidence:** high
+- **Revisit if:** a recorded prompt/artifact/model differs or a deterministic stage refuses its chain
+- **Source:** assumed — autonomous
+
+## D16: Apply the single retained review finding within the bounded fix batch
+- **Question:** How should the completed C/S/X review be adjudicated?
+- **Options:** ignore the observed fixture timeout; change production deadlines; align the named full-daemon integration fixture with the established test budget
+- **Chose:** Correctness C and security X passed with zero retained findings/advisories. C1, the duplicate budget observation, was refuted because its file was beyond the original diff. Spec compliance retained S1 at effective MEDIUM, low confidence: markdown-acceptance.test.ts lacked the permitted full-daemon budget and actually hit a 5013.32ms hook timeout in the gate. Accept S1 as a reached verification prerequisite; set that file's test budget to 60 seconds while preserving all assertions and production deadlines. Run one post-fix editor/scripts/typecheck batch; do not run a second model round, as LOOP explicitly directs.
+- **Why:** The full-builtin fixture's allowed operation bounds already exceed Bun's default five seconds, as D9 records. This is a test-operation contract correction, not proof of a particular slow sub-operation or a production performance fix. The unmodified formal review receipt remains NEEDS_FIXES for its reviewed 6d2b800a snapshot, not a fabricated PASS for later source.
+- **Evidence:** completed deep Google/Gemini C/S/X manifests; S/gate.first.json S1; C/merged.json C1 refutation; markdown-acceptance.test.ts; post-fix checks recorded next
+- **Reversibility:** easy
+- **Confidence:** high for observed timeout and applied budget contract; operation latency unmeasured
+- **Revisit if:** the bounded integration fixture still fails or a later review finds a regression in the fix
+- **Source:** assumed — autonomous
+
+## D17: Land only after the accepted fix batch passes the complete affected gate
+- **Question:** What final evidence closes the retained review prerequisite?
+- **Options:** relabel the old S manifest as PASS; rely on source inspection alone; keep the historical review verdict and verify the actual fixed source
+- **Chose:** Commit the S1 fixture-budget correction as ce0f355f and run the complete `bun scripts/suite.ts plugins/quirky.editor scripts` plus `bun run typecheck`. All 33 remote test files passed on the initial run, the one macOS-only file passed, and suite-result returned ok true with an empty flaky list. Root/UI-lint/mobile/prepared-desktop typecheck passed. The combined commit/check command exited 0 in 127.37s.
+- **Why:** This directly exercises the corrected review-note fixture together with every editor and scripts test, without weakening assertions or relabeling earlier flaky runs. S1's requested budget is applied and the post-fix gate is green. There is no unaddressed accepted finding; no second model closure round was run, following LOOP's cap. The formal manifests still correctly describe the earlier reviewed snapshot.
+- **Evidence:** .quirk/build-loop/fix-test-editor-1028/final-{tests,types}.log; source ce0f355f; completed C/S/X receipt and D16 adjudication
+- **Reversibility:** easy
+- **Confidence:** high for exercised checks and applied requirement
+- **Revisit if:** canonical merge-result verification or later independent evidence identifies a regression
+- **Source:** assumed — autonomous
+
 ## Progress
-Final fixture correction is ready. Actual isolated API/browser smoke finished with D7 receipts; both owned browsers stopped and daemon printed EDITOR_SMOKE_CLEANED with exit 0, while unrelated revoked worktree/notification shutdown warnings remain visible (not pristine shutdown output). No orchestration source change remains. Next: commit, sole integration catch-up/read decisions, fresh editor/scripts/typecheck gate and bounded cross-family review, then canonical land.
+Ready for canonical land. Source ce0f355f closes S1; final complete affected gate passed 33/33 remote plus 1/1 macOS file with no retry/flaky entry, and full root typecheck passed. One bounded deep C/S/X round and its single accepted fix batch are complete; historical review verdicts and prior retries are preserved. Actual CSV, guarded web and macOS linked-worktree API smoke evidence and cleanup limits remain explicit. All four incoming decision logs were consumed after the sole catch-up; no source agent/model/runtime job remains. Commit this receipt, detach and run authoritative queue land for this item only; on a failed land follow the required recovery path.
