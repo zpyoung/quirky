@@ -128,6 +128,17 @@ function boardMove(container: HTMLElement, title: string): HTMLSelectElement {
   return select
 }
 
+function labelledInput(container: HTMLElement, labelText: string): HTMLInputElement | null {
+  const label = [...container.querySelectorAll('label')].find((candidate) => candidate.textContent?.trim() === labelText)
+  const control = label?.control
+  return control instanceof HTMLInputElement ? control : null
+}
+
+function projectRefreshReady(container: HTMLElement): boolean {
+  const refresh = container.querySelector<HTMLButtonElement>('button[aria-label="Refresh project"]')
+  return refresh !== null && !refresh.disabled
+}
+
 async function changeSelect(select: HTMLSelectElement, value: string): Promise<void> {
   await act(async () => {
     const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')?.set
@@ -207,6 +218,8 @@ test('Project Start reports post-create outcomes truthfully and stays linked', a
 test('a delayed older UI selection response cannot replace a newer view or trigger another selection', async () => {
   let boardCallReturned = false
   let boardResponseReleased = false
+  let roadmapSelectionReturned = false
+  let roadmapLoadReturned = false
   let roadmapSelections = 0
   const { promise: boardGate, resolve: releaseBoard } = Promise.withResolvers<void>()
   const mounted = await mountProjects({ intercept: async (method, params, forward) => {
@@ -217,14 +230,25 @@ test('a delayed older UI selection response cannot replace a newer view or trigg
       boardResponseReleased = true
       return result
     }
-    if (method === 'quirky.tasks/projectView' && params.action === 'select' && params.viewId === 'VIEW_ROADMAP') roadmapSelections += 1
+    if (method === 'quirky.tasks/projectView' && params.action === 'select' && params.viewId === 'VIEW_ROADMAP') {
+      roadmapSelections += 1
+      const result = await forward()
+      roadmapSelectionReturned = true
+      return result
+    }
+    if (method === 'quirky.tasks/projectView' && params.action === 'load' && params.viewId === 'VIEW_ROADMAP') {
+      const result = await forward()
+      roadmapLoadReturned = true
+      return result
+    }
     return forward()
   } })
 
   await clickTab(mounted.container, 'Board')
   await waitFor(() => boardCallReturned, 'Board selection response gate')
   await clickTab(mounted.container, 'Roadmap')
-  await waitFor(() => selectedTab(mounted.container, 'Roadmap') && mounted.container.querySelector('[aria-label=\"Move Improve project table\"]') === null, 'newer Roadmap view')
+  await waitFor(() => roadmapSelectionReturned && roadmapLoadReturned && selectedTab(mounted.container, 'Roadmap') &&
+    mounted.container.querySelector('[aria-label=\"Move Improve project table\"]') === null, 'Roadmap selection response and loaded view')
   releaseBoard()
   await waitFor(() => boardResponseReleased, 'late Board response release')
 
@@ -245,8 +269,8 @@ test('Project query overrides remain isolated and survive switching views', asyn
     }
     return forward()
   } })
-  const search = mounted.container.querySelector('input[aria-label="Search project items"]')
-  if (!(search instanceof HTMLInputElement)) throw new Error('Project search control was not rendered')
+  const search = labelledInput(mounted.container, 'Search project items')
+  if (!search) throw new Error('Project search control was not rendered')
   await act(async () => {
     const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set
     setter?.call(search, 'assignee:@me')
@@ -257,13 +281,13 @@ test('Project query overrides remain isolated and survive switching views', asyn
 
   await clickTab(mounted.container, 'Board')
   await waitFor(() => selectedTab(mounted.container, 'Board') && mounted.container.querySelector('[aria-label="Move Improve project table"]') !== null, 'Board view')
-  const boardSearch = mounted.container.querySelector('input[aria-label="Search project items"]')
-  if (!(boardSearch instanceof HTMLInputElement)) throw new Error('Board search control was not rendered')
+  const boardSearch = labelledInput(mounted.container, 'Search project items')
+  if (!boardSearch) throw new Error('Board search control was not rendered')
   expect(boardSearch.value).not.toBe('assignee:@me')
   await clickTab(mounted.container, 'Table')
   await waitFor(() => {
-    const tableSearch = mounted.container.querySelector('input[aria-label="Search project items"]')
-    return selectedTab(mounted.container, 'Table') && tableSearch instanceof HTMLInputElement && tableSearch.value === 'assignee:@me'
+    const tableSearch = labelledInput(mounted.container, 'Search project items')
+    return selectedTab(mounted.container, 'Table') && tableSearch !== null && tableSearch.value === 'assignee:@me'
   }, 'restored Table query')
 }, 60_000)
 
@@ -307,29 +331,40 @@ test('a failed earlier field edit cannot undo the later confirmed value across a
 test('board moves clear into No Status and failed moves restore the confirmed column', async () => {
   let failClear = true
   let successfulWrites = 0
+  let fieldAttempts = 0
+  let completedMutationLoads = 0
   const mounted = await mountProjects({ viewId: 'VIEW_BOARD', intercept: async (method, params, forward) => {
-    if (method === 'quirky.tasks/projectEdit' && params.action === 'field' && params.clear === true && failClear) {
-      failClear = false
-      throw new Error('board clear refused')
-    }
     if (method === 'quirky.tasks/projectEdit' && params.action === 'field') {
+      fieldAttempts += 1
+      if (params.clear === true && failClear) {
+        failClear = false
+        throw new Error('board clear refused')
+      }
       const result = await forward()
       successfulWrites += 1
+      return result
+    }
+    if (method === 'quirky.tasks/projectView' && params.action === 'load' && completedMutationLoads < fieldAttempts) {
+      const result = await forward()
+      completedMutationLoads += 1
       return result
     }
     return forward()
   } })
 
   await changeSelect(boardMove(mounted.container, 'Improve project table'), 'OPT_DONE')
-  await waitFor(() => successfulWrites === 1 && boardMove(mounted.container, 'Improve project table').value === 'OPT_DONE', 'move into Done')
+  await waitFor(() => successfulWrites === 1 && completedMutationLoads === 1 &&
+    projectRefreshReady(mounted.container) && boardMove(mounted.container, 'Improve project table').value === 'OPT_DONE', 'confirmed move into Done')
   await changeSelect(boardMove(mounted.container, 'Improve project table'), '')
-  await waitFor(() => mounted.container.querySelector('[role="alert"]')?.textContent?.includes('board clear refused') === true, 'visible board rollback error')
+  await waitFor(() => completedMutationLoads === 2 && projectRefreshReady(mounted.container) &&
+    mounted.container.querySelector('[role="alert"]')?.textContent?.includes('board clear refused') === true, 'visible board rollback error')
   expect(boardMove(mounted.container, 'Improve project table').value).toBe('OPT_DONE')
 
   await changeSelect(boardMove(mounted.container, 'Improve project table'), '')
   await waitFor(() => {
     const bucket = mounted.container.querySelector('[aria-label="No Status"]')
-    return successfulWrites === 2 && bucket?.textContent?.includes('Improve project table') === true
+    return successfulWrites === 2 && completedMutationLoads === 3 && projectRefreshReady(mounted.container) &&
+      bucket?.textContent?.includes('Improve project table') === true
   }, 'cleared item in No Status')
   const response = object(await mounted.host.call('projectView', { action: 'load', viewId: 'VIEW_BOARD' }))
   const table = object(response.result)
@@ -383,6 +418,7 @@ test('restricted Project rows stay read-only, refresh errors retain rows, and un
   expect(mounted.container.textContent).toContain('Restricted item')
 
   await clickButtonByLabel(mounted.container, 'Start work on Unknown source issue')
+  await waitFor(() => dialogByTitle(mounted.container, 'GitHub project item guidance') !== null, 'unknown repository guidance')
   const guidance = dialogByTitle(mounted.container, 'GitHub project item guidance')
   if (!guidance) throw new Error('unknown repository guidance was not rendered')
   const pathInput = guidance.querySelector('input#local-project-repo-path')
