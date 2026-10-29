@@ -83,6 +83,21 @@ async function run(argv: string[], env: Record<string, string>) {
 
 const shimPath = () => join(quirkyHome, 'bin', 'quirky')
 
+describe('inherited agent session markers', () => {
+  test('a session does not inherit the markers of the Claude Code session that started Quirky', () => {
+    const env = sessionEnv('/bin/zsh', 'shell', {
+      CLAUDECODE: '1',
+      CLAUDE_CODE_CHILD_SESSION: '1',
+      CLAUDE_CODE_ENTRYPOINT: 'cli',
+      CLAUDE_CODE_SESSION_ID: 'abc',
+      CLAUDE_CODE_MESSAGING_TOKEN: 'secret',
+      CLAUDE_PID: '42',
+      CLAUDE_CODE_MAX_OUTPUT_TOKENS: '64000'
+    })
+    expect(Object.keys(env).filter((key) => key.startsWith('CLAUDE'))).toEqual(['CLAUDE_CODE_MAX_OUTPUT_TOKENS'])
+  })
+})
+
 describe('command sessions', () => {
   test('the shim stays on PATH when ~/.zshenv resets it', async () => {
     write(join(userHome, '.zshenv'), RESET_PATH)

@@ -71,6 +71,28 @@ describe('ensureDaemon', () => {
     expect(modeOf(log)).toBe(0o600)
   })
 
+  test('does not hand the daemon the markers of the agent session that started it', async () => {
+    const home = tempDir()
+    const marker = join(home, 'env.json')
+    const entry = join(home, 'record-env.ts')
+    writeFileSync(entry, `require('node:fs').writeFileSync(${JSON.stringify(marker)}, JSON.stringify(process.env))\n`)
+    const saved = { CLAUDECODE: process.env.CLAUDECODE, CLAUDE_CODE_SESSION_ID: process.env.CLAUDE_CODE_SESSION_ID }
+    process.env.CLAUDECODE = '1'
+    process.env.CLAUDE_CODE_SESSION_ID = 'abc'
+    try {
+      await expect(ensureDaemon({ home, daemonEntry: entry, timeoutMs: 300 })).rejects.toThrow()
+    } finally {
+      for (const [key, value] of Object.entries(saved)) {
+        if (value === undefined) delete process.env[key]
+        else process.env[key] = value
+      }
+    }
+    const env = JSON.parse(readFileSync(marker, 'utf8'))
+    expect(env.CLAUDECODE).toBeUndefined()
+    expect(env.CLAUDE_CODE_SESSION_ID).toBeUndefined()
+    expect(env.QUIRKY_HOME).toBe(home)
+  })
+
   test('starts the daemon in the home, not the caller directory', async () => {
     const home = tempDir()
     const marker = join(home, 'cwd.txt')

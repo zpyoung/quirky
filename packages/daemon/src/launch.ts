@@ -2,6 +2,7 @@ import { chmodSync, existsSync, mkdirSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { basename, isAbsolute, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { withoutAgentSessionMarkers } from '@quirky/protocol/node'
 
 export function defaultCliEntry(): string {
   return process.env.QUIRKY_CLI_ENTRY ?? fileURLToPath(new URL('../../cli/src/main.ts', import.meta.url))
@@ -50,7 +51,7 @@ export function commandArgv(home: string, shell: string, command: string): strin
   return [shell, '-l', '-c', `${exportPath}exec ${command}`]
 }
 
-/** The environment given to a session's process; the daemon's own QUIRKY_* variables are not passed on. */
+/** The environment given to a session's process; the daemon's own QUIRKY_* variables and inherited agent session markers are not passed on. */
 export function buildSessionEnv(options: {
   home: string
   sessionId: string
@@ -67,7 +68,7 @@ export function buildSessionEnv(options: {
   shellInit?: string
 }): Record<string, string> {
   const env: Record<string, string> = {}
-  for (const [key, value] of Object.entries(options.base ?? process.env)) {
+  for (const [key, value] of Object.entries(withoutAgentSessionMarkers(options.base ?? process.env))) {
     if (value !== undefined && !key.startsWith('QUIRKY_')) env[key] = value
   }
   const baseEnv: Record<string, string> = { ...env, TERM: 'xterm-256color', COLORTERM: 'truecolor' }

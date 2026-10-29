@@ -155,6 +155,30 @@ export function defaultDaemonEntry(): string {
 }
 
 /**
+ * Variables that identify the running agent session that launched the caller. A daemon or terminal
+ * that inherits them makes every agent started inside it act as that session's child.
+ */
+const AGENT_SESSION_MARKERS = new Set([
+  'CLAUDECODE',
+  'CLAUDE_CODE_CHILD_SESSION',
+  'CLAUDE_CODE_ENTRYPOINT',
+  'CLAUDE_CODE_EXECPATH',
+  'CLAUDE_CODE_MESSAGING_SOCKET',
+  'CLAUDE_CODE_MESSAGING_TOKEN',
+  'CLAUDE_CODE_SESSION_ATTENDED',
+  'CLAUDE_CODE_SESSION_ID',
+  'CLAUDE_CODE_SSE_PORT',
+  'CLAUDE_PID'
+])
+
+/** `env` without the markers of an agent session; user settings such as `CLAUDE_CODE_MAX_OUTPUT_TOKENS` are kept. */
+export function withoutAgentSessionMarkers<T extends Record<string, string | undefined>>(env: T): T {
+  const result = { ...env }
+  for (const key of AGENT_SESSION_MARKERS) delete result[key]
+  return result
+}
+
+/**
  * Returns the running daemon's runtime info, starting a detached daemon first if none answers.
  * The daemon outlives its starter. Its output goes to `<home>/logs/daemon.log`.
  */
@@ -173,7 +197,7 @@ export async function ensureDaemon(
     cwd: home,
     detached: true,
     stdio: ['ignore', log, log],
-    env: { ...process.env, QUIRKY_HOME: home }
+    env: { ...withoutAgentSessionMarkers(process.env), QUIRKY_HOME: home }
   })
   child.unref()
   closeSync(log)
