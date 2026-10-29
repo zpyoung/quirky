@@ -68,6 +68,9 @@ export class RuntimeSessionAuthority {
   ) {
     pty.onExit((sessionId) => {
       const row = this.store.getRuntimeAuthority(sessionId)
+      // Exit observers must not see stale liveness while the exact PTY evidence is refreshed.
+      // Invalidate to unknown here; only the host's matching process record proves exit below.
+      if (row) this.deleteLiveIdentityForRow(row)
       void this.refreshTerminal(sessionId).catch(() => {
         if (row) this.deleteLiveIdentityForRow(row)
       })
