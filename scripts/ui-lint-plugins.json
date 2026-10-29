@@ -1,4 +1,7 @@
 [
+  "quirky.ask",
+  "quirky.notifications",
+  "quirky.structured",
   "quirky.tasks",
   "quirky.automations",
   "quirky.agents",
@@ -18,5 +21,9 @@
   "quirky.session-info",
   "quirky.terminal",
   "quirky.terminal-dock",
+  "quirky.mobile",
+  "quirky.cli",
+  "quirky.palette",
+  "quirky.sidebar-extras",
   "quirky.worktree"
 ]
