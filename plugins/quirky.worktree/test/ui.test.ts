@@ -897,11 +897,11 @@ test('a parent offers Delete with Descendants and removes them together', async 
   expect(h.callsTo('quirky.worktree/remove')).toEqual([{ worktree: 'w2', force: true, withDescendants: true, yes: true }])
 })
 
-test('Update and Set Parent open their dialogs and the report names them', async () => {
+test('Rename and Set Parent open their dialogs and the report names them', async () => {
   const h = setup()
   await h.mountInto(host)
   await contextMenu(openButton(rowOf('fix-login', 'api'))!)
-  await click(itemNamed('Update…'))
+  await click(itemNamed('Rename…'))
   expect(dialogName(document.querySelector<HTMLElement>('[role="dialog"]')!)).toBe('Workspace details')
   expect(lastReport(h).dialog).toEqual({ kind: 'update', worktreeId: 'w2' })
   await press('Escape')
@@ -1254,11 +1254,11 @@ test('SC-20: a base fallback is shown in its own dialog with Got it', async () =
   expect(dialogTitles()).toEqual([])
 })
 
-test('SC-42: Update saves the display name and notes through set', async () => {
+test('SC-42: Rename saves the display name and notes through set', async () => {
   const h = setup()
   await h.mountInto(host)
   await contextMenu(openButton(rowOf('fix-login', 'api'))!)
-  await click(itemNamed('Update…'))
+  await click(itemNamed('Rename…'))
   await typeInto(dialogField('Display Name')!, ' Login fix ')
   await act(async () => {
     const notes = dialogField('Notes') as unknown as HTMLTextAreaElement

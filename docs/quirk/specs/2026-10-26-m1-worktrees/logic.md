@@ -405,9 +405,9 @@ repository `/tmp/w/origin.git` with `main`; the worktrees folder `/tmp/w/ws`; an
     - **When** the agent runs `wt set a --parent-worktree c`, `wt set a --parent-worktree a`, `wt set c --no-parent`, then `wt show a`
     - **Then** the first two fail because **c** is a descendant of **a** and a worktree can't be its own parent; the third clears **c**'s parent; `wt show a` lists **b** as its only child
 
-42. **SC-42: the Update dialog edits the display name and notes** (UI)
+42. **SC-42: Rename edits the display name and notes** (UI)
     - **Given** worktree **fix-login** in the window
-    - **When** the person chooses Update from its menu, enters display name "Login fix" and notes, and saves
+    - **When** the person chooses Rename… from its menu, enters display name "Login fix" and notes, and saves
     - **Then** the dialog was titled "Workspace details" with Display Name ("Shown in the sidebar. The folder name stays the same."), notes and Save; the card now reads "Login fix", and `wt list` shows the same name and comment with branch and folder unchanged
 
 43. **SC-43: status, pin and unread from the card menu** (UI)

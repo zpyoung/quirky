@@ -55,7 +55,7 @@ export function workspaceMenu(
         ...(descendants > 0 ? [{ label: `Sleep with Descendants (${descendants})`, onSelect: () => on.setSleeping(worktree, true, true) }] : [])
       ]
   const items: ContextMenuItem[] = [
-    { label: 'Update…', onSelect: () => on.openDialog({ kind: 'update', worktreeId: worktree.id }) },
+    { label: 'Rename…', onSelect: () => on.openDialog({ kind: 'update', worktreeId: worktree.id }) },
     {
       label: 'archivedAt' in worktree && (worktree as Worktree & { archivedAt: number | null }).archivedAt !== null ? 'Unarchive' : 'Archive',
       enabled: !worktree.isMain && worktree.kind === 'git',
