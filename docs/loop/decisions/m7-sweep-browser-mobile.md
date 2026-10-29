@@ -231,5 +231,93 @@
 - **Revisit if:** criteria/contracts change or production evidence contradicts them.
 - **Source:** locked by docs/loop/LOOP.md
 
+## D22: Prove count authority at the API, CLI and rendered consumer boundaries
+- **Question:** What closes the observed session-record/tab-count mismatch without another provider fan-out?
+- **Options:** repin the old number; assert handler wiring; drive the owner model/API and actual phone card.
+- **Chose:** same PhoneLinks identity implemented dc97d9f4 against committed contracts; parent integrated it and removed its worktree. Queue-only owner projection counts group tabs, not panes/history/background records; unreadable wins. Private inline consumer parser rejects duplicate/conflicting/unsafe counts, and existing load generations guard late responses. No new cache, provider startup or raw payload.
+- **Why:** ownership is structural; the phone must not infer another product's tabs from Session rows.
+- **Evidence:** three new focused test files; first remote failures were wrong fixture import/onNavigate recorder, corrected without source workaround. Two final count files pass0retries29.30s; Mobile negative-boundary file passed; component typecheck37.65s; added first-query no-default-terminal regression passes35.03s. Real390px UI screenshot2 shows2tabs/1session and14 shows3tabs/1session after a real Markdown tab. Actual CLI parser returned tabCount3/unavailable[] on the same live daemon.
+- **Reversibility:** medium
+- **Confidence:** high for exercised counts and consumer transitions
+- **Revisit if:** another layout-owned container becomes countable or a provider starts during a pure count query.
+- **Source:** assumed — autonomous
+
+## D23: Close source UI defects with fresh evidence and retain fixture/native limits
+- **Question:** Can the earlier partial/failing phone report be called green after a source fix?
+- **Options:** relabel old evidence; skip remaining visible flows; run fresh repaired pages and preserve both reports.
+- **Chose:** fresh real daemon/PTY/encrypted phone and built pages1019127bytes. Run20261029T003428-8f25 passes counts, Markdown create/edit/list-preview/dirty-close Keep/save/back/reopen, explicit URL→actual Chrome Watch beside unchanged Native→Close to live Shell, and options/Sleep Cancel/view parking/wake. A real variable printed BEFORE_SLEEP_kept_7 and AFTER_SLEEP_kept_7. Feedback is intrinsic56px with usable tab strip/controls/frame, not the prior empty flex band.
+- **Why:** transport success alone does not establish usable layout or persistence. Native Settings is not in this web page, so its Phone-mode counterpart used separate fixture run20261029T005206-9a5a, which passes exact external callback/no-new-Watch. The desktop report retains its historical partial for that unexecuted counterpart; no retroactive pass or native-browser claim.
+- **Evidence:** both actual likeuser reports/end oktrue; screenshots2/7–17/20–21/25–36 and Phone-mode screenshot2 plus readonly callback event1709. Favicon404 fixture findings retained. Actual CLI count3. Owned service lane7.sweep.counts-ui exit0/homeRemovedtrue, both browsers/popups closed; shutdown Worktree deactivation warning retained.
+- **Reversibility:** easy
+- **Confidence:** high for real source-web/API/PTY boundaries; native window/OS browser/default keychain remain pending
+- **Revisit if:** real phone WebView/keyboard/OS handoff contradicts source-web proof.
+- **Source:** locked by docs/loop/LOOP.md
+
+## D24: Consume the landed domain-scope repair without taking over another item
+- **Question:** Does a missing peer branch mean its reported prerequisite is unreachable?
+- **Options:** duplicate its source edit; stop at missing branch; inspect canonical committed provenance.
+- **Chose:** canonical service history identified2516679e after build/fix-test-mobile-1028 disappeared. Read its complete D1–D9 decisions and consumed it asb35f96c7. Keep the exact published owner log after the expected absent-base modify/delete conflict; source/docs otherwise auto-merged. Params.scope is domain data, envelope scope/token identity stays forbidden/registry-derived, strict method policy remains. Keep existing Hosting/Tasks repair ownership and their complete appended failure inventory.
+- **Why:** a deleted landed branch is not missing evidence. One literal parameter-identity correction fixes legitimate Stage/Vault consumers without new per-feature exceptions or authority widening.
+- **Evidence:** git show2516679e and actual b35f96c7; lane12's real encrypted Stage/anti-spoof smoke3.95s and prior expanded31file gate25pass6fail remain their receipts, not a whole-suite pass here.
+- **Reversibility:** easy
+- **Confidence:** high for narrow committed intake; final whole-importer gate runs here
+- **Revisit if:** a transport derives credential authority from method params or a shared fixture traces a failure to this patch.
+- **Source:** locked by fix-test-mobile-1028 D9
+
+## D25: Preserve no-tools review across the operating-system argument boundary
+- **Question:** How can a273025byte frozen code artifact reach the selected reviewer without granting filesystem tools?
+- **Options:** drop context; grant read/Bash; duplicate SDK behavior; feed the shipped CLI parser from an in-memory argument.
+- **Chose:** temporary Node launcher reads the staged prompt, enforces --no-tools/rejects --tools, sets process.argv in memory and imports the actual pi-watch.mjs entry. No CLI/source SDK fork, default resource scan, product service or model filesystem access. Real help invocation with the273k artifact exits0; model stages still require their actual dispatch/output/claims/refute/gate.
+- **Why:** plain argv exceeds macOS limits; the shipped module executes unconditionally and already supplies the empty resource loader, in-memory sessions, tool list, streaming/flush and exit behavior.
+- **Evidence:** SweepPromptTransport plus actual parser/module source134–173/384–490; /tmp/quirky-l7-pi-prompt-file.mjs; help2.06s. Frozen source b35f96c7 against13eb, code/test/publicREADME only, resolve hash2f091d8d613fa9aae4c07f5401fb867e5f852d856f211b0c9dfd471bdf11875c. Actual select-model resolves verifiedgoogle/gemini-3.1-pro-preview:high/full independence. No final review result is implied by that preflight.
+- **Reversibility:** easy
+- **Confidence:** high for transport/no-tools structure; judgment evidence remains pending
+- **Revisit if:** shipped CLI gains a supported prompt-file transport or its entrypoint stops executing on import.
+- **Source:** assumed — autonomous
+
+## D26: Preserve the failed whole-suite scope and recover evidence before rerunning anything
+- **Question:** What did the long final prepass actually establish?
+- **Options:** invent totals from an older lane snapshot; rerun the whole suite for lost logs; inspect persisted evidence and runner retention.
+- **Chose:** retain the actual3132.12s combined exit1. Build/typecheck reached the full packages/apps/plugins/scripts suite; its retained tail proves our new design-runtime annotation case timed out120s with4other cases passed and later window-undefined cleanup errors. The mechanical prepass stores only4000output bytes. Read-only scout verified remote snapshots/JUnit files are removed and no full output/manifest is persisted; remote totals/other failures are therefore unknown here, not green.
+- **Why:** source reachability checks cannot recover bytes the runner deleted. A failed current file needs a cause/fix, not another unchanged baseline run. Future commands use an owned full-output capture before mechanical truncation. This is a slow-suite observation; Python-only pytest-xdist is not applicable to this Bun suite, and no runner configuration is changed.
+- **Evidence:** /tmp/quirky-l7-final-review-sT15E3/prepass.json duration3131830ms/exit1; SweepSuiteReceipts source mapping of suite.ts143–202/231–322. Lane8's separately reported877remote682pass195fail snapshot was read for our six files and matched already-repaired families; it is not a substitute for this run's missing totals or a new repair assignment.
+- **Reversibility:** easy
+- **Confidence:** high for retained failure and retention limitation; unretained totals unknown
+- **Revisit if:** a durable run manifest/full log is supplied by an actual runner.
+- **Source:** assumed — autonomous
+
+## D27: Consume the published typed Watch contract without duplicating its owner
+- **Question:** Does the first lane12 checkpoint contain its later accepted Watch findings?
+- **Options:** keep a known old input restriction; create a competing fix; read and consume the later published delta.
+- **Chose:** canonical history supplies399a7eb8, consumed70e77f2b. Shared validMobileBrowserParams now admits the already-public optional-code/char/64KiB/finite-wheel vocabulary, preserving exact lease/frame/connection authorization. Contribution loss matches the actual method:-prefixed identity; exact MethodNotFound handling remains once. Read full canonical MobileD1–D16; later generic Git lint inventory supersedes their narrow D11, while our lint source remains untouched.
+- **Why:** these are advertised-contract repairs, not new APIs/grants or permission to take over Mobile. Actual source conflict was ordering/identity text, resolved to the published tighter branch and existing exact unknown-method branch.
+- **Evidence:** published399diff; actual70e77f2b; current root typecheck32.23s passes. Their real red/green/57file consumer and fresh JPEG/4097byte/char/foreign-denial receipts remain owner evidence; the specific activation-race interleaving still has source-only qualification.
+- **Reversibility:** easy
+- **Confidence:** high for exact intake and current compilation; current focused consumers run here
+- **Revisit if:** actual producer behavior contradicts the shared vocabulary or exact provider identity.
+- **Source:** locked by fix-test-mobile-1028 D13–D16
+
+## D28: Repair the annotation consumer fixture against semantic UI, not legacy classes
+- **Question:** Why did the new real two-selection case hang after catch-up although its backend cases passed?
+- **Options:** extend120s timeout; change production note storage; locate the awaited real consumer signal.
+- **Chose:** same Browser implementer gets one explicit root test-file scope. AfterAll diagnostics prove both initial/retry hang at waiting for annotation count1 after real picker/Feedback/Add. Current UI renders Browser annotations articles, not the removed qbp-design-note class; Running agents uses menuitems. Use those accessible regions, required Annotate control, dynamic React client import after DOM setup, and an actual completion Promise for non-DOM designSend data. Retain two selections/comments/distinct IDs/redaction/no page clicks and retention after unconfirmed delivery; delete bare nonempty/incidental-default pins.
+- **Why:** a MutationObserver cannot observe an ordinary JS assignment, and obsolete implementation classes are not a product defect. No deadline, production policy, permissions, frame producer or behavioral coverage is weakened.
+- **Evidence:** annotation-diagnostic.full.log initial/retry4pass1fail2errors257.07s and exact afterAll stage; source Browser annotations/Running agents; corrected actual suite annotation-semantic file1/1MacPASS0retries11.73s. Temporary diagnostics are removed before final checks/review; all raw failure evidence retained.
+- **Reversibility:** easy
+- **Confidence:** high for observed fixture cause and corrected real Chrome flow
+- **Revisit if:** current semantic consumer or actual duplicate selection/retention behavior fails.
+- **Source:** assumed — autonomous
+
+## D29: Consume completed Protocol/Terminal repairs and delete the superseded loop namespace pin
+- **Question:** Are the current consumer failures new count defects or already-owned acceptance migrations?
+- **Options:** repin inventories/defaults and unsupported-platform behavior; duplicate completed owners; consume their committed repair and keep the new count contract.
+- **Chose:** captured current gate173remote148pass25fail/488.005s and exact26unique failure-file inventory across remote/Mac. Mobile-plugin/new count files pass. Protocol's two files match completed fix-test-packages-protocol-1028; Terminal files match completed fix-test-terminal-1028. Read their complete logs/patches and consumedc2f243a1→ec4f1c14,6a885635→2da7cf97,b8bee4c1→07aaacc1. Union only independent macOS runner markers. No Terminal/Protocol production change, alias, platform bypass or deadline increase.
+- **Why:** later canonical repairs were absent from the earlier caught-up snapshot. One new legitimate readonly tabCounts call invalidates the app loop test's no-Terminal-namespace wiring pin, not its summary behavior. Same PhoneLinks implementer removes that and exact loop-call copies only; actual rendered both-layout labels, report privacy and negative route/params/controller denials remain.
+- **Evidence:** owned-api-consumers.full.log plus extracted failure inventory; canonical queue owners status done; published repair commits and full D1–D5 Protocol/D1–D12 Terminal. Their98remote+5Mac/real API smoke and29file Protocol results remain owner receipts; the newly composed gate runs here before final review. Parent seeded the privacy fixture's actual dummy URL instead of asserting an absent string.
+- **Reversibility:** easy
+- **Confidence:** high for exact failure/owner alignment and narrow intake; composed verification pending
+- **Revisit if:** a current valid consumer failure remains after these committed migrations.
+- **Source:** locked by completed repair decisions and current tab-count contract
+
 ## Progress
-All initial components and committed owner fixtures are integrated; one canonical catchup/read25bindinglogs complete. Root build after frozen dependency install passed20.65s. Actual caught-up phone UI proved live shell persistence and explicit Watch target/close without Native conversion, but uncovered real tab-count and feedback-height defects. S7/S8 shared contracts committed4d253fa1; parent feedback source committed2e86019f but not visually closed. Same PhoneLinks identity now implements only the count slice in /tmp/quirky-l7-sweep-counts; amended-spec review uses actual no-tools Codex stages in parallel. Lane12 owns the repair item/existing plugin tests; consumed5cc as6cb. All owned smoke/browser processes are closed. Next: receive/audit/check/merge count slice and remove its worktree; fresh UI Markdown/options/count/feedback and Phone link branch, full suite(build/protocol imports/scripts)/types, bounded no-tools cross-family final review plus one fix batch, then land. No final completion claim.
+All implementation and explicit committed prerequisites integrated through07aaacc1; no second routine roadmap merge. Count/feedback/UI/CLI/PTY smokes passed and resources closed. Current consumer capture identifies completed Protocol/Terminal repairs now consumed; obsolete app loop RPC wiring pin removed. Real annotation semantics pass11.73s, temporary diagnostics removed with all meaningful two-selection/privacy/retention coverage. All writers stopped; current full build/types/owned Browser/Mobile/Terminal/Protocol/apps/scripts/helper checks follow on the composed tree. Old whole-suite failure/tail-loss and exact broad owner limits retained, not called green. Final models undispatched; next freeze current code artifact/chain, actual no-tools C/S/X Final Round1 plus one fix batch/checks, explicit remaining findings/limits, then commit/detach canonical land and own scratch cleanup.

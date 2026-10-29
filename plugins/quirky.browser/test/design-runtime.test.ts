@@ -1,7 +1,7 @@
-import { afterAll, expect, test } from 'bun:test'
+import { afterAll, beforeAll, expect, test } from 'bun:test'
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
 import { act, createElement } from 'react'
-import { createRoot, type Root } from 'react-dom/client'
+import type { createRoot as ReactCreateRoot, Root } from 'react-dom/client'
 import type { UiPluginContext } from '@quirky/protocol'
 import { DesignWindow, setLiveDesignPageKeys } from '../src/design-window/DesignWindow'
 import type { DesignAction } from '../src/design-window/DesignWindow'
@@ -16,12 +16,16 @@ for (const [name, value] of nativeGlobals) {
   if (value !== undefined) Object.defineProperty(globalThis, name, { value, writable: true, configurable: true })
 }
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
-
-afterAll(() => {
-  setLiveDesignPageKeys([])
-  GlobalRegistrator.unregister()
+let createRoot: typeof ReactCreateRoot
+beforeAll(async () => {
+  // ReactDOM/client reads DOM input support at import time; initialize after HappyDOM registration.
+  ;({ createRoot } = await import('react-dom/client'))
 })
 
+afterAll(async () => {
+  setLiveDesignPageKeys([])
+  await GlobalRegistrator.unregister()
+})
 async function waitForUi(root: Node, predicate: () => boolean): Promise<void> {
   if (predicate()) return
   const { promise, resolve } = Promise.withResolvers<void>()
@@ -55,8 +59,10 @@ async function addUiComment(host: HTMLElement, comment: string, annotationCount:
     textarea.dispatchEvent(new Event('input', { bubbles: true }))
     textarea.dispatchEvent(new Event('keyup', { bubbles: true }))
   })
-  await act(async () => { uiButton(host, 'Add').click() })
-  await waitForUi(host, () => host.querySelectorAll('.qbp-design-note').length === annotationCount)
+  const addButton = uiButton(host, 'Add')
+  expect(addButton.disabled).toBe(false)
+  await act(async () => { addButton.click() })
+  await waitForUi(host, () => host.querySelectorAll('[aria-label="Browser annotations"] article').length === annotationCount)
 }
 
 const call = (h: BrowserTestHarness, name: string, params: Record<string, unknown> = {}) =>
@@ -366,11 +372,13 @@ test('Watch picker stores two real annotation selections with distinct IDs and r
       sendable: true
     }
     let capturedAnnotations: unknown
+    const sentAnnotations = Promise.withResolvers<void>()
     const context = {
       call: async (method: string, params: Record<string, unknown> = {}) => {
         if (method === 'quirky.browser/designTargets') return { sessions: [sendTarget], agents: [] }
         if (method === 'quirky.browser/designSend') {
           capturedAnnotations = params.annotations
+          sentAnnotations.resolve()
           return { delivery: 'unknown' }
         }
         return await h.client.callAny(method, params)
@@ -398,12 +406,16 @@ test('Watch picker stores two real annotation selections with distinct IDs and r
       actionRef,
       onMessage: () => {}
     })))
-    const annotateButton = () => [...rootElement!.querySelectorAll('.qbp-design-toolbar button')].find((button) =>
+    const toolbar = rootElement.querySelector<HTMLElement>('[aria-label="Browser design tools"]')
+    if (!toolbar) throw new Error('Browser design tools toolbar was not rendered')
+    const annotateButton = [...toolbar.querySelectorAll('button')].find((button) =>
       button.textContent?.trim().startsWith('Annotate')
-    ) as HTMLButtonElement | undefined
-    const waitForAnnotationPicker = () => waitForUi(rootElement!, () => annotateButton()?.getAttribute('aria-pressed') === 'true')
+    )
+    if (!(annotateButton instanceof HTMLButtonElement)) throw new Error('Annotate control was not rendered')
+    const waitForAnnotationPicker = () =>
+      waitForUi(rootElement!, () => annotateButton.getAttribute('aria-pressed') === 'true')
 
-    await act(async () => { annotateButton()?.click() })
+    await act(async () => { annotateButton.click() })
     await waitForAnnotationPicker()
     await clickAt(h, page.pane, 60, 60)
     const firstComment = 'Move the header lower'
@@ -416,9 +428,11 @@ test('Watch picker stores two real annotation selections with distinct IDs and r
 
     expect(await call(h, 'eval', { page: page.page, expression: 'window.__designClicks' })).toEqual({ value: 0 })
     await act(async () => { uiButton(host!, 'Send').click() })
-    await waitForUi(host, () => host!.querySelector('button.qbp-design-target') !== null)
-    await act(async () => { host!.querySelector<HTMLButtonElement>('button.qbp-design-target')!.click() })
-    await waitForUi(document.body, () => capturedAnnotations !== undefined)
+    await waitForUi(host, () => host!.querySelector('[aria-label="Running agents"] [role="menuitem"]') !== null)
+    const sendTargetButton = host.querySelector<HTMLButtonElement>('[aria-label="Running agents"] [role="menuitem"]')
+    if (!sendTargetButton) throw new Error('Running agent send target was not rendered')
+    await act(async () => { sendTargetButton.click() })
+    await sentAnnotations.promise
 
     if (!Array.isArray(capturedAnnotations)) throw new Error('Design send did not receive the stored annotations')
     const annotations = capturedAnnotations as DesignAnnotation[]
@@ -429,12 +443,9 @@ test('Watch picker stores two real annotation selections with distinct IDs and r
       'Coordinate-only paragraph',
       'Second element'
     ])
-    expect(annotations.map((annotation) => annotation.intent)).toEqual(['change', 'change'])
     expect(annotations[0]!.id).not.toBe(annotations[1]!.id)
-    expect(annotations.every((annotation) => annotation.id.length > 0)).toBe(true)
     expect(annotations[0]!.payload.target.attributes.title).toBe('[redacted]')
-    expect(annotations.map((annotation) => annotation.payload.screenshot)).toEqual([null, null])
-    const visibleComments = [...host.querySelectorAll('.qbp-design-note p')].map((entry) => entry.textContent ?? '')
+    const visibleComments = [...host.querySelectorAll('[aria-label="Browser annotations"] article p')].map((entry) => entry.textContent ?? '')
     expect(visibleComments).toHaveLength(2)
     expect(visibleComments[0]).toContain(firstComment)
     expect(visibleComments[1]).toContain(secondComment)

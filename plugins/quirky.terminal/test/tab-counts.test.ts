@@ -14,7 +14,7 @@ function terminalTab(): TerminalTab {
   const first = pane('pane-first', 'private-session-first')
   const second = pane('pane-second', 'private-session-second')
   return {
-    id: 'tab-terminal', defaultTitle: 'Private terminal title', customTitle: null, liveTitle: null,
+    id: 'tab-terminal', defaultTitle: 'Private terminal title', customTitle: 'https://private.invalid/secret?token=private-tab', liveTitle: null,
     color: 'none', pinned: false,
     root: { kind: 'split', id: 'pane-split', direction: 'right', ratio: 0.5, first, second },
     activePane: first.id, expandedPane: null, createdAt: '2026-10-28T00:00:00.000Z'
