@@ -232,15 +232,20 @@ describe('SessionService.create', () => {
   })
 
 
-  test('a provider session saved while spawn is in flight survives the launch', async () => {
+  test('a provider update requested during spawn commits after the workspace launch lock releases', async () => {
+    let providerUpdate!: Promise<Session>
     const { service, records } = launchContext((svc, id) => {
-      svc.setProviderSession({ session: id, id: 'provider-123' })
+      providerUpdate = svc.setProviderSession({ session: id, id: 'provider-123' })
     })
 
     const result = await service.create({ agent: 'claude' }, caller)
+    await providerUpdate
 
-    expect(result.providerSession).toEqual({ id: 'provider-123', transcriptPath: null })
-    expect(records.get(result.id)?.providerSession).toEqual({ id: 'provider-123', transcriptPath: null })
+    expect(records.get(result.id)).toMatchObject({
+      status: 'running',
+      launch: { command: 'claude', args: '--model x', env: {} },
+      providerSession: { id: 'provider-123', transcriptPath: null }
+    })
   })
 })
 

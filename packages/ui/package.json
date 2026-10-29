@@ -5,8 +5,11 @@
   "exports": {
     ".": "./src/design-system/index.ts",
     "./styles.css": "./src/design-system/styles.css",
+    "./read-only-preview": "./src/design-system/read-only-preview.tsx",
+    "./selection-overlay": "./src/design-system/selection-overlay.ts",
     "./terminal-theme": "./src/terminal-theme.ts",
-    "./editor-print": "./src/editor-print.ts"
+    "./editor-print": "./src/editor-print.ts",
+    "./editor-theme": "./src/editor-theme.ts"
   },
   "type": "module",
   "scripts": {

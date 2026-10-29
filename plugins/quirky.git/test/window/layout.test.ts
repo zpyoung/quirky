@@ -1,13 +1,13 @@
 import { afterEach, expect, test } from 'bun:test'
 import { isolateGitConfig } from '../../../quirky.repo/test/git-fixtures'
-import { buttonText, click, q, qa, rowOf, sectionHeadings, text, type } from './dom'
+import { buttonText, click, q, qa, rowContainerOf, rowOf, sectionHeadings, text, type } from './dom'
 import { badge, boot, sc1, shutdown } from './world'
 
 const { scratch } = isolateGitConfig()
 const SLOW = 60_000
 afterEach(shutdown)
 
-const sectionCounts = () => qa('.scm-section-head .scm-count').map(text)
+const sectionCounts = () => qa('[data-section-count] .ui-badge').map(text)
 
 test('SC-8: the panel shows Orca\'s layout against a real daemon', async () => {
   const w = await boot(scratch)
@@ -17,22 +17,22 @@ test('SC-8: the panel shows Orca\'s layout against a real daemon', async () => {
 
   expect(sectionHeadings()).toEqual(['Changes', 'Staged Changes', 'Untracked Files', 'Committed on Branch', 'Commits'])
   expect(sectionCounts().slice(0, 4)).toEqual(['1', '2', '1', '1'])
-  expect(q('[data-section="history"] .scm-history')).toBeNull()
+  expect(q('[data-history-content]')).toBeNull()
   expect(q('[aria-label="Filter files by name"]')).not.toBeNull()
   expect(q('[aria-label="More source control actions"]')).not.toBeNull()
 
-  const branch = q('.scm-branch')!
-  expect(text(q('.scm-branch-name', branch))).toBe('zoe/feat')
-  expect(text(q('.scm-base', branch))).toBe('origin/main')
-  expect(text(q('.scm-ahead', branch))).toBe('↑1')
-  expect(text(q('.scm-chip', branch))).toBe('+1 −0')
+  const branch = q('[data-branch-row]')!
+  expect(text(q('[data-branch-name]', branch))).toBe('zoe/feat')
+  expect(text(q('[data-base-ref]', branch))).toBe('origin/main')
+  expect(text(q('[aria-label="1 commit(s) to push"]', branch))).toBe('↑1')
+  expect(text(q('[aria-label="Lines changed on this branch"]', branch))).toBe('+1 −0')
 
   const math = rowOf('math.ts')!
-  expect(text(q('.scm-row-name', math))).toBe('math.ts')
-  expect(text(q('.scm-added', math))).toMatch(/^\+\d+$/)
-  expect(text(q('.scm-letter', math))).toBe('M')
-  expect(text(q('.scm-letter', rowOf('new.ts', 'staged')!))).toBe('R')
-  expect(text(q('.scm-letter', rowOf('notes.txt')!))).toBe('U')
+  expect(text(q('[data-row-name]', math))).toBe('math.ts')
+  expect(text(q('[aria-label*="additions"]', rowContainerOf('math.ts')!))).toMatch(/^\+\d+$/)
+  expect(text(q('[aria-label="Git status modified"]', rowContainerOf('math.ts')!))).toBe('M')
+  expect(text(q('[aria-label="Git status renamed"]', rowContainerOf('new.ts', 'staged')!))).toBe('R')
+  expect(text(q('[aria-label="Git status untracked"]', rowContainerOf('notes.txt')!))).toBe('U')
 
   const state = await w.win.waitFor(async () => {
     const r = await w.report()

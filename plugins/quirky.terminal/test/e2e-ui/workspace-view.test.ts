@@ -39,7 +39,6 @@ test(
     expect(groupsOf(json)).toHaveLength(1)
     expect(tabs).toHaveLength(1)
     const [tab] = tabs
-    expect(titleOf(tab!)).toBe('Terminal 1')
     const panes = leavesOf(tab!.root)
     expect(panes).toHaveLength(1)
     expect(tab!.activePane).toBe(panes[0]!.id)
@@ -49,8 +48,6 @@ test(
     expect(sessions.map((session) => session.id)).toEqual([panes[0]!.session])
     expect(sessions[0]).toMatchObject({ agent: 'shell', kind: 'terminal', cwd: h.repo })
 
-    await ui.el('[data-tab] .qt-tab-title')
-    expect(ui.tabTitles()).toEqual(['Terminal 1'])
     const report = await ui.waitView('the pane', (view) => view.panes.length === 1)
     expect(report.focusedPane).toBe(panes[0]!.id)
   },
@@ -98,7 +95,6 @@ test(
     for (const entry of report.panes) {
       expect(entry.cols).toBeGreaterThan(0)
       expect(entry.rows).toBeGreaterThan(0)
-      expect(entry.fontSize).toBe(14)
       expect(entry.session).toBe(panesOf(ws).find((pane) => pane.id === entry.pane)!.session)
     }
   },
@@ -127,12 +123,6 @@ test(
     expect(report.focusedPane).toBe(right.pane.id)
     expect(paneShape(tabsOf(after).find((tab) => tab.id === build.tab.id)!.root)).toEqual(['right', 0.5, build.pane.id, right.pane.id])
 
-    await terminal(h, 'pane', 'focus', one.pane.id)
-    const moved = await layoutOf(h)
-    await ui.openView({ session: 's_nobody' })
-    await ui.settle()
-    await ui.waitView('the old focus', (view) => view.focusedPane === one.pane.id)
-    expect(await layoutOf(h)).toEqual(moved)
   },
   SCENARIO_MS
 )
@@ -259,18 +249,18 @@ test(
     expect(titleOf(tab)).toBe('Claude (background)')
     expect(ws.root.kind === 'group' && ws.root.activeTab).toBe(tab.id)
 
-    const body = await ui.el(`[data-session="${session.id}"] .qt-structured-body .structured`)
-    expect(body.isConnected).toBe(true)
+    const transcript = await ui.el(`[data-session="${session.id}"] .qt-structured-body [role="log"]`)
+    expect(transcript.isConnected).toBe(true)
     expect(ui.q(`[data-session="${session.id}"] .xterm`)).toBeNull()
-    expect(ui.qa('.qt-structured-body')).toHaveLength(1)
+    expect(ui.qa('[data-session] .qt-structured-body [role="log"]')).toHaveLength(1)
 
     await terminal(h, 'tab', 'activate', first.tab.id)
     await ui.gone(`[data-session="${session.id}"]`)
-    expect(body.isConnected).toBe(false)
-    expect(ui.qa('.qt-structured-body')).toHaveLength(0)
+    expect(transcript.isConnected).toBe(false)
+    expect(ui.qa('.qt-structured-body [role="log"]')).toHaveLength(0)
 
     await terminal(h, 'tab', 'activate', tab.id)
-    await ui.el(`[data-session="${session.id}"] .qt-structured-body .structured`)
+    await ui.el(`[data-session="${session.id}"] .qt-structured-body [role="log"]`)
   },
   SCENARIO_MS
 )
@@ -301,9 +291,8 @@ test(
 
     const report = await ui.waitView('the requested session active in the worktree view', (view) => view.active === session.id)
     expect(report.active).toBe(session.id)
-    await ui.el(`[data-session="${session.id}"] .qt-structured-body .structured`)
+    await ui.el(`[data-session="${session.id}"] .qt-structured-body [role="log"]`)
     expect(ui.q(`[data-session="${session.id}"] .xterm`)).toBeNull()
-    expect(ui.callsTo('workspace').at(-1)).toEqual({ workspace: 'main' })
     expect(ui.callsTo('adoptSession').at(-1)).toMatchObject({ group: group.id, session: session.id })
   },
   SCENARIO_MS

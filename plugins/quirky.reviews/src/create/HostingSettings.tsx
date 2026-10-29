@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { Badge, Button, FormRow, SectionHeader, StatusDot } from '@quirky/ui'
 import type { CreationDefaults, ReviewsSurfaceProps } from '../contracts'
 import { isRecord } from './guards'
 
@@ -410,42 +411,48 @@ export function HostingSettings(props: ReviewsSurfaceProps) {
     ? `${provider.activeAccount.user} @ ${provider.activeAccount.host}` : null
   const displayedDefaults = defaultScope === 'repository' && !currentRepoHasOverride ? globalDefaults : selectedDefaults
 
-  return <main className="reviews-settings" aria-labelledby="reviews-settings-title">
-    <header>
-      <h1 id="reviews-settings-title">Hosting settings</h1>
+  return <main className="ui-stack" aria-label="Hosting settings">
+    <header className="ui-stack">
+      <SectionHeader title="Hosting settings" />
       {worktree ? <p>Repository scope: <code>{repositoryDefaultsReady ? repoId ?? worktree : worktree}</code></p> : <p>Global settings are available. Select a worktree to inspect repository hosting.</p>}
     </header>
 
-    <section aria-labelledby="settings-worktree-title">
-      <h2 id="settings-worktree-title">Workspace</h2>
-      <label htmlFor="settings-worktree">Repository worktree</label>
-      <select
-        id="settings-worktree"
-        value={worktree ?? ''}
-        disabled={workspacesLoading || workspacesError !== null}
-        onChange={(event) => setSelectedWorktree(event.target.value === '' ? null : event.target.value)}
-      >
-        <option value="">No workspace · global settings only</option>
-        {registeredWorktrees.map((workspace) => <option key={workspace.id} value={workspace.id}>
-          {workspace.name}{workspace.branch ? ` · ${workspace.branch}` : ''} · {workspace.path}
-        </option>)}
-      </select>
-      {workspacesLoading && <p role="status">Loading registered worktrees…</p>}
-      {workspacesError && <p role="alert">Could not list registered worktrees: {workspacesError}</p>}
+    <section className="ui-stack" aria-label="Workspace">
+      <SectionHeader title="Workspace" />
+      <FormRow label="Repository worktree" htmlFor="settings-worktree">
+        <select
+          id="settings-worktree"
+          className="ui-text-field__input"
+          value={worktree ?? ''}
+          disabled={workspacesLoading || workspacesError !== null}
+          onChange={(event) => setSelectedWorktree(event.target.value === '' ? null : event.target.value)}
+        >
+          <option value="">No workspace · global settings only</option>
+          {registeredWorktrees.map((workspace) => <option key={workspace.id} value={workspace.id}>
+            {workspace.name}{workspace.branch ? ` · ${workspace.branch}` : ''} · {workspace.path}
+          </option>)}
+        </select>
+      </FormRow>
+      {workspacesLoading && <p role="status" className="ui-text-muted">Loading registered worktrees…</p>}
+      {workspacesError && <p role="alert"><StatusDot status="failing" label="Error" /> Could not list registered worktrees: {workspacesError}</p>}
       {!workspacesLoading && !workspacesError && registeredWorktrees.length === 0 &&
-        <p role="status">No registered Git worktrees are available. Global creation defaults remain available.</p>}
-      <small>Repository hosting settings require a registered Git worktree. Global defaults are available without one.</small>
+        <p role="status" className="ui-text-muted">No registered Git worktrees are available. Global creation defaults remain available.</p>}
+      <small className="ui-text-muted">Repository hosting settings require a registered Git worktree. Global defaults are available without one.</small>
     </section>
 
-    {settingsContextError && <p role="alert">Could not resolve the settings worktree: {settingsContextError}</p>}
-    {localSettingsError && <p role="alert">{localSettingsError}</p>}
-    {settingsError && <p className="reviews-error" role="alert">Hosting observations may be stale: {settingsError}</p>}
+    {settingsContextError && <p role="alert"><StatusDot status="failing" label="Error" /> {settingsContextError}</p>}
+    {localSettingsError && <p role="alert"><StatusDot status="failing" label="Error" /> {localSettingsError}</p>}
+    {settingsError && <p role="alert"><StatusDot status="failing" label="Error" /> Hosting observations may be stale: {settingsError}</p>}
 
-    <section aria-labelledby="reviews-providers-title">
-      <h2 id="reviews-providers-title">Review providers</h2>
-      <article className="hosting-provider-card" aria-labelledby="github-provider-title">
-        <h3 id="github-provider-title">GitHub</h3>
-        <p role={providerError ? 'alert' : 'status'}>{githubReadiness}{providerError ? `: ${providerError}` : ''}</p>
+    <section className="ui-stack" aria-label="Review providers">
+      <SectionHeader title="Review providers" />
+      <article className="ui-stack" aria-label="GitHub">
+        <SectionHeader title="GitHub" />
+        <p role={providerError ? 'alert' : 'status'}>
+          {providerError
+            ? <><StatusDot status="failing" label="Error" /> {githubReadiness}: {providerError}</>
+            : <Badge tone={provider?.missingScopes.length ? 'needs-you' : provider?.requiredHostAuthenticated ? 'working' : 'neutral'}>{githubReadiness}</Badge>}
+        </p>
         {provider && <>
           {provider.ghAvailable === false && <p>Install GitHub CLI: <code>brew install gh</code></p>}
           {provider.ghAvailable && !provider.requiredHostAuthenticated && <p>Sign in to {provider.requiredHost}: <code>{githubLoginCommand(provider)}</code></p>}
@@ -453,118 +460,111 @@ export function HostingSettings(props: ReviewsSurfaceProps) {
           {activeAccount && <p>Active account: {activeAccount}</p>}
           {provider.envTokenInProcess && <p>Environment credentials are in use for this process. Credentials are never shown or stored by these settings.</p>}
         </>}
-        <button type="button" disabled={!worktree || loadingProvider} onClick={() => void recheckProvider(true)}>
-          {loadingProvider ? 'Re-checking…' : 'Re-check GitHub'}
-        </button>
+        <Button disabled={!worktree || loadingProvider} onClick={() => void recheckProvider(true)}>{loadingProvider ? 'Re-checking…' : 'Re-check GitHub'}</Button>
         {provider && <p>Required account scope: <code>{provider.requiredHost}</code>{provider.requiredScopes.length ? ` · ${provider.requiredScopes.join(', ')}` : ''}</p>}
       </article>
 
-      <article className="hosting-provider-card" aria-labelledby="gitlab-provider-title">
-        <h3 id="gitlab-provider-title">GitLab</h3>
+      <article className="ui-stack" aria-label="GitLab">
+        <SectionHeader title="GitLab" />
         <p>Unsupported: this build has no public GitLab hosting methods. CLI login alone does not enable MR reads or creation.</p>
         <p>CLI setup command (not a readiness check): <code>glab auth login</code></p>
       </article>
-      <article className="hosting-provider-card" aria-labelledby="bitbucket-provider-title">
-        <h3 id="bitbucket-provider-title">Bitbucket</h3>
+      <article className="ui-stack" aria-label="Bitbucket">
+        <SectionHeader title="Bitbucket" />
         <p>Unsupported: no public Bitbucket hosting diagnostics or review-creation methods are registered.</p>
         <p>No install, login, account-scope, or Re-check action is available.</p>
       </article>
-      <article className="hosting-provider-card" aria-labelledby="azure-provider-title">
-        <h3 id="azure-provider-title">Azure DevOps</h3>
+      <article className="ui-stack" aria-label="Azure DevOps">
+        <SectionHeader title="Azure DevOps" />
         <p>Unsupported: no public Azure DevOps hosting diagnostics or review-creation methods are registered.</p>
         <p>No install, login, account-scope, or Re-check action is available.</p>
       </article>
-      <article className="hosting-provider-card" aria-labelledby="gitea-provider-title">
-        <h3 id="gitea-provider-title">Gitea</h3>
+      <article className="ui-stack" aria-label="Gitea">
+        <SectionHeader title="Gitea" />
         <p>Unsupported: no public Gitea hosting diagnostics or review-creation methods are registered.</p>
         <p>No install, login, account-scope, or Re-check action is available.</p>
       </article>
     </section>
 
-    <section aria-labelledby="creation-defaults-title">
-      <h2 id="creation-defaults-title">Hosted-review creation defaults</h2>
-      <fieldset>
+    <section className="ui-stack" aria-label="Hosted-review creation defaults">
+      <SectionHeader title="Hosted-review creation defaults" />
+      <fieldset className="ui-stack">
         <legend>Apply defaults to</legend>
-        <label>
-          <input type="radio" name="creation-default-scope" value="global" checked={defaultScope === 'global'} onChange={() => {
+        <FormRow label="Global" htmlFor="creation-default-global">
+          <input id="creation-default-global" type="radio" style={{ accentColor: 'var(--ui-accent)' }} name="creation-default-scope" value="global" checked={defaultScope === 'global'} onChange={() => {
             setDefaultScope('global')
             setDefaultsError(null)
           }} />
-          Global
-        </label>
-        <label>
-          <input type="radio" name="creation-default-scope" value="repository" checked={defaultScope === 'repository'} disabled={!repositoryDefaultsReady} onChange={() => {
+        </FormRow>
+        <FormRow label={`This repository${currentRepoHasOverride ? ' · overrides global' : ' · inherits global'}`} htmlFor="creation-default-repository">
+          <input id="creation-default-repository" type="radio" style={{ accentColor: 'var(--ui-accent)' }} name="creation-default-scope" value="repository" checked={defaultScope === 'repository'} disabled={!repositoryDefaultsReady} onChange={() => {
             setDefaultScope('repository')
             if (!currentRepoHasOverride) setRepoDefaults(globalDefaults)
             setDefaultsError(null)
           }} />
-          This repository{currentRepoHasOverride ? ' · overrides global' : ' · inherits global'}
-        </label>
+        </FormRow>
       </fieldset>
-      <fieldset disabled={savingDefaults || (defaultScope === 'repository' && !repositoryDefaultsReady)}>
+      <fieldset className="ui-stack" disabled={savingDefaults || (defaultScope === 'repository' && !repositoryDefaultsReady)}>
         <legend>Creation options</legend>
-        {DEFAULT_FIELDS.map(({ key, label }) => <label key={key}>
-          <input type="checkbox" checked={displayedDefaults[key]} onChange={(event) => setDefault(key, event.target.checked)} />
-          {label}
-        </label>)}
+        {DEFAULT_FIELDS.map(({ key, label }) => <FormRow key={key} label={label} htmlFor={`creation-default-${key}`}>
+          <input id={`creation-default-${key}`} type="checkbox" style={{ accentColor: 'var(--ui-accent)' }} checked={displayedDefaults[key]} onChange={(event) => setDefault(key, event.target.checked)} />
+        </FormRow>)}
       </fieldset>
-      {defaultsError && <p role="alert">{defaultsError}</p>}
-      <button type="button" disabled={savingDefaults || (defaultScope === 'repository' && !repositoryDefaultsReady)} onClick={() => void saveDefaults()}>
-        {savingDefaults ? 'Saving…' : 'Save creation defaults'}
-      </button>
-      {defaultScope === 'repository' && currentRepoHasOverride && <button type="button" disabled={savingDefaults || !repositoryDefaultsReady} onClick={() => void resetRepoDefaults()}>
-        Reset repository defaults to global
-      </button>}
+      {defaultsError && <p role="alert"><StatusDot status="failing" label="Error" /> {defaultsError}</p>}
+      <div className="ui-cluster">
+        <Button variant="primary" disabled={savingDefaults || (defaultScope === 'repository' && !repositoryDefaultsReady)} onClick={() => void saveDefaults()}>{savingDefaults ? 'Saving…' : 'Save creation defaults'}</Button>
+        {defaultScope === 'repository' && currentRepoHasOverride && <Button disabled={savingDefaults || !repositoryDefaultsReady} onClick={() => void resetRepoDefaults()}>
+          Reset repository defaults to global
+        </Button>}
+      </div>
     </section>
 
-    <section aria-labelledby="github-binding-title">
-      <h2 id="github-binding-title">Repository GitHub account</h2>
-      {configurationError && <p role="alert">{configurationError}</p>}
-      {accountsError && <p role="alert">{accountsError}</p>}
+    <section className="ui-stack" aria-label="Repository GitHub account">
+      <SectionHeader title="Repository GitHub account" />
+      {configurationError && <p role="alert"><StatusDot status="failing" label="Error" /> {configurationError}</p>}
+      {accountsError && <p role="alert"><StatusDot status="failing" label="Error" /> {accountsError}</p>}
       {selectedBinding && !bindingAvailable && <p role="alert">
-        The saved binding to {selectedBinding.user} @ {selectedBinding.host} is unavailable. It remains saved and GitHub requests fail closed; no ambient-account fallback is used.
+        <StatusDot status="failing" label="Error" /> The saved binding to {selectedBinding.user} @ {selectedBinding.host} is unavailable. It remains saved and GitHub requests fail closed; no ambient-account fallback is used.
       </p>}
-      <label htmlFor="hosting-account">Account for this repository</label>
-      <select
-        id="hosting-account"
-        value={accountSelection}
-        disabled={!worktree || savingAccount || configuration === null}
-        onChange={(event) => setAccountSelection(event.target.value)}
-      >
-        <option value="ambient">Default (ambient gh login)</option>
-        {selectedBinding && !bindingAvailable && <option value={accountOption} disabled>Unavailable saved binding · {selectedBinding.user} @ {selectedBinding.host}</option>}
-        {requiredHostAccounts.map((account) => <option key={accountKey(account)} value={accountKey(account)} disabled={!account.bindable}>
-          {account.user} @ {account.host}{account.bindable ? '' : ` · ${account.source} account cannot be bound`}
-        </option>)}
-      </select>
+      <FormRow label="Account for this repository" htmlFor="hosting-account">
+        <select
+          id="hosting-account"
+          className="ui-text-field__input"
+          value={accountSelection}
+          disabled={!worktree || savingAccount || configuration === null}
+          onChange={(event) => setAccountSelection(event.target.value)}
+        >
+          <option value="ambient">Default (ambient gh login)</option>
+          {selectedBinding && !bindingAvailable && <option value={accountOption} disabled>Unavailable saved binding · {selectedBinding.user} @ {selectedBinding.host}</option>}
+          {requiredHostAccounts.map((account) => <option key={accountKey(account)} value={accountKey(account)} disabled={!account.bindable}>
+            {account.user} @ {account.host}{account.bindable ? '' : ` · ${account.source} account cannot be bound`}
+          </option>)}
+        </select>
+      </FormRow>
       {requiredHostAccounts.map((account) => <p key={`${accountKey(account)}-scope`}>
         {account.user} @ {account.host} · {account.source} · scopes: {account.scopes.length ? account.scopes.join(', ') : 'unknown'}
       </p>)}
-      {accountSaveError && <p role="alert">{accountSaveError}</p>}
-      <button type="button" disabled={!worktree || savingAccount || configuration === null} onClick={() => void saveAccount()}>
-        {savingAccount ? 'Saving account…' : 'Save account binding'}
-      </button>
+      {accountSaveError && <p role="alert"><StatusDot status="failing" label="Error" /> {accountSaveError}</p>}
+      <Button variant="primary" disabled={!worktree || savingAccount || configuration === null} onClick={() => void saveAccount()}>{savingAccount ? 'Saving account…' : 'Save account binding'}</Button>
     </section>
 
-    <section aria-labelledby="github-budget-title">
-      <h2 id="github-budget-title">GitHub API Budget</h2>
-      <button type="button" disabled={!worktree || refreshingBudget} onClick={() => void refreshBudget(true)}>
-        {refreshingBudget ? 'Refreshing…' : 'Refresh budget'}
-      </button>
-      {budgetError && <p role="alert">Budget unavailable: {budgetError}</p>}
-      {!budget && !budgetError && <p role="status">Loading GitHub API budget…</p>}
+    <section className="ui-stack" aria-label="GitHub API Budget">
+      <SectionHeader title="GitHub API Budget" />
+      <Button disabled={!worktree || refreshingBudget} onClick={() => void refreshBudget(true)}>{refreshingBudget ? 'Refreshing…' : 'Refresh budget'}</Button>
+      {budgetError && <p role="alert"><StatusDot status="failing" label="Error" /> Budget unavailable: {budgetError}</p>}
+      {!budget && !budgetError && <p role="status" className="ui-text-muted">Loading GitHub API budget…</p>}
       {budget && <>
-        <dl className="hosting-budget-list">
+        <dl className="ui-stack">
           {([['REST', budget.core], ['Search', budget.search], ['GraphQL', budget.graphql]] as const).map(([name, bucket]) => {
             const tone = percentTone(bucket)
-            const color = tone === 'critical' ? 'var(--danger, #e5534b)' : tone === 'warning' ? 'var(--amber, #f0b429)' : tone === 'ok' ? 'var(--green, #3fb950)' : 'var(--muted, #8a909e)'
-            return <div key={name} className={`hosting-budget hosting-budget-${tone}`}>
+            const badgeTone = tone === 'critical' ? 'failing' : tone === 'warning' ? 'needs-you' : tone === 'ok' ? 'working' : 'neutral'
+            return <div key={name} className="ui-cluster">
               <dt>{name}</dt>
-              <dd><span style={{ color }}>{budgetLabel(bucket)}</span> · {bucket.remaining} / {bucket.limit} remaining · {resetLabel(bucket.resetAt)}</dd>
+              <dd><Badge tone={badgeTone}>{budgetLabel(bucket)}</Badge> · {bucket.remaining} / {bucket.limit} remaining · {resetLabel(bucket.resetAt)}</dd>
             </div>
           })}
         </dl>
-        <small>Updated {new Date(budget.fetchedAt).toLocaleTimeString()}. Refreshes every 60 seconds while this settings view is visible.</small>
+        <small className="ui-text-muted">Updated {new Date(budget.fetchedAt).toLocaleTimeString()}. Refreshes every 60 seconds while this settings view is visible.</small>
       </>}
     </section>
   </main>

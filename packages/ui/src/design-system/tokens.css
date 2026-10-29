@@ -29,11 +29,14 @@
   --ui-radius-window: 10px;
   --ui-row-single: 26px;
   --ui-row-double: 34px;
+  --ui-row-compact: 32px;
   --ui-border-width: 1px;
   --ui-focus-width: 2px;
   --ui-focus-offset: 2px;
   --ui-icon-size: 16px;
   --ui-status-dot-size: 8px;
+  --ui-dialog-wide-width: 52rem;
+  --ui-form-column-width: 16rem;
 }
 
 [data-theme='light'] {
@@ -53,5 +56,8 @@
 :root,
 [data-theme='dark'],
 [data-theme='light'] {
+  --ui-transparent: transparent;
+  --ui-shadow: color-mix(in srgb, var(--ui-rail) 55%, transparent);
+  --ui-scrim: color-mix(in srgb, var(--ui-surface) 88%, transparent);
   color: var(--ui-text);
 }

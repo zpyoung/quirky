@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useSyncExternalStore, type FormEvent } from 'react'
 import type { UiPluginContext } from '@quirky/protocol'
 import { AccountsUiStore, accountSort, ageLabel, credentialLabel, displayIdentity, formatReset, snapshotStatus, windowEntries, type AccountState, type AccountSummary, type CredentialStatus, type ManagedProvider, type PendingLogin } from './model'
-import { ACCOUNTS_CSS } from './styles'
+import { Badge, Button, EmptyState, FormRow, ListRow, SectionHeader, SelectField, Tabs, TextField } from '@quirky/ui'
 import { meterColor, SnapshotLine, UsagePreferencesControls } from './Usage'
 import { useStableReport, type UiReport } from './report'
 
@@ -10,6 +10,7 @@ const SETTINGS_SECTIONS: { id: string; title: string }[] = [
   { id: 'claude', title: 'Claude' }, { id: 'codex', title: 'Codex' }, { id: 'gemini', title: 'Gemini CLI (legacy)' },
   { id: 'grok', title: 'Grok (xAI)' }, { id: 'cursor', title: 'Cursor' }, { id: 'credentials', title: 'Meter credentials' }, { id: 'appearance', title: 'Appearance' }
 ]
+const SETTINGS_TABS = SETTINGS_SECTIONS.map(({ id, title }) => ({ id, label: title }))
 const CREDENTIAL_FIELDS: Record<string, { provider: string; label: string; help: string; kinds: { kind: string; input: 'password' | 'text' | 'url' }[] }[]> = {
   minimax: [{ provider: 'minimax', label: 'MiniMax', help: 'Configure a supported MiniMax meter credential. Values are sent only to the local accounts service and are never shown again.', kinds: [
     { kind: 'api-key', input: 'password' }, { kind: 'cookie', input: 'password' }, { kind: 'group-id', input: 'password' }, { kind: 'base-url', input: 'url' }, { kind: 'model', input: 'text' }
@@ -18,10 +19,10 @@ const CREDENTIAL_FIELDS: Record<string, { provider: string; label: string; help:
   zcode: [{ provider: 'zcode', label: 'ZCode', help: 'Configure the credential used for the ZCode usage meter.', kinds: [{ kind: 'api-key', input: 'password' }, { kind: 'base-url', input: 'url' }] }]
 }
 
-function statusBadge(account: AccountSummary, activeId: string | null): { text: string; className: string }[] {
+function statusBadge(account: AccountSummary, activeId: string | null): { text: string; tone: 'accent' | 'needs-you' }[] {
   return [
-    ...(account.id === activeId ? [{ text: 'Active', className: 'badge active' }] : []),
-    ...(account.needsSignIn ? [{ text: 'Needs sign-in', className: 'badge warning' }] : [])
+    ...(account.id === activeId ? [{ text: 'Active', tone: 'accent' as const }] : []),
+    ...(account.needsSignIn ? [{ text: 'Needs sign-in', tone: 'needs-you' as const }] : [])
   ]
 }
 
@@ -37,15 +38,15 @@ function LoginLinkNotice({ context, store, pending, provider }: { context: UiPlu
     {isCodex && pending.status === 'pending' && <p>Copy it to finish signing in somewhere else — a private window, or another profile.</p>}
     {pending.status === 'error' && <p className="status-error">Sign-in failed. Check the provider CLI and try again.</p>}
     {loginUrl && <div className="login-actions">
-      <button type="button" onClick={async () => {
+      <Button type="button" onClick={async () => {
         try {
           await navigator.clipboard.writeText(loginUrl)
           store.notify('Sign-in link copied', isCodex ? 'Open it in a private window or another browser profile.' : 'Open it in a private window to sign in with a different account.')
         } catch {
           store.notify('Could not copy the link', 'Use the Open link to continue sign-in in your browser.')
         }
-      }}>Copy link</button>
-      {isCodex && <button type="button" disabled={opening} onClick={async () => {
+      }}>Copy link</Button>
+      {isCodex && <Button type="button" disabled={opening} onClick={async () => {
         setOpening(true)
         setOpenError(false)
         try {
@@ -55,10 +56,10 @@ function LoginLinkNotice({ context, store, pending, provider }: { context: UiPlu
         } finally {
           setOpening(false)
         }
-      }}>{opening ? 'Opening…' : 'Open'}</button>}
+      }}>{opening ? 'Opening…' : 'Open'}</Button>}
     </div>}
     {openError && <p className="status-error" role="alert">Could not open the sign-in link. Try again or use Copy link to open it in your browser.</p>}
-    {pending.status === 'pending' && <button type="button" disabled={loginCancelling} onClick={() => void store.cancelLogin()}>{loginCancelling ? 'Cancelling…' : 'Cancel'}</button>}
+    {pending.status === 'pending' && <Button type="button" disabled={loginCancelling} onClick={() => void store.cancelLogin()}>{loginCancelling ? 'Cancelling…' : 'Cancel'}</Button>}
   </div>
 }
 
@@ -82,18 +83,24 @@ function AccountRow({ store, provider, account, state }: { store: AccountsUiStor
     }
   }
   return <div className="account-row">
-    <div className="account-row-main"><div className="row-badges"><strong>{account.label}</strong>{badges.map((badge) => <span key={badge.text} className={badge.className}>{badge.text}</span>)}</div>
-      <small>{[account.email, account.organization, account.lastAuthenticatedAt ? `Last signed in ${new Date(account.lastAuthenticatedAt).toLocaleDateString()}` : null].filter(Boolean).join(' · ') || 'Managed account on this device'}</small>
-      {account.needsSignIn && <small className="status-error">Sign in again to use this account.</small>}
-    </div>
-    <div className="account-actions">
-      {account.needsSignIn && <>
-        <button type="button" disabled={loginBusy} onClick={() => void store.beginLogin(provider, { accountId: account.id })}>{provider === 'claude' ? 'Sign in again' : 'Re-authenticate'}</button>
-        {provider === 'claude' && <details><summary aria-label="More sign-in options">More sign-in options</summary><button type="button" disabled={loginBusy} onClick={() => void store.beginLogin('claude', { accountId: account.id, copyLink: true })}>Copy sign-in link instead</button></details>}
+    <ListRow
+      title={<><strong>{account.label}</strong>{badges.map((badge) => <Badge key={badge.text} tone={badge.tone}>{badge.text}</Badge>)}</>}
+      description={<>
+        <span>{[account.email, account.organization, account.lastAuthenticatedAt ? `Last signed in ${new Date(account.lastAuthenticatedAt).toLocaleDateString()}` : null].filter(Boolean).join(' · ') || 'Managed account on this device'}</span>
+        {account.needsSignIn && <span className="status-error">Sign in again to use this account.</span>}
       </>}
-      {!account.needsSignIn && <button type="button" aria-label={`Select ${providerName} account ${account.label}`} disabled={state.active[provider] === account.id} onClick={() => void store.selectAccount(provider, account.id)}>{state.active[provider] === account.id ? 'Active' : 'Select'}</button>}
-      <button type="button" aria-label={`Remove ${providerName} account ${account.label}`} disabled={removing} onClick={() => void remove()}>{removing ? 'Removing…' : 'Remove'}</button>
-    </div>
+      selected={state.active[provider] === account.id}
+      trailing={<span className="account-actions">
+        {account.needsSignIn
+          ? <Button type="button" disabled={loginBusy} onClick={() => void store.beginLogin(provider, { accountId: account.id })}>{provider === 'claude' ? 'Sign in again' : 'Re-authenticate'}</Button>
+          : <Button type="button" aria-label={`Select ${providerName} account ${account.label}`} disabled={state.active[provider] === account.id} onClick={() => void store.selectAccount(provider, account.id)}>{state.active[provider] === account.id ? 'Active' : 'Select'}</Button>}
+        <Button type="button" variant="destructive" aria-label={`Remove ${providerName} account ${account.label}`} disabled={removing} onClick={() => void remove()}>{removing ? 'Removing…' : 'Remove'}</Button>
+      </span>}
+    />
+    {account.needsSignIn && provider === 'claude' && <details className="account-more">
+      <summary aria-label="More sign-in options">More sign-in options</summary>
+      <Button type="button" disabled={loginBusy} onClick={() => void store.beginLogin('claude', { accountId: account.id, copyLink: true })}>Copy sign-in link instead</Button>
+    </details>}
   </div>
 }
 
@@ -110,36 +117,45 @@ function ManagedAccountsSection({ context, store, provider }: { context: UiPlugi
     : []
   return <div className="account-stack">
     <section className="section-card">
-      <h2>{providerName} accounts</h2>
+      <SectionHeader title={`${providerName} accounts`} />
       <p className="settings-description">Optional. Quirky can use your normal {providerName} login; add accounts only if you want quick switching without moving chat sessions. Managed accounts keep their sign-in context separate on this device.</p>
       <p className="settings-description">Account changes apply to future {providerName} launches. Running sessions keep the account they started with.</p>
-      <div className="section-heading"><h3>Accounts</h3><small>Showing accounts for this device. New accounts are added there.</small></div>
+      <SectionHeader title="Accounts" actions={<small>Showing accounts for this device. New accounts are added there.</small>} />
       <div className="account-list">
-        <div className="account-row">
-          <div className="account-row-main"><strong>{system?.email ? `System default: ${system.email}` : 'System default'}</strong><small>{displayIdentity(system ?? { email: null, authKind: 'none', hasAuth: false })}</small>{provider === 'claude' && <small>Use the system default Claude login.</small>}{provider === 'codex' && !system?.hasAuth && <small>No Codex sign-in was found for this device.</small>}</div>
-          <div className="account-actions">{state?.active[provider] === null && <span className="badge active">Active</span>}{provider === 'codex' && system && !system.hasAuth && <span className="badge warning">Needs sign-in</span>}<button type="button" aria-label={`Select ${providerName} System default`} disabled={!state || state.active[provider] === null} onClick={() => void store.selectAccount(provider, null)}>{state?.active[provider] === null ? 'Active' : 'Select'}</button>{system?.hasAuth && <span className="badge">{system.authKind === 'api-key' ? 'API key' : 'Signed in'}</span>}</div>
-        </div>
-        {accounts.length ? accounts.map((account) => <AccountRow key={account.id} store={store} provider={provider} account={account} state={state!} />) : <p className="empty-note">No managed {providerName} accounts yet.</p>}
+        <ListRow
+          title={<><strong>{system?.email ? `System default: ${system.email}` : 'System default'}</strong>{state?.active[provider] === null && <Badge tone="accent">Active</Badge>}{provider === 'codex' && system && !system.hasAuth && <Badge tone="needs-you">Needs sign-in</Badge>}</>}
+          description={<>
+            <span>{displayIdentity(system ?? { email: null, authKind: 'none', hasAuth: false })}</span>
+            {provider === 'claude' && <span>Use the system default Claude login.</span>}
+            {provider === 'codex' && !system?.hasAuth && <span>No Codex sign-in was found for this device.</span>}
+          </>}
+          selected={state?.active[provider] === null}
+          trailing={<span className="account-actions">
+            {system?.hasAuth && <Badge>{system.authKind === 'api-key' ? 'API key' : 'Signed in'}</Badge>}
+            <Button type="button" aria-label={`Select ${providerName} System default`} disabled={!state || state.active[provider] === null} onClick={() => void store.selectAccount(provider, null)}>{state?.active[provider] === null ? 'Active' : 'Select'}</Button>
+          </span>}
+        />
+        {accounts.length ? accounts.map((account) => <AccountRow key={account.id} store={store} provider={provider} account={account} state={state!} />) : <EmptyState message={`No managed ${providerName} accounts yet.`} />}
       </div>
       {configWarnings.length > 0 && <section className="section-card" role="status" aria-label="Codex configuration warnings">
-        <h3>Codex settings sync</h3>
+        <SectionHeader title="Codex settings sync" />
         {configWarnings.map((warning, index) => <p className="status-error" key={`${warning.accountId ?? 'system'}-${warning.kind}-${index}`}>{warning.message}</p>)}
       </section>}
       {provider === 'claude' ? <div className="details-actions">
-        <button type="button" disabled={Boolean(anyPending)} onClick={() => void store.beginLogin('claude')}>{anyPending ? 'Signing in…' : 'Add Account'}</button>
-        <details><summary aria-label="More sign-in options">More sign-in options</summary><button type="button" disabled={Boolean(anyPending)} onClick={() => void store.beginLogin('claude', { copyLink: true })}>Copy sign-in link instead</button></details>
-      </div> : <button type="button" disabled={Boolean(anyPending)} onClick={() => void store.beginLogin('codex')}>{anyPending ? 'Signing in…' : 'Add Account'}</button>}
+        <Button type="button" disabled={Boolean(anyPending)} onClick={() => void store.beginLogin('claude')}>{anyPending ? 'Signing in…' : 'Add Account'}</Button>
+        <details><summary aria-label="More sign-in options">More sign-in options</summary><Button type="button" disabled={Boolean(anyPending)} onClick={() => void store.beginLogin('claude', { copyLink: true })}>Copy sign-in link instead</Button></details>
+      </div> : <Button type="button" disabled={Boolean(anyPending)} onClick={() => void store.beginLogin('codex')}>{anyPending ? 'Signing in…' : 'Add Account'}</Button>}
       {pending?.provider === provider && <LoginLinkNotice key={pending.id} context={context} store={store} pending={pending} provider={provider} />}
     </section>
     {provider === 'claude' && <section className="section-card">
-      <h3>When you switch accounts while Claude is running</h3>
+      <SectionHeader title="When you switch accounts while Claude is running" />
       <p className="settings-description">Restarting continues each running conversation on the new account.</p>
-      <select className="form-control" aria-label="Claude running-session switch policy" value={state?.preferences.claudeSwitchPolicy ?? 'ask'} onChange={(event) => {
+      <SelectField label="Claude running-session switch policy" id="claude-switch-policy" value={state?.preferences.claudeSwitchPolicy ?? 'ask'} onChange={(event) => {
         const value = event.currentTarget.value
         if (value === 'ask' || value === 'always' || value === 'never') void store.setPreferences({ claudeSwitchPolicy: value })
       }}>
         <option value="ask">Ask</option><option value="always">Always restart</option><option value="never">Never restart</option>
-      </select>
+      </SelectField>
     </section>}
   </div>
 }
@@ -157,7 +173,7 @@ function ProviderReadOnlySettings({ store, provider }: { store: AccountsUiStore;
     : signedIn ? status?.label === 'Sign-in expired' ? 'Sign-in expired — run cursor-agent login on this computer, then refresh usage.' : `Signed in${source ? ` · ${sourceName(source)}` : ''}. Quirky only reads the existing Cursor sign-in.` : 'No Cursor sign-in found on this computer.'
   const windows = usage ? windowEntries(usage) : []
   return <section className="section-card">
-    <div className="section-heading"><h2>{title}</h2><button type="button" aria-label={`Refresh ${title} usage`} disabled={snapshot.refreshing} onClick={() => void store.refresh(provider)}>Refresh usage</button></div>
+    <SectionHeader title={title} actions={<Button type="button" aria-label={`Refresh ${title} usage`} disabled={snapshot.refreshing} onClick={() => void store.refresh(provider)}>Refresh usage</Button>} />
     <p className="settings-description">{provider === 'grok' ? 'Shows weekly credit usage from your existing Grok CLI sign-in. Quirky never refreshes or changes Grok credentials.' : 'Shows monthly Cursor plan usage from the sign-in already on this computer. Quirky only reads it — it never changes your Cursor login.'}</p>
     <p className={status?.kind === 'warning' ? 'status-error' : ''} role="status">{statusText}</p>
     {source && <p className="muted">Credential source: {sourceName(source)} · {usage ? ageLabel(usage.updatedAt) : 'Not refreshed yet'}</p>}
@@ -215,11 +231,11 @@ function CredentialField({ store, provider, kind, inputType, statuses }: { store
     }
   }
   return <div className="credential-row">
-    <div className="account-row-main"><strong>{credentialLabel(kind)}</strong><small role="status">{status?.configured ? status.readable ? 'Configured · Readable' : 'Configured · Not readable' : 'Not configured'}</small>{actionError && <small className="status-error" role="alert">{actionError}</small>}</div>
+    <div className="account-row-main"><small role="status">{status?.configured ? status.readable ? 'Configured · Readable' : 'Configured · Not readable' : 'Not configured'}</small>{actionError && <small className="status-error" role="alert">{actionError}</small>}</div>
     <form className="credential-entry" onSubmit={save}>
-      <input className="form-control" aria-label={`${provider} ${credentialLabel(kind)}`} type={inputType} autoComplete="off" spellCheck={false} disabled={busy} value={value} onChange={(event) => setValue(event.currentTarget.value)} />
-      <button type="submit" disabled={!value || busy}>{saving ? 'Saving…' : 'Set'}</button>
-      {status?.configured && <button type="button" disabled={busy} onClick={() => void clear()}>{clearing ? 'Clearing…' : 'Clear'}</button>}
+      <TextField label={`${provider} ${credentialLabel(kind)}`} type={inputType} autoComplete="off" spellCheck={false} disabled={busy} value={value} onChange={(event) => setValue(event.currentTarget.value)} />
+      <Button type="submit" disabled={!value || busy}>{saving ? 'Saving…' : 'Set'}</Button>
+      {status?.configured && <Button type="button" variant="destructive" disabled={busy} onClick={() => void clear()}>{clearing ? 'Clearing…' : 'Clear'}</Button>}
     </form>
   </div>
 }
@@ -228,11 +244,12 @@ function MeterCredentials({ store }: { store: AccountsUiStore }) {
   const snapshot = useStore(store)
   return <div className="account-stack">
     <section className="section-card">
-      <h2>Provider meter credentials</h2>
+      <SectionHeader title="Provider meter credentials" />
       <p className="settings-description">Credential values are stored by the accounts service. Values never appear in account state or usage reports. Password fields clear after a successful save.</p>
     </section>
     {Object.values(CREDENTIAL_FIELDS).flat().map((group) => <section className="section-card" key={group.provider}>
-      <h3>{group.label}</h3><p className="settings-description">{group.help}</p>
+      <SectionHeader title={group.label} />
+      <p className="settings-description">{group.help}</p>
       {group.kinds.map((field) => <CredentialField key={field.kind} store={store} provider={group.provider} kind={field.kind} inputType={field.input} statuses={snapshot.credentials} />)}
     </section>)}
   </div>
@@ -263,10 +280,12 @@ function GeminiCliSettings({ context }: { context: UiPluginContext }) {
   }
 
   return <section className="section-card">
-    <h2>Gemini CLI (legacy)</h2>
+    <SectionHeader title="Gemini CLI (legacy)" />
     <p className="settings-description">Gemini CLI OAuth credential refresh is opt-in. When enabled, Quirky may let Gemini CLI refresh its local OAuth credentials for quota checks. It is off until you explicitly enable it.</p>
     <p className="settings-description">Usage checks do not send prompts, run models, sign you in, or change the active Gemini account.</p>
-    <label className="checkbox-row"><input type="checkbox" aria-label="Allow Gemini CLI OAuth credential refresh" checked={enabled} disabled={saving} onChange={(event) => void update(event.currentTarget.checked)} />Allow Gemini CLI OAuth credential refresh</label>
+    <FormRow label="Allow Gemini CLI OAuth credential refresh" htmlFor="gemini-cli-oauth-enabled">
+      <input id="gemini-cli-oauth-enabled" type="checkbox" checked={enabled} disabled={saving} onChange={(event) => void update(event.currentTarget.checked)} />
+    </FormRow>
     {saving && <small className="loading-indicator">Saving…</small>}
   </section>
 }
@@ -312,16 +331,16 @@ export function AccountsSettings({ context, store, report }: { context: UiPlugin
   }
   useStableReport(report, reportState)
   return <div className="accounts-ui settings-shell">
-    <style>{ACCOUNTS_CSS}</style>
     <nav className="settings-nav" aria-label="AI Provider Accounts settings">
-      <strong>AI Provider Accounts</strong>
-      {SETTINGS_SECTIONS.map((item) => <button type="button" key={item.id} aria-current={section === item.id ? 'page' : undefined} onClick={() => void store.setUiState({ settingsSection: item.id })}>{item.title}</button>)}
-      <button type="button" onClick={() => void store.refresh()}>Refresh usage</button>
-      <button type="button" onClick={() => context.closeView()}>Close settings</button>
+      <SectionHeader title="AI Provider Accounts" actions={<span className="settings-nav-actions">
+        <Button type="button" onClick={() => void store.refresh()}>Refresh usage</Button>
+        <Button type="button" onClick={() => context.closeView()}>Close settings</Button>
+      </span>} />
+      <Tabs label="AI Provider Accounts settings" items={SETTINGS_TABS} value={section} onChange={(id) => void store.setUiState({ settingsSection: id })} />
     </nav>
     <main className="settings-content" aria-label={`${SETTINGS_SECTIONS.find((item) => item.id === section)?.title ?? 'Accounts'} settings`}>
       <section>
-        <div className="section-heading"><h1>{SETTINGS_SECTIONS.find((item) => item.id === section)?.title ?? 'Accounts'}</h1>{snapshot.refreshing && <small className="loading-indicator">Refreshing…</small>}</div>
+        <SectionHeader title={SETTINGS_SECTIONS.find((item) => item.id === section)?.title ?? 'Accounts'} actions={snapshot.refreshing ? <small className="loading-indicator" role="status">Refreshing…</small> : undefined} />
         {snapshot.error && <p className="status-error" role="alert">{snapshot.error}</p>}
         <SettingsSection key={section} context={context} store={store} id={section} />
       </section>

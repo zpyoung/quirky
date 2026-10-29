@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "description": "Owns external command launchers, profile-pinned commands, saved paired runtime metadata, and authenticated owner-host identity.",
   "main": "main.ts",
-  "ui": "ui.js",
+  "ui": "dist/ui.js",
   "cli": "cli.ts",
   "activation": "lazy",
   "contributes": {

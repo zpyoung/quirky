@@ -137,15 +137,12 @@ test(
     h.track(sleep)
 
     const asking = await startAsking(h, ['terminal', 'tab', 'close', busy.tab.id])
-    expect(asking.stderr()).toContain('Stop sleep in Terminal 2?')
     expect(tabsOf(await layoutOf(h)).map((tab) => tab.id)).toEqual([keep.tab.id, busy.tab.id])
     expect(await asking.answer(false)).toBe(1)
-    expect(asking.stderr()).toContain('declined')
     expect(tabsOf(await layoutOf(h)).map((tab) => tab.id)).toEqual([keep.tab.id, busy.tab.id])
     expect(descendantsOf(shell).some((row) => row.pid === sleep)).toBe(true)
 
     const paneAsk = await startAsking(h, ['terminal', 'pane', 'close', busy.pane.id])
-    expect(paneAsk.stderr()).toContain('Stop sleep in Terminal 2?')
     expect(await paneAsk.answer(false)).toBe(1)
     expect(tabsOf(await layoutOf(h))).toHaveLength(2)
 

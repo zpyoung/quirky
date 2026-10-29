@@ -236,7 +236,7 @@ const selectValue = (select: HTMLSelectElement, value: string) =>
 test('Activity navigation opens the grouped feed; filters, children and clear-completed act on visible threads', async () => {
   const h = setup()
   const cleanup = await h.mount(SIDEBAR)
-  const navigation = host.querySelector('button.activity-navigation')!
+  const navigation = host.querySelector<HTMLButtonElement>('button[aria-label^="Activity"]')!
   expect(navigation.textContent).toContain('Activity')
   await click(navigation)
   expect(h.opened.at(-1)).toEqual({ id: VIEW, input: { group: 'status' } })
@@ -287,7 +287,7 @@ test('Activity navigation opens the grouped feed; filters, children and clear-co
   await click(host.querySelector('button[aria-label="Apply Activity filters"]')!)
   expect(h.calls.filter((call) => call.method === 'quirky.agent-status/activity').at(-1)?.params).toMatchObject({ text: 'audit', worktree: 'wt1' })
   expect(host.querySelector('[data-session-id="s-work"]')).toBeNull()
-  expect(host.querySelector('.activity-empty')).not.toBeNull()
+  expect(host.querySelector('[role="status"]')).not.toBeNull()
 
   await typeInto(workspace, 'wt2')
   await click(host.querySelector('button[aria-label="Apply Activity filters"]')!)
@@ -303,7 +303,7 @@ test('Activity navigation opens the grouped feed; filters, children and clear-co
   expect(h.calls.filter((call) => call.method === 'quirky.agent-status/acknowledge')).toHaveLength(ackCount + 1)
   expect(h.calls.filter((call) => call.method === 'quirky.agent-status/acknowledge').at(-1)?.params).toEqual({ session: 's-work', turn: 'turn-2' })
   expect(host.querySelector('[data-session-id="s-work"]')).toBeNull()
-  expect(host.querySelector('.activity-empty')).not.toBeNull()
+  expect(host.querySelector('[role="status"]')).not.toBeNull()
 
   await act(async () => {
     unread.click()

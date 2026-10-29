@@ -28,3 +28,7 @@ quirky agents configure claude --host 'runtime:dev-laptop' --command claude
 ```
 
 Provider process creation remains owned by `quirky.session`. To launch remotely, call `quirky.cli/runtimeCall` for the saved target with `method: "quirky.session/create"`; do not return a target launch plan to a local session owner or relabel local execution as remote.
+
+## Desktop configuration
+
+The Agents center view uses the shared graphite controls and theme tokens. Default agent, permissions, detection/refresh, enable switches, command/argument/environment overrides and workspace trust keep their existing public APIs. Fields save on Enter or blur (Cmd/Ctrl+Enter for multiline environment values); Reset removes that override. Appearance follows the host's dark/light choice.

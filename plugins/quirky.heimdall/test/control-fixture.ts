@@ -20,16 +20,31 @@ export async function activate(context) {
     if (p.releaseRead) { pendingReads.get(p.workspace)?.(); pendingReads.delete(p.workspace) }
     return worlds.get(p.workspace)
   })
-  context.provide('method:' + hook('authorize'), p => {
+  context.provide('method:' + hook('authorize'), async p => {
     const input = p.input ?? p
     const payload = input.kindPayload
     const workspace = payload.workspace ?? 'fixture'
     if (!/^[a-z0-9-]+$/.test(workspace)) throw new Error('invalid workspace')
-    const path = join(context.dataDir, 'workspaces', workspace)
-    mkdirSync(path, { recursive: true })
-    const canonical = realpathSync(path)
+    let canonical
+    let worktreeId = null
+    let repoId = null
+    if (payload.worktreeId !== undefined && payload.worktreeId !== null) {
+      if (typeof payload.worktreeId !== 'string' || payload.worktreeId.length === 0) throw new Error('invalid worktree id')
+      if (typeof payload.repoId !== 'string' || payload.repoId.length === 0) throw new Error('worktree repo id is required')
+      const worktree = await context.call('quirky.worktree/resolve', { selector: 'id:' + payload.worktreeId })
+      if (!worktree || worktree.id !== payload.worktreeId || worktree.repoId !== payload.repoId || typeof worktree.path !== 'string') {
+        throw new Error('registered worktree identity does not match enrollment')
+      }
+      canonical = realpathSync(worktree.path)
+      worktreeId = worktree.id
+      repoId = worktree.repoId
+    } else {
+      const path = join(context.dataDir, 'workspaces', workspace)
+      mkdirSync(path, { recursive: true })
+      canonical = realpathSync(path)
+    }
     return { workspaceKey: 'local::' + canonical, workspacePath: canonical, executionHostId: 'local', schedulerOwner: 'daemon', kindPayload: payload,
-      worktreeId: payload.worktreeId ?? null, repoId: payload.repoId ?? null }
+      worktreeId, repoId }
   })
   context.provide('method:' + hook('read'), async p => {
     const e = p.enrollment ?? p

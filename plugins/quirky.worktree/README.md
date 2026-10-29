@@ -4,6 +4,13 @@ Reader: people and scripts managing worktrees — Decision: choose how the sideb
 
 ## Sidebar options
 
+Worktrees is the host-managed tool in the left-top slot by default. Add project, Workspace options,
+Activity filters and More workspace tools stay inside its panel; the latter includes the board
+and status editor. Project management uses the existing `quirky.repo` API, not a second tool.
+Rows show name plus activity, with selected branch/note/status metadata on the secondary line
+and full text available on hover. Attention counts and contextual actions remain independently
+clickable. Controls, menus, dialogs and both appearances use the shared graphite system.
+
 Options persist in the worktree plugin's SQLite store; no new global setting IDs are used. Defaults are project grouping, recent sorting, manual project order, detailed cards, all available card properties, sleeping worktrees shown, external worktrees hidden globally, and archived worktrees hidden.
 
 - `groupBy`: `project`, `status`, `pr`, or `none`. PR grouping uses the worktree's recorded linked PR; rows without one use a “No pull request” lane. Parent and descendants stay together.
@@ -30,7 +37,7 @@ Use `quirky.worktree/projectMetadata({repo})`, `setProjectMetadata({repo,identit
 
 `linkReference({worktree,url,label?})` accepts absolute HTTP or HTTPS references, persists them independently of branch/path, and displays them as text rather than executing them. `references({worktree})` reads them and `unlinkReference({worktree,reference})` removes one by stable ID. The workspace details dialog has the same link/unlink controls.
 
-`statusDefinitions({})` reads the built-ins and custom definitions; `setStatusDefinitions({statuses})` requires the four built-in IDs and refuses to remove a status that a workspace still uses. Status labels, colors and safe text icons persist into the board and status-group lanes. The sidebar's Workspace statuses editor and `quirky worktree status-set --statuses '<json>'` use the same API.
+`statusDefinitions({})` reads the built-ins and custom definitions; `setStatusDefinitions({statuses})` requires the four built-in IDs and refuses to remove a status that a workspace still uses. Status labels, color metadata and safe text icons persist. The board and status-group lanes use shared semantic colors rather than arbitrary stored paint. More workspace tools opens the Workspace statuses editor; `quirky worktree status-set --statuses '<json>'` uses the same API.
 
 ## Navigation and Open in
 

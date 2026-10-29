@@ -1,9 +1,9 @@
 import { createRoot } from 'react-dom/client'
 import { useCallback, useEffect, useSyncExternalStore } from 'react'
+import { Badge, Button } from '@quirky/ui'
 import type { UiPluginContext } from '@quirky/protocol'
 import { MobilePage, MOBILE_PAGE_ID, MOBILE_SETTINGS_ID } from './window/MobilePage'
 import { MobileSettings } from './window/MobileSettings'
-import { MobileStyles } from './window/MobileStyles'
 import { useMobileState } from './window/useMobileState'
 
 const MOBILE_SIDEBAR_ID = 'sidebar-section:quirky.mobile/mobile'
@@ -42,13 +42,12 @@ function MobileSidebar({ context, report }: { context: UiPluginContext; report?:
   }
 
   return (
-    <div className="mobile-sidebar">
-      <MobileStyles />
-      <button className="mobile-sidebar-button" type="button" aria-label="Mobile" onClick={() => void open()}>
+    <div className="ui-stack">
+      <Button aria-label="Mobile" onClick={() => void open()}>
         <span aria-hidden="true">▣</span>
         <span>Mobile</span>
-        {!onboardingSeen && <span className="mobile-badge">Try it</span>}
-      </button>
+        {!onboardingSeen && <Badge tone="accent">Try it</Badge>}
+      </Button>
     </div>
   )
 }

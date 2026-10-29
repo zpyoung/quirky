@@ -11,6 +11,8 @@ export const uiTokens = {
     needsYou: '--ui-needs-you',
     failing: '--ui-failing',
     transparent: '--ui-transparent',
+    shadow: '--ui-shadow',
+    scrim: '--ui-scrim',
   },
   font: {
     title: '--ui-font-title',

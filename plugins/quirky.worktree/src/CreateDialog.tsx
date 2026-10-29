@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
 import type { EffectiveHooks, GitHubWorktreeSource, ProjectSettings, Repo, RepoDetails, UiPluginContext, Worktree } from '@quirky/protocol'
+import { Badge, Button, Dialog, FormRow, Tabs, TextField } from '@quirky/ui'
 import { createWorkspace, messageOf, SETUP_CHOICE_NEEDED, type CreateHooks } from './actions'
-import { Dialog } from './Dialog'
 import { isGitHubWorktreeReference, parseWorkItemsPage, parseWorktreeSource, type GitHubWorkItem } from './github'
 import { repoLabel, workspaceOption } from './report'
 
@@ -104,6 +104,12 @@ type CreateHooksInfo = EffectiveHooks & {
 type Project = { settings: ProjectSettings | null; hooks: CreateHooksInfo | null }
 type HostChoice = { id: string; label: string; available: boolean; capabilities: string[] }
 type Mode = 'smart' | 'github' | 'branch' | 'name'
+const SOURCE_TABS = [
+  { id: 'smart', label: 'Smart' },
+  { id: 'github', label: 'GitHub' },
+  { id: 'branch', label: 'Branch' },
+  { id: 'name', label: 'Name' }
+] as const
 type SearchState = {
   repoId: string
   primaryId: string
@@ -558,97 +564,85 @@ export function CreateDialog({ context, repos, worktrees, repoId, onRepoChange, 
   const clearSource = () => invalidateSource()
 
   return (
-    <Dialog title="New workspace" onClose={onClose} wide>
-      <form className="form" onSubmit={onSubmit} onKeyDown={onKeyDown}>
-        <label>
-          <span>Project</span>
-          <select value={repoId} onChange={(event) => onRepoChange(event.target.value)}>
+    <Dialog open title="New workspace" onClose={onClose} size="wide">
+      <form className="ui-stack" onSubmit={onSubmit} onKeyDown={onKeyDown}>
+        <FormRow label="Project" htmlFor="create-project">
+          <select id="create-project" className="ui-text-field__input" value={repoId} onChange={(event) => onRepoChange(event.target.value)}>
             {repos.map((r) => (
               <option key={r.id} value={r.id}>
                 {repoLabel(r)}
               </option>
             ))}
           </select>
-        </label>
+        </FormRow>
         {!folder && repo?.kind === 'git' && (
-          <div className="composer-tabs" role="tablist" aria-label="Workspace source">
-            {(['smart', 'github', 'branch', 'name'] as const).map((choice) => {
-              const label = choice === 'smart' ? 'Smart' : choice === 'github' ? 'GitHub' : choice === 'branch' ? 'Branch' : 'Name'
-              return (
-                <button key={choice} type="button" role="tab" aria-selected={mode === choice} onClick={() => changeMode(choice)}>
-                  {label}
-                </button>
-              )
-            })}
-          </div>
+          <Tabs label="Workspace source" items={SOURCE_TABS} value={mode} onChange={(id) => changeMode(id as Mode)} />
         )}
         {mode === 'smart' && !folder && (
           <>
-            <label>
-              <span>Name</span>
-              <input
-                autoFocus
-                value={smartInput}
-                onChange={(event) => {
-                  invalidateSource()
-                  setSmartInput(event.target.value)
-                }}
-                placeholder={placeholder}
-              />
-              <small className="muted">Enter a workspace name, #issue number, or GitHub URL.</small>
-            </label>
+            <TextField
+              label="Name"
+              id="create-smart-name"
+              autoFocus
+              value={smartInput}
+              onChange={(event) => {
+                invalidateSource()
+                setSmartInput(event.target.value)
+              }}
+              placeholder={placeholder}
+              help="Enter a workspace name, #issue number, or GitHub URL."
+            />
             {plainSmartInputNeedsChoice && (
-              <div className="smart-choices" role="group" aria-label="Choose how to use this text">
-                <button type="button" onClick={smartName}>Use text as workspace name</button>
-                <button type="button" onClick={smartBranch}>Search branches</button>
-                <button type="button" onClick={smartSearch}>Search GitHub</button>
+              <div className="ui-cluster" role="group" aria-label="Choose how to use this text">
+                <Button type="button" onClick={smartName}>Use text as workspace name</Button>
+                <Button type="button" onClick={smartBranch}>Search branches</Button>
+                <Button type="button" onClick={smartSearch}>Search GitHub</Button>
               </div>
             )}
-            {explicitSmartReference && sourceBusy && <p className="muted" role="status">Loading GitHub work item…</p>}
-            {explicitSmartReference && sourceError && <p className="error" role="alert">Could not resolve GitHub work item: {sourceError}</p>}
+            {explicitSmartReference && sourceBusy && <p className="ui-text-muted" role="status">Loading GitHub work item…</p>}
+            {explicitSmartReference && sourceError && <p className="ui-error-text" role="alert">Could not resolve GitHub work item: {sourceError}</p>}
           </>
         )}
         {mode === 'github' && !folder && (
           <>
-            <label>
-              <span>Search GitHub</span>
-              <input
-                autoFocus
-                value={query}
-                onChange={(event) => {
-                  invalidateSource()
-                  setQuery(event.target.value)
-                }}
-                placeholder="Search issues and pull requests"
-              />
-            </label>
-            {sourceBusy && <p className="muted" role="status">Loading GitHub work item…</p>}
-            {sourceError && <p className="error" role="alert">Could not resolve GitHub work item: {sourceError}</p>}
-            {currentSearch?.status === 'loading' && <p className="muted" role="status">Loading GitHub issues and pull requests…</p>}
-            {currentSearch?.status === 'error' && <p className="error" role="alert">Could not search GitHub work items: {currentSearch.error}</p>}
+            <TextField
+              label="Search GitHub"
+              id="create-github-query"
+              autoFocus
+              value={query}
+              onChange={(event) => {
+                invalidateSource()
+                setQuery(event.target.value)
+              }}
+              placeholder="Search issues and pull requests"
+            />
+            {sourceBusy && <p className="ui-text-muted" role="status">Loading GitHub work item…</p>}
+            {sourceError && <p className="ui-error-text" role="alert">Could not resolve GitHub work item: {sourceError}</p>}
+            {currentSearch?.status === 'loading' && <p className="ui-text-muted" role="status">Loading GitHub issues and pull requests…</p>}
+            {currentSearch?.status === 'error' && <p className="ui-error-text" role="alert">Could not search GitHub work items: {currentSearch.error}</p>}
             {currentSearch?.status === 'ready' && currentSearch.errors.length > 0 && (
-              <p className="error" role="alert">{currentSearch.errors.join(' ')}</p>
+              <p className="ui-error-text" role="alert">{currentSearch.errors.join(' ')}</p>
             )}
             {currentSearch?.status === 'ready' && currentSearch.items.length === 0 && currentSearch.errors.length === 0 && (
-              <p className="muted" role="status">No GitHub issues or pull requests found.</p>
+              <p className="ui-text-muted" role="status">No GitHub issues or pull requests found.</p>
             )}
             {currentSearch?.status === 'ready' && currentSearch.items.length > 0 && (
-              <ul className="github-work-items" aria-label="GitHub issues and pull requests">
+              <ul className="ui-tree ui-stack" aria-label="GitHub issues and pull requests">
                 {currentSearch.items.map((item) => (
-                  <li key={`${item.kind}:${item.number}`}>
-                    <button
+                  <li key={`${item.kind}:${item.number}`} className="ui-tree-item ui-stack">
+                    <Button
                       type="button"
-                      className="github-work-item"
+                      className="ui-stack"
                       aria-pressed={source?.item.url === item.url}
                       onClick={() => chooseWorkItem(item)}
                     >
-                      <span className="tag">{item.kind === 'pullRequest' ? 'Pull request' : 'Issue'}</span>
+                      <Badge>{item.kind === 'pullRequest' ? 'Pull request' : 'Issue'}</Badge>
                       <span>{item.kind === 'pullRequest' ? 'PR' : 'Issue'} #{item.number}</span>
                       <strong>{item.title}</strong>
-                      {item.headRefName && <span className="muted">{item.headRefName}</span>}
-                      {item.labels.map((label) => <span className="tag" key={label}>{label}</span>)}
-                    </button>
-                    <a href={item.url} target="_blank" rel="noreferrer">Open</a>
+                      {item.headRefName && <span className="ui-text-muted">{item.headRefName}</span>}
+                      {item.labels.map((label) => <Badge key={label}>{label}</Badge>)}
+                    </Button>
+                    <a className="ui-text-muted" href={item.url} target="_blank" rel="noreferrer">Open</a>
                   </li>
                 ))}
               </ul>
@@ -656,37 +650,29 @@ export function CreateDialog({ context, repos, worktrees, repoId, onRepoChange, 
           </>
         )}
         {mode === 'name' && (
-          <label>
-            <span>Name</span>
-            <input
-              autoFocus
-              value={name}
-              onChange={(event) => setName(event.target.value)}
-              placeholder={source?.item.title ?? placeholder}
-            />
-          </label>
+          <TextField
+            label="Name"
+            id="create-name"
+            autoFocus
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+            placeholder={source?.item.title ?? placeholder}
+          />
         )}
         {mode === 'branch' && !folder && (
           <>
-            <label>
-              <span>Name</span>
-              <input value={name} onChange={(event) => setName(event.target.value)} placeholder={placeholder} />
-            </label>
-            <label>
-              <span>Existing branch</span>
-              <input value={branch} onChange={(event) => setBranch(event.target.value)} placeholder="Search or enter an existing branch" />
-            </label>
-            {currentBranchSearch?.status === 'loading' && <p className="muted" role="status">Loading branches…</p>}
-            {currentBranchSearch?.status === 'error' && <p className="error" role="alert">Could not search branches: {currentBranchSearch.error}</p>}
-            {currentBranchSearch?.status === 'ready' && currentBranchSearch.refs.length === 0 && <p className="muted" role="status">No matching branches.</p>}
+            <TextField label="Name" id="create-branch-name" value={name} onChange={(event) => setName(event.target.value)} placeholder={placeholder} />
+            <TextField label="Existing branch" id="create-branch" value={branch} onChange={(event) => setBranch(event.target.value)} placeholder="Search or enter an existing branch" />
+            {currentBranchSearch?.status === 'loading' && <p className="ui-text-muted" role="status">Loading branches…</p>}
+            {currentBranchSearch?.status === 'error' && <p className="ui-error-text" role="alert">Could not search branches: {currentBranchSearch.error}</p>}
+            {currentBranchSearch?.status === 'ready' && currentBranchSearch.refs.length === 0 && <p className="ui-text-muted" role="status">No matching branches.</p>}
             {currentBranchSearch?.status === 'ready' && currentBranchSearch.refs.length > 0 && (
-              <ul className="branch-results" aria-label="Matching branches">
+              <ul className="ui-tree">
                 {currentBranchSearch.refs.map((ref) => (
-                  <li key={`${ref.kind}:${ref.name}`}>
-                    <button type="button" aria-pressed={branch.trim() === ref.name} onClick={() => setBranch(ref.name)}>
-                      <span>{ref.name}</span>
-                      <span className="muted">{ref.kind}</span>
-                    </button>
+                  <li key={`${ref.kind}:${ref.name}`} className="ui-tree-item">
+                    <Button type="button" aria-pressed={branch.trim() === ref.name} onClick={() => setBranch(ref.name)}>
+                      {ref.name} <span className="ui-text-muted">{ref.kind}</span>
+                    </Button>
                   </li>
                 ))}
               </ul>
@@ -695,38 +681,41 @@ export function CreateDialog({ context, repos, worktrees, repoId, onRepoChange, 
         )}
         {source && (
           <>
-            <section className="github-source" aria-label="Chosen GitHub source">
-              <div className="setup-heading">
+            <section className="ui-stack" aria-label="Chosen GitHub source">
+              <div className="ui-cluster">
                 <strong>{source.item.kind === 'pullRequest' ? 'Pull request' : 'Issue'} #{source.item.number}: {source.item.title}</strong>
-                <button type="button" onClick={clearSource}>Clear source</button>
+                <Button type="button" onClick={clearSource}>Clear source</Button>
               </div>
-              {source.head?.refName && <p className="muted">Source branch: {source.head.refName}</p>}
-              <a href={source.item.url} target="_blank" rel="noreferrer">Open on GitHub</a>
+              {source.head?.refName && <p className="ui-text-muted">Source branch: {source.head.refName}</p>}
+              <a className="ui-text-muted" href={source.item.url} target="_blank" rel="noreferrer">Open on GitHub</a>
             </section>
-            <label>
-              <span>Name</span>
-              <input value={name} onChange={(event) => setName(event.target.value)} placeholder={source.item.title} />
-              <small className="muted">Optional worktree name; the linked source remains the default display name.</small>
-            </label>
+            <TextField
+              label="Name"
+              id="create-source-name"
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+              placeholder={source.item.title}
+              help="Optional worktree name; the linked source remains the default display name."
+            />
           </>
         )}
-        {unsupportedFolderReference && <p className="error" role="alert">GitHub worktree sources require a Git repository.</p>}
+        {unsupportedFolderReference && <p className="ui-error-text" role="alert">GitHub worktree sources require a Git repository.</p>}
         {showBase && (
-          <label>
-            <span>Base</span>
-            <input
-              value={base}
-              onChange={(event) => {
-                baseEdited.current = true
-                setBase(event.target.value)
-              }}
-              placeholder="Default branch"
-            />
-          </label>
+          <TextField
+            label="Base"
+            id="create-base"
+            value={base}
+            onChange={(event) => {
+              baseEdited.current = true
+              setBase(event.target.value)
+            }}
+            placeholder="Default branch"
+          />
         )}
-        <label>
-          <span>Agent</span>
+        <FormRow label="Agent" htmlFor="create-agent">
           <select
+            id="create-agent"
+            className="ui-text-field__input"
             value={agent}
             onChange={(event) => {
               setAgent(event.target.value)
@@ -742,35 +731,38 @@ export function CreateDialog({ context, repos, worktrees, repoId, onRepoChange, 
               </option>
             ))}
           </select>
-        </label>
+        </FormRow>
         {agent && agentOptionsState?.agent === agent && agentOptionsState.status === 'loading' && (
-          <p className="muted" role="status">Loading {agent} model options…</p>
+          <p className="ui-text-muted" role="status">Loading {agent} model options…</p>
         )}
         {agent && agentOptionsState?.agent === agent && agentOptionsState.status === 'error' && (
-          <p className="error" role="alert">Could not load {agent} model options: {agentOptionsState.error}</p>
+          <p className="ui-error-text" role="alert">Could not load {agent} model options: {agentOptionsState.error}</p>
         )}
         {agentOptionsCatalog && !agentOptionsCatalog.supported && (
-          <p className="muted">This agent does not support launch-time model and option selection.</p>
+          <p className="ui-text-muted">This agent does not support launch-time model and option selection.</p>
         )}
         {agentOptionsCatalog?.supported && (
-          <div className="agent-launch-options">
-            <label>
-              <span>Model</span>
-              <input
-                list="worktree-agent-models"
-                value={model}
-                onChange={(event) => {
-                  setModel(event.target.value)
-                  setLaunchPicks({})
-                }}
-                placeholder="Use the agent's native default"
-              />
-              <datalist id="worktree-agent-models">
-                {agentOptionsCatalog.models.map((choice) => <option key={choice.id} value={choice.id}>{choice.label}</option>)}
-              </datalist>
-            </label>
+          <div className="ui-stack">
+            <FormRow label="Model" htmlFor="worktree-agent-model" help="Use the agent's native default when left blank.">
+              <>
+                <input
+                  id="worktree-agent-model"
+                  className="ui-text-field__input"
+                  list="worktree-agent-models"
+                  value={model}
+                  onChange={(event) => {
+                    setModel(event.target.value)
+                    setLaunchPicks({})
+                  }}
+                  placeholder="Use the agent's native default"
+                />
+                <datalist id="worktree-agent-models">
+                  {agentOptionsCatalog.models.map((choice) => <option key={choice.id} value={choice.id}>{choice.label}</option>)}
+                </datalist>
+              </>
+            </FormRow>
             {visibleLaunchOptions.map((option) => option.type === 'boolean' ? (
-              <label className="check-row" key={option.id}>
+              <label className="ui-checkbox-label" key={option.id}>
                 <input
                   type="checkbox"
                   checked={launchPicks[option.id] === true}
@@ -779,9 +771,10 @@ export function CreateDialog({ context, repos, worktrees, repoId, onRepoChange, 
                 <span>{option.label}</span>
               </label>
             ) : (
-              <label key={option.id}>
-                <span>{option.label}</span>
+              <FormRow label={option.label} htmlFor={`create-agent-option-${option.id}`} key={option.id}>
                 <select
+                  id={`create-agent-option-${option.id}`}
+                  className="ui-text-field__input"
                   value={typeof launchPicks[option.id] === 'string' ? launchPicks[option.id] as string : ''}
                   onChange={(event) => setLaunchPicks((current) => {
                     const next = { ...current }
@@ -793,18 +786,24 @@ export function CreateDialog({ context, repos, worktrees, repoId, onRepoChange, 
                   <option value="">Use default</option>
                   {option.choices?.map((choice) => <option key={choice.value} value={choice.value}>{choice.label}</option>)}
                 </select>
-              </label>
+              </FormRow>
             ))}
           </div>
         )}
         {agent && (
-          <label>
-            <span>Prompt</span>
-            <textarea rows={3} value={prompt} onChange={(event) => setPrompt(event.target.value)} placeholder="What should the agent do first?" />
-          </label>
+          <FormRow label="Prompt" htmlFor="create-agent-prompt">
+            <textarea
+              id="create-agent-prompt"
+              rows={3}
+              className="ui-text-field__input"
+              value={prompt}
+              onChange={(event) => setPrompt(event.target.value)}
+              placeholder="What should the agent do first?"
+            />
+          </FormRow>
         )}
         {agent && (prompt.trim() !== '' || source?.item.kind === 'issue') && (
-          <label className="check-row">
+          <label className="ui-checkbox-label">
             <input
               aria-label="Submit prompt automatically"
               type="checkbox"
@@ -814,18 +813,18 @@ export function CreateDialog({ context, repos, worktrees, repoId, onRepoChange, 
             <span>Submit prompt automatically</span>
           </label>
         )}
-        <button type="button" className="disclosure" aria-expanded={advanced} onClick={() => setAdvanced(!advanced)}>
+        <Button type="button" className="ui-disclosure" aria-expanded={advanced} onClick={() => setAdvanced(!advanced)}>
           Advanced
-        </button>
+        </Button>
         {advanced && (
-          <div className="form-advanced">
-            <label>
-              <span>Display name</span>
-              <input value={displayName} onChange={(event) => setDisplayName(event.target.value)} />
-            </label>
-            <label>
-              <span>Target peer</span>
-              <select value={selectedHost} onChange={(event) => setSelectedHost(event.target.value)}>
+          <div className="ui-stack">
+            <TextField label="Display name" id="create-display-name" value={displayName} onChange={(event) => setDisplayName(event.target.value)} />
+            <FormRow
+              label="Target peer"
+              htmlFor="create-target-peer"
+              help="Remote selections use exact authenticated peer IDs and never fall back locally. This runtime has no remote worktree-create owner."
+            >
+              <select id="create-target-peer" className="ui-text-field__input" value={selectedHost} onChange={(event) => setSelectedHost(event.target.value)}>
                 <option value="">Current execution context (default)</option>
                 {hostChoices.map((host) => (
                   <option key={host.id} value={host.id} disabled={!host.available}>
@@ -833,18 +832,13 @@ export function CreateDialog({ context, repos, worktrees, repoId, onRepoChange, 
                   </option>
                 ))}
               </select>
-              <small className="muted">Remote selections use exact authenticated peer IDs and never fall back locally. This runtime has no remote worktree-create owner.</small>
-              {hostError && <small role="status">Remote host discovery is unavailable: {hostError}</small>}
-            </label>
+            </FormRow>
+            {hostError && <p className="ui-help-text" role="status">Remote host discovery is unavailable: {hostError}</p>}
             {showBranchName && (
-              <label>
-                <span>Branch name</span>
-                <input value={branchName} onChange={(event) => setBranchName(event.target.value)} placeholder="Generated from the name" />
-              </label>
+              <TextField label="Branch name" id="create-branch-name-advanced" value={branchName} onChange={(event) => setBranchName(event.target.value)} placeholder="Generated from the name" />
             )}
-            <label>
-              <span>Parent worktree</span>
-              <select value={parent} onChange={(event) => setParent(event.target.value)}>
+            <FormRow label="Parent worktree" htmlFor="create-parent-worktree">
+              <select id="create-parent-worktree" className="ui-text-field__input" value={parent} onChange={(event) => setParent(event.target.value)}>
                 <option value="">No parent</option>
                 {worktrees.map((w) => (
                   <option key={w.id} value={w.id}>
@@ -852,36 +846,39 @@ export function CreateDialog({ context, repos, worktrees, repoId, onRepoChange, 
                   </option>
                 ))}
               </select>
-            </label>
-            <label>
-              <span>Note</span>
-              <textarea rows={2} value={note} onChange={(event) => setNote(event.target.value)} />
-            </label>
+            </FormRow>
+            <FormRow label="Note" htmlFor="create-note">
+              <textarea id="create-note" rows={2} className="ui-text-field__input" value={note} onChange={(event) => setNote(event.target.value)} />
+            </FormRow>
             {repo?.kind === 'git' && (
               <>
-                <label>
-                  <span>Sparse checkout paths</span>
+                <FormRow
+                  label="Sparse checkout paths"
+                  htmlFor="create-sparse-paths"
+                  help="One tracked repository-relative file or directory per line. Unsafe or missing paths are refused before creating the worktree."
+                >
                   <textarea
+                    id="create-sparse-paths"
                     rows={3}
+                    className="ui-text-field__input"
                     value={sparsePathsText}
                     onChange={(event) => setSparsePathsText(event.target.value)}
                     placeholder="src&#10;docs"
                   />
-                  <small className="muted">One tracked repository-relative file or directory per line. Unsafe or missing paths are refused before creating the worktree.</small>
-                </label>
-                <label className="check-row">
+                </FormRow>
+                <label className="ui-checkbox-label">
                   <input type="checkbox" checked={keepMain} onChange={(event) => setKeepMain(event.target.checked)} />
                   <span>Fast-forward primary checkout when it is clean and exactly behind this remote base</span>
                 </label>
               </>
             )}
                 {project?.hooks?.defaultTabs?.length ? (
-                  <fieldset className="form-group">
+                  <fieldset className="ui-stack">
                     <legend>Default terminal tabs</legend>
                     {project?.hooks?.defaultTabs?.map((tab, index) => {
                       const selector = String(index + 1)
                       return (
-                        <label className="check-row" key={selector}>
+                        <label className="ui-checkbox-label" key={selector}>
                           <input
                             type="checkbox"
                             checked={selectedDefaultTabs.includes(selector)}
@@ -890,15 +887,15 @@ export function CreateDialog({ context, repos, worktrees, repoId, onRepoChange, 
                               : current.filter((value) => value !== selector))}
                           />
                           <span>{tab.title ?? `Tab ${index + 1}`}</span>
-                          {tab.command && <small className="muted">{tab.command}</small>}
+                          {tab.command && <small className="ui-help-text">{tab.command}</small>}
                         </label>
                       )
                     })}
-                    <small className="muted">Commands run as shell-only background tabs after the shared setup trust choice.</small>
+                    <small className="ui-help-text">Commands run as shell-only background tabs after the shared setup trust choice.</small>
                   </fieldset>
                 ) : null}
-                {defaultTabWarnings.map((warning) => <p className="muted" role="status" key={warning}>{warning}</p>)}
-                {recipeDiagnostics.map((diagnostic) => <p className="muted" role="status" key={`${diagnostic.index}:${diagnostic.field ?? ''}`}>{diagnostic.message}</p>)}
+                {defaultTabWarnings.map((warning) => <p className="ui-text-muted" role="status" key={warning}>{warning}</p>)}
+                {recipeDiagnostics.map((diagnostic) => <p className="ui-text-muted" role="status" key={`${diagnostic.index}:${diagnostic.field ?? ''}`}>{diagnostic.message}</p>)}
                 {(project?.hooks?.environmentRecipes?.length ?? 0) > 0 && (
                   <button type="button" onClick={() => {
                     context.openView('view:quirky.worktree/environments', { repo: repoId })
@@ -906,42 +903,42 @@ export function CreateDialog({ context, repos, worktrees, repoId, onRepoChange, 
                   }}>Manage VM environments and review lifecycle commands</button>
                 )}
             {(setup || asksForSetup) && (
-              <div className="setup-block">
-                <div className="setup-heading">
+              <section className="ui-stack">
+                <div className="ui-cluster">
                   <span>Setup script</span>
-                  {setup && <span className="setup-badge">{setup.badge}</span>}
+                  {setup && <Badge>{setup.badge}</Badge>}
                 </div>
-                <label className="check-row">
+                <label className="ui-checkbox-label">
                   <input type="checkbox" checked={waitsForSetup} disabled readOnly title="Set in the project's settings" />
                   <span>Wait for setup to complete before starting agent</span>
                 </label>
                 {asksForSetup && (
-                  <div className="setup-choice" role="group" aria-label="Run setup now?">
+                  <div className="ui-cluster" role="group" aria-label="Run setup now?">
                     <span>Run setup now?</span>
-                    <button type="button" className={setupChoice === 'run' ? 'primary' : ''} aria-pressed={setupChoice === 'run'} onClick={() => setSetupChoice('run')}>
+                    <Button type="button" variant={setupChoice === 'run' ? 'primary' : 'secondary'} aria-pressed={setupChoice === 'run'} onClick={() => setSetupChoice('run')}>
                       Run setup now
-                    </button>
-                    <button type="button" className={setupChoice === 'skip' ? 'primary' : ''} aria-pressed={setupChoice === 'skip'} onClick={() => setSetupChoice('skip')}>
+                    </Button>
+                    <Button type="button" variant={setupChoice === 'skip' ? 'primary' : 'secondary'} aria-pressed={setupChoice === 'skip'} onClick={() => setSetupChoice('skip')}>
                       Skip for now
-                    </button>
+                    </Button>
                   </div>
                 )}
-              </div>
+              </section>
             )}
           </div>
         )}
-        <div className="dialog-actions dialog-actions-spread">
-          <label className="check-row">
+        <div className="ui-actions">
+          <label className="ui-checkbox-label">
             <input type="checkbox" checked={createMore} onChange={(event) => setCreateMore(event.target.checked)} />
             <span>Create more</span>
           </label>
-          {asksForSetup && setupChoice === null && <span className="muted">Choose whether to run setup, under Advanced.</span>}
-          <button type="button" onClick={onClose}>
+          {asksForSetup && setupChoice === null && <span className="ui-text-muted">Choose whether to run setup, under Advanced.</span>}
+          <Button type="button" onClick={onClose}>
             Cancel
-          </button>
-          <button type="submit" className="primary" disabled={blocked}>
+          </Button>
+          <Button type="submit" variant="primary" disabled={blocked}>
             Create
-          </button>
+          </Button>
         </div>
       </form>
     </Dialog>

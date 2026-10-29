@@ -40,6 +40,6 @@ export function evidenceParts(source: string): Part[] {
 
 export function EvidenceText({ source }: { source: string }): ReactNode {
   return evidenceParts(source).map((part, index) => part.highlighted
-    ? <mark key={index} data-vault-highlight>{part.text}</mark>
+    ? <mark key={index} className="qvh-evidence-highlight" data-vault-highlight>{part.text}</mark>
     : <span key={index}>{part.text}</span>)
 }

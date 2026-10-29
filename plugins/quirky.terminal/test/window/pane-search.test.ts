@@ -2,6 +2,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } fr
 import { act } from 'react'
 import { RpcErrorCode } from '@quirky/protocol'
 import { fakeContext, loadPane, mountPane, paneHandlers, startRecording, stopRecording, unloadPane, type MountedPane } from './pane-support'
+import { waitFor } from '../e2e-support'
 
 let mounted: MountedPane | null = null
 
@@ -20,6 +21,9 @@ const seq = (to: number) => Array.from({ length: to }, (_, index) => `${index + 
 async function mountWithOutput() {
   const fake = fakeContext(paneHandlers())
   mounted = await mountPane(fake)
+  await act(async () => {
+    await waitFor('the pane output subscription', () => fake.streams.has(101), 2_000)
+  })
   await fake.push(101, seq(200))
   await mounted.flush()
   return { fake, pane: mounted }

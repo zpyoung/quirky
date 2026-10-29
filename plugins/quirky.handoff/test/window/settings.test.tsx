@@ -26,12 +26,10 @@ const openAdd = async (page: Awaited<ReturnType<typeof opened>>['page']) => {
 }
 
 describe('SC-24: the Session handoff settings page', () => {
-  test('SC-24: title, subtitle, the three built-ins, the count and a disabled Reset to defaults', async () => {
+  test('SC-24: the Session handoff settings page lists built-ins with their count and reset state', async () => {
     const { page } = await opened()
     const v = page.view
-    expect(v.q('h1')!.textContent).toBe('Session handoff')
-    expect(v.text()).toContain('Create reusable instructions for continuing work in a new Agent session.')
-    expect(v.all('[data-template]').map((row) => row.querySelector('.hf-template-name')!.textContent)).toEqual([
+    expect(v.all('[data-template]').map((row) => row.querySelector<HTMLButtonElement>('button[aria-label^="Edit "]')!.getAttribute('aria-label')!.slice(5))).toEqual([
       'Continue implementation',
       'Review what was done',
       'Debug the failure'

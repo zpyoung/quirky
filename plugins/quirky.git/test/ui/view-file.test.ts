@@ -37,7 +37,7 @@ describe('quirky.git file diff view', () => {
   test('SC-60: loads the diff of the input and titles the view "<path> (diff)"', async () => {
     const { element } = await open()
     expect(fake.callsTo('quirky.git/diff')[0].params).toEqual({ worktree: 'w1', path: 'math.ts', source: 'unstaged' })
-    expect(element.querySelector('.qgv-title')?.textContent).toBe('math.ts (diff)')
+    expect(element.querySelector('h2')?.textContent).toBe('math.ts (diff)')
     expect(element.querySelector('.cm-editor')).not.toBeNull()
   })
 
@@ -104,7 +104,8 @@ describe('quirky.git file diff view', () => {
     expect(element.querySelector('[role=menu]')).toBeNull()
     await click(byLabel(element, 'More actions'))
     const items = [...element.querySelectorAll('[role=menuitemcheckbox]')]
-    expect(items.map((i) => i.textContent)).toEqual(['Word Wrap', 'Show Whitespace'])
+    expect(items[0]?.textContent).toContain('Word Wrap')
+    expect(items[1]?.textContent).toContain('Show Whitespace')
     expect(items.map((i) => i.getAttribute('aria-checked'))).toEqual(['false', 'false'])
     await click(items[0])
     expect(fake.calls.at(-1)?.params).toEqual({ id: 'setting:quirky.git/diffWordWrap', value: true })
@@ -161,7 +162,7 @@ describe('quirky.git file diff view', () => {
     const { element } = await open(
       textDiff({ path: 'logo.png', kind: 'image', binary: true, mime: 'image/png', original: '', modified: 'iVBORw0KGgo=' })
     )
-    const sides = [...element.querySelectorAll('.qgv-image-side')]
+    const sides = [...element.querySelectorAll('figure')]
     expect(sides.map((side) => side.querySelector('figcaption')?.textContent)).toEqual(['Original', 'Modified'])
     expect(sides[0].textContent).toContain('No preview')
     expect(sides[1].querySelector('img')?.getAttribute('src')).toBe('data:image/png;base64,iVBORw0KGgo=')
@@ -280,7 +281,7 @@ describe('quirky.git editable file diff', () => {
     edit(element, 'mine\n')
     await act(async () => void (await fake.run('save')))
     await settle()
-    expect(element.querySelector('.qgv-stale')?.textContent).toContain(
+    expect(element.querySelector('[role="alert"]')?.textContent).toContain(
       'This file changed on disk since your edits. Use the banner to compare, reload, or overwrite.'
     )
     expect(byText(element, 'Reload from Disk')).not.toBeNull()
@@ -300,7 +301,7 @@ describe('quirky.git editable file diff', () => {
     await click(byText(element, 'Overwrite'))
     expect(fake.callsTo('quirky.git/save').map((c) => 'expected' in c.params)).toEqual([true, false])
     expect(fake.callsTo('quirky.git/save')[1].params.content).toBe('mine\n')
-    expect(element.querySelector('.qgv-stale')).toBeNull()
+    expect(element.querySelector('[role="alert"]')).toBeNull()
     expect(report()).toMatchObject({ dirty: false, stale: false })
   })
 
@@ -313,7 +314,7 @@ describe('quirky.git editable file diff', () => {
     await act(async () => void (await fake.run('save')))
     fake.handlers['quirky.git/diff'] = () => textDiff({ ...far, modified: far.modified + 'agent\n', modifiedHash: 'hash-7' })
     await click(byText(element, 'Reload from Disk'))
-    expect(element.querySelector('.qgv-stale')).toBeNull()
+    expect(element.querySelector('[role="alert"]')).toBeNull()
     expect(s.modifiedEditor(element).state.sliceDoc()).toBe(far.modified + 'agent\n')
     expect(report()).toMatchObject({ dirty: false, stale: false })
   })
@@ -329,7 +330,7 @@ describe('quirky.git editable file diff', () => {
     await act(async () => void (await fake.run('overwrite')))
     await settle()
     expect(fake.callsTo('quirky.git/save').length).toBe(2)
-    expect(element.querySelector('.qgv-stale')).toBeNull()
+    expect(element.querySelector('[role="alert"]')).toBeNull()
     edit(element, 'again\n')
     fake.handlers['quirky.git/save'] = () => {
       throw failure('changed', 'changed-on-disk')
@@ -337,7 +338,7 @@ describe('quirky.git editable file diff', () => {
     await act(async () => void (await fake.run('save')))
     await act(async () => void (await fake.run('reload-from-disk')))
     await settle()
-    expect(element.querySelector('.qgv-stale')).toBeNull()
+    expect(element.querySelector('[role="alert"]')).toBeNull()
     expect(s.modifiedEditor(element).state.sliceDoc()).toBe(far.modified)
   })
 

@@ -1,10 +1,12 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
+import { Badge, Button, Dialog, EmptyState, FormRow, IconButton, ListRow, Tabs, TextField } from '@quirky/ui'
 import type { UiLayout, UiPluginContext } from '@quirky/protocol'
 import { currentRevisionOf, errorData, errorMessage, isConflict, ledgerRequest } from './api'
 import { LedgerDetail } from './LedgerDetail'
 import { LedgerForm, type LocationBaseOption } from './LedgerForm'
 import { LedgerTriage } from './LedgerTriage'
-import { LEDGER_CSS } from './styles'
+import { ledgerStyles } from './styles'
 import type {
   LedgerCandidate,
   LedgerControl,
@@ -146,6 +148,7 @@ export function LedgerApp({
   mode?: LedgerUiMode
   registerControl?(handler: ControlHandler, mode: LedgerUiMode): () => void
 }) {
+  const controlId = useId()
   const [target, setTarget] = useState<LedgerTarget | null>(() => targetFromInput(input))
   const [panelTargetOverride, setPanelTargetOverride] = useState<LedgerTarget | null>(null)
   const [scope, setScope] = useState<Scope>(mode === 'panel' ? 'worktree' : 'project')
@@ -783,29 +786,58 @@ export function LedgerApp({
   const detached = Boolean(currentSummary && !currentSummary.owner)
 
   const renderFilters = () => (
-    <div className="ledger-filters" aria-label="Ledger filters">
-      <label className="search">
-        <span>Search title or ID</span>
-        <input aria-label="Search ledger" placeholder="Search title or ID" value={filters.search ?? ''} onChange={(event) => setFilters((previous) => ({ ...previous, search: event.target.value }))} />
-      </label>
-      <label><span>Type</span><select aria-label="Filter by type" value={filters.type ?? ''} onChange={(event) => setFilters((previous) => ({ ...previous, type: event.target.value ? event.target.value as LedgerType : undefined }))}>
-        <option value="">All types</option>{TYPE_OPTIONS.map((type) => <option key={type} value={type}>{TYPE_LABELS[type]}</option>)}
-      </select></label>
-      <label><span>State</span><select aria-label="Filter by state" value={filters.state ?? ''} onChange={(event) => setFilters((previous) => ({ ...previous, state: event.target.value ? event.target.value as LedgerState : undefined }))}>
-        <option value="">All states</option>{STATE_OPTIONS.map((state) => <option key={state} value={state}>{state[0]!.toUpperCase() + state.slice(1)}</option>)}
-      </select></label>
-      <label><span>Review</span><select aria-label="Filter by review status" value={filters.reviewed === undefined ? '' : String(filters.reviewed)} onChange={(event) => setFilters((previous) => ({ ...previous, reviewed: event.target.value === '' ? undefined : event.target.value === 'true' }))}>
-        <option value="">All review statuses</option><option value="true">Reviewed</option><option value="false">Unreviewed</option>
-      </select></label>
-      <label><span>Freshness</span><select aria-label="Filter by freshness" value={filters.stale === undefined ? '' : String(filters.stale)} onChange={(event) => setFilters((previous) => ({ ...previous, stale: event.target.value === '' ? undefined : event.target.value === 'true' }))}>
-        <option value="">All entries</option><option value="true">Stale</option><option value="false">Not stale</option>
-      </select></label>
+    <div className="ledger-filters" aria-label="Ledger filters" style={ledgerStyles.filters}>
+      <div style={ledgerStyles.search}>
+        <TextField
+          label="Search title or ID"
+          aria-label="Search ledger"
+          placeholder="Search title or ID"
+          value={filters.search ?? ''}
+          onChange={(event) => setFilters((previous) => ({ ...previous, search: event.target.value }))}
+        />
+      </div>
+      <div style={ledgerStyles.field}>
+        <FormRow label="Type" htmlFor={`${controlId}-filter-type`}>
+          <select aria-label="Filter by type" className="ui-text-field__input" value={filters.type ?? ''} onChange={(event) => setFilters((previous) => ({ ...previous, type: event.target.value ? event.target.value as LedgerType : undefined }))}>
+            <option value="">All types</option>{TYPE_OPTIONS.map((type) => <option key={type} value={type}>{TYPE_LABELS[type]}</option>)}
+          </select>
+        </FormRow>
+      </div>
+      <div style={ledgerStyles.field}>
+        <FormRow label="State" htmlFor={`${controlId}-filter-state`}>
+          <select aria-label="Filter by state" className="ui-text-field__input" value={filters.state ?? ''} onChange={(event) => setFilters((previous) => ({ ...previous, state: event.target.value ? event.target.value as LedgerState : undefined }))}>
+            <option value="">All states</option>{STATE_OPTIONS.map((state) => <option key={state} value={state}>{state[0]!.toUpperCase() + state.slice(1)}</option>)}
+          </select>
+        </FormRow>
+      </div>
+      <div style={ledgerStyles.field}>
+        <FormRow label="Review" htmlFor={`${controlId}-filter-review`}>
+          <select aria-label="Filter by review status" className="ui-text-field__input" value={filters.reviewed === undefined ? '' : String(filters.reviewed)} onChange={(event) => setFilters((previous) => ({ ...previous, reviewed: event.target.value === '' ? undefined : event.target.value === 'true' }))}>
+            <option value="">All review statuses</option><option value="true">Reviewed</option><option value="false">Unreviewed</option>
+          </select>
+        </FormRow>
+      </div>
+      <div style={ledgerStyles.field}>
+        <FormRow label="Freshness" htmlFor={`${controlId}-filter-freshness`}>
+          <select aria-label="Filter by freshness" className="ui-text-field__input" value={filters.stale === undefined ? '' : String(filters.stale)} onChange={(event) => setFilters((previous) => ({ ...previous, stale: event.target.value === '' ? undefined : event.target.value === 'true' }))}>
+            <option value="">All entries</option><option value="true">Stale</option><option value="false">Not stale</option>
+          </select>
+        </FormRow>
+      </div>
       {mode === 'page' && <>
-        <label><span>Origin workspace</span><input aria-label="Origin workspace" value={filters.workspaceId ?? ''} onChange={(event) => setFilters((previous) => ({ ...previous, workspaceId: event.target.value || undefined }))} /></label>
-        <label><span>Origin branch</span><input aria-label="Origin branch" value={filters.branch ?? ''} onChange={(event) => setFilters((previous) => ({ ...previous, branch: event.target.value || undefined }))} /></label>
-        <label><span>Sort</span><select aria-label="Sort ledger entries" value={sort} onChange={(event) => setSort(event.target.value as SortMode)}>
-          <option value="activity">Newest activity</option><option value="sequence">Sequence</option><option value="title">Title</option>
-        </select></label>
+        <div style={ledgerStyles.field}>
+          <TextField label="Origin workspace" aria-label="Origin workspace" value={filters.workspaceId ?? ''} onChange={(event) => setFilters((previous) => ({ ...previous, workspaceId: event.target.value || undefined }))} />
+        </div>
+        <div style={ledgerStyles.field}>
+          <TextField label="Origin branch" aria-label="Origin branch" value={filters.branch ?? ''} onChange={(event) => setFilters((previous) => ({ ...previous, branch: event.target.value || undefined }))} />
+        </div>
+        <div style={ledgerStyles.field}>
+          <FormRow label="Sort" htmlFor={`${controlId}-filter-sort`}>
+            <select aria-label="Sort ledger entries" className="ui-text-field__input" value={sort} onChange={(event) => setSort(event.target.value as SortMode)}>
+              <option value="activity">Newest activity</option><option value="sequence">Sequence</option><option value="title">Title</option>
+            </select>
+          </FormRow>
+        </div>
       </>}
     </div>
   )
@@ -814,47 +846,48 @@ export function LedgerApp({
     const currentSelection = { id: entry.id, revision: entry.revision }
     const checked = selectedKeys.has(selectionKey(currentSelection))
     return (
-      <li className="ledger-entry-row" key={entry.id} data-entry-id={entry.id}>
-        <div className="ledger-row-main">
-          {mode === 'page' && <label className="ledger-check-row">
-            <input type="checkbox" aria-label={`Select ${entry.id} revision ${entry.revision}`} checked={checked} onChange={() => toggleSelected(entry)} />
+      <li className="ledger-entry-row" key={entry.id} data-entry-id={entry.id} style={ledgerStyles.row}>
+        <div className="ledger-row-main" style={ledgerStyles.rowMain}>
+          {mode === 'page' && <label className="ledger-check-row" style={ledgerStyles.check}>
+            <input type="checkbox" aria-label={`Select ${entry.id} revision ${entry.revision}`} checked={checked} style={ledgerStyles.checkbox} onChange={() => toggleSelected(entry)} />
           </label>}
-          <button type="button" className="ledger-row-title" aria-label={`Show details: ${entry.id}`} onClick={() => { setActionMessage(''); void openDetail(entry) }}>
-            <code>{entry.id}</code> · <span className="ledger-badge">{TYPE_LABELS[entry.type]}</span> · <span className="ledger-badge">{entry.state}</span>{entry.reviewed && <span className="ledger-badge reviewed">reviewed</span>} · {entryTitle(entry)}
-          </button>
-          {mode === 'panel' && scope !== 'worktree' && workspaceId && entry.origin.workspaceId === workspaceId && <span className="ledger-badge">Filed here</span>}
+          <Button type="button" variant="secondary" className="ledger-row-title" style={ledgerStyles.rowTitle} aria-label={`Show details: ${entry.id}`} onClick={() => { setActionMessage(''); void openDetail(entry) }}>
+            <code>{entry.id}</code> · <Badge>{TYPE_LABELS[entry.type]}</Badge> · <Badge>{entry.state}</Badge>{entry.reviewed && <Badge tone="working">reviewed</Badge>} · {entryTitle(entry)}
+          </Button>
+          {mode === 'panel' && scope !== 'worktree' && workspaceId && entry.origin.workspaceId === workspaceId && <Badge>Filed here</Badge>}
         </div>
-        <div className="ledger-row-actions">
-          <button type="button" aria-label={`Edit ${entry.id}`} onClick={() => setForm({ entry })}>Edit {entry.id}</button>
-          <button type="button" aria-label={`Review ${entry.id}`} disabled={entry.reviewed || actionBusy} onClick={() => void perRowReview(entry)}>Review {entry.id}</button>
-          <button type="button" aria-label={`Delete ${entry.id}`} onClick={() => beginDelete([entry])}>Delete {entry.id}</button>
+        <div className="ledger-row-actions" style={ledgerStyles.actions}>
+          <Button type="button" aria-label={`Edit ${entry.id}`} onClick={() => setForm({ entry })}>Edit {entry.id}</Button>
+          <Button type="button" aria-label={`Review ${entry.id}`} disabled={entry.reviewed || actionBusy} onClick={() => void perRowReview(entry)}>Review {entry.id}</Button>
+          <Button type="button" variant="destructive" aria-label={`Delete ${entry.id}`} onClick={() => beginDelete([entry])}>Delete {entry.id}</Button>
         </div>
       </li>
     )
   }
 
   const renderChooser = () => (
-    <section className="ledger-root ledger-chooser">
-      <style>{LEDGER_CSS}</style>
-      <header className="ledger-header">
-        <div><h1>Open ledger</h1><p className="ledger-summary">Attached and detached ledgers for this runtime</p></div>
-        <button type="button" aria-label="Refresh ledger catalog" disabled={catalogLoading} onClick={() => void loadCatalog()}>Refresh</button>
+    <section className="ledger-root ledger-chooser" style={ledgerStyles.page}>
+      <header className="ledger-header" style={ledgerStyles.header}>
+        <div><h1 style={ledgerStyles.title}>Open ledger</h1><p className="ledger-summary" style={ledgerStyles.meta}>Attached and detached ledgers for this runtime</p></div>
+        <Button type="button" aria-label="Refresh ledger catalog" disabled={catalogLoading} onClick={() => void loadCatalog()}>Refresh</Button>
       </header>
-      {runtimeText && <p className="ledger-muted" title={runtimeText}>Runtime identity: {response?.runtime.runtimeId ?? catalog?.runtime.runtimeId ?? 'loading'}</p>}
-      {catalogError && <div className="ledger-error" role="alert">Ledger catalog could not be loaded: {catalogError} <button type="button" onClick={() => void loadCatalog()}>Retry</button></div>}
-      {catalogLoading && <p className="ledger-state-message">Loading ledgers…</p>}
-      {!catalogLoading && !catalogError && (catalog?.ledgers?.length ?? 0) === 0 && <p className="ledger-empty">No attached or detached ledgers yet. File an entry to create one.</p>}
-      <ul className="ledger-chooser-list">
+      {runtimeText && <p className="ledger-muted" title={runtimeText} style={ledgerStyles.meta}>Runtime identity: {response?.runtime.runtimeId ?? catalog?.runtime.runtimeId ?? 'loading'}</p>}
+      {catalogError && <div className="ledger-error" role="alert" style={ledgerStyles.actions}><span style={ledgerStyles.error}>Ledger catalog could not be loaded: {catalogError}</span><Button type="button" onClick={() => void loadCatalog()}>Retry</Button></div>}
+      {catalogLoading && <p className="ledger-state-message" style={ledgerStyles.message}>Loading ledgers…</p>}
+      {!catalogLoading && !catalogError && (catalog?.ledgers?.length ?? 0) === 0 && <EmptyState message="No attached or detached ledgers yet. File an entry to create one." />}
+      <ul className="ledger-chooser-list" style={ledgerStyles.list}>
         {(catalog?.ledgers ?? []).map((summary) => {
           const isDetached = !summary.owner
           const rowLabel = isDetached
             ? `${summary.name}, Detached ${summary.tier} ledger · ${summary.entryCount} ${summary.entryCount === 1 ? 'entry' : 'entries'}`
             : `${summary.name}, ${summary.tier === 'project' ? 'Project' : 'Group'} · ${summary.entryCount} ${summary.entryCount === 1 ? 'entry' : 'entries'}`
-          return <li className="ledger-chooser-row" key={summary.ledgerId}>
-            <span>{rowLabel}</span>
-            <button type="button" aria-label={`Open ledger ${summary.name}`} onClick={() => {
-              setOwnerTarget(summary.owner ? { owner: summary.owner } : { ledgerId: summary.ledgerId })
-            }}>Open</button>
+          return <li className="ledger-chooser-row" key={summary.ledgerId} style={ledgerStyles.row}>
+            <ListRow
+              title={rowLabel}
+              trailing={<Button type="button" aria-label={`Open ledger ${summary.name}`} onClick={() => {
+                setOwnerTarget(summary.owner ? { owner: summary.owner } : { ledgerId: summary.ledgerId })
+              }}>Open</Button>}
+            />
           </li>
         })}
       </ul>
@@ -873,82 +906,90 @@ export function LedgerApp({
       && !directory.error
       && !error
     return (
-      <section className="ledger-root ledger-panel" aria-label="Ledger panel">
-        <style>{LEDGER_CSS}</style>
-        <header className="ledger-panel-header">
-          <h2>Ledger</h2>
-          <button type="button" aria-label="Refresh ledger" aria-busy={refreshSpinner} className={refreshSpinner ? 'ledger-refreshing' : ''} title={refreshSpinner ? 'Refreshing ledger…' : 'Refresh ledger'} onClick={refresh}>↻</button>
-          <button type="button" onClick={openTriage}>Triage</button>
-          <button type="button" onClick={beginNew}>New</button>
+      <section className="ledger-root ledger-panel" aria-label="Ledger panel" style={ledgerStyles.panel}>
+        <header className="ledger-panel-header" style={ledgerStyles.actions}>
+          <IconButton label="Refresh ledger" aria-busy={refreshSpinner} title={refreshSpinner ? 'Refreshing ledger…' : 'Refresh ledger'} onClick={refresh}>{refreshSpinner ? '…' : '↻'}</IconButton>
+          <Button type="button" onClick={openTriage}>Triage</Button>
+          <Button type="button" variant="primary" onClick={beginNew}>New</Button>
         </header>
-        <div className="ledger-scope-tabs" role="group" aria-label="Ledger scope">
-          <button type="button" aria-pressed={scope === 'worktree'} onClick={() => { setScope('worktree'); setPanelTargetOverride(null) }}>{workspaceFolder ? 'Folder' : 'Worktree'}</button>
-          {!workspaceFolder && <button type="button" aria-pressed={scope === 'project'} onClick={() => { setScope('project'); setPanelTargetOverride(null) }}>Project</button>}
-          {workspaceGroup && <button type="button" aria-pressed={scope === 'group'} onClick={() => { setScope('group'); setPanelTargetOverride(null) }}>Group</button>}
+        <div className="ledger-scope-tabs">
+          <Tabs
+            label="Ledger scope"
+            items={[
+              { id: 'worktree', label: workspaceFolder ? 'Folder' : 'Worktree' },
+              ...(!workspaceFolder ? [{ id: 'project', label: 'Project' }] : []),
+              ...(workspaceGroup ? [{ id: 'group', label: 'Group' }] : [])
+            ]}
+            value={scope}
+            onChange={(nextScope) => { setScope(nextScope as Scope); setPanelTargetOverride(null) }}
+          />
         </div>
-        <div className="ledger-row-meta">
+        <div className="ledger-row-meta" style={ledgerStyles.meta}>
           {currentSummary && currentSummary.owner === null ? 'Detached' : `${groupScope ? 'Group' : 'Project'} · ${groupScope ? workspaceGroup?.name ?? currentSummary?.ownerName ?? 'Unknown group' : currentSummary?.ownerName ?? repoName(workspaceRepo)}`}
           {scope === 'worktree' && workspace && <span> · Filed in {workspace.name ?? workspace.id}</span>}
         </div>
         {renderFilters()}
-        {directory.error && <p role="alert" className="ledger-error">Owner catalog could not be loaded: {directory.error} <button type="button" onClick={() => setDirectoryRetry((value) => value + 1)}>Retry</button></p>}
-        {directory.loading && <p className="ledger-state-message">Loading ledger…</p>}
-        {!directory.loading && noWorkspace && <p className="ledger-empty">Open a workspace to see its ledger.</p>}
-        {!directory.loading && missingGroup && <p className="ledger-error">This workspace has no group.</p>}
-        {error && <p role="alert" className="ledger-error">{error}<button type="button" onClick={refresh}>Retry</button></p>}
-        {!directory.loading && !noWorkspace && !missingGroup && loading && <p className="ledger-state-message">Loading ledger…</p>}
-        {!directory.loading && !noWorkspace && !missingGroup && !loading && !error && visibleRows.length === 0 && <div className="ledger-empty"><p>No entries match this view.</p><button type="button" onClick={beginNew}>New entry</button></div>}
-        {!directory.loading && !error && !missingGroup && <ul className="ledger-entry-list">{visibleRows.map(renderRow)}</ul>}
+        {directory.error && <div role="alert" className="ledger-error" style={ledgerStyles.actions}><span style={ledgerStyles.error}>Owner catalog could not be loaded: {directory.error}</span><Button type="button" onClick={() => setDirectoryRetry((value) => value + 1)}>Retry</Button></div>}
+        {directory.loading && <p className="ledger-state-message" style={ledgerStyles.message}>Loading ledger…</p>}
+        {!directory.loading && noWorkspace && <EmptyState message="Open a workspace to see its ledger." />}
+        {!directory.loading && missingGroup && <p className="ledger-error" style={ledgerStyles.error}>This workspace has no group.</p>}
+        {error && <div role="alert" className="ledger-error" style={ledgerStyles.actions}><span style={ledgerStyles.error}>{error}</span><Button type="button" onClick={refresh}>Retry</Button></div>}
+        {!directory.loading && !noWorkspace && !missingGroup && loading && <p className="ledger-state-message" style={ledgerStyles.message}>Loading ledger…</p>}
+        {!directory.loading && !noWorkspace && !missingGroup && !loading && !error && visibleRows.length === 0 && <EmptyState message="No entries match this view." action={{ label: 'New entry', onAction: beginNew }} />}
+        {!directory.loading && !error && !missingGroup && <ul className="ledger-entry-list" style={ledgerStyles.list}>{visibleRows.map(renderRow)}</ul>}
       </section>
     )
   }
 
   const renderPage = () => (
-    <section className="ledger-root ledger-page">
-      <style>{LEDGER_CSS}</style>
-      <header className="ledger-header">
-        <div><p className="ledger-muted"><button type="button" onClick={() => { returnToChooser(); void loadCatalog() }}>Open ledger</button></p><h1>{pageTitle}</h1>
-          <p className="ledger-summary" title={runtimeText}>{pageTier === 'project' ? 'Project' : 'Group'} · {currentSummary ? `${currentSummary.entryCount} entries · revision ${currentSummary.revision}` : 'No ledger yet'}{response?.runtime && <span> · runtime {response.runtime.runtimeId} · profile {response.runtime.profileId}</span>}</p>
+    <section className="ledger-root ledger-page" style={ledgerStyles.page}>
+      <header className="ledger-header" style={ledgerStyles.header}>
+        <div>
+          <p className="ledger-muted" style={ledgerStyles.muted}><Button type="button" onClick={() => { returnToChooser(); void loadCatalog() }}>Open ledger</Button></p>
+          <h1 style={ledgerStyles.title}>{pageTitle}</h1>
+          <p className="ledger-summary" title={runtimeText} style={ledgerStyles.meta}>{pageTier === 'project' ? 'Project' : 'Group'} · {currentSummary ? `${currentSummary.entryCount} entries · revision ${currentSummary.revision}` : 'No ledger yet'}{response?.runtime && <span> · runtime {response.runtime.runtimeId} · profile {response.runtime.profileId}</span>}</p>
         </div>
-        <div className="ledger-page-actions">
-          {(effectiveTarget?.owner?.tier === 'project' || currentSummary?.owner?.tier === 'project') && <button type="button" onClick={() => {
+        <div className="ledger-page-actions" style={ledgerStyles.actions}>
+          {(effectiveTarget?.owner?.tier === 'project' || currentSummary?.owner?.tier === 'project') && <Button type="button" onClick={() => {
             const repoId = currentSummary?.repoId ?? effectiveTarget?.owner?.id
             if (repoId) context.openView(LEDGER_SETTINGS_VIEW_ID, { repoId })
-          }}>Ledger settings</button>}
-          <button type="button" aria-label="Refresh ledger" aria-busy={refreshSpinner} className={refreshSpinner ? 'ledger-refreshing' : ''} title={refreshSpinner ? 'Refreshing ledger…' : 'Refresh ledger'} onClick={refresh}>Refresh</button>
-          <button type="button" onClick={openTriage}>Triage</button>
-          <button type="button" onClick={beginNew}>New entry</button>
-          {currentSummary && <button type="button" onClick={() => setConfirmation({ kind: 'delete-ledger', ledgerId: currentSummary.ledgerId, revision: currentSummary.revision, entryCount: currentSummary.entryCount })}>Delete ledger</button>}
+          }}>Ledger settings</Button>}
+          <Button type="button" aria-label="Refresh ledger" aria-busy={refreshSpinner} title={refreshSpinner ? 'Refreshing ledger…' : 'Refresh ledger'} onClick={refresh}>{refreshSpinner ? 'Refreshing…' : 'Refresh'}</Button>
+          <Button type="button" onClick={openTriage}>Triage</Button>
+          <Button type="button" variant="primary" onClick={beginNew}>New entry</Button>
+          {currentSummary && <Button type="button" variant="destructive" onClick={() => setConfirmation({ kind: 'delete-ledger', ledgerId: currentSummary.ledgerId, revision: currentSummary.revision, entryCount: currentSummary.entryCount })}>Delete ledger</Button>}
         </div>
       </header>
-      <div className="ledger-row-meta" title={runtimeText}>{currentSummary && currentSummary.owner === null ? `Detached ${currentSummary.tier} ledger · former owner ${currentSummary.formerOwner?.id ?? 'unknown'}` : ownerForPage ? `${ownerForPage.tier} · ${currentSummary?.ownerName ?? pageTitle}` : `${pageTier} · ${pageTitle}`}</div>
-      {detached && <section className="ledger-attach" aria-label="Attach detached ledger">
-        <label><span>Attach ledger to owner</span><select aria-label="Attach ledger to owner" value={attachChoice} onChange={(event) => setAttachChoice(event.target.value)}>
-          <option value="">Choose a live owner</option>{availableOwners.map((owner) => <option key={`${owner.tier}:${owner.id}`} value={`${owner.tier}:${owner.id}`}>{owner.tier} · {owner.name}</option>)}
-        </select></label>
-        <button type="button" disabled={!attachChoice} onClick={openAttachConfirmation}>Attach</button>
-        {availableOwners.length === 0 && <p className="ledger-muted">No unoccupied live owners are available.</p>}
+      <div className="ledger-row-meta" title={runtimeText} style={ledgerStyles.meta}>{currentSummary && currentSummary.owner === null ? `Detached ${currentSummary.tier} ledger · former owner ${currentSummary.formerOwner?.id ?? 'unknown'}` : ownerForPage ? `${ownerForPage.tier} · ${currentSummary?.ownerName ?? pageTitle}` : `${pageTier} · ${pageTitle}`}</div>
+      {detached && <section className="ledger-attach" aria-label="Attach detached ledger" style={ledgerStyles.section}>
+        <FormRow label="Attach ledger to owner" htmlFor={`${controlId}-attach-owner`}>
+          <select aria-label="Attach ledger to owner" className="ui-text-field__input" value={attachChoice} onChange={(event) => setAttachChoice(event.target.value)}>
+            <option value="">Choose a live owner</option>{availableOwners.map((owner) => <option key={`${owner.tier}:${owner.id}`} value={`${owner.tier}:${owner.id}`}>{owner.tier} · {owner.name}</option>)}
+          </select>
+        </FormRow>
+        <Button type="button" disabled={!attachChoice} onClick={openAttachConfirmation}>Attach</Button>
+        {availableOwners.length === 0 && <p className="ledger-muted" style={ledgerStyles.muted}>No unoccupied live owners are available.</p>}
       </section>}
-      {catalogError && <p role="alert" className="ledger-error">Owner catalog unavailable: {catalogError}</p>}
-      {directory.error && <p role="alert" className="ledger-error">Location bases could not be loaded: {directory.error} <button type="button" onClick={() => setDirectoryRetry((value) => value + 1)}>Retry</button></p>}
+      {catalogError && <p role="alert" className="ledger-error" style={ledgerStyles.error}>Owner catalog unavailable: {catalogError}</p>}
+      {directory.error && <div role="alert" className="ledger-error" style={ledgerStyles.actions}><span style={ledgerStyles.error}>Location bases could not be loaded: {directory.error}</span><Button type="button" onClick={() => setDirectoryRetry((value) => value + 1)}>Retry</Button></div>}
       {renderFilters()}
-      {error && <p role="alert" className="ledger-error">Ledger could not be loaded: {error} <button type="button" onClick={refresh}>Retry</button></p>}
-      {actionMessage && <p role="alert" className="ledger-error">{actionMessage}</p>}
-      {loading && <p className="ledger-state-message">Loading ledger…</p>}
-      {!loading && !error && visibleRows.length === 0 && <div className="ledger-empty"><p>No entries match this view.</p><button type="button" onClick={beginNew}>New entry</button></div>}
-      {!error && <ul className="ledger-entry-list">{visibleRows.map(renderRow)}</ul>}
-      {selected.length > 0 && <div className="ledger-bulk-actions" aria-label="Selected ledger actions">
+      {error && <div role="alert" className="ledger-error" style={ledgerStyles.actions}><span style={ledgerStyles.error}>Ledger could not be loaded: {error}</span><Button type="button" onClick={refresh}>Retry</Button></div>}
+      {actionMessage && <p role="alert" className="ledger-error" style={ledgerStyles.error}>{actionMessage}</p>}
+      {loading && <p className="ledger-state-message" style={ledgerStyles.message}>Loading ledger…</p>}
+      {!loading && !error && visibleRows.length === 0 && <EmptyState message="No entries match this view." action={{ label: 'New entry', onAction: beginNew }} />}
+      {!error && <ul className="ledger-entry-list" style={ledgerStyles.list}>{visibleRows.map(renderRow)}</ul>}
+      {selected.length > 0 && <div className="ledger-bulk-actions" aria-label="Selected ledger actions" style={ledgerStyles.actions}>
         <span>{selected.length} selected</span>
-        <button type="button" disabled={actionBusy} onClick={() => void approve(selected, setActionMessage)}>Review ({selected.length})</button>
-        <button type="button" onClick={() => requestBulkState('resolved', selected, selectionTitles, entries)}>Resolve selected</button>
-        <button type="button" onClick={() => requestBulkState('archived', selected, selectionTitles, entries)}>Archive selected</button>
-        <button type="button" onClick={() => beginDeleteSelections(selected, selectionTitles, entries)}>Delete selected</button>
+        <Button type="button" disabled={actionBusy} onClick={() => void approve(selected, setActionMessage)}>Review ({selected.length})</Button>
+        <Button type="button" onClick={() => requestBulkState('resolved', selected, selectionTitles, entries)}>Resolve selected</Button>
+        <Button type="button" onClick={() => requestBulkState('archived', selected, selectionTitles, entries)}>Archive selected</Button>
+        <Button type="button" variant="destructive" onClick={() => beginDeleteSelections(selected, selectionTitles, entries)}>Delete selected</Button>
       </div>}
     </section>
   )
 
   const visible = mode === 'panel' ? renderPanel() : effectiveTarget ? renderPage() : renderChooser()
-  return <div className="ledger-root" data-ledger-view={mode === 'panel' ? 'panel' : effectiveTarget ? 'page' : 'chooser'}>
+  return <div className="ledger-root" data-ledger-view={mode === 'panel' ? 'panel' : effectiveTarget ? 'page' : 'chooser'} style={ledgerStyles.root}>
     {visible}
     {form && <LedgerForm
       entry={form.entry}
@@ -957,10 +998,24 @@ export function LedgerApp({
       onCancel={() => setForm(null)}
       onSave={(type, content) => saveForm(type, content, form.entry)}
     />}
-    {detailId && !detail && <div className="ledger-modal-backdrop" role="presentation"><section className="ledger-dialog" role="dialog" aria-modal="true" aria-label={`Ledger entry ${detailId}`}><header className="ledger-dialog-header"><h2>{detailId}</h2></header><div className="ledger-dialog-body">{detailLoading ? <p>Loading entry…</p> : <p role="alert" className="ledger-error">{detailError} <button type="button" onClick={() => {
-      const entry = entries.find((item) => item.id === detailId)
-      if (entry) void openDetail(entry)
-    }}>Retry</button></p>}</div><footer className="ledger-dialog-actions"><button type="button" onClick={closeDetail}>Close</button></footer></section></div>}
+    {detailId && !detail && createPortal(
+      <Dialog
+        open
+        title={`Ledger entry ${detailId}`}
+        closeOnBackdrop={false}
+        scrollBody
+        onClose={closeDetail}
+        actions={<div className="ledger-dialog-actions" style={ledgerStyles.actions}><Button type="button" onClick={closeDetail}>Close</Button></div>}
+      >
+        <div className="ledger-dialog-body">
+          {detailLoading ? <p style={ledgerStyles.message}>Loading entry…</p> : <p role="alert" className="ledger-error" style={ledgerStyles.error}>{detailError} <Button type="button" onClick={() => {
+            const entry = entries.find((item) => item.id === detailId)
+            if (entry) void openDetail(entry)
+          }}>Retry</Button></p>}
+        </div>
+      </Dialog>,
+      document.body
+    )}
     {detail && <LedgerDetail
       entry={detail}
       busy={actionBusy}
@@ -971,7 +1026,7 @@ export function LedgerApp({
       onRevert={(revision) => void revertDetail(detail, revision)}
       onClose={closeDetail}
     />}
-    {triageOpen && <LedgerTriage
+    {triageOpen && !confirmation && <LedgerTriage
       candidates={visibleCandidates}
       selections={triageSelected}
       conflict={triageConflict}
@@ -983,15 +1038,24 @@ export function LedgerApp({
       onRetry={() => void loadCandidates()}
       onClose={() => { setTriageOpen(false); setTriageConflict(''); setTriageSelected([]); setTriageTitles(new Map()) }}
     />}
-    {confirmation && <div className="ledger-modal-backdrop" role="presentation">
-      <section className="ledger-dialog" role="dialog" aria-modal="true" aria-label={confirmation.kind === 'delete-ledger' ? 'Confirm ledger deletion' : confirmation.kind === 'attach' ? 'Confirm ledger attachment' : 'Confirm ledger action'}>
-        <header className="ledger-dialog-header"><h2>{confirmation.kind === 'delete-ledger' ? 'Delete ledger?' : confirmation.kind === 'attach' ? 'Attach ledger?' : 'Confirm ledger action'}</h2></header>
+    {confirmation && createPortal(
+      <Dialog
+        open
+        title={confirmation.kind === 'delete-ledger' ? 'Confirm ledger deletion' : confirmation.kind === 'attach' ? 'Confirm ledger attachment' : 'Confirm ledger action'}
+        closeOnBackdrop={false}
+        scrollBody
+        onClose={() => { if (!confirmBusy) setConfirmation(null) }}
+        actions={<div className="ledger-dialog-actions" style={ledgerStyles.actions}>
+          <Button type="button" disabled={confirmBusy} onClick={() => setConfirmation(null)}>Cancel</Button>
+          <Button type="button" variant="primary" disabled={confirmBusy} onClick={() => void confirmAction()}>Confirm</Button>
+        </div>}
+      >
         <div className="ledger-dialog-body">
           <p>{confirmation.kind === 'bulk-state' ? `Set ${confirmation.selections.length} displayed entries to ${confirmation.state}? This bulk action requires confirmation and will use the listed immutable id/revision snapshots.`
             : confirmation.kind === 'delete-entries' ? `Permanently delete ${confirmation.selections.length} selected entries and their history? This action uses the listed immutable id/revision snapshots.`
               : confirmation.kind === 'delete-ledger' ? 'Permanently delete this ledger, every entry body, and all history?'
                 : `Attach this detached ledger to ${confirmation.ownerName}? The displayed ledger revision must still match.`}</p>
-          <ul className="ledger-confirm-snapshots">
+          <ul className="ledger-confirm-snapshots" style={ledgerStyles.snapshotList}>
             {confirmation.kind === 'bulk-state' || confirmation.kind === 'delete-entries'
               ? confirmation.snapshots.map((snapshot) => <li key={`${snapshot.id}@${snapshot.revision}`}><code>{snapshot.id}</code> · revision {snapshot.revision} · {snapshot.title}</li>)
               : confirmation.kind === 'delete-ledger'
@@ -999,16 +1063,13 @@ export function LedgerApp({
                 : <li><code>{confirmation.ledgerId}</code> · ledger revision {confirmation.revision} · attach to {confirmation.attachTo.tier} {confirmation.attachTo.id}</li>}
           </ul>
         </div>
-        <footer className="ledger-dialog-actions">
-          <button type="button" disabled={confirmBusy} onClick={() => setConfirmation(null)}>Cancel</button>
-          <button type="button" className="primary" disabled={confirmBusy} onClick={() => void confirmAction()}>Confirm</button>
-        </footer>
-      </section>
-    </div>}
+      </Dialog>,
+      document.body
+    )}
   </div>
 }
 
 export function LedgerSidebarSection({ context, report }: { context: UiPluginContext; report?(state: unknown): void }) {
   useEffect(() => report?.({ view: 'navigation', target: undefined, scope: null, filters: {}, sort: 'activity', selection: [], dialog: 'none' }), [report])
-  return <div className="ledger-root"><style>{LEDGER_CSS}</style><button type="button" className="ledger-nav-item" onClick={() => context.openView(LEDGER_VIEW_ID)}>Ledger</button></div>
+  return <div className="ledger-root" style={ledgerStyles.root}><Button type="button" className="ledger-nav-item" onClick={() => context.openView(LEDGER_VIEW_ID)}>Ledger</Button></div>
 }

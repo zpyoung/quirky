@@ -1,28 +1,28 @@
-import { useRef, type KeyboardEvent } from 'react'
-import { s } from './styles'
+import { useId, type KeyboardEvent } from 'react'
+import { Button, FormRow } from '@quirky/ui'
 
-/** A two-state control that reads as a switch to assistive technology. */
+/** Native switch semantics inside the shared form hierarchy; the browser draws the checkbox. */
 export function Switch({ checked, label, onChange }: { checked: boolean; label: string; onChange: (checked: boolean) => void }) {
+  const id = useId()
   return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={checked}
-      aria-label={label}
-      style={{ ...s.switchTrack, background: checked ? 'var(--accent)' : 'var(--bg-active)' }}
-      onClick={() => onChange(!checked)}
-    >
-      <span aria-hidden="true" style={{ ...s.switchThumb, left: checked ? 15 : 1 }} />
-    </button>
+    <FormRow label={label} htmlFor={id}>
+      <input
+        id={id}
+        type="checkbox"
+        role="switch"
+        aria-label={label}
+        aria-checked={checked}
+        checked={checked}
+        onChange={(event) => onChange(event.currentTarget.checked)}
+        style={{ accentColor: 'var(--ui-accent)' }}
+      />
+    </FormRow>
   )
 }
 
 export type Segment<T extends string> = { value: T; label: string }
 
-/**
- * Mutually exclusive choices as a radio group. A `value` of null selects none, and arrow keys
- * move the choice as they do for native radios.
- */
+/** Radio semantics and arrow-key behavior composed from the shared button primitive. */
 export function Segmented<T extends string>({
   value,
   options,
@@ -34,37 +34,31 @@ export function Segmented<T extends string>({
   label: string
   onChange: (value: T) => void
 }) {
-  const refs = useRef<(HTMLButtonElement | null)[]>([])
   const selected = options.findIndex((option) => option.value === value)
 
-  const onKeyDown = (event: KeyboardEvent, index: number) => {
+  const onKeyDown = (event: KeyboardEvent<HTMLButtonElement>, index: number) => {
     const step = event.key === 'ArrowRight' || event.key === 'ArrowDown' ? 1 : event.key === 'ArrowLeft' || event.key === 'ArrowUp' ? -1 : 0
     if (step === 0) return
     event.preventDefault()
     const next = (index + step + options.length) % options.length
-    refs.current[next]?.focus()
+    event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>('[role="radio"]')[next]?.focus()
     onChange(options[next]!.value)
   }
 
   return (
-    <div role="radiogroup" aria-label={label} style={s.segments}>
+    <div role="radiogroup" aria-label={label} style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--ui-space-6)' }}>
       {options.map((option, index) => (
-        <button
+        <Button
           key={option.value}
-          ref={(node) => {
-            refs.current[index] = node
-          }}
-          type="button"
+          variant={option.value === value ? 'primary' : 'secondary'}
           role="radio"
           aria-checked={option.value === value}
           tabIndex={index === (selected === -1 ? 0 : selected) ? 0 : -1}
-          className={option.value === value ? 'active' : undefined}
-          style={option.value === value ? s.segmentSelected : s.segment}
           onClick={() => onChange(option.value)}
           onKeyDown={(event) => onKeyDown(event, index)}
         >
           {option.label}
-        </button>
+        </Button>
       ))}
     </div>
   )

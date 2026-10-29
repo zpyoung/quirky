@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef } from 'react'
 import { createRoot } from 'react-dom/client'
+import { EmptyState } from '@quirky/ui'
 import type { MountFunction, UiPluginContext } from '@quirky/protocol'
+
 import { DIFF_VIEW_ID, SESSIONS_VIEW_ID, type DiffViewInput, type ReviewSnapshot } from '../shared/view-input'
 import { CombinedDiff } from './CombinedDiff'
 import { ConflictFile } from './ConflictFile'
@@ -113,11 +115,11 @@ export function mountDiffView(context: UiPluginContext): MountFunction {
     const parsed = parseInput(input)
     const send = (state: ViewReport) => report?.(state)
     if (parsed === null) {
-      root.render(<p className="muted pad">Open a worktree first.</p>)
+      root.render(<EmptyState message="Open a worktree first." />)
       return () => root.unmount()
     }
     root.render(
-      <div className="qgv-root">
+      <div data-git-view-root className="ui-stack" style={{ flex: 1, minHeight: 0, minWidth: 0, overflow: 'hidden' }}>
         <DiffWindow context={context} input={parsed} report={send} />
       </div>
     )
