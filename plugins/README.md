@@ -315,7 +315,7 @@ toward active time without double-counting overlaps. Background workers require 
 identity and an active assignment to count. Missing contact, an idle prompt or a lost reply does
 not prove completion. Unknown effects retain their durable request identity.
 
-Headless plugins use the eight `quirky.orchestration` service methods through `PluginContext.call`:
+Headless plugins use the `quirky.orchestration` service methods through `PluginContext.call`:
 
 - `serviceRunCreate` creates a stable Run for the authenticated plugin and its key. It does not
   invent a coordinator session.
@@ -325,6 +325,9 @@ Headless plugins use the eight `quirky.orchestration` service methods through `P
   guidance with the Run as sender; `serviceCheck` consumes and acknowledges owned Run deliveries.
 - `serviceReply` answers a pending blocking Ask. `serviceWorkerStop` requires the exact session
   and process incarnation; `serviceWorkerRelease` uses settled-outcome, archive and custody guards.
+- `serviceRegisterSubmissionPreflight` binds the owner's callback before worker dispatch.
+  Registration is a mutation: send `contractVersion` and a stable `requestId`, and require the
+  matching receipt before proceeding. A lost reply reuses that identity, including after restart.
 
 Another plugin cannot read or control that service-owned Run. Ordinary worker CLI commands keep
 their native launch authority; they do not receive the service principal. See
@@ -852,6 +855,8 @@ cooldown policy. Disabling that plugin silences delivery.
 The workspace host grants one current epoch lease before Heimdall executes effects.
 Git workspaces keep it under `<gitdir>/orca-heimdall/lease/epoch-N/holder.json`;
 folder workspaces use `<workspace>/.orca/heimdall/lease/epoch-N/holder.json`.
+Registered worktrees derive their kind from a successful repository-scoped inventory. The enrolled
+path must be that exact workspace: a Git worktree ID cannot authorize a different plain folder.
 Renewal, assertions and release require the exact current holder and epoch.
 Expired or superseded holders cannot regain authority by renewing an old epoch.
 

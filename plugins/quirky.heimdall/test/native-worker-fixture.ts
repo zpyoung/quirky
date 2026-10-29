@@ -499,8 +499,12 @@ export async function startNativeControlFixture(): Promise<NativeControlFixture>
           }
           return { ready: false, observed: JSON.stringify({ status: detail.status, enrollment: detail.enrollment, workers: detail.workers }) }
         })
-        if (attached.detail.enrollment.worktreeId !== mainwt.id || attached.detail.enrollment.repoId !== repo.id) {
-          throw new Error(`Heimdall detail does not identify the actual private repo/worktree: ${JSON.stringify(attached.detail.enrollment)}`)
+        if (
+          attached.detail.enrollment.worktreeId !== mainwt.id ||
+          attached.detail.enrollment.repoId !== repo.id ||
+          attached.detail.enrollment.workspacePath !== mainwt.path
+        ) {
+          throw new Error(`Heimdall detail does not bind the actual private repo/worktree path: ${JSON.stringify(attached.detail.enrollment)}`)
         }
         await waitForReady<number>(`attached provider process for ${attached.dispatchId}`, PROVIDER_READY_TIMEOUT_MS, async (): Promise<ReadyObservation<number>> => {
           const detail = await client!.callAny('quirky.heimdall/detail', { target: { watcherId } }) as WatcherDetail | null
