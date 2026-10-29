@@ -66,5 +66,27 @@
 - **Revisit if:** The corrected controls do not reach the intended actual state.
 - **Source:** assumed — autonomous
 
+## D7: All search must not depend on workspace resolution, and indexing must not rediscover every source per file
+- **Question:** What explains the remaining reached search failures after valid selectors and queries?
+- **Options:** Increase test or freshness deadlines; alter candidate limits; repair actual scope independence and repeated discovery.
+- **Chose:** All scope bypasses workspace/project readiness checks. Streaming parse reuses scanner-owned discovery authority with existing per-file validation, leaving opaque-ID reads to rediscover paths. The candidate fixture separately waits for the real indexed-source count/no-due-work before asserting retrieval truncation. Do not change production limits or deadlines.
+- **Why:** Configured retry captured All search failing with 'Resolving the current workspace and project' during stale-page replacement. The real private 601-source diagnostic showed candidate=false/freshness=true initially and only 81 indexed/545 due after repeated fresh requests for 30 seconds. Scanner.parse was performing complete root discovery for every candidate already returned by the index pass's discovery, an avoidable quadratic path. D6's preliminary sort explanation was insufficient: both orders use the candidate bound, and incomplete indexing was the actual prerequisite.
+- **Evidence:** Second package gate: 22/24 remote files initially passed; scope.test.ts passed isolated retry; window-parity retained label and search failures. Native diagnostic artifact26 and cleanup marker; scanner/index.ts currentCandidateById/parse; search/index.ts runPass; search/engine.ts:474-476.
+- **Reversibility:** medium
+- **Confidence:** high for observed causes; final repaired-source verification follows
+- **Revisit if:** source revalidation or invalidation no longer fences a changed/outside file.
+- **Source:** supersedes fix-test-vault-1028 D6 candidate-limit diagnosis only
+
+## D8: Consume the older broad consumer inventory without duplicate ownership
+- **Question:** Does Lane 8's older 15-file Vault failure snapshot require new repair items or reverting current fixes?
+- **Options:** Duplicate every old failure; use current owned package verification and preserve snapshot chronology.
+- **Chose:** Keep this item's ownership and current repairs. Read all 15 Vault records in Lane 8's full-consumer-failures.json. Most are missing-method failures covered by the curated dependency correction; current full-package gates already reach those files successfully. No duplicate queue item or method alias.
+- **Why:** The operator explicitly states that snapshot precedes later lands and is a heads-up, not scope reassignment. Current package evidence is newer; the only remaining reached failures are this item's window/search seams.
+- **Evidence:** /Users/zpyoung/orca/workspaces/quirky/build-lane-8/.quirk/build-loop/fix-test-orchestration-1028/full-consumer-failures.json, selected plugins/quirky.vault records; second local-owned canonical package gate.
+- **Reversibility:** easy
+- **Confidence:** high for chronology and ownership
+- **Revisit if:** a fresh consumer run identifies a failure absent from this item's final package evidence.
+- **Source:** assumed — autonomous
+
 ## Progress
-All implementers returned and components removed after scope audit. First package gate identified additional fixture assumptions under D6; corrected full vault gate running. Actual paired-daemon smoke passes with private homes removed. Scripts 12/12 remote files pass without retries (47.22s); caught-up root/UI-lint/mobile/desktop typecheck passes (41.83s). Single roadmap catch-up consumed. Final package result, bounded review and landing pending. Owned scratch: /tmp/quirky-vault-repair-lane5-RDQalGGE.
+Original components returned/audited/removed. Additional ScannerIndexing component at 06d5d3a2 is repairing the reached quadratic path, scoped to scanner/index.ts and scanner.test.ts; parent owns the All guard and final selector/index-readiness barriers. All prior gates are historical, not final-source green. Paired-daemon smoke passes and cleans homes. Scripts 12/12 remote files pass without retries; last root/UI-lint/mobile/desktop typecheck passed in 55.66s before the latest source fix. Single roadmap catch-up consumed. Next: scanner barrier/audit/integration, real candidate diagnostic and full package/scripts/typecheck, bounded review, land. Scratch: /tmp/quirky-vault-repair-lane5-RDQalGGE.

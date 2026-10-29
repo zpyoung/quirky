@@ -323,20 +323,17 @@ test(
       document.querySelector<HTMLButtonElement>('[aria-label="View options"]')!.click()
       const resetDialog = await until(features, () => document.querySelector<HTMLElement>('[data-vault-view-options]'))
       buttonNamed(resetDialog, 'Reset view').click()
-      const reset = await reportOf<HistoryReport>(features, HISTORY_PANEL, 'default view choices', (state) => state.group === 'project' && state.disabledAgents.length === 0 && !state.hideEmptySessions && state.sessionLimit === 250 && state.browseSort === 'updated' && state.searchSort === 'relevance')
+      const reset = await reportOf<HistoryReport>(features, HISTORY_PANEL, 'view adjustments reset', (state) => state.adjustmentCount === 0 && !state.loading)
       expect(reset.adjustmentCount).toBe(0)
 
       const persistDialog = resetDialog
-      const agentGroup = [...persistDialog.querySelectorAll<HTMLInputElement>('input[type=\"radio\"]')].find((input) => input.closest('label')?.textContent?.trim() === 'Agent')
-      if (!agentGroup) throw new Error('The Agent group control is missing after reset.')
+      const agentGroup = inputByLabel(persistDialog, 'Agent')
       agentGroup.click()
-      const hideEmptyForPersistence = [...persistDialog.querySelectorAll<HTMLInputElement>('input[type=\"checkbox\"]')].find((input) => input.closest('label')?.textContent?.includes('Hide empty sessions'))
-      if (!hideEmptyForPersistence) throw new Error('Hide empty sessions control is missing after reset.')
+      const hideEmptyForPersistence = inputByLabel(persistDialog, 'Hide empty sessions')
       hideEmptyForPersistence.click()
       setSelect(selectByLabel(persistDialog, 'History depth'), '500')
       setSelect(selectByLabel(document, 'Sort'), 'created')
-      const geminiForPersistence = [...persistDialog.querySelectorAll<HTMLInputElement>('input[type=\"checkbox\"]')].find((input) => input.closest('label')?.textContent?.includes('Gemini'))
-      if (!geminiForPersistence) throw new Error('The Gemini history filter is missing after reset.')
+      const geminiForPersistence = inputByLabel(persistDialog, 'Gemini')
       geminiForPersistence.click()
       await reportOf<HistoryReport>(features, HISTORY_PANEL, 'stable browse choices before restart', (state) => state.group === 'agent' && state.disabledAgents.includes('gemini') && state.hideEmptySessions && state.sessionLimit === 500 && state.browseSort === 'created')
       buttonNamed(persistDialog, 'Close').click()
@@ -678,9 +675,18 @@ test(
       expect(features.win.document.querySelector(`[data-vault-session-row="${snippetHit.id}"] [data-vault-evidence]`)).not.toBeNull()
 
       await features.h.call('quirky.vault/setView', { searchSort: 'relevance' })
+      const beforeCandidates = await features.h.call<{ status: SearchStatus }>('quirky.vault/searchStatus', { host: 'local' })
+      const expectedClaudeSessions = (beforeCandidates.status.sessionsByAgent.claude ?? 0) + 601
       for (let index = 0; index < 601; index++) {
         writeClaudeSession(source, `candidate-cap-${index}`, { response: `candidatecapneedle distinct source ${index}` })
       }
+      await waitFor('all candidate-cap sources are indexed independently of retrieval truncation', async () => {
+        await features!.h.call<SearchResponse>('quirky.vault/search', {
+          host: 'local', query: 'candidatecapneedle', freshness: 'wait-until-current', filters: { agents: ['claude'], sort: 'relevance' }
+        })
+        const { status } = await features!.h.call<{ status: SearchStatus }>('quirky.vault/searchStatus', { host: 'local' })
+        return status.filesDue === 0 && (status.sessionsByAgent.claude ?? 0) >= expectedClaudeSessions ? true : undefined
+      }, 30_000)
       const candidateResponse = await features.h.call<SearchResponse>('quirky.vault/search', {
         host: 'local', query: 'candidatecapneedle', freshness: 'wait-until-current', filters: { agents: ['claude'] }
       })
