@@ -1,4 +1,5 @@
-import type { PluginStore } from '@quirky/protocol'
+import type { OwnerHostIdentity, PluginStore } from '@quirky/protocol'
+import { hasExactKeys, isRecord, nonEmptyString } from './guards'
 import type { LineageEnd, LineageRecord, Relationship } from './types'
 
 /** The most records kept; older ones are dropped after each insert. */
@@ -7,22 +8,29 @@ export const MAX_LINEAGE = 500
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const RELATIONSHIPS: readonly string[] = ['continues', 'reviews', 'branches-from']
 
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === 'object' && value !== null && !Array.isArray(value)
-
 const textOrNull = (value: unknown): string | null => (typeof value === 'string' ? value : null)
 
 function endOf(value: unknown): LineageEnd | null {
   if (!isRecord(value)) return null
   const { agent } = value
   if (agent !== null && typeof agent !== 'string') return null
+  let executionHost: OwnerHostIdentity | undefined
+  if (value.executionHost !== undefined && value.executionHost !== null) {
+    const host = value.executionHost
+    if (!isRecord(host) || !hasExactKeys(host, ['hostId', 'generation']) ||
+      !nonEmptyString(host.hostId, 256) || !nonEmptyString(host.generation, 256)) return null
+    executionHost = { hostId: host.hostId, generation: host.generation }
+  }
+  if (value.instanceId !== undefined && value.instanceId !== null && typeof value.instanceId !== 'string') return null
   return {
     session: textOrNull(value.session),
     agent: agent ?? null,
     providerSessionId: textOrNull(value.providerSessionId),
     transcriptPath: textOrNull(value.transcriptPath),
     worktreeId: textOrNull(value.worktreeId),
-    title: textOrNull(value.title)
+    title: textOrNull(value.title),
+    ...(executionHost === undefined ? {} : { executionHost }),
+    ...(value.instanceId === undefined ? {} : { instanceId: value.instanceId as string | null })
   }
 }
 

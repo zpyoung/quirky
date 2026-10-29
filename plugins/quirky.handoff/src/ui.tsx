@@ -86,6 +86,11 @@ export function activate(context: UiPluginContext): void {
     const cwd = text(archived.cwd)
     const prompt = text(archived.prompt)
     const lastMessage = text(archived.lastMessage)
+    const owner = archived.owner
+    const vaultId = text(archived.vaultId)
+    if ((owner === undefined) !== (vaultId === undefined) || (owner !== undefined && !isRecord(owner))) {
+      return refused('archived-owner-required')
+    }
     const openSource: ArchivedSource = {
       agent: archived.agent,
       ...(providerSessionId === undefined ? {} : { providerSessionId }),
@@ -94,7 +99,8 @@ export function activate(context: UiPluginContext): void {
       ...(worktree === undefined ? {} : { worktree }),
       ...(cwd === undefined ? {} : { cwd }),
       ...(prompt === undefined ? {} : { prompt }),
-      ...(lastMessage === undefined ? {} : { lastMessage })
+      ...(lastMessage === undefined ? {} : { lastMessage }),
+      ...(owner === undefined ? {} : { owner: owner as NonNullable<ArchivedSource['owner']>, vaultId })
     }
     return dialog.openArchived(openSource)
   })
@@ -114,9 +120,10 @@ export function activate(context: UiPluginContext): void {
   provide('resend-confirm', async (args) => {
     const session = text(args.session)
     if (!session) return refused('session-required')
+    const lineage = text(args.lineage)
     if (!(await context.confirm({ title: RESEND_CONFIRM_TITLE, confirmLabel: 'Send again' }))) return refused('cancelled')
     try {
-      await context.call(METHOD('resend'), { session })
+      await context.call(METHOD('resend'), { session, ...(lineage === undefined ? {} : { lineage }) })
       return ok()
     } catch (error) {
       context.toast('Could not resend the brief', messageOf(error))
@@ -127,8 +134,9 @@ export function activate(context: UiPluginContext): void {
   provide('discard', async (args) => {
     const session = text(args.session)
     if (!session) return refused('session-required')
+    const lineage = text(args.lineage)
     try {
-      await context.call(METHOD('discard'), { session })
+      await context.call(METHOD('discard'), { session, ...(lineage === undefined ? {} : { lineage }) })
     } catch (error) {
       context.log(`could not discard the handoff brief: ${messageOf(error)}`)
     }

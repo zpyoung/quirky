@@ -111,6 +111,11 @@ export function daemon(world: World, overrides: Record<string, Handler> = {}): R
         templates: world.templates
       }
     },
+    'quirky.handoff/targetAgents': () => ({
+      state: world.agents.state as 'ready' | 'failed',
+      list: world.agents.list,
+      defaultAgent: typeof world.controls.agent === 'string' ? world.controls.agent : world.agents.list[0]?.id ?? null
+    }),
     'quirky.handoff/preview': async (params) => {
       if (world.previewGate) await world.previewGate
       if (world.previewError) throw world.previewError
