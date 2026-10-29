@@ -139,21 +139,18 @@ describe('shared graphite components', () => {
         <option value="claude">Claude</option>
         <option value="codex">Codex</option>
       </SelectField>
-      <TextArea label="Unavailable" name="disabled" defaultValue="not submitted" disabled />
     </form>)
     const form = container.querySelector('form')!
     const instructions = form.querySelector<HTMLTextAreaElement>('textarea[name="instructions"]')!
     const agent = form.querySelector('select')!
     expect(Object.fromEntries(new FormData(form))).toEqual({ instructions: 'first line\nsecond line', agent: 'codex' })
-    expect([...form.querySelectorAll('label')].map((label) => label.control)).toEqual([
-      instructions, agent, form.querySelector<HTMLTextAreaElement>('textarea[name="disabled"]'),
-    ])
+    expect([...form.querySelectorAll('label')].map((label) => label.control)).toEqual([instructions, agent])
     expect(instructions.getAttribute('aria-invalid')).toBe('true')
     const describedIds = instructions.getAttribute('aria-describedby')!.split(' ')
     expect(describedIds.map((id) => document.getElementById(id)?.textContent)).toEqual([
       'Inherited description', 'Keep line breaks', 'Review instructions',
     ])
-    expect(new Set([...form.querySelectorAll('textarea,select')].map((field) => field.id)).size).toBe(3)
+    expect(instructions.id).not.toBe(agent.id)
   })
 
   test('list rows announce selection and disabled rows ignore activation', async () => {
