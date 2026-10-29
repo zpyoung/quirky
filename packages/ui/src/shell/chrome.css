@@ -61,9 +61,21 @@
   gap: var(--ui-space-6);
 }
 
+.shell-statusbar__summary {
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.shell-statusbar__metric {
+  flex-shrink: 0;
+}
+
 .shell-statusbar__branch {
   color: var(--ui-text);
   font-family: var(--ui-font-mono);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .shell-statusbar__unknown {
