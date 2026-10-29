@@ -1,5 +1,6 @@
 {
   "id": "quirky.ask",
+  "apiVersion": "1.0.0",
   "name": "Questions",
   "version": "0.1.0",
   "description": "Questions an agent or the kernel puts to the person at the window, with answers returned to whoever is waiting.",

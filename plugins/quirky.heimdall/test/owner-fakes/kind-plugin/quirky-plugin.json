@@ -1,5 +1,6 @@
 {
   "id": "acme.owner-fixture",
+  "apiVersion": "1.0.0",
   "name": "Heimdall owner acceptance kind",
   "version": "1.0.0",
   "main": "main.ts",

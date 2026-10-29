@@ -1,5 +1,6 @@
 {
   "id": "acme.launch-override",
+  "apiVersion": "1.0.0",
   "name": "Acme launch override",
   "version": "1.0.0",
   "description": "Replaces the built-in claude entry with a one-model launch catalog for e2e tests.",

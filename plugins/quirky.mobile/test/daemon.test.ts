@@ -256,7 +256,7 @@ describe('mobile daemon integration', () => {
     const producer = join(home, 'plugins', 'acme.large-reply')
     mkdirSync(producer, { recursive: true })
     writeFileSync(join(producer, 'quirky-plugin.json'), JSON.stringify({
-      id: 'acme.large-reply', name: 'Large reply producer', version: '0.1.0', main: 'main.ts',
+      id: 'acme.large-reply', name: 'Large reply producer', apiVersion: '1.0.0', version: '0.1.0', main: 'main.ts',
       overrides: [{
         id: 'method:quirky.terminal/history', readOnly: true,
         params: { type: 'object', properties: { session: { type: 'string' }, lines: { type: 'integer' } }, required: ['session'], additionalProperties: false }

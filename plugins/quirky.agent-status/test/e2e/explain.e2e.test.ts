@@ -495,6 +495,7 @@ describe('SC-11 and SC-12: plugin rules, rules list and rules show', () => {
         join(dir, 'quirky-plugin.json'),
         JSON.stringify({
           id: 'acme-rules',
+          apiVersion: '1.0.0',
           name: 'Acme rules',
           version: '1.0.0',
           contributes: {

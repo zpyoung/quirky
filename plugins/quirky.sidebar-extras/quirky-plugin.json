@@ -1,5 +1,6 @@
 {
   "id": "quirky.sidebar-extras",
+  "apiVersion": "1.0.0",
   "name": "Sidebar extras",
   "version": "0.1.0",
   "description": "Client-local workspace activity filters and the Source Control activity item.",

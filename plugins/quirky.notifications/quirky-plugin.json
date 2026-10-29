@@ -1,5 +1,6 @@
 {
   "id": "quirky.notifications",
+  "apiVersion": "1.0.0",
   "name": "Notifications",
   "version": "0.1.0",
   "description": "Decides when an agent, a bell, a terminal program or an ask deserves attention: unread markers, banners, sounds and the badge count.",

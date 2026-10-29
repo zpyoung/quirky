@@ -1,5 +1,6 @@
 {
   "id": "quirky.cli",
+  "apiVersion": "1.0.0",
   "name": "CLI and Runtime Profiles",
   "version": "0.1.0",
   "description": "Owns external command launchers, profile-pinned commands, saved paired runtime metadata, and authenticated owner-host identity.",

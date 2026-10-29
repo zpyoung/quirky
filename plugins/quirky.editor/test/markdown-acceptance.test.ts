@@ -39,6 +39,7 @@ beforeEach(async () => {
       join(agentSource, 'quirky-plugin.json'),
       JSON.stringify({
         id: 'acme.transport-test',
+        apiVersion: '1.0.0',
         name: 'Transport test agent',
         version: '1.0.0',
         description: 'Temporary fake-PTY transport recipient',

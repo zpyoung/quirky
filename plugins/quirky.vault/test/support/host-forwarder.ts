@@ -16,6 +16,7 @@ export function createVaultHostForwarder(remoteUrl: string): { root: string; dir
 
   writeFileSync(join(directory, 'quirky-plugin.json'), JSON.stringify({
     id: PLUGIN_ID,
+    apiVersion: '1.0.0',
     name: 'Vault Host Forwarder Test Plugin',
     version: '1.0.0',
     main: 'main.ts',

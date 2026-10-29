@@ -1,5 +1,6 @@
 {
   "id": "acme.trim",
+  "apiVersion": "1.0.0",
   "name": "Acme trim",
   "version": "1.0.0",
   "description": "Removes the built-in aider agent for e2e tests.",

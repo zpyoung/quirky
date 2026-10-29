@@ -1,5 +1,6 @@
 {
   "id": "quirky.agent-status",
+  "apiVersion": "1.0.0",
   "name": "Agent status",
   "version": "0.1.0",
   "description": "Turns agent hooks into live status rows and durable per-session Activity threads.",

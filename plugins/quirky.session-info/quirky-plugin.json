@@ -1,5 +1,6 @@
 {
   "id": "quirky.session-info",
+  "apiVersion": "1.0.0",
   "name": "Session Info",
   "version": "0.1.0",
   "description": "A provider-neutral projection of the focused terminal agent, with guarded Claude session telemetry.",

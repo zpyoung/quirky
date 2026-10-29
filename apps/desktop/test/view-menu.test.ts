@@ -11,7 +11,7 @@ test('a plugin-declared View menu switch remains scriptable and disappears when 
   const home = makeTempHome('qmenu-')
   const pluginDir = join(home, 'plugins', 'acme.menu')
   mkdirSync(pluginDir, { recursive: true })
-  writeFileSync(join(pluginDir, 'quirky-plugin.json'), JSON.stringify({ id: 'acme.menu', name: 'Menu fixture', version: '1.0.0', contributes: { setting: [{ id: 'visible', type: 'boolean', default: true, title: 'Show fixture', menu: 'view' }] } }))
+  writeFileSync(join(pluginDir, 'quirky-plugin.json'), JSON.stringify({ id: 'acme.menu', apiVersion: '1.0.0', name: 'Menu fixture', version: '1.0.0', contributes: { setting: [{ id: 'visible', type: 'boolean', default: true, title: 'Show fixture', menu: 'view' }] } }))
   harness = await startHarness({ home })
   const client = await harness.connect('cli')
   const call = (method: string, params: Record<string, unknown>) => client.callAny(method, params)

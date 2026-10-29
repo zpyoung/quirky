@@ -1,5 +1,6 @@
 {
   "id": "quirky.structured",
+  "apiVersion": "1.0.0",
   "name": "Structured (test fake)",
   "version": "0.0.0",
   "main": "main.ts",
