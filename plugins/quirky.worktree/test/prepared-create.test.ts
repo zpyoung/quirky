@@ -1,11 +1,12 @@
-import { existsSync, mkdirSync } from 'node:fs'
+import { existsSync, mkdirSync, statSync } from 'node:fs'
 import { Database } from 'bun:sqlite'
 import { afterEach, expect, test } from 'bun:test'
-import { join } from 'node:path'
+import { isAbsolute, join, sep } from 'node:path'
 import type { Repo, WorktreeCreateResult } from '@quirky/protocol'
 import { spawnCli } from '../../../packages/cli/test/fixtures/fake-daemon'
 import { git, isolateGitConfig } from '../../quirky.repo/test/git-fixtures'
 import { githubUser, makeOrigin, makeProject, setSetting, startWorld, useGlobalGitConfig, type World } from './fixtures/repos'
+import { isRecord } from '../src/loop-status'
 
 const { scratch } = isolateGitConfig()
 let world: World | undefined
@@ -36,10 +37,17 @@ const call = (w: World, method: string, params: Record<string, unknown> = {}) =>
 test('the CLI prefetch is consumed by canonical create only for the exact repo and base', async () => {
   const w = await start()
   const proc = spawnCli(['worktree', 'prefetch', w.repo.id, '--base', 'origin/main', '--json'], { home: w.t.h.home })
-  const [stdout, stderr, code] = await Promise.all([new Response(proc.stdout).text(), new Response(proc.stderr).text(), proc.exited])
+  const [, stderr, code] = await Promise.all([new Response(proc.stdout).text(), new Response(proc.stderr).text(), proc.exited])
   expect(code).toBe(0)
   expect(stderr).toBe('')
-  expect(JSON.parse(stdout)).toMatchObject({ prepared: true, repoId: w.repo.id, base: 'origin/main' })
+  const preparingRoot = `${join(w.root, '.quirky-preparing')}${sep}`
+  const preparedLine = git(w.dir, 'worktree', 'list', '--porcelain')
+    .split('\n')
+    .find((line) => line.startsWith('worktree ') && line.slice('worktree '.length).startsWith(preparingRoot))
+  if (!preparedLine) throw new Error('prefetch did not create a Git-registered checkout in the preparation pool')
+  const preparedPath = preparedLine.slice('worktree '.length)
+  const preparedStat = statSync(preparedPath)
+  const preparedIdentity = { device: preparedStat.dev, inode: preparedStat.ino, birthtimeMs: preparedStat.birthtimeMs }
   expect(countRegistrations(w.dir)).toBe(2)
   const visible = await call(w, 'quirky.worktree/list') as Array<{ path: string }>
   expect(visible.some((worktree) => worktree.path.includes('.quirky-preparing'))).toBe(false)
@@ -48,12 +56,19 @@ test('the CLI prefetch is consumed by canonical create only for the exact repo a
   const [createdOut, createdErr, createCode] = await Promise.all([new Response(cli.stdout).text(), new Response(cli.stderr).text(), cli.exited])
   expect(createCode).toBe(0)
   expect(createdErr).toBe('')
-  expect(JSON.parse(createdOut)).toMatchObject({
-    ok: true,
-    result: { worktree: { name: 'from-prepared' }, creationReceipt: { preparedCheckout: true } }
-  })
+  const createdResult: unknown = JSON.parse(createdOut)
+  if (
+    !isRecord(createdResult) || !isRecord(createdResult.worktree) ||
+    typeof createdResult.worktree.name !== 'string' || createdResult.worktree.name !== 'from-prepared' ||
+    typeof createdResult.worktree.path !== 'string' || !isAbsolute(createdResult.worktree.path)
+  ) throw new Error('canonical create CLI returned no absolute materialized worktree path')
+  const materializedPath = createdResult.worktree.path
+  const materializedStat = statSync(materializedPath)
+  expect({ device: materializedStat.dev, inode: materializedStat.ino, birthtimeMs: materializedStat.birthtimeMs }).toEqual(preparedIdentity)
+  expect(materializedPath).not.toContain(`${sep}.quirky-preparing${sep}`)
   expect(countRegistrations(w.dir)).toBe(2)
   expect(git(w.dir, 'worktree', 'list', '--porcelain')).not.toContain('.quirky-preparing')
+  expect(existsSync(preparedPath)).toBe(false)
 })
 
 test('dirty, sparse, and existing-branch creates never claim a prepared checkout', async () => {

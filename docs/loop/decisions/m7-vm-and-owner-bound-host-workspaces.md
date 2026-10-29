@@ -176,5 +176,16 @@
 - **Revisit if:** Resource teardown can target a foreign or changed registration, or the new live regression fails.
 - **Source:** assumed — autonomous
 
+## D17: Repair the pre-pass fixtures and the accepted resume binding defect before model discovery
+- **Question:** What stopped the first deterministic pre-pass, and what did the independent-from-implementation spec inspection establish?
+- **Options:** Ignore red checks, repin old envelopes, or keep an old-generation mirror selector; fix the actual resource/attachment contracts.
+- **Chose:** The preparation CLI regression now proves real directory device/inode/birth-time reuse and moved Git registration rather than pinning a legacy ok/result envelope or echoed repo/base fields. The shared fixture writer creates parent directories for nested files. Accept the spec review's resume defect: after a guest generation rotates, the VM reattaches its original worktree ID/instance through the verified current host and retains the actual new mirror ID/fingerprint. Its boundary fixture rotates generation/mirror identity. Add the two missing technical logic backlinks.
+- **Why:** Actual prepass returned fail with two preparation-file cases, while typecheck/build passed and the new disable/foreign-resource regression passed. No independent code model was dispatched over that red snapshot. The spec reviewer showed that the old resume lookup required the previous ID even though remote mirror IDs include generation, making ordinary cold resume unreachable.
+- **Evidence:** preserved review/prepass.json for run4a129bc8383c995a; prepared-create failure outputs; same-family spec reviewer finding vm.ts966–967 and remote.ts generation hashing; source fix uses remoteAttach plus original-instance validation. No live-VM reproduction is claimed.
+- **Reversibility:** easy
+- **Confidence:** high for the observed fixture errors and source-level resume contradiction; refreshed checks and final independent round follow
+- **Revisit if:** The generation-rotating boundary or resource reuse regression fails.
+- **Source:** assumed — autonomous
+
 ## Progress
 Feature source and current sibling logic/technical maps are prepared. Three initial component worktrees are removed; all source implementers returned. One clean roadmap catch-up consumed all20 incoming logs. The prior named19-file gate, full typecheck and packaged build pass; the actual API/CLI/production-component proof is preserved with its limits. End-phase final review is now being staged against a fixed feature baseline; its deterministic pre-pass adds the owned-preparation regression. Browser, SSH tunnel, remote scenario and throwaway product-tree bundles are closed/removed. One native capability successor is verified. Next: capture the frozen source/spec artifact, run the independent final round, adjudicate and fix accepted findings once, rerun the exact checks, update the archived receipt, commit and canonical land; end only after the verdict and owned cleanup.

@@ -1229,9 +1229,17 @@ async function reconcileGuestAfterResume(context: VmContext, store: PluginStore,
   const current = rowById(store, row.id)!
   let mirror: VmRemoteWorkspace
   if (current.mirror_json !== null) {
-    const refreshed = await context.call('quirky.worktree/remoteRefresh', { host: host.id })
+    const previous = parseMirror(context, current)
+    const savedIdentity = parseStoredIdentity(context, current)
+    if (!previous || !savedIdentity || previous.hostId !== host.id || !sameIdentity(previous.identity, savedIdentity) ||
+      previous.worktree.id !== current.worktree_id || previous.worktree.instanceId !== current.worktree_instance_id ||
+      current.worktree_id === null || current.worktree_instance_id === null) {
+      conflict(context, 'Saved VM mirror no longer matches its exact offline owner/workspace instance')
+    }
+    // Mirror ids include the current host generation; reattach the same workspace to obtain its new id.
+    const attached = await context.call('quirky.worktree/remoteAttach', { host: host.id, worktree: current.worktree_id })
     assertServiceActive(context, service)
-    mirror = mirrorForWorkspace(context, current, isRecord(refreshed) ? refreshed.workspaces : undefined, host.identity, true)
+    mirror = validateMirror(context, attached, host, { id: current.worktree_id, instanceId: current.worktree_instance_id })
   } else {
     const request = parseAttachmentRequest(context, current)
     const attached = await attachCreatedWorkspace(context, store, service, current, host, request)

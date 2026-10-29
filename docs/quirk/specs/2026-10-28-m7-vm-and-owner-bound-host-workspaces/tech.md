@@ -10,7 +10,7 @@ The protocol defines public identities and activation cleanup. The kernel owns e
 
 ## Code references
 
-All paths below are absolute under the implementation worktree; symbols are the authoritative anchors, not line numbers that drift during integration.
+These anchors implement the [observable acceptance scenarios](logic.md#behavior-and-acceptance-scenarios). All paths below are absolute under the implementation worktree; symbols are authoritative, not line numbers that drift during integration.
 
 | Unit | Source anchors |
 |---|---|
@@ -91,7 +91,7 @@ orca-worktree output = { pairingCode:string, repo:guestRepoSelector, name:guestW
 
 Persist the offer only through the existing saved-target API. Compare `quirky api call quirky.cli/hostIdentity --json` inside Lima to the authenticated endpoint before attaching. Orca-worktree mode forwards supported canonical create options and retains its actual receipt; provisioned-root refuses choices it cannot honor. Activation of the result uses the remote-specific view only.
 
-Suspend verifies a stopped/suspended backend, requires matching stored owner/runtime status disconnected, and reads the exact retained mirror from `remoteList`. It cannot require a live refresh from a powered-off guest. Resume verifies backend instance, actual guest generation and original workspace instance before reattachment. A stopped backend is powered off, not evidence of preserved RAM.
+Suspend verifies a stopped/suspended backend, requires matching stored owner/runtime status disconnected, and reads the exact retained mirror from `remoteList`. It cannot require a live refresh from a powered-off guest. Resume verifies backend instance, actual guest generation and original workspace instance before reattachment. A new generation produces a new mirror ID/fingerprint: reattach through the verified current host and retain that new projection, never search for the old-generation mirror ID. A stopped backend is powered off, not evidence of preserved RAM.
 
 Destroy proves backend absence before retiring anything. Local host-list absence is reconciled only when no replacement uses the recorded runtime. Existing host retirement is generation/grant-fenced atomically; credential retirement verifies the exact VM-created saved UUID and current safe summary. Other registrations/credentials remain. A partial retirement keeps enough flags/evidence for explicit reconciliation.
 
@@ -116,6 +116,8 @@ Preserves [scope/non-goals](logic.md#scope-and-non-goals).
 - Supported notification callbacks and authorized production signing: no private SDK patch, no fabricated delivery callback, no ad-hoc production identity.
 
 ## Always / Ask / Never
+
+Preserves the [locked authority and lifecycle constraints](logic.md#decisions-locked--gray-areas).
 
 - Always retain exact owner/instance evidence, conservative unknown/offline state, explicit destructive consent and durable ambiguous outcomes.
 - Ask no person in this unattended loop. Record an autonomous choice; a genuine locked-decision conflict uses the prescribed block/defer path.

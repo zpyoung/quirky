@@ -1,7 +1,7 @@
 import { afterAll, beforeAll } from 'bun:test'
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { RpcError, type QuirkyClient } from '@quirky/protocol'
 
 /** Real-git tests must not read the user's git config; call inside a `describe` or at file level. */
@@ -44,7 +44,11 @@ export function makeRepo(dir: string, files: Record<string, string> = { 'a.txt':
 }
 
 export function commitFiles(dir: string, files: Record<string, string>): void {
-  for (const [name, text] of Object.entries(files)) writeFileSync(join(dir, name), text)
+  for (const [name, text] of Object.entries(files)) {
+    const path = join(dir, name)
+    mkdirSync(dirname(path), { recursive: true })
+    writeFileSync(path, text)
+  }
   git(dir, 'add', '.')
   git(dir, 'commit', '-q', '-m', 'update')
 }
