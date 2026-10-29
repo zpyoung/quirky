@@ -1,5 +1,6 @@
 import { nativeBrowserCapabilityForWindow } from '../native-browser'
 import {
+  pluginApiCompatibilityError,
   DEFAULT_THEME,
   THEME_TOKENS,
   chordFromKeyEvent,
@@ -105,6 +106,8 @@ type CommandDragCapability = {
 
 type Runtime = {
   module?: UiPluginModule
+  moduleUrl?: string
+  moduleApiVersion?: unknown
   session?: Session
   /** The session whose `activate` is running; it receives events before it becomes `session`. */
   pending?: Session
@@ -515,6 +518,21 @@ export class WindowPluginHost {
       const entry = model.views.find((view) => view.id === handle.id)
       if (!entry || entry.plugin !== handle.plugin) this.releaseEmbedded(handle)
     }
+    let changedModules: Promise<void>[] | undefined
+    for (const [pluginId, runtime] of this.runtimes) {
+      const declared = model.modules[pluginId]
+      if (
+        declared === undefined ||
+        runtime.module === undefined ||
+        (runtime.moduleUrl === declared.url && runtime.moduleApiVersion === declared.apiVersion)
+      ) {
+        continue
+      }
+      changedModules ??= []
+      changedModules.push(this.deactivate(pluginId).then(() => this.forgetModule(runtime)))
+    }
+    if (changedModules) await Promise.all(changedModules)
+
     const departed = [...this.runtimes.keys()].filter((id) => !this.enabled(id))
     for (const id of departed) {
       // a plugin that failed and was then disabled gets a clean start when it comes back
@@ -527,7 +545,18 @@ export class WindowPluginHost {
   private releaseStaleMounts(model: UiModel): void {
     for (const handle of [...this.mounts]) {
       const entry = findSlot(model, handle.id)
-      if (!entry || entry.plugin !== handle.plugin || entry.module !== handle.module) this.release(handle)
+      const previous = this.state.model?.modules[handle.plugin]
+      const next = model.modules[handle.plugin]
+      const moduleChanged = previous?.url !== next?.url || previous?.apiVersion !== next?.apiVersion
+      if (!entry || entry.plugin !== handle.plugin || entry.module !== handle.module || moduleChanged) this.release(handle)
+    }
+    for (const handle of [...this.embedded]) {
+      const view = model.views.find((entry) => entry.id === handle.id)
+      const previous = this.state.model?.modules[handle.plugin]
+      const next = model.modules[handle.plugin]
+      if (!view || view.plugin !== handle.plugin || previous?.url !== next?.url || previous?.apiVersion !== next?.apiVersion) {
+        this.releaseEmbedded(handle)
+      }
     }
   }
 
@@ -692,6 +721,13 @@ export class WindowPluginHost {
     return runtime
   }
 
+  private forgetModule(runtime: Runtime): void {
+    runtime.module = undefined
+    runtime.moduleUrl = undefined
+    runtime.moduleApiVersion = undefined
+    runtime.importAttempts = 0
+  }
+
   /**
    * Resolves once the plugin has an active session, or its load failed (rejects). A session torn
    * down by a deactivation the caller raced with is replaced by a fresh load while the plugin is
@@ -699,6 +735,22 @@ export class WindowPluginHost {
    */
   private async ensureLoaded(pluginId: string): Promise<void> {
     const runtime = this.runtime(pluginId)
+    const declared = this.state.model?.modules[pluginId]
+    if (declared) {
+      const compatibilityError = pluginApiCompatibilityError(declared.apiVersion)
+      if (compatibilityError) {
+        await this.deactivate(pluginId)
+        this.forgetModule(runtime)
+        const message = `${pluginId}: ${compatibilityError}`
+        this.fail(pluginId, message)
+        this.deps.log(message)
+        throw new LoadFailure(message)
+      }
+      if (runtime.module && (runtime.moduleUrl !== declared.url || runtime.moduleApiVersion !== declared.apiVersion)) {
+        await this.deactivate(pluginId)
+        this.forgetModule(runtime)
+      }
+    }
     for (;;) {
       if (runtime.tearingDown) {
         await runtime.tearingDown
@@ -737,7 +789,7 @@ export class WindowPluginHost {
     }
     runtime.pending = session
     try {
-      await this.withTimeout(pluginId, this.importAndActivate(pluginId, runtime, declared.url, session))
+      await this.withTimeout(pluginId, this.importAndActivate(pluginId, runtime, declared.url, declared.apiVersion, session))
     } catch (error) {
       revoke(session)
       this.fail(pluginId, messageOf(error))
@@ -756,7 +808,26 @@ export class WindowPluginHost {
     if (!this.enabled(pluginId)) await this.deactivate(pluginId)
   }
 
-  private async importAndActivate(pluginId: string, runtime: Runtime, url: string, session: Session): Promise<void> {
+  private async importAndActivate(
+    pluginId: string,
+    runtime: Runtime,
+    url: string,
+    apiVersion: unknown,
+    session: Session
+  ): Promise<void> {
+    const checkDeclaration = (): void => {
+      const declared = this.state.model?.modules[pluginId]
+      if (!declared) throw new LoadFailure(`${pluginId} has no ui module`)
+      const compatibilityError = pluginApiCompatibilityError(declared.apiVersion)
+      if (compatibilityError) throw new LoadFailure(`${pluginId}: ${compatibilityError}`)
+      if (declared.url !== url || declared.apiVersion !== apiVersion) {
+        throw new LoadFailure(`${pluginId} UI module metadata changed while loading`)
+      }
+    }
+    checkDeclaration()
+    if (runtime.module && (runtime.moduleUrl !== url || runtime.moduleApiVersion !== apiVersion)) {
+      this.forgetModule(runtime)
+    }
     if (!runtime.module) {
       const attempt = runtime.importAttempts++
       let imported: unknown
@@ -766,10 +837,13 @@ export class WindowPluginHost {
         throw new LoadFailure(`${pluginId} failed to load: ${messageOf(error)}`)
       }
       if (session.revoked) return
+      checkDeclaration()
       if (!isPluginModule(imported)) {
         throw new LoadFailure(`${pluginId} failed to load: module does not export activate`)
       }
       runtime.module = imported
+      runtime.moduleUrl = url
+      runtime.moduleApiVersion = apiVersion
     }
     session.activating = true
     try {

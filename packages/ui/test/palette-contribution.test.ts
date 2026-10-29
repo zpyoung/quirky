@@ -1,7 +1,7 @@
 import { afterEach, expect, test } from 'bun:test'
 import { symlinkSync } from 'node:fs'
 import { join, resolve } from 'node:path'
-import { type QuirkyClient, type UiPluginContext, type UiPluginModule } from '@quirky/protocol'
+import { PLUGIN_API_VERSION, type QuirkyClient, type UiPluginContext, type UiPluginModule } from '@quirky/protocol'
 import { makeTempHome, startHarness, waitFor, waitForAsync, type Harness } from '../../daemon/test/helpers'
 import { makeTempDir, removeTempDirs, writePlugin } from '../../daemon/test/plugins/fixtures'
 import { WindowPluginHost } from '../src/plugins/host'
@@ -37,6 +37,7 @@ async function boot(options: { dock?: boolean; override?: boolean } = {}) {
         id: 'acme.dock',
         name: 'Dock fixture',
         version: '1.0.0',
+        apiVersion: PLUGIN_API_VERSION,
         ui: 'ui.js',
         contributes: {
           command: [{ id: 'passthrough', title: 'Terminal passthrough' }],
@@ -53,6 +54,7 @@ async function boot(options: { dock?: boolean; override?: boolean } = {}) {
         id: 'acme.override',
         name: 'Palette override fixture',
         version: '1.0.0',
+        apiVersion: PLUGIN_API_VERSION,
         ui: 'ui.js',
         contributes: {
           command: [{ id: 'open', title: 'Replacement shortcut' }],
