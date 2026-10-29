@@ -43,7 +43,7 @@ const AGENTS = {
   agents: [
     { id: 'goose', label: 'Goose', installed: false, enabled: true, isDefault: false },
     { id: 'codex', label: 'Codex', installed: true, enabled: true, isDefault: false },
-    { id: 'claude', label: 'Claude', installed: true, enabled: true, isDefault: true },
+    { id: 'claude', label: 'Claude', installed: true, enabled: true, isDefault: true, permissions: { mode: 'yolo' } },
     { id: 'amp', label: 'Amp', installed: true, enabled: false, isDefault: false }
   ]
 }
@@ -207,6 +207,17 @@ describe('SC-22: the + menu', () => {
     await type(view.q<HTMLTextAreaElement>('[role="dialog"] textarea')!, ' review the diff ')
     await click(view.q('[role="dialog"] button[type="submit"]'))
     expect(callsTo(view.fake, 'newTab')).toEqual([{ workspace: 'wt-main', group: 'grp-1', agent: 'codex', prompt: 'review the diff' }])
+  })
+
+  test("the dialog says which permission mode the agent will start in", async () => {
+    const view = await mount()
+    await open(view)
+    await click(row(view, 'Claude'))
+    expect(view.q('[role="dialog"]')!.textContent).toContain('Permissions: Bypass')
+    await click([...view.element.querySelectorAll<HTMLElement>('[role="dialog"] button')].find((el) => el.textContent === 'Cancel')!)
+    await open(view)
+    await click(row(view, 'Codex'))
+    expect(view.q('[role="dialog"]')!.textContent).not.toContain('Permissions:')
   })
 
   test('an empty prompt sends none', async () => {
