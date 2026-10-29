@@ -390,7 +390,7 @@ void updates.start()
 let latest: RuntimeInfo | null = null
 
 try {
-  latest = await ensureDaemon()
+  latest = await ensureDaemon({ replaceStale: true })
   showDaemon(latest)
 } catch (error) {
   showError(error)
@@ -398,7 +398,7 @@ try {
 
 void maintainConnection({
   ensure: async () => {
-    latest = await ensureDaemon()
+    latest = await ensureDaemon({ replaceStale: true })
     showDaemon(latest)
   },
   connect: () =>
