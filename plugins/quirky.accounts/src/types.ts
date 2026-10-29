@@ -1,4 +1,16 @@
 export type ManagedProvider = 'claude' | 'codex'
+export const OWNER_CALL_OPERATIONS = [
+  'list',
+  'usage',
+  'refresh',
+  'inactiveUsage',
+  'select',
+  'credentialStatus',
+  'agentsList',
+  'agentsRefresh'
+] as const
+
+export type OwnerCallOperation = typeof OWNER_CALL_OPERATIONS[number]
 
 export type AccountSummary = {
   id: string

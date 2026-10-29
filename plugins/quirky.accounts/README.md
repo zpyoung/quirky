@@ -12,6 +12,14 @@ The returned `env` is an environment patch, not credentials. String values are a
 quirky accounts prepare-provider-env --agent codex --cwd "$PWD" --home-overrides '{"claude":{"value":null,"source":"absent"},"codex":{"value":null,"source":"absent"}}'
 ```
 
+## Paired-owner Accounts
+
+When a window shows a registered remote workspace, Accounts and Usage read that workspace's full-owner host. The window keeps its last actual workspace owner when Accounts settings replaces the workspace view; settings itself is not a local workspace. An offline or replaced owner is unavailable, never a source of local fallback data.
+
+Account selection, inactive-account usage, and usage refresh operate on the selected owner. Presentation and Claude restart preferences remain local. Remote sign-in, reauthentication, pending-link actions, account removal, session restart/keep, meter-credential editing, and Codex reset redemption are unavailable; credential status remains read-only.
+
+`quirky accounts owner-call` exposes the scoped API through the generated CLI group. `--owner` takes an exact owner reference derived from a current `quirky.worktree/remoteHostList` registration. Choose one `--operation`: `list`, `usage`, `refresh`, `inactiveUsage`, `select`, `credentialStatus`, `agentsList`, or `agentsRefresh`; `--operation-params` supplies that operation's JSON object. The route cannot forward an arbitrary method or use a phone-scoped runtime.
+
 ## Usage and sign-in controls
 
 The Usage status bar measures the rendered chip container, gaps and overflow-button widths. It keeps an exact visible prefix and a `+N` button for the omitted providers; the button's tooltip names that suffix. Compact, Detailed, Remaining and badge-only changes remeasure, and hidden measurement elements do not enlarge the status bar.

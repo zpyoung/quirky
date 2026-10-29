@@ -72,7 +72,9 @@ function makeContext(): UiPluginContext {
       return () => { listeners = listeners.filter((current) => current !== listener) }
     },
     toast: (...args: unknown[]) => toasts.push(args),
-    closeView: () => {}
+    closeView: () => {},
+    getLayout: () => ({ view: null, panel: null, sidebar: true, focus: null }),
+    onLayout: () => () => {}
   }
   return uiContext as unknown as UiPluginContext
 }
