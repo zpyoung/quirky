@@ -1,10 +1,10 @@
 import { afterEach, beforeEach, expect, test } from 'bun:test'
 import { Database } from 'bun:sqlite'
-import { chmodSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { OwnerHostIdentity, PluginContext, PluginStore, RegisteredOwnerHost, Worktree } from '@quirky/protocol'
 import { makeTempHome } from '../../../packages/daemon/test/helpers'
-import { environmentRecipeHash, matchesRetainedVmWorkspaceOrigin, migrateVmEnvironments, registerVmEnvironments, runVmProcessBounded } from '../src/daemon/vm'
+import { environmentRecipeHash, matchesRetainedVmWorkspaceOrigin, migrateVmEnvironments, registerVmEnvironments, runVmProcessBounded, vmRecipeSearchPath } from '../src/daemon/vm'
 import type { VmEnvironment, VmEnvironmentRecipe } from '../src/vm-types'
 
 const guestIdentity: OwnerHostIdentity = { hostId: 'guest-host-stable', generation: 'activation-7' }
@@ -270,6 +270,44 @@ test('terminates a spawned descendant with its bounded process group', async () 
   })
   expect(result.timedOut).toBe(true)
   expect(readFileSync(marker, 'utf8')).toBe('terminated')
+})
+
+test('does not search the repository cwd when the inherited VM script PATH is absent', async () => {
+  const backendDir = join(home, 'trusted-backend-bin')
+  const inheritedDir = join(home, 'trusted-inherited-bin')
+  const maliciousExecutable = join(repoPath, 'quirky-path-probe')
+  const trustedExecutable = join(inheritedDir, 'quirky-path-probe')
+  const poisonMarker = join(home, 'poison-executed')
+  const backendExecutable = join(backendDir, 'limactl')
+  mkdirSync(backendDir, { recursive: true, mode: 0o700 })
+  mkdirSync(inheritedDir, { recursive: true, mode: 0o700 })
+  writeFileSync(maliciousExecutable, '#!/bin/bash\nprintf poison > "$QUIRKY_PATH_POISON_MARKER"\n', { mode: 0o700 })
+  chmodSync(maliciousExecutable, 0o700)
+  writeFileSync(trustedExecutable, '#!/bin/bash\nprintf trustedvalue\n', { mode: 0o700 })
+  chmodSync(trustedExecutable, 0o700)
+
+  const missingInheritedPath = await runVmProcessBounded('/bin/bash', ['-c', 'quirky-path-probe'], {
+    cwd: repoPath,
+    timeoutMs: 1000,
+    env: {
+      PATH: vmRecipeSearchPath(backendExecutable, undefined),
+      QUIRKY_PATH_POISON_MARKER: poisonMarker
+    }
+  })
+  expect(missingInheritedPath.exitCode).toBe(127)
+  expect(existsSync(poisonMarker)).toBe(false)
+
+  const trustedInheritedPath = await runVmProcessBounded('/bin/bash', ['-c', 'quirky-path-probe'], {
+    cwd: repoPath,
+    timeoutMs: 1000,
+    env: {
+      PATH: vmRecipeSearchPath(backendExecutable, inheritedDir),
+      QUIRKY_PATH_POISON_MARKER: poisonMarker
+    }
+  })
+  expect(trustedInheritedPath.exitCode).toBe(0)
+  expect(trustedInheritedPath.stdout.trim()).toBe('trustedvalue')
+  expect(existsSync(poisonMarker)).toBe(false)
 })
 
 

@@ -127,7 +127,7 @@ Preserves the [locked authority and lifecycle constraints](logic.md#decisions-lo
 
 Implements [defect prevention](logic.md#defect-prevention).
 
-Secrets stay in the existing private target registry/output files and are excluded from errors, summaries, screenshots and archives. Migrations are append-only. Do not invent downgrade shims; preserve original data for explicit recovery. Callers distinguish snapshot visibility from fresh permission. Per-activation closure ownership is required even when multiple kernels import one source module URL.
+Secrets stay in the existing private target registry/output files and are excluded from errors, summaries, screenshots and archives. Migrations are append-only. Do not invent downgrade shims; preserve original data for explicit recovery. Callers distinguish snapshot visibility from fresh permission. Public VM history is unavailable when lifecycle state or authenticated epoch no longer verifies its attachment. Lifecycle command search must not introduce an implicit working-directory component when inherited PATH is absent or empty; existing nonempty host PATH policy is preserved. Per-activation closure ownership is required even when multiple kernels import one source module URL.
 
 ## Testing strategy
 
@@ -135,7 +135,7 @@ Acceptance maps to [scenarios](logic.md#behavior-and-acceptance-scenarios); exac
 
 - `plugins/quirky.cli/test/owner-host-fence.test.ts`: stable ID/new generation, pre-dispatch saved/host fences, malformed pins, phone refusal, state unchanged after denial.
 - `plugins/quirky.worktree/test/remote-owner-workspaces.test.ts`: live owner registration/restart, actual mirrors/data/terminals, current and replaced instances, canonical cleanup, local-row preservation, explicit consent, atomic forget pins, public saved-name replacement and ordinary folders.
-- `plugins/quirky.worktree/test/vm-environments.test.ts`: full recipe hash, bad private output, missing backend, busy lifecycle guard, child-group termination, explicit offline projections, replaced/absent host retirement and same-name backend replacement. Mac-only boundary simulations skip off macOS and are never live-VM evidence.
+- `plugins/quirky.worktree/test/vm-environments.test.ts`: full recipe hash, bad private output, missing backend, busy lifecycle guard, real child-group termination and executable-search isolation, portable historical-origin relation, generation-rotating and same-generation reattachment, detached-history recovery, explicit offline projections, replaced/absent host retirement and same-name backend replacement. Mac-only boundary simulations skip off macOS and are never live-VM evidence.
 - `packages/daemon/test/plugins/activation-disposer.test.ts`: independent real leases across two hosts sharing one module URL and late activation disposal. Existing host/extension/runtime tests retain their lifetime contracts.
 - `plugins/quirky.worktree/test/prepared-create.test.ts`: exact owned preparation cleanup on deactivation, preserving unrelated user/Git state.
 

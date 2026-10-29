@@ -721,12 +721,22 @@ function cleanStalePrivateOutputs(context: PluginContext): void {
   }
 }
 
+
+/**
+ * Preserves the current trusted-backend-first recipe PATH ordering.
+ * @internal
+ */
+export function vmRecipeSearchPath(backendExecutable: string, inheritedPath: string | undefined): string {
+  const executableDir = isAbsolute(backendExecutable) ? dirname(backendExecutable) : ''
+  if (executableDir === '') return inheritedPath ?? ''
+  return inheritedPath ? `${executableDir}${delimiter}${inheritedPath}` : executableDir
+}
+
 /** Environment passed to every trusted lifecycle script; the create result path is meaningful only during create. */
 function scriptEnvironment(row: VmRow, operationId: string, outputPath: string): Record<string, string> {
   const snapshot = JSON.parse(row.recipe_json) as VmRecipeSnapshot
-  const executableDir = isAbsolute(row.backend_executable) ? dirname(row.backend_executable) : ''
   return {
-    PATH: executableDir === '' ? process.env.PATH ?? '' : `${executableDir}${delimiter}${process.env.PATH ?? ''}`,
+    PATH: vmRecipeSearchPath(row.backend_executable, process.env.PATH),
     QUIRKY_LIMACTL: row.backend_executable,
     QUIRKY_VM_BACKEND_EXECUTABLE: row.backend_executable,
     QUIRKY_VM_NAME: row.instance_id,
