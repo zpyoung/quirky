@@ -32,8 +32,11 @@ const searchOf = async (f: Features, what: string, check: (search: NonNullable<A
   (await viewReport(f, what, (report) => report.panes[0]!.search !== null && check(report.panes[0]!.search))).panes[0]!.search!
 
 const statusText = () => document.querySelector('[data-pane-search-status]')?.textContent
-const box = () => document.querySelector<HTMLInputElement>('[data-pane-search] input')!
-const enter = (shift = false) => press(shift ? 'shift+enter' : 'enter', box())
+const searchInput = (f: Features) => waitFor(
+  'the search input to mount',
+  () => f.win.document.querySelector<HTMLInputElement>('[data-pane-search] input') ?? undefined
+)
+const enter = (input: HTMLInputElement, shift = false) => press(shift ? 'shift+enter' : 'enter', input)
 const toggle = (title: string) => document.querySelector<HTMLButtonElement>(`[data-pane-search] button[title="${title}"]`)!
 const reads = (text: string) => waitFor(`the counter to read ${text}`, () => (statusText() === text ? true : undefined))
 
@@ -43,19 +46,20 @@ test(
     const { f, session } = await withNumbers()
 
     const opened = await press('mod+f')
+    const input = await searchInput(f)
     expect(opened.defaultPrevented).toBe(true)
     expect(await searchOf(f, 'an empty search box')).toEqual({ query: '', regex: false, caseSensitive: false, current: 0, total: 0, more: false })
     expect(statusText()).toBe('0/0')
-    expect(document.activeElement).toBe(box())
+    expect(document.activeElement).toBe(input)
 
-    await typeInto(box(), '19')
+    await typeInto(input, '19')
     await reads('1/12')
-    await enter()
+    await enter(input)
     await reads('2/12')
-    await enter()
+    await enter(input)
     await reads('3/12')
     for (const expected of ['2/12', '1/12', '12/12']) {
-      await enter(true)
+      await enter(input, true)
       await reads(expected)
     }
     expect(await searchOf(f, 'the last match', (search) => search.current === 12)).toMatchObject({ query: '19', current: 12, total: 12, more: false })
@@ -67,21 +71,22 @@ test(
     expect(others.length).toBeGreaterThan(0)
     expect(term.options.overviewRulerWidth).toBeGreaterThan(0)
 
-    await typeInto(box(), '^1.9$')
+    await typeInto(input, '^1.9$')
     await reads('No results')
     await toggle('Regex').click()
     await reads('1/10')
     expect(toggle('Regex').getAttribute('aria-pressed')).toBe('true')
-    await typeInto(box(), 'zzz')
+    await typeInto(input, 'zzz')
     await reads('No results')
-    await typeInto(box(), '')
+    await typeInto(input, '')
     await reads('0/0')
 
-    await press('mod+f', box())
+    await press('mod+f', input)
     await press('mod+f')
-    expect(document.activeElement).toBe(box())
+    const activeInput = await searchInput(f)
+    expect(document.activeElement).toBe(activeInput)
 
-    await press('escape', box())
+    await press('escape', activeInput)
     expect(await viewReport(f, 'the box closed', (report) => report.panes[0]!.search === null)).toBeDefined()
     expect(document.querySelector('[data-pane-search]')).toBeNull()
     expect(term.element!.querySelectorAll('.xterm-find-result-decoration')).toHaveLength(0)
@@ -94,6 +99,7 @@ test(
   async () => {
     const { f } = await withNumbers(2500)
     await runCommand(f, 'search', { query: '1' })
+    await searchInput(f)
     const search = await searchOf(f, 'a capped count', (candidate) => candidate.more)
     expect(search.total).toBeGreaterThanOrEqual(1000)
     expect(statusText()).toMatch(/^\d+\+$/)
@@ -106,7 +112,8 @@ test(
   async () => {
     const { f, session } = await withNumbers()
     await press('mod+f')
-    await typeInto(box(), '19')
+    const input = await searchInput(f)
+    await typeInto(input, '19')
     await reads('1/12')
     await focusTerminal(f, session)
     expect(document.activeElement).toBe(termOf(f, session).textarea!)
@@ -128,6 +135,7 @@ test(
     expect(f.calls.slice(revision).filter((call) => call.method.startsWith('ui.'))).toEqual([])
 
     await press('mod+f')
+    await searchInput(f)
     await reads('0/0')
     await focusTerminal(f, session)
     await press('mod+g')
@@ -143,6 +151,7 @@ test(
     const { f, pane } = await withNumbers()
     const { h } = f
     expect(await runCommand(f, 'search', { query: '19' })).toEqual({ ok: true })
+    await searchInput(f)
     expect(await runCommand(f, 'search-next')).toEqual({ ok: true })
     const state = JSON.parse(await h.ok(['ui', 'state', '--json'])) as { slots: { id: string; report: { panes: { pane: string; search: unknown }[] } }[] }
     const report = state.slots.find((slot) => slot.id === 'view:quirky.session/worktree')!.report
@@ -171,13 +180,14 @@ test(
   async () => {
     const { f } = await withNumbers()
     await press('mod+f')
-    await typeInto(box(), '19')
+    const input = await searchInput(f)
+    await typeInto(input, '19')
     await reads('1/12')
-    box().focus()
-    const stepped = await press('enter', box())
+    input.focus()
+    const stepped = await press('enter', input)
     expect(stepped.defaultPrevented).toBe(true)
     await reads('2/12')
-    const viaKey = await press('mod+g', box())
+    const viaKey = await press('mod+g', input)
     expect(viaKey.defaultPrevented).toBe(true)
     await reads('3/12')
     expect(await searchOf(f, 'the third match', (search) => search.current === 3)).toMatchObject({ current: 3, total: 12 })

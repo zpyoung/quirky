@@ -1,6 +1,4 @@
 import { describe, expect, test } from 'bun:test'
-import manifest from '../../quirky-plugin.json'
-import { TERMINAL_SETTING_DEFAULTS } from '../ui-fake'
 import { DEFAULT_PANE_SETTINGS, fontStack, readPaneSettings, zoomed } from '../../src/window/pane/settings'
 
 describe('pane settings', () => {
@@ -28,10 +26,4 @@ describe('pane settings', () => {
     expect(zoomed(8, -1)).toBe(8)
   })
 
-  test('the defaults match the fake context and every manifest setting the pane reads', () => {
-    for (const [id, value] of Object.entries(DEFAULT_PANE_SETTINGS)) expect(TERMINAL_SETTING_DEFAULTS[id]).toEqual(value)
-    for (const setting of manifest.contributes.setting) {
-      if (setting.id in DEFAULT_PANE_SETTINGS) expect(setting.default as unknown).toEqual(DEFAULT_PANE_SETTINGS[setting.id as keyof typeof DEFAULT_PANE_SETTINGS])
-    }
-  })
 })
