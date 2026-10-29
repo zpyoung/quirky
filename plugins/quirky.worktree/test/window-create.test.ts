@@ -7,12 +7,13 @@ import { makeTempDir, removeTempDirs } from '../../../packages/daemon/test/plugi
 import { startHeadlessWindow, type HeadlessWindow } from '../../../packages/ui/test/fixtures/headless-window'
 import { commitFiles, git, isolateGitConfig } from '../../quirky.repo/test/git-fixtures'
 import { githubUser, makeOrigin, makeProject, repoSet, useGlobalGitConfig } from './fixtures/repos'
-import { button, click, dialogNamed, dialogs, field, menuItem, modEnter, pressEscape, sectionHeadingMatches, setSelect, setText, toastMessages, topDialog } from './window/dom'
+import { button, click, dialogNamed, dialogs, field, listRowName, menuItem, modEnter, pressEscape, sectionHeadingMatches, setSelect, setText, toastMessages, topDialog } from './window/dom'
 
-const SIDEBAR = 'sidebar-section:quirky.worktree/worktrees'
+const WORKTREES_CONTRIBUTION = 'sidebar-section:quirky.worktree/worktrees'
 const SESSION_VIEW = 'view:quirky.session/worktree'
 const NEW_WORKTREE = 'command:quirky.worktree/new-worktree'
 const CREATE_MORE_AGENT_ID = 'worktree-create-more'
+const WORKTREES_TOOL = WORKTREES_CONTRIBUTION
 const CREATE_MORE_AGENT_LABEL = 'Worktree Create More Test Agent'
 const CREATE = 'New workspace'
 const FALLBACK = 'Workspace created from a local base'
@@ -40,6 +41,10 @@ async function boot(): Promise<World> {
   await agent.callAny('setting.set', { id: 'setting:quirky.worktree/worktreesRoot', value: root })
   const win = await startHeadlessWindow({ home: harness.home, runtime: harness.runtime })
   current = { harness, win, agent, root }
+  await win.waitFor(async () => {
+    const slot = await sidebarSlot(agent)
+    return slot?.shown && slot.report !== undefined ? slot : undefined
+  })
   return current
 }
 
@@ -48,15 +53,31 @@ type Project = { repo: Repo; dir: string }
 async function addProject(w: World, name: string, options: Parameters<typeof makeProject>[1] = {}): Promise<Project> {
   const dir = makeProject(join(scratch(), name), options)
   const repo = (await w.agent.callAny('quirky.repo/add', { path: dir })) as Repo
-  await w.win.waitFor(() => [...document.querySelectorAll<HTMLElement>('section.repo')].some((section) => sectionHeadingMatches(section, name)))
+  await w.win.waitFor(() => sidebarElements<HTMLElement>('section.repo').some((section) => sectionHeadingMatches(section, name)))
   return { repo, dir }
 }
 
 const worktrees = async (agent: QuirkyClient) => (await agent.callAny('quirky.worktree/list', {})) as Worktree[]
 const sessionsOf = async (agent: QuirkyClient, worktreeId: string) => (await agent.callAny('quirky.session/list', { worktree: worktreeId })) as Session[]
 const uiState = async (agent: QuirkyClient) => (await agent.callAny('ui.state', {})) as UiState
+const rendererState = async (agent: QuirkyClient): Promise<UiState | undefined> => {
+  const overview = await uiState(agent)
+  const renderers = overview.windows.filter((window) => window.name === 'quirky-ui')
+  if (renderers.length !== 1) return undefined
+  return await agent.callAny('ui.window.state', { connId: renderers[0]!.connId }) as UiState
+}
 const openView = async (agent: QuirkyClient) => (await uiState(agent)).layout.view as { id: string; input?: { worktree?: string } } | null
-const report = async (agent: QuirkyClient): Promise<any> => (await uiState(agent)).slots.find((slot) => slot.id === SIDEBAR)?.report
+const sidebarPanel = (): HTMLElement | undefined =>
+  document.querySelector<HTMLElement>(`[data-tool-panel="${WORKTREES_TOOL}"]`) ?? undefined
+const sidebarElements = <T extends Element>(selector: string): T[] =>
+  [...(sidebarPanel()?.querySelectorAll<T>(selector) ?? [])]
+
+const sidebarSlot = async (agent: QuirkyClient) => {
+  const state = await rendererState(agent)
+  return state?.slots.find((slot) => slot.id === WORKTREES_CONTRIBUTION)
+}
+
+const report = async (agent: QuirkyClient): Promise<any> => (await sidebarSlot(agent))?.report
 type SidebarTreeRow = { id: string; name?: string; branch?: string | null; pending?: boolean; parentId?: string | null; depth?: number }
 type SidebarTreeProject = { worktrees?: SidebarTreeRow[] }
 type SidebarTreeReport = { projects?: SidebarTreeProject[]; groups?: { projects?: SidebarTreeProject[] }[] }
@@ -133,9 +154,9 @@ async function expandAdvanced(dialog: HTMLElement): Promise<void> {
 }
 
 const worktreeRow = (name: string) =>
-  [...document.querySelectorAll<HTMLElement>('[data-worktree-id]')].find((row) => row.querySelector('.worktree-name')?.textContent === name)
+  sidebarElements<HTMLElement>('[data-worktree-id]').find((row) => listRowName(row) === name)
 const pendingRow = (name: string) =>
-  [...document.querySelectorAll<HTMLElement>('section.repo li')].find((row) =>
+  sidebarElements<HTMLElement>('section.repo li').find((row) =>
     !row.hasAttribute('data-worktree-id') && row.textContent?.includes(name)
   )
 
@@ -467,7 +488,7 @@ test('SC-42: the Update dialog edits the display name and notes', async () => {
   const w = await boot()
   const api = await addProject(w, 'api')
   const fix = ((await w.agent.callAny('quirky.worktree/create', { repo: api.repo.id, name: 'fix-login' })) as WorktreeCreateResult).worktree
-  await w.win.waitFor(() => [...document.querySelectorAll('.worktree-name')].some((e) => e.textContent === 'fix-login'))
+  await w.win.waitFor(() => sidebarElements<HTMLElement>('[data-worktree-id]').some((row) => listRowName(row) === 'fix-login'))
 
   const card = await w.win.waitFor(() => worktreeRow('fix-login'))
   await click(button(card, 'Actions for fix-login')!)
@@ -482,7 +503,7 @@ test('SC-42: the Update dialog edits the display name and notes', async () => {
   await click(button(dialog, 'Save')!)
   await closed(w, 'Workspace details')
 
-  await w.win.waitFor(() => [...document.querySelectorAll('.worktree-name')].some((e) => e.textContent === 'Login fix'))
+  await w.win.waitFor(() => sidebarElements<HTMLElement>('[data-worktree-id]').some((row) => listRowName(row) === 'Login fix'))
   const after = (await worktrees(w.agent)).find((x) => x.id === fix.id)!
   expect(after).toMatchObject({ name: 'Login fix', displayName: 'Login fix', comment: '## todo\n- retry flow', branch: fix.branch, path: fix.path })
   expect(basename(after.path)).toBe('fix-login')
@@ -497,7 +518,7 @@ test('SC-41: the Set Parent dialog excludes the workspace and its descendants, s
   const b = await make('b', { parent: a.id })
   const c = await make('c', { parent: b.id })
   const d = await make('d')
-  await w.win.waitFor(() => [...document.querySelectorAll('.worktree-name')].some((e) => e.textContent === 'd'))
+  await w.win.waitFor(() => sidebarElements<HTMLElement>('[data-worktree-id]').some((row) => listRowName(row) === 'd'))
 
   const menuFor = async (name: string, label: string) => {
     const card = worktreeRow(name)!
