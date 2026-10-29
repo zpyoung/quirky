@@ -62,7 +62,7 @@ Implements [scope](logic.md#goal-and-scope).
 Implements [decisions locked](logic.md#decisions-locked). Always reuse the shared parser, migrate distributed manifests and author-facing docs, preserve lifecycle cleanup, and keep malformed inputs testable. Resolve questions autonomously and record them in this item's decision log. Never prompt a person, invent a release server, push, conflate version domains, add compatibility shims, or run build/tests/lint/formatters inside implementer tasks. The integration owner runs verification after all slices return.
 
 ## Cross-cutting
-Implements [AC2](logic.md#ac2-refuse-incompatible-code-before-import) and [AC3](logic.md#ac3-distro-compatibility-is-preflighted). Full-trust code is unchanged but incompatibility must fail before import. Install rejection cannot mutate installed code/distro layers. Missing pre-freeze declarations require explicit author migration; there is no automatic rewrite or update. Reverting this commit is the source rollback, not a persisted schema migration. Only macOS checks are claimed.
+Implements [AC2](logic.md#ac2-refuse-incompatible-code-before-import) and [AC3](logic.md#ac3-distro-compatibility-is-preflighted). Full-trust code is unchanged but incompatibility must fail before import. Install rejection cannot mutate installed code/distro layers. Missing pre-freeze declarations require explicit author migration; there is no automatic rewrite or update. Reverting this commit is the source rollback, not a persisted schema migration. Product build/native verification remains macOS; canonical remote test placement is not a Linux/Windows product-support claim.
 
 ## Testing strategy
 Implements [acceptance scenarios](logic.md#behavior-and-acceptance-scenarios).
@@ -72,6 +72,8 @@ Implements [acceptance scenarios](logic.md#behavior-and-acceptance-scenarios).
 - Existing sample CLI/UI exit test exercises the actual pack. Extend only consumer-visible coverage (version introspection, inspect/install/state/remove), not tests of copied fields or source text.
 - Required integration commands: `bun scripts/suite.ts packages apps plugins`, `bun test scripts`, `bun run typecheck`. Use the canonical integration checkout's suite runner if the worktree copy is stale, without modifying protected scripts. Run targeted files first and smoke the actual CLI against a fresh temporary home. Follow LOOP.md for the one final review round and accepted-finding fix batch.
 - Public signature additions are committed before implementers. LSP references were attempted for PluginManifest and returned no language server; use literal reference search plus whole-repo typecheck to catch typed consumers.
+
+Execution amendment, 2026-10-29: the incoming operator build-first/typecheck-only instruction supersedes the remaining final campaign in the original plan above. The caught-up root compiler passed; no new final full suite or C/S/X model review was dispatched. Earlier exercised results, unresolved owner-host acceptance ownership, and the actual final declaration smoke remain bounded in [D24–D25](../../../loop/decisions/m7-api-freeze.md). Prepared review helpers are not reviews.
 
 ## Non-goals
 As [logic scope](logic.md#goal-and-scope): no feature parity reimplementation, network publishing, marketplace, native-window changes, distro API field, version-range expressions, or public import reorganization. The protocol package's own release number and app version are not changed solely to advertise plugin API 1.0.0.

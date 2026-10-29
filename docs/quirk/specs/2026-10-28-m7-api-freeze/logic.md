@@ -1,9 +1,11 @@
 # Plugin API 1.0
 
 ## Status & amendments
-Approved autonomously under LOOP.md. Tech spec: requested (public contract, loader, CLI catalog, and distribution cross subsystem boundaries).
+Implemented; ready for the canonical landing gate. Tech spec: authored. The caught-up root compiler passed; remaining verification follows the inherited operator build-first amendment below, not an unrun final suite/review claim.
 
 **Amendments:** 2026-10-28 — accepted spec-review F1: propagate each plugin's floor to independently executing UI/CLI hosts and reject locally before importing, including already-connected older clients of a newer daemon. Actual stock-UI verification additionally requires disabling the sidebar-extras Source Control activity and editor Source Control command/keybinding in the sample pack; removing the pack restores these with the Git panel.
+
+**Execution amendment, 2026-10-29:** The roadmap catch-up brought the operator build-first/typecheck-only instruction recorded in m7-session-extras-owner-host-flows D10–D11. The remaining gate is the caught-up compiler and canonical land; skip unstarted final full-suite/model-review work. Previously exercised API/CLI/UI evidence and failures remain accurately recorded in [this item's decisions](../../../loop/decisions/m7-api-freeze.md), D24–D25. No functional scope or compatibility contract changes.
 
 ## Goal and scope
 Freeze the existing plugin-author contract as API **1.0.0**, require every plugin to declare the minimum stable API release it needs, refuse incompatible code before execution, and publish the existing sample distro as a documented, installable repository artifact. This item owns API freeze, not another parity sweep.
