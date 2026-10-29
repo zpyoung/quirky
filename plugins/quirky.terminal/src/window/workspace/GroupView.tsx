@@ -1,4 +1,4 @@
-import { useRef, type DragEvent, type MouseEvent as ReactMouseEvent } from 'react'
+import { useEffect, useRef, type DragEvent, type MouseEvent as ReactMouseEvent } from 'react'
 import { Badge, Button, EmptyState, IconButton } from '@quirky/ui'
 import { displayTitle } from '../../layout/titles'
 import { dropZone, paneLeaves, roundRatio } from '../../layout/tree'
@@ -25,6 +25,11 @@ function TabItem({ controller, state, group, tab, index, others, now }: Common &
   const session = lead ? state.sessions[lead.session] : undefined
   const unread = leaves.map((leaf) => state.sessions[leaf.session]?.unread).find((reason) => reason)
   const title = displayTitle(tab)
+  const element = useRef<HTMLDivElement>(null)
+  // macOS hides the strip's scrollbar, so a selected tab past the edge would otherwise stay out of sight
+  useEffect(() => {
+    if (selected) element.current?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' })
+  }, [selected])
   const renaming = state.rename?.kind === 'tab' && state.rename.id === tab.id
   const drag = state.tabDrag
   const mark = drag?.over?.kind === 'strip' && drag.over.group === group.id && others[drag.over.index]?.id === tab.id
@@ -39,8 +44,8 @@ function TabItem({ controller, state, group, tab, index, others, now }: Common &
 
   return (
     <div
-      role="tab"
-      aria-selected={selected}
+      ref={element}
+      role="presentation"
       className={`qt-tab${selected ? ' qt-selected' : ''}${selected && ws.activeGroup === group.id ? ' qt-focused' : ''}${mark ? ' qt-drop-before' : ''}${paneTarget ? ' qt-drop-target' : ''}`}
       data-tab={tab.id}
       data-pinned={tab.pinned ? 'true' : undefined}
@@ -83,7 +88,9 @@ function TabItem({ controller, state, group, tab, index, others, now }: Common &
       {renaming ? (
         <InlineField label="Tab title" initial={displayTitle(tab)} className="ui-text-field__input qt-rename" onCommit={(value) => void controller.commitRename(value)} onCancel={() => controller.cancelRename()} />
       ) : (
-        <span className="qt-tab-title">{title}</span>
+        <span className="qt-tab-title" role="tab" aria-selected={selected}>
+          {title}
+        </span>
       )}
       {Object.entries(session?.badges ?? {}).map(([key, badge]) =>
         badge.command ? (

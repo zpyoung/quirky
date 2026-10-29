@@ -1,4 +1,4 @@
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from 'bun:test'
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, spyOn, test } from 'bun:test'
 import { act } from 'react'
 import {
   callsTo,
@@ -60,9 +60,27 @@ describe('SC-11: clicking a tab activates it', () => {
     })
     const view = await mount(daemon)
     await click(view.q('[data-tab="tab-1"]'))
-    expect(view.q('[data-tab="tab-1"]')!.getAttribute('aria-selected')).toBe('true')
+    expect(view.q('[data-tab="tab-1"] [role="tab"]')!.getAttribute('aria-selected')).toBe('true')
     expect(view.q('[data-pane="pane-1"]')).not.toBeNull()
     expect(view.q('[data-pane="pane-3"]')).toBeNull()
+  })
+
+  test('a newly selected tab is scrolled into a strip too narrow for every tab', async () => {
+    const daemon = fakeDaemon(conceptualWorkspace(), {
+      transforms: { activateTab: (ws) => ({ ...ws, root: { ...(ws.root as any), first: { ...(ws.root as any).first, activeTab: 'tab-1' } } }) }
+    })
+    const scrolled: Element[] = []
+    const scroll = spyOn(Element.prototype, 'scrollIntoView').mockImplementation(function (this: Element) {
+      scrolled.push(this)
+    })
+    try {
+      const view = await mount(daemon)
+      scrolled.length = 0
+      await click(view.q('[data-tab="tab-1"]'))
+      expect(scrolled.map((el) => (el as HTMLElement).dataset.tab)).toEqual(['tab-1'])
+    } finally {
+      scroll.mockRestore()
+    }
   })
 })
 
