@@ -212,9 +212,25 @@ export class OwnerRouter {
       throw this.fail('conflict', 'The selected remote workspace is unavailable. Refresh targets and choose again.', { reason: 'target-unavailable' })
     }
     const rows = isRecord(listed) && Array.isArray(listed.workspaces) ? listed.workspaces : []
-    const mirror = rows.map(parseMirror).find((row): row is RemoteMirror => row !== null && row.id === ref.mirrorId)
+    let mirror: RemoteMirror | null = null
+    let hasCurrentReplacement = false
+    for (const value of rows) {
+      const row = parseMirror(value)
+      if (!row) continue
+      if (row.id === ref.mirrorId) mirror = row
+      if (
+        row.connected &&
+        row.hostId === ref.owner.hostId &&
+        sameIdentity(row.identity, ref.owner.identity) &&
+        row.worktree.id === ref.worktreeId &&
+        row.worktree.instanceId !== ref.instanceId
+      ) {
+        hasCurrentReplacement = true
+      }
+    }
     if (
       !mirror ||
+      hasCurrentReplacement ||
       mirror.hostId !== ref.owner.hostId ||
       !sameIdentity(mirror.identity, ref.owner.identity) ||
       mirror.worktree.id !== ref.worktreeId ||

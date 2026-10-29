@@ -315,7 +315,7 @@ export class HandoffDialog {
       target,
       createName: target && 'create' in target ? target.create.name : '',
       createBase: target && 'create' in target ? (target.create.base ?? '') : '',
-      agent: target && 'remote' in target ? null : controls.agent ?? null,
+      agent: target && 'remote' in target ? (prepared.draft?.controls.agent ?? null) : controls.agent ?? null,
       relationship: controls.relationship,
       context: 'focused',
       include: controls.include,
@@ -328,12 +328,12 @@ export class HandoffDialog {
       previewing: true
     }
     for (const listener of [...this.listeners]) listener()
-    if (target && !('create' in target)) void this.refreshTargetAgents(target)
+    if (target && !('create' in target)) void this.refreshTargetAgents(target, true)
     await this.refresh()
     return ok()
   }
 
-  private async refreshTargetAgents(target: Target | null): Promise<void> {
+  private async refreshTargetAgents(target: Target | null, preserveSelection = false): Promise<void> {
     const attempt = ++this.targetSequence
     if (target === null || 'create' in target) {
       const current = this.snapshot.agent
@@ -345,7 +345,7 @@ export class HandoffDialog {
       this.commit({ agents: this.localAgents, agent })
       return
     }
-    this.commit({ agents: { state: 'loading', list: [] }, agent: null })
+    this.commit({ agents: { state: 'loading', list: [] }, ...(preserveSelection ? {} : { agent: null }) })
     try {
       const result = await this.context.call(METHOD('targetAgents'), { target })
       if (attempt !== this.targetSequence || !this.snapshot.shown) return

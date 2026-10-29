@@ -787,6 +787,20 @@ offers and unknown outcomes are shown separately from confirmed redemption.
 Full remaining UI acceptance and native-only clipboard, browser, Keychain and OS-focus checks are
 tracked in [the completion decisions](../docs/loop/decisions/m3-accounts-remaining-flows.md).
 
+### Paired-owner session features
+
+Accounts and Usage follow the focused workspace's registered owner; remote
+browser sign-in stays unavailable. Returning to a local workspace restores local
+accounts without changing either computer's selection.
+
+Vault opens a remote archive in the local Handoff review dialog using its
+authenticated owner record and latest user prompt. Remote source paths and
+resume commands are not exposed as local actions. Handoff checks transcript
+reachability and enabled agents on the exact destination owner. A saved draft's
+agent survives reopening only if that owner still offers it; Start remains
+disabled during validation. A replaced workspace instance requires a fresh
+target selection rather than silently using its replacement.
+
 ## Paired daemon transport
 
 `quirky.orchestration` provides an explicit daemon-to-daemon peer listener.

@@ -278,9 +278,13 @@ export class HandoffService {
       !Array.isArray(value.previewMessages)) {
       throw this.fail('conflict', 'The archived source owner returned incomplete session metadata.', { reason: 'source-unverifiable' })
     }
+    const lastUserPrompt = typeof value.lastUserPrompt === 'string' && value.lastUserPrompt !== '' ? value.lastUserPrompt : null
+    let prompt = lastUserPrompt
     let lastMessage: string | null = null
     for (const message of value.previewMessages) {
-      if (isRecord(message) && message.role === 'assistant' && typeof message.text === 'string') lastMessage = message.text
+      if (!isRecord(message)) continue
+      if (message.role === 'assistant' && typeof message.text === 'string') lastMessage = message.text
+      if (lastUserPrompt === null && message.role === 'user' && typeof message.text === 'string' && message.text !== '') prompt = message.text
     }
     return {
       key: sourceKey(ref),
@@ -291,7 +295,7 @@ export class HandoffService {
       worktreeId: null,
       providerSessionId: value.sessionId,
       transcriptPath: null,
-      prompt: typeof value.firstUserPrompt === 'string' ? value.firstUserPrompt : null,
+      prompt,
       lastMessage,
       live: false,
       busy: false
@@ -712,7 +716,8 @@ export class HandoffService {
       expectedInstanceId: resolved.ref.instanceId,
       source: {
         agent: info.agent,
-        providerSessionId: info.providerSessionId
+        providerSessionId: info.providerSessionId,
+        reportedPath: info.transcriptPath
       }
     })
     if (!isRecord(value) ||
