@@ -2,6 +2,7 @@ import { Editor, type Extensions } from '@tiptap/core'
 import Image from '@tiptap/extension-image'
 import Link from '@tiptap/extension-link'
 import { Mathematics } from '@tiptap/extension-mathematics'
+import Paragraph from '@tiptap/extension-paragraph'
 import { Markdown } from '@tiptap/markdown'
 import StarterKit from '@tiptap/starter-kit'
 import { Table } from '@tiptap/extension-table'
@@ -13,13 +14,20 @@ import TaskList from '@tiptap/extension-task-list'
 import { MarkdownDocumentLink } from './DocumentLink'
 import { MarkdownToggle } from './Toggle'
 
+/** Keeps soft source newlines distinct from hard breaks during native DOM input. */
+const MarkdownParagraph = Paragraph.extend({
+  whitespace: 'pre'
+})
+
 export function createMarkdownExtensions(): Extensions {
   return [
     StarterKit.configure({
       heading: { levels: [1, 2, 3, 4, 5] },
       link: false,
+      paragraph: false,
       trailingNode: false
     }),
+    MarkdownParagraph,
     Markdown.configure({ markedOptions: { gfm: true } }),
     MarkdownDocumentLink,
     Link.configure({
