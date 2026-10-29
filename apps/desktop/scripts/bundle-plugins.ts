@@ -220,6 +220,26 @@ function workerEntries(pluginId: string, pluginDir: string, value: unknown): [st
   return entries
 }
 
+const JSDOM_STYLE_RULES = /[\\/]jsdom[\\/]lib[\\/]jsdom[\\/]living[\\/]helpers[\\/]style-rules\.js$/
+const JSDOM_STYLESHEET_READ = /fs\.readFileSync\(\s*path\.resolve\(__dirname, "\.\.\/\.\.\/browser\/default-stylesheet\.css"\),\s*\{ encoding: "utf-8" \}\s*\)/
+
+/**
+ * Inlines jsdom's default stylesheet into the bundle. jsdom reads it from beside its own source at
+ * load time, and a bundle keeps that path as the build machine's absolute path, so any app built
+ * elsewhere fails to load a plugin that pulls in jsdom. Fails the build if jsdom changes the read.
+ */
+export const inlineJsdomStylesheet: Bun.BunPlugin = {
+  name: 'inline-jsdom-stylesheet',
+  setup(build) {
+    build.onLoad({ filter: JSDOM_STYLE_RULES }, ({ path }) => {
+      const source = readFileSync(path, 'utf8')
+      if (!JSDOM_STYLESHEET_READ.test(source)) throw new Error(`jsdom changed how it loads its default stylesheet: ${path}`)
+      const css = readFileSync(resolve(dirname(path), '../../browser/default-stylesheet.css'), 'utf8')
+      return { contents: source.replace(JSDOM_STYLESHEET_READ, JSON.stringify(css)), loader: 'js' }
+    })
+  }
+}
+
 async function bundleEntry(pluginId: string, pluginDir: string, outPluginDir: string, entry: string): Promise<string> {
   const target = jsName(entry)
   const result = await Bun.build({
@@ -227,6 +247,7 @@ async function bundleEntry(pluginId: string, pluginDir: string, outPluginDir: st
     target: 'bun',
     outdir: dirname(join(outPluginDir, target)),
     naming: parse(target).base,
+    plugins: [inlineJsdomStylesheet],
     throw: false
   })
   if (!result.success) {
