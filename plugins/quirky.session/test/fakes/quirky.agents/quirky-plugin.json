@@ -21,6 +21,7 @@
       },
       {
         "id": "plan",
+        "description": "Shows an agent launch without starting it: no session, trust record, or hooks.",
         "readOnly": true,
         "params": {
           "type": "object",
@@ -34,6 +35,27 @@
             "extraArgs": { "type": "string" }
           },
           "required": ["agent"]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "agent": { "type": "string" },
+            "command": { "type": "string" },
+            "env": { "type": "object", "additionalProperties": true },
+            "record": {
+              "type": "object",
+              "properties": {
+                "command": { "type": "string" },
+                "args": { "type": "string" },
+                "env": { "type": "object", "additionalProperties": true }
+              },
+              "required": ["command", "args", "env"]
+            },
+            "promptDelivery": {},
+            "paste": {},
+            "launchSettings": {}
+          },
+          "required": ["agent", "command", "env", "record", "promptDelivery", "paste", "launchSettings"]
         }
       },
       {

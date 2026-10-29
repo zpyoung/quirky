@@ -45,7 +45,7 @@
                   "type": "object",
                   "properties": {
                     "id": { "type": "string" },
-                    "transcriptPath": { "description": "Absolute captured Codex rollout path or null." }
+                    "transcriptPath": { "description": "The captured provider transcript path, or null." }
                   },
                   "required": ["id", "transcriptPath"],
                   "additionalProperties": false
@@ -57,7 +57,16 @@
           },
           "required": ["agent", "sessionId", "worktreeId", "cwd", "homeOverrides"]
         },
-        "result": { "type": "object" }
+        "result": {
+          "type": "object",
+          "properties": {
+            "env": { "type": "object", "additionalProperties": true },
+            "shellInit": { "description": "The prepared private shell init path, or null." },
+            "account": { "description": "The prepared non-secret account identity, or null." },
+            "resumeTranscriptPath": { "type": "string" }
+          },
+          "required": ["env", "shellInit", "account"]
+        }
       }
     ]
   }

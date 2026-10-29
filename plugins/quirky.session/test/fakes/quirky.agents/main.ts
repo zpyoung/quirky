@@ -71,6 +71,34 @@ export function activate(context: PluginContext): void {
     }
   })
 
+  provide('plan', (params) => {
+    const found = entry(params.agent)
+    const prompt: string | undefined = params.prompt?.trim() ? params.prompt : undefined
+    if (prompt?.includes('\u0000')) throw context.error('invalid-params', 'prompt contains a NUL character')
+    const options =
+      params.options !== null && typeof params.options === 'object' && !Array.isArray(params.options)
+        ? (params.options as Record<string, unknown>)
+        : {}
+    const selected: Record<string, { value: string | boolean; source: 'explicit' }> = {}
+    if (typeof params.model === 'string') selected.model = { value: params.model, source: 'explicit' }
+    for (const [key, value] of Object.entries(options)) {
+      if (typeof value === 'string' || typeof value === 'boolean') selected[key] = { value, source: 'explicit' }
+    }
+    const args = [fakeAgents().args, typeof params.extraArgs === 'string' ? params.extraArgs : ''].filter(Boolean).join(' ')
+    const record = { command: params.agent, args, env: {} }
+    const paste = prompt !== undefined && (found.paste || params.submitPrompt === false)
+    const summary = Object.keys(selected).length > 0 ? `${String(params.agent)} selected options` : undefined
+    return {
+      agent: params.agent,
+      command: `${record.command}${args === '' ? '' : ` ${args}`}${prompt !== undefined && !paste ? ` ${quote(prompt)}` : ''}`,
+      env: record.env,
+      record,
+      promptDelivery: prompt === undefined ? null : paste ? 'pending' : 'command-line',
+      paste: paste ? { text: prompt, submit: params.submitPrompt !== false } : null,
+      launchSettings:
+        summary === undefined ? null : { agent: params.agent, options: selected, summary }
+    }
+  })
   provide('resolveLaunch', (params) => {
     const structured: Record<string, string | boolean> = {}
     const selected: Record<string, { value: string | boolean; source: 'explicit' }> = {}
@@ -92,22 +120,6 @@ export function activate(context: PluginContext): void {
         ? { agent: params.agent, options: selected, summary: `${String(params.agent)} selected options` }
         : null
     return { added: [], args: '', structured, shadowed: [], launchSettings }
-  })
-
-  provide('plan', (params) => {
-    const found = entry(params.agent)
-    const prompt = typeof params.prompt === 'string' && params.prompt.trim() !== '' ? params.prompt : undefined
-    const args = fakeAgents().args === '' ? '' : ` ${fakeAgents().args}`
-    const paste = prompt !== undefined && (found.paste || params.submitPrompt === false)
-    return {
-      agent: params.agent,
-      command: `${params.agent}${args}${prompt !== undefined && !paste ? ` ${quote(prompt)}` : ''}`,
-      env: {},
-      record: { command: params.agent, args: fakeAgents().args, env: {} },
-      promptDelivery: prompt === undefined ? null : paste ? 'pending' : 'command-line',
-      paste: paste ? { text: prompt, submit: params.submitPrompt !== false } : null,
-      launchSettings: null
-    }
   })
 
   provide('prepareLaunch', (params) => {

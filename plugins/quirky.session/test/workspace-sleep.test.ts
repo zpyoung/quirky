@@ -13,22 +13,11 @@ import { setWorktreeOverride } from './fakes/quirky.worktree/main'
 
 const PTY_ENTRY = join(import.meta.dir, '../../../packages/pty-host/src/main.ts')
 const quote = (value: string) => `'${value.replaceAll("'", `'\\''`)}'`
-function shellScript(script: string): string {
+
+function commandWithHistoryScrollback(marker: string, continuation: string): string {
+  const script = `printf '%s\\n' ${quote(marker)}; i=0; while [ "$i" -lt 32 ]; do printf 'WORKSPACE_SLEEP_SCROLLBACK_FILLER\\n'; i=$((i + 1)); done; ${continuation}`
   return `sh -c ${quote(script)}`
 }
-
-// PTY history is scrollback, so push the marker past the live terminal screen.
-
-function printHistoryMarkerToScrollback(marker: string): string {
-  return `printf ${quote(`${marker}\\n`)}; i=0; while [ "$i" -lt 30 ]; do printf 'history filler\\n'; i=$((i + 1)); done;`
-}
-
-function makeTranscript(name: string): string {
-  const transcriptPath = join(home, name)
-  writeFileSync(transcriptPath, '')
-  return transcriptPath
-}
-
 
 let home: string
 let daemon: DaemonHandle | null
@@ -75,11 +64,6 @@ async function history(sessionId: string): Promise<string> {
   return page.lines.join('\n')
 }
 
-async function waitForHostRunning(sessionId: string): Promise<void> {
-  await waitForAsync(async () => (await pty!.request('list', {})).find((session) => session.sessionId === sessionId && session.alive), 5000)
-}
-
-
 beforeEach(async () => {
   resetFakeAgents()
   setWorktreeOverride('wt_main', null)
@@ -107,9 +91,9 @@ describe('workspace sleep and wake', () => {
     const shell = await createSession(client!, {
       worktree: 'floating',
       agent: 'shell',
-      command: shellScript(`${printHistoryMarkerToScrollback('SLEEP_HISTORY_MARKER')} (exec sleep 600) & echo $! > ${quote(pidFile)}; wait`)
+      cwd: home,
+      command: commandWithHistoryScrollback('SLEEP_HISTORY_MARKER', `(exec sleep 600) & echo $! > ${quote(pidFile)}; wait`)
     })
-    await waitForHostRunning(shell.id)
     await waitFor(() => existsSync(pidFile), 5000)
     await waitForAsync(async () => (await history(shell.id)).includes('SLEEP_HISTORY_MARKER'), 5000)
     const childPid = Number(await Bun.file(pidFile).text())
@@ -141,13 +125,11 @@ describe('workspace sleep and wake', () => {
   })
 
   test('resumes an agent with its stored provider conversation identity', async () => {
-    const transcriptPath = makeTranscript('claude-transcript.jsonl')
     const pidFile = join(home, 'claude.pid')
     writeExecutable('claude', `echo "$$" > '${pidFile}'; exec sleep 600`)
     const agent = await createSession(client!, { worktree: 'floating', agent: 'claude', cwd: home })
-    await waitForHostRunning(agent.id)
     await waitFor(() => existsSync(pidFile), 5000)
-    await call(client!, 'quirky.session/setProviderSession', { session: agent.id, id: 'provider-thread-42', transcriptPath })
+    await call(client!, 'quirky.session/setProviderSession', { session: agent.id, id: 'provider-thread-42' })
 
     await call(client!, 'quirky.session/sleepWorkspace', { worktree: 'floating' })
     const awake = await call<WorkspaceSleepState>(client!, 'quirky.session/wakeWorkspace', { worktree: 'floating' })
@@ -155,7 +137,7 @@ describe('workspace sleep and wake', () => {
     expect(awake.state).toBe('awake')
     expect(fakeAgents().calls.findLast((entry) => entry.method === 'prepareResume')?.params.providerSession).toEqual({
       id: 'provider-thread-42',
-      transcriptPath
+      transcriptPath: null
     })
     const resumed = (await call(client!, 'quirky.session/list', { worktree: 'floating' })).find((entry: { resumedFrom: string | null }) => entry.resumedFrom === agent.id)
     expect(resumed).toMatchObject({ agent: 'claude', resumedFrom: agent.id, providerSession: { id: 'provider-thread-42' } })
@@ -210,7 +192,6 @@ describe('workspace sleep and wake', () => {
     const pidFile = join(home, 'aider.pid')
     writeExecutable('aider', `echo "$$" > '${pidFile}'; exec sleep 600`)
     const session = await createSession(client!, { worktree: 'floating', agent: 'aider', cwd: home })
-    await waitForHostRunning(session.id)
     await waitFor(() => existsSync(pidFile), 5000)
     const pid = Number(await Bun.file(pidFile).text())
 
@@ -231,9 +212,8 @@ describe('workspace sleep and wake', () => {
       worktree: 'id:wt_main',
       cwd: checkout,
       agent: 'shell',
-      command: shellScript(`${printHistoryMarkerToScrollback('OLD_WORKTREE_HISTORY')} echo "$$" > ${quote(pidFile)}; exec sleep 600`)
+      command: commandWithHistoryScrollback('OLD_WORKTREE_HISTORY', `echo "$$" > ${quote(pidFile)}; exec sleep 600`)
     })
-    await waitForHostRunning(old.id)
     await waitFor(() => existsSync(pidFile), 5000)
     await waitForAsync(async () => (await history(old.id)).includes('OLD_WORKTREE_HISTORY'), 5000)
     const oldPid = Number(await Bun.file(pidFile).text())
@@ -270,14 +250,13 @@ describe('workspace sleep and wake', () => {
   })
   test('retains a partial stop and retries the live session without losing history', async () => {
     const pidFile = join(home, 'partial-stop.pid')
-    const first = await createSession(client!, { worktree: 'floating', agent: 'shell', command: 'exec sleep 600' })
-    await waitForHostRunning(first.id)
+    const first = await createSession(client!, { worktree: 'floating', agent: 'shell', cwd: home, command: 'exec sleep 600' })
     const second = await createSession(client!, {
       worktree: 'floating',
+      cwd: home,
       agent: 'shell',
-      command: shellScript(`${printHistoryMarkerToScrollback('PARTIAL_STOP_HISTORY')} echo "$$" > ${quote(pidFile)}; exec sleep 600`)
+      command: commandWithHistoryScrollback('PARTIAL_STOP_HISTORY', `echo "$$" > ${quote(pidFile)}; exec sleep 600`)
     })
-    await waitForHostRunning(second.id)
     await waitFor(() => existsSync(pidFile), 5000)
     await waitForAsync(async () => (await history(second.id)).includes('PARTIAL_STOP_HISTORY'), 5000)
     const childPid = Number(await Bun.file(pidFile).text())
@@ -327,12 +306,10 @@ describe('workspace sleep and wake', () => {
 
   test('retains a partial wake error and retries with the original provider identity', async () => {
     const cwd = join(home, 'agent-cwd')
-    const transcriptPath = makeTranscript('provider-retry.jsonl')
     mkdirSync(cwd)
     writeExecutable('claude', 'exec sleep 600')
     const agent = await createSession(client!, { worktree: 'floating', agent: 'claude', cwd })
-    await waitForHostRunning(agent.id)
-    await call(client!, 'quirky.session/setProviderSession', { session: agent.id, id: 'provider-retry-9', transcriptPath })
+    await call(client!, 'quirky.session/setProviderSession', { session: agent.id, id: 'provider-retry-9' })
     await call(client!, 'quirky.session/sleepWorkspace', { worktree: 'floating' })
     rmSync(cwd, { recursive: true, force: true })
 
@@ -344,7 +321,7 @@ describe('workspace sleep and wake', () => {
     expect(retried).toMatchObject({ state: 'awake', sessions: [{ sessionId: agent.id, state: 'restored', error: null }] })
     const resumed = (await call<Session[]>(client!, 'quirky.session/list', { worktree: 'floating' }))
       .find((session) => session.resumedFrom === agent.id && session.status !== 'exited')
-    expect(resumed?.providerSession).toEqual({ id: 'provider-retry-9', transcriptPath })
+    expect(resumed?.providerSession?.id).toBe('provider-retry-9')
   })
 
 

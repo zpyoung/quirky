@@ -222,5 +222,38 @@ The deterministic combined-scratch prepass returned25 path findings, not a clean
 - **Revisit if:** The fresh full affected gate remains red.
 - **Source:** assumed — autonomous, actual prepass and isolated retry evidence
 
+## D21: Remove only the requested Session Info wording assertion
+- **Question:** How should lane9's canonical session-fix ownership and reported restyle failure be handled?
+- **Options:** Re-pin a replacement title; edit Session Info production; remove the one incidental assertion and preserve semantic coverage.
+- **Chose:** Commit666e590a deletes only the old ui.test.tsx175 assertion requiring the redundant inner “Session Info” title. Preserve accessible sections, interrupted/stale states, context thresholds and action assertions. No Session Info production change. Freeze further Session source/fixture work under lane9; this branch's Session production diff is comment-only, and its earlier fixture repairs remain separately reviewable.
+- **Why:** The user reports that canonical restyle removed the redundant inner title. The title text is not a behavior contract; replacing it would recreate the same incidental pin. No external dependency or human decision is needed.
+- **Evidence:** user Lane9 interjection; exact one-deletion commit666e590a; session-info-title-removal/result.json remote1/1pass/no-flakes; peer send request379e58d9-b91d-4b53-95cf-08835f86f50a input_accepted/provider unsupported (not proof of observed delivery or turn start).
+- **Reversibility:** easy
+- **Confidence:** high for the narrow deletion and exercised semantic file.
+- **Revisit if:** A named merge conflict requires reconciling lane9's newer producer contract.
+- **Source:** locked by user Lane9 scope and narrow assertion-removal request
+
+## D22: Distinguish positive startup owner loss from ordinary PTY absence
+- **Question:** Was the earlier structured restart assertion correctly classified as an unsupported PTY inference?
+- **Options:** Keep that classification; conflate all reconnects with startup; accept the canonical Session owner's independent lifetime trace.
+- **Chose:** Supersede D18's structured-restart classification. Runtime structured leases are memory-only; reverse dependent shutdown stops runners/releases leases, and Session startup precedes lazy Structured activation. Startup owner loss is positive evidence for finalizing persisted active structured sessions, while ordinary startup:false PTY reconnect remains terminal-only. Preserve lane9's restored startup-only finalize loop and stronger provider-ID/cwd retention regression, plus lazy-activation survival coverage, during integration.
+- **Why:** The user's independent source trace establishes the missing ownership distinction. The earlier test removal must not be treated as a new lifecycle contract or a fix for the underlying startup regression. This branch remains frozen for further Session source/fixture work; no duplicate kernel or Structured repair is authorized.
+- **Evidence:** user Lane9 ACK and source trace; canonical owner reports restoration of the loop removed by48083f14 and retention of the substantive regression; af513cb7 imported only our narrow Session Info title fix. No passing result for the owner's expanded startup tests is asserted here before its receipt.
+- **Reversibility:** medium
+- **Confidence:** high for the authoritative ownership distinction; canonical expanded verification remains separately reported.
+- **Revisit if:** Canonical integration loses either startup finalization or ordinary reconnect/lazy-activation safety.
+- **Source:** supersedes m7-sweep-sessions D18 structured-restart classification; locked by user Lane9 lifetime trace
+
+## D23: Adopt the landed Session owner's overlapping files verbatim
+- **Question:** How can this branch avoid reapplying its superseded Session variants now that the canonical repair has landed?
+- **Options:** Retain competing variants; import a whole newer roadmap/restyle; perform an exact bounded canonical-file cutover.
+- **Chose:** Replace only the eight overlapping Session source/fixture files fromf9ac686846d26d9299e6ce6a77b9ae27a3db2d19. Their recorded Git blob hashes match exactly. This preserves the startup-only finalize loop, substantive startup/provider/cwd regression, exact live structured lease on ordinary reconnect and final fake-account/plan result schemas. No unrelated UI restyle, kernel or structured/main.ts change is imported; no second general roadmap merge is performed.
+- **Why:** The user explicitly requires canonical semantics and forbids reapplying the removed structured-test deletion/comment-only assumption. Whole-file identity eliminates residual competing fixture variants. The canonical owner's complete11-decision log was read; its reported38-file, typecheck and real private PTY evidence stays attributed to that owner. Our previous nine-directory prepass3 passed259remote+5Mac without flakes, scripts/types/build passed, but it is not relabeled as a fresh check of the later canonical cutover.
+- **Evidence:** authoritative user landing receipt roadmap2c3d4c91/sourcef9ac6868; canonical-session-cutover.json eight exact blob pairs; complete canonical fix-test-session-1028 D1–D11/Progress; final-review/verified-3/result.json and check-0.log.
+- **Reversibility:** medium
+- **Confidence:** high for exact source identity and binding semantics; current integrated verification remains required.
+- **Revisit if:** The scoped integrated gate shows a source/fixture dependency mismatch.
+- **Source:** locked by user canonical Session landing and preservation instruction; supersedes this branch's competing Session implementation/fixture variants
+
 ## Progress
-Single catch-up bb774ec6 complete; all22 incoming decision logs read. Committed repairs fe7ab4f1, exact47-code-path artifact staged net of incoming899b0573; preserved original user metadata hashes. Real remote five-owner smoke passed1/1; temporary adapters removed, all local resources closed. Full prepass1 failed260remote/249pass/11fail while5Mac files passed; no discovery review yet. Terminal/Session follow-up roots returned; Vault index/fixture diagnosis still running. Parent narrowed Handoff's real owner closure; two-file result passed with one reported flaky file. Next finish the writer barrier, current full gate/compiler/build, one cross-family C/S/X review/fix batch, register the one genuine host implementation successor, canonical land and owned archive/cleanup. Lane8 owns kernel exit-cache ordering; this branch has no kernel or structured/main.ts edits.
+Single general catch-up bb774ec6 and its22 incoming logs are complete. Previous full prepass3 passed259remote+5Mac/no-flakes plus scripts/types/build, but the subsequent user-required eight-file canonical Session cutover is a newer snapshot. Exact f9ac6868 blobs and complete binding owner decisions are retained; no further custom Session edits, kernel edits or Structured implementation changes. Next commit the cutover/docs, capture the current51-path artifact, run the full affected gate including Structured, then exactly one cross-family C/S/X final discovery/fix batch. Register the one genuine host implementation successor immediately before canonical land. All owned browsers/runtime scenes remain closed; original metadata is preserved.

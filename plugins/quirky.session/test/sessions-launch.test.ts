@@ -232,17 +232,20 @@ describe('SessionService.create', () => {
   })
 
 
-  test('a provider session update submitted during spawn persists after launch', async () => {
-    let providerUpdate: Promise<Session> | undefined
+  test('a provider update requested during spawn commits after the workspace launch lock releases', async () => {
+    let providerUpdate!: Promise<Session>
     const { service, records } = launchContext((svc, id) => {
       providerUpdate = svc.setProviderSession({ session: id, id: 'provider-123' })
     })
 
     const result = await service.create({ agent: 'claude' }, caller)
-
-    if (!providerUpdate) throw new Error('provider session update was not started during spawn')
     await providerUpdate
-    expect(records.get(result.id)?.providerSession).toEqual({ id: 'provider-123', transcriptPath: null })
+
+    expect(records.get(result.id)).toMatchObject({
+      status: 'running',
+      launch: { command: 'claude', args: '--model x', env: {} },
+      providerSession: { id: 'provider-123', transcriptPath: null }
+    })
   })
 })
 
