@@ -1,9 +1,11 @@
 # Paired-owner session features
 
 ## Status & amendments
-Status: implemented; autonomous approval and bounded combined Codex specification review recorded in the decision log. Operator build-first override makes typecheck the land gate; acceptance repairs are assigned to fix-test-session-extras-owner-host-1029.
+Status: implemented; autonomous approval and bounded combined Codex specification review recorded in the decision log. The original operator build-first land used typecheck only; [fix-test-session-extras-owner-host-1029](../../../loop/decisions/fix-test-session-extras-owner-host-1029.md) records the subsequent owning acceptance repairs and actual paired-owner UI/physical-delivery evidence.
 
 **Amendments:** 2026-10-29 — the operator explicitly replaced the remaining acceptance-debugging/UI/build/final-review campaign with a typecheck-only land and recorded fix-test item. Feature scenarios and authority requirements remain unchanged; no passing acceptance result is implied.
+
+2026-10-29 acceptance closure: the caught-up Accounts/Vault/Handoff and scripts suite passes83/83 files; final behavioral draft regressions pass2/2. Actual isolated paired-owner UI exercises Accounts scope/sign-in gates, archive review, saved target-agent restoration, cross-host warnings and source-preserving launch. Physical executable logs separately establish exact reviewed-body delivery. Native OS and real paid-provider behavior are not claimed.
 
 ## Purpose and conceptual model
 Accounts, Agent Session History (Vault), and Handoff must use the real computer owning the selected workspace or session. A registered owner is an authenticated full-owner saved runtime, pinned to its producer-issued host ID, activation generation and saved grant. A remote workspace mirror additionally binds an exact canonical worktree ID, filesystem instance and fingerprint; its path is display data, never local execution authority.

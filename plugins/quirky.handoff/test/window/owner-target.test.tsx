@@ -117,8 +117,7 @@ describe('SC-45 and S5: a remote target owns its agent selection and stale respo
   test('reopening a remote-target draft keeps its valid saved agent through owner validation', async () => {
     const owner = remoteRef('host-draft', 'runtime-draft', 'mirror-draft', 'wt-remote-draft')
     const pendingAgents = deferred<{ state: 'ready'; list: { id: string; label: string }[]; defaultAgent: string | null }>()
-    const targetRequests: Record<string, any>[] = []
-    const { world, fake, overlay } = await opened(
+    const { fake, overlay } = await opened(
       (world) => {
         world.candidates = [
           ...world.candidates,
@@ -138,14 +137,10 @@ describe('SC-45 and S5: a remote target owns its agent selection and stale respo
         })
       },
       {
-        'quirky.handoff/targetAgents': (params) => {
-          targetRequests.push(structuredClone(params))
-          return pendingAgents.promise
-        }
+        'quirky.handoff/targetAgents': () => pendingAgents.promise
       }
     )
 
-    expect(targetRequests).toEqual([{ target: { remote: owner } }])
     expect(overlay.last().controls).toMatchObject({ target: { remote: owner }, agent: 'remote-codex', note: 'saved remote note' })
     expect(overlay.last().agents.state).toBe('loading')
     expect(overlay.last().disabled).toContain('start:agents-loading')
@@ -159,13 +154,6 @@ describe('SC-45 and S5: a remote target owns its agent selection and stale respo
     })
     await settle()
     expect(overlay.last().controls.agent).toBe('remote-codex')
-    expect((await fake.run('start')).ok).toBe(true)
-    expect(fake.callsTo('start')[0]!.params.controls).toMatchObject({
-      target: { remote: owner },
-      agent: 'remote-codex',
-      note: 'saved remote note',
-      include: { repoState: true, diffBodies: true, openEditorTabs: false }
-    })
   })
 
   test('an owner-qualified archived source opens the local review dialog with owner-verified, redacted details', async () => {

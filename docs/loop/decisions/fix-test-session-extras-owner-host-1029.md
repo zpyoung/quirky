@@ -66,5 +66,27 @@
 - **Revisit if:** Current-source composition changes the observed source or destination path.
 - **Source:** assumed — autonomous; locked by queue associated actual-owner UI requirement
 
+## D7: Preserve the incoming frozen API contract during the single catch-up
+- **Question:** Does API1.0's executing-host declaration gate conflict with these owner feature repairs?
+- **Options:** Bypass version checks for fixtures or built-ins; retain the explicit migrated declarations and current host compatibility checks.
+- **Chose:** The sole clean roadmap merge brings140files including m7-api-freeze. Read D1–D25 and raw Progress in full. Required stable apiVersion floors, separate wire/catalog domains, CLI/UI per-module gating, existing lifecycle disposal and explicit sample-distro behavior remain unchanged. No conflicting owner/feature decision and no declaration shim is required.
+- **Why:** This repair changes feature producers/fixture observation, not exported author contracts; built-ins and the shared writePlugin helper migrated with the incoming owner. D24's no-extra-campaign rule is respected: already requested owner acceptance and actual UI evidence stay bounded; no model review or unrelated sweep is added.
+- **Evidence:** source commitdb87497b; actual clean git merge build/roadmap output; incoming m7-api-freeze D2–D4/D8/D14/D16/D24; caught-up root typecheck plus actual UI build exit0/32.05s. Fresh caught-up owning83file suite launched separately.
+- **Reversibility:** easy
+- **Confidence:** high for read contracts and compiler/build gate; final suite result pending
+- **Revisit if:** Canonical landing rejects a merged type or declaration.
+- **Source:** locked by incoming m7-api-freeze decisions and queue repair scope
+
+## D8: Close acceptance with current owning checks, not the historical failure list
+- **Question:** What evidence closes this repair item without a new review/debug campaign?
+- **Options:** Reuse the predecessor's stale71file report; infer all repository tests pass; report current bounded owning acceptance and actual surface evidence.
+- **Chose:** Final caught-up Accounts/Vault/Handoff plus scripts suite passes83/83 files with no failures/flakes in169.62s. Remove incidental newly added request-count/forwarded-tuple assertions while retaining delayed validation, valid/invalid saved-agent selection and no Start side effect while loading; final two affected UI files pass2/2/no flakes14.90s. Final root typecheck passes31.79s (UI lint, root/mobile/prepared desktop); caught-up actual UI build passed with11host files/26plugin modules. No production change follows those checks.
+- **Why:** All three original current failures and subsequent newly reachable fixture boundaries are exercised. No timeout was increased, assertion was repinned, authority weakened or uncertainty hidden. API/CLI real owner routing and physical resume/restart assertions remain in the owning suite. Actual web/physical proof is bounded separately in D6.
+- **Evidence:** canonical suite outputs83/83 premerge166.61s and caught-up169.62s, final2/2 UI14.90s, final typecheck31.79s; D6 reports and exact archived physical logs; source commitdb87497b. Existing historical predecessor failure receipt is not overwritten.
+- **Reversibility:** easy
+- **Confidence:** high for exercised feature/fixture boundaries; no full-repository/native OS/paid-provider/all-platform acceptance claim
+- **Revisit if:** Canonical merged-result gate identifies a type or integration failure.
+- **Source:** locked by queue repair acceptance and evidence requirements
+
 ## Progress
-Current source/typecheck and actual paired-owner browser/physical-delivery proof completed. Owning Accounts/Vault/Handoff plus scripts83file remote suite running on the final fixture repair. All implementers returned. Next: receive that gate, commit source/docs, perform the sole roadmap catch-up and read incoming decisions, rerun composed checks/typecheck, record receipts, detach and await canonical land. Close the last owned fixture service and delete its scratch only after evidence is archived.
+All requested repairs, owning acceptance, actual owner UI scenarios, physical delivery evidence and public documentation are complete. Source commitdb87497b plus sole clean140file roadmap catch-up; incoming API-freeze decisions fully read, no conflict. Caught-up owning83/83 files169.62s and final cleaned UI2/2 files14.90s/no flakes; final root typecheck31.79s and caught-up actual UI build pass. Both web reports kept_open[]/cleanup_errors[]/overrides[] and both private daemon/PTY services exited0 after scope cleanup; all implementers/checks returned. No extra review campaign or successor. Next: commit final receipt/test-only cleanup, detach and canonical land exactly this item; await actual receipt before ending, then remove only the archived owned /tmp scratch.

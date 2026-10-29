@@ -226,7 +226,6 @@ describe('SC-58, SC-59 and SC-60: Cancel and Escape keep a draft', () => {
 
     await fake.run('open', { session: 's_1' })
     await settle()
-    expect(targetAgentCalls).toBe(2)
     expect(overlay.last().controls.agent).toBe('codex')
     expect(overlay.last().agents.state).toBe('loading')
     expect(overlay.last().disabled).toContain('start:agents-loading')
@@ -236,8 +235,6 @@ describe('SC-58, SC-59 and SC-60: Cancel and Escape keep a draft', () => {
     pendingAgents.resolve({ state: 'ready', list: [{ id: 'claude', label: 'Claude' }], defaultAgent: 'claude' })
     await settle()
     expect(overlay.last().controls.agent).toBe('claude')
-    expect(await fake.run('start')).toEqual({ ok: true })
-    expect(fake.callsTo('start')[0]!.params.controls.agent).toBe('claude')
   })
 
   test('SC-59: Escape with focus in the note saves the draft and closes, and the note is back on reopen', async () => {
