@@ -39,6 +39,7 @@ afterEach(async () => {
   try {
     for (const mounted of mounts.splice(0).reverse()) {
       await act(async () => mounted.root.unmount())
+      mounted.container.remove()
       await mounted.host.cleanup()
     }
   } finally {
@@ -67,6 +68,7 @@ async function mountProjects(options: { state?: ProjectFixtureState; viewId?: st
   const isBoard = initialViewId === 'VIEW_BOARD'
   const host = await bootTasks(PROJECTS_GH_FIXTURE)
   const container = document.createElement('div')
+  document.body.append(container)
   const mounted: Mounted = { host, container, root: createRoot(container), toasts: [] }
   mounts.push(mounted)
   host.writeState(options.state ?? seedProjectsState())

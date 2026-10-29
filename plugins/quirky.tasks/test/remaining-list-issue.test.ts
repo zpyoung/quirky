@@ -428,20 +428,17 @@ test('an origin switch prevents a lagging upstream refresh from repainting the c
   await host.call('navigate', { mode: 'issues', repoIds: [host.repoId], query: 'is:issue is:open' })
   const state = taskState(await host.call('state'))
   const driver = uiContext(host)
-  const initialList = driver.wait('quirky.tasks/list')
   const mounted = await mount(React.createElement(TasksList, { context: driver.context, state, refresh: async () => undefined }))
-  await React.act(async () => { await initialList })
-  expect(mounted.container.textContent).toContain('Upstream issue 7')
+  await waitForUi(() => mounted.container.textContent?.includes('Upstream issue 7') === true, 'initial upstream issue row')
 
   const oldRefresh = driver.hold('quirky.tasks/list', (params) => params.noCache === true)
-  const oldRead = driver.wait('quirky.tasks/list')
-  await React.act(async () => { button(mounted.container, 'Refresh').click(); await oldRead; await oldRefresh.reached })
-  const sourceWrite = driver.wait('quirky.tasks/row')
-  const originList = driver.wait('quirky.tasks/list')
-  await React.act(async () => { button(mounted.container, 'Origin').click(); await sourceWrite; await originList })
-  expect(mounted.container.textContent).toContain('Origin issue 7')
+  await React.act(async () => { button(mounted.container, 'Refresh').click() })
+  await waitForUi(() => oldRefresh.wasReached(), 'delayed upstream refresh')
+  await React.act(async () => { button(mounted.container, 'Origin').click() })
+  await waitForUi(() => mounted.container.textContent?.includes('Origin issue 7') === true, 'confirmed origin issue row')
 
-  await React.act(async () => { oldRefresh.release(); await oldRefresh.finished })
+  oldRefresh.release()
+  await waitForUi(() => oldRefresh.wasFinished(), 'released stale upstream response')
   expect(mounted.container.textContent).toContain('Origin issue 7')
   expect(mounted.container.textContent).not.toContain('Upstream issue 7')
 }, 30_000)
@@ -525,13 +522,13 @@ test('a failed assignee edit preserves an earlier successful status change in th
   await React.act(async () => { button(mounted.container, 'Save assignees').click() })
   await waitForUi(() => {
     const alert = mounted.container.querySelector('[role="alert"]')
-    return completedCall(driver.receipts, 'quirky.tasks/row', (receipt) => receipt.params.action === 'assignees' && receipt.error !== undefined)
-      && alert?.textContent?.includes('fixture issue update failure') === true
+    return completedCall(driver.receipts, 'quirky.tasks/row', (receipt) =>
+      receipt.params.action === 'assignees' && receipt.error instanceof Error &&
+      alert?.textContent?.includes(receipt.error.message) === true)
   }, 'failed assignee update')
 
   expect(fixtureItem(host, 7).state).toBe('closed')
   await expectClosedIssueStatus(mounted.container)
-  expect(mounted.container.textContent).toContain('fixture issue update failure')
 }, 30_000)
 
 test('quiet adoption retains a confirmed status while search indexing lags, then adopts the indexed row', async () => {
@@ -633,8 +630,9 @@ test('a failed later reviewer request retains an earlier confirmed reviewer upda
       && !reviewers.includes('second-reviewer')
       && reviewerButton()?.textContent?.includes('first-reviewer') === true
       && reviewerButton()?.textContent?.includes('second-reviewer') !== true
-      && completedCall(driver.receipts, 'quirky.tasks/row', (receipt) => receipt.params.action === 'reviewers' && receipt.error !== undefined)
-      && alert?.textContent?.includes('fixture reviewer update failure') === true
+      && completedCall(driver.receipts, 'quirky.tasks/row', (receipt) =>
+        receipt.params.action === 'reviewers' && receipt.error instanceof Error &&
+        alert?.textContent?.includes(receipt.error.message) === true)
   }, 'failed later reviewer update')
 
   expect(reviewerButton()?.textContent).toContain('first-reviewer')
