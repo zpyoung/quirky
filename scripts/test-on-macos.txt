@@ -17,3 +17,6 @@ plugins/quirky.browser/test/import.test.ts  real managed-profile cookie imports 
 plugins/quirky.browser/test/extras-api.test.ts  public profile/cookie API integration launches installed macOS Chrome; remote host has no Chrome/Chromium
 plugins/quirky.browser/test/extras-cli.test.ts  CLI fill and import acceptance launches installed macOS Chrome; remote host has no Chrome/Chromium
 plugins/quirky.mobile/test/browser-watch.test.ts  owned phone Watch frames/input require installed macOS Chrome; remote host has no Chrome/Chromium
+plugins/quirky.terminal/test/artifacts-api.test.ts  artifact grants intentionally require macOS descriptor identity and no-follow file safety APIs; Linux returns unsupported
+plugins/quirky.terminal/test/artifacts.test.ts  real daemon artifact acceptance exercises the macOS-only safe-file capability boundary
+plugins/quirky.terminal/test/emulator.test.ts  simulator list and frame APIs intentionally require macOS even with an owned xcrun fixture
