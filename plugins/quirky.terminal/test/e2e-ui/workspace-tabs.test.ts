@@ -166,7 +166,7 @@ test(
     const back = await ui.waitView('main again', (view) => view.worktree === (view.layout?.id ?? '') && view.focusedPane === one.pane.id && view.panes.length === 1)
     expect(back.panes[0]!.session).toBe(one.session)
     expect(ui.tabTitles()).toEqual(['Terminal 1', 'Build'])
-    expect(ui.q('[data-tab="' + one.tab.id + '"]')!.getAttribute('aria-selected')).toBe('true')
+    expect(ui.q('[data-tab="' + one.tab.id + '"] [role="tab"]')!.getAttribute('aria-selected')).toBe('true')
     await waitFor('the screen of Terminal 1 back', () => (ui.paneText(one.pane.id).some((line) => line === 'marker-one') ? true : undefined))
     expect(ui.callsTo('attach').length).toBeGreaterThan(attaches)
     expect(ui.q(`[data-pane="${build.pane.id}"]`)).toBeNull()
