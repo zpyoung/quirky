@@ -1,6 +1,7 @@
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
+import { PLUGIN_API_VERSION } from '@quirky/protocol'
 
 const tempDirs: string[] = []
 
@@ -19,8 +20,9 @@ export function removeTempDirs(): void {
 /**
  * Writes `<rootDir>/<dirName>/quirky-plugin.json` plus any extra files (paths relative to the
  * plugin directory) and returns the plugin directory. `dirName` defaults to the manifest's `id`;
- * pass it explicitly to test a directory that doesn't match the ID. A string manifest is written
- * verbatim, so tests can supply malformed JSON.
+ * pass it explicitly to test a directory that doesn't match the ID. String manifests are written
+ * verbatim. Object manifests default to the current API declaration unless `apiVersion` is an
+ * explicit property, so missing and malformed declarations remain testable.
  */
 export function writePlugin(
   rootDir: string,
@@ -31,7 +33,17 @@ export function writePlugin(
   const dirName = options.dirName ?? manifestId(manifest)
   const dir = join(rootDir, dirName)
   mkdirSync(dir, { recursive: true })
-  writeFileSync(join(dir, 'quirky-plugin.json'), typeof manifest === 'string' ? manifest : JSON.stringify(manifest, null, 2))
+  const contents =
+    typeof manifest === 'string'
+      ? manifest
+      : JSON.stringify(
+          Object.prototype.hasOwnProperty.call(manifest, 'apiVersion')
+            ? manifest
+            : { ...manifest, apiVersion: PLUGIN_API_VERSION },
+          null,
+          2
+        )
+  writeFileSync(join(dir, 'quirky-plugin.json'), contents)
   for (const [relativePath, content] of Object.entries(files)) {
     const target = join(dir, relativePath)
     mkdirSync(dirname(target), { recursive: true })

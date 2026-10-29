@@ -1,7 +1,8 @@
+import { PLUGIN_API_VERSION } from '@quirky/protocol'
 import { describe, expect, test } from 'bun:test'
 import { parseManifest } from '../../src/plugins/manifest'
 
-const base = { id: 'acme.tools', name: 'Acme', version: '1.0.0' }
+const base = { id: 'acme.tools', name: 'Acme', version: '1.0.0', apiVersion: PLUGIN_API_VERSION }
 
 function result(manifest: Record<string, unknown>) {
   return parseManifest(JSON.stringify({ ...base, ...manifest }), {
@@ -54,7 +55,7 @@ describe('manifest cli and cliAliases', () => {
   test('rejects duplicate aliases and the plugin\'s own group word', () => {
     expect(errorsOf({ cliAliases: ['tl', 'tl'] })).toEqual(["cliAliases: duplicate alias 'tl'"])
     const builtin = parseManifest(
-      JSON.stringify({ id: 'quirky.tools', name: 'Tools', version: '1.0.0', cliAliases: ['tools', 'tl'] }),
+      JSON.stringify({ id: 'quirky.tools', name: 'Tools', version: '1.0.0', apiVersion: PLUGIN_API_VERSION, cliAliases: ['tools', 'tl'] }),
       { dirName: 'quirky.tools', dir: '/plugins/quirky.tools', source: 'builtin' },
     )
     expect(builtin).toEqual({ ok: false, errors: ["cliAliases: 'tools' is the plugin's own group word"] })

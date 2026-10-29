@@ -1,5 +1,5 @@
+import { PLUGIN_API_VERSION, type ContributionInfo, type PluginInfo } from '@quirky/protocol'
 import { describe, expect, test } from 'bun:test'
-import type { ContributionInfo, PluginInfo } from '@quirky/protocol'
 import { buildUiModel } from '../../src/plugins/ui-model'
 import { checkUiKindEntry } from '../../src/plugins/ui-kinds'
 
@@ -7,6 +7,7 @@ const plugin: PluginInfo = {
   id: 'quirky.vault',
   name: 'Agent Session History',
   version: '0.1.0',
+  apiVersion: PLUGIN_API_VERSION,
   source: 'builtin',
   dir: '/plugins/quirky.vault',
   activation: 'lazy',

@@ -1,9 +1,9 @@
+import { PLUGIN_API_VERSION, type ContributionInfo, type ContributionStatus, type PluginInfo } from '@quirky/protocol'
 import { describe, expect, test } from 'bun:test'
-import type { ContributionInfo, ContributionStatus, PluginInfo } from '@quirky/protocol'
 import { parseManifest } from '../../src/plugins/manifest'
 import { buildUiModel } from '../../src/plugins/ui-model'
 
-const base = { id: 'acme', name: 'Acme', version: '1.0.0' }
+const base = { id: 'acme', name: 'Acme', version: '1.0.0', apiVersion: PLUGIN_API_VERSION }
 
 function parse(entry: Record<string, unknown>) {
   return parseManifest(JSON.stringify({ ...base, contributes: { 'menu-item': [entry] } }), {
@@ -22,7 +22,7 @@ function errorsFor(entry: Record<string, unknown>): string[] {
 const GOOD = { id: 'handoff', menu: 'quirky.terminal/pane', title: 'Hand Off', command: 'open', when: { agent: 'any' }, after: 'quick-commands' }
 
 function plugin(id: string): PluginInfo {
-  return { id, name: id, version: '1.0.0', source: 'installed', dir: `/plugins/${id}`, activation: 'lazy', dependencies: [], state: 'inactive', diagnostics: [] }
+  return { id, name: id, version: '1.0.0', apiVersion: PLUGIN_API_VERSION, source: 'installed', dir: `/plugins/${id}`, activation: 'lazy', dependencies: [], state: 'inactive', diagnostics: [] }
 }
 
 function decl(owner: string, name: string, data: Record<string, unknown>, status: ContributionStatus = 'effective'): ContributionInfo {

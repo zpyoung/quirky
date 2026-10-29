@@ -1,8 +1,9 @@
+import { PLUGIN_API_VERSION } from '@quirky/protocol'
 import { describe, expect, test } from 'bun:test'
 import { checkKindEntry } from '../../src/plugins/kinds'
 import { parseManifest } from '../../src/plugins/manifest'
 
-const base = { id: 'acme', name: 'Acme', version: '1.0.0' }
+const base = { id: 'acme', name: 'Acme', version: '1.0.0', apiVersion: PLUGIN_API_VERSION }
 
 function result(manifest: Record<string, unknown>) {
   return parseManifest(JSON.stringify({ ...base, ...manifest }), {

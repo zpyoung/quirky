@@ -1,8 +1,8 @@
+import { PLUGIN_API_VERSION, type PluginSource } from '@quirky/protocol'
 import { describe, expect, test } from 'bun:test'
-import type { PluginSource } from '@quirky/protocol'
 import { parseManifest } from '../../src/plugins/manifest'
 
-const base = { id: 'acme', name: 'Acme', version: '1.0.0' }
+const base = { id: 'acme', name: 'Acme', version: '1.0.0', apiVersion: PLUGIN_API_VERSION }
 
 function parse(manifest: unknown, source: PluginSource = 'installed') {
   return parseManifest(JSON.stringify(manifest), { dirName: 'acme', dir: '/plugins/acme', source })
