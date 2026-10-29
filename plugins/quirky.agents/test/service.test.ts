@@ -973,7 +973,6 @@ describe('provider-owned model discovery', () => {
         label: 'Fixture provider',
         prompt: 'argv',
         detect: providerId,
-        prompt: 'argv',
         launchOptions: {
           model: { flag: ['--model', '{value}'] },
           options: [{
