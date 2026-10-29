@@ -5,7 +5,7 @@ export const LOCALHOST_LABEL_DOMAIN = NATIVE_BROWSER_LABEL_DOMAIN
 const LABEL_MAX_LENGTH = 48
 const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '0.0.0.0', '::1', '::'])
 
-export type LabelWorktree = { id: string; path: string; isMain: boolean }
+export type LabelWorktree = { id: string; path: string; isMain: boolean; kind: 'git' | 'folder' }
 
 export function slugifyLabel(value: string): string {
   const slug = value
@@ -19,10 +19,10 @@ export function slugifyLabel(value: string): string {
   return slug || 'workspace'
 }
 
-/** The worktree folder's slug; a primary checkout becomes `<project>-main` so projects don't collide on "main". */
+/** The worktree folder's slug; a git primary checkout becomes `<project>-main` so projects don't collide on "main". */
 export function baseLabelForWorktree(worktree: LabelWorktree): string {
   const folder = worktree.path.split(/[\\/]/).map((part) => part.trim()).findLast(Boolean) ?? worktree.path
-  return worktree.isMain ? slugifyLabel(`${folder}-main`) : slugifyLabel(folder)
+  return worktree.isMain && worktree.kind === 'git' ? slugifyLabel(`${folder}-main`) : slugifyLabel(folder)
 }
 
 function bareHost(hostname: string): string {

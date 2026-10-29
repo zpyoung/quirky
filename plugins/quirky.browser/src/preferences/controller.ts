@@ -44,11 +44,12 @@ async function labelWorktree(context: PluginContext, selector: string): Promise<
     worktree === null || typeof worktree !== 'object' || Array.isArray(worktree) ||
     !('id' in worktree) || typeof worktree.id !== 'string' || worktree.id.length === 0 ||
     !('path' in worktree) || typeof worktree.path !== 'string' || worktree.path.length === 0 ||
-    !('isMain' in worktree) || typeof worktree.isMain !== 'boolean'
+    !('isMain' in worktree) || typeof worktree.isMain !== 'boolean' ||
+    !('kind' in worktree) || (worktree.kind !== 'git' && worktree.kind !== 'folder')
   ) {
-    throw fault('browser_error', 'quirky.worktree/show did not return a worktree id, path and isMain')
+    throw fault('browser_error', 'quirky.worktree/show did not return a worktree id, path, isMain and kind')
   }
-  return { id: worktree.id, path: worktree.path, isMain: worktree.isMain }
+  return { id: worktree.id, path: worktree.path, isMain: worktree.isMain, kind: worktree.kind }
 }
 
 function emitPreferencesChanged(context: PluginContext): void {

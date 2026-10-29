@@ -41,7 +41,7 @@ function preferenceHarness(options: {
     call: async (method: string, params: Record<string, unknown> = {}) => {
       calls.push({ method, params })
       if (method === 'quirky.browser/paneOpen') return { id: 'pane-created', worktreeId: 'wt-resolved' }
-      if (method === 'quirky.worktree/show') return { id: 'wt-feature', path: '/repos/app/.worktrees/feature-a', isMain: false }
+      if (method === 'quirky.worktree/show') return { id: 'wt-feature', path: '/repos/app/.worktrees/feature-a', isMain: false, kind: 'git' }
       return { opened: true }
     },
     getSetting(name: string) { return settings[name.replace(/^quirky\.browser\//, '')] },

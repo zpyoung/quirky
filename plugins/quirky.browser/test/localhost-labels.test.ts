@@ -51,9 +51,10 @@ async function throughTunnel(proxyPort: number, authority: string, payload: stri
 
 describe('localhost worktree labels', () => {
   test('derive a label from the worktree folder, giving a primary checkout its project name', () => {
-    expect(baseLabelForWorktree({ id: 'w1', path: '/repos/quirky/.worktrees/Feature Login!', isMain: false })).toBe('feature-login')
-    expect(baseLabelForWorktree({ id: 'w2', path: '/repos/quirky', isMain: true })).toBe('quirky-main')
-    expect(baseLabelForWorktree({ id: 'w3', path: '/repos/!!!', isMain: false })).toBe('workspace')
+    expect(baseLabelForWorktree({ id: 'w1', path: '/repos/quirky/.worktrees/Feature Login!', isMain: false, kind: 'git' })).toBe('feature-login')
+    expect(baseLabelForWorktree({ id: 'w2', path: '/repos/quirky', isMain: true, kind: 'git' })).toBe('quirky-main')
+    expect(baseLabelForWorktree({ id: 'w3', path: '/notes/Scratch', isMain: true, kind: 'folder' })).toBe('scratch')
+    expect(baseLabelForWorktree({ id: 'w4', path: '/repos/!!!', isMain: false, kind: 'git' })).toBe('workspace')
   })
 
   test('label only loopback http URLs with an explicit port', () => {
