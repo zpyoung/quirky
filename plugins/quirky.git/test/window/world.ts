@@ -131,6 +131,13 @@ export async function boot(scratch: () => string, options: BootOptions = {}): Pr
       ? new DOMRect(0, 0, 1024, 768)
       : originalRect.call(this)
   }
+  // Match terminal e2e fixtures: Happy DOM has no 2D canvas context either.
+  const canvasPrototype = HTMLCanvasElement.prototype
+  const originalContext = canvasPrototype.getContext
+  const context2d = new Proxy({}, { get: () => () => ({ width: 0 }), set: () => true })
+  canvasPrototype.getContext = function (type: string) {
+    return type === '2d' ? context2d : null
+  } as typeof originalContext
   globalThis.Response = NativeResponse
   const state = async () => (await agent.callAny('ui.state', {})) as UiState
   const world: World = {
@@ -201,6 +208,7 @@ export async function boot(scratch: () => string, options: BootOptions = {}): Pr
         await win.stop()
       } finally {
         elementPrototype.getBoundingClientRect = originalRect
+        canvasPrototype.getContext = originalContext
         await harness.cleanup()
       }
     }
