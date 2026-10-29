@@ -2,8 +2,17 @@ import { useId, useState, type FormEvent } from 'react'
 import { Button, FormRow } from '@quirky/ui'
 import { Dialog } from './Dialog'
 
+/** How an agent handles tool approvals, as Agent settings configures it. */
+export type PermissionMode = 'manual' | 'auto' | 'yolo'
+
 /** What a `+` menu row asks for: an agent session, optionally one that runs without a terminal. */
-export type NewSessionRequest = { agent: string; background: boolean; label: string }
+export type NewSessionRequest = { agent: string; background: boolean; label: string; permissions?: PermissionMode }
+
+const PERMISSION_TEXT: Record<PermissionMode, string> = {
+  manual: 'Permissions: Manual. The agent asks before acting.',
+  auto: 'Permissions: Auto. The agent decides which actions need approval.',
+  yolo: 'Permissions: Bypass. The agent acts without asking.'
+}
 
 type Props = {
   request: NewSessionRequest
@@ -41,6 +50,7 @@ export function PromptDialog({ request, pending, error, onSubmit, onClose }: Pro
             }}
           />
         </FormRow>
+        {request.permissions ? <p className="ui-help-text">{PERMISSION_TEXT[request.permissions]} Change it in Agent settings.</p> : null}
         {error !== null ? <div className="ui-error-text" role="alert">{error}</div> : null}
         <div className="ui-dialog__actions qt-dialog-actions">
           <Button type="button" variant="secondary" onClick={onClose}>

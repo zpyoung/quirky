@@ -1,9 +1,9 @@
 import type { UiPluginContext } from '@quirky/protocol'
-import type { NewSessionRequest } from './PromptDialog'
+import type { NewSessionRequest, PermissionMode } from './PromptDialog'
 
 /** The fields of a `quirky.agents/list` result the menu reads. */
 export type AgentListing = { defaultAgent: string; agents: AgentInfo[] }
-type AgentInfo = { id: string; label: string; installed: boolean; enabled: boolean; isDefault: boolean }
+type AgentInfo = { id: string; label: string; installed: boolean; enabled: boolean; isDefault: boolean; permissions?: { mode: PermissionMode } }
 
 export const AGENTS_VIEW_ID = 'view:quirky.agents/settings'
 
@@ -31,7 +31,7 @@ export function menuEntries(listing: AgentListing): MenuEntry[] {
   const entries: MenuEntry[] = ordered.map((agent) => ({
     kind: 'agent',
     label: agent.label,
-    request: { agent: agent.id, background: false, label: agent.label }
+    request: { agent: agent.id, background: false, label: agent.label, ...(agent.permissions ? { permissions: agent.permissions.mode } : {}) }
   }))
   if (agents.some((agent) => agent.id === 'claude')) {
     entries.push({ kind: 'agent', label: 'Claude (background)', request: { agent: 'claude', background: true, label: 'Claude (background)' } })
