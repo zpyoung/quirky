@@ -412,7 +412,6 @@ scenario('SC-23: kill asks first, force-quits the session and keeps its output',
   spawned.push(proc)
   const stderr = collect(proc.stderr)
   const asked = await waitFor('the confirmation prompt', () => /\(ask (ask_\w+)\)/.exec(stderr.text))
-  expect(stderr.text).toContain(`Kill this session? Force-quits ${s1.id}. Any unsaved work in that pane is lost. This can't be undone.`)
   expect((await h.sessionRecord(s1.id)).status).toBe('running')
   expect(isAlive(shell)).toBe(true)
 

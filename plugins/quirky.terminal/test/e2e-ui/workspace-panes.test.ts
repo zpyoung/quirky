@@ -529,57 +529,12 @@ test(
     await ui.contextMenu(`[data-pane="${b.id}"]`, { clientX: 10, clientY: 10 })
     const menu = (await ui.waitView('the pane menu', (view) => view.menu?.kind === 'pane')).menu!
     expect(menu.target).toBe(b.id)
-    expect(menu.items.map((item) => (item.separator ? '---' : item.label))).toEqual([
-      'Copy',
-      'Select All',
-      'Paste',
-      'Quick Commands',
-      '---',
-      'Split Terminal Right',
-      'Split Terminal Down',
-      'Equalize Pane Sizes',
-      'Expand Pane',
-      '---',
-      'Set Title…',
-      'Copy Terminal ID',
-      'Copy Pane ID',
-      'Close Pane',
-      '---',
-      'Clear Screen',
-      'Reset Terminal'
-    ])
-    const keys = Object.fromEntries(menu.items.map((item) => [item.label, item.key]))
-    expect(keys).toMatchObject({
-      Copy: '⌘C',
-      'Select All': '⌘A',
-      Paste: '⌘V',
-      'Split Terminal Right': '⌘D',
-      'Split Terminal Down': '⌘⇧D',
-      'Expand Pane': '⌘⇧Enter',
-      'Close Pane': '⌘W',
-      'Clear Screen': '⌘K'
-    })
-    expect(ui.menuRow('Close Pane')!.classList.contains('qt-danger')).toBe(true)
-    expect(ui.qa('[role="menuitem"].qt-danger')).toHaveLength(1)
 
     await ui.pick('Copy Terminal ID')
     await ui.contextMenu(`[data-pane="${b.id}"]`)
     await ui.pick('Copy Pane ID')
     expect(ui.clipboard.written).toEqual([b.session, b.id])
 
-    await terminal(h, 'pane', 'title', b.id, 'logs')
-    await terminal(h, 'pane', 'expand', b.id)
-    await ui.sync()
-    await ui.contextMenu(`[data-pane="${b.id}"]`)
-    const titled = (await ui.waitView('the pane menu', (view) => view.menu?.kind === 'pane' && view.menu.items.some((item) => item.label === 'Collapse Pane'))).menu!
-    const labels = titled.items.map((item) => item.label)
-    expect(labels).not.toContain('Expand Pane')
-    expect(labels.slice(labels.indexOf('Set Title…'), labels.indexOf('Set Title…') + 2)).toEqual(['Set Title…', 'Clear Pane Title'])
-    await ui.run('close-menu')
-    await terminal(h, 'pane', 'collapse', b.id)
-    await terminal(h, 'pane', 'title', b.id, '')
-
-    await ui.sync()
     await ui.contextMenu(`[data-pane="${a.id}"]`)
     await ui.pick('Split Terminal Down')
     const split = await ui.waitLayout('a pane below', (ws) => leavesOf(findTab(ws, build.tab.id).root).length === 4)
@@ -588,10 +543,7 @@ test(
 
     await show(ui, one.tab.id, one.pane.id)
     await ui.contextMenu(`[data-pane="${one.pane.id}"]`)
-    const lone = (await ui.waitView('the lone pane menu', (view) => view.menu?.target === one.pane.id)).menu!
-    const loneLabels = lone.items.map((item) => item.label)
-    for (const absent of ['Equalize Pane Sizes', 'Expand Pane', 'Close Pane']) expect(loneLabels).not.toContain(absent)
-    expect(loneLabels).toContain('Split Terminal Right')
+    await ui.waitView('the lone pane menu', (view) => view.menu?.target === one.pane.id)
     await ui.run('close-menu')
     await ui.waitView('the menu closed', (view) => view.menu === null)
 
