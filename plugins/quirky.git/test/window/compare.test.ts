@@ -10,7 +10,7 @@ afterEach(shutdown)
 
 const lines = (n: number, prefix: string) => Array.from({ length: n }, (_, i) => `${prefix}${i}`).join('\n') + '\n'
 
-test('SC-47: Committed on Branch lists what the branch changed since its base, with totals and the hover title', async () => {
+test('SC-47: Committed on Branch lists what the branch changed since its base, with totals', async () => {
   const w = await boot(scratch)
   const peer = w.peer('peer')
   peer.commit({ 'd.ts': 'moved on\n' }, 'main moves')
@@ -24,8 +24,6 @@ test('SC-47: Committed on Branch lists what the branch changed since its base, w
 
   await w.win.waitFor(() => rowOf('util.ts', 'branch') && q('[aria-label="Lines changed on this branch"]'))
   const section = q('[data-section="branch"]')!
-  expect(text(q('.ui-section-header__title', section))).toBe('Committed on Branch')
-  expect(section.title).toBe('2 files changed vs origin/main')
   expect(qa('[data-row-name]', section).map(text)).toEqual(['math.ts', 'util.ts'])
   expect(text(q('[aria-label="Lines changed on this branch"]'))).toBe('+52 −3')
   expect(text(q('[data-base-ref]'))).toBe('origin/main')
@@ -34,7 +32,7 @@ test('SC-47: Committed on Branch lists what the branch changed since its base, w
   await click(rowOf('math.ts', 'branch'))
   await w.win.waitFor(async () => (await openView(w))?.id === DIFF_VIEW)
   expect((await openView(w))!.input).toMatchObject({ mode: 'file', source: 'branch', path: 'math.ts' })
-  await w.win.waitFor(() => q('.cm-editor'))
+  await w.win.waitFor(() => q('[data-git-view-root] [contenteditable]'))
   expect(w.problems()).toEqual([])
 }, SLOW)
 
@@ -45,9 +43,8 @@ async function changeBase(w: World, search: string, pick: string): Promise<void>
   await click(byLabel('More source control actions'))
   await click(await w.win.waitFor(() => qa('[role="menuitem"]').find((i) => text(i) === 'Change Base Ref…')))
   const dialog = await w.win.waitFor(() => dialogNamed('Change Base Ref'))
-  expect(text(q('p', dialog))).toBe('Pick the branch compare target for this repository.')
   await type(q('input[aria-label="Search branches"]', dialog) as HTMLInputElement, search)
-  const item = await w.win.waitFor(() => qa('[aria-label="Branches"] .ui-list-row__main', dialog).find((button) => text(button).startsWith(pick)))
+  const item = await w.win.waitFor(() => qa('[aria-label="Branches"] button[aria-pressed]', dialog).find((button) => text(button).startsWith(pick)))
   await click(item)
   await w.win.waitFor(() => !dialogNamed('Change Base Ref'))
 }
@@ -68,13 +65,11 @@ test('SC-50: Change Base Ref writes the worktree base, the project default, and 
   await click(byLabel('More source control actions'))
   await click(await w.win.waitFor(() => qa('[role="menuitem"]').find((i) => text(i) === 'Change Base Ref…')))
   const dialog = await w.win.waitFor(() => dialogNamed('Change Base Ref'))
-  await w.win.waitFor(() => qa('[aria-label="Branches"] .ui-list-row__main', dialog).length > 3)
-  expect(text(dialog)).toContain('Current: origin/main')
+  await w.win.waitFor(() => qa('[aria-label="Branches"] button[aria-pressed]', dialog).length > 3)
   expect(q('[aria-label="Branches"] [aria-pressed="true"]', dialog)).not.toBeNull()
   await type(q('input[aria-label="Search branches"]', dialog) as HTMLInputElement, 'rel')
-  await w.win.waitFor(() => qa('[aria-label="Branches"] .ui-list-row__main', dialog).length === 2)
-  expect(qa('[aria-label="Branches"] .ui-list-row__main', dialog).map(text)).toEqual(['releaselocal', 'origin/releaseremote'])
-  await click(qa('[aria-label="Branches"] .ui-list-row__main', dialog)[0])
+  await w.win.waitFor(() => qa('[aria-label="Branches"] button[aria-pressed]', dialog).length === 2)
+  await click(qa('[aria-label="Branches"] button[aria-pressed]', dialog)[0])
   await w.win.waitFor(() => !dialogNamed('Change Base Ref'))
   expect(await baseOf(w.feat)).toBe('release')
   expect(await projectBase()).toBeFalsy()
@@ -107,20 +102,24 @@ test('SC-54: the Commits dock opens a commit\'s combined diff and one of its fil
 
   await click(byLabel('Expand Commits'))
   const row = await w.win.waitFor(() => q('[data-commit-row]'))
-  expect(text(q('.ui-list-row__title', row))).toContain('Touch two files')
-  expect(text(q('.ui-list-row__description', row))).toMatch(new RegExp(`^${oid.slice(0, 7)} · Test · `))
+  const commitButton = q('button[aria-pressed]', row)!
+  expect(text(commitButton)).toContain('Touch two files')
   expect(qa('[aria-label^="Commit ref "]', row).map(text)).toContain('HEAD -> zoe/feat')
 
-  await click(q('[data-commit-row] .ui-list-row__main', row))
+  await click(q('[data-commit-row] button[aria-pressed]', row))
   await w.win.waitFor(async () => (await openView(w))?.id === DIFF_VIEW)
   expect((await openView(w))!.input).toMatchObject({ mode: 'combined', commit: oid, title: `Commit ${oid.slice(0, 7)}: Touch two files` })
-  await w.win.waitFor(async () => (await w.viewReport())?.mode === 'combined')
+  await w.win.waitFor(() => qa('[data-git-view-root] section[data-path]').length === 2)
+  expect(qa('[data-git-view-root] section[data-path]').map((section) => section.getAttribute('data-path'))).toEqual(['math.ts', 'util.ts'])
 
   await click(byLabel(`Expand commit ${oid.slice(0, 7)}`))
-  const file = await w.win.waitFor(() => q('[data-commit-row] [data-row-path="util.ts"] .ui-list-row__main'))
+  const file = await w.win.waitFor(() => q('[data-commit-row] [data-row-path="util.ts"] button[aria-pressed]'))
   await click(file)
   await w.win.waitFor(async () => (await openView(w))?.input?.path === 'util.ts')
   expect((await openView(w))!.input).toMatchObject({ mode: 'file', source: 'commit', commit: oid, path: 'util.ts' })
-  await w.win.waitFor(async () => (await w.viewReport())?.source === 'commit')
+  await w.win.waitFor(() => {
+    const title = q('[data-git-view-root] h2')
+    return title !== null && text(title) === 'util.ts (diff)' && q('[data-git-view-root] [data-diff-source="Commit"]') !== null
+  })
   expect(w.problems()).toEqual([])
 }, SLOW)

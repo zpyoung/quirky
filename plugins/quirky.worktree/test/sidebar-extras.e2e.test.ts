@@ -7,8 +7,11 @@ import { builtinsDir, makeTempHome, startHarness, type Harness } from '../../../
 import { makeTempDir, removeTempDirs } from '../../../packages/daemon/test/plugins/fixtures'
 import { startHeadlessWindow, type HeadlessWindow } from '../../../packages/ui/test/fixtures/headless-window'
 import { isolateGitConfig, makeRepo } from '../../quirky.repo/test/git-fixtures'
-import { button, click, menuItem as findMenuItem, sectionHeadingMatches } from './window/dom'
-const SIDEBAR = 'sidebar-section:quirky.worktree/worktrees'
+import { button, click, dialogNamed, listRowName, menuItem as findMenuItem, sectionHeadingMatches } from './window/dom'
+const WORKTREES_CONTRIBUTION = 'sidebar-section:quirky.worktree/worktrees'
+const WORKTREES_TOOL = WORKTREES_CONTRIBUTION
+const SOURCE_CONTROL_CONTRIBUTION = 'activity-item:quirky.sidebar-extras/source-control'
+const CHANGES_TOOL = 'panel:quirky.git/source-control'
 const SESSION_VIEW = 'view:quirky.session/worktree'
 const REPO_ROOT = resolve(import.meta.dir, '../../..')
 const CLI_MAIN = join(REPO_ROOT, 'packages/cli/src/main.ts')
@@ -66,6 +69,10 @@ async function boot(): Promise<World> {
     const feature = ((await agent.callAny('quirky.worktree/create', { repo: api.id, name: 'feature' })) as WorktreeCreateResult).worktree
     const group = (await agent.callAny('quirky.repo/groupCreate', { name: 'Team' })) as ProjectGroup
     win = await startHeadlessWindow({ home, runtime: harness.runtime })
+    await win.waitFor(async () => {
+      const slot = await sidebarSlot(agent)
+      return slot?.shown && slot.report !== undefined ? slot : undefined
+    })
     const cli = async (args: string[]) => {
       const child = processScope!.spawn([process.execPath, CLI_MAIN, ...args], {
         cwd: root,
@@ -109,28 +116,42 @@ type SidebarReport = {
   separators?: { enabled: boolean; eligibleBoundaries?: string[] }
 }
 
+const sidebarPanel = (): HTMLElement | undefined =>
+  document.querySelector<HTMLElement>(`[data-tool-panel="${WORKTREES_TOOL}"]`) ?? undefined
+const sidebarElements = <T extends Element>(selector: string): T[] =>
+  [...(sidebarPanel()?.querySelectorAll<T>(selector) ?? [])]
+const rendererState = async (agent: QuirkyClient): Promise<UiState | undefined> => {
+  const overview = (await agent.callAny('ui.state', {})) as UiState
+  const renderers = overview.windows.filter((window) => window.name === 'quirky-ui')
+  if (renderers.length !== 1) return undefined
+  return await agent.callAny('ui.window.state', { connId: renderers[0]!.connId }) as UiState
+}
+
+const sidebarSlot = async (agent: QuirkyClient) => {
+  const state = await rendererState(agent)
+  return state?.slots.find((slot) => slot.id === WORKTREES_CONTRIBUTION)
+}
+
 const report = async (agent: QuirkyClient): Promise<SidebarReport | undefined> => {
-  const state = (await agent.callAny('ui.state', {})) as UiState
-  const entry = state.slots.find((slot) => slot.id === SIDEBAR)
-  const value = entry?.report
+  const value = (await sidebarSlot(agent))?.report
   return value && typeof value === 'object' ? value as SidebarReport : undefined
 }
 
 function card(name: string, project?: string): HTMLElement | undefined {
-  const sections = [...document.querySelectorAll<HTMLElement>('section.repo, section.group')].filter(
+  const sections = sidebarElements<HTMLElement>('section.repo, section.group').filter(
     (section) => project === undefined || sectionHeadingMatches(section, project)
   )
   for (const section of sections) {
-    const found = [...section.querySelectorAll<HTMLElement>('[data-worktree-id]')].find((row) => row.querySelector('.worktree-name')?.textContent === name)
+    const found = [...section.querySelectorAll<HTMLElement>('[data-worktree-id]')].find((row) => listRowName(row) === name)
     if (found) return found
   }
   return undefined
 }
 
 const rowIdentity = () =>
-  [...document.querySelectorAll<HTMLElement>('[data-worktree-id]')].map((row) => ({
+  sidebarElements<HTMLElement>('[data-worktree-id]').map((row) => ({
     id: row.dataset.worktreeId,
-    name: row.querySelector('.worktree-name')?.textContent
+    name: listRowName(row)
   }))
 
 const menuItem = (label: string): HTMLElement | undefined => findMenuItem(document, label)
@@ -154,19 +175,24 @@ async function cliJson<T>(world: World, args: string[]): Promise<T> {
 }
 
 const sidebarState = (world: World) => cliJson<{ preferences: { workspaceActivityWindow: string; alwaysShowDefaultBranchWorkspace: boolean }; active: { worktreeId: string } | null }>(world, ['sidebar-extras', 'state'])
-type DirtyActivityReport = { count: number; dirty: boolean; available: boolean; title: string }
+type DirtyActivityReport = { worktreeId: string | null; count: number; dirty: boolean; available: boolean; title: string }
 
 async function activityReport(agent: QuirkyClient): Promise<DirtyActivityReport | undefined> {
-  const state = (await agent.callAny('ui.state', {})) as UiState
-  const slot = state.slots.find((candidate) => candidate.kind === 'activity-item' && candidate.title === 'Source Control')
-  const value = slot?.report
+  const state = await rendererState(agent)
+  const value = state?.slots.find((candidate) => candidate.id === SOURCE_CONTROL_CONTRIBUTION)?.report
   if (!value || typeof value !== 'object') return undefined
+  if (!('worktreeId' in value) || (value.worktreeId !== null && typeof value.worktreeId !== 'string')) return undefined
   if (!('count' in value) || typeof value.count !== 'number') return undefined
   if (!('dirty' in value) || typeof value.dirty !== 'boolean') return undefined
   if (!('available' in value) || typeof value.available !== 'boolean') return undefined
   if (!('title' in value) || typeof value.title !== 'string') return undefined
-  return { count: value.count, dirty: value.dirty, available: value.available, title: value.title }
+  return { worktreeId: value.worktreeId as string | null, count: value.count, dirty: value.dirty, available: value.available, title: value.title }
 }
+
+const activityMarker = () =>
+  document.querySelector<HTMLButtonElement>('button[data-dirty][title^="Source Control"]') ?? undefined
+const changesPanel = () =>
+  document.querySelector<HTMLElement>(`[data-tool-panel="${CHANGES_TOOL}"]`) ?? undefined
 
 async function runGit(world: World, cwd: string, args: string[]): Promise<void> {
   const child = world.processScope.spawn(['git', ...args], {
@@ -203,11 +229,12 @@ test('SC-02/08/10/17: real CLI and sidebar share activity preferences, selected 
   expect(initial.preferences.workspaceActivityWindow).toBe('all')
   expect(initial.active).toMatchObject({ worktreeId: feature.id })
 
-  const filter = await win.waitFor(() => [...document.querySelectorAll<HTMLButtonElement>('button[aria-label]')].find(
-    (candidate) => /workspace options|filters/i.test(candidate.getAttribute('aria-label') ?? '')
-  ))
-  await click(filter)
-  const week = await win.waitFor(() => button(document, 'Week'))
+  const optionsButton = await win.waitFor(() => button(document, 'Worktrees options'))
+  await click(optionsButton)
+  const options = await win.waitFor(() => dialogNamed('Worktrees options'))
+  const filters = await win.waitFor(() => options.querySelector<HTMLButtonElement>('button[aria-controls="workspace-activity-filter-options"]'))
+  await click(filters)
+  const week = await win.waitFor(() => button(options, 'Past 7 days'))
   await click(week)
   await win.waitFor(async () => {
     const state = (await agent.callAny('quirky.sidebar-extras/state', {})) as { preferences: { workspaceActivityWindow: string } }
@@ -255,34 +282,58 @@ test('SC-14/15/17: the real dirty activity item follows the active worktree and 
   const world = await boot()
   const { win, agent, feature, main } = world
   await win.waitFor(() => card('feature', 'api'))
+  await win.waitFor(() => changesPanel())
+  await agent.callAny('ui.tool.close', { slot: 'right-top' })
+  await win.waitFor(() => !changesPanel())
   await agent.callAny('ui.view.open', { id: SESSION_VIEW, input: { worktree: feature.id } })
   await win.waitFor(async () => {
     const state = (await agent.callAny('quirky.sidebar-extras/state', {})) as { active: { worktreeId: string } | null }
     return state.active?.worktreeId === feature.id ? state : undefined
   })
 
-  const clean = await win.waitFor(() => activityReport(agent))
-  expect(clean).toMatchObject({ count: 0, dirty: false, available: true, title: 'Source Control' })
+  const clean = await win.waitFor(async () => {
+    const report = await activityReport(agent)
+    return report?.worktreeId === feature.id ? report : undefined
+  })
+  expect(clean).toMatchObject({ worktreeId: feature.id, count: 0, dirty: false, available: true, title: 'Source Control' })
+  const cleanMarker = await win.waitFor(() => {
+    const marker = activityMarker()
+    return marker?.dataset.available === 'true' && marker.dataset.dirty === 'false' ? marker : undefined
+  })
+  expect(cleanMarker.querySelector('.ui-badge')).toBeNull()
+  expect(changesPanel()).toBeUndefined()
 
   const file = join(feature.path, 'sidebar-dirty.txt')
   writeFileSync(file, 'unstaged\n')
   await agent.callAny('quirky.worktree/set', { worktree: feature.id, comment: 'refresh dirty status one' })
   const untracked = await win.waitFor(async () => {
     const report = await activityReport(agent)
-    return report?.count === 1 ? report : undefined
+    return report?.worktreeId === feature.id && report.count === 1 ? report : undefined
   })
-  expect(untracked).toMatchObject({ count: 1, dirty: true, available: true })
-
+  expect(untracked).toMatchObject({ worktreeId: feature.id, count: 1, dirty: true, available: true })
+  const untrackedMarker = await win.waitFor(() => {
+    const marker = activityMarker()
+    return marker?.dataset.available === 'true' && marker.dataset.dirty === 'true' ? marker : undefined
+  })
+  expect(untrackedMarker.querySelector('.ui-badge')?.textContent).toBe('1')
+  expect(changesPanel()).toBeUndefined()
   await runGit(world, feature.path, ['add', '--', 'sidebar-dirty.txt'])
   writeFileSync(file, 'staged and unstaged\n')
   await agent.callAny('quirky.worktree/set', { worktree: feature.id, comment: 'refresh dirty status two' })
   const modified = await win.waitFor(async () => {
     const report = await activityReport(agent)
-    return report?.count === 2 ? report : undefined
+    return report?.worktreeId === feature.id && report.count === 2 ? report : undefined
   })
-  expect(modified).toMatchObject({ count: 2, dirty: true, available: true })
+  expect(modified).toMatchObject({ worktreeId: feature.id, count: 2, dirty: true, available: true })
+  const modifiedMarker = await win.waitFor(() => {
+    const marker = activityMarker()
+    return marker?.dataset.available === 'true' && marker.dataset.dirty === 'true' && marker.querySelector('.ui-badge')?.textContent === '2'
+      ? marker
+      : undefined
+  })
+  expect(modifiedMarker.querySelector('.ui-badge')?.textContent).toBe('2')
+  expect(changesPanel()).toBeUndefined()
   expect((await cliJson<DirtyActivityReport>(world, ['sidebar-extras', 'dirty', '--worktree', feature.id])).count).toBe(2)
-
   await agent.callAny('ui.view.open', { id: SESSION_VIEW, input: { worktree: main.id } })
   await win.waitFor(async () => {
     const state = (await agent.callAny('quirky.sidebar-extras/state', {})) as { active: { worktreeId: string } | null }
@@ -290,16 +341,32 @@ test('SC-14/15/17: the real dirty activity item follows the active worktree and 
   })
   const backgroundDirty = await win.waitFor(async () => {
     const report = await activityReport(agent)
-    return report?.count === 0 ? report : undefined
+    return report?.worktreeId === main.id && report.count === 0 ? report : undefined
   })
-  expect(backgroundDirty).toMatchObject({ count: 0, dirty: false, available: true, title: 'Source Control' })
+  expect(backgroundDirty).toMatchObject({ worktreeId: main.id, count: 0, dirty: false, available: true, title: 'Source Control' })
+  const mainMarker = await win.waitFor(() => {
+    const marker = activityMarker()
+    return marker?.dataset.available === 'true' && marker.dataset.dirty === 'false' ? marker : undefined
+  })
+  expect(mainMarker.querySelector('.ui-badge')).toBeNull()
+  expect(changesPanel()).toBeUndefined()
 
   await agent.callAny('ui.view.open', { id: SESSION_VIEW, input: { worktree: null } })
   await win.waitFor(async () => {
     const state = (await agent.callAny('quirky.sidebar-extras/state', {})) as { active: { worktreeId: string } | null }
     return state.active === null ? state : undefined
   })
-  expect(await win.waitFor(() => activityReport(agent))).toMatchObject({ count: 0, dirty: false, title: 'Source Control' })
+  const empty = await win.waitFor(async () => {
+    const report = await activityReport(agent)
+    return report?.worktreeId === null && report.count === 0 ? report : undefined
+  })
+  expect(empty).toMatchObject({ worktreeId: null, count: 0, dirty: false, available: true, title: 'Source Control' })
+  const emptyMarker = await win.waitFor(() => {
+    const marker = activityMarker()
+    return marker?.dataset.available === 'true' && marker.dataset.dirty === 'false' ? marker : undefined
+  })
+  expect(emptyMarker.querySelector('.ui-badge')).toBeNull()
+  expect(changesPanel()).toBeUndefined()
 }, SLOW)
 
 test('SC-16/17: appearance setting changes separators through CLI without changing sidebar row identity', async () => {
@@ -333,6 +400,10 @@ test('SC-16/17: appearance setting changes separators through CLI without changi
   world.harness = await startHarness({ home: world.harness.home, builtinPluginsDir: builtinsDir() })
   world.agent = await world.harness.connect('cli', 'sidebar-extras-e2e-restarted')
   world.win = await startHeadlessWindow({ home: world.harness.home, runtime: world.harness.runtime })
+  await world.win.waitFor(async () => {
+    const slot = await sidebarSlot(world.agent)
+    return slot?.shown && slot.report !== undefined ? slot : undefined
+  })
   await world.win.waitFor(() => card('feature', 'api'))
   const restored = await world.win.waitFor(async () => {
     const latest = await report(world.agent)

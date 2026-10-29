@@ -21,6 +21,16 @@ type PageShortcut = { id: string; label: string; text: string }
 type ReadResult = { lines: string[]; cols: number; rows: number; alt: boolean }
 type LeaseResult = { terminals: PhoneTerminalLease[] }
 type CloseResult = { ok: true } | { ok: false; reason: string }
+type WatchCreationContext = {
+  bridge: MobilePageBridge
+  worktreeId: string
+  routeKey: string
+  routeEpoch: number
+  generation: number
+  connected: boolean
+  connectionState: MobilePageBridge['state']
+}
+type BrowserWatchCreateResult = { tab: MobileWorkspaceTab; watchId: string }
 type CloseDialog = { sessionIds: string[]; descriptions: string[]; leaveAfterClose: boolean }
 type AnswerDraft = { selected: string[]; freeText: string; text: string; confirm: boolean | null }
 
@@ -239,6 +249,9 @@ export function SessionPage({ bridge, route, connected, onNavigate, onReport }: 
   const leaseQueries = useRef(new Set<string>())
   const loadSequence = useRef(0)
   const loadInFlight = useRef<{ key: string; request: number } | null>(null)
+  const browserCreationPending = useRef(false)
+  const ownerMounted = useRef(false)
+  const watchCreationContext = useRef<WatchCreationContext | null>(null)
   const terminalGranted = bridge.init.grants.includes('terminal')
   const storageGranted = bridge.init.grants.includes('storage')
   const clipboardReadGranted = bridge.init.grants.includes('clipboard.read')
@@ -248,6 +261,27 @@ export function SessionPage({ bridge, route, connected, onNavigate, onReport }: 
     (typeof document === 'undefined' || document.visibilityState !== 'hidden'), [bridge, connected])
   const canMutateNow = useCallback(() => pageActiveNow() && rpcGranted, [pageActiveNow, rpcGranted])
   const canMutate = canMutateNow()
+  const routeKey = JSON.stringify([route.worktreeId, route.sessionId ?? null])
+  const connectionState = bridge.state
+  const previousWatchContext = watchCreationContext.current
+  if (!previousWatchContext || previousWatchContext.bridge !== bridge || previousWatchContext.routeKey !== routeKey ||
+    previousWatchContext.connected !== connected || previousWatchContext.connectionState !== connectionState) {
+    watchCreationContext.current = {
+      bridge,
+      worktreeId: route.worktreeId,
+      routeKey,
+      routeEpoch: (previousWatchContext?.routeEpoch ?? -1) + (previousWatchContext && previousWatchContext.routeKey === routeKey ? 0 : 1),
+      generation: (previousWatchContext?.generation ?? 0) + 1,
+      connected,
+      connectionState
+    }
+  }
+
+  useEffect(() => {
+    ownerMounted.current = true
+    return () => { ownerMounted.current = false }
+  }, [])
+
 
   useEffect(() => {
     setSelectedSessionId(route.sessionId ?? null)
@@ -478,21 +512,73 @@ export function SessionPage({ bridge, route, connected, onNavigate, onReport }: 
     }
   }
 
-  const createBrowserWatch = async () => {
-    if (!canMutateNow() || route.worktreeId === 'floating' || creatingMarkdown || creatingBrowser) return
+  const releaseWatchLease = async (context: WatchCreationContext, tabId: string, watchId: string) => {
+    try {
+      const result = await context.bridge.call<{ closed: boolean }>('quirky.mobile/browserWatchStop', {
+        worktree: context.worktreeId, tabId, watchId
+      })
+      if (result?.closed !== true) throw new Error('The desktop did not confirm stopping the exact Chrome Watch lease.')
+    } catch (cause) {
+      if (ownerMounted.current && watchCreationContext.current?.routeEpoch === context.routeEpoch) {
+        setTabCreationError(errorMessage(cause, 'Could not release the stale Chrome Watch lease.'))
+      } else {
+        console.error('Could not release a stale Chrome Watch lease.', cause)
+      }
+    }
+  }
+
+  const createBrowserWatch = async (url?: string) => {
+    if (route.worktreeId === 'floating') {
+      setTabCreationError('Chrome Watch requires a saved workspace; floating workspaces cannot open a Watch page.')
+      return
+    }
+    if (browserCreationPending.current || creatingMarkdown || creatingBrowser) return
+    if (!pageActiveNow()) {
+      setTabCreationError('Reconnect to the desktop before opening a Chrome Watch page.')
+      return
+    }
+    const context = watchCreationContext.current
+    if (!context) return
+    browserCreationPending.current = true
     setCreatingBrowser(true)
     setTabCreationError(null)
     try {
-      const created = await bridge.call<{ tab: MobileWorkspaceTab; watchId: string }>('quirky.mobile/browserWatchCreate', { worktree: route.worktreeId })
-      chooseWorkspaceTab(created.tab)
+      const params: Record<string, unknown> = { worktree: context.worktreeId }
+      if (url !== undefined) params.url = url
+      const created = await context.bridge.call<BrowserWatchCreateResult>('quirky.mobile/browserWatchCreate', params)
+      const tab = created?.tab
+      const watchId = created?.watchId
+      if (!tab || typeof tab.tabId !== 'string' || !tab.tabId || typeof watchId !== 'string' || !watchId) {
+        throw new Error('The desktop did not return a complete Chrome Watch identity.')
+      }
+      if (tab.worktreeId !== context.worktreeId || tab.kind !== 'browser' || tab.browserMode !== 'watch') {
+        await releaseWatchLease(context, tab.tabId, watchId)
+        throw new Error('The desktop did not return a Chrome Watch tab for this workspace.')
+      }
+      const current = watchCreationContext.current
+      const isCurrent = ownerMounted.current && current?.generation === context.generation &&
+        current.routeKey === context.routeKey && current.bridge === context.bridge && current.connected &&
+        current.connectionState === context.connectionState && context.bridge.state === context.connectionState &&
+        pageActiveNow()
+      if (!isCurrent) {
+        await releaseWatchLease(context, tab.tabId, watchId)
+        return
+      }
+      chooseWorkspaceTab(tab)
       setNotice('Browser (Chrome Watch) opened. This is an explicit agent-page Watch, not a Native browser mirror.')
       await load()
     } catch (cause) {
-      setTabCreationError(errorMessage(cause, 'Could not open a Browser (Chrome Watch) tab.'))
+      if (ownerMounted.current && watchCreationContext.current?.routeEpoch === context.routeEpoch) {
+        setTabCreationError(errorMessage(cause, 'Could not open a Browser (Chrome Watch) tab.'))
+      } else {
+        console.error('Chrome Watch creation failed after the workspace screen changed.', cause)
+      }
     } finally {
-      setCreatingBrowser(false)
+      browserCreationPending.current = false
+      if (ownerMounted.current) setCreatingBrowser(false)
     }
   }
+
 
   useEffect(() => {
     if (!newTabOpen) return
@@ -806,9 +892,10 @@ export function SessionPage({ bridge, route, connected, onNavigate, onReport }: 
           setSelectedTabIds([])
         }}>{manageTabs ? 'Done' : 'Manage terminal tabs'}</button>
       </div>
-      {pageError && <div className="qp-content"><PageError>{pageError}</PageError></div>}
-      {actionError && <div className="qp-content"><PageError>{actionError}</PageError></div>}
-      {notice && <div className="qp-content"><div className="qp-error" role="status">{notice}</div></div>}
+      {tabCreationError && !newTabOpen && <div className="qp-content qp-session-feedback"><PageError>{tabCreationError}</PageError></div>}
+      {pageError && <div className="qp-content qp-session-feedback"><PageError>{pageError}</PageError></div>}
+      {actionError && <div className="qp-content qp-session-feedback"><PageError>{actionError}</PageError></div>}
+      {notice && <div className="qp-content qp-session-feedback"><div className="qp-error" role="status">{notice}</div></div>}
       <div className="qp-tabs" role="tablist" aria-label="Workspace tabs">
         {terminalSessions.map((session) => {
           const active = session.id === selectedSession?.id
@@ -886,6 +973,7 @@ export function SessionPage({ bridge, route, connected, onNavigate, onReport }: 
             textScale={bridge.init.preferences.terminalTextScale}
             onLease={updateLeaseFromView}
             onRestored={onTerminalRestored}
+            onDesktopLink={createBrowserWatch}
           />
         ) : selectedSession ? (
           <div className="qp-session-empty qp-empty" role="alert"><strong>Terminal view unavailable</strong>This page bundle did not receive the terminal grant; no terminal stream is opened.</div>
@@ -1003,8 +1091,10 @@ export function SessionPage({ bridge, route, connected, onNavigate, onReport }: 
         <section className="qp-sheet__section">
           <h3>Browser</h3>
           <p className="qp-dialog-copy">Browser (Chrome Watch) is an explicit view of a managed agent Chrome page; it is not a mirror of a human Native browser.</p>
+          {route.worktreeId === 'floating'
+            ? <p className="qp-dialog-copy">Chrome Watch requires a saved workspace; floating workspaces cannot open a Watch page.</p>
+            : <p className="qp-dialog-copy">Existing Native browser tabs remain listed but cannot stream to this phone. The phone never converts them to Watch.</p>}
           <button className="qp-button qp-button--primary" type="button" disabled={!canMutate || route.worktreeId === 'floating' || creatingMarkdown || creatingBrowser || startingAgent} onClick={() => void createBrowserWatch()}>{creatingBrowser ? 'Starting Chrome Watch…' : 'Browser (Chrome Watch)'}</button>
-          <p className="qp-dialog-copy">Existing Native browser tabs remain listed but cannot stream to this phone. Switch a Native pane to Watch explicitly on the desktop; the phone never converts it silently.</p>
         </section>
         {tabCreationError && <PageError>{tabCreationError}</PageError>}
       </PageModal>}

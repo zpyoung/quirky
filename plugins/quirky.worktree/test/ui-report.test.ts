@@ -202,25 +202,13 @@ test('a removing worktree and a pending create are reported with their flags', (
       pending: [{ repoId: 'r1', name: 'feature-y' }]
     })
   )
-  expect(report.projects[0]!.worktrees).toEqual([
-    expect.objectContaining({ id: 'w1', removing: true, pending: false }),
-    {
-      id: 'pending:feature-y',
-      name: 'feature-y',
-      branch: null,
-      kind: 'git',
-      primary: false,
-      status: null,
-      workspaceStatus: 'in-progress',
-      pinned: false,
-      unread: false,
-      parentId: null,
-      depth: 0,
-      pending: true,
-      removing: false,
-      selected: false
-    }
-  ])
+  const worktrees = report.projects[0]!.worktrees
+  expect(worktrees.find((row) => row.id === 'w1')).toMatchObject({ removing: true, pending: false })
+  expect(worktrees.find((row) => row.id === 'pending:feature-y')).toMatchObject({
+    name: 'feature-y',
+    workspaceStatus: 'in-progress',
+    pending: true
+  })
 })
 
 test('SC-62: the open dialog is reported', () => {

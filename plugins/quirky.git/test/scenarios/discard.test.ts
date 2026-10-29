@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from 'bun:test'
 import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { RpcErrorCode } from '@quirky/protocol'
-import { diverge, fakeAsks, isolateScenarioGit, startScenario, type Scenario } from './fixture'
+import { diverge, isolateScenarioGit, startScenario, type Scenario } from './fixture'
 
 const { scratch } = isolateScenarioGit()
 let s: Scenario | undefined
@@ -24,13 +24,13 @@ describe('discard', () => {
       'confirm in Quirky: Discard changes to "math.ts"? This will revert the unstaged changes to this file. This cannot be undone.'
     )
     expect(read('math.ts')).toBe('a\nb\nc\nd\ne\n')
-    expect(fakeAsks().size).toBe(1)
+    expect(await s.askCount()).toBe(1)
 
     s.write('math.ts', 'edited again\n')
     const yes = await s.cli(['git', 'discard', '--paths', 'math.ts', '--yes'])
     expect(yes.code).toBe(0)
     expect(read('math.ts')).toBe('a\nb\nc\nd\ne\n')
-    expect(fakeAsks().size).toBe(1)
+    expect(await s.askCount()).toBe(1)
   })
 
   test('SC-19: a declined ask changes nothing (CLI)', async () => {

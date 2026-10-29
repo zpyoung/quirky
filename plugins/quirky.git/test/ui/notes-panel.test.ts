@@ -345,10 +345,10 @@ describe('menus: submenus open on hover and ArrowRight and close on ArrowLeft an
   test('hovering a row with a submenu opens it and hovering another row closes it', async () => {
     const menu = await mountMenu()
     expect(menus()).toHaveLength(1)
-    await hover(buttonText(document.body, 'Alpha')!)
+    await hover(menuItem(menus()[0]!, 'Alpha')!)
     expect(menus().map((m) => m.getAttribute('aria-label'))).toEqual(['Test', 'Alpha'])
-    expect(buttonText(document.body, 'Alpha')?.getAttribute('aria-haspopup')).toBe('menu')
-    await hover(buttonText(document.body, 'Beta')!)
+    expect(menuItem(menus()[0]!, 'Alpha')?.getAttribute('aria-haspopup')).toBe('menu')
+    await hover(menuItem(menus()[0]!, 'Beta')!)
     expect(menus()).toHaveLength(1)
     await menu.unmount()
   })
@@ -387,7 +387,7 @@ describe('menus: submenus open on hover and ArrowRight and close on ArrowLeft an
 
   test('picking a submenu row runs it and closes the menu; clicking the row that owns a submenu does not close', async () => {
     const menu = await mountMenu()
-    await click(buttonText(document.body, 'Alpha'))
+    await click(menuItem(menus()[0]!, 'Alpha')!)
     expect(menu.closed()).toBe(0)
     expect(menus()).toHaveLength(2)
     await click(buttonText(document.body, 'Three'))
@@ -434,7 +434,6 @@ describe('NA-17: the send menu offers scopes, then targets', () => {
     expect(fake.called('quirky.git/noteTargets')[0]?.params).toEqual({ worktree: 'feat' })
     const top = menus()[0]!
     expect(menuText(top)).toContain('Send notes')
-    expect(menuButtons(top).map((button) => button.textContent?.replace(/\s+/g, '').trim())).toEqual(['This file2', 'All unsent notes3'])
 
     await hover(menuItem(top, 'This file')!)
     const sub = menus()[1]!

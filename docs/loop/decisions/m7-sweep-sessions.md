@@ -354,5 +354,16 @@ The deterministic combined-scratch prepass returned25 path findings, not a clean
 - **Revisit if:** The controller names a concrete new conflict or merged type failure.
 - **Source:** locked by latest operator scope/landing instruction and LOOP7.3
 
+## D33: Resolve only the second controller-named routing conflict
+- **Question:** What does the next failed land require under the operator's landing cap?
+- **Options:** Restart broad review/testing; stop without receipt; resolve the sole named routing duplication and retry.
+- **Chose:** Required merge of727c7cbce9bded4f2048dca5ec39e9bc4a20f53f overb108f3f2 has only scripts/test-on-macos.txt in conflict. Keep the incoming macOS routes, including phone page teardown, and remove only the duplicate mobile session-tabs row. Read all7new immutable decision logs/125D-sections (reader's initial161total was explicitly corrected). No feature or API patch, no further review pass.
+- **Why:** Touched-source41573f1b already passes272remote+5Mac, scripts12, full typing/build and real runtime checks. The controller requires current routing reconciliation; it does not justify another unrelated scope expansion. Run the scripts gate for the changed routing and rely on the controller's mandatory merge-result typecheck before accepting a receipt.
+- **Evidence:** landing-2/check-0.log stopped at conflict before verification; landing-recovery-2/manifest.json and full-log reader; sole conflict removes a duplicate while preserving the same existing Mac route.
+- **Reversibility:** easy
+- **Confidence:** high for exact routing-only resolution; no new overall-source or native certification claim.
+- **Revisit if:** The controller names another concrete merge/type failure.
+- **Source:** locked by operator landing cap and LOOP7.3
+
 ## Progress
-Ready to retry canonical land under the operator's instruction. Current41573f1b touched gate passes272remote+5Mac (Handoff delivery flaky retry retained), scripts12, full typing/build; merged actual runtime smoke and named consumer pass with cleanup, temporary transport removed. Requiredb108f3f2 recovery/log inventory is complete; no further review pass. Commit only these final evidence/status updates, detach and invoke the current absolute queue.ts land. Retain the existing host-composition successor and all partial UI/native/review bounds. Await authoritative receipt; after success archive/clean only owned residue, preserve metadata, mark the final task done and end exactly this iteration.
+Second controller-named recovery is routing-only; all7incoming logs/125decisions read and duplicate mobile route removed without losing its canonical entry. No further review or feature work. Commit the required merge, run remote scripts for the changed routing, detach and immediately retry absolute canonical land; await actual controller typecheck/receipt. Existing host successor and all review/UI/native limits remain. After success archive/clean owned residue, preserve metadata and end exactly this iteration.

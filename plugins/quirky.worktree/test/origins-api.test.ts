@@ -17,9 +17,9 @@ let changedMobilePort = false
 type OriginWorld = { fixture: PluginHarness; repoId: string; projectPath: string }
 
 async function start(options: { automation?: boolean; mobile?: boolean } = {}): Promise<OriginWorld> {
-  const plugins = ['quirky.repo', 'quirky.worktree']
+  const plugins = ['quirky.cli', 'quirky.repo', 'quirky.worktree']
   if (options.mobile) plugins.push('quirky.agents', 'quirky.session', 'quirky.terminal', 'quirky.ask', 'quirky.agent-status', 'quirky.structured', 'quirky.mobile')
-  if (options.automation) plugins.push('quirky.ask', 'quirky.agents', 'quirky.checks', 'quirky.structured', 'quirky.automations')
+  if (options.automation) plugins.push('quirky.ask', 'quirky.agents', 'quirky.checks', 'quirky.structured', 'quirky.session', 'quirky.automations')
   const fixture = await startPluginHarness({
     plugins,
     realGit: true,
@@ -109,23 +109,21 @@ describe('quirky.worktree/origins public API', () => {
     const secondCreated = await second.callAny('quirky.worktree/create', {
       repo: repoId, name: 'desktop-second'
     }) as WorktreeCreateResult
-    const forgedCreated = await first.callAny('quirky.worktree/create', {
+    const beforeForgedCreate = (await first.callAny('quirky.worktree/list', { repo: repoId }) as Array<{ id: string }>).map((worktree) => worktree.id)
+    await expect(first.callAny('quirky.worktree/create', {
       repo: repoId, name: 'forged-desktop', desktopClientId: secondId
-    }) as WorktreeCreateResult
+    })).rejects.toMatchObject({ code: RpcErrorCode.InvalidParams })
+    expect((await first.callAny('quirky.worktree/list', { repo: repoId }) as Array<{ id: string }>).map((worktree) => worktree.id)).toEqual(beforeForgedCreate)
 
     const cliCreated = await fixture.client.callAny('quirky.worktree/create', {
       repo: repoId, name: 'cli-origin'
     }) as WorktreeCreateResult
     const firstView = await first.callAny('quirky.worktree/origins', {}) as WorkspaceOriginView[]
     const secondView = await second.callAny('quirky.worktree/origins', {}) as WorkspaceOriginView[]
-    await expect(first.callAny('quirky.worktree/origins', { desktopClientId: secondId }))
-      .rejects.toMatchObject({ code: RpcErrorCode.InvalidParams })
     expect(originFor(firstView, firstCreated.worktree.id)?.otherClient).toBe(false)
     expect(originFor(firstView, secondCreated.worktree.id)?.otherClient).toBe(true)
     expect(originFor(secondView, firstCreated.worktree.id)?.otherClient).toBe(true)
     expect(originFor(secondView, secondCreated.worktree.id)?.otherClient).toBe(false)
-    expect(originFor(firstView, forgedCreated.worktree.id)?.otherClient).toBe(false)
-    expect(originFor(secondView, forgedCreated.worktree.id)?.otherClient).toBe(true)
     expect(originFor(firstView, cliCreated.worktree.id)?.otherClient).toBeNull()
     const primary = (await fixture.client.callAny('quirky.worktree/list', { repo: repoId }) as Array<{ id: string; isMain: boolean }>).find((row) => row.isMain)!
     expect(originFor(firstView, primary.id)).toEqual({ worktreeId: primary.id, automation: null, otherClient: null })

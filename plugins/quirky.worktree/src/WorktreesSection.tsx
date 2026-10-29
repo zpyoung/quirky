@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Button, EmptyState } from '@quirky/ui'
+import { Button, EmptyState, IconButton, Popover, ToolPanelActions } from '@quirky/ui'
 import type { Repo, Session, UiLayout, UiPluginContext, Worktree } from '@quirky/protocol'
 import { confirmsDelete, currentWindowId, deleteWorkspace, setWorktree, type CreateRequests, type KeptBranch, type TrustChoice, type TrustRequest } from './actions'
 import { AddProjectDialog } from './AddProjectDialog'
@@ -35,8 +35,13 @@ import type { MembershipTarget } from './membership'
 const SEPARATOR_SETTING = 'setting:quirky.sidebar-extras/sidebar-section-separators'
 
 function readSeparatorSetting(context: UiPluginContext): boolean {
-  const value = context.getSetting(SEPARATOR_SETTING)
-  return typeof value === 'boolean' ? value : true
+  try {
+    const value = context.getSetting(SEPARATOR_SETTING)
+    return typeof value === 'boolean' ? value : true
+  } catch (error) {
+    if (error instanceof Error && error.message === `no setting ${SEPARATOR_SETTING}`) return true
+    throw error
+  }
 }
 function projectIdentitiesOf(value: unknown): Record<string, WorktreeProjectIdentity> | null {
   if (!Array.isArray(value)) return null
@@ -127,6 +132,8 @@ export function WorktreesSection({ context, report, requests }: Props) {
   const { repos, groups, worktrees, sessions, otherClientByWorktree, hasAuthenticatedDesktopClient, loaded } = useTree(context)
   const now = useNow()
   const [layout, setLayout] = useState(() => context.getLayout())
+  const [optionsOpen, setOptionsOpen] = useState(false)
+  const optionsButton = useRef<HTMLButtonElement>(null)
   const [dialog, setDialog] = useState<DialogState | null>(null)
   const [pending, setPending] = useState<PendingCreate[]>([])
   const [trust, setTrust] = useState<TrustPrompt | null>(null)
@@ -507,43 +514,72 @@ export function WorktreesSection({ context, report, requests }: Props) {
           .filter((worktree): worktree is NonNullable<typeof worktree> => worktree !== undefined)
       : undefined
   const trustRepo = trust ? repos.find((repo) => repo.id === trust.request.repoId) : undefined
+  const openAddProject = () => {
+    setOptionsOpen(false)
+    setDialog({ kind: 'add-project' })
+  }
+  const openCleanup = () => {
+    setOptionsOpen(false)
+    setCleanupOpen(true)
+  }
+  const openStatusEditor = () => {
+    setOptionsOpen(false)
+    setStatusEditorOpen(true)
+  }
 
   return (
     <div className="ui-stack ui-panel-content">
-      <div className="ui-cluster ui-toolbar">
-        {!(loaded && repos.length === 0) && (
-          <Button type="button" variant="primary" onClick={() => setDialog({ kind: 'add-project' })}>
-            Add project
-          </Button>
-        )}
-        <StockOptions
-          options={stockOptions}
-          repos={repos}
-          projectOrder={projectOrder}
-          hiddenSleepingCount={hiddenSleepingWorktrees.length}
-          hiddenFilteredCount={hiddenFilteredWorktrees.length}
-          revealSleeping={revealSleeping}
-          revealFiltered={revealFiltered}
-          changeOptions={(patch) => void changeStockOptions(patch)}
-          changeProjectOrder={(ids) => void reorderProjects(ids)}
-          toggleSleepingReveal={() => setRevealSleeping((current) => !current)}
-          toggleFilteredReveal={() => setRevealFiltered((current) => !current)}
-          openCleanup={() => setCleanupOpen(true)}
-        />
-        <ActivityFilters
-          projection={currentProjection}
-          error={activity.status === 'error' ? activity.error : null}
-          loading={activity.status === 'loading'}
-          setPreferences={activity.setPreferences}
-        />
-        <details className="ui-disclosure">
-          <summary>More workspace tools</summary>
-          <div className="ui-cluster ui-actions">
-            <Button type="button" aria-expanded={boardOpen} onClick={() => setBoardOpen((open) => !open)}>Workspace board</Button>
-            <Button type="button" onClick={() => setStatusEditorOpen(true)}>Edit workspace statuses</Button>
-          </div>
-        </details>
-      </div>
+      <ToolPanelActions>
+        <>
+          <IconButton
+            ref={optionsButton}
+            label="Worktrees options"
+            aria-expanded={optionsOpen}
+            aria-haspopup="dialog"
+            onClick={() => setOptionsOpen((open) => !open)}
+          >
+            <svg viewBox="0 0 24 24" width="var(--ui-icon-size)" height="var(--ui-icon-size)" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M4 5h16l-6.5 7.4V18l-3 1.5v-7.1L4 5Z" />
+            </svg>
+          </IconButton>
+          <Popover open={optionsOpen} label="Worktrees options" anchor={optionsButton} onClose={() => setOptionsOpen(false)}>
+            <div className="ui-stack">
+              {!(loaded && repos.length === 0) && (
+                <Button type="button" variant="primary" onClick={openAddProject}>
+                  Add project
+                </Button>
+              )}
+              <StockOptions
+                options={stockOptions}
+                repos={repos}
+                projectOrder={projectOrder}
+                hiddenSleepingCount={hiddenSleepingWorktrees.length}
+                hiddenFilteredCount={hiddenFilteredWorktrees.length}
+                revealSleeping={revealSleeping}
+                revealFiltered={revealFiltered}
+                changeOptions={(patch) => void changeStockOptions(patch)}
+                changeProjectOrder={(ids) => void reorderProjects(ids)}
+                toggleSleepingReveal={() => setRevealSleeping((current) => !current)}
+                toggleFilteredReveal={() => setRevealFiltered((current) => !current)}
+                openCleanup={openCleanup}
+              />
+              <ActivityFilters
+                projection={currentProjection}
+                error={activity.status === 'error' ? activity.error : null}
+                loading={activity.status === 'loading'}
+                setPreferences={activity.setPreferences}
+              />
+              <details className="ui-disclosure">
+                <summary>More workspace tools</summary>
+                <div className="ui-cluster ui-actions">
+                  <Button type="button" aria-expanded={boardOpen} onClick={() => setBoardOpen((open) => !open)}>Workspace board</Button>
+                  <Button type="button" onClick={openStatusEditor}>Edit workspace statuses</Button>
+                </div>
+              </details>
+            </div>
+          </Popover>
+        </>
+      </ToolPanelActions>
       {boardOpen && (
         <WorktreeBoard
           worktrees={ordered.filter((worktree) => treeVisibleIds.has(worktree.id))}
@@ -560,7 +596,7 @@ export function WorktreesSection({ context, report, requests }: Props) {
       )}
       {!loaded && <p className="ui-text-muted" role="status">Loading projects and worktrees…</p>}
       {loaded && repos.length === 0 && (
-        <EmptyState message="No projects yet." action={{ label: 'Add project', onAction: () => setDialog({ kind: 'add-project' }) }} />
+        <EmptyState message="No projects yet." action={{ label: 'Add project', onAction: openAddProject }} />
       )}
       {loaded && repos.length > 0 && (
         <div className="ui-scroll ui-grow">

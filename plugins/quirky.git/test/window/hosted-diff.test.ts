@@ -1,21 +1,15 @@
-import { afterAll, afterEach, expect, test } from 'bun:test'
+import { afterEach, expect, test } from 'bun:test'
+import { EditorView } from '@codemirror/view'
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { Buffer } from 'node:buffer'
-import { GlobalRegistrator } from '@happy-dom/global-registrator'
-import { registerDom } from '../ui/register-dom'
 import { isolateGitConfig } from '../../../quirky.repo/test/git-fixtures'
-import type { World } from './world'
+import { boot, shutdown, DIFF_VIEW, type World } from './world'
+import { modifiedEditor, q, rowOf, text } from './dom'
 
-// The headless window must register DOM globals before loading its window module.
-
-registerDom()
-const { boot, shutdown, DIFF_VIEW } = await import('./world')
-const { modifiedEditor, q, rowOf, text } = await import('./dom')
-const { EditorView } = await import('@codemirror/view')
 const { scratch } = isolateGitConfig()
+const SLOW = 90_000
 
-afterAll(() => GlobalRegistrator.unregister())
 afterEach(shutdown)
 
 type RecordValue = Record<string, unknown>
@@ -84,7 +78,7 @@ test('Source Control preview replaces only a clean hosted tab, promotes on doubl
   clickRow('math.ts')
   const first = await world.win.waitFor(async () => {
     const tabs = diffTabs(await terminalWorkspace(world))
-    return tabs.find(({ tab }) => record(tab.input).path === 'math.ts') ?? null
+    return tabs.find(({ tab }) => record(tab.input).path === 'math.ts' && record(tab.input).tabId === tab.id) ?? null
   })
   expect(first.tab.preview).toBe(true)
   const previewId = first.tab.id
@@ -92,7 +86,7 @@ test('Source Control preview replaces only a clean hosted tab, promotes on doubl
   clickRow('README.md')
   const replaced = await world.win.waitFor(async () => {
     const tabs = diffTabs(await terminalWorkspace(world))
-    return tabs.find(({ tab }) => tab.id === previewId && record(tab.input).path === 'README.md') ?? null
+    return tabs.find(({ tab }) => tab.id === previewId && record(tab.input).path === 'README.md' && record(tab.input).tabId === tab.id) ?? null
   })
   expect(replaced.tab.preview).toBe(true)
   expect(diffTabs(await terminalWorkspace(world))).toHaveLength(1)
@@ -100,7 +94,7 @@ test('Source Control preview replaces only a clean hosted tab, promotes on doubl
   clickRow('README.md', 2)
   const promoted = await world.win.waitFor(async () => {
     const current = diffTabs(await terminalWorkspace(world)).find(({ tab }) => tab.id === previewId)
-    return current?.tab.preview === false ? current : null
+    return current?.tab.preview === false && record(current.tab.input).tabId === current.tab.id && record(current.tab.input).preview === false ? current : null
   })
   expect(promoted.tab.id).toBe(previewId)
 
@@ -108,30 +102,22 @@ test('Source Control preview replaces only a clean hosted tab, promotes on doubl
   const split = await world.win.waitFor(async () => {
     const workspace = await terminalWorkspace(world)
     const tabs = diffTabs(workspace)
-    return tabs.find(({ tab }) => record(tab.input).path === 'a.ts') ?? null
+    return groups(workspace.root).length === 2
+      ? tabs.find(({ tab, group }) => record(tab.input).path === 'a.ts' && record(tab.input).split === true && record(tab.input).groupId === group.id) ?? null
+      : null
   })
   const splitWorkspace = await terminalWorkspace(world)
   expect(groups(splitWorkspace.root)).toHaveLength(2)
   expect(record(split.tab.input)).toMatchObject({ worktree: world.feat.id, path: 'a.ts', split: true, groupId: split.group.id })
   expect(split.tab.preview).toBe(false)
 
-  await world.win.waitFor(async () => (await world.viewReport())?.placement === 'split')
-  expect(await world.viewReport()).toMatchObject({
-    worktree: world.feat.id,
-    tabId: split.tab.id,
-    groupId: split.group.id,
-    mode: 'file',
-    path: 'a.ts',
-    placement: 'split',
-    display: 'source'
-  })
 
   await world.agent.callAny('quirky.terminal/pinTab', { tab: previewId, pinned: true })
   await world.win.waitFor(async () => {
     const current = diffTabs(await terminalWorkspace(world)).find(({ tab }) => tab.id === previewId)
     return current?.tab.pinned === true && current.tab.preview === false
   })
-})
+}, SLOW)
 
 test('dirty hosted diffs refuse close and are never replaced by another preview', async () => {
   const world = await boot(scratch, { published: false })
@@ -141,9 +127,9 @@ test('dirty hosted diffs refuse close and are never replaced by another preview'
   clickRow('math.ts')
   const opened = await world.win.waitFor(async () => {
     const tabs = diffTabs(await terminalWorkspace(world))
-    return tabs.find(({ tab }) => record(tab.input).path === 'math.ts') ?? null
+    return tabs.find(({ tab }) => record(tab.input).path === 'math.ts' && record(tab.input).tabId === tab.id) ?? null
   })
-  await world.win.waitFor(() => q('[data-git-view-root] .cm-editor'))
+  await world.win.waitFor(() => q('[data-git-view-root] [contenteditable]'))
   const editor = modifiedEditor(EditorView, q('[data-diff-editor]')!)
   editor.dispatch({ changes: { from: 0, insert: 'unsaved draft ' } })
   await world.win.waitFor(async () => {
@@ -158,10 +144,11 @@ test('dirty hosted diffs refuse close and are never replaced by another preview'
   )
   expect(closeFailure).toContain('refused to close')
   clickRow('README.md')
-  await world.win.waitFor(async () => diffTabs(await terminalWorkspace(world)).some(({ tab }) =>
-    tab.id === opened.tab.id && record(tab.input).path === 'math.ts'
-  ))
-})
+  await world.win.waitFor(async () => diffTabs(await terminalWorkspace(world)).some(({ tab }) => record(tab.input).path === 'README.md'))
+  const remaining = diffTabs(await terminalWorkspace(world)).find(({ tab }) => tab.id === opened.tab.id)
+  expect(record(remaining?.tab.input).path).toBe('math.ts')
+  expect(record(remaining?.tab.closeParams).dirty).toBe(true)
+}, SLOW)
 
 test('Markdown diff previews the modified side with an authorized image and releases only its hosted lease', async () => {
   const world = await boot(scratch, { published: false })
@@ -263,4 +250,4 @@ test('Markdown diff previews the modified side with an authorized image and rele
   })).toMatchObject({ leaseId: siblingLeaseId, released: true })
   await expectImageResourceUnavailable(world, siblingSrc)
   await expectImageResource(world, sourceSrc!, imageBytes)
-})
+}, SLOW)

@@ -298,7 +298,7 @@ function WorktreeCard({
         trailing={
           <span className="ui-cluster">
             {needsYou && <Badge tone="needs-you" label={attentionLabel}>{pendingAskCount}</Badge>}
-            {worktree.isMain && <Badge tone="accent">Primary</Badge>}
+            {worktree.isMain && <Badge>Primary</Badge>}
             <IconButton
               className="worktree-menu"
               label={`Actions for ${worktree.name}`}
@@ -493,10 +493,16 @@ export function Tree({
     setDropPreview(target)
     onDropPreviewChange(target)
   }
+  useEffect(() => {
+    if (options.groupBy === 'project' || previewRef.current === null) return
+    previewRef.current = null
+    setDropPreview(null)
+    onDropPreviewChange(null)
+  }, [onDropPreviewChange, options.groupBy])
 
   const resolveAt = (clientX: number, clientY: number, worktree: Worktree): MembershipTarget | null => {
     const root = treeRoot.current
-    if (!root || worktree.kind !== 'git') return null
+    if (!root || options.groupBy !== 'project' || worktree.kind !== 'git' || repoById.get(worktree.repoId)?.kind !== 'git') return null
     const groupHeaders = [...root.querySelectorAll<HTMLElement>('[data-group-target]')].map((header) => {
       const bounds = header.getBoundingClientRect()
       return { id: header.dataset.groupTarget!, left: bounds.left, right: bounds.right, top: bounds.top, bottom: bounds.bottom }
@@ -513,7 +519,7 @@ export function Tree({
 
   const changeMembership = async (worktree: Worktree, group: ProjectGroup | null) => {
     const groupId = group?.id ?? null
-    if (worktree.kind !== 'git' || groupId === worktree.projectGroupId) return
+    if (worktree.kind !== 'git' || repoById.get(worktree.repoId)?.kind !== 'git' || groupId === worktree.projectGroupId) return
     const changed = await changeGroup(context, 'Could not change worktree group', () =>
       context.call('quirky.worktree/set', {
         worktree: worktree.id,

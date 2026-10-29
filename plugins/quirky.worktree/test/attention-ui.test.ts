@@ -8,11 +8,16 @@ import { bootWindow, closeWindows, installUiPlugin, provide, type WindowEnv } fr
 const WORKTREES = 'sidebar-section:quirky.worktree/worktrees'
 const CURRENT_VIEW = 'view:acme.attention/current'
 
-function installRealPlugins(installed: string): void {
-  mkdirSync(installed, { recursive: true })
-  for (const id of ['quirky.repo', 'quirky.worktree', 'quirky.ask']) {
-    symlinkSync(resolve(import.meta.dir, '../../../', 'plugins', id), join(installed, id))
+function createBuiltinPlugins(): string {
+  const directory = makeTempDir('worktree-attention-builtins-')
+  mkdirSync(directory, { recursive: true })
+  for (const id of ['quirky.repo', 'quirky.cli', 'quirky.worktree', 'quirky.ask']) {
+    symlinkSync(resolve(import.meta.dir, '../../../', 'plugins', id), join(directory, id))
   }
+  return directory
+}
+
+function installAttentionUiPlugin(installed: string): void {
   installUiPlugin(
     installed,
     'acme.attention',
@@ -24,7 +29,7 @@ function installRealPlugins(installed: string): void {
 afterEach(closeWindows)
 
 async function bootTree() {
-  const env = await bootWindow(installRealPlugins)
+  const env = await bootWindow(installAttentionUiPlugin, { builtinPluginsDir: createBuiltinPlugins() })
   const currentPath = makeTempDir('worktree-attention-current-')
   const otherPath = makeTempDir('worktree-attention-other-')
   const [currentRepo, otherRepo] = await Promise.all([
@@ -46,14 +51,18 @@ function row(env: WindowEnv, worktreeId: string): HTMLElement | null {
   return env.win.document.querySelector<HTMLElement>(`[data-worktree-id="${worktreeId}"]`)
 }
 
-function attentionIndicators(env: WindowEnv, worktreeId: string, count: number): HTMLElement[] {
+function attentionBadges(env: WindowEnv, worktreeId: string, count: number): HTMLElement[] {
   const label = `${count} pending ${count === 1 ? 'question' : 'questions'}`
-  return [...(row(env, worktreeId)?.querySelectorAll<HTMLElement>('[role=\"img\"]') ?? [])]
+  return [...(row(env, worktreeId)?.querySelectorAll<HTMLElement>('.ui-badge[aria-label]') ?? [])]
     .filter((element) => element.getAttribute('aria-label') === label)
 }
 
+function needsYouDot(env: WindowEnv, worktreeId: string): HTMLElement | null {
+  return row(env, worktreeId)?.querySelector<HTMLElement>('.ui-status-dot[aria-label="Status: needs-you"]') ?? null
+}
+
 function askBadge(env: WindowEnv, worktreeId: string, count: number): HTMLElement | null {
-  return attentionIndicators(env, worktreeId, count).find((element) => element.textContent?.trim() !== '') ?? null
+  return attentionBadges(env, worktreeId, count).find((element) => element.textContent?.trim() !== '') ?? null
 }
 
 async function createAsk(env: WindowEnv, worktree: Worktree): Promise<string> {
@@ -84,14 +93,16 @@ test('pending asks badge only their exact worktree and updates as the real Ask a
   const otherAsk1 = await createAsk(env, other)
   const otherAsk2 = await createAsk(env, other)
 
-  await env.win.waitFor(() => attentionIndicators(env, current.id, 1).length === 2)
-  await env.win.waitFor(() => attentionIndicators(env, other.id, 2).length === 2)
+  await env.win.waitFor(() => attentionBadges(env, current.id, 1).length === 1)
+  await env.win.waitFor(() => attentionBadges(env, other.id, 2).length === 1)
   expect(askBadge(env, current.id, 1)?.textContent).toBe('1')
   expect(askBadge(env, other.id, 2)?.textContent).toBe('2')
+  expect(needsYouDot(env, current.id)).not.toBeNull()
+  expect(needsYouDot(env, other.id)).not.toBeNull()
   expect(env.win.host.getState().layout.view).toEqual(selectedView)
 
   await answerAsk(env, otherAsk1)
-  await env.win.waitFor(() => attentionIndicators(env, other.id, 1).length === 2)
+  await env.win.waitFor(() => attentionBadges(env, other.id, 1).length === 1)
   const remaining = await pendingAsks(env)
   expect(remaining).toHaveLength(2)
   expect(remaining.map((ask) => ask.id)).toEqual(expect.arrayContaining([currentAsk, otherAsk2]))
@@ -99,7 +110,8 @@ test('pending asks badge only their exact worktree and updates as the real Ask a
   expect(env.win.host.getState().layout.view).toEqual(selectedView)
 
   await answerAsk(env, otherAsk2)
-  await env.win.waitFor(() => askBadge(env, other.id, 1) === null)
+  await env.win.waitFor(() => askBadge(env, other.id, 1) === null && needsYouDot(env, other.id) === null)
   expect((await pendingAsks(env)).map((ask) => ask.id)).toEqual([currentAsk])
+  expect(needsYouDot(env, current.id)).not.toBeNull()
   expect(env.win.host.getState().layout.view).toEqual(selectedView)
 })

@@ -7,7 +7,7 @@ const { scratch } = isolateGitConfig()
 const SLOW = 60_000
 afterEach(shutdown)
 
-const sectionCounts = () => qa('[data-section-count] .ui-badge').map(text)
+const sectionCounts = () => qa('[data-section-count]').map(text)
 
 test('SC-8: the panel shows Orca\'s layout against a real daemon', async () => {
   const w = await boot(scratch)

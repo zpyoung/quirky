@@ -93,7 +93,7 @@ export function workspaceMenu(
     ...sleepItems,
     del
   ]
-  if (worktree.kind === 'git') {
+  if (worktree.kind === 'git' && repo?.kind === 'git') {
     items.push({
       label: 'New group from worktree…',
       onSelect: () => on.openDialog({
@@ -115,10 +115,16 @@ export function workspaceMenu(
           onSelect: () => on.setMembership(worktree, group)
         }))
       })
-      if (worktree.projectGroupId !== null) {
-        items.push({ label: 'Remove worktree from group', onSelect: () => on.setMembership(worktree, null) })
-      }
     }
+    if (worktree.projectGroupId !== null) {
+      items.push({ label: 'Remove worktree from group', onSelect: () => on.setMembership(worktree, null) })
+    }
+  }
+  if (repo && !(worktree.kind === 'git' && repo.kind === 'git')) {
+    items.push({
+      label: 'New Group from Project…',
+      onSelect: () => on.openDialog({ kind: 'group', action: 'new', repoId: repo.id })
+    })
   }
   if (repo && groups.length > 0) {
     const targets: ContextMenuItem[] = groups.map((group) => ({
@@ -129,6 +135,9 @@ export function workspaceMenu(
     }))
     if (repo.groupId !== null) targets.push({ label: 'No group', onSelect: () => on.moveProject(repo, null) })
     items.push({ label: 'Move project to group', submenu: targets })
+  }
+  if (repo && !(worktree.kind === 'git' && repo.kind === 'git') && repo.groupId !== null) {
+    items.push({ label: 'Remove project from group', onSelect: () => on.moveProject(repo, null) })
   }
   return items
 }

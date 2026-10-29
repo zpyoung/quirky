@@ -1,0 +1,22 @@
+{
+  "item": "m7-sweep-browser-mobile",
+  "spec": "docs/quirk/specs/2026-10-28-m7-sweep-browser-mobile/logic.md",
+  "scenarios": [
+    {
+      "id": "S1-S3-native-links",
+      "title": "On an isolated real iOS/Android development build, Settings saves Phone versus Desktop (Chrome Watch); tapping an actual xterm link opens the chosen destination, preserves existing Native tabs and releases only its own Watch lease when the app backgrounds or leaves the session",
+      "status": "pending",
+      "lastRun": null,
+      "report": null,
+      "summary": null
+    },
+    {
+      "id": "S5-native-keyboard-layout",
+      "title": "On an isolated real phone with the keyboard raised, Tasks Create Workspace fields/buttons remain within the viewport; cancel restores Tasks header and the Open filter sheet without horizontal clipping or persistent shift",
+      "status": "pending",
+      "lastRun": null,
+      "report": null,
+      "summary": null
+    }
+  ]
+}

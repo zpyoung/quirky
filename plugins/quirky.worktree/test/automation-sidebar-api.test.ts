@@ -2,7 +2,7 @@ import { rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { afterEach, expect, test } from 'bun:test'
 import { RpcErrorCode, type QuirkyClient, type Repo, type Worktree, type WorktreeCreateResult } from '@quirky/protocol'
-import { builtinsDir, makeTempHome, startHarness, waitFor, type Harness } from '../../../packages/daemon/test/helpers'
+import { builtinsDir, makeHomeWithoutAutoHooks, startHarness, waitFor, type Harness } from '../../../packages/daemon/test/helpers'
 import { isolateGitConfig, makeRepo } from '../../quirky.repo/test/git-fixtures'
 
 isolateGitConfig()
@@ -88,7 +88,7 @@ async function createAttributedWorktree(world: World): Promise<{ repo: Repo; wor
 }
 
 test('hideAutomationCreated persists per client and filters provenance without matching API creators or name prefixes', async () => {
-  const home = makeTempHome('qwt-automation-sidebar-api-')
+  const home = makeHomeWithoutAutoHooks('qwt-automation-sidebar-api-')
   try {
     current = await start(home)
   } catch (error) {
@@ -130,7 +130,9 @@ test('hideAutomationCreated persists per client and filters provenance without m
   expect(phoneProjection.filterCount).toBe(1)
   expect(phoneProjection.automationHiddenIds).toEqual([attributed.id])
 
-  await world.harness.cleanup()
+  for (const client of world.harness.clients) await client.close()
+  await world.harness.daemon.stop()
+  world.harness.pty.stop()
   current = null
   try {
     current = await start(home)

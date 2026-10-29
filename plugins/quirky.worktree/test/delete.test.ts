@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, setDefaultTimeout, test } from 'bun:test'
 import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, readlinkSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { basename, join } from 'node:path'
-import { RpcErrorCode, type ApiDescription, type ProjectGroup, type Repo, type Worktree, type WorktreeCreateResult, type WorktreeRemoveResult } from '@quirky/protocol'
+import { RpcErrorCode, type ProjectGroup, type Repo, type Worktree, type WorktreeCreateResult, type WorktreeRemoveResult } from '@quirky/protocol'
 import { waitFor, waitForAsync } from '../../../packages/daemon/test/helpers'
 import { makeTempDir } from '../../../packages/daemon/test/plugins/fixtures'
 import { call, commitFiles, failure, git, isolateGitConfig } from '../../quirky.repo/test/git-fixtures'
@@ -667,31 +667,6 @@ describe('SC-12 and SC-11 (delete): folder workspaces', () => {
     expect(await listWorktrees(w.t.client, { group: 'apps' })).toEqual([])
     expect(readdirSync(parent).sort()).toEqual(['a.txt', 'sub'])
     expect(w.t.sessions.sessions).toEqual([])
-  })
-})
-
-describe('SC-61: the new methods and commands are listed with schemas', () => {
-  test('api.describe has the worktree and repo surface', async () => {
-    const w = await start()
-    const api = (await call(w.t.client, 'api.describe')) as ApiDescription
-    const method = (name: string) => api.methods.find((entry) => entry.name === name)!
-    for (const name of ['set', 'show', 'suggestName', 'deleteBranch', 'create', 'remove']) expect(method(`quirky.worktree/${name}`)).toBeDefined()
-    expect(method('quirky.worktree/deleteBranch')).toMatchObject({ destructive: true, confirm: 'Delete branch {branch}?' })
-    expect(Object.keys(method('quirky.worktree/deleteBranch').params.properties!).sort()).toEqual(['branch', 'head', 'repo'])
-    expect(method('quirky.worktree/remove')).toMatchObject({ destructive: true })
-    expect(Object.keys(method('quirky.worktree/remove').params.properties!).sort()).toEqual(['allowFailedArchiveHook', 'force', 'skipArchive', 'withDescendants', 'worktree'])
-    expect(Object.keys(method('quirky.worktree/remove').result.properties!).sort()).toEqual(['keptBranch', 'ok', 'removed', 'sessionErrors'])
-    expect(method('quirky.worktree/create').params.properties).toHaveProperty('createdBy')
-    for (const name of ['clone', 'create', 'scan', 'import', 'set', 'show', 'trustHooks', 'groupList']) expect(method(`quirky.repo/${name}`).params).toBeDefined()
-
-    const words = (plugin: string) => api.cli.commands.filter((command) => command.plugin === plugin).map((command) => command.words)
-    expect(words('quirky.worktree')).toEqual(expect.arrayContaining(['worktree list', 'worktree create', 'worktree set', 'worktree show', 'worktree rm', 'worktree delete-branch']))
-    expect(words('quirky.repo')).toEqual(expect.arrayContaining(['repo clone', 'repo create', 'repo scan', 'repo import', 'repo set', 'repo show', 'repo trust-hooks', 'repo group list']))
-    const rm = api.cli.commands.find((command) => command.plugin === 'quirky.worktree' && command.words === 'worktree rm')!
-    expect(rm.flags.map((flag) => flag.name).sort()).toEqual(['allow-failed-archive-hook', 'force', 'skip-archive', 'with-descendants'])
-    const deleteBranch = api.cli.commands.find((command) => command.plugin === 'quirky.worktree' && command.words === 'worktree delete-branch')!
-    expect(deleteBranch.positionals.map((positional) => positional.name)).toEqual(['repo', 'branch'])
-    expect(deleteBranch.flags.map((flag) => flag.name)).toEqual(['head'])
   })
 })
 

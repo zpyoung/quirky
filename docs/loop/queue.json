@@ -2020,7 +2020,7 @@
         "browser.md",
         "mobile.md"
       ],
-      "status": "in-progress",
+      "status": "done",
       "title": "Parity sweep for browser.md, mobile.md: every remaining flow in these feature docs, except the GitLab, Bitbucket, Gitea/Forgejo and Azure DevOps flows, the Objective runner and the PR sitter, which the user deferred. Find what earlier items left out or deferred, build or fix it, and record anything too large as a follow-up item",
       "deps": [
         "sa-browser-agent",
@@ -2030,8 +2030,7 @@
         "sb-mobile-daemon",
         "sb-mobile-app",
         "sb-mobile-app-panels"
-      ],
-      "lane": 7
+      ]
     },
     {
       "id": "fix-browser-remaining-flows-1028",
@@ -2042,7 +2041,7 @@
         "fix-test-browser-1028",
         "m7-sweep-browser-mobile"
       ],
-      "status": "todo"
+      "status": "done"
     },
     {
       "id": "fix-test-editor-1028",
@@ -2210,8 +2209,7 @@
       "title": "UI redesign polish, matching the approved golden screens in docs/quirk/specs/2026-10-28-ui-redesign/logic.md: (1) the Worktrees tool opens as the plain worktree list; move Add project, Workspace options, the activity filter chips/checkboxes, Clear filters and More workspace tools behind one filter/options icon button in the Worktrees panel header; (2) remove the small dropdown chevrons rendered under every stripe icon on the left, right and bottom stripes; (3) the Primary worktree badge uses a neutral badge token, not the indigo accent, which is reserved for selection. Compare against docs/loop/reviews/ui-final-review/images/after/shell/*.png and recapture those after the fix. Use only shared components and tokens; the UI lint check must pass.",
       "docs": [],
       "deps": [],
-      "status": "in-progress",
-      "lane": 12
+      "status": "done"
     },
     {
       "id": "fix-test-reviews-tool-1028",
@@ -2281,17 +2279,8 @@
         "m2-sidebar-extras",
         "m7-test-triage"
       ],
-      "status": "in-progress",
-      "early": true,
-      "lane": 4
-    },
-    {
-      "id": "fix-native-sa-browser-agent-1028",
-      "milestone": "Side A",
-      "title": "Fix the native-only failures in sa-browser-agent from the 2026-10-28 run: C2-native-focus End phase: native reruns are allowed now on a packaged app with fresh owned state (never mock-keychain in place of production credential protection); gather the causal evidence named in its BLOCKERS.md entry, then fix the cause.",
-      "docs": [],
-      "deps": [],
-      "status": "blocked"
+      "status": "done",
+      "early": true
     },
     {
       "id": "fix-test-git-1028",
@@ -2301,8 +2290,17 @@
       "deps": [
         "m7-test-triage"
       ],
-      "status": "in-progress",
-      "lane": 1
+      "status": "done"
+    },
+    {
+      "id": "fix-git-annotation-coverage-1029",
+      "milestone": "M7",
+      "title": "Add semantic conflict annotation range/state-transition coverage after fix-test-git-1028: preserve Unicode/CRLF marker-end anchors and line boundaries through edits and resolution, without restoring CSS-class, wording, or pixel-height mirrors. Scope plugins/quirky.git/test/pure/conflict-markers.test.ts; exercise actual CodeMirror state/decoration behavior and run the canonical targeted suite and typecheck. No production algorithm change unless a demonstrated failure requires it. Operator authorized this sole follow-up while landing current fixes.",
+      "docs": [],
+      "deps": [
+        "fix-test-git-1028"
+      ],
+      "status": "done"
     },
     {
       "id": "fix-test-worktree-1028",
@@ -2313,7 +2311,15 @@
         "m7-test-triage",
         "m2-sidebar-extras-followup"
       ],
-      "status": "todo"
+      "status": "done"
+    },
+    {
+      "id": "fix-native-sa-browser-agent-1028",
+      "milestone": "Side A",
+      "title": "Fix the native-only failures in sa-browser-agent from the 2026-10-28 run: C2-native-focus End phase: native reruns are allowed now on a packaged app with fresh owned state (never mock-keychain in place of production credential protection); gather the causal evidence named in its BLOCKERS.md entry, then fix the cause.",
+      "docs": [],
+      "deps": [],
+      "status": "blocked"
     },
     {
       "id": "m7-api-freeze",
@@ -2377,7 +2383,8 @@
         "fix-test-reviews-tool-1028",
         "fix-browser-remaining-flows-1028",
         "fix-test-post-restyle-boundaries-1028",
-        "m7-session-extras-owner-host-flows"
+        "m7-session-extras-owner-host-flows",
+        "fix-git-annotation-coverage-1029"
       ],
       "status": "todo",
       "early": true

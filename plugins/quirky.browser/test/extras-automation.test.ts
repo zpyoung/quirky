@@ -2,7 +2,6 @@ import { writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { expect, test } from 'bun:test'
 import { startBrowserHarness, type BrowserTestHarness } from './harness'
-
 const call = (client: BrowserTestHarness['client'], name: string, params: Record<string, unknown> = {}) =>
   client.callAny(`quirky.browser/${name}`, params)
 
@@ -149,7 +148,7 @@ test('SC5: history, advanced interactions, signed nth and full-page capture oper
     expect(await call(h.client, 'eval', { page: pageId, expression: 'document.querySelector("#upload").files[0].name' })).toEqual({ value: 'extras-upload.txt' })
     expect(await call(h.client, 'eval', { page: pageId, expression: 'document.querySelector("#upload").files[0].text()' })).toEqual({ value: 'upload bytes' })
     const downloadPath = join(h.home, 'downloads', 'extras.txt')
-    await call(h.client, 'eval', { page: pageId, expression: `(()=>{const a=document.createElement('a');a.href=${JSON.stringify(downloadServer.url.href)};a.download='extras.txt';a.id='download';document.body.append(a);return true})()` })
+    await call(h.client, 'eval', { page: pageId, expression: `(()=>{const a=document.createElement('a');a.href=${JSON.stringify(downloadServer.url.href)};a.download='extras.txt';a.id='download';a.textContent='Download extras';document.body.append(a);return true})()` })
     await call(h.client, 'download', { page: pageId, selector: '#download', path: downloadPath })
     expect(await Bun.file(downloadPath).text()).toBe('downloaded')
 

@@ -18,7 +18,7 @@ function writeShellPlugin(installed: string): void {
     'acme.shell',
     {
       'sidebar-section': [{ id: 'list', title: 'Notes' }],
-      panel: [{ id: 'outline', title: 'Outline' }],
+      panel: [{ id: 'outline', title: 'Outline', defaultSlot: 'left-top', icon: 'git-branch' }],
       view: [
         { id: 'page', title: 'Page' },
         { id: 'other', title: 'Other' }
@@ -50,6 +50,72 @@ async function boot(): Promise<WindowEnv> {
   await env.win.waitFor(() => env.win.host.getState().slots[SECTION]?.status === 'mounted')
   return env
 }
+
+test('tool stripes toggle panels and move tools with pointer and keyboard context menus', async () => {
+  const env = await boot()
+  const tools = async () => {
+    const state = (await env.agent.callAny('ui.state', {})) as {
+      layout: {
+        tools?: {
+          open: Record<string, string | null>
+          placements: Record<string, string>
+        }
+      }
+    }
+    return state.layout.tools
+  }
+  const menu = () => env.win.document.querySelector<HTMLElement>('[role="menu"][aria-label="Move Outline"]')
+  const menuItems = (element: HTMLElement) => [...element.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')]
+  const itemNamed = (element: HTMLElement, label: string) => menuItems(element).find((item) => item.textContent?.includes(label))
+  const key = async (element: Element, value: string, options: KeyboardEventInit = {}) => {
+    element.dispatchEvent(new KeyboardEvent('keydown', { ...options, key: value, bubbles: true, cancelable: true }))
+    await Promise.resolve()
+  }
+  const icon = await env.win.waitFor(() => env.win.document.querySelector<HTMLButtonElement>('button[aria-label="Outline"]'))
+
+  expect(icon.getAttribute('title')).toBe('Outline')
+  expect(icon.getAttribute('aria-pressed')).toBe('false')
+  expect(icon.getAttribute('draggable')).toBe('true')
+  expect(icon.parentElement?.querySelectorAll('button')).toHaveLength(1)
+  await env.win.click('button[aria-label="Outline"]')
+  await env.win.waitFor(async () => (await tools())?.open['left-top'] === OUTLINE)
+  expect(env.win.document.querySelector('button[aria-label="Outline"]')?.getAttribute('aria-pressed')).toBe('true')
+  await env.win.click('button[aria-label="Outline"]')
+  await env.win.waitFor(async () => (await tools())?.open['left-top'] === null)
+  expect(env.win.document.querySelector('button[aria-label="Outline"]')?.getAttribute('aria-pressed')).toBe('false')
+
+  const pointerIcon = await env.win.waitFor(() => env.win.document.querySelector<HTMLButtonElement>('button[aria-label="Outline"]'))
+  pointerIcon.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 40, clientY: 50 }))
+  const pointerMenu = await env.win.waitFor(menu)
+  expect(menuItems(pointerMenu).map((item) => item.textContent?.trim())).toHaveLength(6)
+  for (const destination of ['Left top', 'Left bottom', 'Right top', 'Right bottom', 'Bottom left', 'Bottom right']) {
+    expect(itemNamed(pointerMenu, destination)).toBeDefined()
+  }
+  expect(itemNamed(pointerMenu, 'Left top')?.disabled).toBe(true)
+  expect(itemNamed(pointerMenu, 'Left top')?.getAttribute('aria-disabled')).toBe('true')
+  itemNamed(pointerMenu, 'Left bottom')!.click()
+  await env.win.waitFor(async () => (await tools())?.placements[OUTLINE] === 'left-bottom')
+
+  const keyboardIcon = await env.win.waitFor(() => env.win.document.querySelector<HTMLButtonElement>('button[aria-label="Outline"]'))
+  keyboardIcon.focus()
+  keyboardIcon.dispatchEvent(new KeyboardEvent('keydown', { key: 'F10', shiftKey: true, bubbles: true, cancelable: true }))
+  const keyboardMenu = await env.win.waitFor(menu)
+  expect(itemNamed(keyboardMenu, 'Left bottom')?.disabled).toBe(true)
+  await key(keyboardMenu, 'ArrowDown')
+  await key(keyboardMenu, 'Enter')
+  await env.win.waitFor(async () => {
+    const placement = (await tools())?.placements[OUTLINE]
+    return placement === 'left-top' || placement === 'right-top'
+  })
+
+  const focusedIcon = await env.win.waitFor(() => env.win.document.querySelector<HTMLButtonElement>('button[aria-label="Outline"]'))
+  focusedIcon.focus()
+  focusedIcon.dispatchEvent(new KeyboardEvent('keydown', { key: 'ContextMenu', bubbles: true, cancelable: true }))
+  const dismissMenu = await env.win.waitFor(menu)
+  await key(dismissMenu, 'Escape')
+  await env.win.waitFor(() => !menu() && env.win.document.activeElement === focusedIcon)
+  expect(env.win.document.activeElement).toBe(focusedIcon)
+})
 
 
 test('the window follows view, panel compatibility, and focus APIs through canonical tool state', async () => {

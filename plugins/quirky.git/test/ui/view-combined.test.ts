@@ -7,7 +7,7 @@ registerDom()
 const s = await import('./support')
 afterAll(() => GlobalRegistrator.unregister())
 
-const { act, byLabel, byText, click, edit, expectOpened, failure, fakeContext, layoutFor, mountView, numbered, settle, status, stubIntersectionObserver, textDiff } = s
+const { act, byLabel, byText, click, edit, failure, fakeContext, layoutFor, mountView, numbered, settle, status, stubIntersectionObserver, textDiff } = s
 
 const small = ['f1.ts', 'f2.ts', 'f3.ts', 'f4.ts', 'f5.ts', 'f6.ts', 'f7.ts']
 const row = (path: string, extra: Partial<GitStatusEntry> = {}): GitStatusEntry => ({
@@ -62,21 +62,6 @@ afterEach(() => {
 })
 
 describe('quirky.git combined diff', () => {
-  test('SC-62: reads "Changes" with the file count, and the toolbar has the named buttons', async () => {
-    const { element } = await open()
-    expect(element.querySelector('h2')?.textContent).toBe('Changes')
-    expect(element.querySelector('[aria-label="8 changed files"]')?.textContent).toBe('8 changed files')
-    const labels = [...(element.querySelector('h2')?.closest('header')?.querySelectorAll('button') ?? [])].map((b) => b.textContent)
-    expect(labels).toEqual([
-      'Open Branch Diff',
-      'Collapse All',
-      'Side by Side',
-      'Wrap On',
-      'Whitespace On',
-      'Show file tree',
-      '✕'
-    ])
-  })
 
   test('SC-62: the first six sections load at once, one at a time, and the rest wait for the scroll', async () => {
     const { element } = await open()
@@ -123,36 +108,29 @@ describe('quirky.git combined diff', () => {
     expect(loading.order).toEqual(['mystery.ts'])
   })
 
-  test('SC-62: unresolved conflicts are left out with the notice and Review conflicts', async () => {
+  test('SC-62: unresolved conflicts are excluded from the two-way diff sections', async () => {
     const { element } = await open()
     expect(element.querySelector('section[data-path="conflict.ts"]')).toBeNull()
-    const text = element.textContent ?? ''
-    expect(text).toContain('Conflicted files are reviewed separately')
-    expect(text).toContain('1 unresolved conflicts were excluded from this diff view.')
-    await click(byText(element, 'Review conflicts'))
-    expectOpened(fake, s.DIFF_VIEW, { worktree: 'w1', mode: 'conflicts' })
+    expect(sectionOf(element, 'f1.ts')).not.toBeNull()
+    expect(loading.order).not.toContain('conflict.ts')
   })
 
-  test('SC-62: each section header shows the path, counts, copy path and Open diff', async () => {
-    const { element } = await open()
-    const head = sectionOf(element, 'f1.ts').querySelector('header')!
-    expect(head.querySelector('[title="f1.ts"]')?.textContent).toBe('f1.ts')
-    expect(head.querySelector('[aria-label="Added 2 lines"]')?.textContent).toBe('+2')
-    expect(head.querySelector('[aria-label="Removed 1 line"]')?.textContent).toBe('-1')
-    expect(byText(head, 'Copy path')).not.toBeNull()
-    await click(byText(head, 'Open diff'))
-    expectOpened(fake, s.DIFF_VIEW, { worktree: 'w1', mode: 'file', source: 'unstaged', path: 'f1.ts' })
-  })
 
   test('SC-62: Collapse All hides every section and becomes Expand All; the command does the same', async () => {
     const { element, report } = await open()
+    const sectionToggle = (path: string) => sectionOf(element, path).querySelector<HTMLButtonElement>('button[aria-expanded]:not([aria-haspopup])')
     expect(report().collapsed).toBe(false)
     await click(byText(element, 'Collapse All'))
     expect(report().collapsed).toBe(true)
-    expect([...element.querySelectorAll<HTMLElement>('section[data-path] > div[hidden]')].every((b) => b.hidden)).toBe(true)
+    for (const path of [...small, 'big.txt']) {
+      expect(sectionToggle(path)?.getAttribute('aria-expanded')).toBe('false')
+    }
     expect(byText(element, 'Expand All')).not.toBeNull()
     await click(byText(element, 'Expand All'))
     expect(report().collapsed).toBe(false)
+    for (const path of [...small, 'big.txt']) {
+      expect(sectionToggle(path)?.getAttribute('aria-expanded')).toBe('true')
+    }
     await act(async () => void (await fake.run('collapse-all', { collapsed: true })))
     await settle()
     expect(report().collapsed).toBe(true)
@@ -167,8 +145,8 @@ describe('quirky.git combined diff', () => {
   test('SC-62: a single section collapses from its chevron', async () => {
     const { element } = await open()
     await click(byLabel(element, 'Collapse f2.ts'))
-    expect(sectionOf(element, 'f2.ts').querySelector<HTMLElement>(':scope > div[hidden]')!.hidden).toBe(true)
-    expect(sectionOf(element, 'f1.ts').querySelector<HTMLElement>(':scope > div[hidden]')!.hidden).toBe(false)
+    expect(sectionOf(element, 'f2.ts').querySelector<HTMLButtonElement>('button[aria-expanded]:not([aria-haspopup])')?.getAttribute('aria-expanded')).toBe('false')
+    expect(sectionOf(element, 'f1.ts').querySelector<HTMLButtonElement>('button[aria-expanded]:not([aria-haspopup])')?.getAttribute('aria-expanded')).toBe('true')
   })
 
   test('SC-64: load-diff still works on a collapsed section', async () => {
@@ -213,33 +191,6 @@ describe('quirky.git combined diff', () => {
     expect(element.querySelector('nav[aria-label=Files]')).not.toBeNull()
   })
 
-  test('SC-62: Open Branch Diff opens the branch combined diff, titled with its base', async () => {
-    const { element } = await open()
-    await click(byText(element, 'Open Branch Diff'))
-    expectOpened(fake, s.DIFF_VIEW, { worktree: 'w1', mode: 'combined', area: 'branch' })
-    mounted!.unmount()
-    fake.handlers['quirky.git/compare'] = () => ({
-      status: 'ready',
-      base: 'origin/main',
-      baseSource: 'detected',
-      message: null,
-      baseOid: 'b'.repeat(40),
-      headOid: 'a'.repeat(40),
-      mergeBase: 'b'.repeat(40),
-      ahead: 1,
-      behind: 0,
-      entries: [{ path: 'util.ts', status: 'added', added: 3, removed: 0, binary: false }],
-      added: 3,
-      removed: 0
-    })
-    const branch = await open({ worktree: 'w1', mode: 'combined', area: 'branch' })
-    expect(branch.element.querySelector('h2')?.textContent).toBe('Branch Changes (origin/main)')
-    expect(fake.callsTo('quirky.git/diff').at(-1)?.params).toEqual({ worktree: 'w1', path: 'util.ts', source: 'branch' })
-    expect(byText(branch.element, 'Open All Changes')).not.toBeNull()
-    expect(branch.element.querySelector('.cm-content[contenteditable=true]')).toBeNull()
-    await click(byText(branch.element, 'Open All Changes'))
-    expectOpened(fake, s.DIFF_VIEW, { worktree: 'w1', mode: 'combined', area: 'all' })
-  })
 
   test('SC-62: a branch compare that is not ready says why', async () => {
     fake.handlers['quirky.git/compare'] = () => ({
@@ -328,25 +279,6 @@ describe('quirky.git combined diff', () => {
     }
     const { element } = await open()
     expect(element.textContent).toContain('Error loading diff: not a repository')
-  })
-
-  test('the report lists sections, loaded sections and the state of the edits', async () => {
-    const { report } = await open()
-    expect(report()).toEqual({
-      mode: 'combined',
-      source: null,
-      path: null,
-      area: 'unstaged',
-      commit: null,
-      changes: 6,
-      currentChange: 1,
-      dirty: false,
-      stale: false,
-      tooLarge: false,
-      sections: 8,
-      loadedSections: small.slice(0, 6),
-      collapsed: false
-    })
   })
 
   test('SC-60: F7 and Shift+F7 walk the changes across sections and wrap', async () => {

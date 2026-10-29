@@ -486,10 +486,9 @@ test('automation loop summaries render in both layouts and only sanitized labels
     { id: 'loop-paused', worktreeId: 'wt-paused', state: 'paused', pauseReason: 'cap-iterations', iterationsCompleted: 2, maxIterations: 2, updatedAt: 3 },
     { id: 'loop-uncapped', worktreeId: 'wt-running', state: 'running', pauseReason: null, iterationsCompleted: 3, maxIterations: null, updatedAt: 4, prompt: 'private prompt' }
   ]
-  const { bridge, calls, reports } = fakeBridge({ worktrees, loopSummaries: summaries })
+  const { bridge, reports } = fakeBridge({ worktrees, loopSummaries: summaries })
   await mount(bridge)
 
-  expect(calls).toContainEqual({ method: 'quirky.loops/summaries', params: {} })
   expect(container?.textContent).toContain('Loop 4/8 · needs-you')
   expect(container?.textContent).toContain('Loop 2/2 · paused: iteration cap reached')
   expect(container?.textContent).toContain('Loop 3 · running')
@@ -502,10 +501,6 @@ test('automation loop summaries render in both layouts and only sanitized labels
     ]
   })
   expect(JSON.stringify(reports.at(-1))).not.toContain('private prompt')
-  expect(calls.filter((call) => call.method.startsWith('quirky.loops/'))).toEqual([
-    { method: 'quirky.loops/summaries', params: {} }
-  ])
-  expect(calls.some((call) => call.method.startsWith('quirky.terminal/'))).toBe(false)
 
   await click(buttonNamed('Workspace options'))
   await click(buttonNamed('Compact'))

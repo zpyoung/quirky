@@ -62,8 +62,10 @@ export function Dialog({ open, title, children, actions, onClose, variant = 'dia
     if (!element) return
     dialogStack.push(element)
     const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null
-    const firstFocusable = dialogRef.current?.querySelector<HTMLElement>(focusableSelector)
-    ;(firstFocusable ?? dialogRef.current)?.focus()
+    if (!element.contains(document.activeElement)) {
+      const firstFocusable = element.querySelector<HTMLElement>(focusableSelector)
+      ;(firstFocusable ?? element).focus()
+    }
     const keepFocusInside = (event: FocusEvent) => {
       if (dialogStack[dialogStack.length - 1] !== element) return
       if (!(event.target instanceof Node)) return

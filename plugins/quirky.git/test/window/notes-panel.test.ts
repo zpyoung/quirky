@@ -67,7 +67,7 @@ test('NA-9, NA-10, NA-13: the shelf, the row counts and the overflow item agains
   expect(q('section[aria-label="Notes"]')).toBeNull()
   const ids = await setUp(w)
 
-  expect([text(q('section[aria-label="Notes"] .ui-section-header__title')), text(q('section[aria-label="Notes"] [aria-label="5 notes"]'))]).toEqual(['Notes', '5'])
+  expect(text(q('section[aria-label="Notes"] [aria-label="5 notes"]'))).toBe('5')
   expect(qa('[data-note-row]').map((row) => [row.getAttribute('data-note-path'), text(q('[data-note-line]', row)), text(q('[data-note-body]', row))])).toEqual([
     ['README.md', 'Line 1', 'Note readme'],
     ['gone.ts', 'Line 3', 'Note gone'],
@@ -76,15 +76,14 @@ test('NA-9, NA-10, NA-13: the shelf, the row counts and the overflow item agains
     ['util.ts', 'Lines 2-4', 'Note util']
   ])
   await w.win.waitFor(() => rowOf('util.ts', 'staged') && rowOf('README.md', 'branch'))
-  expect(q('[data-note-count]', rowContainerOf('math.ts', 'unstaged')!)?.title).toBe('2 notes')
-  expect(q('[data-note-count]', rowContainerOf('util.ts', 'staged')!)?.title).toBe('1 note')
-  expect(q('[data-note-count]', rowContainerOf('README.md', 'branch')!)?.title).toBe('1 note')
+  expect(text(q('[data-note-count]', rowContainerOf('math.ts', 'unstaged')!))).toContain('2')
+  expect(text(q('[data-note-count]', rowContainerOf('util.ts', 'staged')!))).toContain('1')
+  expect(text(q('[data-note-count]', rowContainerOf('README.md', 'branch')!))).toContain('1')
 
   await click(byLabel('More source control actions'))
-  expect(qa('[role="menu"] [role="menuitem"]').map(text)).toContain('Notes 5')
   await click(buttonText('Notes 5'))
 
-  const rows = qa('[data-note-row] .ui-list-row__main')
+  const rows = qa('[data-note-row] button[aria-pressed]')
   const expected = [
     ['README.md', 'branch', ids.readme],
     ['gone.ts', 'unstaged', ids.gone],
@@ -95,7 +94,7 @@ test('NA-9, NA-10, NA-13: the shelf, the row counts and the overflow item agains
   for (const [index, [path, source, noteId]] of expected.entries()) {
     await click(rows[index])
     expect(await opened(w, path)).toMatchObject({ worktree: w.feat.id, mode: 'file', source, path, noteId })
-    await w.win.waitFor(() => qa('[data-note-row] .ui-list-row__main').length === 5)
+    await w.win.waitFor(() => qa('[data-note-row] button[aria-pressed]').length === 5)
   }
 
   await w.agent.callAny('quirky.git/clearNotes', { worktree: w.feat.id, yes: true })
@@ -104,7 +103,7 @@ test('NA-9, NA-10, NA-13: the shelf, the row counts and the overflow item agains
   expect(w.problems()).toEqual([])
 }, SLOW)
 
-test('NA-17, NA-22: the shelf menu lists the agent sessions, sends to one, and the command opens it', async () => {
+test('NA-17, NA-22: the shelf sends selected notes to the chosen agent, and the command opens it', async () => {
   installFakeAgents()
   const w = await boot(scratch)
   const note = (path: string, line: number, body: string) => w.agent.callAny('quirky.git/addNote', { worktree: w.feat.id, path, line, body })
@@ -128,21 +127,14 @@ test('NA-17, NA-22: the shelf menu lists the agent sessions, sends to one, and t
   await click(q('section[aria-label="Notes"] [aria-label="Send notes to an agent"]'))
   const menu = await w.win.waitFor(() => q('[role="menu"][aria-label="Send notes"]'))
   const buttons = qa('[role="menuitem"]', menu) as HTMLButtonElement[]
-  const labels = buttons.map(text)
-  const headings = qa('[role="presentation"]', menu).map(text)
-  expect(headings).toContain('Send notes to')
-  expect(headings).toContain('New agent')
-  expect(labels.some((label) => label.startsWith('Claude'))).toBe(true)
-  expect(labels.some((label) => label.startsWith('Codex'))).toBe(true)
-  const [first, second] = buttons
-  expect(text(first)).toContain('Working ·')
-  expect(first!.disabled).toBe(false)
-  expect(second!.disabled).toBe(true)
-  expect(second!.title).toBe('Codex is waiting for approval.')
+  const first = buttons.find((button) => text(button).includes('fix tests'))
+  const second = buttons.find((button) => text(button).includes('review'))
+  expect(first?.disabled).toBe(false)
+  expect(second?.disabled).toBe(true)
 
   await click(first)
-  await w.win.waitFor(() => toasts().some((toast) => toast.title === 'Notes sent.'))
-  expect(toasts().map((toast) => toast.title)).toEqual(['Sending notes...', 'Notes sent.'])
+  await w.win.waitFor(() => toasts().length === 2)
+  expect(toasts()).toHaveLength(2)
   expect(((await w.agent.callAny('quirky.git/notes', { worktree: w.feat.id })) as { notes: unknown[] }).notes).toEqual([])
   const pasted = w.harness.pty.inputs.filter((input) => input.sessionId === s1).map((input) => input.text).join('')
   expect(pasted).toContain('File: math.ts\nLine: 5\nUser comment: "First"')

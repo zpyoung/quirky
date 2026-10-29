@@ -1,7 +1,8 @@
 import { describe, expect, test } from 'bun:test'
 import { EditorState } from '@codemirror/state'
-import { EditorView, type DecorationSet } from '@codemirror/view'
-import { conflictBlocks, conflictDecorationSet, conflictDecorations } from '../../src/view/conflict-markers'
+import { EditorView, WidgetType } from '@codemirror/view'
+import { conflictBlocks, conflictDecorations } from '../../src/view/conflict-markers'
+import { lineBreakExtension } from '../../src/view/theme'
 
 const lines = (...l: string[]) => l.join('\n')
 
@@ -89,95 +90,120 @@ describe('conflictBlocks', () => {
   })
 })
 
-type Found = { from: number; to: number; class?: string; label?: string }
-
-function collect(set: DecorationSet): Found[] {
-  const out: Found[] = []
-  const cursor = set.iter()
-  while (cursor.value) {
-    const spec = cursor.value.spec as { class?: string; widget?: { label?: string } }
-    out.push({ from: cursor.from, to: cursor.to, class: spec.class, label: spec.widget?.label })
-    cursor.next()
-  }
-  return out
+function annotatedState(text: string): EditorState {
+  return EditorState.create({ doc: text, extensions: [lineBreakExtension(text), conflictDecorations()] })
 }
 
-describe('conflictDecorationSet', () => {
-  const doc = lines('top', '<<<<<<< HEAD', 'ours', '||||||| base', 'old', '=======', 'theirs', '>>>>>>> t', 'bottom')
-  const state = EditorState.create({ doc })
-  const found = collect(conflictDecorationSet(state.doc))
-  const lineClasses = (cls: string) =>
-    found.filter((f) => f.class === cls).map((f) => state.doc.lineAt(f.from).number)
-
-  test('tints marker lines', () => {
-    expect(lineClasses('qg-conflict-marker')).toEqual([2, 4, 6, 8])
-  })
-
-  test('tints the current, base and incoming sides', () => {
-    expect(lineClasses('qg-conflict-current')).toEqual([3])
-    expect(lineClasses('qg-conflict-base')).toEqual([5])
-    expect(lineClasses('qg-conflict-incoming')).toEqual([7])
-  })
-
-  test('labels the marker lines at their end', () => {
-    const labels = found.filter((f) => f.label).map((f) => [state.doc.lineAt(f.from).number, f.label, f.from === state.doc.lineAt(f.from).to])
-    expect(labels).toEqual([
-      [2, 'Current change', true],
-      [4, 'Common ancestor', true],
-      [6, 'Incoming change', true],
-      [8, 'End conflict', true]
-    ])
-  })
-
-  test('leaves lines outside blocks alone', () => {
-    const touched = new Set(found.map((f) => state.doc.lineAt(f.from).number))
-    expect([...touched].sort((a, b) => a - b)).toEqual([2, 3, 4, 5, 6, 7, 8])
-  })
-
-  test('without a base section the current side runs to the separator', () => {
-    const s = EditorState.create({ doc: lines('<<<<<<< a', 'x', 'y', '=======', 'z', '>>>>>>> b') })
-    const f = collect(conflictDecorationSet(s.doc))
-    expect(f.filter((d) => d.class === 'qg-conflict-current').map((d) => s.doc.lineAt(d.from).number)).toEqual([2, 3])
-    expect(f.filter((d) => d.label === 'Common ancestor')).toEqual([])
-  })
-
-  test('an empty side adds no side lines', () => {
-    const s = EditorState.create({ doc: lines('<<<<<<< a', '=======', 'z', '>>>>>>> b') })
-    const f = collect(conflictDecorationSet(s.doc))
-    expect(f.filter((d) => d.class === 'qg-conflict-current')).toEqual([])
-  })
-
-  test('works with CRLF documents', () => {
-    const s = EditorState.create({ doc: '<<<<<<< a\r\nx\r\n=======\r\ny\r\n>>>>>>> b' })
-    const f = collect(conflictDecorationSet(s.doc))
-    expect(f.filter((d) => d.class === 'qg-conflict-marker')).toHaveLength(3)
-  })
-})
-
-describe('conflictDecorations extension', () => {
-  const decorationsOf = (state: EditorState): Found[] => {
-    const sets = state.facet(EditorView.decorations).filter((v): v is DecorationSet => typeof v !== 'function')
-    return sets.flatMap(collect)
+/** Inspect actual field output, without coupling the contract to classes or label copy. */
+function expectAnnotations(state: EditorState, lineNumbers: number[], widgetLines: number[]): void {
+  const lineRanges: { from: number; to: number }[] = []
+  const widgetRanges: { from: number; to: number }[] = []
+  for (const decorations of state.facet(EditorView.decorations)) {
+    if (typeof decorations === 'function') throw new Error('Expected state-provided conflict decorations')
+    for (let cursor = decorations.iter(); cursor.value; cursor.next()) {
+      const ranges = cursor.value.spec.widget instanceof WidgetType ? widgetRanges : lineRanges
+      ranges.push({ from: cursor.from, to: cursor.to })
+    }
   }
+  expect(lineRanges).toEqual(lineNumbers.map(n => {
+    const from = state.doc.line(n).from
+    return { from, to: from }
+  }))
+  expect(widgetRanges).toEqual(widgetLines.map(n => {
+    const to = state.doc.line(n).to
+    return { from: to, to }
+  }))
+}
 
-  test('recomputes when the document changes', () => {
-    let state = EditorState.create({ doc: 'plain\n', extensions: [conflictDecorations()] })
-    expect(decorationsOf(state)).toEqual([])
+describe('conflict annotation state', () => {
+  test('Unicode CRLF diff3 annotations cover only conflict lines and end at the full marker text', () => {
+    const text = [
+      'before 🧭 e\u0301',
+      '<<<<<<< HEAD 🧑‍💻',
+      'ours 🦊',
+      '',
+      '||||||| base é',
+      'base 🇨🇦',
+      '=======',
+      'incoming 漢字',
+      '>>>>>>> topic 🚀',
+      'after'
+    ].join('\r\n')
+    const state = annotatedState(text)
 
-    state = state.update({ changes: { from: 0, insert: '<<<<<<< a\nx\n=======\ny\n>>>>>>> b\n' } }).state
-    expect(decorationsOf(state).filter((d) => d.class === 'qg-conflict-marker')).toHaveLength(3)
-
-    const resolved = state.update({ changes: { from: 0, to: state.doc.length, insert: 'resolved\n' } }).state
-    expect(decorationsOf(resolved)).toEqual([])
+    expect(state.sliceDoc()).toBe(text)
+    expectAnnotations(state, [2, 3, 4, 5, 6, 7, 8, 9], [2, 5, 7, 9])
   })
 
-  test('shows blocks present in the initial document', () => {
-    const state = EditorState.create({ doc: '<<<<<<< a\n=======\n>>>>>>> b', extensions: [conflictDecorations()] })
-    expect(decorationsOf(state).filter((d) => d.label).map((d) => d.label)).toEqual([
-      'Current change',
-      'Incoming change',
-      'End conflict'
-    ])
+  test('incremental CRLF edits move marker ends and newly split content-line anchors', () => {
+    let state = annotatedState([
+      'before 🧭',
+      '<<<<<<< HEAD',
+      'ours',
+      '=======',
+      'theirs',
+      '>>>>>>> topic',
+      'after'
+    ].join('\r\n'))
+    expectAnnotations(state, [2, 3, 4, 5, 6], [2, 4, 6])
+
+    state = state.update({ changes: { from: 0, insert: 'new 🪶\r\n' } }).state
+    expectAnnotations(state, [3, 4, 5, 6, 7], [3, 5, 7])
+
+    const marker = state.doc.line(3)
+    state = state.update({ changes: { from: marker.from + 8, to: marker.to, insert: 'HEAD 🧑‍💻 e\u0301' } }).state
+    expectAnnotations(state, [3, 4, 5, 6, 7], [3, 5, 7])
+
+    state = state.update({ changes: { from: state.doc.line(4).to, insert: '\r\nmore 🦊' } }).state
+    expectAnnotations(state, [3, 4, 5, 6, 7, 8], [3, 6, 8])
+  })
+
+  test('joining a separator to content removes only that block until the line boundary is restored', () => {
+    let state = annotatedState(lines(
+      'before',
+      '<<<<<<< HEAD', 'ours', '=======', 'theirs', '>>>>>>> first',
+      'between',
+      '<<<<<<< HEAD', 'local', '=======', 'remote', '>>>>>>> second',
+      'after'
+    ))
+    expectAnnotations(state, [2, 3, 4, 5, 6, 8, 9, 10, 11, 12], [2, 4, 6, 8, 10, 12])
+
+    const boundary = state.doc.line(3).to
+    state = state.update({ changes: { from: boundary, to: state.doc.line(4).from } }).state
+    expectAnnotations(state, [7, 8, 9, 10, 11], [7, 9, 11])
+
+    state = state.update({ changes: { from: boundary, insert: '\n' } }).state
+    expectAnnotations(state, [2, 3, 4, 5, 6, 8, 9, 10, 11, 12], [2, 4, 6, 8, 10, 12])
+  })
+
+  test('resolving one block preserves the other, and new conflicts reappear after full resolution', () => {
+    let state = annotatedState(lines(
+      'before',
+      '<<<<<<< HEAD', 'ours 🦊', '=======', 'theirs', '>>>>>>> first',
+      'between',
+      '<<<<<<< HEAD', 'local', '=======', 'remote', '>>>>>>> second',
+      'after'
+    ))
+    expectAnnotations(state, [2, 3, 4, 5, 6, 8, 9, 10, 11, 12], [2, 4, 6, 8, 10, 12])
+
+    state = state.update({
+      changes: { from: state.doc.line(2).from, to: state.doc.line(6).to, insert: 'ours 🦊' }
+    }).state
+    expectAnnotations(state, [4, 5, 6, 7, 8], [4, 6, 8])
+
+    state = state.update({
+      changes: { from: state.doc.line(4).from, to: state.doc.line(8).to, insert: 'remote' }
+    }).state
+    expectAnnotations(state, [], [])
+
+    state = state.update({
+      changes: {
+        from: state.doc.line(4).from,
+        to: state.doc.line(4).to,
+        insert: lines('<<<<<<< HEAD', 'local', '=======', 'remote', '>>>>>>> topic')
+      }
+    }).state
+    expectAnnotations(state, [4, 5, 6, 7, 8], [4, 6, 8])
   })
 })
 

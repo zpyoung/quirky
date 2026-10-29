@@ -138,6 +138,7 @@ function listItemState(host: TasksTest): RecordValue[] {
   const items = record(state.items)
   return list(items['test-owner/test-repo']).map(record)
 }
+
 test('encrypted task consumers list, detail, edit, and create a workspace attached to the selected repository', async () => {
   const host = await bootTasks(listFixtureSource, { extraBuiltins: ['quirky.mobile', 'quirky.agents', 'quirky.session', 'quirky.terminal', 'quirky.ask'] })
   tasksHost = host

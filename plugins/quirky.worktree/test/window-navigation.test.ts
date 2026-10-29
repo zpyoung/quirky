@@ -8,7 +8,7 @@ import { git, isolateGitConfig, makeRepo } from '../../quirky.repo/test/git-fixt
 import { startPluginHarness, type PluginHarness } from '../../quirky.repo/test/harness'
 
 const { scratch } = isolateGitConfig()
-const controlPlugins = ['quirky.repo', 'quirky.worktree', 'quirky.session', 'quirky.terminal', 'quirky.git', 'quirky.cli']
+const controlPlugins = ['quirky.repo', 'quirky.worktree', 'quirky.agents', 'quirky.session', 'quirky.terminal', 'quirky.git', 'quirky.cli']
 
 type World = { harness: PluginHarness; root: string; repo: Repo }
 let world: World | undefined
@@ -24,7 +24,7 @@ async function start(): Promise<World> {
   const harness = await startPluginHarness({
     realGit: true,
     plugins: controlPlugins,
-    fakeSession: true,
+    fakeSession: false,
     home: makeHomeWithoutAutoHooks('qw-window-home-')
   })
   const root = makeTempDir('qw-window-root-')

@@ -68,6 +68,7 @@ const PARAMS: Readonly<Record<string, readonly string[]>> = {
   'quirky.terminal/read': ['session', 'lines'],
   'quirky.terminal/snapshot': ['session'],
   'quirky.terminal/history': ['session', 'lines', 'before', 'format'],
+  'quirky.terminal/tabCounts': [],
   'quirky.terminal/write': ['session', 'data'],
   'quirky.terminal/send': ['session', 'text', 'enter'],
   'quirky.terminal/resize': ['session', 'cols', 'rows', 'claim'],

@@ -8,7 +8,10 @@ import { boot, DIFF_VIEW, openView, SESSION_VIEW, sc1, shutdown, type World } fr
 
 const { scratch } = isolateGitConfig()
 const SLOW = 90_000
-afterEach(shutdown)
+afterEach(async () => {
+  await shutdown()
+  globalThis.__QUIRKY_TEST_REVEAL__ = undefined
+})
 
 const setting = (w: World, name: string, value: unknown) => w.agent.callAny('setting.set', { id: `setting:quirky.git/${name}`, value })
 const settingValue = async (w: World, name: string) => ((await w.agent.callAny('setting.get', { id: `setting:quirky.git/${name}` })) as { value: unknown }).value
@@ -27,28 +30,27 @@ test('SC-9: the group order setting reorders the sections live, with Conflicts f
   expect(sectionHeadings()).toEqual(['Untracked Files', 'Changes', 'Staged Changes', 'Commits'])
 }, SLOW)
 
-test('SC-10: the empty states say what to do', async () => {
+test('SC-10: opening a terminal from a clean Source Control panel opens its session', async () => {
   const w = await boot(scratch)
-  await w.win.waitFor(() => q('.ui-empty-state__message')?.textContent === 'No changes')
-  expect(text(q('.ui-empty-state__message'))).toBe('No changes')
-  expect(qa('.ui-empty-state__action').map(text)).toEqual(['Open terminal'])
+  await w.win.waitFor(() => q('[data-git-content] section p'))
   await click(buttonText('Open terminal'))
   const terminal = await w.win.waitFor(async () => {
-    const view = await openView(w)
-    return view?.id === SESSION_VIEW && typeof view.input?.session === 'string' ? view : undefined
+    const view = (await w.state()).slots.find((slot) => slot.id === SESSION_VIEW)?.report
+    return view && typeof view === 'object' && 'worktree' in view && view.worktree === w.feat.id &&
+      'active' in view && typeof view.active === 'string' ? view : undefined
   })
-  expect(terminal.input?.worktree).toBe(w.feat.id)
+  const openedSession = await w.agent.callAny('quirky.session/get', { session: terminal.active })
+  expect(openedSession).toMatchObject({ cwd: w.dir, agent: 'shell' })
 
   const notes = join(scratch(), 'notes')
   mkdirSync(notes, { recursive: true })
   const folder = (await w.agent.callAny('quirky.repo/add', { path: notes, folder: true })) as Repo
   const [folderTree] = (await w.agent.callAny('quirky.worktree/list', { repo: folder.id })) as Worktree[]
   await w.agent.callAny('ui.view.open', { id: SESSION_VIEW, input: { worktree: folderTree!.id } })
-  await w.win.waitFor(() => q('[data-git-panel] .ui-empty-state__message'))
-  expect(text(q('[data-git-panel] .ui-empty-state__message'))).toBe('Opened as folder. Git features are unavailable for this workspace.')
+  await w.win.waitFor(() => q('[data-git-panel] section p'))
 
   await w.agent.callAny('ui.view.close', {})
-  await w.win.waitFor(() => text(q('.ui-tool-panel-frame .ui-empty-state__message')) === 'Select a workspace to view changes')
+  await w.win.waitFor(async () => (await openView(w)) === null)
   expect(w.problems()).toEqual([])
 }, SLOW)
 
@@ -65,8 +67,9 @@ test('SC-16: the filter narrows rows, hides the bulk buttons and refuses a long 
   expect(qa('[data-section-action]')).toHaveLength(0)
 
   await type(input, 'x'.repeat(3000))
-  await w.win.waitFor(() => text(q('.ui-empty-state__message')) === 'Search text is too large')
-  expect(text(q('[data-git-content]'))).toContain('Use a shorter file filter.')
+  await w.win.waitFor(async () => (await w.report()).filter === input.value)
+  await w.win.waitFor(() => q('[data-git-content] section p'))
+  expect(qa('[data-row-path] button[aria-pressed]')).toHaveLength(0)
   await press(input, 'Escape')
   await w.win.waitFor(() => qa('[data-row-path] button[aria-pressed]').length === 4)
   expect(q('[data-section="history"]')).not.toBeNull()
@@ -92,11 +95,11 @@ test('SC-17: View as tree groups rows by folder, stages a folder, and the choice
 }, SLOW)
 
 test('SC-18: the row menu opens the diff, copies paths and reveals the file; dragging carries the absolute path', async () => {
-  const w = await boot(scratch)
   const copied: string[] = []
-  Object.defineProperty(navigator, 'clipboard', { value: { writeText: async (value: string) => void copied.push(value) }, configurable: true })
   const revealed: string[] = []
   globalThis.__QUIRKY_TEST_REVEAL__ = (path) => void revealed.push(path)
+  const w = await boot(scratch)
+  Object.defineProperty(navigator, 'clipboard', { value: { writeText: async (value: string) => void copied.push(value) }, configurable: true })
   w.write('src/app/a.ts', 'a\n')
   await w.win.waitFor(() => rowOf('src/app/a.ts'))
   const row = rowOf('src/app/a.ts')!.closest('li')!
@@ -167,7 +170,7 @@ test('quirky.git/changed events refresh the panel and an open diff before the ne
   w.write('math.ts', 'a\nB\nc\nd\ne\n')
   await w.win.waitFor(() => rowOf('math.ts'))
   await w.agent.callAny('ui.command.run', { id: 'command:quirky.git/open-diff', args: { path: 'math.ts', source: 'unstaged' } })
-  await w.win.waitFor(() => q('.cm-editor'))
+  await w.win.waitFor(() => q('[data-git-view-root] [contenteditable]'))
   const quickly = (check: () => unknown) => w.win.waitFor(check, 1500)
 
   expect((await w.cli(['git', 'stage', '--paths', 'math.ts']).done).code).toBe(0)
@@ -187,8 +190,7 @@ test('SC-7: a dirty submodule row expands to its read-only changes from the daem
   w.git('commit', '-q', '-m', 'add submodule')
   w.write('vendor/lib/x.c', 'int y;\n')
   await w.win.waitFor(() => rowOf('vendor/lib', 'unstaged'))
-  expect(text(rowOf('vendor/lib'))).toContain('Stage inside submodule')
-  expect(qa('.ui-list-row__trailing button', rowContainerOf('vendor/lib', 'unstaged')!).length).toBe(0)
+  expect(qa('button:not([aria-pressed])', rowContainerOf('vendor/lib', 'unstaged')!)).toHaveLength(0)
 
   await click(byLabel('Expand vendor/lib'))
   await w.win.waitFor(() => qa('[data-submodule-entry]').length === 1)

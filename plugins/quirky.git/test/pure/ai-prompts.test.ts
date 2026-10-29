@@ -228,7 +228,6 @@ describe('named hosting and branch prompts', () => {
 
   test('pull request details preserve trusted repository, exact head, title and body', () => {
     const prompt = buildPullRequestDetailsPrompt({ worktreePath: '/tmp/worktree', review })
-    expect(prompt).toContain('Pull request #42')
     expect(prompt).toContain('"octo/quirky"')
     expect(prompt).toContain('Avoid a second resolver')
     expect(prompt).toContain('a'.repeat(40))

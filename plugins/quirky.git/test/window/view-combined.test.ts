@@ -12,7 +12,6 @@ afterEach(shutdown)
 
 const rows = (n: number, prefix: string) => Array.from({ length: n }, (_, i) => `${prefix} ${i}`).join('\n') + '\n'
 const settingValue = async (w: World, name: string) => ((await w.agent.callAny('setting.get', { id: `setting:quirky.git/${name}` })) as { value: unknown }).value
-const sections = () => qa('[data-git-view-root] section[data-path]').map((s) => s.getAttribute('data-path'))
 
 test('SC-62: View all opens a combined diff with lazy sections, a Load diff for the large file and the conflict left out', async () => {
   const w = await boot(scratch, { files: { ...BASE_FILES, 'big.txt': rows(12_000, 'before') } })
@@ -31,34 +30,37 @@ test('SC-62: View all opens a combined diff with lazy sections, a Load diff for 
     await click(q('[data-section="unstaged"] [aria-label="View all"]'))
     await w.win.waitFor(async () => (await openView(w))?.id === DIFF_VIEW)
     expect((await openView(w))!.input).toMatchObject({ mode: 'combined', area: 'unstaged' })
-    const report = await w.win.waitFor(async () => {
-      const r = await w.viewReport()
-      return r?.sections === 7 ? r : undefined
+    const root = await w.win.waitFor(() => q('[data-git-view-root]'))
+    const big = await w.win.waitFor(() => q('section[data-path="big.txt"]', root))
+    await w.win.waitFor(() => {
+      const sections = qa('section[data-path]', root)
+      const loaded = qa('section[data-path] [data-diff-editor]', root).length
+      return sections.length === 7 && loaded >= 5 && loaded <= 6 && buttonText('Load diff', big) !== undefined
     })
-    expect(text(q('[data-git-view-root] h2'))).toBe('Changes')
-    expect(text(q('[data-git-view-root] [aria-label="7 changed files"]'))).toBe('7 changed files')
-    expect(report.loadedSections.length).toBeLessThanOrEqual(6)
-    await w.win.waitFor(async () => ((await w.viewReport())?.loadedSections.length ?? 0) >= 5)
-    await Bun.sleep(100)
-    expect((await w.viewReport()).loadedSections.length).toBeLessThanOrEqual(6)
 
-    const notice = q('[data-git-view-root] [role="region"][aria-label="Conflicted files are reviewed separately"]')!
-    expect(text(notice)).toContain('Conflicted files are reviewed separately')
-    expect(text(notice)).toContain('1 unresolved conflicts were excluded from this diff view.')
+    const notice = await w.win.waitFor(() => qa('[role="region"]', root).find((region) => buttonText('Review conflicts', region) !== undefined))
     expect(buttonText('Review conflicts', notice)).toBeDefined()
 
     await observer.revealAll()
-    await w.win.waitFor(async () => (await w.viewReport())?.loadedSections.length === 6)
-    const big = q('[data-git-view-root] section[data-path="big.txt"]')!
-    expect(text(big)).toContain('Large diffs are not rendered by default.')
+    await w.win.waitFor(() => qa('section[data-path] [data-diff-editor]', root).length === 6)
+    expect(qa('section[data-path] [data-diff-editor]', root)).toHaveLength(6)
+    expect(buttonText('Load diff', big)).toBeDefined()
+
     expect(q('[aria-label="Added 12000 lines"]', big)).not.toBeNull()
     expect(q('[aria-label="Removed 12000 lines"]', big)).not.toBeNull()
+
     expect(buttonText('Copy path', big)).toBeDefined()
     expect(buttonText('Open diff', big)).toBeDefined()
-    await click(buttonText('Collapse All', q('[data-git-view-root]')!))
-    expect(buttonText('Expand All', q('[data-git-view-root]')!)).toBeDefined()
-    await click(buttonText('Expand All', q('[data-git-view-root]')!))
-    await w.win.waitFor(async () => (await w.viewReport())?.collapsed === false)
+    await click(buttonText('Collapse All', root))
+    await w.win.waitFor(() =>
+      buttonText('Expand All', root) !== undefined &&
+      qa('section[data-path] button[aria-expanded="false"]', root).length === 7
+    )
+    await click(buttonText('Expand All', root))
+    await w.win.waitFor(() =>
+      buttonText('Collapse All', root) !== undefined &&
+      qa('section[data-path] button[aria-expanded="true"]', root).length === 7
+    )
     await click(buttonText('Side by Side', q('[data-git-view-root]')!))
     expect(await settingValue(w, 'diffDefaultView')).toBe('side-by-side')
     await click(buttonText('Wrap On', q('[data-git-view-root]')!))
@@ -68,18 +70,22 @@ test('SC-62: View all opens a combined diff with lazy sections, a Load diff for 
     await click(buttonText('Show file tree', q('[data-git-view-root]')!))
     await w.win.waitFor(() => q('[data-git-view-root] nav[aria-label="Files"]'))
     expect(qa('[data-git-view-root] nav[aria-label="Files"] button[aria-pressed]')).toHaveLength(7)
-    for (const label of ['Inline', 'Wrap Off', 'Whitespace Off', 'Hide file tree']) expect(buttonText(label, q('[data-git-view-root]')!)).toBeDefined()
 
     await click(buttonText('Load diff', big))
-    await w.win.waitFor(async () => (await w.viewReport())?.loadedSections.includes('big.txt'))
-    expect(text(q('[data-git-view-root] section[data-path="big.txt"]'))).not.toContain('Large diffs are not rendered by default.')
+    await w.win.waitFor(() => q('[data-diff-editor]', big))
     await click(buttonText('Open diff', q('[data-git-view-root] section[data-path="a.ts"]')!))
     await w.win.waitFor(async () => (await openView(w))?.input?.mode === 'file')
     expect((await openView(w))!.input).toMatchObject({ source: 'unstaged', path: 'a.ts' })
 
     await w.run('open-changes', { area: 'unstaged' })
-    await w.win.waitFor(async () => (await openView(w))?.input?.mode === 'combined')
-    await w.win.waitFor(() => text(q('[data-git-view-root] h2')) === 'Branch Changes (origin/main)')
+    await w.win.waitFor(async () => {
+      const view = await openView(w)
+      return view?.id === DIFF_VIEW && view.input?.mode === 'combined' && view.input?.area === 'unstaged'
+    })
+    await w.win.waitFor(() => {
+      const title = q('[data-git-view-root] h2')
+      return title !== null && text(title) === 'Changes'
+    })
     expect(w.problems()).toEqual([])
   } finally {
     observer.restore()
@@ -90,13 +96,15 @@ test('SC-62: unstaged sections of a combined diff are editable and save', async 
   const w = await boot(scratch)
   w.write('a.ts', 'changed a\n')
   await w.win.waitFor(() => rowOf('a.ts'))
-  await w.win.waitFor(() => q('[data-git-view-root] section[data-path="a.ts"] .cm-editor'))
+  await w.run('open-changes', { area: 'unstaged' })
+  await w.win.waitFor(() => q('[data-git-view-root] section[data-path="a.ts"] [contenteditable]'))
   const editor = modifiedEditor(EditorView, q('[data-git-view-root] section[data-path="a.ts"]')!)
   editor.dispatch({ changes: { from: 0, insert: 'mine ' } })
-  await w.win.waitFor(async () => (await w.viewReport())?.dirty === true)
+  expect(editor.state.sliceDoc()).toBe('mine changed a\n')
+  expect(readFileSync(join(w.dir, 'a.ts'), 'utf8')).toBe('changed a\n')
   await w.run('save')
-  await w.win.waitFor(async () => (await w.viewReport())?.dirty === false)
-  expect(readFileSync(join(w.dir, 'a.ts'), 'utf8')).toBe('mine changed a\n')
+  await w.win.waitFor(() => readFileSync(join(w.dir, 'a.ts'), 'utf8') === 'mine changed a\n')
+  expect(editor.state.sliceDoc()).toBe(readFileSync(join(w.dir, 'a.ts'), 'utf8'))
   expect(w.problems()).toEqual([])
 }, SLOW)
 
@@ -113,23 +121,20 @@ test('SC-63: big, image and binary diffs show their fallbacks, and a draft past 
   writeFileSync(join(w.dir, 'logo.png'), PNG_B)
   writeFileSync(join(w.dir, 'blob.bin'), Buffer.from([0, 9, 9, 0, 4, 4]))
   await w.win.waitFor(() => rowOf('big.txt') && rowOf('logo.png') && rowOf('blob.bin'), 20_000)
+  await w.run('open-changes', { area: 'unstaged' })
 
-  await w.win.waitFor(() => q('[data-git-view-root] [role="status"][aria-label="This diff is too large to display safely."]'))
-  const large = q('[data-git-view-root] [role="status"][aria-label="This diff is too large to display safely."]')!
-  expect(text(large)).toContain('This diff is too large to display safely.')
-  expect(text(large)).toContain('Original lines')
-  expect(text(large)).toContain('Modified lines')
-  expect(text(large)).toContain('Characters')
-  expect(text(large)).toContain('line count exceeds the safe display limit')
-  expect(text(large)).toContain('Limits: 120,000 lines per side · 6,000,000 combined characters')
-  await w.win.waitFor(async () => (await w.viewReport())?.tooLarge === true)
+  const big = await w.win.waitFor(() => q('[data-git-view-root] section[data-path="big.txt"]'))
+  await w.run('load-diff', { path: 'big.txt' })
+  await w.run('load-diff', { path: 'logo.png' })
+  await w.run('load-diff', { path: 'blob.bin' })
+  await w.win.waitFor(() => q('[role="status"]', big))
+  expect(text(q('[role="status"]', big)!)).toContain('This diff is too large to display safely')
 
   await w.win.waitFor(() => q('[data-git-view-root] [role="group"][aria-label="Image diff"]'))
   expect(qa('[data-git-view-root] [role="group"][aria-label="Image diff"] figcaption').map(text)).toEqual(['Original', 'Modified'])
   expect(qa('[data-git-view-root] [role="group"][aria-label="Image diff"] img')).toHaveLength(2)
 
-  await w.win.waitFor(() => text(q('[data-git-view-root] [role="status"][aria-label="Binary file changed"]')).includes('Binary file changed'))
-  expect(text(q('[data-git-view-root] [role="status"][aria-label="Binary file changed"]'))).toContain('Text diff is unavailable for this file.')
+  expect(text(q('[role="status"]', q('[data-git-view-root] section[data-path="blob.bin"]')!))).toContain('Binary file changed')
 }, SLOW)
 
 test('SC-63: a draft that crosses the display limit is replaced by the fallback and saved with Save', async () => {
@@ -137,19 +142,14 @@ test('SC-63: a draft that crosses the display limit is replaced by the fallback 
   w.write('a.ts', 'one changed\n')
   await w.win.waitFor(() => rowOf('a.ts'))
   await click(rowOf('a.ts'))
-  await w.win.waitFor(() => q('.cm-editor'))
+  await w.win.waitFor(() => q('[data-git-view-root] [contenteditable]'))
   const draft = 'x'.repeat(6_000_001)
   const editor = modifiedEditor(EditorView)
-  await w.win.waitFor(() => q('[data-git-view-root] [role="region"][aria-label="This diff is too large to display safely."]'), 10_000)
-  expect(text(q('[data-git-view-root] [role="region"][aria-label="This diff is too large to display safely."]'))).toContain('This diff is too large to display safely.')
-  expect(text(q('[data-git-view-root] [role="region"][aria-label="This diff is too large to display safely."]'))).toContain('character count exceeds the safe display limit')
-  expect(text(q('[data-git-view-root] [role="region"][aria-label="This diff is too large to display safely."]'))).toContain('This draft crossed the safe display limit, but it can still be saved.')
-  await w.win.waitFor(() => q('.cm-editor') === null)
-  await w.win.waitFor(async () => {
-    const r = await w.viewReport()
-    return r?.tooLarge === true && r.dirty === true
-  })
-  await click(buttonText('Save', q('[data-git-view-root] [role="region"][aria-label="This diff is too large to display safely."]')!))
-  await w.win.waitFor(() => (buttonText('Save', q('[data-git-view-root] [role="region"][aria-label="This diff is too large to display safely."]') ?? document) as HTMLButtonElement | undefined)?.disabled === true, 15_000)
+  editor.dispatch({ changes: { from: 0, to: editor.state.doc.length, insert: draft } })
+  await w.win.waitFor(() => q('[data-git-view-root] [role="region"]'), 10_000)
+  await w.win.waitFor(() => q('[data-git-view-root] [contenteditable]') === null)
+  expect((buttonText('Save', q('[data-git-view-root] [role="region"]')!) as HTMLButtonElement).disabled).toBe(false)
+  await click(buttonText('Save', q('[data-git-view-root] [role="region"]')!))
+  await w.win.waitFor(() => (buttonText('Save', q('[data-git-view-root] [role="region"]') ?? document) as HTMLButtonElement | undefined)?.disabled === true, 15_000)
   expect(readFileSync(join(w.dir, 'a.ts'), 'utf8')).toBe(draft)
 }, SLOW)

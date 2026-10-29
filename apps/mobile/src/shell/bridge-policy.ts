@@ -48,6 +48,7 @@ export const PAGE_METHOD_PARAMS: Readonly<Record<string, readonly string[]>> = O
   'quirky.terminal/claim': ['session', 'cols', 'rows'],
   'quirky.terminal/read': ['session', 'lines'],
   'quirky.terminal/snapshot': ['session'],
+  'quirky.terminal/tabCounts': [],
   'quirky.terminal/write': ['session', 'data'],
   'quirky.terminal/send': ['session', 'text', 'enter'],
   'quirky.terminal/resize': ['session', 'cols', 'rows'],
@@ -145,7 +146,8 @@ function boundedEditorChunk(value: unknown): value is string {
 
 function validPageSpecificParams(method: string, params: Record<string, unknown>): boolean {
   if (Object.hasOwn(MOBILE_BROWSER_METHOD_PARAMS, method)) return validMobileBrowserParams(method, params)
-  if (method === 'quirky.worktree/origins' || method === 'quirky.session/workspaceSleepStates') return Object.keys(params).length === 0
+  if (method === 'quirky.worktree/origins' || method === 'quirky.session/workspaceSleepStates' ||
+    method === 'quirky.terminal/tabCounts') return Object.keys(params).length === 0
   if (method === 'quirky.worktree/sleep' || method === 'quirky.worktree/wake' ||
     method === 'quirky.session/sleepWorkspace' || method === 'quirky.session/wakeWorkspace' ||
     method === 'quirky.mobile/sessionTabs' || method === 'quirky.mobile/markdownCreate') return boundedString(params, 'worktree')
@@ -232,6 +234,9 @@ export function validatePageRpc(
 ): asserts method is string {
   if (typeof method !== 'string' || !Object.hasOwn(PAGE_METHOD_PARAMS, method)) throw new Error('Quirky method is unavailable to page apps')
   if (!grants.includes('rpc')) throw new Error('page route does not have the rpc grant')
+  if (method === 'quirky.terminal/tabCounts' && route.kind !== 'workspaces') {
+    throw new Error('tabCounts is available only to the Workspaces page')
+  }
   if ((Object.hasOwn(MOBILE_BROWSER_METHOD_PARAMS, method) || Object.hasOwn(SESSION_TAB_METHODS, method)) && route.kind !== 'session') {
     throw new Error('workspace tab operations require the session route')
   }

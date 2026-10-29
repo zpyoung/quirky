@@ -47,7 +47,7 @@ export type World = {
   state(): Promise<UiState>
   /** The panel's last report. */
   report(): Promise<any>
-  /** The diff view's last report. */
+  /** The explicit top-level diff mount's report; embedded hosted views have no slot report. */
   viewReport(): Promise<any>
   run(command: string, args?: unknown): Promise<unknown>
   /** Console errors and failed plugin slots seen since the window opened; empty when all is well. */
@@ -123,6 +123,21 @@ export async function boot(scratch: () => string, options: BootOptions = {}): Pr
   actEnvironment = (globalThis as ActGlobal).IS_REACT_ACT_ENVIRONMENT
   ;(globalThis as ActGlobal).IS_REACT_ACT_ENVIRONMENT = false
   const win = await startHeadlessWindow({ home: harness.home, runtime: harness.runtime })
+  // Happy DOM has no layout; use the terminal acceptance fixture's measured-stage convention.
+  const elementPrototype = Element.prototype
+  const originalRect = elementPrototype.getBoundingClientRect
+  elementPrototype.getBoundingClientRect = function () {
+    return this.matches('.qt-groups, .qt-panes, .qt-body')
+      ? new DOMRect(0, 0, 1024, 768)
+      : originalRect.call(this)
+  }
+  // Match terminal e2e fixtures: Happy DOM has no 2D canvas context either.
+  const canvasPrototype = HTMLCanvasElement.prototype
+  const originalContext = canvasPrototype.getContext
+  const context2d = new Proxy({}, { get: () => () => ({ width: 0 }), set: () => true })
+  canvasPrototype.getContext = function (type: string) {
+    return type === '2d' ? context2d : null
+  } as typeof originalContext
   globalThis.Response = NativeResponse
   const state = async () => (await agent.callAny('ui.state', {})) as UiState
   const world: World = {
@@ -189,13 +204,21 @@ export async function boot(scratch: () => string, options: BootOptions = {}): Pr
       ...Object.entries(win.host.getState().slots).flatMap(([id, slot]) => (slot.status === 'error' ? [`${id}: ${slot.message}`] : []))
     ],
     async cleanup() {
-      await win.stop()
-      await harness.cleanup()
+      try {
+        await win.stop()
+      } finally {
+        elementPrototype.getBoundingClientRect = originalRect
+        canvasPrototype.getContext = originalContext
+        await harness.cleanup()
+      }
     }
   }
   current = world
   await agent.callAny('ui.view.open', { id: SESSION_VIEW, input: { worktree: feat.id } })
-  if (!options.noPanel) {
+  if (options.noPanel) {
+    await agent.callAny('ui.panel.close', {})
+    await win.waitFor(() => document.querySelector('[data-git-panel]') === null)
+  } else {
     await agent.callAny('ui.panel.open', { id: PANEL })
     await win.waitFor(() => document.querySelector('[data-git-panel]'))
     await win.waitFor(async () => (await world.report())?.primary)
@@ -224,14 +247,36 @@ export function sc1(w: World): void {
   w.write('notes.txt', 'x\ny\nz\n')
 }
 
-/** The badge on the Source Control panel toggle, or null with none. */
+/** The accessible Source Control badge, or null when the panel has no uncommitted changes. */
 export function badge(): { count: string; title: string } | null {
-  const toggle = [...document.querySelectorAll('button[aria-pressed]')].find((b) => b.textContent?.startsWith('Source control'))
-  const span = toggle?.querySelector('.badge')
-  return span ? { count: span.textContent ?? '', title: span.getAttribute('title') ?? '' } : null
+  const span = document.querySelector<HTMLElement>('[role="img"][aria-label^="Source Control —"]')
+  return span ? { count: span.textContent ?? '', title: span.getAttribute('aria-label') ?? '' } : null
 }
 
-/** The diff view the layout shows, or null. */
-export async function openView(w: World): Promise<{ id: string; input?: any } | null> {
-  return (await w.state()).layout.view as { id: string; input?: any } | null
+type TerminalViewTab = { id: string; kind: 'view'; viewId: string; input?: Record<string, unknown> }
+type TerminalTab = { id: string; kind?: never }
+type WorkspaceTab = TerminalViewTab | TerminalTab
+type WorkspaceGroup = { kind: 'group'; id: string; tabs: WorkspaceTab[]; activeTab: string | null }
+type WorkspaceNode = WorkspaceGroup | { kind: 'split'; first: WorkspaceNode; second: WorkspaceNode }
+type TerminalWorkspace = { root: WorkspaceNode; activeGroup: string }
+
+function groupsIn(node: WorkspaceNode): WorkspaceGroup[] {
+  return node.kind === 'group' ? [node] : [...groupsIn(node.first), ...groupsIn(node.second)]
+}
+
+/** The selected top-level view, or its settled active hosted tab when the terminal owns it. */
+export async function openView(w: World): Promise<{ id: string; input?: Record<string, unknown> } | null> {
+  const root = (await w.state()).layout.view
+  if (!root) return null
+  const input = typeof root.input === 'object' && root.input !== null && !Array.isArray(root.input)
+    ? root.input as Record<string, unknown>
+    : undefined
+  const shown = { id: root.id, ...(input === undefined ? {} : { input }) }
+  if (root.id !== SESSION_VIEW || typeof input?.worktree !== 'string') return shown
+  const { workspace } = await w.agent.callAny('quirky.terminal/workspace', { workspace: input.worktree }) as { workspace: TerminalWorkspace }
+  const group = groupsIn(workspace.root).find((candidate) => candidate.id === workspace.activeGroup)
+  const tab = group?.tabs.find((candidate) => candidate.id === group.activeTab)
+  if (tab?.kind !== 'view') return shown
+  if (tab.viewId === DIFF_VIEW && tab.input?.tabId !== tab.id) return null
+  return { id: tab.viewId, ...(tab.input === undefined ? {} : { input: tab.input }) }
 }
