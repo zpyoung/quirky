@@ -146,16 +146,21 @@ describe('quirky.loops public API', () => {
     })
     const loop = await createLoop(rig, 'approval loop', loopConfig('continue after approval', { caps: { maxIterations: 3 } }))
     const needsYou = await rig.waitForLoop(loop.id, (snapshot) => snapshot.state === 'needs-you')
+    expect(needsYou.iterationsCompleted).toBe(0)
     const asks = await rig.call<any[]>('quirky.ask/list', { pendingOnly: true })
     const ask = asks.find((candidate) => candidate.sessionId === needsYou.sessionId)
     expect(ask).toBeDefined()
     expect(ask?.envelope.status).toBe('pending')
 
     await rig.call('quirky.ask/answer', { askId: ask!.id, answers: { go: { value: true, source: 'input' } } })
-    await waitFor(() => rig!.sends.length >= 2 || undefined, 10_000)
     const paused = await rig.waitForLoop(loop.id, (snapshot) => snapshot.state === 'paused')
     expect(paused.pauseReason).toBe('agent-blocked')
     expect(paused.iterationsCompleted).toBe(2)
+    const history = await rig.call<any[]>('quirky.loops/iterations', { loopId: loop.id })
+    expect(history.map(({ n, endReason }) => ({ n, endReason }))).toEqual([
+      { n: 1, endReason: 'settled' },
+      { n: 2, endReason: 'settled' }
+    ])
   })
 
   test('L08: pause waits for the current iteration and stop-now does not count an aborted turn', async () => {

@@ -144,8 +144,9 @@ transcript path when account preparation moves the conversation.
 The plugin exposes `create`, `messages`, `send`, `stop`, and `resume`. Creation returns a session
 record before startup finishes; `send` waits for native startup before submitting input. Messages
 are journaled and status comes from native events. Command/file permissions become ordinary
-`quirky.ask` questions. Cancellation denies approval; disabling the creating plugin stops its
-owned runners and cancels their pending approvals.
+`quirky.ask` questions. The structured owner waits through its own lease-authenticated
+client connection; answering resumes the waiting provider. Cancellation denies approval;
+disabling the creating plugin stops its owned runners and cancels their pending approvals.
 
 Stop a connected runner before resuming its conversation:
 
