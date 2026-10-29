@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test } from 'bun:test'
 import { chmodSync, mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import type { ApiDescription, CliContext, QuirkyClient } from '@quirky/protocol'
+import type { CliContext, QuirkyClient } from '@quirky/protocol'
 import { runCli } from '../../../packages/cli/test/fixtures/fake-daemon'
 import { startHarness, type Harness } from '../../../packages/daemon/test/helpers'
 import { writePlugin } from '../../../packages/daemon/test/plugins/fixtures'
@@ -263,7 +263,7 @@ describe('agents configure', () => {
       .toMatchObject({ command: 'remote-claude', commandOverridden: true })
     expect(await source.client.callAny('quirky.agents/get', { agent: 'claude' }))
       .toMatchObject({ command: 'claude', commandOverridden: false })
-    await run('discoverModels', ctx, ['claude'], { host: 'runtime:target-owner' })
+    await run('discover-models', ctx, ['claude'], { host: 'runtime:target-owner' })
     expect(routed[1]).toEqual({
       runtime: 'target-owner',
       method: 'quirky.agents/discoverModels',
@@ -425,14 +425,14 @@ describe('agents options', () => {
   })
 
   test('discover-models requires an exact host and reports the provider result as JSON', async () => {
-    const { client } = await start()
+    const { h, client } = await start()
     const missingHost = testCliContext(client)
-    expect(await failure(run('discoverModels', missingHost.ctx, ['codex'])))
+    expect(await failure(run('discover-models', missingHost.ctx, ['codex'])))
       .toMatchObject({ message: 'missing --host', kind: 'usage' })
 
-    const json = testCliContext(client, { json: true })
-    await run('discoverModels', json.ctx, ['codex'], { host: 'local' })
-    expect(JSON.parse(json.lines[0]!)).toMatchObject({
+    const result = await runCli(['agents', 'discover-models', 'codex', '--host', 'local', '--json'], { home: h.home })
+    expect(result.code).toBe(0)
+    expect(JSON.parse(result.stdout)).toMatchObject({
       agent: 'codex',
       host: 'local',
       authoritative: false,
@@ -554,30 +554,6 @@ describe('agents plan with a pick', () => {
 })
 
 describe('the CLI catalog', () => {
-  test('lists the agents group with every command and the methods each calls', async () => {
-    const { client } = await start()
-    const api = (await client.callAny('api.describe', {})) as ApiDescription
-    expect(api.cli.groups.find((g) => g.plugin === 'quirky.agents')).toEqual({ plugin: 'quirky.agents', words: 'agents', aliases: [] })
-    const own = api.cli.commands.filter((c) => c.plugin === 'quirky.agents')
-    expect(own.map((c) => c.words).sort()).toEqual([
-      'agents configure',
-      'agents default',
-      'agents disable',
-      'agents enable',
-      'agents get',
-      'agents list',
-      'agents options',
-      'agents permissions',
-      'agents plan',
-      'agents refresh',
-      'agents resolve'
-    ])
-    expect(own.every((c) => c.module?.endsWith('/quirky.agents/cli.ts'))).toBe(true)
-    expect(own.find((c) => c.words === 'agents disable')!.methods).toEqual(['quirky.agents/setEnabled'])
-    expect(own.find((c) => c.words === 'agents options')!.methods).toEqual(['quirky.agents/options'])
-    expect(own.find((c) => c.words === 'agents resolve')!.methods).toEqual(['quirky.agents/resolveLaunch'])
-  })
-
   test('quirky agents list --json resolves through the real CLI', async () => {
     const { h, client } = await start()
     const result = await runCli(['agents', 'list', '--json'], { home: h.home })

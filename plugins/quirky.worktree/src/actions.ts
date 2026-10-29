@@ -193,16 +193,26 @@ export async function createWorkspace(
   let attempt = fields
   for (;;) {
     try {
-      const result = (await context.call('quirky.worktree/create', { ...attempt, createdBy: 'window' })) as WorktreeCreateResult
+      const result = (await context.call('quirky.worktree/create', { ...attempt, createdBy: 'window' })) as WorktreeCreateResult & {
+        remoteWorkspace?: { id: string }
+      }
       if (JSON.stringify(context.getLayout().view) === viewAtSubmit) {
         try {
-          await context.call('quirky.worktree/navigate', { worktree: result.worktree.id, window })
+          if (result.remoteWorkspace !== undefined) {
+            if (typeof result.remoteWorkspace.id !== 'string' || result.remoteWorkspace.id === '') throw new Error('VM creation returned no remote attachment identity.')
+            await context.call('quirky.worktree/remoteNavigate', { workspace: result.remoteWorkspace.id, window })
+          } else {
+            await context.call('quirky.worktree/navigate', { worktree: result.worktree.id, window })
+          }
         } catch (error) {
           context.toast('Created worktree but could not open it', messageOf(error))
         }
       }
       else context.toast(`Created ${result.worktree.name}`, result.worktree.path)
-      if (result.baseFallback) hooks.showFallback(result.worktree.id, result.baseFallback.message)
+      if (result.baseFallback) {
+        if (result.remoteWorkspace) context.toast('Guest workspace base fallback', result.baseFallback.message)
+        else hooks.showFallback(result.worktree.id, result.baseFallback.message)
+      }
       const receipt = (result as WorktreeCreateResult & {
         creationReceipt?: {
           sparsePaths?: string[]

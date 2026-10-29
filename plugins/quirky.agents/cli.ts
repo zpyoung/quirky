@@ -317,7 +317,7 @@ const named: CliModule['commands'] = {
     ctx.out.result(info, () => hostedText(info, (local) => formatCatalog(local, ctx)))
   },
 
-  async discoverModels(args, ctx) {
+  async 'discover-models'(args, ctx) {
     const host = args.flags.host
     if (typeof host !== 'string' || host.trim() === '') throw ctx.usage('missing --host')
     const result = await callAtHost(ctx, host, 'quirky.agents/discoverModels', {

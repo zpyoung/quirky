@@ -4,6 +4,8 @@ Model discovery is provider-owned and host-specific. `local` means this agent ru
 
 Codex uses its real stdio app-server `model/list` operation with read-only, no-approval, and plugins-disabled flags. It derives the launch environment from `quirky.agents/plan` and `quirky.accounts/prepareProviderEnv`, preserving the selected account home without creating an account session.
 
+If account preparation is unavailable, Codex discovery refuses to start the provider process and preserves the previous model catalog; it never bypasses account preparation with an inherited `CODEX_HOME`.
+
 Claude uses the official Models API `GET https://api.anthropic.com/v1/models`, with `limit=1000`, `after_id` pagination, `anthropic-version: 2026-10-21`, and the selected account's API key as a bearer credential. The selected profile is prepared with `quirky.accounts/prepareProviderEnv`; `account.authKind` must be `api-key` before a profile or inherited key is used. Explicit `ANTHROPIC_API_KEY` launch configuration is honored; OAuth tokens are never sent to this API. Keys are never returned. Model effort options are taken from each API model's `capabilities.effort`.
 
 Both probes require complete, nonempty valid snapshots before they update that host's catalog or emit `modelSnapshot`. Empty, malformed, unavailable, unsupported, truncated, and timed-out probes preserve the prior catalog and choices. HTTP probe time is capped at 8 seconds; response and normalized snapshot size at 256 KiB; pagination at 32 pages and 4096 models. The Anthropic protocol follows the official [List Models reference](https://docs.anthropic.com/en/api/models-list), [API overview and authentication headers](https://docs.anthropic.com/en/api/overview), and [API versioning documentation](https://docs.anthropic.com/en/api/versioning), which requires `anthropic-version: 2026-10-21`.
@@ -26,6 +28,8 @@ quirky agents discover-models claude --host 'runtime:dev-laptop'
 quirky agents resolve claude --host 'runtime:dev-laptop' --model <id>
 quirky agents configure claude --host 'runtime:dev-laptop' --command claude
 ```
+
+Custom agent declarations must include a prompt mode. Their `homepage` and `install` links accept only HTTP(S) URLs; invalid links exclude that declaration from the catalog and appear in `agents list --all`.
 
 Provider process creation remains owned by `quirky.session`. To launch remotely, call `quirky.cli/runtimeCall` for the saved target with `method: "quirky.session/create"`; do not return a target launch plan to a local session owner or relabel local execution as remote.
 

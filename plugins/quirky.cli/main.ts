@@ -1,4 +1,5 @@
-import type { OwnerCliPairOffer, OwnerRuntimeCallParams, OwnerRuntimeCallResult, PluginContext } from '@quirky/protocol'
+import { randomUUID } from 'node:crypto'
+import type { OwnerCliPairOffer, OwnerHostIdentity, OwnerRuntimeCallParams, OwnerRuntimeCallResult, OwnerRuntimePin, PluginContext } from '@quirky/protocol'
 import { createMobileRpc, parseOwnerCliOffer, type MobileRpc } from '@quirky/protocol/paired-client'
 import {
   addSavedRuntimeTarget,
@@ -33,10 +34,55 @@ function booleanParam(context: PluginContext, params: Params, key: string): bool
   return value
 }
 
+function isOwnerHostIdentity(value: unknown): value is OwnerHostIdentity {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return false
+  const candidate = value as Record<string, unknown>
+  return Object.keys(candidate).length === 2 &&
+    Object.hasOwn(candidate, 'hostId') && typeof candidate.hostId === 'string' && candidate.hostId.trim().length > 0 &&
+    Object.hasOwn(candidate, 'generation') && typeof candidate.generation === 'string' && candidate.generation.trim().length > 0
+}
+
+function expectedHostParam(context: PluginContext, value: unknown): OwnerHostIdentity | undefined {
+  if (value === undefined) return undefined
+  if (!isOwnerHostIdentity(value)) {
+    throw context.error('invalid-params', 'expectedHost must contain exactly non-empty hostId and generation strings')
+  }
+  return { hostId: value.hostId, generation: value.generation }
+}
+function isExpectedOwnerRuntime(value: unknown): value is OwnerRuntimePin {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return false
+  const candidate = value as Record<string, unknown>
+  return Object.keys(candidate).length === 3 &&
+    Object.hasOwn(candidate, 'id') && typeof candidate.id === 'string' && candidate.id.trim().length > 0 &&
+    Object.hasOwn(candidate, 'endpoint') && typeof candidate.endpoint === 'string' && candidate.endpoint.trim().length > 0 &&
+    Object.hasOwn(candidate, 'grantId') && typeof candidate.grantId === 'string' && candidate.grantId.trim().length > 0
+}
+
+function expectedRuntimeParam(context: PluginContext, value: unknown): OwnerRuntimePin | undefined {
+  if (value === undefined) return undefined
+  if (!isExpectedOwnerRuntime(value)) {
+    throw context.error('invalid-params', 'expectedRuntime must contain exactly non-empty id, endpoint, and grantId strings')
+  }
+  return { id: value.id, endpoint: value.endpoint, grantId: value.grantId }
+}
+
+
+function registerHostIdentity(context: PluginContext): OwnerHostIdentity {
+  const store = context.openStore([
+    'CREATE TABLE IF NOT EXISTS owner_host_identity (singleton INTEGER PRIMARY KEY CHECK (singleton = 1), host_id TEXT NOT NULL)'
+  ])
+  store.run('INSERT OR IGNORE INTO owner_host_identity (singleton, host_id) VALUES (1, ?)', randomUUID())
+  const row = store.get<{ host_id: unknown }>('SELECT host_id FROM owner_host_identity WHERE singleton = 1')
+  if (typeof row?.host_id !== 'string' || row.host_id.trim().length === 0) {
+    throw new Error('Stored owner host identity is invalid')
+  }
+  return { hostId: row.host_id, generation: randomUUID() }
+}
+
 function failure(context: PluginContext, error: unknown): Error {
   const message = error instanceof Error ? error.message : String(error)
   if (/not found/i.test(message)) return context.error('not-found', message)
-  if (/foreign|ambiguous|permission|unavailable|occupied|could not|failed/i.test(message)) return context.error('conflict', message)
+  if (/foreign|ambiguous|permission|unavailable|occupied|could not|failed|host identity|runtime pin/i.test(message)) return context.error('conflict', message)
   return context.error('invalid-params', message)
 }
 
@@ -53,13 +99,17 @@ function provideAsync(context: PluginContext, name: string, handler: (params: Pa
 }
 
 async function callOwnerRuntime(context: PluginContext, params: Params): Promise<OwnerRuntimeCallResult> {
-  if (Object.keys(params).some((key) => !['runtime', 'method', 'params'].includes(key))) {
-    throw context.error('invalid-params', 'runtimeCall accepts only runtime, method, and optional params')
+  if (Object.keys(params).some((key) => !['runtime', 'method', 'params', 'expectedHost', 'expectedRuntime'].includes(key))) {
+    throw context.error('invalid-params', 'runtimeCall accepts only runtime, method, optional params, expectedHost, and expectedRuntime')
   }
+  const expectedHost = expectedHostParam(context, params.expectedHost)
+  const expectedRuntime = expectedRuntimeParam(context, params.expectedRuntime)
   const input: OwnerRuntimeCallParams = {
     runtime: stringParam(context, params, 'runtime')!,
     method: stringParam(context, params, 'method')!,
-    ...(params.params === undefined ? {} : { params: params.params as Record<string, unknown> })
+    ...(params.params === undefined ? {} : { params: params.params as Record<string, unknown> }),
+    ...(expectedHost === undefined ? {} : { expectedHost }),
+    ...(expectedRuntime === undefined ? {} : { expectedRuntime })
   }
   if (params.params !== undefined &&
     (params.params === null || typeof params.params !== 'object' || Array.isArray(params.params))) {
@@ -74,6 +124,12 @@ async function callOwnerRuntime(context: PluginContext, params: Params): Promise
   }
   if (target.scope !== 'owner-cli' || target.grantId === null) {
     throw context.error('invalid-params', 'runtime must select a saved owner-cli target')
+  }
+  if (input.expectedRuntime !== undefined &&
+    (target.id !== input.expectedRuntime.id ||
+      target.endpoint !== input.expectedRuntime.endpoint ||
+      target.grantId !== input.expectedRuntime.grantId)) {
+    throw context.error('conflict', 'Saved owner runtime pin does not match expectedRuntime')
   }
   let offer: OwnerCliPairOffer
   try { offer = parseOwnerCliOffer(target.pairingCode) } catch {
@@ -90,7 +146,25 @@ async function callOwnerRuntime(context: PluginContext, params: Params): Promise
     throw context.error('conflict', 'Owner runtime connection failed')
   }
   try {
-    const result = await rpc.call(input.method, input.params ?? {})
+    if (input.expectedHost !== undefined) {
+      let actualHost: unknown
+      try {
+        actualHost = await rpc.call('quirky.cli/hostIdentity', {})
+      } catch {
+        throw context.error('conflict', 'Owner host identity could not be verified')
+      }
+      if (!isOwnerHostIdentity(actualHost) ||
+        actualHost.hostId !== input.expectedHost.hostId ||
+        actualHost.generation !== input.expectedHost.generation) {
+        throw context.error('conflict', 'Owner host identity does not match expectedHost')
+      }
+    }
+    let result: unknown
+    try {
+      result = await rpc.call(input.method, input.params ?? {})
+    } catch {
+      throw context.error('conflict', 'Owner runtime call failed')
+    }
     markSavedRuntimeTargetUsed(context.home, target.id)
     return {
       runtime: {
@@ -101,14 +175,17 @@ async function callOwnerRuntime(context: PluginContext, params: Params): Promise
       },
       result
     }
-  } catch {
-    throw context.error('conflict', 'Owner runtime call failed')
   } finally {
     rpc.close()
   }
 }
 
 export function activate(context: PluginContext): void {
+  const hostIdentity = registerHostIdentity(context)
+  provide(context, 'hostIdentity', (params) => {
+    if (Object.keys(params).length > 0) throw context.error('invalid-params', 'hostIdentity accepts no parameters')
+    return { ...hostIdentity }
+  })
   provide(context, 'commandStatus', (params) => {
     const path = stringParam(context, params, 'path', true)
     const profileHome = stringParam(context, params, 'profileHome', true) ?? context.home

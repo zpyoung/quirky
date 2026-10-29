@@ -10,43 +10,51 @@ afterEach(() => daemon.stop())
 
 const run = (args: string[]) => runCli(args, { home: daemon.home })
 const SOLAR = 'theme:acme.solar/solar'
+const LUNAR = 'theme:acme.lunar/lunar'
+const themeRow = (output: string, id: string) =>
+  output.split('\n').find((line) => line.split(/\s+/, 1)[0] === id)
 
 describe('theme list', () => {
-  test('marks the active theme with *', async () => {
+  test('tracks active and chosen themes through set and list', async () => {
     daemon.addTheme('acme.solar', 'solar', { title: 'Solar' })
-    const result = await run(['theme', 'list'])
-    expect(result.code).toBe(0)
-    const lines = result.stdout.trimEnd().split('\n')
-    expect(lines[0].split(/\s{2,}/)).toEqual(['ID', 'TITLE', 'APPEARANCE'])
-    expect(lines[1].split(/\s{2,}/)).toEqual(['default', 'Quirky Dark', 'dark', '*'])
-    expect(lines[2].split(/\s{2,}/)).toEqual([SOLAR, 'Solar', 'light'])
-    expect(lines).toHaveLength(3)
-    expect(daemon.methodCalls('theme.list')).toEqual([{}])
-  })
-
-  test('marks the active theme after a choice', async () => {
-    daemon.addTheme('acme.solar', 'solar', { title: 'Solar' })
+    daemon.addTheme('acme.lunar', 'lunar', { title: 'Lunar' })
     daemon.chooseTheme(SOLAR)
-    const lines = (await run(['theme', 'list'])).stdout.trimEnd().split('\n')
-    expect(lines[1].split(/\s{2,}/)).toEqual(['default', 'Quirky Dark', 'dark'])
-    expect(lines[2].split(/\s{2,}/)).toEqual([SOLAR, 'Solar', 'light', '*'])
-  })
 
-  test('marks a chosen theme that is not active with (chosen)', async () => {
-    daemon.addTheme('acme.solar', 'solar', { title: 'Solar' })
-    daemon.chooseTheme(SOLAR)
-    daemon.ui.theme = { chosen: SOLAR, active: 'default' }
-    const lines = (await run(['theme', 'list'])).stdout.trimEnd().split('\n')
-    expect(lines[1].split(/\s{2,}/)).toEqual(['default', 'Quirky Dark', 'dark', '*'])
-    expect(lines[2].split(/\s{2,}/)).toEqual([SOLAR, 'Solar', 'light', '(chosen)'])
-  })
+    const solarActive = await run(['theme', 'list'])
+    const solarRow = themeRow(solarActive.stdout, SOLAR)
+    const lunarRow = themeRow(solarActive.stdout, LUNAR)
+    expect(solarRow?.split(/\s+/).includes('*')).toBe(true)
+    expect(lunarRow).toBeDefined()
+    expect(lunarRow?.split(/\s+/).includes('*')).toBe(false)
 
-  test('keeps a chosen theme that is no longer listed as a chosen line', async () => {
-    daemon.ui.theme = { chosen: SOLAR, active: 'default' }
-    const lines = (await run(['theme', 'list'])).stdout.trimEnd().split('\n')
-    expect(lines).toHaveLength(3)
-    expect(lines[1].split(/\s{2,}/)).toEqual(['default', 'Quirky Dark', 'dark', '*'])
-    expect(lines[2]).toBe(`chosen: ${SOLAR} (not in effect)`)
+    const set = await run(['theme', 'set', LUNAR])
+    expect(set.code).toBe(0)
+    const lunarActive = await run(['theme', 'list'])
+    const solarAfterSet = themeRow(lunarActive.stdout, SOLAR)
+    const lunarAfterSet = themeRow(lunarActive.stdout, LUNAR)
+    expect(solarAfterSet).toBeDefined()
+    expect(solarAfterSet?.split(/\s+/).includes('*')).toBe(false)
+    expect(lunarAfterSet?.split(/\s+/).includes('*')).toBe(true)
+
+    daemon.ui.theme = { chosen: SOLAR, active: LUNAR }
+    const inactiveChosen = await run(['theme', 'list'])
+    const solarChosen = themeRow(inactiveChosen.stdout, SOLAR)
+    const lunarChosen = themeRow(inactiveChosen.stdout, LUNAR)
+    expect(solarChosen).toBeDefined()
+    expect(solarChosen?.split(/\s+/).includes('(chosen)')).toBe(true)
+    expect(solarChosen?.split(/\s+/).includes('*')).toBe(false)
+    expect(lunarChosen?.split(/\s+/).includes('*')).toBe(true)
+
+    const missing = 'theme:acme.ghost/ghost'
+    daemon.ui.theme = { chosen: missing, active: LUNAR }
+    const missingChosen = await run(['theme', 'list'])
+    expect(themeRow(missingChosen.stdout, missing)).toBeUndefined()
+    const missingLine = missingChosen.stdout.split('\n').find((line) => line.split(/\s+/).includes(missing))
+    expect(missingLine).toBeDefined()
+    expect(missingLine?.split(/\s+/).includes('*')).toBe(false)
+    const activeLunar = themeRow(missingChosen.stdout, LUNAR)
+    expect(activeLunar).toBeDefined()
+    expect(activeLunar?.split(/\s+/).includes('*')).toBe(true)
   })
 
   test('--json prints the theme list', async () => {

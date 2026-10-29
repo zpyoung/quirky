@@ -99,7 +99,7 @@ test('runFiles with more failing files than the limit fails without a rerun', as
   expect(await runFiles(dir, ['pkg/a.test.ts', 'pkg/b.test.ts'], [], 2, 1)).toEqual({ ok: false, flaky: [] })
 }, 30_000)
 
-test('actual bun test processes get isolated homes and clean them up', async () => {
+test('actual bun test processes run unprofiled with isolated homes and clean them up', async () => {
   const report = join(dir, 'home.json')
   const parentHome = process.env.HOME ?? null
   const parentQuirkyHome = process.env.QUIRKY_HOME ?? null
@@ -133,7 +133,10 @@ test('has an isolated home', () => {
   expect(process.env.HOME ?? null).toBe(parentHome)
   expect(process.env.QUIRKY_HOME ?? null).toBe(parentQuirkyHome)
 
-  expect(await runFiles(dir, ['pkg/home.test.ts'], [], 1)).toEqual({ ok: true, flaky: [] })
+  const { result: fileResult, output } = await captureOutput(() =>
+    runFiles(dir, ['pkg/home.test.ts'], [], 1))
+  expect(fileResult).toEqual({ ok: true, flaky: [] })
+  expect(output).not.toContain('suite-file ')
   const second = JSON.parse(readFileSync(report, 'utf8')) as { home: string; quirkyHome: string }
   expect(second.home).not.toBe(first.home)
   expect(second.quirkyHome).not.toBe(first.quirkyHome)
@@ -193,12 +196,6 @@ test('runFiles profiles each file attempt only when enabled', async () => {
   }
 }, 20_000)
 
-test('runFiles emits no profile rows when profiling is disabled', async () => {
-  passing('a.test.ts')
-  const { result, output } = await captureOutput(() => runFiles(dir, ['pkg/a.test.ts'], [], 1))
-  expect(result).toEqual({ ok: true, flaky: [] })
-  expect(output).not.toContain('suite-file ')
-})
 
 test('the suite CLI profiles each selected file in local mode', async () => {
   Bun.spawnSync(['git', 'init', '-q'], { cwd: dir })
