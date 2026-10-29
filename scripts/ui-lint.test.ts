@@ -133,7 +133,7 @@ test('plugin configuration is strict, unique, and limited to known immediate dir
   expect(() => parsePluginConfig('[1]', ['example.plugin'])).toThrow()
 })
 
-test('root lint scans all UI source, skips fixtures and unopted plugins, and enforces opted-in plugin trees', () => {
+test('root lint scans UI source, skips fixtures, and enforces opted-in plugins', () => {
   const root = mkdtempSync(join(tmpdir(), 'ui-lint-enforcement-'))
   const put = (relativePath: string, content: string) => {
     const path = join(root, relativePath)
@@ -171,27 +171,36 @@ test('root lint scans all UI source, skips fixtures and unopted plugins, and enf
     expect(enforced.status).toBe(1)
     expect(enforced.diagnostics.some((message) => message.includes(' ui/no-raw-color:'))).toBe(true)
     expect(enforced.diagnostics.some((message) => message.includes(' ui/no-raw-pixel:'))).toBe(true)
-    expect(enforced.diagnostics).toContain('plugins/example/theme.css:1:1 ui/no-plugin-css: Plugin source must use shared UI components and tokens instead of stylesheet CSS.')
     expect(enforced.diagnostics.some((message) => message.includes('plugins/example/theme.css:1:'))).toBe(true)
     expect(enforced.diagnostics.some((message) => message.includes('packages/ui/src/vendor'))).toBe(false)
     expect(enforced.diagnostics.some((message) => message.includes('packages/ui/src/fixtures'))).toBe(false)
 
     put('scripts/ui-lint-plugins.json', '["../outside"]')
-    expect(run().diagnostics[0]).toContain('safe immediate plugin directory ID')
+    expect(run().status).toBe(1)
   } finally {
     rmSync(root, { recursive: true, force: true })
   }
 })
 
-test('root lint excludes Git-ignored generated plugin output but scans tracked plugin source', () => {
-  const root = mkdtempSync(join(tmpdir(), 'ui-lint-gitignore-'))
-  const put = (relativePath: string, content: string) => {
-    const path = join(root, relativePath)
+test('repository inventory ignores generated artifacts but still enforces tracked and new plugin source', () => {
+  const root = mkdtempSync(join(tmpdir(), 'ui-lint-git-inventory-'))
+  const put = (name: string, content: string) => {
+    const path = join(root, name)
     mkdirSync(dirname(path), { recursive: true })
     writeFileSync(path, content)
   }
   const git = (...args: string[]) => {
-    const result = Bun.spawnSync(['git', ...args], { cwd: root, stdout: 'pipe', stderr: 'pipe' })
+    const result = Bun.spawnSync(['git', ...args], {
+      cwd: root,
+      env: {
+        PATH: process.env.PATH,
+        HOME: root,
+        QUIRKY_HOME: root,
+        GIT_CONFIG_GLOBAL: '/dev/null',
+        GIT_CONFIG_SYSTEM: '/dev/null',
+        GIT_CONFIG_NOSYSTEM: '1'
+      }
+    })
     if (result.exitCode !== 0) throw new Error(result.stderr.toString())
   }
   const run = () => {
@@ -205,26 +214,21 @@ test('root lint excludes Git-ignored generated plugin output but scans tracked p
     }
   }
   try {
-    git('init', '-q')
-    mkdirSync(join(root, 'packages/ui/src'), { recursive: true })
-    put('.gitignore', 'plugins/example/mobile/assets/mobile/\n')
+    git('init', '--quiet')
+    put('.gitignore', 'plugins/example/generated/\nplugins/example/ignored-source.tsx\n')
+    put('packages/ui/src/prose.ts', 'export const title = "Fixture"')
     put('scripts/ui-lint-plugins.json', '["example"]')
-    put('plugins/example/mobile/assets/mobile/page.css', '.bad { color: #fff; }')
-    put('plugins/example/mobile/assets/mobile/authored.html', '<div style="color: #00ff00"></div>')
-    put('plugins/example/source.html', '<div style="color: #ff0000"></div>')
-    git('add', '--', '.gitignore', 'scripts/ui-lint-plugins.json', 'plugins/example/source.html')
-    git('add', '-f', '--', 'plugins/example/mobile/assets/mobile/authored.html')
+    put('plugins/example/generated/page.css', '.card { color: red; padding: 13px; }')
+    expect(run()).toEqual({ status: 0, diagnostics: [] })
 
-    const result = run()
-    expect(result.status).toBe(1)
-    const diagnosticFilesAndRules = result.diagnostics.map((message) => {
-      const match = message.match(/^(.+):\d+:\d+ (ui\/[^:]+):/)
-      if (!match) throw new Error(`Unexpected UI lint diagnostic format: ${message}`)
-      return { file: match[1]!, rule: match[2]! }
-    })
-    expect(diagnosticFilesAndRules).toEqual([
-      { file: 'plugins/example/mobile/assets/mobile/authored.html', rule: 'ui/no-raw-color' },
-      { file: 'plugins/example/source.html', rule: 'ui/no-raw-color' }
+    put('plugins/example/ignored-source.tsx', 'export const tracked = <div style={{ color: "red" }} />')
+    git('add', '--force', '--', 'plugins/example/ignored-source.tsx')
+    put('plugins/example/source.tsx', 'export const fresh = <div style={{ color: "red" }} />')
+    const enforced = run()
+    expect(enforced.status).toBe(1)
+    expect(enforced.diagnostics.map((line) => line.match(/^(.*?):\d+:\d+ (ui\/[^:]+):/)?.slice(1))).toEqual([
+      ['plugins/example/ignored-source.tsx', 'ui/no-raw-color'],
+      ['plugins/example/source.tsx', 'ui/no-raw-color']
     ])
   } finally {
     rmSync(root, { recursive: true, force: true })

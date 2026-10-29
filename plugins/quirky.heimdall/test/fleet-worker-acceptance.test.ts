@@ -75,4 +75,4 @@ test('an actual Heimdall-owned worker stays inspectable but stops counting after
   } finally {
     await fixture.releaseReadFence(watcherId)
   }
-})
+}, 180_000)

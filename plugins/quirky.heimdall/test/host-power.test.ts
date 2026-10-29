@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from 'bun:test'
-import { mkdirSync, mkdtempSync, rmSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, realpathSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { PluginContext } from '@quirky/protocol'
@@ -34,12 +34,17 @@ const descriptor: KindRegistration = {
   hooks: HOOKS
 }
 const contributions = Object.values(HOOKS).map((id) => ({
-  kind: 'method', status: 'effective', plugin: OWNER_PLUGIN, id
+  kind: 'method', status: 'effective', plugin: OWNER_PLUGIN, id: `method:${id}`
 }))
 const roots: string[] = []
 const databaseClosers: Array<() => void> = []
+const services: KernelService[] = []
 
-afterEach(() => {
+afterEach(async () => {
+  const shutdowns = services.splice(0).reverse().map((service) =>
+    Promise.resolve().then(() => service.shutdown())
+  )
+  await Promise.allSettled(shutdowns)
   for (const close of databaseClosers.splice(0).reverse()) close()
   for (const root of roots.splice(0).reverse()) rmSync(root, { recursive: true, force: true })
 })
@@ -118,6 +123,7 @@ function makeFixture(options: {
     launch: {}
   } as unknown as PluginContext
   const service = createKernelService(context, options.now)
+  services.push(service)
   return { context, service, power, emitted }
 }
 
@@ -144,9 +150,15 @@ function enrollment(watcherId: string, workspacePath = `/workspace/${watcherId}`
   }
 }
 
+function createWorkspace(service: KernelService): string {
+  return realpathSync.native(mkdtempSync(join(service.context.dataDir, 'workspace-')))
+}
+
 function seed(service: KernelService, ...watcherIds: string[]): void {
   service.registry.registerDescriptor(descriptor, OWNER_PLUGIN)
-  for (const watcherId of watcherIds) service.store.save(enrollment(watcherId))
+  for (const watcherId of watcherIds) {
+    service.store.save(enrollment(watcherId, createWorkspace(service)))
+  }
 }
 
 function deferred<T>() {
@@ -259,13 +271,14 @@ describe('Heimdall host-power lifecycle binding', () => {
     const readBoth = deferred<void>()
     const executeBoth = deferred<void>()
     const decided = new Set<string>()
+    let newlyEnrolledWorkspacePath = ''
     const fixture = makeFixture({
       initiallySuspended: true,
       call: async (method, params) => {
         if (method === HOOKS.authorize) {
           const input = params?.input as { kindPayload: unknown }
           return {
-            workspaceKey: 'ignored-by-authority', workspacePath: '/workspace/newly-enrolled',
+            workspaceKey: 'ignored-by-authority', workspacePath: newlyEnrolledWorkspacePath,
             executionHostId: 'local', schedulerOwner: 'daemon', kindPayload: input.kindPayload
           }
         }
@@ -297,6 +310,7 @@ describe('Heimdall host-power lifecycle binding', () => {
       }
     })
     const { service, power } = fixture
+    newlyEnrolledWorkspacePath = createWorkspace(service)
     const restoredWatcher = 'watcher-restored-asleep'
     seed(service, restoredWatcher)
 
@@ -372,17 +386,9 @@ describe('Heimdall host-power lifecycle binding', () => {
 
   test('attempts every synchronous runner fence and reports the failing watcher', async () => {
     const failFenceFor = 'watcher-fence-failure'
-    let failEmit = false
     const bothDecided = deferred<void>()
     const decidedWatchers = new Set<string>()
     const fixture = makeFixture({
-      emit: (event, value) => {
-        if (
-          failEmit && event === 'changed' && typeof value === 'object' && value !== null &&
-          'watcherId' in value && value.watcherId === failFenceFor
-        ) throw new Error('changed notification failed')
-        return false
-      },
       call: async (method, params) => {
         if (method === HOOKS.read) return snapshot('idle', Date.now)
         if (method === HOOKS.decide) {
@@ -399,7 +405,13 @@ describe('Heimdall host-power lifecycle binding', () => {
 
     await service.start()
     await bothDecided.promise
-    failEmit = true
+    const failingRunner = service.runner(failFenceFor)
+    if (!failingRunner) throw new Error('fixture runner is unavailable')
+    const suspend = failingRunner.suspend
+    failingRunner.suspend = () => {
+      suspend()
+      throw new Error('runner fence failed')
+    }
 
     let failure: unknown
     try {
@@ -412,7 +424,6 @@ describe('Heimdall host-power lifecycle binding', () => {
     expect(service.runner(failFenceFor)?.status()).toMatchObject({ state: 'held', reason: 'suspended' })
     expect(service.runner('watcher-fence-survivor')?.status()).toMatchObject({ state: 'held', reason: 'suspended' })
 
-    failEmit = false
     await service.shutdown()
   })
 })

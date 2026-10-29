@@ -1,4 +1,7 @@
 import { describe, expect, test } from 'bun:test'
+import { mkdtempSync, realpathSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import type { PluginContext, QuirkyEvent } from '@quirky/protocol'
 import { budgetUsage } from '../src/budget'
 import { createRunner } from '../src/runner'
@@ -7,80 +10,106 @@ import { createOrchestrationAdapter, orchestrationRequestIdForAttemptFingerprint
 import { HostPowerService } from '../../../packages/daemon/src/host-power'
 
 describe('Heimdall orchestration adapter', () => {
-  test('maps the SHA-256 dispatch identity to a stable UUIDv8 mutation request', () => {
-    expect(orchestrationRequestIdForAttemptFingerprint('fp-1')).toBe('5731a55c-52dd-8cf8-bea3-0ae115069b14')
-    expect(orchestrationRequestIdForAttemptFingerprint('fp-1')).toBe(orchestrationRequestIdForAttemptFingerprint('fp-1'))
-    expect(orchestrationRequestIdForAttemptFingerprint('fp-2')).not.toBe(orchestrationRequestIdForAttemptFingerprint('fp-1'))
-  })
-
-  test('creates an owner-scoped run and dispatches with the prepared request identity', async () => {
-    const enrollment = makeEnrollment()
-    const store = makeStore(enrollment)
-    const calls: { method: string; params: Record<string, unknown> }[] = []
-    const request: WorkerRequest = {
-      spec: 'fixture task',
-      worktree: '/tmp/fixture-worktree',
-      agent: 'codex',
-      runId: 'run_attacker',
-      from: 'session_attacker',
-      terminal: 'terminal_attacker'
-    }
-    const adapter = createOrchestrationAdapter(makeContext(async (method, params = {}) => {
-      calls.push({ method, params })
-      if (method === 'quirky.orchestration/serviceRegisterSubmissionPreflight') return undefined
-      if (method === 'quirky.orchestration/serviceRunCreate') {
-        return { run: { id: 'run_fixture' }, mutation: { requestId: params.requestId, replayed: false } }
-      }
-      if (method === 'quirky.orchestration/serviceWorkerStart') {
-        return readyReceipt(params.runId, params.requestId)
-      }
-      throw new Error(`unexpected method ${method}`)
-    }), store, () => {})
-
-    const result = await adapter.dispatch(enrollment, preparedAttempt(request), request)
-
-    expect(result).toEqual({ kind: 'dispatched', dispatchId: 'ctx_fixture' })
-    expect(store.get(enrollment.watcherId)?.orchestrationRunId).toBe('run_fixture')
-    expect(calls.map((call) => call.method)).toEqual([
-      'quirky.orchestration/serviceRunCreate',
-      'quirky.orchestration/serviceRegisterSubmissionPreflight',
-      'quirky.orchestration/serviceWorkerStart'
-    ])
-    expect(calls[1]?.params).toEqual({
-      runId: 'run_fixture',
-      method: 'quirky.heimdall/submissionPreflight'
-    })
-    expect(calls[0]?.params).toMatchObject({
-      contractVersion: 1,
-      key: enrollment.watcherId,
-      objective: expect.stringContaining(enrollment.watcherId)
-    })
-    const start = calls[2]!.params
-    expect(start).toMatchObject({
-      runId: 'run_fixture',
-      requestId: orchestrationRequestIdForAttemptFingerprint('fp-1'),
-      contractVersion: 1,
-      spec: 'fixture task',
-      worktree: '/tmp/fixture-worktree',
-      agent: 'codex'
-    })
-    expect(start).not.toHaveProperty('from')
-    expect(start).not.toHaveProperty('terminal')
-  })
-  test('restores the submission hook for an existing owned Run', async () => {
+  test('restores the submission hook with the same mutation identity after adapter restart', async () => {
     const enrollment = makeEnrollment({ orchestrationRunId: 'run_fixture' })
     const calls: { method: string; params: Record<string, unknown> }[] = []
-    const adapter = createOrchestrationAdapter(makeContext(async (method, params = {}) => {
+    const context = makeContext(async (method, params = {}) => {
       calls.push({ method, params })
-      return undefined
-    }), makeStore(enrollment), () => {})
+      return submissionPreflightReceipt(params)
+    })
+    const first = createOrchestrationAdapter(context, makeStore(enrollment), () => {})
 
-    await adapter.restore(enrollment)
+    await first.restore(enrollment)
+    first.dispose()
 
-    expect(calls).toEqual([{
-      method: 'quirky.orchestration/serviceRegisterSubmissionPreflight',
-      params: { runId: 'run_fixture', method: 'quirky.heimdall/submissionPreflight' }
-    }])
+    const restarted = createOrchestrationAdapter(context, makeStore(enrollment), () => {})
+    await restarted.restore(enrollment)
+    restarted.dispose()
+
+    expect(calls).toHaveLength(2)
+    expect(calls[0]?.params.requestId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-8[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/)
+    expect(calls[1]?.params.requestId).toBe(calls[0]?.params.requestId)
+  })
+  test('rejects submission preflight receipts that do not prove the exact registered mutation', async () => {
+    const invalidReceipts: ((params: Record<string, unknown>) => unknown)[] = [
+      (_params) => undefined,
+      (params) => submissionPreflightReceipt(params, {
+        mutation: { requestId: '00000000-0000-4000-8000-000000000001', replayed: false }
+      }),
+      (params) => submissionPreflightReceipt(params, {
+        mutation: { requestId: params.requestId }
+      }),
+      (params) => submissionPreflightReceipt(params, { runId: 'run_other' }),
+      (params) => submissionPreflightReceipt(params, { method: 'quirky.other/submissionPreflight' }),
+      (params) => submissionPreflightReceipt(params, { registered: false })
+    ]
+    for (const invalidReceipt of invalidReceipts) {
+      const enrollment = makeEnrollment({ orchestrationRunId: 'run_fixture' })
+      const store = makeStore(enrollment)
+      let workerStarted = false
+      const adapter = createOrchestrationAdapter(makeContext(async (method, params = {}) => {
+        if (method === 'quirky.orchestration/serviceRegisterSubmissionPreflight') return invalidReceipt(params)
+        if (method === 'quirky.orchestration/serviceWorkerStart') {
+          workerStarted = true
+          return readyReceipt(params.runId, params.requestId)
+        }
+        throw new Error(`unexpected method ${method}`)
+      }), store, () => {})
+
+      const result = await adapter.dispatch(
+        enrollment,
+        preparedAttempt(),
+        { spec: 'fixture task', worktree: '/tmp/fixture-worktree' }
+      )
+
+      expect(result).toMatchObject({ kind: 'indeterminate', detail: expect.stringContaining('preflight') })
+      expect(workerStarted).toBe(false)
+      adapter.dispose()
+    }
+  })
+
+  test('retries a lost submission preflight reply with the same mutation identity', async () => {
+    const enrollment = makeEnrollment()
+    const store = makeStore(enrollment)
+    const runRequestIds: unknown[] = []
+    const preflightRequestIds: unknown[] = []
+    let registrations = 0
+    const adapter = createOrchestrationAdapter(makeContext(async (method, params = {}) => {
+      if (method === 'quirky.orchestration/serviceRunCreate') {
+        runRequestIds.push(params.requestId)
+        return {
+          run: { id: 'run_fixture' },
+          mutation: { requestId: params.requestId, replayed: runRequestIds.length > 1 }
+        }
+      }
+      if (method === 'quirky.orchestration/serviceRegisterSubmissionPreflight') {
+        preflightRequestIds.push(params.requestId)
+        registrations++
+        if (registrations === 1) throw new Error('submission preflight reply lost')
+        return submissionPreflightReceipt(params, {
+          mutation: { requestId: params.requestId, replayed: true }
+        })
+      }
+      if (method === 'quirky.orchestration/serviceWorkerStart') return readyReceipt(params.runId, params.requestId)
+      throw new Error(`unexpected method ${method}`)
+    }), store, () => {})
+    const attempt = preparedAttempt()
+    const request = { spec: 'fixture task', worktree: '/tmp/fixture-worktree' }
+
+    const first = await adapter.dispatch(enrollment, attempt, request)
+    expect(store.get(enrollment.watcherId)?.orchestrationRunId).toBeNull()
+    const second = await adapter.dispatch(enrollment, attempt, request)
+
+    expect(first).toMatchObject({
+      kind: 'indeterminate',
+      detail: expect.stringContaining('submission preflight reply lost')
+    })
+    expect(second).toMatchObject({ kind: 'dispatched', dispatchId: 'ctx_fixture' })
+    expect(runRequestIds).toHaveLength(2)
+    expect(runRequestIds[1]).toBe(runRequestIds[0])
+    expect(preflightRequestIds).toHaveLength(2)
+    expect(preflightRequestIds[1]).toBe(preflightRequestIds[0])
+    expect(store.get(enrollment.watcherId)?.orchestrationRunId).toBe('run_fixture')
     adapter.dispose()
   })
 
@@ -104,7 +133,7 @@ describe('Heimdall orchestration adapter', () => {
       if (method === 'quirky.orchestration/serviceRunCreate') {
         return { run: { id: 'run_fixture' }, mutation: { requestId: params.requestId, replayed: false } }
       }
-      if (method === 'quirky.orchestration/serviceRegisterSubmissionPreflight') return undefined
+      if (method === 'quirky.orchestration/serviceRegisterSubmissionPreflight') return submissionPreflightReceipt(params)
       if (method === 'quirky.orchestration/serviceWorkerStart') throw new Error('connection closed after request')
       throw new Error(`unexpected method ${method}`)
     }), makeStore(makeEnrollment()), () => {})
@@ -131,7 +160,7 @@ describe('Heimdall orchestration adapter', () => {
         if (createAttempts === 1) throw new Error('run creation reply lost')
         return { run: { id: 'run_fixture' }, mutation: { requestId: params.requestId, replayed: true } }
       }
-      if (method === 'quirky.orchestration/serviceRegisterSubmissionPreflight') return undefined
+      if (method === 'quirky.orchestration/serviceRegisterSubmissionPreflight') return submissionPreflightReceipt(params)
       if (method === 'quirky.orchestration/serviceWorkerStart') return readyReceipt(params.runId, params.requestId)
       throw new Error(`unexpected method ${method}`)
     }), store, () => {})
@@ -170,34 +199,19 @@ describe('Heimdall orchestration adapter', () => {
     expect(calls).toEqual(['quirky.orchestration/serviceRunCreate'])
   })
 
-  test('recovery repeats the exact prepared request key instead of minting another dispatch', async () => {
-    const enrollment = makeEnrollment({ orchestrationRunId: 'run_fixture' })
-    const calls: { method: string; params: Record<string, unknown> }[] = []
-    const adapter = createOrchestrationAdapter(makeContext(async (method, params = {}) => {
-      calls.push({ method, params })
-      if (method === 'quirky.orchestration/serviceRunShow') return { run: { id: 'run_fixture' }, workers: [], questions: [] }
-      if (method === 'quirky.orchestration/serviceRegisterSubmissionPreflight') return undefined
-      if (method === 'quirky.orchestration/serviceWorkerStart') return readyReceipt(params.runId, params.requestId)
-      throw new Error(`unexpected method ${method}`)
-    }), makeStore(enrollment), () => {})
 
-    const result = await adapter.recover(enrollment, preparedAttempt())
-
-    expect(result).toMatchObject({ kind: 'dispatched', dispatchId: 'ctx_fixture' })
-    expect(calls.map((call) => call.method)).toEqual([
-      'quirky.orchestration/serviceRegisterSubmissionPreflight',
-      'quirky.orchestration/serviceWorkerStart'
-    ])
-    expect(calls[0]?.params).toEqual({ runId: 'run_fixture', method: 'quirky.heimdall/submissionPreflight' })
-  })
-
-  test('owner-run worker evidence drives billable contact and malformed rows cannot appear live', async () => {
+  test('certified live worker evidence bills with nullable contact metadata, while exit and malformed rows cannot extend it', async () => {
     let nowMs = 1_000
+    let lastContactAtMs: unknown = null
     let workerState: 'live' | 'exited' = 'live'
-    let omitWorkers = false
-    const enrollment = makeEnrollment({ orchestrationRunId: 'run_fixture' })
+    const workspacePath = realpathSync.native(mkdtempSync(join(tmpdir(), 'heimdall-orchestration-billing-')))
+    const enrollment = makeEnrollment({
+      orchestrationRunId: 'run_fixture',
+      workspaceKey: `fixture-host::${workspacePath}`,
+      workspacePath
+    })
     const store = makeStore(enrollment)
-    const attempt = preparedAttempt()
+    const attempt = preparedAttempt({ spec: 'fixture task', worktree: workspacePath })
     if (!attempt.requestId || !attempt.workerRequest) throw new Error('prepared fixture has no worker replay data')
     store.append(enrollment.watcherId, {
       kind: 'attempt',
@@ -209,26 +223,25 @@ describe('Heimdall orchestration adapter', () => {
       fingerprint: attempt.fingerprint,
       action: attempt.action,
       state: 'running',
+      dispatchId: 'ctx_fixture',
       requestId: attempt.requestId,
       workerRequest: attempt.workerRequest
     })
     const context = makeContext(async (method, params = {}) => {
-      if (method === 'quirky.orchestration/serviceWorkerStart') return readyReceipt(params.runId, params.requestId)
+      if (method === 'quirky.orchestration/serviceRegisterSubmissionPreflight') return submissionPreflightReceipt(params)
       if (method === 'quirky.orchestration/serviceCheck') return checkResult(params.requestId)
       if (method === 'quirky.orchestration/serviceRunShow') {
         return {
           run: { id: params.runId },
           questions: [],
-          ...(omitWorkers ? {} : {
-            workers: [{
-              dispatchId: 'ctx_fixture',
-              sessionId: 'session-fixture',
-              processIncarnation: 'process-fixture',
-              state: workerState,
-              assignmentActive: true,
-              lastContactAtMs: nowMs
-            }]
-          })
+          workers: [{
+            dispatchId: 'ctx_fixture',
+            sessionId: 'session-fixture',
+            processIncarnation: 'process-fixture',
+            state: workerState,
+            assignmentActive: true,
+            lastContactAtMs
+          }]
         }
       }
       throw new Error(`unexpected method ${method}`)
@@ -282,12 +295,12 @@ describe('Heimdall orchestration adapter', () => {
       expect(runner.status()).toMatchObject({ state: 'held', reason: 'worker-contact-unverifiable' })
 
       nowMs = 3_000
-      omitWorkers = true
+      lastContactAtMs = 'not-a-contact-time'
       await runner.pulse()
       expect(runner.status()).toMatchObject({
         state: 'held',
         reason: 'tick-error',
-        detail: expect.stringContaining('worker')
+        detail: expect.stringContaining('contact')
       })
       expect(store.journal(enrollment.watcherId).some((entry) =>
         entry.kind === 'interval-open' && entry.cause === 'worker-dispatched' &&
@@ -298,8 +311,15 @@ describe('Heimdall orchestration adapter', () => {
       expect(store.journal(enrollment.watcherId).filter((entry) => entry.kind === 'attempt').at(-1))
         .toMatchObject({ state: 'running', dispatchId: 'ctx_fixture' })
     } finally {
-      await runner.shutdown(0)
-      adapter.dispose()
+      try {
+        await runner.shutdown(0)
+      } finally {
+        try {
+          adapter.dispose()
+        } finally {
+          rmSync(workspacePath, { recursive: true, force: true })
+        }
+      }
     }
   })
 
@@ -379,7 +399,7 @@ function adapterForReceipt(overrides: Record<string, unknown>) {
     if (method === 'quirky.orchestration/serviceRunCreate') {
       return { run: { id: 'run_fixture' }, mutation: { requestId: params.requestId, replayed: false } }
     }
-    if (method === 'quirky.orchestration/serviceRegisterSubmissionPreflight') return undefined
+    if (method === 'quirky.orchestration/serviceRegisterSubmissionPreflight') return submissionPreflightReceipt(params)
     if (method === 'quirky.orchestration/serviceWorkerStart') return { ...readyReceipt(params.runId, params.requestId), ...overrides }
     throw new Error(`unexpected method ${method}`)
   }), makeStore(enrollment), () => {})
@@ -511,6 +531,19 @@ function readyReceipt(runId: unknown, requestId: unknown): Record<string, unknow
     effects: [],
     residualResources: [],
     mutation: { requestId, replayed: false }
+  }
+}
+
+function submissionPreflightReceipt(
+  params: Record<string, unknown>,
+  overrides: Record<string, unknown> = {}
+): Record<string, unknown> {
+  return {
+    runId: params.runId,
+    method: params.method,
+    registered: true,
+    mutation: { requestId: params.requestId, replayed: false },
+    ...overrides
   }
 }
 

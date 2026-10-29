@@ -1,5 +1,4 @@
-import { spawnSync } from 'node:child_process'
-import { readFileSync, readdirSync, statSync } from 'node:fs'
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
 import { dirname, extname, join, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import * as ts from 'typescript'
@@ -1012,7 +1011,25 @@ function shouldSkipPath(path: string): boolean {
   return /(?:^|[.-])(?:test|spec|fixture|fixtures)\.[^.]+$/i.test(file)
 }
 
-function collectSourceFiles(directory: string): string[] {
+/** Build artifacts are not source; tracked files remain enforced even when ignored. */
+function repositorySourceFiles(root: string): ReadonlySet<string> | undefined {
+  if (!existsSync(join(root, '.git'))) return undefined
+  const result = Bun.spawnSync(['git', 'ls-files', '--cached', '--others', '--exclude-standard', '-z'], {
+    cwd: root,
+    env: {
+      PATH: process.env.PATH,
+      HOME: root,
+      QUIRKY_HOME: root,
+      GIT_CONFIG_GLOBAL: '/dev/null',
+      GIT_CONFIG_SYSTEM: '/dev/null',
+      GIT_CONFIG_NOSYSTEM: '1'
+    }
+  })
+  if (result.exitCode !== 0) throw new Error(`Cannot enumerate repository source: ${result.stderr.toString().trim()}`)
+  return new Set(result.stdout.toString().split('\0').filter(Boolean).map((path) => resolve(root, path)))
+}
+
+function collectSourceFiles(directory: string, repositoryFiles?: ReadonlySet<string>): string[] {
   const results: string[] = []
   const visit = (path: string) => {
     const entries = readdirSync(path, { withFileTypes: true }).sort((left, right) => compareText(left.name, right.name))
@@ -1020,31 +1037,11 @@ function collectSourceFiles(directory: string): string[] {
       const absolute = join(path, entry.name)
       if (entry.isSymbolicLink() || shouldSkipPath(relative(directory, absolute))) continue
       if (entry.isDirectory()) visit(absolute)
-      else if (entry.isFile() && sourceExtensions.has(extname(entry.name).toLowerCase())) results.push(absolute)
+      else if (entry.isFile() && sourceExtensions.has(extname(entry.name).toLowerCase()) && (!repositoryFiles || repositoryFiles.has(absolute))) results.push(absolute)
     }
   }
   visit(directory)
   return results
-}
-
-function gitIgnoredSourceFiles(root: string, files: string[]): Set<string> {
-  if (files.length === 0) return new Set()
-  const paths = files.map((file) => relative(root, file).split(sep).join('/'))
-  const input = `${paths.join('\0')}\0`
-  const result = spawnSync('git', ['check-ignore', '-z', '--stdin'], {
-    cwd: root,
-    input,
-    encoding: 'utf8',
-    maxBuffer: Math.max(64 * 1024, Buffer.byteLength(input) + 1)
-  })
-  if (result.error) throw new Error(`Cannot inspect Git ignore rules for UI source files: ${result.error.message}`)
-  if (result.status === 128 && /not a git repository/i.test(result.stderr)) return new Set()
-  if (result.status !== 0 && result.status !== 1) {
-    const detail = result.stderr.trim()
-    throw new Error(`git check-ignore failed while collecting UI source files${detail ? `: ${detail}` : ` (exit code ${result.status})`}`)
-  }
-  const ignored = new Set(result.stdout.split('\0').filter(Boolean))
-  return new Set(files.filter((_, index) => ignored.has(paths[index])))
 }
 
 function ensureDirectory(path: string, label: string): void {
@@ -1063,18 +1060,17 @@ export function runUiLint(root = resolve(dirname(fileURLToPath(import.meta.url))
     ensureDirectory(uiSourceRoot, 'packages/ui/src')
     ensureDirectory(pluginsRoot, 'plugins')
     const pluginIds = parsePluginConfig(readFileSync(configPath, 'utf8'), immediatePluginDirectories(pluginsRoot))
+    const repositoryFiles = repositorySourceFiles(root)
     const files = [
-      ...collectSourceFiles(uiSourceRoot).map((path) => ({ path, plugin: false })),
+      ...collectSourceFiles(uiSourceRoot, repositoryFiles).map((path) => ({ path, plugin: false })),
       ...pluginIds.flatMap((id) => {
         const pluginRoot = resolve(pluginsRoot, id)
         if (relative(pluginsRoot, pluginRoot).startsWith('..') || pluginRoot === pluginsRoot) throw new Error(`Invalid plugin directory path: ${id}`)
         ensureDirectory(pluginRoot, `plugin ${id}`)
-        return collectSourceFiles(pluginRoot).map((path) => ({ path, plugin: true }))
+        return collectSourceFiles(pluginRoot, repositoryFiles).map((path) => ({ path, plugin: true }))
       })
     ]
-    const ignoredFiles = gitIgnoredSourceFiles(resolve(root), files.map(({ path }) => path))
     const diagnostics = files.flatMap(({ path, plugin }) => {
-      if (ignoredFiles.has(path)) return []
       const file = relative(root, path).split(sep).join('/')
       return scanSource(file, readFileSync(path, 'utf8'), { plugin })
     }).sort((left, right) => compareText(left.file, right.file) || left.line - right.line || left.column - right.column || compareText(left.rule, right.rule))

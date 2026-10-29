@@ -19,8 +19,9 @@ const AUTH_FAILURE_WINDOW_MS = 60_000
 const MOBILE_UNAVAILABLE_GUIDANCE = 'Mobile pairing is unavailable. Check the listener, network, and device registry, then try again.'
 const INVALID_ENDPOINT_GUIDANCE = 'No usable advertised address is available. Connect to Wi-Fi or Tailscale, then refresh the network interfaces or add a custom address.'
 const EXPOSURE_FAILED_GUIDANCE = 'The mobile listener could not be widened safely. It was restored to loopback; choose another reachable address or check the listener port.'
+// A params.scope may be domain data; envelope-level scope remains caller identity below.
 const CALLER_IDENTITY_FIELDS = [
-  'role', 'scope', 'caller', 'credential', 'credentials', 'token', 'connection', 'client', 'clientId', 'deviceToken', 'ownerGrantId', 'desktopClientId'
+  'role', 'caller', 'credential', 'credentials', 'token', 'connection', 'client', 'clientId', 'deviceToken', 'ownerGrantId', 'desktopClientId'
 ] as const
 const ENVELOPE_IDENTITY_FIELDS = [
   'deviceId', 'role', 'scope', 'caller', 'credential', 'credentials', 'token', 'connection',

@@ -160,7 +160,7 @@ export async function bootWorkspace(options: { extraBuiltins?: string[] } = {}):
     throw error
   }
 }
-export async function bootWorkspaceWithAgent(): Promise<WorkspaceAgentFixture> {
+export async function bootWorkspaceWithAgent(options: { extraEnv?: Record<string, string> } = {}): Promise<WorkspaceAgentFixture> {
   const realGit = Bun.which('git')
   if (!realGit) throw new Error('Git is required to start the real-agent workspace fixture.')
   const fixtureRoot = mkdtempSync(join(tmpdir(), 'quirky-task-agent-gh-'))
@@ -172,7 +172,7 @@ export async function bootWorkspaceWithAgent(): Promise<WorkspaceAgentFixture> {
   try {
     e2e = await startAgentsE2E({
       fakes: { goose: { raw: true, steps: [{ afterMs: 40, write: PASTE_READY }] } },
-      extraEnv: { QUIRKY_TEST_FIXTURE_DIR: fixtureRoot }
+      extraEnv: { ...(options.extraEnv ?? {}), QUIRKY_TEST_FIXTURE_DIR: fixtureRoot }
     })
     const ghPath = join(e2e.fakebin, 'gh')
     writeFileSync(ghPath, `#!${process.execPath}\n${workspaceFixtureSource}\n`)

@@ -181,11 +181,22 @@
 - **Options:** relabel the old S manifest as PASS; rely on source inspection alone; keep the historical review verdict and verify the actual fixed source
 - **Chose:** Commit the S1 fixture-budget correction as ce0f355f and run the complete `bun scripts/suite.ts plugins/quirky.editor scripts` plus `bun run typecheck`. All 33 remote test files passed on the initial run, the one macOS-only file passed, and suite-result returned ok true with an empty flaky list. Root/UI-lint/mobile/prepared-desktop typecheck passed. The combined commit/check command exited 0 in 127.37s.
 - **Why:** This directly exercises the corrected review-note fixture together with every editor and scripts test, without weakening assertions or relabeling earlier flaky runs. S1's requested budget is applied and the post-fix gate is green. There is no unaddressed accepted finding; no second model closure round was run, following LOOP's cap. The formal manifests still correctly describe the earlier reviewed snapshot.
-- **Evidence:** .quirk/build-loop/fix-test-editor-1028/final-{tests,types}.log; source ce0f355f; completed C/S/X receipt and D16 adjudication
+- **Evidence:** .quirk/build-loop/fix-test-editor-1028/pre-recovery-final-{tests,types}.log; source ce0f355f; completed C/S/X receipt and D16 adjudication
 - **Reversibility:** easy
 - **Confidence:** high for exercised checks and applied requirement
 - **Revisit if:** canonical merge-result verification or later independent evidence identifies a regression
 - **Source:** assumed — autonomous
 
+## D18: Converge on the landed Git inventory during required failed-land recovery
+- **Question:** How should the actual canonical-land conflict with a concurrent lint correction be resolved?
+- **Options:** keep both Git discovery helpers; override Accounts' landed convention; use its canonical inventory and remove this item's duplicate path
+- **Chose:** Follow the required failed-land recovery merge. Keep Accounts' repositorySourceFiles implementation using isolated-environment `git ls-files --cached --others --exclude-standard`; remove this item's check-ignore helper/import/call and duplicate regression. Retain the canonical regression covering ignored generated artifacts, forced-tracked ignored source and ordinary untracked source. README semantics remain accurate. No plugin/path exemption or assertion weakening is introduced.
+- **Why:** Accounts D13 establishes the repository-wide discovery authority and Mobile D15 explicitly requires convergence on it. Both implementations address the same generated-output problem; retaining both adds work and a second convention without behavior. The canonical implementation also isolates Git environment overrides and handles non-Git fixture roots without a Git invocation.
+- **Evidence:** first land exit 1 in 1.99s; actual scripts/ui-lint.ts import conflict; complete recovery logs ui-restyle-accounts D1–D15, fix-test-mobile-1028 D1–D16, fix-test-heimdall-1028 D1–D12 and fix-test-loops-1028 D1–D11, including raw Progress; merged canonical inventory regression
+- **Reversibility:** easy
+- **Confidence:** high for contract equivalence and explicit incoming authority; composed checks follow
+- **Revisit if:** composed checks show a source-admission mismatch
+- **Source:** supersedes fix-test-editor-1028 D10
+
 ## Progress
-Ready for canonical land. Source ce0f355f closes S1; final complete affected gate passed 33/33 remote plus 1/1 macOS file with no retry/flaky entry, and full root typecheck passed. One bounded deep C/S/X round and its single accepted fix batch are complete; historical review verdicts and prior retries are preserved. Actual CSV, guarded web and macOS linked-worktree API smoke evidence and cleanup limits remain explicit. All four incoming decision logs were consumed after the sole catch-up; no source agent/model/runtime job remains. Commit this receipt, detach and run authoritative queue land for this item only; on a failed land follow the required recovery path.
+Required failed-land recovery is resolved: use the landed canonical Git inventory only, keep its full behavioral regression, and preserve all incoming Accounts/Mobile/Heimdall/Loops authorities. All four recovery decision logs were read completely. The original accepted S1 remains fixed; its pre-recovery clean gate and historical review/smoke limits are preserved. Next: commit the merge resolution, rerun complete editor/scripts and typecheck on this composed source, then commit the receipt and retry authoritative land without another normal catch-up.

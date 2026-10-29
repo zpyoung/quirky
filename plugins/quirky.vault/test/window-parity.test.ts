@@ -119,6 +119,23 @@ function buttonNamed(root: ParentNode, text: string): HTMLButtonElement {
   if (!button) throw new Error(`missing button: ${text}`)
   return button
 }
+function selectByLabel(root: ParentNode, text: string): HTMLSelectElement {
+  const label = [...root.querySelectorAll<HTMLLabelElement>('label')].find((candidate) => candidate.textContent?.trim() === text)
+  const select = label?.control
+  if (!(select instanceof HTMLSelectElement)) throw new Error(`Missing select: ${text}`)
+  return select
+}
+function dialogByTitle(root: ParentNode, title: string): HTMLElement | null {
+  return [...root.querySelectorAll<HTMLElement>('[role="dialog"][aria-labelledby]')].find((dialog) => {
+    const titleText = (dialog.getAttribute('aria-labelledby') ?? '')
+      .split(/\s+/)
+      .map((id) => dialog.ownerDocument.getElementById(id)?.textContent?.trim())
+      .filter(Boolean)
+      .join(' ')
+    return titleText === title
+  }) ?? null
+}
+
 
 function menuButton(document: Document, sessionId: string): HTMLButtonElement {
   const row = document.querySelector<HTMLElement>(`[data-vault-session-row="${sessionId}"]`)
@@ -269,7 +286,7 @@ test(
         await reportOf<HistoryReport>(features, HISTORY_PANEL, `${label} grouping`, (state) => state.group === value)
       }
 
-      const historyDepth = dialog.querySelector<HTMLSelectElement>('[aria-label="History depth"]')!
+      const historyDepth = selectByLabel(dialog, 'History depth')
       setSelect(historyDepth, '500')
       await reportOf<HistoryReport>(features, HISTORY_PANEL, '500-session depth', (state) => state.sessionLimit === 500)
       setSelect(historyDepth, '1000')
@@ -279,7 +296,7 @@ test(
       setSelect(historyDepth, '250')
       await reportOf<HistoryReport>(features, HISTORY_PANEL, 'recommended history depth', (state) => state.sessionLimit === 250)
 
-      const sort = document.querySelector<HTMLSelectElement>('[aria-label="Sort sessions"]')!
+      const sort = selectByLabel(document, 'Sort')
       setSelect(sort, 'created')
       await reportOf<HistoryReport>(features, HISTORY_PANEL, 'created-time browse sort', (state) => state.browseSort === 'created')
 
@@ -297,7 +314,7 @@ test(
       const query = await until(features, () => document.querySelector<HTMLInputElement>('[data-vault-search]'))
       await typeInto(query, 'paritycontrolneedle')
       await reportOf<HistoryReport>(features, HISTORY_PANEL, 'indexed query matches', (state) => state.query === 'paritycontrolneedle' && !state.loading && state.visibleIds.length > 0)
-      const searchSort = document.querySelector<HTMLSelectElement>('[aria-label="Sort sessions"]')!
+      const searchSort = selectByLabel(document, 'Sort')
       setSelect(searchSort, 'newest')
       await reportOf<HistoryReport>(features, HISTORY_PANEL, 'newest search sort', (state) => state.searchSort === 'newest')
 
@@ -314,8 +331,8 @@ test(
       const hideEmptyForPersistence = [...persistDialog.querySelectorAll<HTMLInputElement>('input[type=\"checkbox\"]')].find((input) => input.closest('label')?.textContent?.includes('Hide empty sessions'))
       if (!hideEmptyForPersistence) throw new Error('Hide empty sessions control is missing after reset.')
       hideEmptyForPersistence.click()
-      setSelect(persistDialog.querySelector<HTMLSelectElement>('[aria-label=\"History depth\"]')!, '500')
-      setSelect(document.querySelector<HTMLSelectElement>('[aria-label=\"Sort sessions\"]')!, 'created')
+      setSelect(selectByLabel(persistDialog, 'History depth'), '500')
+      setSelect(selectByLabel(document, 'Sort'), 'created')
       const geminiForPersistence = [...persistDialog.querySelectorAll<HTMLInputElement>('input[type=\"checkbox\"]')].find((input) => input.closest('label')?.textContent?.includes('Gemini'))
       if (!geminiForPersistence) throw new Error('The Gemini history filter is missing after reset.')
       geminiForPersistence.click()
@@ -323,7 +340,7 @@ test(
       buttonNamed(persistDialog, 'Close').click()
       await typeInto(query, 'paritycontrolneedle')
       await reportOf<HistoryReport>(features, HISTORY_PANEL, 'query restored for search sort', (state) => state.query === 'paritycontrolneedle' && !state.loading)
-      setSelect(document.querySelector<HTMLSelectElement>('[aria-label=\"Sort sessions\"]')!, 'newest')
+      setSelect(selectByLabel(document, 'Sort'), 'newest')
       await reportOf<HistoryReport>(features, HISTORY_PANEL, 'stable newest search sort before restart', (state) => state.searchSort === 'newest')
       await typeInto(query, '')
       await reportOf<HistoryReport>(features, HISTORY_PANEL, 'transient query cleared', (state) => state.query === '' && !state.loading)
@@ -400,7 +417,7 @@ test(
       menuButton(document, rowA.id).click()
       const deleteMenu = await until(features, () => document.body.querySelector<HTMLElement>(`[data-vault-actions="${rowA.id}"]`))
       buttonNamed(deleteMenu, 'Delete').click()
-      const firstDialog = await until(features, () => document.querySelector<HTMLElement>('[role="dialog"][aria-label="Delete this agent session?"]'))
+      const firstDialog = await until(features, () => dialogByTitle(document, 'Delete this agent session?'))
       buttonNamed(firstDialog, 'Cancel').click()
       expect(existsSync(pathA)).toBe(true)
       expect(features.calls.some((call) => call.method === 'quirky.vault/deleteSession' && call.settled)).toBe(false)
@@ -410,7 +427,7 @@ test(
         menuButton(document, rowA.id).click()
         const errorMenu = await until(features, () => document.body.querySelector<HTMLElement>(`[data-vault-actions="${rowA.id}"]`))
         buttonNamed(errorMenu, 'Delete').click()
-        const confirmDialog = await until(features, () => document.querySelector<HTMLElement>('[role="dialog"][aria-label="Delete this agent session?"]'))
+        const confirmDialog = await until(features, () => dialogByTitle(document, 'Delete this agent session?'))
         buttonNamed(confirmDialog, 'Delete').click()
         const failure = await until(features, () => [...document.querySelectorAll<HTMLElement>('[role="alert"]')].find((alert) => alert.textContent?.includes('owned delete refusal')))
         expect(failure.textContent).toContain('owned delete refusal')
@@ -465,7 +482,7 @@ test.skipIf(process.platform !== 'darwin')(
       menuButton(features.win.document, session.id).click()
       const menu = await until(features, () => features!.win.document.body.querySelector<HTMLElement>(`[data-vault-actions=\"${session.id}\"]`))
       buttonNamed(menu, 'Delete').click()
-      const confirmation = await until(features, () => features!.win.document.querySelector<HTMLElement>('[role=\"dialog\"][aria-label=\"Delete this agent session?\"]'))
+      const confirmation = await until(features, () => dialogByTitle(features!.win.document, 'Delete this agent session?'))
       buttonNamed(confirmation, 'Delete').click()
       await waitFor('confirmed source moved to Trash', async () => !existsSync(sourcePath) ? true : undefined)
       expect(readFileSync(volume.trashPathFor(basename(sourcePath)))).toEqual(originalBytes)
