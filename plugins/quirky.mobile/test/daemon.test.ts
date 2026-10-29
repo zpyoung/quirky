@@ -25,7 +25,7 @@ async function boot(home?: string): Promise<Harness> {
   return await startHarness({
     home: isolatedHome,
     builtinPluginsDir: makeBuiltinDir(isolatedHome, {
-      real: ['quirky.mobile', 'quirky.agents', 'quirky.session', 'quirky.terminal', 'quirky.ask', 'quirky.agent-status', 'quirky.worktree', 'quirky.repo', 'quirky.structured'],
+      real: ['quirky.mobile', 'quirky.agents', 'quirky.session', 'quirky.terminal', 'quirky.ask', 'quirky.agent-status', 'quirky.worktree', 'quirky.repo', 'quirky.structured', 'quirky.cli'],
       fakes: []
     })
   })
@@ -127,6 +127,7 @@ describe('mobile daemon integration', () => {
     await expect(mobile.call('daemon.stop', {})).rejects.toMatchObject({ code: -32001 })
     await mobile.call('status.get', {}, { requestId: 'cached-mobile-status' })
     await expect(mobile.call('status.get', {}, { requestId: 'cached-mobile-status', deviceToken: 'not-the-paired-token' })).rejects.toMatchObject({ code: -32001 })
+    await expect(mobile.call('status.get', {}, { scope: 'cli' })).rejects.toMatchObject({ code: -32001 })
     await expect(mobile.call('client.hello', { role: 'mobile', protocolVersion: 2 })).rejects.toMatchObject({ code: -32001 })
     const plaintextPeer = MobileTestClient.connectWithoutAuthentication(`ws://127.0.0.1:${currentState.listener.port}`, offer.publicKeyB64)
     await plaintextPeer.readyForAuthentication
