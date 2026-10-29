@@ -11,6 +11,7 @@ type Control = HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement
 
 const normalizeText = (value: string | null | undefined): string => value?.replace(/\s+/g, ' ').trim() ?? ''
 const visibleText = (node: Node): string => {
+  if (node.nodeType === Node.TEXT_NODE) return node.textContent ?? ''
   if (node instanceof Element && node.getAttribute('aria-hidden') === 'true') return ''
   return [...node.childNodes].map(visibleText).join('')
 }

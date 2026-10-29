@@ -745,6 +745,7 @@ const openMenu = () =>
     .find((root) => !root.parentElement?.closest('[role="menu"]') && !root.closest('[aria-hidden="true"]')) ?? null
 const menuItems = () => [...(openMenu()?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]') ?? [])]
 const visibleMenuText = (node: Node): string => {
+  if (node.nodeType === Node.TEXT_NODE) return node.textContent ?? ''
   if (node instanceof Element && node.getAttribute('aria-hidden') === 'true') return ''
   return [...node.childNodes].map(visibleMenuText).join('')
 }
