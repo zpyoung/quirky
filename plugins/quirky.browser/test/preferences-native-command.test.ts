@@ -14,6 +14,7 @@ for (const available of [false, true]) {
       nativeBrowser: {
         available,
         clearPartitionAvailable: false,
+        previewAvailable: false,
         mount: () => { throw new Error('Native mount must not run in this fixture') },
         clearPartition: async () => { clears += 1 }
       }

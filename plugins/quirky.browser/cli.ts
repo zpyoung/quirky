@@ -27,7 +27,7 @@ const COMMAND_METHODS: Readonly<Record<string, CliBrowserMethod>> = {
   dialogAccept: 'dialogAccept', dialogDismiss: 'dialogDismiss', detectBrowsers: 'detectBrowsers',
   importFile: 'importCookies', importBrowser: 'importCookies', importStart: 'importStart', importGet: 'importGet', importList: 'importList',
   identityGet: 'identityGet', identitySet: 'identitySet', openUrl: 'openUrl', exec: 'exec',
-  paneOpen: 'paneOpen', paneState: 'paneState', paneNavigate: 'paneNavigate', paneControl: 'paneControl',
+  paneOpen: 'paneOpen', paneState: 'paneState', paneNavigate: 'paneNavigate', panePreview: 'panePreview', paneControl: 'paneControl',
   paneReport: 'paneReport', paneClose: 'paneClose', paneSuggestions: 'paneSuggestions', paneWatch: 'paneWatch',
   paneWatchStop: 'paneWatchStop', paneFrameAck: 'paneFrameAck', paneInput: 'paneInput', paneRespond: 'paneRespond', paneDownload: 'paneDownload',
   designArm: 'designArm', designRead: 'designRead', designHover: 'designHover', designCancel: 'designCancel',

@@ -1,7 +1,12 @@
 import {
   NATIVE_BROWSER_NAVIGATION_RULES,
   NATIVE_BROWSER_PARTITION_RE,
+  NATIVE_BROWSER_PREVIEW_NAVIGATION_RULES,
+  NATIVE_BROWSER_PREVIEW_SCHEME,
+  isNativeBrowserPreviewGrant,
+  isNativeBrowserPreviewUrl,
   type NativeBrowserCapability,
+  type NativeBrowserPreviewGrant,
   type NativeBrowserHandle,
   type NativeBrowserOptions,
   type NativeBrowserRequest,
@@ -30,11 +35,14 @@ export type NativeBrowserAdapter = {
     onState: (state: NativeBrowserState) => void
   ): NativeBrowserAdapterHandle
   readonly clearPartitionAvailable: boolean
+  readonly previewAvailable: boolean
   clearPartition(partition: string): Promise<void>
 }
 
 export type NativeBrowserShellBridge = {
-  claimNativeBrowserView(params: { viewId: number; owner: string; partition: string }): Promise<{ zoomFactor: number }>
+  /** Set by a desktop host whose SDK enforces isolated previews. */
+  readonly previewAvailable?: boolean
+  claimNativeBrowserView(params: { viewId: number; owner: string; partition: string; preview?: NativeBrowserPreviewGrant }): Promise<{ zoomFactor: number }>
   setNativeBrowserZoom(params: { viewId: number; owner: string; level: number }): Promise<{ zoomFactor: number }>
   releaseNativeBrowserView(params: { viewId: number; owner: string }): Promise<{ released: true }>
 }
@@ -376,7 +384,8 @@ function parseNativeBrowserEvaluationMessage(value: unknown): NativeBrowserEvalu
 }
 
 
-function allowedUrl(raw: string): boolean {
+function allowedUrl(raw: string, preview?: NativeBrowserPreviewGrant): boolean {
+  if (preview) return raw === 'about:blank' || isNativeBrowserPreviewUrl(raw, preview.id)
   let url: URL
   try {
     url = new URL(raw)
@@ -396,7 +405,7 @@ function normalizeUrl(raw: string): string {
   return new URL(raw).href
 }
 
-function parseGuestState(value: unknown): GuestStateMessage | null {
+function parseGuestState(value: unknown, preview?: NativeBrowserPreviewGrant): GuestStateMessage | null {
   let message = value
   if (typeof value === 'string') {
     try {
@@ -408,7 +417,7 @@ function parseGuestState(value: unknown): GuestStateMessage | null {
   if (!message || typeof message !== 'object') return null
   const state = message as Partial<GuestStateMessage>
   if (
-    state.type !== 'quirky-native-browser-state' || typeof state.url !== 'string' || !allowedUrl(state.url) ||
+    state.type !== 'quirky-native-browser-state' || typeof state.url !== 'string' || !allowedUrl(state.url, preview) ||
     typeof state.title !== 'string' || typeof state.loading !== 'boolean' ||
     !Number.isInteger(state.findCurrent) || !Number.isInteger(state.findTotal) ||
     (state.findCurrent as number) < 0 || (state.findTotal as number) < 0 || (state.findCurrent as number) > (state.findTotal as number)
@@ -416,13 +425,13 @@ function parseGuestState(value: unknown): GuestStateMessage | null {
   return state as GuestStateMessage
 }
 
-function eventUrl(detail: unknown): string | null {
+function eventUrl(detail: unknown, preview?: NativeBrowserPreviewGrant): string | null {
   const raw = typeof detail === 'string'
     ? detail
     : detail && typeof detail === 'object' && typeof (detail as { url?: unknown }).url === 'string'
       ? (detail as { url: string }).url
       : null
-  return raw && allowedUrl(raw) ? normalizeUrl(raw) : null
+  return raw && allowedUrl(raw, preview) ? normalizeUrl(raw) : null
 }
 
 function createWebviewTag(): WebviewTag {
@@ -491,8 +500,15 @@ class ElectrobunNativeBrowserMount implements NativeBrowserAdapterHandle {
     const masks = [...NATIVE_BROWSER_DEFAULT_MASKS, ...(this.options.masks ?? [])]
     child.setAttribute('sandbox', '')
     child.setAttribute('renderer', 'native')
-    child.setAttribute('partition', this.options.partition)
-    child.setAttribute('navigation-rules', JSON.stringify(NATIVE_BROWSER_NAVIGATION_RULES))
+    if (this.options.preview) {
+      // The SDK gives the view a fresh nonpersistent store and installs its network, permission and
+      // download fences before about:blank loads; a browsing partition never applies.
+      child.setAttribute('isolated-preview', NATIVE_BROWSER_PREVIEW_SCHEME)
+      child.setAttribute('navigation-rules', JSON.stringify(NATIVE_BROWSER_PREVIEW_NAVIGATION_RULES))
+    } else {
+      child.setAttribute('partition', this.options.partition)
+      child.setAttribute('navigation-rules', JSON.stringify(NATIVE_BROWSER_NAVIGATION_RULES))
+    }
     child.setAttribute('masks', masks.join(','))
     child.setAttribute('preload', pagePreload ??= `(${installNativeBrowserPreload.toString()})()`)
     // SDK webviewTagInit does not apply constructor navigationRules to the native view.
@@ -509,7 +525,12 @@ class ElectrobunNativeBrowserMount implements NativeBrowserAdapterHandle {
     const viewId = await this.waitForViewId(child)
     if (viewId === null || this.disposed) return
     this.viewId = viewId
-    await this.bridge.claimNativeBrowserView({ viewId, owner: this.owner, partition: this.options.partition })
+    await this.bridge.claimNativeBrowserView({
+      viewId,
+      owner: this.owner,
+      partition: this.options.partition,
+      ...(this.options.preview ? { preview: this.options.preview } : {})
+    })
     this.claimed = true
     if (this.disposed) {
       await this.releaseClaim()
@@ -633,7 +654,7 @@ class ElectrobunNativeBrowserMount implements NativeBrowserAdapterHandle {
       this.navigationPending = true
       this.invalidateEvaluations('native browser evaluation was cancelled by navigation')
     }
-    const url = eventUrl(detail)
+    const url = eventUrl(detail, this.options.preview)
     if (!url) return
     if (this.expectedNavigation !== null) {
       if (url === this.expectedNavigation) {
@@ -647,7 +668,7 @@ class ElectrobunNativeBrowserMount implements NativeBrowserAdapterHandle {
   }
 
   private onNavigation(detail: unknown, navigationCommit = false): void {
-    const url = eventUrl(detail)
+    const url = eventUrl(detail, this.options.preview)
     if (!url || (this.expectedNavigation !== null && url !== this.expectedNavigation && !this.navigationStarted)) return
     if (this.expectedNavigation !== null && url !== this.expectedNavigation && this.waiter?.kind === 'navigation') {
       this.waiter.expectedUrl = url
@@ -664,7 +685,7 @@ class ElectrobunNativeBrowserMount implements NativeBrowserAdapterHandle {
   }
 
   private onGuestState(detail: unknown): void {
-    const guest = parseGuestState(detail)
+    const guest = parseGuestState(detail, this.options.preview)
     if (!guest) return
     const url = normalizeUrl(guest.url)
     if (url !== this.documentUrl || this.navigationPending) return
@@ -913,10 +934,14 @@ export function createNativeBrowserCapability(adapter?: NativeBrowserAdapter): N
   return {
     available,
     clearPartitionAvailable: adapter?.clearPartitionAvailable === true,
+    previewAvailable: adapter?.previewAvailable === true,
     mount(element, options) {
       if (!adapter) throw new Error('Native browser is unavailable outside the Quirky desktop app')
-      if (!options.id || !allowedUrl(options.url)) throw new Error('unsupported native browser URL')
-      if (!NATIVE_BROWSER_PARTITION_RE.test(options.partition)) throw new Error('unsupported browser partition')
+      if (options.preview !== undefined) {
+        if (!adapter.previewAvailable) throw new Error('Isolated workspace previews are unavailable: this host cannot enforce their network, permission and download policy')
+        if (!isNativeBrowserPreviewGrant(options.preview)) throw new Error('invalid workspace preview grant')
+      } else if (!NATIVE_BROWSER_PARTITION_RE.test(options.partition)) throw new Error('unsupported browser partition')
+      if (!options.id || !allowedUrl(options.url, options.preview)) throw new Error('unsupported native browser URL')
       if (!levelIsValid(options.zoom)) throw new Error('invalid native browser zoom level')
       const previous = current
       const afterDispose = previous ? disposeMount(previous) : lastDispose
@@ -951,7 +976,7 @@ export function createNativeBrowserCapability(adapter?: NativeBrowserAdapter): N
       mount.publicHandle = {
         request: async (request) => {
           if (mount.disposed || current !== mount) throw new Error('native browser handle is disposed')
-          if (request.action === 'navigate' && !allowedUrl(request.url)) throw new Error('unsupported native browser URL')
+          if (request.action === 'navigate' && !allowedUrl(request.url, options.preview)) throw new Error('unsupported native browser URL')
           if (request.action === 'zoom' && !levelIsValid(request.level)) throw new Error('invalid native browser zoom level')
           const generation = ++mount.generation
           const state = await mount.adapterHandle.request(request)
@@ -1001,6 +1026,7 @@ export function createNativeBrowserCapability(adapter?: NativeBrowserAdapter): N
 export function createElectrobunNativeBrowserAdapter(bridge: NativeBrowserShellBridge): NativeBrowserAdapter {
   return {
     clearPartitionAvailable: false,
+    previewAvailable: bridge.previewAvailable === true,
     mount: (element, options, afterDispose, onState) => new ElectrobunNativeBrowserMount(element, options, bridge, afterDispose, onState),
     async clearPartition(partition) {
       if (!NATIVE_BROWSER_PARTITION_RE.test(partition)) throw new Error('unsupported browser partition')

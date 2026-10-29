@@ -35,6 +35,8 @@ export class BrowserView {
   readonly url: string | null
   readonly navigationRules: string | null
   readonly allowedProtocols: { views: boolean; appData: boolean }
+  readonly isolatedPreview: string | null
+  setIsolatedPreviewHandler(handler: ((request: Request) => Response | Promise<Response>) | null): void
   setNavigationRules(rules: string[]): void
   setPageZoom(factor: number): void
   getPageZoom(): number

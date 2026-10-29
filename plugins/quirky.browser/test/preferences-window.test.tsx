@@ -95,6 +95,7 @@ function makeContext(): UiPluginContext {
     nativeBrowser: {
       available: false,
       clearPartitionAvailable: false,
+      previewAvailable: false,
       mount: () => { throw new Error('Native views are unavailable in this owned DOM fixture.') },
       clearPartition: async () => { throw new Error('Native storage completion is unavailable in this owned DOM fixture.') }
     },

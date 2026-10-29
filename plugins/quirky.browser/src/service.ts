@@ -228,7 +228,7 @@ export class BrowserService {
     }
     if ((PANE_METHODS as readonly string[]).includes(name)) {
       const result = await this.panes.call(name as PaneMethod, params, caller)
-      if (name === 'paneClose' || name === 'paneWatchStop' || name === 'paneNavigate') {
+      if (name === 'paneClose' || name === 'paneWatchStop' || name === 'paneNavigate' || name === 'panePreview') {
         const pane = typeof params.pane === 'string' ? params.pane : ''
         if (pane !== '') await this.design.cancelPane(pane)
       }

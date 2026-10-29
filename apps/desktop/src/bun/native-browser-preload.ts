@@ -37,7 +37,10 @@ new Electroview({ rpc })
 const requests = (rpc as unknown as { request: NativeBrowserPreloadBridge & DesktopRequestBridge }).request
 
 
-const bridge: NativeBrowserPreloadBridge = {
+const bridge: NativeBrowserPreloadBridge & { readonly previewAvailable: boolean } = {
+  // The pinned Electrobun fork enforces isolated previews on every macOS it supports; the main
+  // claim still refuses a view the SDK did not create as one.
+  previewAvailable: true,
   claimNativeBrowserView: (params) => requests.claimNativeBrowserView(params),
   setNativeBrowserZoom: (params) => requests.setNativeBrowserZoom(params),
   releaseNativeBrowserView: (params) => requests.releaseNativeBrowserView(params)

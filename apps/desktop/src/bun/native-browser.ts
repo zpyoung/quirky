@@ -1,6 +1,10 @@
 import {
   NATIVE_BROWSER_NAVIGATION_RULES,
   NATIVE_BROWSER_PARTITION_RE,
+  NATIVE_BROWSER_PREVIEW_NAVIGATION_RULES,
+  NATIVE_BROWSER_PREVIEW_SCHEME,
+  isNativeBrowserPreviewGrant,
+  type NativeBrowserPreviewGrant,
   type DesktopRevealRequest,
   type DesktopRevealResult,
   type DesktopWindowCloseResult,
@@ -9,12 +13,13 @@ import {
   type FolderPickerRequest,
   type FolderPickerResult
 } from '@quirky/protocol'
+import { createWorkspacePreviewHandler, type WorkspacePreviewHandler } from './workspace-preview'
 
 export type NativeBrowserHostRPC = {
   bun: {
     requests: {
       claimNativeBrowserView: {
-        params: { viewId: number; owner: string; partition: string }
+        params: { viewId: number; owner: string; partition: string; preview?: NativeBrowserPreviewGrant }
         response: { zoomFactor: number }
       }
       setNativeBrowserZoom: {
@@ -47,6 +52,9 @@ export type NativeBrowserViewPort = {
   url: string | null
   navigationRules: string | null
   allowedProtocols: { views: boolean; appData: boolean }
+  /** The scheme of an SDK isolated preview; absent on SDKs without isolated previews. */
+  isolatedPreview?: string | null
+  setIsolatedPreviewHandler?(handler: WorkspacePreviewHandler | null): void
   setNavigationRules(rules: string[]): void
   setPageZoom(factor: number): void
   getPageZoom(): number
@@ -56,6 +64,7 @@ export type NativeBrowserViewPort = {
 export type NativeBrowserHostDeps = {
   getWindow(): { id: number; webview: { id: number } } | null
   getView(id: number): NativeBrowserViewPort | undefined
+  createPreviewHandler?(grant: NativeBrowserPreviewGrant): WorkspacePreviewHandler
 }
 
 export type NativeBrowserHandlers = {
@@ -65,10 +74,15 @@ export type NativeBrowserHandlers = {
   dispose(): void
 }
 
-type Claim = { viewId: number; owner: string; partition: string }
+type Claim = { viewId: number; owner: string; partition: string; preview: boolean }
 
 function invalidChild(): Error {
   return new Error('native browser view is not an owned sandboxed child')
+}
+
+/** An isolated preview child: the SDK's fences, not a browsing partition, define what it may reach. */
+function isPreviewChild(view: NativeBrowserViewPort): boolean {
+  return view.isolatedPreview === NATIVE_BROWSER_PREVIEW_SCHEME && typeof view.setIsolatedPreviewHandler === 'function'
 }
 
 function isZoomLevel(level: number): boolean {
@@ -96,10 +110,12 @@ export function createNativeBrowserHandlers(deps: NativeBrowserHostDeps): Native
     if (!claim || claim.viewId !== viewId || claim.owner !== owner) throw new Error('native browser view is not owned by this handle')
     const view = deps.getView(viewId)
     const window = deps.getWindow()
+    const rules = claim.preview ? NATIVE_BROWSER_PREVIEW_NAVIGATION_RULES : NATIVE_BROWSER_NAVIGATION_RULES
     if (
       !view || !window || view.id !== viewId || view.windowId !== window.id || view.hostWebviewId !== window.webview.id ||
-      !view.sandbox || view.renderer !== 'native' || view.partition !== claim.partition ||
-      view.allowedProtocols.appData || view.navigationRules !== JSON.stringify(NATIVE_BROWSER_NAVIGATION_RULES)
+      !view.sandbox || view.renderer !== 'native' || isPreviewChild(view) !== claim.preview ||
+      (!claim.preview && view.partition !== claim.partition) ||
+      view.allowedProtocols.appData || view.navigationRules !== JSON.stringify(rules)
     ) {
       claim = null
       throw invalidChild()
@@ -109,14 +125,19 @@ export function createNativeBrowserHandlers(deps: NativeBrowserHostDeps): Native
 
   return {
     async claim(params) {
-      if (!Number.isSafeInteger(params.viewId) || params.viewId <= 0 || typeof params.owner !== 'string' || params.owner.length === 0 || !NATIVE_BROWSER_PARTITION_RE.test(params.partition)) {
+      const preview = params.preview !== undefined
+      if (
+        !Number.isSafeInteger(params.viewId) || params.viewId <= 0 || typeof params.owner !== 'string' || params.owner.length === 0 ||
+        (preview ? !isNativeBrowserPreviewGrant(params.preview) : !NATIVE_BROWSER_PARTITION_RE.test(params.partition))
+      ) {
         throw invalidChild()
       }
       const window = deps.getWindow()
       const view = deps.getView(params.viewId)
       if (
         !window || !view || view.windowId !== window.id || view.hostWebviewId !== window.webview.id ||
-        !view.sandbox || view.renderer !== 'native' || view.partition !== params.partition ||
+        !view.sandbox || view.renderer !== 'native' || isPreviewChild(view) !== preview ||
+        (!preview && view.partition !== params.partition) ||
         view.allowedProtocols.appData || view.url !== 'about:blank'
       ) throw invalidChild()
       if (claim && !deps.getView(claim.viewId)) claim = null
@@ -126,10 +147,15 @@ export function createNativeBrowserHandlers(deps: NativeBrowserHostDeps): Native
 
       // `webviewTagInit` creates the view before applying its policy; it always starts on inert about:blank.
       // This public SDK call completes before claim resolves and before the renderer can load a target URL.
-      view.setNavigationRules([...NATIVE_BROWSER_NAVIGATION_RULES])
-      if (view.navigationRules !== JSON.stringify(NATIVE_BROWSER_NAVIGATION_RULES)) throw new Error('native browser navigation policy was not installed')
+      const rules = preview ? NATIVE_BROWSER_PREVIEW_NAVIGATION_RULES : NATIVE_BROWSER_NAVIGATION_RULES
+      view.setNavigationRules([...rules])
+      if (view.navigationRules !== JSON.stringify(rules)) throw new Error('native browser navigation policy was not installed')
+      if (params.preview) {
+        // Until this runs the SDK answers every preview request with 404, so nothing is readable early.
+        view.setIsolatedPreviewHandler!((deps.createPreviewHandler ?? createWorkspacePreviewHandler)(params.preview))
+      }
       const zoomFactor = view.getPageZoom()
-      claim = { viewId: params.viewId, owner: params.owner, partition: params.partition }
+      claim = { viewId: params.viewId, owner: params.owner, partition: params.partition, preview }
       return { zoomFactor }
     },
     async setZoom(params) {

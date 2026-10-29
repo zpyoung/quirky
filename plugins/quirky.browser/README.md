@@ -59,6 +59,7 @@ Browser panes are real hosted tabs in the worktree's terminal workspace. `pane o
 quirky browser pane open --worktree current --mode native --url https://example.com --json
 quirky browser pane state --worktree current --json
 quirky browser pane navigate --pane <pane-id> --input localhost:3000
+quirky browser pane preview --pane <pane-id> --path docs/report/index.html
 quirky browser pane control --pane <pane-id> --action zoom --level 1
 quirky browser pane control --pane <pane-id> --action viewport --preset mobile-m
 quirky browser pane open --worktree current --mode watch --page <page-id> --json
@@ -77,6 +78,10 @@ Find protects the focused typed query from delayed canonical replies. Next, Prev
 Native is available only in the desktop shell. A plain web client explains that the system webview cannot be embedded and offers an explicit Watch action; it never silently substitutes Chrome. Native browsing uses the selected visible viewport size. Mobile device emulation is available only in Watch.
 
 `Open source file` uses public `quirky.editor/open` only with the backend's canonical in-worktree `sourcePath`; outside file URLs have no source action. `Open in Editor Preview` opens a separate editor preview tab and is not a Browser preview conversion. Selecting a supported non-HTML document suggestion navigates its backend-provided resource URL, and Browser Back returns to the prior location. Resource-backed previews do not serve `text/html`; unsupported editor previews show an error. Native `file:` navigation uses runtime authorization, and the UI does not resolve typed paths itself.
+
+### Workspace document previews
+
+`pane preview` (`panePreview`), or **Preview as workspace document** on a pane showing worktree HTML, converts a Native pane into an isolated preview of one `.html` or `.htm` file inside its worktree. The page and the files in its folder load from `quirky-preview://<grant>/…`, served by the desktop host; at the worktree root the grant reads the file alone, and dotfiles, symlinks and anything outside the folder are never served. Electrobun's isolated preview view gives the page its own throwaway storage and blocks outbound network (WebRTC included), camera, microphone, location, file pickers, popups, downloads and navigation off the grant. Back walks the preview's own history, then returns to the page it was converted from; Forward re-enters the preview. Typing an address on a preview page converts back to browsing. Grants are minted per mount and never stored, so history and saved panes hold only the document path. Previews need the macOS desktop app and the Native browser; elsewhere the pane says preview is unavailable. Watch panes refuse them.
 
 The pinned Electrobun SDK has no public JavaScript-dialog, basic-auth, or certificate-response interception, no download cancellation or destination control for Native views, and no Native hard reload. Native popup events are informational; Quirky does not turn a popup URL into a replacement tab or claim to preserve named/opener-dependent OAuth windows. Those Native operations are not presented as working controls. Watch uses the managed page's CDP events for its supported prompts, downloads and typed input.
 
