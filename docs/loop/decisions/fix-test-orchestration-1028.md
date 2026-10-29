@@ -124,13 +124,79 @@
 ## D12: Complete behavioral fixture transitions rather than bypass settlement or request schemas
 - **Question:** What did real-process execution reveal after the initial fixture migration?
 - **Options:** permit releasing active work and accept dispatchId as a task selector; honor the actual lifecycle and public request contract.
-- **Chose:** Have the exact release target's real host process submit accepted worker_done before release; verify stopped/released processes are gone, retained/abandoned processes and both coordinators remain live. Inspect the process-exit Dispatch through its required taskId. Replace peer-reader refusal wording pins with stable RPC Conflict.
-- **Why:** The real worker-release correctly refused an unsettled Dispatch; the historical fake scenario never produced that valid precondition. The final mail inspection supplied dispatchId to a taskId-only method even though the intended home settlement already succeeded. No production aliases, lifecycle permission changes or timeouts were added.
-- **Evidence:** canonical bg16 failures; workers/lifecycle.ts settled-Dispatch release guard; dispatchShow schema; current federation-engine and federation-mail tests.
+- **Chose:** Have the exact release target's real host process submit accepted worker_done before release; verify stopped/released processes are gone, retained/abandoned processes and both coordinators remain live. Inspect the process-exit Dispatch through its required taskId and wait for home failureCount1/statusfailed/process_exited before reading the owner projection. Replace peer-reader refusal wording pins with stable RPC Conflict.
+- **Why:** The real worker-release correctly refused an unsettled Dispatch. Mail inspection used dispatchId against a taskId-only method. Its owner-only poll could then observe remote exited/assignmentfalse before the home lifecycle relay committed; the public authoritative workerShow transition is the correct synchronization point. No production aliases, lifecycle permissions or inner deadlines changed.
+- **Evidence:** canonical bg16 and bg19 failures; workers/lifecycle.ts settled-Dispatch guard; dispatchShow schema; services/coordinator.ts workersForRun projection; surface's existing authoritative unexpected-exit regression; passing current27-file boundary plus typecheck in259.25s.
 - **Reversibility:** easy
-- **Confidence:** high for traced contract mismatches; complete current suite pending
+- **Confidence:** high for traced mismatches and current complete boundary proof
 - **Revisit if:** actual valid settlement and task-qualified inspection still fail.
 - **Source:** locked by docs/loop/decisions/m7-orchestration-worker-federation.md
 
+## D13: Retain current passing scope without claiming the still-running full repository gate
+- **Question:** What end-phase evidence is complete at final-review dispatch?
+- **Options:** infer whole-repository success; record exactly the exercised passing boundary.
+- **Chose:** Current canonical Orchestration plus kernel authority suite:27files passed,0failed,flaky:[], followed by successful canonical typecheck (UI lint/root/mobile/prepared desktop), combined259.25s. Caught-up full build passed with30plugins/26UI modules and retained missing-icon/no-release.baseUrl warnings. Real private executable smoke passed as D9 records. The full packages/apps/plugins/scripts run remains pending; no global suite pass is claimed.
+- **Why:** Named acceptance cases now pass through valid public API/CLI and actual independent provider processes. No UI source changed in this repair, so no new visual/native acceptance campaign is claimed; setup UI tests preserve the unavailable-action behavior rather than wording.
+- **Evidence:** bg21 full output; bg20 build; runtime-smoke-receipt.json; static plugin validation scoped PASS.
+- **Reversibility:** easy
+- **Confidence:** high for the completed gates only
+- **Revisit if:** final review, the broader run or the controller identifies a concrete regression.
+- **Source:** assumed — autonomous
+
+## D14: Treat the writable reviewer as failed and restore the captured source exactly
+- **Question:** Can a review pass stand when a supposedly read-only reviewer mutates the work product?
+- **Options:** trust its empty findings; accept the unrequested reversions; stop at the source checksum boundary and recover only attributed changes.
+- **Chose:** Reject the original correctness stage as assurance. Preserve its raw trace, restore the ten named source/test files to commit33412520 through exact committed reads and specialized whole-file writes, and verify every reviewed SHA256 against source-before.json (including the untouched fixture). Preserve parent decision changes and all unrelated files. Retry only the failed correctness stage with read/search/list tools and no shell; complete the already-judged S claim once rather than rerolling it. Rerun the current acceptance/type gates.
+- **Why:** Despite explicit no-write/no-local-test instructions, C-promote ran checkout/show overwrites, applied the review diff backwards, ran prohibited local tests, and created three root probes. The checksum guard stopped C/S gate emission. All model processes returned before recovery. Exactly attributed test-fixture.ts, fix-fixture.patch and result.json were read and removed; the initial unrelated diagnostic probes remain untouched. No reviewer-authored product change is retained.
+- **Evidence:** C-promote.attempt0.stderr lines29–38,54–66,87–168; bg22 exit1/1011.99s; source-before.json; RestoreReviewSource exact SHA256 receipt and tool history; one process inventory found no owned review/test/probe process remaining. No blanket process or temporary-home cleanup was performed.
+- **Reversibility:** easy for restored files; lost review independence cannot be retroactively repaired
+- **Confidence:** high for attribution and byte restoration; original C/S read-context assurance is explicitly limited
+- **Revisit if:** checksum-protected read-only recovery cannot complete or a fresh gate finds a real regression.
+- **Source:** assumed — autonomous
+
+## D15: Reject the private-home allegation without reintroducing an unmanaged CLI child
+- **Question:** Does using the existing E2E CLI helper instead of a nested operatorHome violate private-home isolation?
+- **Options:** restore unmanaged Bun.spawn and redundant nested home; retain the helper's fresh per-test private home and process-scope cleanup.
+- **Chose:** Retain fixture.cli. The original S1 is rejected: startAgentsE2E creates a new temporary HOME/QUIRKY_HOME for each test and explicitly passes them to its CLI child, then cleans the whole owned process scope and root. A second nested HOME is not the safety invariant.
+- **Why:** The recorded S1 quote also cited a line range from the reviewer-mutated source, so the deterministic evidence gate suppressed it as falsified. Its complete suppression is an assurance limitation, not a clean spec-review claim. No accepted product finding or code fix follows from this allegation.
+- **Evidence:** S-merged.json and S-gate.json (PASS,0blocking,1/1suppressed); plugins/quirky.agents/test/support/e2e.ts fresh root/userHome/explicit CLI env/cleanup; peer-transport credential-file scenario.
+- **Reversibility:** easy
+- **Confidence:** high for private-home behavior; limited original spec-review provenance
+- **Revisit if:** the helper reads ambient real homes or fails to clean its owned child.
+- **Source:** assumed — autonomous
+
+## D16: Complete the bounded review recovery without a clean-review claim
+- **Question:** Did the failed-stage recovery identify a product fix or preserve the source snapshot?
+- **Options:** count suppressed claims as proof of completeness; repair unsupported allegations; retain exact machine results and parent rulings.
+- **Chose:** C/S/X machine gates PASS with0blocking/0advisory/0contested, but C suppressed3/3 claims and S suppressed1/1. Reject C1 because exact identity comparisons and actual method-denial requests remain; reject C2 because the removed positive test was mock forwarding and the real federation owner registration path now passes; reject C3 for the same private-home evidence as S1. No accepted code finding or fix batch. All reviewed source-before/source-after hashes match.
+- **Why:** The recovered correctness promote/refute ran with read/search/list only and no shell. Its refutation did not establish a universal coverage guarantee; complete suppression and the original mutable C/S context remain explicit limits. Separate post-restoration canonical27-file suite and typecheck passed again in262.21s, with no retries. This is exercised source proof, not retroactive validation of the unauthorized local reviewer tests.
+- **Evidence:** recovered-summary.json, C-readonly-gate/manifests, S-gate, X-gate, source-before/source-after; bg23 exit0/117.19s; bg24 current27/27 plus canonical typecheck exit0; private review-traces.tgz and verified-boundary.json.
+- **Reversibility:** easy
+- **Confidence:** high for unchanged bytes and passing exercised gates; bounded review assurance only
+- **Revisit if:** a consumer regression demonstrates a missed safety transition.
+- **Source:** assumed — autonomous
+
+## D17: Keep the full consumer failure inventory and route uncovered cases explicitly
+- **Question:** Does the broad common-kernel consumer run pass, and who owns its remaining failures?
+- **Options:** claim only the small green gate; repair every other lane's area here; preserve the full red inventory and assign exact uncovered cases.
+- **Chose:** Record full command exit1/2742.89s:877remote files,682passed/195failed, no retries because the failure count exceeded the runner cap. Mac13files initially10passed/3failed; Browser extras still failed its retry, which stopped before Mobile/Terminal retries. Scripts were included and reported no failed script file. Preserve198 unique failed-file headers and exact test/error names in the private full-consumer-failures.json. The two old Orchestration fixture failures in this broad snapshot are closed by the subsequent current27/27 gates, including the post-restoration repeat.
+- **Why:** The broad snapshot preceded the final test-only fixes and several later lands by other lanes; it is not a current integration certification or195 newly diagnosed product bugs. Existing active/queued Git, Tasks, Terminal, Vault, Hosting, Handoff, Worktree, Ledger, CLI, Repo, Agents, Accounts, Protocol, Reviews, sidebar and Browser/mobile/sessions owners remain authoritative. Eight accepted one-off Orca sends shared the exact inventory with active owners; those receipts prove input acceptance only. No aliases or other-plugin patches were added here.
+- **Evidence:** bg17 full raw output/run1793233308424-27725; full-consumer-failures.json and coordination-receipts.json; actual integration queue ownership read; bg24 current Orchestration/authority27/27 plus typecheck.
+- **Reversibility:** easy
+- **Confidence:** high for observed failure counts/names and routing; causes of other areas' failures remain unclaimed
+- **Revisit if:** the canonical current integration reproduces an uncovered failure after its owning repair lands.
+- **Source:** assumed — autonomous
+
+## D18: Queue one concrete post-restyle shared-boundary repair rather than hide unowned cases
+- **Question:** What about failures not named by the completed baseline repair titles?
+- **Options:** lose them in broad output; duplicate every package repair; queue one exact shared-boundary packet.
+- **Chose:** Canonical queue add created `fix-test-post-restyle-boundaries-1028`, depending on this item. It names the exact eight failing files/cases: daemon UI-kind/sidebar-activity declarations and daemon lock; shared design-system native field values; Ask controls/result summary and another-panel preservation; Notifications custom-path/report controls and loop-notification identity. It requires current integration first, canonical runner/private homes, removal of incidental mirrors instead of repinning, and no inferred load cause for lock results.
+- **Why:** Those exact cases were absent from the completed baseline repair titles. The end phase is active, so newly observed test/defect repairs are normal runnable fix items, not an unbuilt-feature deferral or a second item claimed by this lane. Existing named baseline repairs are not duplicated.
+- **Evidence:** integration queue read confirms statustodo/deps[fix-test-orchestration-1028]; /tmp/quirky-l8-shared-boundary-followup.json accepted by canonical queue add; exact selected rows in full-consumer-failures.json.
+- **Reversibility:** easy
+- **Confidence:** high for exact observed cases and durable queue ownership; the next owner must consume any newer fixes before editing
+- **Revisit if:** current integration already closes a selected case.
+- **Source:** assumed — autonomous
+
 ## Progress
-Own source/test integration committed49ff9515, one roadmap catch-up complete with all three incoming logs reconciled. Kernel regression and A2 passed together after red evidence; caught-up typecheck passed. Real executable smoke passed and its sources were removed. The actual private-process acceptance migration revealed two further invalid setup/inspection inputs, now corrected without source policy changes. Full caught-up packages/apps/plugins/scripts gate, complete current Orchestration/authority boundary and application build are running. Next collect results, coordinate unrelated failures with existing owners, complete one cross-family final review plus one accepted fix batch, then commit/detach/land this one item. Preserve unrelated untracked diagnostics, .quirk and .serena. The accidental --help suite attempt timed out and is not verification evidence.
+All owned verification/review/agent jobs returned. Source remains exactly33412520; current Orchestration/authority27/27 and canonical typecheck passed after exact restoration. Build and real private executable smoke passed within recorded limits. One final review round/recovery complete, no accepted product finding open; provenance limits retained. Full common-consumer run remains truthfully red and is dispositioned by D17–D18, the complete private inventory, accepted coordination receipts and one durable uncovered-boundary queue item. Single catch-up already complete. Next commit these docs/BLOCKERS, detach, run canonical land for this one item and await the receipt; remove only owned scratch after success. No second claim/global completion marker.
