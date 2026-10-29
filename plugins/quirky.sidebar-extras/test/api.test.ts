@@ -335,6 +335,7 @@ describe('sidebar-extras API', () => {
     mkdirSync(source, { recursive: true })
     writeFileSync(join(source, 'quirky-plugin.json'), JSON.stringify({
       id: overrideId,
+      apiVersion: '1.0.0',
       name: 'Sidebar extras activity override',
       version: '1.0.0',
       ui: 'ui.js',

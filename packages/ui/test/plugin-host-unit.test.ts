@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test'
 import {
   DEFAULT_THEME,
   UI_TOOL_SLOTS,
+  PLUGIN_API_VERSION,
   type QuirkyEvent,
   type SettingInfo,
   type ThemeInfo,
@@ -82,11 +83,19 @@ function makeModel(parts: Partial<UiModel> = {}): UiModel {
   if (parts.modules) return model
   const entries = [...model.sidebarSections, ...model.activityItems, ...model.statusBars, ...model.panels, ...model.settingsSections, ...model.views, ...model.overlays, ...model.commands]
   for (const entry of entries) {
-    const module = (model.modules[entry.plugin] ??= { url: urlOf(entry.plugin), provides: [] })
+    const module = (model.modules[entry.plugin] ??= { url: urlOf(entry.plugin), provides: [], apiVersion: PLUGIN_API_VERSION })
     module.provides.push(entry.id)
   }
   return model
 }
+
+function setModuleApiVersion(model: UiModel, plugin: string, apiVersion: unknown): void {
+  const module = model.modules[plugin]
+  if (!module) throw new Error(`missing test module ${plugin}`)
+  if (apiVersion === undefined) Reflect.deleteProperty(module, 'apiVersion')
+  else Reflect.set(module, 'apiVersion', apiVersion)
+}
+
 
 function setting(id: string, value: SettingInfo['value'], plugin = 'acme.notes'): SettingInfo {
   return { id, plugin, type: 'number', title: id, default: 13, value }
@@ -519,6 +528,43 @@ test('S1: a plugin whose eager load fails is not retried by later refreshes, onl
 
   t.host.mount(LIST, element())
   await until(() => attempts === 2)
+})
+
+test('incompatible API floor changes deactivate cached UI modules before reuse', async () => {
+  const plugin = 'acme.skew'
+  const commandId = `command:${plugin}/run`
+  const makeSkewModel = () => makeModel({
+    sidebarSections: [section(plugin, 'list'), section(NOTES, 'list')],
+    commands: [command(plugin, 'run')]
+  })
+  for (const apiVersion of ['1.1.0', undefined, '^1.0.0', 1] as const) {
+    const t = setup(makeSkewModel())
+    let executions = 0
+    const skew = recording([`sidebar-section:${plugin}/list`, commandId], (id) =>
+      id === commandId ? () => executions++ : () => {}
+    )
+    t.useModule(plugin, skew.module)
+    t.useModule(NOTES, recording([LIST]).module)
+    await t.host.refresh()
+    await until(() => state(t).plugins[plugin]?.state === 'active' && state(t).plugins[NOTES]?.state === 'active')
+    await t.host.runCommand(commandId)
+    expect(executions).toBe(1)
+
+    const updated = makeSkewModel()
+    setModuleApiVersion(updated, plugin, apiVersion)
+    t.setModel(updated)
+    await t.host.refresh()
+    await until(() => state(t).plugins[plugin]?.state === 'failed')
+    await t.host.runCommand(commandId)
+
+    expect(state(t).plugins[plugin]?.error).toContain('apiVersion')
+    expect(skew.record.deactivations).toBe(1)
+    expect(executions).toBe(1)
+    expect(t.imports.filter((url) => url === urlOf(plugin))).toHaveLength(1)
+    expect(state(t).plugins[NOTES]?.state).toBe('active')
+    expect(t.imports).toContain(urlOf(NOTES))
+    t.host.stop()
+  }
 })
 
 test('SC-9: opening a panel contribution selects its canonical tool slot, and toggling closes it', async () => {

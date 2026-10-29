@@ -1,5 +1,6 @@
 {
   "id": "quirky.tasks",
+  "apiVersion": "1.0.0",
   "name": "GitHub Tasks",
   "version": "0.1.0",
   "description": "Browse GitHub tasks, discuss issues and work with Projects v2.",

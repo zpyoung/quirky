@@ -203,7 +203,7 @@ export type UiModel = {
   /** `chosen` and `active` are `default` or a theme ID. */
   theme: { chosen: string; active: string }
   /** Per plugin with a `ui` field and code-backed contributions in effect; `provides` lists the IDs its module may provide. */
-  modules: Record<string, { url: string; provides: string[] }>
+  modules: Record<string, { url: string; provides: string[]; apiVersion: string }>
   /** Resolved tool projection; omitted by older contribution producers. */
   tools?: UiToolEntry[]
 }

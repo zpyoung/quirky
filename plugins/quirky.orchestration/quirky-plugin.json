@@ -1,5 +1,6 @@
 {
   "id": "quirky.orchestration",
+  "apiVersion": "1.0.0",
   "name": "Orchestration",
   "version": "0.1.0",
   "description": "Durable Runs, task dependencies, Dispatch attempts, mail, questions, and decision gates.",

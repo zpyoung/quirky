@@ -1,8 +1,8 @@
+import { PLUGIN_API_VERSION, type PluginSource } from '@quirky/protocol'
 import { describe, expect, test } from 'bun:test'
-import type { PluginSource } from '@quirky/protocol'
 import { parseManifest } from '../../src/plugins/manifest'
 
-const base = { id: 'acme', name: 'Acme', version: '1.0.0' }
+const base = { id: 'acme', name: 'Acme', version: '1.0.0', apiVersion: PLUGIN_API_VERSION }
 
 function parse(manifest: unknown, at: { dirName?: string; dir?: string; source?: PluginSource } = {}) {
   const text = typeof manifest === 'string' ? manifest : JSON.stringify(manifest)
@@ -48,7 +48,7 @@ describe('parseManifest', () => {
   })
 
   test('reports a missing required field', () => {
-    for (const field of ['id', 'name', 'version']) {
+    for (const field of ['id', 'name', 'version', 'apiVersion']) {
       const manifest: Record<string, string> = { ...base }
       delete manifest[field]
       expect(errorsOf(manifest, { dirName: 'acme' })).toContain(`missing required field '${field}'`)
@@ -60,7 +60,41 @@ describe('parseManifest', () => {
     expect(errorsOf({ ...base, name: '' }).join('\n')).toContain("field 'name'")
     expect(errorsOf({ ...base, version: '' }).join('\n')).toContain("field 'version'")
     expect(errorsOf({ ...base, version: 1 }).join('\n')).toContain("field 'version'")
+    expect(errorsOf({ ...base, apiVersion: '' }).join('\n')).toContain("field 'apiVersion'")
+    expect(errorsOf({ ...base, apiVersion: 1 }).join('\n')).toContain("field 'apiVersion'")
     expect(errorsOf({ ...base, id: 5 }, { dirName: 'acme' }).join('\n')).toContain("field 'id'")
+  })
+
+  test('rejects malformed, unsafe and whitespace-padded API floors', () => {
+    for (const apiVersion of [
+      '^1.0.0',
+      '01.0.0',
+      '1.0',
+      '1.0.0-alpha',
+      '1.0.0+build',
+      ' 1.0.0',
+      '1.0.0 ',
+      '9007199254740992.0.0'
+    ]) {
+      const errors = errorsOf({ ...base, apiVersion }).join('\n')
+      expect(errors).toContain('apiVersion')
+      expect(errors).toContain('major.minor.patch')
+    }
+  })
+
+  test('rejects unsupported future releases and different major versions', () => {
+    for (const apiVersion of ['1.0.1', '1.1.0', '2.0.0']) {
+      const errors = errorsOf({ ...base, apiVersion }).join('\n')
+      expect(errors).toContain(apiVersion)
+      expect(errors).toContain(PLUGIN_API_VERSION)
+    }
+  })
+
+  test('reports API incompatibility alongside other manifest problems', () => {
+    const errors = errorsOf({ ...base, apiVersion: '2.0.0', extra: true, main: '/outside.js' })
+    expect(errors).toContain("unknown field 'extra'")
+    expect(errors.some((error) => error.includes('2.0.0') && error.includes(PLUGIN_API_VERSION))).toBe(true)
+    expect(errors.some((error) => error.includes("field 'main'"))).toBe(true)
   })
 
   test('reports optional fields of the wrong type', () => {

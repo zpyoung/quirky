@@ -1,5 +1,6 @@
 {
   "id": "acme.dupe",
+  "apiVersion": "1.0.0",
   "name": "Acme dupe",
   "version": "1.0.0",
   "description": "Declares an agent named like a built-in one for e2e tests.",

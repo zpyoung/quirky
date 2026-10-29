@@ -1,5 +1,6 @@
 {
   "id": "quirky.agent-status",
+  "apiVersion": "1.0.0",
   "name": "Agent status (test fake)",
   "version": "0.0.0",
   "main": "main.ts",

@@ -318,14 +318,20 @@ export function buildUiModel(input: {
 
   const modules: UiModel['modules'] = {}
   for (const pluginId of [...codeBackedOwners].sort(compare)) {
-    const ui = byId.get(pluginId)?.ui
-    if (ui === undefined) {
+    const plugin = byId.get(pluginId)
+    if (plugin === undefined || plugin.ui === undefined) {
       addWarning(warnings, pluginId, 'declares code-backed contributions but has no ui module')
+      continue
+    }
+    const ui = plugin.ui
+    const apiVersion = plugin.apiVersion
+    if (apiVersion === undefined) {
+      addWarning(warnings, pluginId, 'declares code-backed contributions but has no apiVersion')
       continue
     }
     const url = moduleUrl(pluginId, ui)
     if (url === null) continue
-    modules[pluginId] = { url, provides: [...(provides.get(pluginId) ?? [])].sort(compare) }
+    modules[pluginId] = { url, provides: [...(provides.get(pluginId) ?? [])].sort(compare), apiVersion }
   }
   const moduleOf = (pluginId: string): string | null => modules[pluginId]?.url ?? null
 

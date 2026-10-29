@@ -5,6 +5,7 @@ import {
   CONNECTION_METHODS,
   KERNEL_EVENT_SCHEMAS,
   KERNEL_METHOD_SCHEMAS,
+  PLUGIN_API_VERSION,
   PROTOCOL_VERSION,
   type ApiDescription
 } from '@quirky/protocol'
@@ -51,6 +52,13 @@ describe('api.describe', () => {
   test('lists every kernel method and event with no plugin and flags connection methods', async () => {
     const s = await boot({})
     const description = await s.describe()
+
+    expect(description.pluginApiVersion).toBe(PLUGIN_API_VERSION)
+    expect(KERNEL_METHOD_SCHEMAS['api.describe'].result).toMatchObject({
+      type: 'object',
+      properties: { pluginApiVersion: { type: 'string' } },
+      required: expect.arrayContaining(['pluginApiVersion'])
+    })
 
     expect(description.schemaVersion).toBe(CATALOG_SCHEMA_VERSION)
     expect(description.protocolVersion).toBe(PROTOCOL_VERSION)

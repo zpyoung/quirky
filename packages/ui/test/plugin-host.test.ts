@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test } from 'bun:test'
 import { writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { QuirkyClient, type QuirkyEvent, type UiPluginContext } from '@quirky/protocol'
+import { PLUGIN_API_VERSION, QuirkyClient, type QuirkyEvent, type UiModel, type UiPluginContext } from '@quirky/protocol'
 import { rpcUrl } from '@quirky/protocol/node'
 import { makeTempHome, startHarness, waitFor, type Harness } from '../../daemon/test/helpers'
 import { makeTempDir, readMarker, removeTempDirs, writeModulePlugin, writePlugin } from '../../daemon/test/plugins/fixtures'
@@ -54,14 +54,18 @@ function installUi(
 ): string {
   return writePlugin(
     installed,
-    { id, name: id, version: '1.0.0', ui: 'ui.js', ...(Object.keys(contributes).length ? { contributes } : {}), ...extra },
+    { id, name: id, version: '1.0.0', apiVersion: PLUGIN_API_VERSION, ui: 'ui.js', ...(Object.keys(contributes).length ? { contributes } : {}), ...extra },
     { 'ui.js': uiSource(marker, id, source) }
   )
 }
 
 const listSection = { 'sidebar-section': [{ id: 'list', title: 'List' }] }
 
-type BootOptions = { builtin?: Writer; activationTimeoutMs?: number }
+type BootOptions = {
+  builtin?: Writer
+  activationTimeoutMs?: number
+  transformUiModel?: (model: UiModel) => UiModel
+}
 type Booted = Awaited<ReturnType<typeof boot>>
 
 const harnesses: Harness[] = []
@@ -99,7 +103,13 @@ async function boot(write: Writer, options: BootOptions = {}) {
   const logs: string[] = []
   let fetched = 0
   const host = new WindowPluginHost({
-    call: (method, params) => client.callAny(method, params),
+    call: async (method, params) => {
+      const result = await client.callAny(method, params)
+      if (method === 'ui.contributions' && options.transformUiModel) {
+        return options.transformUiModel(result as UiModel)
+      }
+      return result
+    },
     onEvent: (listener) =>
       client.onEvent((event) => {
         events.push(event)
@@ -284,6 +294,7 @@ describe('window plugin host against a real daemon', () => {
         id: 'acme.bare',
         name: 'acme.bare',
         version: '1.0.0',
+        apiVersion: PLUGIN_API_VERSION,
         contributes: {
           command: [{ id: 'go', title: 'Go' }],
           setting: [{ id: 'size', type: 'number', title: 'Size', default: 5 }]
@@ -450,6 +461,7 @@ describe('window plugin host against a real daemon', () => {
         marker,
         {
           id: 'acme.notes',
+          apiVersion: PLUGIN_API_VERSION,
           ui: 'ui.js',
           contributes: { ...listSection, method: [{ id: 'count' }, { id: 'bump' }], event: [{ id: 'changed' }] }
         },
@@ -648,6 +660,44 @@ describe('window plugin host against a real daemon', () => {
       expect(t.lines().filter((line) => line === 'ui-activate acme.x')).toHaveLength(2)
       expect(t.lines()).not.toContain('ui-deactivate acme.x')
     })
+  })
+
+  test('newer UI hosts reject skewed module floors before actual module import', async () => {
+    const apiVersions: [string, unknown][] = [
+      ['acme.future', '1.1.0'],
+      ['acme.missing', undefined],
+      ['acme.malformed', '^1.0.0'],
+      ['acme.nonstring', 1]
+    ]
+    const ids = apiVersions.map(([id]) => id)
+    const t = await boot((installed, marker) => {
+      for (const id of ids) installUi(installed, marker, id, listSection)
+      installUi(installed, marker, 'acme.compatible', listSection)
+    }, {
+      transformUiModel(model) {
+        for (const [id, apiVersion] of apiVersions) {
+          const module = model.modules[id]
+          if (!module) throw new Error(`missing UI model module ${id}`)
+          if (apiVersion === undefined) Reflect.deleteProperty(module, 'apiVersion')
+          else Reflect.set(module, 'apiVersion', apiVersion)
+        }
+        return model
+      }
+    })
+
+    await waitFor(() =>
+      ids.every((id) => t.state().plugins[id]?.state === 'failed') &&
+      t.state().plugins['acme.compatible']?.state === 'active'
+    )
+
+    for (const id of ids) {
+      expect(t.state().plugins[id]?.error).toContain('apiVersion')
+      expect(t.lines()).not.toContain(`ui-import ${id}`)
+      expect(t.lines()).not.toContain(`ui-activate ${id}`)
+    }
+    expect(t.lines()).toContain('ui-import acme.compatible')
+    expect(t.lines()).toContain('ui-activate acme.compatible')
+    expect(t.imports.some(({ url }) => url.includes('acme.compatible'))).toBe(true)
   })
 
   test('SC-14: the command palette lists commands in effect', async () => {
@@ -946,6 +996,7 @@ describe('window plugin host against a real daemon', () => {
       id: 'acme.solar',
       name: 'acme.solar',
       version: '1.0.0',
+      apiVersion: PLUGIN_API_VERSION,
       contributes: {
         theme: [{ id: 'solar', title: 'Solar', appearance: 'light', colors: { bg: '#fdf6e3', text: '#657b83' } }]
       }

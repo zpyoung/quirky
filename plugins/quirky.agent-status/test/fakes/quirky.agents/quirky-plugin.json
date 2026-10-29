@@ -1,5 +1,6 @@
 {
   "id": "quirky.agents",
+  "apiVersion": "1.0.0",
   "name": "Fake agents",
   "version": "0.0.0",
   "main": "main.ts",

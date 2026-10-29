@@ -158,6 +158,7 @@ test(
         join(source, 'quirky-plugin.json'),
         JSON.stringify({
           id: 'acme.worktree-view',
+          apiVersion: '1.0.0',
           name: 'Acme worktree view',
           version: '1.0.0',
           ui: 'ui.js',

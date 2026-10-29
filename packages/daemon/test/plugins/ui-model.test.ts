@@ -1,10 +1,5 @@
+import { PLUGIN_API_VERSION, type ContributionInfo, type ContributionStatus, type PluginInfo, type PluginSource } from '@quirky/protocol'
 import { describe, expect, test } from 'bun:test'
-import {
-  type ContributionInfo,
-  type ContributionStatus,
-  type PluginInfo,
-  type PluginSource,
-} from '@quirky/protocol'
 import { buildUiModel } from '../../src/plugins/ui-model'
 
 function plugin(id: string, extra: Partial<PluginInfo> = {}, source: PluginSource = 'installed'): PluginInfo {
@@ -12,6 +7,7 @@ function plugin(id: string, extra: Partial<PluginInfo> = {}, source: PluginSourc
     id,
     name: id,
     version: '1.0.0',
+    apiVersion: PLUGIN_API_VERSION,
     source,
     dir: `/plugins/${id}`,
     activation: 'lazy',

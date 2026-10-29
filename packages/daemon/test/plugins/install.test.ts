@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test } from 'bun:test'
 import { existsSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { RpcError, RpcErrorCode, type PluginInspection } from '@quirky/protocol'
+import { PLUGIN_API_VERSION, RpcError, RpcErrorCode, type PluginInspection } from '@quirky/protocol'
 import { inspectPlugin, installPlugin, renderInspection, uninstallPlugin } from '../../src/plugins/install'
 import { PluginHost } from '../../src/plugins/host'
 import { makeTempHome, startHarness, waitFor, type Harness } from '../helpers'
@@ -30,6 +30,7 @@ function acmeManifest(extra: Record<string, unknown> = {}, version = '1.0.0') {
     id: 'acme.tools',
     name: 'Acme tools',
     version,
+    apiVersion: PLUGIN_API_VERSION,
     main: 'main.ts',
     contributes: {
       method: [{ id: 'greet' }],
@@ -153,10 +154,11 @@ describe('plugin install', () => {
     h = await startHarness({ home, builtinPluginsDir: builtinDir })
     const client = await h.connect()
 
-    const invalid = writePlugin(join(scratch, 'src'), { id: 'acme.bad', name: 'Bad' })
+    const invalid = writePlugin(join(scratch, 'src'), { id: 'acme.bad', name: 'Bad', apiVersion: undefined })
     const invalidError = await codeOf(client.call('plugin.install', { path: invalid, yes: true }))
     expect(invalidError.code).toBe(RpcErrorCode.InvalidParams)
     expect(invalidError.message).toContain("missing required field 'version'")
+    expect(invalidError.message).toContain("missing required field 'apiVersion'")
 
     const builtin = writePlugin(join(scratch, 'src'), { id: 'quirky.git', name: 'Mine', version: '9.0.0' })
     expect((await codeOf(client.call('plugin.install', { path: builtin, yes: true }))).code).toBe(RpcErrorCode.Conflict)

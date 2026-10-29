@@ -1,5 +1,6 @@
 {
   "id": "quirky.mobile",
+  "apiVersion": "1.0.0",
   "name": "Mobile",
   "version": "0.1.0",
   "description": "Pair phones with Quirky over a direct encrypted connection.",

@@ -98,6 +98,13 @@ afterEach(() => {
 
 const run = (args: string[]) => runCli(args, { home: daemon.home, env: { QUIRKY_TEST_MARKER: marker } })
 const loads = () => (existsSync(marker) ? readFileSync(marker, 'utf8').trim().split('\n').length : 0)
+const setCommandApiVersion = (id: string, apiVersion: unknown): void => {
+  const entry = daemon.cli.commands.find((command) => command.id === id)
+  if (!entry) throw new Error('missing CLI test command')
+  if (apiVersion === undefined) Reflect.deleteProperty(entry, 'apiVersion')
+  else Reflect.set(entry, 'apiVersion', apiVersion)
+}
+
 
 describe('SC-20: a declared command without a module runs generically', () => {
   test('positionals and flags fill the method params, validated by its schema', async () => {
@@ -131,6 +138,13 @@ describe('SC-20: a declared command without a module runs generically', () => {
     expect(range.code).toBe(2)
     expect(daemon.methodCalls('acme.notes/add')).toEqual([])
   })
+  test('generic RPC commands do not require a local module API floor', async () => {
+    setCommandApiVersion('cli-command:acme.notes/add', undefined)
+    const result = await run(['acme.notes', 'add', 'Groceries'])
+    expect(result.code).toBe(0)
+    expect(daemon.methodCalls('acme.notes/add')).toEqual([{ title: 'Groceries' }])
+  })
+
 })
 
 describe('a declared command with a CLI module', () => {
@@ -179,6 +193,16 @@ describe('a declared command with a CLI module', () => {
     expect(gone.code).toBe(1)
     expect(gone.stderr).toContain('could not load the CLI module of acme.notes')
   })
+  test('incompatible, missing, and malformed API floors fail before importing the module', async () => {
+    for (const apiVersion of ['1.1.0', undefined, '^1.0.0', 1]) {
+      setCommandApiVersion('cli-command:acme.notes/greet', apiVersion)
+      const result = await run(['acme.notes', 'greet'])
+      expect(result.code).toBe(1)
+      expect(result.stderr).toContain('apiVersion')
+      expect(loads()).toBe(0)
+    }
+  })
+
 })
 
 describe('alias words', () => {

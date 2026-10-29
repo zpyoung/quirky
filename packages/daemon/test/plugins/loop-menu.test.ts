@@ -1,5 +1,5 @@
+import { PLUGIN_API_VERSION, type ContributionInfo, type PluginInfo } from '@quirky/protocol'
 import { expect, test } from 'bun:test'
-import type { ContributionInfo, PluginInfo } from '@quirky/protocol'
 import { buildUiModel } from '../../src/plugins/ui-model'
 import { parseManifest } from '../../src/plugins/manifest'
 
@@ -13,6 +13,7 @@ const menuItem = {
 const loopPlugin: PluginInfo = {
   id: 'quirky.loops',
   name: 'Background loops',
+  apiVersion: PLUGIN_API_VERSION,
   version: '0.1.0',
   source: 'builtin',
   dir: '/plugins/quirky.loops',
@@ -49,6 +50,7 @@ test('the terminal tab menu accepts and projects loop contributions as public co
     id: 'quirky.loops',
     name: 'Background loops',
     version: '0.1.0',
+    apiVersion: PLUGIN_API_VERSION,
     contributes: { 'menu-item': [menuItem] }
   }), { dirName: 'quirky.loops', dir: loopPlugin.dir, source: 'builtin' })
   expect(parsed.ok).toBe(true)
@@ -68,6 +70,7 @@ test('tab menu items retain valid quick-command placement and reject unknown pla
     id: 'quirky.loops',
     name: 'Background loops',
     version: '0.1.0',
+    apiVersion: PLUGIN_API_VERSION,
     contributes: { 'menu-item': [{ ...menuItem, after: 'quick-commands' }] }
   }), { dirName: 'quirky.loops', dir: loopPlugin.dir, source: 'builtin' })
   expect(placed.ok).toBe(true)
@@ -76,6 +79,7 @@ test('tab menu items retain valid quick-command placement and reject unknown pla
     id: 'quirky.loops',
     name: 'Background loops',
     version: '0.1.0',
+    apiVersion: PLUGIN_API_VERSION,
     contributes: { 'menu-item': [{ ...menuItem, after: 'copy' }] }
   }), { dirName: 'quirky.loops', dir: loopPlugin.dir, source: 'builtin' })
   expect(invalid.ok).toBe(false)

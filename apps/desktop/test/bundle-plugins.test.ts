@@ -25,7 +25,7 @@ function write(path: string, content: string): void {
 
 function writePlugin(id: string, manifest: Record<string, unknown>, files: Record<string, string> = {}): string {
   const dir = join(src, id)
-  write(join(dir, 'quirky-plugin.json'), JSON.stringify({ id, name: id, version: '0.1.0', ...manifest }))
+  write(join(dir, 'quirky-plugin.json'), JSON.stringify({ id, apiVersion: '1.0.0', name: id, version: '0.1.0', ...manifest }))
   for (const [name, content] of Object.entries(files)) write(join(dir, name), content)
   return dir
 }

@@ -1,5 +1,5 @@
 import { join } from 'node:path'
-import type { QuirkyClient } from '@quirky/protocol'
+import { PLUGIN_API_VERSION, type QuirkyClient } from '@quirky/protocol'
 import { makeTempHome, startHarness, type Harness } from '../../../daemon/test/helpers'
 import { removeTempDirs, writePlugin } from '../../../daemon/test/plugins/fixtures'
 import { startHeadlessWindow, type HeadlessWindow } from './headless-window'
@@ -53,7 +53,7 @@ export function installUiPlugin(
 ): void {
   writePlugin(
     installed,
-    { id, name: id, version: '1.0.0', ui: 'ui.js', contributes, ...extra },
+    { id, name: id, version: '1.0.0', apiVersion: PLUGIN_API_VERSION, ui: 'ui.js', contributes, ...extra },
     { 'ui.js': `export function activate(context) {\n${body}\n}\nexport function deactivate() {}\n` }
   )
 }

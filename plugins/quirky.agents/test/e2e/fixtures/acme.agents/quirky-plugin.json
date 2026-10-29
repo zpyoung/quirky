@@ -1,5 +1,6 @@
 {
   "id": "acme.agents",
+  "apiVersion": "1.0.0",
   "name": "Acme agents",
   "version": "1.0.0",
   "description": "Adds the acme-bot agent for e2e tests.",

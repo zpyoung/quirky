@@ -69,6 +69,7 @@ const pluginInfo = object(
     dependencies: strings,
     state: { type: 'string', enum: ['inactive', 'activating', 'active', 'failed', 'disabled', 'invalid'] },
     ui: string('Relative path of the webview module.'),
+    apiVersion: string('The declaring plugin minimum API release.'),
     diagnostics: listOf(object({ level: { type: 'string', enum: ['error', 'warning'] }, message: string() }))
   },
   ['id', 'name', 'version', 'source', 'dir', 'activation', 'dependencies', 'state', 'diagnostics']
@@ -239,11 +240,12 @@ const apiDescription = object(
     schemaVersion: { type: 'integer' },
     daemonVersion: string(),
     protocolVersion: { type: 'integer' },
+    pluginApiVersion: string('Stable plugin-author API release hosted by this daemon.'),
     methods: listOf({ type: 'object' }),
     events: listOf({ type: 'object' }),
     uiCommands: listOf({ type: 'object' })
   },
-  ['schemaVersion', 'daemonVersion', 'protocolVersion', 'methods', 'events', 'uiCommands']
+  ['schemaVersion', 'daemonVersion', 'protocolVersion', 'pluginApiVersion', 'methods', 'events', 'uiCommands']
 )
 
 const uiLayout = object(

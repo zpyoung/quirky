@@ -1,5 +1,6 @@
 {
   "id": "quirky.structured",
+  "apiVersion": "1.0.0",
   "name": "Structured sessions",
   "version": "0.1.0",
   "description": "Background native Claude and Codex sessions without terminals: journaled messages and permission prompts as asks.",

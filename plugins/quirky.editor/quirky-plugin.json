@@ -1,5 +1,6 @@
 {
   "id": "quirky.editor",
+  "apiVersion": "1.0.0",
   "name": "Editor",
   "version": "0.1.0",
   "description": "Worktree-scoped file editing, recovery, search and explorer services.",

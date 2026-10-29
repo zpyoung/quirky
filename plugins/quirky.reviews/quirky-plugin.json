@@ -1,5 +1,6 @@
 {
   "id": "quirky.reviews",
+  "apiVersion": "1.0.0",
   "name": "Hosting reviews",
   "version": "0.1.0",
   "description": "Pull-request review, workspace Checks, creation and hosting settings over public hosting APIs.",
