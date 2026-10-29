@@ -240,6 +240,25 @@ export const inlineJsdomStylesheet: Bun.BunPlugin = {
   }
 }
 
+const JSDOM_XHR_IMPL = /[\\/]jsdom[\\/]lib[\\/]jsdom[\\/]living[\\/]xhr[\\/]XMLHttpRequest-impl\.js$/
+const JSDOM_SYNC_WORKER_RESOLVE = /require\.resolve\("\.\/xhr-sync-worker\.js"\)/
+
+/**
+ * Removes jsdom's load-time lookup of its synchronous-XHR worker, which a bundle keeps as the build
+ * machine's absolute path. Bundled plugins never make synchronous XHRs, so only that call fails, and
+ * it names the missing worker. Fails the build if jsdom changes the lookup.
+ */
+export const dropJsdomSyncXhrWorker: Bun.BunPlugin = {
+  name: 'drop-jsdom-sync-xhr-worker',
+  setup(build) {
+    build.onLoad({ filter: JSDOM_XHR_IMPL }, ({ path }) => {
+      const source = readFileSync(path, 'utf8')
+      if (!JSDOM_SYNC_WORKER_RESOLVE.test(source)) throw new Error(`jsdom changed how it locates its sync XHR worker: ${path}`)
+      return { contents: source.replace(JSDOM_SYNC_WORKER_RESOLVE, JSON.stringify('jsdom-sync-xhr-worker-not-bundled')), loader: 'js' }
+    })
+  }
+}
+
 async function bundleEntry(pluginId: string, pluginDir: string, outPluginDir: string, entry: string): Promise<string> {
   const target = jsName(entry)
   const result = await Bun.build({
@@ -247,7 +266,7 @@ async function bundleEntry(pluginId: string, pluginDir: string, outPluginDir: st
     target: 'bun',
     outdir: dirname(join(outPluginDir, target)),
     naming: parse(target).base,
-    plugins: [inlineJsdomStylesheet],
+    plugins: [inlineJsdomStylesheet, dropJsdomSyncXhrWorker],
     throw: false
   })
   if (!result.success) {
