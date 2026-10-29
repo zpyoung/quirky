@@ -239,6 +239,7 @@ export class DeliveryTracker {
   private settle(child: string, lineageId: string | null, outcome: Outcome): void {
     const toast = TOASTS[outcome]
     const kept = this.retained.has(child)
+    const args = { session: child }
     if (outcome === 'delivered' || outcome === 'resent') this.retained.delete(child)
     this.context.emit('delivery', { child, lineageId, outcome })
     if (toast.persistent && !kept) return
@@ -252,8 +253,30 @@ export class DeliveryTracker {
       ...(toast.persistent
         ? {
             persistent: true,
-            actions: [{ label: 'Resend brief', command: RESEND_COMMAND, args: { session: child }, keepOpen: true }],
-            onDismiss: { command: DISCARD_COMMAND, args: { session: child } }
+            actions: [{ label: 'Resend brief', command: RESEND_COMMAND, args, keepOpen: true }],
+            onDismiss: { command: DISCARD_COMMAND, args }
+          }
+        : {})
+    })
+  }
+
+  /** Publishes the outcome of a delivery performed by an exact remote Handoff owner. */
+  reportExternal(child: string, lineageId: string | null, outcome: Outcome): void {
+    const toast = TOASTS[outcome]
+    const args = { session: child, ...(lineageId === null ? {} : { lineage: lineageId }) }
+    this.context.emit('delivery', { child, lineageId, outcome })
+    this.notify({
+      title: toast.title,
+      body: '',
+      desktop: false,
+      kind: toast.kind,
+      key: `handoff:${child}`,
+      ...(toast.detail === undefined ? {} : { detail: toast.detail }),
+      ...(toast.persistent
+        ? {
+            persistent: true,
+            actions: [{ label: 'Resend brief', command: RESEND_COMMAND, args, keepOpen: true }],
+            onDismiss: { command: DISCARD_COMMAND, args }
           }
         : {})
     })
