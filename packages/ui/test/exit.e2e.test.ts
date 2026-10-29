@@ -11,6 +11,7 @@ const SAMPLE_DISTRO = resolve(import.meta.dir, '../../../distros/sample')
 const SIDEBAR = 'sidebar-section:quirky.worktree/worktrees'
 const SOURCE_CONTROL = 'panel:quirky.git/source-control'
 const SOURCE_CONTROL_ACTIVITY = 'activity-item:quirky.sidebar-extras/source-control'
+const EDITOR_SOURCE_CONTROL = 'command:quirky.editor/source-control'
 const QUESTIONS = 'panel:quirky.ask/questions'
 const SESSION_VIEW = 'view:quirky.session/worktree'
 
@@ -105,6 +106,7 @@ test('SC-59: the M0 exit test, through the CLI only', async () => {
   expect(inspection.plugins.map(({ id }) => id)).toContain('sample.sidebar')
   const catalog = JSON.parse(await ok(['api', '--json'])) as ApiCatalog
   expect(catalog.pluginApiVersion).toBe(PLUGIN_API_VERSION)
+  expect(catalog.uiCommands.some((command) => command.id === EDITOR_SOURCE_CONTROL)).toBe(true)
 
   expect(slotOf(stock, SIDEBAR)?.plugin).toBe('quirky.worktree')
   expect(slotOf(stock, SOURCE_CONTROL)).toBeDefined()
@@ -125,6 +127,8 @@ test('SC-59: the M0 exit test, through the CLI only', async () => {
   })
   expect(flat.slots.filter((slot) => slot.kind === 'panel').map((slot) => slot.id)).not.toContain(SOURCE_CONTROL)
   expect(slotOf(flat, SOURCE_CONTROL_ACTIVITY)).toBeUndefined()
+  const disabledCatalog = JSON.parse(await ok(['api', '--json'])) as ApiCatalog
+  expect(disabledCatalog.uiCommands.some((command) => command.id === EDITOR_SOURCE_CONTROL)).toBe(false)
   const unknown = await quirky(['git', 'status'])
   expect(unknown.code).not.toBe(0)
   expect(unknown.stderr).toContain('unknown command')
@@ -140,6 +144,8 @@ test('SC-59: the M0 exit test, through the CLI only', async () => {
   expect(slotOf(restored, SOURCE_CONTROL)).toBeDefined()
   expect(slotOf(restored, SOURCE_CONTROL_ACTIVITY)).toBeDefined()
   expect((await quirky(['git', 'status'])).code).toBe(0)
+  const restoredCatalog = JSON.parse(await ok(['api', '--json'])) as ApiCatalog
+  expect(restoredCatalog.uiCommands.some((command) => command.id === EDITOR_SOURCE_CONTROL)).toBe(true)
 
   const sessions = (await agent.callAny('quirky.session/list', {})) as Session[]
   expect(sessions.find((session) => session.id === shell.id)?.status).toBe('running')

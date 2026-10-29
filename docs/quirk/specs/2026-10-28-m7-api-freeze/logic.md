@@ -3,7 +3,7 @@
 ## Status & amendments
 Approved autonomously under LOOP.md. Tech spec: requested (public contract, loader, CLI catalog, and distribution cross subsystem boundaries).
 
-**Amendments:** 2026-10-28 — accepted spec-review F1: propagate each plugin's floor to independently executing UI/CLI hosts and reject locally before importing, including already-connected older clients of a newer daemon. Actual stock-UI verification additionally requires disabling the separate `activity-item:quirky.sidebar-extras/source-control` in the sample pack; removing the pack restores it with the Git panel.
+**Amendments:** 2026-10-28 — accepted spec-review F1: propagate each plugin's floor to independently executing UI/CLI hosts and reject locally before importing, including already-connected older clients of a newer daemon. Actual stock-UI verification additionally requires disabling the sidebar-extras Source Control activity and editor Source Control command/keybinding in the sample pack; removing the pack restores these with the Git panel.
 
 ## Goal and scope
 Freeze the existing plugin-author contract as API **1.0.0**, require every plugin to declare the minimum stable API release it needs, refuse incompatible code before execution, and publish the existing sample distro as a documented, installable repository artifact. This item owns API freeze, not another parity sweep.
@@ -13,7 +13,7 @@ Non-goals: a registry service, network publication or pushing a release, automat
 ## Conceptual model and data flow
 The host exposes a stable plugin API release independently of its app version, wire-protocol version, catalog schema version, and each plugin's own version. A plugin manifest declares `apiVersion`, a minimum stable release. The daemon validates it through the shared manifest parser during discovery, inspection, direct installation, and distro inspection/installation, before importing any plugin module. Supported manifests enter the existing lazy activation and contribution lifecycle unchanged. Installed code without the declaration is invalid, not silently upgraded. UI module metadata and CLI command entries carry the declaring plugin's floor; each local executing host checks against its own API release before importing. A newer daemon cannot authorize newer-context code to execute in an older UI/CLI.
 
-The sample remains `distros/sample`, a pack of one UI plugin which overrides the stock worktree sidebar and disables `quirky.git` plus the separate sidebar-extras Source Control activity. Installation, introspection and removal use existing public CLI/API paths. Repository publication means committed source and author-facing instructions; no remote or external registry is required or authorized.
+The sample remains `distros/sample`, a pack of one UI plugin which overrides the stock worktree sidebar and disables `quirky.git` plus the independently owned Source Control activity, editor command and keybinding. Installation, introspection and removal use existing public CLI/API paths. Repository publication means committed source and author-facing instructions; no remote or external registry is required or authorized.
 
 ## Key decisions & rationale
 Recommended: a required stable SemVer minimum with same-major compatibility. The 1.0.0 host accepts 1.0.0; a later 1.x host retains older 1.x contracts. Reject another major, any release newer than the host, ranges, shorthand, prereleases and build suffixes. This makes missing capabilities fail before code executes and fulfills m0-registry D15's version-floor intent.

@@ -187,15 +187,15 @@
 - **Revisit if:** distro replacement semantics are explicitly changed
 - **Source:** locked by docs/loop/decisions/m0-core.md
 
-## D18: Disable the separate Source Control activity in the published sample
-- **Question:** Actual web use showed the Git panel and CLI group absent, but a Source Control activity button still visible.
-- **Options:** hide it with renderer special cases; disable all sidebar extras; add its stable contribution ID to the sample pack's disable list
-- **Chose:** add activity-item:quirky.sidebar-extras/source-control alongside quirky.git; removing the pack restores both
-- **Why:** the later sidebar-extras plugin owns this affordance independently. A distro is the supported stable-ID mechanism and should genuinely turn Source Control off in current stock Quirky.
-- **Evidence:** using-apps-like-a-user run20261029T042251-1b31 screenshot/tree3, first goal pass and second fail; manifest owner at plugins/quirky.sidebar-extras/quirky-plugin.json; added real CLI/UI state regression failed before the pack edit and passed after (canonical1-file suite flaky:[]); later fixed run20261029T042517-8509 shows no Source Control tool
+## D18: Disable all independent Source Control launch affordances in the sample
+- **Question:** Actual web use showed the Git panel and CLI group absent but the sidebar-extras activity button, then the editor-owned palette command, still present.
+- **Options:** renderer special cases; disable all sidebar extras/editor; disable just the stable activity/command/keybinding IDs in the pack
+- **Chose:** add activity-item:quirky.sidebar-extras/source-control, command:quirky.editor/source-control and keybinding:quirky.editor/source-control alongside quirky.git; removal restores them
+- **Why:** later plugins own these affordances independently. The distro's stable-ID mechanism turns Source Control off without disabling unrelated editor/filter capabilities.
+- **Evidence:** failed web runs20261029T042251-1b31 and20261029T042517-8509; both added CLI/UI transition assertions failed before their pack edits. Canonical final60-file acceptance set passed60/60 flaky:[] in48.04s. Final web run20261029T042933-ea2d:2/2pass, findings[]/overrides[]/kept_open[]; stock-restoration run20261029T043308-37f7:1/1pass, same clean report fields. Report paths are .quirk/using-apps-like-a-user/runs/<run-id>/report.json and screenshots alongside.
 - **Reversibility:** easy
 - **Confidence:** high
-- **Revisit if:** the activity's stable owner/ID changes in a major API release
+- **Revisit if:** one of these stable owner/IDs changes in a major API release
 - **Source:** assumed — autonomous
 
 ## D19: Restore worker contamination before the integration barrier
@@ -210,4 +210,4 @@
 - **Source:** assumed — autonomous
 
 ## Progress
-All three audited worker branches merged (88221520,6f1e2714,9aa743a3) and their worktrees removed immediately. Initial composed typecheck29.46s and full macOS build16.50s passed. Canonical targeted60-file gate found a new fixture scenario error and three UI teardown regressions; both repaired with focused2-file suite passing. Actual daemon/CLI/real-PTY smoke passed version reporting, compatible package7.3.2 execution, future direct/distro refusal and sample install. Web dogfood exposed separate Source Control affordance; pack fixed via stable-ID disable, real CLI/UI regression red then green, composed typecheck passed48.38s. Fixed web run active; finish goals, remove pack, stop owned runtime, run full suite/scripts/final review. Pending early dependency queue deps remains in flight; wait until ready before sole roadmap catch-up/land. Scratch `/tmp/quirky-m7-api-freeze-lane12.AAiuFD`; no human asks.
+All three audited worker branches merged (88221520,6f1e2714,9aa743a3); worktrees removed. Shared comparator36pass; composed60-file acceptance suite now60/60passed flaky:[] after UI teardown/fixture and sample-affordance fixes. Initial full macOS build16.50s, subsequent UI rebuild and composed typecheck passed. Actual daemon/CLI/real-PTY smoke passed version reporting, compatible package7.3.2 execution, future direct/distro refusal, sample install and stock restore. Final sample web goals2/2pass and restore1/1pass; failed earlier runs preserved honestly. Every owned browser closed; private process-scope cleanup printed SMOKE_STOPPED and its lingering stdin service was terminated. Full packages/apps/plugins suite plus scripts is running (bg_19). Early dependency deps retry bg_18 pending; do not end turn: wait until ready, sole roadmap catch-up, consume incoming decisions, final checks and bounded Gemini review, land via canonical queue. Scratch `/tmp/quirky-m7-api-freeze-lane12.AAiuFD`; no human asks.
