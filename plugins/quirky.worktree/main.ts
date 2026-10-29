@@ -495,6 +495,7 @@ export async function activate(context: PluginContext): Promise<void> {
         }
       })
     },
+    ownedIds,
     availableHosts: () => availableHosts((method, params) => context.call(method, params), fail),
     async create(params, caller) {
       if (Object.hasOwn(params, 'runtime')) throw fail('invalid-params', 'Use quirky.worktree/createRemote for owner-runtime worktree creation.')
