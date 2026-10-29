@@ -319,5 +319,27 @@
 - **Revisit if:** isolated verification or a later full run demonstrates a repeatable failure.
 - **Source:** assumed — autonomous
 
+## D30: Verify separator persistence with a fresh page, not ineffective reload shortcuts
+- **Question:** how can the browser prove persistence without a visible reload control?
+- **Options:** claim modal reopen is reload; repeat unsupported keyboard shortcuts; end the browser and begin a fresh guarded run against the same daemon/home.
+- **Chose:** phase1 run20261029T004449-46b1 saved separators off and ended its browser; phase2 run20261029T004725-d397 opened a new browser at the same URL, observed dividers absent and the setting unchecked before any mutation, then restored on through Settings and Save. Both reports pass with kept_open=[] and cleanup_errors=[].
+- **Why:** a distinct page hydrates the persisted value instead of reusing the prior modal state. No JS/API setting write or reload substitute was used. Phase1's checkbox action returned NO_EFFECT for the requested value signal, but its screenshot/tree show checked→unchecked and Save was observed; checkbox checked state, not its unchanged value string, is the relevant evidence.
+- **Evidence:** phase1 obs-1/2/3/5; phase2 obs-1/2/4; parent inspected phase2 unchecked Settings and restored divider screenshots. Rows retain their positions in both states. The sole owned service sidebar-current-web-8 then exited0 with WEB_FIXTURE_CLEANED; all owned UI browsers/daemons are closed.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** fresh-page hydration loses the saved setting or toggling changes geometry.
+- **Source:** assumed — autonomous
+
+## D31: Repair the current shell's missing live activity mount, not replace it with panel counts
+- **Question:** does the new shell preserve SC-14/15 when Changes is closed?
+- **Options:** treat panel status counts as equivalent; restore a legacy rail; mount the effective public activity alias in the canonical stripe.
+- **Chose:** the generic alias mount. If an available activity-item aliases a tool with a different body contribution, its public renderer owns the stripe control and live decoration, independently of panel visibility. Keep the existing substantive panel, placement and move authority; avoid nested buttons/double toggles and duplicate cached host badges. Reflect that stripe visibility in public slot state. Standalone activity-tool bodies keep their current semantics.
+- **Why:** current source mounts only the Git panel body and uses a host icon/cached badge on the stripe. The real current-shell run confirms stale decoration: dirty main count1 survives closing Changes, remains after switching to clean feature, and clears only when Changes reopens. This is distinct from D25's old-host visual misread. A Changes section-count test alone would silently narrow the requested surface.
+- **Evidence:** SidebarDirtyMountAudit source chain ToolShell372–457/660–663/734–739, tool-layout aliases48–50/115–132, public activity provider ui.tsx91–131/278–289. Guarded run20261029T005852-55f5 FAIL F1 obs-4, with dirty/closed obs-2/3 and clear only on reopen obs-5/6. Readonly actual CLI ui state shows Worktrees original ID shown/reported, but activity alias shown:false and no report while Changes is closed. Failed browser was explicitly closed; daemon exited0. Earlier full packaged build passed21.36s but predates this new host correction.
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** alias rendering duplicates mounts, changes standalone contribution behavior, loses move/activation, or the corrected closed-panel scenario remains stale.
+- **Source:** assumed — autonomous, preserving ui-shell-slots D3/D11 and original sidebar SC-14/15
+
 ## Progress
-Current source is b2b82c58 plus the README update. Core/source corrections and prior fixture components are integrated; all thirty incoming decision logs were audited. Current-shell empty-project UI passed and its browser closed. Separator persistence is undergoing a two-run fresh-page proof on the sole owned fixture. The latest remote prepass is red as D27 records; three disjoint corrective workers are migrating current shell/DOM/Ask fixtures, with no checks mid-flight. No final code-review model has run yet. Remaining: integrate and remotely verify corrections, complete/close the separator fixture, final build and three-lens review with one accepted fix batch, record complete criterion evidence, commit and canonical land. Dependency readiness is true; quiet aging retains the explicit D22 observation limit. No global completion claim.
+Current source is b2b82c58 plus committed documentation7d4e5de8. Core/source corrections and prior fixture components are integrated; all thirty incoming decision logs were audited. Current-shell empty-project and two-phase separator persistence UI passed; every owned browser/daemon is closed, with final service cleanup observed. The latest remote prepass is red as D27 records; three disjoint corrective workers are migrating current shell/DOM/Ask fixtures, with no checks mid-flight. A packaged build is running on unchanged production source. No final code-review model has run yet. Remaining: integrate and remotely verify corrections, finish build and three-lens review with one accepted fix batch, record complete criterion evidence, commit and canonical land. Dependency readiness is true; quiet aging retains the explicit D22 observation limit. No global completion claim.

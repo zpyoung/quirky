@@ -31,6 +31,8 @@ Satisfies [locked decisions](logic.md#decisions-locked). Existing schema and API
 - Guarded mutation preserves expectedInstanceId/expectedProjectGroupId. Do not broaden loose membership to folders or change repoId/path/parentId.
 - Serialized windows remain all/live-only/today/week/month/custom. Displayed labels express rolling durations. Tests may use accessible selectors to exercise them, not assert a copied menu inventory.
 - Unknown runtime retains non-main rows per original tech.md69-71; main exception remains explicit. MethodNotFound means absent optional source. Ordinary provider failure means unavailable, not authoritative empty. No private browser store imports or persisted-tab-is-live inference: public browser pane/tab records alone do not expose an authoritative runtime-liveness predicate.
+- Aliased activity presentation remains mounted in the canonical tool stripe independently of the tool panel. For an effective tool whose aliases include an available activity-item different from its body contribution, mount that public activity slot as the stripe control; retain the existing panel body, move menu and tool placement authority. Do not nest buttons or double-toggle the contributed action. Its live decoration replaces the cached host badge for that control, so closing a panel cannot freeze a stale badge beside it.
+- Public slot state marks this aliased stripe activity visible even when the panel is closed. Standalone activity-tool bodies retain their existing open/close behavior; disabled/overridden activity mounts use existing PluginSlot cleanup and ownership checks. No new protocol field, registry, legacy rail or sidebar-extras-specific host import.
 
 ## Data models / schemas
 
@@ -39,7 +41,7 @@ Satisfies [client state](logic.md#decisions-locked). No new data model. Existing
 ## DO-NOT-CHANGE fences
 
 - `docs/loop/LOOP.md`, `scripts/build-loop/**`, shared queue and decision index: controller-owned protected paths.
-- `packages/ui/**`, `packages/protocol/**`, daemon UI model/layout: concurrent shell-slot owner; consume public contributions, do not implement duplicate host mounting.
+- `packages/ui/**`, `packages/protocol/**`, daemon UI model/layout remain owned by the canonical shell. The direct SC-14/15 regression permits only its generic aliased-activity stripe mount/visibility repair in ToolShell and layout state; consume existing public IDs and mount lifecycle. No duplicate host, protocol migration or obsolete layout restoration.
 - Existing group lifecycle/ledger retention guards and canonical CAS identity: preserve safety; only edit if direct scenario evidence demands a narrowly scoped repair.
 - Review/automation filter policy: separate owners; preserve composition and independent hidden counts.
 
