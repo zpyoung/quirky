@@ -440,5 +440,16 @@
 - **Revisit if:** the canonical merge/typecheck gate reports a failure.
 - **Source:** locked by operator instruction in this conversation
 
+## D41: Resolve only the landing controller's named merge conflicts and retry
+- **Question:** how to proceed after canonical land rejected the stale branch?
+- **Options:** bypass the controller; restart discretionary campaigns; merge current roadmap, preserve both test repairs and retry.
+- **Chose:** corrective merge21fa8372 resolved five test files, retaining explicit activity-tool open, schema rejection without prose pins, native-form/application assertions, hooks warnings and prepared-checkout identity/cleanup checks. Read all28 incoming decision logs through D/Progress; no binding conflict with sidebar behavior was found. Preserve optional required-choice dismissal, child autofocus, canonical IDs, optional-provider and ownership boundaries.
+- **Why:** the controller named a merge conflict, not a new feature or review request. Its required correction is now checked: all five resolved files pass remotely with no flakes, and merged UI lint/root/mobile/desktop typechecks pass40.06s.
+- **Evidence:** first land rejection; merge21fa8372; five-file suite-result ok:true/flaky:[] and typecheck output; SidebarLandingDecisions complete28-log read list. No production compatibility path or new follow-up was added.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** the retried canonical gate reports another conflict or failure.
+- **Source:** locked by canonical landing controller and operator instruction
+
 ## Progress
-Ready for canonical land. Current source72b0a879 passed169/169 affected files and12/12 script files remotely, both without flakes. Latest full typecheck/build passed47.32s. Every original scenario has retained API/CLI/renderer coverage; guarded UI evidence and the D22 quiet-clock tool limit are preserved. All owned browsers/daemons and worker trees are closed. No extra final review is claimed or required under the operator waiver. No duplicate follow-up was added; existing fix-test-worktree-1028 owns broader baseline repair. Commit this verification record, detach and run canonical queue land; await its authoritative receipt.
+Retry canonical land after verified corrective merge21fa8372. The original169 affected files and12 scripts passed remotely without flakes; after the named merge, all five resolved files and full typecheck passed as D41 records. All28 incoming decision logs were consumed; every owned process/browser and component tree is closed. The operator waived extra reviews; no duplicate follow-up was added. Existing fix-test-worktree-1028 remains the broader owner. D22's quiet-clock sampling limit is preserved. Await the authoritative land receipt.
