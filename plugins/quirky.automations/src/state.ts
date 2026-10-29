@@ -100,7 +100,9 @@ export function createAutomationUiEnv(context: PluginContext, service: Automatio
       const returningFromSettings = record(currentView) && currentView.id === AUTOMATIONS_SETTINGS_VIEW
       const next = env.update(value => { Object.assign(value.navigation, patch) })
       if (toolState.slot === null) {
-        if (!record(currentView) || currentView.id !== AUTOMATIONS_VIEW) await context.call('ui.view.open', { id: AUTOMATIONS_VIEW })
+        const hasAutomationTab = toolState.layout?.viewTabs?.some((view) => view.id === AUTOMATIONS_VIEW) ?? false
+        if (returningFromSettings && hasAutomationTab) await context.call('ui.view.close', {})
+        else if (!record(currentView) || currentView.id !== AUTOMATIONS_VIEW) await context.call('ui.view.open', { id: AUTOMATIONS_VIEW })
       } else if (returningFromSettings) {
         if (previousView) await context.call('ui.view.open', { id: previousView.id, ...(previousView.input === undefined ? {} : { input: previousView.input }) })
         else await context.call('ui.view.close', {})

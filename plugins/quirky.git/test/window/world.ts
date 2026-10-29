@@ -247,12 +247,6 @@ export function sc1(w: World): void {
   w.write('notes.txt', 'x\ny\nz\n')
 }
 
-/** The accessible Source Control badge, or null when the panel has no uncommitted changes. */
-export function badge(): { count: string; title: string } | null {
-  const span = document.querySelector<HTMLElement>('[role="img"][aria-label^="Source Control —"]')
-  return span ? { count: span.textContent ?? '', title: span.getAttribute('aria-label') ?? '' } : null
-}
-
 type TerminalViewTab = { id: string; kind: 'view'; viewId: string; input?: Record<string, unknown> }
 type TerminalTab = { id: string; kind?: never }
 type WorkspaceTab = TerminalViewTab | TerminalTab

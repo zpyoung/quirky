@@ -18,7 +18,7 @@ test('disabling a creating plugin kills its check but leaves client-owned checks
   try {
     const builtins = join(home, 'builtins')
     mkdirSync(builtins)
-    for (const id of ['quirky.repo', 'quirky.worktree', 'quirky.checks']) {
+    for (const id of ['quirky.repo', 'quirky.cli', 'quirky.worktree', 'quirky.checks']) {
       symlinkSync(resolve(import.meta.dir, '../..', id), join(builtins, id))
     }
     writePlugin(join(home, 'plugins'), {
@@ -81,7 +81,7 @@ test('a startup plugin can run a check and expose its evidence during activation
   try {
     const builtins = join(home, 'builtins')
     mkdirSync(builtins)
-    for (const id of ['quirky.repo', 'quirky.worktree', 'quirky.checks']) {
+    for (const id of ['quirky.repo', 'quirky.cli', 'quirky.worktree', 'quirky.checks']) {
       symlinkSync(resolve(import.meta.dir, '../..', id), join(builtins, id))
     }
     writePlugin(join(home, 'plugins'), {

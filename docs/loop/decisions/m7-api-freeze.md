@@ -209,5 +209,49 @@
 - **Revisit if:** a worker tool again resolves a relative path outside its assigned worktree
 - **Source:** assumed — autonomous
 
+## D20: Close fixture dependency sets over the real Worktree requirements
+- **Question:** Full-suite Checks owner and automation provenance tests saw invalid dependent plugins or a missing Worktree setting.
+- **Options:** relax production manifest/dependency validation; add the missing real prerequisite to the fixture
+- **Chose:** link quirky.cli in the two Checks owner stacks and automation provenance stack
+- **Why:** quirky.worktree declares quirky.repo and quirky.cli; an incomplete test stack invalidated Worktree, then Checks and owner plugins. These source manifests already target API1.0.0, so an API fallback would hide the actual problem.
+- **Evidence:** full suite17macOSpassed plus remote869/874passed, five failing files; real Worktree manifest dependencies13–15; corrected focused five-file suite5/5passed flaky:[]
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** fixture stacks omit another declared runtime prerequisite
+- **Source:** assumed — autonomous
+
+## D21: Preserve real origin/upstream hydration while removing duplicate request-shape checks
+- **Question:** The Tasks navigation test exceeded its default5-second bound while repeatedly refreshing the same upstream detail and inspecting provider query shapes.
+- **Options:** drop hydration and assert forwarded tuples only; keep duplicate provider internals; retain one real hydration per distinct source with a bounded integration deadline
+- **Chose:** seed distinct origin/upstream PRs sharing a number, verify both sources across all three tabs, hydrate each source once and assert actual review URL/prRepo. Remove provider query-shape/count assertions; use the existing20-second review integration bound.
+- **Why:** correct forwarded state with data fetched from the wrong repo is a real consumer bug, so hydration cannot be discarded. Repeating the same full refresh per tab and pinning transport queries adds no separate invariant.
+- **Evidence:** initial full-suite timeout/cleanup ConnectionLost; parent rejected the narrower worker draft; focused five-file suite5/5passed with actual two-source hydration retained
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** a tab has its own distinct source-selection contract not covered by the shared detail hydration
+- **Source:** assumed — autonomous
+
+## D22: Synchronize independent activity and panel snapshots before the Git commit transition
+- **Question:** Git layout tests depended on the old badge DOM, then committed before GitPanel had left its initial clean snapshot.
+- **Options:** repin obsolete tooltip/DOM assumptions or increase timeouts; observe semantic activity count and establish positive panel readiness
+- **Chose:** assert the accessible Source Control activity's visible count4, capped1000+, and clean status; wait for the initial unstaged math.ts row before staging, invoke the actual primary Commit action, verify HEAD changed and Git status is clean, then observe count removal. Delete obsolete world.badge.
+- **Why:** the independent activity could show4 before GitPanel rendered any dirty row, so a negative absence wait passed vacuously. The observed disabled primary title Nothing to commit proved the missing readiness edge; no timeout or production Git change was needed.
+- **Evidence:** full-suite badge failures; two focused attempts exposed the unperformed commit and disabled clean snapshot; final focused five-file suite5/5passed flaky:[]; LSP unavailable and literal references showed no badge-helper callers
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** another asynchronous producer is mistaken for readiness of the control under test
+- **Source:** assumed — autonomous
+
+## D23: Keep the original standalone Automations predecessor across a settings detour
+- **Question:** open/settings/open/close restored the settings page instead of the view preceding Automations.
+- **Options:** weaken the expected predecessor; select Automations above Settings; close Settings to reuse the existing Automations tab
+- **Chose:** close the settings detour when the standalone Automations tab already exists; preserve the tool-visible path and retained navigation mutation
+- **Why:** inserting/selecting a new center target left Settings underneath it. The existing-tab return restores the original predecessor on the next Close, without replacing filters/drafts.
+- **Evidence:** full-suite ui-state failure; corrected ui-state assertions and focused five-file pass; fresh-home actual daemon/CLI open/uiNavigate/settings/open/close smoke2.83s, before:null/after:null plus retained query/page/status/runStatus assertions
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** standalone and tool navigation acquire a different explicit history policy
+- **Source:** locked by plugins/quirky.automations/README.md
+
 ## Progress
-All three audited worker branches merged (88221520,6f1e2714,9aa743a3); worktrees removed. Shared comparator36pass; composed60-file acceptance suite now60/60passed flaky:[] after UI teardown/fixture and sample-affordance fixes. Initial full macOS build16.50s, subsequent UI rebuild and composed typecheck passed. Actual daemon/CLI/real-PTY smoke passed version reporting, compatible package7.3.2 execution, future direct/distro refusal, sample install and stock restore. Final sample web goals2/2pass and restore1/1pass; failed earlier runs preserved honestly. Every owned browser closed; private process-scope cleanup printed SMOKE_STOPPED and its lingering stdin service was terminated. Full packages/apps/plugins suite plus scripts is running (bg_19). Early dependency deps retry bg_18 pending; do not end turn: wait until ready, sole roadmap catch-up, consume incoming decisions, final checks and bounded Gemini review, land via canonical queue. Scratch `/tmp/quirky-m7-api-freeze-lane12.AAiuFD`; no human asks.
+All feature slices and sample fixes are committed through5bea0e52. Comparator36pass; original focused acceptance60/60passed. First full suite failed:17/17macOSpassed, remote869/874passed; five actual failures repaired as D20–D23. Final focused five-file gate5/5passed flaky:[], full typecheck passed, scripts126tests/12filespassed/0fail (132.04s combined; nested negative-fixture output is expected, root verdict green). Fresh-home actual automation CLI smoke2.83s also passed. Earlier real API/CLI/PTY/sample web proof remains valid as D18 records; all owned runtime/browser resources stopped. Commit this repaired batch, then await pending early dependency (current canonical deps retrybg_32), perform the sole roadmap catch-up and consume incoming decisions, run final deterministic build/fullsuite/scripts/typecheck prepass and actual bounded Gemini review, remediate accepted findings once and land. Final-prepass.ts is prepared outside repo in `/tmp/quirky-m7-api-freeze-lane12.AAiuFD`; it has not run. Do not end while dependency merely pending; no human asks.
