@@ -378,6 +378,7 @@ function ToolItem({
   badges,
   badgeTitles,
   inboxCount,
+  activityItemIds,
   dragging,
   registerAnchor,
   onOpen,
@@ -392,6 +393,7 @@ function ToolItem({
   badges: Record<string, number>
   badgeTitles: Record<string, string>
   inboxCount: number | null
+  activityItemIds: ReadonlySet<string>
   dragging: { current: string | null }
   registerAnchor: ToolAnchorRegistration
   onOpen: (id: string) => void
@@ -400,27 +402,44 @@ function ToolItem({
 }) {
   const anchor = useCallback((element: HTMLDivElement | null) => registerAnchor(tool.id, element), [registerAnchor, tool.id])
   const selected = openId === tool.id
-  const badge = toolBadge(tool, badges, badgeTitles, inboxCount)
+  const activityItemId = tool.aliases.find((id) => id !== tool.contributionId && activityItemIds.has(id))
+  const badge = activityItemId ? null : toolBadge(tool, badges, badgeTitles, inboxCount)
+  const handleDragStart = (event: ReactDragEvent<HTMLElement>) => {
+    dragging.current = tool.id
+    event.dataTransfer.effectAllowed = 'move'
+    event.dataTransfer.setData('application/x-quirky-tool', tool.id)
+  }
+  const handleDragEnd = () => { dragging.current = null }
 
   return (
     <div ref={anchor} className="tool-shell__tool">
-      <IconButton
-        className="tool-shell__tool-button"
-        label={tool.title}
-        title={tool.title}
-        aria-pressed={selected}
-        draggable
-        onDragStart={(event) => {
-          dragging.current = tool.id
-          event.dataTransfer.effectAllowed = 'move'
-          event.dataTransfer.setData('application/x-quirky-tool', tool.id)
-        }}
-        onDragEnd={() => { dragging.current = null }}
-        onClick={() => selected ? onClose(slot) : onOpen(tool.id)}
-      >
-        <ToolIcon tool={tool} />
-      </IconButton>
-      {badge && <Badge tone="needs-you" label={badge.title}>{badge.count}</Badge>}
+      {activityItemId
+        ? (
+          <div
+            className="tool-shell__tool-provider"
+            data-selected={selected}
+            draggable
+            onDragStart={handleDragStart}
+            onDragEnd={handleDragEnd}
+          >
+            <PluginSlot id={activityItemId} />
+          </div>
+        )
+        : (
+          <IconButton
+            className="tool-shell__tool-button"
+            label={tool.title}
+            title={tool.title}
+            aria-pressed={selected}
+            draggable
+            onDragStart={handleDragStart}
+            onDragEnd={handleDragEnd}
+            onClick={() => selected ? onClose(slot) : onOpen(tool.id)}
+          >
+            <ToolIcon tool={tool} />
+          </IconButton>
+        )}
+      {!activityItemId && badge && <Badge tone="needs-you" label={badge.title}>{badge.count}</Badge>}
       <ToolMenu
         entry={tool}
         placement={placement}
@@ -440,6 +459,7 @@ function ToolStripe({
   badges,
   badgeTitles,
   inboxCount,
+  activityItemIds,
   knownIds,
   dragging,
   onOpen,
@@ -453,6 +473,7 @@ function ToolStripe({
   badges: Record<string, number>
   badgeTitles: Record<string, string>
   inboxCount: number | null
+  activityItemIds: ReadonlySet<string>
   knownIds: ReadonlySet<string>
   dragging: { current: string | null }
   onOpen: (id: string) => void
@@ -562,6 +583,7 @@ function ToolStripe({
             badges={badges}
             badgeTitles={badgeTitles}
             inboxCount={inboxCount}
+            activityItemIds={activityItemIds}
             dragging={dragging}
             registerAnchor={registerAnchor}
             onOpen={onOpen}
@@ -671,6 +693,9 @@ export function ToolShell({ geometry, sizes, onResizePreview, onResizeCommit }: 
   const inboxCount = attention.asks !== null && !attention.errors.asks ? attention.asks.length : null
   const toolLayout = layout.tools
   const tools = orderedTools(model?.tools ?? [], toolLayout)
+  const activityItemIds = new Set(
+    (model?.activityItems ?? []).filter(({ module }) => module !== null).map(({ id }) => id)
+  )
   const placements = new Map(tools.flatMap((tool) => {
     const placement = effectiveToolPlacement(tool, toolLayout)
     return placement ? [[tool.id, placement] as const] : []
@@ -723,6 +748,7 @@ export function ToolShell({ geometry, sizes, onResizePreview, onResizeCommit }: 
           badges={badges}
           badgeTitles={badgeTitles}
           inboxCount={inboxCount}
+          activityItemIds={activityItemIds}
           knownIds={knownIds}
           dragging={dragging}
           onOpen={open}
