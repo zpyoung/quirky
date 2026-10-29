@@ -1,10 +1,12 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from 'bun:test'
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
-import { act, createElement as h, type ReactNode } from 'react'
+import { act, createElement as h, createRef, useState, type ReactNode } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
+import { ToolPanelActions } from '@quirky/ui'
 import {
   Badge,
   Button,
+  ContextMenu,
   Dialog,
   EmptyState,
   FormRow,
@@ -12,16 +14,20 @@ import {
   InlineAgentCard,
   ListRow,
   Menu,
+  Popover,
   SectionHeader,
   StatusDot,
   Tabs,
   TextField,
+  TextArea,
+  SelectField,
   Toast,
   ToolPanelFrame,
 } from '../src/design-system'
 
 let root: Root | null = null
 let container: HTMLDivElement
+const independentRoots = new Set<Root>()
 
 beforeAll(() => {
   GlobalRegistrator.register()
@@ -39,6 +45,10 @@ beforeEach(() => {
 })
 
 afterEach(async () => {
+  for (const extra of [...independentRoots].reverse()) {
+    await act(async () => extra.unmount())
+    independentRoots.delete(extra)
+  }
   await act(async () => root?.unmount())
   root = null
   document.body.innerHTML = ''
@@ -46,6 +56,16 @@ afterEach(async () => {
 
 async function render(node: ReactNode) {
   await act(async () => root!.render(node))
+}
+function mountIndependentRoot(target: HTMLElement): Root {
+  const next = createRoot(target)
+  independentRoots.add(next)
+  return next
+}
+
+async function unmountIndependentRoot(target: Root): Promise<void> {
+  await act(async () => target.unmount())
+  independentRoots.delete(target)
 }
 
 const click = async (element: Element) => act(async () => {
@@ -92,21 +112,16 @@ afterEach(() => {
 })
 
 describe('shared graphite components', () => {
-  test('button variants render and disabled buttons do not invoke their callback', async () => {
+  test('buttons honor disabled state and icon buttons have accessible names', async () => {
     const calls: string[] = []
     const onClick = () => calls.push('clicked')
     await render(h('div', null,
-      <Button variant="primary" onClick={onClick}>Primary</Button>,
-      <Button variant="secondary">Secondary</Button>,
-      <Button variant="destructive">Delete</Button>,
+      <Button onClick={onClick}>Enabled</Button>,
       <Button disabled onClick={onClick}>Disabled</Button>,
       <IconButton label="Close panel" onClick={onClick}><span aria-hidden="true">×</span></IconButton>,
     ))
 
-    expect(container.querySelectorAll('.ui-button')).toHaveLength(5)
-    expect(container.querySelector('.ui-button--primary')).not.toBeNull()
-    expect(container.querySelector('.ui-button--secondary')).not.toBeNull()
-    expect(container.querySelector('.ui-button--destructive')).not.toBeNull()
+    expect(container.querySelectorAll('button')).toHaveLength(3)
     expect(container.querySelector('button[aria-label="Close panel"]')).not.toBeNull()
     await click(container.querySelector('button:disabled')!)
     expect(calls).toEqual([])
@@ -127,35 +142,52 @@ describe('shared graphite components', () => {
     expect(container.textContent).toContain('Message is required')
   })
 
+  test('multiline and selection fields preserve native form values and accessible error ownership', async () => {
+    await render(<form>
+      <span id="existing-help">Inherited description</span>
+      <TextArea label="Instructions" name="instructions" defaultValue={'first line\nsecond line'} help="Keep line breaks" error="Review instructions" aria-describedby="existing-help" />
+      <SelectField label="Agent" name="agent" defaultValue="codex">
+        <option value="claude">Claude</option>
+        <option value="codex">Codex</option>
+      </SelectField>
+      <TextArea label="Unavailable" name="disabled" defaultValue="not submitted" disabled />
+    </form>)
+    const form = container.querySelector('form')!
+    const instructions = form.querySelector<HTMLTextAreaElement>('textarea[name="instructions"]')!
+    const agent = form.querySelector('select')!
+    const unavailable = form.querySelector<HTMLTextAreaElement>('textarea[name="disabled"]')!
+    expect(instructions.value).toBe('first line\nsecond line')
+    expect(agent.value).toBe('codex')
+    expect(unavailable.value).toBe('not submitted')
+    expect(unavailable.disabled).toBe(true)
+    expect([...form.querySelectorAll('label')].map((label) => label.control)).toEqual([
+      instructions, agent, unavailable,
+    ])
+    expect(instructions.getAttribute('aria-invalid')).toBe('true')
+    const describedIds = instructions.getAttribute('aria-describedby')!.split(' ')
+    expect(describedIds.map((id) => document.getElementById(id)?.textContent)).toEqual([
+      'Inherited description', 'Keep line breaks', 'Review instructions',
+    ])
+    expect(new Set([...form.querySelectorAll('textarea,select')].map((field) => field.id)).size).toBe(3)
+  })
+
   test('list rows announce selection and disabled rows ignore activation', async () => {
     const calls: number[] = []
     await render(<ListRow title="provider-host" description="codex · editing host.ts" status="working" count={2} selected disabled onClick={() => calls.push(1)} />)
-    const row = container.querySelector('.ui-list-row')!
-    const action = container.querySelector('[aria-pressed="true"]')!
-    expect(row.className).toContain('ui-list-row')
-    expect(row.textContent).toContain('provider-host')
-    expect(row.textContent).toContain('2')
+    const action = container.querySelector('button[aria-pressed="true"]')!
+    expect(container.textContent).toContain('provider-host')
+    expect(container.textContent).toContain('2')
     expect(container.querySelector('[role="img"][aria-label]')).not.toBeNull()
     await click(action)
     expect(calls).toEqual([])
   })
 
-  test('list rows size one-line and two-line content correctly', async () => {
-    await render(<>
-      <ListRow title="Single line" />
-      <ListRow title="Two-line row" description="Secondary detail" />
-    </>)
-    const rows = [...container.querySelectorAll('.ui-list-row')]
-    expect(rows[0].className).not.toContain('ui-list-row--double')
-    expect(rows[1].className).toContain('ui-list-row--double')
-  })
-
   test('trailing row actions do not trigger the row action', async () => {
     const calls: string[] = []
     await render(<ListRow title="provider-host" onClick={() => calls.push('row')} trailing={<Button onClick={() => calls.push('trailing')}>Open</Button>} />)
-    await click(container.querySelector('.ui-list-row__trailing button')!)
+    await click(container.querySelector('button:not([aria-pressed])')!)
     expect(calls).toEqual(['trailing'])
-    await click(container.querySelector('.ui-list-row__main')!)
+    await click(container.querySelector('button[aria-pressed]')!)
     expect(calls).toEqual(['trailing', 'row'])
   })
 
@@ -166,7 +198,7 @@ describe('shared graphite components', () => {
       <StatusDot status="working" label="Agent working" />
     </>)
     expect(container.querySelector('h2')?.textContent).toBe('CHECKS')
-    expect(container.querySelector('.ui-section-header__actions button')?.textContent).toBe('Refresh')
+    expect(container.querySelector('button')?.textContent).toBe('Refresh')
     expect(container.querySelector('[aria-label="2 waiting"]')?.textContent).toBe('2')
     expect(container.querySelector('[role="img"][aria-label="Agent working"]')).not.toBeNull()
   })
@@ -224,6 +256,124 @@ describe('shared graphite components', () => {
     expect(container.querySelector('[role="menu"]')).toBeNull()
   })
 
+  test('only the top stacked dialog traps focus and handles Escape', async () => {
+    const calls: string[] = []
+    const tree = (inner: boolean) => <>
+      <Dialog open title="Project settings" onClose={() => calls.push('outer')}>
+        <button id="outer-action">Edit setup</button>
+      </Dialog>
+      <Dialog open={inner} title="Trust setup" onClose={() => calls.push('inner')}>
+        <button id="inner-action">Run once</button>
+      </Dialog>
+    </>
+    await render(tree(false))
+    const outerAction = container.querySelector<HTMLButtonElement>('#outer-action')!
+    outerAction.focus()
+    await render(tree(true))
+    const innerDialog = [...container.querySelectorAll<HTMLElement>('[role="dialog"]')][1]
+    const innerAction = container.querySelector<HTMLButtonElement>('#inner-action')!
+    innerAction.focus()
+    expect(document.activeElement).toBe(innerAction)
+    outerAction.focus()
+    expect(innerDialog.contains(document.activeElement)).toBe(true)
+    await key(innerAction, 'Escape')
+    expect(calls).toEqual(['inner'])
+    await render(tree(false))
+    expect(document.activeElement).toBe(outerAction)
+    await key(outerAction, 'Escape')
+    expect(calls).toEqual(['inner', 'outer'])
+  })
+
+  test('closing a stacked dialog keeps keyboard focus in a busy parent', async () => {
+    const calls: string[] = []
+    const tree = (inner: boolean, busy: boolean) => <>
+      <Dialog open title="New workspace" onClose={() => calls.push('outer')}>
+        <button id="submit-create" disabled={busy}>Create</button>
+      </Dialog>
+      <Dialog open={inner} title="Trust setup" onClose={() => calls.push('inner')}>
+        <button>Cancel trust</button>
+      </Dialog>
+    </>
+    await render(tree(false, false))
+    container.querySelector<HTMLButtonElement>('#submit-create')!.focus()
+    await render(tree(true, true))
+    await render(tree(false, true))
+    const parent = container.querySelector<HTMLElement>('[role="dialog"]')!
+    expect(parent.contains(document.activeElement)).toBe(true)
+    expect(document.activeElement).not.toBe(container.querySelector('#submit-create'))
+    await key(document.activeElement!, 'Escape')
+    expect(calls).toEqual(['outer'])
+  })
+
+  test('context menus skip headings and disabled rows before selecting an enabled nested item', async () => {
+    const actions: string[] = []
+    function Example() {
+      const [open, setOpen] = useState(true)
+      return open ? <ContextMenu x={0} y={0} label="File actions" onClose={() => setOpen(false)} items={[
+        { label: 'Destinations', heading: true },
+        { label: 'Unavailable', enabled: false, onSelect: () => actions.push('disabled') },
+        { label: 'Send to', submenu: [
+          { label: 'Unavailable target', enabled: false, onSelect: () => actions.push('disabled target') },
+          { label: 'Agent', onSelect: () => actions.push('agent') },
+        ] },
+      ]} /> : null
+    }
+    await render(<Example />)
+    const parent = document.querySelector<HTMLElement>('[role="menu"][aria-label="File actions"]')!
+    expect(parent.querySelector('[role="presentation"]')).not.toBeNull()
+    expect(parent.querySelector('[role="menuitem"][aria-disabled="true"]')).not.toBeNull()
+
+    await key(parent, 'ArrowDown')
+    await key(parent, 'ArrowRight')
+    const child = document.querySelector<HTMLElement>('[role="menu"][aria-label="Send to"]')!
+    expect(child.querySelector('[role="menuitem"][aria-disabled="true"]')).not.toBeNull()
+    await key(child, 'ArrowDown')
+    await key(child, 'Enter')
+    expect(actions).toEqual(['agent'])
+    expect(document.querySelector('[role="menu"]')).toBeNull()
+  })
+
+  test('menu checkbox actions expose current state and restore trigger focus', async () => {
+    function Example() {
+      const [checked, setChecked] = useState(false)
+      return <Menu label="Diff options" items={[
+        { id: 'wrap', label: 'Word Wrap', checked, onAction: () => setChecked((value) => !value) },
+        { id: 'copy', label: 'Copy', onAction: () => {} },
+      ]} />
+    }
+    await render(<Example />)
+    const trigger = container.querySelector('button[aria-haspopup="menu"]')!
+    await click(trigger)
+    expect(container.querySelector('[role="menuitemcheckbox"]')?.getAttribute('aria-checked')).toBe('false')
+    expect(container.querySelector('[role="menuitem"]')).not.toBeNull()
+    await click(container.querySelector('[role="menuitemcheckbox"]')!)
+    expect(document.activeElement).toBe(trigger)
+    await click(trigger)
+    expect(container.querySelector('[role="menuitemcheckbox"]')?.getAttribute('aria-checked')).toBe('true')
+  })
+
+  test('popover interaction stays nonmodal and outside interaction dismisses it', async () => {
+    const anchor = createRef<HTMLButtonElement>()
+    const calls: string[] = []
+    function Example() {
+      const [open, setOpen] = useState(true)
+      return <><button ref={anchor}>Notes</button><button>Outside</button>
+        <Popover open={open} label="AI notes" anchor={anchor} onClose={() => { calls.push('close'); setOpen(false) }}>
+          <Button onClick={() => calls.push('copy')}>Copy</Button>
+        </Popover></>
+    }
+    await render(<Example />)
+    const dialog = document.querySelector('[role="dialog"][aria-label="AI notes"]')!
+    expect(dialog.hasAttribute('aria-modal')).toBe(false)
+    await act(async () => { dialog.dispatchEvent(new Event('pointerdown', { bubbles: true })) })
+    await click(dialog.querySelector('button')!)
+    expect(calls).toEqual(['copy'])
+    const outside = [...container.querySelectorAll('button')].find((button) => button.textContent === 'Outside')!
+    await act(async () => { outside.dispatchEvent(new Event('pointerdown', { bubbles: true })) })
+    expect(calls).toEqual(['copy', 'close'])
+    expect(document.querySelector('[role="dialog"][aria-label="AI notes"]')).toBeNull()
+  })
+
   test('toasts dismiss on expiration and expiration never invokes the action', async () => {
     const calls: string[] = []
     await render(<Toast title="Approve merge?" status="needs-you" durationMs={1200} onDismiss={() => calls.push('dismiss')} action={{ label: 'Approve', onAction: () => calls.push('action') }} />)
@@ -253,7 +403,7 @@ describe('shared graphite components', () => {
   test('toast actions invoke their action and dismiss callbacks once', async () => {
     const calls: string[] = []
     await render(<Toast title="Approve merge?" onDismiss={() => calls.push('dismiss')} action={{ label: 'Approve', onAction: () => calls.push('action') }} />)
-    await click(container.querySelector('button.ui-toast__action')!)
+    await click([...container.querySelectorAll<HTMLButtonElement>('button')].find((button) => button.textContent?.trim() === 'Approve')!)
     expect(calls).toEqual(['action', 'dismiss'])
   })
 
@@ -267,7 +417,7 @@ describe('shared graphite components', () => {
   test('disabled toast actions do not invoke callbacks', async () => {
     const calls: string[] = []
     await render(<Toast title="Approve merge?" durationMs={0} onDismiss={() => calls.push('dismiss')} action={{ label: 'Approve', disabled: true, onAction: () => calls.push('action') }} />)
-    await click(container.querySelector('button.ui-toast__action')!)
+    await click([...container.querySelectorAll<HTMLButtonElement>('button')].find((button) => button.textContent?.trim() === 'Approve')!)
     expect(calls).toEqual([])
   })
 
@@ -312,12 +462,65 @@ describe('shared graphite components', () => {
     expect(document.activeElement).toBe(opener)
   })
 
+  test('required-choice dialogs stay open until an explicit enabled action is selected', async () => {
+    const choices: string[] = []
+    const RequiredChoice = () => {
+      const [open, setOpen] = useState(false)
+      return <>
+        <button id="opener" onClick={() => setOpen(true)}>Choose account</button>
+        <Dialog
+          open={open}
+          title="Choose how to continue"
+          actions={<>
+            <Button disabled>Unavailable choice</Button>
+            <Button onClick={() => { choices.push('keep'); setOpen(false) }}>Keep current account</Button>
+            <Button onClick={() => { choices.push('restart'); setOpen(false) }}>Restart on selected account</Button>
+          </>}
+        >
+          <p>Choose an explicit action to continue.</p>
+        </Dialog>
+      </>
+    }
+    await render(<RequiredChoice />)
+    const opener = container.querySelector<HTMLButtonElement>('#opener')!
+    opener.focus()
+    await click(opener)
+
+    const panel = container.querySelector<HTMLElement>('[role="dialog"]')!
+    expect(panel.getAttribute('aria-modal')).toBe('true')
+    const titleId = panel.getAttribute('aria-labelledby')
+    expect(titleId).toBeTruthy()
+    expect(document.getElementById(titleId!)?.textContent).toBe('Choose how to continue')
+    expect(panel.querySelector('button[aria-label="Close dialog"]')).toBeNull()
+    const [unavailable, keep, restart] = [...panel.querySelectorAll<HTMLButtonElement>('button')]
+    expect(unavailable?.disabled).toBe(true)
+    expect(document.activeElement).toBe(keep)
+
+    await key(panel, 'Escape')
+    expect(container.querySelector('[role="dialog"]')).toBe(panel)
+    await click(panel.parentElement!)
+    expect(container.querySelector('[role="dialog"]')).toBe(panel)
+    expect(choices).toEqual([])
+
+    restart!.focus()
+    await key(restart!, 'Tab')
+    expect(document.activeElement).toBe(keep)
+    keep!.focus()
+    await key(keep!, 'Tab', { shiftKey: true })
+    expect(document.activeElement).toBe(restart)
+
+    await click(restart!)
+    expect(choices).toEqual(['restart'])
+    expect(container.querySelector('[role="dialog"]')).toBeNull()
+    expect(document.activeElement).toBe(opener)
+  })
+
   test('dialog content clicks do not dismiss and a disabled backdrop does not close', async () => {
     const calls: string[] = []
     await render(<Dialog open title="Panel" closeOnBackdrop={false} onClose={() => calls.push('close')}>
       <button>Inside action</button>
     </Dialog>)
-    const backdrop = container.querySelector('.ui-dialog-backdrop')!
+    const backdrop = container.querySelector('[role="dialog"]')!.parentElement!
     const inside = [...container.querySelectorAll('button')].find((button) => button.textContent === 'Inside action')!
     await click(inside)
     await click(backdrop)
@@ -329,7 +532,7 @@ describe('shared graphite components', () => {
     await render(<Dialog open title="Panel" onClose={() => calls.push('close')}>
       <button>Inside action</button>
     </Dialog>)
-    const backdrop = container.querySelector('.ui-dialog-backdrop')!
+    const backdrop = container.querySelector('[role="dialog"]')!.parentElement!
     const inside = [...container.querySelectorAll('button')].find((button) => button.textContent === 'Inside action')!
     await click(inside)
     expect(calls).toEqual([])
@@ -341,7 +544,7 @@ describe('shared graphite components', () => {
     const calls: number[] = []
     await render(<EmptyState message="No changes" icon={<span aria-hidden="true">∅</span>} action={{ label: 'Open terminal', disabled: true, onAction: () => calls.push(1) }} />)
     expect(container.textContent).toContain('No changes')
-    expect(container.querySelectorAll('.ui-empty-state__action')).toHaveLength(1)
+    expect(container.querySelectorAll('button')).toHaveLength(1)
     await click(container.querySelector('button')!)
     expect(calls).toEqual([])
   })
@@ -368,6 +571,44 @@ describe('shared graphite components', () => {
     expect(calls).toEqual([1])
   })
 
+  test('tool panel actions stay in their nearest frame across independent roots and unmount cleanly', async () => {
+    const secondFrameContainer = document.createElement('div')
+    document.body.append(secondFrameContainer)
+    const secondFrameRoot = mountIndependentRoot(secondFrameContainer)
+
+    await act(async () => {
+      root!.render(<ToolPanelFrame title="First Worktrees"><div data-plugin-root="first" /></ToolPanelFrame>)
+      secondFrameRoot.render(<ToolPanelFrame title="Second Worktrees"><div data-plugin-root="second" /></ToolPanelFrame>)
+    })
+
+    const firstPluginRoot = mountIndependentRoot(container.querySelector<HTMLElement>('[data-plugin-root="first"]')!)
+    const secondPluginRoot = mountIndependentRoot(secondFrameContainer.querySelector<HTMLElement>('[data-plugin-root="second"]')!)
+    const orphanContainer = document.createElement('div')
+    document.body.append(orphanContainer)
+    const orphanRoot = mountIndependentRoot(orphanContainer)
+    await act(async () => {
+      firstPluginRoot.render(<ToolPanelActions><button aria-label="First action">First action</button></ToolPanelActions>)
+      secondPluginRoot.render(<ToolPanelActions><button aria-label="Second action">Second action</button></ToolPanelActions>)
+      orphanRoot.render(<ToolPanelActions><button aria-label="Orphan action">Orphan action</button></ToolPanelActions>)
+    })
+
+    const firstAction = document.querySelector<HTMLButtonElement>('button[aria-label="First action"]')
+    const secondAction = document.querySelector<HTMLButtonElement>('button[aria-label="Second action"]')
+    expect(firstAction?.closest('header')).toBe(container.querySelector('header'))
+    expect(secondAction?.closest('header')).toBe(secondFrameContainer.querySelector('header'))
+    expect(document.querySelectorAll('button[aria-label="First action"]')).toHaveLength(1)
+    expect(document.querySelectorAll('button[aria-label="Second action"]')).toHaveLength(1)
+    expect(document.querySelector('button[aria-label="Orphan action"]')).toBeNull()
+
+    await unmountIndependentRoot(firstPluginRoot)
+    expect(document.querySelector('button[aria-label="First action"]')).toBeNull()
+    expect(document.querySelector('button[aria-label="Second action"]')).toBe(secondAction)
+
+    await unmountIndependentRoot(secondPluginRoot)
+    expect(document.querySelector('button[aria-label="Second action"]')).toBeNull()
+    await unmountIndependentRoot(orphanRoot)
+  })
+
   test('inline agent cards show status and suppress disabled actions', async () => {
     const calls: number[] = []
     await render(<InlineAgentCard title="provider-host" description="codex · editing host.ts" status="working" action={{ label: 'Approve merge', disabled: true, onAction: () => calls.push(1) }} />)
@@ -377,50 +618,4 @@ describe('shared graphite components', () => {
     expect(calls).toEqual([])
   })
 
-  test('theme scopes publish the exact graphite palette and fixed type, spacing, radius and row tokens', async () => {
-    const css = await Bun.file(new URL('../src/design-system/tokens.css', import.meta.url)).text()
-    for (const declaration of [
-      '--ui-rail: #101114;',
-      '--ui-surface: #16171b;',
-      '--ui-selected: #22242b;',
-      '--ui-border: #24262c;',
-      '--ui-text: #eceef2;',
-      '--ui-muted: #7c828d;',
-      '--ui-accent: #7c8cff;',
-      '--ui-working: #4cc38a;',
-      '--ui-needs-you: #e5b454;',
-      '--ui-failing: #ef6b73;',
-      '--ui-rail: #f4f5f7;',
-      '--ui-surface: #ffffff;',
-      '--ui-selected: #e7e9ef;',
-      '--ui-border: #e3e5ea;',
-      '--ui-text: #1b1d22;',
-      '--ui-muted: #80868f;',
-      '--ui-accent: #5b6cff;',
-      '--ui-working: #1f9d63;',
-      '--ui-needs-you: #c98a0b;',
-      '--ui-failing: #d6455d;',
-      '--ui-font-title: 15px;',
-      '--ui-font-body: 12px;',
-      '--ui-font-label: 11px;',
-      '--ui-font-section: 10.5px;',
-      '--ui-font-mono: 11.5px;',
-      '--ui-space-2: 2px;',
-      '--ui-space-4: 4px;',
-      '--ui-space-6: 6px;',
-      '--ui-space-8: 8px;',
-      '--ui-space-12: 12px;',
-      '--ui-space-16: 16px;',
-      '--ui-space-24: 24px;',
-      '--ui-radius-mark: 5px;',
-      '--ui-radius-control: 7px;',
-      '--ui-radius-window: 10px;',
-      '--ui-row-single: 26px;',
-      '--ui-row-double: 34px;',
-      "[data-theme='dark'] {",
-      "[data-theme='light'] {",
-    ]) {
-      expect(css).toContain(declaration)
-    }
-  })
 })

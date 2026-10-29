@@ -1,4 +1,4 @@
-import { Button } from '@quirky/ui'
+import { Button, EmptyState } from '@quirky/ui'
 import { useCallback, useEffect, useRef, useState, type ReactElement } from 'react'
 import type { UiPluginContext } from '@quirky/protocol'
 import { makeDiff } from '@sanity/diff-match-patch'
@@ -235,6 +235,7 @@ export function ChangesSurface(props: ChangesSurfaceProps): ReactElement {
       {noChanges && <div className="qe-changes-clean" role="status">No uncommitted changes.</div>}
       {display === 'markdown-preview' && buffer.kind === 'markdown' ? <>
         <div className="qe-changes-preview-notice" role="note">Markdown preview shows modified content only; HEAD is not included.</div>
+        {previewError !== null && <div role="alert"><EmptyState message={previewError} /></div>}
         {previewHtml !== null && <div className="qe-changes-markdown-preview" dangerouslySetInnerHTML={{ __html: previewHtml }} />}
         {previewHtml === null && previewError === null && <div role="status">Rendering modified Markdown…</div>}
       </> : layout === 'inline' ? (

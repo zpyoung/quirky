@@ -15,3 +15,7 @@ quirky agent-status hooks remove gemini --host 'runtime:dev-laptop'
 ```
 
 Without `--host`, hooks setup/removal and status reads retain their local behavior. Paired-peer federation remains read-only; remote config mutation requires a separately saved owner runtime.
+
+## Desktop Activity and Dashboard
+
+Activity and Agent Dashboard remain registered center views, with their existing tool-stripe entries. Shared controls, agent cards and semantic status dots follow the host theme; detailed status labels, filters, read/clear actions and exact-session navigation remain authoritative. The experimental Dashboard setting still controls its navigation entry. An interrupted or unconfirmed session is not presented as successful completion.

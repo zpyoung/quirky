@@ -183,8 +183,13 @@ function isObject(value: unknown): value is Record<string, unknown> {
 }
 
 function safeReason(error: unknown): { code: string; message: string } {
-  if (error instanceof Error && 'code' in error && typeof error.code === 'string') {
-    return { code: error.code, message: 'Peer request could not be completed.' }
+  if (error instanceof Error) {
+    if ('data' in error && isObject(error.data) && typeof error.data.reason === 'string') {
+      return { code: error.data.reason, message: 'Peer request could not be completed.' }
+    }
+    if ('code' in error && typeof error.code === 'string') {
+      return { code: error.code, message: 'Peer request could not be completed.' }
+    }
   }
   return { code: 'peer_call_failed', message: 'Peer request could not be completed.' }
 }

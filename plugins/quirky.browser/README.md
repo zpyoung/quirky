@@ -108,6 +108,8 @@ The public UI command `quirky.browser/design` accepts `grab`, `annotate`, `draw`
 
 The schema-declared automation catalog includes managed profiles/pages, advanced page interactions, captures, observability, cookies/storage, import jobs and page controls. `quirky api --json` is the authoritative method/argument listing. Browser preferences retain `preferencesState`, `profileSet` and `openLink`; `profileSet` targets a hosted Browser **pane**, while `tabProfileSet` targets a managed agent page.
 
+Managed-page `selectAll` focuses the selected element and uses macOS editing commands for the owned Chrome target. Network observations include CORS preflight requests as well as application requests; distinguish them by HTTP method rather than assuming the latest row is a GET response.
+
 Pane methods are `paneOpen`, `paneState`, `paneNavigate`, `paneControl`, `paneReport`, `paneClose`, `paneSuggestions`, `paneWatch`, `paneWatchStop`, `paneFrameAck`, `paneInput`, `paneRespond`, and `paneDownload`; they use the same Browser CLI group.
 
 Design methods are `designArm`, `designRead`, `designHover`, `designCancel`, `designCapture`, `designFormat`, `designTargets`, and `designSend`.
@@ -164,3 +166,4 @@ Cookie and storage CRUD share the same scoped API/CLI. Dialog accept/dismiss use
 Run `bun scripts/suite.ts plugins/quirky.browser` for the canonical package checks. Real browser automation, extras API/CLI, cookie import, Watch and design-runtime files run on macOS with installed Chrome, as listed in `scripts/test-on-macos.txt`; the remote Linux host does not provide Chrome. These checks retain real owned browser processes rather than skipping browser scenarios or substituting mocks.
 
 The browser harness installs the public dependencies of its real plugins, including the Worktrees dependency on `quirky.cli`. It uses temporary process homes and synthetic cookie source files and cleans up the owned browser and daemon. UI import tests verify explicit discovery, file recovery, captured destination confirmation and command execution without pinning explanatory copy or button punctuation.
+

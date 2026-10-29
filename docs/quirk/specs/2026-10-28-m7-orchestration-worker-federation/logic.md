@@ -5,6 +5,8 @@ Status: Implemented under LOOP build-first; combined logic/technical specificati
 
 **Amendments:** 2026-10-28 — preserve established migration order, exact accepted→attached authority, service entry-point routing, stable relay UUIDs, serialized imports and home settlement before host verdict. No human asks or external research swarm.
 
+End-phase repair `fix-test-orchestration-1028`: bootstrap and method-ceiling denials preserve their stable peer error reasons and return HTTP 403 without exposing private error text. Paired-host acceptance uses independent real daemon processes rather than aliased module globals and shared process environment. Existing-workspace acceptance uses an actual registered host workspace; floating terminal attribution is not a remotely addressable workspace. Archived output retains exact provenance and captured bytes, but its content-derived source identity need not equal the live source identity. Verification receipts live in the repair decision log.
+
 ## Purpose, scope and conceptual model
 A coordinator keeps its authoritative Run, Tasks, Dispatches and questions on the home daemon. `worker-start --on <peer-id>` executes a real worker on the explicitly paired host. That host owns its local service Run, Task, Dispatch, process and terminal custody. A durable binding maps the two identities; a remote identity is never represented as a locally authenticated session. Both session coordinators and authenticated service coordinators use the same pipeline.
 

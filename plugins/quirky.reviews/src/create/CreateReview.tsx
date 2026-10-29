@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
+import { Badge, Button, FormRow, SectionHeader, StatusDot, TextField } from '@quirky/ui'
 import { isRecord, safeHttpUrl, viewWorktree } from './guards'
 import type { ReviewsSurfaceProps } from '../contracts'
-
 function errorText(error: unknown): string {
   return error instanceof Error ? error.message : 'The operation failed.'
 }
@@ -204,55 +204,56 @@ export function CreateReview(props: ReviewsSurfaceProps) {
   }
 
   if (!worktree) {
-    return <section className="reviews-create" aria-labelledby="reviews-create-title">
-      <h1 id="reviews-create-title">Create pull request</h1>
-      <p role="alert">Select a Git worktree before creating a pull request.</p>
+    return <section className="ui-stack" aria-label="Create pull request">
+      <SectionHeader title="Create pull request" />
+      <p role="alert"><Badge tone="failing">Select a Git worktree before creating a pull request.</Badge></p>
     </section>
   }
 
   if (!currentTarget || creation.loading) {
-    return <section className="reviews-create" aria-labelledby="reviews-create-title" aria-busy="true">
-      <h1 id="reviews-create-title">Create pull request</h1>
-      <p>{localError ?? creation.error ?? 'Confirming this worktree and its current branch…'}</p>
+    return <section className="ui-stack" aria-label="Create pull request" aria-busy="true">
+      <SectionHeader title="Create pull request" />
+      <p role="status" className="ui-text-muted">{localError ?? creation.error ?? 'Confirming this worktree and its current branch…'}</p>
     </section>
   }
 
-  return <main className="reviews-create" aria-labelledby="reviews-create-title" aria-busy={creation.submitting || generationRunning}>
-    <header>
-      <h1 id="reviews-create-title">Create pull request</h1>
+  return <main className="ui-stack" aria-label="Create pull request" aria-busy={creation.submitting || generationRunning}>
+    <header className="ui-stack">
+      <SectionHeader title="Create pull request" />
       <p>Worktree <strong>{worktree}</strong> · <code>{creation.head || 'No current branch'}</code></p>
     </header>
 
-    {creation.error && <p className="reviews-error" role="alert">{creation.error}</p>}
-    {localError && <p className="reviews-error" role="alert">{localError}</p>}
-    {resultReview && <section className="reviews-create-result" aria-live="polite">
+    {creation.error && <p role="alert"><StatusDot status="failing" label="Error" /> {creation.error}</p>}
+    {localError && <p role="alert"><StatusDot status="failing" label="Error" /> {localError}</p>}
+    {resultReview && <section className="ui-stack" aria-live="polite">
       <strong>{result?.status === 'partial' ? 'Pull request created; stack registration was incomplete.' : result?.status === 'already_exists' ? 'Pull request already exists.' : 'Pull request created.'}</strong>
       <p>{resultNumber === null ? 'The review identity could not be shown.' : `Pull request #${resultNumber}`}{resultUrl ? ` · ${resultUrl}` : ''}</p>
-      <button type="button" onClick={() => void openResult()}>Open review</button>
+      <Button variant="primary" onClick={() => void openResult()}>Open review</Button>
     </section>}
 
-    <form onSubmit={(event) => void submit(event)}>
-      <label htmlFor="review-base">Base branch</label>
-      <input
-        id="review-base"
-        type="search"
-        list="review-base-options"
-        value={base}
-        aria-label="Search remote base branches"
-        aria-describedby="review-base-help"
-        disabled={creation.submitting || saving || generationRunning}
-        onChange={(event) => setBase(event.target.value)}
-        onBlur={() => void setBaseValue(base)}
-      />
-      <datalist id="review-base-options">
-        {creation.bases.map((branch) => <option key={branch} value={branch} />)}
-      </datalist>
-      <small id="review-base-help">Choose a remote branch different from {creation.head || 'the current branch'}.</small>
-      {creation.bases.length === 0 && <p role="status">No remote base branches are available.</p>}
+    <form className="ui-stack" onSubmit={(event) => void submit(event)}>
+      <div className="ui-stack">
+        <TextField
+          id="review-base"
+          label="Base branch"
+          type="search"
+          list="review-base-options"
+          value={base}
+          aria-label="Search remote base branches"
+          help={`Choose a remote branch different from ${creation.head || 'the current branch'}.`}
+          disabled={creation.submitting || saving || generationRunning}
+          onChange={(event) => setBase(event.target.value)}
+          onBlur={() => void setBaseValue(base)}
+        />
+        <datalist id="review-base-options">
+          {creation.bases.map((branch) => <option key={branch} value={branch} />)}
+        </datalist>
+      </div>
+      {creation.bases.length === 0 && <p role="status" className="ui-text-muted">No remote base branches are available.</p>}
 
-      <label htmlFor="review-title">Title</label>
-      <input
+      <TextField
         id="review-title"
+        label="Title"
         value={title}
         placeholder="Short summary"
         disabled={creation.submitting || saving || generationRunning}
@@ -265,53 +266,50 @@ export function CreateReview(props: ReviewsSurfaceProps) {
         onBlur={() => void releaseDraftEdit('title')}
       />
 
-      <label htmlFor="review-body">Description</label>
-      <textarea
-        id="review-body"
-        value={body}
-        rows={10}
-        placeholder="What changed and why?"
-        disabled={creation.submitting || saving || generationRunning}
-        onChange={(event) => {
-          const value = event.target.value
-          editingDraft.current.body = true
-          setBody(value)
-          save({ body: value })
-        }}
-        onBlur={() => void releaseDraftEdit('body')}
-        onKeyDown={onBodyKeyDown}
-      />
-      <small>Use Cmd+Enter (macOS) or Ctrl+Enter to submit.</small>
+      <FormRow label="Description" htmlFor="review-body">
+        <textarea
+          id="review-body"
+          className="ui-text-field__input"
+          value={body}
+          rows={10}
+          placeholder="What changed and why?"
+          disabled={creation.submitting || saving || generationRunning}
+          onChange={(event) => {
+            const value = event.target.value
+            editingDraft.current.body = true
+            setBody(value)
+            save({ body: value })
+          }}
+          onBlur={() => void releaseDraftEdit('body')}
+          onKeyDown={onBodyKeyDown}
+        />
+      </FormRow>
+      <small className="ui-text-muted">Use Cmd+Enter (macOS) or Ctrl+Enter to submit.</small>
 
-      <fieldset disabled={creation.submitting || saving || generationRunning}>
+      <fieldset className="ui-stack" disabled={creation.submitting || saving || generationRunning}>
         <legend>Creation options</legend>
-        <label>
-          <input type="checkbox" checked={draft} onChange={(event) => {
+        <FormRow label="Create as draft" htmlFor="review-create-draft">
+          <input id="review-create-draft" type="checkbox" style={{ accentColor: 'var(--ui-accent)' }} checked={draft} onChange={(event) => {
             setDraft(event.target.checked)
             void save({ draft: event.target.checked })
           }} />
-          Create as draft
-        </label>
-        <label>
-          <input type="checkbox" checked={useTemplate} onChange={(event) => {
+        </FormRow>
+        <FormRow label="Use repository pull-request template when the description is empty" htmlFor="review-use-template">
+          <input id="review-use-template" type="checkbox" style={{ accentColor: 'var(--ui-accent)' }} checked={useTemplate} onChange={(event) => {
             setUseTemplate(event.target.checked)
             void save({ useTemplate: event.target.checked })
           }} />
-          Use repository pull-request template when the description is empty
-        </label>
-        {stackSupported && stackParentNumber !== null && <label>
-          <input type="checkbox" checked={stackEnabled} onChange={(event) => void createStack(event.target.checked)} />
-          Create pull request in stack with #{stackParentNumber}
-        </label>}
+        </FormRow>
+        {stackSupported && stackParentNumber !== null && <FormRow label={`Create pull request in stack with #${stackParentNumber}`} htmlFor="review-create-stack">
+          <input id="review-create-stack" type="checkbox" style={{ accentColor: 'var(--ui-accent)' }} checked={stackEnabled} onChange={(event) => void createStack(event.target.checked)} />
+        </FormRow>}
         {stackSupported && stackParentNumber === null && stackLookupError !== null && <small role="status">Stack capability could not be confirmed: {stackLookupError}</small>}
         {!stackSupported && <small>Stacked pull requests are available only for supported GitHub.com repositories.</small>}
       </fieldset>
 
-      <div className="reviews-create-actions">
-        <button type="button" disabled={creation.submitting || saving || generationRunning} onClick={() => void generateDetails()}>
-          {generationRunning ? 'Generating…' : 'Generate PR details with AI'}
-        </button>
-        {generationRunning && <button type="button" aria-label="Stop generating pull-request details" onClick={() => {
+      <div className="ui-cluster">
+        <Button disabled={creation.submitting || saving || generationRunning} onClick={() => void generateDetails()}>{generationRunning ? 'Generating…' : 'Generate PR details with AI'}</Button>
+        {generationRunning && <Button variant="destructive" aria-label="Stop generating pull-request details" onClick={() => {
           if (!worktree) return
           void props.context.call('quirky.reviews/createCancelGenerate', { worktree })
             .then((value: unknown) => {
@@ -319,15 +317,13 @@ export function CreateReview(props: ReviewsSurfaceProps) {
               return props.refresh()
             })
             .catch((error: unknown) => setLocalError(errorText(error)))
-        }}>Stop</button>}
-        <button type="button" disabled={creation.submitting || saving || generationRunning} onClick={() => void refreshEligibility()}>
-          Refresh eligibility
-        </button>
-        <button type="submit" disabled={!canSubmit} title={disabledReason ?? undefined}>
+        }}>Stop</Button>}
+        <Button disabled={creation.submitting || saving || generationRunning} onClick={() => void refreshEligibility()}>Refresh eligibility</Button>
+        <Button variant="primary" type="submit" disabled={!canSubmit} title={disabledReason ?? undefined}>
           {creation.submitting || saving ? 'Creating…' : stackEnabled ? `${draft ? 'Create draft' : 'Create'} PR in stack` : needsPush ? 'Push & Create PR' : 'Create PR'}
-        </button>
+        </Button>
       </div>
-      {disabledReason && <p className="reviews-disabled-reason" role="status">{disabledReason}</p>}
+      {disabledReason && <p className="ui-text-muted" role="status">{disabledReason}</p>}
       {blockerMessage && needsPush && <p role="status">{blockerMessage}</p>}
     </form>
   </main>

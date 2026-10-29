@@ -1,8 +1,11 @@
-import { afterEach, beforeEach, expect, test } from 'bun:test'
+import { afterEach, beforeEach, expect, setDefaultTimeout, test } from 'bun:test'
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { QuirkyClient } from '@quirky/protocol'
 import { builtinsDir, makeHomeWithoutAutoHooks, startHarness, waitFor, type Harness } from '../../../packages/daemon/test/helpers'
+
+// Full-builtin daemon setup and teardown have a longer contract than Bun's 5s default.
+setDefaultTimeout(60_000)
 
 const EDITOR_OPEN = 'quirky.editor/open'
 const NOTES = 'quirky.editor/notes'

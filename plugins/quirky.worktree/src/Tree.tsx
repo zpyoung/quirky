@@ -1,15 +1,15 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type MouseEvent } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent } from 'react'
 import type { ProjectGroup, Repo, Session, UiPluginContext, Worktree } from '@quirky/protocol'
-import { Badge, StatusDot as NeedsYouStatusDot } from '@quirky/ui'
+import { Badge, Button, ContextMenu, IconButton, ListRow, SectionHeader, StatusDot as UiStatusDot, type ContextMenuItem, type UiStatus } from '@quirky/ui'
 import { DEFAULT_STOCK_OPTIONS, type StockWorktreeOptions, type WorktreeControl } from './control-types'
 import type { HeimdallWorktreeStatus } from './useTree'
 import { resolveMembershipTarget, type MembershipTarget } from './membership'
 import { changeGroup, copyText, currentWindowId, setWorkspaceSleeping, setWorktree } from './actions'
-import { ContextMenu, groupMenu, projectMenu, workspaceMenu, type MenuItem } from './Menu'
+import { groupMenu, projectMenu, workspaceMenu } from './Menu'
 import { projectSeparatorBoundaries, repoLabel, type AutomationAvailabilitySnapshot, type DialogState, type GroupNode, type ProjectNode, type TreeModel, type TreeRow } from './report'
 import type { WorktreeProjectIdentity, WorktreeStatusDefinition } from './parity-types'
-import { StatusDot, UnreadBell } from './StatusDot'
-import { worktreeGlyph } from './status'
+import { semanticStatus, UnreadBell } from './StatusDot'
+import { worktreeGlyph, type WorktreeGlyph } from './status'
 import { OrchestrationRows, type OrchestrationWorkerRow } from './OrchestrationRows'
 import { useOrchestrationRows } from './useOrchestrationRows'
 import { useWorktreeAttention } from './useWorktreeAttention'
@@ -41,10 +41,25 @@ export type TreeProps = {
   loopsByWorktree?: ReadonlyMap<string, LoopProjection>
 }
 
-type OpenMenu = { x: number; y: number; label: string; items: MenuItem[] }
+type OpenMenu = { x: number; y: number; label: string; items: ContextMenuItem[] }
 
 const plural = (count: number) => `${count} ${count === 1 ? 'child' : 'children'}`
 const EMPTY_LOOP_PROJECTIONS: ReadonlyMap<string, LoopProjection> = new Map()
+const ACTIVITY_LABELS: Record<string, string> = {
+  waiting: 'Needs you',
+  permission: 'Permission needed',
+  blocked: 'Blocked',
+  failed: 'Failed',
+  interrupted: 'Interrupted',
+  unverifiable: 'Activity unverifiable',
+  unconfirmed: 'Unconfirmed',
+  monitoring: 'Monitoring',
+  working: 'Working',
+  done: 'Done',
+  idle: 'Idle',
+  running: 'Running',
+  exited: 'Exited'
+}
 
 function isHeimdallWorktreeStatus(value: unknown): value is HeimdallWorktreeStatus {
   if (typeof value !== 'object' || value === null) return false
@@ -63,33 +78,52 @@ function heimdallStatusOf(worktree: Worktree): HeimdallWorktreeStatus | null {
 
 function HeimdallGlyph({ status, now }: { status: HeimdallWorktreeStatus; now: number }) {
   let label = status.state
-  let color = 'var(--muted)'
+  let dotStatus: UiStatus = 'idle'
   if (status.ownerContact === 'unverifiable') {
     const ageSeconds = Math.max(0, Math.floor((now - status.observedAtMs) / 1_000))
     label = `Host unreachable · last confirmed ${ageSeconds}s ago`
-    color = 'var(--amber)'
+    dotStatus = 'needs-you'
   } else if (status.state === 'escalated' || status.state === 'parked') {
-    color = 'var(--amber)'
+    dotStatus = 'needs-you'
   } else if (status.state === 'held' && (status.reason === 'tick-error' || (status.consecutiveErrors ?? 0) > 0)) {
     label = 'Error · retrying'
-    color = 'var(--amber)'
+    dotStatus = 'needs-you'
   } else if (status.state === 'held') {
     label = status.reason ? `Held · ${status.reason}` : 'Held'
-    color = 'var(--amber)'
+    dotStatus = 'needs-you'
   } else if (status.state === 'acting' || status.state === 'watching') {
-    color = 'var(--green)'
+    dotStatus = 'working'
   } else if (status.state === 'unreachable' || status.state === 'malformed') {
-    color = 'var(--danger)'
+    dotStatus = 'failing'
   }
   const title = [`${status.watcherName}: ${label}`, status.reason, status.detail].filter(Boolean).join(' · ')
   return (
-    <span role="img" aria-label={`Heimdall ${label}`} title={title} style={{ display: 'inline-flex', color, flex: '0 0 auto', alignItems: 'center' }}>
-      <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">
-        <circle cx="6" cy="6" r="4.6" fill="none" stroke="currentColor" strokeWidth="1.3" />
-        <circle cx="6" cy="6" r="1.8" fill="currentColor" />
-      </svg>
+    <span title={title}>
+      <UiStatusDot status={dotStatus} label={`Heimdall ${label}`} />
     </span>
   )
+}
+
+function sameGlyph(candidate: WorktreeGlyph | null, expected: WorktreeGlyph): boolean {
+  if (!candidate || candidate.kind !== expected.kind) return false
+  if (candidate.kind === 'agent' && expected.kind === 'agent') {
+    return candidate.display === expected.display && candidate.label === expected.label && candidate.percent === expected.percent
+  }
+  return candidate.kind === 'coarse' && expected.kind === 'coarse' && candidate.status === expected.status
+}
+
+
+function activityFor(sessions: Session[] | null, worktreeId: string, now: number, glyph: WorktreeGlyph | null): string {
+  if (sessions === null) return 'Activity unavailable'
+  if (!glyph) return 'Idle'
+  const session = sessions.find((item) =>
+    item.worktreeId === worktreeId && sameGlyph(worktreeGlyph([item], worktreeId, now), glyph)
+  )
+  const activity = glyph.kind === 'agent'
+    ? glyph.label.trim() || (ACTIVITY_LABELS[glyph.display] ?? glyph.display)
+    : ACTIVITY_LABELS[glyph.status] ?? glyph.status
+  if (!session) return activity
+  return [session.agent, session.kind, session.title.trim() || null, activity].filter(Boolean).join(' · ')
 }
 
 type CardProps = {
@@ -142,6 +176,33 @@ function WorktreeCard({
   const sleeping = 'sleeping' in worktree && worktree.sleeping === true
   const needsYou = pendingAskCount !== null && pendingAskCount > 0
   const attentionLabel = needsYou ? `${pendingAskCount} pending ${pendingAskCount === 1 ? 'question' : 'questions'}` : ''
+  const glyph = sessions === null ? null : worktreeGlyph(sessions, worktree.id, now)
+  const archivedAt = 'archivedAt' in worktree ? (worktree as Worktree & { archivedAt: number | null }).archivedAt : null
+  const activity = worktree.removing
+    ? 'Deleting…'
+    : glyph
+      ? activityFor(sessions, worktree.id, now, glyph)
+      : sleeping
+        ? 'Sleeping'
+        : archivedAt !== null
+          ? 'Archived'
+          : sessions === null
+            ? 'Activity unavailable'
+            : 'Idle'
+  const rowStatus: UiStatus | undefined = needsYou
+    ? 'needs-you'
+    : options.showProperties.includes('activity')
+      ? worktree.removing
+        ? 'queued'
+        : glyph
+          ? semanticStatus(glyph.kind === 'agent' ? glyph.display : glyph.status)
+          : sessions === null
+            ? 'queued'
+            : 'idle'
+      : undefined
+  const progress = !needsYou && options.showProperties.includes('activity') && glyph?.kind === 'agent'
+    ? glyph.percent ?? undefined
+    : undefined
   const open = async () => {
     try {
       await context.call('quirky.worktree/navigate', { worktree: worktree.id })
@@ -153,8 +214,24 @@ function WorktreeCard({
   const linkedPR = worktree.linkedPR
   const linkedIssue = worktree.linkedIssue
   const statusLabel = statusDefinitions.find((status) => status.id === worktree.status)?.label ?? worktree.status
-  const archivedAt = 'archivedAt' in worktree ? (worktree as Worktree & { archivedAt: number | null }).archivedAt : null
-  const className = ['worktree', selected && 'selected', worktree.removing && 'removing', sleeping && 'sleeping', options.compact && 'compact'].filter(Boolean).join(' ')
+  const description = [
+    options.showProperties.includes('activity') ? activity : null,
+    worktree.status !== 'in-progress' ? statusLabel : null,
+    sleeping && glyph ? 'Sleeping' : null,
+    archivedAt !== null && glyph ? 'Archived' : null,
+    repoName,
+    options.showBranch && options.showProperties.includes('branch') ? worktree.branch : null,
+    options.showComment && options.showProperties.includes('notes') ? worktree.comment : null,
+  ].filter(Boolean).join(' · ')
+  const className = [
+    'worktree',
+    'ui-tree-item',
+    'ui-indent',
+    selected && 'selected',
+    worktree.removing && 'removing',
+    sleeping && 'sleeping',
+    options.compact && 'compact'
+  ].filter(Boolean).join(' ')
   const heimdall = heimdallStatusOf(worktree)
   const provenance = worktree.automationProvenance?.kind === 'created-by-automation'
     ? worktree.automationProvenance
@@ -193,7 +270,7 @@ function WorktreeCard({
       data-worktree-id={worktree.id}
       data-parent-id={worktree.parentId ?? ''}
       data-project-group-id={worktree.projectGroupId ?? ''}
-      style={{ '--depth': depth, flexWrap: 'wrap' } as CSSProperties}
+      style={{ '--depth': depth } as CSSProperties}
       draggable={worktree.kind === 'git'}
       onDragStart={(event) => onDragStart(worktree, event)}
       onDragEnd={onDragEnd}
@@ -202,87 +279,103 @@ function WorktreeCard({
         onMenu(worktree, event.clientX, event.clientY)
       }}
     >
-      <button className="worktree-main" style={options.compact ? { paddingBlock: 2 } : undefined} onClick={() => void open()} title={worktree.path} aria-label={`${sleeping ? 'Wake and open' : 'Open'} ${worktree.name}`}>
-        {worktree.unread ? <UnreadBell /> : loop ? <LoopGlyph label={loop.label} /> : null}
-        {needsYou
-          ? <NeedsYouStatusDot status="needs-you" label={attentionLabel} />
-          : !worktree.unread && !loop && options.showProperties.includes('activity')
-            ? <StatusDot glyph={sessions === null ? null : worktreeGlyph(sessions, worktree.id, now)} />
-            : null}
-        {heimdall && <HeimdallGlyph status={heimdall} now={now} />}
-        <span className={worktree.unread ? 'worktree-name worktree-name-unread' : 'worktree-name'}>{worktree.name}</span>
-        {needsYou && <Badge tone="needs-you" label={attentionLabel}>{pendingAskCount}</Badge>}
-        {repoName && <span className="tag tag-repo">{repoName}</span>}
-        {worktree.isMain && <span className="tag tag-primary">primary</span>}
-        {worktree.status !== 'in-progress' && <span className="tag tag-status">{statusLabel}</span>}
-        {sleeping && <span className="tag tag-state">Sleeping</span>}
-        {archivedAt !== null && <span className="tag tag-state">Archived</span>}
-        {worktree.removing && <span className="tag tag-state">Deleting…</span>}
-      </button>
-      {options.showBranch && options.showProperties.includes('branch') && worktree.branch && <span className="worktree-branch" style={{ color: 'var(--muted)', fontSize: '0.8em' }}>{worktree.branch}</span>}
-      {options.showComment && options.showProperties.includes('notes') && worktree.comment && <span className="worktree-comment" title={worktree.comment} style={{ color: 'var(--muted)', fontSize: '0.8em', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{worktree.comment}</span>}
-      {options.showProperties.includes('pullRequest') && linkedPR && (
-        <a className="tag tag-github" href={linkedPR.url} target="_blank" rel="noreferrer" aria-label={`Pull request #${linkedPR.number}: ${linkedPR.title}`}>
-          PR #{linkedPR.number}
-        </a>
-      )}
-      {options.showProperties.includes('issue') && linkedIssue && (
-        <a className="tag tag-github" href={linkedIssue.url} target="_blank" rel="noreferrer" aria-label={`Issue #${linkedIssue.number}: ${linkedIssue.title}`}>
-          Issue #{linkedIssue.number}
-        </a>
-      )}
-      {options.showProperties.includes('automation') && provenance && (
-        <>
-          <span className="tag tag-automation-created">Created by automation</span>
-          <button
-            type="button"
-            className="tag tag-automation-details"
-            aria-label={`Automation details for ${worktree.id}`}
-            aria-expanded={automationExpanded}
-            onClick={onToggleAutomationDetails}
-          >
-            Automation details
-          </button>
-          {automationExpanded && (
-            <section className="automation-detail" role="group" aria-label="Automation details" style={{ flexBasis: '100%' }}>
-              <h3>Automation</h3>
-              <p><strong>Automation name:</strong> {provenance.automationName}</p>
-              <p><strong>Run:</strong> {provenance.runTitle}</p>
-              {(definitionStatus === 'checking' || runHistoryStatus === 'checking') && (
-                <p role="status">Checking automation availability...</p>
-              )}
-              {definitionStatus === 'available' && <p role="status">Automation available.</p>}
-              {runHistoryStatus === 'available' && <p role="status">Run history available.</p>}
-              {definitionStatus === 'missing' && <p role="status">Automation no longer available.</p>}
-              {runHistoryStatus === 'missing' && <p role="status">Run history no longer available.</p>}
-              {(definitionStatus === 'error' || runHistoryStatus === 'error') && (
-                <p role="status">Automation availability could not be checked.</p>
-              )}
-              {(definitionStatus === 'unavailable' || runHistoryStatus === 'unavailable') && (
-                <p role="status">Automations plugin unavailable.</p>
-              )}
-              <button type="button" onClick={openAutomation} disabled={definitionStatus !== 'available'}>Open automation</button>
-              <button type="button" onClick={openRun} disabled={runHistoryStatus !== 'available'}>Open run</button>
-            </section>
+      <ListRow
+        title={
+          <span className="ui-cluster">
+            {worktree.unread ? <UnreadBell /> : loop ? <LoopGlyph label={loop.label} /> : null}
+            <span className={`${worktree.unread ? 'worktree-name worktree-name-unread' : 'worktree-name'} ui-text-ellipsis`} title={worktree.name}>{worktree.name}</span>
+            {heimdall && <HeimdallGlyph status={heimdall} now={now} />}
+          </span>
+        }
+        description={description ? <span className="ui-text-ellipsis" title={description}>{description}</span> : undefined}
+        status={rowStatus}
+        progress={progress}
+        selected={selected}
+        compact={options.compact}
+        mainTitle={worktree.path}
+        mainLabel={`${sleeping ? 'Wake and open' : 'Open'} ${worktree.name}`}
+        onClick={() => void open()}
+        trailing={
+          <span className="ui-cluster">
+            {needsYou && <Badge tone="needs-you" label={attentionLabel}>{pendingAskCount}</Badge>}
+            {worktree.isMain && <Badge>Primary</Badge>}
+            <IconButton
+              className="worktree-menu"
+              label={`Actions for ${worktree.name}`}
+              aria-haspopup="menu"
+              onClick={(event) => {
+                const box = event.currentTarget.getBoundingClientRect()
+                onMenu(worktree, box.left, box.bottom)
+              }}
+            >
+              ⋯
+            </IconButton>
+          </span>
+        }
+      />
+      <div className="ui-cluster ui-row-details">
+            {options.showProperties.includes('pullRequest') && linkedPR && (
+              <a
+                href={linkedPR.url}
+                target="_blank"
+                rel="noreferrer"
+                aria-label={`Pull request #${linkedPR.number}: ${linkedPR.title}`}
+              >
+                <Badge tone="accent">PR #{linkedPR.number}</Badge>
+              </a>
+            )}
+            {options.showProperties.includes('issue') && linkedIssue && (
+              <a
+                href={linkedIssue.url}
+                target="_blank"
+                rel="noreferrer"
+                aria-label={`Issue #${linkedIssue.number}: ${linkedIssue.title}`}
+              >
+                <Badge tone="accent">Issue #{linkedIssue.number}</Badge>
+              </a>
+            )}
+            {options.showProperties.includes('automation') && provenance && (
+              <Badge tone="accent">Created by automation</Badge>
+            )}
+            {options.showProperties.includes('automation') && provenance && (
+              <Button
+                aria-label={`Automation details for ${worktree.id}`}
+                aria-expanded={automationExpanded}
+                onClick={onToggleAutomationDetails}
+              >
+                Automation details
+              </Button>
+            )}
+            {childCount > 0 && (
+              <Button className="ui-disclosure" aria-expanded={!collapsed} onClick={onToggle}>
+                {plural(childCount)}
+              </Button>
+            )}
+      </div>
+      {options.showProperties.includes('automation') && provenance && automationExpanded && (
+        <section className="automation-detail ui-stack ui-panel-content" role="group" aria-label="Automation details">
+          <SectionHeader title="Automation" />
+          <p><strong>Automation name:</strong> {provenance.automationName}</p>
+          <p><strong>Run:</strong> {provenance.runTitle}</p>
+          {(definitionStatus === 'checking' || runHistoryStatus === 'checking') && (
+            <p className="ui-text-muted" role="status">Checking automation availability...</p>
           )}
-        </>
+          {definitionStatus === 'available' && <p className="ui-text-muted" role="status">Automation available.</p>}
+          {runHistoryStatus === 'available' && <p className="ui-text-muted" role="status">Run history available.</p>}
+          {definitionStatus === 'missing' && <p className="ui-text-muted" role="status">Automation no longer available.</p>}
+          {runHistoryStatus === 'missing' && <p className="ui-text-muted" role="status">Run history no longer available.</p>}
+          {(definitionStatus === 'error' || runHistoryStatus === 'error') && (
+            <p className="ui-text-muted" role="status">Automation availability could not be checked.</p>
+          )}
+          {(definitionStatus === 'unavailable' || runHistoryStatus === 'unavailable') && (
+            <p className="ui-text-muted" role="status">Automations plugin unavailable.</p>
+          )}
+          <div className="ui-actions">
+            <Button onClick={openAutomation} disabled={definitionStatus !== 'available'}>Open automation</Button>
+            <Button onClick={openRun} disabled={runHistoryStatus !== 'available'}>Open run</Button>
+          </div>
+        </section>
       )}
-      {childCount > 0 && (
-        <button className="children-chip" aria-expanded={!collapsed} onClick={onToggle}>
-          {plural(childCount)}
-        </button>
-      )}
-      <button
-        className="icon-button worktree-menu"
-        aria-label={`Actions for ${worktree.name}`}
-        aria-haspopup="menu"
-        onClick={(event: MouseEvent<HTMLButtonElement>) => {
-          const box = event.currentTarget.getBoundingClientRect()
-          onMenu(worktree, box.left, box.bottom)
-        }}
-      >
-        ⋯
-      </button>
       <OrchestrationRows context={context} workers={orchestrationWorkers} sessions={sessions} worktreeId={worktree.id} />
     </li>
   )
@@ -291,12 +384,8 @@ function WorktreeCard({
 
 function PendingCard({ name }: { name: string }) {
   return (
-    <li className="worktree pending" style={{ '--depth': 0 } as CSSProperties}>
-      <span className="worktree-main">
-        <span className="dot dot-none" aria-hidden />
-        <span className="worktree-name">{name}</span>
-        <span className="tag tag-state">Creating…</span>
-      </span>
+    <li className="worktree pending ui-tree-item ui-indent">
+      <ListRow title={name} description="Creating…" status="queued" />
     </li>
   )
 }
@@ -559,19 +648,17 @@ export function Tree({
       }
       rootById.set(row.worktree.id, current.id)
     }
-    const lanes = new Map<string, { label: string; color?: string; icon?: string; roots: Set<string> }>()
+    const lanes = new Map<string, { label: string; icon?: string; roots: Set<string> }>()
     for (const row of list) {
       const rootId = rootById.get(row.worktree.id)!
       if (rootId !== row.worktree.id) continue
       let key: string
       let label: string
-      let color: string | undefined
       let icon: string | undefined
       if (options.groupBy === 'status') {
         key = `status:${row.worktree.status}`
         const definition = statusDefinitions.find((status) => status.id === row.worktree.status)
         label = definition?.label ?? row.worktree.status
-        color = definition?.color
         icon = definition?.icon
       } else if (row.worktree.linkedPR) {
         key = `pr:${row.worktree.linkedPR.number}:${row.worktree.linkedPR.url}`
@@ -580,63 +667,71 @@ export function Tree({
         key = 'pr:none'
         label = 'No pull request'
       }
-      const lane = lanes.get(key) ?? { label, ...(color ? { color } : {}), ...(icon ? { icon } : {}), roots: new Set<string>() }
+      const lane = lanes.get(key) ?? { label, ...(icon ? { icon } : {}), roots: new Set<string>() }
       lane.roots.add(rootId)
       lanes.set(key, lane)
     }
     return [...lanes].map(([key, lane]) => {
       const laneRows = list.filter((row) => lane.roots.has(rootById.get(row.worktree.id)!))
       return (
-        <li className="worktree-status-lane" key={key} style={lane.color ? { borderColor: lane.color } : undefined}>
-          <h3>{lane.icon && <span className="status-icon" aria-label={`${lane.label} icon`}>{lane.icon}</span>} {lane.label}</h3>
-          <ul className="worktree-list">{rows(laneRows)}</ul>
+        <li className="worktree-status-lane ui-tree-item ui-stack" key={key}>
+          <SectionHeader title={`${lane.icon ? `${lane.icon} ` : ''}${lane.label}`} />
+          <ul className="worktree-list ui-tree">{rows(laneRows)}</ul>
         </li>
       )
     })
   }
 
-  const project = (node: ProjectNode, topLevel = false) => {
+  const project = (node: ProjectNode, topLevel = false, depth = 0) => {
     const { repo, rows: projectRows, pending: pendingCreates } = node
     const identity = projectIdentities[repo.id]
     const sectionKey = `repo:${repo.id}`
-    const className = ['repo', eligibleBoundaries.includes(sectionKey) && 'section-separator'].filter(Boolean).join(' ')
+    const separator = topLevel && eligibleBoundaries.includes(sectionKey)
+    const previewing = dropPreview?.kind === 'repo' && dropPreview.id === repo.id
+    const className = ['repo', 'ui-stack', 'ui-indent', separator && 'ui-section-separated'].filter(Boolean).join(' ')
     return (
-      <section className={className} key={repo.id} data-top-level-section={topLevel ? sectionKey : undefined}>
-        <header
+      <section
+        className={className}
+        key={repo.id}
+        data-top-level-section={topLevel ? sectionKey : undefined}
+        style={{ '--depth': depth } as CSSProperties}
+      >
+        <SectionHeader
           hidden={options.groupBy !== 'project'}
-          className={`repo-header${dropPreview?.kind === 'repo' && dropPreview.id === repo.id ? ' membership-drop-preview' : ''}`}
+          className={`repo-header${previewing ? ' ui-drop-target--active' : ''}`}
+          title={`${identity?.icon ? `${identity.icon} ` : ''}${repoLabel(repo)}`}
+          titleTooltip={repo.path}
           data-repo-target={repo.id}
           onContextMenu={(event) => {
             event.preventDefault()
             openProjectMenu(repo, event.clientX, event.clientY)
           }}
-        >
-          {identity?.icon && <span className="project-icon" aria-label={`${repoLabel(repo)} icon`} style={{ color: identity.color ?? undefined }}>{identity.icon}</span>}
-          <span className="repo-name" title={repo.path} style={{ color: identity?.color ?? undefined }}>{repoLabel(repo)}</span>
-          {identity?.trackerProject && <span className="tag tag-tracker">{identity.trackerProject}</span>}
-          <span className="repo-actions">
-            <button
-              className="icon-button"
-              aria-label={`New worktree in ${repoLabel(repo)}`}
-              title="New worktree"
-              onClick={() => openDialog({ kind: 'create', repoId: repo.id })}
-            >
-              +
-            </button>
-            <button
-              className="icon-button project-menu"
-              aria-label={`Actions for ${repoLabel(repo)}`}
-              aria-haspopup="menu"
-              onClick={(event) => {
-                const bounds = event.currentTarget.getBoundingClientRect()
-                openProjectMenu(repo, bounds.left, bounds.bottom)
-              }}
-            >
-              ⋯
-            </button>
-          </span>
-        </header>
-        <ul className="worktree-list">
+          actions={
+            <span className="ui-cluster repo-actions">
+              {previewing && <Badge tone="accent">Drop worktree here</Badge>}
+              {identity?.trackerProject && <Badge>{identity.trackerProject}</Badge>}
+              <IconButton
+                label={`New worktree in ${repoLabel(repo)}`}
+                title="New worktree"
+                onClick={() => openDialog({ kind: 'create', repoId: repo.id })}
+              >
+                +
+              </IconButton>
+              <IconButton
+                className="project-menu"
+                label={`Actions for ${repoLabel(repo)}`}
+                aria-haspopup="menu"
+                onClick={(event) => {
+                  const bounds = event.currentTarget.getBoundingClientRect()
+                  openProjectMenu(repo, bounds.left, bounds.bottom)
+                }}
+              >
+                ⋯
+              </IconButton>
+            </span>
+          }
+        />
+        <ul className="worktree-list ui-tree">
           {groupedRows(projectRows)}
           {pendingCreates.map((create) => <PendingCard key={create.name} name={create.name} />)}
         </ul>
@@ -644,48 +739,60 @@ export function Tree({
     )
   }
 
-  const groupSection = (node: GroupNode, topLevel = false) => {
+  const groupSection = (node: GroupNode, topLevel = false, depth = 0) => {
     const { group, projects, rows: groupRows, looseRows, children } = node
     const sectionKey = `group:${group.id}`
-    const className = ['group', topLevel && eligibleBoundaries.includes(sectionKey) && 'section-separator'].filter(Boolean).join(' ')
+    const separator = topLevel && eligibleBoundaries.includes(sectionKey)
+    const previewing = dropPreview?.kind === 'group' && dropPreview.id === group.id
+    const className = ['group', 'ui-stack', 'ui-indent', separator && 'ui-section-separated'].filter(Boolean).join(' ')
     return (
-      <section className={className} key={group.id} data-top-level-section={topLevel ? sectionKey : undefined}>
-        <header
-          className={`group-header${dropPreview?.kind === 'group' && dropPreview.id === group.id ? ' membership-drop-preview' : ''}`}
+      <section
+        className={className}
+        key={group.id}
+        data-top-level-section={topLevel ? sectionKey : undefined}
+        style={{ '--depth': depth } as CSSProperties}
+      >
+        <SectionHeader
+          className={`group-header${previewing ? ' ui-drop-target--active' : ''}`}
+          title={group.name}
           data-group-target={group.id}
           onContextMenu={(event) => event.preventDefault()}
-        >
-          <button
-            className="group-toggle"
-            aria-expanded={!group.collapsed}
-            onClick={() =>
-              void context.call('quirky.repo/groupCollapse', { group: group.id, collapsed: !group.collapsed }).catch((error: unknown) => {
-                context.toast('Could not collapse group', error instanceof Error ? error.message : String(error))
-              })
-            }
-          >
-            <span className="group-chevron" aria-hidden>{group.collapsed ? '▸' : '▾'}</span>
-            <span className="group-name">{group.name}</span>
-          </button>
-          <button
-            className="icon-button group-menu"
-            aria-label={`Actions for group ${group.name}`}
-            aria-haspopup="menu"
-            onClick={(event) => {
-              const bounds = event.currentTarget.getBoundingClientRect()
-              openGroupMenu(group, bounds.left, bounds.bottom)
-            }}
-          >
-            ⋯
-          </button>
-        </header>
+          actions={
+            <span className="ui-cluster">
+              {previewing && <Badge tone="accent">Drop worktree here</Badge>}
+              <IconButton
+                className="ui-disclosure group-toggle"
+                label={`${group.collapsed ? 'Expand' : 'Collapse'} group ${group.name}`}
+                aria-expanded={!group.collapsed}
+                onClick={() =>
+                  void context.call('quirky.repo/groupCollapse', { group: group.id, collapsed: !group.collapsed }).catch((error: unknown) => {
+                    context.toast('Could not collapse group', error instanceof Error ? error.message : String(error))
+                  })
+                }
+              >
+                {group.collapsed ? '▸' : '▾'}
+              </IconButton>
+              <IconButton
+                className="group-menu"
+                label={`Actions for group ${group.name}`}
+                aria-haspopup="menu"
+                onClick={(event) => {
+                  const bounds = event.currentTarget.getBoundingClientRect()
+                  openGroupMenu(group, bounds.left, bounds.bottom)
+                }}
+              >
+                ⋯
+              </IconButton>
+            </span>
+          }
+        />
         {!group.collapsed && (
           <>
-            {groupRows.length > 0 && <ul className="worktree-list">{groupedRows(groupRows)}</ul>}
-            {projects.filter((projectNode) => projectNode.repo.kind === 'folder').map((projectNode) => project(projectNode))}
-            {looseRows.length > 0 && <ul className="worktree-list">{groupedRows(looseRows)}</ul>}
-            {projects.filter((projectNode) => projectNode.repo.kind === 'git').map((projectNode) => project(projectNode))}
-            {children.map((child) => groupSection(child))}
+            {groupRows.length > 0 && <ul className="worktree-list ui-tree">{groupedRows(groupRows)}</ul>}
+            {projects.filter((projectNode) => projectNode.repo.kind === 'folder').map((projectNode) => project(projectNode, false, depth + 1))}
+            {looseRows.length > 0 && <ul className="worktree-list ui-tree">{groupedRows(looseRows)}</ul>}
+            {projects.filter((projectNode) => projectNode.repo.kind === 'git').map((projectNode) => project(projectNode, false, depth + 1))}
+            {children.map((child) => groupSection(child, false, depth + 1))}
           </>
         )}
       </section>
@@ -775,7 +882,7 @@ export function Tree({
 
   return (
     <div
-      className="worktree-tree"
+      className="worktree-tree ui-stack"
       ref={treeRoot}
       onDragOver={onDragOver}
       onDrop={onDrop}
@@ -790,11 +897,11 @@ export function Tree({
     >
       {model.pinned.length > 0 && (
         <section
-          className={['pinned', eligibleBoundaries.includes('pinned') && 'section-separator'].filter(Boolean).join(' ')}
+          className={['pinned', 'ui-stack', eligibleBoundaries.includes('pinned') && 'ui-section-separated'].filter(Boolean).join(' ')}
           data-top-level-section="pinned"
         >
-          <header className="repo-header"><span className="section-title">Pinned</span></header>
-          <ul className="worktree-list">
+          <SectionHeader className="repo-header" title="Pinned" />
+          <ul className="worktree-list ui-tree">
             {model.pinned.map((worktree) => {
               const repo = repoById.get(worktree.repoId)
               const repoName = worktree.kind === 'git' && groups.some((group) => group.id === worktree.projectGroupId) && repo

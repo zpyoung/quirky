@@ -15,12 +15,58 @@
             "sessionId": { "type": "string" },
             "worktreeId": { "type": "string" },
             "cwd": { "type": "string" },
-            "homeOverrides": { "type": "object" },
-            "resume": { "type": "object" }
+            "homeOverrides": {
+              "type": "object",
+              "properties": {
+                "claude": {
+                  "type": "object",
+                  "properties": {
+                    "value": {},
+                    "source": { "type": "string", "enum": ["explicit", "inherited", "injected", "absent"] }
+                  },
+                  "required": ["value", "source"]
+                },
+                "codex": {
+                  "type": "object",
+                  "properties": {
+                    "value": {},
+                    "source": { "type": "string", "enum": ["explicit", "inherited", "injected", "absent"] }
+                  },
+                  "required": ["value", "source"]
+                }
+              },
+              "required": ["claude", "codex"]
+            },
+            "resume": {
+              "type": "object",
+              "properties": {
+                "sourceSessionId": { "type": "string" },
+                "providerSession": {
+                  "type": "object",
+                  "properties": {
+                    "id": { "type": "string" },
+                    "transcriptPath": { "description": "The captured provider transcript path, or null." }
+                  },
+                  "required": ["id", "transcriptPath"],
+                  "additionalProperties": false
+                }
+              },
+              "required": ["sourceSessionId", "providerSession"],
+              "additionalProperties": false
+            }
           },
           "required": ["agent", "sessionId", "worktreeId", "cwd", "homeOverrides"]
         },
-        "result": { "type": "object" }
+        "result": {
+          "type": "object",
+          "properties": {
+            "env": { "type": "object", "additionalProperties": true },
+            "shellInit": { "description": "The prepared private shell init path, or null." },
+            "account": { "description": "The prepared non-secret account identity, or null." },
+            "resumeTranscriptPath": { "type": "string" }
+          },
+          "required": ["env", "shellInit", "account"]
+        }
       }
     ]
   }

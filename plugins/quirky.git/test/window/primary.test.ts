@@ -94,7 +94,7 @@ test('SC-30: a push running from the CLI shows a disabled Push titled "Push in p
   await w.win.waitFor(async () => (await w.report()).busy === 'push')
   expect((await w.report()).primary).toEqual({ label: 'Push', enabled: false, title: 'Push in progress…' })
   expect((await w.report()).busy).toBe('push')
-  expect(q('.scm-primary .scm-spinner')).not.toBeNull()
+  expect(q('[data-git-primary] [aria-label="Action in progress"]')).not.toBeNull()
 
   await click(byLabel('More commit and remote actions'))
   const rows = qa('[role="menu"] [role="menuitem"]')

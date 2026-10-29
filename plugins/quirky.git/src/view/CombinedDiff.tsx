@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { Badge, Button, EmptyState, IconButton, ListRow, SectionHeader } from '@quirky/ui'
 import type { GitCompare, GitDiff, GitStatus } from '@quirky/protocol'
+
 import { reuseGitDiff } from '../diffRefresh'
 import { useNotesBinding } from '../notes/binding'
 import { NotesPreview } from '../notes/NotesPreview'
@@ -301,82 +303,78 @@ export function CombinedDiff({ context, input, settings, setSetting, report, bin
   const count = entries.length
 
   return (
-    <div className="qgv-combined">
-      <header className="qgv-toolbar">
-        <strong className="qgv-title">{title}</strong>
-        {data && <span className="qgv-count">{`${count} changed file${count === 1 ? '' : 's'}`}</span>}
-        {notes.length > 0 && (
-          <span className="qgv-note-group">
-            <NotesPreview context={context} worktree={worktree} notes={notes} />
-            <SendMenu
-              context={context}
-              worktree={worktree}
-              className="qgv-note-send-button"
-              scopes={[{ id: 'all', label: 'All unsent notes', notes, params: { scope: 'all' } }]}
-            >
-              Send
-            </SendMenu>
-          </span>
-        )}
-        <span className="qgv-spacer" />
-        {input.commit === undefined && (
-          <button type="button" onClick={() => open({ area: area === 'branch' ? 'all' : 'branch' })}>
-            {area === 'branch' ? 'Open All Changes' : 'Open Branch Diff'}
-          </button>
-        )}
-        <button type="button" onClick={() => setAllCollapsed(!allCollapsed)}>
-          {allCollapsed ? 'Expand All' : 'Collapse All'}
-        </button>
-        <button type="button" onClick={() => setSetting('diffDefaultView', settings.sideBySide ? 'inline' : 'side-by-side')}>
-          {settings.sideBySide ? 'Inline' : 'Side by Side'}
-        </button>
-        <button type="button" onClick={() => setSetting('diffWordWrap', !settings.wrap)}>
-          {settings.wrap ? 'Wrap Off' : 'Wrap On'}
-        </button>
-        <button type="button" onClick={() => setSetting('diffShowWhitespace', !settings.showWhitespace)}>
-          {settings.showWhitespace ? 'Whitespace Off' : 'Whitespace On'}
-        </button>
-        <button type="button" onClick={() => setSetting('combinedDiffFileTree', settings.fileTree ? 'hidden' : 'shown')}>
-          {settings.fileTree ? 'Hide file tree' : 'Show file tree'}
-        </button>
-        <button type="button" aria-label="Close" title="Close" onClick={close}>
-          ✕
-        </button>
-      </header>
-      <div className="qgv-split">
+    <div className="ui-stack" style={{ flex: 1, minHeight: 0, minWidth: 0, overflow: 'hidden' }}>
+      <SectionHeader
+        title={title}
+        actions={
+          <div className="ui-cluster" style={{ justifyContent: 'flex-end' }}>
+            {data && <Badge label={`${count} changed file${count === 1 ? '' : 's'}`}>{`${count} changed file${count === 1 ? '' : 's'}`}</Badge>}
+            {notes.length > 0 && (
+              <>
+                <NotesPreview context={context} worktree={worktree} notes={notes} />
+                <SendMenu
+                  context={context}
+                  worktree={worktree}
+                  scopes={[{ id: 'all', label: 'All unsent notes', notes, params: { scope: 'all' } }]}
+                >
+                  Send
+                </SendMenu>
+              </>
+            )}
+            {input.commit === undefined && (
+              <Button onClick={() => open({ area: area === 'branch' ? 'all' : 'branch' })}>
+                {area === 'branch' ? 'Open All Changes' : 'Open Branch Diff'}
+              </Button>
+            )}
+            <Button onClick={() => setAllCollapsed(!allCollapsed)}>
+              {allCollapsed ? 'Expand All' : 'Collapse All'}
+            </Button>
+            <Button onClick={() => setSetting('diffDefaultView', settings.sideBySide ? 'inline' : 'side-by-side')}>
+              {settings.sideBySide ? 'Inline' : 'Side by Side'}
+            </Button>
+            <Button onClick={() => setSetting('diffWordWrap', !settings.wrap)}>
+              {settings.wrap ? 'Wrap Off' : 'Wrap On'}
+            </Button>
+            <Button onClick={() => setSetting('diffShowWhitespace', !settings.showWhitespace)}>
+              {settings.showWhitespace ? 'Whitespace Off' : 'Whitespace On'}
+            </Button>
+            <Button onClick={() => setSetting('combinedDiffFileTree', settings.fileTree ? 'hidden' : 'shown')}>
+              {settings.fileTree ? 'Hide file tree' : 'Show file tree'}
+            </Button>
+            <IconButton label="Close" title="Close" onClick={close}>×</IconButton>
+          </div>
+        }
+      />
+      <div className="ui-cluster" style={{ alignItems: 'stretch', flexWrap: 'nowrap', flex: 1, minHeight: 0, minWidth: 0 }}>
         {settings.fileTree && (
-          <nav className="qgv-tree" aria-label="Files">
+          <nav aria-label="Files" className="ui-stack" style={{ flex: '0 0 20%', minHeight: 0, overflow: 'auto', padding: 'var(--ui-space-8)' }}>
             {entries.map((entry) => (
-              <button
-                type="button"
-                key={entry.key}
-                className="qgv-tree-item"
-                title={entry.path}
-                onClick={() => {
-                  treeTargets.current.get(entry.key)?.scrollIntoView?.({ block: 'start' })
-                  onVisible(entry.key)
-                }}
-              >
-                {entry.path}
-              </button>
+              <div key={entry.key} data-path={entry.path}>
+                <ListRow
+                  title={<span title={entry.path}>{entry.path}</span>}
+                  selected={activeKey === entry.key}
+                  onClick={() => {
+                    treeTargets.current.get(entry.key)?.scrollIntoView?.({ block: 'start' })
+                    onVisible(entry.key)
+                  }}
+                />
+              </div>
             ))}
           </nav>
         )}
-        <div className="qgv-scroll" ref={setScrollEl}>
+        <div className="ui-stack" ref={setScrollEl} style={{ flex: 1, minHeight: 0, minWidth: 0, overflow: 'auto' }}>
           {error !== null && data === null && <ErrorNotice message={error} />}
-          {data === null && error === null && <p className="qgv-muted qgv-pad">Loading diff...</p>}
+          {data === null && error === null && <p className="ui-text-muted" style={{ padding: 'var(--ui-space-8)' }}>Loading diff...</p>}
           {showConflicts && (
-            <div className="qgv-notice">
-              <strong>Conflicted files are reviewed separately</strong>
+            <section className="ui-stack" role="region" aria-label="Conflicted files are reviewed separately" style={{ padding: 'var(--ui-space-12)' }}>
+              <Badge tone="needs-you">Conflicted files are reviewed separately</Badge>
               <p>This diff view excludes unresolved conflicts because the normal two-way diff pipeline is not conflict-safe.</p>
               <p>{data!.excluded} unresolved conflicts were excluded from this diff view.</p>
-              <button type="button" onClick={() => context.openView(DIFF_VIEW_ID, { worktree, mode: 'conflicts' })}>
-                Review conflicts
-              </button>
-            </div>
+              <Button onClick={() => context.openView(DIFF_VIEW_ID, { worktree, mode: 'conflicts' })}>Review conflicts</Button>
+            </section>
           )}
-          {notEmptyReason && <p className="qgv-muted qgv-pad">{notEmptyReason}</p>}
-          {data !== null && count === 0 && !notEmptyReason && <p className="qgv-muted qgv-pad">No changes to display</p>}
+          {notEmptyReason && <p className="ui-text-muted" style={{ padding: 'var(--ui-space-8)' }}>{notEmptyReason}</p>}
+          {data !== null && count === 0 && !notEmptyReason && <EmptyState message="No changes to display" />}
           {entries.map((entry) => (
             <Section
               key={entry.key}
@@ -445,7 +443,7 @@ function Section(props: SectionProps) {
       (hits) => {
         if (hits.some((hit) => hit.isIntersecting)) onVisible(key)
       },
-      { root, rootMargin: '100% 0px' }
+      { root, rootMargin: '100% 0%' }
     )
     observer.observe(el)
     return () => {
@@ -462,68 +460,62 @@ function Section(props: SectionProps) {
   const mode = loadMode(entry)
   const known = entry.added !== null && entry.removed !== null
   return (
-    <section className="qgv-section" data-path={entry.path} ref={element} onPointerDown={() => props.onActivate(key)}>
-      <header className="qgv-section-head">
-        <button
-          type="button"
-          className="qgv-chevron"
-          aria-label={`${collapsed ? 'Expand' : 'Collapse'} ${entry.path}`}
+    <section data-path={entry.path} ref={element} onPointerDown={() => props.onActivate(key)} className="ui-stack">
+      <header className="ui-cluster" style={{ position: 'sticky', top: 0, zIndex: 5, flexWrap: 'nowrap', minWidth: 0 }}>
+        <IconButton
+          label={`${collapsed ? 'Expand' : 'Collapse'} ${entry.path}`}
           aria-expanded={!collapsed}
           onClick={() => onToggle(key)}
         >
           {collapsed ? '▸' : '▾'}
-        </button>
-        <span className="qgv-path" title={entry.path}>
-          {entry.oldPath ? `${entry.oldPath} → ${entry.path}` : entry.path}
-        </span>
-        {dirty && (
-          <span className="qgv-dirty" title="Unsaved changes">
-            M
-          </span>
-        )}
-        {known && (
-          <span className="qgv-counts">
-            <span className="qgv-add">+{entry.added}</span> <span className="qgv-del">-{entry.removed}</span>
-          </span>
-        )}
-        <span className="qgv-spacer" />
-        {fileNotes.length > 0 && (
-          <SendMenu
-            context={context}
-            worktree={worktree}
-            className="icon-button qgv-note-send"
-            scopes={[
-              { id: 'file', label: 'This file', notes: fileNotes, params: { scope: 'file', path: entry.path } },
-              { id: 'all', label: 'All unsent notes', notes, params: { scope: 'all' } }
-            ]}
-          />
-        )}
-        <button type="button" aria-label="Copy path" title="Copy path" onClick={() => void navigator.clipboard?.writeText(entry.path)}>
-          Copy path
-        </button>
-        <button
-          type="button"
-          onClick={() =>
-            context.openView(DIFF_VIEW_ID, {
-              worktree,
-              mode: 'file',
-              source: entry.source,
-              path: entry.path,
-              ...(entry.oldPath ? { oldPath: entry.oldPath } : {}),
-              ...(entry.commit ? { commit: entry.commit } : {})
-            })
+        </IconButton>
+        <ListRow
+          title={<span title={entry.path}>{entry.oldPath ? `${entry.oldPath} → ${entry.path}` : entry.path}</span>}
+          description={
+            known && (
+              <span className="ui-cluster" style={{ flexWrap: 'nowrap' }}>
+                <Badge tone="working" label={`Added ${entry.added} line${entry.added === 1 ? '' : 's'}`}>+{entry.added}</Badge>
+                <Badge tone="failing" label={`Removed ${entry.removed} line${entry.removed === 1 ? '' : 's'}`}>-{entry.removed}</Badge>
+              </span>
+            )
           }
-        >
-          Open diff
-        </button>
+          trailing={
+            <div className="ui-cluster">
+              {dirty && <Badge tone="needs-you" label="Unsaved changes">M</Badge>}
+              {fileNotes.length > 0 && (
+                <SendMenu
+                  context={context}
+                  worktree={worktree}
+                  scopes={[
+                    { id: 'file', label: 'This file', notes: fileNotes, params: { scope: 'file', path: entry.path } },
+                    { id: 'all', label: 'All unsent notes', notes, params: { scope: 'all' } }
+                  ]}
+                />
+              )}
+              <Button onClick={() => void navigator.clipboard?.writeText(entry.path)}>Copy path</Button>
+              <Button
+                onClick={() =>
+                  context.openView(DIFF_VIEW_ID, {
+                    worktree,
+                    mode: 'file',
+                    source: entry.source,
+                    path: entry.path,
+                    ...(entry.oldPath ? { oldPath: entry.oldPath } : {}),
+                    ...(entry.commit ? { commit: entry.commit } : {})
+                  })
+                }
+              >
+                Open diff
+              </Button>
+            </div>
+          }
+        />
       </header>
-      <div className="qgv-section-body" hidden={collapsed}>
+      <div hidden={collapsed} className="ui-stack" style={{ minWidth: 0 }}>
         {state.status === 'error' ? (
           <>
             <ErrorNotice message={state.error ?? 'Unable to load diff.'} />
-            <button type="button" onClick={() => void onLoad(key)}>
-              Retry
-            </button>
+            <Button onClick={() => void onLoad(key)}>Retry</Button>
           </>
         ) : state.status === 'loaded' && state.diff ? (
           <DiffPane
@@ -543,14 +535,12 @@ function Section(props: SectionProps) {
             notes={binding}
           />
         ) : state.status === 'idle' && mode !== 'auto' ? (
-          <div className="qgv-notice">
+          <section className="ui-stack" style={{ padding: 'var(--ui-space-12)' }}>
             <p>{known ? 'Large diffs are not rendered by default.' : "This diff's size isn't known yet, so it loads on request."}</p>
-            <button type="button" onClick={() => void onLoad(key)}>
-              Load diff
-            </button>
-          </div>
+            <Button onClick={() => void onLoad(key)}>Load diff</Button>
+          </section>
         ) : (
-          <p className="qgv-muted qgv-pad">Loading diff...</p>
+          <p className="ui-text-muted" style={{ padding: 'var(--ui-space-8)' }}>Loading diff...</p>
         )}
       </div>
     </section>

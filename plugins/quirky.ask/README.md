@@ -25,6 +25,9 @@ There are no Ask-specific user settings.
 
 ## Presentation and attention
 
+Questions stays in the shell's Ask tool (right top by default). Cards, fields, options, validation and result summaries use shared graphite components and semantic tokens in dark and light; the host still owns the tool frame and placement. Draft timing, answer envelopes and attention behavior are unchanged. Sanitized option previews use the shared read-only iframe presentation, follow the host appearance live, and keep their empty sandbox and restrictive networkless/scriptless CSP.
+
+
 - Option previews accept `markdown` or `html`. They use the package-local unified Markdown/GFM, raw-HTML and `rehype-sanitize` pipeline, then stringify sanitized markup into an iframe with an empty `sandbox` and restrictive CSP. No server-side React module is required in the browser. Script, forms, navigation/URL attributes, external resources, images/media and embedded documents are removed or blocked. Links have no navigation attributes. Hiding a preview removes its frame; normal selection and free-text answers remain available.
 - A terminal answer, cancellation, or timeout summary is presentation-only and remains in Questions for four seconds. It does not change durable FIFO state or the pending badge. A stale pending snapshot cannot restore a recently resolved ask. A promoted ask remains the queue head and is counted normally.
 - Questions auto-opens only when a surfaced ask's exact session is the active session in the focused worktree view and the view has focus. It opens only if no panel is selected; opening the panel preserves terminal focus. A later user panel choice is not replaced by refreshes. Unfocused and session-null asks are not used to steal focus; the Questions badge and manual panel remain available.
@@ -33,5 +36,7 @@ There are no Ask-specific user settings.
 ## Exact owner and unavailable outcomes
 
 `unavailable` is a terminal refusal with a reason, empty answers, and every question skipped. It is never consent. Registration returns the no-`askId` `{status:'unavailable', reason}` shape when there is no authenticated live asker and no attached question surface. Existing asks are reconciled only from exact kernel session identity: a missing session lookup or absent UI is unknown evidence and leaves a live background Ask pending; a proven-exited or replaced process resolves it unavailable.
+
+An exit notification invalidates cached live terminal authority before asynchronous PTY reconciliation. That interval remains unknown rather than exited; exact session exit evidence then resolves its owned Ask. This prevents stale cached liveness from swallowing the session-change notification while preserving background questions during missing or disconnected evidence.
 
 `quirky.ask/register` forwards the original client caller through the daemon's callback-lifetime `PluginContext.forward` only while the registration callback is active. `quirky.orchestration/ask` authenticates the exact caller and returns the current Run, Dispatch, worker key, and session identity. The Ask store persists that identity, question ID, and request ID before wait resumes, so retries and restarts cannot create a second coordinator question or retarget another worker. Coordinator free text maps back through the original question IDs, option values, and answer types. Native Claude/Codex question prompts preserve their provider question/option IDs; secret inputs are refused.

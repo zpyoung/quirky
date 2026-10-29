@@ -215,6 +215,18 @@ export async function startFleetWorkerFixture(options: { fenceHoldMs?: number } 
   let harness: WorkerAcceptance | undefined
   let cleanupPromise: Promise<void> | undefined
   const heldFences = new Set<string>()
+  const fencePulses = new Map<string, Promise<void>>()
+  const fenceFailures = new Map<string, unknown>()
+
+  const drainFencePulse = async (watcherId: string): Promise<void> => {
+    await fencePulses.get(watcherId)
+    fencePulses.delete(watcherId)
+    if (fenceFailures.has(watcherId)) {
+      const error = fenceFailures.get(watcherId)
+      fenceFailures.delete(watcherId)
+      throw error
+    }
+  }
 
   const stop = (): Promise<void> => {
     cleanupPromise ??= (async () => {
@@ -227,6 +239,7 @@ export async function startFleetWorkerFixture(options: { fenceHoldMs?: number } 
           await step(async () => {
             await harness!.fixture.call(`${fleetWorkerFixturePluginId}/releaseFence`, { watcherId })
           })
+          await step(() => drainFencePulse(watcherId))
         }
         await step(() => harness!.cleanup())
         harness = undefined
@@ -319,8 +332,20 @@ export async function startFleetWorkerFixture(options: { fenceHoldMs?: number } 
       async establishReadFence(watcherId) {
         heldFences.add(watcherId)
         await call(`${fleetWorkerFixturePluginId}/armFence`, { watcherId })
+        let pending = false
         await eventually(
-          () => call<unknown>(`${fleetWorkerFixturePluginId}/readFenceState`, { watcherId }),
+          async () => {
+            if (fenceFailures.has(watcherId)) throw fenceFailures.get(watcherId)
+            if (!pending) {
+              pending = true
+              const pulse = call('quirky.heimdall/reconcile', { watcherId }).then(
+                () => { pending = false },
+                error => { pending = false; fenceFailures.set(watcherId, error) }
+              )
+              fencePulses.set(watcherId, pulse)
+            }
+            return call<unknown>(`${fleetWorkerFixturePluginId}/readFenceState`, { watcherId })
+          },
           value => typeof value === 'object' && value !== null && !Array.isArray(value) &&
             'held' in value && value.held === true,
           'fixture read hook to acknowledge its pre-mailbox fence',
@@ -330,6 +355,7 @@ export async function startFleetWorkerFixture(options: { fenceHoldMs?: number } 
       async releaseReadFence(watcherId) {
         await call(`${fleetWorkerFixturePluginId}/releaseFence`, { watcherId })
         heldFences.delete(watcherId)
+        await drainFencePulse(watcherId)
       },
       async reportCompletion(worker) {
         return harness!.callAs<WorkerCompletion>(worker.sessionId, 'send', [
@@ -347,8 +373,8 @@ export async function startFleetWorkerFixture(options: { fenceHoldMs?: number } 
           call<FleetSnapshot>('quirky.heimdall/fleet'),
           call<WatcherDetail | null>('quirky.heimdall/detail', target),
           call<DebugReport | null>('quirky.heimdall/debugReport', target),
-          harness!.fixture.cli(['heimdall', 'list']),
-          harness!.fixture.cli(['heimdall', 'show', watcherId]),
+          harness!.fixture.cli(['heimdall', 'list', '--json']),
+          harness!.fixture.cli(['heimdall', 'show', watcherId, '--json']),
           harness!.fixture.cli(['heimdall', 'debug', watcherId])
         ])
         return { fleet, detail, debug, cli: { list, show, debug: cliDebug } }

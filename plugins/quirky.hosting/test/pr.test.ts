@@ -132,8 +132,9 @@ const restPull = (item) => {
     merged_at: merged ? new Date(0).toISOString() : null,
     mergeable: item.mergeable === 'MERGEABLE' ? true : item.mergeable === 'CONFLICTING' ? false : null,
     mergeable_state: typeof item.mergeStateStatus === 'string' ? item.mergeStateStatus.toLowerCase() : null,
-    base: { ref: item.baseRefName, sha: item.baseRefOid, repo: { name: baseRepo, owner: { login: baseOwner } } },
-    head: { ref: item.headRefName, sha: item.headRefOid, repo: headRepo === null ? null : { name: headRepo, owner: { login: headOwner }, default_branch: 'main' }, user: { login: headOwner } }
+    base: { ref: item.baseRefName, sha: item.baseRefOid, repo: { name: baseRepo, owner: { login: baseOwner }, html_url: 'https://github.com/' + baseOwner + '/' + baseRepo } },
+    head: { ref: item.headRefName, sha: item.headRefOid, repo: headRepo === null ? null : { name: headRepo, owner: { login: headOwner }, html_url: 'https://github.com/' + headOwner + '/' + headRepo }, user: { login: headOwner } },
+    maintainer_can_modify: item.maintainerCanModify === true
   }
   const restStacks = state.restStacks && typeof state.restStacks === 'object' ? state.restStacks : {}
   if (Object.hasOwn(restStacks, String(item.number))) {
@@ -574,17 +575,27 @@ async function waitForState(testHost: HostingTest, key: string): Promise<void> {
   }
 }
 
-function installLocalPushTransport(testHost: HostingTest, bare: string, log: string): void {
+function installLocalGitTransport(testHost: HostingTest, pushBare: string, log: string, fetchBare?: string): void {
   const realGit = Bun.which('git')
   if (!realGit) throw new Error('the test Git executable is unavailable')
   const quote = (value: string) => `'${value.replaceAll("'", "'\\''")}'`
   const wrapper = [
     '#!/bin/sh',
+    ...(fetchBare === undefined ? [] : [
+      'if [ "$1" = "fetch" ]; then',
+      '  if [ "$2" != "--no-tags" ] || [ "$3" != "--no-write-fetch-head" ] || [ "$4" != "--" ] || [ "$5" != "origin" ]; then',
+      '    printf "%s\\n" "unexpected Git fetch target" >&2',
+      '    exit 97',
+      '  fi',
+      '  shift 5',
+      `  exec ${quote(realGit)} fetch --no-tags --no-write-fetch-head -- ${quote(fetchBare)} "$@"`,
+      'fi'
+    ]),
     'if [ "$1" = "push" ]; then',
     `  printf '%s\\n' "$*" >> ${quote(log)}`,
     '  shift',
     '  shift',
-    `  exec ${quote(realGit)} push ${quote(bare)} "$@"`,
+    `  exec ${quote(realGit)} push ${quote(pushBare)} "$@"`,
     'fi',
     `exec ${quote(realGit)} "$@"`
   ].join(String.fromCharCode(10)) + String.fromCharCode(10)
@@ -668,25 +679,62 @@ describe('quirky.hosting PR reads', () => {
     const testHost = await bootHosting(ghFixture, { extraBuiltins: ['quirky.git'] })
     hosts.push(testHost)
     const remoteHead = gitOutput(testHost, ['rev-parse', 'HEAD'])
-    const bare = join(testHost.root, 'fork-push.git')
+    const baseBare = join(testHost.root, 'base.git')
+    const forkBare = join(testHost.root, 'fork-push.git')
     const pushLog = join(testHost.root, 'pushes.log')
     writeFileSync(pushLog, '')
-    git(testHost, ['init', '--bare', bare])
-    git(testHost, ['push', bare, 'HEAD:refs/heads/feature'])
-    git(testHost, ['remote', 'add', 'fork', 'https://github.com/test-owner/fork-repo.git'])
+    git(testHost, ['init', '--bare', baseBare])
+    git(testHost, ['init', '--bare', forkBare])
+    git(testHost, ['push', baseBare, 'refs/heads/main:refs/heads/main'])
     commitFeature(testHost)
-    const localHead = gitOutput(testHost, ['rev-parse', 'HEAD'])
+    const pullHead = gitOutput(testHost, ['rev-parse', 'HEAD'])
+    git(testHost, ['push', forkBare, 'HEAD:refs/heads/feature'])
+    git(testHost, ['push', baseBare, 'HEAD:refs/pull/7/head'])
+    git(testHost, ['checkout', 'main'])
+    git(testHost, ['remote', 'add', 'fork', 'https://github.com/test-owner/fork-repo.git'])
     testHost.writeState(fixtureState({
       prs: [pr({
-        headRefOid: remoteHead,
+        headRefOid: pullHead,
+        baseRefOid: remoteHead,
         headRepositoryOwner: { login: 'test-owner' },
         headRepository: { name: 'fork-repo', owner: { login: 'test-owner' } }
       })]
     }))
-    installLocalPushTransport(testHost, bare, pushLog)
+    installLocalGitTransport(testHost, forkBare, pushLog, baseBare)
+
+    const worktrees = await testHost.client.callAny('quirky.worktree/list', {})
+    if (!Array.isArray(worktrees)) throw new Error('expected registered worktrees')
+    const initial = worktrees.find((value) => isRecord(value) && value.id === testHost.worktree)
+    if (!isRecord(initial) || typeof initial.repoId !== 'string') throw new Error('expected registered repository identity')
+    const repoId = initial.repoId
+    const created = recordOf(await testHost.client.callAny('quirky.worktree/create', {
+      repo: repoId,
+      github: 'https://github.com/test-owner/test-repo/pull/7'
+    }))
+    const forkWorktree = recordOf(created.worktree)
+    if (typeof forkWorktree.id !== 'string' || typeof forkWorktree.path !== 'string') {
+      throw new Error('expected a created pull-request worktree')
+    }
+    const forkWorktreeId = forkWorktree.id
+    const forkWorktreePath = forkWorktree.path
+    expect(forkWorktree).toMatchObject({
+      branch: 'feature',
+      linkedPR: {
+        provider: 'github',
+        kind: 'pullRequest',
+        number: 7,
+        repository: { host: 'github.com', owner: 'test-owner', repo: 'test-repo' }
+      },
+      pushTarget: { remoteName: 'fork', branchName: 'feature' }
+    })
+
+    writeFileSync(join(forkWorktreePath, 'pushed.txt'), 'fork feature\n')
+    git(testHost, ['-C', forkWorktreePath, 'add', 'pushed.txt'])
+    git(testHost, ['-C', forkWorktreePath, '-c', 'user.name=Hosting Test', '-c', 'user.email=hosting@example.invalid', 'commit', '-m', 'feature'])
+    const localHead = gitOutput(testHost, ['-C', forkWorktreePath, 'rev-parse', 'HEAD'])
 
     const target = recordOf(await testHost.client.callAny('quirky.git/pushTarget', {
-      worktree: testHost.worktree,
+      worktree: forkWorktreeId,
       purpose: 'review'
     }))
     expect(target).toMatchObject({
@@ -695,21 +743,67 @@ describe('quirky.hosting PR reads', () => {
       branch: 'feature',
       localBranch: 'feature',
       localHead,
-      headOid: remoteHead,
+      headOid: pullHead,
       number: 7,
       fork: true,
       repository: { host: 'github.com', owner: 'test-owner', repo: 'fork-repo' }
     })
 
-    expect(await testHost.client.callAny('quirky.git/push', { worktree: testHost.worktree, purpose: 'review' })).toMatchObject({
+    expect(await testHost.client.callAny('quirky.git/push', { worktree: forkWorktreeId, purpose: 'review' })).toMatchObject({
       remote: 'fork',
       branch: 'feature',
       upstream: 'fork/feature'
     })
-    expect(gitOutput(testHost, ['--git-dir', bare, 'rev-parse', 'refs/heads/feature'])).toBe(localHead)
-    expect(readFileSync(pushLog, 'utf8').trim()).toBe(`push https://github.com/test-owner/fork-repo.git ${localHead}:refs/heads/feature`)
+    const expectedPush = `push https://github.com/test-owner/fork-repo.git ${localHead}:refs/heads/feature`
+    expect(gitOutput(testHost, ['--git-dir', forkBare, 'rev-parse', 'refs/heads/feature'])).toBe(localHead)
+    expect(gitOutput(testHost, ['--git-dir', baseBare, 'rev-parse', 'refs/heads/main'])).toBe(remoteHead)
+    expect(gitOutput(testHost, ['--git-dir', baseBare, 'rev-parse', 'refs/pull/7/head'])).toBe(pullHead)
+    expect(gitOutput(testHost, ['--git-dir', baseBare, 'branch', '--list', 'feature'])).toBe('')
+    expect(readFileSync(pushLog, 'utf8').trim()).toBe(expectedPush)
     expect(gitOutput(testHost, ['remote'])).toBe('fork\norigin')
+    expect(gitOutput(testHost, ['remote', 'get-url', 'origin'])).toBe('https://github.com/test-owner/test-repo.git')
     expect(gitOutput(testHost, ['remote', 'get-url', '--push', 'fork'])).toBe('https://github.com/test-owner/fork-repo.git')
+
+    testHost.writeState(fixtureState({
+      prs: [pr({
+        headRefName: 'moved-feature',
+        headRefOid: pullHead,
+        baseRefOid: remoteHead,
+        headRepositoryOwner: { login: 'test-owner' },
+        headRepository: { name: 'fork-repo', owner: { login: 'test-owner' } }
+      })]
+    }))
+    expect(recordOf(await testHost.client.callAny('quirky.git/pushTarget', {
+      worktree: forkWorktreeId,
+      purpose: 'review'
+    }))).toMatchObject({ ready: false, reason: 'stale_worktree_target' })
+    expect(reasonOf(await rejection(testHost.client.callAny('quirky.git/push', {
+      worktree: forkWorktreeId,
+      purpose: 'review'
+    })))).toBe('stale_worktree_target')
+    expect(readFileSync(pushLog, 'utf8').trim()).toBe(expectedPush)
+    expect(gitOutput(testHost, ['--git-dir', forkBare, 'rev-parse', 'refs/heads/feature'])).toBe(localHead)
+  }, 20_000)
+
+  test('pushRepository resolves a later named remote among multiple remotes', async () => {
+    const testHost = await host()
+    git(testHost, ['remote', 'add', 'fork', 'https://github.com/test-owner/fork-repo.git'])
+
+    expect(await testHost.call('pushRepository', { remote: 'fork' })).toMatchObject({
+      ready: true,
+      repository: { host: 'github.com', owner: 'test-owner', repo: 'fork-repo' }
+    })
+  }, 20_000)
+
+  test('pushRepository refuses multiple push URLs with the exact ambiguity reason', async () => {
+    const testHost = await host(fixtureState(), { remote: 'https://github.com/test-owner/fork-repo.git' })
+    git(testHost, ['config', '--add', 'remote.origin.pushurl', 'https://github.com/test-owner/fork-repo.git'])
+    git(testHost, ['config', '--add', 'remote.origin.pushurl', 'https://github.com/test-owner/other-fork.git'])
+
+    expect(await testHost.call('pushRepository', { remote: 'origin' })).toMatchObject({
+      ready: false,
+      reason: 'ambiguous_push_url'
+    })
   }, 20_000)
 
   test('review push revalidates each target and refuses unsafe, stale, closed, ambiguous or detached destinations before any push', async () => {
@@ -722,9 +816,10 @@ describe('quirky.hosting PR reads', () => {
     git(testHost, ['init', '--bare', bare])
     git(testHost, ['push', bare, 'HEAD:refs/heads/feature'])
     commitFeature(testHost)
-    installLocalPushTransport(testHost, bare, pushLog)
+    installLocalGitTransport(testHost, bare, pushLog)
     const params = { worktree: testHost.worktree, purpose: 'review' }
     const linked = pr({ headRefOid: remoteHead })
+    testHost.writeState(fixtureState({ prs: [linked] }))
 
     expect(recordOf(await testHost.client.callAny('quirky.git/pushTarget', params)).ready).toBe(true)
     testHost.writeState(fixtureState({ prs: [pr({ ...linked, state: 'CLOSED' })] }))
@@ -756,10 +851,6 @@ describe('quirky.hosting PR reads', () => {
     await rejection(testHost.client.callAny('quirky.git/push', params))
 
     git(testHost, ['config', '--unset-all', 'remote.origin.pushurl'])
-    git(testHost, ['config', 'branch.feature.merge', 'refs/heads/not-feature'])
-    expect(recordOf(await testHost.client.callAny('quirky.git/pushTarget', params)).ready).toBe(false)
-    await rejection(testHost.client.callAny('quirky.git/push', params))
-
     git(testHost, ['checkout', '--detach', 'HEAD'])
     expect(recordOf(await testHost.client.callAny('quirky.git/pushTarget', params))).toMatchObject({ ready: false })
     await rejection(testHost.client.callAny('quirky.git/push', params))

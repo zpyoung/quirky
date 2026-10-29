@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import type { UiCommandEntry, UiSlotEntry, UiToolEntry, Worktree } from '@quirky/protocol'
 import type { Connection } from '../connection'
-import { Dialog, ListRow, TextField } from '../design-system'
+import { Dialog, EmptyState, ListRow, TextField } from '../design-system'
 import { useConnection, usePluginHost, usePluginState } from '../context'
 import { useAttention } from '../shell/attention'
 import { paletteKey } from './palette'
@@ -147,13 +147,13 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
         }}
       />
       {snapshot.errors.worktrees && <p className="ui-error-text" role="status">Worktrees unavailable: {snapshot.errors.worktrees}</p>}
-      {snapshot.worktrees === null && !snapshot.errors.worktrees && <p className="muted pad">Loading worktrees…</p>}
+      {snapshot.worktrees === null && !snapshot.errors.worktrees && <p className="ui-text-muted" role="status">Loading worktrees…</p>}
       {entries.length === 0 && snapshot.worktrees !== null && !snapshot.errors.worktrees ? (
-        <p className="muted pad">No matching contributions.</p>
+        <EmptyState message="No matching contributions." />
       ) : entries.length > 0 ? (
-        <ul className="shell-palette-list" role="listbox" aria-label="Search results">
+        <div className="ui-option-list" role="listbox" aria-label="Search results">
           {entries.map((entry, index) => (
-            <li
+            <div
               key={`${entry.kind}:${entry.id}`}
               role="option"
               aria-selected={index === current}
@@ -165,9 +165,9 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
                 selected={index === current}
                 onClick={() => run(entry)}
               />
-            </li>
+            </div>
           ))}
-        </ul>
+        </div>
       ) : null}
     </Dialog>
   )

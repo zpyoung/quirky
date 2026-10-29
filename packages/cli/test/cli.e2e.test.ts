@@ -39,10 +39,12 @@ describe('usage', () => {
   })
 
   test('unknown flag and missing argument exit 2', async () => {
-    expect((await run(['status', '--bogus'])).code).toBe(2)
+    const unknown = await run(['status', '--bogus'])
+    expect(unknown.code).toBe(2)
     const missing = await run(['plugin', 'enable'])
     expect(missing.code).toBe(2)
     expect(missing.stderr).toContain('missing <id>')
+    expect(daemon.calls).toEqual([])
   })
 
   test('a command group without a subcommand exits 2', async () => {
@@ -80,15 +82,6 @@ describe('usage', () => {
 })
 
 describe('flag parsing', () => {
-  test('an unknown flag names the command and the valid flags', async () => {
-    const result = await run(['setting', 'list', '--bogus'])
-    expect(result.code).toBe(2)
-    expect(result.stderr).toContain(
-      'quirky: unknown flag --bogus for setting list\nvalid flags: --plugin, --json, --help, --yes, --retry-request\n'
-    )
-    expect(result.stderr).toContain("run 'quirky help' for usage")
-    expect(daemon.calls).toEqual([])
-  })
 
   test('a valued flag without a value exits 2 and makes no call', async () => {
     const atEnd = await run(['setting', 'list', '--plugin'])

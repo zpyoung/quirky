@@ -1,9 +1,13 @@
-import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { beforeEach, describe, expect, setDefaultTimeout, test } from 'bun:test'
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { QuirkyClient } from '@quirky/protocol'
 import { builtinsDir, makeHomeWithoutAutoHooks, startHarness, type Harness } from '../../../packages/daemon/test/helpers'
 import type { EditorBufferInfo, EditorOpenResult, EditorStateData } from '../src/types'
+import { registerIsolatedEditorFixtures } from './isolated-environment'
+
+// Full-builtin daemon startup and shutdown, especially across a restart, can exceed Bun's 5s default.
+setDefaultTimeout(60_000)
 
 type Api = <Result>(method: string, params?: Record<string, unknown>) => Promise<Result>
 type Fixture = { harness: Harness; client: QuirkyClient; call: Api; root: string; worktreeId: string; restart(): Promise<void> }
@@ -16,37 +20,54 @@ type ReadBufferResult = { buffer?: EditorBufferInfo }
 
 let fixture: Fixture | null = null
 let activeHarness: Harness | null = null
+let activeHome: string | null = null
+
+async function cleanupFixture(): Promise<void> {
+  const harness = activeHarness
+  const home = activeHome
+  activeHarness = null
+  activeHome = null
+  fixture = null
+  if (harness) await harness.cleanup()
+  else if (home) rmSync(home, { recursive: true, force: true })
+}
+
+registerIsolatedEditorFixtures(cleanupFixture)
 
 beforeEach(async () => {
   const home = makeHomeWithoutAutoHooks('editor-lifecycle-')
-  let harness = await startHarness({ home, builtinPluginsDir: builtinsDir() })
-  activeHarness = harness
-  let client = await harness.connect('cli', 'editor-lifecycle-test')
-  const root = join(home, 'workspace')
-  mkdirSync(root, { recursive: true })
-  await client.callAny('quirky.repo/add', { path: root, folder: true })
-  const worktree = await client.callAny('quirky.worktree/resolve', { selector: `path:${root}` }) as { id: string }
-  fixture = {
-    get harness() { return harness },
-    get client() { return client },
-    root,
-    worktreeId: worktree.id,
-    call: <Result,>(method: string, params: Record<string, unknown> = {}) => client.callAny(method, params) as Promise<Result>,
-    async restart() {
-      for (const connection of harness.clients) connection.close()
-      await harness.daemon.stop()
-      harness.pty.stop()
-      harness = await startHarness({ home, builtinPluginsDir: builtinsDir() })
-      activeHarness = harness
-      client = await harness.connect('cli', 'editor-lifecycle-restarted')
+  activeHome = home
+  try {
+    let harness = await startHarness({ home, builtinPluginsDir: builtinsDir() })
+    activeHarness = harness
+    let client = await harness.connect('cli', 'editor-lifecycle-test')
+    const root = join(home, 'workspace')
+    mkdirSync(root, { recursive: true })
+    await client.callAny('quirky.repo/add', { path: root, folder: true })
+    const worktree = await client.callAny('quirky.worktree/resolve', { selector: `path:${root}` }) as { id: string }
+    fixture = {
+      get harness() { return harness },
+      get client() { return client },
+      root,
+      worktreeId: worktree.id,
+      call: <Result,>(method: string, params: Record<string, unknown> = {}) => client.callAny(method, params) as Promise<Result>,
+      async restart() {
+        for (const connection of harness.clients) connection.close()
+        await harness.daemon.stop()
+        harness.pty.stop()
+        harness = await startHarness({ home, builtinPluginsDir: builtinsDir() })
+        activeHarness = harness
+        client = await harness.connect('cli', 'editor-lifecycle-restarted')
+      }
     }
+  } catch (error) {
+    try {
+      await cleanupFixture()
+    } catch (cleanupError) {
+      throw new AggregateError([error, cleanupError], 'Editor lifecycle fixture setup and cleanup failed', { cause: error })
+    }
+    throw error
   }
-})
-
-afterEach(async () => {
-  await activeHarness?.cleanup()
-  activeHarness = null
-  fixture = null
 })
 
 function current(): Fixture {

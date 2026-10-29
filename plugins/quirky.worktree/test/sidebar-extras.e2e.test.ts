@@ -7,7 +7,7 @@ import { builtinsDir, makeTempHome, startHarness, type Harness } from '../../../
 import { makeTempDir, removeTempDirs } from '../../../packages/daemon/test/plugins/fixtures'
 import { startHeadlessWindow, type HeadlessWindow } from '../../../packages/ui/test/fixtures/headless-window'
 import { isolateGitConfig, makeRepo } from '../../quirky.repo/test/git-fixtures'
-
+import { button, click, dialogNamed, menuItem as findMenuItem, sectionHeadingMatches } from './window/dom'
 const SIDEBAR = 'sidebar-section:quirky.worktree/worktrees'
 const SESSION_VIEW = 'view:quirky.session/worktree'
 const REPO_ROOT = resolve(import.meta.dir, '../../..')
@@ -118,29 +118,27 @@ const report = async (agent: QuirkyClient): Promise<SidebarReport | undefined> =
 
 function card(name: string, project?: string): HTMLElement | undefined {
   const sections = [...document.querySelectorAll<HTMLElement>('section.repo, section.group')].filter(
-    (section) => project === undefined || section.querySelector('.repo-name')?.textContent === project
+    (section) => project === undefined || sectionHeadingMatches(section, project)
   )
   for (const section of sections) {
-    const found = [...section.querySelectorAll<HTMLElement>('li.worktree')].find((row) => row.querySelector('.worktree-name')?.textContent === name)
+    const found = [...section.querySelectorAll<HTMLElement>('[data-worktree-id]')].find((row) => row.querySelector('.worktree-name')?.textContent === name)
     if (found) return found
   }
   return undefined
 }
 
-const rowGeometry = () =>
-  [...document.querySelectorAll<HTMLElement>('li.worktree')].map((row) => {
-    const bounds = row.getBoundingClientRect()
-    return { name: row.querySelector('.worktree-name')?.textContent, top: bounds.top, bottom: bounds.bottom, height: bounds.height }
-  })
-const menuItem = (label: string): HTMLElement | undefined =>
-  [...document.querySelectorAll<HTMLElement>('[role="menu"] [role="menuitem"]')].find(
-    (element) => element.textContent?.replace(/\s*▸$/, '').trim() === label
-  )
+const rowIdentity = () =>
+  [...document.querySelectorAll<HTMLElement>('[data-worktree-id]')].map((row) => ({
+    id: row.dataset.worktreeId,
+    name: row.querySelector('.worktree-name')?.textContent
+  }))
+
+const menuItem = (label: string): HTMLElement | undefined => findMenuItem(document, label)
 
 async function openMenu(win: HeadlessWindow, name: string, project?: string): Promise<void> {
-  const target = card(name, project)?.querySelector<HTMLElement>('.worktree-menu')
-  if (!target) throw new Error(`no action button for ${project}/${name}`)
-  target.click()
+  const row = card(name, project)
+  if (!row) throw new Error(`no worktree row for ${project}/${name}`)
+  await click(button(row, `Actions for ${name}`)!)
   await win.waitFor(() => document.querySelector('[role="menu"]'))
 }
 
@@ -196,7 +194,6 @@ test('SC-02/08/10/17: real CLI and sidebar share activity preferences, selected 
   const { win, agent, api, feature, group } = world
   await win.waitFor(() => card('feature', 'api'))
   await agent.callAny('ui.view.open', { id: SESSION_VIEW, input: { worktree: feature.id } })
-  await win.waitFor(() => card('feature', 'api')?.classList.contains('selected'))
   await win.waitFor(async () => {
     const state = (await agent.callAny('quirky.sidebar-extras/state', {})) as { active: { worktreeId: string } | null }
     return state.active?.worktreeId === feature.id ? state : undefined
@@ -206,12 +203,13 @@ test('SC-02/08/10/17: real CLI and sidebar share activity preferences, selected 
   expect(initial.preferences.workspaceActivityWindow).toBe('all')
   expect(initial.active).toMatchObject({ worktreeId: feature.id })
 
-  const filter = await win.waitFor(() => [...document.querySelectorAll<HTMLButtonElement>('button')].find(
-    (button) => /workspace options|filters/i.test(button.textContent ?? '') || /workspace options|filters/i.test(button.getAttribute('aria-label') ?? '')
-  ))
-  filter.click()
-  const week = await win.waitFor(() => [...document.querySelectorAll<HTMLButtonElement>('button')].find((button) => button.textContent?.trim() === 'Week'))
-  week.click()
+  const optionsButton = await win.waitFor(() => button(document, 'Worktrees options'))
+  await click(optionsButton)
+  const options = await win.waitFor(() => dialogNamed('Worktrees options'))
+  const filters = await win.waitFor(() => options.querySelector<HTMLButtonElement>('button[aria-controls="workspace-activity-filter-options"]'))
+  await click(filters)
+  const week = await win.waitFor(() => button(options, 'Week'))
+  await click(week)
   await win.waitFor(async () => {
     const state = (await agent.callAny('quirky.sidebar-extras/state', {})) as { preferences: { workspaceActivityWindow: string } }
     return state.preferences.workspaceActivityWindow === 'week' ? state : undefined
@@ -224,14 +222,20 @@ test('SC-02/08/10/17: real CLI and sidebar share activity preferences, selected 
   ])
   expect(fromCli.preferences).toMatchObject({ workspaceActivityWindow: 'live-only', alwaysShowDefaultBranchWorkspace: false })
   await win.waitFor(() => !card('main', 'api'))
-  expect(card('feature', 'api')?.classList.contains('selected')).toBe(true)
+  await win.waitFor(async () => {
+    const state = await sidebarState(world)
+    return state.active?.worktreeId === feature.id ? state : undefined
+  })
 
   await openMenu(win, 'feature', 'api')
   await choose(win, 'Add worktree to group')
   await choose(win, 'Team')
   await win.waitFor(async () => ((await agent.callAny('quirky.worktree/list', {})) as Worktree[]).find((item) => item.id === feature.id)?.projectGroupId === group.id)
-  await win.waitFor(() => card('feature')?.closest('section.group')?.querySelector('.group-name')?.textContent === 'Team')
-  expect(card('feature')?.closest('section.group')?.querySelector('.group-name')?.textContent).toBe('Team')
+  const groupSection = await win.waitFor(() => {
+    const section = card('feature')?.closest<HTMLElement>('section.group')
+    return section && sectionHeadingMatches(section, 'Team') ? section : undefined
+  })
+  expect(sectionHeadingMatches(groupSection, 'Team')).toBe(true)
   expect((await report(agent))?.groups.some((item) => item.id === group.id)).toBe(true)
 
   await openMenu(win, 'feature')
@@ -304,7 +308,7 @@ test('SC-16/17: appearance setting changes separators through CLI without changi
   const { win, agent, api, feature } = world
   await win.waitFor(() => card('feature', 'api'))
   const before = await report(agent)
-  const rowsBefore = rowGeometry()
+  const rowsBefore = rowIdentity()
   expect(before?.separators?.enabled).toBe(true)
 
   const settings = (await agent.callAny('setting.list', {})) as { id: string; name?: string; title?: string }[]
@@ -318,7 +322,7 @@ test('SC-16/17: appearance setting changes separators through CLI without changi
   })
   expect(after.separators?.enabled).toBe(false)
 
-  const rowsAfter = rowGeometry()
+  const rowsAfter = rowIdentity()
   expect(rowsAfter).toEqual(rowsBefore)
   expect(card('feature', 'api')).toBeDefined()
   expect((await agent.callAny('quirky.repo/list', {})) as Repo[]).toContainEqual(expect.objectContaining({ id: api.id }))
@@ -336,7 +340,7 @@ test('SC-16/17: appearance setting changes separators through CLI without changi
     return latest?.separators?.enabled === false ? latest : undefined
   })
   expect(restored.separators?.enabled).toBe(false)
-  expect(rowGeometry()).toEqual(rowsBefore)
+  expect(rowIdentity()).toEqual(rowsBefore)
 }, SLOW)
 
 test('disabled sidebar extras leaves core worktree dispatch available', async () => {

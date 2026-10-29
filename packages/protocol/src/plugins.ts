@@ -447,9 +447,12 @@ export function formatDuration(ms: number): string {
   return `${ms}ms`
 }
 
+/** Cleanup owned by one activation, even when the same module is loaded by multiple hosts. */
+export type PluginActivationDisposer = () => void | Promise<void>
+
 /** The shape a plugin's `main` module must export. */
 export type PluginModule = {
-  activate(context: PluginContext): void | Promise<void>
+  activate(context: PluginContext): void | PluginActivationDisposer | Promise<void | PluginActivationDisposer>
   deactivate?(): void | Promise<void>
 }
 

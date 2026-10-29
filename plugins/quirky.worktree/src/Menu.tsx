@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import type { ContextMenuItem } from '@quirky/ui'
 import type { ProjectGroup, Repo, Worktree, WorktreeStatus } from '@quirky/protocol'
 import type { WorktreeStatusDefinition } from './parity-types'
 import type { DialogState } from './report'
@@ -12,105 +12,6 @@ export const STATUS_LABELS: Record<WorktreeStatus, string> = {
   done: 'Done'
 }
 
-export type MenuItem = {
-  label: string
-  onSelect?(): void
-  disabled?: boolean
-  /** Explains why an item is disabled. */
-  title?: string
-  /** Items shown under this one when it is opened. */
-  submenu?: MenuItem[]
-  /** Marks the item that matches the current value. */
-  current?: boolean
-}
-
-type Props = {
-  /** Viewport position of the menu's top-left corner. */
-  x: number
-  y: number
-  label: string
-  items: MenuItem[]
-  onClose(): void
-}
-
-const MENU_WIDTH = 220
-
-function Items({ items, onPick }: { items: MenuItem[]; onPick(item: MenuItem): void }) {
-  const [open, setOpen] = useState<number | null>(null)
-  return (
-    <>
-      {items.map((item, index) => (
-        <li key={item.label} role="none" title={item.title}>
-          <button
-            role="menuitem"
-            disabled={item.disabled}
-            title={item.title}
-            data-current={item.current ? '' : undefined}
-            aria-haspopup={item.submenu ? 'menu' : undefined}
-            aria-expanded={item.submenu ? open === index : undefined}
-            onClick={() => (item.submenu ? setOpen(open === index ? null : index) : onPick(item))}
-          >
-            {item.label}
-            {item.submenu && (
-              <span className="menu-arrow" aria-hidden>
-                ▸
-              </span>
-            )}
-          </button>
-          {item.submenu && open === index && (
-            <ul className="menu-sub" role="menu" aria-label={item.label}>
-              <Items items={item.submenu} onPick={onPick} />
-            </ul>
-          )}
-        </li>
-      ))}
-    </>
-  )
-}
-
-/** A menu opened at a screen position; Escape, a click outside or picking an item closes it. */
-export function ContextMenu({ x, y, label, items, onClose }: Props) {
-  const root = useRef<HTMLUListElement>(null)
-  const close = useRef(onClose)
-  close.current = onClose
-
-  useEffect(() => {
-    const enabled = () => [...(root.current?.querySelectorAll<HTMLButtonElement>('button:not(:disabled)') ?? [])]
-    enabled()[0]?.focus()
-    const onDown = (event: MouseEvent) => {
-      if (!root.current?.contains(event.target as Node)) close.current()
-    }
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') return close.current()
-      if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return
-      const buttons = enabled()
-      if (buttons.length === 0) return
-      event.preventDefault()
-      const at = buttons.indexOf(document.activeElement as HTMLButtonElement)
-      const step = event.key === 'ArrowDown' ? 1 : -1
-      buttons[(at + step + buttons.length) % buttons.length]!.focus()
-    }
-    window.addEventListener('mousedown', onDown)
-    window.addEventListener('keydown', onKey)
-    return () => {
-      window.removeEventListener('mousedown', onDown)
-      window.removeEventListener('keydown', onKey)
-    }
-  }, [])
-
-  const left = Math.max(0, Math.min(x, window.innerWidth - MENU_WIDTH))
-  return (
-    <ul ref={root} className="menu menu-context" role="menu" aria-label={label} style={{ left, top: y }}>
-      <Items
-        items={items}
-        onPick={(item) => {
-          onClose()
-          item.onSelect?.()
-        }}
-      />
-    </ul>
-  )
-}
 
 /** What a workspace's menu items do; the dialog-opening ones are implemented by the section. */
 export type WorkspaceMenuHandlers = {
@@ -135,20 +36,16 @@ export function workspaceMenu(
   groups: ProjectGroup[],
   repo: Repo | undefined,
   on: WorkspaceMenuHandlers,
-  statuses: readonly WorktreeStatusDefinition[] = Object.entries(STATUS_LABELS).map(([id, label]) => ({
-    id,
-    label,
-    color: '#777777'
-  }))
-): MenuItem[] {
-  const del: MenuItem = worktree.isMain
-    ? { label: 'Delete', disabled: true, title: PRIMARY_DELETE_TIP }
+  statuses: readonly Pick<WorktreeStatusDefinition, 'id' | 'label' | 'icon'>[] = Object.entries(STATUS_LABELS).map(([id, label]) => ({ id, label }))
+): ContextMenuItem[] {
+  const del: ContextMenuItem = worktree.isMain
+    ? { label: 'Delete', enabled: false, title: PRIMARY_DELETE_TIP }
     : {
         label: descendants > 0 ? `Delete with Descendants (${descendants})…` : 'Delete',
         onSelect: () => on.openDeleteDialog(worktree, descendants)
       }
   const sleeping = 'sleeping' in worktree && worktree.sleeping === true
-  const sleepItems: MenuItem[] = sleeping
+  const sleepItems: ContextMenuItem[] = sleeping
     ? [
         { label: 'Wake', onSelect: () => on.setSleeping(worktree, false, false) },
         ...(descendants > 0 ? [{ label: `Wake with Descendants (${descendants})`, onSelect: () => on.setSleeping(worktree, false, true) }] : [])
@@ -157,11 +54,11 @@ export function workspaceMenu(
         { label: 'Sleep', onSelect: () => on.setSleeping(worktree, true, false) },
         ...(descendants > 0 ? [{ label: `Sleep with Descendants (${descendants})`, onSelect: () => on.setSleeping(worktree, true, true) }] : [])
       ]
-  const items: MenuItem[] = [
+  const items: ContextMenuItem[] = [
     { label: 'Update…', onSelect: () => on.openDialog({ kind: 'update', worktreeId: worktree.id }) },
     {
       label: 'archivedAt' in worktree && (worktree as Worktree & { archivedAt: number | null }).archivedAt !== null ? 'Unarchive' : 'Archive',
-      disabled: worktree.isMain || worktree.kind !== 'git',
+      enabled: !worktree.isMain && worktree.kind === 'git',
       onSelect: () => on.archive(
         worktree,
         !('archivedAt' in worktree) || (worktree as Worktree & { archivedAt: number | null }).archivedAt === null
@@ -171,7 +68,7 @@ export function workspaceMenu(
       label: 'Move to Status',
       submenu: statuses.map((status) => ({
         label: `${status.icon ? `${status.icon} ` : ''}${status.label}`,
-        current: worktree.status === status.id,
+        checked: worktree.status === status.id,
         onSelect: () => on.setStatus(worktree, status.id)
       }))
     },
@@ -213,8 +110,8 @@ export function workspaceMenu(
         label: 'Add worktree to group',
         submenu: groups.map((group) => ({
           label: group.name,
-          disabled: group.id === worktree.projectGroupId,
-          current: group.id === worktree.projectGroupId,
+          enabled: group.id !== worktree.projectGroupId,
+          checked: group.id === worktree.projectGroupId,
           onSelect: () => on.setMembership(worktree, group)
         }))
       })
@@ -224,10 +121,10 @@ export function workspaceMenu(
     }
   }
   if (repo && groups.length > 0) {
-    const targets: MenuItem[] = groups.map((group) => ({
+    const targets: ContextMenuItem[] = groups.map((group) => ({
       label: group.name,
-      disabled: group.id === repo.groupId,
-      current: group.id === repo.groupId,
+      enabled: group.id !== repo.groupId,
+      checked: group.id === repo.groupId,
       onSelect: () => on.moveProject(repo, group)
     }))
     if (repo.groupId !== null) targets.push({ label: 'No group', onSelect: () => on.moveProject(repo, null) })
@@ -244,9 +141,9 @@ export type ProjectMenuHandlers = {
 }
 
 /** The items of a project header's menu. */
-export function projectMenu(repo: Repo, groups: ProjectGroup[], on: ProjectMenuHandlers): MenuItem[] {
+export function projectMenu(repo: Repo, groups: ProjectGroup[], on: ProjectMenuHandlers): ContextMenuItem[] {
   const others = groups.filter((group) => group.id !== repo.groupId)
-  const targets: MenuItem[] = [
+  const targets: ContextMenuItem[] = [
     ...others.map((group) => ({ label: group.name, onSelect: () => on.moveToGroup(repo, group) })),
     ...(repo.groupId !== null ? [{ label: 'No group', onSelect: () => on.moveToGroup(repo, null) }] : [])
   ]
@@ -260,7 +157,7 @@ export function projectMenu(repo: Repo, groups: ProjectGroup[], on: ProjectMenuH
 }
 
 /** The items of a group header's menu. */
-export function groupMenu(group: ProjectGroup, openDialog: (dialog: DialogState) => void, openLedger: () => void): MenuItem[] {
+export function groupMenu(group: ProjectGroup, openDialog: (dialog: DialogState) => void, openLedger: () => void): ContextMenuItem[] {
   return [
     { label: 'Open ledger', onSelect: openLedger },
     { label: 'Rename…', onSelect: () => openDialog({ kind: 'group', action: 'rename', groupId: group.id }) },

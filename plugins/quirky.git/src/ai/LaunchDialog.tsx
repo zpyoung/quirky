@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useId, useState } from 'react'
 import type { UiPluginContext } from '@quirky/protocol'
-import { Dialog } from '../panel/Dialog'
+import { Button, Dialog, FormRow, TextField } from '@quirky/ui'
 import { messageOf } from '../panel/format'
 import { initialAgent, isUsable, useAgents } from './agents'
 import { DEFAULT_TEMPLATE, type FixAction, type LaunchParams, type Recipe } from './types'
@@ -69,6 +69,10 @@ function LaunchForm({ context, action, preview, agents, onClose, start }: FormPr
   const [saveRecipe, setSaveRecipe] = useState(true)
   const [scope, setScope] = useState<'repo' | 'global'>('repo')
   const [starting, setStarting] = useState(false)
+  const agentId = useId()
+  const templateId = useId()
+  const saveRecipeId = useId()
+  const saveForId = useId()
 
   const template = templateOf(text, preview.prompt, recipe.template)
   const optionsChanged =
@@ -97,11 +101,10 @@ function LaunchForm({ context, action, preview, agents, onClose, start }: FormPr
 
   return (
     <>
-      <div className="form">
-        <label>
-          Agent
-          {agents.list !== null && usable.length > 0 ? (
-            <select aria-label="Agent" value={agent} onChange={(event) => setPicked(event.target.value)}>
+      <div className="ui-stack">
+        {agents.list !== null && usable.length > 0 ? (
+          <FormRow label="Agent" htmlFor={agentId}>
+            <select id={agentId} className="ui-text-field__input" aria-label="Agent" value={agent} onChange={(event) => setPicked(event.target.value)}>
               {!known && agent !== '' && <option value={agent}>{agent}</option>}
               {usable.map((entry) => (
                 <option key={entry.id} value={entry.id}>
@@ -109,31 +112,32 @@ function LaunchForm({ context, action, preview, agents, onClose, start }: FormPr
                 </option>
               ))}
             </select>
-          ) : (
-            <span className="muted scm-ai-status">{agents.settled ? 'No enabled agents' : 'Detecting agents...'}</span>
-          )}
-        </label>
-        <div className="scm-ai-field">
-          <div className="scm-ai-field-head">
-            <label htmlFor="scm-ai-launch-template">Prompt template</label>
-            <button type="button" disabled={text === DEFAULT_TEMPLATE} onClick={() => setText(DEFAULT_TEMPLATE)}>
-              Reset
-            </button>
+          </FormRow>
+        ) : (
+          <div className="ui-stack">
+            <span className="ui-text-field__label">Agent</span>
+            <span className="ui-text-muted">{agents.settled ? 'No enabled agents' : 'Detecting agents...'}</span>
           </div>
-          <textarea
-            id="scm-ai-launch-template"
-            className="scm-ai-template"
-            aria-label="Prompt template"
-            rows={8}
-            spellCheck={false}
-            value={text}
-            onChange={(event) => setText(event.target.value)}
-          />
+        )}
+        <div className="ui-stack">
+          <FormRow label="Prompt template" htmlFor={templateId}>
+            <textarea
+              id={templateId}
+              className="ui-text-field__input"
+              aria-label="Prompt template"
+              rows={8}
+              spellCheck={false}
+              value={text}
+              onChange={(event) => setText(event.target.value)}
+            />
+          </FormRow>
+          <div className="ui-cluster">
+            <Button type="button" disabled={text === DEFAULT_TEMPLATE} onClick={() => setText(DEFAULT_TEMPLATE)}>
+              Reset
+            </Button>
+          </div>
         </div>
-        <label>
-          CLI arguments
-          <input type="text" aria-label="CLI arguments" spellCheck={false} value={args} onChange={(event) => setArgs(event.target.value)} />
-        </label>
+        <TextField label="CLI arguments" type="text" aria-label="CLI arguments" spellCheck={false} value={args} onChange={(event) => setArgs(event.target.value)} />
         <LaunchOptionsEditor
           context={context}
           host="local"
@@ -146,29 +150,31 @@ function LaunchForm({ context, action, preview, agents, onClose, start }: FormPr
             return choices
           })}
         />
-        <div className="scm-ai-save">
-          <label className="scm-ai-check">
-            <input type="checkbox" aria-label="Save this launch as the recipe" checked={saveRecipe} onChange={(event) => setSaveRecipe(event.target.checked)} />
-            <span>{alreadySaved ? 'Launch recipe already saved' : 'Save this launch as the recipe'}</span>
-          </label>
+        <div className="ui-stack">
+          <FormRow label={alreadySaved ? 'Launch recipe already saved' : 'Save this launch as the recipe'} htmlFor={saveRecipeId}>
+            <input
+              id={saveRecipeId}
+              type="checkbox"
+              aria-label="Save this launch as the recipe"
+              checked={saveRecipe}
+              onChange={(event) => setSaveRecipe(event.target.checked)}
+            />
+          </FormRow>
           {saveRecipe && !alreadySaved && (
-            <label>
-              Save for
-              <select aria-label="Save for" value={scope} onChange={(event) => setScope(event.target.value as 'repo' | 'global')}>
+            <FormRow label="Save for" htmlFor={saveForId}>
+              <select id={saveForId} className="ui-text-field__input" aria-label="Save for" value={scope} onChange={(event) => setScope(event.target.value as 'repo' | 'global')}>
                 <option value="repo">This repository</option>
                 <option value="global">All repositories</option>
               </select>
-            </label>
+            </FormRow>
           )}
         </div>
       </div>
-      <div className="dialog-actions">
-        <button type="button" onClick={onClose}>
-          Cancel
-        </button>
-        <button type="button" className="primary" disabled={agent === '' || usable.length === 0 || starting} onClick={() => void go()}>
+      <div className="ui-cluster">
+        <Button type="button" onClick={onClose}>Cancel</Button>
+        <Button type="button" variant="primary" disabled={agent === '' || usable.length === 0 || starting} onClick={() => void go()}>
           {saving ? 'Save & start agent' : 'Start agent'}
-        </button>
+        </Button>
       </div>
     </>
   )
@@ -200,19 +206,17 @@ export function LaunchDialog(props: Props) {
   }, [context, worktree, action])
 
   return (
-    <Dialog title={TITLES[action]} onClose={onClose} wide>
-      <p className="muted">Review and edit the full command input before starting an agent.</p>
+    <Dialog open title={TITLES[action]} onClose={onClose}>
+      <p className="ui-text-muted">Review and edit the full command input before starting an agent.</p>
       {preview !== null && <LaunchForm {...props} preview={preview} agents={agents} />}
-      {preview === null && error === null && <p className="muted">Loading…</p>}
+      {preview === null && error === null && <p className="ui-text-muted">Loading…</p>}
       {error !== null && (
         <>
-          <p className="form-error" role="alert">
+          <p className="ui-error-text" role="alert">
             {error}
           </p>
-          <div className="dialog-actions">
-            <button type="button" onClick={onClose}>
-              Cancel
-            </button>
+          <div className="ui-cluster">
+            <Button type="button" onClick={onClose}>Cancel</Button>
           </div>
         </>
       )}

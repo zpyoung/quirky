@@ -1,94 +1,125 @@
-import { useState, type CSSProperties } from 'react'
+import { useMemo, useState, type CSSProperties } from 'react'
 import type { Session, UiPluginContext } from '@quirky/protocol'
+import { Badge, Button, IconButton, Tabs } from '@quirky/ui'
 import type { WorktreeSessions } from './model'
 import { NewSessionMenu } from './NewSessionMenu'
 import { PromptDialog, type NewSessionRequest } from './PromptDialog'
-import { displayStatus } from './status'
-import { StatusDot, UnreadBell, useNow } from './StatusDot'
+import { sessionStatusPresentation, StatusDot, UNREAD_LABELS, UnreadBell, useNow } from './StatusDot'
 
-const BADGE_STYLE: CSSProperties = {
-  flex: 'none',
-  maxWidth: 90,
-  overflow: 'hidden',
-  textOverflow: 'ellipsis',
-  padding: '0 6px',
-  border: '1px solid var(--border)',
-  borderRadius: 8,
-  background: 'var(--bg-hover)',
-  color: 'var(--muted)',
-  font: 'inherit',
-  fontSize: 10,
-  lineHeight: '14px'
-}
+const layout = {
+  display: 'flex',
+  flexDirection: 'column',
+  minWidth: 0,
+  color: 'var(--ui-text)',
+  background: 'var(--ui-surface)'
+} satisfies CSSProperties
+
+const tabBar = {
+  display: 'flex',
+  alignItems: 'flex-end',
+  gap: 'var(--ui-space-4)',
+  minWidth: 0,
+} satisfies CSSProperties
+
+const tabs = { flex: '1 1 auto', minWidth: 0 } satisfies CSSProperties
+const actions = { display: 'flex', alignItems: 'center', flex: '0 0 auto', gap: 'var(--ui-space-4)', paddingBottom: 'var(--ui-space-2)' } satisfies CSSProperties
+const summary = {
+  display: 'flex',
+  alignItems: 'center',
+  flexWrap: 'wrap',
+  gap: 'var(--ui-space-8)',
+  padding: 'var(--ui-space-4) var(--ui-space-8)',
+  borderBottom: 'var(--ui-border-width) solid var(--ui-border)',
+  color: 'var(--ui-muted)',
+  fontSize: 'var(--ui-font-label)',
+  minWidth: 0
+} satisfies CSSProperties
+const sessionControls = {
+  display: 'flex',
+  alignItems: 'center',
+  flexWrap: 'wrap',
+  gap: 'var(--ui-space-8)',
+  padding: 'var(--ui-space-4) var(--ui-space-8)',
+  borderBottom: 'var(--ui-border-width) solid var(--ui-border)',
+  minWidth: 0
+} satisfies CSSProperties
+const sessionControlGroup = {
+  display: 'flex',
+  alignItems: 'center',
+  flexWrap: 'wrap',
+  gap: 'var(--ui-space-4)',
+  minWidth: 0
+} satisfies CSSProperties
+const sessionName = { color: 'var(--ui-muted)', fontSize: 'var(--ui-font-label)', overflowWrap: 'anywhere' } satisfies CSSProperties
 
 type Props = { context: UiPluginContext; store: WorktreeSessions; sessions: Session[]; active: Session | null }
+
+function tabLabel(session: Session, now: number, index: number): string {
+  const presentation = sessionStatusPresentation(session, now)
+  const labels = [session.title, presentation.label]
+  if (session.unread) labels.push(UNREAD_LABELS[session.unread])
+  if (presentation.progress !== null) labels.push(`${presentation.progress}%`)
+  for (const badge of Object.values(session.badges ?? {})) labels.push(badge.label)
+  if (index < 9) labels.push(`Cmd+${index + 1}`)
+  return labels.join(' · ')
+}
 
 export function SessionTabs({ context, store, sessions, active }: Props) {
   const [pending, setPending] = useState<NewSessionRequest | null>(null)
   const now = useNow()
+  const items = useMemo(() => sessions.map((session, index) => ({ id: session.id, label: tabLabel(session, now, index) })), [sessions, now])
 
   const pick = (request: NewSessionRequest) => {
     if (request.agent === 'shell') void store.create('shell', '', false)
     else setPending(request)
   }
 
+  const activePresentation = active ? sessionStatusPresentation(active, now) : null
+
   return (
-    <div className="tabs">
-      <div className="tab-scroll" role="tablist">
-        {sessions.map((session, index) => (
-          <div
-            key={session.id}
-            role="tab"
-            aria-selected={session.id === active?.id}
-            className={`tab${session.id === active?.id ? ' active' : ''}`}
-            onClick={() => store.open(session.id)}
-            title={`${session.title} (${session.status})${index < 9 ? ` - Cmd+${index + 1}` : ''}`}
-          >
-            {session.unread ? (
-              <UnreadBell reason={session.unread} />
-            ) : (
-              <StatusDot
-                status={displayStatus(session.status)}
-                summary={session.agentStatus}
-                now={now}
-                running={session.status !== 'exited'}
-              />
-            )}
-            <span className="tab-title">{session.title}</span>
-            {Object.entries(session.badges ?? {}).map(([key, badge]) =>
-              badge.command ? (
-                <button
-                  key={key}
-                  type="button"
-                  title={badge.tooltip}
-                  style={{ ...BADGE_STYLE, cursor: 'pointer' }}
-                  onClick={(event) => {
-                    event.stopPropagation()
-                    void context.executeCommand(badge.command!, badge.args)
-                  }}
-                >
-                  {badge.label}
-                </button>
-              ) : (
-                <span key={key} title={badge.tooltip} style={BADGE_STYLE}>
-                  {badge.label}
-                </span>
-              )
-            )}
-            <button
-              className="icon-button"
-              aria-label={`Close ${session.title}`}
-              onClick={(event) => {
-                event.stopPropagation()
-                void store.close(session)
-              }}
-            >
-              ×
-            </button>
-          </div>
-        ))}
+    <div style={layout}>
+      <div style={tabBar}>
+        <div style={tabs}>
+          <Tabs label="Sessions" items={items} value={active?.id ?? ''} onChange={(id) => store.open(id)} />
+        </div>
+        <div style={actions}><NewSessionMenu context={context} onPick={pick} /></div>
       </div>
-      <NewSessionMenu context={context} onPick={pick} />
+      {active && activePresentation && (
+        <div style={summary} role="status">
+          {active.unread ? <UnreadBell reason={active.unread} /> : <StatusDot session={active} now={now} />}
+          <span>{active.unread ? `${UNREAD_LABELS[active.unread]} · ${activePresentation.label}` : activePresentation.label}</span>
+          {activePresentation.progress !== null && (
+            <Badge tone="accent" label={`Progress ${activePresentation.progress}%`}>
+              {activePresentation.progress}%
+            </Badge>
+          )}
+        </div>
+      )}
+      {sessions.length > 0 && (
+        <div style={sessionControls} role="group" aria-label="Session actions">
+          {sessions.map((session) => (
+            <div key={session.id} style={sessionControlGroup} role="group" aria-label={`Actions for ${session.title}`}>
+              <span style={sessionName}>{session.title}</span>
+              {Object.entries(session.badges ?? {}).map(([key, badge]) => badge.command ? (
+                <Button key={key} type="button" title={badge.tooltip} onClick={() => void context.executeCommand(badge.command!, badge.args)}>
+                  {badge.label}
+                </Button>
+              ) : (
+                <span key={key} title={badge.tooltip}>
+                  <Badge label={badge.tooltip ?? badge.label}>{badge.label}</Badge>
+                </span>
+              ))}
+              <IconButton
+                label={`Close ${session.title}`}
+                title={`Close ${session.title}`}
+                onClick={() => void store.close(session)}
+              >
+                ×
+              </IconButton>
+            </div>
+          ))}
+        </div>
+      )}
       {pending && (
         <PromptDialog
           request={pending}

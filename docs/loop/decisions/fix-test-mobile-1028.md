@@ -154,5 +154,27 @@
 - **Revisit if:** a genuine provider activation race contradicts the exact producer identity or canonical land reports a concrete source/type failure
 - **Source:** assumed — autonomous
 
+## D15: Recover the controller's concurrent merge conflict with the canonical Git inventory
+- **Question:** What must change after the actual first land refusal?
+- **Options:** bypass the controller; retain competing plugin-path exclusions; adopt the incoming general source inventory
+- **Chose:** required recovery merge reads fix-test-heimdall D1–D12, fix-test-loops D1–D11 and ui-restyle-accounts D1–D15 completely, including raw omitted lines. Preserve nullable certified liveness, connection-owned approval waits/cancellation and the20-second quiet gate, and Accounts/Vault shared presentation/required-choice authority. Resolve both lint conflicts in favor of Accounts' repository Git inventory, remove our obsolete plugin-specific exclusion and duplicate Mobile-only fixture section, retain semantic assertion cleanup plus the incoming ignored/tracked/new-source regression.
+- **Why:** first canonical land of399a7eb8 failed with a real concurrent merge conflict. Incoming Accounts D13 addresses the same generated bundle cause using the repository's existing cached+nonignored source convention, retaining force-tracked ignored source and ordinary new source, with fail-closed Git errors and non-Git fallback. One canonical owner avoids a second path-specific convention. No protected loop file or authority policy changed.
+- **Evidence:** bg14 exit1/1.50s; recovery conflicts4/5 in scripts/ui-lint.ts; incoming three complete decision logs and tests; canonical Accounts D13; exact resolver writes and removal of stale excludedSubdirectory. Fresh recovery gates and current runtime proof follow before retry.
+- **Reversibility:** easy
+- **Confidence:** high for source conflict resolution, recovery runtime/typecheck pending
+- **Revisit if:** the current source inventory or composed mobile runtime fails verification
+- **Source:** supersedes fix-test-mobile-1028 D11 (inventory mechanism only); locked by ui-restyle-accounts D13
+
+## D16: Verify the recovered composition before the canonical retry
+- **Question:** Does the recovery's current source preserve all repaired consumer behavior?
+- **Options:** reuse399a7eb8 results; skip independent runtime proof; run fresh composed gates and existing owned smokes
+- **Chose:** current canonical Mobile/apps-mobile/scripts/workspace-flow/Git suite passes55remote+2macOS files in89.17s, no failures/flakes. Current full frozen-install/UIlint/root/mobile/prepared-desktop typecheck passes44.83s. Actual public Markdown/encrypted-phone and typed Chrome Watch smokes both pass in one16.67s command, with exact values/authority refusals, fresh JPEG personally inspected and all private homes removed.
+- **Why:** validates the canonical Git inventory regression plus incoming structured/UI composition instead of relabeling the earlier source. No further review discovery, timeout increase, source exception, grant widening or proactive merge was added.
+- **Evidence:** recovery fa2d2492; bg15 suite-result ok:true/flaky:[]; bg16 typecheck exit0; current combined smoke exit0/16.67s and cleanup rootRemoved/daemonHomeRemoved:true for both; retained current watch-input.jpg
+- **Reversibility:** easy
+- **Confidence:** high for current exercised boundaries; native phone and exact NotFound activation-race interleaving limits remain unchanged
+- **Revisit if:** canonical merge-result gate reports a new concrete integration failure
+- **Source:** locked by docs/loop/LOOP.md failed-land recovery; assumed — autonomous for bounded proof
+
 ## Progress
-Ready for canonical land. All implementers, static validator/closure, tests, compiler and actual smoke processes have returned; no owned daemon/Chrome/PTY/service remains. One bounded fix batch closes both final static findings, with exact pre-review/post-batch qualification retained. Current full Mobile/apps-mobile/scripts/workspace/Git consumers pass55remote+2macOS files/no flakes; full typecheck passes45.41s; actual Watch fresh-frame smoke passes4.85s and private homes removed. Sole roadmap catch-up and incoming decision reads complete. Next: commit source/tests/README/logs, detach, canonical land and await actual merge-result gate; remove owned scratch after success. Separate Hosting/Tasks/Reviews repairs remain named, not a whole-repository pass claim.
+Ready for canonical retry on recoveredfa2d2492 composition. All incoming decision logs and raw omissions read; canonical Git inventory replaces obsolete narrow exclusion, all Mobile/public authority fixes retained. Fresh57file consumer suite/no flakes, full typecheck44.83s and actual combined API/encrypted/Chrome fresh-frame smokes16.67s pass with awaited private cleanup. All implementers/validators/review/check/runtime processes returned. Exact prior formal-review/fix-batch/source-only race qualification and independent area owners remain recorded. Next: commit receipt, detach, canonical queue land retry and await actual result; remove only owned scratch after success and end exactly this item.

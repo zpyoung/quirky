@@ -5,7 +5,7 @@ import { registerDom } from './register-dom'
 registerDom()
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 const s = await import('./panel-support')
-const { act, byLabel, buttonText, click, compareOf, DIFF_VIEW, entry, failure, fakeContext, layoutFor, mountPanel, q, qa, rowOf, settle, statusOf, type } = s
+const { act, byLabel, buttonText, click, compareOf, DIFF_VIEW, entry, failure, fakeContext, layoutFor, mountPanel, noticeOf, q, qa, rowOf, settle, statusOf, type } = s
 const { activePanel } = await import('../../src/panel/registry')
 
 afterAll(() => GlobalRegistrator.unregister())
@@ -24,6 +24,10 @@ async function open(configure: (fake: Fake) => void = () => {}) {
 }
 
 const dialog = () => q(document.body, '[role="dialog"]')
+const dialogTitle = () => {
+  const titleId = dialog()?.getAttribute('aria-labelledby')
+  return titleId ? document.getElementById(titleId)?.textContent ?? null : null
+}
 
 describe('SC-48: compare explains when it cannot run', () => {
   const unavailable = compareOf({ status: 'invalid-base', base: 'origin/gone', message: 'Base ref origin/gone could not be resolved in this repository.' })
@@ -34,7 +38,7 @@ describe('SC-48: compare explains when it cannot run', () => {
       f.compare = unavailable
     })
     expect(element.textContent).toContain('Base ref origin/gone could not be resolved in this repository.')
-    expect(q(element, '.scm-card')).toBeNull()
+    expect(q(element, '[role="status"] .ui-inline-agent-card')).toBeNull()
     expect(buttonText(element, 'Change base ref')).toBeDefined()
     const before = fake.called('quirky.git/compare').length
     await click(buttonText(element, 'Retry'))
@@ -47,7 +51,7 @@ describe('SC-48: compare explains when it cannot run', () => {
       f.status = statusOf([])
       f.compare = compareOf({ status: 'no-merge-base', message: 'This branch and origin/main do not share a merge base, so compare-to-base is unavailable.' })
     })
-    expect(q(element, '.scm-card strong')?.textContent).toBe('Branch compare unavailable')
+    expect(q(element, '[role="status"] .ui-inline-agent-card h3')?.textContent).toBe('Branch compare unavailable')
     expect(element.textContent).toContain('do not share a merge base')
     expect(element.textContent).not.toContain('No changes on this branch')
     unmount()
@@ -76,7 +80,7 @@ describe('SC-47 and SC-51: Committed on Branch refreshes', () => {
     expect(q(element, '[data-section="branch"]')).toBeNull()
     fake.compare = compareOf({ entries: [{ path: 'math.ts', status: 'modified', added: 1, removed: 0, binary: false }], added: 1 })
     await type(byLabel(element, 'Commit message') as HTMLTextAreaElement, 'msg')
-    await click(q(element, '.scm-primary'))
+    await click(q(element, '[data-git-primary]'))
     expect(rowOf(element, 'math.ts', 'branch')).not.toBeNull()
     unmount()
   })
@@ -120,14 +124,14 @@ describe('SC-50: Change Base Ref', () => {
     const { fake, element, unmount } = await open(setup)
     await click(byLabel(element, 'More source control actions'))
     await click(buttonText(document.body, 'Change Base Ref…'))
-    expect(dialog()?.getAttribute('aria-label')).toBe('Change Base Ref')
+    expect(dialogTitle()).toBe('Change Base Ref')
     expect(dialog()?.textContent).toContain('Pick the branch compare target for this repository.')
-    expect(qa(dialog()!, '[role="option"]')).toHaveLength(4)
-    expect(q(dialog()!, '[aria-selected="true"]')?.textContent).toContain('origin/main')
+    expect(qa(dialog()!, '[aria-label="Branches"] .ui-list-row__main')).toHaveLength(4)
+    expect(q(dialog()!, '[aria-label="Branches"] [aria-pressed="true"]')?.textContent).toContain('origin/main')
     await type(byLabel(dialog()!, 'Search branches') as HTMLInputElement, 'rel')
     expect(fake.called('quirky.git/branches').at(-1)?.params).toEqual({ worktree: 'feat', query: 'rel' })
-    expect(qa(dialog()!, '[role="option"]').map((o) => o.textContent)).toEqual(['releaselocal', 'origin/releaseremote'])
-    await click(q(dialog()!, '[role="option"] button'))
+    expect(qa(dialog()!, '[aria-label="Branches"] .ui-list-row__main').map((row) => row.textContent)).toEqual(['releaselocal', 'origin/releaseremote'])
+    await click(q(dialog()!, '[aria-label="Branches"] .ui-list-row__main'))
     expect(fake.called('quirky.git/setBase').at(-1)?.params).toEqual({ worktree: 'feat', base: 'release' })
     expect(dialog()).toBeNull()
     unmount()
@@ -135,7 +139,7 @@ describe('SC-50: Change Base Ref', () => {
 
   test('Use Primary clears the base; the base button in the branch row opens the dialog too', async () => {
     const { fake, element, unmount } = await open(setup)
-    await click(q(element, '.scm-base'))
+    await click(q(element, '[data-base-ref]'))
     await click(buttonText(dialog()!, 'Use Primary'))
     expect(fake.called('quirky.git/setBase').at(-1)?.params).toEqual({ worktree: 'feat', clear: true })
     unmount()
@@ -148,8 +152,8 @@ describe('SC-50: Change Base Ref', () => {
         throw failure('Base ref origin/gone could not be resolved in this repository.', { reason: 'invalid-base' })
       })
     })
-    await click(q(element, '.scm-base'))
-    await click(q(dialog()!, '[role="option"] button'))
+    await click(q(element, '[data-base-ref]'))
+    await click(q(dialog()!, '[aria-label="Branches"] .ui-list-row__main'))
     expect(dialog()?.textContent).toContain('could not be resolved')
     unmount()
   })
@@ -185,26 +189,26 @@ describe('SC-54: the Commits dock', () => {
 
   test('is collapsed by default and loads nothing until opened', async () => {
     const { fake, element, unmount } = await open(history)
-    expect(q(element, '[data-section="history"] .scm-history')).toBeNull()
+    expect(q(element, '[data-history-content]')).toBeNull()
     expect(fake.called('quirky.git/history')).toHaveLength(0)
     unmount()
   })
 
   test('rows show subject, short id, author, relative time and ref chips', async () => {
     const { fake, element, unmount } = await open(history)
-    await click(q(element, '[data-section="history"] .scm-section-toggle'))
+    await click(byLabel(element, 'Expand Commits'))
     expect(fake.called('quirky.git/history').at(-1)?.params).toEqual({ worktree: 'feat' })
-    const row = q(element, '.scm-commit')!
-    expect(q(row, '.scm-row-name')?.textContent).toBe('Merge main')
-    expect(q(row, '.scm-row-sub')?.textContent).toBe('1111111 · Zoe · 3h ago')
-    expect(qa(row, '.scm-ref').map((r) => r.textContent)).toEqual(['HEAD -> zoe/feat', 'tag: v1'])
+    const row = q(element, '[data-commit-row]')!
+    expect(q(row, '.ui-list-row__title')?.textContent).toContain('Merge main')
+    expect(q(row, '.ui-list-row__description')?.textContent).toBe('1111111 · Zoe · 3h ago')
+    expect(qa(row, '[aria-label^="Commit ref "]').map((ref) => ref.textContent)).toEqual(['HEAD -> zoe/feat', 'tag: v1'])
     unmount()
   })
 
   test('clicking a commit opens its combined diff; expanding it lists files that open their commit diff', async () => {
     const { fake, element, unmount } = await open(history)
-    await click(q(element, '[data-section="history"] .scm-section-toggle'))
-    await click(q(element, '.scm-commit .scm-row-main'))
+    await click(byLabel(element, 'Expand Commits'))
+    await click(q(element, '[data-commit-row] .ui-list-row__main'))
     expect(fake.views.at(-1)).toEqual({ id: DIFF_VIEW, input: { worktree: 'feat', mode: 'combined', commit: '1'.repeat(40), title: 'Commit 1111111: Merge main' } })
     await click(byLabel(element, 'Expand commit 1111111'))
     expect(fake.called('quirky.git/commitFiles').at(-1)?.params).toEqual({ worktree: 'feat', commit: '1'.repeat(40) })
@@ -215,10 +219,10 @@ describe('SC-54: the Commits dock', () => {
 
   test('Load more asks for up to 200 and goes away when everything is shown', async () => {
     const { fake, element, unmount } = await open(history)
-    await click(q(element, '[data-section="history"] .scm-section-toggle'))
+    await click(byLabel(element, 'Expand Commits'))
     await click(buttonText(element, 'Load more'))
     expect(fake.called('quirky.git/history').at(-1)?.params).toEqual({ worktree: 'feat', limit: 200 })
-    expect(qa(element, '.scm-commit')).toHaveLength(3)
+    expect(qa(element, '[data-commit-row]')).toHaveLength(3)
     expect(buttonText(element, 'Load more')).toBeUndefined()
     unmount()
   })
@@ -227,10 +231,10 @@ describe('SC-54: the Commits dock', () => {
     const { element, unmount } = await open(history)
     await act(async () => activePanel().toggleHistory())
     await settle()
-    expect(q(element, '[data-section="history"] .scm-history')).not.toBeNull()
+    expect(q(element, '[data-history-content]')).not.toBeNull()
     await act(async () => activePanel().toggleHistory(false))
     await settle()
-    expect(q(element, '[data-section="history"] .scm-history')).toBeNull()
+    expect(q(element, '[data-history-content]')).toBeNull()
     unmount()
   })
 })
@@ -249,17 +253,17 @@ describe('SC-58 and SC-59: huge repositories', () => {
     expect(q(element, '[data-section="untracked"] [aria-label="Stage all"]')).toBeNull()
     await click(byLabel(q(element, '[data-section="unstaged"]')!, 'Stage all'))
     expect(fake.called('quirky.git/stage').at(-1)?.params).toEqual({ worktree: 'feat', scope: 'tracked' })
-    await click(buttonText(q(element, '.scm-card-warning')!, 'Stage All'))
+    await click(buttonText(q(element, '[role="status"] .ui-inline-agent-card')!, 'Stage All'))
     expect(fake.called('quirky.git/stage').at(-1)?.params).toEqual({ worktree: 'feat', scope: 'all' })
     const before = fake.called('quirky.git/status').length
-    await click(buttonText(q(element, '.scm-card-warning')!, 'Retry'))
+    await click(buttonText(q(element, '[role="status"] .ui-inline-agent-card')!, 'Retry'))
     expect(fake.called('quirky.git/status').length).toBe(before + 1)
     unmount()
   })
 
   test('the primary Stage All stages with scope all while capped', async () => {
     const { fake, element, unmount } = await open(huge)
-    await click(q(element, '.scm-primary'))
+    await click(q(element, '[data-git-primary]'))
     expect(fake.called('quirky.git/stage').at(-1)?.params).toEqual({ worktree: 'feat', scope: 'all' })
     unmount()
   })
@@ -269,7 +273,7 @@ describe('SC-58 and SC-59: huge repositories', () => {
     fake.on('quirky.git/status', () => {
       throw new Error('timeout')
     })
-    await click(buttonText(q(element, '.scm-card-warning')!, 'Retry'))
+    await click(buttonText(q(element, '[role="status"] .ui-inline-agent-card')!, 'Retry'))
     expect(fake.toasts).toContainEqual(['Could not refresh Source Control', 'Try again.'])
     unmount()
   })
@@ -279,14 +283,14 @@ describe('SC-58 and SC-59: huge repositories', () => {
       huge(f)
       f.on('quirky.git/hugeFolders', () => ({ folders: ['node_modules', 'dist'] }))
     })
-    const notice = q(element, '.notice')!
+    const notice = noticeOf(element)!
     expect(notice.textContent).toContain('This repository has too many active changes. Add "node_modules" to .gitignore?')
     await act(async () => fake.emit({ type: 'quirky.git/changed', data: { worktreeId: 'feat' } }))
     await settle()
     expect(fake.called('quirky.git/hugeFolders')).toHaveLength(1)
     await click(buttonText(notice, 'Add to .gitignore'))
     expect(fake.called('quirky.git/ignoreFolder').at(-1)?.params).toEqual({ worktree: 'feat', folder: 'node_modules' })
-    expect(q(element, '.notice')).toBeNull()
+    expect(noticeOf(element)).toBeNull()
     unmount()
   })
 })
@@ -298,14 +302,14 @@ describe('SC-64: the panel handle commands act on', () => {
     })
     await act(async () => activePanel().setFilter('math'))
     await settle()
-    expect(qa(element, '.scm-row-main[title]').map((r) => r.getAttribute('title'))).toEqual(['math.ts'])
+    expect(qa(element, '[data-row-path] button[aria-pressed]').map((row) => row.closest('[data-row-path]')?.getAttribute('title'))).toEqual(['math.ts'])
     expect(fake.reports.at(-1).filter).toBe('math')
     await act(async () => activePanel().setFilter(''))
     await settle()
     expect(byLabel(element, 'Filter files…')).toBeNull()
     await act(async () => activePanel().select(['math.ts', 'other.ts']))
     await settle()
-    expect(q(element, '.scm-bulk')?.textContent).toContain('2 selected')
+    expect(q(element, '[role="toolbar"][aria-label="Selection actions"]')?.textContent).toContain('2 selected')
     const before = fake.called('quirky.git/compare').length
     await act(async () => activePanel().refreshCompare())
     await settle()

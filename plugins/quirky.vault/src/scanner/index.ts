@@ -330,7 +330,10 @@ export function createScanner(options: ScannerOptions): VaultScanner {
     const discovery = await discoverSources(normalized, signal)
     for (const candidate of discovery.candidates) {
       const id = stableSourceId(candidate)
-      knownCandidates.set(id, candidate)
+      const known = { ...candidate }
+      if (candidate.sidecars) known.sidecars = [...candidate.sidecars]
+      if (candidate.metadata) known.metadata = { ...candidate.metadata }
+      knownCandidates.set(id, known)
       if (startedAt === generation) invalidated.delete(id)
     }
     return discovery
@@ -395,8 +398,16 @@ export function createScanner(options: ScannerOptions): VaultScanner {
     discover,
     async parse(candidate, onMessage, signal) {
       const generationAtStart = generation
-      const current = await currentCandidateById(stableSourceId(candidate), signal)
-      if (!current) return null
+      if (closed) throw new Error('scanner-closed')
+      throwIfAborted(signal)
+      const id = stableSourceId(candidate)
+      const current = knownCandidates.get(id)
+      if (
+        !current ||
+        current.agent !== candidate.agent ||
+        resolve(current.filePath) !== resolve(candidate.filePath) ||
+        (current.sessionId ?? '') !== (candidate.sessionId ?? '')
+      ) return null
       return parseCandidate(current, onMessage, signal, generationAtStart)
     },
     async list(request, signal) {

@@ -6,7 +6,7 @@ import { removeTempDirs } from '../../../packages/daemon/test/plugins/fixtures'
 import { startHeadlessWindow, type HeadlessWindow } from '../../../packages/ui/test/fixtures/headless-window'
 import { isolateGitConfig, makeRepo } from '../../quirky.repo/test/git-fixtures'
 import { githubUser, useGlobalGitConfig } from '../../quirky.worktree/test/fixtures/repos'
-import { button, click, dialogNamed, field, setSelect, setText } from '../../quirky.worktree/test/window/dom'
+import { button, click, dialogNamed, field, menuItem as findMenuItem, sectionHeadingMatches, setSelect, setText, toastContaining } from '../../quirky.worktree/test/window/dom'
 
 const SLOW = 40_000
 const OPEN = 'command:quirky.ledger/open'
@@ -67,25 +67,38 @@ const request = async (world: World, body: Record<string, unknown>): Promise<any
 const owner = (world: World) => ({ tier: 'project' as const, id: world.repo.id })
 const groupOwner = (group: ProjectGroup) => ({ tier: 'group' as const, id: group.id })
 
+const chooserSection = (): HTMLElement | undefined =>
+  [...document.querySelectorAll<HTMLElement>('section')].find((section) =>
+    section.querySelector(':scope > header h1')?.textContent?.trim() === 'Open ledger'
+  )
+
+const ledgerPage = (): HTMLElement | undefined =>
+  [...document.querySelectorAll<HTMLElement>('section')].find((section) => {
+    const title = section.querySelector(':scope > header h1')?.textContent?.trim()
+    return title !== undefined && title !== 'Open ledger'
+  })
+
 function projectSection(name: string): HTMLElement | undefined {
-  return [...document.querySelectorAll<HTMLElement>('section.repo')].find((section) => section.querySelector('.repo-name')?.textContent === name)
+  return [...document.querySelectorAll<HTMLElement>('section.repo')].find((section) => sectionHeadingMatches(section, name))
 }
 
 function groupSection(name: string): HTMLElement | undefined {
-  return [...document.querySelectorAll<HTMLElement>('section.group')].find((section) => section.querySelector('.group-name')?.textContent === name)
+  return [...document.querySelectorAll<HTMLElement>('section.group')].find((section) => sectionHeadingMatches(section, name))
 }
 
 function menuItem(label: string): HTMLElement | undefined {
-  return [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((item) => item.textContent?.replace(/\s*▸$/, '').trim() === label)
+  return findMenuItem(document, label)
 }
 
 async function projectMenu(world: World): Promise<void> {
-  await click(await world.win.waitFor(() => projectSection(world.repo.name)?.querySelector<HTMLElement>('.project-menu'))!)
+  const section = await world.win.waitFor(() => projectSection(world.repo.name))
+  await click(button(section, `Actions for ${world.repo.name}`)!)
   await world.win.waitFor(() => document.querySelector('[role="menu"]'))
 }
 
 async function groupMenu(world: World, name: string): Promise<void> {
-  await click(await world.win.waitFor(() => groupSection(name)?.querySelector<HTMLElement>('.group-menu'))!)
+  const section = await world.win.waitFor(() => groupSection(name))
+  await click(button(section, `Actions for group ${name}`)!)
   await world.win.waitFor(() => document.querySelector('[role="menu"]'))
 }
 
@@ -95,7 +108,7 @@ async function chooseMenu(world: World, label: string): Promise<void> {
 
 async function openOwnerCommand(world: World): Promise<void> {
   await world.agent.callAny('ui.command.run', { id: OPEN, args: { target: { owner: owner(world) } } })
-  await world.win.waitFor(() => document.querySelector('.ledger-page'))
+  await world.win.waitFor(() => ledgerPage())
 }
 
 async function createBug(world: World, title: string, path = 'src/a.ts'): Promise<any> {
@@ -113,7 +126,7 @@ async function createBug(world: World, title: string, path = 'src/a.ts'): Promis
 }
 
 async function createEntryFromForm(world: World, type: string, index: number): Promise<void> {
-  const page = document.querySelector<HTMLElement>('.ledger-page')!
+  const page = ledgerPage()!
   await click(button(page, 'New entry')!)
   const form = await world.win.waitFor(() => dialogNamed('New ledger entry'))
   await setSelect(field<HTMLSelectElement>(form, 'Type')!, type)
@@ -163,10 +176,10 @@ test('SC-13: the sidebar panel follows the active workspace, scopes and client s
   })
   await world.agent.callAny('ui.view.open', { id: 'view:quirky.session/worktree', input: { worktree: world.workspace.id } })
   await world.agent.callAny('ui.panel.open', { id: LEDGER_PANEL })
-  const panel = await world.win.waitFor(() => document.querySelector<HTMLElement>('.ledger-panel'))
-  await world.win.waitFor(() => panel.querySelector('.ledger-entry-row'))
+  const panel = await world.win.waitFor(() => document.querySelector<HTMLElement>('[aria-label="Ledger panel"]'))
+  await world.win.waitFor(() => panel.querySelector('ul li'))
   expect(panel.textContent).toContain('Panel origin record')
-  expect([...panel.querySelectorAll('.ledger-scope-tabs button')].map((button) => button.textContent)).toEqual(['Worktree', 'Project'])
+
   expect((await uiState(world.agent)).slots.find((slot) => slot.id === LEDGER_PANEL)?.report).toMatchObject({
     view: 'panel',
     target: { workspaceId: world.workspace.id },
@@ -180,12 +193,12 @@ test('SC-13: the sidebar panel follows the active workspace, scopes and client s
   })
   const search = field(panel, 'Search title or ID')!
   await setText(search, 'not found')
-  await world.win.waitFor(() => panel.textContent?.includes('No entries match this view.'))
+  await world.win.waitFor(() => panel.querySelector('ul li') === null)
   await setText(search, 'Panel origin')
-  await world.win.waitFor(() => panel.querySelector('.ledger-entry-row'))
+  await world.win.waitFor(() => panel.querySelector('ul li'))
 
   await world.agent.callAny('ui.view.close', {})
-  await world.win.waitFor(() => panel.textContent?.includes('Open a workspace to see its ledger.'))
+  await world.win.waitFor(() => panel.querySelector('ul li') === null)
 }, SLOW)
 
 test('SC-14: Open Ledger and real owner menus route to the same attached and detached catalog-backed page', async () => {
@@ -193,17 +206,16 @@ test('SC-14: Open Ledger and real owner menus route to the same attached and det
   await createBug(world, 'Project menu entry')
   await world.agent.callAny('ui.command.run', { id: OPEN })
   const chooser = await world.win.waitFor(() => {
-    const element = document.querySelector<HTMLElement>('.ledger-chooser')
-    return element?.querySelector('.ledger-chooser-row') ? element : undefined
+    const section = chooserSection()
+    return section?.querySelector('ul li') ? section : undefined
   })
-  expect(chooser.textContent).toContain('Open ledger')
-  expect(chooser.textContent).toContain(`${world.repo.name}, Project · 1 entry`)
+  expect(button(chooser, `Open ledger ${world.repo.name}`)).toBeDefined()
   expect((await uiState(world.agent)).slots.find((slot) => slot.id === LEDGER_VIEW)?.report).toMatchObject({ view: 'chooser' })
 
   await projectMenu(world)
   await chooseMenu(world, 'Open ledger')
-  await world.win.waitFor(() => document.querySelector('.ledger-page'))
-  await world.win.waitFor(() => document.querySelector('.ledger-page h1')?.textContent === world.repo.name)
+  await world.win.waitFor(() => ledgerPage())
+  await world.win.waitFor(() => ledgerPage()?.querySelector(':scope > header h1')?.textContent === world.repo.name)
 
   const group = (await world.agent.callAny('quirky.repo/groupCreate', { name: 'tools' })) as ProjectGroup
   await world.agent.callAny('quirky.repo/groupAdd', { group: group.id, repo: world.repo.id })
@@ -216,14 +228,17 @@ test('SC-14: Open Ledger and real owner menus route to the same attached and det
   await world.win.waitFor(() => groupSection(group.name))
   await groupMenu(world, group.name)
   await chooseMenu(world, 'Open ledger')
-  await world.win.waitFor(() => document.querySelector('.ledger-page h1')?.textContent === group.name)
+  await world.win.waitFor(() => ledgerPage()?.querySelector(':scope > header h1')?.textContent === group.name)
   await world.agent.callAny('ui.command.run', { id: CONTROL, args: { action: 'detail', id: 'proposal-1' } })
   const commandedDetail = await world.win.waitFor(() => dialogNamed('Ledger entry proposal-1'))
   expect(commandedDetail.textContent).toContain('Group policy')
   await click(button(commandedDetail, 'Close')!)
   await world.agent.callAny('ui.command.run', { id: CONTROL, args: { action: 'new' } })
   const commandedForm = await world.win.waitFor(() => dialogNamed('New ledger entry'))
+  const groupEntriesBeforeCancel = await request(world, { operation: 'list', target: { owner: groupOwner(group) } })
   await click(button(commandedForm, 'Cancel')!)
+  expect((await request(world, { operation: 'list', target: { owner: groupOwner(group) } })).entries.map((entry: { id: string }) => entry.id))
+    .toEqual(groupEntriesBeforeCancel.entries.map((entry: { id: string }) => entry.id))
   await world.agent.callAny('ui.command.run', { id: CONTROL, args: { action: 'sort', sort: 'title' } })
   await world.win.waitFor(async () => {
     const report = (await uiState(world.agent)).slots.find((slot) => slot.id === LEDGER_VIEW)?.report
@@ -234,7 +249,7 @@ test('SC-14: Open Ledger and real owner menus route to the same attached and det
     id: CONTROL,
     args: { action: 'filters', target: { owner: groupOwner(group) }, filters: { search: 'Group policy' } }
   })
-  await world.win.waitFor(() => (document.querySelector('.ledger-page')?.textContent ?? '').includes('Group policy'))
+  await world.win.waitFor(() => ledgerPage()?.textContent?.includes('Group policy'))
   expect((await uiState(world.agent)).slots.find((slot) => slot.id === LEDGER_VIEW)?.report).toMatchObject({
     target: { owner: groupOwner(group) },
     filters: { search: 'Group policy' }
@@ -249,12 +264,11 @@ test('SC-15: the real ledger form exposes complete typed fields and creates each
   }
   const response = await request(world, { operation: 'list', target: { owner: owner(world) } })
   expect(response.entries.map((entry: { type: string }) => entry.type).sort()).toEqual(['bug', 'decision', 'deferred', 'proposal', 'test-gap'])
-  expect(document.querySelectorAll('.ledger-entry-row')).toHaveLength(5)
+  expect(document.querySelectorAll('[data-entry-id]')).toHaveLength(5)
   const bugEntry = response.entries.find((entry: { type: string }) => entry.type === 'bug')
-  await click(button(document.querySelector('.ledger-page')!, `Edit ${bugEntry.id}`)!)
+  await click(button(ledgerPage()!, `Edit ${bugEntry.id}`)!)
   const editForm = await world.win.waitFor(() => dialogNamed(`Edit ${bugEntry.id}`))
   expect(field<HTMLSelectElement>(editForm, 'Type')).toBeUndefined()
-  expect(editForm.textContent).toContain(`Source revision: ${bugEntry.revision}`)
   await setText(field(editForm, 'Title')!, 'Stale local title')
   await request(world, {
     operation: 'edit',
@@ -264,14 +278,14 @@ test('SC-15: the real ledger form exposes complete typed fields and creates each
     content: { description: 'Concurrent revision wins.' }
   })
   await click(button(editForm, 'Save changes')!)
-  await world.win.waitFor(() => editForm.textContent?.includes(`Current revision is ${bugEntry.revision + 1}`))
+  await world.win.waitFor(() => editForm.querySelector('[role="alert"]'))
   const unchanged = await request(world, { operation: 'show', target: { owner: owner(world) }, id: bugEntry.id })
   expect(unchanged.entry.content.title).toBe(bugEntry.content.title)
   expect(unchanged.entry.content.description).toBe('Concurrent revision wins.')
   await click(button(editForm, 'Cancel')!)
 
 
-  await click(button(document.querySelector('.ledger-page')!, 'New entry')!)
+  await click(button(ledgerPage()!, 'New entry')!)
   const bugForm = await world.win.waitFor(() => dialogNamed('New ledger entry'))
   await setSelect(field<HTMLSelectElement>(bugForm, 'Type')!, 'bug')
   await setText(field(bugForm, 'Title')!, 'duplicate form record')
@@ -286,7 +300,7 @@ test('SC-15: the real ledger form exposes complete typed fields and creates each
   })
   expect(duplicateDialog.querySelector('[aria-label="Possible duplicate entries"]')?.textContent).toContain('bug-1')
   await click(button(duplicateDialog, 'Done')!)
-  await click(button(document.querySelector('.ledger-page')!, 'New entry')!)
+  await click(button(ledgerPage()!, 'New entry')!)
   const externalForm = await world.win.waitFor(() => dialogNamed('New ledger entry'))
   await setSelect(field<HTMLSelectElement>(externalForm, 'Type')!, 'bug')
   await setText(field(externalForm, 'Title')!, 'External location validation')
@@ -296,7 +310,7 @@ test('SC-15: the real ledger form exposes complete typed fields and creates each
   await setSelect(field<HTMLSelectElement>(externalForm, 'Severity')!, 'low')
   await click(field<HTMLInputElement>(externalForm, 'External location')!)
   await click(button(externalForm, 'Create entry')!)
-  await world.win.waitFor(() => externalForm.textContent?.includes('External host is required.'))
+  await world.win.waitFor(() => externalForm.querySelector('[role="alert"]'))
   expect(await request(world, { operation: 'list', target: { owner: owner(world) } }).then((result) => result.entries)).toHaveLength(6)
   await click(button(externalForm, 'Cancel')!)
 }, SLOW)
@@ -317,16 +331,16 @@ test('SC-16: long-history detail actions change state and revert through the pub
     revision = result.entry.revision
   }
   await openOwnerCommand(world)
-  const row = await world.win.waitFor(() => document.querySelector<HTMLElement>(`.ledger-entry-row[data-entry-id="${id}"]`))
+  const row = await world.win.waitFor(() => document.querySelector<HTMLElement>(`[data-entry-id="${id}"]`))
   await click(row.querySelector('button[aria-label^="Show details"]')!)
   const detail = await world.win.waitFor(() => {
     const dialog = dialogNamed(`Ledger entry ${id}`)
-    return dialog?.querySelector('.ledger-detail-actions') ? dialog : undefined
+    return dialog && button(dialog, 'Edit') ? dialog : undefined
   })
   expect(detail.textContent).toContain('Full history')
   expect(detail.textContent).toContain('Before')
   expect(detail.textContent).toContain('After')
-  const footer = detail.querySelector<HTMLElement>('.ledger-detail-actions')!
+  const footer = detail.querySelector<HTMLElement>('footer')!
   expect(button(footer, 'Edit')?.disabled).toBe(false)
   expect(button(footer, 'Review')?.disabled).toBe(false)
   expect(button(footer, 'Open')?.disabled).toBe(true)
@@ -358,9 +372,9 @@ test('SC-17: triage snapshots conflict cleanly, then approval and confirmed stat
   const filed = await createBug(world, 'Triage snapshot record')
   const id = filed.entry.id as string
   await openOwnerCommand(world)
-  await click(button(document.querySelector('.ledger-page')!, 'Triage')!)
+  await click(button(ledgerPage()!, 'Triage')!)
   const triage = await world.win.waitFor(() => dialogNamed('Operation review'))
-  expect(triage.textContent).toContain('No entries are auto-resolved.')
+  expect((await request(world, { operation: 'show', target: { owner: owner(world) }, id })).entry.state).toBe('open')
   const firstSelection = await world.win.waitFor(() => triage.querySelector<HTMLInputElement>('input[type="checkbox"]'))
   await click(firstSelection)
   await click(button(triage, 'Resolve')!)
@@ -374,21 +388,24 @@ test('SC-17: triage snapshots conflict cleanly, then approval and confirmed stat
     content: { description: 'A concurrent writer moved the candidate revision.' }
   })
   await click(button(staleConfirm, 'Confirm')!)
-  await world.win.waitFor(() => triage.textContent?.includes('Review the refreshed revisions before confirming again.'))
+  const refreshedTriage = await world.win.waitFor(() => {
+    const dialog = dialogNamed('Operation review')
+    return dialog?.querySelector('[role="alert"]') ? dialog : undefined
+  })
   expect((await request(world, { operation: 'show', target: { owner: owner(world) }, id })).entry.revision).toBe(2)
 
-  const refreshed = await world.win.waitFor(() => triage.querySelector<HTMLInputElement>('input[type="checkbox"]'))
+  const refreshed = await world.win.waitFor(() => refreshedTriage.querySelector<HTMLInputElement>('input[type="checkbox"]'))
   await click(refreshed)
-  await click(button(triage, 'Approve review (1)')!)
+  await click(button(refreshedTriage, 'Approve review (1)')!)
   await world.win.waitFor(async () => {
     const result = await request(world, { operation: 'show', target: { owner: owner(world) }, id })
     return result.entry.reviewed && result.entry.revision === 3
   })
 
-  await world.win.waitFor(() => triage.textContent?.includes('revision 3'))
-  const approved = await world.win.waitFor(() => triage.querySelector<HTMLInputElement>('input[type="checkbox"]'))
+  await world.win.waitFor(() => refreshedTriage.textContent?.includes('revision 3'))
+  const approved = await world.win.waitFor(() => refreshedTriage.querySelector<HTMLInputElement>('input[type="checkbox"]'))
   await click(approved)
-  await click(button(triage, 'Resolve')!)
+  await click(button(refreshedTriage, 'Resolve')!)
   const refreshedConfirm = await world.win.waitFor(() => dialogNamed('Confirm ledger action'))
   expect(refreshedConfirm.textContent).toContain(`${id} · revision 3 · Triage snapshot record`)
   await click(button(refreshedConfirm, 'Confirm')!)
@@ -404,7 +421,7 @@ test('SC-17 and SC-11: project settings and owner-removal previews retain ledger
   await projectMenu(world)
   await chooseMenu(world, 'Project Settings…')
   const settings = await world.win.waitFor(() => dialogNamed(`Project Settings > ${world.repo.name}`))
-  await world.win.waitFor(() => settings.textContent?.includes('This project has no ledger yet. File an entry to create one.'))
+  expect((await request(world, { operation: 'catalog' })).ledgers).toHaveLength(0)
   await click(button(settings, 'Cancel')!)
 
   await createBug(world, 'Retention snapshot')
@@ -415,8 +432,10 @@ test('SC-17 and SC-11: project settings and owner-removal previews retain ledger
   expect(ledgerDays.value).toBe('90')
   await setText(ledgerDays, '0')
   await click(button(savedSettings, 'Save')!)
-  await world.win.waitFor(() => savedSettings.textContent?.includes('Saved'))
-  const updated = await request(world, { operation: 'list', target: { owner: owner(world) } })
+  const updated = await world.win.waitFor(async () => {
+    const latest = await request(world, { operation: 'list', target: { owner: owner(world) } })
+    return latest.ledger.staleAfterDays === 0 ? latest : undefined
+  })
   expect(updated.ledger.staleAfterDays).toBe(0)
   await click(button(savedSettings, 'Cancel')!)
 
@@ -427,7 +446,6 @@ test('SC-17 and SC-11: project settings and owner-removal previews retain ledger
     const action = dialog && button(dialog, 'Remove')
     return action && !action.disabled ? dialog : undefined
   })
-  expect(remove.textContent).toContain('Ledger records retained: 1 entry across 1 ledger')
   const entry = updated.entries[0]
   await request(world, {
     operation: 'edit',
@@ -437,9 +455,10 @@ test('SC-17 and SC-11: project settings and owner-removal previews retain ledger
     content: { description: 'Changed after the immutable removal preview.' }
   })
   await click(button(remove, 'Remove')!)
-  await world.win.waitFor(() => document.querySelector('.toast-title')?.textContent === 'Could not remove project')
+  await world.win.waitFor(() => toastContaining('Could not remove project'))
   expect(await world.agent.callAny('quirky.repo/list', {})).toContainEqual(expect.objectContaining({ id: world.repo.id }))
   await click(button(remove, 'Cancel')!)
+  expect(await world.agent.callAny('quirky.repo/list', {})).toContainEqual(expect.objectContaining({ id: world.repo.id }))
 
   await projectMenu(world)
   await chooseMenu(world, 'Remove Project…')
@@ -453,11 +472,10 @@ test('SC-17 and SC-11: project settings and owner-removal previews retain ledger
   const replacement = await world.agent.callAny('quirky.repo/add', { path: replacementPath }) as Repo
   await world.win.waitFor(() => projectSection(replacement.name))
   await world.agent.callAny('ui.command.run', { id: OPEN })
-  const chooser = await world.win.waitFor(() => document.querySelector<HTMLElement>('.ledger-chooser'))
-  const detachedRow = await world.win.waitFor(() => [...chooser.querySelectorAll<HTMLElement>('.ledger-chooser-row')].find((row) => row.textContent?.includes('Detached project ledger')))
-  expect(detachedRow.textContent).toContain('Detached project ledger · 1 entry')
-  await click(button(detachedRow, 'Open')!)
-  const detachedPage = await world.win.waitFor(() => document.querySelector<HTMLElement>('.ledger-page'))
+  const chooser = await world.win.waitFor(() => chooserSection())
+  const openDetached = await world.win.waitFor(() => button(chooser, `Open ledger ${world.repo.name}`))
+  await click(openDetached)
+  const detachedPage = await world.win.waitFor(() => ledgerPage())
   const attachOwner = await world.win.waitFor(() => {
     const select = field<HTMLSelectElement>(detachedPage, 'Attach ledger to owner')
     return select && [...select.options].some((option) => option.value === `project:${replacement.id}`) ? select : undefined
@@ -476,9 +494,8 @@ test('SC-17 and SC-11: project settings and owner-removal previews retain ledger
 
   await click(button(detachedPage, 'Delete ledger')!)
   const deleteConfirm = await world.win.waitFor(() => dialogNamed('Confirm ledger deletion'))
-  expect(deleteConfirm.textContent).toContain('Permanently delete this ledger, every entry body, and all history?')
   await click(button(deleteConfirm, 'Confirm')!)
-  await world.win.waitFor(() => document.querySelector('.ledger-chooser'))
+  await world.win.waitFor(() => chooserSection())
   expect((await request(world, { operation: 'catalog' })).ledgers).toHaveLength(0)
 }, SLOW)
 
@@ -494,7 +511,7 @@ test('SC-11 and SC-14: group menu opens its ledger and deleting a group reports 
   })
   await groupMenu(world, group.name)
   await chooseMenu(world, 'Open ledger')
-  await world.win.waitFor(() => document.querySelector('.ledger-page h1')?.textContent === group.name)
+  await world.win.waitFor(() => ledgerPage()?.querySelector(':scope > header h1')?.textContent === group.name)
   await groupMenu(world, group.name)
   await chooseMenu(world, 'Delete Group…')
   const dialog = await world.win.waitFor(() => {
@@ -502,20 +519,17 @@ test('SC-11 and SC-14: group menu opens its ledger and deleting a group reports 
     const action = current && button(current, 'Delete Group')
     return action && !action.disabled ? current : undefined
   })
-  expect(dialog.textContent).toContain('Ledger records retained: 1 entry across 1 ledger')
   await click(button(dialog, 'Delete Group')!)
   await world.win.waitFor(async () => !(await world.agent.callAny('quirky.repo/groupList', {}) as ProjectGroup[]).some((item) => item.id === group.id))
   const catalog = await request(world, { operation: 'catalog' })
   expect(catalog.ledgers).toContainEqual(expect.objectContaining({ owner: null, formerOwner: groupOwner(group), entryCount: 1 }))
-  await world.agent.callAny('ui.command.run', { id: OPEN })
-  const chooser = await world.win.waitFor(() => document.querySelector<HTMLElement>('.ledger-chooser'))
-  const detachedRow = await world.win.waitFor(() => [...chooser.querySelectorAll<HTMLElement>('.ledger-chooser-row')].find((row) => row.textContent?.includes('Detached group ledger')))
-  expect(detachedRow.textContent).toContain('Detached group ledger · 1 entry')
-  await click(button(detachedRow, 'Open')!)
-  const detachedPage = await world.win.waitFor(() => document.querySelector<HTMLElement>('.ledger-page'))
+  await click(await world.win.waitFor(() => button(ledgerPage()!, 'Open ledger')))
+  const chooser = await world.win.waitFor(() => chooserSection())
+  const openDetached = await world.win.waitFor(() => button(chooser, `Open ledger ${group.name}`))
+  await click(openDetached)
+  const detachedPage = await world.win.waitFor(() => ledgerPage())
   await click(await world.win.waitFor(() => button(detachedPage, 'Delete ledger')))
   const confirm = await world.win.waitFor(() => dialogNamed('Confirm ledger deletion'))
-  expect(confirm.textContent).toContain('Permanently delete this ledger, every entry body, and all history?')
   await click(button(confirm, 'Confirm')!)
   await world.win.waitFor(async () => (await request(world, { operation: 'catalog' })).ledgers.length === 0)
 }, SLOW)

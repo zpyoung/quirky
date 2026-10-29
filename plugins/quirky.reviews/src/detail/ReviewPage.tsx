@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Markdown, MarkdownComposer } from '@quirky/plugin-tasks/markdown'
+import { Badge, Button, FormRow, ListRow, Menu, SectionHeader, StatusDot, Tabs, TextField } from '@quirky/ui'
 import type { JsonRecord, ReviewsSurfaceProps, ReviewData } from '../contracts'
 import { isRecord, reviewContext, safeHttpUrl, workspaceLinkFor, type RepoIdentity, type ReviewContext, type WorkspaceLink } from './data'
 import { ReviewActions } from './Actions'
@@ -7,7 +8,6 @@ import { ChecksList } from './ChecksList'
 import { Comments } from './Comments'
 import { FilesChanged } from './FilesChanged'
 import { useReviewLinkRouting } from '../link-routing'
-
 const tabs = ['conversation', 'checks', 'files'] as const
 const reviewerPattern = /^[A-Za-z0-9-]{1,39}$/
 
@@ -192,49 +192,47 @@ function AssignmentPanels(props: { context: ReviewsSurfaceProps['context']; stat
     : reviews.length === 0 ? 'No reviews submitted yet.' : reviews.map((entry) => `${entry.author ?? 'Unknown reviewer'}: ${entry.state}`).join(' · ')
 
   return <>
-    <section className="review-assignees" aria-label="Assignees">
-      <header className="review-assignment-header">
-        <h3>Assignees</h3>
-        <button type="button" disabled={assignees === null || pending} onClick={() => {
-          setSelectedAssignees(assignees ?? [])
-          setAssigneeOpen(!assigneeOpen)
-          setQuery('')
-        }}>{assigneeOpen ? 'Done' : 'Edit assignees'}</button>
-      </header>
-      {assignees === null ? <p role="status">Assignee data is unavailable.</p> : assignees.length === 0 ? <p>No one assigned.</p> : <ul>{assignees.map((login) => <li key={login}>{login}</li>)}</ul>}
-      {assigneeOpen ? <div className="review-assignee-picker">
-        <label>Find assignable users<input value={query} onChange={(event) => setQuery(event.currentTarget.value)} /></label>
-        {suggestionError ? <p role="alert">{suggestionError}</p> : null}
-        <ul>{suggestions.map((option) => <li key={option.login}>
-          <label><input type="checkbox" checked={selectedAssignees.includes(option.login)} onChange={(event) => {
-            setSelectedAssignees(event.currentTarget.checked
-              ? [...new Set([...selectedAssignees, option.login])]
-              : selectedAssignees.filter((login) => login !== option.login))
-          }} />{option.login}</label>
+    <section className="ui-stack" aria-label="Assignees">
+      <SectionHeader title="Assignees" actions={<Button disabled={assignees === null || pending} onClick={() => {
+        setSelectedAssignees(assignees ?? [])
+        setAssigneeOpen(!assigneeOpen)
+        setQuery('')
+      }}>{assigneeOpen ? 'Done' : 'Edit assignees'}</Button>} />
+      {assignees === null ? <p role="status" className="ui-text-muted">Assignee data is unavailable.</p> : assignees.length === 0 ? <p>No one assigned.</p> : <ul className="ui-stack" style={{ listStyle: 'none', padding: 0 }}>
+        {assignees.map((login) => <li key={login}><ListRow title={login} /></li>)}
+      </ul>}
+      {assigneeOpen ? <div className="ui-stack">
+        <TextField label="Find assignable users" value={query} onChange={(event) => setQuery(event.currentTarget.value)} />
+        {suggestionError ? <p role="alert"><StatusDot status="failing" label="Error" /> {suggestionError}</p> : null}
+        <ul className="ui-stack" style={{ listStyle: 'none', padding: 0 }}>{suggestions.map((option) => <li key={option.login}>
+          <FormRow label={option.login} htmlFor={`review-assignee-${option.login}`}>
+            <input id={`review-assignee-${option.login}`} type="checkbox" style={{ accentColor: 'var(--ui-accent)' }} checked={selectedAssignees.includes(option.login)} onChange={(event) => {
+              setSelectedAssignees(event.currentTarget.checked
+                ? [...new Set([...selectedAssignees, option.login])]
+                : selectedAssignees.filter((login) => login !== option.login))
+            }} />
+          </FormRow>
         </li>)}</ul>
-        <button type="button" disabled={pending || selectedAssignees.length > 100} onClick={() => void writeAssignees()}>{pending ? 'Saving…' : 'Save assignees'}</button>
+        <Button disabled={pending || selectedAssignees.length > 100} onClick={() => void writeAssignees()}>{pending ? 'Saving…' : 'Save assignees'}</Button>
       </div> : null}
     </section>
-    <section className="review-reviewers" aria-label="Reviewers">
-      <header className="review-assignment-header">
-        <h3>Reviewers</h3>
-        <button type="button" disabled={pending} onClick={() => { setReviewerOpen(!reviewerOpen); setQuery('') }}>{reviewerOpen ? 'Done' : 'Request reviewers'}</button>
-      </header>
-      {reviewers === null ? <p role="status">Requested reviewer data is unavailable.</p> : reviewers.length === 0 ? <p>No reviewers requested.</p> : <ul>{reviewers.map((login) => <li key={login}>
-        {login} <button type="button" disabled={pending} aria-label={`Unrequest reviewer ${login}`} onClick={() => void writeReviewers('remove', [login])}>Remove</button>
-      </li>)}</ul>}
-      <p className="review-reviewed-state">{reviewStatus}</p>
-      {reviewerOpen ? <div className="review-reviewer-picker">
-        <label>Type or choose a user<input value={reviewerText} onChange={(event) => setReviewerText(event.currentTarget.value)} /></label>
-        {requestReviewers.error ? <p role="alert">{requestReviewers.error}</p> : null}
-        {suggestionError ? <p role="alert">{suggestionError}</p> : null}
-        <ul>{suggestions.filter((option) => option.login.toLowerCase().startsWith(query.toLowerCase())).slice(0, 8).map((option) => <li key={option.login}>
-          <button type="button" onClick={() => setReviewerText([...new Set([...requestReviewers.logins, option.login])].map((login) => `@${login}`).join(', '))}>@{option.login}</button>
+    <section className="ui-stack" aria-label="Reviewers">
+      <SectionHeader title="Reviewers" actions={<Button disabled={pending} onClick={() => { setReviewerOpen(!reviewerOpen); setQuery('') }}>{reviewerOpen ? 'Done' : 'Request reviewers'}</Button>} />
+      {reviewers === null ? <p role="status" className="ui-text-muted">Requested reviewer data is unavailable.</p> : reviewers.length === 0 ? <p>No reviewers requested.</p> : <ul className="ui-stack" style={{ listStyle: 'none', padding: 0 }}>
+        {reviewers.map((login) => <li key={login}><ListRow title={login} trailing={<Button disabled={pending} aria-label={`Unrequest reviewer ${login}`} onClick={() => void writeReviewers('remove', [login])}>Remove</Button>} /></li>)}
+      </ul>}
+      <p className="ui-text-muted">{reviewStatus}</p>
+      {reviewerOpen ? <div className="ui-stack">
+        <TextField label="Type or choose a user" value={reviewerText} onChange={(event) => setReviewerText(event.currentTarget.value)} />
+        {requestReviewers.error ? <p role="alert"><StatusDot status="failing" label="Error" /> {requestReviewers.error}</p> : null}
+        {suggestionError ? <p role="alert"><StatusDot status="failing" label="Error" /> {suggestionError}</p> : null}
+        <ul className="ui-stack" style={{ listStyle: 'none', padding: 0 }}>{suggestions.filter((option) => option.login.toLowerCase().startsWith(query.toLowerCase())).slice(0, 8).map((option) => <li key={option.login}>
+          <Button onClick={() => setReviewerText([...new Set([...requestReviewers.logins, option.login])].map((login) => `@${login}`).join(', '))}>@{option.login}</Button>
         </li>)}</ul>
-        <button type="button" disabled={pending || requestReviewers.error !== null || requestReviewers.logins.length === 0} onClick={() => void writeReviewers('add', requestReviewers.logins)}>{pending ? 'Requesting…' : 'Request reviewers'}</button>
+        <Button disabled={pending || requestReviewers.error !== null || requestReviewers.logins.length === 0} onClick={() => void writeReviewers('add', requestReviewers.logins)}>{pending ? 'Requesting…' : 'Request reviewers'}</Button>
       </div> : null}
     </section>
-    {writeError ? <p role="alert" className="review-error">{writeError}</p> : null}
+    {writeError ? <p role="alert"><StatusDot status="failing" label="Error" /> {writeError}</p> : null}
   </>
 }
 
@@ -423,53 +421,54 @@ export function ReviewPage(props: ReviewsSurfaceProps) {
   const checksCount = isRecord(detail.checks) && Array.isArray(detail.checks.checks) ? detail.checks.checks.length : null
   const filesCount = isRecord(detail.files) && Array.isArray(detail.files.files) ? detail.files.files.length : null
   const commentsCount = isRecord(detail.comments) && Array.isArray(detail.comments.comments) ? detail.comments.comments.length : null
-  const item = itemDetails(detail.details)
   const body = review?.body ?? ''
   const attached = workspace.link
   const workspaceReady = workspace.status === 'ready' && owner !== null && url !== null
 
-  if (owner === null) return <main className="review-page review-page-empty" aria-label="Pull request detail">
-    <button type="button" onClick={() => void back()}>Back to pull requests</button>
-    <h1>No pull request selected</h1>
+  if (owner === null) return <main className="ui-stack" aria-label="Pull request detail">
+    <Button onClick={() => void back()}>Back to pull requests</Button>
+    <SectionHeader title="No pull request selected" />
     <p>Open a pull request from Tasks or the Checks panel to view its details.</p>
   </main>
 
-  return <main className="review-page" aria-label="Pull request detail">
-    <header className="review-page-header">
-      <div className="review-page-header-top">
-        <button type="button" onClick={() => void back()}>Back to pull requests</button>
-        <nav aria-label="Pull request repository">
+  return <main className="ui-stack" aria-label="Pull request detail">
+    <header className="ui-stack">
+      <div className="ui-cluster" style={{ justifyContent: 'space-between' }}>
+        <Button onClick={() => void back()}>Back to pull requests</Button>
+        <nav className="ui-cluster" aria-label="Pull request repository">
           {repo ? <span>{repo.owner} / {repo.repo}</span> : <span>Repository unavailable</span>}
           <span>#{owner.number}</span>
         </nav>
-        <div className="review-link-actions">
-          <button type="button" disabled={url === null} onClick={() => void copyLink()}>Copy pull request link</button>
-          <button type="button" disabled={url === null} title={routing.title} onClick={(event) => void openLink(routing.invert(event))}>Open on host</button>
+        <div className="ui-cluster">
+          <Button disabled={url === null} onClick={() => void copyLink()}>Copy pull request link</Button>
+          <Button disabled={url === null} title={routing.title} onClick={(event) => void openLink(routing.invert(event))}>Open on host</Button>
         </div>
       </div>
-      {review === null ? <div className="review-page-loading">
-        <h1>Pull request #{owner.number}</h1>
-        {detail.loading ? <p role="status">Loading pull request…</p> : <p role="alert">Pull request details are unavailable.</p>}
+      {review === null ? <div className="ui-stack">
+        <SectionHeader title={`Pull request #${owner.number}`} />
+        {detail.loading ? <p role="status" className="ui-text-muted">Loading pull request…</p> : <p role="alert"><StatusDot status="failing" label="Error" /> Pull request details are unavailable.</p>}
       </div> : <>
-        <div className="review-title-block">
-          <div>
+        <div className="ui-cluster" style={{ justifyContent: 'space-between', alignItems: 'start' }}>
+          <div className="ui-stack">
             <h1>{review.title} <span>#{review.number}</span></h1>
-            <span className={`review-state review-state-${review.state}`}>{review.state === 'open' ? 'Open' : review.state === 'draft' ? 'Draft' : review.state === 'closed' ? 'Closed' : 'Merged'}</span>
+            <Badge tone={review.state === 'open' ? 'working' : review.state === 'merged' ? 'accent' : 'neutral'}>{review.state === 'open' ? 'Open' : review.state === 'draft' ? 'Draft' : review.state === 'closed' ? 'Closed' : 'Merged'}</Badge>
           </div>
-          <div className="review-workspace-action">
-            <button type="button" disabled={!workspaceReady || workspaceBusy} onClick={() => void openWorkspace(attached ? 'resume' : 'start')}>
+          <div className="ui-cluster">
+            <Button disabled={!workspaceReady || workspaceBusy} onClick={() => void openWorkspace(attached ? 'resume' : 'start')}>
               {workspaceBusy ? 'Opening…' : attached ? `Resume workspace · ${attached.name}` : 'Start workspace'}
-            </button>
-            {attached ? <details>
-              <summary>Workspace options</summary>
-              <button type="button" disabled={!workspaceReady || workspaceBusy} onClick={() => void openWorkspace('start', true)}>Start new workspace</button>
-            </details> : null}
+            </Button>
+            {attached ? <Menu label="Workspace options" items={[{
+              id: 'start-new-workspace',
+              label: 'Start new workspace',
+              disabled: !workspaceReady || workspaceBusy,
+              onAction: () => { void openWorkspace('start', true) },
+            }]} /> : null}
           </div>
         </div>
-        {workspace.status === 'loading' ? <p role="status">Checking linked workspace…</p> : null}
-        {workspace.error ? <p className="review-error" role="alert">Workspace link status unavailable: {workspace.error}. Start and Resume are disabled until the link can be checked.</p> : null}
-        {workspaceError ? <p className="review-error" role="alert">{workspaceError}</p> : null}
-        <div className="review-meta">
+        {workspace.status === 'loading' ? <p role="status" className="ui-text-muted">Checking linked workspace…</p> : null}
+        {workspace.error ? <p role="alert"><StatusDot status="failing" label="Error" /> Workspace link status unavailable: {workspace.error}. Start and Resume are disabled until the link can be checked.</p> : null}
+        {workspaceError ? <p role="alert"><StatusDot status="failing" label="Error" /> {workspaceError}</p> : null}
+        <div className="ui-cluster ui-text-muted">
           <span>by {author ?? 'Unknown author'}</span>
           <span>{review.baseRefName} ← {review.headRefName}</span>
           {updated ? <time>{updated}</time> : null}
@@ -478,39 +477,45 @@ export function ReviewPage(props: ReviewsSurfaceProps) {
       </>}
     </header>
 
-    {detail.error ? <div className="review-error" role="alert">
-      <span>{detail.error}</span><button type="button" onClick={() => void refresh()}>Retry</button>
+    {detail.error ? <div role="alert" className="ui-cluster">
+      <StatusDot status="failing" label="Error" /><span>{detail.error}</span><Button onClick={() => void refresh()}>Retry</Button>
     </div> : null}
-    {review === null ? null : <div className="review-tabs" role="tablist" aria-label="Pull request sections">
-      {tabs.map((tab) => <button
-        key={tab}
-        type="button"
-        role="tab"
-        aria-selected={detail.tab === tab}
-        onClick={() => void selectTab(tab)}
-      >{tab === 'conversation' ? `Conversation${commentsCount === null ? '' : ` (${commentsCount})`}` : tab === 'checks' ? `Checks${checksCount === null ? '' : ` (${checksCount})`}` : `Files changed${filesCount === null ? '' : ` (${filesCount})`}`}</button>)}
-      <button type="button" disabled={detail.loading} onClick={() => void refresh()}>{detail.loading ? 'Refreshing…' : 'Refresh pull request'}</button>
+    {review === null ? null : <div className="ui-stack">
+      <Tabs label="Pull request sections" items={[
+        { id: 'conversation', label: `Conversation${commentsCount === null ? '' : ` (${commentsCount})`}` },
+        { id: 'checks', label: `Checks${checksCount === null ? '' : ` (${checksCount})`}` },
+        { id: 'files', label: `Files changed${filesCount === null ? '' : ` (${filesCount})`}` },
+      ]} value={detail.tab} onChange={(tab) => void selectTab(tab as typeof tabs[number])} />
+      <div className="ui-cluster" style={{ justifyContent: 'flex-end' }}>
+        <Button disabled={detail.loading} onClick={() => void refresh()}>{detail.loading ? 'Refreshing…' : 'Refresh pull request'}</Button>
+      </div>
     </div>}
 
-    {review === null ? null : <div className="review-page-content">
-      <div className="review-page-main">
+    {review === null ? null : <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 2fr) minmax(0, 1fr)', gap: 'var(--ui-space-16)', alignItems: 'start' }}>
+      <div className="ui-stack" style={{ minWidth: 0 }}>
         {detail.tab === 'conversation' ? <>
-          <section className="review-description" aria-label="Pull request description">
-            <header><h2>Description</h2>{canEditBody && !bodyEditing ? <button type="button" onClick={() => { updateBodyDraft(body); setBodyEditing(true) }}>Edit description</button> : null}</header>
-            {bodyEditing ? <div className="review-description-editor">
+          <section className="ui-stack" aria-label="Pull request description">
+            <SectionHeader title="Description" actions={canEditBody && !bodyEditing ? <Button onClick={() => { updateBodyDraft(body); setBodyEditing(true) }}>Edit description</Button> : undefined} />
+            {bodyEditing ? <div className="ui-stack">
               <MarkdownComposer value={bodyDraft} onChange={updateBodyDraft} label="Pull request description" minRows={8} onSubmit={() => void saveBody()} />
-              {bodySaveError ? <p role="alert">{bodySaveError}</p> : null}
-              <button type="button" onClick={() => void saveBody()}>Save description</button>
-              <button type="button" onClick={() => { setBodyEditing(false); updateBodyDraft(null) }}>Cancel</button>
-            </div> : <div className="review-description-body"><Markdown source={body} /></div>}
+              {bodySaveError ? <p role="alert"><StatusDot status="failing" label="Error" /> {bodySaveError}</p> : null}
+              <div className="ui-cluster">
+                <Button variant="primary" onClick={() => void saveBody()}>Save description</Button>
+                <Button onClick={() => { setBodyEditing(false); updateBodyDraft(null) }}>Cancel</Button>
+              </div>
+            </div> : <div><Markdown source={body} /></div>}
           </section>
           <Comments {...props} surface="detail" />
         </> : detail.tab === 'checks' ? <ChecksList {...props} surface="detail" /> : <FilesChanged {...props} />}
       </div>
-      <aside className="review-page-rail" aria-label="Review actions and assignments">
+      <aside className="ui-stack" aria-label="Review actions and assignments">
         <ReviewActions {...props} surface="detail" />
         <AssignmentPanels context={props.context} state={props.state} owner={owner} />
-        {detail.tab === 'conversation' && <section aria-label="Checks summary"><h3>Checks</h3><ChecksList {...props} surface="detail" compact /><button type="button" onClick={() => void selectTab('checks')}>Open Checks tab</button></section>}
+        {detail.tab === 'conversation' && <section className="ui-stack" aria-label="Checks summary">
+          <SectionHeader title="Checks" />
+          <ChecksList {...props} surface="detail" compact />
+          <Button onClick={() => void selectTab('checks')}>Open Checks tab</Button>
+        </section>}
       </aside>
     </div>}
   </main>
