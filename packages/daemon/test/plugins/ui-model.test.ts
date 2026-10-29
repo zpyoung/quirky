@@ -211,7 +211,7 @@ describe('contributions shown only while a setting is on', () => {
   ]
   const ids = (model: ReturnType<typeof build>['model']) => ({
     sections: model.sidebarSections.map((entry) => entry.id),
-    tools: model.tools.map((tool) => tool.id).filter((id) => id.startsWith('sidebar-section:'))
+    tools: (model.tools ?? []).map((tool) => tool.id).filter((id) => id.startsWith('sidebar-section:'))
   })
 
   test('a section whose setting is off is neither a section nor a tool', () => {
