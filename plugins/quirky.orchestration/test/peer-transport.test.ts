@@ -2,6 +2,7 @@ import { chmodSync, mkdirSync, writeFileSync } from 'node:fs'
 import { randomBytes, randomUUID } from 'node:crypto'
 import { join } from 'node:path'
 import { afterEach, expect, test } from 'bun:test'
+import { RpcErrorCode } from '@quirky/protocol'
 import { startAgentsE2E, type E2E } from '../../quirky.agents/test/support/e2e'
 
 const fixtures: E2E[] = []
@@ -155,11 +156,11 @@ test('remote status and hook-status reads retain exact peer identity without cop
     pairingRevision: paired.peer.pairingRevision
   })
   await expect(home.call('quirky.agent-status/hooksStatusOnHost', { host: 'host-a' }))
-    .rejects.toThrow('No exact paired host matches host-a.')
+    .rejects.toMatchObject({ code: RpcErrorCode.Conflict })
   await expect(home.call('quirky.agent-status/getOnHost', {
     host: 'not-paired',
     session: 'remote-only-status-row'
-  })).rejects.toThrow('No exact paired host matches not-paired.')
+  })).rejects.toMatchObject({ code: RpcErrorCode.Conflict })
 }, 120_000)
 
 test('provider model discovery executes on the exact authenticated peer without local fallback', async () => {

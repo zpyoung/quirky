@@ -220,6 +220,13 @@ test('remote retain, stop, release/archive, and abandon affect only the exact ho
 
   const stopped = await runControl<MutationResult<WorkerControlResult>>(home, 'worker-stop', stoppedStart.receipt.dispatchId)
   expect(stopped.state).toBe('stopped')
+  const releasedSessionId = releasedHost.resource?.sessionId
+  if (!releasedSessionId) throw new Error('release target has no exact host session')
+  const completed = await host.callAs<{ report: { status: string } }>(releasedSessionId, 'send', [
+    '--type', 'worker_done', '--task-id', releasedHost.taskId, '--dispatch-id', releasedHost.dispatchId,
+    '--outcome', 'succeeded', '--subject', 'Release target completed', '--body', 'Settle before releasing its terminal.',
+  ])
+  expect(completed.report.status).toBe('accepted')
   const released = await runControl<MutationResult<WorkerControlResult>>(home, 'worker-release', releasedStart.receipt.dispatchId)
   expect(released.state).toBe('released')
   const archived = await home.fixture.call('quirky.orchestration/workerRead', {
@@ -229,7 +236,10 @@ test('remote retain, stop, release/archive, and abandon affect only the exact ho
   expect(archived.remote?.hostDispatchId).toBe(releasedHost.dispatchId)
   const abandoned = await runControl<MutationResult<WorkerControlResult>>(home, 'worker-abandon', abandonedStart.receipt.dispatchId)
   expect(abandoned.state).toBe('abandoned')
-  expect(stoppedHost.dispatchId).not.toBe(releasedHost.dispatchId)
-  expect(abandonedHost.dispatchId).not.toBe(retainedHost.dispatchId)
+  expect(await host.ptyAlive(stoppedHost.agentTerminalHandle!)).toBe(false)
+  expect(await host.ptyAlive(releasedSessionId)).toBe(false)
+  expect(await host.ptyAlive(retainedHost.agentTerminalHandle!)).toBe(true)
+  expect(await host.ptyAlive(abandonedHost.agentTerminalHandle!)).toBe(true)
+  expect(await host.ptyAlive(host.coordinator.id)).toBe(true)
   expect((await sessions(home)).map(session => session.id).sort()).toEqual(homeSessionsBefore)
 }, 120_000)

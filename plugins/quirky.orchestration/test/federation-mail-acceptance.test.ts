@@ -172,7 +172,7 @@ test('paired daemons preserve FIFO mail and ask identity; a rejected home comple
   )
   expect(exitedHome.workers.find((worker) => worker.dispatchId === processExitStart.receipt.dispatchId)?.state).toBe('exited')
   const exitDispatch = await home.fixture.call('quirky.orchestration/dispatchShow', {
-    dispatchId: processExitStart.receipt.dispatchId,
+    taskId: processExitStart.receipt.taskId,
   }) as { dispatch: { status: string } }
   expect(exitDispatch.dispatch.status).not.toBe('dispatched')
 }, 180_000)

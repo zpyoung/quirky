@@ -110,5 +110,27 @@
 - **Revisit if:** real execution exceeds a product boundary rather than the fixture guard.
 - **Source:** assumed — autonomous
 
+## D11: Preserve all contracts from the single roadmap catch-up
+- **Question:** Did incoming Heimdall, Loops and Accounts work change this repair's authority?
+- **Options:** reinterpret incoming behavior; reconcile the complete logs and keep their existing owners.
+- **Chose:** Merge build/roadmap once after49ff9515 and read all three incoming decision logs, including raw long ending lines. Preserve Heimdall's exact mutation receipts, peer revision/incarnation and certified live identity despite null contact time; preserve Loops' owned lease-authenticated wait/cancel/drain bridge; retain UI-only Accounts/Vault control changes.
+- **Why:** No binding conflict was found. The incoming loop boundary names these Orchestration failures as independently owned; this item neither duplicates the structured bridge nor changes Ask's wait guard.
+- **Evidence:** Complete fix-test-heimdall-1028, fix-test-loops-1028 and ui-restyle-accounts logs; OrchestrationIncomingLogs scout; caught-up canonical typecheck exit0/32.91s; incoming-contracts.json private receipt.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** controller landing identifies a concrete concurrent source conflict.
+- **Source:** locked by docs/loop/LOOP.md
+
+## D12: Complete behavioral fixture transitions rather than bypass settlement or request schemas
+- **Question:** What did real-process execution reveal after the initial fixture migration?
+- **Options:** permit releasing active work and accept dispatchId as a task selector; honor the actual lifecycle and public request contract.
+- **Chose:** Have the exact release target's real host process submit accepted worker_done before release; verify stopped/released processes are gone, retained/abandoned processes and both coordinators remain live. Inspect the process-exit Dispatch through its required taskId. Replace peer-reader refusal wording pins with stable RPC Conflict.
+- **Why:** The real worker-release correctly refused an unsettled Dispatch; the historical fake scenario never produced that valid precondition. The final mail inspection supplied dispatchId to a taskId-only method even though the intended home settlement already succeeded. No production aliases, lifecycle permission changes or timeouts were added.
+- **Evidence:** canonical bg16 failures; workers/lifecycle.ts settled-Dispatch release guard; dispatchShow schema; current federation-engine and federation-mail tests.
+- **Reversibility:** easy
+- **Confidence:** high for traced contract mismatches; complete current suite pending
+- **Revisit if:** actual valid settlement and task-qualified inspection still fail.
+- **Source:** locked by docs/loop/decisions/m7-orchestration-worker-federation.md
+
 ## Progress
-Kernel exit ordering regression and original A2 passed together after red evidence; root typecheck passed after correcting the stale test reference. Real executable smoke passed and its sources were removed. The remaining three acceptance failures were traced to aliased in-process daemon state, login-shell/provider environment, stale hook inventory, and operator-close versus unexpected-exit setup. Peer/engine migrations now use existing real-process fixtures; canonical federation gate is running. Next collect current gates, catch up once/read incoming decisions, run required end-phase gates, complete one cross-family final review plus one accepted fix batch, then commit/detach/land this one item. Preserve unrelated untracked diagnostic files, .quirk and .serena. The accidental suite --help invocation timed out after30seconds and is not verification evidence.
+Own source/test integration committed49ff9515, one roadmap catch-up complete with all three incoming logs reconciled. Kernel regression and A2 passed together after red evidence; caught-up typecheck passed. Real executable smoke passed and its sources were removed. The actual private-process acceptance migration revealed two further invalid setup/inspection inputs, now corrected without source policy changes. Full caught-up packages/apps/plugins/scripts gate, complete current Orchestration/authority boundary and application build are running. Next collect results, coordinate unrelated failures with existing owners, complete one cross-family final review plus one accepted fix batch, then commit/detach/land this one item. Preserve unrelated untracked diagnostics, .quirk and .serena. The accidental --help suite attempt timed out and is not verification evidence.
