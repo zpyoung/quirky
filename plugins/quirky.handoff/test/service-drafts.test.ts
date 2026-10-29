@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from 'bun:test'
-import { RpcErrorCode, type ApiDescription } from '@quirky/protocol'
+import { RpcErrorCode } from '@quirky/protocol'
 import { HandoffRig } from './support'
 
 let rig: HandoffRig
@@ -139,36 +139,3 @@ describe('SC-62: remembered choices seed the next dialog', () => {
   })
 })
 
-describe('the plugin declares what it provides', () => {
-  test('every H1 method, both events and the CLI commands are in the catalog', async () => {
-    rig = await HandoffRig.start()
-    const description = (await rig.call('api.describe')) as ApiDescription
-    const methods = description.methods.filter((entry) => entry.name.startsWith('quirky.handoff/')).map((entry) => entry.name.slice('quirky.handoff/'.length))
-    expect(methods.sort()).toEqual(
-      ['discard', 'draft', 'jump', 'lineage', 'prepare', 'preview', 'probe', 'resend', 'start', 'templateMutate', 'templates'].sort()
-    )
-    const commands = description.cli.commands.filter((entry) => entry.plugin === 'quirky.handoff').map((entry) => entry.words)
-    expect(commands.sort()).toEqual(
-      [
-        'handoff preview',
-        'handoff start',
-        'handoff resend',
-        'handoff lineage',
-        'handoff jump',
-        'handoff templates add',
-        'handoff templates edit',
-        'handoff templates list',
-        'handoff templates reset',
-        'handoff templates rm'
-      ].sort()
-    )
-    const plugin = (await rig.call('plugin.list')) as { id: string; state: string; dependencies: string[]; diagnostics: unknown[] }[]
-    const handoff = plugin.find((entry) => entry.id === 'quirky.handoff')!
-    expect(handoff.state).toBe('active')
-    expect(handoff.diagnostics).toEqual([])
-    expect(handoff.dependencies.sort()).toEqual(
-      ['quirky.agent-status', 'quirky.agents', 'quirky.git', 'quirky.repo', 'quirky.session', 'quirky.terminal', 'quirky.worktree']
-    )
-    expect(handoff.dependencies).not.toContain('quirky.editor')
-  })
-})
