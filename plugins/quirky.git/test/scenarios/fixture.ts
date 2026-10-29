@@ -1,16 +1,14 @@
 import { setDefaultTimeout } from 'bun:test'
 import { chmodSync, mkdirSync, realpathSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
-import { RpcError, type QuirkyClient, type QuirkyEvent, type Repo, type Worktree, type WorktreeCreateResult } from '@quirky/protocol'
+import { RpcError, type Ask, type QuirkyClient, type QuirkyEvent, type Repo, type Worktree, type WorktreeCreateResult } from '@quirky/protocol'
 import { runCli, spawnCli, type CliResult } from '../../../../packages/cli/test/fixtures/fake-daemon'
-import { waitFor } from '../../../../packages/daemon/test/helpers'
+import { waitForAsync } from '../../../../packages/daemon/test/helpers'
 import { makeTempDir } from '../../../../packages/daemon/test/plugins/fixtures'
-import { fakeAsks } from '../../../quirky.repo/test/fakes/quirky.ask/main'
 import { git, isolateGitConfig, makeRepo } from '../../../quirky.repo/test/git-fixtures'
 import { startPluginHarness, type PluginHarness } from '../../../quirky.repo/test/harness'
 import { makeOrigin, makeProject } from '../../../quirky.worktree/test/fixtures/repos'
 
-export { fakeAsks }
 
 /**
  * Per test file: isolates git's config and lifts the test timeout, because each scenario starts a
@@ -51,6 +49,8 @@ export type Scenario = {
   cli(args: string[], options?: { cwd?: string }): Promise<CliResult>
   /** Runs the real CLI and answers the confirm ask it opens with `answer`; stderr carries the question. */
   cliAsk(args: string[], answer: boolean): Promise<CliResult>
+  /** Number of durable asks created in this scenario. */
+  askCount(): Promise<number>
   /** Another worktree of the project, on a new branch of its own name cut from origin/main. */
   addWorktree(name: string): Promise<Worktree>
   /** Runs git in `cwd` (default feat) and returns the exit code and output without throwing. */
@@ -68,11 +68,14 @@ export type Scenario = {
 }
 
 /**
- * A daemon with the real repo, worktree and git plugins on real git, one project with a bare
- * origin, and the worktree feat. Destructive calls ask through the fake `quirky.ask`.
+ * A daemon with real repo, worktree and git plugins on real git, one project with a bare origin,
+ * and the worktree feat. Destructive calls use the real `quirky.ask` provider.
  */
 export async function startScenario(scratch: () => string, options: { files?: Record<string, string> } = {}): Promise<Scenario> {
-  const t = await startPluginHarness({ plugins: ['quirky.repo', 'quirky.worktree', 'quirky.git'], realGit: true, fakeAsk: true })
+  const t = await startPluginHarness({
+    plugins: ['quirky.repo', 'quirky.worktree', 'quirky.git', 'quirky.ask'],
+    realGit: true
+  })
   const { client } = t
   const root = realpathSync(makeTempDir('qs-'))
   await client.callAny('setting.set', { id: 'setting:quirky.worktree/worktreesRoot', value: root })
@@ -120,12 +123,24 @@ export async function startScenario(scratch: () => string, options: { files?: Re
       return { code: r.exitCode, out: `${r.stdout}${r.stderr}`.trim() }
     },
     async cliAsk(args, answer) {
+      const listed = await client.callAny('quirky.ask/list', {})
+      const existing = new Set((listed as Ask[]).map((ask) => ask.id))
       const proc = spawnCli(args, { home: t.h.home, cwd: feat.path })
       const output = Promise.all([new Response(proc.stdout).text(), new Response(proc.stderr).text(), proc.exited])
-      await waitFor(() => [...fakeAsks().values()].some((ask) => ask.status === 'pending'))
-      answerAsk(answer)
+      const ask = await waitForAsync(async () => {
+        const result = await client.callAny('quirky.ask/list', { pendingOnly: true })
+        return (result as Ask[]).find((candidate) => !existing.has(candidate.id))
+      })
+      await client.callAny('quirky.ask/answer', {
+        askId: ask.id,
+        answers: { confirm: { value: answer, source: 'input' } }
+      })
       const [stdout, stderr, code] = await output
       return { code, stdout, stderr }
+    },
+    async askCount() {
+      const asks = await client.callAny('quirky.ask/list', {})
+      return (asks as Ask[]).length
     },
     async addWorktree(name) {
       const made = (await client.callAny('quirky.worktree/create', {
@@ -151,13 +166,6 @@ export async function startScenario(scratch: () => string, options: { files?: Re
   }
 }
 
-/** Answers the newest pending fake ask. */
-export function answerAsk(value: boolean): string {
-  const [askId, ask] = [...fakeAsks()].reverse().find(([, candidate]) => candidate.status === 'pending')!
-  ask.status = 'answered'
-  ask.value = value
-  return askId
-}
 
 /**
  * Leaves the branch checked out at `cwd` (default feat) with one commit of `ours` and a branch

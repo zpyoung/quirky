@@ -13,7 +13,7 @@ function git(cwd: string, args: string[]): string {
 }
 
 test('merge preview reports exact conflict paths without changing branch/index/worktree or running merge drivers', async () => {
-  host = await bootHosting('process.stdout.write("{}")', { extraBuiltins: ['quirky.git', 'quirky.agents', 'quirky.session', 'quirky.terminal'] })
+  host = await bootHosting('process.stdout.write("{}")', { extraBuiltins: ['quirky.git', 'quirky.agents', 'quirky.session', 'quirky.terminal', 'quirky.cli'] })
   const repo = host.repoPath
   const file = join(repo, 'README.md')
   writeFileSync(file, 'feature change\n')
