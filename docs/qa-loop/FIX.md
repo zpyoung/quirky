@@ -29,8 +29,11 @@ Your lane number is in the prompt that started you.
    makes it pass. Follow the code-comment rules in `/Users/zpyoung/CLAUDE.md`: no comments that
    narrate the change, docstrings for intent. Commit messages say what was wrong and why the fix is
    right, in the style of `git log`.
-5. **Verify.** Run the affected test directories with `bun scripts/suite.ts <dirs>` and
-   `bun run typecheck`. Both must pass.
+5. **Verify.** `bun run typecheck` must pass. Run each test file your change touches, and the test
+   files beside the code you changed, one file per `bun test <file>` (a whole plugin directory in
+   one process hangs). They must pass, except a failure that also happens on `origin/main`: some
+   files time out or compare `/var` with `/private/var` on this Mac. Check such a failure in a
+   scratch worktree of `origin/main` and name it in the PR body.
 6. **PR and merge.** Use the keyring login, because the shell's `GITHUB_TOKEN` cannot push:
 
    ```sh
