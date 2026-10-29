@@ -2291,8 +2291,7 @@
       "deps": [
         "m7-test-triage"
       ],
-      "status": "in-progress",
-      "lane": 1
+      "status": "done"
     },
     {
       "id": "fix-git-annotation-coverage-1029",
