@@ -2322,6 +2322,20 @@
       "status": "blocked"
     },
     {
+      "id": "fix-test-session-extras-owner-host-1029",
+      "milestone": "M7",
+      "title": "Resolve recorded paired-owner session feature acceptance after build-first land of m7-session-extras-owner-host-flows. Last exercised composed snapshot: 71 files, 63 passed/8 failed/no flakes (138.51s). Failing files: plugins/quirky.handoff/test/{start,lineage,delivery,cli-start,owner-host}.test.ts; plugins/quirky.handoff/test/e2e/handoff.e2e.test.ts; plugins/quirky.handoff/test/window/start.test.tsx; plugins/quirky.vault/test/owner-host.test.ts. Handoff readPrefs/import/helper/compiler repairs landed afterward but acceptance was intentionally not rerun under the operator override; do not assume all old failures persist or are closed. Preserve semantic owner/grant/generation/instance fences, reviewed target-only delivery, local-source liveness, remote-archive privacy and saved-agent draft state; repair actual causes without weakening assertions/deadlines. See docs/loop/decisions/m7-session-extras-owner-host-flows.md D10 and the loop evidence archive. Every check through bun scripts/suite.ts; private homes/process cleanup. Include associated actual owner UI scenarios when the test roots are repaired; no extra review campaign.",
+      "docs": [
+        "accounts.md",
+        "ai-vault.md",
+        "handoff.md"
+      ],
+      "deps": [
+        "m7-session-extras-owner-host-flows"
+      ],
+      "status": "todo"
+    },
+    {
       "id": "m7-api-freeze",
       "milestone": "M7",
       "title": "Plugin API 1.0: freeze and version the API, manifests declare their API version, publish an example distro",
