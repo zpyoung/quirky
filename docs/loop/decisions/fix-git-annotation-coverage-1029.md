@@ -22,5 +22,29 @@
 - **Revisit if:** the targeted runtime requires a native-only surface or a demonstrated production repair.
 - **Source:** locked by docs/loop/decisions/fix-test-git-1028.md D2
 
+## D3: Observe actual field ranges through document transitions
+- **Question:** Which assertions close the accepted coverage gap without reproducing presentation?
+- **Options:** inspect CSS/labels or rendered height; call only the parser; inspect state-provided DecorationSets through the public EditorView.decorations facet.
+- **Chose:** Four tests classify only widget versus line anchors using public WidgetType and assert exact zero-length ranges against explicit expected editor line numbers. Cover Unicode/combining/astral marker suffixes, CRLF round-trip and blank diff3 content; prefix and marker-suffix edits; splitting and joining line boundaries; invalidating/restoring just one block; resolving blocks individually and recreating a conflict after complete resolution.
+- **Why:** These are consumer-visible boundaries and state transitions, not copied class names, label strings or pixel geometry. The existing extension passed every new case, so no production edit or artificial red/green repair is justified.
+- **Evidence:** plugins/quirky.git/test/pure/conflict-markers.test.ts:93-208; canonical single-file gate exit0 in12.13s, no flaky files; actual CodeMirror smoke emits initial line2/widget25, prefix-edited line3/widget32 and resolved anchors[] while CRLF serialization remains true.
+- **Reversibility:** easy (four deterministic tests)
+- **Confidence:** high for the exercised state contract, not native rendering.
+- **Revisit if:** a concrete editor transaction violates range boundaries or requires a mounted view to reproduce.
+- **Source:** assumed — autonomous
+
+## D4: Preserve exact verification and cross-family review limits
+- **Question:** What has actually run on the committed tests?
+- **Options:** claim broad Git/UI acceptance; report only the targeted/source gates and actual state smoke.
+- **Chose:** Targeted canonical suite plus the scripts gate; full typecheck; actual in-memory CodeMirror API transactions with no process/home state. The sole catch-up merge reports already up to date. Use Gemini read-only review because opus and sonnet preflight report unavailable; grant only read, never shell/write or protected-profile access.
+- **Why:** This item changes only one test file and its decision log. Existing Git/Hosting/native findings remain with their owners. Initial reviewer dispatch exited6 after a read with no required final trailer, so it is not a completed or passing review; retry only that failed review stage.
+- **Evidence:** source commit06334695; composed canonical13/13files, no flaky files, then full frozen-install/UI-lint/root/mobile/prepared-desktop typecheck, combined52.75s; first full typecheck29.23s; pi-watch --check reports Gemini google/gemini-3.1-pro-preview:high available and opus0/8, sonnet0/6.
+- **Reversibility:** easy (verification/reviewer execution)
+- **Confidence:** high for observed checks; review pending.
+- **Revisit if:** review or the canonical merge-result gate finds a concrete issue.
+- **Source:** locked by docs/loop/LOOP.md verification
+
+The retry completed in161.94s with STATUS: PASS and no actionable findings. It actually read the target test and implementation with read-only capabilities; no shell/write tools were available. This is a bounded source review, not an independent test execution or native rendering certificate. No accepted finding required a fix batch.
+
 ## Progress
-Claimed on lane12; branch build/fix-git-annotation-coverage-1029 created from build/roadmap. Read the prior repair decisions and existing parser tests. Read-only annotation mapper running; next implement semantic state/decoration tests, run canonical targeted suite and real state smoke, then catch up once, typecheck and land. Preserve unrelated .serena directory. No test or production change yet.
+Ready for canonical land. Source commit06334695 contains four new semantic tests and no production edits. Canonical targeted1/1 and composed targeted+scripts13/13 pass without retries; initial and composed full typecheck pass. Actual CodeMirror state smoke confirms Unicode/CRLF anchors move after prefix edit and disappear after resolution. Sole roadmap catch-up was already up to date. Cross-family read-only review retry completed STATUS: PASS/no actionable findings; initial incomplete dispatch remains disclosed. All worker/review jobs finished. Commit receipts, detach, canonical land and update loop notes. Preserve unrelated .serena directory; do not claim whole Git/UI/native or whole-loop completion.
