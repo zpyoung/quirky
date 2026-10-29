@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test'
 import { execFileSync } from 'node:child_process'
-import { mkdirSync, mkdtempSync, rmSync, unlinkSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, unlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { RpcErrorCode, type QuirkyClient, type QuirkyEvent } from '@quirky/protocol'
@@ -49,7 +49,7 @@ async function registerWorktree(client: QuirkyClient, root: string): Promise<{ r
 }
 
 async function fixture(files: Record<string, string>): Promise<Fixture> {
-  const root = mkdtempSync(join(tmpdir(), 'quirky-editor-explorer-'))
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'quirky-editor-explorer-')))
   const home = makeHomeWithoutAutoHooks('q-editor-explorer-')
   let harness: Harness | undefined
   const roots = new Set([root])
@@ -262,7 +262,7 @@ test('Explorer keeps empty trees empty', async () => {
 
 test('Explorer interaction and expansion state are isolated by worktree', async () => {
   const world = await fixture({ 'A/first.txt': 'main\n', 'shared.txt': 'main\n' })
-  const otherRoot = mkdtempSync(join(tmpdir(), 'quirky-editor-explorer-other-'))
+  const otherRoot = realpathSync(mkdtempSync(join(tmpdir(), 'quirky-editor-explorer-other-')))
   world.roots.add(otherRoot)
   git(world.root, world.home, ['worktree', 'add', '-b', 'other', otherRoot])
   const worktrees = await call<Worktree[]>(world.client, 'quirky.worktree/list', { repo: world.repoId })
