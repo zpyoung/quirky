@@ -2342,6 +2342,17 @@
       ],
       "status": "todo",
       "early": true
+    },
+    {
+      "id": "fix-browser-remaining-flows-1028",
+      "milestone": "M7",
+      "title": "Complete remaining managed-browser interaction flows after fix-test-browser-1028: SC5 drag fails at the pinned native helper boundary after verified selectAll and pointer-event repairs. Consume the existing lane7 m7-sweep-browser-mobile committed repair first rather than duplicate its source writer. Preserve actual drag delivery, page scoping, CORS GET-vs-OPTIONS observation, cookie safety, private process homes and cleanup; keep assertions and deadlines meaningful. Evidence: docs/loop/decisions/fix-test-browser-1028.md and docs/loop/BLOCKERS.md. Execute every affected check through bun scripts/suite.ts; no direct bun test.",
+      "docs": [],
+      "deps": [
+        "fix-test-browser-1028",
+        "m7-sweep-browser-mobile"
+      ],
+      "status": "todo"
     }
   ]
 }
