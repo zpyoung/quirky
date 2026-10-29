@@ -430,6 +430,7 @@ export class VaultWindowModel {
   }
 
   scopeUnavailableReason(): string | null {
+    if (this.snapshot.view.scope === 'all') return null
     if (this.snapshot.scope.loading) return 'Resolving the current workspace and project.'
     if (this.snapshot.view.scope === 'workspace' && !this.snapshot.scope.worktree) return 'This workspace is unavailable. Switch to Project or All explicitly.'
     if (this.snapshot.view.scope === 'project' && !this.snapshot.scope.repo) return 'This project is unavailable. Switch to All explicitly.'
