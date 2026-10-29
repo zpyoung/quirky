@@ -254,6 +254,43 @@
         "describe": "describeReset",
         "params": { "type": "object", "properties": { "idempotencyKey": { "type": "string" }, "expectedScope": { "type": "object", "properties": { "accountId": {}, "accountRevision": { "type": "integer", "minimum": 0 }, "offerRevision": { "type": "string" } }, "required": ["accountId", "accountRevision", "offerRevision"] }, "yes": { "type": "boolean" } }, "required": ["idempotencyKey", "expectedScope"] },
         "result": { "type": "object", "properties": { "outcome": { "type": "string", "enum": ["reset", "nothingToReset", "noCredit", "alreadyRedeemed"] }, "state": { "type": "object", "additionalProperties": true } }, "required": ["outcome", "state"] }
+      },
+      {
+        "id": "ownerCall",
+        "description": "Calls one fixed Accounts, Usage, or agent-detection operation on an exactly registered full-owner runtime. It never accepts caller-selected methods, phone grants, sign-in flows, or local preference writes.",
+        "params": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "owner": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "hostId": { "type": "string" },
+                "identity": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": { "hostId": { "type": "string" }, "generation": { "type": "string" } },
+                  "required": ["hostId", "generation"]
+                },
+                "runtime": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": { "id": { "type": "string" }, "endpoint": { "type": "string" }, "grantId": { "type": "string" } },
+                  "required": ["id", "endpoint", "grantId"]
+                }
+              },
+              "required": ["hostId", "identity", "runtime"]
+            },
+            "operation": {
+              "type": "string",
+              "enum": ["list", "usage", "refresh", "inactiveUsage", "select", "credentialStatus", "agentsList", "agentsRefresh"]
+            },
+            "params": { "type": "object", "additionalProperties": true }
+          },
+          "required": ["owner", "operation", "params"]
+        },
+        "result": {}
       }
     ],
     "event": [
@@ -308,6 +345,7 @@
       { "id": "usage", "words": "usage", "summary": "show current provider usage snapshots", "methods": ["quirky.accounts/usage"] },
       { "id": "refresh", "words": "refresh", "summary": "force-refresh provider usage", "flags": { "provider": { "type": "string", "description": "Optional provider ID; omit to refresh all providers." } }, "methods": ["quirky.accounts/refresh"] },
       { "id": "inactive-usage", "words": "inactive-usage", "summary": "load inactive Claude or Codex account usage", "flags": { "provider": { "type": "string", "required": true, "description": "Provider whose inactive account snapshots to load." } }, "methods": ["quirky.accounts/inactiveUsage"] },
+      { "id": "owner-call", "words": "owner-call", "summary": "call one fixed Accounts or usage operation on an exactly registered full-owner runtime", "flags": { "owner": { "type": "json", "required": true, "description": "Exact OwnerSessionHostRef from registered remote owner state." }, "operation": { "type": "string", "required": true, "enum": ["list", "usage", "refresh", "inactiveUsage", "select", "credentialStatus", "agentsList", "agentsRefresh"], "description": "Fixed Accounts or agent-detection operation; never an RPC method name." }, "operation-params": { "type": "json", "required": true, "description": "JSON object accepted by the selected operation." } }, "methods": ["quirky.accounts/ownerCall"] },
       { "id": "add", "words": "add", "summary": "begin official Claude or Codex sign-in in a private account home", "flags": { "provider": { "type": "string", "required": true, "description": "Provider to sign in to." }, "label": { "type": "string", "description": "Optional display label for the managed account." }, "copy-link": { "type": "boolean", "description": "Capture a trusted Claude authorize URL for manual opening." }, "account-id": { "type": "string", "description": "Existing managed UUID to reauthenticate instead of adding an account." } }, "methods": ["quirky.accounts/beginLogin"] },
       { "id": "login-status", "words": "login-status", "summary": "read sign-in progress and a trusted authorize URL", "flags": { "id": { "type": "string", "required": true, "description": "Pending sign-in request ID returned by accounts add." } }, "methods": ["quirky.accounts/loginStatus"] },
       { "id": "cancel-login", "words": "cancel-login", "summary": "cancel sign-in without removing a committed Codex auth write", "flags": { "id": { "type": "string", "required": true, "description": "Pending sign-in request ID returned by accounts add." } }, "methods": ["quirky.accounts/cancelLogin"] },

@@ -12,6 +12,7 @@ export type WarningCode =
   | 'full-unavailable'
   | 'no-live-pane'
   | 'secrets'
+  | 'host-change'
 
 export type Warning = { code: WarningCode; message: string }
 
@@ -33,12 +34,15 @@ export type SourceFacts = {
   cwd: string | null
   prompt: string | null
   lastMessage: string | null
+  providerSessionId?: string | null
 }
 
 export type ComposeInput = {
   source: SourceFacts
-  /** Set only when the transcript is usable on the target; it then wins over `capture`. */
+  /** Set only when a local transcript path is usable; it wins over `capture`. */
   transcriptPath: string | null
+  /** A target-host probe found the transcript in that host's provider roots. */
+  targetTranscriptAvailable?: boolean
   /** The bounded terminal capture, already cleaned by `boundCapture`. */
   capture: string | null
   context: 'focused' | 'full'

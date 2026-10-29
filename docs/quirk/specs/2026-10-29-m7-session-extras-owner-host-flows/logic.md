@@ -1,9 +1,9 @@
 # Paired-owner session features
 
 ## Status & amendments
-Status: autonomously approved under LOOP; tech spec required (cross-subsystem, more than three source files). Combined specification review precedes implementation.
+Status: implemented; autonomous approval and bounded combined Codex specification review recorded in the decision log. Operator build-first override makes typecheck the land gate; acceptance repairs are assigned to fix-test-session-extras-owner-host-1029.
 
-**Amendments:** None.
+**Amendments:** 2026-10-29 — the operator explicitly replaced the remaining acceptance-debugging/UI/build/final-review campaign with a typecheck-only land and recorded fix-test item. Feature scenarios and authority requirements remain unchanged; no passing acceptance result is implied.
 
 ## Purpose and conceptual model
 Accounts, Agent Session History (Vault), and Handoff must use the real computer owning the selected workspace or session. A registered owner is an authenticated full-owner saved runtime, pinned to its producer-issued host ID, activation generation and saved grant. A remote workspace mirror additionally binds an exact canonical worktree ID, filesystem instance and fingerprint; its path is display data, never local execution authority.

@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties, type KeyboardEvent, type MouseEvent } from 'react'
 import { createPortal } from 'react-dom'
 import { createRoot } from 'react-dom/client'
-import type { Session, UiPluginContext } from '@quirky/protocol'
+import type { OwnerSessionHostRef, OwnerSessionWorkspaceRef, Session, UiPluginContext } from '@quirky/protocol'
 import { Badge, Button, ContextMenuList, EmptyState, FormRow, IconButton, SectionHeader, SelectField, Tabs, TextField, type ContextMenuItem } from '@quirky/ui'
 import { HISTORY_AGENTS } from '../agents'
 import type { HostedSession, ViewState } from '../types'
@@ -24,9 +24,78 @@ const OVERSCAN = 7
 
 type HistoryPanelProps = { context: UiPluginContext; report?(state: unknown): void }
 type RenderEntry = { kind: 'group'; id: string; label: string; count: number; collapsed: boolean } | { kind: 'session'; id: string; row: VaultRow; group: string }
+type GroupedRows = {
+  entries: RenderEntry[]
+  allRows: VaultRow[]
+  totalHeight: number
+  offsets: number[]
+  heights: number[]
+}
 type DetailState = { session: HostedSession | null; sessionLoaded: boolean; firstPrompt: string | null; firstPromptLoaded: boolean; subagents: HostedSession[]; subagentsLoaded: boolean; errors: string[] }
+type RemoteResumeChoice = { reference: OwnerSessionWorkspaceRef; label: string }
+type RemoteResumeState = { row: VaultRow; choices: RemoteResumeChoice[]; selectedMirrorId: string; loading: boolean; error: string | null }
 
-type GroupedRows = { entries: RenderEntry[]; allRows: VaultRow[]; totalHeight: number; offsets: number[]; heights: number[] }
+function recordOf(value: unknown): Record<string, unknown> | null {
+  return typeof value === 'object' && value !== null && !Array.isArray(value) ? value as Record<string, unknown> : null
+}
+
+function remoteResumeChoices(hostsValue: unknown, mirrorsValue: unknown, hostId: string): RemoteResumeChoice[] {
+  const hosts = recordOf(hostsValue)?.hosts
+  if (!Array.isArray(hosts)) throw new Error('Registered owner hosts could not be listed.')
+  const host = hosts.map(recordOf).find((candidate) => candidate?.id === hostId)
+  const runtime = recordOf(host?.runtime)
+  const identity = recordOf(host?.identity)
+  if (
+    !host ||
+    !runtime ||
+    !identity ||
+    host.connected !== true ||
+    identity.hostId !== hostId ||
+    typeof identity.generation !== 'string' ||
+    typeof runtime.id !== 'string' ||
+    typeof runtime.name !== 'string' ||
+    typeof runtime.endpoint !== 'string' ||
+    typeof runtime.grantId !== 'string'
+  ) throw new Error('The selected source owner is unavailable or no longer registered.')
+  const response = recordOf(mirrorsValue)
+  if (!response || !Array.isArray(response.workspaces)) throw new Error('Registered owner workspaces could not be listed.')
+  const owner: OwnerSessionHostRef = {
+    hostId,
+    identity: { hostId, generation: identity.generation },
+    runtime: { id: runtime.id, endpoint: runtime.endpoint, grantId: runtime.grantId }
+  }
+  const choices: RemoteResumeChoice[] = []
+  for (const value of response.workspaces) {
+    const mirror = recordOf(value)
+    const mirrorIdentity = recordOf(mirror?.identity)
+    const worktree = recordOf(mirror?.worktree)
+    if (
+      !mirror ||
+      !mirrorIdentity ||
+      !worktree ||
+      mirror.connected !== true ||
+      mirror.hostId !== hostId ||
+      mirrorIdentity.hostId !== hostId ||
+      mirrorIdentity.generation !== identity.generation ||
+      typeof mirror.id !== 'string' ||
+      typeof mirror.fingerprint !== 'string' ||
+      typeof worktree.id !== 'string' ||
+      typeof worktree.instanceId !== 'string'
+    ) continue
+    const name = typeof worktree.name === 'string' && worktree.name !== '' ? worktree.name : worktree.id
+    choices.push({
+      reference: {
+        owner,
+        mirrorId: mirror.id,
+        worktreeId: worktree.id,
+        instanceId: worktree.instanceId,
+        fingerprint: mirror.fingerprint
+      },
+      label: `${runtime.name} · ${name} (${worktree.id})`
+    })
+  }
+  return choices
+}
 function cancelCommandDrag(context: UiPluginContext, token: { current: string | null }): void {
   const value = token.current
   token.current = null
@@ -302,7 +371,7 @@ function SessionDetails({
   return <div className="qvh-row-details" data-vault-session-details={row.id} onClick={(event) => event.stopPropagation()}>
     <div className="qvh-action-row">
       <ActionButton label="Resume" disabled={!available} onClick={onResume} />
-      <ActionButton label="Resume in Worktree" disabled={!available || !row.cwd} onClick={onResumeWorktree} />
+      <ActionButton label="Resume in Worktree" disabled={!available || (row.hostId === 'local' && !row.cwd)} onClick={onResumeWorktree} />
       <ActionButton label="Hand Off" disabled={!available} onClick={onHandoff} />
       <ActionButton label="View Log" disabled={!canReveal(row)} onClick={() => onOpenSource('view')} />
       <ActionButton label="Reveal Log" disabled={!canReveal(row)} onClick={() => onOpenSource('reveal')} />
@@ -324,13 +393,16 @@ function SessionDetails({
     <section className="qvh-detail-section"><span className="qvh-detail-label">Latest turns</span>
       {previewMessages.length ? previewMessages.slice(-5).map((message, index) => <div className="qvh-turn" key={`${message.timestamp ?? 'none'}:${index}`}><span className="qvh-role">{messageRole(message.role)}</span>{message.text}</div>) : detail.sessionLoaded ? <div className="qvh-muted">No conversation preview available.</div> : null}
     </section>
-    {detail.subagents.length ? <section className="qvh-detail-section"><span className="qvh-detail-label">Subagents</span><div className="qvh-subagents">{detail.subagents.map((agent) => <Button className="qvh-action-button" key={agent.id} onClick={() => void context.call('quirky.vault/openSource', { id: agent.id, mode: 'view' }).then(requireSourceOpened).catch((error: unknown) => onError(messageOf(error)))}>{agent.title || agent.sessionId} · {agentLabel(agent.agent)}</Button>)}</div></section> : null}
+    {detail.subagents.length ? <section className="qvh-detail-section"><span className="qvh-detail-label">Subagents</span><div className="qvh-subagents">{detail.subagents.map((agent) => row.hostId === 'local'
+      ? <Button className="qvh-action-button" key={agent.id} onClick={() => void context.call('quirky.vault/openSource', { id: agent.id, mode: 'view' }).then(requireSourceOpened).catch((error: unknown) => onError(messageOf(error)))}>{agent.title || agent.sessionId} · {agentLabel(agent.agent)}</Button>
+      : <div className="qvh-muted" key={agent.id}>{agent.title || agent.sessionId} · {agentLabel(agent.agent)}</div>)}</div></section> : null}
   </div>
 }
 
 function SessionRow({
   context,
   row,
+  hostLabel,
   view,
   selected,
   expanded,
@@ -350,6 +422,7 @@ function SessionRow({
 }: {
   context: UiPluginContext
   row: VaultRow
+  hostLabel?: string
   view: ViewState
   selected: boolean
   expanded: boolean
@@ -509,13 +582,13 @@ function SessionRow({
   const deleteEnabled = ['gemini', 'copilot', 'cursor', 'hermes', 'devin', 'openclaw', 'droid', 'pi', 'omp', 'claude', 'codebuddy', 'rovo', 'grok', 'cline'].includes(row.agent) && row.hostId === 'local' && row.presence !== 'unverifiable'
   const actionMenuItems: ContextMenuItem[] = [
     { label: 'Resume in New Tab', enabled: resumable, onSelect: () => runMenuAction(onResume) },
-    { label: 'Resume in Worktree', enabled: resumable && Boolean(row.cwd), onSelect: () => runMenuAction(onResumeWorktree) },
+    { label: 'Resume in Worktree', enabled: resumable && (row.hostId !== 'local' || Boolean(row.cwd)), onSelect: () => runMenuAction(onResumeWorktree) },
     { label: 'Resume in New Terminal', enabled: resumable, onSelect: () => runMenuAction(onResume) },
-    { label: 'Copy Resume Command', enabled: resumable, onSelect: () => runMenuAction(() => void commandCopy()) },
+    { label: 'Copy Resume Command', enabled: resumable && row.hostId === 'local', onSelect: () => runMenuAction(() => void commandCopy()) },
     { label: 'Hand Off to Another Agent', enabled: resumable, onSelect: () => runMenuAction(onHandoff) },
-    { label: 'Jump to Original Pane', onSelect: () => runMenuAction(() => void action('jump', { target: 'pane' })) },
-    { label: 'Jump to Worktree', onSelect: () => runMenuAction(() => void action('jump', { target: 'worktree' })) },
-    { label: 'Jump to Folder', onSelect: () => runMenuAction(() => void action('jump', { target: 'folder' })) },
+    { label: 'Jump to Original Pane', enabled: row.hostId === 'local', onSelect: () => runMenuAction(() => void action('jump', { target: 'pane' })) },
+    { label: 'Jump to Worktree', enabled: row.hostId === 'local', onSelect: () => runMenuAction(() => void action('jump', { target: 'worktree' })) },
+    { label: 'Jump to Folder', enabled: row.hostId === 'local', onSelect: () => runMenuAction(() => void action('jump', { target: 'folder' })) },
     { label: 'Open Log', enabled: canReveal(row), onSelect: () => runMenuAction(() => onOpenSource('open')) },
     { label: 'Reveal Log', enabled: canReveal(row), onSelect: () => runMenuAction(() => onOpenSource('reveal')) },
     { label: 'Open Working Directory', enabled: row.hostId === 'local' && Boolean(row.cwd) && row.presence === 'present', onSelect: () => runMenuAction(() => void action('openWorkingDirectory')) },
@@ -571,7 +644,7 @@ function SessionRow({
       </div>
     </div>
     <div className="qvh-row-meta">
-      <span>{agentLabel(row.agent)}</span><span>{row.messageCount} messages</span>
+      {row.hostId !== 'local' ? <span data-vault-session-host={row.hostId}>{hostLabel ?? row.hostId}</span> : null}<span>{agentLabel(row.agent)}</span><span>{row.messageCount} messages</span>
       {row.subagentTranscriptCount ? <span>{row.subagentTranscriptCount} subagents</span> : null}
       {row.model ? <span>{row.model}</span> : null}
       <span>{ageLabel(view.query.trim() && row.evidence ? row.evidence.timestamp ?? row.updatedAt : row.updatedAt)}</span>
@@ -640,6 +713,8 @@ function HistoryPanel({ context, report }: HistoryPanelProps) {
   const [optionsOpen, setOptionsOpen] = useState(false)
   const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set())
   const [menuId, setMenuId] = useState<string | null>(null)
+  const [remoteResume, setRemoteResume] = useState<RemoteResumeState | null>(null)
+  const remoteResumeGeneration = useRef(0)
   const [width, setWidth] = useState(700)
   const [scrollTop, setScrollTop] = useState(0)
   const [viewportHeight, setViewportHeight] = useState(520)
@@ -754,8 +829,64 @@ function HistoryPanel({ context, report }: HistoryPanelProps) {
     context.toast('Vault action failed', message)
   }
 
+  const beginRemoteResume = async (row: VaultRow) => {
+    const generation = ++remoteResumeGeneration.current
+    setRemoteResume({ row, choices: [], selectedMirrorId: '', loading: true, error: null })
+    try {
+      const [hosts, mirrors] = await Promise.all([
+        context.call('quirky.worktree/remoteHostList', {}),
+        context.call('quirky.worktree/remoteList', { host: row.hostId })
+      ])
+      const choices = remoteResumeChoices(hosts, mirrors, row.hostId)
+      if (choices.length === 0) throw new Error('No current registered workspace is available on the selected owner.')
+      if (generation !== remoteResumeGeneration.current) return
+      setRemoteResume({
+        row,
+        choices,
+        selectedMirrorId: choices.length === 1 ? choices[0]!.reference.mirrorId : '',
+        loading: false,
+        error: null
+      })
+    } catch (error) {
+      if (generation !== remoteResumeGeneration.current) return
+      setRemoteResume({ row, choices: [], selectedMirrorId: '', loading: false, error: messageOf(error) })
+    }
+  }
+
+  const cancelRemoteResume = () => {
+    remoteResumeGeneration.current += 1
+    setRemoteResume(null)
+  }
+
+  const confirmRemoteResume = async () => {
+    const pending = remoteResume
+    const target = pending?.choices.find((choice) => choice.reference.mirrorId === pending.selectedMirrorId)
+    if (!pending || !target || pending.loading) return
+    const generation = remoteResumeGeneration.current
+    setRemoteResume({ ...pending, loading: true, error: null })
+    try {
+      const result = await context.call('quirky.vault/resume', { id: pending.row.id, remote: target.reference })
+      const session = recordOf(result)
+      if (
+        !session ||
+        session.hostId !== pending.row.hostId ||
+        typeof session.id !== 'string' ||
+        session.worktreeId !== target.reference.worktreeId
+      ) throw new Error('The vault did not confirm a session on the selected owner workspace.')
+      if (generation !== remoteResumeGeneration.current) return
+      const hostLabel = snapshot.hostOutcomes.find((host) => host.hostId === pending.row.hostId)?.label ?? pending.row.hostId
+      setRemoteResume(null)
+      context.openView('view:quirky.worktree/remote', { workspace: target.reference.mirrorId })
+      context.toast('Remote session resumed', `${agentLabel(pending.row.agent)} session opened on ${hostLabel}.`)
+    } catch (error) {
+      if (generation !== remoteResumeGeneration.current) return
+      setRemoteResume({ ...pending, loading: false, error: messageOf(error) })
+    }
+  }
+
   const resume = async (row: VaultRow, options: Record<string, unknown> = {}) => {
     if (!isResumable(row)) { setError(row.presence === 'missing' ? 'The transcript no longer exists.' : 'The transcript availability could not be verified.'); return }
+    if (row.hostId !== 'local') { await beginRemoteResume(row); return }
     try {
       const result = await context.call('quirky.vault/resume', { id: row.id, ...options })
       const sessionRecord = result && typeof result === 'object' && !Array.isArray(result) ? result as Record<string, unknown> : {}
@@ -766,9 +897,11 @@ function HistoryPanel({ context, report }: HistoryPanelProps) {
       context.toast('Session resumed', `${agentLabel(row.agent)} session opened from its original source.`)
     } catch (error) { setError(messageOf(error)) }
   }
-
   const resumeInWorktree = async (row: VaultRow) => {
-    if (!isResumable(row) || !row.cwd) { setError('This session has no verifiable working directory.'); return }
+
+    if (!isResumable(row)) { setError(row.presence === 'missing' ? 'The transcript no longer exists.' : 'The transcript availability could not be verified.'); return }
+    if (row.hostId !== 'local') { await beginRemoteResume(row); return }
+    if (!row.cwd) { setError('This session has no verifiable working directory.'); return }
     try {
       const rows = await context.call('quirky.worktree/list', {}) as unknown
       if (!Array.isArray(rows)) throw new Error('Available worktrees could not be listed.')
@@ -894,6 +1027,33 @@ function HistoryPanel({ context, report }: HistoryPanelProps) {
       </div>
     </div>
     {optionsOpen ? <ViewOptions model={model} snapshot={snapshot} onClose={() => setOptionsOpen(false)} /> : null}
+    {remoteResume ? <section className="qvh-view-options" role="dialog" aria-modal="true" aria-label="Choose a registered owner workspace" data-vault-remote-resume>
+      <SectionHeader
+        title={`Resume ${agentLabel(remoteResume.row.agent)} on ${snapshot.hostOutcomes.find((host) => host.hostId === remoteResume.row.hostId)?.label ?? remoteResume.row.hostId}`}
+      />
+      {remoteResume.loading ? <div role="status">Checking registered owner workspaces…</div> : null}
+      {remoteResume.error ? <div className="qvh-error-inline" role="alert">{remoteResume.error}</div> : null}
+      {remoteResume.choices.length === 1 ? <p data-vault-remote-resume-target>{remoteResume.choices[0]!.label}</p> : null}
+      {remoteResume.choices.length > 1 ? <SelectField
+        label="Owner workspace"
+        id="qvh-remote-resume-target"
+        aria-label="Registered owner workspace"
+        value={remoteResume.selectedMirrorId}
+        disabled={remoteResume.loading}
+        onChange={(event) => setRemoteResume((current) => current ? { ...current, selectedMirrorId: event.currentTarget.value } : current)}
+      >
+        <option value="">Choose a registered workspace</option>
+        {remoteResume.choices.map((choice) => <option key={choice.reference.mirrorId} value={choice.reference.mirrorId}>{choice.label}</option>)}
+      </SelectField> : null}
+      <p>The selected owner validates this exact workspace instance again before starting the session.</p>
+      <div className="qvh-option-toolbar">
+        <Button disabled={remoteResume.loading} onClick={cancelRemoteResume}>Cancel</Button>
+        <Button
+          disabled={remoteResume.loading || remoteResume.choices.length === 0 || remoteResume.selectedMirrorId === ''}
+          onClick={() => void confirmRemoteResume()}
+        >Resume on selected host</Button>
+      </div>
+    </section> : null}
     <div className="qvh-scan-strip" data-vault-scan-status={snapshot.list.loading ? 'scanning' : 'settled'}>
       {snapshot.list.loading ? <><span>Scanning {snapshot.scanProgress?.scannedFiles ?? 0} files{snapshot.scanProgress?.current ? ` · ${snapshot.scanProgress.current}` : ''}</span><span className="qvh-progress"><span /></span><span>{model.scanElapsed(now)}</span></> : <><span>Scanned {snapshot.list.result?.scannedFiles ?? 0} files</span><span>{model.ageText(now)}</span><span>{snapshot.list.result?.total ?? 0} sessions</span></>}
     </div>
@@ -924,6 +1084,7 @@ function HistoryPanel({ context, report }: HistoryPanelProps) {
           return <div className="qvh-virtual-item" key={entry.id} style={style}><SessionRow
             context={context}
             row={row}
+            hostLabel={snapshot.hostOutcomes.find((host) => host.hostId === row.hostId)?.label}
             view={snapshot.view}
             selected={snapshot.view.selectedId === row.id}
             tabStop={tabStopId === row.id}

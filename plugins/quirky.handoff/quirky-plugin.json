@@ -15,7 +15,8 @@
     "quirky.git",
     "quirky.agents",
     "quirky.agent-status",
-    "quirky.terminal"
+    "quirky.terminal",
+    "quirky.cli"
   ],
   "contributes": {
     "method": [
@@ -38,7 +39,35 @@
                     "worktree": { "type": "string" },
                     "cwd": { "type": "string" },
                     "prompt": { "type": "string" },
-                    "lastMessage": { "type": "string" }
+                    "lastMessage": { "type": "string" },
+                    "owner": {
+                      "type": "object",
+                      "properties": {
+                        "hostId": { "type": "string" },
+                        "identity": {
+                          "type": "object",
+                          "properties": {
+                            "hostId": { "type": "string" },
+                            "generation": { "type": "string" }
+                          },
+                          "required": ["hostId", "generation"],
+                          "additionalProperties": false
+                        },
+                        "runtime": {
+                          "type": "object",
+                          "properties": {
+                            "id": { "type": "string" },
+                            "endpoint": { "type": "string" },
+                            "grantId": { "type": "string" }
+                          },
+                          "required": ["id", "endpoint", "grantId"],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": ["hostId", "identity", "runtime"],
+                      "additionalProperties": false
+                    },
+                    "vaultId": { "type": "string" }
                   },
                   "required": ["agent"]
                 }
@@ -101,7 +130,35 @@
                     "lastMessage": {
                       "type": "string",
                       "description": "The agent's last message."
-                    }
+                    },
+                    "owner": {
+                      "type": "object",
+                      "properties": {
+                        "hostId": { "type": "string" },
+                        "identity": {
+                          "type": "object",
+                          "properties": {
+                            "hostId": { "type": "string" },
+                            "generation": { "type": "string" }
+                          },
+                          "required": ["hostId", "generation"],
+                          "additionalProperties": false
+                        },
+                        "runtime": {
+                          "type": "object",
+                          "properties": {
+                            "id": { "type": "string" },
+                            "endpoint": { "type": "string" },
+                            "grantId": { "type": "string" }
+                          },
+                          "required": ["id", "endpoint", "grantId"],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": ["hostId", "identity", "runtime"],
+                      "additionalProperties": false
+                    },
+                    "vaultId": { "type": "string" }
                   },
                   "required": [
                     "agent"
@@ -200,6 +257,52 @@
                   },
                   "branch": {
                     "description": "The branch, or null."
+                  },
+                  "hostName": {
+                    "type": "string",
+                    "description": "The registered owner host name for a remote mirror."
+                  },
+                  "connected": {
+                    "type": "boolean",
+                    "description": "The registered owner and mirror are currently available."
+                  },
+                  "remote": {
+                    "type": "object",
+                    "properties": {
+                      "owner": {
+                        "type": "object",
+                        "properties": {
+                          "hostId": { "type": "string" },
+                          "identity": {
+                            "type": "object",
+                            "properties": {
+                              "hostId": { "type": "string" },
+                              "generation": { "type": "string" }
+                            },
+                            "required": ["hostId", "generation"],
+                            "additionalProperties": false
+                          },
+                          "runtime": {
+                            "type": "object",
+                            "properties": {
+                              "id": { "type": "string" },
+                              "endpoint": { "type": "string" },
+                              "grantId": { "type": "string" }
+                            },
+                            "required": ["id", "endpoint", "grantId"],
+                            "additionalProperties": false
+                          }
+                        },
+                        "required": ["hostId", "identity", "runtime"],
+                        "additionalProperties": false
+                      },
+                      "mirrorId": { "type": "string" },
+                      "worktreeId": { "type": "string" },
+                      "instanceId": { "type": "string" },
+                      "fingerprint": { "type": "string" }
+                    },
+                    "required": ["owner", "mirrorId", "worktreeId", "instanceId", "fingerprint"],
+                    "additionalProperties": false
                   }
                 },
                 "required": [
@@ -274,9 +377,48 @@
                       "required": [
                         "name"
                       ]
+                    },
+                    "remote": {
+                      "type": "object",
+                      "properties": {
+                        "owner": {
+                          "type": "object",
+                          "properties": {
+                            "hostId": { "type": "string" },
+                            "identity": {
+                              "type": "object",
+                              "properties": {
+                                "hostId": { "type": "string" },
+                                "generation": { "type": "string" }
+                              },
+                              "required": ["hostId", "generation"],
+                              "additionalProperties": false
+                            },
+                            "runtime": {
+                              "type": "object",
+                              "properties": {
+                                "id": { "type": "string" },
+                                "endpoint": { "type": "string" },
+                                "grantId": { "type": "string" }
+                              },
+                              "required": ["id", "endpoint", "grantId"],
+                              "additionalProperties": false
+                            }
+                          },
+                          "required": ["hostId", "identity", "runtime"],
+                          "additionalProperties": false
+                        },
+                        "mirrorId": { "type": "string" },
+                        "worktreeId": { "type": "string" },
+                        "instanceId": { "type": "string" },
+                        "fingerprint": { "type": "string" }
+                      },
+                      "required": ["owner", "mirrorId", "worktreeId", "instanceId", "fingerprint"],
+                      "additionalProperties": false
                     }
                   },
-                  "description": "Where the new session starts: an existing worktree, or a worktree created at Start. Defaults to the source's worktree."
+                  "additionalProperties": false,
+                  "description": "A local worktree/create target or an exact registered owner workspace target."
                 },
                 "agent": {
                   "type": "string",
@@ -365,6 +507,236 @@
         "readOnly": true
       },
       {
+        "id": "targetAgents",
+        "description": "Lists enabled Agents on the exact selected local or registered remote workspace.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": {
+            "target": {
+              "type": "object",
+              "properties": {
+                "worktree": { "type": "string" },
+                "create": {
+                  "type": "object",
+                  "properties": { "name": { "type": "string" }, "base": { "type": "string" } },
+                  "required": ["name"],
+                  "additionalProperties": false
+                },
+                "remote": {
+                  "type": "object",
+                  "properties": {
+                    "owner": {
+                      "type": "object",
+                      "properties": {
+                        "hostId": { "type": "string" },
+                        "identity": {
+                          "type": "object",
+                          "properties": { "hostId": { "type": "string" }, "generation": { "type": "string" } },
+                          "required": ["hostId", "generation"],
+                          "additionalProperties": false
+                        },
+                        "runtime": {
+                          "type": "object",
+                          "properties": { "id": { "type": "string" }, "endpoint": { "type": "string" }, "grantId": { "type": "string" } },
+                          "required": ["id", "endpoint", "grantId"],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": ["hostId", "identity", "runtime"],
+                      "additionalProperties": false
+                    },
+                    "mirrorId": { "type": "string" },
+                    "worktreeId": { "type": "string" },
+                    "instanceId": { "type": "string" },
+                    "fingerprint": { "type": "string" }
+                  },
+                  "required": ["owner", "mirrorId", "worktreeId", "instanceId", "fingerprint"],
+                  "additionalProperties": false
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "required": ["target"],
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "state": { "type": "string", "enum": ["ready", "failed"] },
+            "list": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": { "id": { "type": "string" }, "label": { "type": "string" } },
+                "required": ["id", "label"],
+                "additionalProperties": false
+              }
+            },
+            "defaultAgent": { "description": "The default agent, or null." }
+          },
+          "required": ["state", "list", "defaultAgent"],
+          "additionalProperties": false
+        }
+      },
+      {
+        "id": "ownerAgents",
+        "description": "Target-side enabled-Agent detection for one exact local worktree filesystem instance.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": { "worktree": { "type": "string" }, "expectedInstanceId": { "type": "string" } },
+          "required": ["worktree", "expectedInstanceId"],
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "state": { "type": "string", "enum": ["ready", "failed"] },
+            "list": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": { "id": { "type": "string" }, "label": { "type": "string" } },
+                "required": ["id", "label"],
+                "additionalProperties": false
+              }
+            },
+            "defaultAgent": { "description": "The default agent, or null." }
+          },
+          "required": ["state", "list", "defaultAgent"],
+          "additionalProperties": false
+        }
+      },
+      {
+        "id": "ownerProbe",
+        "description": "Probes provider transcript roots on this owner after verifying one exact workspace instance.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": { "type": "string" },
+            "expectedInstanceId": { "type": "string" },
+            "source": {
+              "type": "object",
+              "properties": {
+                "agent": { "type": "string" },
+                "providerSessionId": {},
+                "reportedPath": {}
+              },
+              "required": ["agent"],
+              "additionalProperties": false
+            }
+          },
+          "required": ["worktree", "expectedInstanceId", "source"],
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "verdict": { "type": "string", "enum": ["usable", "unverifiable", "unreachable", "none"] },
+            "path": { "description": "Always null in the owner response; provider paths remain on this target host." },
+            "reason": { "description": "The verification reason, or null." },
+            "candidate": { "description": "The winning probe source, or null." }
+          },
+          "required": ["verdict", "path", "reason", "candidate"],
+          "additionalProperties": false
+        }
+      },
+      {
+        "id": "ownerStart",
+        "description": "Starts and delivers on this owner after revalidating the exact canonical workspace instance and enabled agent.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": { "type": "string" },
+            "expectedInstanceId": { "type": "string" },
+            "agent": { "type": "string" },
+            "body": { "type": "string" },
+            "notice": { "type": "string" },
+            "wait": { "type": "boolean" }
+          },
+          "required": ["worktree", "expectedInstanceId", "agent", "body", "notice", "wait"],
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "child": {
+              "type": "object",
+              "properties": {
+                "session": { "type": "string" },
+                "tab": { "type": "string" },
+                "worktreeId": { "type": "string" },
+                "providerSessionId": { "description": "The child provider session id, or null." },
+                "title": { "description": "The child title, or null." }
+              },
+              "required": ["session", "tab", "worktreeId", "providerSessionId", "title"],
+              "additionalProperties": false
+            },
+            "delivery": { "type": "string", "enum": ["delivered", "resent", "retry-failed", "unobservable", "pending"] }
+          },
+          "required": ["child", "delivery"],
+          "additionalProperties": false
+        }
+      },
+      {
+        "id": "ownerResend",
+        "description": "Resends a retained brief only on this owner and exact workspace instance.",
+        "params": {
+          "type": "object",
+          "properties": { "session": { "type": "string" }, "worktree": { "type": "string" }, "expectedInstanceId": { "type": "string" } },
+          "required": ["session", "worktree", "expectedInstanceId"],
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "properties": { "delivery": { "type": "string", "enum": ["delivered", "resent", "retry-failed", "unobservable"] } },
+          "required": ["delivery"],
+          "additionalProperties": false
+        }
+      },
+      {
+        "id": "ownerDiscard",
+        "description": "Discards a retained target-side brief after verifying its workspace instance.",
+        "params": {
+          "type": "object",
+          "properties": { "session": { "type": "string" }, "worktree": { "type": "string" }, "expectedInstanceId": { "type": "string" } },
+          "required": ["session", "worktree", "expectedInstanceId"],
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "properties": { "discarded": { "type": "boolean" } },
+          "required": ["discarded"],
+          "additionalProperties": false
+        }
+      },
+      {
+        "id": "ownerJump",
+        "description": "Focuses a child session on this owner after verifying its exact workspace instance.",
+        "params": {
+          "type": "object",
+          "properties": { "session": { "type": "string" }, "worktree": { "type": "string" }, "expectedInstanceId": { "type": "string" } },
+          "required": ["session", "worktree", "expectedInstanceId"],
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "focused": {
+              "type": "object",
+              "properties": { "session": { "type": "string" }, "pane": { "type": "string" } },
+              "required": ["session", "pane"],
+              "additionalProperties": false
+            }
+          },
+          "required": ["focused"],
+          "additionalProperties": false
+        }
+      },
+      {
         "id": "preview",
         "description": "Composes the brief for a source and controls with its warnings, secret hits and cost. With body, analyzes that edited text instead of composing. Refuses a source with no context (reason no-context) and a target that does not resolve (reason invalid-target).",
         "params": {
@@ -411,7 +783,35 @@
                     "lastMessage": {
                       "type": "string",
                       "description": "The agent's last message."
-                    }
+                    },
+                    "owner": {
+                      "type": "object",
+                      "properties": {
+                        "hostId": { "type": "string" },
+                        "identity": {
+                          "type": "object",
+                          "properties": {
+                            "hostId": { "type": "string" },
+                            "generation": { "type": "string" }
+                          },
+                          "required": ["hostId", "generation"],
+                          "additionalProperties": false
+                        },
+                        "runtime": {
+                          "type": "object",
+                          "properties": {
+                            "id": { "type": "string" },
+                            "endpoint": { "type": "string" },
+                            "grantId": { "type": "string" }
+                          },
+                          "required": ["id", "endpoint", "grantId"],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": ["hostId", "identity", "runtime"],
+                      "additionalProperties": false
+                    },
+                    "vaultId": { "type": "string" }
                   },
                   "required": [
                     "agent"
@@ -446,9 +846,48 @@
                       "required": [
                         "name"
                       ]
+                    },
+                    "remote": {
+                      "type": "object",
+                      "properties": {
+                        "owner": {
+                          "type": "object",
+                          "properties": {
+                            "hostId": { "type": "string" },
+                            "identity": {
+                              "type": "object",
+                              "properties": {
+                                "hostId": { "type": "string" },
+                                "generation": { "type": "string" }
+                              },
+                              "required": ["hostId", "generation"],
+                              "additionalProperties": false
+                            },
+                            "runtime": {
+                              "type": "object",
+                              "properties": {
+                                "id": { "type": "string" },
+                                "endpoint": { "type": "string" },
+                                "grantId": { "type": "string" }
+                              },
+                              "required": ["id", "endpoint", "grantId"],
+                              "additionalProperties": false
+                            }
+                          },
+                          "required": ["hostId", "identity", "runtime"],
+                          "additionalProperties": false
+                        },
+                        "mirrorId": { "type": "string" },
+                        "worktreeId": { "type": "string" },
+                        "instanceId": { "type": "string" },
+                        "fingerprint": { "type": "string" }
+                      },
+                      "required": ["owner", "mirrorId", "worktreeId", "instanceId", "fingerprint"],
+                      "additionalProperties": false
                     }
                   },
-                  "description": "Where the new session starts: an existing worktree, or a worktree created at Start. Defaults to the source's worktree."
+                  "additionalProperties": false,
+                  "description": "An existing local worktree, an exact remote owner workspace, or a worktree created at Start."
                 },
                 "agent": {
                   "type": "string",
@@ -640,7 +1079,7 @@
       },
       {
         "id": "probe",
-        "description": "Whether the source's transcript can be read on this machine, and where.",
+        "description": "Whether the source's transcript can be read on this daemon, and where.",
         "params": {
           "type": "object",
           "properties": {
@@ -685,7 +1124,35 @@
                     "lastMessage": {
                       "type": "string",
                       "description": "The agent's last message."
-                    }
+                    },
+                    "owner": {
+                      "type": "object",
+                      "properties": {
+                        "hostId": { "type": "string" },
+                        "identity": {
+                          "type": "object",
+                          "properties": {
+                            "hostId": { "type": "string" },
+                            "generation": { "type": "string" }
+                          },
+                          "required": ["hostId", "generation"],
+                          "additionalProperties": false
+                        },
+                        "runtime": {
+                          "type": "object",
+                          "properties": {
+                            "id": { "type": "string" },
+                            "endpoint": { "type": "string" },
+                            "grantId": { "type": "string" }
+                          },
+                          "required": ["id", "endpoint", "grantId"],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": ["hostId", "identity", "runtime"],
+                      "additionalProperties": false
+                    },
+                    "vaultId": { "type": "string" }
                   },
                   "required": [
                     "agent"
@@ -694,9 +1161,6 @@
                 }
               },
               "description": "The session to continue from: a live session id, or an archived one; pass exactly one."
-            },
-            "target": {
-              "description": "Ignored: Quirky has one host."
             }
           },
           "required": [
@@ -782,7 +1246,35 @@
                     "lastMessage": {
                       "type": "string",
                       "description": "The agent's last message."
-                    }
+                    },
+                    "owner": {
+                      "type": "object",
+                      "properties": {
+                        "hostId": { "type": "string" },
+                        "identity": {
+                          "type": "object",
+                          "properties": {
+                            "hostId": { "type": "string" },
+                            "generation": { "type": "string" }
+                          },
+                          "required": ["hostId", "generation"],
+                          "additionalProperties": false
+                        },
+                        "runtime": {
+                          "type": "object",
+                          "properties": {
+                            "id": { "type": "string" },
+                            "endpoint": { "type": "string" },
+                            "grantId": { "type": "string" }
+                          },
+                          "required": ["id", "endpoint", "grantId"],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": ["hostId", "identity", "runtime"],
+                      "additionalProperties": false
+                    },
+                    "vaultId": { "type": "string" }
                   },
                   "required": [
                     "agent"
@@ -817,9 +1309,48 @@
                       "required": [
                         "name"
                       ]
+                    },
+                    "remote": {
+                      "type": "object",
+                      "properties": {
+                        "owner": {
+                          "type": "object",
+                          "properties": {
+                            "hostId": { "type": "string" },
+                            "identity": {
+                              "type": "object",
+                              "properties": {
+                                "hostId": { "type": "string" },
+                                "generation": { "type": "string" }
+                              },
+                              "required": ["hostId", "generation"],
+                              "additionalProperties": false
+                            },
+                            "runtime": {
+                              "type": "object",
+                              "properties": {
+                                "id": { "type": "string" },
+                                "endpoint": { "type": "string" },
+                                "grantId": { "type": "string" }
+                              },
+                              "required": ["id", "endpoint", "grantId"],
+                              "additionalProperties": false
+                            }
+                          },
+                          "required": ["hostId", "identity", "runtime"],
+                          "additionalProperties": false
+                        },
+                        "mirrorId": { "type": "string" },
+                        "worktreeId": { "type": "string" },
+                        "instanceId": { "type": "string" },
+                        "fingerprint": { "type": "string" }
+                      },
+                      "required": ["owner", "mirrorId", "worktreeId", "instanceId", "fingerprint"],
+                      "additionalProperties": false
                     }
                   },
-                  "description": "Where the new session starts: an existing worktree, or a worktree created at Start. Defaults to the source's worktree."
+                  "additionalProperties": false,
+                  "description": "An existing local worktree, an exact remote owner workspace, or a worktree created at Start."
                 },
                 "agent": {
                   "type": "string",
@@ -936,7 +1467,8 @@
             "session": {
               "type": "string",
               "description": "The child session."
-            }
+            },
+            "lineage": { "type": "string", "description": "The exact remote or local lineage record, when session ids are ambiguous." }
           },
           "required": [
             "session"
@@ -969,7 +1501,8 @@
             "session": {
               "type": "string",
               "description": "The child session."
-            }
+            },
+            "lineage": { "type": "string", "description": "The exact remote or local lineage record, when session ids are ambiguous." }
           },
           "required": [
             "session"
@@ -1040,7 +1573,14 @@
                       },
                       "title": {
                         "description": "or null"
-                      }
+                      },
+                      "executionHost": {
+                        "type": "object",
+                        "properties": { "hostId": { "type": "string" }, "generation": { "type": "string" } },
+                        "required": ["hostId", "generation"],
+                        "additionalProperties": false
+                      },
+                      "instanceId": { "description": "The producer filesystem instance, or null." }
                     }
                   },
                   "child": {
@@ -1066,7 +1606,14 @@
                       },
                       "tab": {
                         "description": "The child's tab id, or null."
-                      }
+                      },
+                      "executionHost": {
+                        "type": "object",
+                        "properties": { "hostId": { "type": "string" }, "generation": { "type": "string" } },
+                        "required": ["hostId", "generation"],
+                        "additionalProperties": false
+                      },
+                      "instanceId": { "description": "The producer filesystem instance, or null." }
                     }
                   }
                 },
@@ -1314,7 +1861,35 @@
                     "lastMessage": {
                       "type": "string",
                       "description": "The agent's last message."
-                    }
+                    },
+                    "owner": {
+                      "type": "object",
+                      "properties": {
+                        "hostId": { "type": "string" },
+                        "identity": {
+                          "type": "object",
+                          "properties": {
+                            "hostId": { "type": "string" },
+                            "generation": { "type": "string" }
+                          },
+                          "required": ["hostId", "generation"],
+                          "additionalProperties": false
+                        },
+                        "runtime": {
+                          "type": "object",
+                          "properties": {
+                            "id": { "type": "string" },
+                            "endpoint": { "type": "string" },
+                            "grantId": { "type": "string" }
+                          },
+                          "required": ["id", "endpoint", "grantId"],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": ["hostId", "identity", "runtime"],
+                      "additionalProperties": false
+                    },
+                    "vaultId": { "type": "string" }
                   },
                   "required": [
                     "agent"
@@ -1493,6 +2068,18 @@
           "cwd": {
             "type": "string",
             "description": "archived source: the folder it ran in"
+          },
+          "remote": {
+            "type": "string",
+            "description": "JSON OwnerSessionWorkspaceRef for an exact registered remote mirror."
+          },
+          "source-owner": {
+            "type": "string",
+            "description": "JSON OwnerSessionHostRef for an owner-qualified archived Vault source."
+          },
+          "vault-id": {
+            "type": "string",
+            "description": "Opaque owner-local id accepted by that owner's quirky.vault/get."
           }
         },
         "methods": [
@@ -1596,12 +2183,44 @@
           "wait": {
             "type": "boolean",
             "description": "wait for the delivery outcome and print it"
+          },
+          "remote": {
+            "type": "string",
+            "description": "JSON OwnerSessionWorkspaceRef for an exact registered remote mirror."
+          },
+          "source-owner": {
+            "type": "string",
+            "description": "JSON OwnerSessionHostRef for an owner-qualified archived Vault source."
+          },
+          "vault-id": {
+            "type": "string",
+            "description": "Opaque owner-local id accepted by that owner's quirky.vault/get."
           }
         },
         "methods": [
           "quirky.handoff/start",
           "quirky.worktree/resolve"
         ]
+      },
+      {
+        "id": "target-agents",
+        "words": "target agents",
+        "summary": "list enabled Agents on an exact worktree or registered owner mirror",
+        "flags": {
+          "worktree": { "type": "string", "description": "local worktree selector" },
+          "remote": { "type": "string", "description": "JSON exact OwnerSessionWorkspaceRef" }
+        },
+        "methods": ["quirky.handoff/targetAgents", "quirky.worktree/resolve"]
+      },
+      {
+        "id": "owner-agents",
+        "words": "owner agents",
+        "summary": "list enabled Agents on this exact local owner workspace instance",
+        "flags": {
+          "worktree": { "type": "string", "description": "exact local worktree id", "required": true },
+          "expected-instance-id": { "type": "string", "description": "producer filesystem instance id", "required": true }
+        },
+        "methods": ["quirky.handoff/ownerAgents"]
       },
       {
         "id": "resend",
@@ -1614,6 +2233,9 @@
             "required": true
           }
         ],
+        "flags": {
+          "lineage": { "type": "string", "description": "the exact handoff lineage to resend" }
+        },
         "methods": [
           "quirky.handoff/resend"
         ]
@@ -1793,7 +2415,35 @@
                     "worktree": { "type": "string" },
                     "cwd": { "type": "string" },
                     "prompt": { "type": "string" },
-                    "lastMessage": { "type": "string" }
+                    "lastMessage": { "type": "string" },
+                    "owner": {
+                      "type": "object",
+                      "properties": {
+                        "hostId": { "type": "string" },
+                        "identity": {
+                          "type": "object",
+                          "properties": {
+                            "hostId": { "type": "string" },
+                            "generation": { "type": "string" }
+                          },
+                          "required": ["hostId", "generation"],
+                          "additionalProperties": false
+                        },
+                        "runtime": {
+                          "type": "object",
+                          "properties": {
+                            "id": { "type": "string" },
+                            "endpoint": { "type": "string" },
+                            "grantId": { "type": "string" }
+                          },
+                          "required": ["id", "endpoint", "grantId"],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": ["hostId", "identity", "runtime"],
+                      "additionalProperties": false
+                    },
+                    "vaultId": { "type": "string" }
                   },
                   "required": ["agent"]
                 }
@@ -1923,7 +2573,8 @@
           "properties": {
             "session": {
               "type": "string"
-            }
+            },
+            "lineage": { "type": "string" }
           },
           "required": [
             "session"
@@ -1938,7 +2589,8 @@
           "properties": {
             "session": {
               "type": "string"
-            }
+            },
+            "lineage": { "type": "string" }
           },
           "required": [
             "session"

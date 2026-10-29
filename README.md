@@ -96,6 +96,39 @@ The first-party UI stores a durable installation UUID and binds it to its authen
 It is not a machine or OS identity. Clearing browser storage creates a new installation identity;
 old workspace origins remain unchanged, and absent origin evidence stays unknown.
 
+### Owner-bound session features
+
+Register a saved full-owner runtime through `quirky.worktree/remoteHostRegister` and attach its
+workspaces through `quirky.worktree/remoteAttach`. Session features use those registrations,
+the saved grant and host generation; workspace actions also bind the producer's filesystem
+instance. Remote paths and matching local names never supply execution authority.
+
+**Usage and AI Provider Accounts** follow the focused workspace's owner in each window.
+Opening settings preserves that window's last workspace owner. An unavailable remote owner
+does not show local account data instead. Browser sign-in and reauthentication stay local;
+presentation preferences remain on this desktop. The fixed-operation API is
+`quirky.accounts/ownerCall`; its CLI is `quirky accounts owner-call --owner '<OwnerSessionHostRef JSON>'
+--operation list --operation-params '{}' --json`.
+
+**Agent Session History** has a built-in provider for registered owners. Select `local`, `all`
+or a registered host ID with `--host`; enabling on all computers runs locally first and reports
+each remote outcome. Remote inspection withholds transcript paths and launch environments.
+Resume uses `quirky vault resume '<session id>' --remote '<OwnerSessionWorkspaceRef JSON>'`,
+exclusive with local worktree/group options. Remote Trash, system-open/reveal and copy-command
+actions do not fall back to this computer.
+
+**Handoff** includes registered remote workspace candidates, exact-target agent detection and
+transcript probes, reviewed brief delivery, and host-qualified lineage. Query a captured target
+with `quirky handoff target agents --remote '<OwnerSessionWorkspaceRef JSON>' --json`.
+Remote history opens the review dialog in this desktop; it does not invoke a remote headless
+window. Cross-host secret warnings remain review aids, not a security boundary.
+
+The reference shapes are exported from
+[`runtime-owner.ts`](packages/protocol/src/runtime-owner.ts). Current acceptance results and
+the operator-directed repair item are recorded in the
+[owner-feature decision log](docs/loop/decisions/m7-session-extras-owner-host-flows.md#d10-apply-the-operators-build-first-land-gate).
+
+
 ## Agent Session History
 
 Open **Agent Session History** to browse agent-owned transcripts and resume a session in a

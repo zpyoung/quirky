@@ -1,3 +1,4 @@
+import { OWNER_CALL_OPERATIONS } from './src/types'
 import type { CliArgs, CliContext, CliModule } from '@quirky/protocol'
 
 const output = (context: CliContext, value: unknown): void => {
@@ -101,6 +102,17 @@ export const commands: CliModule['commands'] = {
 
   async 'inactive-usage'(args, context) {
     output(context, await context.call('quirky.accounts/inactiveUsage', { provider: stringFlag(args, context, 'provider') }))
+  },
+  async 'owner-call'(args, context) {
+    const owner = objectFlag(args, context, 'owner', true)
+    if (!owner) throw context.usage('--owner must be a JSON object')
+    const operation = stringFlag(args, context, 'operation')
+    if (!OWNER_CALL_OPERATIONS.some((candidate) => candidate === operation)) {
+      throw context.usage('--operation must be a supported owner-call operation')
+    }
+    const params = objectFlag(args, context, 'operation-params', true)
+    if (!params) throw context.usage('--operation-params must be a JSON object')
+    output(context, await context.call('quirky.accounts/ownerCall', { owner, operation, params }))
   },
 
   async add(args, context) {

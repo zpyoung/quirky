@@ -20,6 +20,9 @@ const nonEmpty = (value: string | null | undefined): string | null => (value ? v
 /** The key drafts and cached captures use: one per live session, one per archived transcript. */
 export function sourceKey(ref: SourceRef): string {
   if ('session' in ref) return `session:${ref.session}`
+  if (ref.archived.owner && ref.archived.vaultId) {
+    return `archived:${ref.archived.owner.hostId}:${ref.archived.owner.identity.generation}:${ref.archived.vaultId}`
+  }
   const { agent, providerSessionId, transcriptPath } = ref.archived
   return `archived:${agent}:${providerSessionId ?? transcriptPath ?? ''}`
 }
@@ -113,7 +116,7 @@ const candidateOf = (worktree: Worktree): Candidate => ({
   name: worktree.name,
   path: worktree.path,
   kind: worktree.kind,
-  branch: worktree.branch
+  branch: worktree.branch,
 })
 
 /**
@@ -121,14 +124,14 @@ const candidateOf = (worktree: Worktree): Candidate => ({
  * repo, or only the source's own folder for a folder source. An archived source with no known
  * worktree can go to any workspace but cannot create one.
  */
-export async function destinationOf(call: Call, info: SourceInfo): Promise<Destination> {
+export async function destinationOf(call: Call, info: SourceInfo, remoteCandidates: Candidate[] = []): Promise<Destination> {
   const all = await worktreesOf(call)
   const home = info.worktreeId === null ? null : (all.find((worktree) => worktree.id === info.worktreeId) ?? null)
   if (home === null) {
-    return { candidates: info.session === null ? all.map(candidateOf) : [], canCreateWorktree: false, home: null }
+    return { candidates: [...(info.session === null ? all.map(candidateOf) : []), ...remoteCandidates], canCreateWorktree: false, home: null }
   }
   if (home.kind === 'folder' || home.repoId.startsWith('group:')) {
-    return { candidates: [candidateOf(home)], canCreateWorktree: false, home }
+    return { candidates: [candidateOf(home), ...remoteCandidates], canCreateWorktree: false, home }
   }
   let repo: Repo | null = null
   try {
@@ -141,7 +144,7 @@ export async function destinationOf(call: Call, info: SourceInfo): Promise<Desti
     (worktree) =>
       worktree.repoId === home.repoId || (repoPath !== undefined && worktree.kind === 'folder' && contains(worktree.path, repoPath))
   )
-  return { candidates: members.map(candidateOf), canCreateWorktree: repo?.kind === 'git', home }
+  return { candidates: [...members.map(candidateOf), ...remoteCandidates], canCreateWorktree: repo?.kind === 'git', home }
 }
 
 /** The agents a handoff can start: installed and enabled, in the agent plugin's order. */
