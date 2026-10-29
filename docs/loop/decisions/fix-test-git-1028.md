@@ -176,5 +176,62 @@
 - **Revisit if:** this lane's final Git consumer scenario still fails with the landed parser fix.
 - **Source:** locked by user lane9 canonical handoff
 
+## D17: Preserve exact final verification, including the automatic scripts retry
+- **Question:** Which checks actually passed on the committed repairs?
+- **Options:** relabel every run green; report exact snapshots, controlled red/green and configured retry outcomes.
+- **Chose:** retain the receipts below and the complete operator-requested red transcript. No scripts deadline or source-lint suppression changed.
+- **Why:** the navigation regression fails when only the workspace-reveal conditional is removed in the owned verification checkout, then passes after exact restoration; main source never changes for that negative probe. The latest canonical Git/scripts result is accepted by its retry policy, not an unconditional first-pass/no-flake result.
+- **Evidence:** `.quirk/build-loop/fix-test-git-1028/verification.json`; parent jobs19,21–23,27; `operator-git-hosting-red.log`.
+- **Reversibility:** easy (receipts only)
+- **Confidence:** high for observed commands, not unexercised platform or merged functional checks.
+- **Revisit if:** the controller reports a concrete merge-result failure.
+- **Source:** locked by docs/loop/LOOP.md verification; locked by operator finalization instruction
+
+| Check | Observed result | Seconds |
+| --- | --- | ---: |
+| Canonical Git + scripts at3a1004c0 | 84/84files; ok:true, flaky:[] | 357.41 |
+| Canonical Git + scripts at606b305e | Initial83/84; scripts/ui-review/review.test.ts timed-out-reviewer case5173.67ms exceeded5000ms. Automatic isolated retry20/20, case4073.19ms; ok:true with that one flaky file | 343.66 |
+| Controlled SC65 negative probe, owned verify tree only | Expected0/1 failure atcommands:237; automatic retry fails the same view-selection assertion;2filtered | 39.71 |
+| Restored SC65 plus full source-only typecheck | 1/1/no-flake; frozen install, UIlint, root/mobile/prepared-desktop typing pass | 55.35 |
+| Final two Git consumer files | commands + github-handoff2/2/no-flake | 39.76 |
+| Full source-only typecheck at3a1004c0 | All five stages pass | 30.67 |
+| Composed typecheck + actual renderer build | Exit0;11host/vendor files,26plugin UI modules | 36.29 |
+| Operator-requested Git + Hosting at606b305e | Exit1;72/89files pass,17Hosting setup failures: unknown quirky.worktree/list | 302.54 |
+
+## D18: Keep guarded QA tool-blocked and raw browser proof separately scoped
+- **Question:** What did the current compiled UI actually establish?
+- **Options:** relabel a refused guarded action as passing; preserve the tool block and perform separately identified runtime diagnosis.
+- **Chose:** guarded web run20261029T014145-5697 remains blocked with0actions and no test overrides: two STALE refusals against the visible unchanged/refreshed math.ts row. Preserve its report/screenshots. Separately, an exclusively owned testing-browser/CDP59126 and fresh private eight-plugin fixture exercised real row preview, real Alt-down/click/up split with both correct diffs, and visible Search→AI settings→file navigation returning to Worktree. Final body/viewport both1340, no toast or fresh page errors. Light only; no golden/native/provider-turn/clipboard/Finder or foreign-platform certificate.
+- **Why:** an observed raw diagnostic is not a guarded QA pass. The first minimal fixture omitted sidebar-extras and produced a missing-setting page error; preserve that history and fix only fixture enrollment. Both private web fixtures exited0/homeRemoved, the final managed tab was released, the owned browser service stopped, and the guarded run's deliberately kept session was explicitly closed after end.
+- **Evidence:** `.quirk/using-apps-like-a-user/runs/20261029T014145-5697/report.json`; task evidence `proof.json`, `preview.png`, `split.png`, `return-from-settings.png`; actual inspected captures and GIT26_WEB_CLEANED true.
+- **Reversibility:** easy (verification environment)
+- **Confidence:** high for exercised UI/API paths only.
+- **Revisit if:** native/other-platform or guarded-tool acceptance supplies contradictory app evidence.
+- **Source:** deferred: platform
+
+## D19: Reject Bash-enabled execution assurance and enforce source-only reviewer capabilities
+- **Question:** Did the review obey its read-only execution boundary, and what do its findings mean?
+- **Options:** silently accept the initial PASSs; edit user profiles speculatively; preserve attribution, remove only owned probes and repeat invalid execution stages without shell/write tools.
+- **Chose:** initial X transport omitted required schema fields; retry only that failed stage without manual JSON repair. A subsequent audit found X's two untracked repro files/direct local Bun invocations, C's npm typecheck||true attempt and S's narrow canonical checks. Preserve all raw artifacts and exact repro bytes, remove only those two attributed source files, and reject that run as read-only assurance. Repeat the same fixed3332line artifact/lenses/criteria/model with actual grants read/grep/find/ls only; reuse completed deterministic setup. Final tracked diff remains empty at606b305e; no matching repro test process remains.
+- **Why:** a prompt-only fence is not a permission boundary. Known protected hook-file metadata predates the reviewer calls, but there is no before-content baseline or blanket home-isolation proof; parent read no protected config contents and performed no speculative profile restoration. The restricted six actual stages complete with C/X no findings and S three suppressed claims. Suppression3/3 and incorrect refuter facts are limits, not proof that no tests were deleted.
+- **Evidence:** task evidence `review-bash-enabled/`, `review-execution-violations/incident.json`, `review-source-only/` raw prompts/results/receipts and `parent-dispositions.json`; fixed artifact e2bf7b8f00a092a0bb3aa986240a192a871bd9a4eee483f983c5ad6504b4c055; source inspection manifests deep/google/gemini-3.1-pro-preview:high/full independence. Machine gates have0standing/advisory/contested findings and no excluded/unreviewed patch paths; assurance is bounded to that patch and source inspection.
+- **Reversibility:** easy (per-run tool grant and evidence)
+- **Confidence:** high for source integrity and actual dispatches; explicitly limited for rejected execution and global side effects.
+- **Revisit if:** an admitted, reproducible changed-code defect is established.
+- **Source:** assumed — autonomous; locked by protected-home and read-only instructions
+
+Parent rulings use the actual diff, not the refuter's false claim that no deletions occurred: S1 is accepted as a medium semantic annotation-range/state-transition coverage concern; S2 fixed-pixel restoration and S3 stale provenance-enum mirroring are rejected under the current no-incidental-copy requirement. Existing note submission/editing and actual provider/context/precedence/nonmutation behavior remain exercised. The initial malformed dirty-preview promotion proposal cites unchanged guards and is not admitted as a changed-code defect. No new production bug was confirmed.
+
+## D20: Follow the operator's stop-review order and land without duplicating a landed fixture fix
+- **Question:** How should the remaining concern and requested red consumer run affect finalization?
+- **Options:** extend review/debugging; create competing Hosting fixes; obey the operator and put open coverage in one follow-up.
+- **Chose:** stop all further review and annotation implementation. Canonical add/readback confirms the sole follow-up fix-git-annotation-coverage-1029 is todo, depending on this item; its scope is class-free range/state coverage. Append S1 to BLOCKERS. Run the exact requested Git/Hosting command and preserve its red result. A read-only HEAD..build/roadmap diff shows Hosting's helper already adds quirky.cli and skips duplicate enrollment; canonical landing brings that existing fixture correction, not another implementation here. Do not claim a merged Hosting functional rerun.
+- **Why:** the operator explicitly directs landing committed fixes while API freeze and other lanes wait. The17Hosting failures stop during stale-branch fixture activation before their scenarios; the missing declared CLI dependency is already corrected on the authoritative roadmap. Source c96115df was consumed unchanged asf4428c61; Git fixes/README and all retained tests are committed through606b305e. Only final receipts/BLOCKERS append remain to commit before canonical land.
+- **Evidence:** operator finalization instruction; canonical queue add exit0 and integration readback; requested89file transcript; exact two-line Hosting helper diff; all earlier observed Git/type/runtime receipts above.
+- **Reversibility:** easy (sole follow-up)
+- **Confidence:** high for queue/source/check observations; no unperformed merged functional claim.
+- **Revisit if:** the canonical land itself fails.
+- **Source:** locked by operator finalization instruction
+
 ## Progress
-All fixture/action repairs are committed through4d19eb8e. Parent now has three Git source caller corrections plus README and directly affected test coverage, including the demonstrated forbidden moveTab field fix. Read complete landed Hosting handoff; consume its exact source commit after committing this candidate. Next: compiler/UI build, affected canonical suites, fresh actual split/navigation/browser proof, deep3lens review and one accepted-finding batch, then final receipts and canonical land. No second unsolicited roadmap merge.
+Ready for canonical land. Operator-requested Git/Hosting command ran and its72/89 result is preserved; the17Hosting setup failures have an already-landed authoritative helper correction. No further review or code work. Sole follow-up fix-git-annotation-coverage-1029 recorded and queued; all review/runtime processes finished, owned repro files removed, six implementer trees and the source-only verification tree removed. Commit this decision receipt and append-only BLOCKERS entry, detach, then run the canonical absolute queue.ts land fix-test-git-1028 and await its actual result. Only mandatory failed-land recovery may add a roadmap merge. Preserve final land receipt in loop notes; remove only owned scratch/merged refs after success.
