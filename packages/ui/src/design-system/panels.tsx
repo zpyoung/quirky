@@ -66,10 +66,29 @@ export function FormRow({ label, htmlFor, help, error, children }: FormRowProps)
   )
 }
 
+/**
+ * A tool panel's header and body. A plugin's frame mounted inside the host's frame for the same
+ * panel draws only its body and moves its actions into the host header, so the panel has one header.
+ */
 export function ToolPanelFrame({ title, actions, onMinimize, children }: ToolPanelFrameProps) {
   const titleId = useId()
+  const section = useRef<HTMLElement>(null)
+  const [nested, setNested] = useState(false)
+
+  useLayoutEffect(() => {
+    if (section.current?.parentElement?.closest('[data-ui-tool-panel-frame]')) setNested(true)
+  }, [])
+
+  if (nested) {
+    return (
+      <>
+        {actions !== undefined && <ToolPanelActions>{actions}</ToolPanelActions>}
+        {children}
+      </>
+    )
+  }
   return (
-    <section className="ui-tool-panel-frame" data-ui-tool-panel-frame="" aria-labelledby={titleId}>
+    <section ref={section} className="ui-tool-panel-frame" data-ui-tool-panel-frame="" aria-labelledby={titleId}>
       <header className="ui-tool-panel-frame__header">
         <h2 className="ui-tool-panel-frame__title" id={titleId}>{title}</h2>
         <div className="ui-tool-panel-frame__actions">

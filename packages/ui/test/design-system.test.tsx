@@ -612,6 +612,21 @@ describe('shared graphite components', () => {
     await unmountIndependentRoot(orphanRoot)
   })
 
+  test('a plugin frame inside the host frame adds no second header and moves its actions up', async () => {
+    await act(async () => {
+      root!.render(<ToolPanelFrame title="Tasks" onMinimize={() => {}}><div data-plugin-root="tasks" /></ToolPanelFrame>)
+    })
+    const pluginRoot = mountIndependentRoot(container.querySelector<HTMLElement>('[data-plugin-root="tasks"]')!)
+    await act(async () => {
+      pluginRoot.render(<ToolPanelFrame title="Tasks" actions={<button aria-label="Task settings">Task settings</button>} onMinimize={() => {}}><p>Issues</p></ToolPanelFrame>)
+    })
+    expect(container.querySelectorAll('h2')).toHaveLength(1)
+    expect(container.querySelectorAll('button[aria-label="Minimize Tasks"]')).toHaveLength(1)
+    expect(document.querySelector('button[aria-label="Task settings"]')?.closest('header')).toBe(container.querySelector('header'))
+    expect(container.textContent).toContain('Issues')
+    await unmountIndependentRoot(pluginRoot)
+  })
+
   test('inline agent cards show status and suppress disabled actions', async () => {
     const calls: number[] = []
     await render(<InlineAgentCard title="provider-host" description="codex · editing host.ts" status="working" action={{ label: 'Approve merge', disabled: true, onAction: () => calls.push(1) }} />)
