@@ -14,3 +14,6 @@ packages/cli/test/open.e2e.test.ts  exercises macOS-only desktop opening through
 plugins/quirky.mobile/test/browser-watch.test.ts  owned phone Watch frames/input require installed macOS Chrome; remote host has no Chrome/Chromium
 apps/mobile/test/session-tabs.test.tsx  Browser Watch scrolls a real page through the owned macOS Chrome harness; the remote Linux host has no Chrome/Chromium
 plugins/quirky.mobile/test/page-bridge-lifecycle.test.ts  real encrypted phone page teardown exercises installed macOS Chrome; remote host has no Chrome/Chromium
+plugins/quirky.terminal/test/artifacts-api.test.ts  artifact grants intentionally require macOS descriptor identity and no-follow file safety APIs; Linux returns unsupported
+plugins/quirky.terminal/test/artifacts.test.ts  real daemon artifact acceptance exercises the macOS-only safe-file capability boundary
+plugins/quirky.terminal/test/emulator.test.ts  simulator list and frame APIs intentionally require macOS even with an owned xcrun fixture

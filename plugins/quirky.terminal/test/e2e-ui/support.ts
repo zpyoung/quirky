@@ -284,7 +284,7 @@ export async function startUi(options: UiOptions = {}) {
     dialogButton: (label: string) => [...win.document.querySelectorAll<HTMLElement>('[role="dialog"] button')].find((button) => button.textContent === label) ?? null,
 
     /** The toasts on screen, by title. */
-    toasts: () => [...win.document.querySelectorAll('.toast .toast-title')].map((element) => element.textContent ?? ''),
+    toasts: () => [...win.document.querySelectorAll('.ui-toast__title')].map((element) => element.textContent ?? ''),
 
     /** Types into a controlled input the way a keyboard does, then lets React take it. */
     async fill(input: HTMLInputElement | HTMLTextAreaElement, value: string): Promise<void> {

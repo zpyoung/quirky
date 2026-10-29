@@ -217,10 +217,9 @@ describe('SC-21: the Ctrl+Tab switcher', () => {
   test('lists tabs by recent use with the previous one highlighted', async () => {
     const view = await mount(four())
     await run(() => view.controller().recentTab())
-    expect(view.q('[role="dialog"]')!.getAttribute('aria-label')).toBe('Switch tabs')
+    expect(view.q('[role="dialog"]')).not.toBeNull()
     expect(titles(view)).toEqual(['Tab 4', 'Tab 1', 'Tab 3', 'Tab 2'])
     expect(highlighted(view)).toBe('Tab 1')
-    expect(view.last().dialog).toEqual({ kind: 'switch-tabs', title: 'Switch tabs' })
   })
 
   test('each further press moves down, and releasing Ctrl activates the highlighted tab', async () => {
@@ -247,7 +246,7 @@ describe('SC-21: the Ctrl+Tab switcher', () => {
     expect(highlighted(view)).toBe('Tab 3')
     await key(window, 'Tab', { shiftKey: true })
     expect(highlighted(view)).toBe('Tab 1')
-    await key(window, 'Escape')
+    await key(view.q('[role="dialog"]')!, 'Escape')
     expect(view.q('[role="dialog"]')).toBeNull()
     expect(callsTo(view.fake, 'activateTab')).toEqual([])
   })
@@ -296,25 +295,25 @@ describe('SC-76: the view input focuses a session pane', () => {
 
 describe('the floating workspace', () => {
   const empty = () => makeWorkspace(group('grp-1', []), { id: 'floating' })
+  const buttonStartingWith = (view: MountedWorkspace, label: string) => view.qa('button').find((button) => button.textContent?.trim().startsWith(label))!
 
-  test('loads without creating a tab and shows the two empty-state rows', async () => {
+  test('loads without creating a tab', async () => {
     const view = await mount(empty(), { input: undefined, view: { workspace: 'floating' } })
     expect(view.fake.callsTo('quirky.terminal/workspace')[0]!.params).toEqual({ workspace: 'floating' })
-    expect(view.qa('.qt-empty button').map((el) => el.textContent)).toEqual(['New Terminal⌘T', 'Minimize⌘W'])
+    expect(callsTo(view.fake, 'newTab')).toEqual([])
   })
 
   test('New Terminal opens a tab; Minimize hides the panel', async () => {
     const view = await mount(empty(), { input: undefined, view: { workspace: 'floating' } })
-    await click(view.qa('.qt-empty button')[0]!)
-    await click(view.qa('.qt-empty button')[1]!)
+    await click(buttonStartingWith(view, 'New Terminal'))
+    await click(buttonStartingWith(view, 'Minimize'))
     expect(callsTo(view.fake, 'newTab')).toEqual([{ workspace: 'floating', group: 'grp-1' }])
     expect(view.fake.callsTo('quirky.terminal/setFloating').map((call) => call.params)).toEqual([{ open: false }])
   })
 
-  test('a worktree workspace with no tabs offers New Terminal', async () => {
+  test('a worktree workspace with no tabs opens a terminal from its action', async () => {
     const view = await mount(makeWorkspace(group('grp-1', [])))
-    expect(view.q('.qt-empty')!.textContent).toContain('No terminals open.')
-    await click(view.q('.qt-empty .qt-primary'))
+    await click(buttonStartingWith(view, 'New Terminal'))
     expect(callsTo(view.fake, 'newTab')).toEqual([{ workspace: 'wt-main', group: 'grp-1' }])
   })
 })

@@ -37,3 +37,7 @@ quirky terminal emulator-frame 11111111-2222-3333-4444-555555555555 --json
 ```
 
 The example UDID must be replaced with one returned by `emulators`. The same operations are public methods `quirky.terminal/emulators` and `quirky.terminal/emulatorFrame({device})`. Visible previews request the next bounded frame one second after the previous request finishes; hiding the tab unmounts the preview and stops polling.
+
+## Verification
+
+Run `bun scripts/suite.ts plugins/quirky.terminal` from the repository root. The runner keeps artifact capability/descriptor and iOS Simulator scenarios on macOS: those production APIs intentionally reject unsupported platforms, even when a test supplies a local file or an owned `xcrun` fixture. The remaining portable scenarios run on the configured remote test host. All process scenarios use private homes and reap their owned processes.
