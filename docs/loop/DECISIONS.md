@@ -2907,6 +2907,15 @@ files, not this one.
 | easy | high | [m1-term-ui D55](decisions/m1-term-ui.md) | Like-a-user pass: 25 scenarios pass, SC-21 and SC-24 partial because of the tool | assumed — autonomous |
 | easy | high | [m1-term-ui D56](decisions/m1-term-ui.md) | Fixes from the UI pass | assumed — autonomous |
 | easy | high | [m1-term-ui D58](decisions/m1-term-ui.md) | The first land failed on dependencies the integration tree never installed | assumed — autonomous |
+| easy | high | [fix-test-tasks-1028 D1](decisions/fix-test-tasks-1028.md) | Repair the owned Tasks behavior without cross-plugin bypasses | locked by docs/loop/LOOP.md |
+| easy | high | [fix-test-tasks-1028 D2](decisions/fix-test-tasks-1028.md) | Use omp implementers and the reachable Gemini cross-family reviewer | assumed — autonomous |
+| easy | high | [fix-test-tasks-1028 D3](decisions/fix-test-tasks-1028.md) | Keep inherited untracked tooling state untouched | assumed — autonomous |
+| easy | high for partition, medium for remaining causes | [fix-test-tasks-1028 D4](decisions/fix-test-tasks-1028.md) | Split three disjoint repair components without changing public contracts | assumed — autonomous |
+| easy | high | [fix-test-tasks-1028 D5](decisions/fix-test-tasks-1028.md) | Repair executable test boundaries instead of changing correct product behavior | assumed — autonomous |
+| easy | high | [fix-test-tasks-1028 D6](decisions/fix-test-tasks-1028.md) | Exercise lagging REST search data and compare rendered producer errors | assumed — autonomous |
+| easy | high for named effects only | [fix-test-tasks-1028 D7](decisions/fix-test-tasks-1028.md) | Bound actual web evidence and preserve every observed limitation | deferred: platform; assumed — autonomous |
+| easy | high | [fix-test-tasks-1028 D8](decisions/fix-test-tasks-1028.md) | Consume the sole roadmap catch-up and lane8's historical Tasks inventory | assumed — autonomous |
+| easy | high for recorded protocol/results; qualified review assurance | [fix-test-tasks-1028 D9](decisions/fix-test-tasks-1028.md) | Preserve review provenance and its failed read-only assumptions | assumed — autonomous |
 | easy | high | [m1-providers D1](decisions/m1-providers.md) | Classify the item as Data, API, CLI, Visual and Integration work, and run every research phase | assumed — autonomous |
 | easy | high | [m1-providers D2](decisions/m1-providers.md) | Skip the visual companion and the adhd offer, use the standard gray-area set | locked by docs/loop/LOOP.md |
 | easy | high | [m1-providers D3](decisions/m1-providers.md) | Select every gray area that matters for m1-providers | assumed — autonomous |
