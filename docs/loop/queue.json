@@ -1569,8 +1569,7 @@
       "deps": [
         "m7-terminal-owner-provisioning-and-selector-flows"
       ],
-      "status": "in-progress",
-      "lane": 6
+      "status": "done"
     },
     {
       "id": "ui-restyle-terminal",
