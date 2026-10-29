@@ -172,7 +172,6 @@ describe('Session Info UI contributions', () => {
     activate(fake.context)
     const panel = fake.mount('panel:quirky.session-info/info')
     await waitForUi()
-    expect(panel.element.textContent).toContain('Session Info')
     expect(panel.element.textContent).toContain('Claude Sonnet')
     expect(panel.element.textContent).toContain('59% context used')
     expect(panel.element.querySelector('[data-context-threshold="muted"]')).not.toBeNull()

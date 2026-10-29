@@ -6,6 +6,10 @@ plugins/quirky.editor/test/markdown.test.ts  SC-14 exports a real PDF with the i
 plugins/quirky.browser/test/automation.test.ts  exercises the owned headless browser on macOS Chrome
 plugins/quirky.browser/test/pane.test.ts  Watch cases use the same owned macOS Chrome harness as automation.test.ts; the remote Linux host has no Chrome/Chromium
 plugins/quirky.browser/test/design-runtime.test.ts  real picker and PNG crop regressions require the installed macOS Chrome used by the owned browser runtime
+plugins/quirky.browser/test/extras-api.test.ts  real cookie imports and page profile rebinding require installed macOS Chrome; the remote Linux host has no Chrome/Chromium
+plugins/quirky.browser/test/extras-automation.test.ts  cookies, storage, clone rollback, HAR, dialogs and capture exercise the owned macOS Chrome runtime
+plugins/quirky.browser/test/extras-cli.test.ts  literal/file input and confirmed cookie imports drive real macOS Chrome through the CLI
+plugins/quirky.browser/test/import.test.ts  cookie replacement and rollback use managed macOS Chrome; source readers also exercise macOS browser cookie formats
 packages/cli/test/open.e2e.test.ts  exercises macOS-only desktop opening through an owned open shim; production refuses non-macOS platforms
 apps/mobile/test/session-tabs.test.tsx  Browser Watch scrolls a real page through the owned macOS Chrome harness; the remote Linux host has no Chrome/Chromium
 plugins/quirky.browser/test/extras-automation.test.ts  real cookie/profile/input/HAR/CDP flows require installed macOS Chrome; remote host has no Chrome/Chromium

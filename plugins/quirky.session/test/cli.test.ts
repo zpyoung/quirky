@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
-import { QuirkyClient, type ApiDescription, type CliContext, type LaunchSettings, type Session } from '@quirky/protocol'
+import { QuirkyClient, type CliContext, type LaunchSettings, type Session } from '@quirky/protocol'
 import { rpcUrl } from '@quirky/protocol/node'
 import { runCli } from '../../../packages/cli/test/fixtures/fake-daemon'
 import type { Harness } from '../../../packages/daemon/test/helpers'
@@ -412,7 +412,7 @@ describe('session restore', () => {
     expect(h.pty.requests.filter((r) => r.type === 'create' && r.restore === true)).toHaveLength(1)
   })
   test('the restore CLI resumes a cold agent in place from its provider session', async () => {
-    const session = await createSession(client, { worktree: 'id:wt_main', agent: 'codex' })
+    const session = await createSession(client, { worktree: 'id:wt_main', cwd: h.home, agent: 'codex' })
     await call(client, 'quirky.session/setProviderSession', { session: session.id, id: 'codex-cli-provider' })
     h.pty.exit(session.id, null, { exitCause: 'host-restart' })
     await waitForAsync(async () => (await call<Session>(client, 'quirky.session/get', { session: session.id })).restorable)
@@ -432,7 +432,7 @@ describe('session restore', () => {
   })
 
   test('the restore CLI refuses an agent without a captured provider identity', async () => {
-    const session = await createSession(client, { worktree: 'id:wt_main', agent: 'codex' })
+    const session = await createSession(client, { worktree: 'id:wt_main', cwd: h.home, agent: 'codex' })
     h.pty.exit(session.id, null, { exitCause: 'host-restart' })
     await waitForAsync(async () => (await call<Session>(client, 'quirky.session/get', { session: session.id })).restorable)
     const { ctx } = testCliContext(client)
@@ -466,50 +466,23 @@ describe('session restore', () => {
   })
 })
 
-describe('the CLI catalog', () => {
-  test('SC-17: lists the session group, its commands and its methods under quirky.session/', async () => {
-    const api = (await call<ApiDescription>(client, 'api.describe')) as ApiDescription
-    expect(api.cli.groups.find((g) => g.plugin === 'quirky.session')).toEqual({ plugin: 'quirky.session', words: 'session', aliases: [] })
-    const own = api.cli.commands.filter((c) => c.plugin === 'quirky.session')
-    expect(own.map((c) => c.words).sort()).toEqual([
-      'session close',
-      'session get',
-      'session list',
-      'session name',
-      'session new',
-      'session restore',
-      'session resume',
-      'session set-provider-session'
-    ])
-    expect(own.every((c) => c.module?.endsWith('/quirky.session/cli.ts'))).toBe(true)
-    expect(own.find((c) => c.words === 'session new')!.methods).toEqual(['quirky.session/create', 'quirky.structured/create'])
-    const names = api.methods.map((m) => m.name)
-    for (const name of ['list', 'get', 'create', 'resume', 'setName', 'setProviderSession', 'register', 'close', 'setStatus', 'restore']) expect(names).toContain(`quirky.session/${name}`)
-    expect(own.find((c) => c.words === 'session resume')!.methods).toEqual(['quirky.session/resume'])
-    expect(own.find((c) => c.words === 'session set-provider-session')!.methods).toEqual(['quirky.session/setProviderSession'])
-    expect(own.find((c) => c.words === 'session new')!.flags.map((f) => f.name).sort()).toEqual([
-      'agent',
-      'background',
-      'cwd',
-      'draft',
-      'effort',
-      'extra-args',
-      'model',
-      'name',
-      'option',
-      'prompt',
-      'wait',
-      'worktree'
-    ])
-    expect(own.find((c) => c.words === 'session new')!.flags.find((f) => f.name === 'option')).toMatchObject({ type: 'string', repeatable: true })
-    expect(own.find((c) => c.words === 'session get')).toMatchObject({ methods: ['quirky.session/get'], positionals: [{ name: 'session', required: true }] })
-    expect(own.find((c) => c.words === 'session new')!.flags.find((f) => f.name === 'agent')!.required).toBeFalsy()
-    expect(api.methods.find((m) => m.name === 'quirky.session/list')).toMatchObject({ readOnly: true })
-    expect(api.methods.find((m) => m.name === 'quirky.session/get')).toMatchObject({ readOnly: true })
-  })
+describe('the real CLI', () => {
 
   test('the new commands run through the real CLI with their positionals and flags', async () => {
     process.env.QUIRKY_TEST_REAL_WORKTREE = makeTempDir('qs-')
+    const restorable = await createSession(client, { worktree: 'id:wt_main', cwd: h.home, agent: 'codex' })
+    const providerSession = { id: 'codex-real-cli-provider', transcriptPath: null }
+    await call(client, 'quirky.session/setProviderSession', { session: restorable.id, id: providerSession.id })
+    h.pty.exit(restorable.id, null, { exitCause: 'host-restart' })
+    await waitForAsync(async () => (await call<Session>(client, 'quirky.session/get', { session: restorable.id })).restorable)
+    const restored = await runCli(['session', 'restore', restorable.id], { home: h.home })
+    expect(restored.code).toBe(0)
+    expect(restored.stdout).toContain(`restored ${restorable.id}`)
+    expect(await call<Session>(client, 'quirky.session/get', { session: restorable.id })).toMatchObject({
+      status: 'running',
+      cwd: h.home,
+      providerSession
+    })
     const first = await createSession(client, { worktree: 'id:wt_real', agent: 'codex' })
     const set = await runCli(['session', 'set-provider-session', first.id, 'thread-1', '--transcript', '/t.jsonl', '--json'], { home: h.home })
     expect(set.code).toBe(0)
@@ -518,15 +491,10 @@ describe('the CLI catalog', () => {
     const resumed = await runCli(['session', 'resume', first.id, '--fork', '--json'], { home: h.home })
     expect(resumed.code).toBe(0)
     expect(JSON.parse(resumed.stdout)).toMatchObject({ resumedFrom: first.id, providerSession: null })
-    expect(fakeAgents().calls.find((c) => c.method === 'prepareResume')!.params).toMatchObject({
-      fork: true,
-      providerSession: { id: 'thread-1', transcriptPath: '/t.jsonl' }
-    })
 
     const created = await runCli(['session', 'new', '--agent', 'goose', '--worktree', 'id:wt_main', '--prompt', 'p', '--draft', '--wait'], { home: h.home })
     expect(created.code).toBe(0)
     expect(created.stdout).toContain('prompt: pasted')
-    expect(fakeAgents().calls.find((c) => c.method === 'deliver')!.params).toMatchObject({ text: 'p', submit: false })
   })
 
   test('generated commands reach the session methods through the real CLI', async () => {

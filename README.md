@@ -223,6 +223,9 @@ adds its plugin IDs. Worktree and repository management are enforced. Unlisted l
 are not checked. Listed plugins must remove their own CSS files, private CSS imports, style
 elements and stylesheet injection; the canonical `@quirky/ui/styles.css` import is allowed.
 Use shared controls and tokens instead.
+Generated files ignored by Git are excluded from source discovery. Tracked source stays
+checked even inside an ignored directory; standalone source-scanner calls still inspect
+the supplied content.
 Only custom-property values in the two central design-system token files may define raw
 primitives. Existing host geometry remains in `compatibility-tokens.css` until its area restyle;
 new shared controls use the approved semantic tokens and size scale. Static source analysis
