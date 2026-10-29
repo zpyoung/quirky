@@ -1,4 +1,4 @@
-# Source Control AI recipes
+# Source Control
 
 The Git plugin stores independent recipes for commit messages, fix/review actions, branch names, and conversation names. `aiRecipe` resolves each field from the repository recipe, then the global recipe, then the default, and reports each field's source. `setAiRecipe` saves or resets a recipe at repository or global scope.
 
@@ -10,8 +10,18 @@ The Git plugin stores independent recipes for commit messages, fix/review action
 
 Both actions use their own `branchName` or `conversationName` recipe. The one-shot generator must support the selected provider. Raw provider arguments are passed through the one-shot resolver, so singleton flags in raw arguments take precedence over structured model/option picks, which take precedence over inherited picks. `providerSource` identifies the provider plugin and recipe/request source for the chosen launch settings.
 
-Names are drafts only. Generating a candidate does not create or rename a Git branch, rename a conversation, or otherwise mutate either owner. A failed generation leaves the UI's current candidate draft intact. The generated CLI method is `orca git aiName --action branchName` or `orca git aiName --action conversationName --session <session-id>`; add `--json` for the full provenance result.
+Names are drafts only. Generating a candidate does not create or rename a Git branch, rename a conversation, or otherwise mutate either owner. A failed generation leaves the UI's current candidate draft intact. The generated CLI method is `quirky git aiName --action branchName` or `quirky git aiName --action conversationName --session <session-id>`; add `--json` for the full provenance result.
 
 ## Provider model snapshots
 
 `quirky.agents/options` and `discoverModels` take an exact host identity. `local` means the current runtime; a paired host is its saved peer ID. The Source Control settings and automation editor target their captured local owner explicitly. A successful nonempty provider snapshot retires only structured model picks tagged for that provider on that host; valid options common to the refreshed default catalog are retained. Empty, malformed, unavailable, or unsupported probes do not retire picks. Raw CLI arguments are not rewritten by model snapshot retirement.
+
+## Hosted diff navigation
+
+Click a Source Control row to preview its diff in the selected terminal workspace. Double-click to keep the tab; Option-click to open it in a split group. Dirty diff tabs refuse close and are not replaced by another preview.
+
+Combined-diff navigation and Git open commands use the same hosted-tab route. Opening a diff selects its workspace view if another top-level view was showing. The `open-changes` and `open-commit` commands await the hosted-tab operation before replying.
+
+Plugin integrations split a tab through `quirky.terminal/moveTab` with `tab`, `split`, `of`, and the acknowledged `revision`; the tab determines its workspace, so this method does not accept a `workspace` field.
+
+Explicit standalone diffs opened through `ui.view.open` publish a top-level slot report. Embedded hosted views intentionally have no separate slot report; their tab identity and placement are available through `quirky.terminal/workspace`.

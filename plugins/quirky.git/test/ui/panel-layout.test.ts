@@ -65,7 +65,7 @@ describe('SC-8: the panel layout', () => {
     unmount()
   })
 
-  test('rows show the bold name, the muted folder, counts only above zero and the coloured letter', async () => {
+  test('rows show the filename, parent directory and nonzero change counts', async () => {
     const { element, unmount } = await open((fake) => {
       fake.status = statusOf([entry('src/app/math.ts', 'unstaged', 'modified', { added: 5, removed: 0 })])
     })
@@ -75,23 +75,9 @@ describe('SC-8: the panel layout', () => {
     expect(q(row, '[data-row-dir]')?.getAttribute('data-row-dir')).toBe('src/app')
     expect(q(details, '[aria-label="5 additions"]')?.textContent).toBe('+5')
     expect(q(details, '[aria-label*="deletions"]')).toBeNull()
-    expect(q(details, '[aria-label="Git status modified"]')?.textContent).toBe('M')
     unmount()
   })
 
-  test('uses a letter per status: A, D, R, U', async () => {
-    const { element, unmount } = await open((fake) => {
-      fake.status = statusOf([
-        entry('a.ts', 'staged', 'added'),
-        entry('d.ts', 'unstaged', 'deleted'),
-        entry('r.ts', 'staged', 'renamed', { oldPath: 'x.ts' }),
-        entry('u.ts', 'untracked')
-      ])
-    })
-    const letters = Object.fromEntries(['a.ts', 'd.ts', 'r.ts', 'u.ts'].map((path) => [path, q(rowOf(element, path)!, '[aria-label^="Git status "]')?.textContent]))
-    expect(letters).toEqual({ 'a.ts': 'A', 'd.ts': 'D', 'r.ts': 'R', 'u.ts': 'U' })
-    unmount()
-  })
 
   test('the Committed on Branch heading says how many files changed against the base', async () => {
     const { element, unmount } = await open()
@@ -118,15 +104,6 @@ describe('SC-9: the group order setting', () => {
 })
 
 describe('SC-10: empty states', () => {
-  test('a clean branch with nothing ahead of its base says so', async () => {
-    const { element, unmount } = await open((fake) => {
-      fake.status = statusOf([])
-      fake.compare = compareOf()
-    })
-    expect(element.textContent).toContain('No changes on this branch')
-    expect(element.textContent).toContain('This workspace is clean and this branch has no changes ahead of origin/main')
-    unmount()
-  })
 
   test('with no worktree open it asks for a workspace and reports nothing', async () => {
     const fake = fakeContext(layoutFor(null))

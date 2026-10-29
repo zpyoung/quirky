@@ -1,5 +1,5 @@
 import type { UiPluginContext } from '@quirky/protocol'
-import { DIFF_VIEW_ID, diffViewKey, type DiffViewInput } from '../shared/view-input'
+import { DIFF_VIEW_ID, SESSIONS_VIEW_ID, diffViewKey, type DiffViewInput } from '../shared/view-input'
 import { setActiveHostedView } from './registry'
 import { messageOf } from './data'
 
@@ -153,7 +153,6 @@ export async function openHostedDiff(context: UiPluginContext, requested: DiffVi
 
   if (split) {
     const movedValue = await context.call('quirky.terminal/moveTab', {
-      workspace: `id:${requested.worktree}`,
       tab: opened.tab,
       split: 'right',
       of: groupId,
@@ -177,6 +176,12 @@ export async function openHostedDiff(context: UiPluginContext, requested: DiffVi
     revision: openedWorkspace.revision
   })
   setActiveHostedView(opened.tab)
+  const shown = context.getLayout().view
+  const shownInput = shown?.input
+  if (shown?.id !== SESSIONS_VIEW_ID || typeof shownInput !== 'object' || shownInput === null ||
+    !('worktree' in shownInput) || shownInput.worktree !== requested.worktree) {
+    context.openView(SESSIONS_VIEW_ID, { worktree: requested.worktree })
+  }
   return finalInput
 }
 

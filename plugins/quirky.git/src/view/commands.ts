@@ -73,14 +73,14 @@ export function commandHandlers(context: UiPluginContext): Record<string, (args?
     'open-changes': (args) => {
       const given = argsOf(args)
       const area = AREAS.find((a) => a === given.area) ?? 'unstaged'
-      open({ worktree: worktreeFor(context, given), mode: 'combined', area })
+      return open({ worktree: worktreeFor(context, given), mode: 'combined', area })
     },
     'open-branch-changes': (args) => open({ worktree: worktreeFor(context, argsOf(args)), mode: 'combined', area: 'branch' }),
     'open-commit': (args) => {
       const given = argsOf(args)
       const commit = text(given.commit)
       if (!commit) throw new Error('open-commit needs a commit.')
-      open({ worktree: worktreeFor(context, given), mode: 'combined', commit })
+      return open({ worktree: worktreeFor(context, given), mode: 'combined', commit })
     },
     'review-conflicts': (args) => open({ worktree: worktreeFor(context, argsOf(args)), mode: 'conflicts' }),
     'send-review-notes': async () => {

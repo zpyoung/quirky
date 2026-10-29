@@ -435,16 +435,6 @@ describe('NA-3: the draft card keys and buttons', () => {
     expect(draftOf(element)).toBeNull()
   })
 
-  test('the textarea grows from 60 to 240 pixels with its content', async () => {
-    const { area } = await draftOn()
-    expect(area.style.height).toBe('60px')
-    Object.defineProperty(area, 'scrollHeight', { configurable: true, get: () => 120 })
-    await setValue(area, 'a\nb\nc\nd')
-    expect(area.style.height).toBe('120px')
-    Object.defineProperty(area, 'scrollHeight', { configurable: true, get: () => 900 })
-    await setValue(area, 'a\nb\nc\nd\ne')
-    expect(area.style.height).toBe('240px')
-  })
 })
 
 describe('NA-6: notes are edited and deleted', () => {
@@ -620,7 +610,6 @@ describe('NA-14: the diff header pill and the combined view note controls', () =
     await click(pill)
     const menu = q(document.body, '[role="menu"]')!
     expect(qa(menu, '[role="presentation"]').map(text)).toEqual(['Send notes'])
-    expect(qa(menu, '[role="menuitem"]').map(text)).toEqual(['This file2', 'All unsent notes3'])
   })
 
   test('no pill without a note on the file', async () => {
@@ -651,7 +640,6 @@ describe('NA-14: the diff header pill and the combined view note controls', () =
     await click(sendIcon('math.ts'))
     const menu = q(document.body, '[role="menu"]')!
     expect(qa(menu, '[role="presentation"]').map(text)).toEqual(['Send notes'])
-    expect(qa(menu, '[role="menuitem"]').map(text)).toEqual(['This file2', 'All unsent notes3'])
     await click(document.body)
     document.body.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
 

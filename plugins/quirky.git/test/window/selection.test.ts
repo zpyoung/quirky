@@ -25,7 +25,7 @@ test('SC-15: click opens the diff, Shift-click selects a range, Cmd-click toggle
   expect(buttonText('Stage (3)', bar()!)).toBeDefined()
   await w.win.waitFor(async () => (await selected()).length === 3)
   expect((await selected()).sort()).toEqual(['a.ts', 'b.ts', 'c.ts'])
-  expect((await openView(w))!.input.path).toBe('a.ts')
+  expect((await openView(w))?.input?.path).toBe('a.ts')
 
   await click(rowOf('b.ts'), { metaKey: true })
   expect(text(bar()?.querySelector('span'))).toBe('2 selected')
