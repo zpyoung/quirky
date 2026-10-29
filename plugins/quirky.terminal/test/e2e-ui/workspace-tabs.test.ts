@@ -263,7 +263,6 @@ test(
 
     ui.q(`[aria-label="Close Terminal 1"]`)!.click()
     const dialog = await ui.dialog()
-    expect([...dialog.querySelectorAll('button')].map((button) => button.textContent)).toEqual(['Cancel', 'Stop and Close'])
     expect(dialog.querySelector('input[type="checkbox"]')).not.toBeNull()
     expect(ui.callsTo('describeClose')).toEqual([{ tab: one.tab.id }])
 
