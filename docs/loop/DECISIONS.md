@@ -570,6 +570,8 @@ files, not this one.
 | medium | high | [m6-orchestration-workers D23](decisions/m6-orchestration-workers.md) | Create worker tabs atomically without stealing focus, and pin the task label | locked by orchestration.md placement/focus and meaningful-title behavior |
 | medium | high | [m6-orchestration-workers D24](decisions/m6-orchestration-workers.md) | Treat provider-acknowledged native turns as distinct from queued user journal input | assumed — autonomous |
 | medium | high | [m6-orchestration-workers D26](decisions/m6-orchestration-workers.md) | Reconcile interrupted worker state through the shared core transition | locked by worker AC6/19 and core lifecycle authority |
+| medium | high | [fix-test-loops-1028 D4](decisions/fix-test-loops-1028.md) | Repair structured approval waiting at its consumer, not Ask's guard | assumed — autonomous |
+| medium | high | [fix-test-loops-1028 D6](decisions/fix-test-loops-1028.md) | Separate cancellation settlement from transport teardown | assumed — autonomous |
 | medium | high | [sb-mobile-daemon D2](decisions/sb-mobile-daemon.md) | LAN and tailnet only; no hosted relay or misleading installation links | locked by docs/architecture.md |
 | medium | high | [sb-mobile-daemon D5](decisions/sb-mobile-daemon.md) | A separate mobile listener preserves the loopback UI security condition | assumed — autonomous |
 | medium | high | [sb-mobile-daemon D7](decisions/sb-mobile-daemon.md) | Pending reuse, explicit rotation and fail-closed identity | locked by mobile.md |
@@ -2212,6 +2214,15 @@ files, not this one.
 | easy | high | [m6-orchestration-workers D29](decisions/m6-orchestration-workers.md) | Keep the UI verification profile and default-profile failure explicit | assumed — autonomous |
 | easy | high | [m6-orchestration-workers D30](decisions/m6-orchestration-workers.md) | Preserve typed output refusal reasons through the public CLI | locked by typed output/cursor recovery requirements |
 | easy | high | [m6-orchestration-workers D31](decisions/m6-orchestration-workers.md) | Remove owned component worktrees without deleting unattributed metadata | assumed — autonomous |
+| easy | high | [fix-test-loops-1028 D1](decisions/fix-test-loops-1028.md) | Diagnose the three named loops failures against current public contracts | locked by docs/loop/LOOP.md |
+| easy | high | [fix-test-loops-1028 D2](decisions/fix-test-loops-1028.md) | Run every test through the canonical remote runner and isolate runtime smoke | locked by docs/loop/LOOP.md |
+| easy | high | [fix-test-loops-1028 D3](decisions/fix-test-loops-1028.md) | Restore the fixture's declared worktree dependency | locked by plugins/quirky.worktree/quirky-plugin.json |
+| easy | high | [fix-test-loops-1028 D5](decisions/fix-test-loops-1028.md) | Preserve the human-input quiet gate in native acceptance fixtures | locked by docs/loop/decisions/m5-loops-core.md |
+| easy | high | [fix-test-loops-1028 D7](decisions/fix-test-loops-1028.md) | Await approval registration independently of the waiting-status edge | assumed — autonomous |
+| easy | high | [fix-test-loops-1028 D8](decisions/fix-test-loops-1028.md) | Preserve incoming Ask restyle boundaries during the sole catch-up | locked by docs/loop/decisions/ui-restyle-ask.md |
+| easy | high | [fix-test-loops-1028 D9](decisions/fix-test-loops-1028.md) | Repair newly reached acceptance fixture prerequisites without repinning presentation | assumed — autonomous |
+| easy | high for the named owning-package repair; no broader clearance | [fix-test-loops-1028 D10](decisions/fix-test-loops-1028.md) | Close the owning-package repair and retain the failing broader boundary honestly | assumed — autonomous |
+| easy | high for the exercised paths | [fix-test-loops-1028 D11](decisions/fix-test-loops-1028.md) | Keep runtime, review and platform assurances bounded | deferred: platform |
 | easy | high | [sb-mobile-daemon D3](decisions/sb-mobile-daemon.md) | Follow night-mode workflow and autonomous defaults | locked by docs/loop/LOOP.md |
 | easy | high | [sb-mobile-daemon D4](decisions/sb-mobile-daemon.md) | Use omp task implementers and Gemini cross-family review | assumed — autonomous |
 | easy | high | [sb-mobile-daemon D8](decisions/sb-mobile-daemon.md) | Preserve desktop flows with API-backed controls | locked by mobile.md |
