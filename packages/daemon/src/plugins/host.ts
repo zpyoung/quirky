@@ -10,6 +10,7 @@ import {
   type PluginDiagnostic,
   type PluginInfo,
   type PluginModule,
+  type PluginActivationDisposer,
   type QuirkyEvent
 } from '@quirky/protocol'
 import { conflict, invalidParams, notFound } from '../errors'
@@ -87,6 +88,8 @@ type Attempt = {
   /** True once `extension.create` ran for this attempt and `extension.revoke` has not. */
   extensionLive: boolean
   implementations: Map<string, unknown>
+  /** Cleanup returned by this attempt's activate call; never stored on the imported module. */
+  activationDisposer?: PluginActivationDisposer
 }
 
 type Runtime = {
@@ -446,7 +449,7 @@ export class PluginHost {
         }
       }
       this.assertEnabled(id)
-      await this.loadAndActivate(entry, attempt, imported)
+      await this.loadAndActivate(entry, attempt, imported, runtime)
       this.assertEnabled(id)
     } catch (error) {
       disabledMidway = !this.isEnabled(id)
@@ -456,10 +459,12 @@ export class PluginHost {
       runtime.module = undefined
       if (disabledMidway) {
         if (imported.module) await this.callDeactivate(id, imported.module, runtime)
+        await this.disposeActivation(id, attempt, runtime)
         await this.revokeExtension(id, attempt)
         this.setState(runtime, 'inactive')
         throw conflict(`${id} was disabled during activation`)
       }
+      await this.disposeActivation(id, attempt, runtime)
       await this.revokeExtension(id, attempt)
       runtime.error = messageOf(error)
       this.options.log(`plugin ${id} failed to activate: ${runtime.error}`)
@@ -477,9 +482,15 @@ export class PluginHost {
 
   /**
    * Records the module in `imported` as soon as it imports, so a failed or timed-out activate can
-   * still be deactivated. An import that resolves after the attempt was revoked never activates.
+   * still be deactivated. An import that resolves after the attempt was revoked never activates;
+   * a disposer returned after activation was revoked runs immediately.
    */
-  private async loadAndActivate(entry: RegistryPlugin, attempt: Attempt, imported: { module?: PluginModule }): Promise<void> {
+  private async loadAndActivate(
+    entry: RegistryPlugin,
+    attempt: Attempt,
+    imported: { module?: PluginModule },
+    runtime: Runtime
+  ): Promise<void> {
     const { discovered } = entry
     const manifest = discovered.manifest!
     if (manifest.main === undefined) return
@@ -491,7 +502,15 @@ export class PluginHost {
         if (attempt.revoked) return
         if (typeof loaded.activate !== 'function') throw new Error('main module has no activate export')
         imported.module = loaded as PluginModule
-        await loaded.activate(context)
+        const activationDisposer = await loaded.activate(context)
+        if (activationDisposer !== undefined) {
+          if (typeof activationDisposer !== 'function') throw new Error('main activate returned an invalid disposer')
+          if (attempt.revoked) {
+            await this.callActivationDisposer(discovered.id, activationDisposer, runtime)
+          } else {
+            attempt.activationDisposer = activationDisposer
+          }
+        }
       },
       this.timeoutMs,
       `activation timed out after ${this.timeoutMs} ms`
@@ -704,7 +723,10 @@ export class PluginHost {
     runtime.module = undefined
     runtime.state = 'inactive'
     if (module) await this.callDeactivate(id, module, runtime)
-    if (attempt) await this.revokeExtension(id, attempt)
+    if (attempt) {
+      await this.disposeActivation(id, attempt, runtime)
+      await this.revokeExtension(id, attempt)
+    }
   }
 
   private async revokeExtension(id: string, attempt: Attempt): Promise<void> {
@@ -716,6 +738,27 @@ export class PluginHost {
       this.options.log(`plugin ${id}: revoke failed: ${messageOf(error)}`)
     }
   }
+  private async disposeActivation(id: string, attempt: Attempt, runtime: Runtime): Promise<void> {
+    const disposer = attempt.activationDisposer
+    if (!disposer) return
+    delete attempt.activationDisposer
+    await this.callActivationDisposer(id, disposer, runtime)
+  }
+
+  private async callActivationDisposer(
+    id: string,
+    disposer: PluginActivationDisposer,
+    runtime: Runtime
+  ): Promise<void> {
+    try {
+      await withTimeout(() => disposer(), this.timeoutMs, `activation disposer timed out after ${this.timeoutMs} ms`)
+    } catch (error) {
+      const message = error instanceof TimedOut ? error.message : `activation disposer failed: ${messageOf(error)}`
+      runtime.warnings.push({ level: 'warning', message })
+      this.options.log(`plugin ${id}: ${message}`)
+    }
+  }
+
 
   private async callDeactivate(id: string, module: PluginModule, runtime: Runtime): Promise<void> {
     if (typeof module.deactivate !== 'function') return

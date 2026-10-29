@@ -93,5 +93,5 @@ export type CleanupCandidate = {
   eligible: boolean
   blockers: CleanupBlocker[]
 }
-export type CleanupSelection = { worktreeId: string; fingerprint: string }
+export type CleanupSelection = { worktreeId: string; fingerprint: string; expectedInstanceId?: string }
 export type CleanupRemovalResult = { worktreeId: string; removed: boolean; error?: string }

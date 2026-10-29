@@ -55,6 +55,8 @@ type MainUpdateReceipt = {
   to?: string
 }
 type WorktreeCreateReceipt = WorktreeCreateResult & {
+  vm?: { id: string; vmName: string; state: string }
+  remoteWorkspace?: { id: string }
   creationReceipt?: {
     sparsePaths: string[]
     sharedDirectories?: string[]
@@ -183,6 +185,7 @@ function createNotes(result: WorktreeCreateReceipt, agent: string | undefined): 
   }
   if (result.worktree.pushTarget) lines.push(`push target: ${result.worktree.pushTarget.remoteName}/${result.worktree.pushTarget.branchName}`)
   const receipt = result.creationReceipt
+  if (result.vm) lines.push(`VM: ${result.vm.vmName} (${result.vm.id}, ${result.vm.state}); owner-bound remote workspace ${result.remoteWorkspace?.id ?? 'unknown'}`)
   if (receipt?.sparsePaths.length) lines.push(`sparse checkout: ${receipt.sparsePaths.join(', ')}`)
   if (receipt?.preparedCheckout) lines.push('checkout: claimed the exact prepared repo/base checkout')
   if (receipt?.defaultTabs?.length) lines.push(`default tabs: ${receipt.defaultTabs.map((tab) => `${tab.title} (${tab.session})`).join(', ')}`)
@@ -206,6 +209,18 @@ function createNotes(result: WorktreeCreateReceipt, agent: string | undefined): 
     if (summary) lines.push(`agent launch: ${summary}`)
   } else if (result.agentPending) lines.push(`agent: ${agent ?? 'agent'} starts when setup finishes`)
   return lines
+}
+
+/** Complex owner/VM records retain the exact structured receipt in either output mode. */
+async function ownerResult(ctx: CliContext, method: string, params: Record<string, unknown> = {}): Promise<void> {
+  const result = await ctx.call(`quirky.worktree/${method}`, params)
+  ctx.out.result(result, () => JSON.stringify(result, null, 2))
+}
+
+function vmLifecycleParams(args: CliArgs, ctx: CliContext): Record<string, unknown> {
+  const instanceId = stringFlag(args, 'instance')
+  if (instanceId === undefined || instanceId === '') throw ctx.usage('--instance must name the exact instanceId from vm-list or vm-show')
+  return { vm: args.positionals[0], instanceId }
 }
 
 const named: CliModule['commands'] = {
@@ -251,6 +266,70 @@ const named: CliModule['commands'] = {
         )
       : 'no authenticated remote hosts')
   },
+  async 'remote-host-list'(_args, ctx) { await ownerResult(ctx, 'remoteHostList') },
+  async 'remote-host-add'(args, ctx) {
+    await ownerResult(ctx, 'remoteHostRegister', { runtime: args.positionals[0], replace: args.flags.replace === true })
+  },
+  async 'remote-host-status'(args, ctx) { await ownerResult(ctx, 'remoteHostStatus', { host: args.positionals[0] }) },
+  async 'remote-host-forget'(args, ctx) {
+    if (args.flags.confirm !== true) throw ctx.usage('--confirm is required to forget this host registration')
+    await ownerResult(ctx, 'remoteHostForget', { host: args.positionals[0], detach: args.flags.detach === true, confirmed: true })
+  },
+  async 'remote-attach'(args, ctx) { await ownerResult(ctx, 'remoteAttach', { host: args.positionals[0], worktree: args.positionals[1] }) },
+  async 'remote-refresh'(args, ctx) { await ownerResult(ctx, 'remoteRefresh', { host: args.positionals[0] }) },
+  async 'remote-list'(args, ctx) {
+    const host = stringFlag(args, 'host')
+    await ownerResult(ctx, 'remoteList', host === undefined ? {} : { host })
+  },
+  async 'remote-show'(args, ctx) { await ownerResult(ctx, 'remoteShow', { workspace: args.positionals[0] }) },
+  async 'remote-open'(args, ctx) { await ownerResult(ctx, 'remoteNavigate', { workspace: args.positionals[0], ...windowParams(args, ctx) }) },
+  async 'remote-call'(args, ctx) {
+    const operation = stringFlag(args, 'operation')
+    if (operation === undefined) throw ctx.usage('--operation is required')
+    const params: Record<string, unknown> = { workspace: args.positionals[0], operation }
+    for (const key of ['path', 'source', 'session', 'data', 'title']) {
+      const value = stringFlag(args, key)
+      if (value !== undefined) params[key] = value
+    }
+    if (args.flags.lines !== undefined) {
+      const lines = Number(args.flags.lines)
+      if (!Number.isSafeInteger(lines) || lines < 0 || lines > 5000) throw ctx.usage('--lines must be an integer from 0 through 5000')
+      params.lines = lines
+    }
+    await ownerResult(ctx, 'remoteCall', params)
+  },
+  async 'remote-cleanup-preview'(args, ctx) { await ownerResult(ctx, 'remoteCleanupPreview', { workspace: args.positionals[0] }) },
+  async 'remote-cleanup-remove'(args, ctx) {
+    const fingerprint = stringFlag(args, 'fingerprint')
+    if (args.flags.confirm !== true || fingerprint === undefined) throw ctx.usage('--confirm and the current --fingerprint are required')
+    await ownerResult(ctx, 'remoteCleanupRemove', { workspace: args.positionals[0], fingerprint, confirmed: true })
+  },
+  async 'remote-remove'(args, ctx) {
+    const fingerprint = stringFlag(args, 'fingerprint')
+    if (args.flags.confirm !== true || fingerprint === undefined) throw ctx.usage('--confirm and the current --fingerprint are required')
+    await ownerResult(ctx, 'remoteRemove', { workspace: args.positionals[0], fingerprint, confirmed: true })
+  },
+  async 'vm-doctor'(_args, ctx) { await ownerResult(ctx, 'vmDoctor') },
+  async 'vm-recipes'(args, ctx) { await ownerResult(ctx, 'vmRecipes', { repo: args.positionals[0] }) },
+  async 'vm-list'(_args, ctx) { await ownerResult(ctx, 'vmList') },
+  async 'vm-show'(args, ctx) { await ownerResult(ctx, 'vmShow', { vm: args.positionals[0] }) },
+  async 'vm-create'(args, ctx) {
+    const trustHash = stringFlag(args, 'trust-hash')
+    if (trustHash === undefined || trustHash === '') throw ctx.usage('--trust-hash must be the complete reviewed lifecycle hash from vm-recipes')
+    const name = stringFlag(args, 'name')
+    const createParams = jsonFlag(args, ctx, 'create-options')
+    if (createParams !== undefined && (typeof createParams !== 'object' || createParams === null || Array.isArray(createParams))) {
+      throw ctx.usage('--create-options must be a JSON object of canonical guest worktree options')
+    }
+    await ownerResult(ctx, 'vmCreate', {
+      repo: args.positionals[0], recipe: args.positionals[1], trustHash,
+      ...(name === undefined ? {} : { name }),
+      ...(createParams === undefined ? {} : { createParams })
+    })
+  },
+  async 'vm-suspend'(args, ctx) { await ownerResult(ctx, 'vmSuspend', vmLifecycleParams(args, ctx)) },
+  async 'vm-resume'(args, ctx) { await ownerResult(ctx, 'vmResume', vmLifecycleParams(args, ctx)) },
+  async 'vm-destroy'(args, ctx) { await ownerResult(ctx, 'vmDestroy', vmLifecycleParams(args, ctx)) },
 
   async set(args, ctx) {
     const [worktree] = args.positionals as [string]
@@ -340,6 +419,7 @@ const named: CliModule['commands'] = {
       ['options', selection.options],
       ['sparsePaths', sparsePaths],
       ['environmentRecipe', stringFlag(args, 'environment-recipe')],
+      ['trustEnvironmentRecipeHash', stringFlag(args, 'trust-environment-recipe-hash')],
       ['defaultTabs', defaultTabs],
       ['host', stringFlag(args, 'host')],
     ]
