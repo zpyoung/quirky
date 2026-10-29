@@ -537,7 +537,7 @@ test('incompatible API floor changes deactivate cached UI modules before reuse',
     sidebarSections: [section(plugin, 'list'), section(NOTES, 'list')],
     commands: [command(plugin, 'run')]
   })
-  for (const apiVersion of ['1.1.0', undefined, '^1.0.0', 1] as const) {
+  for (const apiVersion of ['1.2.0', undefined, '^1.0.0', 1] as const) {
     const t = setup(makeSkewModel())
     let executions = 0
     const skew = recording([`sidebar-section:${plugin}/list`, commandId], (id) =>
@@ -1666,6 +1666,21 @@ test('SC-4: plugin.changed refetches the model and reconciles', async () => {
   await until(() => state(t).model?.sidebarSections.length === 0)
   expect(t.methodCalls('ui.contributions')).toHaveLength(2)
   expect(t.methodCalls('setting.list')).toHaveLength(2)
+})
+
+test('a change to a setting that shows or hides contributions refetches the model', async () => {
+  const board = 'setting:acme.notes/board-enabled'
+  const t = setup(makeModel({ visibilitySettings: [board] }), { settings: [setting(board, false), setting('setting:acme.notes/fontSize', 13)] })
+  await t.host.refresh()
+  t.emit({ type: 'setting.changed', id: 'setting:acme.notes/fontSize', value: 14 })
+  await tick()
+  await tick()
+  expect(t.methodCalls('ui.contributions')).toHaveLength(1)
+
+  t.setModel(makeModel({ visibilitySettings: [board], sidebarSections: [section(NOTES, 'board')] }))
+  t.emit({ type: 'setting.changed', id: board, value: true })
+  await until(() => state(t).model?.sidebarSections.length === 1)
+  expect(t.methodCalls('ui.contributions')).toHaveLength(2)
 })
 
 test('SC-25: theme.changed refreshes active theme colors', async () => {

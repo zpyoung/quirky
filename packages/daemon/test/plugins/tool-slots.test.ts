@@ -196,6 +196,17 @@ describe('effective tool projection', () => {
     ])
   })
 
+  test('registration kinds may name a setting that shows them; it must be a setting name', () => {
+    for (const kind of ['panel', 'sidebar-section', 'activity-item']) {
+      const valid: string[] = []
+      checkUiKindEntry(kind, `${kind} valid`, { id: 'valid', title: 'Valid', whenSetting: 'board-enabled' }, valid)
+      expect(valid).toEqual([])
+    }
+    const errors: string[] = []
+    checkUiKindEntry('panel', 'panel invalid', { id: 'invalid', title: 'Invalid', whenSetting: '' }, errors)
+    expect(errors).toEqual(['panel invalid: whenSetting must be a non-empty string'])
+  })
+
 })
 
 describe('tool layout mutations', () => {

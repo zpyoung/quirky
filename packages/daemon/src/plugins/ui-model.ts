@@ -302,6 +302,8 @@ export function buildUiModel(input: {
   distroId?: string | null
   /** User remaps by contribution ID; null disables without erasing the inherited declaration. */
   keybindingOverrides?: Record<string, string | null>
+  /** The effective value of a setting; without it, contributions with `whenSetting` are always shown. */
+  settingValue?: (entry: UiSettingEntry) => unknown
 }): { model: UiModel; warnings: Map<string, PluginDiagnostic[]> } {
   const { declarations, chosenTheme } = input
   const byId = pluginsById(input.plugins)
@@ -335,8 +337,14 @@ export function buildUiModel(input: {
   }
   const moduleOf = (pluginId: string): string | null => modules[pluginId]?.url ?? null
 
+  const shown = (declaration: ContributionInfo): boolean => {
+    const setting = declaration.data.whenSetting
+    if (typeof setting !== 'string' || input.settingValue === undefined) return true
+    const entry = settings.find((candidate) => candidate.id === `setting:${declaration.plugin}/${setting}`)
+    return entry !== undefined && input.settingValue(entry) === true
+  }
   const slot = (kind: UiSlotEntry['kind']): UiSlotEntry[] =>
-    ofKind(kind).map((declaration) => {
+    ofKind(kind).filter(shown).map((declaration) => {
       const defaultSlot =
         kind === 'panel' || kind === 'sidebar-section' || kind === 'activity-item'
           ? UI_TOOL_SLOTS.find((slot) => slot === declaration.data.defaultSlot)
@@ -417,5 +425,11 @@ export function buildUiModel(input: {
     modules,
     tools: projectTools({ panels, sidebarSections, activityItems, views })
   }
+  const visibilitySettings = [...new Set(
+    effective
+      .filter((declaration) => typeof declaration.data.whenSetting === 'string')
+      .map((declaration) => `setting:${declaration.plugin}/${declaration.data.whenSetting as string}`)
+  )].sort(compare)
+  if (visibilitySettings.length > 0) model.visibilitySettings = visibilitySettings
   return { model, warnings }
 }

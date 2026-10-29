@@ -1106,7 +1106,8 @@ export class WindowPluginHost {
     if (event.type === 'desktop.window.changed') this.updateAuxiliaryWindowRoute(event.windows)
     if (event.type === 'ui.command.request') void this.answerCommand(event.requestId, event.id, event.args)
     if (event.type === 'setting.changed') this.applySetting(event.id, event.value)
-    if (event.type === 'plugin.changed' || event.type === 'theme.changed' || event.type === 'ui.keybindings.changed') {
+    const visibility = event.type === 'setting.changed' && (this.state.model?.visibilitySettings?.includes(event.id) ?? false)
+    if (visibility || event.type === 'plugin.changed' || event.type === 'theme.changed' || event.type === 'ui.keybindings.changed') {
       const deliver = () => setTimeout(() => this.deliver(event), 0)
       void this.refresh().then(deliver, (error) => {
         this.deps.log(`refresh failed: ${messageOf(error)}`)

@@ -94,7 +94,7 @@ describe('daemon plugin API version freeze', () => {
       id: 'acme.future-discovered',
       name: 'Future plugin',
       version: '1.0.0',
-      apiVersion: '1.1.0',
+      apiVersion: '1.2.0',
       main: 'main.ts',
       contributes: { method: [{ id: 'hidden' }] }
     }
@@ -146,7 +146,7 @@ describe('daemon plugin API version freeze', () => {
     const discovered = listed.find((plugin) => plugin.id === 'acme.future-discovered')!
     expect(discovered.state).toBe('invalid')
     expect(discovered.apiVersion).toBeUndefined()
-    expect(discovered.diagnostics.map((item) => item.message).join('\n')).toContain('1.1.0')
+    expect(discovered.diagnostics.map((item) => item.message).join('\n')).toContain('1.2.0')
     expect(discovered.diagnostics.map((item) => item.message).join('\n')).toContain(PLUGIN_API_VERSION)
     expect((await errorOf(client.call('plugin.activate', { pluginId: 'acme.future-discovered' }))).code).toBe(RpcErrorCode.Conflict)
     const missing = listed.find((plugin) => plugin.id === 'acme.missing-api')!
@@ -164,7 +164,7 @@ describe('daemon plugin API version freeze', () => {
     for (const refusal of [inspection, install]) {
       expect(refusal.code).toBe(RpcErrorCode.InvalidParams)
       expect(refusal.message).toContain('apiVersion')
-      expect(refusal.message).toContain('1.1.0')
+      expect(refusal.message).toContain('1.2.0')
       expect(refusal.message).toContain(PLUGIN_API_VERSION)
     }
     expect(existsSync(join(home, 'plugins', 'acme.future-source'))).toBe(false)
@@ -214,7 +214,7 @@ describe('daemon plugin API version freeze', () => {
       id: 'acme.stable',
       name: 'Future plugin',
       version: '1.0.0',
-      apiVersion: '1.1.0',
+      apiVersion: '1.2.0',
       main: 'main.ts',
       contributes: { method: [{ id: 'never' }] }
     }, 9000, ['acme.stable'])
@@ -238,7 +238,7 @@ describe('daemon plugin API version freeze', () => {
     for (const refusal of [inspected, installed]) {
       expect(refusal.code).toBe(RpcErrorCode.InvalidParams)
       expect(refusal.message).toContain('acme.stable')
-      expect(refusal.message).toContain('1.1.0')
+      expect(refusal.message).toContain('1.2.0')
       expect(refusal.message).toContain(PLUGIN_API_VERSION)
     }
     expect({

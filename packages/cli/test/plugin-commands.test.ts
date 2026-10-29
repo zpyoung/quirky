@@ -194,7 +194,7 @@ describe('a declared command with a CLI module', () => {
     expect(gone.stderr).toContain('could not load the CLI module of acme.notes')
   })
   test('incompatible, missing, and malformed API floors fail before importing the module', async () => {
-    for (const apiVersion of ['1.1.0', undefined, '^1.0.0', 1]) {
+    for (const apiVersion of ['1.2.0', undefined, '^1.0.0', 1]) {
       setCommandApiVersion('cli-command:acme.notes/greet', apiVersion)
       const result = await run(['acme.notes', 'greet'])
       expect(result.code).toBe(1)

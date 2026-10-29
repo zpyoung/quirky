@@ -206,6 +206,8 @@ export type UiModel = {
   modules: Record<string, { url: string; provides: string[]; apiVersion: string }>
   /** Resolved tool projection; omitted by older contribution producers. */
   tools?: UiToolEntry[]
+  /** Settings that show or hide contributions (`whenSetting`); a change to one changes this model. Omitted when none do. */
+  visibilitySettings?: string[]
 }
 
 /** The daemon-owned layout: open view/panel, sidebar visibility and desired panel geometry; `palette` is absent when the command palette is closed. */
