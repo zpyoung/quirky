@@ -16,6 +16,7 @@ export type ListRowProps = {
   title: ReactNode
   description?: ReactNode
   status?: UiStatus
+  statusLabel?: string
   progress?: number
   count?: number
   trailing?: ReactNode

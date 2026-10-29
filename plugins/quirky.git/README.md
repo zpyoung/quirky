@@ -20,6 +20,8 @@ Names are drafts only. Generating a candidate does not create or rename a Git br
 
 Click a Source Control row to preview its diff in the selected terminal workspace. Double-click to keep the tab; Option-click to open it in a split group. Dirty diff tabs refuse close and are not replaced by another preview.
 
+Screen readers announce file rows with their Git state (such as modified or untracked) and history rows as commits. Row colors do not change those names to agent activity states.
+
 For Markdown files, **Preview** shows only the rendered modified content and hides both source diff sides. **Source** restores the diff.
 
 Combined-diff navigation and Git open commands use the same hosted-tab route. Opening a diff selects its workspace view if another top-level view was showing. The `open-changes` and `open-commit` commands await the hosted-tab operation before replying.

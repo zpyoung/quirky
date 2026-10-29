@@ -4,7 +4,7 @@ import type { ListRowProps, MenuProps, SectionHeaderProps, TabsProps } from './c
 import { classNames } from './shared'
 import { Badge, StatusDot } from './primitives'
 
-export function ListRow({ title, description, status, progress, count, trailing, mainTitle, mainLabel, compact = false, selected = false, disabled = false, onClick }: ListRowProps) {
+export function ListRow({ title, description, status, statusLabel, progress, count, trailing, mainTitle, mainLabel, compact = false, selected = false, disabled = false, onClick }: ListRowProps) {
   const className = classNames(
     'ui-list-row',
     description !== undefined && description !== null && description !== false && 'ui-list-row--double',
@@ -15,7 +15,7 @@ export function ListRow({ title, description, status, progress, count, trailing,
   )
   const content = (
     <>
-      {status && <span className="ui-list-row__status"><StatusDot status={status} progress={progress} label={`Status: ${status}`} /></span>}
+      {status && <span className="ui-list-row__status"><StatusDot status={status} progress={progress} label={statusLabel ?? `Status: ${status}`} /></span>}
       <span className="ui-list-row__body">
         <span className="ui-list-row__title">{title}</span>
         {description !== undefined && <span className="ui-list-row__description">{description}</span>}

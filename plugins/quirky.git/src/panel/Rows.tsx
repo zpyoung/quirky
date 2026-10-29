@@ -178,6 +178,7 @@ function SubmoduleEntries({ expansion, depth, tree }: { expansion: Expansion; de
               <ListRow
                 title={<span title={inside.path}><span data-row-name>{name}</span>{dir !== '' && <span data-row-dir={dir} className="ui-text-muted">{` · ${dir}`}</span>}</span>}
                 status={statusFor(inside.status)}
+                statusLabel={`Git status ${inside.status}`}
                 trailing={<Badge tone={toneFor(inside.status)} label={`Git status ${inside.status}`}>{statusLetter(inside.status)}</Badge>}
               />
             </li>
@@ -216,6 +217,7 @@ function FileRow({ item, depth, tree, selected, handlers }: { item: RowItem; dep
               title={<span><span data-row-name>{name}</span>{!tree && dir !== '' && <span data-row-dir={dir} className="ui-text-muted">{` · ${dir}`}</span>}</span>}
               description={hint ?? undefined}
               status={statusFor(item.status)}
+              statusLabel={`Git status ${item.status}`}
               selected={selected}
               trailing={
                 <span className="ui-cluster">
