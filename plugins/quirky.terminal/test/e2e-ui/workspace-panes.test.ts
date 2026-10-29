@@ -429,7 +429,7 @@ test(
 )
 
 test(
-  'SC-31: the active pane\'s header',
+  'SC-31: split pane headers keep pane controls while lone panes use the tab strip to close',
   async () => {
     const ui = await startUi()
     const { h } = ui
@@ -455,11 +455,13 @@ test(
     expect(untitled.querySelector('.qt-pane-title')).toBeNull()
 
     await show(ui, one.tab.id, one.pane.id)
-    await waitFor('the lone header', () => (ui.qa('[data-pane-header]').map((element) => element.dataset.paneHeader).join() === one.pane.id ? true : undefined))
-    const lone = ui.q(`[data-pane="${one.pane.id}"] [data-pane-header]`)!
-    expect(lone.querySelector('[aria-label="Close tab"]')).not.toBeNull()
-    expect(lone.querySelector('[aria-label="Move pane"]')).toBeNull()
-    expect(lone.querySelector('[aria-label="Expand pane"]')).toBeNull()
+    expect(ui.q(`[data-pane="${one.pane.id}"] [data-pane-header]`)).toBeNull()
+    expect(ui.q(`[data-pane="${one.pane.id}"] [aria-label="Close tab"]`)).toBeNull()
+    const tabClose = ui.q<HTMLButtonElement>(`[data-tab="${one.tab.id}"] .qt-tab-close`)
+    expect(tabClose).not.toBeNull()
+    tabClose!.click()
+    await ui.waitLayout('the lone tab closed', (ws) => !tabsOf(ws).some((tab) => tab.id === one.tab.id))
+    expect(ui.callsTo('closeTab')).toEqual([{ tab: one.tab.id, yes: true }])
   },
   SCENARIO_MS
 )

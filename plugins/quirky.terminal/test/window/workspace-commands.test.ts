@@ -110,6 +110,12 @@ describe('layout commands', () => {
     expect(callsTo(view.fake, 'setPaneTitle')).toEqual([{ pane: 'pane-3', title: '' }])
   })
 
+  test('setTitle keeps a lone pane header mounted for editing', async () => {
+    const view = await mount(simpleWorkspace())
+    await run(() => view.controller().setTitle())
+    expect(view.q('[data-pane-header="pane-1"] input[aria-label="Pane title"]')).not.toBeNull()
+  })
+
   test('clearPane and resetPane act on the focused pane', async () => {
     const view = await mount()
     await run(() => view.controller().clearPane())
