@@ -284,14 +284,14 @@ for **main**. Keys are macOS keys (`⌘` is Mod).
     - **Then** pane-3 and its session go, pane-4 takes the right column, and the first remaining pane becomes active; `⌘W` on a tab's only pane closes the tab (SC-12)
 
 30. **SC-30: a pane title** (UI, CLI)
-    - **Given** pane-3 in a split tab
+    - **Given** pane-3 in a split tab or an untitled lone-pane tab
     - **When** the person picks Set Title…, types "logs" in the "Pane title" field and presses Enter; or the agent runs `quirky terminal pane title pane-3 logs`
-    - **Then** the pane header shows "logs" and the title survives a restart; Escape cancels; Clear Pane Title or `pane title pane-3 ""` removes it; a titled pane's header shows "Remove title" where untitled split panes show close
+    - **Then** the pane header shows "logs" and the title survives a restart; Escape cancels; Clear Pane Title or `pane title pane-3 ""` removes it; a titled split pane's header shows "Remove title" where an untitled split pane shows close
 
-31. **SC-31: the active pane's header** (UI)
-    - **Given** a split tab
-    - **When** the person looks at the panes
-    - **Then** only the active pane shows its header controls: its title if set, expand/collapse and close ("Close Pane" in a split, "Close tab" for a lone pane), and a drag handle when the tab has 2+ panes
+31. **SC-31: pane headers and closing controls** (UI)
+    - **Given** split and lone-pane tabs
+    - **When** the person looks at their active panes
+    - **Then** only the active split pane shows its header with its title if set, expand/collapse and close ("Close Pane" when untitled, "Remove title" when titled), and a drag handle when the tab has 2+ panes; an untitled lone pane has no empty header, a titled lone pane shows only its title/edit field, and lone tabs are closed from the tab strip
 
 32. **SC-32: exit 0 closes the pane, except an untouched lone pane** (CLI)
     - **Given** (a) pane-3 in a split tab where the person typed `exit`; (b) a lone pane nobody typed into whose shell exits 0 at startup

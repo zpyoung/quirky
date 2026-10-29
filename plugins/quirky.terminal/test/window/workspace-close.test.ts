@@ -236,17 +236,29 @@ describe('closing panes', () => {
     expect(callsTo(view.fake, 'closePane')).toEqual([{ pane: 'pane-3', yes: true }])
   })
 
-  test('the header close button of a lone pane closes the tab; of a split pane, the pane', async () => {
+  test('an untitled lone pane has no header and still closes from the tab strip', async () => {
     const lone = await mount()
-    await click(lone.q('[aria-label="Close tab"]'))
+    const lonePane = lone.q('[data-pane="pane-1"]')!
+    expect(lonePane.querySelector('[data-pane-header]')).toBeNull()
+    expect(lonePane.querySelector('[aria-label="Close tab"]')).toBeNull()
+    const tabClose = lone.q('[data-tab="tab-1"] [aria-label="Close Terminal 1"]')
+    expect(tabClose).not.toBeNull()
+    await click(tabClose)
     expect(callsTo(lone.fake, 'closeTab')).toEqual([{ tab: 'tab-1', yes: true }])
-    await lone.unmount()
-    mounted = null
+  })
+
+  test('the header close button of a split pane closes the pane', async () => {
     const split = await mount(conceptualWorkspace())
     await click(split.q('[data-pane-header] [aria-label="Close Pane"]'))
     expect(callsTo(split.fake, 'closePane')).toEqual([{ pane: 'pane-3', yes: true }])
   })
 
+  test('a titled lone pane shows its title without a header close button', async () => {
+    const lone = await mount(makeWorkspace(group('grp-1', [tab('tab-1', pane('pane-1', 's-1', { title: 'logs' }))])))
+    const header = lone.q('[data-pane-header="pane-1"]')!
+    expect(header.querySelector('.qt-pane-title')!.textContent).toBe('logs')
+    expect(header.querySelector('[aria-label="Close tab"]')).toBeNull()
+  })
   test('a titled split pane shows Remove title instead of close', async () => {
     const ws = conceptualWorkspace()
     ;(ws.root as any).first.tabs[1].root.second.first.title = 'logs'

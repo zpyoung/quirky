@@ -274,20 +274,16 @@ function ExitOverlay({ controller, leaf }: { controller: WorkspaceController; le
 function PaneHeader({ controller, state, tab, leaf, multi, onGrip }: { controller: WorkspaceController; state: ControllerState; tab: TerminalTab; leaf: PaneLeaf; multi: boolean; onGrip: (event: ReactMouseEvent) => void }) {
   const renaming = state.rename?.kind === 'pane' && state.rename.id === leaf.id
   const expanded = tab.expandedPane !== null
+
+  if (!multi && !leaf.title && !renaming) return null
   let close
-  if (!multi) {
-    close = (
-      <IconButton className="qt-icon" label="Close tab" title="Close tab" onClick={() => void controller.closeTab(tab.id)}>
-        <CloseIcon />
-      </IconButton>
-    )
-  } else if (leaf.title) {
+  if (multi && leaf.title) {
     close = (
       <IconButton className="qt-icon" label="Remove title" title="Remove title" onClick={() => void controller.clearTitle(leaf.id)}>
         <CloseIcon />
       </IconButton>
     )
-  } else {
+  } else if (multi) {
     close = (
       <IconButton className="qt-icon" label="Close Pane" title="Close Pane" onClick={() => void controller.closePane(leaf.id)}>
         <CloseIcon />
