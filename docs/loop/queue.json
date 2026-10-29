@@ -2213,8 +2213,7 @@
       "deps": [
         "m7-test-triage"
       ],
-      "status": "in-progress",
-      "lane": 10
+      "status": "done"
     },
     {
       "id": "fix-test-terminal-dock-1028",
