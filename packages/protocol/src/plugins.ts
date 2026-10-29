@@ -14,6 +14,8 @@ export type PluginInfo = {
   id: string
   name: string
   version: string
+  /** Validated API floor; absent when the manifest could not be parsed. */
+  apiVersion?: string
   description?: string
   source: PluginSource
   dir: string
@@ -461,6 +463,8 @@ export type PluginManifest = {
   id: string
   name: string
   version: string
+  /** Minimum stable plugin API release required by every entrypoint, e.g. "1.0.0". */
+  apiVersion: string
   description?: string
   /** Relative path inside the plugin directory. */
   main?: string

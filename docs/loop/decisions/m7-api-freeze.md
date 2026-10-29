@@ -143,5 +143,16 @@
 - **Revisit if:** Linux or Windows support is validated on those platforms
 - **Source:** deferred: platform
 
+## D14: Gate each executing host before module import
+- **Question:** Spec review F1: a newer daemon could accept a floor the connected local CLI/UI does not implement.
+- **Options:** require every client release to match the daemon; gate each module using its declaring plugin's floor
+- **Chose:** propagate apiVersion through PluginInfo, CLI command entries and UI module metadata; shared compatibility helper checks the local host release before dynamic import; reject missing metadata, isolate failure
+- **Why:** independent CLI/UI contexts execute code locally, so the daemon parser cannot attest their compatibility. Per-module floors preserve compatible code across skew without unnecessarily blocking generic RPC clients.
+- **Evidence:** actual Codex spec review STATUS NEEDS_FIXES; packages/cli/src/plugin-commands.ts:74-89; packages/ui/src/plugins/host.ts:ensure/importAndActivate
+- **Reversibility:** hard
+- **Confidence:** high
+- **Revisit if:** module execution moves to another host or version domain
+- **Source:** assumed — autonomous
+
 ## Progress
-Design/specs written; source contract references surveyed. No implementation dispatched yet. Next: commit specs, run bounded Codex spec review, commit shared API signatures, then dispatch disjoint runtime, distributed-fixture, and example/docs slices. Scratch `/tmp/quirky-m7-api-freeze-lane12.AAiuFD`. Canonical queue deps attempt timed out at120s while integration was occupied; retry before landing. No human asks. Only this item may be completed this iteration.
+Specs committed at c0a9b7bd; actual Codex bounded review found F1 (accepted, amended both specs). Shared public signatures and comparator being committed before dispatch. Next: disjoint runtime, distributed-fixture and executing-host/example slices, parent-only verification and final Gemini review. Scratch `/tmp/quirky-m7-api-freeze-lane12.AAiuFD`. Canonical queue deps retry running with3600s deadline. No human asks. Only this item may be completed this iteration.

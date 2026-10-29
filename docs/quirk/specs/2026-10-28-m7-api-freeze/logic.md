@@ -3,7 +3,7 @@
 ## Status & amendments
 Approved autonomously under LOOP.md. Tech spec: requested (public contract, loader, CLI catalog, and distribution cross subsystem boundaries).
 
-**Amendments:** None.
+**Amendments:** 2026-10-28 — accepted spec-review F1: propagate each plugin's floor to independently executing UI/CLI hosts and reject locally before importing, including already-connected older clients of a newer daemon.
 
 ## Goal and scope
 Freeze the existing plugin-author contract as API **1.0.0**, require every plugin to declare the minimum stable API release it needs, refuse incompatible code before execution, and publish the existing sample distro as a documented, installable repository artifact. This item owns API freeze, not another parity sweep.
@@ -11,7 +11,7 @@ Freeze the existing plugin-author contract as API **1.0.0**, require every plugi
 Non-goals: a registry service, network publication or pushing a release, automatic updates, a new sandbox, changing feature behavior, changing the JSON-RPC handshake, adding a distro-level API requirement, or certifying all earlier parity/native scenarios. No feature docs are assigned to this item, so there are no additional Orca-defect scenarios.
 
 ## Conceptual model and data flow
-The host exposes a stable plugin API release independently of its app version, wire-protocol version, catalog schema version, and each plugin's own version. A plugin manifest declares `apiVersion`, a minimum stable release. The daemon validates it through the shared manifest parser during discovery, inspection, direct installation, and distro inspection/installation, before importing any plugin module. Supported manifests enter the existing lazy activation and contribution lifecycle unchanged. Installed code without the declaration is invalid, not silently upgraded.
+The host exposes a stable plugin API release independently of its app version, wire-protocol version, catalog schema version, and each plugin's own version. A plugin manifest declares `apiVersion`, a minimum stable release. The daemon validates it through the shared manifest parser during discovery, inspection, direct installation, and distro inspection/installation, before importing any plugin module. Supported manifests enter the existing lazy activation and contribution lifecycle unchanged. Installed code without the declaration is invalid, not silently upgraded. UI module metadata and CLI command entries carry the declaring plugin's floor; each local executing host checks against its own API release before importing. A newer daemon cannot authorize newer-context code to execute in an older UI/CLI.
 
 The sample remains `distros/sample`, a pack of one UI plugin which overrides the stock worktree sidebar and disables `quirky.git`. Installation, introspection and removal use existing public CLI/API paths. Repository publication means committed source and author-facing instructions; no remote or external registry is required or authorized.
 
@@ -50,7 +50,12 @@ Before: the checked-in `distros/sample` and a daemon with real stock built-ins i
 Walkthrough: CLI `distro inspect`, `distro install … --yes`, `ui state --json`, catalog introspection, then `distro remove sample --yes` and inspect state again.
 After install: the flat worktree sidebar is owned by sample.sidebar; source-control contribution and git CLI group are absent. After removal: the stock sidebar and source-control/git group return. The bundled UI module is usable through the existing declared UI API; existing sample UI exit coverage exercises the rendered surface.
 
+### AC2b: Version-skewed local module hosts fail closed
+Before: a 1.0.0 CLI or UI receives module metadata from a newer daemon requiring 1.1.0 (or metadata missing/malforming the floor). The module has an observable import side effect.
+Walkthrough: invoke its CLI command or mount/activate its UI contribution.
+After: the local host reports incompatibility without importing or activating the module. Supported 1.0.0 modules continue to execute. Missing metadata is not defaulted to the local/daemon release, and failures remain contained to the affected plugin/command.
 ### AC5: Clean declaration cutover
+
 Every shipped built-in and bundled example plugin declares apiVersion 1.0.0. Test plugin factories/fixtures explicitly produce current manifests while preserving raw malformed-manifest tests. Existing manifest/lifecycle/distro/CLI tests and compile-time consumers continue to work. Historical specs/decision logs remain historical records, superseded explicitly by this item rather than rewritten.
 
 ## Industry insights
