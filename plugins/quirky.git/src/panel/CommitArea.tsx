@@ -45,6 +45,8 @@ export function CommitArea({ message, onMessage, locked, primary, menu, spinner,
             rows={messageRows(message)}
             value={message}
             placeholder="Message"
+            autoCapitalize="off"
+            autoCorrect="off"
             aria-label="Commit message"
             aria-describedby={remoteError === null ? undefined : 'commit-area-remote-error'}
             disabled={locked}

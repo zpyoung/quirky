@@ -115,6 +115,13 @@ const up = (ahead: number, behind: number) => ({ hasUpstream: true, name: 'origi
 const blocked = (reason: 'lint' | 'hook', output = 'eslint found 2 problems') =>
   failure('Lint failed during commit.', { reason, summary: 'Lint failed during commit.', output })
 
+test('the commit message keeps a conventional prefix as typed', async () => {
+  const { element, unmount } = await open()
+  expect(message(element).getAttribute('autocapitalize')).toBe('off')
+  expect(message(element).getAttribute('autocorrect')).toBe('off')
+  unmount()
+})
+
 describe('NA-24: the sparkle button', () => {
   test('is absent while Source Control AI actions are off', async () => {
     const { element, unmount } = await open((f) => void (f.settings['ai-enabled'] = false))
