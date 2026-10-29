@@ -50,7 +50,7 @@ export type DialogState =
   | { kind: 'close-running'; title: string; target: CloseTarget; tabLabel: string; agent: boolean; notBefore: number }
   | { kind: 'close-pinned'; title: string; target: CloseTarget; tabLabel: string; notBefore: number }
   | { kind: 'switch-tabs'; title: string; group: string; order: string[]; index: number }
-  | { kind: 'new-session'; title: string; request: NewSessionRequest; group: string | null }
+  | { kind: 'new-session'; title: string; request: NewSessionRequest; group: string | null; pending?: boolean; error?: string | null }
 
 export type PaneDropTarget = { kind: 'edge'; pane: string; edge: Edge } | { kind: 'tab'; tab: string }
 
@@ -1209,23 +1209,34 @@ export class WorkspaceController {
     else this.set({ dialog: { kind: 'new-session', title: `New ${entry.request.label} session`, request: entry.request, group: group ?? null } })
   }
 
-  /** Starts the agent session the New Session dialog asked for, or drops the dialog when `prompt` is null. */
+  /**
+   * Starts the agent session the New Session dialog asked for, or drops the dialog when `prompt` is
+   * null. The dialog stays open with the error when the start fails, so the prompt is not lost.
+   */
   async submitNewSession(prompt: string | null): Promise<void> {
     const dialog = this.state.dialog
-    if (dialog?.kind !== 'new-session') return
-    this.set({ dialog: null })
-    if (prompt === null) return
-    const text = prompt.trim()
-    const { request, group } = dialog
-    if (request.background) {
-      try {
-        await this.context.call('quirky.structured/create', { worktree: this.workspaceId, agent: request.agent, prompt: text })
-      } catch (error) {
-        this.context.toast('Could not start session', messageOf(error))
-      }
+    if (dialog?.kind !== 'new-session' || dialog.pending) return
+    if (prompt === null) {
+      this.set({ dialog: null })
       return
     }
-    await this.newTab({ ...(group === null ? {} : { group }), agent: request.agent, ...(text === '' ? {} : { prompt: text }) })
+    const text = prompt.trim()
+    const { request, group } = dialog
+    this.set({ dialog: { ...dialog, pending: true, error: null } })
+    try {
+      if (request.background) {
+        await this.context.call('quirky.structured/create', { worktree: this.workspaceId, agent: request.agent, prompt: text })
+      } else {
+        const spec = { ...(group === null ? {} : { group }), agent: request.agent, ...(text === '' ? {} : { prompt: text }) }
+        const result = (await this.context.call(`${TERMINAL_PREFIX}newTab`, { workspace: this.workspaceId, ...spec })) as { workspace?: Workspace } | undefined
+        if (!this.stopped && result?.workspace) this.apply(result.workspace)
+      }
+      if (!this.stopped) this.set({ dialog: null })
+    } catch (error) {
+      if (this.stopped) return
+      if (hasCode(error, RpcErrorCode.Conflict)) void this.refresh()
+      this.set({ dialog: { ...dialog, pending: false, error: messageOf(error) } })
+    }
   }
 
   closeDialog(): void {

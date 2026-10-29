@@ -589,6 +589,18 @@ describe('NA-37: Customize launch', () => {
     unmount()
   })
 
+  test('a refused start keeps the dialog open and shows why', async () => {
+    const { unmount } = await openLaunch((f) =>
+      f.on('quirky.git/aiFix', () => {
+        throw failure('quirky.agents/plan failed: ENOENT', { reason: 'internal' })
+      })
+    )
+    await click(buttonText(dialog()!, 'Start agent'))
+    expect(dialog()).not.toBeNull()
+    expect(dialog()!.querySelector('[role="alert"]')?.textContent).toContain('quirky.agents/plan failed: ENOENT')
+    unmount()
+  })
+
   test('with "All repositories" the save goes to the global scope', async () => {
     const { fake, unmount } = await openLaunch()
     await type(field('CLI arguments'), '--fast')
