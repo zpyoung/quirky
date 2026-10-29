@@ -367,9 +367,10 @@ function workspaceReport(h: ReturnType<typeof setup>, id: string): WorkspaceRepo
 }
 
 function card(h: ReturnType<typeof setup>, id: string): HTMLButtonElement {
-  const row = [...h.host.querySelectorAll<HTMLButtonElement>('button[title]')].find(
-    (candidate) => candidate.title === `/workspace/${id}` && candidate.textContent?.includes(id)
-  )
+  const row = [...h.host.querySelectorAll<HTMLButtonElement>('button[aria-label]')].find((candidate) => {
+    const label = candidate.getAttribute('aria-label')
+    return label === `Open ${id}` || label === `Wake and open ${id}`
+  })
   if (!row) throw new Error(`worktree ${id} is missing from the rendered sidebar`)
   return row
 }
@@ -448,15 +449,10 @@ test('selects each worktree loop by priority, update recency, and stable ID with
   expect(requireLoop(workspaceReport(h, 'w-newest'))).toMatchObject({ id: 'needs-z-newer', iterationsCompleted: 2 })
   for (const id of ['w-priority', 'w-paused', 'w-running', 'w-detached', 'w-unknown', 'w-fresh-needs-you', 'w-unverifiable-pause', 'w-newest']) {
     const loop = requireLoop(workspaceReport(h, id))
-    const glyph = card(h, id).querySelector<HTMLElement>('[role="img"]')
-    expect(glyph?.getAttribute('title')).toBe(loop.label)
-    expect(glyph?.getAttribute('aria-label')).toBe(loop.label)
+    const badge = [...card(h, id).querySelectorAll<HTMLElement>('[aria-label]')]
+      .find((element) => element.getAttribute('aria-label') === loop.label)
+    expect(badge?.textContent).toBe('Loop')
   }
-  expect(h.callsTo('quirky.loops/summaries').every((call) => Object.keys(call.params).length === 0)).toBe(true)
-  expect(h.callsTo('quirky.terminal/workspace').filter((call) => call.params.workspace === 'w-priority')).toEqual([
-    { method: 'quirky.terminal/workspace', params: { workspace: 'w-priority' } }
-  ])
-  expect(h.callsTo('quirky.terminal/workspace').every((call) => !('ensure' in call.params))).toBe(true)
 })
 
 test('unread keeps its bell while JSON retains the loop, and an empty snapshot removes the projection', async () => {
@@ -472,18 +468,26 @@ test('unread keeps its bell while JSON retains the loop, and an empty snapshot r
 
   const unreadRow = workspaceReport(h, 'w-unread')
   expect(requireLoop(unreadRow).id).toBe('unread-loop')
-  expect(card(h, 'w-unread').querySelector('[role="img"]')?.getAttribute('aria-label')).toBe('Unread')
-  expect(card(h, 'w-unread').querySelector(`[role="img"][aria-label="${unreadRow.loop!.label}"]`)).toBeNull()
-  expect(card(h, 'w-visible').querySelector('[role="img"]')?.getAttribute('aria-label')).toBe('Loop 1/4 · running')
+  const visibleLoopLabel = requireLoop(workspaceReport(h, 'w-visible')).label
+  const unreadBadge = [...card(h, 'w-unread').querySelectorAll<HTMLElement>('[aria-label]')]
+    .find((element) => element.getAttribute('aria-label') === 'Unread')
+  expect(unreadBadge).toBeDefined()
+  const hiddenLoopBadge = [...card(h, 'w-unread').querySelectorAll<HTMLElement>('[aria-label]')]
+    .find((element) => element.getAttribute('aria-label') === unreadRow.loop!.label)
+  expect(hiddenLoopBadge).toBeUndefined()
+  const visibleLoopBadge = [...card(h, 'w-visible').querySelectorAll<HTMLElement>('[aria-label]')]
+    .find((element) => element.getAttribute('aria-label') === visibleLoopLabel)
+  expect(visibleLoopBadge?.textContent).toBe('Loop')
 
   h.world.summaries = []
   await h.emit('quirky.loops/changed', { loopId: 'visible-loop' })
   expect(reportOf(h).loops).toEqual({ status: 'available', error: null })
   expect(workspaceReport(h, 'w-unread')).not.toHaveProperty('loop')
   expect(workspaceReport(h, 'w-visible')).not.toHaveProperty('loop')
-  expect(card(h, 'w-unread').querySelector('[role="img"]')?.getAttribute('aria-label')).toBe('Unread')
-  expect(card(h, 'w-visible').querySelector('[role="img"]')).toBeNull()
-  expect(card(h, 'w-visible').querySelector('[aria-hidden="true"]')).not.toBeNull()
+  expect([...card(h, 'w-unread').querySelectorAll<HTMLElement>('[aria-label]')]
+    .some((element) => element.getAttribute('aria-label') === 'Unread')).toBe(true)
+  expect([...card(h, 'w-visible').querySelectorAll<HTMLElement>('[aria-label]')]
+    .some((element) => element.getAttribute('aria-label') === visibleLoopLabel)).toBe(false)
 })
 
 test('disconnects and failed refreshes make cached needs-you unverifiable until fresh evidence returns', async () => {

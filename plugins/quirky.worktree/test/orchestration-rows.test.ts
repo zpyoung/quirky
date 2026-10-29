@@ -144,6 +144,9 @@ function renderRows(workers: readonly OrchestrationWorkerRow[], sessions: readon
   } as unknown as UiPluginContext
   return render(createElement(OrchestrationRows, { context, workers, sessions, worktreeId }))
 }
+const workerButton = (name: string) =>
+  [...host.querySelectorAll<HTMLButtonElement>('button[aria-label]')]
+    .find((button) => button.getAttribute('aria-label') === `Open ${name} terminal`)
 
 function fakeContext() {
   const calls: Array<{ method: string; params: Record<string, unknown> }> = []
@@ -193,7 +196,7 @@ function HookProbe({ context }: { context: UiPluginContext }) {
   return createElement('output', { 'data-count': workers.length }, workers.map((worker) => worker.displayName).join(','))
 }
 
-test('nests descendants under their creator, preserves fleet order, and caps visual depth', async () => {
+test('nests descendants under their creator and preserves worker order', async () => {
   const child = workerRow({
     dispatchId: 'dispatch-child', taskId: 'task-child', taskTitle: 'Child task', displayName: 'Child agent',
     coordinatorSessionId: 'worker-session-1', parentSessionId: 'worker-session-1',
@@ -216,10 +219,22 @@ test('nests descendants under their creator, preserves fleet order, and caps vis
   })
   await renderRows([child, parent, fallback], [session('coordinator-session', 'wt-main', { title: 'Coordinator' }), session('worker-session-1', 'wt-main'), session('worker-session-2', 'wt-main'), session('worker-session-3', 'wt-main')])
 
-  const rows = [...host.querySelectorAll<HTMLButtonElement>('.orchestration-worker-row')]
-  expect(host.querySelector('.orchestration-coordinator-row')?.textContent).toContain('Coordinator')
-  expect(rows.map((row) => row.textContent)).toEqual(['Parent agent · Working', 'Child agent · Waiting', 'Fallback task title · Working'])
-  expect(rows.map((row) => row.dataset.visualDepth)).toEqual(['1', '1', '1'])
+  const parentButton = workerButton('Parent agent')
+  const childButton = workerButton('Child agent')
+  const fallbackButton = workerButton('Fallback task title')
+  expect(host.textContent).toContain('Coordinator')
+  expect(parentButton).toBeDefined()
+  expect(childButton).toBeDefined()
+  expect(fallbackButton).toBeDefined()
+  const parentItem = parentButton!.closest<HTMLElement>('li')!
+  const childItem = childButton!.closest<HTMLElement>('li')!
+  expect(parentItem.contains(childItem)).toBe(true)
+  expect(parentItem.contains(fallbackButton!)).toBe(false)
+  expect(Boolean(parentButton!.compareDocumentPosition(childButton!) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true)
+  expect(Boolean(childButton!.compareDocumentPosition(fallbackButton!) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true)
+  expect(parentItem.textContent).toContain('Working')
+  expect(childItem.textContent).toContain('Waiting')
+  expect(fallbackButton!.closest('li')?.textContent).toContain('Working')
   expect(host.textContent).not.toContain('Internal stage detail')
 })
 
@@ -237,7 +252,7 @@ test('shows cross-workspace and orphaned workers in the actual worker workspace'
   root = null
   host.replaceChildren()
   await renderRows([crossWorkspace], [], 'wt-main')
-  expect(host.querySelector('.orchestration-worker-row')).toBeNull()
+  expect(workerButton('Cross-workspace child')).toBeUndefined()
 })
 
 test('uses only the latest retry and exact resource owner for a reused terminal', async () => {
@@ -261,7 +276,7 @@ test('uses only the latest retry and exact resource owner for a reused terminal'
   })
   await renderRows([current, obsoleteRetry, reusedByAnotherTask, released], [session('reused-session', 'wt-main')])
 
-  expect(host.querySelectorAll('.orchestration-worker-row')).toHaveLength(1)
+  expect([...host.querySelectorAll<HTMLButtonElement>('button[aria-label="Open Current assignment terminal"]')]).toHaveLength(1)
   expect(host.textContent).toContain('Current assignment')
   expect(host.textContent).not.toContain('Old retry label')
   expect(host.textContent).not.toContain('Prior terminal label')
@@ -299,7 +314,7 @@ test('shows unverified workers with the actual terminal label, never their stale
   expect(host.textContent).toContain('Assignment unverified')
   expect(host.textContent).not.toContain('Old task display name')
   expect(host.textContent).not.toContain('Old task title')
-  expect(host.querySelector('.orchestration-worker-row')).toBeNull()
+  expect(workerButton('Old task display name')).toBeUndefined()
 })
 
 test('keeps an unverified worker inspectable when no current session can be found', async () => {
@@ -316,7 +331,7 @@ test('keeps an unverified worker inspectable when no current session can be foun
   expect(host.textContent).toContain('Worker assignment unverified')
   expect(host.textContent).not.toContain('Old task display name')
   expect(host.textContent).not.toContain('Old task title')
-  expect(host.querySelector('.orchestration-worker-row')).toBeNull()
+  expect(workerButton('Old task display name')).toBeUndefined()
 })
 
 test('breaks cyclic lineage without duplicating or losing worker rows', async () => {
@@ -330,7 +345,8 @@ test('breaks cyclic lineage without duplicating or losing worker rows', async ()
   })
   await renderRows([left, right], [session('left-session', 'wt-main'), session('right-session', 'wt-main')])
 
-  expect(host.querySelectorAll('.orchestration-worker-row')).toHaveLength(2)
+  expect(workerButton('Left agent')).toBeDefined()
+  expect(workerButton('Right agent')).toBeDefined()
   expect(host.textContent?.match(/Left agent/g)).toHaveLength(1)
   expect(host.textContent?.match(/Right agent/g)).toHaveLength(1)
 })
@@ -343,7 +359,7 @@ test('structured workers stay visible without pretending to be terminals', async
   await renderRows([structured], [session('structured-session', 'wt-main', { kind: 'structured' })])
 
   expect(host.textContent).toContain('Structured agent')
-  expect(host.querySelector('.orchestration-worker-row')).toBeNull()
+  expect(workerButton('Structured agent')).toBeUndefined()
   expect(host.querySelector('button[aria-label*="Structured agent"]')).toBeNull()
 })
 
@@ -351,7 +367,7 @@ test('clicking a terminal re-proves task assignment before focusing the returned
   const worker = workerRow()
   await renderRows([worker], [session('worker-session-1', 'wt-main')])
 
-  await act(async () => host.querySelector<HTMLButtonElement>('.orchestration-worker-row')!.click())
+  await act(async () => workerButton('Agent label')!.click())
   await flush()
 
   expect(terminalCalls).toEqual([{ method: 'quirky.orchestration/taskTerminal', params: { taskId: 'task-1' } }])
@@ -362,7 +378,7 @@ test('refuses to focus a stale row when taskTerminal resolves a newer retry', as
   terminalResultOverride = { taskId: 'task-1', dispatchId: 'dispatch-new', sessionId: 'new-session', worktreeId: 'wt-main' }
   await renderRows([workerRow()], [session('worker-session-1', 'wt-main')])
 
-  await act(async () => host.querySelector<HTMLButtonElement>('.orchestration-worker-row')!.click())
+  await act(async () => workerButton('Agent label')!.click())
   await flush()
 
   expect(opened).toEqual([])

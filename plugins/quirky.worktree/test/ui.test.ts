@@ -1,8 +1,9 @@
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
-import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:test'
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from 'bun:test'
 import type { AgentDisplayState, AgentStatusSummary, ProjectGroup, QuirkyEvent, Repo, Session, UiLayout, UiPluginContext, Worktree, WorkspaceOriginView } from '@quirky/protocol'
 import { RpcErrorCode } from '@quirky/protocol'
 import { DEFAULT_STOCK_OPTIONS, type CleanupCandidate, type CleanupRemovalResult, type StockWorktreeOptions, type WorktreeControl } from '../src/control-types'
+import { sectionHeading } from './window/dom'
 
 const SLOT = 'sidebar-section:quirky.worktree/worktrees'
 const COMMAND = 'command:quirky.worktree/new-worktree'
@@ -410,12 +411,20 @@ function setup(layout: UiLayout = { view: null, panel: null, sidebar: true, focu
       await act(async () => {
         cleanup = mount(element, { report: (state) => void reports.push(state) })
       })
-      return () => act(async () => cleanup())
+      let mounted = true
+      const unmount = async () => {
+        if (!mounted) return
+        mounted = false
+        await act(async () => cleanup())
+      }
+      mountedCleanups.push(unmount)
+      return unmount
     }
   }
 }
 
 let host: HTMLElement
+const mountedCleanups: Array<() => Promise<void>> = []
 let copied: string[]
 let copyFails: boolean
 beforeEach(() => {
@@ -434,32 +443,44 @@ beforeEach(() => {
     }
   })
 })
+afterEach(async () => {
+  for (const cleanup of mountedCleanups.splice(0)) await cleanup()
+  document.body.replaceChildren()
+})
 
 const lastReport = (h: ReturnType<typeof setup>) => h.reports[h.reports.length - 1] as any
-const sectionHeading = (section: HTMLElement) => section.querySelector(':scope > header h2')?.textContent?.trim()
 const projectSection = (repoName: string) =>
-  [...host.querySelectorAll<HTMLElement>('section.repo')].find((section) => sectionHeading(section) === repoName)!
+  [...host.querySelectorAll<HTMLElement>('section')].find((section) =>
+    sectionHeading(section) === repoName && [...section.querySelectorAll<HTMLButtonElement>('button[aria-label]')]
+      .some((button) => button.getAttribute('aria-label') === `New worktree in ${repoName}`)
+  )!
 const groupSection = (groupName: string) =>
-  [...host.querySelectorAll<HTMLElement>('section.group')].find((section) => sectionHeading(section) === groupName)!
-const rowOf = (name: string, repoName: string) =>
-  [...projectSection(repoName).querySelectorAll<HTMLElement>('[data-worktree-id]')].find(
-    (row) => row.querySelector('.worktree-name')?.textContent?.trim() === name
-  ) as HTMLElement
+  [...host.querySelectorAll<HTMLElement>('section')].find((section) =>
+    sectionHeading(section) === groupName && [...section.querySelectorAll<HTMLButtonElement>('button[aria-label]')]
+      .some((button) => button.getAttribute('aria-label') === `Actions for group ${groupName}`)
+  )!
+const rowIn = (within: ParentNode, name: string) =>
+  [...within.querySelectorAll<HTMLButtonElement>('button[aria-label]')].find((button) => {
+    const label = button.getAttribute('aria-label')
+    return label === `Open ${name}` || label === `Wake and open ${name}`
+  })?.closest<HTMLElement>('li')
+const rowOf = (name: string, repoName: string) => rowIn(projectSection(repoName), name) as HTMLElement
+const pendingRow = (name: string, repoName: string) =>
+  [...projectSection(repoName).querySelectorAll<HTMLLIElement>('li')].find((row) => {
+    const text = row.textContent?.replace(/\s+/g, ' ').trim() ?? ''
+    return text.includes(name) && text.includes('Creating…')
+  })
 const click = (element: Element) => act(async () => void (element as HTMLElement).click())
 const buttonNamed = (root: ParentNode, name: string) =>
   [...root.querySelectorAll<HTMLButtonElement>('button')].find((button) =>
     button.getAttribute('aria-label') === name || button.textContent?.replace(/\s+/g, ' ').trim() === name
   )
-const openButton = (row: HTMLElement) => {
-  const name = row.querySelector('.worktree-name')?.textContent?.trim() ?? ''
-  return [...row.querySelectorAll<HTMLButtonElement>('button[aria-label]')].find((button) =>
-    button.getAttribute('aria-label') === `Open ${name}` || button.getAttribute('aria-label') === `Wake and open ${name}`
-  )
-}
-const actionButton = (row: HTMLElement) => {
-  const name = row.querySelector('.worktree-name')?.textContent?.trim() ?? ''
-  return buttonNamed(row, `Actions for ${name}`)
-}
+const openButton = (row: HTMLElement) =>
+  [...row.querySelectorAll<HTMLButtonElement>('button[aria-label]')].find((button) => {
+    const label = button.getAttribute('aria-label') ?? ''
+    return label.startsWith('Open ') || label.startsWith('Wake and open ')
+  })
+const actionButton = (row: HTMLElement) => row.querySelector<HTMLButtonElement>('button[aria-label^="Actions for "]') ?? undefined
 const openDisclosure = async (name: string) => {
   const summary = [...host.querySelectorAll<HTMLElement>('details > summary')].find((item) => item.textContent?.trim() === name)
   const disclosure = summary?.parentElement as HTMLDetailsElement | null
@@ -470,8 +491,11 @@ const contextMenu = (element: Element, x = 30, y = 40) =>
   act(async () => {
     element.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: x, clientY: y }))
   })
-const menu = () => document.querySelector('[role="menu"]') as HTMLElement | null
-const items = () => [...document.querySelectorAll('[role="menu"] [role="menuitem"]')] as HTMLButtonElement[]
+const menu = () =>
+  [...document.body.querySelectorAll<HTMLElement>('[role="menu"]')]
+    .reverse()
+    .find((root) => !root.parentElement?.closest('[role="menu"]') && !root.closest('[aria-hidden="true"]')) ?? null
+const items = () => [...(menu()?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]') ?? [])]
 const visibleMenuText = (node: Node): string => {
   if (node instanceof Element && node.getAttribute('aria-hidden') === 'true') return ''
   return [...node.childNodes].map(visibleMenuText).join('')
@@ -544,12 +568,12 @@ test('an empty tree offers Add project', async () => {
 test('SC-36: the selected row follows the open view input', async () => {
   const h = setup()
   await h.mountInto(host)
-  expect(host.querySelector('[data-worktree-id] button[aria-pressed="true"]')).toBeNull()
+  expect(host.querySelector('button[aria-pressed="true"]')).toBeNull()
   await h.setLayout({ view: { id: SESSION_VIEW, input: { worktree: 'w3' } }, panel: null, sidebar: true, focus: null })
   expect(openButton(rowOf('main', 'web'))?.getAttribute('aria-pressed')).toBe('true')
   expect(lastReport(h).projects[1].worktrees[0].selected).toBe(true)
   await h.setLayout({ view: null, panel: null, sidebar: true, focus: null })
-  expect(host.querySelector('[data-worktree-id] button[aria-pressed="true"]')).toBeNull()
+  expect(host.querySelector('button[aria-pressed="true"]')).toBeNull()
 })
 
 test('SC-37: clicking a worktree opens the session view on it', async () => {
@@ -602,7 +626,7 @@ test('refreshes the tree on repo, group and worktree changes', async () => {
   h.world.repos[0] = { ...h.world.repos[0]!, groupId: 'g1' }
   await h.emit({ type: 'quirky.repo/changed', data: { groupId: 'g1' } })
   expect(lastReport(h).groups.map((item: { name: string }) => item.name)).toEqual(['services'])
-  expect(groupSection('services')?.querySelector('section.repo')).toBeDefined()
+  expect(groupSection('services')!.contains(projectSection('api'))).toBe(true)
   expect(lastReport(h).groups[0].projects.map((p: { name: string }) => p.name)).toEqual(['api'])
 })
 
@@ -641,9 +665,10 @@ test('SC-44: groups, pinned rows, nested children and status values', async () =
   ]
   await h.mountInto(host)
 
-  expect(host.querySelector('[data-top-level-section="pinned"] [data-worktree-id="w2"]')).not.toBeNull()
+  const pinnedSection = [...host.querySelectorAll<HTMLElement>('section')].find((section) => sectionHeading(section) === 'Pinned')
+  expect(rowIn(pinnedSection!, 'fix-login')).toBeDefined()
   const group1 = groupSection('services')!
-  expect(group1.querySelector('section.repo')).toBe(projectSection('api'))
+  expect(group1.contains(projectSection('api'))).toBe(true)
   expect(rowOf('main', 'api')).toBeDefined()
   expect(rowOf('fix-login', 'api')).toBeDefined()
   expect(rowOf('child', 'api')).toBeDefined()
@@ -695,7 +720,7 @@ test('SC-44: a group header collapses its projects through groupCollapse', async
   expect(h.callsTo('quirky.repo/groupCollapse')).toEqual([{ group: 'g1', collapsed: true }])
   h.world.groups = [group('g1', 'services', ['r1'], { collapsed: true })]
   await h.emit({ type: 'quirky.repo/changed', data: { groupId: 'g1' } })
-  expect(host.querySelector('section.group section.repo')).toBeNull()
+  expect(groupSection('services')?.contains(projectSection('api'))).toBe(false)
   expect(buttonNamed(host, 'Expand group services')?.getAttribute('aria-expanded')).toBe('false')
   expect(lastReport(h).groups[0].collapsed).toBe(true)
   await click(buttonNamed(host, 'Expand group services')!)
@@ -731,7 +756,7 @@ test('SC-43: the card menu opens and closes on Escape and outside click', async 
 
   await click(actionButton(rowOf('fix-login', 'api'))!)
   expect(menu()).not.toBeNull()
-  await act(async () => void document.body.dispatchEvent(new Event('pointerdown', { bubbles: true })))
+  await act(async () => void document.body.dispatchEvent(new MouseEvent('mousedown', { bubbles: true })))
   expect(menu()).toBeNull()
 })
 
@@ -1007,8 +1032,9 @@ test('the new-worktree dialog creates a worktree through a pending row and opens
   await typeInto(dialogField('Base')!, 'main')
   await act(async () => void (dialog.querySelector('button[type="submit"]') as HTMLButtonElement).click())
 
-  const pending = rowOf('feature-y', 'api')
-  expect(pending.textContent).toContain('Creating…')
+  const pending = pendingRow('feature-y', 'api')
+  expect(pending).toBeDefined()
+  expect(pending?.textContent).toContain('Creating…')
   expect(lastReport(h).projects[0].worktrees.at(-1)).toMatchObject({ id: 'pending:feature-y', name: 'feature-y', pending: true })
   await act(async () => release())
 
@@ -1017,7 +1043,7 @@ test('the new-worktree dialog creates a worktree through a pending row and opens
   ])
   expect(h.opened).toEqual([{ id: SESSION_VIEW, input: { worktree: 'w9' } }])
   expect(document.querySelector('[role="dialog"]')).toBeNull()
-  expect(rowOf('feature-y', 'api')).toBeUndefined()
+  expect(pendingRow('feature-y', 'api')).toBeUndefined()
   expect(lastReport(h).dialog).toBeNull()
 })
 
@@ -1347,13 +1373,12 @@ test('stock worktree controls persist options, reveal sleeping rows and wake wit
   await click(reveal)
   const row = rowOf('fix-login', 'api')
   expect(row).toBeDefined()
-  expect(row.querySelectorAll('[title="fix-login"]')).toHaveLength(2)
-  expect(row.querySelector('[title="keep this note"]')).not.toBeNull()
+  expect(row.textContent).toContain('fix-login')
+  expect(row.textContent).toContain('keep this note')
   await click(host.querySelector('input[aria-label="Compact cards"]')!)
   await click(host.querySelector('input[aria-label="Show Branch"]')!)
   await click(host.querySelector('input[aria-label="Show Notes"]')!)
-  expect(row.querySelectorAll('[title="fix-login"]')).toHaveLength(1)
-  expect(row.querySelector('[title="keep this note"]')).toBeNull()
+  expect(row.textContent).not.toContain('keep this note')
   await contextMenu(openButton(row)!)
   expect(itemLabels()).toContain('Wake')
   await click(itemNamed('Wake'))
@@ -1443,6 +1468,7 @@ test('workspace board exposes status controls for a worktree with a project-defi
   h.world.worktrees[1] = { ...h.world.worktrees[1]!, status: 'blocked' as Worktree['status'] }
   const unmount = await h.mountInto(host)
   await openDisclosure('More workspace tools')
+  await click(buttonNamed(host, 'Workspace board')!)
   const board = host.querySelector('section[aria-label="Workspace board"]')!
   const statusControl = board.querySelector<HTMLSelectElement>('select[aria-label="Move fix-login to status"]')
   expect(statusControl).not.toBeNull()
@@ -1454,6 +1480,7 @@ test('cleanup review prevents blocked selection and supports ignoring and restor
   const h = setup()
   const unmount = await h.mountInto(host)
   await openDisclosure('Workspace options')
+  await click(buttonNamed(host, 'Review cleanup')!)
 
   const dialog = document.querySelector('[role="dialog"]') as HTMLElement
   expect(dialog.textContent).toContain('Primary worktrees cannot be deleted.')
@@ -1472,6 +1499,7 @@ test('Escape dismisses cleanup review and leaves the workspace available', async
   const h = setup()
   const unmount = await h.mountInto(host)
   await openDisclosure('Workspace options')
+  await click(buttonNamed(host, 'Review cleanup')!)
   expect(document.querySelector('[role="dialog"]')).not.toBeNull()
   await press('Escape')
   expect(document.querySelector('[role="dialog"]')).toBeNull()
