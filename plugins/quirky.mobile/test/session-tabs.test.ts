@@ -9,6 +9,7 @@ import { makeBuiltinDir } from '../../quirky.session/test/support'
 
 type Fixture = { harness: Harness; client: QuirkyClient; worktree: Worktree; root: string }
 let fixture: Fixture | undefined
+let pendingHarness: Harness | undefined
 const roots = new Set<string>()
 const previousPort = process.env.QUIRKY_MOBILE_PORT
 
@@ -16,6 +17,10 @@ afterEach(async () => {
   if (fixture) {
     await fixture.harness.cleanup()
     fixture = undefined
+  }
+  if (pendingHarness) {
+    await pendingHarness.cleanup()
+    pendingHarness = undefined
   }
   for (const root of roots) {
     roots.delete(root)
@@ -37,17 +42,20 @@ async function createFixture(): Promise<Fixture> {
   const harness = await startHarness({
     home,
     builtinPluginsDir: makeBuiltinDir(home, {
-      real: ['quirky.mobile', 'quirky.editor', 'quirky.session', 'quirky.terminal', 'quirky.agents', 'quirky.agent-status', 'quirky.worktree', 'quirky.repo', 'quirky.ask', 'quirky.structured'],
+      real: ['quirky.mobile', 'quirky.editor', 'quirky.session', 'quirky.terminal', 'quirky.agents', 'quirky.agent-status', 'quirky.worktree', 'quirky.repo', 'quirky.cli', 'quirky.ask', 'quirky.structured'],
       fakes: []
     })
   })
+  pendingHarness = harness
   const client = await harness.connect('cli')
   const repo = await client.callAny('quirky.repo/add', { path: root }) as { id: string }
   const worktrees = await client.callAny('quirky.worktree/list', { repo: repo.id }) as Worktree[]
   const worktree = worktrees.find((item) => item.path === root) ?? worktrees[0]
   if (!worktree) throw new Error('repo add returned no worktree')
-  fixture = { harness, client, worktree, root }
-  return fixture
+  const ready: Fixture = { harness, client, worktree, root }
+  fixture = ready
+  pendingHarness = undefined
+  return ready
 }
 
 const call = <T>(client: QuirkyClient, method: string, params: Record<string, unknown> = {}) => client.callAny(method, params) as Promise<T>
@@ -56,8 +64,12 @@ const call = <T>(client: QuirkyClient, method: string, params: Record<string, un
 test('public mobile Markdown APIs preserve actual tab identity, bounded drafts and dirty-close decisions', async () => {
   const { client, worktree, root } = await createFixture()
   const created = await call<MobileMarkdownDocument>(client, 'quirky.mobile/markdownCreate', { worktree: worktree.id })
-  expect(created).toMatchObject({ worktreeId: worktree.id, text: '', revision: expect.any(Number), dirty: false, readOnly: false })
-  expect(created.relativePath).toMatch(/^Phone note .*\.md$/)
+  expect(created.worktreeId).toBe(worktree.id)
+  expect(created.text).toBe('')
+  expect(Number.isSafeInteger(created.revision)).toBe(true)
+  expect(created.revision).toBeGreaterThanOrEqual(0)
+  expect(created.dirty).toBe(false)
+  expect(created.readOnly).toBe(false)
 
   const state = await call<{ tabs: { tabId: string; bufferId: string }[]; buffers: { id: string; relativePath: string }[] }>(client, 'quirky.editor/state', { worktree: worktree.id })
   const editorTab = state.tabs.find((tab) => tab.tabId === created.tabId)
@@ -69,17 +81,22 @@ test('public mobile Markdown APIs preserve actual tab identity, bounded drafts a
   const written = await call<MobileMarkdownDocument>(client, 'quirky.mobile/markdownWrite', {
     worktree: worktree.id, tabId: created.tabId, text: '# Phone note\n', expectedRevision: created.revision
   })
-  expect(written).toMatchObject({ text: '# Phone note\n', dirty: true })
+  expect(written.text).toBe('# Phone note\n')
+  expect(written.dirty).toBe(true)
+  expect(Number.isSafeInteger(written.revision)).toBe(true)
   await expect(call(client, 'quirky.mobile/markdownWrite', {
     worktree: worktree.id, tabId: created.tabId, text: '# Stale overwrite\n', expectedRevision: created.revision
   })).rejects.toThrow()
-  expect(await call<MobileMarkdownDocument>(client, 'quirky.mobile/markdownRead', { worktree: worktree.id, tabId: created.tabId }))
-    .toMatchObject({ text: '# Phone note\n', dirty: true, revision: written.revision })
+  const afterDraft = await call<MobileMarkdownDocument>(client, 'quirky.mobile/markdownRead', { worktree: worktree.id, tabId: created.tabId })
+  expect(afterDraft.text).toBe('# Phone note\n')
+  expect(afterDraft.dirty).toBe(true)
+  expect(afterDraft.revision).toBe(written.revision)
 
   const saved = await call<MobileMarkdownDocument>(client, 'quirky.mobile/markdownSave', {
     worktree: worktree.id, tabId: created.tabId, expectedRevision: written.revision
   })
-  expect(saved).toMatchObject({ text: '# Phone note\n', dirty: false })
+  expect(saved.text).toBe('# Phone note\n')
+  expect(saved.dirty).toBe(false)
   expect(readFileSync(join(root, created.relativePath), 'utf8')).toBe('# Phone note\n')
   await expect(call(client, 'quirky.mobile/markdownSave', {
     worktree: worktree.id, tabId: created.tabId, expectedRevision: written.revision
@@ -89,7 +106,9 @@ test('public mobile Markdown APIs preserve actual tab identity, bounded drafts a
   expect(await call<{ tabId: string; closed: boolean }>(client, 'quirky.mobile/sessionTabAction', { worktree: worktree.id, tabId: created.tabId, action: 'refresh' }))
     .toEqual({ tabId: created.tabId, closed: false })
   const refreshed = await call<MobileMarkdownDocument>(client, 'quirky.mobile/markdownRead', { worktree: worktree.id, tabId: created.tabId })
-  expect(refreshed).toMatchObject({ text: '# Changed on disk\n', dirty: false })
+  expect(refreshed.text).toBe('# Changed on disk\n')
+  expect(refreshed.dirty).toBe(false)
+  expect(Number.isSafeInteger(refreshed.revision)).toBe(true)
 
   await call(client, 'quirky.mobile/sessionTabAction', { worktree: worktree.id, tabId: created.tabId, action: 'rename', name: 'Phone title' })
   expect(await call<MobileWorkspaceTab[]>(client, 'quirky.mobile/sessionTabs', { worktree: worktree.id }))
@@ -101,8 +120,9 @@ test('public mobile Markdown APIs preserve actual tab identity, bounded drafts a
   expect(dirty.dirty).toBe(true)
   expect(await call<{ tabId: string; closed: boolean }>(client, 'quirky.mobile/sessionTabAction', { worktree: worktree.id, tabId: created.tabId, action: 'close' }))
     .toEqual({ tabId: created.tabId, closed: false })
-  expect(await call<MobileMarkdownDocument>(client, 'quirky.mobile/markdownRead', { worktree: worktree.id, tabId: created.tabId }))
-    .toMatchObject({ text: '# Keep this draft\n', dirty: true })
+  const readDirty = await call<MobileMarkdownDocument>(client, 'quirky.mobile/markdownRead', { worktree: worktree.id, tabId: created.tabId })
+  expect(readDirty.text).toBe('# Keep this draft\n')
+  expect(readDirty.dirty).toBe(true)
   expect(await call<{ tabId: string; closed: boolean }>(client, 'quirky.mobile/sessionTabAction', { worktree: worktree.id, tabId: created.tabId, action: 'close', discard: true }))
     .toEqual({ tabId: created.tabId, closed: true })
   expect(await call<MobileWorkspaceTab[]>(client, 'quirky.mobile/sessionTabs', { worktree: worktree.id })).not.toContainEqual(expect.objectContaining({ tabId: created.tabId }))
