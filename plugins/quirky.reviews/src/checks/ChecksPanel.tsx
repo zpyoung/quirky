@@ -1019,6 +1019,11 @@ export function ChecksPanel(props: ReviewsSurfaceProps) {
 
   useEffect(() => () => dragCleanup.current?.(), [])
 
+  const actionItems = useMemo(() => [
+    { id: 'unlink', label: 'Unlink PR from workspace', onAction: () => { void runReviewMethod('checksUnlink', { worktree: activeWorktree }) } },
+    { id: 'link-another', label: 'Link another PR', onAction: () => setLinkOpen(true) },
+  ], [activeWorktree, runReviewMethod])
+
   if (!activeWorktree) {
     return <section className="ui-stack">
       <SectionHeader title="No workspace selected" />
@@ -1111,11 +1116,6 @@ export function ChecksPanel(props: ReviewsSurfaceProps) {
   const hostConflict = currentReview.mergeable === 'CONFLICTING' || currentReview.mergeStateStatus === 'DIRTY'
   const queuedCount = active.queuedComments.length
   const contentHeight = dragHeight ?? active.height
-
-  const actionItems = useMemo(() => [
-    { id: 'unlink', label: 'Unlink PR from workspace', onAction: () => { void runReviewMethod('checksUnlink', { worktree: activeWorktree }) } },
-    { id: 'link-another', label: 'Link another PR', onAction: () => setLinkOpen(true) },
-  ], [activeWorktree, runReviewMethod])
 
   return (
     <section className="ui-stack" style={{ display: 'flex', flexDirection: 'column', minHeight: 0, maxHeight: '100%', overflow: 'hidden' }}>
