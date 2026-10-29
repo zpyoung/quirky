@@ -25,3 +25,7 @@ Combined-diff navigation and Git open commands use the same hosted-tab route. Op
 Plugin integrations split a tab through `quirky.terminal/moveTab` with `tab`, `split`, `of`, and the acknowledged `revision`; the tab determines its workspace, so this method does not accept a `workspace` field.
 
 Explicit standalone diffs opened through `ui.view.open` publish a top-level slot report. Embedded hosted views intentionally have no separate slot report; their tab identity and placement are available through `quirky.terminal/workspace`.
+
+## Review notes
+
+Choose “Add Review Note to Diff” in the command palette to open a note for selected text in an open diff. The editor's “Add Review Note” command targets a Markdown selection instead.

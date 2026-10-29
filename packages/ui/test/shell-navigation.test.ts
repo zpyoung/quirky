@@ -46,6 +46,14 @@ function navigationBuiltinPlugins(): string {
   return builtins
 }
 
+function reviewNoteBuiltinPlugins(): string {
+  const builtins = makeTempDir('ui-shell-review-note-builtins-')
+  for (const id of ['quirky.repo', 'quirky.cli', 'quirky.worktree', 'quirky.agents', 'quirky.session', 'quirky.terminal', 'quirky.editor', 'quirky.git']) {
+    symlinkSync(resolve(import.meta.dir, '../../../plugins', id), join(builtins, id))
+  }
+  return builtins
+}
+
 afterEach(closeWindows)
 
 const text = (env: WindowEnv) => env.win.document.body.textContent ?? ''
@@ -148,4 +156,27 @@ test('an active contributed Mod+K binding keeps priority over the search fallbac
   await env.win.waitFor(() => env.win.host.getState().layout.view?.id === SECONDARY)
   expect(env.win.host.getState().layout.view?.input).toEqual({ source: 'palette' })
   expect(env.win.host.getState().layout.palette).not.toBe(true)
+})
+
+test('the palette keeps Markdown and diff review notes distinct and searchable', async () => {
+  const env = await bootWindow(() => {}, { builtinPluginsDir: reviewNoteBuiltinPlugins() })
+  const input = await openPalette(env)
+  const options = () => [...env.win.document.querySelectorAll<HTMLElement>('[role="option"]')]
+  const reviewChoices = () => options().filter((option) =>
+    option.querySelector('.ui-list-row__title')?.textContent?.trim().startsWith('Add Review Note')
+  )
+  const titleOf = (option: HTMLElement) => option.querySelector('.ui-list-row__title')?.textContent?.trim()
+
+  await env.win.waitFor(() => reviewChoices().length === 2)
+  const choices = reviewChoices()
+  expect(choices.map(titleOf).sort()).toEqual(['Add Review Note', 'Add Review Note to Diff'])
+  expect(choices.find((option) => titleOf(option) === 'Add Review Note')?.textContent)
+    .toMatch(/Markdown.*selection/i)
+  expect(choices.find((option) => titleOf(option) === 'Add Review Note to Diff')?.textContent)
+    .toMatch(/selection|selected/i)
+
+  typeInto(input, 'Markdown')
+  await env.win.waitFor(() => reviewChoices().length === 1 && titleOf(reviewChoices()[0]!) === 'Add Review Note')
+  typeInto(input, 'diff')
+  await env.win.waitFor(() => reviewChoices().length === 1 && titleOf(reviewChoices()[0]!) === 'Add Review Note to Diff')
 })
