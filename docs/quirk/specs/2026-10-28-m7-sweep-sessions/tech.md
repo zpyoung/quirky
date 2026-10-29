@@ -1,6 +1,6 @@
 # Session extras sweep technical specification
 
-Status: Pre-recovery post-review acceptance passed270remote+5Mac/no-flakes, scripts12, full typing and build. Canonical land required a named-conflict recovery merge ofb108f3f2; resolved source now awaits merged checks. The earlier bounded C/X PASS and S NEEDS_FIXES/caller rejection are not relabeled as a review of later merged code. Host successor and visual/native limits remain explicit.
+Status: Required canonical recovery is implemented. Current touched-package acceptance passes272remote+5Mac files (Handoff delivery isolated retry disclosed), scripts12, full typing and packaged build; merged real runtime smoke passes with cleanup. The earlier bounded C/X PASS and S NEEDS_FIXES/caller rejection remain attributed to the pre-recovery review. Host successor and visual/native limits remain explicit.
 Logic: [scope and scenarios](logic.md#behavior-and-acceptance-matrix).
 
 ## Architecture
