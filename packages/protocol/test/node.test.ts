@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from 'bun:test'
-import { chmodSync, closeSync, mkdirSync, mkdtempSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { chmodSync, closeSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { ensureDaemon, ensureHome, openPrivateLog } from '../src/node'
@@ -69,5 +69,15 @@ describe('ensureDaemon', () => {
     await expect(ensureDaemon({ home, daemonEntry: entry, timeoutMs: 300 })).rejects.toThrow()
     expect(modeOf(home)).toBe(0o700)
     expect(modeOf(log)).toBe(0o600)
+  })
+
+  test('starts the daemon in the home, not the caller directory', async () => {
+    const home = tempDir()
+    const marker = join(home, 'cwd.txt')
+    const entry = join(home, 'record-cwd.ts')
+    writeFileSync(entry, `require('node:fs').writeFileSync(${JSON.stringify(marker)}, process.cwd())\n`)
+    await expect(ensureDaemon({ home, daemonEntry: entry, timeoutMs: 300 })).rejects.toThrow()
+    expect(existsSync(marker)).toBe(true)
+    expect(realpathSync(readFileSync(marker, 'utf8'))).toBe(realpathSync(home))
   })
 })

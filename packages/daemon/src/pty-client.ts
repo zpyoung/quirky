@@ -503,6 +503,7 @@ export class PtyClient {
     if (!existsSync(entry)) throw new Error(`quirky-pty entry not found: ${entry}`)
     const log = openPrivateLog(join(this.options.home, 'logs', 'pty-host.log'))
     const child = spawn(process.execPath, [entry], {
+      cwd: this.options.home,
       detached: true,
       stdio: ['ignore', log, log],
       env: { ...process.env, QUIRKY_HOME: this.options.home }
