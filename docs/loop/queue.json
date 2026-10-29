@@ -2041,8 +2041,7 @@
         "fix-test-browser-1028",
         "m7-sweep-browser-mobile"
       ],
-      "status": "in-progress",
-      "lane": 11
+      "status": "done"
     },
     {
       "id": "fix-test-editor-1028",
