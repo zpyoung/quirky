@@ -338,7 +338,7 @@ test('Smart # references resolve authoritatively and create from the canonical P
   await click(button(dialog, 'Smart')!)
   const smart = labelField<HTMLInputElement>(dialog, 'Name')!
   await setText(smart, '#3')
-  await waitFor(() => dialog.querySelector('.github-source'))
+  await waitFor(() => dialog.querySelector('section[aria-label="Chosen GitHub source"]'))
 
   expect(h.calls.find((call) => call.method === 'quirky.hosting/worktreeSource')?.params).toEqual({ worktree: 'wt-main', reference: '#3' })
   expect(dialog.textContent).toContain('Reword the README')
@@ -362,7 +362,7 @@ test('a pasted GitHub PR URL is an authoritative source lookup', async () => {
   await h.ready
   const dialog = h.element.querySelector('[role="dialog"]')!
   await setText(labelField<HTMLInputElement>(dialog, 'Name')!, PR_URL)
-  await waitFor(() => dialog.querySelector('.github-source'))
+  await waitFor(() => dialog.querySelector('section[aria-label="Chosen GitHub source"]'))
   expect(h.calls.find((call) => call.method === 'quirky.hosting/worktreeSource')?.params).toEqual({ worktree: 'wt-main', reference: PR_URL })
   await click(button(dialog, 'Create')!)
   expect(h.calls.find((call) => call.method === 'quirky.worktree/create')?.params).toMatchObject({ github: PR_URL })
@@ -410,14 +410,14 @@ test('GitHub search shows mixed labelled items, selected source, external link, 
   expect(searchCall.params).toMatchObject({ worktree: 'wt-main', query: 'multiply' })
 
   await click(buttonContaining(dialog, 'PR #3')!)
-  await waitFor(() => dialog.querySelector('.github-source'))
+  await waitFor(() => dialog.querySelector('section[aria-label="Chosen GitHub source"]'))
   expect(dialog.querySelector(`a[href="${PR_URL}"]`)?.textContent).toContain('Open')
   expect(dialog.textContent).toContain('feat/conflict')
   await click(button(dialog, 'Clear source')!)
-  expect(dialog.querySelector('.github-source')).toBeNull()
+  expect(dialog.querySelector('section[aria-label="Chosen GitHub source"]')).toBeNull()
 
   await click(buttonContaining(dialog, 'Issue #4')!)
-  await waitFor(() => dialog.querySelector('.github-source'))
+  await waitFor(() => dialog.querySelector('section[aria-label="Chosen GitHub source"]'))
   expect(labelField(dialog, 'Base')).toBeDefined()
   await setText(labelField<HTMLInputElement>(dialog, 'Base')!, 'release')
   await click(button(dialog, 'Advanced')!)
@@ -449,7 +449,7 @@ test('an issue-derived agent prompt keeps its raw URL as an unsubmitted draft by
   await setText(labelField<HTMLInputElement>(dialog, 'Search GitHub')!, 'multiply')
   await waitFor(() => buttonContaining(dialog, 'Issue #4'))
   await click(buttonContaining(dialog, 'Issue #4')!)
-  await waitFor(() => dialog.querySelector('.github-source'))
+  await waitFor(() => dialog.querySelector('section[aria-label="Chosen GitHub source"]'))
   await setSelect(labelField<HTMLSelectElement>(dialog, 'Agent')!, 'claude')
 
   const submit = labelField<HTMLInputElement>(dialog, 'Submit prompt automatically')!
@@ -473,7 +473,7 @@ test('a person can explicitly submit an issue-derived prompt and generic prompts
   await setText(labelField<HTMLInputElement>(dialog, 'Search GitHub')!, 'multiply')
   await waitFor(() => buttonContaining(dialog, 'Issue #4'))
   await click(buttonContaining(dialog, 'Issue #4')!)
-  await waitFor(() => dialog.querySelector('.github-source'))
+  await waitFor(() => dialog.querySelector('section[aria-label="Chosen GitHub source"]'))
   await setSelect(labelField<HTMLSelectElement>(dialog, 'Agent')!, 'claude')
   await click(labelField<HTMLInputElement>(dialog, 'Submit prompt automatically')!)
   await click(button(dialog, 'Create')!)
@@ -575,7 +575,7 @@ test('a pending lookup from the prior project cannot select a source after switc
   await h.render({ repoId: 'r2' })
   await act(async () => sourceRequest.resolve(prSource))
   await flush()
-  expect(dialog.querySelector('.github-source')).toBeNull()
+  expect(dialog.querySelector('section[aria-label="Chosen GitHub source"]')).toBeNull()
   expect(dialog.textContent).not.toContain('Reword the README')
 })
 
@@ -674,16 +674,16 @@ test('create more resets the selected source, name, query, agent and setup choic
   await setText(labelField<HTMLInputElement>(dialog, 'Search GitHub')!, 'multiply')
   await waitFor(() => buttonContaining(dialog, 'Issue #4'))
   await click(buttonContaining(dialog, 'Issue #4')!)
-  await waitFor(() => dialog.querySelector('.github-source'))
+  await waitFor(() => dialog.querySelector('section[aria-label="Chosen GitHub source"]'))
   await setText(labelField<HTMLInputElement>(dialog, 'Name')!, 'custom-name')
   await setSelect(labelField<HTMLSelectElement>(dialog, 'Agent')!, 'claude')
   await click(labelField<HTMLInputElement>(dialog, 'Create more')!)
   await click(button(dialog, 'Advanced')!)
   await click(button(dialog, 'Run setup now')!)
   await click(button(dialog, 'Create')!)
-  await waitFor(() => dialog.querySelector('.github-source') === null)
+  await waitFor(() => dialog.querySelector('section[aria-label="Chosen GitHub source"]') === null)
 
-  expect(dialog.querySelector('.github-source')).toBeNull()
+  expect(dialog.querySelector('section[aria-label="Chosen GitHub source"]')).toBeNull()
   expect(labelField<HTMLInputElement>(dialog, 'Agent')?.value).toBe('')
   expect(button(dialog, 'Create')?.disabled).toBe(true)
   await click(button(dialog, 'Name')!)
