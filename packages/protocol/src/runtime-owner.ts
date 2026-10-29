@@ -54,3 +54,19 @@ export type RegisteredOwnerHost = {
   error: string | null
   updatedAt: number
 }
+
+/** Captured feature scope; revalidate against the current registered host before dispatch. */
+export type OwnerSessionHostRef = {
+  hostId: string
+  identity: OwnerHostIdentity
+  runtime: OwnerRuntimePin
+}
+
+/** Paths are deliberately absent: only the canonical mirror and producer instance authorize work. */
+export type OwnerSessionWorkspaceRef = {
+  owner: OwnerSessionHostRef
+  mirrorId: string
+  worktreeId: string
+  instanceId: string
+  fingerprint: string
+}
