@@ -2264,8 +2264,7 @@
       "deps": [
         "m7-test-triage"
       ],
-      "status": "in-progress",
-      "lane": 10
+      "status": "done"
     },
     {
       "id": "fix-test-scripts-profile-timeout-1028",
