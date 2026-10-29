@@ -777,6 +777,7 @@ export class AgentsService {
     const declaration = entry.modelDiscovery
     if (!catalog || !declaration) return this.discoveryFailure(entry.id, 'local', 'the provider does not declare model discovery')
 
+
     const config = this.configs.get(entry.id)
     const command = config.command ?? entry.launch
     const fingerprint = JSON.stringify({ plugin: entry.plugin, launch: command, declaration, catalog })

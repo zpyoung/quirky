@@ -1,6 +1,6 @@
 import { setDefaultTimeout } from 'bun:test'
 import { Database } from 'bun:sqlite'
-import { chmodSync, mkdirSync, readdirSync, realpathSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs'
+import { chmodSync, mkdirSync, realpathSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import {
   HOOK_TOKEN_HEADER,
@@ -26,6 +26,11 @@ setDefaultTimeout(60_000)
 const PLUGINS_ROOT = resolve(import.meta.dir, '../..')
 const ENV_KEYS = ['HOME', 'CLAUDE_CONFIG_DIR', 'CODEX_HOME', 'QUIRKY_AGENT_SEARCH_DIRS', 'QUIRKY_TEST_AGENT_TIME_SCALE'] as const
 const AGENTS = ['claude', 'codex', 'gemini']
+const BUILTIN_OWNERS = [
+  'quirky.accounts', 'quirky.agent-status', 'quirky.agents', 'quirky.ask', 'quirky.cli',
+  'quirky.git', 'quirky.handoff', 'quirky.repo', 'quirky.session', 'quirky.structured',
+  'quirky.terminal', 'quirky.vault', 'quirky.worktree'
+]
 const DEFAULT_TIME_SCALE = 0.05
 export const PASTE_ON = '\x1b[?2004h'
 export const CURSOR_ON = '\x1b[?25h'
@@ -124,8 +129,8 @@ export type RigOptions = {
 }
 
 /**
- * A daemon with every built-in plugin over a fake git and a fake PTY host, a temporary HOME
- * holding the transcript roots, fake agent programs on a private PATH, and a repo `quirky`.
+ * A daemon with the real dependency and context owners over a fake git and PTY host, a temporary
+ * HOME holding transcript roots, fake agent programs on a private PATH, and a repo `quirky`.
  */
 export class HandoffRig {
   worktrees: Record<string, Worktree> = {}
@@ -168,9 +173,7 @@ export class HandoffRig {
 
     const builtin = join(home, 'builtin')
     mkdirSync(builtin)
-    for (const name of readdirSync(PLUGINS_ROOT)) {
-      if (name.startsWith('quirky.') && name !== 'quirky.editor') symlinkSync(join(PLUGINS_ROOT, name), join(builtin, name))
-    }
+    for (const name of BUILTIN_OWNERS) symlinkSync(join(PLUGINS_ROOT, name), join(builtin, name))
     if (options.editor) {
       const editor = fakeEditor(options.editor)
       const dir = writePlugin(join(home, 'editor-src'), editor.manifest, editor.files)

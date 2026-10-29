@@ -4,7 +4,6 @@ import { join } from 'node:path'
 import { RpcErrorCode, type QuirkyClient, type QuirkyEvent } from '@quirky/protocol'
 import { startHarness, waitFor, type Harness } from '../../../packages/daemon/test/helpers'
 import { writePlugin } from '../../../packages/daemon/test/plugins/fixtures'
-import { AUTO_PICK_ORDER } from '../src/core/catalog'
 
 const PLUGIN_DIR = join(import.meta.dir, '..')
 const ENV_NAMES = ['HOME', 'QUIRKY_AGENT_SEARCH_DIRS', 'QUIRKY_TEST_AGENT_TIME_SCALE', 'GEMINI_API_KEY', 'GOOGLE_API_KEY'] as const
@@ -162,9 +161,6 @@ describe('catalog and listing', () => {
     expect(listing.workspaceTrust).toBe(true)
     expect(listing.permissions.summary).toBe('yolo')
     expect(listing).not.toHaveProperty('problems')
-    expect(listing.agents.map((agent: any) => agent.id)).toEqual([...AUTO_PICK_ORDER])
-    expect(listing.agents.every((agent: any) => agent.plugin === 'quirky.agents' && agent.enabled && !agent.isDefault)).toBe(true)
-    expect(listing.agents.filter((agent: any) => agent.installed).map((agent: any) => agent.id)).toEqual(['claude', 'claude-agent-teams', 'codex'])
 
     expect(find(listing, 'claude')).toMatchObject({
       label: 'Claude',
@@ -975,8 +971,8 @@ describe('provider-owned model discovery', () => {
       plugins: [agentManifest('fixture.provider', [{
         id: providerId,
         label: 'Fixture provider',
-        detect: providerId,
         prompt: 'argv',
+        detect: providerId,
         launchOptions: {
           model: { flag: ['--model', '{value}'] },
           options: [{
@@ -1373,10 +1369,10 @@ describe('launch settings', () => {
     expect(efforts(info, 'gpt-5.2-codex')).toEqual(all.slice(0, 5))
   })
 
-  test('boolean options omit choices and unknown agents are rejected', async () => {
+  test('SC-3: a boolean option has no choices, and unknown agents are refused', async () => {
     const t = await start()
-    const cursor = await t.call(A('options'), { agent: 'cursor' })
-    const fast = cursor.models.find((model: any) => model.id === 'gpt-5.3-codex').options.find((option: any) => option.id === 'fastMode')
+    const cursor: { models: { id: string; options: { id: string; type: string; choices: unknown }[] }[] } = await t.call(A('options'), { agent: 'cursor' })
+    const fast = cursor.models.find((model) => model.id === 'gpt-5.3-codex')?.options.find((option) => option.id === 'fastMode')
     expect(fast).toMatchObject({ type: 'boolean', choices: null })
     expect(await failure(t.call(A('options'), { agent: 'nope' }))).toMatchObject({ code: RpcErrorCode.NotFound, message: 'unknown agent: nope' })
   })

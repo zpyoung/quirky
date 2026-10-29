@@ -49,7 +49,7 @@ function viewIn(workspace: Workspace, tabId: string): ViewTab | undefined {
 
 async function startLiveLoop() {
   const held = holdTurn()
-  rig = await startLoopRig({ extraPlugins: ['quirky.terminal'], script: held.script })
+  rig = await startLoopRig({ extraPlugins: ['quirky.terminal', 'quirky.cli'], script: held.script })
   const base = await rig.call<{ workspace: Workspace }>('quirky.terminal/workspace', { workspace: rig.worktree.id, ensure: true })
   const anchor = tabsIn(base.workspace.root).find((tab) => !isViewTab(tab))
   if (!anchor) throw new Error('terminal fixture did not create its initial tab')
@@ -84,7 +84,7 @@ async function startLiveLoop() {
 }
 
 test('hosted loop close context persists without changing legacy tab invocation shape', async () => {
-  rig = await startLoopRig({ extraPlugins: ['quirky.terminal'] })
+  rig = await startLoopRig({ extraPlugins: ['quirky.terminal', 'quirky.cli'] })
   const initial = await rig.call<{ workspace: Workspace }>('quirky.terminal/workspace', { workspace: rig.worktree.id, ensure: true })
   const initialTabIds = tabsIn(initial.workspace.root).map((tab) => tab.id)
   const group = initial.workspace.activeGroup

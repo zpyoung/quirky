@@ -10,8 +10,8 @@ function entryOf(data: Record<string, unknown>) {
   return result.entry
 }
 
-function errorOf(data: Record<string, unknown>): string {
-  const result = validateEntry('acme.agents', 'acme', data)
+function errorOf(data: Record<string, unknown>, id = 'acme'): string {
+  const result = validateEntry('acme.agents', id, data)
   if (result.ok) throw new Error('expected the entry to be invalid')
   return result.error
 }

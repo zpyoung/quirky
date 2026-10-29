@@ -554,6 +554,7 @@ describe('agents plan with a pick', () => {
 })
 
 describe('the CLI catalog', () => {
+
   test('quirky agents list --json resolves through the real CLI', async () => {
     const { h, client } = await start()
     const result = await runCli(['agents', 'list', '--json'], { home: h.home })

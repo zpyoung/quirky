@@ -117,7 +117,7 @@ describe('quirky.accounts lifecycle API and CLI', () => {
     })
 
     const cli = testCli(h.client)
-    await commands.sessionHome({ positionals: [], flags: { session: sessionId } }, cli.ctx)
+    await commands['session-home']({ positionals: [], flags: { session: sessionId } }, cli.ctx)
     expect(cli.lines).toEqual([expected])
   })
   test('prepareProviderEnv resolves the selected Codex home without creating a session identity', async () => {

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { Badge, Button, Dialog, EmptyState, FormRow, IconButton, SectionHeader, Tabs } from '@quirky/ui'
 import { useStableReport, type UiReport } from './report'
 import {
@@ -6,6 +6,7 @@ import {
   PROVIDER_BADGES, PROVIDER_LABELS, snapshotStatus, windowEntries,
   type AccountState, type CredentialStatus, type ManagedProvider, type Preferences, type ProviderId, type ProviderSnapshot, type ResetCreditResult, type ResetExpectedScope, type StaleSession, type UsageState, type WindowData
 } from './model'
+import { fitUsagePrefix } from './usage-fit'
 
 const useStore = (store: AccountsUiStore) => useSyncExternalStore(store.subscribe, store.getSnapshot)
 const MANAGE_LABEL = 'Manage Accounts…'
@@ -408,55 +409,95 @@ function UsagePopover({ store, accounts, usage, credentials }: { store: Accounts
 const DEFAULT_USAGE_PREFERENCES: Preferences = { mode: 'compact', direction: 'used', hidden: false, visibleProviders: [], density: 'normal', claudeSwitchPolicy: 'ask', skipCodexResetConfirm: false }
 const isProvider = (value: string): value is ProviderId => (Object.hasOwn(PROVIDER_LABELS, value))
 const isManaged = (value: string): value is ManagedProvider => value === 'claude' || value === 'codex'
+function cssPixels(value: string): number {
+  const parsed = Number.parseFloat(value)
+  return Number.isFinite(parsed) ? parsed : 0
+}
+
+function contentBoxWidth(element: HTMLElement): number {
+  const style = getComputedStyle(element)
+  const rect = element.getBoundingClientRect()
+  return rect.width
+    - cssPixels(style.borderLeftWidth) - cssPixels(style.borderRightWidth)
+    - cssPixels(style.paddingLeft) - cssPixels(style.paddingRight)
+}
+
 
 export function StatusBarUsage({ store, report }: { store: AccountsUiStore; report?: UiReport }) {
   const snapshot = useStore(store)
   const [contextMenu, setContextMenu] = useState(false)
   const [visibleCount, setVisibleCount] = useState<number | null>(null)
   const rootRef = useRef<HTMLDivElement>(null)
+  const chipsRef = useRef<HTMLDivElement>(null)
   const measureRef = useRef<HTMLDivElement>(null)
+  const moreMeasureRef = useRef<HTMLDivElement>(null)
   const triggerRef = useRef<HTMLButtonElement>(null)
   const refreshRef = useRef<HTMLButtonElement>(null)
-  const moreRef = useRef<HTMLSpanElement>(null)
   const preferences = snapshot.accounts?.preferences
   const visibilityProviders = PROVIDER_LABELS_LIST.filter(([provider]) => canShowProviderVisibility(provider, snapshot.agentDetection))
   const configuredProviders = useMemo(() => (snapshot.usage?.providers ?? []).filter((provider) => isCurrentSnapshot(provider, snapshot.accounts) && isConfigured(provider, snapshot.accounts, snapshot.credentials)), [snapshot.usage, snapshot.accounts, snapshot.credentials])
   const chips = useMemo(() => configuredProviders.filter((provider) => preferences?.visibleProviders.includes(provider.provider)), [configuredProviders, preferences])
   const showEmptyCta = snapshot.accounts !== null && snapshot.usage !== null && configuredProviders.length === 0
 
-  useEffect(() => {
-    const root = rootRef.current
+  useLayoutEffect(() => {
     const measureContainer = measureRef.current
-    if (!root || !measureContainer) return
-    const children = [...measureContainer.children].filter((child) => child instanceof HTMLElement) as HTMLElement[]
-    const measure = () => {
-      const width = root.clientWidth
-      if (width <= 0 || !preferences || preferences.hidden) { setVisibleCount(null); return }
-      if (!children.length) { setVisibleCount(0); return }
-      const triggerWidth = triggerRef.current?.getBoundingClientRect().width ?? 0
-      const refreshWidth = refreshRef.current?.getBoundingClientRect().width ?? 0
-      const gap = Number.parseFloat(getComputedStyle(root).columnGap) || 0
-      const available = Math.max(0, width - triggerWidth - refreshWidth - gap * 2)
-      const widths = children.map((child) => child.getBoundingClientRect().width)
-      if (widths.every((item) => item === 0)) { setVisibleCount(null); return }
-      const plusWidth = moreRef.current?.getBoundingClientRect().width ?? 0
-      const used = widths.reduce((sum, item) => sum + item, 0)
-      if (used <= available) { setVisibleCount(null); return }
-      let count = 0
-      for (let candidate = widths.length - 1; candidate >= 0; candidate -= 1) {
-        const candidateWidth = widths.slice(0, candidate).reduce((sum, item) => sum + item, 0) + plusWidth
-        if (candidateWidth <= available) { count = candidate; break }
-      }
-      setVisibleCount(count)
+    const moreMeasureContainer = moreMeasureRef.current
+    if (!measureContainer || !moreMeasureContainer) return
+    if (!preferences || preferences.hidden) {
+      setVisibleCount(null)
+      return
     }
+
+    const measuredChips = [...measureContainer.children].filter((child) => child instanceof HTMLElement) as HTMLElement[]
+    const suffixButtons = [...moreMeasureContainer.querySelectorAll<HTMLButtonElement>('[data-collapsed-count]')]
+    const measure = () => {
+      const chipsContainer = chipsRef.current
+      if (!chipsContainer) { setVisibleCount(null); return }
+      const clearMeasurement = () => {
+        chipsContainer.style.setProperty('--usage-more-min-width', '0px')
+        setVisibleCount(null)
+      }
+      if (!measuredChips.length) { clearMeasurement(); return }
+
+      const widths = measuredChips.map((child) => child.getBoundingClientRect().width)
+      if (widths.some((width) => width <= 0)) { clearMeasurement(); return }
+
+      const suffixWidths = new Array(measuredChips.length + 1).fill(Number.POSITIVE_INFINITY)
+      let widestSuffixWidth = 0
+      for (const button of suffixButtons) {
+        const collapsedCount = Number(button.dataset.collapsedCount)
+        if (!Number.isInteger(collapsedCount) || collapsedCount < 1 || collapsedCount > measuredChips.length) continue
+        const width = button.getBoundingClientRect().width
+        if (width <= 0) { clearMeasurement(); return }
+        suffixWidths[collapsedCount] = width
+        widestSuffixWidth = Math.max(widestSuffixWidth, width)
+      }
+      for (let collapsedCount = 1; collapsedCount < suffixWidths.length; collapsedCount += 1) {
+        if (!Number.isFinite(suffixWidths[collapsedCount])) { clearMeasurement(); return }
+      }
+
+      chipsContainer.style.setProperty('--usage-more-min-width', `${widestSuffixWidth}px`)
+      const availableWidth = contentBoxWidth(chipsContainer)
+      if (availableWidth <= 0) { clearMeasurement(); return }
+      const gap = cssPixels(getComputedStyle(chipsContainer).columnGap)
+      const nextCount = fitUsagePrefix(widths, suffixWidths, availableWidth, gap)
+      setVisibleCount((current) => current === nextCount ? current : nextCount)
+    }
+
     measure()
-    if (typeof ResizeObserver === 'undefined') return
+    if (typeof ResizeObserver === 'undefined') {
+      window.addEventListener('resize', measure)
+      return () => window.removeEventListener('resize', measure)
+    }
     const observer = new ResizeObserver(measure)
-    observer.observe(root)
-    observer.observe(measureContainer)
-    for (const child of children) observer.observe(child)
+    for (const element of [
+      chipsRef.current, measureContainer, moreMeasureContainer,
+      triggerRef.current, refreshRef.current, ...measuredChips, ...suffixButtons
+    ]) {
+      if (element) observer.observe(element)
+    }
     return () => observer.disconnect()
-  }, [chips, preferences?.hidden, preferences?.density, preferences?.mode, visibleCount])
+  }, [chips, preferences, showEmptyCta, snapshot.ui.open])
   useEffect(() => {
     if (!snapshot.ui.open) return
     const onPointerDown = (event: PointerEvent) => {
@@ -500,7 +541,7 @@ export function StatusBarUsage({ store, report }: { store: AccountsUiStore; repo
   }}>
     {!hidden && <>
       <Button ref={triggerRef} type="button" className="usage-trigger" aria-label="Open Usage" aria-expanded={snapshot.ui.open} onClick={() => void store.setUiState({ open: !snapshot.ui.open })}>Usage <small>{preferences?.direction === 'remaining' ? 'Remaining' : 'Used'}</small></Button>
-      {!showEmptyCta && <div className="usage-chips" aria-label="Provider usage status bar">
+      {!showEmptyCta && <div ref={chipsRef} className="usage-chips" aria-label="Provider usage status bar">
             {visibleChips.map((provider) => <StatusChip key={provider.provider} snapshot={provider} preferences={preferences ?? DEFAULT_USAGE_PREFERENCES} />)}
             {collapsed.length > 0 && <Button type="button" className="usage-chip" aria-label={`${collapsed.length} more providers`} title={tooltip} onClick={() => void store.setUiState({ open: true })}>+{collapsed.length}</Button>}
           </div>}
@@ -514,8 +555,8 @@ export function StatusBarUsage({ store, report }: { store: AccountsUiStore; repo
       <Button type="button" onClick={() => setContextMenu(false)}>Close menu</Button>
     </div>}
     <UsagePopover store={store} accounts={snapshot.accounts} usage={snapshot.usage} credentials={snapshot.credentials} />
-    <div ref={measureRef} className="usage-measure" aria-hidden="true">{chips.map((provider) => <StatusChip key={provider.provider} snapshot={provider} preferences={preferences ?? DEFAULT_USAGE_PREFERENCES} />)}</div>
-    <span ref={moreRef} className="usage-chip usage-more-measure" aria-hidden="true">+9</span>
+    <div ref={measureRef} className="usage-measure" aria-hidden="true" inert>{chips.map((provider) => <StatusChip key={provider.provider} snapshot={provider} preferences={preferences ?? DEFAULT_USAGE_PREFERENCES} />)}</div>
+    <div ref={moreMeasureRef} className="usage-measure" aria-hidden="true" inert>{chips.map((_, index) => <Button key={index + 1} type="button" className="usage-chip" data-collapsed-count={index + 1} aria-hidden="true" tabIndex={-1} disabled>+{index + 1}</Button>)}</div>
   </div>
 }
 

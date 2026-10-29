@@ -6,8 +6,33 @@ import { startHarness, type Harness } from '../../../../packages/daemon/test/hel
 import { writeEveryAgentFixture } from '../fixtures/scanner-fixtures'
 
 const SOURCE_HOME_ENV = 'QUIRKY_VAULT_SOURCE_HOME'
-const PLUGIN_IDS = ['quirky.repo', 'quirky.worktree', 'quirky.agents', 'quirky.session', 'quirky.terminal', 'quirky.vault', 'quirky.ask', 'quirky.cli']
+const PLUGIN_IDS = [
+  'quirky.repo',
+  'quirky.cli',
+  'quirky.worktree',
+  'quirky.agents',
+  'quirky.session',
+  'quirky.terminal',
+  'quirky.vault',
+  'quirky.ask'
+]
 const PLUGINS_ROOT = join(import.meta.dir, '..', '..', '..')
+
+export function createVaultBuiltinPluginsDir(home: string, options: { isolateVaultPlugin?: boolean } = {}): string {
+  const builtinPluginsDir = join(home, 'builtins')
+  mkdirSync(builtinPluginsDir, { recursive: true })
+  for (const id of PLUGIN_IDS) {
+    const source = join(PLUGINS_ROOT, id)
+    const destination = join(builtinPluginsDir, id)
+    if (options.isolateVaultPlugin && id === 'quirky.vault') {
+      // In-process daemons share Bun's module cache; isolate the plugin's module-level service.
+      cpSync(source, destination, { recursive: true })
+    } else {
+      symlinkSync(source, destination, 'dir')
+    }
+  }
+  return builtinPluginsDir
+}
 
 export type FixtureExpectation = {
   expected: Record<string, { sessionId: string; title: string; cwd: string | null }>
@@ -27,7 +52,7 @@ export class VaultRig {
     private readonly previousSourceHome: string | undefined
   ) {}
 
-  static async start(options: { isolateVaultModule?: boolean } = {}): Promise<VaultRig> {
+  static async start(options: { isolateVaultPlugin?: boolean; includeEveryAgentFixture?: boolean } = {}): Promise<VaultRig> {
     const home = mkdtempSync(join(tmpdir(), 'qv-home-'))
     let sourceHome: string | undefined
     const previousSourceHome = process.env[SOURCE_HOME_ENV]
@@ -36,17 +61,10 @@ export class VaultRig {
       const fixtureSourceHome = mkdtempSync(join(tmpdir(), 'qv-source-'))
       sourceHome = fixtureSourceHome
       process.env[SOURCE_HOME_ENV] = fixtureSourceHome
-      const fixture = await writeEveryAgentFixture(fixtureSourceHome, { cwdRoot: join(fixtureSourceHome, 'workspaces') })
-      const builtinPluginsDir = join(home, 'builtins')
-      mkdirSync(builtinPluginsDir, { recursive: true })
-      for (const id of PLUGIN_IDS) {
-        const pluginDir = join(PLUGINS_ROOT, id)
-        if (options.isolateVaultModule && id === 'quirky.vault') {
-          cpSync(pluginDir, join(builtinPluginsDir, id), { recursive: true })
-        } else {
-          symlinkSync(pluginDir, join(builtinPluginsDir, id), 'dir')
-        }
-      }
+      const fixture: FixtureExpectation = options.includeEveryAgentFixture === false
+        ? { expected: {}, paths: {} }
+        : await writeEveryAgentFixture(fixtureSourceHome, { cwdRoot: join(fixtureSourceHome, 'workspaces') })
+      const builtinPluginsDir = createVaultBuiltinPluginsDir(home, { isolateVaultPlugin: options.isolateVaultPlugin })
       harness = await startHarness({ home, builtinPluginsDir })
       const connected = await harness.connectWithEvents('cli')
       return new VaultRig(harness, connected.client, connected.events, home, fixtureSourceHome, fixture.expected, fixture.paths, builtinPluginsDir, previousSourceHome)

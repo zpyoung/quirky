@@ -9,7 +9,7 @@ import type { PublicListResult } from '../src/types'
 import { writeEveryAgentFixture } from './fixtures/scanner-fixtures'
 import { startHarness, type Harness } from '../../../packages/daemon/test/helpers'
 
-const PLUGIN_IDS = ['quirky.cli', 'quirky.repo', 'quirky.worktree', 'quirky.agents', 'quirky.session', 'quirky.terminal', 'quirky.vault', 'quirky.ask']
+const PLUGIN_IDS = ['quirky.repo', 'quirky.cli', 'quirky.worktree', 'quirky.agents', 'quirky.session', 'quirky.terminal', 'quirky.vault', 'quirky.ask']
 const SOURCE_HOME_ENV = 'QUIRKY_VAULT_SOURCE_HOME'
 const ENV_KEYS = ['HOME', 'QUIRKY_HOME', 'CODEX_HOME', SOURCE_HOME_ENV, 'QUIRKY_AGENT_SEARCH_DIRS'] as const
 const COLLECTOR = `#!/bin/sh

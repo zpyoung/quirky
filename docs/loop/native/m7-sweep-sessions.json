@@ -1,0 +1,21 @@
+{
+  "item": "m7-sweep-sessions",
+  "spec": "docs/quirk/specs/2026-10-28-m7-sweep-sessions/logic.md",
+  "scenarios": [
+    {
+      "id": "A3-native-authorize-open",
+      "title": "Launch packaged Quirky with fresh HOME/QUIRKY_HOME and a run-owned fake Codex CLI exposing an allowlisted synthetic authorize URL. In AI Provider Accounts add Codex, compare Copy link to the exact displayed URL, then click Open and verify the system browser receives exactly that URL without navigating Quirky or changing account/login selection. Do not authenticate or read a real credential. Cancel the owned pending login. Preserve m3-accounts AC6-AC7's historical target=_blank failure report; this is the repaired public-system-opener rerun.",
+      "status": "pending", "lastRun": null, "report": null, "summary": null
+    },
+    {
+      "id": "I1-V3-native-navigation-clipboard",
+      "title": "Using only run-created native-format transcripts and private synthetic terminal agents, copy Session Info ID and Vault first prompt/log path and compare exact macOS clipboard bytes, including Copied feedback and permission-denial failure feedback where safely available. Exercise Focus pane and lineage jump in the real window (same session, no process spawn), Open transcript and Finder reveal/Open working directory. Never reveal real provider paths. Browser feedback is not native focus/Finder proof; keep historical m3 native reports unchanged.",
+      "status": "pending", "lastRun": null, "report": null, "summary": null
+    },
+    {
+      "id": "D2-native-attachment-chooser",
+      "title": "With fresh HOME/QUIRKY_HOME, run-owned valid PNG and fake supported terminal agent, enable Terminal dock, type an unsent draft, use Attach and the real macOS Open panel to select the created PNG, verify the named chip and unchanged text, remove only that chip and confirm original PNG bytes remain. Test actual paste/drop if the native driver supports them; otherwise record a tool limit without claiming success. Do not touch real user files or foreground sessions; stop every owned process.",
+      "status": "pending", "lastRun": null, "report": null, "summary": null
+    }
+  ]
+}

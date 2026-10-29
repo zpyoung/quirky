@@ -38,8 +38,15 @@ const FILE = '/tmp/w/api/src/app.ts'
 
 async function mount(over: Partial<TerminalPaneProps> = {}, handlers = paneHandlers({ existing: [FILE] })) {
   const fake = fakeContext(handlers, over.settings)
+  const { promise: streamReady, resolve: resolveStream } = Promise.withResolvers<number>()
+  const onStream = fake.context.onStream.bind(fake.context)
+  fake.context.onStream = (streamId, listener) => {
+    const unsubscribe = onStream(streamId, listener)
+    resolveStream(streamId)
+    return unsubscribe
+  }
   mounted = await mountPane(fake, over)
-  await fake.push(101, 'docs https://example.com/x and src/app.ts:12:4 and src/missing.ts\r\n')
+  await fake.push(await streamReady, 'docs https://example.com/x and src/app.ts:12:4 and src/missing.ts\r\n')
   await mounted.flush()
   return { fake, pane: mounted }
 }

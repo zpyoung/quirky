@@ -3,7 +3,8 @@ import { mkdir, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { RpcErrorCode, type QuirkyClient } from '@quirky/protocol'
 import { afterEach, describe, expect, test } from 'bun:test'
-import { builtinsDir, makeTempHome, startHarness, type Harness } from '../../../packages/daemon/test/helpers'
+import { makeTempHome, startHarness, type Harness } from '../../../packages/daemon/test/helpers'
+import { createVaultBuiltinPluginsDir } from './support/harness'
 
 type HostedSession = {
   id: string
@@ -64,7 +65,11 @@ async function startVault(): Promise<TestVault> {
 
   const home = makeTempHome('qv-gemini-daemon-')
   temporaryHomes.push(home)
-  const harness = await startHarness({ home, builtinPluginsDir: builtinsDir(), safeMode: true })
+  const harness = await startHarness({
+    home,
+    builtinPluginsDir: createVaultBuiltinPluginsDir(home, { isolateVaultPlugin: true }),
+    safeMode: true
+  })
   activeHarnesses.push(harness)
   return { sourceHome, client: await harness.connect() }
 }
@@ -210,12 +215,18 @@ describe('Gemini cwd recovery through the daemon API', () => {
     await writeProjectMarker(sourceHome, slug, markerRoot)
     await writeProjectRegistry(sourceHome, { [registryRoot]: slug })
 
+    const fixtures: GeminiFixture[] = []
     for (const format of ['json', 'jsonl'] as const) {
-      const fixture = await writeGeminiSession(sourceHome, slug, format, {
+      fixtures.push(await writeGeminiSession(sourceHome, slug, format, {
         projectRoot: registryRoot,
         cwd: explicitRoot
-      })
-      const listed = await sessionById(client, fixture.sessionId)
+      }))
+    }
+
+    const listedSessions = await listGemini(client)
+    for (const fixture of fixtures) {
+      const listed = listedSessions.find((session) => session.sessionId === fixture.sessionId)
+      if (!listed) throw new Error(`Gemini session ${fixture.sessionId} was not listed`)
       expectGeminiSession(listed, fixture, explicitRoot)
     }
   })

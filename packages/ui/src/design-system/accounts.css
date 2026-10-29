@@ -393,9 +393,9 @@
 .accounts-ui .usage-chips {
   align-items: center;
   display: flex;
-  flex: 1 1 auto;
+  flex: 1 1 0;
   gap: var(--ui-space-4);
-  min-width: 0;
+  min-width: var(--usage-more-min-width, 0px);
   overflow: hidden;
 }
 
@@ -429,22 +429,21 @@
 }
 
 .accounts-ui .usage-measure {
+  contain: layout paint;
   display: flex;
   gap: var(--ui-space-4);
-  inset-block-start: 0;
-  inset-inline-end: 100%;
-  pointer-events: none;
-  position: fixed;
-  visibility: hidden;
-  width: max-content;
-}
-
-.accounts-ui .usage-more-measure {
+  height: 0;
   inset-block-start: 0;
   inset-inline-start: 0;
+  overflow: hidden;
   pointer-events: none;
   position: absolute;
   visibility: hidden;
+  width: 0;
+}
+
+.accounts-ui .usage-measure > * {
+  flex: 0 0 auto;
 }
 
 .accounts-ui .provider-letter {

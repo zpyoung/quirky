@@ -535,6 +535,7 @@ test(
     await ui.pick('Copy Pane ID')
     expect(ui.clipboard.written).toEqual([b.session, b.id])
 
+
     await ui.contextMenu(`[data-pane="${a.id}"]`)
     await ui.pick('Split Terminal Down')
     const split = await ui.waitLayout('a pane below', (ws) => leavesOf(findTab(ws, build.tab.id).root).length === 4)

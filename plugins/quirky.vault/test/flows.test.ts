@@ -19,7 +19,7 @@ afterEach(async () => {
   for (const rig of rigs.splice(0).reverse()) await rig.cleanup()
 })
 
-async function start(options: { isolateVaultModule?: boolean } = {}): Promise<VaultRig> {
+async function start(options: { isolateVaultPlugin?: boolean; includeEveryAgentFixture?: boolean } = {}): Promise<VaultRig> {
   const rig = await VaultRig.start(options)
   rigs.push(rig)
   return rig
@@ -422,7 +422,7 @@ describe('vault public acceptance flows', () => {
   }, 30_000)
 
   test('API retention removes old derived content only and an unavailable source root retains recent indexed data', async () => {
-    const vault = await start()
+    const vault = await start({ includeEveryAgentFixture: false })
     const oldId = 'flow-retained-expired-source'
     const oldTime = new Date('2000-01-01T00:00:00.000Z')
     const oldPath = await writeJsonlFixture(vault.sourceHome, 'claude', oldId, [
@@ -520,14 +520,14 @@ describe('vault public acceptance flows', () => {
   })
 
   test('real host contributions preserve identity, expose partial availability, redact remote paths, and fail honestly', async () => {
-    const remote = await start({ isolateVaultModule: true })
+    const remote = await start({ isolateVaultPlugin: true })
     await remote.call('setSearchEnabled', { enabled: true })
     const remoteSearch = results(await remote.call<SearchResponse>('search', {
       query: 'vault-fixture-claude-marker', freshness: 'wait-until-current', filters: { agents: ['claude'] }
     }))
     expect(remoteSearch.hits.some((hit) => hit.sessionId === 'claude-fixture-session')).toBe(true)
 
-    const local = await start({ isolateVaultModule: true })
+    const local = await start({ isolateVaultPlugin: true })
     const forwarder = createVaultHostForwarder(rpcUrl(remote.h.runtime))
     pluginRoots.push(forwarder.root)
     await local.client.callAny('plugin.install', { path: forwarder.directory, yes: true })

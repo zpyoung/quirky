@@ -100,12 +100,29 @@ async function makeFeatures(home: string): Promise<Features> {
   return startFeatures({ env: { QUIRKY_VAULT_SOURCE_HOME: home } })
 }
 
+function settledIndex(status: SearchStatus): boolean {
+  const indexedSessions = Object.values(status.sessionsByAgent).some((count) => count > 0)
+  const settledPhase = status.phase === 'current' || status.phase === 'degraded'
+  return status.enabled && settledPhase && status.filesDue === 0 && indexedSessions && status.messagesIndexed > 0
+}
+
 async function waitForSettledIndex(features: Features, what: string): Promise<SearchStatus> {
   return waitFor(what, async () => {
     const { status } = await features.h.call<{ status: SearchStatus }>('quirky.vault/searchStatus', { host: 'local' })
-    const indexedSessions = Object.values(status.sessionsByAgent).some((count) => count > 0)
-    const settledPhase = status.phase === 'current' || status.phase === 'degraded'
-    return status.enabled && settledPhase && status.filesDue === 0 && indexedSessions && status.messagesIndexed > 0 ? status : undefined
+    return settledIndex(status) ? status : undefined
+  }, 30_000)
+}
+
+async function waitForCandidateLimitIndex(features: Features, what: string, expectedClaudeSessions: number): Promise<SearchStatus> {
+  return waitFor(what, async () => {
+    await features.h.call<SearchResponse>('quirky.vault/search', {
+      host: 'local',
+      query: 'candidatecapneedle',
+      freshness: 'wait-until-current',
+      filters: { agents: ['claude'], sort: 'relevance' }
+    })
+    const { status } = await features.h.call<{ status: SearchStatus }>('quirky.vault/searchStatus', { host: 'local' })
+    return settledIndex(status) && (status.sessionsByAgent.claude ?? 0) >= expectedClaudeSessions ? status : undefined
   }, 30_000)
 }
 
@@ -257,6 +274,7 @@ test(
       const dialog = await options
       buttonNamed(dialog, 'Clear').click()
       await reportOf<HistoryReport>(features, HISTORY_PANEL, 'no-agent selection', (state) => state.disabledAgents.length === 25)
+
       buttonNamed(dialog, 'Select all').click()
       await reportOf<HistoryReport>(features, HISTORY_PANEL, 'select-all restored', (state) => state.disabledAgents.length === 0 && !state.loading)
 
@@ -563,6 +581,11 @@ test(
       try {
         const query = await until(features, () => features!.win.document.querySelector<HTMLInputElement>('[data-vault-search]'))
         await typeInto(query, 'settingsstatusneedle')
+        const status = await until(features, () => {
+          const current = features!.win.document.querySelector<HTMLElement>('[data-vault-query-status]')
+          return current?.textContent?.includes('owned connection failure') ? current : undefined
+        })
+        expect(status.textContent).toContain('owned connection failure')
         await reportOf<HistoryReport>(features, HISTORY_PANEL, 'injected search request failure', (state) => state.query === 'settingsstatusneedle' && state.searchError !== null && !state.loading)
         await until(features, () => features!.win.document.querySelector('[data-vault-query-status][data-vault-search-error="true"]'))
       } finally {
@@ -601,38 +624,66 @@ test(
       features = await makeFeatures(source)
       await features.h.call('quirky.vault/setView', { scope: 'all', searchSort: 'newest' })
       await features.h.call('quirky.vault/setSearchEnabled', { enabled: true, host: 'local' })
-      await waitForSettledIndex(features, 'real search indexing to settle')
+      const indexedBeforeNewPage = await waitForSettledIndex(features, 'real search indexing to settle')
       await runCommand(features, 'command:quirky.vault/open')
       const query = await until(features, () => features!.win.document.querySelector<HTMLInputElement>('[data-vault-search]'))
       await typeInto(query, 'pagefreshnessneedle')
       const firstPage = await reportOf<HistoryReport>(features, HISTORY_PANEL, 'first search page', (state) => state.query === 'pagefreshnessneedle' && !state.loading && state.total === 20)
+      const firstPageRequest = await until(features, () => features!.calls.find((call) => (
+        call.method === 'quirky.vault/search'
+        && call.params.query === 'pagefreshnessneedle'
+        && !('cursor' in call.params)
+        && call.settled
+      )))
+      const originalPage = await features.h.call<SearchResponse>('quirky.vault/search', firstPageRequest.params)
+      if (originalPage.kind !== 'results' || !originalPage.page.cursor) {
+        throw new Error('The settled first index did not produce a stale-page cursor.')
+      }
       expect(new Set(firstPage.visibleIds).size).toBe(firstPage.visibleIds.length)
       await until(features, () => features!.win.document.querySelector('[data-vault-load-more]'))
 
-      writeClaudeSession(source, 'new-page-result', {
+      const newPath = writeClaudeSession(source, 'new-page-result', {
         timestamp: '2026-10-28T11:00:00.000Z',
         response: 'pagefreshnessneedle newly indexed after page one'
       })
-      const fresh = await features.h.call<SearchResponse>('quirky.vault/search', {
-        host: 'local', query: 'pagefreshnessneedle', freshness: 'wait-until-current', limit: 20, filters: { agents: ['claude'] }
+      const freshnessCheck = await features.h.call<SearchResponse>('quirky.vault/search', {
+        ...firstPageRequest.params,
+        freshness: 'wait-until-current'
       })
-      if (fresh.kind !== 'results') throw new Error(`Expected current search results, received ${fresh.kind}.`)
-      const newPageHit = fresh.hits.find((hit) => hit.sessionId === 'new-page-result')
-      if (!newPageHit) throw new Error('The newly indexed source is missing from current search results.')
+      expect(freshnessCheck.kind).toBe('results')
+      expect(existsSync(newPath)).toBe(true)
+      const indexedAfterNewPage = await waitForSettledIndex(features, 'the newly written real index generation')
+      expect(indexedAfterNewPage.filesIndexed).toBe(indexedBeforeNewPage.filesIndexed + 1)
+      const fresh = await features.h.call<SearchResponse>('quirky.vault/search', {
+        ...firstPageRequest.params,
+        freshness: 'indexed'
+      })
+      if (fresh.kind !== 'results') throw new Error(`Expected current-index results, received ${fresh.kind}.`)
+      expect(fresh.generation).toBeGreaterThan(originalPage.generation)
+      expect(fresh.hits[0]?.sessionId).toBe('new-page-result')
 
+      const searchCalls = features.calls
+      const beforeStalePageRequest = searchCalls.length
       features.win.document.querySelector<HTMLButtonElement>('[data-vault-load-more]')!.click()
-      const replaced = await reportOf<HistoryReport>(features, HISTORY_PANEL, 'stale cursor replacement or typed search error', (state) => state.searchError !== null || (
+      const stalePageRequest = await until(features, () => searchCalls.slice(beforeStalePageRequest).find((call) => (
+        call.method === 'quirky.vault/search'
+        && call.params.query === 'pagefreshnessneedle'
+        && call.params.cursor === originalPage.page.cursor
+        && call.settled
+      )))
+      expect(stalePageRequest.params.cursor).toBe(originalPage.page.cursor)
+      const replaced = await reportOf<HistoryReport>(features, HISTORY_PANEL, 'stale page replacement or typed search error', (state) => state.searchError !== null || (
         state.query === 'pagefreshnessneedle'
         && !state.loading
         && state.total === 20
-        && state.visibleIds.includes(newPageHit.id)
+        && state.visibleIds.includes(fresh.hits[0]!.id)
       ))
       if (replaced.searchError) {
         const statusText = features.win.document.querySelector<HTMLElement>('[data-vault-query-status]')?.textContent ?? ''
         throw new Error(`Search failed while replacing the stale page: ${replaced.searchError}. Query status: ${statusText}`)
       }
       expect(replaced.total).toBe(20)
-      expect(replaced.visibleIds).toContain(newPageHit.id)
+      expect(replaced.visibleIds).toContain(fresh.hits[0]!.id)
       expect(new Set(replaced.visibleIds).size).toBe(replaced.visibleIds.length)
       const longQuery = await until(features, () => features!.win.document.querySelector<HTMLInputElement>('[data-vault-search]'))
       const queryTerms = ['querylimitneedle', ...Array.from({ length: 48 }, (_, index) => `term${index}`)]
@@ -680,17 +731,15 @@ test(
       for (let index = 0; index < 601; index++) {
         writeClaudeSession(source, `candidate-cap-${index}`, { response: `candidatecapneedle distinct source ${index}` })
       }
-      await waitFor('all candidate-cap sources are indexed independently of retrieval truncation', async () => {
-        await features!.h.call<SearchResponse>('quirky.vault/search', {
-          host: 'local', query: 'candidatecapneedle', freshness: 'wait-until-current', filters: { agents: ['claude'], sort: 'relevance' }
-        })
-        const { status } = await features!.h.call<{ status: SearchStatus }>('quirky.vault/searchStatus', { host: 'local' })
-        return status.filesDue === 0 && (status.sessionsByAgent.claude ?? 0) >= expectedClaudeSessions ? true : undefined
-      }, 30_000)
-      const candidateResponse = await features.h.call<SearchResponse>('quirky.vault/search', {
-        host: 'local', query: 'candidatecapneedle', freshness: 'wait-until-current', filters: { agents: ['claude'] }
+      const candidateKickoff = await features.h.call<SearchResponse>('quirky.vault/search', {
+        host: 'local', query: 'candidatecapneedle', freshness: 'wait-until-current', filters: { agents: ['claude'], sort: 'relevance' }
       })
-      if (candidateResponse.kind !== 'results') throw new Error(`Expected candidate-limit results, received ${candidateResponse.kind}.`)
+      if (candidateKickoff.kind !== 'results') throw new Error(`Expected candidate-limit results, received ${candidateKickoff.kind}.`)
+      await waitForCandidateLimitIndex(features, 'the real candidate-limit index to settle', expectedClaudeSessions)
+      const candidateResponse = await features.h.call<SearchResponse>('quirky.vault/search', {
+        host: 'local', query: 'candidatecapneedle', freshness: 'indexed', filters: { agents: ['claude'], sort: 'relevance' }
+      })
+      if (candidateResponse.kind !== 'results') throw new Error(`Expected settled candidate-limit results, received ${candidateResponse.kind}.`)
       expect(candidateResponse.truncated.candidates).toBe(true)
       await typeInto(longQuery, 'candidatecapneedle')
       await reportOf<HistoryReport>(features, HISTORY_PANEL, 'candidate-limited query results', (state) => (

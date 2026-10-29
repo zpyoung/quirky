@@ -114,6 +114,7 @@ async function track(options?: Parameters<typeof wire>[0]): Promise<Wired> {
   return wired
 }
 
+
 describe('window commands route to the focused workspace', () => {
   test('SC-60: the terminal actions act on the focused pane and answer with JSON', async () => {
     const wired = await track()
