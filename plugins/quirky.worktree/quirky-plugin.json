@@ -387,7 +387,11 @@
             },
             "environmentRecipe": {
               "type": "string",
-              "description": "Selected environmentRecipes.id. Invalid IDs fail before mutation; valid VM lifecycle recipes currently require an unavailable runtime/attachment owner and are refused rather than run as local shell commands."
+              "description": "Selected environmentRecipes.id. Provisions a genuine Lima VM and attaches its owner-bound guest workspace; requires the exact lifecycle hash and an available backend."
+            },
+            "trustEnvironmentRecipeHash": {
+              "type": "string",
+              "description": "Exact full environment recipe hash from vm-recipes, approving this one provisioning operation."
             },
             "defaultTabs": {
               "type": "array",
@@ -1461,7 +1465,9 @@
             "allowFailedArchiveHook": {
               "type": "boolean",
               "description": "Remove even if the archive script fails."
-            }
+            },
+            "safeOnly": { "type": "boolean", "description": "Refuse live or unknown runtime state without closing sessions." },
+            "expectedInstanceId": { "type": "string", "description": "Refuse if the filesystem workspace instance changed before removal." }
           },
           "required": [
             "worktree"
@@ -1536,7 +1542,9 @@
             "allowFailedArchiveHook": {
               "type": "boolean",
               "description": "Remove even if the archive script fails."
-            }
+            },
+            "safeOnly": { "type": "boolean", "description": "The removal must retain live or unknown runtime state." },
+            "expectedInstanceId": { "type": "string", "description": "The exact selected filesystem instance; canonical removal rechecks it." }
           },
           "required": [
             "worktree"
@@ -1996,7 +2004,7 @@
               "type": "array",
               "items": {
                 "type": "object",
-                "properties": { "worktreeId": { "type": "string" }, "fingerprint": { "type": "string" } },
+                "properties": { "worktreeId": { "type": "string" }, "fingerprint": { "type": "string" }, "expectedInstanceId": { "type": "string" } },
                 "required": ["worktreeId", "fingerprint"],
                 "additionalProperties": false
               }
@@ -2147,6 +2155,976 @@
         "description": "Select a worktree by its visible one-based index from 1 through 9.",
         "params": { "type": "object", "properties": { "index": { "type": "integer", "minimum": 1, "maximum": 9 }, "window": { "type": "integer", "minimum": 1 } }, "required": ["index"], "additionalProperties": false },
         "result": { "type": "object", "properties": { "worktreeId": { "type": "string" }, "target": { "type": "string", "enum": ["terminal"] } }, "required": ["worktreeId", "target"] }
+      },
+      {
+        "id": "remoteHostRegister",
+        "description": "Authenticate a saved owner-cli target, discover its producer-issued host identity, and pin that identity plus the returned saved-runtime grant. Identity or grant changes require replace:true.",
+        "params": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "runtime": {
+              "type": "string",
+              "description": "Saved owner target ID or runtime:<saved owner target ID>; phone-scoped targets are refused."
+            },
+            "replace": {
+              "type": "boolean",
+              "description": "Explicitly replace a changed authenticated grant, host ID or activation generation."
+            }
+          },
+          "required": [
+            "runtime"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "runtime": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "endpoint": {
+                  "type": "string"
+                },
+                "grantId": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "name",
+                "endpoint",
+                "grantId"
+              ]
+            },
+            "identity": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "hostId": {
+                  "type": "string"
+                },
+                "generation": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "hostId",
+                "generation"
+              ]
+            },
+            "connected": {
+              "type": "boolean"
+            },
+            "error": {
+              "description": "String or null."
+            },
+            "updatedAt": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "id",
+            "runtime",
+            "identity",
+            "connected",
+            "error",
+            "updatedAt"
+          ]
+        },
+        "readOnly": false
+      },
+      {
+        "id": "remoteHostList",
+        "description": "Probe saved owner hosts with the pinned generation and return registered status without discarding mirror snapshots.",
+        "params": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {}
+        },
+        "result": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "hosts": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "runtime": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "endpoint": {
+                        "type": "string"
+                      },
+                      "grantId": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "name",
+                      "endpoint",
+                      "grantId"
+                    ]
+                  },
+                  "identity": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                      "hostId": {
+                        "type": "string"
+                      },
+                      "generation": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "hostId",
+                      "generation"
+                    ]
+                  },
+                  "connected": {
+                    "type": "boolean"
+                  },
+                  "error": {
+                    "description": "String or null."
+                  },
+                  "updatedAt": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "id",
+                  "runtime",
+                  "identity",
+                  "connected",
+                  "error",
+                  "updatedAt"
+                ]
+              }
+            }
+          },
+          "required": [
+            "hosts"
+          ]
+        },
+        "readOnly": true
+      },
+      {
+        "id": "remoteHostStatus",
+        "description": "Probe the exact registered host and update only availability/error state; generation or grant drift remains unavailable until explicit re-registration.",
+        "params": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "host": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "host"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "runtime": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "endpoint": {
+                  "type": "string"
+                },
+                "grantId": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "name",
+                "endpoint",
+                "grantId"
+              ]
+            },
+            "identity": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "hostId": {
+                  "type": "string"
+                },
+                "generation": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "hostId",
+                "generation"
+              ]
+            },
+            "connected": {
+              "type": "boolean"
+            },
+            "error": {
+              "description": "String or null."
+            },
+            "updatedAt": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "id",
+            "runtime",
+            "identity",
+            "connected",
+            "error",
+            "updatedAt"
+          ]
+        },
+        "readOnly": true
+      },
+      {
+        "id": "remoteHostForget",
+        "description": "Forget a host registration only while any supplied expectedHost and expectedRuntime pins still match the stored registration. Existing attachments require detach:true and confirmed:true; detach removes only local mirrors and never remote source workspaces.",
+        "params": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "host": {
+              "type": "string"
+            },
+            "detach": {
+              "type": "boolean",
+              "description": "Explicitly detach all local mirror snapshots for this host without deleting remote workspaces."
+            },
+            "expectedHost": {
+              "type": "object",
+              "description": "Optional exact host ID and activation generation required for a stale VM caller to forget this registration.",
+              "additionalProperties": false,
+              "properties": {
+                "hostId": { "type": "string" },
+                "generation": { "type": "string" }
+              },
+              "required": ["hostId", "generation"]
+            },
+            "expectedRuntime": {
+              "type": "object",
+              "description": "Optional exact saved owner grant pin required for a stale VM caller to forget this registration.",
+              "additionalProperties": false,
+              "properties": {
+                "id": { "type": "string" },
+                "endpoint": { "type": "string" },
+                "grantId": { "type": "string" }
+              },
+              "required": ["id", "endpoint", "grantId"]
+            },
+            "confirmed": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "host",
+            "confirmed"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "ok": {
+              "type": "boolean"
+            },
+            "detached": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "ok",
+            "detached"
+          ]
+        },
+        "readOnly": false,
+        "destructive": true,
+        "confirm": "Forget this local host registration; detaching attachments removes only local mirrors and never deletes remote workspaces."
+      },
+      {
+        "id": "remoteAttach",
+        "description": "Attach one exact canonical remote worktree ID to its registered owner host; never accepts paths or fuzzy selectors.",
+        "params": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "host": {
+              "type": "string"
+            },
+            "worktree": {
+              "type": "string",
+              "description": "Exact remote worktree ID; optional id: prefix only."
+            }
+          },
+          "required": [
+            "host",
+            "worktree"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "hostId": {
+              "type": "string"
+            },
+            "identity": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "hostId": {
+                  "type": "string"
+                },
+                "generation": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "hostId",
+                "generation"
+              ]
+            },
+            "worktree": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "connected": {
+              "type": "boolean"
+            },
+            "fingerprint": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "id",
+            "hostId",
+            "identity",
+            "worktree",
+            "connected",
+            "fingerprint"
+          ]
+        },
+        "readOnly": false
+      },
+      {
+        "id": "remoteRefresh",
+        "description": "Fetch the selected owner's current worktree projection through an expectedHost-fenced call and persist separate mirror snapshots.",
+        "params": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "host": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "host"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "workspaces": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "hostId": {
+                    "type": "string"
+                  },
+                  "identity": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                      "hostId": {
+                        "type": "string"
+                      },
+                      "generation": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "hostId",
+                      "generation"
+                    ]
+                  },
+                  "worktree": {
+                    "type": "object",
+                    "additionalProperties": true
+                  },
+                  "connected": {
+                    "type": "boolean"
+                  },
+                  "fingerprint": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "id",
+                  "hostId",
+                  "identity",
+                  "worktree",
+                  "connected",
+                  "fingerprint"
+                ]
+              }
+            }
+          },
+          "required": [
+            "workspaces"
+          ]
+        },
+        "readOnly": false
+      },
+      {
+        "id": "remoteList",
+        "description": "List saved remote mirror snapshots, optionally restricted to one registered host; unavailable owners keep visible disconnected snapshots.",
+        "params": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "host": {
+              "type": "string"
+            }
+          }
+        },
+        "result": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "workspaces": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "hostId": {
+                    "type": "string"
+                  },
+                  "identity": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                      "hostId": {
+                        "type": "string"
+                      },
+                      "generation": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "hostId",
+                      "generation"
+                    ]
+                  },
+                  "worktree": {
+                    "type": "object",
+                    "additionalProperties": true
+                  },
+                  "connected": {
+                    "type": "boolean"
+                  },
+                  "fingerprint": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "id",
+                  "hostId",
+                  "identity",
+                  "worktree",
+                  "connected",
+                  "fingerprint"
+                ]
+              }
+            }
+          },
+          "required": [
+            "workspaces"
+          ]
+        },
+        "readOnly": true
+      },
+      {
+        "id": "remoteShow",
+        "description": "Read the current exact owner instance when available; otherwise return its saved snapshot marked disconnected. It never resolves a local worktree path.",
+        "params": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "workspace": {
+              "type": "string",
+              "description": "Saved mirror ID."
+            }
+          },
+          "required": [
+            "workspace"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "hostId": {
+              "type": "string"
+            },
+            "identity": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "hostId": {
+                  "type": "string"
+                },
+                "generation": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "hostId",
+                "generation"
+              ]
+            },
+            "worktree": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "connected": {
+              "type": "boolean"
+            },
+            "fingerprint": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "id",
+            "hostId",
+            "identity",
+            "worktree",
+            "connected",
+            "fingerprint"
+          ]
+        },
+        "readOnly": true
+      },
+      {
+        "id": "remoteNavigate",
+        "description": "Open the exact remote-specific view in the selected live local window after rechecking host generation and worktree instance.",
+        "params": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "workspace": {
+              "type": "string"
+            },
+            "window": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          "required": [
+            "workspace"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "workspace": {
+              "type": "string"
+            },
+            "connId": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "view": {
+              "type": "string",
+              "description": "view:quirky.worktree/remote"
+            }
+          },
+          "required": [
+            "workspace",
+            "connId",
+            "view"
+          ]
+        },
+        "readOnly": false
+      },
+      {
+        "id": "remoteCall",
+        "description": "Call only the fixed bound-worktree change/diff/session/terminal operation set. No method, host, path or workspace selector override is accepted.",
+        "params": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "workspace": {
+              "type": "string"
+            },
+            "operation": {
+              "type": "string",
+              "enum": [
+                "changes",
+                "diff",
+                "sessions",
+                "terminalWorkspace",
+                "terminalCreate",
+                "terminalRead",
+                "terminalWrite"
+              ]
+            },
+            "path": {
+              "type": "string",
+              "description": "Normalized relative file path, only for diff."
+            },
+            "source": {
+              "type": "string",
+              "enum": [
+                "unstaged",
+                "staged"
+              ]
+            },
+            "session": {
+              "type": "string",
+              "description": "Must be listed by the same bound remote workspace."
+            },
+            "lines": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 5000
+            },
+            "data": {
+              "type": "string",
+              "description": "Raw terminal input bytes encoded as UTF-8 text, only for terminalWrite. Maximum 65536 characters, enforced by the owner."
+            },
+            "title": {
+              "type": "string",
+              "description": "Optional title for a new remote shell session. Maximum 200 characters, enforced by the owner."
+            }
+          },
+          "required": [
+            "workspace",
+            "operation"
+          ]
+        },
+        "result": {},
+        "readOnly": false
+      },
+      {
+        "id": "remoteCleanupPreview",
+        "description": "Return the live canonical cleanup candidate for the selected exact remote mirror, including its owner fingerprint and filesystem instance identity.",
+        "params": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "workspace": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "workspace"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "workspace": {
+              "type": "string"
+            },
+            "hostId": {
+              "type": "string"
+            },
+            "identity": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "hostId": {
+                  "type": "string"
+                },
+                "generation": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "hostId",
+                "generation"
+              ]
+            },
+            "instanceId": {
+              "type": "string"
+            },
+            "generatedAt": {
+              "type": "number"
+            },
+            "candidate": {
+              "additionalProperties": false,
+              "properties": {
+                "worktreeId": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "fingerprint": {
+                  "type": "string"
+                },
+                "reason": {
+                  "type": "string",
+                  "enum": [
+                    "idle-clean",
+                    "archived-7day"
+                  ]
+                },
+                "ignored": {
+                  "type": "boolean"
+                },
+                "eligible": {
+                  "type": "boolean"
+                },
+                "blockers": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                      "code": {
+                        "type": "string"
+                      },
+                      "detail": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "code",
+                      "detail"
+                    ]
+                  }
+                }
+              },
+              "required": [
+                "worktreeId",
+                "name",
+                "fingerprint",
+                "reason",
+                "ignored",
+                "eligible",
+                "blockers"
+              ],
+              "description": "Canonical cleanup candidate object, or null when not suggested for cleanup."
+            }
+          },
+          "required": [
+            "workspace",
+            "hostId",
+            "identity",
+            "instanceId",
+            "generatedAt",
+            "candidate"
+          ]
+        },
+        "readOnly": true
+      },
+      {
+        "id": "remoteCleanupRemove",
+        "description": "Re-fetch canonical cleanup evidence and forward its exact fingerprint plus mirror-bound expectedInstanceId to the owner cleanupRemove API.",
+        "params": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "workspace": {
+              "type": "string"
+            },
+            "fingerprint": {
+              "type": "string"
+            },
+            "confirmed": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "workspace",
+            "fingerprint",
+            "confirmed"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "ok": {
+              "type": "boolean"
+            },
+            "workspace": {
+              "type": "string"
+            },
+            "result": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          },
+          "required": [
+            "ok",
+            "workspace",
+            "result"
+          ]
+        },
+        "readOnly": false,
+        "destructive": true,
+        "confirm": "Remove this exact owner-confirmed cleanup candidate after the canonical fingerprint and filesystem instance are checked."
+      },
+      {
+        "id": "remoteRemove",
+        "description": "Remove one confirmed workspace independently of cleanup age by delegating to canonical non-forced safeOnly removal with the mirror's exact expectedInstanceId.",
+        "params": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "workspace": {
+              "type": "string"
+            },
+            "fingerprint": {
+              "type": "string"
+            },
+            "confirmed": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "workspace",
+            "fingerprint",
+            "confirmed"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "ok": {
+              "type": "boolean"
+            },
+            "workspace": {
+              "type": "string"
+            },
+            "result": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          },
+          "required": [
+            "ok",
+            "workspace",
+            "result"
+          ]
+        },
+        "readOnly": false,
+        "destructive": true,
+        "confirm": "Remove this exact remote workspace through the canonical safe-only worktree owner."
+      },
+      {
+        "id": "vmRecipes",
+        "description": "Read complete repository VM lifecycle scripts and their exact one-shot consent hashes.",
+        "readOnly": true,
+        "params": {"type":"object","properties":{"repo":{"type":"string"}},"required":["repo"],"additionalProperties":false},
+        "result": {"type":"object","properties":{"repo":{"type":"object","properties":{"id":{"type":"string"},"name":{"type":"string"}},"required":["id","name"],"additionalProperties":false},"recipes":{"type":"array","items":{"type":"object","properties":{"id":{"type":"string"},"name":{"type":"string"},"create":{"type":"string"},"checkoutMode":{"type":"string","enum":["orca-worktree","provisioned-root"]},"description":{"type":"string"},"suspend":{"type":"string"},"resume":{"type":"string"},"destroy":{"type":"string"},"destroyDisabled":{"type":"boolean"},"trustHash":{"type":"string"}},"required":["id","name","create","checkoutMode","trustHash"],"additionalProperties":false}},"diagnostics":{"type":"array","items":{"type":"object","properties":{"index":{"type":"number"},"field":{"type":"string"},"message":{"type":"string"}},"required":["index","message"],"additionalProperties":false}}},"required":["repo","recipes","diagnostics"],"additionalProperties":false}
+      },
+      {
+        "id": "vmDoctor",
+        "description": "Inspect the explicit Lima dependency and literal platform/suspension capabilities without provisioning a VM.",
+        "readOnly": true,
+        "params": {"type":"object","properties":{},"required":[],"additionalProperties":false},
+        "result": {"type":"object","properties":{"platform":{"type":"string"},"supported":{"type":"boolean"},"backend":{"type":"object","properties":{"name":{"type":"string","enum":["lima"]},"executable":{"description":"Resolved executable string or null."},"requestedExecutable":{"type":"string"},"available":{"type":"boolean"},"version":{"description":"Version string or null."},"error":{"description":"Error string or null."}},"required":["name","executable","requestedExecutable","available","version","error"],"additionalProperties":false},"suspend":{"type":"object","properties":{"semantics":{"type":"string"},"ramPreserving":{"type":"boolean"}},"required":["semantics","ramPreserving"],"additionalProperties":false}},"required":["platform","supported","backend","suspend"],"additionalProperties":false}
+      },
+      {
+        "id": "vmCreate",
+        "description": "Provision a genuine Lima guest using the exact reviewed lifecycle hash, authenticate its guest owner and attach its actual workspace. After timeout inspect vmList rather than replay creation.",
+        "params": {"type":"object","properties":{"repo":{"type":"string"},"recipe":{"type":"string"},"trustHash":{"type":"string"},"name":{"type":"string"},"createParams":{"type":"object","additionalProperties":true,"description":"Whitelisted canonical guest-create choices; provisioned-root refuses these choices."}},"required":["repo","recipe","trustHash"],"additionalProperties":false},
+        "result": {"type":"object","properties":{"id":{"type":"string"},"name":{"type":"string"},"vmName":{"type":"string"},"repo":{"type":"object","properties":{"id":{"type":"string"},"name":{"type":"string"}},"required":["id","name"],"additionalProperties":false},"recipe":{"type":"object","properties":{"id":{"type":"string"},"name":{"type":"string"},"hash":{"type":"string"},"checkoutMode":{"type":"string","enum":["orca-worktree","provisioned-root"]}},"required":["id","name","hash","checkoutMode"],"additionalProperties":false},"instanceId":{"type":"string"},"backend":{"type":"string","enum":["lima"]},"backendExecutable":{"type":"string"},"state":{"type":"string","enum":["creating","running","suspending","resuming","suspended","stopped","failed","interrupted","destroying","retiring","destroyed"]},"backendState":{"type":"string","enum":["running","suspended","stopped","absent","unknown"]},"operation":{"type":"object","properties":{"id":{"type":"string"},"kind":{"type":"string","enum":["create","suspend","resume","destroy"]},"state":{"type":"string","enum":["running","complete","failed","interrupted"]},"startedAt":{"type":"number"},"updatedAt":{"type":"number"}},"required":["id","kind","state","startedAt","updatedAt"],"additionalProperties":false},"error":{"description":"Error string or null."},"ownerHost":{"properties":{"id":{"type":"string"},"identity":{"type":"object","additionalProperties":false,"properties":{"hostId":{"type":"string"},"generation":{"type":"string"}},"required":["hostId","generation"]},"connected":{"type":"boolean"}},"required":["id","identity","connected"],"additionalProperties":false,"description":"Object or null."},"remoteWorkspace":{"additionalProperties":false,"properties":{"id":{"type":"string"},"hostId":{"type":"string"},"identity":{"type":"object","additionalProperties":false,"properties":{"hostId":{"type":"string"},"generation":{"type":"string"}},"required":["hostId","generation"]},"worktree":{"type":"object","additionalProperties":true},"connected":{"type":"boolean"},"fingerprint":{"type":"string"}},"required":["id","hostId","identity","worktree","connected","fingerprint"],"description":"Exact owner-bound guest workspace, or null."},"guestCreateResult":{"properties":{"worktree":{"type":"object","additionalProperties":true},"warnings":{"type":"array","items":{"type":"string"}},"setup":{"type":"object","additionalProperties":true}},"required":["worktree","warnings","setup"],"additionalProperties":false,"description":"Object or null."},"createdAt":{"type":"number"},"updatedAt":{"type":"number"}},"required":["id","name","vmName","repo","recipe","instanceId","backend","backendExecutable","state","backendState","operation","error","ownerHost","remoteWorkspace","guestCreateResult","createdAt","updatedAt"],"additionalProperties":false}
+      },
+      {
+        "id": "vmList",
+        "description": "List durable VM operation, backend and attachment state, including failed/interrupted provisioning.",
+        "readOnly": true,
+        "params": {"type":"object","properties":{"repo":{"type":"string"},"state":{"type":"string","enum":["creating","running","suspending","resuming","suspended","stopped","failed","interrupted","destroying","retiring","destroyed"]}},"required":[],"additionalProperties":false},
+        "result": {"type":"object","properties":{"environments":{"type":"array","items":{"type":"object","properties":{"id":{"type":"string"},"name":{"type":"string"},"vmName":{"type":"string"},"repo":{"type":"object","properties":{"id":{"type":"string"},"name":{"type":"string"}},"required":["id","name"],"additionalProperties":false},"recipe":{"type":"object","properties":{"id":{"type":"string"},"name":{"type":"string"},"hash":{"type":"string"},"checkoutMode":{"type":"string","enum":["orca-worktree","provisioned-root"]}},"required":["id","name","hash","checkoutMode"],"additionalProperties":false},"instanceId":{"type":"string"},"backend":{"type":"string","enum":["lima"]},"backendExecutable":{"type":"string"},"state":{"type":"string","enum":["creating","running","suspending","resuming","suspended","stopped","failed","interrupted","destroying","retiring","destroyed"]},"backendState":{"type":"string","enum":["running","suspended","stopped","absent","unknown"]},"operation":{"type":"object","properties":{"id":{"type":"string"},"kind":{"type":"string","enum":["create","suspend","resume","destroy"]},"state":{"type":"string","enum":["running","complete","failed","interrupted"]},"startedAt":{"type":"number"},"updatedAt":{"type":"number"}},"required":["id","kind","state","startedAt","updatedAt"],"additionalProperties":false},"error":{"description":"Error string or null."},"ownerHost":{"properties":{"id":{"type":"string"},"identity":{"type":"object","additionalProperties":false,"properties":{"hostId":{"type":"string"},"generation":{"type":"string"}},"required":["hostId","generation"]},"connected":{"type":"boolean"}},"required":["id","identity","connected"],"additionalProperties":false,"description":"Object or null."},"remoteWorkspace":{"additionalProperties":false,"properties":{"id":{"type":"string"},"hostId":{"type":"string"},"identity":{"type":"object","additionalProperties":false,"properties":{"hostId":{"type":"string"},"generation":{"type":"string"}},"required":["hostId","generation"]},"worktree":{"type":"object","additionalProperties":true},"connected":{"type":"boolean"},"fingerprint":{"type":"string"}},"required":["id","hostId","identity","worktree","connected","fingerprint"],"description":"Exact owner-bound guest workspace, or null."},"guestCreateResult":{"properties":{"worktree":{"type":"object","additionalProperties":true},"warnings":{"type":"array","items":{"type":"string"}},"setup":{"type":"object","additionalProperties":true}},"required":["worktree","warnings","setup"],"additionalProperties":false,"description":"Object or null."},"createdAt":{"type":"number"},"updatedAt":{"type":"number"}},"required":["id","name","vmName","repo","recipe","instanceId","backend","backendExecutable","state","backendState","operation","error","ownerHost","remoteWorkspace","guestCreateResult","createdAt","updatedAt"],"additionalProperties":false}}},"required":["environments"],"additionalProperties":false}
+      },
+      {
+        "id": "vmShow",
+        "description": "Inspect one durable VM record and its exact lifecycle instance fence.",
+        "readOnly": true,
+        "params": {"type":"object","properties":{"vm":{"type":"string"}},"required":["vm"],"additionalProperties":false},
+        "result": {"type":"object","properties":{"id":{"type":"string"},"name":{"type":"string"},"vmName":{"type":"string"},"repo":{"type":"object","properties":{"id":{"type":"string"},"name":{"type":"string"}},"required":["id","name"],"additionalProperties":false},"recipe":{"type":"object","properties":{"id":{"type":"string"},"name":{"type":"string"},"hash":{"type":"string"},"checkoutMode":{"type":"string","enum":["orca-worktree","provisioned-root"]}},"required":["id","name","hash","checkoutMode"],"additionalProperties":false},"instanceId":{"type":"string"},"backend":{"type":"string","enum":["lima"]},"backendExecutable":{"type":"string"},"state":{"type":"string","enum":["creating","running","suspending","resuming","suspended","stopped","failed","interrupted","destroying","retiring","destroyed"]},"backendState":{"type":"string","enum":["running","suspended","stopped","absent","unknown"]},"operation":{"type":"object","properties":{"id":{"type":"string"},"kind":{"type":"string","enum":["create","suspend","resume","destroy"]},"state":{"type":"string","enum":["running","complete","failed","interrupted"]},"startedAt":{"type":"number"},"updatedAt":{"type":"number"}},"required":["id","kind","state","startedAt","updatedAt"],"additionalProperties":false},"error":{"description":"Error string or null."},"ownerHost":{"properties":{"id":{"type":"string"},"identity":{"type":"object","additionalProperties":false,"properties":{"hostId":{"type":"string"},"generation":{"type":"string"}},"required":["hostId","generation"]},"connected":{"type":"boolean"}},"required":["id","identity","connected"],"additionalProperties":false,"description":"Object or null."},"remoteWorkspace":{"additionalProperties":false,"properties":{"id":{"type":"string"},"hostId":{"type":"string"},"identity":{"type":"object","additionalProperties":false,"properties":{"hostId":{"type":"string"},"generation":{"type":"string"}},"required":["hostId","generation"]},"worktree":{"type":"object","additionalProperties":true},"connected":{"type":"boolean"},"fingerprint":{"type":"string"}},"required":["id","hostId","identity","worktree","connected","fingerprint"],"description":"Exact owner-bound guest workspace, or null."},"guestCreateResult":{"properties":{"worktree":{"type":"object","additionalProperties":true},"warnings":{"type":"array","items":{"type":"string"}},"setup":{"type":"object","additionalProperties":true}},"required":["worktree","warnings","setup"],"additionalProperties":false,"description":"Object or null."},"createdAt":{"type":"number"},"updatedAt":{"type":"number"}},"required":["id","name","vmName","repo","recipe","instanceId","backend","backendExecutable","state","backendState","operation","error","ownerHost","remoteWorkspace","guestCreateResult","createdAt","updatedAt"],"additionalProperties":false}
+      },
+      {
+        "id": "vmSuspend",
+        "description": "Execute the approved suspend script and verify the exact backend instance really stopped or suspended.",
+        "params": {"type":"object","properties":{"vm":{"type":"string"},"instanceId":{"type":"string"}},"required":["vm","instanceId"],"additionalProperties":false},
+        "result": {"type":"object","properties":{"id":{"type":"string"},"name":{"type":"string"},"vmName":{"type":"string"},"repo":{"type":"object","properties":{"id":{"type":"string"},"name":{"type":"string"}},"required":["id","name"],"additionalProperties":false},"recipe":{"type":"object","properties":{"id":{"type":"string"},"name":{"type":"string"},"hash":{"type":"string"},"checkoutMode":{"type":"string","enum":["orca-worktree","provisioned-root"]}},"required":["id","name","hash","checkoutMode"],"additionalProperties":false},"instanceId":{"type":"string"},"backend":{"type":"string","enum":["lima"]},"backendExecutable":{"type":"string"},"state":{"type":"string","enum":["creating","running","suspending","resuming","suspended","stopped","failed","interrupted","destroying","retiring","destroyed"]},"backendState":{"type":"string","enum":["running","suspended","stopped","absent","unknown"]},"operation":{"type":"object","properties":{"id":{"type":"string"},"kind":{"type":"string","enum":["create","suspend","resume","destroy"]},"state":{"type":"string","enum":["running","complete","failed","interrupted"]},"startedAt":{"type":"number"},"updatedAt":{"type":"number"}},"required":["id","kind","state","startedAt","updatedAt"],"additionalProperties":false},"error":{"description":"Error string or null."},"ownerHost":{"properties":{"id":{"type":"string"},"identity":{"type":"object","additionalProperties":false,"properties":{"hostId":{"type":"string"},"generation":{"type":"string"}},"required":["hostId","generation"]},"connected":{"type":"boolean"}},"required":["id","identity","connected"],"additionalProperties":false,"description":"Object or null."},"remoteWorkspace":{"additionalProperties":false,"properties":{"id":{"type":"string"},"hostId":{"type":"string"},"identity":{"type":"object","additionalProperties":false,"properties":{"hostId":{"type":"string"},"generation":{"type":"string"}},"required":["hostId","generation"]},"worktree":{"type":"object","additionalProperties":true},"connected":{"type":"boolean"},"fingerprint":{"type":"string"}},"required":["id","hostId","identity","worktree","connected","fingerprint"],"description":"Exact owner-bound guest workspace, or null."},"guestCreateResult":{"properties":{"worktree":{"type":"object","additionalProperties":true},"warnings":{"type":"array","items":{"type":"string"}},"setup":{"type":"object","additionalProperties":true}},"required":["worktree","warnings","setup"],"additionalProperties":false,"description":"Object or null."},"createdAt":{"type":"number"},"updatedAt":{"type":"number"}},"required":["id","name","vmName","repo","recipe","instanceId","backend","backendExecutable","state","backendState","operation","error","ownerHost","remoteWorkspace","guestCreateResult","createdAt","updatedAt"],"additionalProperties":false}
+      },
+      {
+        "id": "vmResume",
+        "description": "Resume or reconcile the exact backend instance, authenticate the guest generation and reattach its original workspace instance.",
+        "params": {"type":"object","properties":{"vm":{"type":"string"},"instanceId":{"type":"string"}},"required":["vm","instanceId"],"additionalProperties":false},
+        "result": {"type":"object","properties":{"id":{"type":"string"},"name":{"type":"string"},"vmName":{"type":"string"},"repo":{"type":"object","properties":{"id":{"type":"string"},"name":{"type":"string"}},"required":["id","name"],"additionalProperties":false},"recipe":{"type":"object","properties":{"id":{"type":"string"},"name":{"type":"string"},"hash":{"type":"string"},"checkoutMode":{"type":"string","enum":["orca-worktree","provisioned-root"]}},"required":["id","name","hash","checkoutMode"],"additionalProperties":false},"instanceId":{"type":"string"},"backend":{"type":"string","enum":["lima"]},"backendExecutable":{"type":"string"},"state":{"type":"string","enum":["creating","running","suspending","resuming","suspended","stopped","failed","interrupted","destroying","retiring","destroyed"]},"backendState":{"type":"string","enum":["running","suspended","stopped","absent","unknown"]},"operation":{"type":"object","properties":{"id":{"type":"string"},"kind":{"type":"string","enum":["create","suspend","resume","destroy"]},"state":{"type":"string","enum":["running","complete","failed","interrupted"]},"startedAt":{"type":"number"},"updatedAt":{"type":"number"}},"required":["id","kind","state","startedAt","updatedAt"],"additionalProperties":false},"error":{"description":"Error string or null."},"ownerHost":{"properties":{"id":{"type":"string"},"identity":{"type":"object","additionalProperties":false,"properties":{"hostId":{"type":"string"},"generation":{"type":"string"}},"required":["hostId","generation"]},"connected":{"type":"boolean"}},"required":["id","identity","connected"],"additionalProperties":false,"description":"Object or null."},"remoteWorkspace":{"additionalProperties":false,"properties":{"id":{"type":"string"},"hostId":{"type":"string"},"identity":{"type":"object","additionalProperties":false,"properties":{"hostId":{"type":"string"},"generation":{"type":"string"}},"required":["hostId","generation"]},"worktree":{"type":"object","additionalProperties":true},"connected":{"type":"boolean"},"fingerprint":{"type":"string"}},"required":["id","hostId","identity","worktree","connected","fingerprint"],"description":"Exact owner-bound guest workspace, or null."},"guestCreateResult":{"properties":{"worktree":{"type":"object","additionalProperties":true},"warnings":{"type":"array","items":{"type":"string"}},"setup":{"type":"object","additionalProperties":true}},"required":["worktree","warnings","setup"],"additionalProperties":false,"description":"Object or null."},"createdAt":{"type":"number"},"updatedAt":{"type":"number"}},"required":["id","name","vmName","repo","recipe","instanceId","backend","backendExecutable","state","backendState","operation","error","ownerHost","remoteWorkspace","guestCreateResult","createdAt","updatedAt"],"additionalProperties":false}
+      },
+      {
+        "id": "vmDestroy",
+        "description": "Destroy the exact recorded Lima instance; retire only its owner-bound mirrors and the saved credential created by this VM after absence is proved.",
+        "params": {"type":"object","properties":{"vm":{"type":"string"},"instanceId":{"type":"string"}},"required":["vm","instanceId"],"additionalProperties":false},
+        "result": {"type":"object","properties":{"id":{"type":"string"},"name":{"type":"string"},"vmName":{"type":"string"},"repo":{"type":"object","properties":{"id":{"type":"string"},"name":{"type":"string"}},"required":["id","name"],"additionalProperties":false},"recipe":{"type":"object","properties":{"id":{"type":"string"},"name":{"type":"string"},"hash":{"type":"string"},"checkoutMode":{"type":"string","enum":["orca-worktree","provisioned-root"]}},"required":["id","name","hash","checkoutMode"],"additionalProperties":false},"instanceId":{"type":"string"},"backend":{"type":"string","enum":["lima"]},"backendExecutable":{"type":"string"},"state":{"type":"string","enum":["creating","running","suspending","resuming","suspended","stopped","failed","interrupted","destroying","retiring","destroyed"]},"backendState":{"type":"string","enum":["running","suspended","stopped","absent","unknown"]},"operation":{"type":"object","properties":{"id":{"type":"string"},"kind":{"type":"string","enum":["create","suspend","resume","destroy"]},"state":{"type":"string","enum":["running","complete","failed","interrupted"]},"startedAt":{"type":"number"},"updatedAt":{"type":"number"}},"required":["id","kind","state","startedAt","updatedAt"],"additionalProperties":false},"error":{"description":"Error string or null."},"ownerHost":{"properties":{"id":{"type":"string"},"identity":{"type":"object","additionalProperties":false,"properties":{"hostId":{"type":"string"},"generation":{"type":"string"}},"required":["hostId","generation"]},"connected":{"type":"boolean"}},"required":["id","identity","connected"],"additionalProperties":false,"description":"Object or null."},"remoteWorkspace":{"additionalProperties":false,"properties":{"id":{"type":"string"},"hostId":{"type":"string"},"identity":{"type":"object","additionalProperties":false,"properties":{"hostId":{"type":"string"},"generation":{"type":"string"}},"required":["hostId","generation"]},"worktree":{"type":"object","additionalProperties":true},"connected":{"type":"boolean"},"fingerprint":{"type":"string"}},"required":["id","hostId","identity","worktree","connected","fingerprint"],"description":"Exact owner-bound guest workspace, or null."},"guestCreateResult":{"properties":{"worktree":{"type":"object","additionalProperties":true},"warnings":{"type":"array","items":{"type":"string"}},"setup":{"type":"object","additionalProperties":true}},"required":["worktree","warnings","setup"],"additionalProperties":false,"description":"Object or null."},"createdAt":{"type":"number"},"updatedAt":{"type":"number"}},"required":["id","name","vmName","repo","recipe","instanceId","backend","backendExecutable","state","backendState","operation","error","ownerHost","remoteWorkspace","guestCreateResult","createdAt","updatedAt"],"additionalProperties":false},
+        "destructive": true,
+        "confirm": "Permanently destroy VM {vm} and its guest data?"
       }
     ],
     "event": [
@@ -2260,6 +3238,21 @@
         "id": "worktrees",
         "title": "Worktrees",
         "order": 0
+      },
+      {
+        "id": "remote-workspaces",
+        "title": "Remote workspaces",
+        "order": 1
+      }
+    ],
+    "view": [
+      {
+        "id": "remote",
+        "title": "Remote workspace"
+      },
+      {
+        "id": "environments",
+        "title": "VM environments"
       }
     ],
     "command": [
@@ -2409,6 +3402,10 @@
           "trust-issue-command-hash": {
             "type": "string",
             "description": "shared issue-command hash shown by hooks-untrusted; use with --trust-issue-command to pin one-time consent"
+          },
+          "trust-environment-recipe-hash": {
+            "type": "string",
+            "description": "approve the exact lifecycle hash shown by vm-recipes for this provisioning operation"
           },
           "agent": {
             "type": "string",
@@ -2800,6 +3797,278 @@
           "window": { "type": "integer", "description": "exact kernel UI connection ID" }
         },
         "methods": ["quirky.worktree/openIn"]
+      },
+      {
+        "id": "remote-host-list",
+        "summary": "list registered remote owner hosts",
+        "methods": [
+          "quirky.worktree/remoteHostList"
+        ]
+      },
+      {
+        "id": "remote-host-add",
+        "summary": "register a saved owner runtime; --replace is required when its grant or generation changed",
+        "positionals": [
+          {
+            "name": "target",
+            "description": "saved owner target ID, optionally prefixed runtime:",
+            "required": true
+          }
+        ],
+        "flags": {
+          "replace": {
+            "type": "boolean",
+            "description": "explicitly replace a changed owner identity or grant"
+          }
+        },
+        "methods": [
+          "quirky.worktree/remoteHostRegister"
+        ]
+      },
+      {
+        "id": "remote-host-status",
+        "summary": "check one registered remote owner host",
+        "positionals": [
+          {
+            "name": "host",
+            "description": "registered host ID",
+            "required": true
+          }
+        ],
+        "methods": [
+          "quirky.worktree/remoteHostStatus"
+        ]
+      },
+      {
+        "id": "remote-host-forget",
+        "summary": "forget a registered owner; explicit local detach never deletes remote workspaces",
+        "positionals": [
+          {
+            "name": "host",
+            "description": "registered host ID",
+            "required": true
+          }
+        ],
+        "flags": {
+          "detach": {
+            "type": "boolean",
+            "description": "detach all local mirror rows without deleting remote sources"
+          },
+          "confirm": {
+            "type": "boolean",
+            "description": "confirm the local detach/forget"
+          }
+        },
+        "methods": [
+          "quirky.worktree/remoteHostForget"
+        ]
+      },
+      {
+        "id": "remote-attach",
+        "summary": "attach an exact remote worktree ID",
+        "positionals": [
+          {
+            "name": "host",
+            "description": "registered host ID",
+            "required": true
+          },
+          {
+            "name": "worktree",
+            "description": "exact canonical remote worktree ID",
+            "required": true
+          }
+        ],
+        "methods": [
+          "quirky.worktree/remoteAttach"
+        ]
+      },
+      {
+        "id": "remote-refresh",
+        "summary": "refresh remote worktree snapshots from one registered host",
+        "positionals": [
+          {
+            "name": "host",
+            "description": "registered host ID",
+            "required": true
+          }
+        ],
+        "methods": [
+          "quirky.worktree/remoteRefresh"
+        ]
+      },
+      {
+        "id": "remote-list",
+        "summary": "list remote workspace mirrors",
+        "flags": {
+          "host": {
+            "type": "string",
+            "description": "restrict to one registered host ID"
+          }
+        },
+        "methods": [
+          "quirky.worktree/remoteList"
+        ]
+      },
+      {
+        "id": "remote-show",
+        "summary": "show one remote workspace mirror",
+        "positionals": [
+          {
+            "name": "workspace",
+            "description": "remote mirror ID",
+            "required": true
+          }
+        ],
+        "methods": [
+          "quirky.worktree/remoteShow"
+        ]
+      },
+      {
+        "id": "remote-open",
+        "summary": "open a remote workspace in the exact remote view",
+        "positionals": [
+          {
+            "name": "workspace",
+            "description": "remote mirror ID",
+            "required": true
+          }
+        ],
+        "flags": {
+          "window": {
+            "type": "integer",
+            "description": "exact live local UI connection ID"
+          }
+        },
+        "methods": [
+          "quirky.worktree/remoteNavigate"
+        ]
+      },
+      {
+        "id": "remote-cleanup-preview",
+        "summary": "preview the canonical cleanup candidate for one remote mirror",
+        "positionals": [
+          {
+            "name": "workspace",
+            "description": "remote mirror ID",
+            "required": true
+          }
+        ],
+        "methods": [
+          "quirky.worktree/remoteCleanupPreview"
+        ]
+      },
+      {
+        "id": "remote-cleanup-remove",
+        "summary": "remove one remote workspace from a live canonical cleanup suggestion",
+        "positionals": [
+          {
+            "name": "workspace",
+            "description": "remote mirror ID",
+            "required": true
+          }
+        ],
+        "flags": {
+          "fingerprint": {
+            "type": "string",
+            "description": "exact fingerprint returned by remote-cleanup-preview"
+          },
+          "confirm": {
+            "type": "boolean",
+            "description": "confirm deletion of the remote source worktree"
+          }
+        },
+        "methods": [
+          "quirky.worktree/remoteCleanupRemove"
+        ]
+      },
+      {
+        "id": "remote-remove",
+        "summary": "remove one confirmed remote workspace regardless of cleanup age",
+        "positionals": [
+          {
+            "name": "workspace",
+            "description": "remote mirror ID",
+            "required": true
+          }
+        ],
+        "flags": {
+          "fingerprint": {
+            "type": "string",
+            "description": "exact mirror fingerprint returned by remote-list/show"
+          },
+          "confirm": {
+            "type": "boolean",
+            "description": "confirm deletion of the remote source worktree"
+          }
+        },
+        "methods": [
+          "quirky.worktree/remoteRemove"
+        ]
+      },
+      {
+        "id": "remote-call",
+        "summary": "read changes or drive a terminal belonging to one exact remote workspace",
+        "positionals": [{ "name": "workspace", "description": "owner-bound remote mirror ID", "required": true }],
+        "flags": {
+          "operation": { "type": "string", "description": "bound owner operation", "enum": ["changes", "diff", "sessions", "terminalWorkspace", "terminalCreate", "terminalRead", "terminalWrite"] },
+          "path": { "type": "string", "description": "repository-relative file for diff" },
+          "source": { "type": "string", "description": "diff source", "enum": ["unstaged", "staged"] },
+          "session": { "type": "string", "description": "session listed by this exact remote workspace" },
+          "lines": { "type": "integer", "description": "terminal lines, from 0 through 5000" },
+          "data": { "type": "string", "description": "UTF-8 terminal input" },
+          "title": { "type": "string", "description": "new remote shell title" }
+        },
+        "methods": ["quirky.worktree/remoteCall"]
+      },
+      {
+        "id": "vm-doctor",
+        "summary": "inspect the genuine Lima dependency and platform capabilities",
+        "methods": ["quirky.worktree/vmDoctor"]
+      },
+      {
+        "id": "vm-recipes",
+        "summary": "show complete lifecycle scripts and exact consent hashes",
+        "positionals": [{"name":"repo","description":"local Git project selector","required":true}],
+        "methods": ["quirky.worktree/vmRecipes"]
+      },
+      {
+        "id": "vm-list",
+        "summary": "list durable VM records; inspect this after any ambiguous create timeout",
+        "methods": ["quirky.worktree/vmList"]
+      },
+      {
+        "id": "vm-show",
+        "summary": "inspect an exact VM record and its instance fence",
+        "positionals": [{"name":"vm","description":"durable VM ID","required":true}],
+        "methods": ["quirky.worktree/vmShow"]
+      },
+      {
+        "id": "vm-create",
+        "summary": "provision a real guest and attach its owner-bound workspace",
+        "positionals": [{"name":"repo","description":"local Git project selector","required":true},{"name":"recipe","description":"configured environment recipe ID","required":true}],
+        "flags": {"trust-hash":{"type":"string","description":"exact reviewed full lifecycle SHA-256"},"name":{"type":"string","description":"optional guest worktree name for orca-worktree mode"},"create-options":{"type":"json","description":"canonical guest create options object; not accepted by provisioned-root"}},
+        "methods": ["quirky.worktree/vmCreate"]
+      },
+      {
+        "id": "vm-suspend",
+        "summary": "suspend the exact recorded VM instance",
+        "positionals": [{"name":"vm","description":"durable VM ID","required":true}],
+        "flags": {"instance":{"type":"string","description":"exact instanceId from vm-list or vm-show"}},
+        "methods": ["quirky.worktree/vmSuspend"]
+      },
+      {
+        "id": "vm-resume",
+        "summary": "resume the exact recorded VM instance",
+        "positionals": [{"name":"vm","description":"durable VM ID","required":true}],
+        "flags": {"instance":{"type":"string","description":"exact instanceId from vm-list or vm-show"}},
+        "methods": ["quirky.worktree/vmResume"]
+      },
+      {
+        "id": "vm-destroy",
+        "summary": "destroy the exact recorded VM instance",
+        "positionals": [{"name":"vm","description":"durable VM ID","required":true}],
+        "flags": {"instance":{"type":"string","description":"exact instanceId from vm-list or vm-show"}},
+        "methods": ["quirky.worktree/vmDestroy"]
       }
     ]
   }

@@ -92,7 +92,7 @@ export function Dialog({ open, title, children, actions, onClose, variant = 'dia
     if (dialogStack[dialogStack.length - 1] !== dialogRef.current) return
     if (event.key === 'Escape' && !event.defaultPrevented) {
       event.preventDefault()
-      onClose()
+      onClose?.()
       return
     }
     if (event.key !== 'Tab') return
@@ -118,7 +118,7 @@ export function Dialog({ open, title, children, actions, onClose, variant = 'dia
     <div
       className={classNames('ui-dialog-backdrop', variant === 'sheet' && 'ui-dialog-backdrop--sheet')}
       onClick={(event) => {
-        if (closeOnBackdrop && event.target === event.currentTarget && dialogStack[dialogStack.length - 1] === dialogRef.current) onClose()
+        if (closeOnBackdrop && event.target === event.currentTarget && dialogStack[dialogStack.length - 1] === dialogRef.current) onClose?.()
       }}
     >
       <section
@@ -132,7 +132,7 @@ export function Dialog({ open, title, children, actions, onClose, variant = 'dia
       >
         <header className="ui-dialog__header">
           <h2 className="ui-dialog__title" id={titleId}>{title}</h2>
-          <button type="button" className="ui-dialog__close" aria-label="Close dialog" onClick={onClose}>×</button>
+          {onClose && <button type="button" className="ui-dialog__close" aria-label="Close dialog" onClick={onClose}>×</button>}
         </header>
         <div className="ui-dialog__body">{children}</div>
         {actions !== undefined && <footer className="ui-dialog__actions">{actions}</footer>}

@@ -37,3 +37,17 @@ Changed account/offer authority returns a public Conflict before provider redemp
 ## Queued Claude restarts
 
 Always queues busy restarts without an Ask modal. Under Ask, accepting Restart closes the choice dialog once the restart is queued; the pane accessory and usage details retain nonmodal progress until idle. If policy changes to Ask or Never before the next selection, the old queued intent is invalidated and cannot authorize a restart on the newly selected account.
+
+## Desktop presentation
+
+Accounts uses the public `@quirky/ui` graphite components and shared dark/light tokens for its settings, Usage status item and popover, session accessory and account-switch dialog. Its existing contribution IDs and account/usage APIs are unchanged; the host still owns placement and settings navigation.
+
+Accounts and Vault are both opted into `scripts/ui-lint-plugins.json`. Run `bun run typecheck` to enforce the shared design system as well as TypeScript contracts. Neither plugin injects its own stylesheet. The restyle's scope and acceptance scenarios are recorded in [`ui-restyle-accounts/logic.md`](../../../docs/quirk/specs/2026-10-28-ui-restyle-accounts/logic.md); the approved reference is the [desktop redesign](../../../docs/quirk/specs/2026-10-28-ui-redesign/logic.md).
+
+The lint gate checks tracked source and nonignored new source; ignored generated bundles are not source inputs. A tracked file is still checked even if an ignore pattern also matches it. The gate never rewrites generated phone assets or relaxes token/CSS rules.
+
+## Isolated account regressions
+
+Run `bun scripts/suite.ts plugins/quirky.accounts` for the account lifecycle and UI regressions. They use fresh private homes and synthetic provider/security boundaries; they do not establish native Keychain, real provider authentication, or packaged desktop acceptance.
+
+The model-discovery fixture configures the absolute owned provider executable through `quirky.agents/configure` and uses the running Bun executable as its interpreter. Prepending a fixture directory to `PATH`, or adding it to `QUIRKY_AGENT_SEARCH_DIRS`, is insufficient: a login-shell executable can take precedence. The regression checks selected-account model/effort resolution and preservation of the last usable catalog after failed discovery. Removal and continuation regressions check credential/history bytes and surviving account selection rather than private markup, command inventories, or copied process arguments.

@@ -2,6 +2,14 @@
 
 This directory holds Quirky's built-in plugins, one per subdirectory, each with a `quirky-plugin.json` manifest. The daemon finds it through `QUIRKY_BUILTIN_PLUGINS_DIR`.
 
+## Removing a project
+
+`quirky repo rm <selector>` forgets the selected project and its settings/group
+membership, but leaves its repository and worktree directories on disk. It closes
+only sessions owned by that project; another project with the same name keeps
+its sessions. If an owned session cannot close, removal fails and the project
+stays available for retry. Re-adding a removed project starts with fresh settings.
+
 ## Terminal workspace
 
 Terminal views stay in the center; **Terminal sessions** and **Quick commands** open
@@ -144,8 +152,13 @@ transcript path when account preparation moves the conversation.
 The plugin exposes `create`, `messages`, `send`, `stop`, and `resume`. Creation returns a session
 record before startup finishes; `send` waits for native startup before submitting input. Messages
 are journaled and status comes from native events. Command/file permissions become ordinary
-`quirky.ask` questions. Cancellation denies approval; disabling the creating plugin stops its
-owned runners and cancels their pending approvals.
+`quirky.ask` questions. The structured owner waits through its own lease-authenticated
+client connection; answering resumes the waiting provider. Cancellation denies approval;
+disabling the creating plugin stops its owned runners and cancels their pending approvals.
+
+Structured runners and their leases belong to the daemon. After a daemon restart, startup marks
+their old session records exited while retaining the provider conversation and launch snapshot
+for explicit resume. Terminal processes that still live in the independent PTY host stay running.
 
 Stop a connected runner before resuming its conversation:
 
@@ -314,7 +327,7 @@ toward active time without double-counting overlaps. Background workers require 
 identity and an active assignment to count. Missing contact, an idle prompt or a lost reply does
 not prove completion. Unknown effects retain their durable request identity.
 
-Headless plugins use the eight `quirky.orchestration` service methods through `PluginContext.call`:
+Headless plugins use the `quirky.orchestration` service methods through `PluginContext.call`:
 
 - `serviceRunCreate` creates a stable Run for the authenticated plugin and its key. It does not
   invent a coordinator session.
@@ -324,6 +337,9 @@ Headless plugins use the eight `quirky.orchestration` service methods through `P
   guidance with the Run as sender; `serviceCheck` consumes and acknowledges owned Run deliveries.
 - `serviceReply` answers a pending blocking Ask. `serviceWorkerStop` requires the exact session
   and process incarnation; `serviceWorkerRelease` uses settled-outcome, archive and custody guards.
+- `serviceRegisterSubmissionPreflight` binds the owner's callback before worker dispatch.
+  Registration is a mutation: send `contractVersion` and a stable `requestId`, and require the
+  matching receipt before proceeding. A lost reply reuses that identity, including after restart.
 
 Another plugin cannot read or control that service-owned Run. Ordinary worker CLI commands keep
 their native launch authority; they do not receive the service principal. See
@@ -851,6 +867,8 @@ cooldown policy. Disabling that plugin silences delivery.
 The workspace host grants one current epoch lease before Heimdall executes effects.
 Git workspaces keep it under `<gitdir>/orca-heimdall/lease/epoch-N/holder.json`;
 folder workspaces use `<workspace>/.orca/heimdall/lease/epoch-N/holder.json`.
+Registered worktrees derive their kind from a successful repository-scoped inventory. The enrolled
+path must be that exact workspace: a Git worktree ID cannot authorize a different plain folder.
 Renewal, assertions and release require the exact current holder and epoch.
 Expired or superseded holders cannot regain authority by renewing an old epoch.
 
@@ -954,6 +972,11 @@ Purpose-specific `push` and `forcePush` revalidate the exact destination and pri
 snapshot before mutation; a missing or ambiguous head target never falls back to publishing
 another repository. Force push retains its explicit lease and confirmation. No remote is
 created and no public caller-supplied push URL is accepted.
+
+PR-created workspaces retain the explicit PR link, so a base-repository `origin`
+can coexist with a different configured fork push remote. An unlinked branch
+lookup instead requires a PR head matching `origin`; adding a fork remote alone
+does not link that branch. Multiple push URLs on the selected remote are refused.
 
 Sidebar activity reads canonical current agent display evidence; stale rows alone do not
 establish liveness. Quiet time windows refresh without unrelated events, and client-local

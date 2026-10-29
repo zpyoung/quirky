@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import { PROTOCOL_VERSION, QuirkyClient } from '@quirky/protocol'
 import { rpcUrl } from '@quirky/protocol/node'
 import { startDaemon, type DaemonHandle } from '../src/daemon'
-import { makeTempHome, startHarness, type Harness } from './helpers'
+import { makeTempHome, startHarness, waitForAsync, type Harness } from './helpers'
 import { makeTempDir, removeTempDirs, writeModulePlugin } from './plugins/fixtures'
 
 const pluginId = 'acme.authority'
@@ -14,7 +14,7 @@ const authorityPlugin = {
   manifest: {
     id: pluginId,
     contributes: {
-      method: ['launch', 'lease', 'release', 'identity', 'caller'].map(method)
+      method: ['launch', 'lease', 'release', 'identity', 'caller', 'exitObservation'].map(method)
     }
   },
   behavior: {
@@ -45,6 +45,11 @@ const authorityPlugin = {
       })
       context.provide('method:acme.authority/identity', (params) => context.launch.sessionIdentity(String(params.sessionId)))
       context.provide('method:acme.authority/caller', (_params, caller) => caller)
+      let exitObservation = null
+      context.pty.onExit((sessionId) => {
+        exitObservation = { sessionId, identity: context.launch.sessionIdentity(sessionId) }
+      })
+      context.provide('method:acme.authority/exitObservation', () => exitObservation)
     `
   }
 }
@@ -179,6 +184,21 @@ describe('kernel runtime session authority', () => {
     expect(await current.callAny(`${pluginId}/caller`, {})).toHaveProperty('sessionAuthority')
     harness!.pty.exit(sessionId, 0)
     expect(await current.callAny(`${pluginId}/caller`, {})).not.toHaveProperty('sessionAuthority')
+  })
+
+  test('exit subscribers never observe cached live authority while terminal evidence refreshes', async () => {
+    const { harness: running, client } = await boot()
+    const sessionId = 's_exit_observer'
+    await client.callAny(`${pluginId}/launch`, { sessionId })
+    running.pty.exit(sessionId, 0)
+    const observed = await waitForAsync(async () =>
+      await client.callAny(`${pluginId}/exitObservation`, {}) as {
+        sessionId: string
+        identity: { live: boolean } | null
+      } | null
+    )
+    expect(observed?.sessionId).toBe(sessionId)
+    expect(observed?.identity?.live).not.toBe(true)
   })
 
   test('structured lease identity is live only until release', async () => {

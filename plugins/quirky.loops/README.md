@@ -40,7 +40,7 @@ quirky ui run command:quirky.loops/open --args '{"loopId":"<loop-id>"}'
 - In the CLI, no-progress pausing, checkpoint commits, ask-before-next, and resume-at-reset are off by default.
 - Checks are bounded to 1–600 seconds. An evaluator is read-only, tool-disabled, and bounded; evaluator errors never count as completion.
 - `LOOP_BLOCKED: <reason>` and `LOOP_DECIDE: <question>` pause for attention. Approval asks are surfaced as `needs-you`; loops never approve tools on the user's behalf.
-- External messages to a bound structured session can make a guarded iteration send stale or busy. The loop waits and retains its steer notes.
+- External messages to a bound structured session can make a guarded iteration send stale or busy. The loop waits and retains its steer notes. Direct structured steering is human input: settlement and the next loop prompt wait for 20 seconds of quiet, including when Stop after this iteration is pending or the loop's tab is detached.
 - Cost is reported only when the provider supplies measurable USD. If a cost cap is configured and usage is unavailable, the loop pauses rather than treating missing cost as zero.
 - Protected paths are checked before checkpointing. Checkpoints include only files changed by that iteration; loop notes are excluded. Folder workspaces are supported, but do not provide git tree snapshots or checkpoint commits.
 - Multiple loops may share a worktree and can change the same files concurrently. Isolate work or use protected paths when needed.

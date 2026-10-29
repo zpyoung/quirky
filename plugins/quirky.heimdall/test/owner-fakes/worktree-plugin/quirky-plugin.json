@@ -1,0 +1,59 @@
+{
+  "id": "quirky.worktree",
+  "name": "Heimdall owner acceptance worktree",
+  "version": "1.0.0",
+  "main": "main.ts",
+  "contributes": {
+    "method": [
+      {
+        "id": "resolve",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": {
+            "selector": { "type": "string" },
+            "cwd": { "type": "string" },
+            "worktreeId": { "type": "string" }
+          },
+          "required": ["selector"]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "id": { "type": "string" },
+            "repoId": { "type": "string" },
+            "path": { "type": "string" },
+            "kind": { "type": "string", "enum": ["git", "folder"] }
+          },
+          "required": ["id", "repoId", "path", "kind"],
+          "additionalProperties": true
+        }
+      },
+      {
+        "id": "list",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": {
+            "repo": { "type": "string" },
+            "group": { "type": "string" }
+          }
+        },
+        "result": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string" },
+              "repoId": { "type": "string" },
+              "path": { "type": "string" },
+              "kind": { "type": "string", "enum": ["git", "folder"] }
+            },
+            "required": ["id", "repoId", "path", "kind"],
+            "additionalProperties": true
+          }
+        }
+      }
+    ]
+  }
+}

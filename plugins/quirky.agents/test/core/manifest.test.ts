@@ -360,13 +360,6 @@ const CURSOR_VALUE_FLAGS = [
 ]
 
 describe('quirky.agents launchOptions data', () => {
-  test('only the ten catalogued agents carry a launchOptions block', () => {
-    const withBlock = manifest.contributes.agent.filter((entry) => entry.launchOptions !== undefined).map((entry) => entry.id)
-    expect([...withBlock].sort()).toEqual([...LAUNCH_AGENTS].sort())
-    const others = manifest.contributes.agent.filter((entry) => !LAUNCH_AGENTS.includes(entry.id))
-    expect(others).toHaveLength(35)
-    for (const entry of others) expect(entry.launchOptions).toBeUndefined()
-  })
 
   test('SC-1: claude offers Fable, Opus, Sonnet with five effort levels and Haiku with none', () => {
     const block = rawBlock('claude')

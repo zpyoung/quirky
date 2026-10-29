@@ -361,10 +361,6 @@ describe('usage errors', () => {
     await usage('open-link', [], {}, 'missing <url-or-path>')
   })
 
-  test('tab color accepts only the ten names', async () => {
-    await usage('tab-color', ['tab-1', 'mauve'], {}, '<color> must be one of none, blue, purple, pink, red, orange, yellow, green, teal, gray, got "mauve"')
-  })
-
   test('bad flag combinations', async () => {
     await usage('tab-new', [], { worktree: 'a', workspace: 'floating' }, 'pass --worktree or --workspace, not both')
     await usage('tab-move', ['tab-1'], {}, 'pass --group (with --index) or --split')

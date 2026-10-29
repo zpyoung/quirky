@@ -45,6 +45,9 @@ describe('activity-item, sidebar-section and panel entries', () => {
     expect(accepts(kind, { id: 'p', title: 'P', description: 1 })).toBe(false)
     expect(accepts(kind, { id: 'p', title: 'P', icon: 'files' })).toBe(true)
     expect(accepts(kind, { id: 'p', title: 'P', icon: 1 })).toBe(false)
+    const errors = errorsFor(kind, { id: 'p', title: 'P', extra: true, description: 1 })
+    expect(errors).toContain(`${kind} p: unknown field \`extra\``)
+    expect(errors).toContain(`${kind} p: description must be a string`)
   })
 })
 

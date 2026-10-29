@@ -14,7 +14,10 @@ async function startWithOtherPanel() {
     id: 'quirky.fake',
     name: 'Fake',
     version: '1.0.0',
+    ui: 'ui.js',
     contributes: { panel: [{ id: 'other', title: 'Other' }] }
+  }, {
+    'ui.js': `export function activate(context) { context.provide('${OTHER_PANEL}', () => undefined) }\n`
   })
   return startAsk(undefined, builtin)
 }

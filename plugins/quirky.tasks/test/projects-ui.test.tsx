@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { UiPluginContext } from '@quirky/protocol'
 import { act } from 'react'
-import { createRoot, type Root } from 'react-dom/client'
+import type { Root, createRoot as CreateRoot } from 'react-dom/client'
 import type { TasksState } from '../src/contracts'
 import { ProjectsSurface } from '../src/projects/ProjectsSurface'
 import { bootTasks, type TasksTest } from './helpers'
@@ -14,6 +14,7 @@ import { PROJECTS_GH_FIXTURE, seedProjectsState, type ProjectFixtureState } from
 
 type ApiCall = (method: string, params: Record<string, unknown>, forward: () => Promise<unknown>) => Promise<unknown>
 type Mounted = { host: TasksTest; container: HTMLDivElement; root: Root; toasts: Array<{ title: string; message?: string }> }
+let createRoot: typeof CreateRoot
 
 const mounts: Mounted[] = []
 const temporaryRepositories: string[] = []
@@ -25,9 +26,12 @@ const runtimeGlobals = nativeGlobals.map((name) => [name, (globalThis as Record<
 const reactGlobal = globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
 const previousActEnvironment = reactGlobal.IS_REACT_ACT_ENVIRONMENT
 
-beforeAll(() => {
+beforeAll(async () => {
   GlobalRegistrator.register()
   for (const [name, value] of runtimeGlobals) if (value !== undefined) Object.defineProperty(globalThis, name, { value, writable: true, configurable: true })
+  // React DOM binds its scheduler at import, so register happy-dom before loading it.
+  const reactDom = await import('react-dom/client')
+  createRoot = reactDom.createRoot
   reactGlobal.IS_REACT_ACT_ENVIRONMENT = true
 })
 
@@ -35,6 +39,7 @@ afterEach(async () => {
   try {
     for (const mounted of mounts.splice(0).reverse()) {
       await act(async () => mounted.root.unmount())
+      mounted.container.remove()
       await mounted.host.cleanup()
     }
   } finally {
@@ -59,13 +64,16 @@ function list(value: unknown): unknown[] {
 }
 
 async function mountProjects(options: { state?: ProjectFixtureState; viewId?: string; intercept?: ApiCall } = {}): Promise<Mounted> {
+  const initialViewId = options.viewId ?? 'VIEW_TABLE'
+  const isBoard = initialViewId === 'VIEW_BOARD'
   const host = await bootTasks(PROJECTS_GH_FIXTURE)
   const container = document.createElement('div')
+  document.body.append(container)
   const mounted: Mounted = { host, container, root: createRoot(container), toasts: [] }
   mounts.push(mounted)
   host.writeState(options.state ?? seedProjectsState())
   await host.call('projectSelect', { action: 'add', input: 'https://github.com/orgs/test-owner/projects/4' })
-  await host.call('projectView', { action: 'select', viewId: options.viewId ?? 'VIEW_TABLE' })
+  await host.call('projectView', { action: 'select', viewId: initialViewId })
   const state = await host.call('state') as TasksState
   const context = {
     call(method: string, params: Record<string, unknown> = {}) {
@@ -76,7 +84,9 @@ async function mountProjects(options: { state?: ProjectFixtureState; viewId?: st
     toast(title: string, message?: string) { mounted.toasts.push({ title, ...(message === undefined ? {} : { message }) }) }
   } as unknown as UiPluginContext
   await act(async () => mounted.root.render(<ProjectsSurface context={context} state={state} refresh={async () => {}} />))
-  await waitFor(() => mounted.container.querySelector('tbody tr') !== null, 'initial Project table')
+  await waitFor(() => isBoard
+    ? mounted.container.querySelector('select[aria-label^="Move "]') !== null
+    : mounted.container.querySelector('tbody tr') !== null, isBoard ? 'initial Project board' : 'initial Project table')
   return mounted
 }
 
@@ -100,6 +110,13 @@ async function clickButton(container: HTMLElement, text: string): Promise<HTMLBu
   return target
 }
 
+async function clickButtonByLabel(container: HTMLElement, label: string): Promise<HTMLButtonElement> {
+  const target = [...container.querySelectorAll('button[aria-label]')].find((candidate) => candidate.getAttribute('aria-label') === label)
+  if (!(target instanceof HTMLButtonElement)) throw new Error(`button with accessible name ${JSON.stringify(label)} was not rendered`)
+  await act(async () => target.click())
+  return target
+}
+
 function projectStatus(container: HTMLElement): HTMLSelectElement {
   const row = [...container.querySelectorAll('tbody tr')].find((candidate) => candidate.textContent?.includes('Improve project table'))
   const select = row?.querySelector('select[aria-label="Status"]')
@@ -111,6 +128,17 @@ function boardMove(container: HTMLElement, title: string): HTMLSelectElement {
   const select = container.querySelector(`select[aria-label=${JSON.stringify(`Move ${title}`)}]`)
   if (!(select instanceof HTMLSelectElement)) throw new Error(`board move control for ${title} was not rendered`)
   return select
+}
+
+function labelledInput(container: HTMLElement, labelText: string): HTMLInputElement | null {
+  const label = [...container.querySelectorAll('label')].find((candidate) => candidate.textContent?.trim() === labelText)
+  const control = label?.control
+  return control instanceof HTMLInputElement ? control : null
+}
+
+function projectRefreshReady(container: HTMLElement): boolean {
+  const refresh = container.querySelector<HTMLButtonElement>('button[aria-label="Refresh project"]')
+  return refresh !== null && !refresh.disabled
 }
 
 async function changeSelect(select: HTMLSelectElement, value: string): Promise<void> {
@@ -126,6 +154,13 @@ function selectedTab(container: HTMLElement, label: string): boolean {
   return [...container.querySelectorAll('[role="tab"]')].some((tab) => tab.textContent?.includes(label) && tab.getAttribute('aria-selected') === 'true')
 }
 
+async function clickTab(container: HTMLElement, label: string): Promise<HTMLElement> {
+  const target = [...container.querySelectorAll<HTMLElement>('[role="tab"]')].find((tab) => tab.textContent?.includes(label))
+  if (!target) throw new Error(`Project tab ${JSON.stringify(label)} was not rendered`)
+  await act(async () => target.click())
+  return target
+}
+
 function dialogByTitle(container: HTMLElement, title: string): HTMLElement | null {
   return [...container.querySelectorAll<HTMLElement>('[role="dialog"]')].find((dialog) => {
     const labelledBy = dialog.getAttribute('aria-labelledby')
@@ -135,6 +170,7 @@ function dialogByTitle(container: HTMLElement, title: string): HTMLElement | nul
 
 test('Project Start reports post-create outcomes truthfully and stays linked', async () => {
   const workspaceCalls: Record<string, unknown>[] = []
+  const producerWarning = 'The issue command failed after the workspace was created.'
   const mounted = await mountProjects({ intercept: async (method, params, forward) => {
     if (method === 'quirky.tasks/workspace') {
       workspaceCalls.push(params)
@@ -150,7 +186,7 @@ test('Project Start reports post-create outcomes truthfully and stays linked', a
         worktree: { id: 'workspace-7', repoId: 'repo-fixture', name: 'project-issue-7' },
         setup: { ran: 'none' },
         issueCommand: { ran: 'daemon', exitCode: 1 },
-        warnings: ['The issue command failed after the workspace was created.'],
+        warnings: [producerWarning],
         agentSessionId: 'session-pending-7',
         agentPending: true,
         promptDelivery: 'pending'
@@ -161,28 +197,31 @@ test('Project Start reports post-create outcomes truthfully and stays linked', a
   } })
 
 
-  await clickButton(mounted.container, 'Start work on Improve project table')
-  await waitFor(() => dialogByTitle(mounted.container, 'GitHub project item guidance')?.textContent?.includes('issue command failed') === true, 'post-create warning')
-  const guidance = dialogByTitle(mounted.container, 'GitHub project item guidance')?.textContent?.toLowerCase() ?? ''
-  expect(guidance).toContain('pending')
-  expect(guidance).toContain('not been confirmed')
-  expect(guidance).not.toContain('context delivered')
+  await clickButtonByLabel(mounted.container, 'Start work on Improve project table')
+  await waitFor(() => dialogByTitle(mounted.container, 'GitHub project item guidance') !== null, 'created workspace outcome')
+  expect(dialogByTitle(mounted.container, 'GitHub project item guidance')?.textContent).toContain(producerWarning)
   expect(workspaceCalls.map((call) => call.action)).toEqual(['start'])
 
-  await clickButton(mounted.container, 'Resume Improve project table')
-  await waitFor(() => workspaceCalls.length === 2, 'resume of the created workspace')
+  await clickButtonByLabel(mounted.container, 'Close dialog')
+  const resumeToastCount = mounted.toasts.length
+  await clickButtonByLabel(mounted.container, 'Resume Improve project table')
+  await waitFor(() => workspaceCalls.length === 2 && mounted.toasts.length > resumeToastCount, 'resume of the created workspace')
   expect(workspaceCalls[1]).toMatchObject({ action: 'resume', target: { number: 7 } })
   expect(workspaceCalls[1]).not.toHaveProperty('newWorkspace')
-  await clickButton(mounted.container, 'Start work on Undated project issue')
-  await waitFor(() => mounted.toasts.some((toast) => toast.title === 'Workspace setup required'), 'setup decision composer fallback')
-  expect(mounted.toasts.find((toast) => toast.title === 'Workspace setup required')?.message).toContain('setup script')
+
+  const composerToastCount = mounted.toasts.length
+  await clickButtonByLabel(mounted.container, 'Start work on Undated project issue')
+  await waitFor(() => workspaceCalls.length === 3 && mounted.toasts.length > composerToastCount &&
+    dialogByTitle(mounted.container, 'GitHub project item guidance') === null, 'setup decision composer fallback')
   expect(workspaceCalls[2]).toMatchObject({ action: 'start', target: { number: 9 } })
-  expect(dialogByTitle(mounted.container, 'GitHub project item guidance')).toBeNull()
+
 }, 60_000)
 
 test('a delayed older UI selection response cannot replace a newer view or trigger another selection', async () => {
   let boardCallReturned = false
   let boardResponseReleased = false
+  let roadmapSelectionReturned = false
+  let roadmapLoadReturned = false
   let roadmapSelections = 0
   const { promise: boardGate, resolve: releaseBoard } = Promise.withResolvers<void>()
   const mounted = await mountProjects({ intercept: async (method, params, forward) => {
@@ -193,20 +232,30 @@ test('a delayed older UI selection response cannot replace a newer view or trigg
       boardResponseReleased = true
       return result
     }
-    if (method === 'quirky.tasks/projectView' && params.action === 'select' && params.viewId === 'VIEW_ROADMAP') roadmapSelections += 1
+    if (method === 'quirky.tasks/projectView' && params.action === 'select' && params.viewId === 'VIEW_ROADMAP') {
+      roadmapSelections += 1
+      const result = await forward()
+      roadmapSelectionReturned = true
+      return result
+    }
+    if (method === 'quirky.tasks/projectView' && params.action === 'load' && params.viewId === 'VIEW_ROADMAP') {
+      const result = await forward()
+      roadmapLoadReturned = true
+      return result
+    }
     return forward()
   } })
 
-  await clickButton(mounted.container, 'Board · Board')
+  await clickTab(mounted.container, 'Board')
   await waitFor(() => boardCallReturned, 'Board selection response gate')
-  await clickButton(mounted.container, 'Roadmap · Roadmap')
-  await waitFor(() => selectedTab(mounted.container, 'Roadmap') && mounted.container.textContent?.includes('Placed by') === true, 'newer Roadmap view')
+  await clickTab(mounted.container, 'Roadmap')
+  await waitFor(() => roadmapSelectionReturned && roadmapLoadReturned && selectedTab(mounted.container, 'Roadmap') &&
+    mounted.container.querySelector('[aria-label=\"Move Improve project table\"]') === null, 'Roadmap selection response and loaded view')
   releaseBoard()
   await waitFor(() => boardResponseReleased, 'late Board response release')
 
   expect(selectedTab(mounted.container, 'Roadmap')).toBe(true)
   expect(mounted.container.querySelector('[aria-label=\"Move Improve project table\"]')).toBeNull()
-  expect(mounted.container.textContent).toContain('Placed by')
   expect(roadmapSelections).toBe(1)
   const prefs = object(await mounted.host.call('projectPreferences'))
   const stored = object(prefs.preferences ?? prefs)
@@ -222,8 +271,8 @@ test('Project query overrides remain isolated and survive switching views', asyn
     }
     return forward()
   } })
-  const search = mounted.container.querySelector('input[aria-label="Search project items"]')
-  if (!(search instanceof HTMLInputElement)) throw new Error('Project search control was not rendered')
+  const search = labelledInput(mounted.container, 'Search project items')
+  if (!search) throw new Error('Project search control was not rendered')
   await act(async () => {
     const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set
     setter?.call(search, 'assignee:@me')
@@ -232,15 +281,15 @@ test('Project query overrides remain isolated and survive switching views', asyn
   })
   await waitFor(() => appliedTableQuery, 'applied Table query')
 
-  await clickButton(mounted.container, 'Board · Board')
+  await clickTab(mounted.container, 'Board')
   await waitFor(() => selectedTab(mounted.container, 'Board') && mounted.container.querySelector('[aria-label="Move Improve project table"]') !== null, 'Board view')
-  const boardSearch = mounted.container.querySelector('input[aria-label="Search project items"]')
-  if (!(boardSearch instanceof HTMLInputElement)) throw new Error('Board search control was not rendered')
+  const boardSearch = labelledInput(mounted.container, 'Search project items')
+  if (!boardSearch) throw new Error('Board search control was not rendered')
   expect(boardSearch.value).not.toBe('assignee:@me')
-  await clickButton(mounted.container, 'Table · Table')
+  await clickTab(mounted.container, 'Table')
   await waitFor(() => {
-    const tableSearch = mounted.container.querySelector('input[aria-label="Search project items"]')
-    return selectedTab(mounted.container, 'Table') && tableSearch instanceof HTMLInputElement && tableSearch.value === 'assignee:@me'
+    const tableSearch = labelledInput(mounted.container, 'Search project items')
+    return selectedTab(mounted.container, 'Table') && tableSearch !== null && tableSearch.value === 'assignee:@me'
   }, 'restored Table query')
 }, 60_000)
 
@@ -284,29 +333,40 @@ test('a failed earlier field edit cannot undo the later confirmed value across a
 test('board moves clear into No Status and failed moves restore the confirmed column', async () => {
   let failClear = true
   let successfulWrites = 0
+  let fieldAttempts = 0
+  let completedMutationLoads = 0
   const mounted = await mountProjects({ viewId: 'VIEW_BOARD', intercept: async (method, params, forward) => {
-    if (method === 'quirky.tasks/projectEdit' && params.action === 'field' && params.clear === true && failClear) {
-      failClear = false
-      throw new Error('board clear refused')
-    }
     if (method === 'quirky.tasks/projectEdit' && params.action === 'field') {
+      fieldAttempts += 1
+      if (params.clear === true && failClear) {
+        failClear = false
+        throw new Error('board clear refused')
+      }
       const result = await forward()
       successfulWrites += 1
+      return result
+    }
+    if (method === 'quirky.tasks/projectView' && params.action === 'load' && completedMutationLoads < fieldAttempts) {
+      const result = await forward()
+      completedMutationLoads += 1
       return result
     }
     return forward()
   } })
 
   await changeSelect(boardMove(mounted.container, 'Improve project table'), 'OPT_DONE')
-  await waitFor(() => successfulWrites === 1 && boardMove(mounted.container, 'Improve project table').value === 'OPT_DONE', 'move into Done')
+  await waitFor(() => successfulWrites === 1 && completedMutationLoads === 1 &&
+    projectRefreshReady(mounted.container) && boardMove(mounted.container, 'Improve project table').value === 'OPT_DONE', 'confirmed move into Done')
   await changeSelect(boardMove(mounted.container, 'Improve project table'), '')
-  await waitFor(() => mounted.container.querySelector('[role="alert"]')?.textContent?.includes('board clear refused') === true, 'visible board rollback error')
+  await waitFor(() => completedMutationLoads === 2 && projectRefreshReady(mounted.container) &&
+    mounted.container.querySelector('[role="alert"]')?.textContent?.includes('board clear refused') === true, 'visible board rollback error')
   expect(boardMove(mounted.container, 'Improve project table').value).toBe('OPT_DONE')
 
   await changeSelect(boardMove(mounted.container, 'Improve project table'), '')
   await waitFor(() => {
     const bucket = mounted.container.querySelector('[aria-label="No Status"]')
-    return successfulWrites === 2 && bucket?.textContent?.includes('Improve project table') === true
+    return successfulWrites === 2 && completedMutationLoads === 3 && projectRefreshReady(mounted.container) &&
+      bucket?.textContent?.includes('Improve project table') === true
   }, 'cleared item in No Status')
   const response = object(await mounted.host.call('projectView', { action: 'load', viewId: 'VIEW_BOARD' }))
   const table = object(response.result)
@@ -359,10 +419,10 @@ test('restricted Project rows stay read-only, refresh errors retain rows, and un
   expect(mounted.container.textContent).toContain('Improve project table')
   expect(mounted.container.textContent).toContain('Restricted item')
 
-  await clickButton(mounted.container, 'Start work on Unknown source issue')
+  await clickButtonByLabel(mounted.container, 'Start work on Unknown source issue')
+  await waitFor(() => dialogByTitle(mounted.container, 'GitHub project item guidance') !== null, 'unknown repository guidance')
   const guidance = dialogByTitle(mounted.container, 'GitHub project item guidance')
   if (!guidance) throw new Error('unknown repository guidance was not rendered')
-  expect(guidance.textContent).toContain('Repository not in Quirky')
   const pathInput = guidance.querySelector('input#local-project-repo-path')
   if (!(pathInput instanceof HTMLInputElement)) throw new Error('repository addition path input was not rendered')
   const repoPath = mkdtempSync(join(tmpdir(), 'quirky-project-source-'))

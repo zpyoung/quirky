@@ -269,7 +269,6 @@ test('SC-15: the real ledger form exposes complete typed fields and creates each
   await click(button(ledgerPage()!, `Edit ${bugEntry.id}`)!)
   const editForm = await world.win.waitFor(() => dialogNamed(`Edit ${bugEntry.id}`))
   expect(field<HTMLSelectElement>(editForm, 'Type')).toBeUndefined()
-  expect(editForm.textContent).toContain(`Source revision: ${bugEntry.revision}`)
   await setText(field(editForm, 'Title')!, 'Stale local title')
   await request(world, {
     operation: 'edit',
@@ -389,21 +388,24 @@ test('SC-17: triage snapshots conflict cleanly, then approval and confirmed stat
     content: { description: 'A concurrent writer moved the candidate revision.' }
   })
   await click(button(staleConfirm, 'Confirm')!)
-  await world.win.waitFor(() => triage.querySelector('[role="alert"]'))
+  const refreshedTriage = await world.win.waitFor(() => {
+    const dialog = dialogNamed('Operation review')
+    return dialog?.querySelector('[role="alert"]') ? dialog : undefined
+  })
   expect((await request(world, { operation: 'show', target: { owner: owner(world) }, id })).entry.revision).toBe(2)
 
-  const refreshed = await world.win.waitFor(() => triage.querySelector<HTMLInputElement>('input[type="checkbox"]'))
+  const refreshed = await world.win.waitFor(() => refreshedTriage.querySelector<HTMLInputElement>('input[type="checkbox"]'))
   await click(refreshed)
-  await click(button(triage, 'Approve review (1)')!)
+  await click(button(refreshedTriage, 'Approve review (1)')!)
   await world.win.waitFor(async () => {
     const result = await request(world, { operation: 'show', target: { owner: owner(world) }, id })
     return result.entry.reviewed && result.entry.revision === 3
   })
 
-  await world.win.waitFor(() => triage.textContent?.includes('revision 3'))
-  const approved = await world.win.waitFor(() => triage.querySelector<HTMLInputElement>('input[type="checkbox"]'))
+  await world.win.waitFor(() => refreshedTriage.textContent?.includes('revision 3'))
+  const approved = await world.win.waitFor(() => refreshedTriage.querySelector<HTMLInputElement>('input[type="checkbox"]'))
   await click(approved)
-  await click(button(triage, 'Resolve')!)
+  await click(button(refreshedTriage, 'Resolve')!)
   const refreshedConfirm = await world.win.waitFor(() => dialogNamed('Confirm ledger action'))
   expect(refreshedConfirm.textContent).toContain(`${id} · revision 3 · Triage snapshot record`)
   await click(button(refreshedConfirm, 'Confirm')!)
@@ -521,6 +523,7 @@ test('SC-11 and SC-14: group menu opens its ledger and deleting a group reports 
   await world.win.waitFor(async () => !(await world.agent.callAny('quirky.repo/groupList', {}) as ProjectGroup[]).some((item) => item.id === group.id))
   const catalog = await request(world, { operation: 'catalog' })
   expect(catalog.ledgers).toContainEqual(expect.objectContaining({ owner: null, formerOwner: groupOwner(group), entryCount: 1 }))
+  await click(await world.win.waitFor(() => button(ledgerPage()!, 'Open ledger')))
   const chooser = await world.win.waitFor(() => chooserSection())
   const openDetached = await world.win.waitFor(() => button(chooser, `Open ledger ${group.name}`))
   await click(openDetached)

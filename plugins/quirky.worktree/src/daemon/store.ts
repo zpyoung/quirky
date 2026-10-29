@@ -4,6 +4,8 @@ import { join } from 'node:path'
 import type { GitHubWorktreeLink, PluginContext, PluginStore, ProjectGroup, Worktree, WorktreeAutomationProvenance, WorktreeCreatedBy, WorktreePushTarget, WorktreeStatus } from '@quirky/protocol'
 import type { WorktreeReference } from '../parity-types'
 import type { WorktreeControl } from '../control-types'
+import { migrateRemoteWorkspaces } from './remote'
+import { migrateVmEnvironments } from './vm'
 
 /** One `worktrees` row: Quirky's metadata for a workspace, keyed by the workspace ID. */
 export type WorktreeRow = {
@@ -170,7 +172,9 @@ export function openWorktreeStore(context: PluginContext): PluginStore {
         );
         CREATE INDEX prepared_worktrees_by_expiry ON prepared_worktrees(created_at);
       `)
-    }
+    },
+    migrateRemoteWorkspaces,
+    migrateVmEnvironments
   ])
 }
 export type WorktreeOriginCreator = {

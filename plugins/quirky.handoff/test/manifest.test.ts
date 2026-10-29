@@ -13,6 +13,7 @@ import { registerDom } from './window/register-dom'
 const contributes = manifest.contributes as Record<string, any[]>
 const PLUGIN_IDS = [
   'quirky.repo',
+  'quirky.cli',
   'quirky.worktree',
   'quirky.git',
   'quirky.agents',

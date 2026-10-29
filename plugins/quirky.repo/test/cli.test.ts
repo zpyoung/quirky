@@ -16,50 +16,19 @@ async function start() {
   return t
 }
 
-describe('SC-20: quirky repo commands keep v1 output', () => {
-  test('add resolves the path against the CLI cwd and prints the record', async () => {
+describe('SC-20: quirky repo command path handling', () => {
+  test('add resolves the path against the CLI cwd', async () => {
     const { client } = await start()
-    const { ctx, lines } = testCliContext(client, { cwd: '/fake/alpha' })
+    const { ctx } = testCliContext(client, { cwd: '/fake/alpha' })
     await commands.add!({ positionals: ['src/deep'], flags: {} }, ctx)
-    expect(lines).toHaveLength(1)
-    expect(lines[0]).toMatch(/^id: repo_[0-9a-f]+\nname: alpha\npath: \/fake\/alpha$/)
-    expect(((await client.callAny('quirky.repo/list', {})) as Repo[])[0]!.path).toBe('/fake/alpha')
+    expect((await client.callAny('quirky.repo/list', {})) as Repo[]).toMatchObject([{ name: 'alpha', path: '/fake/alpha' }])
   })
 
-  test('add takes an absolute path as given and prints JSON under --json', async () => {
+  test('add preserves an absolute path from a different CLI cwd', async () => {
     const { client } = await start()
-    const { ctx, lines } = testCliContext(client, { cwd: '/elsewhere', json: true })
+    const { ctx } = testCliContext(client, { cwd: '/elsewhere' })
     await commands.add!({ positionals: ['/fake/alpha'], flags: {} }, ctx)
-    expect(JSON.parse(lines[0]!)).toMatchObject({ name: 'alpha', path: '/fake/alpha' })
-  })
-
-  test('list prints "no repos", then a table', async () => {
-    const { client } = await start()
-    const first = testCliContext(client)
-    await commands.list!({ positionals: [], flags: {} }, first.ctx)
-    expect(first.lines).toEqual(['no repos'])
-
-    const repo = (await client.callAny('quirky.repo/add', { path: '/fake/alpha' })) as Repo
-    const second = testCliContext(client)
-    await commands.list!({ positionals: [], flags: {} }, second.ctx)
-    expect(second.lines[0]!.split('\n')).toEqual(['ID' + ' '.repeat(repo.id.length - 2) + '  NAME   PATH', `${repo.id}  alpha  /fake/alpha`])
-  })
-
-  test('rm prints "removed <repo>" and takes selectors', async () => {
-    const { client } = await start()
-    await client.callAny('quirky.repo/add', { path: '/fake/alpha' })
-    const { ctx, lines } = testCliContext(client)
-    await commands.rm!({ positionals: ['name:alpha'], flags: {} }, ctx)
-    expect(lines).toEqual(['removed name:alpha'])
-    expect(await client.callAny('quirky.repo/list', {})).toEqual([])
-  })
-
-  test('rm --json prints the method result', async () => {
-    const { client } = await start()
-    await client.callAny('quirky.repo/add', { path: '/fake/alpha' })
-    const { ctx, lines } = testCliContext(client, { json: true })
-    await commands.rm!({ positionals: ['alpha'], flags: {} }, ctx)
-    expect(lines).toEqual(['{"ok":true}'])
+    expect((await client.callAny('quirky.repo/list', {})) as Repo[]).toMatchObject([{ name: 'alpha', path: '/fake/alpha' }])
   })
 })
 
@@ -73,8 +42,30 @@ describe('quirky repo through the real CLI', () => {
     expect(JSON.parse(stdout)).toMatchObject({ id: repo.id, name: 'alpha' })
 
     const missing = spawnCli(['repo', 'resolve', '--selector', 'name:nope', '--json'], { home: h.home })
-    const [out, err, missingCode] = await Promise.all([new Response(missing.stdout).text(), new Response(missing.stderr).text(), missing.exited])
+    const [out, , missingCode] = await Promise.all([new Response(missing.stdout).text(), new Response(missing.stderr).text(), missing.exited])
     expect(missingCode).toBe(1)
-    expect(out + err).toContain('no repo matches name:nope; use id:, name: or path:')
+    expect(JSON.parse(out).error).toMatchObject({ code: 'not-found' })
+    expect(JSON.parse(out).error.message).toContain('name:nope')
+  })
+
+  test('rm removes only the selected repo and a second removal is NotFound', async () => {
+    const { client, h } = await start()
+    t!.git!.addRepo('/fake/beta')
+    const removed = (await client.callAny('quirky.repo/add', { path: '/fake/alpha' })) as Repo
+    const retained = (await client.callAny('quirky.repo/add', { path: '/fake/beta' })) as Repo
+
+    const remove = spawnCli(['repo', 'rm', 'name:alpha'], { home: h.home })
+    const [, , removeCode] = await Promise.all([new Response(remove.stdout).text(), new Response(remove.stderr).text(), remove.exited])
+    expect(removeCode).toBe(0)
+    const remaining = ((await client.callAny('quirky.repo/list', {})) as Repo[]).map(({ id }) => id)
+    expect(remaining).not.toContain(removed.id)
+    expect(remaining).toContain(retained.id)
+
+    const missing = spawnCli(['repo', 'rm', 'name:alpha', '--json'], { home: h.home })
+    const [out, , missingCode] = await Promise.all([new Response(missing.stdout).text(), new Response(missing.stderr).text(), missing.exited])
+    expect(missingCode).toBe(1)
+    expect(JSON.parse(out).error).toMatchObject({ code: 'not-found' })
+    expect(JSON.parse(out).error.message).toContain('name:alpha')
+    expect(((await client.callAny('quirky.repo/list', {})) as Repo[]).map(({ id }) => id)).toEqual([retained.id])
   })
 })

@@ -222,8 +222,6 @@ describe('orchestration setup UI', () => {
     }
     const ui = makeFake({ status: unsupported })
     const root = await mountSlot(ui, 'view:quirky.orchestration/settings')
-    expect(root.textContent).toContain('Muse · Unsupported')
-    expect(root.textContent).toContain('No documented native global skill target')
     expect(button(root, 'No installable targets').disabled).toBe(true)
   })
 

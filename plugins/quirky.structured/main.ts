@@ -191,7 +191,8 @@ export function activate(context: PluginContext): void {
   const journal = new Journal(context.openStore(journalMigrations(context.home)))
   const live = new Map<string, LiveSession>()
   const pendingAsks = new Map<string, Set<string>>()
-  const nativeQuestionClients = new Map<string, Set<QuirkyClient>>()
+  const askWaits = new Map<string, Set<Promise<AskEnvelope>>>()
+  const askClients = new Map<string, Set<QuirkyClient>>()
   const owners = new Map<string, OwnerToken>()
   const ownersBySession = new Map<string, OwnerToken>()
   const agentRunners = new Map<StructuredAgent, StructuredRunner>()
@@ -320,45 +321,105 @@ export function activate(context: PluginContext): void {
   }
 
   const cancelPendingAsks = async (sessionId: string): Promise<void> => {
-    for (const client of nativeQuestionClients.get(sessionId) ?? []) client.close()
-    nativeQuestionClients.delete(sessionId)
-    await Promise.all([...(pendingAsks.get(sessionId) ?? [])].map(cancelAsk))
+    const closeClients = (): void => {
+      for (const client of askClients.get(sessionId) ?? []) client.close()
+      askClients.delete(sessionId)
+    }
+    const pending = [...(pendingAsks.get(sessionId) ?? [])]
+    if (!active) {
+      closeClients()
+      await Promise.all(pending.map(cancelAsk))
+      return
+    }
+    await Promise.all(pending.map(cancelAsk))
+    if (active) await Promise.allSettled([...(askWaits.get(sessionId) ?? [])])
+    closeClients()
+  }
+
+  const askOwnerIsActive = (sessionId: string, entry: LiveSession | undefined): entry is LiveSession =>
+    active && entry !== undefined && live.get(sessionId) === entry && !entry.stopping && entry.status !== 'exited'
+
+  const connectAndOwnAskClient = async (
+    sessionId: string,
+    entry: LiveSession,
+    lease: NonNullable<LiveSession['lease']>,
+    name: string
+  ): Promise<QuirkyClient> => {
+    const sessionToken = lease.env.QUIRKY_SESSION_TOKEN
+    if (!sessionToken) throw new Error('Structured approval has no kernel-issued live session lease')
+    const client = await connectDaemon({
+      role: 'cli', name, home: context.home, autostart: false, transport: 'socket',
+      identity: { sessionId, sessionToken, worktreeId: entry.worktreeId }
+    })
+    if (!askOwnerIsActive(sessionId, entry) || entry.lease !== lease) {
+      client.close()
+      throw new Error('Structured approval session lease changed before waiter ownership')
+    }
+    const clients = askClients.get(sessionId) ?? new Set<QuirkyClient>()
+    askClients.set(sessionId, clients)
+    clients.add(client)
+    return client
   }
 
   const createAsk = async (spec: AskSpec, sessionId: string, options?: { nativeQuestion?: boolean }): Promise<AskEnvelope> => {
     const entry = live.get(sessionId)
-    if (!active || !entry || entry.stopping) throw new Error('structured session is not active')
+    if (!askOwnerIsActive(sessionId, entry)) throw new Error('structured session is not active')
+    const lease = entry.lease
     let client: QuirkyClient | undefined
     let askId: string | undefined
     const pending = pendingAsks.get(sessionId) ?? new Set<string>()
     pendingAsks.set(sessionId, pending)
     try {
+      if (!lease || !lease.env.QUIRKY_SESSION_TOKEN) {
+        throw new Error(options?.nativeQuestion
+          ? 'Native question has no kernel-issued live session lease'
+          : 'Structured approval has no kernel-issued live session lease')
+      }
+      client = await connectAndOwnAskClient(
+        sessionId,
+        entry,
+        lease,
+        options?.nativeQuestion ? 'Structured native question' : 'Structured approval waiter'
+      )
       let registration: AskRegistration
       if (options?.nativeQuestion) {
-        const lease = entry.lease
-        const sessionToken = lease?.env.QUIRKY_SESSION_TOKEN
-        if (!lease || !sessionToken) throw new Error('Native question has no kernel-issued live session lease')
-        client = await connectDaemon({
-          role: 'cli', name: 'Structured native question', home: context.home, autostart: false, transport: 'socket',
-          identity: { sessionId, sessionToken, worktreeId: entry.worktreeId }
-        })
-        if (!active || live.get(sessionId) !== entry || entry.stopping || entry.lease !== lease) throw new Error('Native question session lease changed before registration')
-        const clients = nativeQuestionClients.get(sessionId) ?? new Set<QuirkyClient>()
-        nativeQuestionClients.set(sessionId, clients)
-        clients.add(client)
-        registration = await client.callAny('quirky.ask/register', { spec, requestId: crypto.randomUUID(), timeoutMs: 600_000 }) as AskRegistration
+        registration = await client.callAny(
+          'quirky.ask/register',
+          { spec, requestId: crypto.randomUUID(), timeoutMs: 600_000 }
+        ) as AskRegistration
       } else {
-        registration = await context.call('quirky.ask/create', { spec, session: sessionId, worktree: entry.worktreeId }) as AskRegistration
+        registration = await context.call('quirky.ask/create', {
+          spec,
+          session: sessionId,
+          worktree: entry.worktreeId
+        }) as AskRegistration
       }
       if ('status' in registration) throw new Error(`Native question unavailable: ${registration.reason}`)
       askId = registration.askId
       pending.add(askId)
+      if (!askOwnerIsActive(sessionId, entry)) {
+        await cancelAsk(askId)
+        throw new Error('Structured ask owner is no longer available')
+      }
+      const waiter = client
       for (;;) {
-        if (!active || live.get(sessionId) !== entry || entry.stopping) throw new Error('Native question owner is no longer available')
+        if (!askOwnerIsActive(sessionId, entry)) throw new Error('Structured ask owner is no longer available')
         try {
-          const envelope = await (client
-            ? client.callAny('quirky.ask/wait', { askId, timeoutMs: 8000 }, { timeoutMs: 13_000 })
-            : context.call('quirky.ask/wait', { askId })) as AskEnvelope
+          const wait = waiter.callAny(
+            'quirky.ask/wait',
+            { askId, timeoutMs: 8000 },
+            { timeoutMs: 13_000 }
+          ) as Promise<AskEnvelope>
+          const waits = askWaits.get(sessionId) ?? new Set<Promise<AskEnvelope>>()
+          askWaits.set(sessionId, waits)
+          waits.add(wait)
+          let envelope: AskEnvelope
+          try {
+            envelope = await wait
+          } finally {
+            waits.delete(wait)
+            if (waits.size === 0 && askWaits.get(sessionId) === waits) askWaits.delete(sessionId)
+          }
           if (envelope.status !== 'pending') return envelope
         } catch (error) {
           const data = error instanceof RpcError ? error.data : undefined
@@ -373,8 +434,8 @@ export function activate(context: PluginContext): void {
       if (askId !== undefined) pending.delete(askId)
       if (pending.size === 0) pendingAsks.delete(sessionId)
       if (client) {
-        nativeQuestionClients.get(sessionId)?.delete(client)
-        if (nativeQuestionClients.get(sessionId)?.size === 0) nativeQuestionClients.delete(sessionId)
+        askClients.get(sessionId)?.delete(client)
+        if (askClients.get(sessionId)?.size === 0) askClients.delete(sessionId)
         client.close()
       }
     }
