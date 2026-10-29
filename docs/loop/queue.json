@@ -2047,6 +2047,16 @@
       "status": "todo"
     },
     {
+      "id": "fix-test-editor-1028",
+      "milestone": "M7",
+      "title": "Repair end-phase plugins/quirky.editor failures from baseline 97aaa12d (full evidence docs/loop/reports/m7-test-triage.json, area plugins/quirky.editor). Files and exact failed tests: plugins/quirky.editor/test/changes-surface.test.tsx: Changes compares HEAD to the shared draft, not staged content, in the same editable tab; Changes rejects a detached response for another lease and leaves Source available | plugins/quirky.editor/test/explorer-interactions.test.ts: Explorer interaction and expansion state are isolated by worktree | plugins/quirky.editor/test/viewers.test.ts: viewer API behavior > SC-19: small quoted CSV preserves multiline UTF-8 fields across table edits and save; viewer API behavior > CSV copy returns quoted TSV in source coordinates and pastes it back losslessly | plugins/quirky.editor/test/browser-link-routing.test.tsx: document-link completion shows capped totals, follows keyboard selection, and inserts an extensionless atom; document-link completion accepts Tab, dismisses with Escape, and respects boundary, IME and read-only guards. Reproduce via canonical suite; fix consumer-visible defects and delete incidental wording/source/default/inventory mirror assertions rather than repinning them. Preserve fresh private process homes and cleanup. Cross-plugin failures must coordinate with the owning repair, not introduce aliases or bypasses.",
+      "docs": [],
+      "deps": [
+        "m7-test-triage"
+      ],
+      "status": "done"
+    },
+    {
       "id": "m7-sweep-sessions",
       "milestone": "M7",
       "docs": [
@@ -2090,16 +2100,6 @@
       "docs": [],
       "deps": [],
       "status": "blocked"
-    },
-    {
-      "id": "fix-test-editor-1028",
-      "milestone": "M7",
-      "title": "Repair end-phase plugins/quirky.editor failures from baseline 97aaa12d (full evidence docs/loop/reports/m7-test-triage.json, area plugins/quirky.editor). Files and exact failed tests: plugins/quirky.editor/test/changes-surface.test.tsx: Changes compares HEAD to the shared draft, not staged content, in the same editable tab; Changes rejects a detached response for another lease and leaves Source available | plugins/quirky.editor/test/explorer-interactions.test.ts: Explorer interaction and expansion state are isolated by worktree | plugins/quirky.editor/test/viewers.test.ts: viewer API behavior > SC-19: small quoted CSV preserves multiline UTF-8 fields across table edits and save; viewer API behavior > CSV copy returns quoted TSV in source coordinates and pastes it back losslessly | plugins/quirky.editor/test/browser-link-routing.test.tsx: document-link completion shows capped totals, follows keyboard selection, and inserts an extensionless atom; document-link completion accepts Tab, dismisses with Escape, and respects boundary, IME and read-only guards. Reproduce via canonical suite; fix consumer-visible defects and delete incidental wording/source/default/inventory mirror assertions rather than repinning them. Preserve fresh private process homes and cleanup. Cross-plugin failures must coordinate with the owning repair, not introduce aliases or bypasses.",
-      "docs": [],
-      "deps": [
-        "m7-test-triage"
-      ],
-      "status": "done"
     },
     {
       "id": "fix-test-git-1028",
