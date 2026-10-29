@@ -2380,6 +2380,16 @@
       ],
       "status": "todo",
       "early": true
+    },
+    {
+      "id": "fix-git-annotation-coverage-1029",
+      "milestone": "M7",
+      "title": "Add semantic conflict annotation range/state-transition coverage after fix-test-git-1028: preserve Unicode/CRLF marker-end anchors and line boundaries through edits and resolution, without restoring CSS-class, wording, or pixel-height mirrors. Scope plugins/quirky.git/test/pure/conflict-markers.test.ts; exercise actual CodeMirror state/decoration behavior and run the canonical targeted suite and typecheck. No production algorithm change unless a demonstrated failure requires it. Operator authorized this sole follow-up while landing current fixes.",
+      "docs": [],
+      "deps": [
+        "fix-test-git-1028"
+      ],
+      "status": "todo"
     }
   ]
 }
