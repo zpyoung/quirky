@@ -136,6 +136,43 @@ Reader: the maintainer supplying the native preview capability — Decision: whi
 
 ## Progress
 
-Stopped at LOOP.md step 3, brainstorming/technical feasibility, before approving an implementation specification or committing contracts. Current public SDK inspection and a disposable resource-registry smoke confirm the boundaries above; no supported enforcement capability was found. The one scout completed; no background service or implementer remains. No production code or inherited untracked files were changed. Record the blocker through queue.ts block after preserving this branch as blocked/sa-browser-pane-workspace-preview.
+Built on `zpyoung/eb-sa-browser-pane-workspace-preview` against the private fork devkit
+`2.0.5-quirky.0-isolated-preview-view` (fork commit on `patch/isolated-preview-view`). The committed
+desktop pin stays at 2.0.4. It moves to the fork release that carries the patch (`2.0.5-quirky.1`
+in the unified build) when the coordinator releases it.
 
-Resume only after supported Native host hooks provide grant-scoped active HTML/assets, isolated nonpersistent storage, request/transport denial, permission/download denial and safe guest lifecycle. Then requeue/restore the preserved branch, read current integration decisions, write a single logic spec with technical final section, commit real contracts, implement conversion and Back plus public API/CLI/UI/acceptance coverage. Do not remove the current passive-resource protections or equate file/editor browsing with completion.
+### Verified, and how
+- **Host fences, real WebKit:** the fork's `scripts/test-macos-isolated-preview.sh` drives real
+  WKWebViews against in-process loopback TCP and UDP listeners. An unfenced control page opened 16 TCP
+  connections and sent 2 STUN datagrams. The same page under the preview configuration opened 0 and
+  sent 0, while in-scheme images, fetch and a POST body still worked. Two previews didn't share
+  localStorage or cookies, an unrenderable response didn't become a download, and popups never
+  reached the UI delegate. The test fails on unpatched v2.0.5.
+- **Fork wiring:** `src/shared/isolated-preview.test.js` (5 cases) and upstream's
+  `native-symbol-contract.test.ts` and SDK unit tests (254 pass) pass; the patched devkit builds and
+  exports the three new symbols from both dylibs. A Codex review found two real bugs (an empty
+  `isolated-preview` attribute fell back to an ordinary view; streamed request bodies were dropped);
+  both are fixed in the patch.
+- **Quirky:** `bun run typecheck` passes with the private devkit. `bun scripts/suite.ts` passed the 11
+  affected files (desktop native-browser and workspace-preview, UI native-browser and DOM, browser
+  pane, pane-lifecycle, pane-preview, window-model, pane-window-find, preferences-native-command,
+  preferences-window), run locally because the remote box was unreachable. A direct `bun test` of
+  the five new or changed files first failed the long conversion case at 5.48 s against bun's 5 s
+  default on a loaded machine; with a 30 s timeout the same batch passes 36 of 36. The grant handler
+  test covers traversal (encoded and backslash forms), dotfiles, symlinks, other grants, entry-only
+  root grants, HEAD and non-GET methods.
+- **Unified build:** landed after resolving conflicts with the five earlier patches. `run-patch-tests`
+  passes this patch's tests there; per-view-proxy's test fails because its source anchor
+  `NSUUID *UUIDFromString` disappears with the storage-clear-completion merge, before this patch.
+
+### Not verified, and why
+- **The running desktop app.** Driving a Quirky window would take focus on this shared Mac, where
+  seven other sessions are working, so the UI flow and the end-to-end SDK round trip (native request
+  event, TS handler, `webviewIsolatedPreviewRespond`) inside a real app weren't exercised. The native
+  scenarios are handed off in `docs/loop/native/sa-browser-pane-workspace-preview.json`.
+- **DNS prefetch hints.** Orca records that Chromium resolves `<link rel=dns-prefetch>` outside its
+  request filter. No resolver traffic could be observed here without root, so whether WebKit resolves
+  such hints inside an isolated preview is unknown. No TCP or UDP reached the listeners.
+- **Blob request bodies.** WebKit didn't pass a `Blob` POST body to the scheme handler in testing;
+  string bodies arrive. Previews only need GET, so this is documented, not worked around.
+- **Linux and Windows** report unsupported by design (D7).

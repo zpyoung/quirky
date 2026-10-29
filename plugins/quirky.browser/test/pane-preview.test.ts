@@ -128,7 +128,7 @@ test('a Native pane converts to an isolated workspace preview and Back/Forward c
   } finally {
     await h.cleanup()
   }
-})
+}, 30_000)
 
 test('previews refuse files the grant model cannot scope safely and store only the document path', async () => {
   const h = await startBrowserHarness()
@@ -162,7 +162,7 @@ test('previews refuse files the grant model cannot scope safely and store only t
   } finally {
     await h.cleanup()
   }
-})
+}, 30_000)
 
 test('the browser pane preview CLI command converts through the same API', async () => {
   const h = await startBrowserHarness()
@@ -180,4 +180,4 @@ test('the browser pane preview CLI command converts through the same API', async
   } finally {
     await h.cleanup()
   }
-})
+}, 30_000)
