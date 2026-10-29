@@ -123,10 +123,13 @@ async function openGroupMenu(win: HeadlessWindow, name: string): Promise<void> {
 
 /** Opens Add project and submits `path` from its field. */
 async function submitPath(w: World, path: string): Promise<HTMLElement> {
-  await click(await w.win.waitFor(() => {
-    const panel = sidebarPanel()
-    return panel ? button(panel, 'Add project') : undefined
-  }))
+  if ((await repos(w.agent)).length === 0) {
+    await click(await w.win.waitFor(() => button(document, 'Add project')))
+  } else {
+    await click(await w.win.waitFor(() => button(document, 'Worktrees options')))
+    const options = await w.win.waitFor(() => dialogNamed('Worktrees options'))
+    await click(button(options, 'Add project')!)
+  }
   const dialog = await w.win.waitFor(() => dialogNamed('Add project'))
   await reportedDialog(w, 'add-project')
   await setText(field(dialog, 'Path')!, path)

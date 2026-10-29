@@ -1,6 +1,7 @@
-import { cloneElement, Fragment, isValidElement, Children, useId } from 'react'
+import { cloneElement, Fragment, isValidElement, Children, useId, useLayoutEffect, useRef, useState } from 'react'
 import type { ReactElement, ReactNode } from 'react'
-import type { EmptyStateProps, FormRowProps, InlineAgentCardProps, ToolPanelFrameProps } from './contracts'
+import { createPortal } from 'react-dom'
+import type { EmptyStateProps, FormRowProps, InlineAgentCardProps, ToolPanelActionsProps, ToolPanelFrameProps } from './contracts'
 import { classNames } from './shared'
 import { Button, IconButton, StatusDot } from './primitives'
 
@@ -68,18 +69,37 @@ export function FormRow({ label, htmlFor, help, error, children }: FormRowProps)
 export function ToolPanelFrame({ title, actions, onMinimize, children }: ToolPanelFrameProps) {
   const titleId = useId()
   return (
-    <section className="ui-tool-panel-frame" aria-labelledby={titleId}>
+    <section className="ui-tool-panel-frame" data-ui-tool-panel-frame="" aria-labelledby={titleId}>
       <header className="ui-tool-panel-frame__header">
         <h2 className="ui-tool-panel-frame__title" id={titleId}>{title}</h2>
-        {(actions !== undefined || onMinimize) && (
-          <div className="ui-tool-panel-frame__actions">
-            {actions}
-            {onMinimize && <IconButton label={`Minimize ${title}`} onClick={onMinimize}>−</IconButton>}
-          </div>
-        )}
+        <div className="ui-tool-panel-frame__actions">
+          {actions}
+          <span data-ui-tool-panel-action-target="" style={{ display: 'contents' }} />
+          {onMinimize && <IconButton label={`Minimize ${title}`} onClick={onMinimize}>−</IconButton>}
+        </div>
       </header>
       <div className="ui-tool-panel-frame__body">{children}</div>
     </section>
+  )
+}
+
+export function ToolPanelActions({ children }: ToolPanelActionsProps) {
+  const marker = useRef<HTMLSpanElement>(null)
+  const [target, setTarget] = useState<HTMLElement | null>(null)
+
+  useLayoutEffect(() => {
+    const frame = marker.current?.closest<HTMLElement>('[data-ui-tool-panel-frame]')
+    const actionTarget = frame?.querySelector<HTMLElement>(
+      ':scope > .ui-tool-panel-frame__header > .ui-tool-panel-frame__actions > [data-ui-tool-panel-action-target]'
+    ) ?? null
+    setTarget(actionTarget)
+  }, [])
+
+  return (
+    <>
+      <span ref={marker} hidden data-ui-tool-panel-actions-marker="" />
+      {target && createPortal(children, target)}
+    </>
   )
 }
 

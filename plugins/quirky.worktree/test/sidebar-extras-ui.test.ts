@@ -5,6 +5,9 @@ import { RpcErrorCode } from '@quirky/protocol'
 import { resolveMembershipTarget } from '../src/membership'
 import { DEFAULT_STOCK_OPTIONS, type StockWorktreeOptions, type WorktreeControl } from '../src/control-types'
 import type { DropPreviewReport } from '../src/report'
+import type * as React from 'react'
+import type { Root } from 'react-dom/client'
+import type { ToolPanelFrame as ToolPanelFrameComponent } from '@quirky/ui'
 import { sectionHeading } from './window/dom'
 
 const SLOT = 'sidebar-section:quirky.worktree/worktrees'
@@ -161,14 +164,21 @@ function intervalClock() {
 }
 
 let activate: (context: UiPluginContext) => void
+let createElement: typeof React.createElement
+let createRoot: (container: HTMLElement) => Root
+let ToolPanelFrame: typeof ToolPanelFrameComponent
 let host: HTMLElement
 let currentCleanup: (() => Promise<void>) | null = null
 
 beforeAll(async () => {
   GlobalRegistrator.register()
   ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
-  // Register happy-dom before loading React and the renderer that bind their DOM globals.
-  act = (await import('react')).act as typeof act
+  // React and its renderer bind DOM globals when imported, so load them after happy-dom registration.
+  const react = await import('react')
+  act = react.act as typeof act
+  createElement = react.createElement
+  createRoot = (await import('react-dom/client')).createRoot
+  ToolPanelFrame = (await import('@quirky/ui')).ToolPanelFrame
   activate = (await import('../src/ui')).activate
 })
 
@@ -669,11 +679,23 @@ function setup(
     calls,
     reports,
     async mount() {
+      const frameRoot = createRoot(host)
+      const pluginHostRef = { current: null as HTMLDivElement | null }
+      await act(async () => {
+        frameRoot.render(createElement(ToolPanelFrame, {
+          title: 'Worktrees',
+          children: createElement('div', { ref: (node: HTMLDivElement | null) => { pluginHostRef.current = node } })
+        }))
+      })
+      if (!pluginHostRef.current) throw new Error('Worktrees panel body did not mount')
       let unmount = () => {}
       await act(async () => {
-        unmount = mount(host, { report: (value) => reports.push(value) })
+        unmount = mount(pluginHostRef.current!, { report: (value) => reports.push(value) })
       })
-      currentCleanup = async () => act(async () => unmount())
+      currentCleanup = async () => act(async () => {
+        unmount()
+        frameRoot.unmount()
+      })
       await flush()
     },
     async flush() {
@@ -714,15 +736,12 @@ function setup(
     }
   }
 }
-const buttons = (within: ParentNode = host) => [...within.querySelectorAll<HTMLButtonElement>('button')]
+const optionsPopover = () => document.querySelector<HTMLElement>('[role="dialog"][aria-label="Worktrees options"]')
+const optionsContent = () => optionsPopover() ?? document.body
+const buttons = (within: ParentNode = optionsContent()) => [...within.querySelectorAll<HTMLButtonElement>('button')]
 const card = (name: string, within: ParentNode = host) => {
-  const rows = [...within.querySelectorAll<HTMLButtonElement>('button[aria-label]')]
-    .filter((button) => {
-      const label = button.getAttribute('aria-label')
-      return label === `Open ${name}` || label === `Wake and open ${name}`
-    })
-    .map((button) => button.closest<HTMLElement>('li'))
-    .filter((row): row is HTMLElement => row !== null)
+  const rows = [...within.querySelectorAll<HTMLElement>('[data-worktree-id]')]
+    .filter((row) => row.querySelector('.worktree-name')?.textContent?.trim() === name)
   const canonicalRows = rows.filter((row) => {
     const section = row.closest<HTMLElement>('section')
     return !section || sectionHeading(section) !== 'Pinned'
@@ -753,6 +772,12 @@ const normalizedMenuLabel = (item: Element) => visibleMenuText(item).replace(/\s
 const menuItem = (name: string) => menuItems().find((item) => normalizedMenuLabel(item) === name)
 const buttonNamed = (within: ParentNode, name: string) =>
   buttons(within).find((button) => button.getAttribute('aria-label') === name || button.textContent?.trim() === name)
+const openOptions = async (h: UiHarness) => {
+  if (optionsPopover()) return
+  const trigger = buttonNamed(host, 'Worktrees options')
+  if (!trigger) throw new Error('Worktrees options are unavailable in the panel header')
+  await h.click(trigger)
+}
 const openCardMenu = async (h: UiHarness, name: string) => {
   const target = buttonNamed(card(name)!, `Actions for ${name}`)
   if (!target) throw new Error(`no action button for ${name}`)
@@ -766,11 +791,12 @@ const addFolderOwnedGitWorkspace = (h: UiHarness) => {
   return { owner, item }
 }
 const setStockOption = async (h: UiHarness, label: string, value: string) => {
-  const trigger = [...host.querySelectorAll<HTMLElement>('details > summary')]
+  await openOptions(h)
+  const trigger = [...optionsContent().querySelectorAll<HTMLElement>('details > summary')]
     .find((summary) => summary.textContent?.trim() === 'Workspace options')
   if (!trigger) throw new Error('workspace options are unavailable')
   if (!trigger.closest('details')?.open) await h.click(trigger)
-  const select = host.querySelector<HTMLSelectElement>(`select[aria-label="${label}"]`)
+  const select = optionsContent().querySelector<HTMLSelectElement>(`select[aria-label="${label}"]`)
   if (!select) throw new Error(`no workspace option selector ${label}`)
   const control = select
   await act(async () => {
@@ -786,8 +812,8 @@ const dragTransfer = (worktreeId: string): DataTransfer => ({
   setData() {},
   getData() { return worktreeId }
 } as unknown as DataTransfer)
-const filterButton = () => buttons().find((button) => button.textContent?.trim().startsWith('Activity filters'))
-const filterCount = () => filterButton()?.querySelector<HTMLElement>('[aria-label]')?.getAttribute('aria-label')?.match(/^\d+/)?.[0]
+const filterButton = () => buttons(optionsContent()).find((button) => button.textContent?.trim().startsWith('Activity filters'))
+const filterCount = () => filterButton()?.querySelector<HTMLElement>('[role="img"]')?.getAttribute('aria-label')?.match(/^\d+/)?.[0]
 const dragAndDrop = async (
   h: UiHarness,
   source: Element,
@@ -810,26 +836,26 @@ const dragAndDrop = async (
   await h.flush()
   return preview
 }
+
 const checkboxFor = (label: string) =>
-  [...host.querySelectorAll<HTMLLabelElement>('label')]
+  [...optionsContent().querySelectorAll<HTMLLabelElement>('label')]
     .find((item) => item.textContent?.trim() === label)
     ?.querySelector<HTMLInputElement>('input[type="checkbox"]')
-const fieldFor = (name: string, within: ParentNode = host) =>
+const fieldFor = (name: string, within: ParentNode = optionsContent()) =>
   [...within.querySelectorAll<HTMLLabelElement>('label')]
     .find((label) => label.textContent?.replace(/\s+/g, ' ').trim() === name)
     ?.control as HTMLInputElement | undefined
 const openFilters = async (h: UiHarness) => {
+  await openOptions(h)
   const trigger = filterButton()
   if (!trigger) throw new Error('workspace activity filters are unavailable')
-  await h.click(trigger)
+  if (trigger.getAttribute('aria-expanded') !== 'true') await h.click(trigger)
 }
 const selectWindow = async (h: UiHarness, label: string) => {
-  let option = [...host.querySelectorAll<HTMLButtonElement>('[role="tablist"][aria-label="Workspace activity window"] [role="tab"]')]
-    .find((button) => button.textContent?.trim() === label)
+  let option = buttons(optionsContent()).find((button) => button.textContent?.trim() === label)
   if (!option) {
     await openFilters(h)
-    option = [...host.querySelectorAll<HTMLButtonElement>('[role="tablist"][aria-label="Workspace activity window"] [role="tab"]')]
-      .find((button) => button.textContent?.trim() === label)
+    option = buttons(optionsContent()).find((button) => button.textContent?.trim() === label)
   }
   if (!option) throw new Error(`no activity window option ${label}`)
   await h.click(option)
@@ -1489,11 +1515,55 @@ test('manual sibling reordering remains available outside Project grouping', asy
   )).toHaveLength(0)
 })
  
+test('Worktrees options dismiss and reopen without losing applied activity filters', async () => {
+  const h = setup()
+  await h.mount()
+
+  const trigger = buttonNamed(host, 'Worktrees options')
+  expect(trigger?.getAttribute('aria-expanded')).toBe('false')
+  expect(trigger?.getAttribute('aria-haspopup')).toBe('dialog')
+  expect(optionsPopover()).toBeNull()
+  for (const label of ['Add project', 'Workspace options', 'Activity filters', 'More workspace tools']) {
+    expect(host.textContent).not.toContain(label)
+  }
+
+  await h.click(trigger!)
+  const initialPopover = optionsPopover()
+  expect(initialPopover).not.toBeNull()
+  await openFilters(h)
+  await selectWindow(h, 'Past 7 days')
+  expect(h.world.preferences.workspaceActivityWindow).toBe('week')
+
+  await act(async () => {
+    initialPopover!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }))
+  })
+  await h.flush()
+  expect(optionsPopover()).toBeNull()
+  expect(buttonNamed(host, 'Worktrees options')?.getAttribute('aria-expanded')).toBe('false')
+  expect(h.world.preferences.workspaceActivityWindow).toBe('week')
+
+  await h.click(buttonNamed(host, 'Worktrees options')!)
+  await openFilters(h)
+  expect(optionsContent().querySelector('[role="tab"][aria-selected="true"]')?.textContent).toBe('Past 7 days')
+
+  await act(async () => {
+    host.dispatchEvent(new Event('pointerdown', { bubbles: true, cancelable: true }))
+  })
+  await h.flush()
+  expect(optionsPopover()).toBeNull()
+  expect(h.world.preferences.workspaceActivityWindow).toBe('week')
+
+  await h.click(buttonNamed(host, 'Worktrees options')!)
+  await openFilters(h)
+  expect(optionsContent().querySelector('[role="tab"][aria-selected="true"]')?.textContent).toBe('Past 7 days')
+})
+
 test('SC-08/11/12: filters use exact windows, validate custom days on Enter and blur, and recover an empty list', async () => {
   const h = setup()
   await h.mount()
   await openFilters(h)
 
+  expect(optionsContent().querySelector('[role="tablist"][aria-label="Workspace activity window"]')?.querySelectorAll('[role="tab"]')).toHaveLength(6)
   await selectWindow(h, 'Past 7 days')
   expect(h.world.preferences.workspaceActivityWindow).toBe('week')
   expect(card('feature')).toBeUndefined()
@@ -1523,12 +1593,12 @@ test('SC-08/11/12: filters use exact windows, validate custom days on Enter and 
     await inputValue(days!, invalid)
     await commitDays(h, days!)
     expect(h.world.preferences.workspaceActivityCustomDays).toBe(30)
-    expect(host.querySelector('[role="alert"]')).not.toBeNull()
+    expect(optionsContent().querySelector('[role="alert"]')).not.toBeNull()
   }
   await inputValue(days!, '3')
   await commitDays(h, days!)
   expect(h.world.preferences.workspaceActivityCustomDays).toBe(3)
-  expect(host.querySelector('[role="alert"]')).toBeNull()
+  expect(optionsContent().querySelector('[role="alert"]')).toBeNull()
 
   expect(buttons().some((button) => button.textContent?.trim() === 'Clear filters')).toBe(true)
   await h.click(buttons().find((button) => button.textContent?.trim() === 'Clear filters')!)
@@ -1561,7 +1631,7 @@ test('Custom days commits on blur without Enter and rejects an invalid blur with
   await h.flush()
   expect(h.world.preferences.workspaceActivityCustomDays).toBe(3)
   expect(h.world.preferences.workspaceActivityWindow).toBe('custom')
-  expect(host.querySelector('[role="alert"]')).not.toBeNull()
+  expect(optionsContent().querySelector('[role="alert"]')).not.toBeNull()
   expect(card('other')).toBeDefined()
   expect(card('feature')).toBeUndefined()
 })
@@ -1609,7 +1679,8 @@ test('disabled extras falls back to the ordinary tree, while ordinary failures r
   const unavailable = setup({ view: null, panel: null, sidebar: true, focus: null }, { failure: new Error('temporary sidebar extras transport failure') })
   await unavailable.mount()
   expect(card('main')).toBeDefined()
-  expect(host.textContent).toMatch(/unavailable/i)
+  await openOptions(unavailable)
+  expect(optionsContent().textContent).toMatch(/unavailable/i)
   expect(unavailable.world.logs.join('\n')).toContain('temporary sidebar extras transport failure')
   expect(unavailable.world.preferences.workspaceActivityWindow).toBe('all')
 })

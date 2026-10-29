@@ -11,6 +11,10 @@
     "after": {
       "commit": "89321c1eebecd5ebed5888d9bfd0378a22573fd2",
       "state": "All twelve area restyles integrated; immutable capture revision before the final documentation landing."
+    },
+    "shellPolish": {
+      "commit": "7070a851f0754707809c79c1f04764024d79542b",
+      "state": "Shell after pair recaptured after header options, quiet stripes and neutral Primary; all other area captures retain their original source commits."
     }
   },
   "viewport": {
@@ -193,13 +197,13 @@
     },
     {
       "path": "images/after/shell/host-shell-dark.png",
-      "sha256": "c0911eafb76f9a17638049e4aafe9f2784af0bfb8b7614e91b8b7b7209edeaa9",
+      "sha256": "81b919122a59be4e9a8eefc81c9c9d367722d85858fa59eaf3e89be9d04ac2b4",
       "area": "shell",
       "surface": "host:shell",
       "title": "Window shell",
       "theme": "dark",
       "phase": "after",
-      "sourceCommit": "89321c1eebecd5ebed5888d9bfd0378a22573fd2",
+      "sourceCommit": "7070a851f0754707809c79c1f04764024d79542b",
       "width": 1340,
       "height": 600,
       "fixture": "Actual host window before and after the six-slot layout; synthetic repository and worktrees."
@@ -219,13 +223,13 @@
     },
     {
       "path": "images/after/shell/host-shell-light.png",
-      "sha256": "e30afc5a394b4f947cdb2d5be6b940dbbb88a9ef491deffe5397b4971e807170",
+      "sha256": "cd18bf4cbace02cfb0646b44f5b3ec4d28c353470acad2a6f96d3ee722783758",
       "area": "shell",
       "surface": "host:shell",
       "title": "Window shell",
       "theme": "light",
       "phase": "after",
-      "sourceCommit": "89321c1eebecd5ebed5888d9bfd0378a22573fd2",
+      "sourceCommit": "7070a851f0754707809c79c1f04764024d79542b",
       "width": 1340,
       "height": 600,
       "fixture": "Actual host window before and after the six-slot layout; synthetic repository and worktrees."

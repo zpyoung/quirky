@@ -234,51 +234,6 @@
   pointer-events: none;
 }
 
-.tool-shell__menu-portal {
-  position: fixed;
-  z-index: 1000;
-  top: 0;
-  left: 0;
-  transform: translate(
-    calc(var(--tool-menu-left) * var(--compat-px-1)),
-    calc(var(--tool-menu-top) * var(--compat-px-1))
-  );
-  pointer-events: auto;
-}
-
-.tool-shell__menu-portal .ui-menu__trigger {
-  width: var(--compat-px-16);
-  min-width: var(--compat-px-16);
-  height: var(--compat-px-16);
-  min-height: var(--compat-px-16);
-  padding: var(--ui-space-2);
-  border-color: var(--ui-border);
-  background: var(--ui-surface);
-  color: var(--ui-text);
-  font-size: 0;
-}
-
-.tool-shell__menu-portal .ui-menu__trigger-icon {
-  font-size: var(--ui-font-section);
-}
-
-.tool-shell__menu-portal .ui-menu__list {
-  z-index: 1001;
-  min-width: var(--compat-px-160);
-  max-height: 70vh;
-  overflow: auto;
-}
-
-.tool-shell__menu-portal[data-menu-side='right'] .ui-menu__list {
-  right: 0;
-  left: auto;
-}
-
-.tool-shell__menu-portal[data-menu-edge='bottom'] .ui-menu__list {
-  top: auto;
-  bottom: 100%;
-  margin: 0 0 var(--ui-space-4);
-}
 
 .tool-shell__panels {
   position: absolute;

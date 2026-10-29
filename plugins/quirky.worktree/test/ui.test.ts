@@ -3,6 +3,9 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } fr
 import type { AgentDisplayState, AgentStatusSummary, ProjectGroup, QuirkyEvent, Repo, Session, UiLayout, UiPluginContext, Worktree, WorkspaceOriginView } from '@quirky/protocol'
 import { RpcErrorCode } from '@quirky/protocol'
 import { DEFAULT_STOCK_OPTIONS, type CleanupCandidate, type CleanupRemovalResult, type StockWorktreeOptions, type WorktreeControl } from '../src/control-types'
+import type * as React from 'react'
+import type { Root } from 'react-dom/client'
+import type { ToolPanelFrame as ToolPanelFrameComponent } from '@quirky/ui'
 import { sectionHeading } from './window/dom'
 
 const SLOT = 'sidebar-section:quirky.worktree/worktrees'
@@ -42,12 +45,20 @@ type Mount = (element: HTMLElement, props: { input?: unknown; report?(state: unk
 type Call = { method: string; params: Record<string, unknown> }
 
 let act: (callback: () => unknown) => Promise<void>
+let createElement: typeof React.createElement
+let createRoot: (container: HTMLElement) => Root
+let ToolPanelFrame: typeof ToolPanelFrameComponent
 let activate: (context: UiPluginContext) => void
 
 beforeAll(async () => {
   GlobalRegistrator.register()
   ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
-  act = (await import('react')).act as typeof act
+  // React is loaded only after happy-dom registration so its renderer binds this test DOM.
+  const react = await import('react')
+  act = react.act as typeof act
+  createElement = react.createElement
+  createRoot = (await import('react-dom/client')).createRoot
+  ToolPanelFrame = (await import('@quirky/ui')).ToolPanelFrame
   activate = (await import('../src/ui')).activate
 })
 
@@ -407,26 +418,39 @@ function setup(layout: UiLayout = { view: null, panel: null, sidebar: true, focu
         await (provided.get(COMMAND) as (args?: unknown) => unknown)(args)
       }),
     async mountInto(element: HTMLElement) {
+      const frameRoot = createRoot(element)
+      const pluginHostRef = { current: null as HTMLDivElement | null }
+      await act(async () => {
+        frameRoot.render(createElement(ToolPanelFrame, {
+          title: 'Worktrees',
+          children: createElement('div', { ref: (node: HTMLDivElement | null) => { pluginHostRef.current = node } })
+        }))
+      })
+      if (!pluginHostRef.current) throw new Error('Worktrees panel body did not mount')
       let cleanup: () => void = () => {}
       await act(async () => {
-        cleanup = mount(element, { report: (state) => void reports.push(state) })
+        cleanup = mount(pluginHostRef.current!, { report: (state) => void reports.push(state) })
       })
       let mounted = true
       const unmount = async () => {
         if (!mounted) return
         mounted = false
-        await act(async () => cleanup())
+        await act(async () => {
+          cleanup()
+          frameRoot.unmount()
+        })
+        activeMounts.delete(unmount)
       }
-      mountedCleanups.push(unmount)
+      activeMounts.add(unmount)
       return unmount
     }
   }
 }
 
 let host: HTMLElement
-const mountedCleanups: Array<() => Promise<void>> = []
 let copied: string[]
 let copyFails: boolean
+const activeMounts = new Set<() => Promise<void>>()
 beforeEach(() => {
   document.body.innerHTML = ''
   host = document.createElement('div')
@@ -444,7 +468,7 @@ beforeEach(() => {
   })
 })
 afterEach(async () => {
-  for (const cleanup of mountedCleanups.splice(0)) await cleanup()
+  for (const unmount of [...activeMounts].reverse()) await unmount()
   document.body.replaceChildren()
 })
 
@@ -475,14 +499,27 @@ const buttonNamed = (root: ParentNode, name: string) =>
   [...root.querySelectorAll<HTMLButtonElement>('button')].find((button) =>
     button.getAttribute('aria-label') === name || button.textContent?.replace(/\s+/g, ' ').trim() === name
   )
-const openButton = (row: HTMLElement) =>
-  [...row.querySelectorAll<HTMLButtonElement>('button[aria-label]')].find((button) => {
-    const label = button.getAttribute('aria-label') ?? ''
-    return label.startsWith('Open ') || label.startsWith('Wake and open ')
-  })
-const actionButton = (row: HTMLElement) => row.querySelector<HTMLButtonElement>('button[aria-label^="Actions for "]') ?? undefined
+const openButton = (row: HTMLElement) => {
+  const name = row.querySelector('.worktree-name')?.textContent?.trim() ?? ''
+  return [...row.querySelectorAll<HTMLButtonElement>('button[aria-label]')].find((button) =>
+    button.getAttribute('aria-label') === `Open ${name}` || button.getAttribute('aria-label') === `Wake and open ${name}`
+  )
+}
+const actionButton = (row: HTMLElement) => {
+  const name = row.querySelector('.worktree-name')?.textContent?.trim() ?? ''
+  return buttonNamed(row, `Actions for ${name}`)
+}
+const optionsPopover = () => document.querySelector<HTMLElement>('[role="dialog"][aria-label="Worktrees options"]')
+const optionsContent = () => optionsPopover() ?? document.body
+const openOptions = async () => {
+  if (optionsPopover()) return
+  const trigger = buttonNamed(host, 'Worktrees options')
+  if (!trigger) throw new Error('Worktrees options are unavailable in the panel header')
+  await click(trigger)
+}
 const openDisclosure = async (name: string) => {
-  const summary = [...host.querySelectorAll<HTMLElement>('details > summary')].find((item) => item.textContent?.trim() === name)
+  await openOptions()
+  const summary = [...document.body.querySelectorAll<HTMLElement>('details > summary')].find((item) => item.textContent?.trim() === name)
   const disclosure = summary?.parentElement as HTMLDetailsElement | null
   if (!summary || !disclosure) throw new Error(`no disclosure named ${name}`)
   if (!disclosure.open) await click(summary)
@@ -528,6 +565,38 @@ test('the module provides the declared sidebar slot and the new-worktree command
   const h = setup()
   expect([...h.provided.keys()].sort()).toEqual([COMMAND, SLOT])
 })
+test('Worktrees controls are supplied by the header popover, not the closed panel body', async () => {
+  const h = setup()
+  const unmount = await h.mountInto(host)
+  const trigger = buttonNamed(host, 'Worktrees options')
+  expect(trigger).toBeDefined()
+  expect(trigger?.closest('header')?.querySelector('h2')?.textContent).toBe('Worktrees')
+  expect(trigger?.getAttribute('aria-expanded')).toBe('false')
+  expect(trigger?.getAttribute('aria-haspopup')).toBe('dialog')
+  expect(optionsPopover()).toBeNull()
+  for (const label of ['Add project', 'Workspace options', 'Activity filters', 'More workspace tools']) {
+    expect(host.textContent).not.toContain(label)
+  }
+  expect(host.querySelector('[role="tablist"]')).toBeNull()
+  expect(host.querySelector('input[type="checkbox"]')).toBeNull()
+
+  await click(trigger!)
+  const popover = optionsPopover()
+  expect(popover).not.toBeNull()
+  expect(buttonNamed(popover!, 'Add project')).toBeDefined()
+  const summaries = [...popover!.querySelectorAll('details > summary')].map((summary) => summary.textContent?.trim())
+  expect(summaries).toContain('Workspace options')
+  expect(summaries).toContain('More workspace tools')
+  expect(buttonNamed(host, 'Worktrees options')?.getAttribute('aria-expanded')).toBe('true')
+
+  await act(async () => {
+    popover!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }))
+  })
+  expect(optionsPopover()).toBeNull()
+  expect(buttonNamed(host, 'Worktrees options')?.getAttribute('aria-expanded')).toBe('false')
+  await unmount()
+})
+
 
 test('SC-35: renders repos and worktrees and reports them with status and selection', async () => {
   const h = setup({ view: { id: SESSION_VIEW, input: { worktree: 'w2' } }, panel: null, sidebar: true, focus: 'view' })
@@ -563,6 +632,8 @@ test('an empty tree offers Add project', async () => {
   h.world.repos = []
   await h.mountInto(host)
   expect(buttonNamed(host, 'Add project')).toBeDefined()
+  await openOptions()
+  expect(buttonNamed(optionsContent(), 'Add project')).toBeUndefined()
   expect(lastReport(h)).toMatchObject({ pinned: [], groups: [], projects: [], dialog: null, notices: [] })
 })
 
@@ -942,7 +1013,9 @@ test('a delete that keeps its branch shows a notice whose Delete branch calls de
 test('the Add project button opens a dialog whose Add submits the trimmed path', async () => {
   const h = setup()
   await h.mountInto(host)
-  await click(buttonNamed(host, 'Add project')!)
+  await openOptions()
+  await click(buttonNamed(optionsContent(), 'Add project')!)
+  expect(optionsPopover()).toBeNull()
   expect(lastReport(h).dialog).toEqual({ kind: 'add-project' })
   const input = document.querySelector('[role="dialog"] input') as HTMLInputElement
   const submit = dialogButton('Add')
@@ -955,7 +1028,9 @@ test('the Add project button opens a dialog whose Add submits the trimmed path',
 test('Add project Browse uses the native picker and cancellation preserves the typed path', async () => {
   const h = setup()
   await h.mountInto(host)
-  await click(buttonNamed(host, 'Add project')!)
+  await openOptions()
+  await click(buttonNamed(optionsContent(), 'Add project')!)
+  expect(optionsPopover()).toBeNull()
   const input = document.querySelector('[role="dialog"] input') as HTMLInputElement
   await typeInto(input, '/draft/path')
   await click(dialogButton('Browse'))
@@ -1354,31 +1429,32 @@ describe('agent status presentation', () => {
 test('stock worktree controls persist options, reveal sleeping rows and wake without replacing the session', async () => {
   const h = setup()
   h.world.options = { ...DEFAULT_STOCK_OPTIONS, groupBy: 'status', sortBy: 'name', showSleeping: false, filterRepoIds: [], showProperties: [...DEFAULT_STOCK_OPTIONS.showProperties] }
-  h.world.worktrees[1] = { ...h.world.worktrees[1]!, comment: 'keep this note', sleeping: true }
+  h.world.worktrees[1] = { ...h.world.worktrees[1]!, branch: 'topic/fix-login', comment: 'keep this note', sleeping: true }
   const unmount = await h.mountInto(host)
 
   expect(rowOf('fix-login', 'api')).toBeUndefined()
   await openDisclosure('Workspace options')
-  const group = host.querySelector('select[aria-label="Group by"]') as HTMLSelectElement
+  const group = optionsContent().querySelector('select[aria-label="Group by"]') as HTMLSelectElement
   await act(async () => {
     group.value = 'none'
     group.dispatchEvent(new Event('change', { bubbles: true }))
   })
-  const sort = host.querySelector('select[aria-label="Sort by"]') as HTMLSelectElement
+  const sort = optionsContent().querySelector('select[aria-label="Sort by"]') as HTMLSelectElement
   await act(async () => {
     sort.value = 'manual'
     sort.dispatchEvent(new Event('change', { bubbles: true }))
   })
 
-  const reveal = buttonNamed(host, 'Show 1 hidden sleeping worktree')!
+  const reveal = buttonNamed(optionsContent(), 'Show 1 hidden sleeping worktree')!
   await click(reveal)
   const row = rowOf('fix-login', 'api')
   expect(row).toBeDefined()
-  expect(row.textContent).toContain('fix-login')
+  expect(row.textContent).toContain('topic/fix-login')
   expect(row.textContent).toContain('keep this note')
-  await click(host.querySelector('input[aria-label="Compact cards"]')!)
-  await click(host.querySelector('input[aria-label="Show Branch"]')!)
-  await click(host.querySelector('input[aria-label="Show Notes"]')!)
+  await click(optionsContent().querySelector('input[aria-label="Compact cards"]')!)
+  await click(optionsContent().querySelector('input[aria-label="Show Branch"]')!)
+  await click(optionsContent().querySelector('input[aria-label="Show Notes"]')!)
+  expect(row.textContent).not.toContain('topic/fix-login')
   expect(row.textContent).not.toContain('keep this note')
   await contextMenu(openButton(row)!)
   expect(itemLabels()).toContain('Wake')
@@ -1405,7 +1481,7 @@ test('PR grouping, CLI-origin filtering and filtered-row reveal change the works
   }
   const unmount = await h.mountInto(host)
   await openDisclosure('Workspace options')
-  const group = host.querySelector('select[aria-label="Group by"]') as HTMLSelectElement
+  const group = optionsContent().querySelector('select[aria-label="Group by"]') as HTMLSelectElement
   await act(async () => {
     group.value = 'pr'
     group.dispatchEvent(new Event('change', { bubbles: true }))
@@ -1417,9 +1493,9 @@ test('PR grouping, CLI-origin filtering and filtered-row reveal change the works
   expect(groupItem?.querySelector(':scope > ul')).toBe(groupedRow.parentElement)
   expect(rowOf('fix-login', 'api').querySelector('a[aria-label="Pull request #42: Add route"]')).not.toBeNull()
 
-  await click(host.querySelector('input[aria-label="Hide CLI-created worktrees"]')!)
-  expect(rowOf('fix-login', 'api')).toBeUndefined()
-  await click(host.querySelector('button[aria-label="Show 1 filtered worktree"]')!)
+  await click(optionsContent().querySelector('input[aria-label="Hide CLI-created worktrees"]')!)
+  expect(rowOf('fix-login', 'api')).toBeNull()
+  await click(optionsContent().querySelector('button[aria-label="Show 1 filtered worktree"]')!)
   expect(rowOf('fix-login', 'api')).not.toBeNull()
   await unmount()
 })
@@ -1439,13 +1515,13 @@ test('hide other desktop clients filters only known different creators for an au
   ]
   const unmount = await h.mountInto(host)
   await openDisclosure('Workspace options')
-  await click(host.querySelector('input[aria-label="Hide worktrees from other desktop clients"]')!)
-  expect(rowOf('fix-login', 'api')).toBeUndefined()
+  await click(optionsContent().querySelector('input[aria-label="Hide worktrees from other desktop clients"]')!)
+  expect(rowOf('fix-login', 'api')).toBeNull()
   expect(rowOf('main', 'api')).not.toBeNull()
   expect(rowOf('main', 'web')).not.toBeNull()
   expect(rowOf('phone-origin', 'web')).not.toBeNull()
   expect(rowOf('automation-origin', 'web')).not.toBeNull()
-  await click(host.querySelector('button[aria-label="Show 1 filtered worktree"]')!)
+  await click(optionsContent().querySelector('button[aria-label="Show 1 filtered worktree"]')!)
   expect(rowOf('fix-login', 'api')).not.toBeNull()
   await unmount()
 })
@@ -1481,7 +1557,8 @@ test('cleanup review prevents blocked selection and supports ignoring and restor
   const h = setup()
   const unmount = await h.mountInto(host)
   await openDisclosure('Workspace options')
-  await click(buttonNamed(host, 'Review cleanup')!)
+  await click(buttonNamed(optionsContent(), 'Review cleanup')!)
+  expect(optionsPopover()).toBeNull()
 
   const dialog = document.querySelector('[role="dialog"]') as HTMLElement
   expect(dialog.textContent).toContain('Primary worktrees cannot be deleted.')
@@ -1500,7 +1577,8 @@ test('Escape dismisses cleanup review and leaves the workspace available', async
   const h = setup()
   const unmount = await h.mountInto(host)
   await openDisclosure('Workspace options')
-  await click(buttonNamed(host, 'Review cleanup')!)
+  await click(buttonNamed(optionsContent(), 'Review cleanup')!)
+  expect(optionsPopover()).toBeNull()
   expect(document.querySelector('[role="dialog"]')).not.toBeNull()
   await press('Escape')
   expect(document.querySelector('[role="dialog"]')).toBeNull()

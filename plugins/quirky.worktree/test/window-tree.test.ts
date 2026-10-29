@@ -7,7 +7,7 @@ import { builtinsDir, makeTempHome, startHarness, type Harness } from '../../../
 import { makeTempDir, removeTempDirs } from '../../../packages/daemon/test/plugins/fixtures'
 import { startHeadlessWindow, type HeadlessWindow } from '../../../packages/ui/test/fixtures/headless-window'
 import { failure, isolateGitConfig, makeRepo } from '../../quirky.repo/test/git-fixtures'
-import { button, click, dialogNamed, field, listRowName, menuItem, pressEscape, sectionHeading, sectionHeadingMatches, setText } from './window/dom'
+import { button, click, dialogNamed, field, listRowName, menuItem, openDisclosure, pressEscape, sectionHeading, sectionHeadingMatches, setText } from './window/dom'
 const WORKTREES_CONTRIBUTION = 'sidebar-section:quirky.worktree/worktrees'
 const WORKTREES_TOOL = WORKTREES_CONTRIBUTION
 const SESSION_VIEW = 'view:quirky.session/worktree'
@@ -89,12 +89,6 @@ const rendererState = async (agent: QuirkyClient): Promise<UiState | undefined> 
   const renderers = overview.windows.filter((window) => window.name === 'quirky-ui')
   if (renderers.length !== 1) return undefined
   return await agent.callAny('ui.window.state', { connId: renderers[0]!.connId }) as UiState
-}
-const openWorkspaceTools = () => {
-  const summary = sidebarElements<HTMLElement>('details > summary').find((candidate) => candidate.textContent?.trim() === 'More workspace tools')
-  if (!summary) throw new Error('no Worktrees disclosure named More workspace tools')
-  const disclosure = summary.parentElement as HTMLDetailsElement
-  if (!disclosure.open) summary.click()
 }
 
 const sidebarSlot = async (agent: QuirkyClient) => {
@@ -322,10 +316,11 @@ test('SC-62: Mod+N and the API open the create dialog on the right project', asy
 
 test('workspace status icon/avatar controls persist safe plain text and render on the board', async () => {
   const { win, agent } = await boot()
-  const edit = await win.waitFor(() => {
-    const panel = sidebarPanel()
-    return panel ? button(panel, 'Edit workspace statuses') : undefined
-  })
+  const statusOptionsButton = await win.waitFor(() => button(document, 'Worktrees options'))
+  await click(statusOptionsButton)
+  const statusOptions = await win.waitFor(() => dialogNamed('Worktrees options'))
+  await openDisclosure('More workspace tools', statusOptions)
+  const edit = await win.waitFor(() => button(statusOptions, 'Edit workspace statuses'))
   await click(edit)
   const dialog = await win.waitFor(() => dialogNamed('Workspace statuses'))
   const icon = field(dialog, 'Status icon 3')
@@ -336,11 +331,11 @@ test('workspace status icon/avatar controls persist safe plain text and render o
 
   const statuses = await agent.callAny('quirky.worktree/statusDefinitions', {}) as Array<{ id: string; icon?: string }>
   expect(statuses.find((status) => status.id === 'in-review')?.icon).toBe('🧪')
-  openWorkspaceTools()
-  const board = await win.waitFor(() => {
-    const panel = sidebarPanel()
-    return panel ? button(panel, 'Workspace board') : undefined
-  })
+  const boardOptionsButton = await win.waitFor(() => button(document, 'Worktrees options'))
+  await click(boardOptionsButton)
+  const boardOptions = await win.waitFor(() => dialogNamed('Worktrees options'))
+  await openDisclosure('More workspace tools', boardOptions)
+  const board = await win.waitFor(() => button(boardOptions, 'Workspace board'))
   await click(board)
   const laneHeading = await win.waitFor(() =>
     sidebarElements<HTMLHeadingElement>('h2').find((heading) => heading.textContent?.includes('In review'))

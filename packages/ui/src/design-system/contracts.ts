@@ -38,5 +38,7 @@ export type DialogProps = { open: boolean; title: string; children: ReactNode; a
 export type EmptyStateProps = { message: string; action?: UiAction; icon?: ReactNode }
 export type FormRowProps = { label: string; htmlFor: string; help?: string; error?: string; children: ReactNode }
 export type ToolPanelFrameProps = { title: string; actions?: ReactNode; onMinimize?: () => void; children: ReactNode }
+/** Plugin-owned controls portaled into their nearest shared tool frame header. */
+export type ToolPanelActionsProps = { children: ReactNode }
 export type InlineAgentCardProps = { title: string; description?: ReactNode; status: UiStatus; action?: UiAction }
 export type UiLayoutProps = HTMLAttributes<HTMLDivElement>

@@ -4,7 +4,7 @@ export { ContextMenu, ContextMenuList, CONTEXT_MENU_SEPARATOR } from './context-
 export type { ContextMenuItem, ContextMenuListProps, ContextMenuProps } from './context-menu-contracts'
 export { Toast, Dialog } from './overlays'
 export { Popover } from './floating'
-export { EmptyState, FormRow, ToolPanelFrame, InlineAgentCard } from './panels'
+export { EmptyState, FormRow, ToolPanelActions, ToolPanelFrame, InlineAgentCard } from './panels'
 export { uiTokens, type UiTokenName } from './tokens'
 export type {
   BadgeProps,
@@ -27,6 +27,7 @@ export type {
   SelectFieldProps,
   ToastProps,
   ToolPanelFrameProps,
+  ToolPanelActionsProps,
   UiAction,
   UiLayoutProps,
   UiStatus,

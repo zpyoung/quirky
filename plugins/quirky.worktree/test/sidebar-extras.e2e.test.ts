@@ -7,7 +7,7 @@ import { builtinsDir, makeTempHome, startHarness, type Harness } from '../../../
 import { makeTempDir, removeTempDirs } from '../../../packages/daemon/test/plugins/fixtures'
 import { startHeadlessWindow, type HeadlessWindow } from '../../../packages/ui/test/fixtures/headless-window'
 import { isolateGitConfig, makeRepo } from '../../quirky.repo/test/git-fixtures'
-import { button, click, listRowName, menuItem as findMenuItem, sectionHeadingMatches } from './window/dom'
+import { button, click, dialogNamed, listRowName, menuItem as findMenuItem, sectionHeadingMatches } from './window/dom'
 const WORKTREES_CONTRIBUTION = 'sidebar-section:quirky.worktree/worktrees'
 const WORKTREES_TOOL = WORKTREES_CONTRIBUTION
 const SOURCE_CONTROL_CONTRIBUTION = 'activity-item:quirky.sidebar-extras/source-control'
@@ -229,17 +229,12 @@ test('SC-02/08/10/17: real CLI and sidebar share activity preferences, selected 
   expect(initial.preferences.workspaceActivityWindow).toBe('all')
   expect(initial.active).toMatchObject({ worktreeId: feature.id })
 
-  const filter = await win.waitFor(() => {
-    const panel = sidebarPanel()
-    return panel && [...panel.querySelectorAll<HTMLButtonElement>('button')].find(
-      (candidate) => candidate.textContent?.trim().startsWith('Activity filters')
-    )
-  })
-  await click(filter)
-  const week = await win.waitFor(() => {
-    const panel = sidebarPanel()
-    return panel ? button(panel, 'Past 7 days') : undefined
-  })
+  const optionsButton = await win.waitFor(() => button(document, 'Worktrees options'))
+  await click(optionsButton)
+  const options = await win.waitFor(() => dialogNamed('Worktrees options'))
+  const filters = await win.waitFor(() => options.querySelector<HTMLButtonElement>('button[aria-controls="workspace-activity-filter-options"]'))
+  await click(filters)
+  const week = await win.waitFor(() => button(options, 'Past 7 days'))
   await click(week)
   await win.waitFor(async () => {
     const state = (await agent.callAny('quirky.sidebar-extras/state', {})) as { preferences: { workspaceActivityWindow: string } }

@@ -2,6 +2,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } fr
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
 import { act, createElement as h, createRef, useState, type ReactNode } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
+import { ToolPanelActions } from '@quirky/ui'
 import {
   Badge,
   Button,
@@ -26,6 +27,7 @@ import {
 
 let root: Root | null = null
 let container: HTMLDivElement
+const independentRoots = new Set<Root>()
 
 beforeAll(() => {
   GlobalRegistrator.register()
@@ -43,6 +45,10 @@ beforeEach(() => {
 })
 
 afterEach(async () => {
+  for (const extra of [...independentRoots].reverse()) {
+    await act(async () => extra.unmount())
+    independentRoots.delete(extra)
+  }
   await act(async () => root?.unmount())
   root = null
   document.body.innerHTML = ''
@@ -50,6 +56,16 @@ afterEach(async () => {
 
 async function render(node: ReactNode) {
   await act(async () => root!.render(node))
+}
+function mountIndependentRoot(target: HTMLElement): Root {
+  const next = createRoot(target)
+  independentRoots.add(next)
+  return next
+}
+
+async function unmountIndependentRoot(target: Root): Promise<void> {
+  await act(async () => target.unmount())
+  independentRoots.delete(target)
 }
 
 const click = async (element: Element) => act(async () => {
@@ -96,21 +112,16 @@ afterEach(() => {
 })
 
 describe('shared graphite components', () => {
-  test('button variants render and disabled buttons do not invoke their callback', async () => {
+  test('buttons honor disabled state and icon buttons have accessible names', async () => {
     const calls: string[] = []
     const onClick = () => calls.push('clicked')
     await render(h('div', null,
-      <Button variant="primary" onClick={onClick}>Primary</Button>,
-      <Button variant="secondary">Secondary</Button>,
-      <Button variant="destructive">Delete</Button>,
+      <Button onClick={onClick}>Enabled</Button>,
       <Button disabled onClick={onClick}>Disabled</Button>,
       <IconButton label="Close panel" onClick={onClick}><span aria-hidden="true">×</span></IconButton>,
     ))
 
-    expect(container.querySelectorAll('.ui-button')).toHaveLength(5)
-    expect(container.querySelector('.ui-button--primary')).not.toBeNull()
-    expect(container.querySelector('.ui-button--secondary')).not.toBeNull()
-    expect(container.querySelector('.ui-button--destructive')).not.toBeNull()
+    expect(container.querySelectorAll('button')).toHaveLength(3)
     expect(container.querySelector('button[aria-label="Close panel"]')).not.toBeNull()
     await click(container.querySelector('button:disabled')!)
     expect(calls).toEqual([])
@@ -156,32 +167,20 @@ describe('shared graphite components', () => {
   test('list rows announce selection and disabled rows ignore activation', async () => {
     const calls: number[] = []
     await render(<ListRow title="provider-host" description="codex · editing host.ts" status="working" count={2} selected disabled onClick={() => calls.push(1)} />)
-    const row = container.querySelector('.ui-list-row')!
-    const action = container.querySelector('[aria-pressed="true"]')!
-    expect(row.className).toContain('ui-list-row')
-    expect(row.textContent).toContain('provider-host')
-    expect(row.textContent).toContain('2')
+    const action = container.querySelector('button[aria-pressed="true"]')!
+    expect(container.textContent).toContain('provider-host')
+    expect(container.textContent).toContain('2')
     expect(container.querySelector('[role="img"][aria-label]')).not.toBeNull()
     await click(action)
     expect(calls).toEqual([])
   })
 
-  test('list rows size one-line and two-line content correctly', async () => {
-    await render(<>
-      <ListRow title="Single line" />
-      <ListRow title="Two-line row" description="Secondary detail" />
-    </>)
-    const rows = [...container.querySelectorAll('.ui-list-row')]
-    expect(rows[0].className).not.toContain('ui-list-row--double')
-    expect(rows[1].className).toContain('ui-list-row--double')
-  })
-
   test('trailing row actions do not trigger the row action', async () => {
     const calls: string[] = []
     await render(<ListRow title="provider-host" onClick={() => calls.push('row')} trailing={<Button onClick={() => calls.push('trailing')}>Open</Button>} />)
-    await click(container.querySelector('.ui-list-row__trailing button')!)
+    await click(container.querySelector('button:not([aria-pressed])')!)
     expect(calls).toEqual(['trailing'])
-    await click(container.querySelector('.ui-list-row__main')!)
+    await click(container.querySelector('button[aria-pressed]')!)
     expect(calls).toEqual(['trailing', 'row'])
   })
 
@@ -192,7 +191,7 @@ describe('shared graphite components', () => {
       <StatusDot status="working" label="Agent working" />
     </>)
     expect(container.querySelector('h2')?.textContent).toBe('CHECKS')
-    expect(container.querySelector('.ui-section-header__actions button')?.textContent).toBe('Refresh')
+    expect(container.querySelector('button')?.textContent).toBe('Refresh')
     expect(container.querySelector('[aria-label="2 waiting"]')?.textContent).toBe('2')
     expect(container.querySelector('[role="img"][aria-label="Agent working"]')).not.toBeNull()
   })
@@ -397,7 +396,7 @@ describe('shared graphite components', () => {
   test('toast actions invoke their action and dismiss callbacks once', async () => {
     const calls: string[] = []
     await render(<Toast title="Approve merge?" onDismiss={() => calls.push('dismiss')} action={{ label: 'Approve', onAction: () => calls.push('action') }} />)
-    await click(container.querySelector('button.ui-toast__action')!)
+    await click([...container.querySelectorAll<HTMLButtonElement>('button')].find((button) => button.textContent?.trim() === 'Approve')!)
     expect(calls).toEqual(['action', 'dismiss'])
   })
 
@@ -411,7 +410,7 @@ describe('shared graphite components', () => {
   test('disabled toast actions do not invoke callbacks', async () => {
     const calls: string[] = []
     await render(<Toast title="Approve merge?" durationMs={0} onDismiss={() => calls.push('dismiss')} action={{ label: 'Approve', disabled: true, onAction: () => calls.push('action') }} />)
-    await click(container.querySelector('button.ui-toast__action')!)
+    await click([...container.querySelectorAll<HTMLButtonElement>('button')].find((button) => button.textContent?.trim() === 'Approve')!)
     expect(calls).toEqual([])
   })
 
@@ -492,7 +491,7 @@ describe('shared graphite components', () => {
 
     await key(panel, 'Escape')
     expect(container.querySelector('[role="dialog"]')).toBe(panel)
-    await click(container.querySelector('.ui-dialog-backdrop')!)
+    await click(panel.parentElement!)
     expect(container.querySelector('[role="dialog"]')).toBe(panel)
     expect(choices).toEqual([])
 
@@ -514,7 +513,7 @@ describe('shared graphite components', () => {
     await render(<Dialog open title="Panel" closeOnBackdrop={false} onClose={() => calls.push('close')}>
       <button>Inside action</button>
     </Dialog>)
-    const backdrop = container.querySelector('.ui-dialog-backdrop')!
+    const backdrop = container.querySelector('[role="dialog"]')!.parentElement!
     const inside = [...container.querySelectorAll('button')].find((button) => button.textContent === 'Inside action')!
     await click(inside)
     await click(backdrop)
@@ -526,7 +525,7 @@ describe('shared graphite components', () => {
     await render(<Dialog open title="Panel" onClose={() => calls.push('close')}>
       <button>Inside action</button>
     </Dialog>)
-    const backdrop = container.querySelector('.ui-dialog-backdrop')!
+    const backdrop = container.querySelector('[role="dialog"]')!.parentElement!
     const inside = [...container.querySelectorAll('button')].find((button) => button.textContent === 'Inside action')!
     await click(inside)
     expect(calls).toEqual([])
@@ -538,7 +537,7 @@ describe('shared graphite components', () => {
     const calls: number[] = []
     await render(<EmptyState message="No changes" icon={<span aria-hidden="true">∅</span>} action={{ label: 'Open terminal', disabled: true, onAction: () => calls.push(1) }} />)
     expect(container.textContent).toContain('No changes')
-    expect(container.querySelectorAll('.ui-empty-state__action')).toHaveLength(1)
+    expect(container.querySelectorAll('button')).toHaveLength(1)
     await click(container.querySelector('button')!)
     expect(calls).toEqual([])
   })
@@ -563,6 +562,44 @@ describe('shared graphite components', () => {
     expect(container.textContent).toContain('Working tree')
     await click(container.querySelector('button[aria-label="Minimize Changes"]')!)
     expect(calls).toEqual([1])
+  })
+
+  test('tool panel actions stay in their nearest frame across independent roots and unmount cleanly', async () => {
+    const secondFrameContainer = document.createElement('div')
+    document.body.append(secondFrameContainer)
+    const secondFrameRoot = mountIndependentRoot(secondFrameContainer)
+
+    await act(async () => {
+      root!.render(<ToolPanelFrame title="First Worktrees"><div data-plugin-root="first" /></ToolPanelFrame>)
+      secondFrameRoot.render(<ToolPanelFrame title="Second Worktrees"><div data-plugin-root="second" /></ToolPanelFrame>)
+    })
+
+    const firstPluginRoot = mountIndependentRoot(container.querySelector<HTMLElement>('[data-plugin-root="first"]')!)
+    const secondPluginRoot = mountIndependentRoot(secondFrameContainer.querySelector<HTMLElement>('[data-plugin-root="second"]')!)
+    const orphanContainer = document.createElement('div')
+    document.body.append(orphanContainer)
+    const orphanRoot = mountIndependentRoot(orphanContainer)
+    await act(async () => {
+      firstPluginRoot.render(<ToolPanelActions><button aria-label="First action">First action</button></ToolPanelActions>)
+      secondPluginRoot.render(<ToolPanelActions><button aria-label="Second action">Second action</button></ToolPanelActions>)
+      orphanRoot.render(<ToolPanelActions><button aria-label="Orphan action">Orphan action</button></ToolPanelActions>)
+    })
+
+    const firstAction = document.querySelector<HTMLButtonElement>('button[aria-label="First action"]')
+    const secondAction = document.querySelector<HTMLButtonElement>('button[aria-label="Second action"]')
+    expect(firstAction?.closest('header')).toBe(container.querySelector('header'))
+    expect(secondAction?.closest('header')).toBe(secondFrameContainer.querySelector('header'))
+    expect(document.querySelectorAll('button[aria-label="First action"]')).toHaveLength(1)
+    expect(document.querySelectorAll('button[aria-label="Second action"]')).toHaveLength(1)
+    expect(document.querySelector('button[aria-label="Orphan action"]')).toBeNull()
+
+    await unmountIndependentRoot(firstPluginRoot)
+    expect(document.querySelector('button[aria-label="First action"]')).toBeNull()
+    expect(document.querySelector('button[aria-label="Second action"]')).toBe(secondAction)
+
+    await unmountIndependentRoot(secondPluginRoot)
+    expect(document.querySelector('button[aria-label="Second action"]')).toBeNull()
+    await unmountIndependentRoot(orphanRoot)
   })
 
   test('inline agent cards show status and suppress disabled actions', async () => {

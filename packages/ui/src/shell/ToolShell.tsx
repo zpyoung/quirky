@@ -1,8 +1,7 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent as ReactDragEvent, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
-import { createPortal } from 'react-dom'
+import { useCallback, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent as ReactDragEvent, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
 import type { UiToolEntry, UiToolLayout, UiToolResize, UiToolSlot } from '@quirky/protocol'
 import { UI_TOOL_SLOTS } from '@quirky/protocol'
-import { Badge, IconButton, Menu, ToolPanelFrame, type MenuItem } from '../design-system'
+import { Badge, ContextMenu, IconButton, ToolPanelFrame, type ContextMenuItem } from '../design-system'
 import { usePluginHost, usePluginState } from '../context'
 import { PluginSlot } from '../plugins/PluginSlot'
 import { useRegion } from '../plugins/useRegion'
@@ -304,42 +303,6 @@ function toolBadge(entry: UiToolEntry, badges: Record<string, number>, titles: R
   return { count, title }
 }
 
-type ToolMenuPosition = { left: number; top: number }
-type ToolAnchorRegistration = (id: string, element: HTMLDivElement | null) => void
-
-function ToolMenu({ entry, placement, slot, position, onMove }: {
-  entry: UiToolEntry
-  placement: UiToolSlot
-  slot: UiToolSlot
-  position: ToolMenuPosition | undefined
-  onMove: (id: string, slot: UiToolSlot) => void
-}) {
-  const items = useMemo<MenuItem[]>(() => UI_TOOL_SLOTS.map((destination) => ({
-    id: destination,
-    label: SLOT_LABELS[destination],
-    disabled: destination === placement,
-    onAction: () => onMove(entry.id, destination)
-  })), [entry.id, onMove, placement])
-
-  if (!position) return null
-  const opensRightToLeft = slot === 'right-top' || slot === 'right-bottom' || slot === 'bottom-right'
-  const opensUp = slot === 'bottom-left' || slot === 'bottom-right'
-  const style = {
-    '--tool-menu-left': position.left,
-    '--tool-menu-top': position.top
-  } as CSSProperties
-  return createPortal(
-    <div
-      className="tool-shell__menu-portal"
-      data-menu-side={opensRightToLeft ? 'right' : 'left'}
-      data-menu-edge={opensUp ? 'bottom' : 'top'}
-      style={style}
-    >
-      <Menu label={`Move ${entry.title}`} items={items} />
-    </div>,
-    document.body
-  )
-}
 
 const TOOL_ICON_PATHS: Record<string, string> = {
   'git-branch': 'M6 3v12a4 4 0 0 0 4 4h2M18 5v3a4 4 0 0 1-4 4H6M6 3a2 2 0 1 0 0 4 2 2 0 0 0 0-4M18 3a2 2 0 1 0 0 4 2 2 0 0 0 0-4M14 17a2 2 0 1 0 0 4 2 2 0 0 0 0-4',
@@ -374,13 +337,11 @@ function ToolItem({
   slot,
   openId,
   placement,
-  menuPosition,
   badges,
   badgeTitles,
   inboxCount,
   activityItemIds,
   dragging,
-  registerAnchor,
   onOpen,
   onClose,
   onMove
@@ -389,18 +350,38 @@ function ToolItem({
   slot: UiToolSlot
   openId: string | null
   placement: UiToolSlot
-  menuPosition: ToolMenuPosition | undefined
   badges: Record<string, number>
   badgeTitles: Record<string, string>
   inboxCount: number | null
   activityItemIds: ReadonlySet<string>
   dragging: { current: string | null }
-  registerAnchor: ToolAnchorRegistration
   onOpen: (id: string) => void
   onClose: (slot: UiToolSlot) => void
   onMove: (id: string, slot: UiToolSlot) => void
 }) {
-  const anchor = useCallback((element: HTMLDivElement | null) => registerAnchor(tool.id, element), [registerAnchor, tool.id])
+  const button = useRef<HTMLButtonElement>(null)
+  const provider = useRef<HTMLDivElement>(null)
+  const [menuPosition, setMenuPosition] = useState<{ x: number; y: number } | null>(null)
+  const menuWasOpen = useRef(false)
+  const closeMenu = useCallback(() => setMenuPosition(null), [])
+  const menuItems = useMemo<ContextMenuItem[]>(() => UI_TOOL_SLOTS.map((destination) => ({
+    id: destination,
+    label: SLOT_LABELS[destination],
+    enabled: destination !== placement,
+    onSelect: () => onMove(tool.id, destination)
+  })), [onMove, placement, tool.id])
+
+  useLayoutEffect(() => {
+    if (menuPosition) {
+      menuWasOpen.current = true
+      return
+    }
+    if (!menuWasOpen.current) return
+    menuWasOpen.current = false
+    const focusTarget = button.current ?? provider.current?.querySelector<HTMLButtonElement>('button')
+    if (focusTarget?.isConnected) focusTarget.focus()
+  }, [menuPosition])
+
   const selected = openId === tool.id
   const activityItemId = tool.aliases.find((id) => id !== tool.contributionId && activityItemIds.has(id))
   const badge = activityItemId ? null : toolBadge(tool, badges, badgeTitles, inboxCount)
@@ -412,41 +393,67 @@ function ToolItem({
   const handleDragEnd = () => { dragging.current = null }
 
   return (
-    <div ref={anchor} className="tool-shell__tool">
+    <div className="tool-shell__tool">
       {activityItemId
         ? (
           <div
+            ref={provider}
             className="tool-shell__tool-provider"
             data-selected={selected}
             draggable
             onDragStart={handleDragStart}
             onDragEnd={handleDragEnd}
+            onContextMenu={(event) => {
+              event.preventDefault()
+              setMenuPosition({ x: event.clientX, y: event.clientY })
+            }}
+            onKeyDown={(event) => {
+              if (!((event.shiftKey && event.key === 'F10') || event.key === 'ContextMenu')) return
+              event.preventDefault()
+              const bounds = event.currentTarget.getBoundingClientRect()
+              setMenuPosition({ x: bounds.left, y: bounds.bottom })
+            }}
           >
             <PluginSlot id={activityItemId} />
           </div>
         )
         : (
           <IconButton
+            ref={button}
             className="tool-shell__tool-button"
             label={tool.title}
             title={tool.title}
             aria-pressed={selected}
+            aria-haspopup="menu"
+            aria-expanded={menuPosition !== null}
             draggable
             onDragStart={handleDragStart}
             onDragEnd={handleDragEnd}
+            onContextMenu={(event) => {
+              event.preventDefault()
+              setMenuPosition({ x: event.clientX, y: event.clientY })
+            }}
+            onKeyDown={(event) => {
+              if (!((event.shiftKey && event.key === 'F10') || event.key === 'ContextMenu')) return
+              event.preventDefault()
+              const bounds = event.currentTarget.getBoundingClientRect()
+              setMenuPosition({ x: bounds.left, y: bounds.bottom })
+            }}
             onClick={() => selected ? onClose(slot) : onOpen(tool.id)}
           >
             <ToolIcon tool={tool} />
           </IconButton>
         )}
       {!activityItemId && badge && <Badge tone="needs-you" label={badge.title}>{badge.count}</Badge>}
-      <ToolMenu
-        entry={tool}
-        placement={placement}
-        slot={slot}
-        position={menuPosition}
-        onMove={onMove}
-      />
+      {menuPosition && (
+        <ContextMenu
+          label={`Move ${tool.title}`}
+          items={menuItems}
+          x={menuPosition.x}
+          y={menuPosition.y}
+          onClose={closeMenu}
+        />
+      )}
     </div>
   )
 }
@@ -480,65 +487,6 @@ function ToolStripe({
   onClose: (slot: UiToolSlot) => void
   onMove: (id: string, slot: UiToolSlot) => void
 }) {
-  const scroller = useRef<HTMLDivElement>(null)
-  const anchors = useRef(new Map<string, HTMLDivElement>())
-  const [menuPositions, setMenuPositions] = useState<Record<string, ToolMenuPosition>>({})
-  const registerAnchor = useCallback((id: string, element: HTMLDivElement | null) => {
-    if (element) anchors.current.set(id, element)
-    else anchors.current.delete(id)
-  }, [])
-  const updateMenuPositions = useCallback(() => {
-    const scrollElement = scroller.current
-    if (!scrollElement) {
-      setMenuPositions({})
-      return
-    }
-    const scrollBounds = scrollElement.getBoundingClientRect()
-    const next: Record<string, ToolMenuPosition> = {}
-    for (const tool of tools) {
-      if (placementById.get(tool.id) !== slot) continue
-      const anchor = anchors.current.get(tool.id)
-      if (!anchor) continue
-      const bounds = anchor.getBoundingClientRect()
-      const visible =
-        bounds.left >= scrollBounds.left &&
-        bounds.right <= scrollBounds.right &&
-        bounds.top >= scrollBounds.top &&
-        bounds.bottom <= scrollBounds.bottom &&
-        bounds.right > 0 &&
-        bounds.left < window.innerWidth &&
-        bounds.bottom > 0 &&
-        bounds.top < window.innerHeight
-      if (visible) next[tool.id] = { left: bounds.right - 8, top: bounds.bottom - 16 }
-    }
-    setMenuPositions((current) => {
-      const currentIds = Object.keys(current)
-      const nextIds = Object.keys(next)
-      if (currentIds.length !== nextIds.length) return next
-      if (nextIds.every((id) => current[id]?.left === next[id].left && current[id]?.top === next[id].top)) {
-        return current
-      }
-      return next
-    })
-  }, [placementById, slot, tools])
-
-  useEffect(() => {
-    const element = scroller.current
-    if (!element) return
-    updateMenuPositions()
-    element.addEventListener('scroll', updateMenuPositions)
-    window.addEventListener('scroll', updateMenuPositions, true)
-    window.addEventListener('resize', updateMenuPositions)
-    const observer = new ResizeObserver(updateMenuPositions)
-    observer.observe(element)
-    return () => {
-      element.removeEventListener('scroll', updateMenuPositions)
-      window.removeEventListener('scroll', updateMenuPositions, true)
-      window.removeEventListener('resize', updateMenuPositions)
-      observer.disconnect()
-    }
-  }, [updateMenuPositions])
-
   const handleDrop = (event: ReactDragEvent<HTMLElement>) => {
     event.preventDefault()
     const id = resolveToolDropId(dragging.current, knownIds)
@@ -571,7 +519,7 @@ function ToolStripe({
         }
       }}
     >
-      <div ref={scroller} className="tool-shell__stripe-scroll">
+      <div className="tool-shell__stripe-scroll">
         {tools.filter((tool) => placementById.get(tool.id) === slot).map((tool) => (
           <ToolItem
             key={tool.id}
@@ -579,13 +527,11 @@ function ToolStripe({
             slot={slot}
             openId={openId}
             placement={placementById.get(tool.id) ?? slot}
-            menuPosition={menuPositions[tool.id]}
             badges={badges}
             badgeTitles={badgeTitles}
             inboxCount={inboxCount}
             activityItemIds={activityItemIds}
             dragging={dragging}
-            registerAnchor={registerAnchor}
             onOpen={onOpen}
             onClose={onClose}
             onMove={onMove}
