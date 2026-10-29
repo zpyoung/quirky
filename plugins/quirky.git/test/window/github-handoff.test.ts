@@ -242,7 +242,9 @@ function unsetUpstream(path: string, branch: string): void {
 function reviewStatus() {
   return q('[data-scm-review-status]')
 }
-const reviewAction = () => q('[data-git-create-review] button') as HTMLButtonElement | null
+const reviewAction = () =>
+  [...(q('[data-git-create-review')?.querySelectorAll<HTMLButtonElement>('button') ?? [])]
+    .find((button) => text(button).includes('Create PR')) ?? null
 
 async function waitForReviewState(w: World, kind: string, prNumber?: number) {
   return w.win.waitFor(() => {

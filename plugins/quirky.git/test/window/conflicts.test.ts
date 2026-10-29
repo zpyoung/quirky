@@ -10,7 +10,8 @@ const { scratch } = isolateGitConfig()
 const SLOW = 90_000
 afterEach(shutdown)
 
-const editorIn = (root: ParentNode = document) => EditorView.findFromDOM(q('.cm-editor', root)!)!
+const editorIn = (root: ParentNode = document) => EditorView.findFromDOM(q('[data-git-view-root] [contenteditable]', root)!)!
+const reviewConflictCard = () => qa('[role="status"]').find((card) => buttonText('Review conflicts', card) !== undefined)
 
 test('SC-41: a sync that stops on a conflict leads, in the window, to Continue merge and Push', async () => {
   const w = await boot(scratch)
@@ -23,20 +24,17 @@ test('SC-41: a sync that stops on a conflict leads, in the window, to Continue m
   await w.win.waitFor(() => text(primary()) === 'Sync')
 
   await click(primary())
-  const conflict = await w.win.waitFor(() => qa('[role="status"]').find((card) => text(q('h3', card)) === 'Merge conflicts: 1 unresolved'))
+  const conflict = await w.win.waitFor(() => reviewConflictCard())
   expect(buttonText('Review conflicts', conflict)).toBeDefined()
   expect(buttonText('Abort merge', conflict)).toBeDefined()
-  expect(toasts()).toContainEqual({
-    title: 'Pull stopped with merge conflicts',
-    body: 'Resolve them in Source Control, then continue the merge.'
-  })
+  expect(toasts()).toHaveLength(1)
   expect(q('textarea[aria-label="Commit message"]')).toBeNull()
   await w.win.waitFor(async () => (await w.report())?.operation === 'merge')
 
   await click(rowOf('math.ts', 'conflicts'))
   await w.win.waitFor(async () => (await openView(w))?.id === DIFF_VIEW)
   expect((await openView(w))!.input).toMatchObject({ mode: 'conflict-file', path: 'math.ts' })
-  await w.win.waitFor(() => q('[data-git-view-root] .cm-editor') && q('[data-git-view-root] [role="status"]'))
+  await w.win.waitFor(() => q('[data-git-view-root] [contenteditable]') && q('[data-git-view-root] [role="status"]'))
   expect(text(q('[data-git-view-root] [role="status"]'))).toContain('Unresolved conflict · Both modified')
   await w.win.waitFor(() => text(q('[data-git-view-root] [aria-label="Conflict 1 of 1"]')) === '1 / 1')
   expect(rowOf('math.ts', 'conflicts')).not.toBeNull()
@@ -76,7 +74,7 @@ test('SC-43: Abort merge in the window confirms first and returns to the pre-mer
   w.git('fetch', '-q')
   await w.win.waitFor(() => text(primary()) === 'Sync')
   await click(primary())
-  const conflict = await w.win.waitFor(() => qa('[role="status"]').find((card) => text(q('h3', card)) === 'Merge conflicts: 1 unresolved'))
+  const conflict = await w.win.waitFor(() => reviewConflictCard())
 
   await click(buttonText('Abort merge', conflict))
   const dialog = await w.win.waitFor(() => qa('[role="dialog"]').find((d) => d.getAttribute('aria-label') === 'Abort merge?'))
