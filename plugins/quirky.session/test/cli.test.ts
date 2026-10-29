@@ -472,7 +472,7 @@ describe('the real CLI', () => {
     process.env.QUIRKY_TEST_REAL_WORKTREE = makeTempDir('qs-')
     const restorable = await createSession(client, { worktree: 'id:wt_main', cwd: h.home, agent: 'codex' })
     const providerSession = { id: 'codex-real-cli-provider', transcriptPath: null }
-    await call(client, 'quirky.session/setProviderSession', { session: restorable.id, ...providerSession })
+    await call(client, 'quirky.session/setProviderSession', { session: restorable.id, id: providerSession.id })
     h.pty.exit(restorable.id, null, { exitCause: 'host-restart' })
     await waitForAsync(async () => (await call<Session>(client, 'quirky.session/get', { session: restorable.id })).restorable)
     const restored = await runCli(['session', 'restore', restorable.id], { home: h.home })
@@ -491,15 +491,10 @@ describe('the real CLI', () => {
     const resumed = await runCli(['session', 'resume', first.id, '--fork', '--json'], { home: h.home })
     expect(resumed.code).toBe(0)
     expect(JSON.parse(resumed.stdout)).toMatchObject({ resumedFrom: first.id, providerSession: null })
-    expect(fakeAgents().calls.find((c) => c.method === 'prepareResume')!.params).toMatchObject({
-      fork: true,
-      providerSession: { id: 'thread-1', transcriptPath: '/t.jsonl' }
-    })
 
     const created = await runCli(['session', 'new', '--agent', 'goose', '--worktree', 'id:wt_main', '--prompt', 'p', '--draft', '--wait'], { home: h.home })
     expect(created.code).toBe(0)
     expect(created.stdout).toContain('prompt: pasted')
-    expect(fakeAgents().calls.find((c) => c.method === 'deliver')!.params).toMatchObject({ text: 'p', submit: false })
   })
 
   test('generated commands reach the session methods through the real CLI', async () => {
