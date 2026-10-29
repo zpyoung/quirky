@@ -2120,8 +2120,7 @@
       "deps": [
         "m7-test-triage"
       ],
-      "status": "in-progress",
-      "lane": 8
+      "status": "done"
     },
     {
       "id": "fix-test-tasks-1028",
