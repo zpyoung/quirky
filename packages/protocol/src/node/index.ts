@@ -37,6 +37,8 @@ export type RuntimeInfo = {
   startedAt: number
   /** The unix socket the CLI connects to. Optional so a `runtime.json` from an older daemon still parses. */
   socket?: string
+  /** `daemonEntryHash` of the file the daemon runs from; absent from daemons that predate it. */
+  entryHash?: string
 }
 
 export const HEALTH_PATH = '/health'
@@ -147,6 +149,25 @@ export async function isDaemonAlive(info: RuntimeInfo | null, timeoutMs = 1500):
   }
 }
 
+/** Identifies a daemon build by the content of its entry file; the package version is not bumped per release. */
+export function daemonEntryHash(entry: string): string {
+  return createHash('sha256').update(readFileSync(entry)).digest('hex').slice(0, 16)
+}
+
+/** Stops a running daemon the way `quirky daemon restart` does and waits for its health check to go quiet. */
+async function stopDaemon(info: RuntimeInfo, timeoutMs = 10000): Promise<void> {
+  try {
+    process.kill(info.pid, 'SIGTERM')
+  } catch {
+    return
+  }
+  const deadline = Date.now() + timeoutMs
+  while (await isDaemonAlive(info, 500)) {
+    if (Date.now() > deadline) throw new Error(`quirkyd (pid ${info.pid}) did not stop within ${timeoutMs / 1000}s`)
+    await Bun.sleep(100)
+  }
+}
+
 export function defaultDaemonEntry(): string {
   return (
     process.env.QUIRKY_DAEMON_ENTRY ??
@@ -183,13 +204,25 @@ export function withoutAgentSessionMarkers<T extends Record<string, string | und
  * The daemon outlives its starter. Its output goes to `<home>/logs/daemon.log`.
  */
 export async function ensureDaemon(
-  options: { home?: string; daemonEntry?: string; bunPath?: string; timeoutMs?: number; args?: string[] } = {}
+  options: {
+    home?: string
+    daemonEntry?: string
+    bunPath?: string
+    timeoutMs?: number
+    args?: string[]
+    /** Stop a running daemon whose entry differs from `daemonEntry`, as after an app update, and start this one. */
+    replaceStale?: boolean
+  } = {}
 ): Promise<RuntimeInfo> {
   const home = ensureHome(options.home ?? quirkyHome())
   const existing = readRuntime(home)
-  if (await isDaemonAlive(existing)) return existing as RuntimeInfo
-
   const entry = options.daemonEntry ?? defaultDaemonEntry()
+  if (await isDaemonAlive(existing)) {
+    const current = existing as RuntimeInfo
+    if (!options.replaceStale || !existsSync(entry) || current.entryHash === daemonEntryHash(entry)) return current
+    await stopDaemon(current)
+  }
+
   if (!existsSync(entry)) throw new Error(`quirkyd entry not found: ${entry}`)
   const log = openPrivateLog(join(home, 'logs', 'daemon.log'))
   const child = spawn(options.bunPath ?? process.execPath, [entry, ...(options.args ?? [])], {

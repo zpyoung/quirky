@@ -1,4 +1,4 @@
-import { ensureHome, isDaemonAlive, quirkyHome, readRuntime, runtimeFilePath } from '@quirky/protocol/node'
+import { daemonEntryHash, ensureHome, isDaemonAlive, quirkyHome, readRuntime, runtimeFilePath } from '@quirky/protocol/node'
 import { startDaemon } from './daemon'
 import { acquireDaemonLock } from './lock'
 
@@ -20,6 +20,7 @@ if (safeMode) console.error('[quirkyd] safe mode: installed plugins and disables
 
 const daemon = await startDaemon({
   home,
+  entryHash: daemonEntryHash(process.argv[1]!),
   safeMode,
   onStopRequested: () => shutdown()
 }).catch((error) => {
