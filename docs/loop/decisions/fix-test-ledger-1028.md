@@ -154,5 +154,16 @@
 - **Revisit if:** the budgeted current gate fails or a live consumer shows a distinct error
 - **Source:** deferred: platform
 
+## D15: Land only after clean current Ledger consumer proof and retain the queued Worktree failures
+- **Question:** Which final checks establish this item's completion without certifying unrelated consumers?
+- **Options:** hide the broad red result; take over the queued Worktree repair; report exact scopes and require this item's clean current gate
+- **Chose:** Final canonical Ledger/Repo/scripts gate passed23/23remote files,0failures,flaky:[],exit0/53.32s. Corrected full typecheck passed exit0/37.31s, including UI lint/root/mobile/prepared desktop. Actual single-provider subprocess daemon/API/CLI smoke passed exit0/2.41s and removed its owned home. Existing Ledger API, import/CLI and all seven UI-window scenarios now pass; no behavior assertion was replaced by an inventory mirror. No unbuilt flow or follow-up item is needed.
+- **Why:** Final broad Ledger/Repo/Worktree/scripts verification remains exit1/281.03s,44/69files passed,25failed,flaky:[]. Every remaining failed file belongs to quirky.worktree, whose authoritative queued fix-test-worktree-1028 remains todo/unassigned; its future owner consumes the shared DOM base case and landed Repo ownedIds registration. This is not a whole-Worktree/whole-repository pass. The immutable raw receipts, the earlier flaky green and merge-created type error remain available with their actual outcomes.
+- **Evidence:** .quirk/build-loop/fix-test-ledger-1028/final-ledger-repo-scripts.{log,result.json}; final-types-fixed.{log,result.json}; final-macos-smoke-single-provider.{log,result.json}; final-affected-tests.{log,result.json}; source411da80e
+- **Reversibility:** easy
+- **Confidence:** high for exercised current scopes; no universal latency/native/platform claim
+- **Revisit if:** canonical landing reports a concrete integration/type error or a current Ledger flow fails
+- **Source:** locked by current queue ownership and end-phase verification contract
+
 ## Progress
-All named Ledger behavior scenarios have passing observations, with raw earlier broad failures/flaky receipt retained. Independent scoped reviews are complete; the sole helper High claim was explicitly refuted, not suppressed. Sole integration catch-up is complete and all ten incoming decision logs were consumed. Typecheck caught and source now removes a merge-created duplicate ownedIds; real single-provider daemon/API/CLI smoke passed. Await current corrected typecheck and final broad gate; finish a clean in-scope Ledger/Repo/scripts gate, retain queued Worktree failures honestly, then commit/detach/canonical land exactly this item and await authoritative receipt.
+Ready for canonical landing of exactly fix-test-ledger-1028. Final source411da80e passes the23-file Ledger/Repo/scripts gate without retries, corrected full typecheck and actual private daemon/API/CLI smoke. All scoped independent reviews and incoming-decision consumption are complete; no accepted review finding remains. Preserve broader25Worktree failures and browser partial/tool limits as documented, not as clean proof. Commit this evidence receipt, detach, run the canonical absolute queue land command and await its actual result. On success remove only owned scratch and update loop notes; on a concrete land failure follow required recovery. All jobs, reviewers, scouts and UI/runtime resources have returned/closed; no implementer worktree was created.
