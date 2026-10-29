@@ -1,5 +1,6 @@
 {
   "id": "quirky.checks",
+  "apiVersion": "1.0.0",
   "name": "Checks",
   "version": "0.1.0",
   "description": "Runs bounded shell checks in a worktree or an explicit directory.",

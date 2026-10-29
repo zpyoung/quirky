@@ -31,7 +31,7 @@ function writePlugin(id: string, contributes: Record<string, unknown[]>, ui: str
   scratch.push(root)
   const dir = join(root, id)
   mkdirSync(dir)
-  const manifest = { id, name: id, version: '1.0.0', ui: 'ui.js', contributes, ...(overrides === undefined ? {} : { overrides }) }
+  const manifest = { id, apiVersion: '1.0.0', name: id, version: '1.0.0', ui: 'ui.js', contributes, ...(overrides === undefined ? {} : { overrides }) }
   writeFileSync(join(dir, 'quirky-plugin.json'), JSON.stringify(manifest))
   writeFileSync(join(dir, 'ui.js'), ui)
   return dir

@@ -1,5 +1,6 @@
 {
   "id": "quirky.git",
+  "apiVersion": "1.0.0",
   "name": "Source control",
   "version": "0.1.0",
   "description": "Branch status, diffs, staging, commits, remote operations, history and conflicts for a worktree.",

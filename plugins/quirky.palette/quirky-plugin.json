@@ -1,5 +1,6 @@
 {
   "id": "quirky.palette",
+  "apiVersion": "1.0.0",
   "name": "Command Palette",
   "version": "0.1.0",
   "description": "Provides the replaceable command-palette action and its shared layout state API.",

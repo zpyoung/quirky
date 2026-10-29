@@ -1,5 +1,6 @@
 {
   "id": "quirky.hosting",
+  "apiVersion": "1.0.0",
   "name": "GitHub Hosting",
   "version": "0.1.0",
   "description": "GitHub hosting operations over the user's authenticated gh CLI.",

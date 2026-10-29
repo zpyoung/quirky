@@ -1,5 +1,6 @@
 {
   "id": "quirky.accounts",
+  "apiVersion": "1.0.0",
   "name": "Accounts (fake)",
   "version": "0.0.0",
   "main": "main.ts",

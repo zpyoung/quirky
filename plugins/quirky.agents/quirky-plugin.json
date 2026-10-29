@@ -1,5 +1,6 @@
 {
   "id": "quirky.agents",
+  "apiVersion": "1.0.0",
   "name": "Agents",
   "version": "0.1.0",
   "description": "The catalog of agent CLIs Quirky can launch, with their detection, launch and resume data.",

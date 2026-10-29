@@ -124,6 +124,7 @@ async function installCreateMoreAgent(w: World): Promise<void> {
     join(path, 'quirky-plugin.json'),
     JSON.stringify({
       id: 'acme.agents',
+      apiVersion: '1.0.0',
       name: 'Acme test agents',
       version: '1.0.0',
       description: 'Agent provider for the Create more dialog test.',

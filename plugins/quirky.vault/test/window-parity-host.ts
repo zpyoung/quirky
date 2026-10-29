@@ -15,6 +15,7 @@ export function createWindowVaultHostForwarder(options: HostPluginOptions): { ro
   const clientModule = pathToFileURL(join(repository, 'packages', 'protocol', 'src', 'client.ts')).href
   writeFileSync(join(directory, 'quirky-plugin.json'), JSON.stringify({
     id: options.pluginId,
+    apiVersion: '1.0.0',
     name: 'Vault Window Host Fixture',
     version: '1.0.0',
     main: 'main.ts',

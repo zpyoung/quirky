@@ -108,6 +108,7 @@ process.exitCode = child.exitCode ?? 1
 `
 const BRIDGE_MANIFEST = {
   id: 'quirky.hosting-test-bridge',
+  apiVersion: '1.0.0',
   name: 'Hosting test caller bridge',
   version: '0.1.0',
   main: 'main.ts',

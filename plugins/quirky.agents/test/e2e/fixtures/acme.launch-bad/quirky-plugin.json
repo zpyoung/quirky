@@ -1,5 +1,6 @@
 {
   "id": "acme.launch-bad",
+  "apiVersion": "1.0.0",
   "name": "Acme launch bad",
   "version": "1.0.0",
   "description": "Declares an agent whose launchOptions effort choices are not a list, for e2e tests.",

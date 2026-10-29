@@ -22,6 +22,7 @@ function writeFakeHostingPlugin(directory: string): void {
   mkdirSync(pluginDir, { recursive: true })
   writeFileSync(join(pluginDir, 'quirky-plugin.json'), JSON.stringify({
     id: 'quirky.hosting',
+    apiVersion: '1.0.0',
     name: 'Fake hosting cache fixture',
     version: '1.0.0',
     main: 'main.ts',
