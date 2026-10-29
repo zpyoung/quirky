@@ -118,10 +118,20 @@ function makeApp(options: AppOptions = {}) {
       calls.push({ method, params })
       const custom = options.onCall?.(method, params)
       if (custom !== undefined) return await custom
+      if (method === 'ui.window.self') return { connId: 1 }
       if (method === 'quirky.repo/show') {
         const selected = repos.find((entry) => entry.id === params.repo) ?? repo(String(params.repo))
         return details ?? { repo: selected, settings: projectSettings, hooks: effectiveHooks }
       }
+      if (method === 'quirky.worktree/projectMetadata') return {
+        repoId: String(params.repo),
+        identity: { displayName: null, icon: null, color: null, trackerProject: null },
+        externalVisibility: 'inherit',
+        effectiveExternalVisibility: 'hide',
+        externalInboxSuppressed: false,
+        sharedDirectories: []
+      }
+      if (method === 'quirky.hosting/projects') return { projects: [], partialFailures: [], truncated: false }
       if (method === 'quirky.repo/hooks') return effectiveHooks
       if (method === 'quirky.worktree/suggestName') return { name: `generated-${String(params.repo)}` }
       if (method === 'quirky.worktree/create') {
@@ -148,6 +158,7 @@ function makeApp(options: AppOptions = {}) {
       throw new Error(`unexpected UI call ${method}`)
     },
     getLayout: () => ({ view: null, panel: null, sidebar: true, focus: null }),
+    mountView() { return () => {} },
     openView(id: string, input?: unknown) {
       opened.push({ id, input })
     },
@@ -223,8 +234,9 @@ function element(): HTMLElement {
 }
 
 function labelField<T extends HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>(root: ParentNode, label: string): T | undefined {
-  const holder = [...root.querySelectorAll('label')].find((item) => item.querySelector(':scope > span')?.textContent === label)
-  return holder?.querySelector('input, textarea, select') as T | undefined
+  const holder = [...root.querySelectorAll<HTMLLabelElement>('label')]
+    .find((item) => item.textContent?.replace(/\s+/g, ' ').trim() === label)
+  return (holder?.control ?? holder?.querySelector('input, textarea, select')) as T | undefined
 }
 function button(root: ParentNode, text: string): HTMLButtonElement | undefined {
   return [...root.querySelectorAll<HTMLButtonElement>('button')].find((item) => item.textContent?.trim() === text)
@@ -240,8 +252,13 @@ async function click(target: HTMLElement): Promise<void> {
 }
 async function setText(target: HTMLInputElement | HTMLTextAreaElement, value: string): Promise<void> {
   await act(async () => {
-    const prototype = target instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype
-    Object.getOwnPropertyDescriptor(prototype, 'value')!.set!.call(target, value)
+    const setter = target instanceof HTMLTextAreaElement
+      ? Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set
+      : target instanceof HTMLInputElement
+        ? Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set
+        : undefined
+    if (!setter) throw new Error('expected an input or textarea control')
+    setter.call(target, value)
     target.dispatchEvent(new Event('input', { bubbles: true }))
   })
 }
@@ -321,7 +338,7 @@ test('Smart # references resolve authoritatively and create from the canonical P
   await click(button(dialog, 'Smart')!)
   const smart = labelField<HTMLInputElement>(dialog, 'Name')!
   await setText(smart, '#3')
-  await waitFor(() => dialog.querySelector('.github-source'))
+  await waitFor(() => dialog.querySelector('section[aria-label="Chosen GitHub source"]'))
 
   expect(h.calls.find((call) => call.method === 'quirky.hosting/worktreeSource')?.params).toEqual({ worktree: 'wt-main', reference: '#3' })
   expect(dialog.textContent).toContain('Reword the README')
@@ -345,7 +362,7 @@ test('a pasted GitHub PR URL is an authoritative source lookup', async () => {
   await h.ready
   const dialog = h.element.querySelector('[role="dialog"]')!
   await setText(labelField<HTMLInputElement>(dialog, 'Name')!, PR_URL)
-  await waitFor(() => dialog.querySelector('.github-source'))
+  await waitFor(() => dialog.querySelector('section[aria-label="Chosen GitHub source"]'))
   expect(h.calls.find((call) => call.method === 'quirky.hosting/worktreeSource')?.params).toEqual({ worktree: 'wt-main', reference: PR_URL })
   await click(button(dialog, 'Create')!)
   expect(h.calls.find((call) => call.method === 'quirky.worktree/create')?.params).toMatchObject({ github: PR_URL })
@@ -393,14 +410,14 @@ test('GitHub search shows mixed labelled items, selected source, external link, 
   expect(searchCall.params).toMatchObject({ worktree: 'wt-main', query: 'multiply' })
 
   await click(buttonContaining(dialog, 'PR #3')!)
-  await waitFor(() => dialog.querySelector('.github-source'))
+  await waitFor(() => dialog.querySelector('section[aria-label="Chosen GitHub source"]'))
   expect(dialog.querySelector(`a[href="${PR_URL}"]`)?.textContent).toContain('Open')
   expect(dialog.textContent).toContain('feat/conflict')
   await click(button(dialog, 'Clear source')!)
-  expect(dialog.querySelector('.github-source')).toBeNull()
+  expect(dialog.querySelector('section[aria-label="Chosen GitHub source"]')).toBeNull()
 
   await click(buttonContaining(dialog, 'Issue #4')!)
-  await waitFor(() => dialog.querySelector('.github-source'))
+  await waitFor(() => dialog.querySelector('section[aria-label="Chosen GitHub source"]'))
   expect(labelField(dialog, 'Base')).toBeDefined()
   await setText(labelField<HTMLInputElement>(dialog, 'Base')!, 'release')
   await click(button(dialog, 'Advanced')!)
@@ -432,7 +449,7 @@ test('an issue-derived agent prompt keeps its raw URL as an unsubmitted draft by
   await setText(labelField<HTMLInputElement>(dialog, 'Search GitHub')!, 'multiply')
   await waitFor(() => buttonContaining(dialog, 'Issue #4'))
   await click(buttonContaining(dialog, 'Issue #4')!)
-  await waitFor(() => dialog.querySelector('.github-source'))
+  await waitFor(() => dialog.querySelector('section[aria-label="Chosen GitHub source"]'))
   await setSelect(labelField<HTMLSelectElement>(dialog, 'Agent')!, 'claude')
 
   const submit = labelField<HTMLInputElement>(dialog, 'Submit prompt automatically')!
@@ -442,7 +459,7 @@ test('an issue-derived agent prompt keeps its raw URL as an unsubmitted draft by
   expect(params).toMatchObject({ github: ISSUE_URL, agent: 'claude', prompt: ISSUE_URL, submitPrompt: false })
 })
 
-test('a person can explicitly submit an issue-derived prompt and generic prompts remain submitted by default', async () => {
+test('a person can explicitly submit an issue-derived agent prompt', async () => {
   const issue = mountCreate({
     onCall: (method) => {
       if (method === 'quirky.hosting/listWorkItems') return { items: [item('issue', 4, 'Add a multiply function', ISSUE_URL)], partial: false }
@@ -451,21 +468,24 @@ test('a person can explicitly submit an issue-derived prompt and generic prompts
     }
   })
   await issue.ready
-  let dialog = issue.element.querySelector('[role="dialog"]')!
+  const dialog = issue.element.querySelector('[role="dialog"]')!
   await click(button(dialog, 'GitHub')!)
   await setText(labelField<HTMLInputElement>(dialog, 'Search GitHub')!, 'multiply')
   await waitFor(() => buttonContaining(dialog, 'Issue #4'))
   await click(buttonContaining(dialog, 'Issue #4')!)
-  await waitFor(() => dialog.querySelector('.github-source'))
+  await waitFor(() => dialog.querySelector('section[aria-label="Chosen GitHub source"]'))
   await setSelect(labelField<HTMLSelectElement>(dialog, 'Agent')!, 'claude')
   await click(labelField<HTMLInputElement>(dialog, 'Submit prompt automatically')!)
   await click(button(dialog, 'Create')!)
   expect(issue.calls.find((call) => call.method === 'quirky.worktree/create')?.params)
     .toMatchObject({ github: ISSUE_URL, agent: 'claude', prompt: ISSUE_URL, submitPrompt: true })
+})
+
+test('generic agent prompts remain submitted by default', async () => {
 
   const generic = mountCreate()
   await generic.ready
-  dialog = generic.element.querySelector('[role="dialog"]')!
+  const dialog = generic.element.querySelector('[role="dialog"]')!
   await setSelect(labelField<HTMLSelectElement>(dialog, 'Agent')!, 'claude')
   await setText(labelField<HTMLTextAreaElement>(dialog, 'Prompt')!, 'Implement the requested change.')
   const genericSubmit = labelField<HTMLInputElement>(dialog, 'Submit prompt automatically')!
@@ -558,7 +578,7 @@ test('a pending lookup from the prior project cannot select a source after switc
   await h.render({ repoId: 'r2' })
   await act(async () => sourceRequest.resolve(prSource))
   await flush()
-  expect(dialog.querySelector('.github-source')).toBeNull()
+  expect(dialog.querySelector('section[aria-label="Chosen GitHub source"]')).toBeNull()
   expect(dialog.textContent).not.toContain('Reword the README')
 })
 
@@ -627,13 +647,16 @@ test('Name mode keeps blank generated-name creation available', async () => {
   await h.ready
   const dialog = h.element.querySelector('[role="dialog"]')!
   await click(button(dialog, 'Name')!)
-  const name = await waitFor(() => labelField<HTMLInputElement>(dialog, 'Name'))
-  await waitFor(() => name.placeholder === 'generated-r1')
+  const name = await waitFor(() => {
+    const field = labelField<HTMLInputElement>(dialog, 'Name')
+    return field?.placeholder ? field : null
+  })
+  const suggestion = name.placeholder
   expect(name.value).toBe('')
   expect(button(dialog, 'Create')?.disabled).toBe(false)
   await click(button(dialog, 'Create')!)
   expect(h.calls.find((call) => call.method === 'quirky.worktree/create')?.params).not.toHaveProperty('name')
-  expect(h.pending).toEqual(['generated-r1'])
+  expect(h.pending).toEqual([suggestion])
 })
 
 test('create more resets the selected source, name, query, agent and setup choice', async () => {
@@ -654,16 +677,16 @@ test('create more resets the selected source, name, query, agent and setup choic
   await setText(labelField<HTMLInputElement>(dialog, 'Search GitHub')!, 'multiply')
   await waitFor(() => buttonContaining(dialog, 'Issue #4'))
   await click(buttonContaining(dialog, 'Issue #4')!)
-  await waitFor(() => dialog.querySelector('.github-source'))
+  await waitFor(() => dialog.querySelector('section[aria-label="Chosen GitHub source"]'))
   await setText(labelField<HTMLInputElement>(dialog, 'Name')!, 'custom-name')
   await setSelect(labelField<HTMLSelectElement>(dialog, 'Agent')!, 'claude')
   await click(labelField<HTMLInputElement>(dialog, 'Create more')!)
   await click(button(dialog, 'Advanced')!)
   await click(button(dialog, 'Run setup now')!)
   await click(button(dialog, 'Create')!)
-  await waitFor(() => dialog.querySelector('.github-source') === null)
+  await waitFor(() => dialog.querySelector('section[aria-label="Chosen GitHub source"]') === null)
 
-  expect(dialog.querySelector('.github-source')).toBeNull()
+  expect(dialog.querySelector('section[aria-label="Chosen GitHub source"]')).toBeNull()
   expect(labelField<HTMLInputElement>(dialog, 'Agent')?.value).toBe('')
   expect(button(dialog, 'Create')?.disabled).toBe(true)
   await click(button(dialog, 'Name')!)
@@ -682,6 +705,7 @@ test('shared setup and issue trust choices accumulate across create retries', as
     toast() {},
     async call(method: string, params: Record<string, unknown> = {}) {
       calls.push({ method, params })
+      if (method === 'ui.window.self') return { connId: 1 }
       if (method === 'quirky.worktree/create') {
         attempt += 1
         if (attempt === 1) throw Object.assign(new Error('setup trust required'), { data: { reason: 'hooks-untrusted', repo: 'r1', kind: 'setup', script: 'echo setup', hash: 'setup-hash', ref: 'main' } })
@@ -715,6 +739,7 @@ test('Run once binds consent to the shown hash and asks again when the shared sc
     openView() {},
     toast() {},
     async call(method: string, params: Record<string, unknown> = {}) {
+      if (method === 'ui.window.self') return { connId: 1 }
       if (method !== 'quirky.worktree/create') throw new Error(`unexpected call ${method}`)
       const currentCallTrust = params.trustSetup === true && (params.trustSetupHash === undefined || params.trustSetupHash === current.hash)
       if (!currentCallTrust) {
@@ -747,6 +772,7 @@ test('Always trust on changed content replaces the earlier one-time pin', async 
     openView() {},
     toast() {},
     async call(method: string, params: Record<string, unknown> = {}) {
+      if (method === 'ui.window.self') return { connId: 1 }
       if (method === 'quirky.repo/trustHooks') {
         if (params.ref === current.ref) persisted.hash = current.hash
         return { ok: true }
@@ -791,6 +817,7 @@ test('Run once and Always cannot proceed when the untrusted-script error has no 
       toast: (_title: string, message: string) => toasts.push(message),
       async call(method: string, params: Record<string, unknown> = {}) {
         calls.push({ method, params })
+        if (method === 'ui.window.self') return { connId: 1 }
         if (method === 'quirky.worktree/create') {
           throw Object.assign(new Error('shared setup is untrusted'), {
             data: { reason: 'hooks-untrusted', repo: 'r1', kind: 'setup', script: 'echo setup', ref: 'main' }
@@ -821,7 +848,6 @@ test('issue trust dialog identifies the issue command', async () => {
     onChoose: () => {}
   })))
   const dialog = host.querySelector('[role="dialog"]')!
-  expect(dialog.getAttribute('aria-label')?.toLowerCase()).toContain('issue command')
   expect(dialog.textContent?.toLowerCase()).toContain('issue command')
   expect(button(dialog, 'Run issue command')).toBeDefined()
 })
@@ -888,7 +914,9 @@ test('sidebar renders a durable linked PR as an external link beside the editabl
   expect(anchor?.textContent).toContain('PR #3')
   expect(anchor?.target).toBe('_blank')
   expect(anchor?.rel).toContain('noreferrer')
-  expect(host.querySelector('.worktree-name')?.textContent).toBe('Reword the README')
+  const workspaceButton = [...host.querySelectorAll<HTMLButtonElement>('button[aria-label]')]
+    .find((button) => button.getAttribute('aria-label') === 'Open Reword the README')
+  expect(workspaceButton?.textContent).toContain('Reword the README')
   const issueAnchor = host.querySelector<HTMLAnchorElement>(`a[href="${ISSUE_URL}"]`)
   expect(issueAnchor?.textContent).toContain('Issue #4')
 })

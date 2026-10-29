@@ -27,6 +27,7 @@ const request = {
 describe('worktree automation provenance API', () => {
   test('rejects malformed requests and caller-supplied snapshots before creating Git workspaces', async () => {
     const { client, repoDir, repo } = await start()
+    const initialWorktreeIds = (await listWorktrees(client, { repo: repo.id })).map((worktree) => worktree.id)
 
     const malformed = await failure(call(client, 'quirky.worktree/create', {
       repo: repo.id,
@@ -49,7 +50,7 @@ describe('worktree automation provenance API', () => {
       }
     }))
     expect(forgedSnapshot.code).toBe(RpcErrorCode.InvalidParams)
-    expect((await listWorktrees(client, { repo: repo.id })).map((worktree) => worktree.name)).toEqual(['api'])
+    expect((await listWorktrees(client, { repo: repo.id })).map((worktree) => worktree.id)).toEqual(initialWorktreeIds)
     expect(git(repoDir, 'branch', '--list', 'Test/malformed-provenance')).toBe('')
     expect(git(repoDir, 'branch', '--list', 'Test/forged-snapshot')).toBe('')
   })

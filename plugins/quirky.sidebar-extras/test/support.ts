@@ -2,14 +2,14 @@ import { mkdirSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'nod
 import { join } from 'node:path'
 import type { QuirkyClient, Repo, Worktree, WorktreeCreateResult } from '@quirky/protocol'
 import { runCli } from '../../../packages/cli/test/fixtures/fake-daemon'
-import { builtinsDir, makeTempHome, startHarness, type Harness } from '../../../packages/daemon/test/helpers'
+import { builtinsDir, makeHomeWithoutAutoHooks, makeTempHome, startHarness, type Harness } from '../../../packages/daemon/test/helpers'
 import { isolateGitConfig, makeRepo } from '../../quirky.repo/test/git-fixtures'
 
 const { scratch } = isolateGitConfig()
 function testBuiltins(fakeHosting = false, includeAgentStatus = false): string {
   const directory = join(scratch(), 'builtin')
   mkdirSync(directory, { recursive: true })
-  const plugins = ['quirky.repo', 'quirky.worktree', 'quirky.session', 'quirky.agents', 'quirky.git', 'quirky.sidebar-extras']
+  const plugins = ['quirky.cli', 'quirky.repo', 'quirky.worktree', 'quirky.session', 'quirky.agents', 'quirky.git', 'quirky.sidebar-extras']
   for (const name of [...plugins, ...(includeAgentStatus ? ['quirky.agent-status'] : [])]) {
     symlinkSync(join(builtinsDir(), name), join(directory, name))
   }
@@ -213,7 +213,7 @@ export function fakeClock(initial: number): TestClock {
 export async function boot(options: { fakeHosting?: boolean; agentStatus?: boolean } = {}): Promise<TestEnvironment> {
   const fakeHosting = options.fakeHosting ?? false
   const agentStatus = options.agentStatus ?? false
-  const home = makeTempHome('qse-')
+  const home = agentStatus ? makeHomeWithoutAutoHooks('qse-') : makeTempHome('qse-')
   let harness: Harness | undefined
   try {
     harness = await startHarness({ home, builtinPluginsDir: testBuiltins(fakeHosting, agentStatus) })

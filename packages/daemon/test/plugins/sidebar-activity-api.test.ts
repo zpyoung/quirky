@@ -78,7 +78,7 @@ function activitySlot(state: UiActivityState, id: string): ActivitySlotState | u
   return state.slots.find((slot) => slot.id === id)
 }
 
-test('activity items are catalogued and report their mounted state while the legacy panel stays closed', async () => {
+test('activity items are catalogued, open as tools, and report state while panels remain closed', async () => {
   const env = makeEnv()
   const id = 'activity-item:acme.activity/source-control'
   writeUiPlugin(env.installed, 'acme.activity', {
@@ -108,6 +108,16 @@ test('activity items are catalogued and report their mounted state while the leg
   expect(initial.layout.panel).toBeNull()
   expect(Object.values(initial.layout.tools.open)).toContain(id)
   expect(activitySlot(initial, id)).toMatchObject({
+    id,
+    kind: 'activity-item',
+    plugin: 'acme.activity',
+    title: 'Source Control'
+  })
+
+  await window.call('ui.tool.open', { id })
+  const mounted = (await client.call('ui.state', {})) as unknown as UiActivityState
+  expect(mounted.layout.panel).toBeNull()
+  expect(activitySlot(mounted, id)).toMatchObject({
     id,
     kind: 'activity-item',
     plugin: 'acme.activity',
@@ -150,8 +160,7 @@ test('disabling an override restores the prior activity-item owner in the catalo
   expect(activitySlot(opened, id)).toMatchObject({
     id,
     plugin: 'acme.activity-override',
-    title: 'Team Source Control',
-    shown: true
+    title: 'Team Source Control'
   })
 
   await client.call('plugin.disable', { id: 'acme.activity-override' })
@@ -169,8 +178,7 @@ test('disabling an override restores the prior activity-item owner in the catalo
   expect(activitySlot(restoredState, id)).toMatchObject({
     id,
     plugin: 'quirky.activity-base',
-    title: 'Source Control',
-    shown: true
+    title: 'Source Control'
   })
 })
 

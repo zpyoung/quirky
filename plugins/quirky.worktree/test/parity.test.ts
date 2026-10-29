@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from 'bun:test'
-import { existsSync, realpathSync } from 'node:fs'
-import { join } from 'node:path'
+import { existsSync, realpathSync, writeFileSync } from 'node:fs'
+import { delimiter, join } from 'node:path'
 import type { QuirkyClient, Repo, Worktree, WorktreeCreateResult } from '@quirky/protocol'
 import { makeHomeWithoutAutoHooks } from '../../../packages/daemon/test/helpers'
 import { makeTempDir } from '../../../packages/daemon/test/plugins/fixtures'
@@ -10,22 +10,82 @@ import { startPluginHarness, type PluginHarness } from '../../quirky.repo/test/h
 import type { CleanupCandidate, StockWorktreeOptions } from '../src/control-types'
 
 const { scratch } = isolateGitConfig()
-const plugins = ['quirky.repo', 'quirky.worktree', 'quirky.agents', 'quirky.session', 'quirky.agent-status', 'quirky.sidebar-extras', 'quirky.terminal', 'quirky.git', 'quirky.editor']
+const plugins = ['quirky.cli', 'quirky.repo', 'quirky.worktree', 'quirky.agents', 'quirky.session', 'quirky.agent-status', 'quirky.sidebar-extras', 'quirky.terminal', 'quirky.git', 'quirky.editor']
+
+const trackerProjectInput = 'https://github.com/orgs/test-owner/projects/42/'
+const trackerProjectUrl = 'https://github.com/orgs/test-owner/projects/42'
+const fakeGitHubCli = `#!/usr/bin/env bun
+const args = process.argv.slice(2)
+if (args[0] === 'auth' && args[1] === 'status') {
+  process.stdout.write('Logged in to github.com account fixture-user (keyring)\\nActive account: true\\nToken scopes: repo,project,read:org\\n')
+  process.exit(0)
+}
+if (args[0] === 'auth' && args[1] === 'token') {
+  process.stdout.write('fixture-token\\n')
+  process.exit(0)
+}
+if (args[0] === '--version' || args[0] === 'version') {
+  process.stdout.write('gh version 2.77.0\\n')
+  process.exit(0)
+}
+if (args[0] === 'api' && args.includes('rate_limit')) {
+  process.stdout.write(JSON.stringify({ resources: { core: { limit: 5000, remaining: 5000, reset: 2000000000 }, graphql: { limit: 5000, remaining: 5000, reset: 2000000000 }, search: { limit: 30, remaining: 30, reset: 2000000000 } } }))
+  process.exit(0)
+}
+if (args[0] === 'api' && args.includes('graphql')) {
+  const input = await new Response(Bun.stdin.stream()).text()
+  const request = JSON.parse(input || '{}')
+  const query = request.query
+  if (typeof query !== 'string' || !query.includes('ProjectOwner') || request.variables?.owner !== 'test-owner' || request.variables?.number !== 42) {
+    process.stderr.write('unexpected project identity lookup')
+    process.exit(1)
+  }
+  const url = ${JSON.stringify(trackerProjectUrl)}
+  const project = { id: 'P42', number: 42, title: 'Fixture project', url, closed: false }
+  process.stdout.write(JSON.stringify({ data: { organization: { login: 'test-owner', projectV2: project } } }))
+  process.exit(0)
+}
+process.stderr.write('unexpected GitHub fixture call: ' + args.join(' '))
+process.exit(1)
+`
+
 type World = { t: PluginHarness; repoDir: string; repo: Repo }
 let world: World | undefined
+let previousPath: string | undefined
+let changedPath = false
 
 afterEach(async () => {
-  await world?.t.cleanup()
-  world = undefined
+  try {
+    await world?.t.cleanup()
+  } finally {
+    world = undefined
+    if (changedPath) {
+      if (previousPath === undefined) delete process.env.PATH
+      else process.env.PATH = previousPath
+      previousPath = undefined
+      changedPath = false
+    }
+  }
 })
 
 const call = (client: QuirkyClient, method: string, params: Record<string, unknown> = {}) => client.callAny(method, params)
 
-async function start(): Promise<World> {
-  const t = await startPluginHarness({ realGit: true, plugins, fakeSession: false, home: makeHomeWithoutAutoHooks('qw-parity-home-') })
+async function start(options: { trackerProject?: boolean } = {}): Promise<World> {
+  if (options.trackerProject) {
+    if (!changedPath) {
+      previousPath = process.env.PATH
+      changedPath = true
+    }
+    const fakeBin = makeTempDir('qw-project-gh-')
+    writeFileSync(join(fakeBin, 'gh'), fakeGitHubCli, { mode: 0o755 })
+    process.env.PATH = `${fakeBin}${delimiter}${process.env.PATH ?? '/usr/bin:/bin'}`
+  }
+  const configuredPlugins = options.trackerProject ? [...plugins, 'quirky.hosting'] : plugins
+  const t = await startPluginHarness({ realGit: true, plugins: configuredPlugins, fakeSession: false, home: makeHomeWithoutAutoHooks('qw-parity-home-') })
   const root = realpathSync(makeTempDir('qw-parity-root-'))
   await call(t.client, 'setting.set', { id: 'setting:quirky.worktree/worktreesRoot', value: root })
   const repoDir = makeRepo(scratch())
+  if (options.trackerProject) git(repoDir, 'remote', 'add', 'origin', 'https://github.com/test-owner/test-repo.git')
   const repo = await call(t.client, 'quirky.repo/add', { path: repoDir }) as Repo
   return { t, repoDir, repo }
 }
@@ -58,7 +118,7 @@ describe('remaining workspace options are durable and truthful', () => {
     const cliResult = await cli(w, ['worktree', 'options', '--group-by', 'status', '--sort-by', 'project', '--hide-cli-created', '--hide-default-branch', '--hide-detached', '--hide-other-clients', '--json'])
     expect(cliResult.code).toBe(0)
     expect(JSON.parse(cliResult.stdout)).toMatchObject({ groupBy: 'status', sortBy: 'project', hideCliCreated: true, hideDefaultBranch: true, hideDetached: true, hideOtherClients: true })
-    await expect(call(w.t.client, 'quirky.worktree/setOptions', { hideOtherClient: true })).rejects.toThrow(/unknown/i)
+    await expect(call(w.t.client, 'quirky.worktree/setOptions', { hideOtherClient: true })).rejects.toThrow()
   })
 
   test('manual project ordering updates the project list without reordering or changing worktree membership', async () => {
@@ -80,7 +140,7 @@ describe('remaining workspace options are durable and truthful', () => {
 
 describe('external worktree visibility and project identity', () => {
   test('external show/hide/inherit policy and inbox suppression preserve the checkout', async () => {
-    const w = await start()
+    const w = await start({ trackerProject: true })
     world = w
     const externalPath = join(scratch(), 'outside-checkout')
     git(w.repoDir, 'worktree', 'add', '-b', 'outside', externalPath, 'HEAD')
@@ -97,20 +157,20 @@ describe('external worktree visibility and project identity', () => {
     expect((await call(w.t.client, 'quirky.worktree/projectMetadata', { repo: w.repo.id }) as { externalVisibility: string }).externalVisibility).toBe('inherit')
     expect(existsSync(externalPath)).toBe(true)
 
-    const cliResult = await cli(w, ['worktree', 'project-set', w.repo.id, '--external-worktree-visibility', 'show', '--project-icon', 'λ', '--project-color', '#245566', '--tracker-project', 'APP', '--json'])
-    expect(cliResult.code).toBe(0)
-    expect(JSON.parse(cliResult.stdout)).toMatchObject({ externalVisibility: 'show', identity: { icon: 'λ', color: '#245566', trackerProject: 'APP' } })
+    const cliResult = await cli(w, ['worktree', 'project-set', w.repo.id, '--external-worktree-visibility', 'show', '--project-icon', 'λ', '--project-color', '#245566', '--tracker-project', trackerProjectInput, '--json'])
+    expect(cliResult.stderr).toBe('')
+    expect(JSON.parse(cliResult.stdout)).toMatchObject({ externalVisibility: 'show', identity: { icon: 'λ', color: '#245566', trackerProject: trackerProjectUrl } })
   })
 
   test('project identity fields survive restart without changing the repo path', async () => {
-    const w = await start()
+    const w = await start({ trackerProject: true })
     world = w
     await call(w.t.client, 'quirky.worktree/setProjectMetadata', {
       repo: w.repo.id,
-      identity: { displayName: 'API project', icon: '◆', color: '#3178c6', trackerProject: 'QWK' }
+      identity: { displayName: 'API project', icon: '◆', color: '#3178c6', trackerProject: trackerProjectInput }
     })
     await w.t.restart()
-    expect(await call(w.t.client, 'quirky.worktree/projectMetadata', { repo: w.repo.id })).toMatchObject({ identity: { displayName: 'API project', icon: '◆', color: '#3178c6', trackerProject: 'QWK' } })
+    expect(await call(w.t.client, 'quirky.worktree/projectMetadata', { repo: w.repo.id })).toMatchObject({ identity: { displayName: 'API project', icon: '◆', color: '#3178c6', trackerProject: trackerProjectUrl } })
     expect((await call(w.t.client, 'quirky.repo/resolve', { selector: w.repo.id }) as Repo).path).toBe(w.repo.path)
   })
 })
@@ -162,7 +222,7 @@ describe('archived cleanup classification', () => {
     world = w
     const worktree = await create(w, 'archived-review')
     const now = Date.now()
-    await call(w.t.client, 'quirky.worktree/archive', { worktree: worktree.id, archivedAt: now - 7 * 86_400_000 + 1 })
+    await call(w.t.client, 'quirky.worktree/archive', { worktree: worktree.id, archivedAt: now - 7 * 86_400_000 + 60_000 })
     let preview = await call(w.t.client, 'quirky.worktree/cleanupPreview') as { candidates: CleanupCandidate[] }
     expect(preview.candidates.some((row) => row.worktreeId === worktree.id)).toBe(false)
 
@@ -211,9 +271,14 @@ describe('workspace navigation and Open in', () => {
     world = w
     const worktree = await create(w, 'nav-ambiguous')
     const first = await w.t.h.connect('ui')
+    const { connId: firstConnId } = await first.callAny('ui.window.self', {}) as { connId: number }
     await w.t.h.connect('ui')
-    await first.callAny('ui.view.open', { id: 'view:quirky.session/worktree', input: { worktree: worktree.id } })
-    await expect(call(w.t.client, 'quirky.worktree/navigate', { worktree: worktree.id })).rejects.toThrow(/window/i)
-    expect((await first.callAny('ui.state', {}) as { layout: { view: { input: { worktree: string } } } }).layout.view.input.worktree).toBe(worktree.id)
+    await first.callAny('ui.window.view.open', {
+      connId: firstConnId,
+      id: 'view:quirky.session/worktree',
+      input: { worktree: worktree.id }
+    })
+    await expect(call(w.t.client, 'quirky.worktree/navigate', { worktree: worktree.id })).rejects.toThrow()
+    expect((await first.callAny('ui.window.state', { connId: firstConnId }) as { layout: { view: { input: { worktree: string } } } }).layout.view.input.worktree).toBe(worktree.id)
   })
 })

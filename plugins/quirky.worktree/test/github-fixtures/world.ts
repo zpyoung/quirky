@@ -232,7 +232,7 @@ export async function startGithubWorld(options: { originScheme?: 'ssh' | 'https'
     const state: FixtureState = { authenticated: options.authenticated ?? true, ...(host !== 'github.com' ? { host } : {}), pulls: { '3': pull }, issues: { '4': issue } }
     writeFileSync(join(fixtureDir, 'state.json'), JSON.stringify(state))
 
-    const plugins = ['quirky.repo', 'quirky.worktree', 'quirky.hosting', ...(options.includeTerminal ? ['quirky.agents', 'quirky.session', 'quirky.terminal'] : [])]
+    const plugins = ['quirky.cli', 'quirky.repo', 'quirky.worktree', 'quirky.hosting', ...(options.includeTerminal ? ['quirky.agents', 'quirky.session', 'quirky.terminal'] : [])]
     harness = await startPluginHarness({ plugins, realGit: true, fakeSession: false, home })
     const repo = (await harness.client.callAny('quirky.repo/add', { path: project })) as Repo
     const worktreesRoot = join(root, 'worktrees')

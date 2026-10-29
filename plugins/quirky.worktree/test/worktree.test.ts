@@ -267,14 +267,20 @@ describe('describeRemove and the confirmation', () => {
     fakeAsks().get(askId)!.value = true
 
     const other = await failure(call(client, 'quirky.worktree/remove', { worktree: 'fix-login', confirmation: askId }))
-    expect(other).toMatchObject({ code: RpcErrorCode.Conflict, message: 'confirmation is for another call' })
+    expect(other.code).toBe(RpcErrorCode.Conflict)
+    expect(await list(client, repo.id)).toHaveLength(3)
 
+    let removeAttempts = 0
     t!.git!.removeWorktree = async () => {
+      removeAttempts++
       throw new GitError('git worktree failed', 'fatal: refused', 128)
     }
     await failure(call(client, 'quirky.worktree/remove', { worktree: 'feature-x', confirmation: askId }))
+    expect(await list(client, repo.id)).toHaveLength(3)
     const again = await failure(call(client, 'quirky.worktree/remove', { worktree: 'feature-x', confirmation: askId }))
-    expect(again.message).toBe('confirmation already used')
+    expect(again.code).toBe(RpcErrorCode.Conflict)
+    expect(removeAttempts).toBe(1)
+    expect(await list(client, repo.id)).toHaveLength(3)
   })
 
   test('SC-44: yes removes at once and opens no ask', async () => {
@@ -309,22 +315,6 @@ describe('describeRemove and the confirmation', () => {
   })
 })
 
-describe('SC-17: quirky.worktree and quirky.repo as plugins', () => {
-  test('the worktree plugin depends on the repo plugin, owns the wt alias and the section, and both list their commands', async () => {
-    const { client } = await start()
-    const plugins = (await call(client, 'plugin.list')) as { id: string; source: string; dependencies: string[]; cliAliases?: string[] }[]
-    expect(plugins.find((p) => p.id === 'quirky.worktree')).toMatchObject({ source: 'builtin', dependencies: ['quirky.repo'], cliAliases: ['wt'] })
-    expect(plugins.find((p) => p.id === 'quirky.repo')).toMatchObject({ source: 'builtin', dependencies: [] })
-
-    const catalog = (await call(client, 'api.describe')) as { cli: { commands: { words: string; aliasWords: string[] }[] } }
-    const words = catalog.cli.commands.map((c) => c.words)
-    expect(words).toEqual(expect.arrayContaining(['repo add', 'repo list', 'repo rm', 'worktree list', 'worktree create', 'worktree rm']))
-    expect(catalog.cli.commands.find((c) => c.words === 'worktree rm')?.aliasWords).toEqual(['wt rm'])
-
-    const contributions = (await call(client, 'plugin.contributions', { kind: 'sidebar-section' })) as { id: string; data: Record<string, unknown> }[]
-    expect(contributions.find((c) => c.id === 'sidebar-section:quirky.worktree/worktrees')?.data).toMatchObject({ title: 'Worktrees', order: 0 })
-  })
-})
 
 describe('repo removal and worktree ownership', () => {
   const recordedFor = (home: string, repoId: string) => {

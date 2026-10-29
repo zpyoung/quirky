@@ -38,12 +38,21 @@ export function accessibleName(element: HTMLElement): string {
 }
 
 export const sectionHeading = (section: ParentNode): string | undefined => {
-  const heading = section.querySelector<HTMLElement>(':scope > header h2')
+  const header = [...section.children].find((child) => child.classList.contains('ui-section-header'))
+  const heading = header?.querySelector<HTMLElement>('.ui-section-header__title')
   return heading ? accessibleName(heading) : undefined
 }
 export function sectionHeadingMatches(section: ParentNode, name: string): boolean {
   const heading = sectionHeading(section)
   return heading === name || heading?.endsWith(` ${name}`) === true
+}
+/** Returns the workspace name from the shared ListRow's accessible open action. */
+export function listRowName(row: ParentNode): string | undefined {
+  const main = row.querySelector<HTMLElement>('.ui-list-row__main')
+  const label = main ? accessibleName(main) : ''
+  if (label.startsWith('Open ')) return label.slice('Open '.length)
+  if (label.startsWith('Wake and open ')) return label.slice('Wake and open '.length)
+  return undefined
 }
 
 export const menuItem = (root: ParentNode, label: string): HTMLElement | undefined =>

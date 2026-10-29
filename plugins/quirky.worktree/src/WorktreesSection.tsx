@@ -35,8 +35,13 @@ import type { MembershipTarget } from './membership'
 const SEPARATOR_SETTING = 'setting:quirky.sidebar-extras/sidebar-section-separators'
 
 function readSeparatorSetting(context: UiPluginContext): boolean {
-  const value = context.getSetting(SEPARATOR_SETTING)
-  return typeof value === 'boolean' ? value : true
+  try {
+    const value = context.getSetting(SEPARATOR_SETTING)
+    return typeof value === 'boolean' ? value : true
+  } catch (error) {
+    if (error instanceof Error && error.message === `no setting ${SEPARATOR_SETTING}`) return true
+    throw error
+  }
 }
 function projectIdentitiesOf(value: unknown): Record<string, WorktreeProjectIdentity> | null {
   if (!Array.isArray(value)) return null

@@ -62,7 +62,15 @@ test('the CLI prefetch is consumed by canonical create only for the exact repo a
     typeof createdResult.worktree.name !== 'string' || createdResult.worktree.name !== 'from-prepared' ||
     typeof createdResult.worktree.path !== 'string' || !isAbsolute(createdResult.worktree.path)
   ) throw new Error('canonical create CLI returned no absolute materialized worktree path')
-  const materializedPath = createdResult.worktree.path
+  const created = createdResult as {
+    worktree: { name: string; path: string }
+    creationReceipt: { preparedCheckout: boolean }
+  }
+  expect(created).toMatchObject({
+    worktree: { name: 'from-prepared' },
+    creationReceipt: { preparedCheckout: true }
+  })
+  const materializedPath = created.worktree.path
   const materializedStat = statSync(materializedPath)
   expect({ device: materializedStat.dev, inode: materializedStat.ino, birthtimeMs: materializedStat.birthtimeMs }).toEqual(preparedIdentity)
   expect(materializedPath).not.toContain(`${sep}.quirky-preparing${sep}`)

@@ -16,6 +16,7 @@ describe('hashScript', () => {
 })
 
 describe('effectiveHooks: reading the shared file', () => {
+
   test('reads setup and archive scripts, the startup policy and shared directories', () => {
     const hooks = effectiveHooks(
       quirky('scripts:\n  setup: pnpm i\n  archive: |\n    echo done\nsetupAgentStartupPolicy: wait-for-setup\nworktree:\n  sharedDirectories: [node_modules, .venv]\n'),

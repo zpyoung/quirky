@@ -65,7 +65,7 @@ async function startWithSessions() {
   const builtinPluginsDir = join(home, 'builtin')
   mkdirSync(builtinPluginsDir, { recursive: true })
   const pluginsRoot = join(import.meta.dir, '..', '..')
-  for (const id of ['quirky.repo', 'quirky.worktree', 'quirky.session']) {
+  for (const id of ['quirky.cli', 'quirky.repo', 'quirky.worktree', 'quirky.session']) {
     symlinkSync(join(pluginsRoot, id), join(builtinPluginsDir, id))
   }
   symlinkSync(join(pluginsRoot, 'quirky.session', 'test', 'fakes', 'quirky.agents'), join(builtinPluginsDir, 'quirky.agents'))
@@ -179,8 +179,23 @@ describe('canonical worktree project-group membership', () => {
     expect(cliSet).toMatchObject({ code: 0, stderr: '' })
     expect(JSON.parse(cliSet.stdout)).toMatchObject({ displayName: 'CLI fix', projectGroupId: result.group.id })
 
-    const cleared = (await call(client, 'quirky.worktree/set', { worktree: selected.id, projectGroupId: null })) as CanonicalWorktree
-    expect(cleared.projectGroupId).toBeNull()
+    const beforeRestart = await worktreeById(client, selected.id)
+    const { client: restartedClient } = await t!.restart()
+    const persisted = await worktreeById(restartedClient, selected.id)
+    expect(persisted).toEqual(beforeRestart)
+    expect(persisted).toMatchObject({
+      id: selected.id,
+      path: before.path,
+      repoId: repo.id,
+      parentId: parent.id,
+      groupId: before.groupId,
+      instanceId: before.instanceId,
+      displayName: 'CLI fix',
+      projectGroupId: result.group.id
+    })
+
+    const cleared = (await call(restartedClient, 'quirky.worktree/set', { worktree: selected.id, projectGroupId: null })) as CanonicalWorktree
+    expect(cleared).toEqual({ ...persisted, projectGroupId: null })
   })
 
   test('generated set flags move and clear only project-group membership', async () => {
@@ -309,7 +324,7 @@ describe('worktree identity and delayed group assignment', () => {
       stat: () => replacement
     }
     const env: SetEnv = {
-      store: { transaction: () => { throw new Error('a stale assignment must not write') } } as unknown as PluginStore,
+      store: { get: () => null, transaction: () => { throw new Error('a stale assignment must not write') } } as unknown as PluginStore,
       fail: (kind, message, data) => Object.assign(new Error(message), {
         code: kind === 'conflict' ? RpcErrorCode.Conflict : kind === 'not-found' ? RpcErrorCode.NotFound : RpcErrorCode.InvalidParams,
         ...(data === undefined ? {} : { data })

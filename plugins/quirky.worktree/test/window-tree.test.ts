@@ -7,8 +7,9 @@ import { builtinsDir, makeTempHome, startHarness, type Harness } from '../../../
 import { makeTempDir, removeTempDirs } from '../../../packages/daemon/test/plugins/fixtures'
 import { startHeadlessWindow, type HeadlessWindow } from '../../../packages/ui/test/fixtures/headless-window'
 import { failure, isolateGitConfig, makeRepo } from '../../quirky.repo/test/git-fixtures'
-import { button, click, dialogNamed, field, menuItem, openDisclosure, pressEscape, sectionHeading, sectionHeadingMatches, setText } from './window/dom'
-const SIDEBAR = 'sidebar-section:quirky.worktree/worktrees'
+import { button, click, dialogNamed, field, listRowName, menuItem, openDisclosure, pressEscape, sectionHeading, sectionHeadingMatches, setText } from './window/dom'
+const WORKTREES_CONTRIBUTION = 'sidebar-section:quirky.worktree/worktrees'
+const WORKTREES_TOOL = WORKTREES_CONTRIBUTION
 const SESSION_VIEW = 'view:quirky.session/worktree'
 const NEW_WORKTREE = 'command:quirky.worktree/new-worktree'
 
@@ -72,11 +73,30 @@ async function boot(options: { nested?: boolean; docs?: boolean; web?: boolean; 
   }
   world.win = await startHeadlessWindow({ home: harness.home, runtime: harness.runtime })
   current = world
+  await world.win.waitFor(async () => {
+    const slot = await sidebarSlot(agent)
+    return slot?.shown && slot.report !== undefined ? slot : undefined
+  })
   return world
 }
 
-const report = async (agent: QuirkyClient): Promise<any> =>
-  ((await agent.callAny('ui.state', {})) as UiState).slots.find((slot) => slot.id === SIDEBAR)?.report
+const sidebarPanel = (): HTMLElement | undefined =>
+  document.querySelector<HTMLElement>(`[data-tool-panel="${WORKTREES_TOOL}"]`) ?? undefined
+const sidebarElements = <T extends Element>(selector: string): T[] =>
+  [...(sidebarPanel()?.querySelectorAll<T>(selector) ?? [])]
+const rendererState = async (agent: QuirkyClient): Promise<UiState | undefined> => {
+  const overview = (await agent.callAny('ui.state', {})) as UiState
+  const renderers = overview.windows.filter((window) => window.name === 'quirky-ui')
+  if (renderers.length !== 1) return undefined
+  return await agent.callAny('ui.window.state', { connId: renderers[0]!.connId }) as UiState
+}
+
+const sidebarSlot = async (agent: QuirkyClient) => {
+  const state = await rendererState(agent)
+  return state?.slots.find((slot) => slot.id === WORKTREES_CONTRIBUTION)
+}
+
+const report = async (agent: QuirkyClient): Promise<any> => (await sidebarSlot(agent))?.report
 
 type SidebarReportRow = {
   id: string
@@ -104,17 +124,16 @@ const reportRow = async (agent: QuirkyClient, id: string): Promise<SidebarReport
 const listed = async (agent: QuirkyClient, id: string) =>
   ((await agent.callAny('quirky.worktree/list', {})) as Worktree[]).find((w) => w.id === id)!
 
-const texts = (selector: string, within: ParentNode = document) => [...within.querySelectorAll(selector)].map((e) => e.textContent)
 
 /** Finds the worktree row named `name`, in project `project` or, with none, the first match. */
 function card(name: string, project?: string, scope: 'repo' | 'pinned' = 'repo'): HTMLElement | undefined {
   const sections = (scope === 'pinned'
-    ? [...document.querySelectorAll<HTMLElement>('[data-top-level-section="pinned"]')]
-    : [...document.querySelectorAll<HTMLElement>('section.repo')]).filter(
+    ? sidebarElements<HTMLElement>('[data-top-level-section="pinned"]')
+    : sidebarElements<HTMLElement>('section.repo')).filter(
     (section) => project === undefined || sectionHeadingMatches(section, project)
   )
   for (const section of sections) {
-    const found = [...section.querySelectorAll<HTMLElement>('[data-worktree-id]')].find((row) => row.querySelector('.worktree-name')?.textContent === name)
+    const found = [...section.querySelectorAll<HTMLElement>('[data-worktree-id]')].find((row) => listRowName(row) === name)
     if (found) return found
   }
   return undefined
@@ -140,25 +159,25 @@ test('SC-44: the sidebar reports project and group membership, primary worktrees
   const { win, agent, api, main, fixLogin, child, group, notes } = w
   await win.waitFor(() => card('child', 'api'))
 
-  const groupSections = [...document.querySelectorAll<HTMLElement>('section.group')]
-  const projectSections = [...document.querySelectorAll<HTMLElement>('section.repo')]
+  const groupSections = sidebarElements<HTMLElement>('section.group')
+  const projectSections = sidebarElements<HTMLElement>('section.repo')
   expect(groupSections.map(sectionHeading)).toEqual(['services'])
   expect(projectSections.map(sectionHeading)).toEqual(['api', 'notes'])
   expect(sectionHeading(groupSections[0]!.querySelector('section.repo')!)).toBe('api')
-  expect(sectionHeading(document.querySelector('section.group + section.repo')!)).toBe('notes')
+  expect(sectionHeading(sidebarPanel()!.querySelector('section.group + section.repo')!)).toBe('notes')
 
   const apiRows = projectSections.find((section) => sectionHeadingMatches(section, 'api'))!
-  expect(texts('[data-worktree-id] .worktree-name', apiRows)).toEqual(['main', 'fix-login', 'child'])
+  expect([...apiRows.querySelectorAll<HTMLElement>('[data-worktree-id]')].map(listRowName)).toEqual(['main', 'fix-login', 'child'])
   const childToggle = card('fix-login', 'api')!.querySelector<HTMLButtonElement>('button[aria-expanded]')!
   expect(childToggle.getAttribute('aria-expanded')).toBe('true')
 
   await click(childToggle)
   await win.waitFor(() => !card('child', 'api'))
   await agent.callAny('quirky.worktree/set', { worktree: fixLogin.id, status: 'in-review' })
-  await win.waitFor(async () => (await reportRow(agent, fixLogin.id))?.status === 'in-review')
+  await win.waitFor(async () => (await reportRow(agent, fixLogin.id))?.workspaceStatus === 'in-review')
   expect(card('child', 'api')).toBeUndefined()
   await agent.callAny('quirky.worktree/set', { worktree: fixLogin.id, status: 'in-progress' })
-  await win.waitFor(async () => (await reportRow(agent, fixLogin.id))?.status === null)
+  await win.waitFor(async () => (await reportRow(agent, fixLogin.id))?.workspaceStatus === 'in-progress')
   await click(card('fix-login', 'api')!.querySelector<HTMLButtonElement>('button[aria-expanded]')!)
   await win.waitFor(() => card('child', 'api'))
   const state = await win.waitFor(async () => {
@@ -204,7 +223,7 @@ test('SC-44: the sidebar reports project and group membership, primary worktrees
 test('SC-44: a group collapses through quirky.repo/groupCollapse and its projects leave the tree', async () => {
   const { win, agent, group } = await boot({ grouped: true })
   await win.waitFor(() => card('fix-login', 'api'))
-  const section = [...document.querySelectorAll<HTMLElement>('section.group')].find((candidate) => sectionHeadingMatches(candidate, 'services'))!
+  const section = sidebarElements<HTMLElement>('section.group').find((candidate) => sectionHeadingMatches(candidate, 'services'))!
   await click(button(section, 'Collapse group services')!)
   await win.waitFor(() => !card('fix-login', 'api'))
   expect(((await agent.callAny('quirky.repo/groupList', {})) as ProjectGroup[]).find((g) => g.id === group!.id)!.collapsed).toBe(true)
@@ -222,16 +241,16 @@ test('SC-43: status, pin and unread from the card menu', async () => {
   await choose(win, 'In review')
   await win.waitFor(async () => (await listed(agent, fixLogin.id)).status === 'in-review')
 
-  await win.waitFor(async () => (await reportRow(agent, fixLogin.id))?.status === 'in-review')
+  await win.waitFor(async () => (await reportRow(agent, fixLogin.id))?.workspaceStatus === 'in-review')
   await win.waitFor(() => card('fix-login', 'api')?.textContent?.includes('In review'))
   await openMenu(win, 'fix-login', 'api')
   await choose(win, 'Pin')
   await win.waitFor(() => card('fix-login', undefined, 'pinned'))
   expect((await listed(agent, fixLogin.id)).pinned).toBe(true)
-  const pinnedSection = document.querySelector<HTMLElement>('[data-top-level-section="pinned"]')!
+  const pinnedSection = sidebarPanel()!.querySelector<HTMLElement>('[data-top-level-section="pinned"]')!
   expect(sectionHeading(pinnedSection)).toBe('Pinned')
   expect(pinnedSection.nextElementSibling?.getAttribute('data-top-level-section')?.startsWith('repo:')).toBe(true)
-  expect(await reportRow(agent, fixLogin.id)).toMatchObject({ pinned: true, status: 'in-review' })
+  expect(await reportRow(agent, fixLogin.id)).toMatchObject({ pinned: true, workspaceStatus: 'in-review' })
   expect((await report(agent)).pinned).toEqual([fixLogin.id])
 
   await agent.callAny('quirky.worktree/set', { worktree: docs!.id, unread: false })
@@ -284,7 +303,10 @@ test('SC-62: Mod+N and the API open the create dialog on the right project', asy
   await win.waitFor(async () => (await report(agent)).dialog === null)
 
   await agent.callAny('ui.command.run', { id: NEW_WORKTREE, args: { repo: 'web' } })
-  await win.waitFor(() => selectedProject(dialogNamed('New workspace')!) === 'web')
+  await win.waitFor(() => {
+    const next = dialogNamed('New workspace')
+    return next && selectedProject(next) === 'web'
+  })
   const second = await win.waitFor(async () => {
     const next = await report(agent)
     return next?.dialog ? next : undefined
@@ -315,8 +337,9 @@ test('workspace status icon/avatar controls persist safe plain text and render o
   await openDisclosure('More workspace tools', boardOptions)
   const board = await win.waitFor(() => button(boardOptions, 'Workspace board'))
   await click(board)
-  const laneHeading = await win.waitFor(() => [...document.querySelectorAll<HTMLHeadingElement>('h2')]
-    .find((heading) => heading.textContent?.includes('In review')))
+  const laneHeading = await win.waitFor(() =>
+    sidebarElements<HTMLHeadingElement>('h2').find((heading) => heading.textContent?.includes('In review'))
+  )
   expect(laneHeading.textContent).toContain('🧪')
   await expect(agent.callAny('quirky.worktree/setStatusDefinitions', {
     statuses: statuses.map((status) => status.id === 'in-review'

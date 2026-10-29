@@ -340,6 +340,7 @@ function ToolItem({
   badges,
   badgeTitles,
   inboxCount,
+  activityItemIds,
   dragging,
   onOpen,
   onClose,
@@ -352,12 +353,14 @@ function ToolItem({
   badges: Record<string, number>
   badgeTitles: Record<string, string>
   inboxCount: number | null
+  activityItemIds: ReadonlySet<string>
   dragging: { current: string | null }
   onOpen: (id: string) => void
   onClose: (slot: UiToolSlot) => void
   onMove: (id: string, slot: UiToolSlot) => void
 }) {
   const button = useRef<HTMLButtonElement>(null)
+  const provider = useRef<HTMLDivElement>(null)
   const [menuPosition, setMenuPosition] = useState<{ x: number; y: number } | null>(null)
   const menuWasOpen = useRef(false)
   const closeMenu = useCallback(() => setMenuPosition(null), [])
@@ -375,44 +378,73 @@ function ToolItem({
     }
     if (!menuWasOpen.current) return
     menuWasOpen.current = false
-    if (button.current?.isConnected) button.current.focus()
+    const focusTarget = button.current ?? provider.current?.querySelector<HTMLButtonElement>('button')
+    if (focusTarget?.isConnected) focusTarget.focus()
   }, [menuPosition])
 
   const selected = openId === tool.id
-  const badge = toolBadge(tool, badges, badgeTitles, inboxCount)
+  const activityItemId = tool.aliases.find((id) => id !== tool.contributionId && activityItemIds.has(id))
+  const badge = activityItemId ? null : toolBadge(tool, badges, badgeTitles, inboxCount)
+  const handleDragStart = (event: ReactDragEvent<HTMLElement>) => {
+    dragging.current = tool.id
+    event.dataTransfer.effectAllowed = 'move'
+    event.dataTransfer.setData('application/x-quirky-tool', tool.id)
+  }
+  const handleDragEnd = () => { dragging.current = null }
 
   return (
     <div className="tool-shell__tool">
-      <IconButton
-        ref={button}
-        className="tool-shell__tool-button"
-        label={tool.title}
-        title={tool.title}
-        aria-pressed={selected}
-        aria-haspopup="menu"
-        aria-expanded={menuPosition !== null}
-        draggable
-        onDragStart={(event) => {
-          dragging.current = tool.id
-          event.dataTransfer.effectAllowed = 'move'
-          event.dataTransfer.setData('application/x-quirky-tool', tool.id)
-        }}
-        onDragEnd={() => { dragging.current = null }}
-        onContextMenu={(event) => {
-          event.preventDefault()
-          setMenuPosition({ x: event.clientX, y: event.clientY })
-        }}
-        onKeyDown={(event) => {
-          if (!((event.shiftKey && event.key === 'F10') || event.key === 'ContextMenu')) return
-          event.preventDefault()
-          const bounds = event.currentTarget.getBoundingClientRect()
-          setMenuPosition({ x: bounds.left, y: bounds.bottom })
-        }}
-        onClick={() => selected ? onClose(slot) : onOpen(tool.id)}
-      >
-        <ToolIcon tool={tool} />
-      </IconButton>
-      {badge && <Badge tone="needs-you" label={badge.title}>{badge.count}</Badge>}
+      {activityItemId
+        ? (
+          <div
+            ref={provider}
+            className="tool-shell__tool-provider"
+            data-selected={selected}
+            draggable
+            onDragStart={handleDragStart}
+            onDragEnd={handleDragEnd}
+            onContextMenu={(event) => {
+              event.preventDefault()
+              setMenuPosition({ x: event.clientX, y: event.clientY })
+            }}
+            onKeyDown={(event) => {
+              if (!((event.shiftKey && event.key === 'F10') || event.key === 'ContextMenu')) return
+              event.preventDefault()
+              const bounds = event.currentTarget.getBoundingClientRect()
+              setMenuPosition({ x: bounds.left, y: bounds.bottom })
+            }}
+          >
+            <PluginSlot id={activityItemId} />
+          </div>
+        )
+        : (
+          <IconButton
+            ref={button}
+            className="tool-shell__tool-button"
+            label={tool.title}
+            title={tool.title}
+            aria-pressed={selected}
+            aria-haspopup="menu"
+            aria-expanded={menuPosition !== null}
+            draggable
+            onDragStart={handleDragStart}
+            onDragEnd={handleDragEnd}
+            onContextMenu={(event) => {
+              event.preventDefault()
+              setMenuPosition({ x: event.clientX, y: event.clientY })
+            }}
+            onKeyDown={(event) => {
+              if (!((event.shiftKey && event.key === 'F10') || event.key === 'ContextMenu')) return
+              event.preventDefault()
+              const bounds = event.currentTarget.getBoundingClientRect()
+              setMenuPosition({ x: bounds.left, y: bounds.bottom })
+            }}
+            onClick={() => selected ? onClose(slot) : onOpen(tool.id)}
+          >
+            <ToolIcon tool={tool} />
+          </IconButton>
+        )}
+      {!activityItemId && badge && <Badge tone="needs-you" label={badge.title}>{badge.count}</Badge>}
       {menuPosition && (
         <ContextMenu
           label={`Move ${tool.title}`}
@@ -434,6 +466,7 @@ function ToolStripe({
   badges,
   badgeTitles,
   inboxCount,
+  activityItemIds,
   knownIds,
   dragging,
   onOpen,
@@ -447,6 +480,7 @@ function ToolStripe({
   badges: Record<string, number>
   badgeTitles: Record<string, string>
   inboxCount: number | null
+  activityItemIds: ReadonlySet<string>
   knownIds: ReadonlySet<string>
   dragging: { current: string | null }
   onOpen: (id: string) => void
@@ -496,6 +530,7 @@ function ToolStripe({
             badges={badges}
             badgeTitles={badgeTitles}
             inboxCount={inboxCount}
+            activityItemIds={activityItemIds}
             dragging={dragging}
             onOpen={onOpen}
             onClose={onClose}
@@ -604,6 +639,9 @@ export function ToolShell({ geometry, sizes, onResizePreview, onResizeCommit }: 
   const inboxCount = attention.asks !== null && !attention.errors.asks ? attention.asks.length : null
   const toolLayout = layout.tools
   const tools = orderedTools(model?.tools ?? [], toolLayout)
+  const activityItemIds = new Set(
+    (model?.activityItems ?? []).filter(({ module }) => module !== null).map(({ id }) => id)
+  )
   const placements = new Map(tools.flatMap((tool) => {
     const placement = effectiveToolPlacement(tool, toolLayout)
     return placement ? [[tool.id, placement] as const] : []
@@ -656,6 +694,7 @@ export function ToolShell({ geometry, sizes, onResizePreview, onResizeCommit }: 
           badges={badges}
           badgeTitles={badgeTitles}
           inboxCount={inboxCount}
+          activityItemIds={activityItemIds}
           knownIds={knownIds}
           dragging={dragging}
           onOpen={open}

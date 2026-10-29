@@ -293,6 +293,9 @@ Git worktrees expose separate display membership (`projectGroupId`), monotonic a
 <worktree> <name>` creates a group and assigns only that worktree with stale-assignment protection.
 `quirky wt set <worktree> --project-group <group-id>` moves it; `--no-project-group` clears it.
 These operations do not change its repository, path or lineage.
+Loose worktree membership requires a Git worktree owned by a Git project. Folder projects use
+project-group actions instead. Dragging changes membership only in Project grouping; manual
+sibling ordering remains separate.
 
 Project groups expose `parentId`. `quirky repo group create <name> --parent <group>` and
 `quirky repo group set-parent <group> --parent <parent>` manage hierarchy; `--no-parent` clears it.
@@ -306,8 +309,11 @@ activity windows, a live Source Control dirty indicator, and configurable sideba
 `activate --worktree <id>` records a visit; `activate --clear` clears it.
 Preferences persist per client. Visit and departure stamps are keyed to filesystem-instance
 identity, so replacing a worktree does not inherit its predecessor's recency.
-The separator switch is under Appearance > Window & Sidebar. The original header panel toggles
-remain available alongside the Source Control activity item.
+Activity filters offers All, Live only, Past 24 hours, Past 7 days, Past 30 days, and Custom.
+Custom days commit on Enter or blur; invalid values leave the last applied filter unchanged.
+The selected workspace stays visible. “Show hidden” clears only activity filtering.
+The separator switch is under Appearance > Window & Sidebar; it changes dividers, not row geometry.
+Source Control decoration follows the active worktree even when the Changes tool is closed.
 
 Workspace options also includes **Hide merged/closed reviews** and **Hide passing checks**.
 Each enabled toggle adds one to the filter badge; Clear filters resets both and the activity window.
@@ -324,9 +330,8 @@ Uncached, unavailable, expired, or identity/head-stale review data leaves a work
 the review filters. `sidebar-extras projection --json` reports combined `visibleIds`/`hiddenIds`,
 activity-only `hiddenCount`, and separate `reviewHiddenIds`/`reviewHiddenCount`.
 
-The operator-directed core landing leaves exhaustive parity and browser verification to
-`m2-sidebar-extras-followup`; see [the sidebar specification](docs/quirk/specs/2026-10-27-m2-sidebar-extras/logic.md)
-for that remaining acceptance target.
+The [sidebar parity specification](docs/quirk/specs/2026-10-28-m2-sidebar-extras-followup/logic.md)
+defines membership guards, activity freshness, recovery, and dirty-status race handling.
 The root TypeScript configuration resolves both public `@quirky/protocol` entries directly to
 workspace source, so newly added plugins do not need generated per-plugin links for typechecking.
 Keep those mappings aligned with `packages/protocol/package.json` exports.

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
-import { existsSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { RpcErrorCode, type WorktreeCreateResult } from '@quirky/protocol'
 import { call, failure, git, isolateGitConfig } from '../../quirky.repo/test/git-fixtures'
@@ -44,8 +44,10 @@ describe('worktree create parity boundaries', () => {
 
   test('keep-main fast-forwards only the exact clean primary branch to its fetched remote base', async () => {
     const { dir, origin, repo } = await startRepo()
-    const advance = join(scratch(), 'create-parity-advance')
-    git(scratch(), 'clone', '-q', origin, advance)
+    const scratchDir = scratch()
+    mkdirSync(scratchDir, { recursive: true })
+    const advance = join(scratchDir, 'create-parity-advance')
+    git(scratchDir, 'clone', '-q', origin, advance)
     git(advance, 'config', 'user.name', 'Test')
     git(advance, 'config', 'user.email', 'test@example.com')
     writeFileSync(join(advance, 'a.txt'), 'two\n')
@@ -60,8 +62,10 @@ describe('worktree create parity boundaries', () => {
 
   test('keep-main leaves a dirty primary checkout untouched and reports no behind claim', async () => {
     const { dir, origin, repo } = await startRepo()
-    const advance = join(scratch(), 'create-parity-dirty-advance')
-    git(scratch(), 'clone', '-q', origin, advance)
+    const scratchDir = scratch()
+    mkdirSync(scratchDir, { recursive: true })
+    const advance = join(scratchDir, 'create-parity-dirty-advance')
+    git(scratchDir, 'clone', '-q', origin, advance)
     git(advance, 'config', 'user.name', 'Test')
     git(advance, 'config', 'user.email', 'test@example.com')
     writeFileSync(join(advance, 'a.txt'), 'two\n')

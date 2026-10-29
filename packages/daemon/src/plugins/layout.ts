@@ -279,9 +279,16 @@ export class LayoutService {
         .filter((tool) => toolIds.has(tool.id) && tool.contributionId !== null)
         .map((tool) => tool.contributionId!)
     )
+    const aliasedActivityItems = new Set(
+      (model.tools ?? []).flatMap((tool) => tool.aliases.filter((id) => id !== tool.contributionId))
+    )
     const activeViews = new Set([layout.view?.id, routeViewId].filter((id): id is string => id !== undefined))
     const slots: UiSlotState[] = [
-      ...model.activityItems.map((entry) => ({ entry, shown: () => shownToolBodies.has(entry.id) })),
+      ...model.activityItems.map((entry) => ({
+        entry,
+        shown: () => entry.module !== null &&
+          (shownToolBodies.has(entry.id) || aliasedActivityItems.has(entry.id))
+      })),
       ...model.sidebarSections.map((entry) => ({ entry, shown: () => shownToolBodies.has(entry.id) })),
       ...model.statusBars.map((entry) => ({ entry, shown: () => true })),
       ...model.panels.map((entry) => ({ entry, shown: () => shownToolBodies.has(entry.id) })),

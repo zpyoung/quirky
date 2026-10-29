@@ -139,7 +139,7 @@ async function resolveTrackerProject(env: ProjectEnv, repo: Repo, input: string)
   if (requested.protocol !== 'https:' || requested.username || requested.password || requested.search || requested.hash) {
     throw env.fail('invalid-params', 'trackerProject must be a credential-free HTTPS provider project URL')
   }
-  const resolved = recordOf(await env.call('quirky.hosting/projectRef', { worktree: repo.path, input }))
+  const resolved = recordOf(await env.call('quirky.hosting/projectRef', { worktree: `path:${repo.path}`, input }))
   if (typeof resolved?.id !== 'string' || resolved.id.trim() === '' || typeof resolved.url !== 'string') {
     throw env.fail('conflict', 'The tracker provider returned an incomplete project identity; no default was saved.')
   }
