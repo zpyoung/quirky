@@ -1951,7 +1951,8 @@
       "deps": [
         "m7-vm-and-owner-bound-host-workspaces"
       ],
-      "status": "todo"
+      "status": "in-progress",
+      "lane": 9
     },
     {
       "id": "fix-test-heimdall-1028",
