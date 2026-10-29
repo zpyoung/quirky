@@ -2116,6 +2116,46 @@
       "status": "done"
     },
     {
+      "id": "fix-test-repo-1028",
+      "milestone": "M7",
+      "title": "Repair end-phase plugins/quirky.repo failures from baseline 97aaa12d (full evidence docs/loop/reports/m7-test-triage.json, area plugins/quirky.repo). Files and exact failed tests: plugins/quirky.repo/test/projects.test.ts: SC-9: removing a project > forgets it and its settings, takes it out of its group, and leaves the folder | plugins/quirky.repo/test/repo.test.ts: quirky.repo methods > remove forgets the repo and emits changed; removing it again is NotFound; SC-10: repo selectors > remove takes a selector; remove closes the repo sessions > only the sessions of the removed repo are closed; remove closes the repo sessions > sessions still close when git can no longer list the repo worktrees; remove closes the repo sessions > a same-named repo keeps its sessions; remove closes the repo sessions > a session in an externally created worktree closes with its repo after the directory is gone; remove closes the repo sessions > a failed close keeps the repo so removal can be retried; remove closes the repo sessions > without quirky.session the repo is removed with nothing to close | plugins/quirky.repo/test/cli.test.ts: SC-20: quirky repo commands keep v1 output > rm prints \"removed <repo>\" and takes selectors; SC-20: quirky repo commands keep v1 output > rm --json prints the method result | plugins/quirky.repo/test/hooks.test.ts: effectiveHooks: reading the shared file > no file means no hooks, the default startup policy and no warnings. Reproduce via canonical suite; fix consumer-visible defects and delete incidental wording/source/default/inventory mirror assertions rather than repinning them. Preserve fresh private process homes and cleanup. Cross-plugin failures must coordinate with the owning repair, not introduce aliases or bypasses.",
+      "docs": [],
+      "deps": [
+        "m7-test-triage"
+      ],
+      "status": "done"
+    },
+    {
+      "id": "fix-test-terminal-dock-1028",
+      "milestone": "M7",
+      "title": "Repair end-phase plugins/quirky.terminal-dock failures from baseline 97aaa12d (full evidence docs/loop/reports/m7-test-triage.json, area plugins/quirky.terminal-dock). Files and exact failed tests: plugins/quirky.terminal-dock/test/defects.e2e.test.ts: Codex transcript evidence clears a snapshot send despite a stale composer prompt. Reproduce via canonical suite; fix consumer-visible defects and delete incidental wording/source/default/inventory mirror assertions rather than repinning them. Preserve fresh private process homes and cleanup. Cross-plugin failures must coordinate with the owning repair, not introduce aliases or bypasses.",
+      "docs": [],
+      "deps": [
+        "m7-test-triage"
+      ],
+      "status": "done"
+    },
+    {
+      "id": "fix-test-packages-protocol-1028",
+      "milestone": "M7",
+      "title": "Repair end-phase packages/protocol failures from baseline 97aaa12d (full evidence docs/loop/reports/m7-test-triage.json, area packages/protocol). Files and exact failed tests: packages/protocol/test/ui.test.ts: theme tokens and the default theme > DEFAULT_THEME fills exactly THEME_TOKENS with valid colors | packages/protocol/test/kernel-schemas.test.ts: kernel method schemas > read-only and destructive methods are flagged; kernel method schemas > only the hello, subscribe and ui window methods are connection methods; kernel event schemas > cover every event type. Reproduce via canonical suite; fix consumer-visible defects and delete incidental wording/source/default/inventory mirror assertions rather than repinning them. Preserve fresh private process homes and cleanup. Cross-plugin failures must coordinate with the owning repair, not introduce aliases or bypasses.",
+      "docs": [],
+      "deps": [
+        "m7-test-triage"
+      ],
+      "status": "done"
+    },
+    {
+      "id": "fix-test-scripts-ui-review-1028",
+      "milestone": "M7",
+      "title": "Fix bun test scripts failures found during fix-native-m3-vault-1028: scripts/ui-review/review.test.ts has 12 failures (threshold85 returns error; redaction/low-score/family/visibility/digest/timeout cases return error; repeated manifest() mkdir captures EEXIST); scripts/ui-review/cli.test.ts malformed review-only input returns exit2 without ui-review-error.json (ENOENT at219). Overall113pass13fail945assertions in98.17s on2026-10-28. Preserve actual validation/model/visibility/redaction/error behavior; diagnose before repair, no assertion weakening. Evidence docs/loop/decisions/fix-native-m3-vault-1028.md.",
+      "docs": [],
+      "deps": [
+        "m7-test-triage"
+      ],
+      "status": "done"
+    },
+    {
       "id": "m7-sweep-sessions",
       "milestone": "M7",
       "docs": [
@@ -2205,26 +2245,6 @@
       "lane": 8
     },
     {
-      "id": "fix-test-repo-1028",
-      "milestone": "M7",
-      "title": "Repair end-phase plugins/quirky.repo failures from baseline 97aaa12d (full evidence docs/loop/reports/m7-test-triage.json, area plugins/quirky.repo). Files and exact failed tests: plugins/quirky.repo/test/projects.test.ts: SC-9: removing a project > forgets it and its settings, takes it out of its group, and leaves the folder | plugins/quirky.repo/test/repo.test.ts: quirky.repo methods > remove forgets the repo and emits changed; removing it again is NotFound; SC-10: repo selectors > remove takes a selector; remove closes the repo sessions > only the sessions of the removed repo are closed; remove closes the repo sessions > sessions still close when git can no longer list the repo worktrees; remove closes the repo sessions > a same-named repo keeps its sessions; remove closes the repo sessions > a session in an externally created worktree closes with its repo after the directory is gone; remove closes the repo sessions > a failed close keeps the repo so removal can be retried; remove closes the repo sessions > without quirky.session the repo is removed with nothing to close | plugins/quirky.repo/test/cli.test.ts: SC-20: quirky repo commands keep v1 output > rm prints \"removed <repo>\" and takes selectors; SC-20: quirky repo commands keep v1 output > rm --json prints the method result | plugins/quirky.repo/test/hooks.test.ts: effectiveHooks: reading the shared file > no file means no hooks, the default startup policy and no warnings. Reproduce via canonical suite; fix consumer-visible defects and delete incidental wording/source/default/inventory mirror assertions rather than repinning them. Preserve fresh private process homes and cleanup. Cross-plugin failures must coordinate with the owning repair, not introduce aliases or bypasses.",
-      "docs": [],
-      "deps": [
-        "m7-test-triage"
-      ],
-      "status": "done"
-    },
-    {
-      "id": "fix-test-terminal-dock-1028",
-      "milestone": "M7",
-      "title": "Repair end-phase plugins/quirky.terminal-dock failures from baseline 97aaa12d (full evidence docs/loop/reports/m7-test-triage.json, area plugins/quirky.terminal-dock). Files and exact failed tests: plugins/quirky.terminal-dock/test/defects.e2e.test.ts: Codex transcript evidence clears a snapshot send despite a stale composer prompt. Reproduce via canonical suite; fix consumer-visible defects and delete incidental wording/source/default/inventory mirror assertions rather than repinning them. Preserve fresh private process homes and cleanup. Cross-plugin failures must coordinate with the owning repair, not introduce aliases or bypasses.",
-      "docs": [],
-      "deps": [
-        "m7-test-triage"
-      ],
-      "status": "done"
-    },
-    {
       "id": "fix-test-agents-1028",
       "milestone": "M7",
       "title": "Repair end-phase plugins/quirky.agents failures from baseline 97aaa12d (full evidence docs/loop/reports/m7-test-triage.json, area plugins/quirky.agents). Files and exact failed tests: plugins/quirky.agents/test/service.test.ts: provider-owned model discovery > only a bounded provider probe replaces the exact local catalog; empty, malformed and failed probes preserve it; provider-owned model discovery > Codex discovery refuses to run under a raw inherited home when account preparation is unavailable | plugins/quirky.agents/test/cli.test.ts: the CLI catalog > lists the agents group with every command and the methods each calls | plugins/quirky.agents/test/core/entry.test.ts: validateEntry > links must be http(s) URLs. Reproduce via canonical suite; fix consumer-visible defects and delete incidental wording/source/default/inventory mirror assertions rather than repinning them. Preserve fresh private process homes and cleanup. Cross-plugin failures must coordinate with the owning repair, not introduce aliases or bypasses.",
@@ -2245,26 +2265,6 @@
       ],
       "status": "in-progress",
       "lane": 9
-    },
-    {
-      "id": "fix-test-packages-protocol-1028",
-      "milestone": "M7",
-      "title": "Repair end-phase packages/protocol failures from baseline 97aaa12d (full evidence docs/loop/reports/m7-test-triage.json, area packages/protocol). Files and exact failed tests: packages/protocol/test/ui.test.ts: theme tokens and the default theme > DEFAULT_THEME fills exactly THEME_TOKENS with valid colors | packages/protocol/test/kernel-schemas.test.ts: kernel method schemas > read-only and destructive methods are flagged; kernel method schemas > only the hello, subscribe and ui window methods are connection methods; kernel event schemas > cover every event type. Reproduce via canonical suite; fix consumer-visible defects and delete incidental wording/source/default/inventory mirror assertions rather than repinning them. Preserve fresh private process homes and cleanup. Cross-plugin failures must coordinate with the owning repair, not introduce aliases or bypasses.",
-      "docs": [],
-      "deps": [
-        "m7-test-triage"
-      ],
-      "status": "done"
-    },
-    {
-      "id": "fix-test-scripts-ui-review-1028",
-      "milestone": "M7",
-      "title": "Fix bun test scripts failures found during fix-native-m3-vault-1028: scripts/ui-review/review.test.ts has 12 failures (threshold85 returns error; redaction/low-score/family/visibility/digest/timeout cases return error; repeated manifest() mkdir captures EEXIST); scripts/ui-review/cli.test.ts malformed review-only input returns exit2 without ui-review-error.json (ENOENT at219). Overall113pass13fail945assertions in98.17s on2026-10-28. Preserve actual validation/model/visibility/redaction/error behavior; diagnose before repair, no assertion weakening. Evidence docs/loop/decisions/fix-native-m3-vault-1028.md.",
-      "docs": [],
-      "deps": [
-        "m7-test-triage"
-      ],
-      "status": "done"
     },
     {
       "id": "fix-test-scripts-profile-timeout-1028",
