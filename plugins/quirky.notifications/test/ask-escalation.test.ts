@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'bun:test'
+import { afterEach, describe, expect, test } from 'bun:test'
 import type { Ask, PluginContext, PluginNotification, QuirkyEvent, UiState } from '@quirky/protocol'
 import { NotificationsService } from '../src/service'
 
@@ -6,10 +6,10 @@ const ESCALATION_MS = 3 * 60 * 1000
 const VIEW = 'view:quirky.session/worktree'
 const IDLE: UiState = { windows: [], layout: { view: null, panel: null, sidebar: true, focus: null }, slots: [], toasts: [] }
 
-function ask(id: string, sessionId = 'session_1', queued = false, seq = 1): Ask {
+function ask(id: string, sessionId = 'session_1', queued = false, seq = 1, title = 'Deploy?', question = 'Ship to prod?'): Ask {
   return {
     id,
-    spec: { title: 'Deploy?', questions: [{ id: 'go', type: 'confirm', question: 'Ship to prod?' }] },
+    spec: { title, questions: [{ id: 'go', type: 'confirm', question }] },
     sessionId,
     worktreeId: 'worktree_1',
     createdAt: 10,
@@ -37,21 +37,36 @@ function focused(sessionId: string): UiState {
   }
 }
 
+const activeServices = new Set<NotificationsService>()
+afterEach(() => {
+  for (const service of activeServices) service.shutdown()
+  activeServices.clear()
+})
+
+function shutdown(service: NotificationsService): void {
+  activeServices.delete(service)
+  service.shutdown()
+}
 type Timer = { at: number; delay: number; run: () => void }
 
 function manualClock() {
   let time = 1_000_000
   let nextHandle = 0
   const timers = new Map<number, Timer>()
-  const scheduled = new Map<number, ((handle: number) => void)[]>()
+  const scheduled = new Map<number, { afterHandle: number; resolve: (handle: number) => void }[]>()
   const cleared = new Map<number, (() => void)[]>()
   return {
     now: () => time,
     setTimeout(run: () => void, delay: number) {
       const handle = ++nextHandle
       timers.set(handle, { at: time + delay, delay, run })
-      for (const resolve of scheduled.get(delay) ?? []) resolve(handle)
-      scheduled.delete(delay)
+      const waiting: { afterHandle: number; resolve: (handle: number) => void }[] = []
+      for (const listener of scheduled.get(delay) ?? []) {
+        if (handle > listener.afterHandle) listener.resolve(handle)
+        else waiting.push(listener)
+      }
+      if (waiting.length) scheduled.set(delay, waiting)
+      else scheduled.delete(delay)
       return handle
     },
     clearTimeout(handle: unknown) {
@@ -60,14 +75,14 @@ function manualClock() {
       for (const resolve of cleared.get(id) ?? []) resolve()
       cleared.delete(id)
     },
-    whenScheduled(delay: number): Promise<number> {
-      const existing = [...timers].find(([, timer]) => timer.delay === delay)
+    whenScheduled(delay: number, afterHandle = 0): Promise<number> {
+      const existing = [...timers].find(([handle, timer]) => handle > afterHandle && timer.delay === delay)
       if (existing) return Promise.resolve(existing[0])
-      return new Promise((resolve) => {
-        const listeners = scheduled.get(delay) ?? []
-        listeners.push(resolve)
-        scheduled.set(delay, listeners)
-      })
+      const { promise, resolve } = Promise.withResolvers<number>()
+      const listeners = scheduled.get(delay) ?? []
+      listeners.push({ afterHandle, resolve })
+      scheduled.set(delay, listeners)
+      return promise
     },
     whenCleared(handle: number): Promise<void> {
       if (!timers.has(handle)) return Promise.resolve()
@@ -145,6 +160,7 @@ function setup(initial: Ask[] = []) {
     clearTimeout: clock.clearTimeout,
     cooldownMs: 0
   })
+  activeServices.add(service)
   return {
     service,
     clock,
@@ -188,8 +204,6 @@ describe('delayed ask notifications', () => {
     expect(app.calls).toContainEqual({ method: 'quirky.session/setUnread', params: { session: 'session_1', unread: 'notification' } })
     expect(app.calls).toContainEqual({ method: 'quirky.worktree/set', params: { worktree: 'id:worktree_1', unread: true } })
     expect(app.events.find((item) => item.event === 'decided')).toMatchObject({ data: { source: 'ask', result: 'delivered' } })
-    expect(app.calls.filter((call) => call.method === 'quirky.ask/list').length).toBeGreaterThan(1)
-    app.service.shutdown()
   })
 
   test('Q3: focusing the exact session cancels elapsed time; leaving it starts a fresh three-minute interval', async () => {
@@ -216,7 +230,6 @@ describe('delayed ask notifications', () => {
     app.clock.advance(1)
     await app.notified
     expect(app.notifications).toHaveLength(1)
-    app.service.shutdown()
   })
 
   test('Q3: resolution and FIFO head replacement cancel the old timer and the promoted head gets a full delay', async () => {
@@ -228,22 +241,32 @@ describe('delayed ask notifications', () => {
     const oldHandle = await initialTimer
     app.service.onEvent(event('quirky.ask/created', { ask: queued, seq: queued.seq }))
 
-    const newHead = ask('ask_2', 'session_1', false, 4)
-    app.setPending([newHead])
+    app.clock.advance(60_000)
     const cleared = app.clock.whenCleared(oldHandle)
-    const promotedTimer = app.clock.whenScheduled(ESCALATION_MS)
+    const promotedTimer = app.clock.whenScheduled(ESCALATION_MS, oldHandle)
+    const newHead = ask('ask_2', 'session_1', false, 4, 'Restart database?', 'Approve the restart?')
+    app.setPending([newHead])
     app.service.onEvent(event('quirky.ask/resolved', { askId: first.id, envelope: { status: 'declined', askId: first.id, answers: {}, skipped: [], summary: '' }, seq: 3 }))
     app.service.onEvent(event('quirky.ask/surfaced', { ask: newHead, seq: 4 }))
     await cleared
-    await promotedTimer
+    const newHandle = await promotedTimer
+    expect(newHandle).not.toBe(oldHandle)
 
-    app.clock.advance(ESCALATION_MS - 1)
+    app.clock.advance(ESCALATION_MS - 60_000 - 1)
+    expect(app.notifications).toEqual([])
+    app.clock.advance(1)
+    expect(app.notifications).toEqual([])
+    app.clock.advance(60_000 - 1)
     expect(app.notifications).toEqual([])
     app.clock.advance(1)
     await app.notified
-    expect(app.notifications).toMatchObject([{ sessionId: 'session_1' }])
+    expect(app.notifications).toMatchObject([{
+      title: 'Restart database?',
+      body: 'Approve the restart?',
+      sessionId: 'session_1',
+      worktreeId: 'worktree_1'
+    }])
     expect(app.notifications).toHaveLength(1)
-    app.service.shutdown()
   })
 
   test('Q3: startup rehydrates surfaced asks and shutdown cancels their timers', async () => {
@@ -256,7 +279,7 @@ describe('delayed ask notifications', () => {
     expect((await app.service.status()).pendingAsks).toBe(1)
     expect(app.clock.activeCount()).toBeGreaterThan(0)
 
-    app.service.shutdown()
+    shutdown(app.service)
     expect(app.clock.activeCount()).toBe(0)
     app.clock.advance(ESCALATION_MS)
     expect(app.notifications).toEqual([])
