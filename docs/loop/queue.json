@@ -1976,6 +1976,16 @@
       "status": "done"
     },
     {
+      "id": "fix-test-mobile-1028",
+      "milestone": "M7",
+      "title": "Repair end-phase plugins/quirky.mobile failures from baseline 97aaa12d (full evidence docs/loop/reports/m7-test-triage.json, area plugins/quirky.mobile). Files and exact failed tests: plugins/quirky.mobile/test/browser-watch.test.ts: mobile Watch uses real worktree tab identity, bounded frames and connection-owned leases | plugins/quirky.mobile/test/panels-activity-tasks.test.ts: paired mobile workspace consent carries content pins through both hooks and executes each approved script | plugins/quirky.mobile/test/session-tabs.test.ts: public mobile Markdown APIs preserve actual tab identity, bounded drafts and dirty-close decisions. Reproduce via canonical suite; fix consumer-visible defects and delete incidental wording/source/default/inventory mirror assertions rather than repinning them. Preserve fresh private process homes and cleanup. Cross-plugin failures must coordinate with the owning repair, not introduce aliases or bypasses.",
+      "docs": [],
+      "deps": [
+        "m7-test-triage"
+      ],
+      "status": "done"
+    },
+    {
       "id": "m7-sweep-sessions",
       "milestone": "M7",
       "docs": [
@@ -2072,16 +2082,6 @@
       ],
       "status": "in-progress",
       "lane": 1
-    },
-    {
-      "id": "fix-test-mobile-1028",
-      "milestone": "M7",
-      "title": "Repair end-phase plugins/quirky.mobile failures from baseline 97aaa12d (full evidence docs/loop/reports/m7-test-triage.json, area plugins/quirky.mobile). Files and exact failed tests: plugins/quirky.mobile/test/browser-watch.test.ts: mobile Watch uses real worktree tab identity, bounded frames and connection-owned leases | plugins/quirky.mobile/test/panels-activity-tasks.test.ts: paired mobile workspace consent carries content pins through both hooks and executes each approved script | plugins/quirky.mobile/test/session-tabs.test.ts: public mobile Markdown APIs preserve actual tab identity, bounded drafts and dirty-close decisions. Reproduce via canonical suite; fix consumer-visible defects and delete incidental wording/source/default/inventory mirror assertions rather than repinning them. Preserve fresh private process homes and cleanup. Cross-plugin failures must coordinate with the owning repair, not introduce aliases or bypasses.",
-      "docs": [],
-      "deps": [
-        "m7-test-triage"
-      ],
-      "status": "done"
     },
     {
       "id": "fix-test-orchestration-1028",
