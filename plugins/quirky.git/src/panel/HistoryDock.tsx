@@ -135,6 +135,7 @@ function CommitRow({ commit, expanded, files, onToggle, onOpen, onOpenFile }: Co
         }
         description={`${shortOid(commit.oid)} · ${commit.author} · ${relativeTime(commit.authoredAt)}`}
         status="done"
+        statusLabel="Commit"
         trailing={
           <IconButton
             label={`${expanded ? 'Collapse' : 'Expand'} commit ${shortOid(commit.oid)}`}

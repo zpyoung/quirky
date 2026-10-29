@@ -78,6 +78,20 @@ describe('SC-8: the panel layout', () => {
     unmount()
   })
 
+  test.each([
+    ['math.ts', 'unstaged', 'modified'],
+    ['notes.txt', 'untracked', 'untracked'],
+  ])('the %s row announces its Git state instead of an agent state', async (path, section, status) => {
+    const { element, unmount } = await open()
+    try {
+      const row = rowOf(element, path, section)!
+      expect(q(row, '[role="img"]')?.getAttribute('aria-label')).toBe(`Git status ${status}`)
+      expect(q(row, '[aria-label^="Status:"]')).toBeNull()
+    } finally {
+      unmount()
+    }
+  })
+
 
   test('the Committed on Branch heading says how many files changed against the base', async () => {
     const { element, unmount } = await open()

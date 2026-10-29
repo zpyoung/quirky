@@ -204,6 +204,18 @@ describe('SC-54: the Commits dock', () => {
     unmount()
   })
 
+  test('commit rows announce a commit rather than an agent completion state', async () => {
+    const { element, unmount } = await open(history)
+    try {
+      await click(byLabel(element, 'Expand Commits'))
+      const row = q(element, '[data-commit-row] .ui-list-row__main')!
+      expect(q(row, '[role="img"]')?.getAttribute('aria-label')).toBe('Commit')
+      expect(q(row, '[aria-label^="Status:"]')).toBeNull()
+    } finally {
+      unmount()
+    }
+  })
+
   test('clicking a commit opens its combined diff; expanding it lists files that open their commit diff', async () => {
     const { fake, element, unmount } = await open(history)
     await click(byLabel(element, 'Expand Commits'))
