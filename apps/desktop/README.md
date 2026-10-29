@@ -48,8 +48,8 @@ pre-release or draft to keep installed apps from picking it up, because `latest`
 
 To install a release on another Apple Silicon Mac for the first time, download
 `Quirky-macos-arm64.zip`, unzip it into `~/Applications`, and clear the quarantine flag as above.
-Later updates need no manual steps. An update restarts only the app shell, so a daemon that is
-already running keeps running until you stop it.
+Later updates need no manual steps. When the updated app starts, it replaces a daemon left running
+from the previous build. Terminals keep running unless the update changes the PTY protocol.
 
 ## External command and profile launchers
 
