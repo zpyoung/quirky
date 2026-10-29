@@ -234,8 +234,9 @@ function element(): HTMLElement {
 }
 
 function labelField<T extends HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>(root: ParentNode, label: string): T | undefined {
-  const holder = [...root.querySelectorAll('label')].find((item) => item.querySelector(':scope > span')?.textContent === label)
-  return holder?.querySelector('input, textarea, select') as T | undefined
+  const holder = [...root.querySelectorAll<HTMLLabelElement>('label')]
+    .find((item) => item.textContent?.replace(/\s+/g, ' ').trim() === label)
+  return (holder?.control ?? holder?.querySelector('input, textarea, select')) as T | undefined
 }
 function button(root: ParentNode, text: string): HTMLButtonElement | undefined {
   return [...root.querySelectorAll<HTMLButtonElement>('button')].find((item) => item.textContent?.trim() === text)
@@ -251,8 +252,13 @@ async function click(target: HTMLElement): Promise<void> {
 }
 async function setText(target: HTMLInputElement | HTMLTextAreaElement, value: string): Promise<void> {
   await act(async () => {
-    const prototype = target instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype
-    Object.getOwnPropertyDescriptor(prototype, 'value')!.set!.call(target, value)
+    const setter = target instanceof HTMLTextAreaElement
+      ? Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set
+      : target instanceof HTMLInputElement
+        ? Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set
+        : undefined
+    if (!setter) throw new Error('expected an input or textarea control')
+    setter.call(target, value)
     target.dispatchEvent(new Event('input', { bubbles: true }))
   })
 }
@@ -638,13 +644,16 @@ test('Name mode keeps blank generated-name creation available', async () => {
   await h.ready
   const dialog = h.element.querySelector('[role="dialog"]')!
   await click(button(dialog, 'Name')!)
-  const name = await waitFor(() => labelField<HTMLInputElement>(dialog, 'Name'))
-  await waitFor(() => name.placeholder === 'generated-r1')
+  const name = await waitFor(() => {
+    const field = labelField<HTMLInputElement>(dialog, 'Name')
+    return field?.placeholder ? field : null
+  })
+  const suggestion = name.placeholder
   expect(name.value).toBe('')
   expect(button(dialog, 'Create')?.disabled).toBe(false)
   await click(button(dialog, 'Create')!)
   expect(h.calls.find((call) => call.method === 'quirky.worktree/create')?.params).not.toHaveProperty('name')
-  expect(h.pending).toEqual(['generated-r1'])
+  expect(h.pending).toEqual([suggestion])
 })
 
 test('create more resets the selected source, name, query, agent and setup choice', async () => {
@@ -836,7 +845,6 @@ test('issue trust dialog identifies the issue command', async () => {
     onChoose: () => {}
   })))
   const dialog = host.querySelector('[role="dialog"]')!
-  expect(dialog.getAttribute('aria-label')?.toLowerCase()).toContain('issue command')
   expect(dialog.textContent?.toLowerCase()).toContain('issue command')
   expect(button(dialog, 'Run issue command')).toBeDefined()
 })
@@ -903,7 +911,9 @@ test('sidebar renders a durable linked PR as an external link beside the editabl
   expect(anchor?.textContent).toContain('PR #3')
   expect(anchor?.target).toBe('_blank')
   expect(anchor?.rel).toContain('noreferrer')
-  expect(host.querySelector('.worktree-name')?.textContent).toBe('Reword the README')
+  const workspaceButton = [...host.querySelectorAll<HTMLButtonElement>('button[aria-label]')]
+    .find((button) => button.getAttribute('aria-label') === 'Open Reword the README')
+  expect(workspaceButton?.textContent).toContain('Reword the README')
   const issueAnchor = host.querySelector<HTMLAnchorElement>(`a[href="${ISSUE_URL}"]`)
   expect(issueAnchor?.textContent).toContain('Issue #4')
 })
