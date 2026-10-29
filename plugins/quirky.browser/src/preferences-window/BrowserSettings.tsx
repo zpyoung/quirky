@@ -190,7 +190,7 @@ export function BrowserSettings(props: BrowserPreferencesProps & { embedded?: bo
           </select>
         </FormRow>
         <IdentityStatus selected={identitySelection} active={activeIdentity} restartRequired={restartRequired} />
-        <p style={SETTINGS_COPY_STYLE}>System webview identity cannot be changed: the public native SDK has no user-agent override.</p>
+        <NativeIdentityNote supported={preferences?.identity.nativeSupported === true} />
       </section>
 
       <RoutingSettings settings={settings} savingSettings={savingSettings} writeSetting={writeSetting} />
@@ -203,7 +203,7 @@ export function BrowserSettings(props: BrowserPreferencesProps & { embedded?: bo
 
     {embedded && <>
       <IdentityStatus selected={identitySelection} active={activeIdentity} restartRequired={restartRequired} />
-      <p style={SETTINGS_COPY_STYLE}>System webview identity cannot be changed: the public native SDK has no user-agent override.</p>
+      <NativeIdentityNote supported={preferences?.identity.nativeSupported === true} />
       {settings.agentBrowserUseEnabled && <AgentBrowserChecklist />}
     </>}
 
@@ -238,6 +238,12 @@ export function BrowserSettings(props: BrowserPreferencesProps & { embedded?: bo
       {createOpen && <ProfileCreator context={context} onCreated={profileCreated} onCancel={() => setCreateOpen(false)} onError={onError} />}
     </section>
   </div>
+}
+
+function NativeIdentityNote({ supported }: { supported: boolean }) {
+  return <p style={SETTINGS_COPY_STYLE}>{supported
+    ? 'The Native browser pane follows the same active identity: Cleaned removes app tokens from the system webview user agent, Native keeps it unchanged.'
+    : 'System webview identity cannot be changed on this platform: its native webview has no user-agent override.'}</p>
 }
 
 function IdentityStatus({ selected, active, restartRequired }: { selected: 'clean' | 'native'; active: 'clean' | 'native'; restartRequired: boolean }) {

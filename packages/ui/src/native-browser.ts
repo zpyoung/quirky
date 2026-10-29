@@ -1,6 +1,7 @@
 import {
   NATIVE_BROWSER_NAVIGATION_RULES,
   NATIVE_BROWSER_PARTITION_RE,
+  isNativeBrowserUserAgent,
   type NativeBrowserCapability,
   type NativeBrowserHandle,
   type NativeBrowserOptions,
@@ -31,10 +32,12 @@ export type NativeBrowserAdapter = {
   ): NativeBrowserAdapterHandle
   readonly clearPartitionAvailable: boolean
   clearPartition(partition: string): Promise<void>
+  defaultUserAgent(): Promise<string | null>
 }
 
 export type NativeBrowserShellBridge = {
-  claimNativeBrowserView(params: { viewId: number; owner: string; partition: string }): Promise<{ zoomFactor: number }>
+  claimNativeBrowserView(params: { viewId: number; owner: string; partition: string; userAgent: string | null }): Promise<{ zoomFactor: number }>
+  nativeBrowserDefaultUserAgent(params: Record<string, never>): Promise<{ userAgent: string | null }>
   setNativeBrowserZoom(params: { viewId: number; owner: string; level: number }): Promise<{ zoomFactor: number }>
   releaseNativeBrowserView(params: { viewId: number; owner: string }): Promise<{ released: true }>
 }
@@ -509,7 +512,7 @@ class ElectrobunNativeBrowserMount implements NativeBrowserAdapterHandle {
     const viewId = await this.waitForViewId(child)
     if (viewId === null || this.disposed) return
     this.viewId = viewId
-    await this.bridge.claimNativeBrowserView({ viewId, owner: this.owner, partition: this.options.partition })
+    await this.bridge.claimNativeBrowserView({ viewId, owner: this.owner, partition: this.options.partition, userAgent: this.options.userAgent ?? null })
     this.claimed = true
     if (this.disposed) {
       await this.releaseClaim()
@@ -918,6 +921,7 @@ export function createNativeBrowserCapability(adapter?: NativeBrowserAdapter): N
       if (!options.id || !allowedUrl(options.url)) throw new Error('unsupported native browser URL')
       if (!NATIVE_BROWSER_PARTITION_RE.test(options.partition)) throw new Error('unsupported browser partition')
       if (!levelIsValid(options.zoom)) throw new Error('invalid native browser zoom level')
+      if (options.userAgent !== undefined && !isNativeBrowserUserAgent(options.userAgent)) throw new Error('invalid native browser user agent')
       const previous = current
       const afterDispose = previous ? disposeMount(previous) : lastDispose
       const mount: Mount = {
@@ -994,6 +998,9 @@ export function createNativeBrowserCapability(adapter?: NativeBrowserAdapter): N
         throw new Error('Native browser profile clearing is unavailable: the pinned SDK exposes no completion signal for native website-data removal')
       }
       await adapter.clearPartition(partition)
+    },
+    async defaultUserAgent() {
+      return adapter ? adapter.defaultUserAgent() : null
     }
   }
 }
@@ -1005,6 +1012,9 @@ export function createElectrobunNativeBrowserAdapter(bridge: NativeBrowserShellB
     async clearPartition(partition) {
       if (!NATIVE_BROWSER_PARTITION_RE.test(partition)) throw new Error('unsupported browser partition')
       throw new Error('Native browser profile clearing is unavailable: the pinned SDK exposes no completion signal for native website-data removal')
+    },
+    async defaultUserAgent() {
+      return (await bridge.nativeBrowserDefaultUserAgent({})).userAgent
     }
   }
 }

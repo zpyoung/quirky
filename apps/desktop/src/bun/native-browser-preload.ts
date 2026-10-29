@@ -4,6 +4,7 @@ import type { NativeBrowserHostRPC } from './native-browser'
 
 type NativeBrowserPreloadBridge = {
   claimNativeBrowserView(params: NativeBrowserHostRPC['bun']['requests']['claimNativeBrowserView']['params']): Promise<NativeBrowserHostRPC['bun']['requests']['claimNativeBrowserView']['response']>
+  nativeBrowserDefaultUserAgent(params: NativeBrowserHostRPC['bun']['requests']['nativeBrowserDefaultUserAgent']['params']): Promise<NativeBrowserHostRPC['bun']['requests']['nativeBrowserDefaultUserAgent']['response']>
   setNativeBrowserZoom(params: NativeBrowserHostRPC['bun']['requests']['setNativeBrowserZoom']['params']): Promise<NativeBrowserHostRPC['bun']['requests']['setNativeBrowserZoom']['response']>
   releaseNativeBrowserView(params: NativeBrowserHostRPC['bun']['requests']['releaseNativeBrowserView']['params']): Promise<NativeBrowserHostRPC['bun']['requests']['releaseNativeBrowserView']['response']>
 }
@@ -39,6 +40,7 @@ const requests = (rpc as unknown as { request: NativeBrowserPreloadBridge & Desk
 
 const bridge: NativeBrowserPreloadBridge = {
   claimNativeBrowserView: (params) => requests.claimNativeBrowserView(params),
+  nativeBrowserDefaultUserAgent: (params) => requests.nativeBrowserDefaultUserAgent(params),
   setNativeBrowserZoom: (params) => requests.setNativeBrowserZoom(params),
   releaseNativeBrowserView: (params) => requests.releaseNativeBrowserView(params)
 }

@@ -1,9 +1,11 @@
 # Native browser identity
 
 ## Status & amendments
-Blocked at SDK feasibility on 2026-10-28. Design selected autonomously under docs/loop/LOOP.md; no implementation or effective native identity is claimed.
+Implemented 2026-10-29 against the fork API (see amendment). It was blocked at SDK feasibility on 2026-10-28.
 
-**Amendments:** None.
+**Amendments:**
+
+- 2026-10-29: unblocked by Quirky's Electrobun fork (`patch/webview-user-agent`, see `docs/quirk/specs/2026-10-29-electrobun-fork/logic.md`), which adds a supported `BrowserView` user-agent option, setter and engine-default read on macOS. SC1 and SC2 are implemented against it; SC3 still holds on Linux, Windows and any host whose `defaultUserAgent()` is null. Decisions D8–D12 record the shape.
 
 ## Purpose and conceptual model
 Apply the saved Cleaned/Native Browser identity preference to the human Native system-webview through a supported SDK API. Native browsing remains the system webview; owned Chrome/Watch remains a separate engine. The identity value `native` means preserve an engine's actual user agent, not switch engines. Cleaned removes embedding tokens without claiming Chrome compatibility, imported-login success or a fingerprint guarantee.

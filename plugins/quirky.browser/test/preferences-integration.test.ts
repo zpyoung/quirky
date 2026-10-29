@@ -141,7 +141,7 @@ test('Browser routing CLI opens an actual worktree hosted pane and exposes truth
     expect(before.localhostLabels.available).toBe(false)
     await h.client.call('setting.set', { id: 'setting:quirky.browser/identityMode', value: 'native' })
     const after = await call(h, 'preferencesState') as PreferencesState
-    expect(after.identity).toMatchObject({ selected: 'native', active: 'clean', restartRequired: true, nativeSupported: false })
+    expect(after.identity).toMatchObject({ selected: 'native', active: 'clean', restartRequired: true, nativeSupported: process.platform === 'darwin' })
     expect(h.spawnCount()).toBe(0)
   } finally { await h.cleanup() }
 })

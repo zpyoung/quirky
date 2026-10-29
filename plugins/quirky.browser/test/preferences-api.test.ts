@@ -16,6 +16,7 @@ function preferenceHarness(options: {
   pages?: string[]
   settings?: Record<string, unknown>
   clearProfile?: (profile: string, remove: boolean) => Promise<void>
+  nativeIdentitySupported?: boolean
 } = {}) {
   const profile: BrowserProfile = { id: 'profile_0123456789abcdef0123456789abcdef', label: 'Review', scope: 'isolated' }
   const handlers = new Map<string, Handler>()
@@ -30,7 +31,8 @@ function preferenceHarness(options: {
       calls.push({ method: 'setPaneProfile', params: { pane, profile: selected } })
       return { id: pane, profileId: selected }
     },
-    clearProfile: options.clearProfile ?? (async (selected, remove) => { calls.push({ method: 'clearProfile', params: { profile: selected, remove } }) })
+    clearProfile: options.clearProfile ?? (async (selected, remove) => { calls.push({ method: 'clearProfile', params: { profile: selected, remove } }) }),
+    nativeIdentitySupported: options.nativeIdentitySupported ?? false
   }
   const context = {
     dataDir: '',
@@ -75,6 +77,13 @@ test('preferencesState reports profile activity and selected versus active ident
   harness.settings.identityMode = 'native'
   const selectedState = await harness.invoke('preferencesState') as typeof activeState
   expect(selectedState.identity).toEqual({ selected: 'native', active: 'clean', restartRequired: true, nativeSupported: false })
+})
+
+test('preferencesState reports Native identity support from the host adapter without changing restart semantics', async () => {
+  const harness = preferenceHarness({ nativeIdentitySupported: true })
+  harness.settings.identityMode = 'native'
+  const state = await harness.invoke('preferencesState') as { identity: Record<string, unknown> }
+  expect(state.identity).toEqual({ selected: 'native', active: 'clean', restartRequired: true, nativeSupported: true })
 })
 
 test('profileSet rejects invalid profile identities before mutating a pane', async () => {

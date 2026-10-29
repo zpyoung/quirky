@@ -115,7 +115,7 @@ function isProfileUsage(value: unknown): value is ProfileUsage {
 
 function isPreferencesState(value: unknown): value is PreferencesState {
   if (!isRecord(value) || !Array.isArray(value.profiles) || !value.profiles.every(isProfileUsage)) return false
-  if (!isRecord(value.identity) || (value.identity.selected !== 'clean' && value.identity.selected !== 'native') || (value.identity.active !== 'clean' && value.identity.active !== 'native') || typeof value.identity.restartRequired !== 'boolean' || value.identity.nativeSupported !== false) return false
+  if (!isRecord(value.identity) || (value.identity.selected !== 'clean' && value.identity.selected !== 'native') || (value.identity.active !== 'clean' && value.identity.active !== 'native') || typeof value.identity.restartRequired !== 'boolean' || typeof value.identity.nativeSupported !== 'boolean') return false
   if (!isRecord(value.imports) || value.imports.available !== true || value.imports.destination !== 'managed-chrome' || value.imports.nativeSupported !== false || typeof value.imports.reason !== 'string') return false
   if (!isRecord(value.localhostLabels) || value.localhostLabels.available !== false || typeof value.localhostLabels.reason !== 'string') return false
   return true

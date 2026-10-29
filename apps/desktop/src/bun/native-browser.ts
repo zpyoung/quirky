@@ -1,6 +1,7 @@
 import {
   NATIVE_BROWSER_NAVIGATION_RULES,
   NATIVE_BROWSER_PARTITION_RE,
+  isNativeBrowserUserAgent,
   type DesktopRevealRequest,
   type DesktopRevealResult,
   type DesktopWindowCloseResult,
@@ -14,8 +15,12 @@ export type NativeBrowserHostRPC = {
   bun: {
     requests: {
       claimNativeBrowserView: {
-        params: { viewId: number; owner: string; partition: string }
+        params: { viewId: number; owner: string; partition: string; userAgent: string | null }
         response: { zoomFactor: number }
+      }
+      nativeBrowserDefaultUserAgent: {
+        params: Record<string, never>
+        response: { userAgent: string | null }
       }
       setNativeBrowserZoom: {
         params: { viewId: number; owner: string; level: number }
@@ -47,7 +52,9 @@ export type NativeBrowserViewPort = {
   url: string | null
   navigationRules: string | null
   allowedProtocols: { views: boolean; appData: boolean }
+  userAgent: string | null
   setNavigationRules(rules: string[]): void
+  setUserAgent(userAgent: string | null): boolean
   setPageZoom(factor: number): void
   getPageZoom(): number
   remove(): void
@@ -56,12 +63,14 @@ export type NativeBrowserViewPort = {
 export type NativeBrowserHostDeps = {
   getWindow(): { id: number; webview: { id: number } } | null
   getView(id: number): NativeBrowserViewPort | undefined
+  defaultUserAgent(): string | null
 }
 
 export type NativeBrowserHandlers = {
   claim(params: NativeBrowserHostRPC['bun']['requests']['claimNativeBrowserView']['params']): Promise<{ zoomFactor: number }>
   setZoom(params: NativeBrowserHostRPC['bun']['requests']['setNativeBrowserZoom']['params']): Promise<{ zoomFactor: number }>
   release(params: NativeBrowserHostRPC['bun']['requests']['releaseNativeBrowserView']['params']): Promise<{ released: true }>
+  defaultUserAgent(): Promise<{ userAgent: string | null }>
   dispose(): void
 }
 
@@ -112,6 +121,7 @@ export function createNativeBrowserHandlers(deps: NativeBrowserHostDeps): Native
       if (!Number.isSafeInteger(params.viewId) || params.viewId <= 0 || typeof params.owner !== 'string' || params.owner.length === 0 || !NATIVE_BROWSER_PARTITION_RE.test(params.partition)) {
         throw invalidChild()
       }
+      if (params.userAgent !== null && !isNativeBrowserUserAgent(params.userAgent)) throw new Error('invalid native browser user agent')
       const window = deps.getWindow()
       const view = deps.getView(params.viewId)
       if (
@@ -128,6 +138,10 @@ export function createNativeBrowserHandlers(deps: NativeBrowserHostDeps): Native
       // This public SDK call completes before claim resolves and before the renderer can load a target URL.
       view.setNavigationRules([...NATIVE_BROWSER_NAVIGATION_RULES])
       if (view.navigationRules !== JSON.stringify(NATIVE_BROWSER_NAVIGATION_RULES)) throw new Error('native browser navigation policy was not installed')
+      // still on about:blank, so the target URL's first request already carries this user agent
+      if (params.userAgent !== null && (!view.setUserAgent(params.userAgent) || view.userAgent !== params.userAgent)) {
+        throw new Error('native browser user agent override is unavailable on this platform')
+      }
       const zoomFactor = view.getPageZoom()
       claim = { viewId: params.viewId, owner: params.owner, partition: params.partition }
       return { zoomFactor }
@@ -151,6 +165,9 @@ export function createNativeBrowserHandlers(deps: NativeBrowserHostDeps): Native
       if (view.windowId !== window.id || view.hostWebviewId !== window.webview.id) throw invalidChild()
       view.remove()
       return { released: true }
+    },
+    async defaultUserAgent() {
+      return { userAgent: deps.defaultUserAgent() }
     },
     dispose() {
       const active = claim

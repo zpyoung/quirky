@@ -959,7 +959,8 @@ export class WindowPluginHost {
           track(() => handle.dispose())
           return handle
         }),
-        clearPartition: live((partition) => this.nativeBrowser.clearPartition(partition))
+        clearPartition: live((partition) => this.nativeBrowser.clearPartition(partition)),
+        defaultUserAgent: live(() => this.nativeBrowser.defaultUserAgent())
       },
       pluginId,
       log: (message) => this.deps.log(`${pluginId}: ${message}`),

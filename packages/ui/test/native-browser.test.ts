@@ -45,6 +45,7 @@ function deferred<T>(): Deferred<T> {
 /** Stateful model of one isolated view, history, and the trusted shell bridge. */
 class BrowserBridgeModel implements NativeBrowserAdapter {
   readonly clearPartitionAvailable = false
+  async defaultUserAgent(): Promise<string | null> { return null }
   readonly children = new Map<string, ModelChild>()
   readonly clearCalls: string[] = []
   slowFirstNavigation = false
@@ -174,6 +175,17 @@ describe('native browser capability', () => {
     expect(capability.clearPartitionAvailable).toBe(false)
     expect(() => capability.mount(element, options())).toThrow()
     await expect(capability.clearPartition(TEST_PARTITION)).rejects.toBeInstanceOf(Error)
+    expect(await capability.defaultUserAgent()).toBeNull()
+  })
+
+  test('rejects a user agent that could break out of its header before creating a child', () => {
+    const bridge = new BrowserBridgeModel()
+    const capability = createNativeBrowserCapability(bridge)
+
+    expect(() => capability.mount(element, options({ userAgent: 'Mozilla/5.0\r\nX-Injected: 1' }))).toThrow('invalid native browser user agent')
+    expect(() => capability.mount(element, options({ userAgent: '' }))).toThrow('invalid native browser user agent')
+    expect(() => capability.mount(element, options({ userAgent: 'x'.repeat(1025) }))).toThrow('invalid native browser user agent')
+    expect(bridge.children.size).toBe(0)
   })
 
   test('rejects unsafe protocols and non-browser partitions before creating a child', () => {

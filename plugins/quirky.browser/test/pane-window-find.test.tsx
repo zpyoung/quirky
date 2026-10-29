@@ -78,7 +78,8 @@ function makeContext(): UiPluginContext {
       available: false,
       clearPartitionAvailable: false,
       mount: () => { throw new Error('Native views are unavailable in this DOM fixture.') },
-      clearPartition: async () => { throw new Error('Native storage is unavailable in this DOM fixture.') }
+      clearPartition: async () => { throw new Error('Native storage is unavailable in this DOM fixture.') },
+      defaultUserAgent: async () => null
     },
     pluginId: 'quirky.browser',
     log: () => {},

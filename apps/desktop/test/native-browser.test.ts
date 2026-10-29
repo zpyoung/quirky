@@ -6,6 +6,7 @@ import {
   type NativeBrowserViewPort
 } from '../src/bun/native-browser'
 
+const DEFAULT_USER_AGENT = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko)'
 const PARTITION = `persist:quirky-browser-profile_${crypto.randomUUID().replaceAll('-', '')}`
 
 class BrowserViewModel implements NativeBrowserViewPort {
@@ -18,6 +19,8 @@ class BrowserViewModel implements NativeBrowserViewPort {
   readonly allowedProtocols: { views: boolean; appData: boolean }
   url: string
   navigationRules: string | null = null
+  userAgent: string | null = null
+  userAgentSupported = true
   zoom = 1
   removed = false
   calls: string[] = []
@@ -47,6 +50,13 @@ class BrowserViewModel implements NativeBrowserViewPort {
     this.navigationRules = JSON.stringify(rules)
   }
 
+  setUserAgent(userAgent: string | null): boolean {
+    if (!this.userAgentSupported) return false
+    this.calls.push(`userAgent:${userAgent}`)
+    this.userAgent = userAgent
+    return true
+  }
+
   loadURL(url: string): void {
     if (this.navigationRules !== JSON.stringify(NATIVE_BROWSER_NAVIGATION_RULES)) throw new Error('navigation policy is not ready')
     if (!isNativeBrowserNavigationAllowed(url)) throw new Error('navigation denied')
@@ -72,7 +82,8 @@ class BrowserViewModel implements NativeBrowserViewPort {
 function rig(views: BrowserViewModel[]) {
   const handlers = createNativeBrowserHandlers({
     getWindow: () => ({ id: 12, webview: { id: 34 } }),
-    getView: (id) => views.find((view) => view.id === id && !view.removed)
+    getView: (id) => views.find((view) => view.id === id && !view.removed),
+    defaultUserAgent: () => DEFAULT_USER_AGENT
   })
   return { handlers }
 }
@@ -92,10 +103,10 @@ describe('native browser host bridge model', () => {
     const foreign = new BrowserViewModel({ id: 8, hostWebviewId: 99 })
     const { handlers } = rig([child, foreign])
 
-    await expect(handlers.claim({ viewId: 8, owner: 'owner-a', partition: PARTITION })).rejects.toBeInstanceOf(Error)
+    await expect(handlers.claim({ viewId: 8, owner: 'owner-a', partition: PARTITION, userAgent: null })).rejects.toBeInstanceOf(Error)
     expect(foreign.calls).toEqual([])
 
-    const claim = await handlers.claim({ viewId: 7, owner: 'owner-a', partition: PARTITION })
+    const claim = await handlers.claim({ viewId: 7, owner: 'owner-a', partition: PARTITION, userAgent: null })
     expect(claim).toEqual({ zoomFactor: 1 })
     expect(child.calls).toEqual(['policy'])
     expect(child.navigationRules).toBe(JSON.stringify(NATIVE_BROWSER_NAVIGATION_RULES))
@@ -119,7 +130,7 @@ describe('native browser host bridge model', () => {
       new BrowserViewModel({ id: 5, url: 'https://attacker.test/' })
     ]) {
       const { handlers } = rig([child])
-      await expect(handlers.claim({ viewId: child.id, owner: `owner-${child.id}`, partition: PARTITION })).rejects.toBeInstanceOf(Error)
+      await expect(handlers.claim({ viewId: child.id, owner: `owner-${child.id}`, partition: PARTITION, userAgent: null })).rejects.toBeInstanceOf(Error)
       expect(child.calls).toEqual([])
     }
   })
@@ -129,12 +140,12 @@ describe('native browser host bridge model', () => {
     const second = new BrowserViewModel({ id: 11 })
     const { handlers } = rig([first, second])
 
-    await handlers.claim({ viewId: 10, owner: 'first', partition: PARTITION })
-    await expect(handlers.claim({ viewId: 11, owner: 'second', partition: PARTITION })).rejects.toBeInstanceOf(Error)
+    await handlers.claim({ viewId: 10, owner: 'first', partition: PARTITION, userAgent: null })
+    await expect(handlers.claim({ viewId: 11, owner: 'second', partition: PARTITION, userAgent: null })).rejects.toBeInstanceOf(Error)
     expect(second.calls).toEqual([])
     await handlers.release({ viewId: 10, owner: 'first' })
     expect(first.removed).toBe(true)
-    await handlers.claim({ viewId: 11, owner: 'second', partition: PARTITION })
+    await handlers.claim({ viewId: 11, owner: 'second', partition: PARTITION, userAgent: null })
     expect(second.navigationRules).toBe(JSON.stringify(NATIVE_BROWSER_NAVIGATION_RULES))
   })
 
@@ -143,9 +154,9 @@ describe('native browser host bridge model', () => {
     const second = new BrowserViewModel({ id: 13 })
     const { handlers } = rig([first, second])
 
-    await handlers.claim({ viewId: 12, owner: 'old-owner', partition: PARTITION })
+    await handlers.claim({ viewId: 12, owner: 'old-owner', partition: PARTITION, userAgent: null })
     first.remove()
-    await handlers.claim({ viewId: 13, owner: 'new-owner', partition: PARTITION })
+    await handlers.claim({ viewId: 13, owner: 'new-owner', partition: PARTITION, userAgent: null })
 
     expect(second.navigationRules).toBe(JSON.stringify(NATIVE_BROWSER_NAVIGATION_RULES))
     expect(first.removed).toBe(true)
@@ -156,10 +167,51 @@ describe('native browser host bridge model', () => {
     const child = new BrowserViewModel({ id: 17 })
     const { handlers } = rig([child])
 
-    await handlers.claim({ viewId: 17, owner: 'actual-owner', partition: PARTITION })
+    await handlers.claim({ viewId: 17, owner: 'actual-owner', partition: PARTITION, userAgent: null })
     await expect(handlers.release({ viewId: 17, owner: 'foreign-owner' })).rejects.toBeInstanceOf(Error)
     expect(child.removed).toBe(false)
     await handlers.release({ viewId: 17, owner: 'actual-owner' })
     expect(child.removed).toBe(true)
+  })
+
+  test('a claim applies the identity user agent after policy and before any target navigation', async () => {
+    const view = new BrowserViewModel({ id: 21 })
+    const { handlers } = rig([view])
+    const cleaned = `${DEFAULT_USER_AGENT} Test/1`
+
+    await handlers.claim({ viewId: 21, owner: 'owner-ua', partition: PARTITION, userAgent: cleaned })
+
+    expect(view.userAgent).toBe(cleaned)
+    expect(view.calls).toEqual(['policy', `userAgent:${cleaned}`])
+    expect(await handlers.defaultUserAgent()).toEqual({ userAgent: DEFAULT_USER_AGENT })
+  })
+
+  test('a null user agent leaves the engine default untouched', async () => {
+    const view = new BrowserViewModel({ id: 22 })
+    const { handlers } = rig([view])
+
+    await handlers.claim({ viewId: 22, owner: 'owner-native', partition: PARTITION, userAgent: null })
+
+    expect(view.userAgent).toBeNull()
+    expect(view.calls).toEqual(['policy'])
+  })
+
+  test('a host that cannot override the user agent fails the claim instead of pretending', async () => {
+    const view = new BrowserViewModel({ id: 23 })
+    view.userAgentSupported = false
+    const { handlers } = rig([view])
+
+    await expect(handlers.claim({ viewId: 23, owner: 'owner-ua', partition: PARTITION, userAgent: DEFAULT_USER_AGENT }))
+      .rejects.toThrow('native browser user agent override is unavailable on this platform')
+    await expect(handlers.setZoom({ viewId: 23, owner: 'owner-ua', level: 0 })).rejects.toBeInstanceOf(Error)
+  })
+
+  test('a user agent with header-breaking characters is rejected before touching the view', async () => {
+    const view = new BrowserViewModel({ id: 24 })
+    const { handlers } = rig([view])
+
+    await expect(handlers.claim({ viewId: 24, owner: 'owner-ua', partition: PARTITION, userAgent: 'UA\r\nX-Injected: 1' }))
+      .rejects.toThrow('invalid native browser user agent')
+    expect(view.calls).toEqual([])
   })
 })

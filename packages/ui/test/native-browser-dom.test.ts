@@ -54,30 +54,34 @@ beforeAll(async () => {
 })
 afterAll(() => GlobalRegistrator.unregister())
 
-async function mountGuest(claimGate?: Promise<void>) {
+async function mountGuest(claimGate?: Promise<void>, userAgent?: string) {
+  const claims: Array<{ userAgent: string | null }> = []
   const element = document.createElement('div')
   document.body.append(element)
   const mounted = Promise.withResolvers<GuestView>()
   const released = Promise.withResolvers<void>()
   announceGuest = mounted.resolve
   const capability = createNativeBrowserCapability(createElectrobunNativeBrowserAdapter({
-    async claimNativeBrowserView() {
+    async claimNativeBrowserView(params) {
+      claims.push({ userAgent: params.userAgent })
       if (claimGate) await claimGate
       return { zoomFactor: 1 }
     },
+    async nativeBrowserDefaultUserAgent() { return { userAgent: 'Mozilla/5.0 (Macintosh) AppleWebKit/605.1.15 (KHTML, like Gecko)' } },
     async setNativeBrowserZoom({ level }) { return { zoomFactor: Math.pow(1.2, level) } },
     async releaseNativeBrowserView() { released.resolve(); return { released: true } }
   }))
   const handle = capability.mount(element, {
     id: crypto.randomUUID(), url: 'about:blank', zoom: 0,
-    partition: `persist:quirky-browser-profile_${crypto.randomUUID().replaceAll('-', '')}`, onState() {}
+    partition: `persist:quirky-browser-profile_${crypto.randomUUID().replaceAll('-', '')}`, onState() {},
+    ...(userAgent === undefined ? {} : { userAgent })
   })
   const guest = await mounted.promise
   const preload = guest?.getAttribute('preload')
   if (!guest || !preload) throw new Error('native adapter did not attach its real guest program')
   ;(window as Window & { __electrobunSendToHost?: (detail: unknown) => void }).__electrobunSendToHost = (detail) => guest.emitState(detail)
   window.eval(preload)
-  return { handle, guest, async cleanup() { handle.dispose(); await released.promise; element.remove() } }
+  return { handle, guest, claims, capability, async cleanup() { handle.dispose(); await released.promise; element.remove() } }
 }
 
 test('finding text does not replace framework-owned nodes or break a later page update', async () => {
@@ -273,3 +277,22 @@ test('native evaluation times out when guest work never settles', async () => {
     await guest.cleanup()
   }
 }, 8000)
+
+test('the trusted claim carries the requested user agent, or null to keep the engine default', async () => {
+  const cleaned = 'Mozilla/5.0 (Macintosh) AppleWebKit/605.1.15 (KHTML, like Gecko)'
+  const withAgent = await mountGuest(undefined, cleaned)
+  try {
+    await withAgent.handle.request({ action: 'zoom', level: 0 })
+    expect(withAgent.claims).toEqual([{ userAgent: cleaned }])
+    expect(await withAgent.capability.defaultUserAgent()).toBe(cleaned)
+  } finally {
+    await withAgent.cleanup()
+  }
+  const engineDefault = await mountGuest()
+  try {
+    await engineDefault.handle.request({ action: 'zoom', level: 0 })
+    expect(engineDefault.claims).toEqual([{ userAgent: null }])
+  } finally {
+    await engineDefault.cleanup()
+  }
+})
