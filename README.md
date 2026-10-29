@@ -43,7 +43,8 @@ document and tab identity, with revision-guarded edits and saves. Markdown tabs 
 when the optional Browser plugin is absent or disabled.
 
 **Browser (Chrome Watch)** is explicit opt-in, with a connection-owned stream and typed controls;
-selecting an existing Native tab never converts it silently. Interactive native chat, dictation,
+selecting an existing Native tab never converts it silently. Watch accepts typed character/key
+events with optional key codes and up to 64 KiB of UTF-8 text. Interactive native chat, dictation,
 and Native browser mirroring still need their recorded architecture or host prerequisites.
 Signed distribution is tracked separately. Actual camera, secure-store,
 WebView and keyboard checks remain in the [base native handoff](docs/loop/native/sb-mobile-app.json)

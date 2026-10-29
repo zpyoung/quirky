@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import { RpcErrorCode, type MobileBrowserFrame, type MobileMarkdownDocument, type MobileWorkspaceTab, type PluginCaller, type PluginContext, type QuirkyEvent } from '@quirky/protocol'
+import { RpcErrorCode, type MobileBrowserFrame, type MobileMarkdownDocument, type MobileWorkspaceTab, type PluginCaller, type PluginContext, type QuirkyEvent, validMobileBrowserParams } from '@quirky/protocol'
 
 const MAX_MARKDOWN_BYTES = 64 * 1024
 const MAX_FRAME_BASE64_BYTES = 512 * 1024
@@ -89,7 +89,7 @@ function safeTitle(value: string, fallback = 'Untitled'): string {
 function unavailableMethod(error: unknown, pluginId: string, method: string): boolean {
   const record = objectValue(error)
   const message = error instanceof Error ? error.message : ''
-  if (record?.code === RpcErrorCode.NotFound && message.includes(`no contribution ${pluginId}/${method} is in effect`)) return true
+  if (record?.code === RpcErrorCode.NotFound && message === `no contribution method:${pluginId}/${method} is in effect`) return true
   if (record?.code === RpcErrorCode.MethodNotFound && message === `unknown method: ${pluginId}/${method}`) return true
   return record?.code === RpcErrorCode.Conflict && (message === `${pluginId} is disabled` || message === `${pluginId} is invalid`)
 }
@@ -101,7 +101,7 @@ function staleWatchLease(error: unknown): boolean {
 function expectedShutdownProviderLoss(error: unknown): boolean {
   const record = objectValue(error)
   const message = error instanceof Error ? error.message : ''
-  return (record?.code === RpcErrorCode.NotFound && message.includes('no contribution quirky.browser/')) ||
+  return (record?.code === RpcErrorCode.NotFound && /^no contribution method:quirky\.browser\/[^\s]+ is in effect$/.test(message)) ||
     (record?.code === RpcErrorCode.Conflict && message === 'the plugin host is stopped') ||
     message === 'browser pane service is shutting down' ||
     message === 'browser plugin is shutting down'
@@ -737,38 +737,24 @@ export function registerMobileSessionTabs(context: PluginContext): () => Promise
   }
 
   const browserWatchInput = async (params: Record<string, unknown>, caller: PluginCaller): Promise<{ sent: boolean }> => {
-    const kind = params.kind
-    if (kind !== 'mouse' && kind !== 'key' && kind !== 'text' && kind !== 'wheel') throw context.error('invalid-params', 'kind must be mouse, key, text, or wheel.')
-    if (kind === 'text' && (typeof params.text !== 'string' || Buffer.byteLength(params.text, 'utf8') > 4096)) {
-      throw context.error('invalid-params', 'text input must be at most 4 KiB of UTF-8.')
-    }
-    if (kind === 'mouse' && (typeof params.x !== 'number' || !Number.isFinite(params.x) || params.x < 0 ||
-      typeof params.y !== 'number' || !Number.isFinite(params.y) || params.y < 0 ||
-      (params.type !== 'mousePressed' && params.type !== 'mouseReleased' && params.type !== 'mouseMoved'))) {
-      throw context.error('invalid-params', 'mouse input requires a typed event and finite non-negative coordinates.')
-    }
-    if (kind === 'key' && (params.type !== 'keyDown' && params.type !== 'keyUp' ||
-      typeof params.key !== 'string' || params.key.length > 64 || typeof params.code !== 'string' || params.code.length > 64)) {
-      throw context.error('invalid-params', 'key input requires a typed keyDown/keyUp event and bounded key/code values.')
-    }
-    if (kind === 'wheel' && (typeof params.deltaX !== 'number' || !Number.isFinite(params.deltaX) || Math.abs(params.deltaX) > 5000 ||
-      typeof params.deltaY !== 'number' || !Number.isFinite(params.deltaY) || Math.abs(params.deltaY) > 5000)) {
-      throw context.error('invalid-params', 'wheel input requires finite deltas within 5,000 CSS pixels.')
+    if (!validMobileBrowserParams('quirky.mobile/browserWatchInput', params)) {
+      throw context.error('invalid-params', 'Browser Watch input is invalid.')
     }
     const { lease } = await findOwnedBrowserLease(params, caller)
     await runLeaseOperation(lease, async () => {
       await context.call('quirky.browser/paneInput', {
-        ...browserParams(lease), kind,
-        ...(typeof params.type === 'string' ? { type: params.type } : {}),
-        ...(typeof params.x === 'number' ? { x: params.x } : {}),
-        ...(typeof params.y === 'number' ? { y: params.y } : {}),
-        ...(typeof params.button === 'string' ? { button: params.button } : {}),
-        ...(typeof params.key === 'string' ? { key: params.key } : {}),
-        ...(typeof params.code === 'string' ? { code: params.code } : {}),
-        ...(typeof params.text === 'string' ? { text: params.text } : {}),
-        ...(typeof params.deltaX === 'number' ? { deltaX: params.deltaX } : {}),
-        ...(typeof params.deltaY === 'number' ? { deltaY: params.deltaY } : {}),
-        ...(Number.isSafeInteger(params.modifiers) ? { modifiers: params.modifiers as number } : {})
+        ...browserParams(lease),
+        kind: params.kind,
+        ...(params.type !== undefined ? { type: params.type } : {}),
+        ...(params.x !== undefined ? { x: params.x } : {}),
+        ...(params.y !== undefined ? { y: params.y } : {}),
+        ...(params.button !== undefined ? { button: params.button } : {}),
+        ...(params.key !== undefined ? { key: params.key } : {}),
+        ...(params.code !== undefined ? { code: params.code } : {}),
+        ...(params.text !== undefined ? { text: params.text } : {}),
+        ...(params.deltaX !== undefined ? { deltaX: params.deltaX } : {}),
+        ...(params.deltaY !== undefined ? { deltaY: params.deltaY } : {}),
+        ...(params.modifiers !== undefined ? { modifiers: params.modifiers } : {})
       })
     })
     return { sent: true }

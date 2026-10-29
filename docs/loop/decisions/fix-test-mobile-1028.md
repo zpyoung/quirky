@@ -132,5 +132,27 @@
 - **Revisit if:** merge-result typecheck, existing repair owners or native evidence contradicts these results
 - **Source:** assumed — autonomous; deferred: platform for native phone behavior only
 
+## D13: Adjudicate final static Watch contract findings as one bounded fix batch
+- **Question:** Does the separate plugin validator's non-clean static result identify real consumer defects?
+- **Options:** ignore unchanged adjacent code; narrow valid advertised inputs; align the adapter with the existing shared public contract
+- **Chose:** accept V1 (typed Watch input mismatch, effective medium) and V2 (missing method: contribution identity, effective low). Reuse the existing implementer for one fix batch with real Watch regressions authored first, then canonical red/green. Preserve exact connection/lease/frame authorization and all public bounds; no new API or grants.
+- **Why:** source inspection confirms shared admission and Browser accept optional key code, char, up to64KiB text and finite wheel deltas, while the Mobile adapter independently rejects them. Actual host contribution loss includes method: but the classifier omits it. These are existing advertised-contract seams, not new features. The prior formal PASS describes only its fixed pre-batch artifact; it is not relabeled as review of later code.
+- **Evidence:** MobileStructureFinal static findings; protocol mobile-browser.ts53–74; Mobile session-tabs.ts739–756 and89–106; Browser driver.ts605–657; daemon host.ts246–253/dispatch.ts184. V1 runtime regression and final fix evidence follow below; V2's specific activation-race interleaving is not yet exercised.
+- **Reversibility:** easy
+- **Confidence:** high for source mismatches, runtime proof pending
+- **Revisit if:** canonical regressions contradict the shared producer vocabulary
+- **Source:** assumed — autonomous
+
+## D14: Close the accepted batch with real red/green, consumer and frame evidence
+- **Question:** What closes V1/V2 after the original formal review snapshot?
+- **Options:** relabel the earlier PASS; add another discovery campaign; run the required post-batch gates and bounded finding closure
+- **Chose:** shared validator reuse removes the conflicting input restrictions without new grants; exact method:-prefixed contribution matching replaces the broken identity. The real Watch regression first fails initial/retry on optional-code input, then passes in the complete post-batch suite. Static closure reports both findings closed; no new discovery or second formal review.
+- **Why:** the full canonical Mobile/apps-mobile/scripts/workspace-flow/Git-merge gate passes55remote+2macOS files in74.77s, flaky[]. Full UIlint/root/mobile/prepared-desktop typecheck passes45.41s. Independent actual daemon/owned Chromium1148 smoke passes optional-code keys, exact4097-byte value, char insertion, over64KiB rejection and foreign-connection rejection. After frame ACK a fresh bounded JPEG visibly contains typed text; the parent inspected it. Explicit Watch stop and awaited cleanup remove both private homes, exit0/4.85s.
+- **Evidence:** bg11 red exit1/13.65s; bg12 post-batch57files pass; bg13 typecheck exit0; actual smoke4.74s plus fresh-paint extension4.85s; mobile-repair-evidence/watch-input.jpg and final-proof.json beside notes; MobileStructureFinal bounded closure on session-tabs.ts89–106,432–444,739–762. Original review traces remain pre-batch; post-batch delta retained separately.
+- **Reversibility:** easy
+- **Confidence:** high for real exercised Watch/authority/Markdown/consumer paths; source-only for the specific NotFound activation-race interleaving
+- **Revisit if:** a genuine provider activation race contradicts the exact producer identity or canonical land reports a concrete source/type failure
+- **Source:** assumed — autonomous
+
 ## Progress
-Ready for canonical land after final static plugin validation returns. All3implementers finished; source/dependency/scope repairs and generated-output lint classification are complete. Sole roadmap catch-up read/reconciled Ask and Settings logs; final Mobile/scripts/workspace-flow/Git gate passes34remote+1macOS files/no flakes, final lint-regression+full typecheck passes, current actual API/encrypted smoke passes with owned cleanup. Gemini standard promote/refute gatePASS has no findings; raw review evidence retained beside lane notes. No owned process/background check remains except the read-only static validator. Next: commit remaining tests/docs, detach, canonical queue land and await result; remove only owned scratch after success. Separate Hosting/Tasks/Reviews defects stay with named queue owners.
+Ready for canonical land. All implementers, static validator/closure, tests, compiler and actual smoke processes have returned; no owned daemon/Chrome/PTY/service remains. One bounded fix batch closes both final static findings, with exact pre-review/post-batch qualification retained. Current full Mobile/apps-mobile/scripts/workspace/Git consumers pass55remote+2macOS files/no flakes; full typecheck passes45.41s; actual Watch fresh-frame smoke passes4.85s and private homes removed. Sole roadmap catch-up and incoming decision reads complete. Next: commit source/tests/README/logs, detach, canonical land and await actual merge-result gate; remove owned scratch after success. Separate Hosting/Tasks/Reviews repairs remain named, not a whole-repository pass claim.
