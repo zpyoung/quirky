@@ -1052,6 +1052,7 @@ files, not this one.
 | easy | medium | [m2-ask-parity D26](decisions/m2-ask-parity.md) | The suppression hook reads the current configuration, even for a resume | assumed — autonomous |
 | easy | medium | [m2-ask-parity D32](decisions/m2-ask-parity.md) | Patterns are screened more strictly than Orca does | assumed — autonomous |
 | easy | medium | [m6-orchestration-ui D13](decisions/m6-orchestration-ui.md) | Accept the bounded three-lens review without overstating full-context coverage | assumed — autonomous |
+| easy | medium (bounded, qualified review; not a clean independent review claim) | [fix-test-packages-cli-1028 D8](decisions/fix-test-packages-cli-1028.md) | Finish failed review stages without treating malformed output as a verdict | assumed — autonomous |
 | easy | medium | [m1-launch-settings D10](decisions/m1-launch-settings.md) | A model ID the catalog doesn't list is accepted when the agent declares options for unknown models or lists no models at all | assumed — autonomous |
 | easy | medium | [m1-launch-settings D17](decisions/m1-launch-settings.md) | Model discovery and retirement wait for the first item that saves picks | assumed — autonomous |
 | easy | medium | [m1-launch-settings D19](decisions/m1-launch-settings.md) | The catalog yields structured options, and `quirky.structured/create` uses them | assumed — autonomous |
@@ -2859,6 +2860,14 @@ files, not this one.
 | easy (repeat capability assessment after a supported sdk update) | high for the inspected public surface | [sa-browser-pane-native-events D5](decisions/sa-browser-pane-native-events.md) | The selected public SDK still lacks the required response contracts | assumed — autonomous |
 | easy (resume preserved blocked branch after prerequisite changes) | high | [sa-browser-pane-native-events D6](decisions/sa-browser-pane-native-events.md) | Block the core item rather than ship another deferral or forbidden replacement | locked by docs/loop/LOOP.md and docs/loop/decisions/sa-browser-pane.md D5 |
 | easy (resume normal implementation after prerequisite is supported) | high | [sa-browser-pane-native-events D7](decisions/sa-browser-pane-native-events.md) | Use the unattended build-first workflow, with no implementation or completion claims | locked by docs/loop/LOOP.md |
+| easy (tests and bounded cli behavior) | high | [fix-test-packages-cli-1028 D1](decisions/fix-test-packages-cli-1028.md) | Repair the named CLI boundary, not unrelated plugin failures | locked by docs/loop/LOOP.md |
+| easy | high | [fix-test-packages-cli-1028 D2](decisions/fix-test-packages-cli-1028.md) | Use OpenAI implementers and a read-only Gemini review | assumed — autonomous |
+| easy | high | [fix-test-packages-cli-1028 D3](decisions/fix-test-packages-cli-1028.md) | Preserve inherited untracked files and use the canonical remote suite | assumed — autonomous |
+| easy | high | [fix-test-packages-cli-1028 D4](decisions/fix-test-packages-cli-1028.md) | Consume the ownership provider repair from its existing owner | locked by docs/loop/decisions/fix-test-repo-1028.md D3 |
+| easy | high | [fix-test-packages-cli-1028 D5](decisions/fix-test-packages-cli-1028.md) | Delete incidental mirrors while retaining behavioral transitions | assumed — autonomous |
+| easy | high for observed paths; no full-repository claim | [fix-test-packages-cli-1028 D6](decisions/fix-test-packages-cli-1028.md) | Preserve private runtime proof and qualify the configured retry | assumed — autonomous |
+| easy | high | [fix-test-packages-cli-1028 D7](decisions/fix-test-packages-cli-1028.md) | The single roadmap catch-up preserves incoming ownership | assumed — autonomous |
+| easy | high for the named exercised paths | [fix-test-packages-cli-1028 D9](decisions/fix-test-packages-cli-1028.md) | Claim only the exercised CLI surface | assumed — autonomous |
 | easy | high | [fix-flaky-daemon-pty-client D1](decisions/fix-flaky-daemon-pty-client.md) | Diagnose retirement before changing the shutdown-count assertion | assumed — autonomous |
 | easy | high | [fix-flaky-daemon-pty-client D3](decisions/fix-flaky-daemon-pty-client.md) | Use Gemini for the final cross-family review because Claude reviewers are unavailable | assumed — autonomous |
 | easy | high | [fix-flaky-daemon-pty-client D4](decisions/fix-flaky-daemon-pty-client.md) | Deduplicate retirement by authenticated incarnation within each establishment attempt | assumed — autonomous |
