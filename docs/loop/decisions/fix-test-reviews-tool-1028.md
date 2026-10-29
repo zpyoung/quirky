@@ -44,5 +44,49 @@
 - **Revisit if:** the current canonical run exposes another actual transition defect
 - **Source:** assumed — autonomous
 
+## D5: Reject a rationale-contaminated reviewer dispatch and isolate its replacement
+- **Question:** Which cross-family review is actually independent of the author's reasoning?
+- **Options:** accept the first empty reply despite its trace; hide the scope breach; discard it and stage source-only context without filesystem tools
+- **Chose:** preferred Opus unavailable (exit5); verified Gemini fallback (exit0). Discard the first promote reply because its trace reads this decision log despite an explicit instruction not to. Preserve its raw trace, then restart the same fixed-bar review with the immutable two-file source patch, complete source context and no tools in a scratch cwd. Run a fresh-context refute and deterministic gate; do not claim the discarded empty reply as clearance.
+- **Why:** cross-family alone is insufficient once a reviewer reads the author's rationale. No-tools dispatch enforces the intended boundary; bounded source context keeps the small lifecycle patch reviewable without repository exploration.
+- **Evidence:** actual bg6 promote trace includes read docs/loop/decisions/fix-test-reviews-tool-1028.md; invalid-rationale-read evidence; resolve run86371b9819fa8d6b and source-only artifactc1c990cf3e028593489e21b06f2d6dfd76e82e82d5039bb225747bd18a294140
+- **Reversibility:** easy
+- **Confidence:** high for trace and enforced tool boundary; replacement review pending
+- **Revisit if:** the replacement cannot adjudicate an actual claim from supplied source
+- **Source:** assumed — autonomous
+
+## D6: Report bounded review clearance with its noise, not exhaustive assurance
+- **Question:** What did the valid source-only standard review actually establish?
+- **Options:** call it a clean universal review; apply an invented active-slot field; retain the bounded verdict and suppression record
+- **Chose:** Gemini promote156.53seconds returned one HIGH visibility-contract claim; fresh-context refute14.02seconds rejected it because the cited visibility lines are outside the patch. Deterministic claims/merge/gate/manifest all exit0: PASS, full cross-family independence,0blocking/0advisory/0contested,1suppressed,0limitations/0questions/0excluded/0unreviewed. No accepted findings or fix batch.
+- **Why:** the only proposed defect was outside the two-file diff and its recommended tools.active field does not exist: the current public UiToolLayout explicitly defines open. This is a noisy1of1-suppressed review, not evidence of exhaustive correctness. Do not change the working visibility contract to satisfy it.
+- **Evidence:** review run86371b9819fa8d6b; actual promote/refute JSON and manifest; packages/protocol/src/tool-slots.ts:19–25; current prepass18files pass/no flakes57.979seconds and full typecheck31.018seconds
+- **Reversibility:** easy
+- **Confidence:** high for bounded verdict and public schema; no whole-repository assurance
+- **Revisit if:** an actual changed-seam regression is observed
+- **Source:** assumed — autonomous
+
+## D7: Prove the loaded transition through actual APIs and the built web surface
+- **Question:** Which runtime evidence proves the repair without real account state or native claims?
+- **Options:** tests alone; fake rendered data; actual private daemon/upstream fixture, public slot actions and built desktop page
+- **Chose:** independent mounted production ChecksPanel smoke drives real ui.tool.open/move/replacement/reopen/close and Reviews/Hosting RPCs. Exit0/3.98seconds returns PR12, accepted candidate counts1,1,1,0,1,0 and exactly1checksRefresh. Actual built desktop web goals checks-load and checks-reopen both pass: three guarded visible-control clicks return OBSERVED, real PR12/failing-build row renders, minimize removes it and reopen restores it. Final direct browser inspection also shows PR12 with0pageerrors. All browser/daemon cleanup awaited.
+- **Why:** the first scratch scripts incorrectly assumed fresh layout.panel was null; normalize default slots using public ui.tool.close, not a product change. First browser fixture also omitted actual Browser settings provider and rendered blank with getSetting error; record that run as blocked, close its retained owned browser and rerun with the same actual Browser/Editor providers used by bootUi. Corrected run has0findings/0consoleerrors/0networkfailures/0testoverrides and kept_open[]/cleanup_errors[]. The upstream gh fixture is stateful test data; no hosting write or real profile is touched.
+- **Evidence:** runtime-smoke.tsx; corrected likeuser run20261029T020346-2bba report.json and obs2–5 PNGs; earlier incomplete fixture run20261029T020118-07a4 retained separately; actual build exit0/18.94seconds; final browser screenshot and error receipt; both successful daemon services exit0
+- **Reversibility:** easy
+- **Confidence:** high for exercised loading/loaded and slot lifecycle; no real-provider/network/native certification
+- **Revisit if:** a real provider or nightly native check reports a failure in this lifecycle
+- **Source:** assumed — autonomous; deferred: platform for native effects (unchanged by this patch)
+
+## D8: Close the static plugin boundary and owned-resource inventory
+- **Question:** Does moving the menu memo require packaging, API or native-handoff changes?
+- **Options:** change unrelated contracts; validate the unchanged boundary and preserve existing handoffs
+- **Chose:** static plugin validator returns PASS/0blocking at the changed lifecycle seam, without executing checks. No manifest, API, CLI, import, dependency or native-scenario edits are needed. Preserve built-in public API ownership; all5owned fixture roots and runtime URL/token files are confirmed absent, both successful services exit0, all browser sessions are closed.
+- **Why:** the same declared Checks mount and checksUnlink method/CLI remain wired to unchanged handlers. Only hook order and fixture scheduling change. Real smoke and UI evidence already exercise their consumer-visible transition.
+- **Evidence:** ValidateReviewsBoundary report; ChecksPanel.tsx:1022–1025,1131; actual cleanup assertion exit0; corrected UI end kept_open[]/cleanup_errors[]; runtime smoke and browser reports retained in lane notes evidence archive
+- **Reversibility:** easy
+- **Confidence:** high for changed seam and observed cleanup
+- **Revisit if:** canonical land reports a concrete integration failure
+- **Source:** assumed — autonomous
+
 ## Progress
-Step2 fixture repair exposed concrete production Hook-order failure. Existing PR menu useMemo moved before all early returns without changing handlers/dependencies. Second canonical exact-file verification running. No API changes. One task implementer prepares an independent actual daemon+mounted Checks smoke in /tmp/quirky-checks-l11.5hHALQ; all other scratch owned there. Opus unavailable exit5; Gemini fallback available exit0. Next finish runtime/suite/typecheck evidence, one bounded cross-family review, sole catch-up and canonical land.
+Ready for canonical land. Source a1488767 unchanged since current18file Reviews+scripts/typecheck/build checks, actual API/React smoke and2passing actual web goals. Sole planned catch-up changed only queue state; no incoming decisions. Bounded standard review PASS with1suppressed noisy claim, static plugin validation PASS/0blocking; no accepted findings or fix batch. Every implementer/scout/validator/reviewer/check/runtime process returned; all5owned fixture roots and URL/token files confirmed removed, browsers closed. Nonsecret review/proof evidence archived beside lane notes. Next commit this evidence, detach, canonical queue land and await its authoritative result; remove only owned scratch after success and end exactly this item.
