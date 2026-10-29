@@ -66,5 +66,16 @@
 - **Revisit if:** Actual API/CLI/UI placement proof identifies an unsafe ambiguity.
 - **Source:** assumed — autonomous
 
+## D7: Establish missing-feature RED before the three source implementations
+- **Question:** Can inherited owner transport tests stand in for acceptance of these missing feature compositions?
+- **Options:** Infer coverage from dependencies; write forwarding/catalog mirrors; exercise new flows against real registered owner daemons first.
+- **Chose:** Tests-first component drafts, parent-only canonical remote runner, then explicit source GO. Accounts two files fail on absent ownerCall and absent owner-scoped UI loads/requests. Vault fails its production contributor test (one local duplicate-provider record instead of three host-qualified records). Handoff corrected API test fails on absent remote prepared candidate after real pairing/registration. None is called a passing gate. Renderer forwarding/catalog-copy assertions are removed rather than re-pinned; actual generated CLI must prove dispatch.
+- **Why:** Real setup reached the missing behavior. Vault's second test initially hit a reserved QUIRKY_ fixture env name; worker corrects that precondition without weakening redaction. Handoff's first test had an unescaped apostrophe; parent corrected exactly that syntax and reran to obtain the actual missing-feature RED. Existing runner isolation retry repeats failures and is retained, not hidden.
+- **Evidence:** parent suite commands on component Vault1file (exit1/18.43s), Accounts2files (exit1/30.71s), initial Handoff2files (exit1/15.50s), corrected Handoff1file (exit1/13.77s), all remote quirkyci@34.122.38.64, zero configured flaky passes. Raw tool outputs identify missing source behavior and fixture failures.
+- **Reversibility:** easy
+- **Confidence:** high for exercised RED; no implementation pass claimed
+- **Revisit if:** Implemented source does not pass the composed consumer acceptance or actual real-PTY smoke.
+- **Source:** assumed — autonomous; locked by operator remote-test placement and test-before-implementation workflow
+
 ## Progress
-Claimed exactly this item on lane7; created build/m7-session-extras-owner-host-flows from canonical build/roadmap. Both dependencies ready. Read all three feature-doc flows, mapped current APIs and verified reviewer availability. Next: finish sibling specs/shared contracts, combined spec review, three disjoint implementers, composed runtime/suite/typecheck/build/UI evidence, single catch-up and bounded final review, then canonical land.
+Specs/contracts committed944d7da5 and clarifiedf44e32d9; actual combined Codex review and28reference dispositions in D5. Three disjoint plugin implementers now build after observed missing-feature RED, without midflight checks/commits. Parent prepared an untracked throwaway actual child-daemon/real-PTY/CLI/production-web scenario; it has not run. Web doctor reports playwright-cli0.1.22 ready. Next: source barrier, integration and composed acceptance/types/build/smoke, sole canonical catch-up/full incoming decisions, bounded cross-family final review/fix/check, documentation and canonical land.
