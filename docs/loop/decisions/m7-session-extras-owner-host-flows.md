@@ -44,5 +44,27 @@
 - **Revisit if:** An authorized product ruling changes scope.
 - **Source:** locked by docs/roadmap.md and docs/architecture.md; deferred: platform
 
+## D5: Adjudicate the actual spec gate rather than call its models a clean gate
+- **Question:** Did the required Codex combined-spec review establish implementable contracts, and what did its failed mechanical gate mean?
+- **Options:** Label two empty model arrays PASS; discard the prepass; retain the failed gate and correct/adjudicate every reference.
+- **Chose:** Actual standard no-tools Codex promote and fresh-refute calls returned valid empty arrays with no retries. Mechanical gate is NEEDS_FIXES with28 MEDIUM reference findings, zero suppressed. Accept F1–F10/F13–F25 as ambiguous package-relative pointers and expand them to full repository paths; F11/F12 are explicitly planned new test files, not missing implementation prerequisites. F26 is a contribution ID, F27 an RPC method and F28 a tagged shell command, not filesystem paths. Clarify those forms without changing the command. No semantic model defect was raised; do not relabel the recorded gate PASS.
+- **Why:** The archived combined scratch bundle contained the exact committed specs but no repository .git; section coverage passed while symbol checking was skipped/tree_hash null. Both actual model calls completed, but same-family independence is reduced and the manifest records medium thinking ceiling despite high dispatch override. This is bounded specification review, not code/runtime assurance.
+- **Evidence:** /tmp/quirky-l7-owner-spec-wiAR1U/{gate.json,manifest.json,prepass-bundle.json,promote.attempt1.stdout,refute.attempt1.stdout}; raw initial range could-not-run attempt retained. Parent read all28 exact findings.
+- **Reversibility:** easy
+- **Confidence:** high for observed outputs and pointer dispositions; bounded for semantic coverage
+- **Revisit if:** Implementers cannot resolve an expanded pointer or a concrete shared contract remains ambiguous.
+- **Source:** assumed — autonomous; locked by LOOP combined-spec review and no fabricated output
+
+## D6: Fix shared operation shapes before source writers
+- **Question:** Which consumer-visible fields were underspecified when tests were being written?
+- **Options:** Let feature writers invent incompatible variants; settle the minimal shared fields once.
+- **Chose:** Vault remote resume uses remote:OwnerSessionWorkspaceRef, exclusive with local worktree/group; target-side ownerResume accepts owner-local id plus exact worktree/expectedInstanceId/fork. Handoff prepared candidates use id=mirrorId with .remote binding; public targetAgents({target}) returns the existing listAgents result, forwarding only to target-side ownerAgents({worktree,expectedInstanceId}) for remote detection. prepare remains source-only. Accounts uses its own getLayout/onLayout and retains last workspace owner across nonworkspace Settings navigation.
+- **Why:** These are missing parameter/consumer shapes inside approved scenarios, not new product scope. Committing them before implementation prevents parallel drift. Each feature retains its local API and existing delivery/account authority.
+- **Evidence:** implementer clarification requests; UiPluginContext getLayout/onLayout in packages/protocol/src/ui.ts328–330; Handoff source.ts148–150 and service.ts354–358; amended tech Contracts & interfaces.
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** Actual API/CLI/UI placement proof identifies an unsafe ambiguity.
+- **Source:** assumed — autonomous
+
 ## Progress
 Claimed exactly this item on lane7; created build/m7-session-extras-owner-host-flows from canonical build/roadmap. Both dependencies ready. Read all three feature-doc flows, mapped current APIs and verified reviewer availability. Next: finish sibling specs/shared contracts, combined spec review, three disjoint implementers, composed runtime/suite/typecheck/build/UI evidence, single catch-up and bounded final review, then canonical land.
