@@ -43,6 +43,9 @@ jobs:
 
       - name: Typecheck
         run: bun run typecheck
+        env:
+          # the root project overflows tsc's default heap on the 7 GB runner
+          NODE_OPTIONS: --max-old-space-size=6144
 
       - name: Build
         run: bun run build
