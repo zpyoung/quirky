@@ -871,12 +871,12 @@ test('SC-03/05: loose hierarchy keeps child disclosures while delete confirmatio
 
   expect(sectionForGroup('Team')).toBeDefined()
   expect(sectionForGroup('Child')).toBeDefined()
-  expect(card('feature', sectionForGroup('Team')!)?.closest('section')).toBe(sectionForGroup('Team'))
-  expect(card('independent', sectionForGroup('Child')!)?.closest('section')).toBe(sectionForGroup('Child'))
-  expect(card('child', sectionForRepo('api')!)?.closest('section')).toBe(sectionForRepo('api'))
+  expect(card('feature', sectionForGroup('Team')!)?.closest('section')).toBe(sectionForGroup('Team')!)
+  expect(card('independent', sectionForGroup('Child')!)?.closest('section')).toBe(sectionForGroup('Child')!)
+  expect(card('child', sectionForRepo('api')!)?.closest('section')).toBe(sectionForRepo('api')!)
   expect(childChip('feature')).toBeNull()
   expect(sectionForRepo('empty')).toBeDefined()
-  expect(card('lost-group', sectionForRepo('web')!)?.closest('section')).toBe(sectionForRepo('web'))
+  expect(card('lost-group', sectionForRepo('web')!)?.closest('section')).toBe(sectionForRepo('web')!)
   expect(h.world.worktrees.find((item) => item.id === 'w-lost')?.projectGroupId).toBe('g-missing')
   const notesSection = sectionForRepo('notes')!
   const featureRow = card('feature', sectionForGroup('Team')!)!
@@ -929,7 +929,7 @@ test('SC-05: the group action button is the sole menu trigger and rename selects
 
   const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!
   const input = fieldFor('Group name', dialog)
-  expect(input).not.toBeNull()
+  if (!input) throw new Error('rename group input was not rendered')
   expect(document.activeElement).toBe(input)
   expect(input!.selectionStart).toBe(0)
   expect(input!.selectionEnd).toBe(input!.value.length)
@@ -967,8 +967,8 @@ test('SC-05: cancelling group deletion preserves its subtree; confirming release
   expect(h.world.worktrees.find((item) => item.id === 'w-feature')?.projectGroupId).toBeNull()
   expect(h.world.worktrees.find((item) => item.id === 'w-independent')?.projectGroupId).toBeNull()
   expect(sectionForGroup('Team')).toBeUndefined()
-  expect(card('feature', sectionForRepo('api')!)?.closest('section')).toBe(sectionForRepo('api'))
-  expect(card('independent', sectionForRepo('api')!)?.closest('section')).toBe(sectionForRepo('api'))
+  expect(card('feature', sectionForRepo('api')!)?.closest('section')).toBe(sectionForRepo('api')!)
+  expect(card('independent', sectionForRepo('api')!)?.closest('section')).toBe(sectionForRepo('api')!)
 })
 
 test('group deletion retries ledger preview failures and sends subtree snapshots', async () => {
@@ -1167,7 +1167,7 @@ test('SC-06: a folder workspace row removes its project group without changing i
   expect(project).toEqual({ ...projectBefore, groupId: null })
   expect(h.world.worktrees.filter((worktree) => worktree.repoId === project.id)).toEqual(worktreesBefore)
   expect(lastReport(h).groups.find((group) => group.id === 'g-team')?.projects.some((item) => item.id === project.id)).toBe(false)
-  expect(card('notes', sectionForRepo('notes')!)?.closest('section')).toBe(sectionForRepo('notes'))
+  expect(card('notes', sectionForRepo('notes')!)?.closest('section')).toBe(sectionForRepo('notes')!)
 })
 
 test('SC-02: loose membership menus move and remove one worktree', async () => {
@@ -1178,13 +1178,13 @@ test('SC-02: loose membership menus move and remove one worktree', async () => {
   await h.click(menuItem('Add worktree to group')!)
   await h.click(menuItem('Release')!)
   expect(h.world.worktrees.find((item) => item.id === 'w-other')?.projectGroupId).toBe('g-release')
-  expect(card('other', sectionForGroup('Release')!)?.closest('section')).toBe(sectionForGroup('Release'))
+  expect(card('other', sectionForGroup('Release')!)?.closest('section')).toBe(sectionForGroup('Release')!)
   expect(sectionForRepo('web')).toBeDefined()
 
   await openCardMenu(h, 'other')
   await h.click(menuItem('Remove worktree from group')!)
   expect(h.world.worktrees.find((item) => item.id === 'w-other')?.projectGroupId).toBeNull()
-  expect(card('other', sectionForRepo('web')!)?.closest('section')).toBe(sectionForRepo('web'))
+  expect(card('other', sectionForRepo('web')!)?.closest('section')).toBe(sectionForRepo('web')!)
 
   const pinned = [...host.querySelectorAll<HTMLElement>('section')].find((section) => sectionHeading(section) === 'Pinned')
   const pinnedFeature = pinned ? card('feature', pinned) : undefined
@@ -1192,7 +1192,7 @@ test('SC-02: loose membership menus move and remove one worktree', async () => {
   await h.click(buttonNamed(pinnedFeature!, 'Actions for feature')!)
   await h.click(menuItem('Remove worktree from group')!)
   expect(h.world.worktrees.find((item) => item.id === 'w-feature')?.projectGroupId).toBeNull()
-  expect(card('feature', sectionForRepo('api')!)?.closest('section')).toBe(sectionForRepo('api'))
+  expect(card('feature', sectionForRepo('api')!)?.closest('section')).toBe(sectionForRepo('api')!)
 })
 
 test('SC-02/06: a Git worktree with missing group membership stays removable when no groups are available', async () => {
@@ -1212,7 +1212,7 @@ test('SC-02/06: a Git worktree with missing group membership stays removable whe
   expect(lost.kind).toBe('git')
   expect(lost.projectGroupId).toBe('g-missing')
   expect(sectionForRepo('web')).toBeDefined()
-  expect(card('lost-group', sectionForRepo('web')!)?.closest('section')).toBe(sectionForRepo('web'))
+  expect(card('lost-group', sectionForRepo('web')!)?.closest('section')).toBe(sectionForRepo('web')!)
 
   await openCardMenu(h, 'lost-group')
   const remove = menuItem('Remove worktree from group')
@@ -1224,7 +1224,7 @@ test('SC-02/06: a Git worktree with missing group membership stays removable whe
   expect(h.world.worktrees[0]).toBe(lost)
   expect(repo).toEqual(repoBefore)
   expect(h.world.repos[0]).toBe(repo)
-  expect(card('lost-group', sectionForRepo('web')!)?.closest('section')).toBe(sectionForRepo('web'))
+  expect(card('lost-group', sectionForRepo('web')!)?.closest('section')).toBe(sectionForRepo('web')!)
 })
 
 test('SC-02: moving a Git project moves every repo row without changing loose worktree membership', async () => {
@@ -1412,7 +1412,7 @@ test('SC-04: membership dragging is disabled outside Project grouping', async ()
     membership: item.projectGroupId,
     writes: h.calls.filter((call) => call.method === 'quirky.worktree/set' && call.params.worktree === item.id)
   }).toEqual({ preview: null, membership: null, writes: [] })
-  expect(card('other', sectionForRepo('web')!)?.closest('section')).toBe(sectionForRepo('web'))
+  expect(card('other', sectionForRepo('web')!)?.closest('section')).toBe(sectionForRepo('web')!)
 })
 
 test('SC-04: changing away from Project grouping mid-drag clears membership preview and blocks drop', async () => {
