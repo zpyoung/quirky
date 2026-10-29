@@ -620,6 +620,15 @@ test('plain Smart text offers an explicit name choice and branch/name modes reta
   expect(branch.calls.find((call) => call.method === 'quirky.worktree/create')?.params).toMatchObject({ branch: 'feat/local' })
 })
 
+test('Create with plain Smart text uses it as the workspace name, not the suggestion', async () => {
+  const h = mountCreate()
+  await h.ready
+  const dialog = h.element.querySelector('[role="dialog"]')!
+  await setText(labelField<HTMLInputElement>(dialog, 'Name')!, 'qa-scratch')
+  await click(button(dialog, 'Create')!)
+  expect(h.calls.find((call) => call.method === 'quirky.worktree/create')?.params).toMatchObject({ name: 'qa-scratch' })
+})
+
 test('Smart text searches local and remote branches through the public Git API', async () => {
   const refs = [
     { name: 'feat/conflict', kind: 'local' },
