@@ -26,6 +26,8 @@ The application Settings theme picker offers Follow system, Dark and Light. The 
 
 `quirky.terminal/newTab` accepts a shell-only `command`, matching `quirky terminal tab new --command`. Background composition uses `activate:false`; configured default-tab commands retain the existing session exit status. Tab colors accept named presets or safe `#rgb`/`#rrggbb` values through the same API, CLI, persistence and renderer.
 
+Terminal accessories render above the terminal only while they contain content. Empty accessory mounts, including the account switcher on plain shell sessions, stay hidden so they cannot obscure the prompt.
+
 
 ## Mobile Emulator preview
 
