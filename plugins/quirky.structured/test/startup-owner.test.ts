@@ -8,7 +8,7 @@ import type { StructuredRunnerFactory } from '../runner'
 
 isolateGitConfig()
 const globals = globalThis as typeof globalThis & { __QUIRKY_TEST_STRUCTURED_RUNNER__?: StructuredRunnerFactory }
-const BUILTINS = ['quirky.agents', 'quirky.ask', 'quirky.repo', 'quirky.session', 'quirky.structured', 'quirky.worktree']
+const BUILTINS = ['quirky.agents', 'quirky.ask', 'quirky.cli', 'quirky.repo', 'quirky.session', 'quirky.structured', 'quirky.worktree']
 
 test('a startup creator keeps its deferred structured session while a lazy plugin activates', async () => {
   const home = makeTempHome('structured-startup-owner-')

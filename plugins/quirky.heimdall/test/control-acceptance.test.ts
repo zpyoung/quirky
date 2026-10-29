@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
-import { existsSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { RpcError, RpcErrorCode } from '@quirky/protocol'
 import { spawnCli } from '../../../packages/cli/test/fixtures/fake-daemon'
@@ -92,7 +92,25 @@ describe('Heimdall operators through daemon API and real CLI', () => {
   }, 15000)
 
   test('exhausted budget refuses resume until raised, objective cap changes and invalid cap does not mutate', async () => {
-    const id = await enroll('budget', {}, { wallClockActiveMs: 0, turns: 40 })
+    const repositoryPath = join(t.root, 'budget-repository')
+    mkdirSync(repositoryPath)
+    const initialized = Bun.spawnSync(['git', 'init', '-q', '-b', 'main'], {
+      cwd: repositoryPath,
+      env: {
+        PATH: process.env.PATH,
+        HOME: join(t.root, 'user-home'),
+        QUIRKY_HOME: t.h.home,
+        GIT_CONFIG_GLOBAL: '/dev/null',
+        GIT_CONFIG_SYSTEM: '/dev/null',
+        GIT_CONFIG_NOSYSTEM: '1'
+      }
+    })
+    if (initialized.exitCode !== 0) throw new Error(`private repository initialization failed: ${initialized.stderr.toString()}`)
+    const repo = await t.client.callAny('quirky.repo/add', { path: repositoryPath }) as { id: string }
+    const worktrees = await t.client.callAny('quirky.worktree/list', { repo: repo.id }) as { id: string; isMain: boolean }[]
+    const main = worktrees.find(worktree => worktree.isMain)
+    if (!main) throw new Error('private repository has no registered main worktree')
+    const id = await enroll('budget', { repoId: repo.id, worktreeId: main.id }, { wallClockActiveMs: 0, turns: 40 })
     await waitForAsync(async () => (await detail(id)).status?.state === 'parked', 5000)
     expect(await command(id, { kind: 'resume' })).toMatchObject({ kind: 'refused', reason: 'invalid-state' })
     expect((await detail(id)).enrollment).toMatchObject({ enabled: false, budget: { wallClockActiveMs: 0, turns: 40 } })
@@ -377,7 +395,10 @@ describe('Heimdall operators through daemon API and real CLI', () => {
   test('foreign targets and unverifiable workers fail closed through public command API', async () => {
     const id = await enroll('authority')
     const current = await detail(id)
-    expect(await call('command', { target: { watcherId: id, connectionId: 'foreign-host' }, expectedOwner: current.ownerFence, command: { kind: 'pause' } })).toMatchObject({ kind: 'refused', reason: 'owner-unreachable' })
+    const foreign = { watcherId: id, connectionId: 'foreign-host', pairingRevision: 1 }
+    expect(await call('command', { target: { watcherId: id, connectionId: 'foreign-host' }, expectedOwner: current.ownerFence, command: { kind: 'pause' } })).toMatchObject({ kind: 'refused', reason: 'invalid-command' })
+    expect(await call('command', { target: foreign, expectedOwner: current.ownerFence, command: { kind: 'pause' } })).toMatchObject({ kind: 'refused', reason: 'owner-conflict' })
+    expect(await call('command', { target: foreign, expectedIncarnation: 'absent-daemon', expectedOwner: current.ownerFence, command: { kind: 'pause' } })).toMatchObject({ kind: 'refused', reason: 'owner-unreachable' })
     expect(await command(id, { kind: 'stop-worker', identity: { dispatchId: 'not-owned', sessionId: 'unknown', processIncarnation: 'unknown' } })).toMatchObject({ kind: 'refused', reason: 'worker-unverifiable' })
     expect((await detail(id)).enrollment.paused).toBe(false)
   })
