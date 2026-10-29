@@ -79,18 +79,10 @@ async function openBrowserTab(context: UiPluginContext, raw: unknown): Promise<u
 async function controlFocused(context: UiPluginContext, action: 'back' | 'forward' | 'reload' | 'hardReload' | 'zoom', delta?: number): Promise<unknown> {
   const pane = focusedBrowserPane()
   if (!pane) return { ok: false, reason: 'No browser pane is focused.' }
-  if (action !== 'zoom' && action !== 'hardReload') return context.call('quirky.browser/paneControl', { pane, action })
+  if (action !== 'zoom') return context.call('quirky.browser/paneControl', { pane, action })
   const state = await context.call('quirky.browser/paneState', {}) as { tabs?: { id: string; zoom: number; mode: 'native' | 'watch' }[] }
   const current = state.tabs?.find((tab) => tab.id === pane)
   if (!current) return { ok: false, reason: `Browser pane ${pane} is no longer open.` }
-  if (action === 'hardReload') {
-    if (current.mode === 'native') {
-      const reason = 'Hard Reload is unavailable in Native mode; the pinned SDK supports ordinary reload only.'
-      context.toast('Hard Reload unavailable', reason, { kind: 'warning' })
-      return { ok: false, reason }
-    }
-    return context.call('quirky.browser/paneControl', { pane, action })
-  }
   const level = delta === undefined ? 0 : Math.min(5, Math.max(-3, current.zoom + delta))
   return context.call('quirky.browser/paneControl', { pane, action: 'zoom', level })
 }

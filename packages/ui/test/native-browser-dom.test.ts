@@ -9,6 +9,10 @@ type GuestView = HTMLElement & {
   emitEvent(name: string, detail: unknown): void
   onExecute?: (script: string) => void
   lastExecution?: string
+  listeners: Map<string, Set<(event: CustomEvent) => void>>
+  loadURL(url: string): void
+  reloadIgnoringCache?(): Promise<boolean>
+  supportsReloadIgnoringCache?(): Promise<boolean>
 }
 let announceGuest: ((guest: GuestView) => void) | undefined
 let createRoot: (element: HTMLElement) => Root
@@ -273,3 +277,139 @@ test('native evaluation times out when guest work never settles', async () => {
     await guest.cleanup()
   }
 }, 8000)
+
+const CLOSED_URL = 'http://127.0.0.1:9/closed'
+const connectionFailure = (url: string) => ({
+  url, domain: 'NSURLErrorDomain', code: -1004, description: 'Could not connect to the server.'
+})
+
+/** Mounts a guest whose tag reports `support` for cache-bypassing reload, as the patched SDK does. */
+async function mountGuestWithHardReload(support: boolean | 'absent') {
+  const claim = Promise.withResolvers<void>()
+  const guest = await mountGuest(claim.promise)
+  const reloads: string[] = []
+  if (support !== 'absent') {
+    guest.guest.supportsReloadIgnoringCache = async () => support
+    guest.guest.reloadIgnoringCache = async () => {
+      reloads.push('reloadIgnoringCache')
+      return support
+    }
+  }
+  claim.resolve()
+  return { ...guest, reloads }
+}
+
+test('native hard reload bypasses the engine cache through the tag when the webview supports it', async () => {
+  const guest = await mountGuestWithHardReload(true)
+  try {
+    const before = await guest.handle.request({ action: 'zoom', level: 0 })
+    expect(before.hardReloadAvailable).toBe(true)
+    guest.guest.reloadIgnoringCache = async () => {
+      guest.reloads.push('reloadIgnoringCache')
+      queueMicrotask(() => guest.guest.emitEvent('did-navigate', 'about:blank'))
+      return true
+    }
+    const after = await guest.handle.request({ action: 'hardReload' })
+    expect(guest.reloads).toEqual(['reloadIgnoringCache'])
+    expect(after).toMatchObject({ url: 'about:blank', loading: false, error: null, hardReloadAvailable: true })
+  } finally {
+    await guest.cleanup()
+  }
+})
+
+test('native hard reload stays unavailable, never an ordinary reload, when the webview cannot bypass its cache', async () => {
+  for (const support of [false, 'absent'] as const) {
+    const guest = await mountGuestWithHardReload(support)
+    try {
+      const before = await guest.handle.request({ action: 'zoom', level: 0 })
+      expect(before.hardReloadAvailable).toBe(false)
+      await expect(guest.handle.request({ action: 'hardReload' })).rejects.toThrow(/hard reload is unavailable/i)
+      expect(guest.reloads).toEqual([])
+    } finally {
+      await guest.cleanup()
+    }
+  }
+})
+
+test('a native load failure keeps the requested URL, ends loading, and a retry navigation clears it', async () => {
+  const guest = await mountGuest()
+  try {
+    guest.guest.loadURL = (url) => queueMicrotask(() => {
+      guest.guest.emitEvent('will-navigate', JSON.stringify({ url, allowed: true }))
+      guest.guest.emitEvent('load-failed', connectionFailure(url))
+    })
+    const failed = await guest.handle.request({ action: 'navigate', url: CLOSED_URL })
+    expect(failed).toMatchObject({ url: CLOSED_URL, loading: false })
+    expect(failed.error).toBe('Could not connect to the server. (NSURLErrorDomain -1004)')
+
+    guest.guest.loadURL = (url) => queueMicrotask(() => {
+      guest.guest.emitEvent('will-navigate', JSON.stringify({ url, allowed: true }))
+      guest.guest.emitEvent('did-navigate', url)
+    })
+    const retried = await guest.handle.request({ action: 'navigate', url: failed.url })
+    expect(retried).toMatchObject({ url: CLOSED_URL, loading: false, error: null })
+  } finally {
+    await guest.cleanup()
+  }
+})
+
+test('a native failure after a redirect reports the redirect target the engine failed on', async () => {
+  const guest = await mountGuest()
+  const redirected = 'https://redirected.test/landing'
+  try {
+    guest.guest.loadURL = (url) => queueMicrotask(() => {
+      guest.guest.emitEvent('will-navigate', JSON.stringify({ url, allowed: true }))
+      guest.guest.emitEvent('will-navigate', JSON.stringify({ url: redirected, allowed: true }))
+      guest.guest.emitEvent('load-failed', JSON.stringify({
+        url: redirected, domain: 'NSURLErrorDomain', code: -1202, description: 'The certificate for this server is invalid.'
+      }))
+    })
+    const failed = await guest.handle.request({ action: 'navigate', url: 'https://example.test/start' })
+    expect(failed).toMatchObject({ url: redirected, loading: false, error: 'The certificate for this server is invalid. (NSURLErrorDomain -1202)' })
+  } finally {
+    await guest.cleanup()
+  }
+})
+
+test('a late native failure from an earlier navigation cannot replace the current one', async () => {
+  const guest = await mountGuest()
+  const current = 'https://example.test/current'
+  try {
+    guest.guest.loadURL = (url) => queueMicrotask(() => guest.guest.emitEvent('will-navigate', JSON.stringify({ url, allowed: true })))
+    const superseded = guest.handle.request({ action: 'navigate', url: CLOSED_URL })
+    await Promise.resolve()
+    guest.guest.loadURL = (url) => queueMicrotask(() => {
+      guest.guest.emitEvent('will-navigate', JSON.stringify({ url, allowed: true }))
+      guest.guest.emitEvent('did-navigate', url)
+    })
+    const loaded = await guest.handle.request({ action: 'navigate', url: current })
+    await superseded
+    guest.guest.emitEvent('load-failed', connectionFailure(CLOSED_URL))
+    const state = await guest.handle.request({ action: 'zoom', level: 0 })
+    expect(loaded).toMatchObject({ url: current, error: null })
+    expect(state).toMatchObject({ url: current, loading: false, error: null })
+  } finally {
+    await guest.cleanup()
+  }
+})
+
+test('a stopped or download-converted native navigation is not shown as a load error', async () => {
+  const guest = await mountGuest()
+  try {
+    guest.guest.emitEvent('will-navigate', JSON.stringify({ url: CLOSED_URL, allowed: true }))
+    guest.guest.emitEvent('load-failed', { ...connectionFailure(CLOSED_URL), code: -999, description: 'cancelled' })
+    guest.guest.emitEvent('load-failed', { ...connectionFailure(CLOSED_URL), domain: 'WebKitErrorDomain', code: 102, description: 'Frame load interrupted' })
+    const state = await guest.handle.request({ action: 'zoom', level: 0 })
+    expect(state.error).toBeNull()
+  } finally {
+    await guest.cleanup()
+  }
+})
+
+test('a disposed native view stops listening for load failures', async () => {
+  const guest = await mountGuest()
+  await guest.handle.request({ action: 'zoom', level: 0 })
+  expect(guest.guest.listeners.get('load-failed')?.size).toBe(1)
+  await guest.cleanup()
+  expect(guest.guest.listeners.get('load-failed')?.size ?? 0).toBe(0)
+})
