@@ -1,5 +1,5 @@
+import { PLUGIN_API_VERSION, type PluginManifest, type PluginSource } from '@quirky/protocol'
 import { describe, expect, test } from 'bun:test'
-import type { PluginManifest, PluginSource } from '@quirky/protocol'
 import type { DiscoveredPlugin } from '../../src/plugins/discover'
 import { computeRegistry } from '../../src/plugins/registry'
 
@@ -8,7 +8,7 @@ function plugin(id: string, extra: Partial<PluginManifest> = {}, source: PluginS
     id,
     dir: `/plugins/${id}`,
     source,
-    manifest: { id, name: id, version: '1.0.0', ...extra },
+    manifest: { id, name: id, version: '1.0.0', apiVersion: PLUGIN_API_VERSION, ...extra },
     errors: [],
   }
 }

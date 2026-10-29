@@ -5,6 +5,7 @@ import {
   isKind,
   isPluginId,
   parseContributionId,
+  pluginApiCompatibilityError,
   type PluginManifest,
   type PluginSource,
 } from '@quirky/protocol'
@@ -15,6 +16,7 @@ export const MANIFEST_FILE = 'quirky-plugin.json'
 const FIELDS = new Set([
   'id',
   'name',
+  'apiVersion',
   'version',
   'description',
   'main',
@@ -255,6 +257,11 @@ export function parseManifest(
   const id = requiredString(raw, 'id', errors)
   requiredString(raw, 'name', errors)
   requiredString(raw, 'version', errors)
+  const apiVersion = requiredString(raw, 'apiVersion', errors)
+  if (apiVersion !== null) {
+    const compatibilityError = pluginApiCompatibilityError(apiVersion)
+    if (compatibilityError !== null) errors.push(compatibilityError)
+  }
   if (raw.description !== undefined && typeof raw.description !== 'string') errors.push("field 'description' must be a string")
   if (raw.activation !== undefined && raw.activation !== 'lazy' && raw.activation !== 'startup') {
     errors.push("field 'activation' must be 'lazy' or 'startup'")

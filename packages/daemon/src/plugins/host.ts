@@ -371,6 +371,7 @@ export class PluginHost {
       id: discovered.id,
       name: manifest?.name ?? discovered.id,
       version: manifest?.version ?? '',
+      ...(manifest?.apiVersion === undefined ? {} : { apiVersion: manifest.apiVersion }),
       ...(manifest?.description === undefined ? {} : { description: manifest.description }),
       source: discovered.source,
       dir: discovered.dir,

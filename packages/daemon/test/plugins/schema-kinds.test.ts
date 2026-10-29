@@ -1,7 +1,8 @@
+import { PLUGIN_API_VERSION } from '@quirky/protocol'
 import { describe, expect, test } from 'bun:test'
 import { parseManifest } from '../../src/plugins/manifest'
 
-const base = { id: 'acme', name: 'Acme', version: '1.0.0' }
+const base = { id: 'acme', name: 'Acme', version: '1.0.0', apiVersion: PLUGIN_API_VERSION }
 
 function result(manifest: Record<string, unknown>) {
   return parseManifest(JSON.stringify({ ...base, ...manifest }), {
@@ -131,7 +132,7 @@ describe('valid schema declarations', () => {
   test('a result schema nested far beyond the call stack makes the plugin invalid without throwing', () => {
     const levels = 20_000
     const deep = '{"type":"array","items":'.repeat(levels) + '{}' + '}'.repeat(levels)
-    const text = `{"id":"acme","name":"Acme","version":"1.0.0","contributes":{"method":[{"id":"m","result":${deep}}]}}`
+    const text = `{"id":"acme","name":"Acme","version":"1.0.0","apiVersion":"1.0.0","contributes":{"method":[{"id":"m","result":${deep}}]}}`
     const parsed = parseManifest(text, { dirName: 'acme', dir: '/plugins/acme', source: 'installed' })
     expect(parsed.ok).toBe(false)
     if (!parsed.ok) expect(parsed.errors.some((error) => error.startsWith('method m: result'))).toBe(true)
