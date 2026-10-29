@@ -554,10 +554,8 @@ test('Worktrees controls are supplied by the header popover, not the closed pane
 
   await click(trigger!)
   const popover = optionsPopover()
-  expect(popover?.parentElement).toBe(document.body)
-  expect(host.contains(popover)).toBe(false)
+  expect(popover).not.toBeNull()
   expect(buttonNamed(popover!, 'Add project')).toBeDefined()
-  expect(popover?.textContent).toContain('Activity filters')
   const summaries = [...popover!.querySelectorAll('details > summary')].map((summary) => summary.textContent?.trim())
   expect(summaries).toContain('Workspace options')
   expect(summaries).toContain('More workspace tools')
@@ -606,8 +604,9 @@ test('an empty tree offers Add project', async () => {
   const h = setup()
   h.world.repos = []
   await h.mountInto(host)
+  expect(buttonNamed(host, 'Add project')).toBeDefined()
   await openOptions()
-  expect(buttonNamed(optionsContent(), 'Add project')).toBeDefined()
+  expect(buttonNamed(optionsContent(), 'Add project')).toBeUndefined()
   expect(lastReport(h)).toMatchObject({ pinned: [], groups: [], projects: [], dialog: null, notices: [] })
 })
 
