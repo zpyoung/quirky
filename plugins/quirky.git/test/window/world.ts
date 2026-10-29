@@ -195,7 +195,10 @@ export async function boot(scratch: () => string, options: BootOptions = {}): Pr
   }
   current = world
   await agent.callAny('ui.view.open', { id: SESSION_VIEW, input: { worktree: feat.id } })
-  if (!options.noPanel) {
+  if (options.noPanel) {
+    await agent.callAny('ui.panel.close', {})
+    await win.waitFor(() => document.querySelector('[data-git-panel]') === null)
+  } else {
     await agent.callAny('ui.panel.open', { id: PANEL })
     await win.waitFor(() => document.querySelector('[data-git-panel]'))
     await win.waitFor(async () => (await world.report())?.primary)
@@ -224,11 +227,10 @@ export function sc1(w: World): void {
   w.write('notes.txt', 'x\ny\nz\n')
 }
 
-/** The badge on the Source Control panel toggle, or null with none. */
+/** The accessible Source Control badge, or null when the panel has no uncommitted changes. */
 export function badge(): { count: string; title: string } | null {
-  const toggle = [...document.querySelectorAll('button[aria-pressed]')].find((b) => b.textContent?.startsWith('Source control'))
-  const span = toggle?.querySelector('.badge')
-  return span ? { count: span.textContent ?? '', title: span.getAttribute('title') ?? '' } : null
+  const span = document.querySelector<HTMLElement>('[role="img"][aria-label^="Source Control —"]')
+  return span ? { count: span.textContent ?? '', title: span.getAttribute('aria-label') ?? '' } : null
 }
 
 type TerminalViewTab = { id: string; kind: 'view'; viewId: string; input?: Record<string, unknown> }

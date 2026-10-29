@@ -25,7 +25,7 @@ export const rowOf = (path: string, section?: string): HTMLElement | null =>
 
 export const rowContainerOf = (path: string, section?: string): HTMLElement | null => rowOf(path, section)?.parentElement ?? null
 
-export const sectionHeadings = (): string[] => qa('[data-section] .ui-section-header__title').map((el) => text(el))
+export const sectionHeadings = (): string[] => qa('[data-section] h2').map((el) => text(el))
 
 export async function click(element: Element | null | undefined, init: MouseEventInit = {}): Promise<void> {
   if (!element) throw new Error('nothing to click')
@@ -55,11 +55,8 @@ export async function modEnter(element: Element): Promise<void> {
   await press(element, 'Enter', { metaKey: true })
 }
 
-export const toasts = (): Array<{ title: string; body: string }> =>
-  qa('.toasts [role="status"], .toasts [role="alert"]').map((toast) => ({
-    title: text(q('.ui-toast__title', toast)),
-    body: text(q('.ui-toast__description', toast))
-  }))
+export const toasts = (): string[] =>
+  qa('[aria-live="polite"] [role="status"], [aria-live="polite"] [role="alert"]').map(text)
 
 /**
  * Presses the save chord on a CodeMirror editor's content. CodeMirror decides at load time whether
@@ -110,11 +107,13 @@ export function stubIntersectionObserver() {
 }
 
 /** The modified-side CodeMirror editor in the active hosted Git diff. */
-export function modifiedEditor(EditorView: { findFromDOM(dom: HTMLElement): any }, root?: ParentNode): any {
+export function modifiedEditor<T>(EditorView: { findFromDOM(dom: HTMLElement): T | null }, root?: ParentNode): T {
   const scope = root ?? q('[data-git-view-root]')
   if (!scope) throw new Error('Git diff view is not mounted')
-  const editors = qa('.cm-editor', scope)
+  const editors = qa('[contenteditable]', scope)
   const editor = editors[editors.length - 1]
   if (!editor) throw new Error('Git diff view has no editor')
-  return EditorView.findFromDOM(editor)
+  const view = EditorView.findFromDOM(editor)
+  if (!view) throw new Error('Git diff view editor is not mounted')
+  return view
 }

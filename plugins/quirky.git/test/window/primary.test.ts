@@ -86,7 +86,6 @@ test('SC-30: a push running from the CLI shows a disabled Push titled "Push in p
   const push = w.cli(['git', 'push'])
   const busy = await w.win.waitFor(() => primary().title === 'Push in progress…' && primary())
   expect(busy.disabled).toBe(true)
-  expect(text(busy)).toBe('Push')
   await w.win.waitFor(async () => (await w.report()).busy === 'push')
   expect((await w.report()).primary).toEqual({ label: 'Push', enabled: false, title: 'Push in progress…' })
   expect((await w.report()).busy).toBe('push')

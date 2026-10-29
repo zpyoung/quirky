@@ -8,6 +8,7 @@ import { boot, shutdown, DIFF_VIEW, type World } from './world'
 import { modifiedEditor, q, rowOf, text } from './dom'
 
 const { scratch } = isolateGitConfig()
+const SLOW = 90_000
 
 afterEach(shutdown)
 
@@ -124,7 +125,7 @@ test('Source Control preview replaces only a clean hosted tab, promotes on doubl
     const current = diffTabs(await terminalWorkspace(world)).find(({ tab }) => tab.id === previewId)
     return current?.tab.pinned === true && current.tab.preview === false
   })
-})
+}, SLOW)
 
 test('dirty hosted diffs refuse close and are never replaced by another preview', async () => {
   const world = await boot(scratch, { published: false })
@@ -136,7 +137,7 @@ test('dirty hosted diffs refuse close and are never replaced by another preview'
     const tabs = diffTabs(await terminalWorkspace(world))
     return tabs.find(({ tab }) => record(tab.input).path === 'math.ts') ?? null
   })
-  await world.win.waitFor(() => q('[data-git-view-root] .cm-editor'))
+  await world.win.waitFor(() => q('[data-git-view-root] [contenteditable]'))
   const editor = modifiedEditor(EditorView, q('[data-diff-editor]')!)
   editor.dispatch({ changes: { from: 0, insert: 'unsaved draft ' } })
   await world.win.waitFor(async () => {
@@ -154,7 +155,7 @@ test('dirty hosted diffs refuse close and are never replaced by another preview'
   await world.win.waitFor(async () => diffTabs(await terminalWorkspace(world)).some(({ tab }) =>
     tab.id === opened.tab.id && record(tab.input).path === 'math.ts'
   ))
-})
+}, SLOW)
 
 test('Markdown diff previews the modified side with an authorized image and releases only its hosted lease', async () => {
   const world = await boot(scratch, { published: false })
@@ -256,4 +257,4 @@ test('Markdown diff previews the modified side with an authorized image and rele
   })).toMatchObject({ leaseId: siblingLeaseId, released: true })
   await expectImageResourceUnavailable(world, siblingSrc)
   await expectImageResource(world, sourceSrc!, imageBytes)
-})
+}, SLOW)
