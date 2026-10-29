@@ -118,6 +118,13 @@ quirky vault clear --yes
 Advanced parity and verification obligations are tracked in
 [the vault's open findings](docs/loop/BLOCKERS.md#m3-vault-open-review-findings) and the dependent
 `m3-vault-parity-completion` queue item.
+
+Run Vault acceptance with `bun scripts/suite.ts plugins/quirky.vault`. Its paired-host fixture
+uses separate Vault module copies because both daemons run in one Bun process; disabling one
+host must leave the other host's exact source searchable. Search-window scenarios wait for
+settled failures before retrying and exercise term truncation within the public 512-character
+query limit. Native Trash and OS integration remain separate checks.
+
 ## Terminal artifacts on the phone
 
 In a local terminal session, open **More → Terminal artifacts** to browse files named in that
