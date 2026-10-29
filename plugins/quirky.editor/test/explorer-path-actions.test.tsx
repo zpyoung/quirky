@@ -370,6 +370,15 @@ test('Explorer row actions copy canonical absolute and worktree-relative paths a
   expect(sessionIds).toContain(terminalSession.id)
 })
 
+test('Explorer footer path actions are disabled until something is selected', async () => {
+  const fixture = await makeFixture({ displayRoot: 'nested' })
+  const panel = await renderExplorer(fixture)
+  for (const label of ['Copy Path', 'Copy Relative Path', 'Delete']) expect(footerButton(panel.element, label).disabled).toBe(true)
+  expect(footerButton(panel.element, 'Search in Files').disabled).toBe(false)
+  await selectRow(panel.element, join(fixture.root, FILE_A))
+  for (const label of ['Copy Path', 'Copy Relative Path', 'Delete']) expect(footerButton(panel.element, label).disabled).toBe(false)
+})
+
 test('Explorer footer copies multi-selection paths and row drags satisfy the Terminal worktree-path contract', async () => {
   const fixture = await makeFixture({ displayRoot: 'nested' })
   expect(fixture.listing.root).toBe(join(fixture.root, 'nested'))
