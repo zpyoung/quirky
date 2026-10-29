@@ -292,10 +292,16 @@ describe('validateEntry', () => {
     expect(errorOf({ ...minimal, fork: ['fork', '{id}'] })).toBe('fork needs resume')
   })
 
-  test('links must be http(s) URLs', () => {
-    expect(errorOf({ ...minimal, homepage: 'javascript:alert(1)' })).toBe('homepage must be an http(s) URL')
-    expect(errorOf({ ...minimal, install: 'not a url' })).toBe('install must be an http(s) URL')
-    expect(errorOf({ ...minimal, homepage: 4 })).toBe('homepage must be an http(s) URL')
+  test('links accept only http(s) URLs', () => {
+    for (const field of ['homepage', 'install'] as const) {
+      for (const url of ['https://example.com', 'http://example.com']) {
+        expect(entryOf({ ...minimal, [field]: url })[field]).toBe(url)
+      }
+
+      for (const value of ['javascript:alert(1)', 'file:///tmp/example', 'not a url', 4, '']) {
+        expect(validateEntry('acme.agents', 'acme', { ...minimal, [field]: value }).ok).toBe(false)
+      }
+    }
   })
 
   test('windows must be an object', () => {
