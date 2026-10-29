@@ -17,6 +17,12 @@ function shellScript(script: string): string {
   return `sh -c ${quote(script)}`
 }
 
+// PTY history is scrollback, so push the marker past the live terminal screen.
+
+function printHistoryMarkerToScrollback(marker: string): string {
+  return `printf ${quote(`${marker}\\n`)}; i=0; while [ "$i" -lt 30 ]; do printf 'history filler\\n'; i=$((i + 1)); done;`
+}
+
 function makeTranscript(name: string): string {
   const transcriptPath = join(home, name)
   writeFileSync(transcriptPath, '')
@@ -101,7 +107,7 @@ describe('workspace sleep and wake', () => {
     const shell = await createSession(client!, {
       worktree: 'floating',
       agent: 'shell',
-      command: shellScript(`printf 'SLEEP_HISTORY_MARKER\\n'; (exec sleep 600) & echo $! > ${quote(pidFile)}; wait`)
+      command: shellScript(`${printHistoryMarkerToScrollback('SLEEP_HISTORY_MARKER')} (exec sleep 600) & echo $! > ${quote(pidFile)}; wait`)
     })
     await waitForHostRunning(shell.id)
     await waitFor(() => existsSync(pidFile), 5000)
@@ -225,7 +231,7 @@ describe('workspace sleep and wake', () => {
       worktree: 'id:wt_main',
       cwd: checkout,
       agent: 'shell',
-      command: shellScript(`printf 'OLD_WORKTREE_HISTORY\\\\n'; echo "$$" > ${quote(pidFile)}; exec sleep 600`)
+      command: shellScript(`${printHistoryMarkerToScrollback('OLD_WORKTREE_HISTORY')} echo "$$" > ${quote(pidFile)}; exec sleep 600`)
     })
     await waitForHostRunning(old.id)
     await waitFor(() => existsSync(pidFile), 5000)
@@ -269,7 +275,7 @@ describe('workspace sleep and wake', () => {
     const second = await createSession(client!, {
       worktree: 'floating',
       agent: 'shell',
-      command: shellScript(`printf 'PARTIAL_STOP_HISTORY\\\\n'; echo "$$" > ${quote(pidFile)}; exec sleep 600`)
+      command: shellScript(`${printHistoryMarkerToScrollback('PARTIAL_STOP_HISTORY')} echo "$$" > ${quote(pidFile)}; exec sleep 600`)
     })
     await waitForHostRunning(second.id)
     await waitFor(() => existsSync(pidFile), 5000)

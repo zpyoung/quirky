@@ -19,7 +19,7 @@ afterEach(async () => {
   for (const rig of rigs.splice(0).reverse()) await rig.cleanup()
 })
 
-async function start(options: { isolateVaultPlugin?: boolean } = {}): Promise<VaultRig> {
+async function start(options: { isolateVaultPlugin?: boolean; includeEveryAgentFixture?: boolean } = {}): Promise<VaultRig> {
   const rig = await VaultRig.start(options)
   rigs.push(rig)
   return rig
@@ -422,7 +422,7 @@ describe('vault public acceptance flows', () => {
   }, 30_000)
 
   test('API retention removes old derived content only and an unavailable source root retains recent indexed data', async () => {
-    const vault = await start()
+    const vault = await start({ includeEveryAgentFixture: false })
     const oldId = 'flow-retained-expired-source'
     const oldTime = new Date('2000-01-01T00:00:00.000Z')
     const oldPath = await writeJsonlFixture(vault.sourceHome, 'claude', oldId, [

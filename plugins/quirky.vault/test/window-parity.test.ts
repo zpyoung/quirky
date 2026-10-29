@@ -100,12 +100,30 @@ async function makeFeatures(home: string): Promise<Features> {
   return startFeatures({ env: { QUIRKY_VAULT_SOURCE_HOME: home } })
 }
 
+function settledIndex(status: SearchStatus): boolean {
+  const indexedSessions = Object.values(status.sessionsByAgent).some((count) => count > 0)
+  const settledPhase = status.phase === 'current' || status.phase === 'degraded'
+  return status.enabled && settledPhase && status.filesDue === 0 && indexedSessions && status.messagesIndexed > 0
+}
+
 async function waitForSettledIndex(features: Features, what: string): Promise<SearchStatus> {
   return waitFor(what, async () => {
     const { status } = await features.h.call<{ status: SearchStatus }>('quirky.vault/searchStatus', { host: 'local' })
-    const indexedSessions = Object.values(status.sessionsByAgent).some((count) => count > 0)
-    const settledPhase = status.phase === 'current' || status.phase === 'degraded'
-    return status.enabled && settledPhase && status.filesDue === 0 && indexedSessions && status.messagesIndexed > 0 ? status : undefined
+    return settledIndex(status) ? status : undefined
+  }, 30_000)
+}
+
+async function waitForCandidateLimitIndex(features: Features, what: string): Promise<SearchStatus> {
+  return waitFor(what, async () => {
+    const { status } = await features.h.call<{ status: SearchStatus }>('quirky.vault/searchStatus', { host: 'local' })
+    if (settledIndex(status)) return status
+    await features.h.call<SearchResponse>('quirky.vault/search', {
+      host: 'local',
+      query: 'candidatecapneedle',
+      freshness: 'wait-until-current',
+      filters: { agents: ['claude'] }
+    })
+    return undefined
   }, 30_000)
 }
 
@@ -670,7 +688,7 @@ test(
         host: 'local', query: 'candidatecapneedle', freshness: 'wait-until-current', filters: { agents: ['claude'] }
       })
       if (candidateKickoff.kind !== 'results') throw new Error(`Expected candidate-limit results, received ${candidateKickoff.kind}.`)
-      await waitForSettledIndex(features, 'the real candidate-limit index to settle')
+      await waitForCandidateLimitIndex(features, 'the real candidate-limit index to settle')
       const candidateResponse = await features.h.call<SearchResponse>('quirky.vault/search', {
         host: 'local', query: 'candidatecapneedle', freshness: 'indexed', filters: { agents: ['claude'] }
       })

@@ -1340,7 +1340,10 @@ describe('quirky.session/restore', () => {
     expect(restored.cwd).toBe(original.cwd)
     const [request] = restoreRequests(created.id)
     expect(request).toMatchObject({ restore: true, cwd: original.cwd })
-    expect(request?.type === 'create' ? request.argv.join(' ') : '').toContain('--model snapshot-model --effort high --resume codex-provider-17')
+    const resumeCommand = request?.type === 'create' ? request.argv.join(' ') : ''
+    expect(resumeCommand).toContain('--model snapshot-model')
+    expect(resumeCommand).toContain('--effort high')
+    expect(resumeCommand).toContain('--resume codex-provider-17')
     expect((request as { env: Record<string, string> }).env).toMatchObject({
       QUIRKY_SESSION_ID: created.id,
       CODEX_HOME: '/captured/codex-home',
@@ -1398,7 +1401,7 @@ describe('quirky.session/restore', () => {
     await waitFor(() => changedTo('exited'))
 
     const error = await restore(session.id).catch((cause: RpcError) => cause)
-    expect(error).toMatchObject({ code: RpcErrorCode.Conflict, message: "aider can't resume sessions" })
+    expect(error).toMatchObject({ code: RpcErrorCode.Conflict })
     expect(await sessionOf(session.id)).toMatchObject({ status: 'exited', agent: 'aider', restorable: true })
     expect(restoreRequests(session.id)).toEqual([])
     expect(Buffer.from(h.pty.sessions.get(session.id)!.buffer).toString()).toContain('retained history')

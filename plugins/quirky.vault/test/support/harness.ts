@@ -18,6 +18,22 @@ const PLUGIN_IDS = [
 ]
 const PLUGINS_ROOT = join(import.meta.dir, '..', '..', '..')
 
+export function createVaultBuiltinPluginsDir(home: string, options: { isolateVaultPlugin?: boolean } = {}): string {
+  const builtinPluginsDir = join(home, 'builtins')
+  mkdirSync(builtinPluginsDir, { recursive: true })
+  for (const id of PLUGIN_IDS) {
+    const source = join(PLUGINS_ROOT, id)
+    const destination = join(builtinPluginsDir, id)
+    if (options.isolateVaultPlugin && id === 'quirky.vault') {
+      // In-process daemons share Bun's module cache; isolate the plugin's module-level service.
+      cpSync(source, destination, { recursive: true })
+    } else {
+      symlinkSync(source, destination, 'dir')
+    }
+  }
+  return builtinPluginsDir
+}
+
 export type FixtureExpectation = {
   expected: Record<string, { sessionId: string; title: string; cwd: string | null }>
   paths: { claude?: string }
@@ -36,23 +52,15 @@ export class VaultRig {
     private readonly previousSourceHome: string | undefined
   ) {}
 
-  static async start(options: { isolateVaultPlugin?: boolean } = {}): Promise<VaultRig> {
+  static async start(options: { isolateVaultPlugin?: boolean; includeEveryAgentFixture?: boolean } = {}): Promise<VaultRig> {
     const home = mkdtempSync(join(tmpdir(), 'qv-home-'))
     const sourceHome = mkdtempSync(join(tmpdir(), 'qv-source-'))
     const previousSourceHome = process.env[SOURCE_HOME_ENV]
     process.env[SOURCE_HOME_ENV] = sourceHome
-    const fixture = await writeEveryAgentFixture(sourceHome, { cwdRoot: join(sourceHome, 'workspaces') })
-    const builtinPluginsDir = join(home, 'builtins')
-    mkdirSync(builtinPluginsDir, { recursive: true })
-    for (const id of PLUGIN_IDS) {
-      const source = join(PLUGINS_ROOT, id)
-      if (options.isolateVaultPlugin && id === 'quirky.vault') {
-        // In-process daemons share Bun's module cache; isolate the plugin's module-level service.
-        cpSync(source, join(builtinPluginsDir, id), { recursive: true })
-      } else {
-        symlinkSync(source, join(builtinPluginsDir, id), 'dir')
-      }
-    }
+    const fixture: FixtureExpectation = options.includeEveryAgentFixture === false
+      ? { expected: {}, paths: {} }
+      : await writeEveryAgentFixture(sourceHome, { cwdRoot: join(sourceHome, 'workspaces') })
+    const builtinPluginsDir = createVaultBuiltinPluginsDir(home, { isolateVaultPlugin: options.isolateVaultPlugin })
     const h = await startHarness({ home, builtinPluginsDir })
     const connected = await h.connectWithEvents('cli')
     return new VaultRig(h, connected.client, connected.events, home, sourceHome, fixture.expected, fixture.paths, builtinPluginsDir, previousSourceHome)
