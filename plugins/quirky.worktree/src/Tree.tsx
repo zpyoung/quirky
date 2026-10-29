@@ -298,7 +298,7 @@ function WorktreeCard({
         trailing={
           <span className="ui-cluster">
             {needsYou && <Badge tone="needs-you" label={attentionLabel}>{pendingAskCount}</Badge>}
-            {worktree.isMain && <Badge tone="accent">Primary</Badge>}
+            {worktree.isMain && <Badge>Primary</Badge>}
             <IconButton
               className="worktree-menu"
               label={`Actions for ${worktree.name}`}
