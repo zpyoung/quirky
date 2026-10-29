@@ -1735,8 +1735,7 @@
         "ui-restyle-ask",
         "ui-restyle-settings"
       ],
-      "status": "in-progress",
-      "lane": 11
+      "status": "done"
     },
     {
       "id": "fix-flaky-terminal-features-pane",

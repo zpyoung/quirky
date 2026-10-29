@@ -1265,6 +1265,14 @@ files, not this one.
 | easy | high | [m6-heimdall-owner D37](decisions/m6-heimdall-owner.md) | Repair roadmap typing and SDK-init fixture preconditions without changing native behavior | assumed — autonomous |
 | easy | high | [m6-heimdall-owner D40](decisions/m6-heimdall-owner.md) | Remove the final merged SDK-initialization duplicate rather than fabricate a native ID | assumed — autonomous |
 | easy | high | [m6-heimdall-owner D42](decisions/m6-heimdall-owner.md) | Replace fixture source-text rewriting with input-driven typed event production | assumed — autonomous |
+| easy | high | [ui-final-review D1](decisions/ui-final-review.md) | Publish a single Markdown comparison page, not a new UI implementation | assumed — autonomous |
+| easy | high for historical availability; runtime capture completeness must be observed | [ui-final-review D2](decisions/ui-final-review.md) | Capture historical source where genuine before evidence was not retained | assumed — autonomous |
+| easy | high | [ui-final-review D3](decisions/ui-final-review.md) | Preserve build-first and no-code boundaries while gathering the requested evidence | locked by docs/loop/LOOP.md |
+| easy | high | [ui-final-review D4](decisions/ui-final-review.md) | Isolate historical and current captures and disclose native/platform boundaries | deferred: platform |
+| easy | high for the displayed states only | [ui-final-review D5](decisions/ui-final-review.md) | Reject intended-area loading captures and publish representative surfaces with explicit limits | assumed — autonomous |
+| easy | high | [ui-final-review D6](decisions/ui-final-review.md) | Compute published image provenance from bytes rather than trusting worker metadata | assumed — autonomous |
+| easy | high for revision attribution, not later behavioral fixes | [ui-final-review D7](decisions/ui-final-review.md) | Keep immutable capture attribution through the sole integration catch-up | assumed — autonomous |
+| easy | high for exercised checks only | [ui-final-review D8](decisions/ui-final-review.md) | Land documentation and original pixels with explicit verification boundaries | locked by docs/loop/LOOP.md |
 | easy | high | [sa-browser-profile-import-ui D2](decisions/sa-browser-profile-import-ui.md) | Resolve visual, data and integration gray areas without a person | assumed — autonomous |
 | easy | high | [sa-browser-profile-import-ui D3](decisions/sa-browser-profile-import-ui.md) | Follow unattended build-first process and isolate implementation | locked by docs/loop/LOOP.md |
 | easy | high | [sa-browser-profile-import-ui D5](decisions/sa-browser-profile-import-ui.md) | Repair actual wrapped-menu anchoring instead of bypassing hit tests | assumed — autonomous |
