@@ -1,7 +1,7 @@
 import { existsSync } from 'node:fs'
 import { isAbsolute, join } from 'node:path'
 import { RpcErrorCode } from '@quirky/protocol'
-import type { MethodHandler, PluginCaller, PluginContext, PtyFact, Session } from '@quirky/protocol'
+import type { MethodHandler, PluginCaller, PluginContext, PtyFact, Session, TerminalTabCounts } from '@quirky/protocol'
 import { applyFloatingUpdate } from '../floating'
 import type { StoredFloating } from '../floating'
 import type { InputTracker } from '../input-tracker'
@@ -16,7 +16,7 @@ import { displayTitle, nextTerminalTitle } from './titles'
 import { findGroup, findPane, paneLeaves } from './tree'
 import type { GroupSide, TreeError } from './tree'
 import { FLOATING_WORKSPACE, isTerminalTab, isViewTab, TITLE_MAX } from './types'
-import type { ClosedTab, Edge, FloatingState, PaneLeaf, SplitDirection, Tab, TerminalTab, ViewTab, Workspace } from './types'
+import type { ClosedTab, Edge, FloatingState, GroupNode, PaneLeaf, SplitDirection, Tab, TerminalTab, ViewTab, Workspace } from './types'
 
 type Params = Record<string, unknown>
 
@@ -27,6 +27,11 @@ const ID_IN_TEXT = /"(?:tab|grp|pane|split)-(\d+)"/g
 const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error))
 const isNotFound = (error: unknown) => (error as { code?: number } | null)?.code === RpcErrorCode.NotFound
 const isTabbed = (session: Session) => session.background !== true && session.kind === 'terminal'
+function countGroupTabs(node: GroupNode): number {
+  if (node.kind === 'group') return node.tabs.length
+  return countGroupTabs(node.first) + countGroupTabs(node.second)
+}
+
 
 /** What `createTab` takes beyond the workspace: where the tab goes and what its session runs. */
 export type NewTabSpec = {
@@ -132,6 +137,7 @@ export class LayoutService {
     floating: () => this.floating(),
     setFloating: (params) => this.setFloating(params),
     openExternal: (params) => this.openExternal(params),
+    tabCounts: () => this.queued(() => this.tabCounts()),
     pathsExist: (params) => this.pathsExist(params)
   }
 
@@ -281,6 +287,14 @@ export class LayoutService {
     })
     this.tail = run.catch(() => {})
     return run
+  }
+  private tabCounts(): TerminalTabCounts {
+    const counts: TerminalTabCounts['counts'] = []
+    for (const workspace of this.workspaces.values()) {
+      if (this.unreadable.has(workspace.id)) continue
+      counts.push({ worktreeId: workspace.id, tabCount: countGroupTabs(workspace.root) })
+    }
+    return { counts, unavailableWorktrees: [...this.unreadable.keys()] }
   }
 
   private enqueueBackground(work: () => Promise<void>, what: string): void {

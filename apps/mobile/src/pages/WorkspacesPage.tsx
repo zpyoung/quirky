@@ -31,6 +31,37 @@ type WorktreeView = Worktree & { sleeping?: boolean; sleepChangedAt?: number | n
 type WorktreeParkResult = { worktrees: Array<{ worktreeId: string; sleeping: boolean; changedAt: number }> }
 type DeleteDialog = { worktree: WorktreeView; description: string }
 type GroupedRows = { key: string; label: string; worktrees: WorktreeView[] }
+type WorkspaceTabCountSnapshot = { counts: Map<string, number>; unavailableWorktrees: Set<string> }
+
+function parseWorkspaceTabCounts(value: unknown): WorkspaceTabCountSnapshot | null {
+  const validId = (candidate: unknown): candidate is string =>
+    typeof candidate === 'string' && candidate.length > 0 && candidate.length <= 1024
+  if (typeof value !== 'object' || value === null || Array.isArray(value) ||
+    !('counts' in value) || !('unavailableWorktrees' in value)) return null
+  const topLevelKeys = Object.keys(value)
+  if (topLevelKeys.length !== 2 || !topLevelKeys.includes('counts') || !topLevelKeys.includes('unavailableWorktrees') ||
+    !Array.isArray(value.counts) || !Array.isArray(value.unavailableWorktrees)) return null
+
+  const counts = new Map<string, number>()
+  const unavailableWorktrees = new Set<string>()
+  for (const row of value.counts) {
+    if (typeof row !== 'object' || row === null || Array.isArray(row) ||
+      !('worktreeId' in row) || !('tabCount' in row)) return null
+    const rowKeys = Object.keys(row)
+    const worktreeId = row.worktreeId
+    const tabCount = row.tabCount
+    if (rowKeys.length !== 2 || !rowKeys.includes('worktreeId') || !rowKeys.includes('tabCount') ||
+      !validId(worktreeId) || typeof tabCount !== 'number' || !Number.isSafeInteger(tabCount) || tabCount < 0 ||
+      counts.has(worktreeId)) return null
+    counts.set(worktreeId, tabCount)
+  }
+  for (const worktreeId of value.unavailableWorktrees) {
+    if (!validId(worktreeId) || unavailableWorktrees.has(worktreeId) || counts.has(worktreeId)) return null
+    unavailableWorktrees.add(worktreeId)
+  }
+  return { counts, unavailableWorktrees }
+}
+
 
 const GROUP_OPTIONS: Array<{ value: WorkspaceGroupBy; label: string }> = [
   { value: 'none', label: 'None' }, { value: 'status', label: 'Status' }, { value: 'pr', label: 'PR' }, { value: 'project', label: 'Project' }
@@ -91,6 +122,7 @@ export function WorkspacesPage({ bridge, connected, onNavigate, onReport }: Prop
   const [groups, setGroups] = useState<ProjectGroup[]>([])
   const [worktrees, setWorktrees] = useState<WorktreeView[]>([])
   const [sessions, setSessions] = useState<WorkspaceSessionSummary[]>([])
+  const [tabCounts, setTabCounts] = useState<WorkspaceTabCountSnapshot | null>(null)
   const [origins, setOrigins] = useState<WorkspaceOriginView[]>([])
   const [sleepStates, setSleepStates] = useState<WorkspaceSleepState[]>([])
   const [sleepDialog, setSleepDialog] = useState<WorktreeView | null>(null)
@@ -123,6 +155,11 @@ export function WorkspacesPage({ bridge, connected, onNavigate, onReport }: Prop
   const serverLoaded = useRef(false)
   const widthDrag = useRef<{ startX: number; width: number } | null>(null)
   const resizeListeners = useRef<{ move(event: globalThis.PointerEvent): void; up(): void } | null>(null)
+  useEffect(() => () => {
+    requestId.current += 1
+    loopSummaryRequestId.current += 1
+    loadInFlight.current = null
+  }, [])
   const storageGranted = bridge.init.grants.includes('storage')
   const rpcGranted = bridge.init.grants.includes('rpc')
   const pageActiveNow = useCallback(() => connected && bridge.state.phase === 'connected' &&
@@ -163,6 +200,7 @@ export function WorkspacesPage({ bridge, connected, onNavigate, onReport }: Prop
       requestId.current += 1
       loopSummaryRequestId.current += 1
       setLoopSummaryStatus('unavailable')
+      setTabCounts(null)
       setStale(true)
       setLoading(false)
       return
@@ -188,13 +226,14 @@ export function WorkspacesPage({ bridge, connected, onNavigate, onReport }: Prop
     })
 
     try {
-      const [nextRepos, nextGroups, nextWorktrees, nextSessions, nextOrigins, nextSleepStates] = await Promise.all([
+      const [nextRepos, nextGroups, nextWorktrees, nextSessions, nextOrigins, nextSleepStates, rawTabCounts] = await Promise.all([
         bridge.call<Repo[]>('quirky.repo/list', {}),
         bridge.call<ProjectGroup[]>('quirky.repo/groupList', {}),
         bridge.call<WorktreeView[]>('quirky.worktree/list', {}),
         bridge.call<Session[]>('quirky.session/list', {}),
         bridge.call<WorkspaceOriginView[]>('quirky.worktree/origins', {}),
-        bridge.call<WorkspaceSleepState[]>('quirky.session/workspaceSleepStates', {})
+        bridge.call<WorkspaceSleepState[]>('quirky.session/workspaceSleepStates', {}),
+        bridge.call<unknown>('quirky.terminal/tabCounts', {}).catch(() => null)
       ])
       if (currentRequest !== requestId.current || !pageActiveNow()) return
       const cache: WorkspaceCache = {
@@ -209,7 +248,9 @@ export function WorkspacesPage({ bridge, connected, onNavigate, onReport }: Prop
       setSessions(cache.sessions)
       setOrigins(nextOrigins)
       setSleepStates(nextSleepStates)
-      setStale(false)
+      const nextTabCounts = parseWorkspaceTabCounts(rawTabCounts)
+      setTabCounts(nextTabCounts)
+      setStale(nextTabCounts === null || nextTabCounts.unavailableWorktrees.size > 0)
       setError(null)
       serverLoaded.current = true
       if (storageGranted) void writeWorkspaceCache(bridge, cache).catch(() => {})
@@ -217,6 +258,7 @@ export function WorkspacesPage({ bridge, connected, onNavigate, onReport }: Prop
       if (currentRequest !== requestId.current || !pageActiveNow()) return
       setError(errorMessage(cause, 'Could not load workspaces.'))
       setStale(true)
+      setTabCounts(null)
     } finally {
       if (loadInFlight.current === currentRequest) loadInFlight.current = null
       if (currentRequest === requestId.current) setLoading(false)
@@ -632,7 +674,7 @@ export function WorkspacesPage({ bridge, connected, onNavigate, onReport }: Prop
                     )}
                     {!isGroupCollapsed && <div className="qp-worktree-rows">
                       {roots.map((worktree) => renderWorktreeTree(worktree, 0, group.worktrees, {
-                        bridge, canMutate, groupsById, loopSummaries, loopSummaryStatus, menuWorktreeId, preferences, reposById, sessionsByWorktree, sleepByWorktree, sleepBusy,
+                        bridge, canMutate, groupsById, loopSummaries, loopSummaryStatus, menuWorktreeId, preferences, reposById, sessionsByWorktree, tabCounts, sleepByWorktree, sleepBusy,
                         collapsed, onOpen: (item) => void openWorkspace(item), onToggleCollapse: toggleCollapsed,
                         onToggleMenu: (id) => setMenuWorktreeId(menuWorktreeId === id ? null : id), onPin: togglePin, onDelete: requestDelete,
                         onSleep: (item) => { setMenuWorktreeId(null); setSleepDialog(item) },
@@ -720,6 +762,7 @@ type RenderContext = {
   preferences: WorkspacePreferences
   reposById: Map<string, Repo>
   sessionsByWorktree: Map<string, WorkspaceSessionSummary[]>
+  tabCounts: WorkspaceTabCountSnapshot | null
   sleepByWorktree: Map<string, WorkspaceSleepState>
   sleepBusy: string | null
   loopSummaries: Map<string, LoopSummary>
@@ -745,6 +788,9 @@ function renderWorktreeTree(worktree: WorktreeView, depth: number, groupRows: Wo
   const displayProperties = new Set(context.preferences.properties)
   const isPinnedHere = context.preferences.pinnedWorktreeIds.includes(worktree.id)
   const sessionRows = context.sessionsByWorktree.get(worktree.id) ?? []
+  const tabCount = context.tabCounts === null || context.tabCounts.unavailableWorktrees.has(worktree.id)
+    ? null
+    : context.tabCounts.counts.get(worktree.id) ?? 0
   const sessionSleep = context.sleepByWorktree.get(worktree.id)
   const sessionSleepState = sessionSleep?.state
   const parked = worktree.sleeping === true
@@ -809,7 +855,7 @@ function renderWorktreeTree(worktree: WorktreeView, depth: number, groupRows: Wo
           </div>
         )}
         <button className="qp-button qp-worktree-card__open" type="button" disabled={sleepPending || (parked && !context.canMutate)} aria-label={`Open ${worktree.name}`} onClick={() => context.onOpen(worktree)}>
-          Open workspace · {sessionRows.length} {sessionRows.length === 1 ? 'tab' : 'tabs'}
+          {tabCount === null ? 'Open workspace' : `Open workspace · ${tabCount} ${tabCount === 1 ? 'tab' : 'tabs'}`}
         </button>
         {context.menuWorktreeId === worktree.id && <div className="qp-worktree-card__menu" role="group" aria-label={`Actions for ${worktree.name}`}>
           <button type="button" disabled={!context.bridge.init.grants.includes('storage')} onClick={() => context.onPin(worktree)}>{isPinnedHere ? 'Unpin on this phone' : 'Pin on this phone'}</button>
