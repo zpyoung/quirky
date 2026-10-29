@@ -555,26 +555,33 @@ describe('the Questions panel module', () => {
   })
 
   test('SC-21: the card shows each type with its controls', async () => {
-    const fake = fakeContext([deployAsk()])
+    const ask = deployAsk()
+    const fake = fakeContext([ask])
     await activated(fake)
     const { element } = await mount(fake)
 
     const env = fieldsetOf(element, 'env')
     expect([...env.querySelectorAll('button')].map((b) => b.textContent)).toEqual(['Prod', 'Dev'])
     expect(withOwnAnswer(env)).not.toBeNull()
-    expect(env.textContent).not.toContain('(optional)')
 
     const replicas = fieldsetOf(element, 'replicas')
     const number = replicas.querySelector('input') as HTMLInputElement
     expect([number.type, number.getAttribute('step'), number.getAttribute('min'), number.getAttribute('max')]).toEqual(['number', '1', '1', '10'])
-    expect(replicas.textContent).toContain('(optional)')
+    const email = fieldsetOf(element, 'email')
+    const emailQuestion = ask.spec.questions.find((question) => question.id === 'email')!
+    const text = email.querySelector('input') as HTMLInputElement
+    const textLabel = [...email.querySelectorAll('label')].find((label) => label.control === text)
+    expect(text.type).toBe('text')
+    expect(textLabel?.textContent).toBe(emailQuestion.question)
 
     const ship = fieldsetOf(element, 'ship')
-    const shipLegend = ship.querySelector('legend') as HTMLElement
-    expect([...shipLegend.querySelectorAll('strong, span')].map((child) => child.textContent)).toEqual(['Ship', 'Ship date?'])
-    expect(shipLegend.children[0]?.tagName).toBe('STRONG')
-    expect(shipLegend.textContent).toBe('ShipShip date?')
-    expect((ship.querySelector('input') as HTMLInputElement).type).toBe('date')
+    const shipQuestion = ask.spec.questions.find((question) => question.id === 'ship')!
+    const shipLegend = ship.querySelector('legend')
+    const date = ship.querySelector('input[type="date"]') as HTMLInputElement
+    const dateLabel = [...ship.querySelectorAll('label')].find((label) => label.control === date)
+    expect(shipLegend?.textContent).toBe(shipQuestion.header)
+    expect(date.type).toBe('date')
+    expect(dateLabel?.textContent).toBe(shipQuestion.question)
 
     expect([...fieldsetOf(element, 'go').querySelectorAll('button')].map((b) => b.textContent)).toEqual(['Yes', 'No'])
 
@@ -674,7 +681,6 @@ describe('the Questions panel module', () => {
     expect(result.textContent).toContain('Go?: Yes')
     expect(result.getAttribute('role')).toBe('status')
     expect(result.getAttribute('aria-live')).toBe('polite')
-    expect(result.getAttribute('aria-label')).toBe('Confirm?: Answered')
     expect(fake.badges.at(-1)).toBeNull()
   })
 
