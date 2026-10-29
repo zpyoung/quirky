@@ -1,6 +1,6 @@
 {
   "id": "quirky.agent-status",
-  "apiVersion": "1.0.0",
+  "apiVersion": "1.1.0",
   "name": "Agent status",
   "version": "0.1.0",
   "description": "Turns agent hooks into live status rows and durable per-session Activity threads.",
@@ -1524,7 +1524,7 @@
     ],
     "sidebar-section": [
       { "id": "activity", "title": "Activity", "order": 5 },
-      { "id": "dashboard", "title": "Agent Dashboard", "order": 6 }
+      { "id": "dashboard", "title": "Agent Dashboard", "order": 6, "whenSetting": "dashboard-enabled" }
     ],
     "command": [
       {"id":"openDashboardWindow","title":"Pop Out Agent Dashboard","args":{"type":"object","properties":{"text":{"type":"string"},"project":{"type":"string"},"workspaceStatus":{"type":"string","enum":["todo","in-progress","in-review","done"]},"reviewStatus":{"type":"string","enum":["open","draft","merged","closed","no-review"]},"showIdle":{"type":"boolean"}},"additionalProperties":false}},
