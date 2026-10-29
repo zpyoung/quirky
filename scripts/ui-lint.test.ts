@@ -182,3 +182,50 @@ test('root lint scans all UI source, skips fixtures and unopted plugins, and enf
     rmSync(root, { recursive: true, force: true })
   }
 })
+
+test('root lint excludes Git-ignored generated plugin output but scans tracked plugin source', () => {
+  const root = mkdtempSync(join(tmpdir(), 'ui-lint-gitignore-'))
+  const put = (relativePath: string, content: string) => {
+    const path = join(root, relativePath)
+    mkdirSync(dirname(path), { recursive: true })
+    writeFileSync(path, content)
+  }
+  const git = (...args: string[]) => {
+    const result = Bun.spawnSync(['git', ...args], { cwd: root, stdout: 'pipe', stderr: 'pipe' })
+    if (result.exitCode !== 0) throw new Error(result.stderr.toString())
+  }
+  const run = () => {
+    const diagnostics: string[] = []
+    const originalError = console.error
+    console.error = (...values: unknown[]) => diagnostics.push(values.join(' '))
+    try {
+      return { status: runUiLint(root), diagnostics }
+    } finally {
+      console.error = originalError
+    }
+  }
+  try {
+    git('init', '-q')
+    put('.gitignore', 'plugins/example/mobile/assets/mobile/\n')
+    put('scripts/ui-lint-plugins.json', '["example"]')
+    put('plugins/example/mobile/assets/mobile/page.css', '.bad { color: #fff; }')
+    put('plugins/example/mobile/assets/mobile/authored.html', '<div style="color: #00ff00"></div>')
+    put('plugins/example/source.html', '<div style="color: #ff0000"></div>')
+    git('add', '--', '.gitignore', 'scripts/ui-lint-plugins.json', 'plugins/example/source.html')
+    git('add', '-f', '--', 'plugins/example/mobile/assets/mobile/authored.html')
+
+    const result = run()
+    expect(result.status).toBe(1)
+    const diagnosticFilesAndRules = result.diagnostics.map((message) => {
+      const match = message.match(/^(.+):\d+:\d+ (ui\/[^:]+):/)
+      if (!match) throw new Error(`Unexpected UI lint diagnostic format: ${message}`)
+      return { file: match[1]!, rule: match[2]! }
+    })
+    expect(diagnosticFilesAndRules).toEqual([
+      { file: 'plugins/example/mobile/assets/mobile/authored.html', rule: 'ui/no-raw-color' },
+      { file: 'plugins/example/source.html', rule: 'ui/no-raw-color' }
+    ])
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
+})

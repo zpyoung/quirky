@@ -1,3 +1,4 @@
+import { spawnSync } from 'node:child_process'
 import { readFileSync, readdirSync, statSync } from 'node:fs'
 import { dirname, extname, join, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -1026,6 +1027,26 @@ function collectSourceFiles(directory: string): string[] {
   return results
 }
 
+function gitIgnoredSourceFiles(root: string, files: string[]): Set<string> {
+  if (files.length === 0) return new Set()
+  const paths = files.map((file) => relative(root, file).split(sep).join('/'))
+  const input = `${paths.join('\0')}\0`
+  const result = spawnSync('git', ['check-ignore', '-z', '--stdin'], {
+    cwd: root,
+    input,
+    encoding: 'utf8',
+    maxBuffer: Buffer.byteLength(input) + 1
+  })
+  if (result.error) throw new Error(`Cannot inspect Git ignore rules for UI source files: ${result.error.message}`)
+  if (result.status === 128 && /not a git repository/i.test(result.stderr)) return new Set()
+  if (result.status !== 0 && result.status !== 1) {
+    const detail = result.stderr.trim()
+    throw new Error(`git check-ignore failed while collecting UI source files${detail ? `: ${detail}` : ` (exit code ${result.status})`}`)
+  }
+  const ignored = new Set(result.stdout.split('\0').filter(Boolean))
+  return new Set(files.filter((_, index) => ignored.has(paths[index])))
+}
+
 function ensureDirectory(path: string, label: string): void {
   try {
     if (!statSync(path).isDirectory()) throw new Error(`${label} is not a directory: ${path}`)
@@ -1051,7 +1072,9 @@ export function runUiLint(root = resolve(dirname(fileURLToPath(import.meta.url))
         return collectSourceFiles(pluginRoot).map((path) => ({ path, plugin: true }))
       })
     ]
+    const ignoredFiles = gitIgnoredSourceFiles(resolve(root), files.map(({ path }) => path))
     const diagnostics = files.flatMap(({ path, plugin }) => {
+      if (ignoredFiles.has(path)) return []
       const file = relative(root, path).split(sep).join('/')
       return scanSource(file, readFileSync(path, 'utf8'), { plugin })
     }).sort((left, right) => compareText(left.file, right.file) || left.line - right.line || left.column - right.column || compareText(left.rule, right.rule))
