@@ -1147,6 +1147,11 @@ files, not this one.
 | easy | high for observed results; root cause remains unknown | [m3-accounts-remaining-flows D18](decisions/m3-accounts-remaining-flows.md) | Keep the full verifier after an intermittent script timeout | assumed — autonomous; preserves m3-accounts D35's no-waiver precedent |
 | easy | high | [m3-accounts-remaining-flows D19](decisions/m3-accounts-remaining-flows.md) | Preserve both guides during required land-conflict recovery | locked by incoming decision logs and LOOP land-failure protocol |
 | easy | high for observed executions; historical timeout cause remains unknown | [m3-accounts-remaining-flows D20](decisions/m3-accounts-remaining-flows.md) | Diagnose the guardian path without guessing or changing the gate | assumed — autonomous |
+| easy | high | [fix-test-packages-protocol-1028 D1](decisions/fix-test-packages-protocol-1028.md) | Repair the reported protocol assertions without repinning inventories | locked by docs/loop/LOOP.md |
+| easy | high | [fix-test-packages-protocol-1028 D2](decisions/fix-test-packages-protocol-1028.md) | The four reported failures are stale snapshots, not broken public contracts | assumed — autonomous |
+| easy | high | [fix-test-packages-protocol-1028 D3](decisions/fix-test-packages-protocol-1028.md) | Remove adjacent source mirrors and keep validation and safety invariants | assumed — autonomous |
+| easy | high | [fix-test-packages-protocol-1028 D4](decisions/fix-test-packages-protocol-1028.md) | Verify existing consumers without broadening the repair | assumed — autonomous |
+| easy | high | [fix-test-packages-protocol-1028 D5](decisions/fix-test-packages-protocol-1028.md) | Use the available cross-family reviewer and close this repair | assumed — autonomous |
 | easy | high | [ui-restyle-ask D1](decisions/ui-restyle-ask.md) | Apply the approved graphite system without changing feature behavior | locked by docs/quirk/specs/2026-10-28-ui-redesign/logic.md |
 | easy | high | [ui-restyle-ask D3](decisions/ui-restyle-ask.md) | Reuse the committed Structured transcript restyle from its actual owner | assumed — autonomous |
 | easy | high | [ui-restyle-ask D5](decisions/ui-restyle-ask.md) | Follow build-first execution and preserve unrelated state | locked by docs/loop/LOOP.md |
