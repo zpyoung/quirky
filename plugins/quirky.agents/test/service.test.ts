@@ -976,6 +976,7 @@ describe('provider-owned model discovery', () => {
         id: providerId,
         label: 'Fixture provider',
         detect: providerId,
+        prompt: 'argv',
         launchOptions: {
           model: { flag: ['--model', '{value}'] },
           options: [{
@@ -1308,17 +1309,22 @@ process.stdin.on('end', () => writeFileSync(recordPath, JSON.stringify({ args: p
     let t: Fixture | undefined
     try {
       t = await start({ installed: ['codex'] })
+      // This harness loads quirky.agents without quirky.accounts, so provider preparation is unavailable.
+      const refreshed = await t.call(A('refresh'))
+      expect(find(refreshed, 'codex')).toMatchObject({ installed: true })
+      const originalOptions = await t.call(A('options'), { agent: 'codex' })
+      expect(originalOptions).toMatchObject({ supported: true, discoverable: true })
+      expect(await failure(t.call('quirky.accounts/prepareProviderEnv', { agent: 'codex', cwd: t.userHome })))
+        .toMatchObject({ code: RpcErrorCode.MethodNotFound })
       const marker = join(t.userHome, 'raw-codex-probe-ran')
       const executable = join(t.bin, 'codex')
-      writeFileSync(executable, `#!/usr/bin/env node
-require('node:fs').writeFileSync(${JSON.stringify(marker)}, process.env.CODEX_HOME ?? '')
-`)
+      writeFileSync(executable, `#!/bin/sh\nprintf '%s' "$CODEX_HOME" > '${marker}'\n`)
       chmodSync(executable, 0o755)
 
       const discovered = await t.call(A('discoverModels'), { agent: 'codex', host: 'local' })
       expect(discovered).toMatchObject({ status: 'unavailable', authoritative: false, models: [] })
-      expect(discovered.reason).toContain('account environment could not be prepared')
       expect(existsSync(marker)).toBe(false)
+      expect((await t.call(A('options'), { agent: 'codex' })).models).toEqual(originalOptions.models)
     } finally {
       if (t) {
         try { await t.h.cleanup() } catch {}
