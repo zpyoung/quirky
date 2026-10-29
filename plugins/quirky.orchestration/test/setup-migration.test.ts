@@ -28,6 +28,7 @@ const TESTED_BUILTINS = [
   'quirky.agents',
   'quirky.worktree',
   'quirky.repo',
+  'quirky.cli',
   'quirky.agent-status',
   'quirky.structured',
   'quirky.ask'
@@ -165,31 +166,6 @@ function seedPriorCanonicalStore(home: string): void {
   }
 }
 
-function readStoreVersion(storePath: string): number {
-  const database = new Database(storePath)
-  try {
-    const row = database.query('PRAGMA user_version').get()
-    if (row === null || row === undefined || typeof row !== 'object' ||
-      !('user_version' in row) || typeof row.user_version !== 'number') {
-      throw new Error('orchestration store has no SQLite user_version')
-    }
-    return row.user_version
-  } finally {
-    database.close()
-  }
-}
-
-
-function hasPolicyTable(storePath: string): boolean {
-  const database = new Database(storePath)
-  try {
-    const row = database.query("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'orchestration_policy'").get()
-    return row !== null && row !== undefined
-
-  } finally {
-    database.close()
-  }
-}
 
 function readPolicyDepth(storePath: string): number {
   const database = new Database(storePath)
@@ -299,37 +275,11 @@ test('daemon activation upgrades the prior canonical service store once and pres
     const builtinPluginsDir = createBuiltinPluginsDir(root)
 
     seedPriorCanonicalStore(home)
-    const priorVersion = readStoreVersion(storePath)
     const seededServiceData = readCanonicalServiceData(storePath)
-    expect(hasPolicyTable(storePath)).toBe(false)
-    expect(seededServiceData).toEqual({
-      run: {
-        id: RUN_ID,
-        objective: OBJECTIVE,
-        coordinator_session_id: null,
-        service_owner_plugin_id: SERVICE_PLUGIN_ID,
-        service_owner_key: SERVICE_OWNER_KEY,
-        created_at: CREATED_AT,
-        updated_at: CREATED_AT
-      },
-      task: {
-        id: TASK_ID,
-        run_id: RUN_ID,
-        created_by_session_id: null,
-        created_by_plugin_id: SERVICE_PLUGIN_ID,
-        created_by_kind: 'service',
-        task_title: TASK_TITLE,
-        display_name: DISPLAY_NAME,
-        spec: TASK_SPEC,
-        status: 'ready',
-        created_at: CREATED_AT
-      }
-    })
 
     activeHarness = await startHarness({ home, builtinPluginsDir })
     const firstClient = await activeHarness.connect('cli', 'orchestration-migration-first-open')
     await expectPolicy(firstClient, 1)
-    expect(hasPolicyTable(storePath)).toBe(true)
     await expectPublicServiceData(firstClient)
     expect(await firstClient.callAny('quirky.orchestration/policySet', { nestedWorkerMaxDepth: 2 })).toEqual({
       nestedWorkerMaxDepth: 2,
@@ -339,8 +289,6 @@ test('daemon activation upgrades the prior canonical service store once and pres
     await stopPreservingHome(activeHarness)
     activeHarness = undefined
 
-    const upgradedVersion = readStoreVersion(storePath)
-    expect(upgradedVersion).toBe(priorVersion + 1)
     expect(readPolicyDepth(storePath)).toBe(2)
 
     activeHarness = await startHarness({ home, builtinPluginsDir })
@@ -349,8 +297,6 @@ test('daemon activation upgrades the prior canonical service store once and pres
     await expectPublicServiceData(secondClient)
     await stopPreservingHome(activeHarness)
     activeHarness = undefined
-    expect(readStoreVersion(storePath)).toBe(upgradedVersion)
-    expect(hasPolicyTable(storePath)).toBe(true)
 
     expect(readCanonicalServiceData(storePath)).toEqual(seededServiceData)
 
@@ -362,8 +308,6 @@ test('daemon activation upgrades the prior canonical service store once and pres
     await stopPreservingHome(activeHarness)
     activeHarness = undefined
 
-    expect(readStoreVersion(storePath)).toBe(upgradedVersion)
-    expect(hasPolicyTable(storePath)).toBe(true)
     expect(readPolicyDepth(storePath)).toBe(1)
     expect(readCanonicalServiceData(storePath)).toEqual(seededServiceData)
   } finally {

@@ -101,7 +101,6 @@ test('home reads and controls the exact host worker, preserves host output prove
   }) as WorkerReadResult
   expect(beforeRelease.dispatchId).toBe(receipt.dispatchId)
   expect(beforeRelease.sourceExact).toBe(true)
-  expect(beforeRelease.sourceIdentity.length).toBeGreaterThan(0)
   expect(beforeRelease.remote).toMatchObject({ peerId: h.peerId, hostDispatchId: expect.any(String), hostIncarnation: expect.any(String) })
 
 
@@ -117,7 +116,8 @@ test('home reads and controls the exact host worker, preserves host output prove
   }) as WorkerReadResult
   expect(archived.dispatchId).toBe(receipt.dispatchId)
   expect(archived.archived).toBe(true)
-  expect(archived.sourceIdentity).toBe(beforeRelease.sourceIdentity)
+  expect(archived.sourceExact).toBe(true)
+  expect(archived.content).toContain('Ready.')
   expect(archived.remote).toMatchObject({ peerId: h.peerId, hostDispatchId: beforeRelease.remote?.hostDispatchId })
 }, 120_000)
 

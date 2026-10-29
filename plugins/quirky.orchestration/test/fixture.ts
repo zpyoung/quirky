@@ -16,6 +16,7 @@ const TESTED_BUILTINS = [
   'quirky.agents',
   'quirky.worktree',
   'quirky.repo',
+  'quirky.cli',
   'quirky.agent-status',
   'quirky.structured',
   'quirky.ask'

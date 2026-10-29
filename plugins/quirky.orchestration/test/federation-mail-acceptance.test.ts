@@ -97,6 +97,7 @@ test('paired daemons preserve FIFO mail and ask identity; a rejected home comple
 
   const heartbeat = await host.callAs<{ heartbeat: { status: string } }>(hostSession!, 'send', [
     '--type', 'heartbeat',
+    '--subject', 'Worker heartbeat',
     '--task-id', hostRows.taskId,
     '--dispatch-id', hostRows.dispatchId,
     '--phase', 'answered',
@@ -152,8 +153,17 @@ test('paired daemons preserve FIFO mail and ask identity; a rejected home comple
   const processExitHostShow = await host.fixture.call('quirky.orchestration/workerShow', {
     dispatchId: processExitHostRow.dispatchId,
   }) as WorkerShowResult
-  expect(processExitHostShow.worker?.sessionId).toBeTruthy()
-  await host.fixture.call('quirky.session/close', { session: processExitHostShow.worker!.sessionId! })
+  const processExitSessionId = processExitHostShow.worker?.sessionId
+  if (typeof processExitSessionId !== 'string') throw new Error('the second host worker has no process identity')
+  const processExitEvents = await eventually(
+    () => host.events(processExitSessionId),
+    (events) => events.some((event) => event.type === 'started' && event.sessionId === processExitSessionId),
+    'the real process identity for the second host worker',
+  )
+  const processExitProcess = processExitEvents.find((event) =>
+    event.type === 'started' && event.sessionId === processExitSessionId)
+  if (typeof processExitProcess?.pid !== 'number') throw new Error('the second host process did not publish its real PID')
+  process.kill(processExitProcess.pid, 'SIGTERM')
   const exitedHome = await eventually(
     () => owner.show(processExitStart.runId),
     (detail) => detail.workers.some((worker) =>
