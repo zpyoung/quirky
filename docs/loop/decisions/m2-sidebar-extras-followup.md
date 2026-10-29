@@ -396,5 +396,38 @@
 - **Revisit if:** a real browser fails disabled serialization or the public schema admits malformed presentation fields.
 - **Source:** assumed — autonomous
 
+## D37: Keep core Worktrees renderable when the optional separator declaration is absent
+- **Question:** should the attention fixture install sidebar-extras merely to avoid a core renderer exception?
+- **Options:** make the optional add-on mandatory in fixtures; introduce async settings discovery/API changes; retain the existing separator default only for the known absent-declaration outcome.
+- **Chose:** read the existing synchronous public getSetting; when its exact not-registered result is `no setting <separator ID>`, retain the current true default. Rethrow every unexpected error. No new dependency, protocol, private import, generic retry or provider-failure suppression.
+- **Why:** after fixing reserved built-in IDs, the real core-only fixture reached Worktrees and proved it crashed on an optional setting that does not exist. Installing the add-on would mask SC-17's optionality. Existing terminal setting readers already retain defaults for unknown settings; this path narrows that convention to known absence.
+- **Evidence:** focused remote receipt residual-before.json, attention fixture repeated absent-setting failure; WorktreesSection.tsx35–40; public host getSetting1019–1023; terminal pane settings83–94. Unavailable projection errors remain independently reported.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** the public synchronous getter gains a structured absence API.
+- **Source:** locked by original sidebar SC-17
+
+## D38: Isolate sequential composer scenarios instead of mounting duplicate fixed-ID dialogs
+- **Question:** why did generic Prompt remain absent after the issue-derived scenario passed?
+- **Options:** weaken the prompt assertion; force a control value; tear down the first scenario before the second.
+- **Chose:** split the existing combined case into explicit issue-submit and generic-default tests, using the fixture's existing afterEach root cleanup. Retain both create contracts.
+- **Why:** two concurrent create-dialog roots share static control IDs. Native label.control can resolve the first root's Agent control, so changing it leaves the second dialog without its agent-dependent Prompt. This fixture state cannot occur in the one Worktrees tool/dialog per document.
+- **Evidence:** focused remote composer21pass/1fail at487; shared labels use htmlFor; mountCreate appends roots without unmount until afterEach; CreateDialog Prompt is conditional on agent.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** independent real documents show cross-window label collisions.
+- **Source:** assumed — autonomous
+
+## D39: Follow the operator's immediate commit, affected-test and landing order
+- **Question:** should the lane continue the extra final-review campaign while the dependent worktree repair waits?
+- **Options:** continue expanded reviews and additional campaigns; commit the exercised repair set, run touched-package tests and land.
+- **Chose:** commit now, run the touched UI/daemon/sidebar-extras/worktree/repo packages through the remote suite, then canonical queue land. Skip the extra review pass and further discretionary campaigns. Record any remaining open work in at most one follow-up, reusing existing fix-test-worktree-1028 ownership rather than duplicating it where applicable.
+- **Why:** the operator explicitly superseded the earlier review sequence and reported five idle lanes blocked behind this item. No review-model pass is claimed: every attempted review runner stopped at its prepass.
+- **Evidence:** operator interjection; latest focused runs cover all ten corrected files: six passed in the first focused batch, attention/composer passed after optionality/root-isolation fixes, and final window-create/window-tree passed2/2 with no flakes59.55s. Latest full lint/root/mobile/desktop compilation and packaged build passed47.32s. Actual dirty, separator persistence, placeholder and prior grouping/filter scenarios retain their guarded reports; D22 is still the explicit quiet-clock observation limit.
+- **Reversibility:** easy
+- **Confidence:** high about the exercised results and operator direction
+- **Revisit if:** the affected-package run or canonical merge gate identifies unfinished work.
+- **Source:** locked by operator instruction in this conversation
+
 ## Progress
-Source28323f59 and all fixture components are integrated; build/typechecks and current-shell dirty closure have observed passes, with all owned browsers/daemons closed. The expanded169-file remote gate remains red as D34 records; the common Text-node traversal defect is now corrected in a3b9de65. Two disjoint residual fixture workers and a read-only broad-failure audit are active; no checks mid-flight. Next: integrate justified residual corrections, run targeted remote scenarios then the broad UI/daemon/owned-plugin/scripts gate, final three-lens review/one fix batch, complete criterion evidence and canonical land. No final-review model has run. D22 remains the quiet-clock observation limit; dependency readiness is true.
+Operator-directed landing: all source/components are integrated and worker trees removed. Current root passed full typecheck/build47.32s; all ten corrected test files have exercised focused passes, with final window cases2/2 no flakes. All owned browsers/daemons are closed. Commit the current set, run affected UI/daemon/three plugin packages remotely, record any remainder under at most one existing/follow-up owner, and canonical land. No extra review pass or broader discretionary campaign; no final model review is claimed. D22 retains the quiet-clock observation limit. Dependency readiness is true.

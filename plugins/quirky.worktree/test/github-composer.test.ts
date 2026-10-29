@@ -459,7 +459,7 @@ test('an issue-derived agent prompt keeps its raw URL as an unsubmitted draft by
   expect(params).toMatchObject({ github: ISSUE_URL, agent: 'claude', prompt: ISSUE_URL, submitPrompt: false })
 })
 
-test('a person can explicitly submit an issue-derived prompt and generic prompts remain submitted by default', async () => {
+test('a person can explicitly submit an issue-derived agent prompt', async () => {
   const issue = mountCreate({
     onCall: (method) => {
       if (method === 'quirky.hosting/listWorkItems') return { items: [item('issue', 4, 'Add a multiply function', ISSUE_URL)], partial: false }
@@ -468,7 +468,7 @@ test('a person can explicitly submit an issue-derived prompt and generic prompts
     }
   })
   await issue.ready
-  let dialog = issue.element.querySelector('[role="dialog"]')!
+  const dialog = issue.element.querySelector('[role="dialog"]')!
   await click(button(dialog, 'GitHub')!)
   await setText(labelField<HTMLInputElement>(dialog, 'Search GitHub')!, 'multiply')
   await waitFor(() => buttonContaining(dialog, 'Issue #4'))
@@ -479,10 +479,13 @@ test('a person can explicitly submit an issue-derived prompt and generic prompts
   await click(button(dialog, 'Create')!)
   expect(issue.calls.find((call) => call.method === 'quirky.worktree/create')?.params)
     .toMatchObject({ github: ISSUE_URL, agent: 'claude', prompt: ISSUE_URL, submitPrompt: true })
+})
+
+test('generic agent prompts remain submitted by default', async () => {
 
   const generic = mountCreate()
   await generic.ready
-  dialog = generic.element.querySelector('[role="dialog"]')!
+  const dialog = generic.element.querySelector('[role="dialog"]')!
   await setSelect(labelField<HTMLSelectElement>(dialog, 'Agent')!, 'claude')
   await setText(labelField<HTMLTextAreaElement>(dialog, 'Prompt')!, 'Implement the requested change.')
   const genericSubmit = labelField<HTMLInputElement>(dialog, 'Submit prompt automatically')!

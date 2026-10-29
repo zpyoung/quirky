@@ -309,7 +309,10 @@ test('SC-62: Mod+N and the API open the create dialog on the right project', asy
   await win.waitFor(async () => (await report(agent)).dialog === null)
 
   await agent.callAny('ui.command.run', { id: NEW_WORKTREE, args: { repo: 'web' } })
-  await win.waitFor(() => selectedProject(dialogNamed('New workspace')!) === 'web')
+  await win.waitFor(() => {
+    const next = dialogNamed('New workspace')
+    return next && selectedProject(next) === 'web'
+  })
   const second = await win.waitFor(async () => {
     const next = await report(agent)
     return next?.dialog ? next : undefined

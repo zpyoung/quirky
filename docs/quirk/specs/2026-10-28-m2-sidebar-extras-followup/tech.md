@@ -23,6 +23,8 @@ Satisfies [scenarios](logic.md#behavior--scenarios). Paths relative to repositor
 - `plugins/quirky.worktree/src/GroupDialogs.tsx`: a verified empty deletion preview discloses that no ledgers are affected; loading/error/null previews do not make that claim.
 - `packages/ui/src/shell/ToolShell.tsx` and `tool-shell.css`: mount an effective distinct activity alias in the canonical stripe, with provider-owned control/decoration and existing drag/move behavior.
 - `packages/daemon/src/plugins/layout.ts`, `stateFor`: available distinct activity aliases are visible independently of panel bodies; standalone activity-tool bodies still follow open state.
+- `plugins/quirky.worktree/src/WorktreesSection.tsx`, `readSeparatorSetting`: a missing optional add-on declaration retains the existing default; unexpected getter failures still propagate.
+- `packages/ui/src/design-system/overlays.tsx`, `Dialog`: preserve an already-focused child before applying the existing initial-focus fallback.
 
 ## Contracts & interfaces
 
@@ -36,6 +38,7 @@ Satisfies [locked decisions](logic.md#decisions-locked). Existing schema and API
 - Aliased activity presentation remains mounted in the canonical tool stripe independently of the tool panel. For an effective tool whose aliases include an available activity-item different from its body contribution, mount that public activity slot as the stripe control; retain the existing panel body, move menu and tool placement authority. Do not nest buttons or double-toggle the contributed action. Its live decoration replaces the cached host badge for that control, so closing a panel cannot freeze a stale badge beside it.
 - Public slot state marks this aliased stripe activity visible even when the panel is closed. Standalone activity-tool bodies retain their existing open/close behavior; disabled/overridden activity mounts use existing PluginSlot cleanup and ownership checks. No new protocol field, registry, legacy rail or sidebar-extras-specific host import.
 - Shared Dialog initial focus preserves an already-focused child, including the group-name field's native autoFocus/selection, instead of moving it to the header Close button. Keep existing fallback focus, trapping and stack cleanup; no caller-specific imperative focus workaround or new API.
+- A core-only Worktrees UI must not require the optional sidebar-extras setting declaration. Only the public getter's exact known missing-declaration error selects the existing separator default; unexpected errors are not converted to a default.
 
 ## Data models / schemas
 

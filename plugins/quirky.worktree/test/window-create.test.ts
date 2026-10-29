@@ -108,10 +108,12 @@ async function openCreate(w: World, project: Project): Promise<HTMLElement> {
   await w.agent.callAny('ui.command.run', { id: NEW_WORKTREE, args: { repo: project.repo.id } })
   const dialog = await w.win.waitFor(() => dialogNamed(CREATE))
   await w.win.waitFor(() => field<HTMLSelectElement>(dialog, 'Project')?.value === project.repo.id)
+  await w.win.waitFor(() => field(dialog, 'Name')?.placeholder)
   await click(button(dialog, 'Name')!)
   await w.win.waitFor(() =>
     button(dialog, 'Name')?.getAttribute('aria-selected') === 'true' &&
-    field(dialog, 'Name')?.id === 'create-name'
+    field(dialog, 'Name')?.id === 'create-name' &&
+    Boolean(field(dialog, 'Name')?.placeholder)
   )
   return dialog
 }
