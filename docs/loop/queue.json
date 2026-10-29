@@ -2224,6 +2224,16 @@
       "status": "done"
     },
     {
+      "id": "fix-test-post-restyle-boundaries-1028",
+      "milestone": "M7",
+      "title": "Repair newly observed post-restyle/shared-boundary failures from the caught-up full consumer snapshot1793233308424-27725 (682/877 remote files passed; full raw and extracted evidence held by lane8; see fix-test-orchestration-1028 decisions/BLOCKERS). These exact cases are not named by the completed baseline repair titles. Consume current integration first, because the broad snapshot preceded later lanes lands; do not duplicate already repaired cases. Exact files/tests: packages/daemon/test/plugins/ui-kinds.test.ts: activity-item, sidebar-section and panel entries > sidebar-section rejects unknown fields and a non-string description; activity-item, sidebar-section and panel entries > panel rejects unknown fields and a non-string description; overrides of UI kinds > are labelled with the full ID | packages/daemon/test/plugins/sidebar-activity-api.test.ts: activity items are catalogued and report their mounted state while panels remain closed; disabling an override restores the prior activity-item owner in the catalog and state | packages/daemon/test/lock.test.ts: two daemon processes started together > exactly one keeps running and the other exits 0 | packages/ui/test/design-system.test.tsx: shared graphite components > multiline and selection fields preserve native form values and accessible error ownership | plugins/quirky.ask/test/ui.test.ts: the Questions panel module > SC-21: the card shows each type with its controls; the Questions panel module > Q2: an API answer immediately shows its terminal summary | plugins/quirky.ask/test/panel.test.ts: the Questions panel > SC-31: another open panel stays as it is | plugins/quirky.notifications/test/window-view.test.ts: SC-48: the sound controls > SC-48: Custom shows the typed path under the select only while Custom is the sound; SC-48: the sound controls > SC-48: a refused path shows the reason under the field and saves nothing; SC-48: the sound controls > a failed preview call is shown as the reason too; SC-48: the sound controls > picking a built-in sound closes an open path field; SC-48: the sound controls > with Custom stored, the Custom line shows and Change reopens the field with the path; saving and following settings > the view reports the settings and the custom path field state | plugins/quirky.notifications/test/loops.test.ts: loop notifications through the central policy > needs-you events pass through the same policy and keep the loop-specific event key. Keep current shared components and public caller/connection identities; delete incidental wording/source/default/inventory mirrors rather than repinning them. For daemon lock, investigate observed exit/result evidence without inferring load. Use only bun scripts/suite.ts, fresh private HOME/QUIRKY_HOME and owned process cleanup; no aliases, suppressions, deadline increases or real state.",
+      "docs": [],
+      "deps": [
+        "fix-test-orchestration-1028"
+      ],
+      "status": "done"
+    },
+    {
       "id": "m7-sweep-sessions",
       "milestone": "M7",
       "docs": [
@@ -2289,16 +2299,6 @@
         "m2-sidebar-extras-followup"
       ],
       "status": "todo"
-    },
-    {
-      "id": "fix-test-post-restyle-boundaries-1028",
-      "milestone": "M7",
-      "title": "Repair newly observed post-restyle/shared-boundary failures from the caught-up full consumer snapshot1793233308424-27725 (682/877 remote files passed; full raw and extracted evidence held by lane8; see fix-test-orchestration-1028 decisions/BLOCKERS). These exact cases are not named by the completed baseline repair titles. Consume current integration first, because the broad snapshot preceded later lanes lands; do not duplicate already repaired cases. Exact files/tests: packages/daemon/test/plugins/ui-kinds.test.ts: activity-item, sidebar-section and panel entries > sidebar-section rejects unknown fields and a non-string description; activity-item, sidebar-section and panel entries > panel rejects unknown fields and a non-string description; overrides of UI kinds > are labelled with the full ID | packages/daemon/test/plugins/sidebar-activity-api.test.ts: activity items are catalogued and report their mounted state while panels remain closed; disabling an override restores the prior activity-item owner in the catalog and state | packages/daemon/test/lock.test.ts: two daemon processes started together > exactly one keeps running and the other exits 0 | packages/ui/test/design-system.test.tsx: shared graphite components > multiline and selection fields preserve native form values and accessible error ownership | plugins/quirky.ask/test/ui.test.ts: the Questions panel module > SC-21: the card shows each type with its controls; the Questions panel module > Q2: an API answer immediately shows its terminal summary | plugins/quirky.ask/test/panel.test.ts: the Questions panel > SC-31: another open panel stays as it is | plugins/quirky.notifications/test/window-view.test.ts: SC-48: the sound controls > SC-48: Custom shows the typed path under the select only while Custom is the sound; SC-48: the sound controls > SC-48: a refused path shows the reason under the field and saves nothing; SC-48: the sound controls > a failed preview call is shown as the reason too; SC-48: the sound controls > picking a built-in sound closes an open path field; SC-48: the sound controls > with Custom stored, the Custom line shows and Change reopens the field with the path; saving and following settings > the view reports the settings and the custom path field state | plugins/quirky.notifications/test/loops.test.ts: loop notifications through the central policy > needs-you events pass through the same policy and keep the loop-specific event key. Keep current shared components and public caller/connection identities; delete incidental wording/source/default/inventory mirrors rather than repinning them. For daemon lock, investigate observed exit/result evidence without inferring load. Use only bun scripts/suite.ts, fresh private HOME/QUIRKY_HOME and owned process cleanup; no aliases, suppressions, deadline increases or real state.",
-      "docs": [],
-      "deps": [
-        "fix-test-orchestration-1028"
-      ],
-      "status": "done"
     },
     {
       "id": "m7-api-freeze",
