@@ -31,6 +31,8 @@ import type { NativeHostPowerSource } from './host-power-contracts'
 
 export type DaemonOptions = {
   home: string
+  /** Recorded in `runtime.json` so a shell from another build can tell this daemon is stale. */
+  entryHash?: string
   /** Listen port; 0 tries the previous port from `daemon-identity.json`, then any free one. */
   port?: number
   notifier?: Notifier
@@ -262,7 +264,8 @@ async function startDaemonWithPower(options: DaemonOptions, hostPower: HostPower
     daemonVersion,
     protocolVersion: PROTOCOL_VERSION,
     startedAt,
-    socket: socketServer.path
+    socket: socketServer.path,
+    ...(options.entryHash === undefined ? {} : { entryHash: options.entryHash })
   }
   writePrivateJson(runtimeFilePath(home), runtime)
 

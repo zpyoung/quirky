@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from 'bun:test'
 import { existsSync, readFileSync, rmSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { QuirkyClient } from '@quirky/protocol'
-import { isDaemonAlive, readRuntime, rpcUrl } from '@quirky/protocol/node'
+import { daemonEntryHash, isDaemonAlive, readRuntime, rpcUrl } from '@quirky/protocol/node'
 import { createProcessScope, type ProcessScope } from '../../../scripts/test-support/process-scope'
 import { startDaemon } from '../src/daemon'
 import { makeTempHome, waitFor } from './helpers'
@@ -127,6 +127,7 @@ describe('single instance per home', () => {
     const info = await waitFor(() => readRuntime(home), 10000)
     expect(info.pid).toBe(first.pid)
     expect(await isDaemonAlive(info)).toBe(true)
+    expect(info.entryHash).toBe(daemonEntryHash(MAIN))
     const hostPid = await waitFor(
       () => (existsSync(join(home, 'pty.pid')) ? Number(readFileSync(join(home, 'pty.pid'), 'utf8')) : undefined),
       10000
