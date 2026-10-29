@@ -26,6 +26,15 @@ export function TooLargeNotice({ tooLarge }: { tooLarge: TooLarge }) {
   )
 }
 
+/** Shown above a text diff whose sides match, such as an open diff of a change since committed. */
+export function NoChangesNotice() {
+  return (
+    <p className="ui-text-muted" role="status" style={{ padding: 'var(--ui-space-8) var(--ui-space-12)' }}>
+      No changes in this file.
+    </p>
+  )
+}
+
 /** The fallback for a file git treats as binary, which has no text diff. */
 export function BinaryNotice() {
   return (

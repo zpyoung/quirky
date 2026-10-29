@@ -77,6 +77,12 @@ describe('quirky.git file diff view', () => {
     expect(mounted.report()).toMatchObject({ changes: 0, currentChange: null })
   })
 
+  test('a diff whose sides match says there are no changes and keeps the file open', async () => {
+    const { element } = await open(textDiff({ original: 'same\n', modified: 'same\n' }))
+    expect(element.querySelector('[role="status"]')?.textContent).toContain('No changes')
+    expect(element.querySelector('.cm-editor')).not.toBeNull()
+  })
+
   test('SC-60: inline by default; the switch writes diffDefaultView and shows two panes', async () => {
     const { element } = await open()
     expect(element.querySelectorAll('.cm-mergeViewEditor').length).toBe(0)
