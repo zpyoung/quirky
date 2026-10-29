@@ -14,6 +14,11 @@ import { setWorktreeOverride } from './fakes/quirky.worktree/main'
 const PTY_ENTRY = join(import.meta.dir, '../../../packages/pty-host/src/main.ts')
 const quote = (value: string) => `'${value.replaceAll("'", `'\\''`)}'`
 
+function commandWithHistoryScrollback(marker: string, continuation: string): string {
+  const script = `printf '%s\\n' ${quote(marker)}; i=0; while [ "$i" -lt 32 ]; do printf 'WORKSPACE_SLEEP_SCROLLBACK_FILLER\\n'; i=$((i + 1)); done; ${continuation}`
+  return `sh -c ${quote(script)}`
+}
+
 let home: string
 let daemon: DaemonHandle | null
 let client: QuirkyClient | null
@@ -86,7 +91,8 @@ describe('workspace sleep and wake', () => {
     const shell = await createSession(client!, {
       worktree: 'floating',
       agent: 'shell',
-      command: `printf 'SLEEP_HISTORY_MARKER\\n'; (exec sleep 600) & echo $! > '${pidFile}'; wait`
+      cwd: home,
+      command: commandWithHistoryScrollback('SLEEP_HISTORY_MARKER', `(exec sleep 600) & echo $! > ${quote(pidFile)}; wait`)
     })
     await waitFor(() => existsSync(pidFile), 5000)
     await waitForAsync(async () => (await history(shell.id)).includes('SLEEP_HISTORY_MARKER'), 5000)
@@ -123,7 +129,7 @@ describe('workspace sleep and wake', () => {
     writeExecutable('claude', `echo "$$" > '${pidFile}'; exec sleep 600`)
     const agent = await createSession(client!, { worktree: 'floating', agent: 'claude', cwd: home })
     await waitFor(() => existsSync(pidFile), 5000)
-    await call(client!, 'quirky.session/setProviderSession', { session: agent.id, id: 'provider-thread-42', transcriptPath: null })
+    await call(client!, 'quirky.session/setProviderSession', { session: agent.id, id: 'provider-thread-42' })
 
     await call(client!, 'quirky.session/sleepWorkspace', { worktree: 'floating' })
     const awake = await call<WorkspaceSleepState>(client!, 'quirky.session/wakeWorkspace', { worktree: 'floating' })
@@ -146,7 +152,6 @@ describe('workspace sleep and wake', () => {
     await call(client!, 'quirky.session/setProviderSession', {
       session: original.id,
       id: 'structured-thread-ordinary',
-      transcriptPath: null
     })
 
     const resumed = await call<Session>(client!, 'quirky.session/resume', { session: original.id })
@@ -171,7 +176,6 @@ describe('workspace sleep and wake', () => {
     await call(client!, 'quirky.session/setProviderSession', {
       session: original.id,
       id: 'structured-thread-wake',
-      transcriptPath: null
     })
     await call(client!, 'quirky.session/sleepWorkspace', { worktree: 'floating' })
 
@@ -208,7 +212,7 @@ describe('workspace sleep and wake', () => {
       worktree: 'id:wt_main',
       cwd: checkout,
       agent: 'shell',
-      command: `printf 'OLD_WORKTREE_HISTORY\\\\n'; echo \"$$\" > '${pidFile}'; exec sleep 600`
+      command: commandWithHistoryScrollback('OLD_WORKTREE_HISTORY', `echo "$$" > ${quote(pidFile)}; exec sleep 600`)
     })
     await waitFor(() => existsSync(pidFile), 5000)
     await waitForAsync(async () => (await history(old.id)).includes('OLD_WORKTREE_HISTORY'), 5000)
@@ -246,11 +250,12 @@ describe('workspace sleep and wake', () => {
   })
   test('retains a partial stop and retries the live session without losing history', async () => {
     const pidFile = join(home, 'partial-stop.pid')
-    const first = await createSession(client!, { worktree: 'floating', agent: 'shell', command: 'exec sleep 600' })
+    const first = await createSession(client!, { worktree: 'floating', agent: 'shell', cwd: home, command: 'exec sleep 600' })
     const second = await createSession(client!, {
       worktree: 'floating',
+      cwd: home,
       agent: 'shell',
-      command: `printf 'PARTIAL_STOP_HISTORY\\\\n'; echo \"$$\" > '${pidFile}'; exec sleep 600`
+      command: commandWithHistoryScrollback('PARTIAL_STOP_HISTORY', `echo "$$" > ${quote(pidFile)}; exec sleep 600`)
     })
     await waitFor(() => existsSync(pidFile), 5000)
     await waitForAsync(async () => (await history(second.id)).includes('PARTIAL_STOP_HISTORY'), 5000)
@@ -304,7 +309,7 @@ describe('workspace sleep and wake', () => {
     mkdirSync(cwd)
     writeExecutable('claude', 'exec sleep 600')
     const agent = await createSession(client!, { worktree: 'floating', agent: 'claude', cwd })
-    await call(client!, 'quirky.session/setProviderSession', { session: agent.id, id: 'provider-retry-9', transcriptPath: null })
+    await call(client!, 'quirky.session/setProviderSession', { session: agent.id, id: 'provider-retry-9' })
     await call(client!, 'quirky.session/sleepWorkspace', { worktree: 'floating' })
     rmSync(cwd, { recursive: true, force: true })
 

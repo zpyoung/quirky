@@ -1200,6 +1200,9 @@ export class SessionService {
   async reconcile(options: { startup: boolean }): Promise<void> {
     if (options.startup) {
       for (const id of this.records.sweepPendingDeliveries()) this.publish(this.require(id))
+      for (const session of this.records.list()) {
+        if (session.kind === 'structured' && session.status !== 'exited') this.finish(session.id, { exitCode: null })
+      }
       this.reconcileInterruptedWorkspaceSleep()
     }
     let live: Map<string, PtySessionInfo>

@@ -17,6 +17,7 @@ import { isCoordinatorSeatLostError, workerObservationsFromRun } from './worker-
 
 const CONTRACT_VERSION = 1 as const
 const MAILBOX_EVENT = 'quirky.orchestration/message-arrived'
+const SUBMISSION_PREFLIGHT_METHOD = 'quirky.heimdall/submissionPreflight'
 const MAILBOX_TYPES = ['worker_done', 'question', 'escalation'] as const
 const MAILBOX_JOURNAL_KIND = 'orchestration-mailbox-check'
 const RELEASE_JOURNAL_KIND = 'orchestration-worker-release'
@@ -69,11 +70,19 @@ export function createOrchestrationAdapter(
 
   async function registerSubmissionPreflight(runId: string): Promise<void> {
     if (disposed) throw new Error('orchestration adapter is disposed')
-    await context.call('quirky.orchestration/serviceRegisterSubmissionPreflight', {
+    const method = SUBMISSION_PREFLIGHT_METHOD
+    const requestId = deterministicRequestId(`heimdall-submission-preflight-v1\0${runId}\0${method}`)
+    const value = await context.call('quirky.orchestration/serviceRegisterSubmissionPreflight', {
       runId,
-      method: 'quirky.heimdall/submissionPreflight'
+      method,
+      requestId,
+      contractVersion: CONTRACT_VERSION
     })
     if (disposed) throw new Error('submission preflight registration completed after adapter disposal')
+    if (!hasMutationReceipt(value, requestId) || !isRecord(value) ||
+      value.runId !== runId || value.method !== method || value.registered !== true) {
+      throw new Error('submission preflight registration returned no matching mutation receipt')
+    }
   }
 
   async function ensureRun(enrollment: Enrollment): Promise<string> {

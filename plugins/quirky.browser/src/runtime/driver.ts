@@ -404,7 +404,7 @@ function windowsKeyCode(value: string): number | undefined {
   }
 }
 
-function cdpWindowsVirtualKeyCode(key: string, code?: string): number | undefined {
+export function cdpWindowsVirtualKeyCode(key: string, code?: string): number | undefined {
   const fromCode = code ? windowsKeyCode(code) : undefined
   return fromCode ?? windowsKeyCode(key)
 }
@@ -418,7 +418,7 @@ const MAC_EDIT_COMMANDS: Readonly<Record<number, readonly string[]>> = {
 const MAC_UNDO_COMMANDS = ['undo'] as const
 const MAC_REDO_COMMANDS = ['redo'] as const
 
-function macOSEditingCommands(key: string, modifiers?: number): readonly string[] | undefined {
+export function macOSEditingCommands(key: string, modifiers?: number): readonly string[] | undefined {
   if (process.platform !== 'darwin' || modifiers === undefined || (modifiers & 4) === 0 || (modifiers & 3) !== 0) return undefined
   const keyCode = windowsKeyCode(key)
   if (keyCode === undefined) return undefined

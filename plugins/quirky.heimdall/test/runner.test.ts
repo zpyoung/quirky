@@ -1616,6 +1616,7 @@ describe('Heimdall runner gate and budget behavior', () => {
     const originalFetch = globalThis.fetch
     let fetchCalls = 0
     let executions = 0
+    let executedAction: KernelAction | undefined
     const question: JudgmentQuestionRequest = {
       id: 'q-stall',
       questionId: 'heimdall.stall-cause',
@@ -1635,15 +1636,17 @@ describe('Heimdall runner gate and budget behavior', () => {
     const watcherKind = kind({
       decide: () => ({ action }),
       judgmentQuestions: async () => [question],
-      execute: async () => { executions++; return { effect: 'landed' } },
+      execute: async (selectedAction) => { executions++; executedAction = selectedAction; return { effect: 'landed' } },
       pace: () => 'stopped'
     })
-    const runner = createRunner(runnerOptions(stored, watcherKind))
+    const options = runnerOptions(stored, watcherKind, { enrollment: enrollment({ schedulerOwner: 'daemon' }) })
+    const runner = createRunner(options)
     try {
       await runner.pulse()
       const journal = stored.store.journal('watcher-1')
       expect(fetchCalls).toBe(1)
       expect(executions).toBe(1)
+      expect(executedAction).toEqual(action)
       expect(journal.find((entry) => entry.kind === 'judgment-shadow')).toMatchObject({
         class: 'observation', status: 'observed', result: { answers: { 'q-stall': { type: 'noul', noul: 0.25 } } }
       })

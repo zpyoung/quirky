@@ -1,0 +1,180 @@
+# fix-test-mobile-1028 decisions
+
+## D1: Repair the three public mobile boundaries without compatibility aliases
+- **Question:** Which failures belong to this end-phase item, and how should shared ownership be handled?
+- **Options:** add mobile-only browser/trust bypasses; repair the public contracts and coordinate shared owners
+- **Chose:** repair the public contracts and coordinate shared owners
+- **Why:** Triage records missing Chromium, missing consent trustHash, and an unknown browser paneState method; none justifies restoring obsolete aliases or bypassing content-pinned consent.
+- **Evidence:** docs/loop/reports/m7-test-triage.json groups plugins/quirky.mobile; queue item fix-test-mobile-1028
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** current runtime evidence identifies a different consumer-visible boundary
+- **Source:** locked by docs/loop/LOOP.md
+
+## D2: Use reported baseline failures as red evidence and verify changes with the canonical suite
+- **Question:** Should the baseline failures be rerun merely to confirm them?
+- **Options:** repeat triage; trust reported evidence and run changed-path verification
+- **Chose:** trust reported evidence and run changed-path verification
+- **Why:** The supplied triage is authoritative failure evidence. Verification will use bun scripts/suite.ts with fresh isolated homes; no real user state is permitted.
+- **Evidence:** docs/loop/reports/m7-test-triage.json baseline 97aaa12d9fdf91a966cbc78d5557e113fc9789b3; docs/loop/LOOP.md end phase and step 6
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** a new regression needs a new failing scenario
+- **Source:** assumed — autonomous
+
+## D3: Consume the existing mobile owner's published repair rather than duplicate it
+- **Question:** How do the narrower repair and the active browser/mobile sweep share code?
+- **Options:** reimplement the same fixtures; merge the whole unfinished sweep; consume only published prerequisite changes
+- **Chose:** consumed lane7 commit 7bf12184 as 11477ce7 and its exact optional-method classification from 72ef6dae through one narrow omp implementer. Preserve the existing macOS Watch marker; do not take over PhoneLinks, bridge resources or browser runtime.
+- **Why:** Peer patches already identify live-receipt matcher mutation, hard-coded Watch coordinates and fake PTY execution. The older consent fixture conflict was resolved in favor of the real PTY; obsolete Git shim helpers were removed. The signature's optional environment preserves existing fixture callers.
+- **Evidence:** build/m7-sweep-browser-mobile D6/D11–D14; commits 7bf12184/72ef6dae; terminal input receipts 425db308-3524-45f5-9113-31358013c415 and 42f288f9-44f2-4050-9555-b4d1fcaf199c establish accepted coordination, not proven delivery
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** peer supplies a conflicting public contract
+- **Source:** assumed — autonomous
+
+## D4: Preserve runtime receipts before using their hashes and revisions
+- **Question:** Why did a valid producer hash fail the subsequent string check?
+- **Options:** weaken producer validation; cast matcher objects; assert scalar fields without mutating the receipt
+- **Chose:** scalar assertions retain the actual hash/revision for the next request. Real paired consent still requires setup and issue pins and verifies both marker files after real PTY execution.
+- **Why:** A disposable Bun probe observed toMatchObject replacing the actual trustHash string with ExpectStringMatching and revision number with ExpectAny. The failure was in the test's retained receipt, not permission to relax content pins or CAS. Coordinate-based Watch input targets the actual field in the displayed frame, not a fixed pixel.
+- **Evidence:** actual bun probe before hashType:string/revision:7 → after hashType:object/revisionType:object; canonical first acceptance actual paired-consent pass and macOS Watch file pass
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** a later Bun release changes matcher behavior
+- **Source:** assumed — autonomous
+
+## D5: Keep optional providers optional, without swallowing operational failures
+- **Question:** Should absent Browser prevent listing actual Editor tabs?
+- **Options:** require Browser in every Markdown fixture; swallow every browser error; recognize only the exact missing optional method
+- **Chose:** recognize MethodNotFound only with the exact unknown-method message for the requested plugin and method. Preserve other failures, existing disabled/invalid handling, actual tab identity, dirty-close, CAS and byte limits.
+- **Why:** Markdown integration intentionally omits Browser. The existing classifier covered disabled and declared-but-missing providers but not an uninstalled method. Installing a fake provider would hide this consumer defect.
+- **Evidence:** plugins/quirky.mobile/src/daemon/session-tabs.ts unavailableMethod/sessionTabs; triage unknown quirky.browser/paneState; disposable actual RPC smoke passed create/list/write/stale refusal/dirty-close refusal/save/close with browserInstalled:false and cleanup rootRemoved/daemonHomeRemoved:true
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** daemon missing-method errors become a structured provider-availability contract
+- **Source:** assumed — autonomous
+
+## D6: Supply the real declared CLI dependency in isolated fixtures
+- **Question:** Why did the current smoke/suite stop at unknown quirky.worktree/list before reaching mobile behavior?
+- **Options:** weaken Worktree dependency admission; fake its methods; include the actual declared dependency in the fixtures
+- **Chose:** add quirky.cli to the isolated Markdown fixture and the shared Hosting fixture; retain duplicate-symlink protection. Register the Markdown harness for cleanup before connection/repository preconditions.
+- **Why:** Worktree's current manifest declares quirky.repo and quirky.cli. Neither fixture included CLI. Real dependency admission is correct; fixture omissions are not product authority defects. Hosting helper affects mobile task/Vault consumers and Tasks flows, so its full consumers need verification. fix-test-hosting-1028 is still unclaimed; no production Hosting change is taken from that owner.
+- **Evidence:** first canonical mobile/tasks/scripts gate exit1 in37.05s: 27/32 remote files pass and1/1 Mac file pass; missing worktree/list in Markdown/Hosting consumers. Smoke after dependency and canonical-path fixture correction passed in3.07s. scripts and real consent passed; two additional encrypted-mobile failures assigned to a separate disjoint worker.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** the declared Worktree dependency changes
+- **Source:** assumed — autonomous
+
+## D7: Use a reachable cross-family reviewer and preserve platform limits
+- **Question:** Which review/backend and platform evidence are available on this omp lane?
+- **Options:** preferred Opus; verified Gemini fallback; imply native phone coverage from API tests
+- **Chose:** omp/OpenAI implementers, Gemini google/gemini-3.1-pro-preview:high reviewer after Opus probe exit5 and Gemini probe exit0. macOS owned Chrome for Watch; remote portable tests via suite.ts. No native phone/keyboard/keychain success inferred.
+- **Why:** Preferred Opus has no authenticated/shipping model. The real Chromium-dependent file is already in scripts/test-on-macos.txt; no fake or skipped browser acceptance. The changed product boundary is daemon/API, not a UI restyle.
+- **Evidence:** actual pi-watch probes; scripts/test-on-macos.txt; existing mobile/native scenario owners
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** actual reviewer dispatch or native evidence differs
+- **Source:** assumed — autonomous; deferred: platform
+
+## D8: Keep independent Hosting and Tasks failures with their queued repair owners
+- **Question:** Does a shared fixture dependency correction authorize changing Hosting push policy or Tasks UI contracts?
+- **Options:** weaken assertions/security; duplicate other area repairs; retain complete failed verification evidence with the existing queue owners
+- **Chose:** retain fix-test-hosting-1028 and fix-test-tasks-1028 ownership, including all actual consumer failures. No new duplicate item or false green broad-suite claim. Continue fixing mobile's own rejected Vault/Git/session requests with exact method diagnostics.
+- **Why:** The expanded canonical gate exercises actual providers after admission is repaired. Its two Hosting push tests and nine Tasks Projects/list cases match the existing queued failures. Tasks also reports workspace-composer trust UI and restyle-detail cancellation failures; those join that area's recorded repair evidence, not a mobile-only workaround.
+- **Evidence:** canonical expanded gate exit1/235.19s,31 remote files25pass6fail; pr.test.ts44pass2fail; projects-ui.test.tsx3pass4fail; remaining-list-issue.test.ts7pass5fail; workspace-composer.test.tsx3pass1fail; restyle-detail.test.tsx0pass1fail/1error. Markdown file, Tasks workspace flows and Git merge-preview pass. Mobile paired-hook execution passes; Vault request remains diagnosed, not deferred.
+- **Reversibility:** easy
+- **Confidence:** high for observed outcomes and queue ownership
+- **Revisit if:** owning repair traces a failure to a production change from this item
+- **Source:** assumed — autonomous
+
+## D9: Distinguish feature-domain scope from authenticated credential scope
+- **Question:** Why did valid phone Stage all and local Vault search fail as unauthorized?
+- **Options:** change valid UI requests into narrower fixtures; add exceptions per feature; remove the identity/domain conflation while retaining existing method policy
+- **Chose:** remove scope only from parameter caller-identity fields. Keep scope in envelope identity fields and keep credential scope derived solely from the authenticated registry/token. Existing method allowlists, feature-specific validation, public schemas and current-credential checks remain unchanged. Add a real encrypted top-level scope-spoof refusal assertion.
+- **Why:** Temporary method/key-only diagnostics located the failures at Git stage with worktree/scope and Vault search with host/query/scope/freshness/limit/filters/within. The actual Source Control producer uses scope:all; both public feature schemas and the paired-method ceiling permit domain scopes. service.ts rewrote/rejected these before that policy ran. sb-mobile-app-panels D16 already records removing the same collision; owner-provisioning D2 requires separate authenticated grants, not treating every feature scope as an identity claim.
+- **Evidence:** canonical diagnostic gate exit1/48.85s; apps/mobile/src/panels/source-control/index.tsx Stage all/tracked producer; PANEL_METHOD_PARAMS and assertPanelParameters; service.ts guardEnvelopeIdentity/authorizeConnection; sb-mobile-app-panels D16/D18; m7-terminal-owner-provisioning-and-selector-flows D2. Disposable actual encrypted smoke exit0/3.95s staged the saved note in the real Git index, retained mobile role and refused daemon.stop and envelope scope spoof; both private homes removed.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** an authenticated transport starts deriving authority from method parameters, which would violate the retained token/registry contract
+- **Source:** locked by sb-mobile-app-panels D16 and m7-terminal-owner-provisioning-and-selector-flows D2
+
+## D10: Preserve incoming presentation owners and the orchestration exit-order repair
+- **Question:** What binding changes arrived in catch-up and lane8's direct coordination?
+- **Options:** take over their behavior; ignore their boundaries; preserve each current owner
+- **Chose:** sole roadmap merge reads ui-restyle-ask D1–D12 and ui-restyle-settings D1–D11 completely, including long omitted lines. Preserve shared preview subpath, input authority, pairing/revoke/secret masking and current UI lint enrollment. Reply to lane8 that its synchronous liveness UNKNOWN invalidation before async refresh has no conflict; no RuntimeSessionAuthority or Ask source/API edits here.
+- **Why:** source scopes do not overlap; token-derived mobile credential scope is unrelated to session liveness. Current Mobile desktop UI tests arrive with Settings and are included in post-merge verification.
+- **Evidence:** sole catch-up merge output; both full decision logs; /tmp/quirky-lane8-orchestration-reply.md; incoming direct user instruction naming build/fix-test-orchestration-1028
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** an owning repair reports an actual shared-file or authority conflict
+- **Source:** locked by incoming ui-restyle decisions and lane8 coordination
+
+## D11: Classify generated Mobile page output as build output, not authored plugin UI
+- **Question:** Why did caught-up typecheck fail on ignored assets after the Mobile plugin's lint enrollment?
+- **Options:** remove inherited build files; exempt all assets or disable Mobile lint; exclude exactly the canonical generated bundle directory
+- **Chose:** source collection skips only assets/mobile under quirky.mobile, matching the builder's default destination and explicit gitignore rule. All authored Mobile source and other asset directories remain enforced. Extend the existing runner regression with generated CSS/JS/HTML and real source/SVG violations; delete incidental full-message assertions rather than repin them.
+- **Why:** the13 diagnostics came solely from inherited generated page.css/page.js/index.html. Removing those unrelated files would conceal the normal build→typecheck failure. A blanket assets exclusion would weaken source enforcement. The private collector's optional excluded subdirectory changes no exported API or lint baseline.
+- **Evidence:** actual typecheck exit1/1.87s; apps/mobile/scripts/build-pages.ts89+; .gitignore12; scripts/ui-lint.ts collector and CLI-boundary test. Corrected full UIlint/root/mobile/prepared-desktop typecheck passed39.64s; final focused lint regression plus full typecheck passed45.346s in the review prepass.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** the canonical bundle destination changes
+- **Source:** assumed — autonomous
+
+## D12: Record the completed bounded review and exact current verification
+- **Question:** What evidence establishes completion without claiming universal UI/native or unrelated-area clearance?
+- **Options:** report whole-suite success; run another discovery campaign; one fixed-artifact standard cross-family promote/refute review plus observed gates
+- **Chose:** Gemini standard review over the11 owned source/test/document paths, combined correctness/contract/security mandate. Actual promote199.797s returned[]; fresh-context refute6.942s returned[]. Deterministic claims/merge/gate/manifest all exited0: PASS, full family independence,0 blocking/advisory/suppressed/contested findings,0 limitations/questions/excluded/unreviewed paths. No fix batch was needed. The593-line patch's deep suggestion was explicitly bounded to standard independent promote/refute; no claim of three separate lenses or exhaustive assurance.
+- **Why:** fix items skip feature specs; one bounded final review is the loop's completion bar. Raw prompts/replies, immutable patch, chained prepass/model/gate/manifest are retained, with no author reasoning given to the reviewer and no shell/test tools granted. Current consumer gate passes34remote+1macOS files, flaky[]; final lint regression+typecheck passes. Current caught-up real API/encrypted smoke passed3.37s with45 saved bytes, real index mutation, spoof/owner-method refusal and both homes removed. Known shutdown Worktree deactivation warning remains visible; no pristine-log claim.
+- **Evidence:** review run689cb79bb85a1514 artifact8f5edb917d5a8da89c9a25769ee4aec60091d084e2863588aa5c518020f2923d; canonical Mobile gate94.99s; prepass45.346s; smoke3.37s. Existing Hosting/Tasks repair inventory plus newly queued fix-test-reviews-tool-1028 retains separate consumer failures; canonical deps confirms ready:true. Earlier daemon timeout passed its configured retry and final unmodified run; deadlines unchanged.
+- **Reversibility:** easy
+- **Confidence:** high for exercised boundaries, bounded for review completeness/native behavior
+- **Revisit if:** merge-result typecheck, existing repair owners or native evidence contradicts these results
+- **Source:** assumed — autonomous; deferred: platform for native phone behavior only
+
+## D13: Adjudicate final static Watch contract findings as one bounded fix batch
+- **Question:** Does the separate plugin validator's non-clean static result identify real consumer defects?
+- **Options:** ignore unchanged adjacent code; narrow valid advertised inputs; align the adapter with the existing shared public contract
+- **Chose:** accept V1 (typed Watch input mismatch, effective medium) and V2 (missing method: contribution identity, effective low). Reuse the existing implementer for one fix batch with real Watch regressions authored first, then canonical red/green. Preserve exact connection/lease/frame authorization and all public bounds; no new API or grants.
+- **Why:** source inspection confirms shared admission and Browser accept optional key code, char, up to64KiB text and finite wheel deltas, while the Mobile adapter independently rejects them. Actual host contribution loss includes method: but the classifier omits it. These are existing advertised-contract seams, not new features. The prior formal PASS describes only its fixed pre-batch artifact; it is not relabeled as review of later code.
+- **Evidence:** MobileStructureFinal static findings; protocol mobile-browser.ts53–74; Mobile session-tabs.ts739–756 and89–106; Browser driver.ts605–657; daemon host.ts246–253/dispatch.ts184. V1 runtime regression and final fix evidence follow below; V2's specific activation-race interleaving is not yet exercised.
+- **Reversibility:** easy
+- **Confidence:** high for source mismatches, runtime proof pending
+- **Revisit if:** canonical regressions contradict the shared producer vocabulary
+- **Source:** assumed — autonomous
+
+## D14: Close the accepted batch with real red/green, consumer and frame evidence
+- **Question:** What closes V1/V2 after the original formal review snapshot?
+- **Options:** relabel the earlier PASS; add another discovery campaign; run the required post-batch gates and bounded finding closure
+- **Chose:** shared validator reuse removes the conflicting input restrictions without new grants; exact method:-prefixed contribution matching replaces the broken identity. The real Watch regression first fails initial/retry on optional-code input, then passes in the complete post-batch suite. Static closure reports both findings closed; no new discovery or second formal review.
+- **Why:** the full canonical Mobile/apps-mobile/scripts/workspace-flow/Git-merge gate passes55remote+2macOS files in74.77s, flaky[]. Full UIlint/root/mobile/prepared-desktop typecheck passes45.41s. Independent actual daemon/owned Chromium1148 smoke passes optional-code keys, exact4097-byte value, char insertion, over64KiB rejection and foreign-connection rejection. After frame ACK a fresh bounded JPEG visibly contains typed text; the parent inspected it. Explicit Watch stop and awaited cleanup remove both private homes, exit0/4.85s.
+- **Evidence:** bg11 red exit1/13.65s; bg12 post-batch57files pass; bg13 typecheck exit0; actual smoke4.74s plus fresh-paint extension4.85s; mobile-repair-evidence/watch-input.jpg and final-proof.json beside notes; MobileStructureFinal bounded closure on session-tabs.ts89–106,432–444,739–762. Original review traces remain pre-batch; post-batch delta retained separately.
+- **Reversibility:** easy
+- **Confidence:** high for real exercised Watch/authority/Markdown/consumer paths; source-only for the specific NotFound activation-race interleaving
+- **Revisit if:** a genuine provider activation race contradicts the exact producer identity or canonical land reports a concrete source/type failure
+- **Source:** assumed — autonomous
+
+## D15: Recover the controller's concurrent merge conflict with the canonical Git inventory
+- **Question:** What must change after the actual first land refusal?
+- **Options:** bypass the controller; retain competing plugin-path exclusions; adopt the incoming general source inventory
+- **Chose:** required recovery merge reads fix-test-heimdall D1–D12, fix-test-loops D1–D11 and ui-restyle-accounts D1–D15 completely, including raw omitted lines. Preserve nullable certified liveness, connection-owned approval waits/cancellation and the20-second quiet gate, and Accounts/Vault shared presentation/required-choice authority. Resolve both lint conflicts in favor of Accounts' repository Git inventory, remove our obsolete plugin-specific exclusion and duplicate Mobile-only fixture section, retain semantic assertion cleanup plus the incoming ignored/tracked/new-source regression.
+- **Why:** first canonical land of399a7eb8 failed with a real concurrent merge conflict. Incoming Accounts D13 addresses the same generated bundle cause using the repository's existing cached+nonignored source convention, retaining force-tracked ignored source and ordinary new source, with fail-closed Git errors and non-Git fallback. One canonical owner avoids a second path-specific convention. No protected loop file or authority policy changed.
+- **Evidence:** bg14 exit1/1.50s; recovery conflicts4/5 in scripts/ui-lint.ts; incoming three complete decision logs and tests; canonical Accounts D13; exact resolver writes and removal of stale excludedSubdirectory. Fresh recovery gates and current runtime proof follow before retry.
+- **Reversibility:** easy
+- **Confidence:** high for source conflict resolution, recovery runtime/typecheck pending
+- **Revisit if:** the current source inventory or composed mobile runtime fails verification
+- **Source:** supersedes fix-test-mobile-1028 D11 (inventory mechanism only); locked by ui-restyle-accounts D13
+
+## D16: Verify the recovered composition before the canonical retry
+- **Question:** Does the recovery's current source preserve all repaired consumer behavior?
+- **Options:** reuse399a7eb8 results; skip independent runtime proof; run fresh composed gates and existing owned smokes
+- **Chose:** current canonical Mobile/apps-mobile/scripts/workspace-flow/Git suite passes55remote+2macOS files in89.17s, no failures/flakes. Current full frozen-install/UIlint/root/mobile/prepared-desktop typecheck passes44.83s. Actual public Markdown/encrypted-phone and typed Chrome Watch smokes both pass in one16.67s command, with exact values/authority refusals, fresh JPEG personally inspected and all private homes removed.
+- **Why:** validates the canonical Git inventory regression plus incoming structured/UI composition instead of relabeling the earlier source. No further review discovery, timeout increase, source exception, grant widening or proactive merge was added.
+- **Evidence:** recovery fa2d2492; bg15 suite-result ok:true/flaky:[]; bg16 typecheck exit0; current combined smoke exit0/16.67s and cleanup rootRemoved/daemonHomeRemoved:true for both; retained current watch-input.jpg
+- **Reversibility:** easy
+- **Confidence:** high for current exercised boundaries; native phone and exact NotFound activation-race interleaving limits remain unchanged
+- **Revisit if:** canonical merge-result gate reports a new concrete integration failure
+- **Source:** locked by docs/loop/LOOP.md failed-land recovery; assumed — autonomous for bounded proof
+
+## Progress
+Ready for canonical retry on recoveredfa2d2492 composition. All incoming decision logs and raw omissions read; canonical Git inventory replaces obsolete narrow exclusion, all Mobile/public authority fixes retained. Fresh57file consumer suite/no flakes, full typecheck44.83s and actual combined API/encrypted/Chrome fresh-frame smokes16.67s pass with awaited private cleanup. All implementers/validators/review/check/runtime processes returned. Exact prior formal-review/fix-batch/source-only race qualification and independent area owners remain recorded. Next: commit receipt, detach, canonical queue land retry and await actual result; remove only owned scratch after success and end exactly this item.

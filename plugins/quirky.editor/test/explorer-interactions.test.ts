@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test'
 import { execFileSync } from 'node:child_process'
-import { mkdirSync, mkdtempSync, rmSync, unlinkSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, unlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { RpcErrorCode, type QuirkyClient, type QuirkyEvent } from '@quirky/protocol'
@@ -19,7 +19,7 @@ type ExplorerResult = {
 type EditorState = {
   explorer: { worktreeId: string; expanded: string[]; selectedPaths?: string[]; focusedPath?: string | null; selectionAnchor?: string | null }
 }
-type Fixture = { harness: Harness; client: QuirkyClient; home: string; root: string; worktree: Worktree; roots: Set<string>; events: QuirkyEvent[] }
+type Fixture = { harness: Harness; client: QuirkyClient; home: string; root: string; repoId: string; worktree: Worktree; roots: Set<string>; events: QuirkyEvent[] }
 
 const fixtures = new Set<Fixture>()
 registerIsolatedEditorFixtures(async () => {
@@ -40,16 +40,16 @@ function git(root: string, home: string, args: string[]): void {
   })
 }
 
-async function registerWorktree(client: QuirkyClient, root: string): Promise<Worktree> {
+async function registerWorktree(client: QuirkyClient, root: string): Promise<{ repoId: string; worktree: Worktree }> {
   const repo = await call<{ id: string }>(client, 'quirky.repo/add', { path: root })
   const worktrees = await call<Worktree[]>(client, 'quirky.worktree/list', { repo: repo.id })
   const worktree = worktrees.find((entry) => entry.path === root) ?? worktrees[0]
   if (!worktree) throw new Error('repo add returned no worktree')
-  return worktree
+  return { repoId: repo.id, worktree }
 }
 
 async function fixture(files: Record<string, string>): Promise<Fixture> {
-  const root = mkdtempSync(join(tmpdir(), 'quirky-editor-explorer-'))
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'quirky-editor-explorer-')))
   const home = makeHomeWithoutAutoHooks('q-editor-explorer-')
   let harness: Harness | undefined
   const roots = new Set([root])
@@ -66,9 +66,9 @@ async function fixture(files: Record<string, string>): Promise<Fixture> {
     }
     harness = await startHarness({ home, builtinPluginsDir: builtinsDir() })
     const client = await harness.connect('cli')
-    const worktree = await registerWorktree(client, root)
+    const { repoId, worktree } = await registerWorktree(client, root)
     const subscribed = await harness.connectWithEvents('ui')
-    const value = { harness, client, home, root, worktree, roots, events: subscribed.events }
+    const value = { harness, client, home, root, repoId, worktree, roots, events: subscribed.events }
     fixtures.add(value)
     return value
   } catch (error) {
@@ -221,7 +221,7 @@ test('Explorer rejects unauthorized or hidden paths and uses only filtered visib
     .rejects.toMatchObject({ code: RpcErrorCode.InvalidParams })
 })
 
-test('Explorer safely resets stale anchors after collapse, filter and refresh, and keeps empty trees empty', async () => {
+test('Explorer safely resets stale anchors after collapse, filter and refresh', async () => {
   const world = await fixture({ 'A/inside.txt': 'inside\n', 'needle.txt': 'match\n', 'ordinary.txt': 'other\n', 'z-gone.txt': 'stale\n' })
   const worktree = world.worktree.id
   const path = (name: string) => join(world.root, name)
@@ -247,7 +247,9 @@ test('Explorer safely resets stale anchors after collapse, filter and refresh, a
   expect(interaction(afterRefresh).selectedPaths).not.toContain(path('z-gone.txt'))
   expect(interaction(afterRefresh).focusedPath).not.toBe(path('z-gone.txt'))
   expect(interaction(afterRefresh).selectionAnchor).not.toBe(path('z-gone.txt'))
+})
 
+test('Explorer keeps empty trees empty', async () => {
   const empty = await fixture({})
   const initial = await explorer(empty, empty.worktree.id, { action: 'list' })
   expect(initial.entries).toEqual([])
@@ -260,11 +262,10 @@ test('Explorer safely resets stale anchors after collapse, filter and refresh, a
 
 test('Explorer interaction and expansion state are isolated by worktree', async () => {
   const world = await fixture({ 'A/first.txt': 'main\n', 'shared.txt': 'main\n' })
-  const otherRoot = mkdtempSync(join(tmpdir(), 'quirky-editor-explorer-other-'))
+  const otherRoot = realpathSync(mkdtempSync(join(tmpdir(), 'quirky-editor-explorer-other-')))
   world.roots.add(otherRoot)
   git(world.root, world.home, ['worktree', 'add', '-b', 'other', otherRoot])
-  const linkedRepo = await call<{ id: string }>(world.client, 'quirky.repo/add', { path: otherRoot })
-  const worktrees = await call<Worktree[]>(world.client, 'quirky.worktree/list', { repo: linkedRepo.id })
+  const worktrees = await call<Worktree[]>(world.client, 'quirky.worktree/list', { repo: world.repoId })
   const second = worktrees.find((entry) => entry.path === otherRoot)
   if (!second) throw new Error('the linked test worktree was not registered')
 

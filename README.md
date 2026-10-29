@@ -39,10 +39,12 @@ answers agent questions. Workspace **Sleep** parks its views without stopping pr
 opening it wakes those views. **Stop sessions (retain history)** is a separate, explicit operation
 that preserves PTY history and supported agents' resume identities. Unknown workspace origins
 remain visible under automation/other-client filters. Markdown tabs use the actual editor
-document and tab identity, with revision-guarded edits and saves.
+document and tab identity, with revision-guarded edits and saves. Markdown tabs remain available
+when the optional Browser plugin is absent or disabled.
 
 **Browser (Chrome Watch)** is explicit opt-in, with a connection-owned stream and typed controls;
-selecting an existing Native tab never converts it silently. Interactive native chat, dictation,
+selecting an existing Native tab never converts it silently. Watch accepts typed character/key
+events with optional key codes and up to 64 KiB of UTF-8 text. Interactive native chat, dictation,
 and Native browser mirroring still need their recorded architecture or host prerequisites.
 Signed distribution is tracked separately. Actual camera, secure-store,
 WebView and keyboard checks remain in the [base native handoff](docs/loop/native/sb-mobile-app.json)
@@ -116,6 +118,17 @@ quirky vault clear --yes
 Advanced parity and verification obligations are tracked in
 [the vault's open findings](docs/loop/BLOCKERS.md#m3-vault-open-review-findings) and the dependent
 `m3-vault-parity-completion` queue item.
+
+Run Vault acceptance with `bun scripts/suite.ts plugins/quirky.vault`. Its paired-host fixture
+uses separate Vault module copies because both daemons run in one Bun process; disabling one
+host must leave the other host's exact source searchable. Search-window scenarios wait for
+settled failures before retrying and exercise term truncation within the public 512-character
+query limit. Native Trash and OS integration remain separate checks.
+All-scope searches remain usable while workspace context refreshes. Indexing discovers source
+authority once per pass and still revalidates each file before reading it; opaque-ID inspection
+continues to rediscover its current source. Candidate-limit checks wait for the real index to
+finish, independently of the five-second fresh-search deadline.
+
 ## Terminal artifacts on the phone
 
 In a local terminal session, open **More → Terminal artifacts** to browse files named in that
@@ -221,6 +234,9 @@ adds its plugin IDs. Worktree and repository management are enforced. Unlisted l
 are not checked. Listed plugins must remove their own CSS files, private CSS imports, style
 elements and stylesheet injection; the canonical `@quirky/ui/styles.css` import is allowed.
 Use shared controls and tokens instead.
+Generated files ignored by Git are excluded from source discovery. Tracked source stays
+checked even inside an ignored directory; standalone source-scanner calls still inspect
+the supplied content.
 Only custom-property values in the two central design-system token files may define raw
 primitives. Existing host geometry remains in `compatibility-tokens.css` until its area restyle;
 new shared controls use the approved semantic tokens and size scale. Static source analysis

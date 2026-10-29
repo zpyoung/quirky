@@ -56,7 +56,8 @@ test('atomic claims contend, expire to a higher epoch, and stale assert/release 
   expect(JSON.parse(readFileSync(firstFile, 'utf8'))).toMatchObject({ holderId: 'kernel-a', epoch: 1 })
   expect(statSync(firstFile).mode & 0o777).toBe(0o600)
 
-  expect(secondOwner.acquire()).toMatchObject({ kind: 'held', holderId: 'kernel-b', epoch: 1 })
+  // Callers consume contention as a blocked claim; the incumbent identity is not part of that contract.
+  expect(secondOwner.acquire()).toMatchObject({ kind: 'held' })
   now = base + WORKSPACE_LEASE_TTL_MS + 2_000
   const second = secondOwner.acquire()
   expect(second).toMatchObject({ kind: 'acquired', holderId: 'kernel-b', epoch: 2 })

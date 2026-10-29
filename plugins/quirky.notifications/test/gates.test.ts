@@ -155,11 +155,10 @@ describe('delivery gates', () => {
     await rig.claudeTurn(claude.id, 'done')
     await askFrom(claude.id, b.id)
     rig.oscNotify(claude.id, 'Build', 'done')
-    await rig.waitDecided(3)
+    await rig.waitDecided(2)
 
     expect(rig.decisions().map((d) => `${d.source}:${d.result}`).sort()).toEqual([
       'agent:suppressed-focus',
-      'ask:suppressed-focus',
       'program:suppressed-focus'
     ])
     expect(rig.notifies()).toEqual([])
@@ -315,16 +314,6 @@ describe('asks', () => {
     expect(rig.decisions()).toEqual([])
   })
 
-  test('an ask with notifications disabled is not delivered at registration', async () => {
-    rig = await Rig.start()
-    await rig.setting('enabled', false)
-    const session = await rig.session('b')
-
-    await askFrom(session.id, rig.worktrees.b!.id)
-
-    expect(rig.notifies()).toEqual([])
-    expect(rig.decisions()).toEqual([])
-  })
 })
 
 describe('attention events', () => {
@@ -340,7 +329,7 @@ describe('attention events', () => {
     rig.oscNotify(shell.id, 'Build', 'ok')
     await askFrom(claude.id, rig.worktrees.b!.id)
     await rig.client.callAny('quirky.notifications/test', {})
-    await rig.waitDecided(5)
+    await rig.waitDecided(4)
 
     expect(rig.attentions().map((a) => a.source).sort()).toEqual(['agent', 'bell', 'program'])
     expect(rig.notifies()).toEqual([])

@@ -6,7 +6,7 @@
   "contributes": {
     "method": [
       { "id": "create", "params": { "type": "object", "additionalProperties": true } },
-      { "id": "wait", "readOnly": true, "params": { "type": "object", "additionalProperties": true } },
+      { "id": "wait", "readOnly": true, "connection": true, "params": { "type": "object", "additionalProperties": true } },
       { "id": "answer", "params": { "type": "object", "additionalProperties": true } },
       { "id": "cancel", "params": { "type": "object", "additionalProperties": true } },
       { "id": "list", "readOnly": true, "params": { "type": "object", "additionalProperties": true } }

@@ -13,7 +13,7 @@ const PLUGIN_DIR = dirname(dirname(fileURLToPath(import.meta.url)))
 const PLUGINS_DIR = dirname(PLUGIN_DIR)
 const gitConfig = isolateGitConfig()
 const globals = globalThis as typeof globalThis & { __QUIRKY_TEST_STRUCTURED_RUNNER__?: StructuredRunnerFactory }
-const PLUGINS = ['quirky.agents', 'quirky.ask', 'quirky.repo', 'quirky.session', 'quirky.structured', 'quirky.terminal', 'quirky.worktree']
+const PLUGINS = ['quirky.agents', 'quirky.ask', 'quirky.cli', 'quirky.repo', 'quirky.session', 'quirky.structured', 'quirky.terminal', 'quirky.worktree']
 
 setDefaultTimeout(30_000)
 
