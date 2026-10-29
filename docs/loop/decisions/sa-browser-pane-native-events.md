@@ -88,5 +88,127 @@
 - **Revisit if:** other-platform work is authorized and supported public SDK hooks exist.
 - **Source:** deferred: platform
 
+## D9: Unblock through the fork's public-WebKit native page requests
+- **Question:** Does the prerequisite D5/D6 named now exist, and how does Quirky reach it?
+- **Options:** keep blocking; patch Electrobun with private WebKit SPI; patch it with public WKUIDelegate/WKNavigationDelegate/WKDownloadDelegate API.
+- **Chose:** the fork branch `patch/webview-native-events` adds `BrowserView.setNativeRequestHandling`, per-kind request events, `respondToNativeRequest`, `cancelDownload` and `popupRequestId` adoption. Every piece uses public API. Quirky pins the private test devkit `2.0.5-quirky.0-webview-native-events` while developing; the pin moves to the release that holds the patch at merge.
+- **Why:** this is exactly the unblock D6 described. It needs no private pointers, no TLS bypass, no JS fakes and no Chrome substitution.
+- **Evidence:** fork commit `ceba2f98`, `package/src/native/macos/native_requests.h`, `nativeWrapper.mm` `startNativeRequest`/`parkPopupWithConfiguration`/`adoptParkedPopup:`; `docs/quirk/specs/2026-10-29-electrobun-fork/logic.md`.
+- **Reversibility:** medium (depends on the patch landing upstream or staying in the fork)
+- **Confidence:** high
+- **Revisit if:** upstream ships a different API for the same flows; then the host adapter switches to it.
+- **Source:** supersedes sa-browser-pane-native-events D6
+
+## D10: The daemon stays the policy owner; the window only relays
+- **Question:** Where do Native prompt, download and popup decisions live?
+- **Options:** the renderer decides alone; the desktop host decides; the browser plugin's pane service decides as it does for Watch.
+- **Chose:** the pane window relays each request with `paneNativeRequest`, a UI-only method. The pane service applies the existing Watch rules: one prompt per page, a 120 s fail-closed deadline, loopback-only certificate proceed, UI-only external approval, collision-safe Downloads, and a popup budget of four per two seconds. It answers with a prompt ID or an immediate answer. Answers return as the `paneNative` event, and expiry and download progress return through `paneNativeUpdate`. The host and `packages/ui` only carry generic page requests.
+- **Why:** the parent spec requires browser policy to stay in the plugin and every action to be a schema-declared method with a CLI. Reusing `paneRespond`/`paneDownload` keeps one prompt and shelf model for Watch and Native.
+- **Evidence:** `plugins/quirky.browser/src/pane-service.ts` `paneNativeRequest`/`respondNative`/`receiveNativeDownload`; `quirky-plugin.json` `paneNativeRequest`, `paneNativeUpdate`, event `paneNative`; parent logic "browser-specific policy stays in the plugin".
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** a non-window client needs to own a Native view.
+- **Source:** locked by docs/quirk/specs/2026-10-28-sa-browser-pane/logic.md
+
+## D11: Native sign-in credentials never leave the window
+- **Question:** How can `paneRespond` complete a Native basic-auth challenge without the daemon handling the password?
+- **Options:** send credentials through the daemon as Watch does; keep them in the window and send the daemon only the decision.
+- **Chose:** the overlay keeps the typed credentials in a window-local map keyed by prompt ID and calls `paneRespond` with `accept` only. When the `paneNative` answer arrives, the window adds the credentials and answers the view. The daemon refuses credentials for Native prompts, and accepts a Native sign-in only from the UI role.
+- **Why:** the Native answer reaches the window through a broadcast plugin event, and pane state is persisted. Neither may carry a password (D2: credentials neither persisted nor logged). The CLI can still decline.
+- **Evidence:** `BrowserPaneWindow.tsx` `nativeCredentialsRef`; `pane-service.ts` `respondNative`; `test/pane-window-native-events.test.tsx`, `test/pane-native-events.test.ts`.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** a direct, non-broadcast daemon→window channel appears.
+- **Source:** assumed — autonomous
+
+## D12: Popups open in an origin-titled host window and keep WebKit defaults inside
+- **Question:** What hosts an opener-preserving OAuth popup, and what handles page requests inside it?
+- **Options:** a new Quirky pane tab; a small host BrowserWindow with an origin bar; reject named/opener popups.
+- **Chose:** the desktop host adopts the parked WebKit page into a sandboxed native `BrowserView`, with the pane's navigation rules, in its own small `BrowserWindow`. The window's title is always the page origin, which serves as the origin bar. `window.close()` closes it, and closing the main window closes its popups. Native page requests inside the popup stay off, so it keeps WebKit's defaults: alert is dismissed, confirm is false, untrusted certificates fail, and downloads go to Downloads.
+- **Why:** SC11 asks for "a small native window and origin bar, preserving opener/post body". A pane tab can't host the WebKit-created page, because tags create their own views. Popup-internal prompts have no overlay to show them in, and enabling them would only make the page wait out the timeout.
+- **Evidence:** `apps/desktop/src/bun/index.ts` `openPopup`, `native-browser.ts` `popupWindowTitle`; fork test `native_requests.test.mm` (opener, name and POST body survive adoption).
+- **Reversibility:** medium
+- **Confidence:** medium
+- **Revisit if:** OAuth providers need dialogs or downloads inside the popup.
+- **Source:** assumed — autonomous
+
+## D13: External-app allow-list for Native
+- **Question:** Which schemes may a Native page ask to open?
+- **Options:** Watch's `mailto` only; any non-web scheme; a short list of common communication apps.
+- **Chose:** `mailto`, `tel`, `sms`, `facetime`, `facetime-audio`, `zoommtg`, `zoomus`, `msteams`, `slack`. Each needs a user gesture (link or form) and approval from the UI overlay. The fork only reports URLs WebKit itself can't load, so `javascript:`, `data:`, `file:` and `about:` can never reach this path.
+- **Why:** browser.md flow 9 names meeting-app links. The allow-list keeps "allow-listed safe OS launch" without a general OS-launch path. Watch keeps its own list, which is out of scope here.
+- **Evidence:** `pane-service.ts` `NATIVE_EXTERNAL_SCHEMES`; fork `electrobun::isExternalAppURL`.
+- **Reversibility:** easy
+- **Confidence:** medium
+- **Revisit if:** users need another scheme; add it to the list.
+- **Source:** assumed — autonomous
+
+## D14: Two deadlines, daemon first
+- **Question:** Who enforces the 120 s fail-closed timeout across an async FFI boundary?
+- **Options:** native only; daemon only; both.
+- **Chose:** both. The daemon fails a prompt closed at 120 s and sends the decline. The host gives native requests 125 s, so the native deadline only matters if the renderer or daemon goes away. Removing the view also fails every pending request closed natively.
+- **Why:** WebKit requires every completion handler to be called. A page must never stay paused because a renderer died.
+- **Evidence:** `apps/desktop/src/bun/native-browser.ts` `NATIVE_REQUEST_TIMEOUT_MS`; fork `NativeRequestRegistry`; tests for both timeout paths.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** prompts need a user-configurable deadline.
+- **Source:** locked by sa-browser-pane-native-events D2
+
+## D15: Plugin API 1.1.0 for the optional native-browser members
+- **Question:** Does adding Native page requests to `UiPluginContext.nativeBrowser` change the plugin API version?
+- **Options:** keep 1.0.0; bump the minor.
+- **Chose:** `PLUGIN_API_VERSION` 1.1.0. The members are optional: `pageRequestsAvailable`, `onPageRequest`, `onPageRequestExpired`, `onDownload`, `answer()` and `cancelDownload()`. `quirky.browser` declares `apiVersion` 1.1.0.
+- **Why:** docs/plugin-api.md: a backward-compatible author-facing addition is a minor bump, and a plugin declares the earliest release that supplies what it uses.
+- **Evidence:** `packages/protocol/src/plugin-api.ts`, `packages/protocol/src/native-browser.ts`, `docs/plugin-api.md`.
+- **Reversibility:** easy
+- **Confidence:** medium (other fork items may also bump to 1.1.0; merge them as one minor)
+- **Revisit if:** another item lands a 1.1.0 with different members first.
+- **Source:** locked by docs/plugin-api.md
+
+## D16: beforeunload stays unsupported in Native
+- **Question:** Can Native show `beforeunload` prompts?
+- **Options:** WebKit SPI `runBeforeUnloadConfirmPanelWithMessage:`; leave it unsupported.
+- **Chose:** unsupported. WKWebView's public delegate has no `beforeunload` callback, so Native pages leave without asking, as before.
+- **Why:** the item forbids private API.
+- **Evidence:** WKUIDelegate public header; fork PR text.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** WebKit makes the callback public.
+- **Source:** deferred: beforeunload
+
+## Verification (2026-10-29)
+
+### What passed, and how
+- **Fork native test.** `package/scripts/test-macos-native-requests.sh` passes. It compiles `native_requests.test.mm` against Cocoa and WebKit and drives a real WKWebView:
+  - An unanswered `confirm()` returns `false` and an unanswered `prompt()` returns `null` at the deadline, and a late answer is rejected.
+  - Answers return `true` and Unicode text to the page.
+  - A form POST to a named target is parked with its navigation held. After release, the popup sees `window.opener`, `window.name === "oauth"` and the POST body `code=abc`.
+  - A discarded popup never loads.
+  - It also covers the registry (answer once, wrong view, expire-all on close), credential persistence `None`, numbered download destinations and external-URL detection.
+- **Fork contract test.** `package/src/shared/native-requests.test.js` passes 4/4 and fails 4/4 on v2.0.5.
+- **Fork builds.** `test-devkit` built `2.0.5-quirky.0-webview-native-events`. The fork package `tsc --noEmit` passes.
+- **Unified build.** After resolving the conflicts with the three earlier patches, the merged `nativeWrapper.mm` compiles. Every listed patch's contract tests pass on the merged tree: native-symbol-contract, webview-navigation-contract, eventBridge, session-proxy, drop-source-paths and native-requests.
+- **Quirky typecheck.** `bun run typecheck` passes against the private devkit, with the pin `2.0.5-quirky.0-webview-native-events` and `HUTCH_ELECTROBUN_DEVKIT_ROOT` set. The pin change is not committed.
+- **Quirky affected tests.** 171 pass and 0 fail across 10 files, run locally with `QUIRKY_TEST_LOCAL=1 bun scripts/suite.ts <files>` because the remote host was unreachable:
+  - `apps/desktop/test/native-browser.test.ts`: host relay, owner-only answers, credentials only for auth, absolute download paths, popup hosting and decline, expiry, unsupported SDK.
+  - `packages/ui/test/native-browser{,-dom}.test.ts`: routing by view, answer and cancel through the claim, decline without a listener, nothing after dispose.
+  - `plugins/quirky.browser/test/pane-native-events.test.ts`, through the real daemon: SC-1 to SC-6, the 120 s deadline (injected 150 ms), navigation declining a pending prompt, and expiry.
+  - `plugins/quirky.browser/test/pane-window-native-events.test.tsx`: credentials go from the overlay to the handle and never into a daemon call, the popup refusal message, the Native shelf.
+  - The existing `pane.test.ts` (Watch prompts and downloads, including the Chrome runs), `pane-lifecycle`, `pane-window-find`, `plugin-api` and `cli/generated`.
+
+### What wasn't verified, and why
+- **The live desktop app.** A user dialog, sign-in, download, popup and app link were not exercised in the running Quirky window. The machine-wide heavy slots stayed held by other sessions' full suites while this item ran. An isolated daemon, fixture pages and the CLI steps were prepared, but the app build never got a slot. The full chain was only proven in parts:
+  - WKWebView behavior, by the native test.
+  - The SDK FFI path, by the devkit build and typecheck.
+  - The host, adapter and daemon, by the tests above.
+
+  What is still unproven end to end in the app: the Zig core relaying the new events, `setNextWebviewPopupRequest` adoption through `BrowserView`, and the popup window's origin title. `docs/loop/native/sa-browser-pane-native-events.json` should list these for the nightly native run.
+- **`run-patch-tests` in the unified worktree.** Skipped, because another session's land (`patch/storage-clear-completion`) started right after mine and resets that worktree. The release workflow runs every patch test.
+- **Real OS launch for external apps.** Not accepted in any test, to avoid opening Mail or Zoom on a shared Mac. Only the decline and approval-routing paths are tested.
+- **Linux and Windows.** Not validated (D8). The fork returns false there, and the Native browser is darwin-only.
+
 ## Progress
-Stopped at feasibility/design on 2026-10-28, lane 10. The current public Electrobun 2.0.4 SDK still lacks the core native page-event response/ownership hooks. No implementation or behavior change, no checks run. Preserve this record on blocked/sa-browser-pane-native-events and register the blocker with the authoritative queue.ts block command. Resume only after supported per-view dialog/auth/certificate responders, native download destination/cancel controls and opener/postbody-preserving popup/external launch interception are available without the forbidden substitutes. Existing Native and Watch implementations/tests remain unchanged.
+2026-10-29: implemented on `zpyoung/eb-sa-browser-pane-native-events` against fork patch `patch/webview-native-events`, which is landed in `unified/v2.0.5` as part of 2.0.5-quirky.1. Next steps:
+1. Run the native scenarios in the desktop app.
+2. When the fork release that holds the patch is tagged, move `apps/desktop/hutch.config.ts` to it.
+3. Merge after review.
