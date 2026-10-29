@@ -105,7 +105,7 @@ function manualClock() {
   }
 }
 
-function setup(initial: Ask[] = []) {
+function setup(initial: Ask[] = [], enabled = true) {
   const clock = manualClock()
   let pending = [...initial]
   let uiState = IDLE
@@ -114,8 +114,9 @@ function setup(initial: Ask[] = []) {
   const calls: { method: string; params?: Record<string, unknown> }[] = []
   let notifyResolve!: () => void
   const notified = new Promise<void>((resolve) => { notifyResolve = resolve })
+  const decided = Promise.withResolvers<unknown>()
   const settings: Record<string, unknown> = {
-    enabled: true,
+    enabled,
     agentTaskComplete: false,
     terminalBell: false,
     terminalNotifications: false,
@@ -130,6 +131,7 @@ function setup(initial: Ask[] = []) {
     log() {},
     emit(event: string, data: unknown) {
       events.push({ event, data })
+      if (event === 'decided') decided.resolve(data)
       return true
     },
     getSetting(name: string) {
@@ -168,6 +170,7 @@ function setup(initial: Ask[] = []) {
     events,
     notifications,
     notified,
+    decided: decided.promise,
     setPending(asks: Ask[]) {
       pending = [...asks]
     },
@@ -205,6 +208,28 @@ describe('delayed ask notifications', () => {
     expect(app.calls).toContainEqual({ method: 'quirky.worktree/set', params: { worktree: 'id:worktree_1', unread: true } })
     expect(app.events.find((item) => item.event === 'decided')).toMatchObject({ data: { source: 'ask', result: 'delivered' } })
   })
+
+  for (const gate of ['disabled', 'suppressed-focus'] as const) {
+    test(`an escalated Ask respects ${gate} without losing its attention marker`, async () => {
+      const first = ask('ask_gated')
+      const app = setup([first], gate !== 'disabled')
+      // Another session in the same focused worktree must not cancel this Ask's timer.
+      if (gate === 'suppressed-focus') app.setUiState(focused('another_session'))
+      const scheduled = app.clock.whenScheduled(ESCALATION_MS)
+      app.service.onEvent(event('quirky.ask/created', { ask: first, seq: first.seq }))
+      await scheduled
+      expect(app.notifications).toEqual([])
+      expect(app.events.filter((item) => item.event === 'attention')).toEqual([])
+
+      app.clock.advance(ESCALATION_MS)
+      expect(await app.decided).toMatchObject({ source: 'ask', sessionId: first.sessionId, result: gate })
+      expect(app.notifications).toEqual([])
+      expect(app.events.find((item) => item.event === 'attention')).toMatchObject({
+        data: { source: 'ask', sessionId: first.sessionId, worktreeId: first.worktreeId }
+      })
+      expect(app.calls).toContainEqual({ method: 'quirky.session/setUnread', params: { session: first.sessionId, unread: 'notification' } })
+    })
+  }
 
   test('Q3: focusing the exact session cancels elapsed time; leaving it starts a fresh three-minute interval', async () => {
     const first = ask('ask_1')

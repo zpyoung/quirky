@@ -90,5 +90,51 @@
 
 - **Observed shutdown output:** inactive-worktree cleanup, fake-Git cwd/not-repository, and revoked notification-context lookup warnings remain visible. Both failed fixture diagnostic attempts and the successful run acknowledge cleanup and remove their private homes; no pristine-output or product shutdown fix is claimed.
 
+## D9: Adopt the incoming exact-workspace fixture and remove the obsolete symlink
+- **Question:** Does the sole roadmap catch-up change the fixture contract used by this repair?
+- **Options:** Keep redundant path scaffolding; change the shared fixture again; consume its exact registered resolver and remove obsolete local setup.
+- **Chose:** Commit source a0d3ac78, merge roadmap once, read incoming fix-test-heimdall-1028 D1–D12 and raw Progress completely, retain its authority semantics. Remove this repair's temporary fixture-workspace symlink and widened home state; keep repoId and real Git initialization.
+- **Why:** The incoming shared control fixture now resolves the exact worktree through the public API and verifies repoId before authorizing its canonical path. The old symlink is no longer used. The same incoming decision preserves nullable positively certified worker contact and exact preflight mutation identity; neither conflicts with notification policy.
+- **Evidence:** sole clean merge18files; plugins/quirky.heimdall/test/control-fixture.ts:23-47; incoming fix-test-heimdall-1028 D5–D6,D11. Final watcher+Ask narrow suite2/2files,zero flaky reruns,39.06s.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** The final composed runtime or typecheck finds a concrete integration mismatch.
+- **Source:** locked by docs/loop/decisions/fix-test-heimdall-1028.md
+
+## D10: Retain Ask gate coverage at escalation, not registration
+- **Question:** Does deleting the obsolete immediate-Ask gate expectation remove useful enabled/focus behavior coverage?
+- **Options:** Restore immediate decisions; rely only on non-Ask source tests; exercise disabled and focused-worktree gates at the actual escalation boundary.
+- **Chose:** Add two bounded manual-clock behaviors: disabled Ask still emits attention/unread but no notification; another focused session in the same worktree permits the timer yet suppresses its banner. Await the actual decision event before asserting terminal outcomes.
+- **Why:** Exact-session focus cancellation and worktree banner suppression are different boundaries. The migrated immediate-producer gate test must not erase the Ask coverage those assertions originally intended. Removed the incidental public-list call-count assertion rather than pin internal reconciliation frequency.
+- **Evidence:** plugins/quirky.notifications/test/ask-escalation.test.ts; current NotificationsService handle/deliver path; full three-minute API smoke proves the delivered case separately.
+- **Reversibility:** easy
+- **Confidence:** high; final targeted canonical file passes without retries and the fresh-context same-family static delta review reports no findings.
+- **Revisit if:** The direct escalation tests identify different policy behavior.
+- **Source:** assumed — autonomous
+
+- **Pre-merge verification receipt:** full typecheck40.18s; remote scripts12/12files52.87s; remote notifications ok:true in173.59s after configured isolated retries (initial20/22files; banners and gates flaky). Exact load-only failures are appended to BLOCKERS.md, not relabelled as zero initial failures. No deadline/retry change.
+
+## D11: Land the exercised baseline repair without claiming load stability
+- **Question:** Which final results establish this repair, and which failures remain observations?
+- **Options:** Claim every combined run was green; increase blanket startup/watchdog budgets; retain exact canonical outcomes and unchanged policy.
+- **Chose:** Final notifications canonical returns ok:true in128.86s with delivery-sound and gates in its configured flaky list (initial20/22files; both isolated retries pass). Final full typecheck passes48.13s. Final added Ask gate file passes1/1files without retries28.31s, composed watcher/FIFO2/2files39.06s. Scripts pass12/12files52.87s and again occupy the passed set of the combined34-file run.
+- **Why:** Every named baseline regression and the reached loop/UI contract failures are repaired without production changes. The combined34-file run still exits1 in174.67s because other scenarios exceed their enclosing5second watchdogs; BLOCKERS.md preserves the exact evidence and changing failed scenarios across runs. No source/runtime gate, blanket test watchdog or retry policy is weakened.
+- **Evidence:** canonical receipts and appended docs/loop/BLOCKERS.md section fix-test-notifications-1028. The final real disposable daemon smoke after catch-up exits0 in184.52s with all behavior and cleanup markers; Ask arrives179577ms after the public promotion read (its timer begins before that observer read).
+- **Reversibility:** easy
+- **Confidence:** high for exercised baseline/API paths; startup-under-load cause is unproven.
+- **Revisit if:** A dedicated fixture-lifecycle investigation identifies the remaining teardown/startup cause, or the controller reports a concrete new failure.
+- **Source:** assumed — autonomous
+
+## D12: Complete static review through the available fallback and report reduced independence
+- **Question:** Can an authenticated alias probe be mistaken for a completed independent review?
+- **Options:** Treat empty/timed-out cross-family dispatches as passes; block without trying the documented fallback; use the reachable reviewer and disclose its limits.
+- **Chose:** Do not count the unsuccessful Google dispatches. Gemini's first call returned no JSON, its retry timed out240s; Flash tool-driven and captured no-tools attempts each timed out150s. A fresh same-family reviewer then read the exact final patch and all five current tests/README, returning no findings. A separate fresh-context reviewer covered the final added gate test seam and also returned no findings.
+- **Why:** Actual parseable review output is required; successful authentication alone establishes no review result. The fallback is a real cooperative static review with reduced model-family independence, not a formal adversarial campaign or cross-family clearance.
+- **Evidence:** NotificationPatchReview completed with source-backed Ask/FIFO, gate, lease, cleanup and UI coverage checks; NotificationGateReview completed with no findings. All four unsuccessful pi-watch jobs and both fallback review jobs have returned; no review process remains running.
+- **Reversibility:** easy
+- **Confidence:** high for observed review execution and scope only.
+- **Revisit if:** A reachable cross-family runtime returns a concrete evidence-backed defect, or actual acceptance contradicts the reviewed behavior.
+- **Source:** assumed — autonomous
+
 ## Progress
-Both scoped test implementers returned. Parent audited all assigned changes and restored the accidentally omitted bun:test import before checks. No production source changed. Corrected actual API smoke exits0 after real three-minute Ask delivery and watcher policy proof; all three diagnostic/smoke attempts cleaned their private homes. Full local typecheck passes40.18s. Canonical full notifications and scripts checks are running. Next collect both, commit source/decisions, merge roadmap exactly once and read every incoming decision, run final composed checks and scoped review, then commit/detach/canonical land and receive its actual receipt before ending this one-item iteration.
+Ready for canonical land. Source a0d3ac78 and one clean18file roadmap catch-up are preserved; incoming Heimdall D1–D12 and raw Progress read fully. Final source passes typecheck48.13s and notifications canonical128.86s with explicitly declared delivery/gates flaky retries. Scripts12/12passed; earlier combined34-file failure remains in BLOCKERS. Added Ask gate file1/1clean; composed watcher/FIFO2/2clean; final composed actual API smoke184.52s exits0 with cleanup/home absence. Both static fallback reviewers report no findings; no cross-family/formal review pass claimed. Every implementer/scout/check/runtime/review job returned; no owned browser or runtime remains. Commit final source/docs/receipts, detach and invoke the exact authoritative queue.ts land fix-test-notifications-1028, then receive its actual result in this turn. Remove owned scratch only after successful land. No second item and no global completion/stuck state observed.

@@ -1,16 +1,15 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import { execFileSync } from 'node:child_process'
 import { existsSync, mkdirSync, readdirSync, symlinkSync } from 'node:fs'
-import { dirname, join } from 'node:path'
+import { join } from 'node:path'
 import { builtinsDir, makeTempHome, waitForAsync } from '../../../packages/daemon/test/helpers'
 import { fixtureId, installControlFixture } from '../../quirky.heimdall/test/control-fixture'
 import type { WatcherDetail } from '../../quirky.heimdall/src/control-contracts'
 import { Rig } from './support'
 
 let rig: Rig
-let home: string
 beforeAll(async () => {
-  home = makeTempHome('heimdall-notifications-')
+  const home = makeTempHome('heimdall-notifications-')
   const builtins = join(home, 'builtins')
   mkdirSync(builtins)
   for (const item of readdirSync(builtinsDir(), { withFileTypes: true })) {
@@ -27,9 +26,6 @@ async function enroll(workspace: string, worktreeId: string, worktreePath: strin
     cwd: worktreePath,
     env: { ...process.env, GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1' }
   })
-  const workspacePath = join(home, 'plugin-data', fixtureId, 'workspaces', workspace)
-  mkdirSync(dirname(workspacePath), { recursive: true })
-  symlinkSync(worktreePath, workspacePath)
   const result = await rig.client.callAny('quirky.heimdall/enroll', {
     kind: 'objective',
     kindPayload: { workspace, worktreeId, repoId: rig.repo.id },
