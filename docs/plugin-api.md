@@ -23,6 +23,10 @@ The current UI kind identifiers are `status-bar`, `sidebar-section`, `activity-i
 `menu-item`. Daemon method/event declarations and CLI command declarations are part of the same
 frozen contract; their exact schemas remain in the linked protocol declarations.
 
+API 1.1 adds `whenSetting` to `panel`, `sidebar-section` and `activity-item`: the name of one of
+the plugin's own boolean settings. The contribution, and the tool it projects, exist only while that
+setting is `true`. A plugin that uses it declares `"apiVersion": "1.1.0"`.
+
 ## Manifest declaration
 
 Every plugin manifest must include `apiVersion`. It is independent of the plugin's own package `version`:

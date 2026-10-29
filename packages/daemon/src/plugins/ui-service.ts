@@ -185,7 +185,8 @@ export class UiService {
       chosenTheme: chosenThemeOf(store.getUiState('theme'), distro),
       distroKeybindings: Object.entries(distro?.keybindings ?? {}).map(([key, command]) => ({ key, command })),
       distroId: distro?.id ?? null,
-      keybindingOverrides: this.keybindingOverrides()
+      keybindingOverrides: this.keybindingOverrides(),
+      settingValue: (entry) => resolveSetting(entry, store.getSettingValue(entry.id), distro).value
     })
   }
 

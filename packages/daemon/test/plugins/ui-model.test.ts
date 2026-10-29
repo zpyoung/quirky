@@ -203,6 +203,30 @@ describe('slots', () => {
   })
 })
 
+describe('contributions shown only while a setting is on', () => {
+  const declarations = [
+    decl('setting', 'acme.board', 'board-enabled', { type: 'boolean', title: 'Board', default: false }),
+    decl('sidebar-section', 'acme.board', 'board', { title: 'Board', whenSetting: 'board-enabled' }),
+    decl('sidebar-section', 'acme.board', 'always', { title: 'Always' })
+  ]
+  const ids = (model: ReturnType<typeof build>['model']) => ({
+    sections: model.sidebarSections.map((entry) => entry.id),
+    tools: model.tools.map((tool) => tool.id).filter((id) => id.startsWith('sidebar-section:'))
+  })
+
+  test('a section whose setting is off is neither a section nor a tool', () => {
+    const { model } = buildUiModel({ declarations, plugins: [withUi('acme.board')], chosenTheme: 'default', settingValue: (entry) => entry.default })
+    expect(ids(model)).toEqual({ sections: ['sidebar-section:acme.board/always'], tools: ['sidebar-section:acme.board/always'] })
+    expect(model.visibilitySettings).toEqual(['setting:acme.board/board-enabled'])
+  })
+
+  test('the section appears once its setting is on', () => {
+    const { model } = buildUiModel({ declarations, plugins: [withUi('acme.board')], chosenTheme: 'default', settingValue: () => true })
+    expect(ids(model).sections).toEqual(['sidebar-section:acme.board/always', 'sidebar-section:acme.board/board'])
+    expect(ids(model).tools).toContain('sidebar-section:acme.board/board')
+  })
+})
+
 describe('override ownership and modules', () => {
   test('an override gives the entry and module to the overriding plugin (SC-3)', () => {
     const base = withStatus(

@@ -18,9 +18,9 @@ type Entry = Record<string, unknown>
 
 const ALLOWED_FIELDS: Record<string, readonly string[]> = {
   'status-bar': ['title', 'description', 'order'],
-  'sidebar-section': ['title', 'description', 'order', 'defaultSlot', 'icon'],
-  'activity-item': ['title', 'description', 'order', 'defaultSlot', 'icon'],
-  panel: ['title', 'description', 'order', 'defaultSlot', 'icon'],
+  'sidebar-section': ['title', 'description', 'order', 'defaultSlot', 'icon', 'whenSetting'],
+  'activity-item': ['title', 'description', 'order', 'defaultSlot', 'icon', 'whenSetting'],
+  panel: ['title', 'description', 'order', 'defaultSlot', 'icon', 'whenSetting'],
   'settings-section': ['title', 'description', 'order'],
   view: ['title', 'description', 'settings'],
   overlay: ['title', 'description', 'order'],
@@ -205,6 +205,9 @@ export function checkUiKindEntry(kind: string, label: string, entry: Entry, erro
   }
   if (allowed.includes('icon') && entry.icon !== undefined && !isNonEmptyString(entry.icon)) {
     errors.push(`${label}: icon must be a non-empty string`)
+  }
+  if (allowed.includes('whenSetting') && entry.whenSetting !== undefined && !isNonEmptyString(entry.whenSetting)) {
+    errors.push(`${label}: whenSetting must be a non-empty string`)
   }
   if (entry.description !== undefined && typeof entry.description !== 'string') {
     errors.push(`${label}: description must be a string`)

@@ -231,6 +231,7 @@ const uiModel = object(
     themes: listOf({ type: 'object' }),
     theme: object({ chosen: string(), active: string() }, ['chosen', 'active']),
     tools: listOf(uiTool),
+    visibilitySettings: strings,
     modules: { type: 'object', additionalProperties: true }
   },
   ['sidebarSections', 'statusBars', 'activityItems', 'panels', 'views', 'overlays', 'commands', 'keybindings', 'settings', 'settingsSections', 'menuItems', 'themes', 'theme', 'modules']
