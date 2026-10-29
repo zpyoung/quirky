@@ -25,6 +25,20 @@ Reinstalling over a running copy: quit Quirky first (window close or tray Quit),
 The app is unsigned. If macOS refuses to open the copy, run
 `xattr -dr com.apple.quarantine ~/Applications/Quirky.app` once.
 
+## Releases
+
+The `Build and release` GitHub Actions workflow builds the app on every push to `main` and every
+pull request; the run's `quirky-macos-arm64` artifact holds the zipped app. Pushing a `v*` tag also
+sets the app version from the tag and publishes a GitHub release:
+
+```sh
+git tag v0.2.0 && git push origin v0.2.0
+```
+
+To install a release on another Apple Silicon Mac, download `Quirky-macos-arm64.zip`, unzip it into
+`~/Applications`, and clear the quarantine flag as above. The release also carries Electrobun's
+`stable-macos-arm64-update.json` and app tarball for a future in-app updater.
+
 ## External command and profile launchers
 
 The built-in CLI Settings owner exposes installation status, install, reveal and removal through `quirky.cli/*` methods and matching commands. From a source checkout, bootstrap an external command with the current CLI entrypoint:
