@@ -199,19 +199,23 @@ describe('settings apply live', () => {
   })
 
   test('padding and background opacity apply to the pane surface', async () => {
-    const source = document.createElement('div')
-    source.style.setProperty('--terminal-background', '#16181d')
-    document.body.appendChild(source)
-    const { pane } = await mount({ themeSource: source, settings: settings({ 'padding-x': 10, 'padding-y': 6, 'background-opacity': 0.5 }) })
+    const background = '#123456'
+    const themeSource = document.createElement('div')
+    themeSource.style.setProperty('--terminal-background', background)
+    document.body.appendChild(themeSource)
+    const { pane } = await mount({
+      themeSource,
+      settings: settings({ 'padding-x': 10, 'padding-y': 6, 'background-opacity': 0.5 })
+    })
     const host = pane.element.querySelector('[data-terminal-pane]') as HTMLElement
-    const screen = host.firstElementChild as HTMLElement
+    const screen = host.querySelector('.terminal-pane-screen') as HTMLElement
     expect(screen.style.left).toBe('10px')
     expect(screen.style.top).toBe('6px')
-    expect(host.style.background).toBe('rgba(22, 24, 29, 0.5)')
+    expect(host.style.background).toBe('rgba(18, 52, 86, 0.5)')
     expect(pane.term().options.allowTransparency).toBe(true)
     await pane.rerender({ settings: settings({ 'padding-x': 0, 'background-opacity': 1 }) })
     expect(screen.style.left).toBe('0px')
-    expect(host.style.background).toBe('#16181d')
+    expect(host.style.background).toBe(background)
   })
 
   test('the pane follows the complete app palette in place and cleans up its root observer', async () => {

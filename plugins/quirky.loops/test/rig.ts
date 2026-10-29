@@ -12,6 +12,7 @@ import { createCodexAppServerFixture, type CodexAppServerFixture } from '../../q
 const PLUGINS_ROOT = resolve(import.meta.dir, '../..')
 const PLUGINS = [
   'quirky.repo',
+  'quirky.cli',
   'quirky.worktree',
   'quirky.agents',
   'quirky.ask',

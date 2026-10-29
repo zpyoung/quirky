@@ -527,7 +527,7 @@ describe('vault public acceptance flows', () => {
     }))
     expect(remoteSearch.hits.some((hit) => hit.sessionId === 'claude-fixture-session')).toBe(true)
 
-    const local = await start()
+    const local = await start({ isolateVaultPlugin: true })
     const forwarder = createVaultHostForwarder(rpcUrl(remote.h.runtime))
     pluginRoots.push(forwarder.root)
     await local.client.callAny('plugin.install', { path: forwarder.directory, yes: true })
@@ -611,6 +611,17 @@ describe('vault public acceptance flows', () => {
 
 
     await remote.client.callAny('plugin.disable', { id: 'quirky.vault' })
+    await local.call('setSearchEnabled', { enabled: true, host: 'local' })
+
+    const survivingLocalSearch = results(await local.call<SearchResponse>('search', {
+      host: 'local',
+      query: 'vault-fixture-claude-marker',
+      freshness: 'wait-until-current',
+      filters: { agents: ['claude'] }
+    }))
+    const survivingLocalHit = survivingLocalSearch.hits.find((hit) => hit.sessionId === 'claude-fixture-session')
+    if (!survivingLocalHit) throw new Error('local vault stopped serving its source after the remote vault was disabled')
+    expect(survivingLocalHit.source.filePath).toBe(local.fixturePaths.claude)
     const partialAll = await local.call<PublicListResult>('list', {
       host: 'all', agents: ['claude'], unlimited: true
     })

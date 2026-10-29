@@ -5,8 +5,9 @@ import { afterAll, afterEach, expect, test } from 'bun:test'
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
-import { CHORD_PLATFORM, type QuirkyEvent, type UiLayout, type UiPluginContext } from '@quirky/protocol'
+import { CHORD_PLATFORM, type QuirkyEvent, type UiLayout, type UiPluginContext, type UiToolSlot } from '@quirky/protocol'
 import type { ReviewsState } from '../src/contracts'
+import { CHECKS_PANEL } from '../src/contracts'
 import { ChecksPanel } from '../src/checks/ChecksPanel'
 import { ReviewPage } from '../src/detail/ReviewPage'
 import { activate } from '../src/ui'
@@ -51,6 +52,9 @@ type UiHarness = {
   context: UiPluginContext
   settings: Map<string, unknown>
   toasts: { title: string; body: string }[]
+  calls: { method: string; params: Record<string, unknown>; result?: unknown }[]
+  getLayout(): UiLayout
+  setOpenTools(open: Partial<Record<UiToolSlot, string | null>>): Promise<void>
   setBrowserSetting(name: 'openLinksInApp' | 'openLinksInAppModifierInverts', value: boolean): Promise<void>
   forgetSetting(id: string): void
   flushCalls(): Promise<void>
@@ -82,12 +86,27 @@ async function makeUiHarness(host: HostingTest): Promise<UiHarness> {
   const settings = new Map<string, unknown>()
   const eventListeners = new Set<(event: QuirkyEvent) => void | Promise<void>>()
   const toasts: UiHarness['toasts'] = []
+  const layoutListeners = new Set<(layout: UiLayout) => void>()
+  const calls: UiHarness['calls'] = []
   const pendingCalls: Promise<unknown>[] = []
-  const layout: UiLayout = {
+  let layout: UiLayout = {
     view: { id: 'view:quirky.session/worktree', input: { worktree: host.worktree } },
     panel: null,
     sidebar: true,
-    focus: 'view'
+    focus: 'view',
+    tools: {
+      placements: {},
+      order: [],
+      open: {
+        'left-top': null,
+        'left-bottom': null,
+        'right-top': null,
+        'right-bottom': null,
+        'bottom-left': null,
+        'bottom-right': null
+      },
+      sizes: { left: 0, right: 0, bottom: 0, leftSplit: 0, rightSplit: 0, bottomSplit: 0 }
+    }
   }
 
   for (const id of [APP_SETTING, INVERT_SETTING]) {
@@ -103,7 +122,12 @@ async function makeUiHarness(host: HostingTest): Promise<UiHarness> {
       if (typeof implementation === 'function') provided.set(id, implementation as (input?: unknown) => unknown)
     },
     call(method: string, params: Record<string, unknown> = {}) {
-      const operation = window.callAny(method, params)
+      const call: UiHarness['calls'][number] = { method, params }
+      calls.push(call)
+      const operation = window.callAny(method, params).then((result) => {
+        call.result = result
+        return result
+      })
       pendingCalls.push(operation)
       return operation
     },
@@ -121,7 +145,10 @@ async function makeUiHarness(host: HostingTest): Promise<UiHarness> {
     togglePanel() {},
     setPalette() {},
     getLayout: () => layout,
-    onLayout() { return () => {} },
+    onLayout(listener: (layout: UiLayout) => void) {
+      layoutListeners.add(listener)
+      return () => layoutListeners.delete(listener)
+    },
     onStream() { return () => {} },
     onConnection() { return () => {} },
     confirm: async () => true,
@@ -156,6 +183,16 @@ async function makeUiHarness(host: HostingTest): Promise<UiHarness> {
     context,
     settings,
     toasts,
+    calls,
+    getLayout: () => layout,
+    async setOpenTools(open) {
+      await act(async () => {
+        const tools = layout.tools
+        if (!tools) throw new Error('The test layout must include six-slot tool state.')
+        layout = { ...layout, tools: { ...tools, open: { ...tools.open, ...open } } }
+        for (const listener of [...layoutListeners]) listener(layout)
+      })
+    },
     async setBrowserSetting(name, value) {
       const id = name === 'openLinksInApp' ? APP_SETTING : INVERT_SETTING
       await act(async () => {
@@ -194,13 +231,17 @@ async function bootUi(source: string, options: { branch?: string; remote?: strin
   }
 }
 
-function mountChecks(ui: UiHarness, state: ReviewsState): SurfaceMount {
+function mountChecks(ui: UiHarness, state: ReviewsState, loadState?: () => Promise<ReviewsState>): SurfaceMount {
   const element = document.createElement('div')
   document.body.appendChild(element)
   const root: Root = createRoot(element)
   let mountedRoot = true
-  const refresh = async () => {}
-  const render = (next: ReviewsState) => act(() => root.render(<ChecksPanel context={ui.context} state={next} refresh={refresh} />))
+  function render(next: ReviewsState) {
+    act(() => root.render(<ChecksPanel context={ui.context} state={next} refresh={refresh} />))
+  }
+  const refresh = async () => {
+    if (loadState) render(await loadState())
+  }
   const unmount = () => {
     if (!mountedRoot) return
     mountedRoot = false
@@ -211,6 +252,7 @@ function mountChecks(ui: UiHarness, state: ReviewsState): SurfaceMount {
   render(state)
   return { element, render, unmount }
 }
+ 
 
 function mountDetail(ui: UiHarness, state: ReviewsState): SurfaceMount {
   const element = document.createElement('div')
@@ -354,6 +396,87 @@ function detailSurfaceFromChecks(state: ReviewsState): ReviewsState {
   copy.detail.fetchedAt = Date.now()
   return copy
 }
+
+test('mounted Checks refreshes from an open six-slot tool and withdraws visibility candidates when replaced or closed', async () => {
+  const { host, ui } = await bootUi(checksGhSource, { branch: 'feature' })
+  host.writeState(checksFixtureState([checksReview(12)]))
+  const initial = await checksState(host)
+  expect(initial.checks.worktree).toBeNull()
+  expect(initial.checks.review).toBeNull()
+
+  await ui.setOpenTools({ 'right-top': CHECKS_PANEL })
+  expect(ui.getLayout()).toMatchObject({
+    panel: null,
+    tools: { open: { 'right-top': CHECKS_PANEL } }
+  })
+  const checksMount = mountChecks(ui, initial, () => checksState(host))
+
+  // Let React commit the async refresh before waiting for its rendered result.
+  await settleUi(ui)
+  await waitUntil(() => checksMount.element.textContent?.includes('#12') === true)
+  const available = await checksState(host)
+  expect(available.checks).toMatchObject({ worktree: host.worktree, review: { number: 12 } })
+
+  const refreshCalls = () => ui.calls.filter((call) => call.method === 'quirky.reviews/checksRefresh')
+  const candidateReports = () => ui.calls.filter((call) => call.method === 'quirky.hosting/visibleRefreshCandidates')
+  await act(async () => {
+    await ui.flushCalls()
+    await waitUntil(() => candidateReports().length > 0)
+    await ui.flushCalls()
+  })
+  expect(refreshCalls()).toHaveLength(1)
+  expect(refreshCalls()[0]).toMatchObject({ params: { worktree: host.worktree, force: true } })
+  expect(candidateReports().at(-1)).toMatchObject({
+    params: { candidates: [expect.objectContaining({ worktree: host.worktree, active: true })] },
+    result: { accepted: true, candidates: 1 }
+  })
+
+  let reportsBefore = candidateReports().length
+  await ui.setOpenTools({ 'right-top': null, 'bottom-left': CHECKS_PANEL })
+  await act(async () => {
+    await ui.flushCalls()
+    await waitUntil(() => candidateReports().length > reportsBefore)
+  })
+  expect(ui.getLayout().tools?.open).toMatchObject({ 'right-top': null, 'bottom-left': CHECKS_PANEL })
+  expect(candidateReports().at(-1)).toMatchObject({
+    params: { candidates: [expect.objectContaining({ worktree: host.worktree, active: true })] },
+    result: { accepted: true, candidates: 1 }
+  })
+
+  reportsBefore = candidateReports().length
+  await ui.setOpenTools({ 'bottom-left': 'panel:quirky.git/source-control' })
+  await act(async () => {
+    await ui.flushCalls()
+    await waitUntil(() => candidateReports().length > reportsBefore)
+  })
+  expect(candidateReports().at(-1)).toMatchObject({
+    params: { candidates: [] },
+    result: { accepted: true, candidates: 0 }
+  })
+
+  reportsBefore = candidateReports().length
+  await ui.setOpenTools({ 'bottom-left': null, 'right-top': CHECKS_PANEL })
+  await act(async () => {
+    await ui.flushCalls()
+    await waitUntil(() => candidateReports().length > reportsBefore)
+  })
+  expect(candidateReports().at(-1)).toMatchObject({
+    params: { candidates: [expect.objectContaining({ worktree: host.worktree, active: true })] },
+    result: { accepted: true, candidates: 1 }
+  })
+
+  reportsBefore = candidateReports().length
+  await ui.setOpenTools({ 'right-top': null })
+  await act(async () => {
+    await ui.flushCalls()
+    await waitUntil(() => candidateReports().length > reportsBefore)
+  })
+  expect(candidateReports().at(-1)).toMatchObject({
+    params: { candidates: [] },
+    result: { accepted: true, candidates: 0 }
+  })
+  expect(refreshCalls()).toHaveLength(1)
+}, 30_000)
 
 test('mounted Checks and detail controls honor Browser routing settings for normal and alternate clicks', async () => {
   const { host, ui, externalLog } = await bootUi(checksGhSource, { branch: 'feature' })

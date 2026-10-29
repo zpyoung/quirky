@@ -2,6 +2,52 @@
 
 This directory holds Quirky's built-in plugins, one per subdirectory, each with a `quirky-plugin.json` manifest. The daemon finds it through `QUIRKY_BUILTIN_PLUGINS_DIR`.
 
+## Removing a project
+
+`quirky repo rm <selector>` forgets the selected project and its settings/group
+membership, but leaves its repository and worktree directories on disk. It closes
+only sessions owned by that project; another project with the same name keeps
+its sessions. If an owned session cannot close, removal fails and the project
+stays available for retry. Re-adding a removed project starts with fresh settings.
+
+## Terminal workspace
+
+Terminal views stay in the center; **Terminal sessions** and **Quick commands** open
+in the bottom-left tool slot by default and can be moved with the host's tool controls.
+Workspace tabs, pane actions, search, floating terminals, quick-command dialogs and the
+agent composer use the shared graphite controls in dark and light appearances.
+Existing terminal palette overrides, shortcuts, split layouts and pane-owned drafts
+are unchanged. Context menus render above adjacent tools, including nested command menus.
+
+See the [terminal presentation specification](../docs/quirk/specs/2026-10-28-ui-restyle-terminal/logic.md).
+
+## Supervised-work presentation
+
+**Heimdall** opens its fleet in the left-bottom tool slot by default. Orchestration
+settings and remote-worker output, Session handoff settings and previews, and
+background-loop setup and views use the shared graphite controls in both themes.
+Multiline instructions, searchable handoff destinations, secret-marked editable
+previews, queue drafts and confirmation dialogs retain their existing public APIs
+and lifecycle rules. A visual or theme change does not approve, launch or cancel work.
+
+See the [supervised-work presentation specification](../docs/quirk/specs/2026-10-28-ui-restyle-orchestration/logic.md).
+
+## Settings and utility presentation
+
+The host **Settings** window uses shared graphite forms and keeps edits local until
+Save; Cancel leaves stored preferences unchanged. Application and terminal appearance
+continue to use their existing theme controls. Plugin settings sections and dedicated
+settings links remain available from the same window.
+
+Desktop **Mobile**, **CLI settings**, command search and the Source Control activity
+contribution use the same dark/light controls. Mobile pairing offers remain deliberately
+visible only in the pairing surface; CLI pairing-offer entry stays masked. Launcher
+replacement confirmations, unavailable-target guards and device revocation behavior
+are unchanged. The phone application's presentation is not part of this restyle.
+
+See the [settings presentation specification](../docs/quirk/specs/2026-10-28-ui-restyle-settings/logic.md).
+
+
 ## Terminal dock
 
 `quirky.terminal-dock` provides an opt-in composer below recognized terminal agents.
@@ -106,8 +152,13 @@ transcript path when account preparation moves the conversation.
 The plugin exposes `create`, `messages`, `send`, `stop`, and `resume`. Creation returns a session
 record before startup finishes; `send` waits for native startup before submitting input. Messages
 are journaled and status comes from native events. Command/file permissions become ordinary
-`quirky.ask` questions. Cancellation denies approval; disabling the creating plugin stops its
-owned runners and cancels their pending approvals.
+`quirky.ask` questions. The structured owner waits through its own lease-authenticated
+client connection; answering resumes the waiting provider. Cancellation denies approval;
+disabling the creating plugin stops its owned runners and cancels their pending approvals.
+
+Structured runners and their leases belong to the daemon. After a daemon restart, startup marks
+their old session records exited while retaining the provider conversation and launch snapshot
+for explicit resume. Terminal processes that still live in the independent PTY host stay running.
 
 Stop a connected runner before resuming its conversation:
 
@@ -276,7 +327,7 @@ toward active time without double-counting overlaps. Background workers require 
 identity and an active assignment to count. Missing contact, an idle prompt or a lost reply does
 not prove completion. Unknown effects retain their durable request identity.
 
-Headless plugins use the eight `quirky.orchestration` service methods through `PluginContext.call`:
+Headless plugins use the `quirky.orchestration` service methods through `PluginContext.call`:
 
 - `serviceRunCreate` creates a stable Run for the authenticated plugin and its key. It does not
   invent a coordinator session.
@@ -286,6 +337,9 @@ Headless plugins use the eight `quirky.orchestration` service methods through `P
   guidance with the Run as sender; `serviceCheck` consumes and acknowledges owned Run deliveries.
 - `serviceReply` answers a pending blocking Ask. `serviceWorkerStop` requires the exact session
   and process incarnation; `serviceWorkerRelease` uses settled-outcome, archive and custody guards.
+- `serviceRegisterSubmissionPreflight` binds the owner's callback before worker dispatch.
+  Registration is a mutation: send `contractVersion` and a stable `requestId`, and require the
+  matching receipt before proceeding. A lost reply reuses that identity, including after restart.
 
 Another plugin cannot read or control that service-owned Run. Ordinary worker CLI commands keep
 their native launch authority; they do not receive the service principal. See
@@ -481,8 +535,14 @@ isolated Default storage and a run-owned system-browser session before clicking.
 ## GitHub Tasks
 
 `quirky.tasks` supplies Tasks lists, issue detail/creation, Project tables/boards/roadmaps,
-and the shared workspace composer. Its generated commands use the `tasks` group:
+and the shared workspace composer.
 
+Tasks is a host-owned tool in the left-bottom slot by default; moving it uses the
+shared tool layout. Its list, issue/Project surfaces, workspace composer and
+settings use `@quirky/ui` controls and canonical graphite tokens in both themes.
+The host stylesheet supplies those styles once; the plugin injects no private CSS.
+
+Generated commands use the `tasks` group:
 ```sh
 quirky tasks open --mode issues --json
 quirky tasks open --mode prs --page 3 --json
@@ -807,6 +867,8 @@ cooldown policy. Disabling that plugin silences delivery.
 The workspace host grants one current epoch lease before Heimdall executes effects.
 Git workspaces keep it under `<gitdir>/orca-heimdall/lease/epoch-N/holder.json`;
 folder workspaces use `<workspace>/.orca/heimdall/lease/epoch-N/holder.json`.
+Registered worktrees derive their kind from a successful repository-scoped inventory. The enrolled
+path must be that exact workspace: a Git worktree ID cannot authorize a different plain folder.
 Renewal, assertions and release require the exact current holder and epoch.
 Expired or superseded holders cannot regain authority by renewing an old epoch.
 
@@ -910,6 +972,11 @@ Purpose-specific `push` and `forcePush` revalidate the exact destination and pri
 snapshot before mutation; a missing or ambiguous head target never falls back to publishing
 another repository. Force push retains its explicit lease and confirmation. No remote is
 created and no public caller-supplied push URL is accepted.
+
+PR-created workspaces retain the explicit PR link, so a base-repository `origin`
+can coexist with a different configured fork push remote. An unlinked branch
+lookup instead requires a PR head matching `origin`; adding a fork remote alone
+does not link that branch. Multiple push URLs on the selected remote are refused.
 
 Sidebar activity reads canonical current agent display evidence; stale rows alone do not
 establish liveness. Quiet time windows refresh without unrelated events, and client-local

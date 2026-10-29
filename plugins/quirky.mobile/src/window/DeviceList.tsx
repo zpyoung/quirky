@@ -1,3 +1,4 @@
+import { Button, EmptyState, ListRow, ToolPanelFrame } from '@quirky/ui'
 import { useState } from 'react'
 import type { MobileDevice, UiPluginContext } from '@quirky/protocol'
 import { revokeMobileDevice } from './api'
@@ -34,27 +35,39 @@ export function DeviceList({ context, devices, onChanged }: Props) {
   }
 
   return (
-    <section className="mobile-card" aria-label="Paired devices">
-      <h2>Paired Devices</h2>
-      {devices.length === 0 ? (
-        <p className="mobile-muted">No devices paired yet.</p>
-      ) : (
-        <div className="mobile-device-list" role="list">
-          {devices.map((device) => (
-            <div className="mobile-device" key={device.deviceId} role="listitem">
-              <div>
-                <div className="mobile-device-name">{device.name || 'Phone'}</div>
-                <div className="mobile-device-meta">{pairedDateLabel(device.pairedAt)}</div>
+    <ToolPanelFrame title="Paired devices">
+      <div className="ui-stack">
+        {devices.length === 0 ? (
+          <EmptyState message="No devices paired yet." />
+        ) : (
+          <div className="ui-stack" role="list">
+            {devices.map((device) => (
+              <div key={device.deviceId} role="listitem">
+                <ListRow
+                  title={device.name || 'Phone'}
+                  description={pairedDateLabel(device.pairedAt)}
+                  trailing={(
+                    <Button
+                      variant="destructive"
+                      aria-label={`Revoke device ${device.name || 'Phone'}`}
+                      disabled={busyDevice !== null}
+                      onClick={() => void revoke(device)}
+                    >
+                      {busyDevice === device.deviceId ? 'Revoking…' : 'Revoke device'}
+                    </Button>
+                  )}
+                />
               </div>
-              <button className="mobile-button danger" type="button" aria-label={`Revoke device ${device.name || 'Phone'}`} disabled={busyDevice !== null} onClick={() => void revoke(device)}>
-                {busyDevice === device.deviceId ? 'Revoking…' : 'Revoke device'}
-              </button>
-            </div>
-          ))}
-        </div>
-      )}
-      {feedback && <p className={feedback.kind === 'error' ? 'mobile-error' : 'mobile-success'} role={feedback.kind === 'error' ? 'alert' : 'status'}>{feedback.message}</p>}
-      <p className="mobile-muted">Revoking a device disconnects it immediately.</p>
-    </section>
+            ))}
+          </div>
+        )}
+        {feedback && (
+          <p className={feedback.kind === 'error' ? 'ui-error-text' : 'ui-text-muted'} role={feedback.kind === 'error' ? 'alert' : 'status'}>
+            {feedback.message}
+          </p>
+        )}
+        <p className="ui-text-muted">Revoking a device disconnects it immediately.</p>
+      </div>
+    </ToolPanelFrame>
   )
 }

@@ -5,7 +5,7 @@ import { registerDom } from './register-dom'
 registerDom()
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 const s = await import('./panel-support')
-const { act, byLabel, buttonText, click, entry, fakeContext, layoutFor, mountPanel, q, qa, rowOf, settle, statusOf } = s
+const { act, byLabel, buttonText, click, entry, fakeContext, layoutFor, mountPanel, q, qa, rowContainerOf, rowOf, settle, statusOf } = s
 
 afterAll(() => GlobalRegistrator.unregister())
 beforeEach(() => {
@@ -30,10 +30,10 @@ describe('SC-41: conflicts lead to Continue', () => {
     const { fake, element, unmount } = await open((f) => {
       f.status = statusOf([conflict('math.ts')], { operation: 'merge' })
     })
-    expect(q(element, '.scm-card-conflict strong')?.textContent).toBe('Merge conflicts: 1 unresolved')
+    expect(q(element, '[role="status"] .ui-inline-agent-card h3')?.textContent).toBe('Merge conflicts: 1 unresolved')
     expect(element.textContent).toContain('Resolved files move back to normal changes after they leave the live conflict state.')
     expect(q(element, 'textarea')).toBeNull()
-    expect(q(element, '.scm-split')).toBeNull()
+    expect(q(element, '[data-git-primary]')).toBeNull()
     expect(buttonText(element, 'Continue merge')).toBeUndefined()
     await click(buttonText(element, 'Review conflicts'))
     expect(fake.views.at(-1)?.input).toEqual({ worktree: 'feat', mode: 'conflicts' })
@@ -45,13 +45,10 @@ describe('SC-41: conflicts lead to Continue', () => {
       f.status = statusOf([conflict('math.ts'), conflict('b.ts', 'deleted_by_them')], { operation: 'merge' })
     })
     const row = rowOf(element, 'math.ts')!
-    expect(q(row, '.scm-row-sub')?.textContent).toBe('Both modified')
-    expect(q(row, '.scm-badge-text')?.textContent).toBe('Unresolved')
-    expect(q(row, '.scm-badge-icon')?.textContent).toBe('⚠')
-    expect(q(row, '.scm-badge-icon')?.getAttribute('aria-hidden')).toBe('true')
-    expect(q(row, '.scm-badge')?.getAttribute('aria-label')).toBe('Unresolved conflict (Both modified)')
-    expect(q(rowOf(element, 'b.ts')!, '.scm-row-sub')?.textContent).toBe('Deleted by them')
-    expect(q(element, '[data-section="conflicts"] .scm-section-note')?.textContent).toBe('2 conflict(s)')
+    expect(q(row, '.ui-list-row__description')?.textContent).toBe('Both modified')
+    expect(q(rowContainerOf(element, 'math.ts')!, '[aria-label="Unresolved conflict (Both modified)"]')?.textContent).toContain('⚠')
+    expect(q(rowOf(element, 'b.ts')!, '.ui-list-row__description')?.textContent).toBe('Deleted by them')
+    expect(q(element, '[data-section="conflicts"] [data-section-note]')?.textContent).toBe('2 conflict(s)')
     unmount()
   })
 
@@ -122,11 +119,9 @@ describe('SC-41: conflicts lead to Continue', () => {
       f.status = statusOf([conflict('math.ts', 'both_modified', 'resolved_locally'), entry('math.ts', 'staged')], { operation: 'merge' })
     })
     const row = rowOf(element, 'math.ts', 'conflicts')!
-    expect(q(row, '.scm-badge-text')?.textContent).toBe('Resolved locally')
-    expect(q(row, '.scm-badge-icon')?.textContent).toBe('✓')
-    expect(q(row, '.scm-badge')?.className).toContain('scm-badge-resolved')
-    expect(qa(row.parentElement!, '.scm-row-actions button')).toHaveLength(0)
-    expect(q(element, '.scm-card strong')?.textContent).toBe('Merge in progress')
+    expect(q(rowContainerOf(element, 'math.ts', 'conflicts')!, '[aria-label^="Resolved locally conflict"]')?.textContent).toContain('✓')
+    expect(qa(row.parentElement!, '.ui-list-row__trailing button')).toHaveLength(0)
+    expect(q(element, '[role="status"] .ui-inline-agent-card h3')?.textContent).toBe('Merge in progress')
     await click(buttonText(element, 'Continue merge'))
     expect(fake.called('quirky.git/continue')).toHaveLength(1)
     unmount()
@@ -139,8 +134,8 @@ describe('SC-41: conflicts lead to Continue', () => {
     fake.status = statusOf([], { ahead: 2, upstreamStatus: { hasUpstream: true, name: 'origin/zoe/feat', sha: 'b'.repeat(40), ahead: 2, behind: 0, behindPatchEquivalent: null } })
     await act(async () => fake.emit({ type: 'quirky.git/changed', data: { worktreeId: 'feat' } }))
     await settle()
-    expect(q(element, '.scm-primary')?.textContent).toBe('Push')
-    expect(q(element, '.scm-card')).toBeNull()
+    expect(q(element, '[data-git-primary]')?.textContent).toBe('Push')
+    expect(q(element, '[role="status"] .ui-inline-agent-card')).toBeNull()
     unmount()
   })
 })
@@ -150,10 +145,10 @@ describe('SC-46: a cherry-pick has no Abort', () => {
     const { element, unmount } = await open((f) => {
       f.status = statusOf([entry('a.ts', 'staged')], { operation: 'cherry-pick' })
     })
-    expect(q(element, '.scm-card strong')?.textContent).toBe('Cherry-pick in progress')
+    expect(q(element, '[role="status"] .ui-inline-agent-card h3')?.textContent).toBe('Cherry-pick in progress')
     expect(buttonText(element, 'Continue cherry-pick')).toBeDefined()
     expect(buttonText(element, 'Abort cherry-pick')).toBeUndefined()
-    expect(qa(element, '.scm-card button').map((b) => b.textContent)).toEqual(['Continue cherry-pick'])
+    expect(qa(element, '[role="status"] .ui-inline-agent-card button').map((b) => b.textContent)).toEqual(['Continue cherry-pick'])
     expect(q(element, 'textarea')).toBeNull()
     unmount()
   })
@@ -162,8 +157,8 @@ describe('SC-46: a cherry-pick has no Abort', () => {
     const { element, unmount } = await open((f) => {
       f.status = statusOf([conflict('a.ts')], { operation: 'cherry-pick' })
     })
-    expect(q(element, '.scm-card-conflict strong')?.textContent).toBe('Cherry-pick conflicts: 1 unresolved')
-    expect(qa(element, '.scm-card button').map((b) => b.textContent)).toEqual(['Review conflicts'])
+    expect(q(element, '[role="status"] .ui-inline-agent-card h3')?.textContent).toBe('Cherry-pick conflicts: 1 unresolved')
+    expect(qa(element, '[role="status"] .ui-inline-agent-card button').map((b) => b.textContent)).toEqual(['Review conflicts'])
     unmount()
   })
 })

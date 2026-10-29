@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { QuirkyEvent, UiPluginContext } from '@quirky/protocol'
+import { Badge, FormRow, InlineAgentCard, SectionHeader } from '@quirky/ui'
 
 const PLUGIN_ID = 'quirky.terminal-dock'
 
@@ -53,29 +54,39 @@ export function DockSettings({ context }: { context: UiPluginContext }) {
   }
 
   return (
-    <section className="qtd-settings" aria-labelledby="qtd-settings-title">
-      <h1 id="qtd-settings-title">Terminal dock</h1>
+    <section className="qtd-settings" aria-label="Terminal dock settings">
+      <SectionHeader title="Terminal dock" />
       <p>Compose prompts below supported agent terminals without typing into the agent interface.</p>
-      <label className="qtd-setting-row">
-        <input
-          type="checkbox"
-          aria-label="Terminal dock (Experimental)"
-          checked={settings.enabled}
-          onChange={(event) => change('enabled', event.currentTarget.checked)}
-        />
-        <span>Terminal dock <span className="qtd-settings-experimental">Experimental</span></span>
-      </label>
-      <label className="qtd-setting-row qtd-settings-auto-open">
-        <input
-          type="checkbox"
-          aria-label="Open automatically for recognized agents (Experimental)"
-          checked={settings.autoOpen}
-          disabled={!settings.enabled}
-          onChange={(event) => change('autoOpen', event.currentTarget.checked)}
-        />
-        <span>Open automatically for recognized agents <span className="qtd-settings-experimental">Experimental</span></span>
-      </label>
-      {error !== null && <p className="qtd-notice" role="alert">Could not save Terminal dock settings: {error}</p>}
+      <FormRow label="Terminal dock" htmlFor="qtd-dock-enabled">
+        <label className="qtd-setting-control">
+          <input
+            type="checkbox"
+            aria-label="Terminal dock (Experimental)"
+            checked={settings.enabled}
+            onChange={(event) => change('enabled', event.currentTarget.checked)}
+          />
+          <Badge>Experimental</Badge>
+        </label>
+      </FormRow>
+      <div className="qtd-settings-auto-open">
+        <FormRow label="Open automatically for recognized agents" htmlFor="qtd-dock-auto-open">
+          <label className="qtd-setting-control">
+            <input
+              type="checkbox"
+              aria-label="Open automatically for recognized agents (Experimental)"
+              checked={settings.autoOpen}
+              disabled={!settings.enabled}
+              onChange={(event) => change('autoOpen', event.currentTarget.checked)}
+            />
+            <Badge>Experimental</Badge>
+          </label>
+        </FormRow>
+      </div>
+      {error !== null && (
+        <div role="alert">
+          <InlineAgentCard title="Could not save Terminal dock settings" description={error} status="failing" />
+        </div>
+      )}
     </section>
   )
 }

@@ -1,3 +1,4 @@
+import { setDefaultTimeout } from 'bun:test'
 import { Database } from 'bun:sqlite'
 import { chmodSync, mkdirSync, realpathSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
@@ -18,6 +19,9 @@ import { createFakeGit, useTestGit, type FakeGit } from '@quirky/git/testing'
 import { makeTempHome, startHarness, waitFor, type Harness } from '../../../packages/daemon/test/helpers'
 import { makeTempDir, removeTempDirs, writePlugin } from '../../../packages/daemon/test/plugins/fixtures'
 import { addFakeRepo, fakeRegistrations } from '../../quirky.worktree/test/fixtures/fake-git'
+
+// Full-builtin daemon setup, delivery and teardown share this integration-test budget.
+setDefaultTimeout(60_000)
 
 const PLUGINS_ROOT = resolve(import.meta.dir, '../..')
 const ENV_KEYS = ['HOME', 'CLAUDE_CONFIG_DIR', 'CODEX_HOME', 'QUIRKY_AGENT_SEARCH_DIRS', 'QUIRKY_TEST_AGENT_TIME_SCALE'] as const

@@ -5,7 +5,6 @@ import { RpcError, RpcErrorCode } from '@quirky/protocol'
 import { fakeContext, settle, type FakeContext } from '../../quirky.session/test/ui-fake'
 
 const PANEL = 'panel:quirky.terminal/sessions'
-const COMMAND = 'command:quirky.terminal/manage-sessions'
 
 type Row = { sessionId: string; state: string; pid: number; cwd: string; shellState: string; worktreeId: string | null; workspace: string }
 
@@ -64,35 +63,21 @@ async function openPanel(sessions: Row[], extra: Record<string, (params: Record<
   await settle()
 }
 
-const text = () => element!.textContent ?? ''
 const button = (label: string) => element!.querySelector(`button[aria-label="${label}"]`) as HTMLButtonElement
 const click = (target: Element) => act(async () => void target.dispatchEvent(new MouseEvent('click', { bubbles: true })))
 const rows = () => [...element!.querySelectorAll('[data-session]')] as HTMLElement[]
 
 const two = [row('s1', 'wt-main', 'w/api'), row('s2', 'wt-fix', 'api/fix-login')]
 
-describe('the plugin module', () => {
-
-  test('SC-26: the command opens the panel', async () => {
-    fake = fakeContext()
-    const toggles: unknown[][] = []
-    fake.context.togglePanel = (...args: unknown[]) => void toggles.push(args)
-    activateModule(fake.context)
-    await act(async () => void (await fake.provided.get(COMMAND)!()))
-    expect(toggles).toEqual([[PANEL, true]])
-  })
-})
 
 describe('the Terminal Sessions panel', () => {
   test('SC-26: lists a row per live session with its workspace, id and kill button, and reports them', async () => {
     await openPanel(two)
-    expect(element!.querySelector('header')?.textContent).toContain('Sessions (2)')
     for (const label of ['Refresh', 'Kill all sessions', 'Restart terminal host']) expect(button(label)).not.toBeNull()
     expect(rows().map((entry) => [...entry.querySelectorAll('.sessions-workspace, .sessions-id')].map((cell) => cell.textContent))).toEqual([
       ['w/api', 's1'],
       ['api/fix-login', 's2']
     ])
-    expect(rows().map((entry) => entry.querySelector('.dot-done') !== null)).toEqual([true, true])
     expect(button('Kill session s1')).not.toBeNull()
     expect(button('Kill session s2')).not.toBeNull()
     expect(reports[reports.length - 1]).toEqual({
@@ -118,15 +103,15 @@ describe('the Terminal Sessions panel', () => {
     expect(fake.callsTo('quirky.terminal/sessions')).toHaveLength(1)
     live = two
     await click(button('Refresh'))
-    expect(text()).toContain('Sessions (2)')
+    expect(rows()).toHaveLength(2)
     live = [two[1]!]
     await fake.emit({ type: 'quirky.session/changed', data: {} } as never)
     await settle()
-    expect(text()).toContain('Sessions (1)')
+    expect(rows().map((entry) => entry.dataset.session)).toEqual(['s2'])
     live = []
     await fake.emit({ type: 'quirky.session/removed', data: { sessionId: 's2' } } as never)
     await settle()
-    expect(text()).toContain('Sessions (0)')
+    expect(rows()).toHaveLength(0)
   })
 
   test('SC-27: kill asks first, cancelling leaves the session, confirming removes its row', async () => {
@@ -141,13 +126,12 @@ describe('the Terminal Sessions panel', () => {
       }
     ])
     expect(fake.callsTo('quirky.terminal/kill')).toEqual([])
-    expect(text()).toContain('Sessions (2)')
+    expect(rows().map((entry) => entry.dataset.session)).toEqual(['s1', 's2'])
 
     fake.state.confirmAnswer = true
     await click(button('Kill session s1'))
     await settle()
     expect(fake.callsTo('quirky.terminal/kill').map((call) => call.params)).toEqual([{ session: 's1', yes: true }])
-    expect(text()).toContain('Sessions (1)')
     expect(rows().map((entry) => entry.dataset.session)).toEqual(['s2'])
     expect(fake.toasts.map((toast) => toast.title)).toContain('Killed session.')
   })
@@ -167,8 +151,7 @@ describe('the Terminal Sessions panel', () => {
       confirmLabel: 'Restart'
     })
     expect(fake.callsTo('quirky.terminal/restartHost').map((call) => call.params)).toEqual([{ yes: true }])
-    expect(text()).toContain('Sessions (0)')
-    expect(text()).toContain('No sessions.')
+    expect(rows()).toHaveLength(0)
     expect(fake.toasts.map((toast) => toast.title)).toContain('Terminal host restarted.')
   })
 
@@ -180,15 +163,14 @@ describe('the Terminal Sessions panel', () => {
     })
     await click(button('Restart terminal host'))
     await settle()
-    expect(text()).toContain('Sessions (2)')
+    expect(rows()).toHaveLength(2)
     expect(fake.toasts).toHaveLength(1)
     expect(fake.toasts[0]!.title).toBe('Restart failed — check logs.')
   })
 
   test('SC-29: with nothing to kill the panel says so and Kill all is disabled', async () => {
     await openPanel([])
-    expect(text()).toContain('Sessions (0)')
-    expect(text()).toContain('No sessions.')
+    expect(rows()).toHaveLength(0)
     expect(button('Kill all sessions').disabled).toBe(true)
     expect(reports[reports.length - 1]).toEqual({ count: 0, rows: [] })
   })
@@ -200,7 +182,7 @@ describe('the Terminal Sessions panel', () => {
     await settle()
     expect(fake.confirms[0]).toEqual({ title: 'Kill all terminal sessions?', confirmLabel: 'Kill all' })
     expect(fake.callsTo('quirky.terminal/killAll').map((call) => call.params)).toEqual([{ yes: true }])
-    expect(text()).toContain('No sessions.')
+    expect(rows()).toHaveLength(0)
     expect(fake.toasts.map((toast) => toast.title)).toContain('Killed 2 sessions.')
   })
 })

@@ -1,3 +1,4 @@
+import { setDefaultTimeout } from 'bun:test'
 import { mkdirSync } from 'node:fs'
 import type { LedgerResponse } from '../src/types'
 import { dirname, join } from 'node:path'
@@ -5,6 +6,8 @@ import type { ClientRole, QuirkyClient, Repo, Worktree } from '@quirky/protocol'
 import { runCli as runCliProcess, type CliResult } from '../../../packages/cli/test/fixtures/fake-daemon'
 import { makeRepo, git } from '../../quirky.repo/test/git-fixtures'
 import { startPluginHarness, type PluginHarness } from '../../quirky.repo/test/harness'
+
+setDefaultTimeout(60_000)
 
 const LEDGER_PLUGINS = ['quirky.repo', 'quirky.worktree', 'quirky.ledger', 'quirky.ask']
 

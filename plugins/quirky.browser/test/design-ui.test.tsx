@@ -121,7 +121,7 @@ const button = (root: ParentNode, name: string) => {
 }
 
 function explicitTargetButton(root: ParentNode): HTMLButtonElement {
-  const found = root.querySelector<HTMLButtonElement>('button.qbp-design-target')
+  const found = root.querySelector<HTMLButtonElement>('[aria-label="Running agents"] button')
   if (!found) throw new Error('Explicit send target was not found')
   return found
 }
@@ -144,14 +144,14 @@ test('a refused annotation send retains the note and releases it for another sen
     textarea.dispatchEvent(new Event('keyup', { bubbles: true }))
   })
   await act(async () => { button(ui.host, 'Add').click() })
-  await settleUntil(() => ui.host.querySelector('.qbp-design-note p')?.textContent?.includes(comment) === true)
+  await settleUntil(() => ui.host.querySelector('[aria-label="Browser annotations"] article p')?.textContent?.includes(comment) === true)
 
   await act(async () => { button(ui.host, 'Send').click() })
-  await settleUntil(() => ui.host.querySelector('button.qbp-design-target') !== null)
+  await settleUntil(() => ui.host.querySelector('[aria-label="Running agents"] button') !== null)
   await act(async () => { explicitTargetButton(ui.host).click() })
   await settleUntil(() => button(ui.host, 'Send').disabled === false)
 
-  expect(ui.host.querySelector('.qbp-design-note p')?.textContent).toContain(comment)
+  expect(ui.host.querySelector('[aria-label="Browser annotations"] article p')?.textContent).toContain(comment)
   expect(button(ui.host, 'Send').disabled).toBe(false)
   await act(async () => ui.unmount())
 })
@@ -176,10 +176,10 @@ test('editing an annotation while sending retains the edited revision after a pa
     textarea.dispatchEvent(new Event('keyup', { bubbles: true }))
   })
   await act(async () => { button(ui.host, 'Add').click() })
-  await settleUntil(() => ui.host.querySelector('.qbp-design-note p')?.textContent?.includes(originalComment) === true)
+  await settleUntil(() => ui.host.querySelector('[aria-label="Browser annotations"] article p')?.textContent?.includes(originalComment) === true)
 
   await act(async () => { button(ui.host, 'Send').click() })
-  await settleUntil(() => ui.host.querySelector('button.qbp-design-target') !== null)
+  await settleUntil(() => ui.host.querySelector('[aria-label="Running agents"] button') !== null)
   await act(async () => { explicitTargetButton(ui.host).click() })
   expect(button(ui.host, 'Send').disabled).toBe(true)
 
@@ -193,13 +193,13 @@ test('editing an annotation while sending retains the edited revision after a pa
     textarea.dispatchEvent(new Event('keyup', { bubbles: true }))
   })
   await act(async () => { button(ui.host, 'Save').click() })
-  await settleUntil(() => ui.host.querySelector('.qbp-design-note p')?.textContent?.includes(editedComment) === true)
+  await settleUntil(() => ui.host.querySelector('[aria-label="Browser annotations"] article p')?.textContent?.includes(editedComment) === true)
   expect(button(ui.host, 'Send').disabled).toBe(true)
 
   await act(async () => { deferredSend.resolve({ delivery: 'pasted' }) })
-  await settleUntil(() => ui.host.querySelector('.qbp-design-note p')?.textContent?.includes(editedComment) === true && button(ui.host, 'Send').disabled === false)
-  expect(ui.host.querySelector('.qbp-design-note p')?.textContent).toContain(editedComment)
-  expect(ui.host.querySelector('.qbp-design-note p')?.textContent).not.toContain(originalComment)
+  await settleUntil(() => ui.host.querySelector('[aria-label="Browser annotations"] article p')?.textContent?.includes(editedComment) === true && button(ui.host, 'Send').disabled === false)
+  expect(ui.host.querySelector('[aria-label="Browser annotations"] article p')?.textContent).toContain(editedComment)
+  expect(ui.host.querySelector('[aria-label="Browser annotations"] article p')?.textContent).not.toContain(originalComment)
   expect(button(ui.host, 'Send').disabled).toBe(false)
   await act(async () => ui.unmount())
 })
@@ -274,8 +274,8 @@ test('the annotation tray keeps the newest 20 notes and drops the oldest', async
     })
     await act(async () => { button(ui.host, 'Add').click() })
   }
-  await settleUntil(() => ui.host.querySelectorAll('.qbp-design-note').length === 20)
-  const comments = [...ui.host.querySelectorAll('.qbp-design-note p')].map((entry) => entry.textContent)
+  await settleUntil(() => ui.host.querySelectorAll('[aria-label="Browser annotations"] article').length === 20)
+  const comments = [...ui.host.querySelectorAll('[aria-label="Browser annotations"] article p')].map((entry) => entry.textContent)
   expect(comments).toHaveLength(20)
   expect(comments[0]).toContain('Note 2')
   expect(comments).not.toContain('Change: Note 1')

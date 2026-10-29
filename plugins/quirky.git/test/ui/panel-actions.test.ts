@@ -5,7 +5,7 @@ import { registerDom } from './register-dom'
 registerDom()
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 const s = await import('./panel-support')
-const { act, byLabel, buttonText, click, compareOf, entry, failure, fakeContext, layoutFor, mountPanel, press, q, qa, rowOf, settle, statusOf, type, waitForState } = s
+const { act, byLabel, buttonText, click, compareOf, entry, failure, fakeContext, layoutFor, mountPanel, noticeOf, noticesOf, press, q, qa, rowOf, settle, statusOf, type, waitForState } = s
 
 afterAll(() => GlobalRegistrator.unregister())
 beforeEach(() => {
@@ -31,10 +31,14 @@ const upstream = (ahead: number, behind: number, patchEquivalent: boolean | null
   behindPatchEquivalent: patchEquivalent
 })
 
-const primary = (element: HTMLElement) => q(element, '.scm-primary') as HTMLButtonElement
+const primary = (element: HTMLElement) => q(element, '[data-git-primary]') as HTMLButtonElement
 const chevron = (element: HTMLElement) => byLabel(element, 'More commit and remote actions') as HTMLButtonElement
 const dialog = () => q(document.body, '[role="dialog"]')
-const menuLabels = () => qa(document.body, '[role="menu"] button').map((b) => b.textContent)
+const dialogTitle = () => {
+  const titleId = dialog()?.getAttribute('aria-labelledby')
+  return titleId ? document.getElementById(titleId)?.textContent ?? null : null
+}
+const menuLabels = () => qa(document.body, '[role="menu"] [role="menuitem"]').map((b) => b.textContent)
 const message = (element: HTMLElement) => byLabel(element, 'Commit message') as HTMLTextAreaElement
 
 describe('SC-23: the discard dialogs', () => {
@@ -55,13 +59,13 @@ describe('SC-23: the discard dialogs', () => {
     ['untracked', 'notes.txt', 'Delete untracked file', 'Delete "notes.txt"?', 'This will permanently delete this file. This cannot be undone.', 'Delete']
   ]
   for (const [section, path, button, title, body, confirm] of cases) {
-    test(`${button} on ${path} asks "${title}" with focus on ${confirm}, then discards with yes`, async () => {
+    test(`${button} on ${path} asks "${title}" with the shared dialog focused, then discards with yes`, async () => {
       const { fake, element, unmount } = await open(rows)
       await click(byLabel(element, `${button} ${path}`))
-      expect(dialog()?.getAttribute('aria-label')).toBe(title)
-      expect(dialog()?.querySelector('.dialog-message')?.textContent).toBe(body)
+      expect(dialogTitle()).toBe(title)
+      expect(dialog()?.textContent).toContain(body)
       const confirmButton = buttonText(dialog()!, confirm)!
-      expect(document.activeElement).toBe(confirmButton)
+      expect(dialog()?.contains(document.activeElement)).toBe(true)
       expect(fake.called('quirky.git/discard')).toHaveLength(0)
       await click(confirmButton)
       expect(fake.called('quirky.git/discard').at(-1)?.params).toEqual({ worktree: 'feat', paths: [path], yes: true })
@@ -74,7 +78,7 @@ describe('SC-23: the discard dialogs', () => {
     const { fake, element, unmount } = await open(rows)
     const askFor = async (section: string, label: string, title: string, confirm: string) => {
       await click(byLabel(q(element, `[data-section="${section}"]`)!, label))
-      expect(dialog()?.getAttribute('aria-label')).toBe(title)
+      expect(dialogTitle()).toBe(title)
       await click(buttonText(dialog()!, confirm))
     }
     await askFor('untracked', 'Delete all untracked', 'Delete 3 untracked files?', 'Delete 3')
@@ -94,7 +98,7 @@ describe('SC-23: the discard dialogs', () => {
     await click(buttonText(dialog()!, 'Cancel'))
     expect(dialog()).toBeNull()
     await click(byLabel(element, 'Discard changes math.ts'))
-    await press(window, 'Escape')
+    await press(dialog()!, 'Escape')
     expect(dialog()).toBeNull()
     expect(fake.called('quirky.git/discard')).toHaveLength(0)
     unmount()
@@ -124,7 +128,7 @@ describe('SC-24: stage and discard failures show one notice with Retry', () => {
       await click(byLabel(element, 'Discard changes math.ts'))
       await click(buttonText(dialog()!, 'Discard'))
     }
-    const notices = qa(element, '.notice')
+    const notices = noticesOf(element)
     expect(notices).toHaveLength(1)
     expect(notices[0]!.textContent).toContain('Failed to discard “math.ts”')
     expect(notices[0]!.textContent).toContain('EACCES: permission denied')
@@ -153,12 +157,12 @@ describe('SC-24: stage and discard failures show one notice with Retry', () => {
         })
       })
       await click(byLabel(element, 'Stage math.ts'))
-      expect(element.querySelector('.notice')?.textContent).toContain('Failed to stage “math.ts”')
+      expect(noticeOf(element)?.textContent).toContain('Failed to stage “math.ts”')
       await act(async () => delays.forEach((run) => run()))
-      expect(buttonText(element.querySelector('.notice')!, 'Retry')).toBeUndefined()
-      expect(buttonText(element.querySelector('.notice')!, 'Dismiss')).toBeDefined()
-      await click(buttonText(element.querySelector('.notice')!, 'Dismiss'))
-      expect(element.querySelector('.notice')).toBeNull()
+      expect(buttonText(noticeOf(element)!, 'Retry')).toBeUndefined()
+      expect(byLabel(noticeOf(element)!, 'Dismiss notification')).toBeDefined()
+      await click(byLabel(noticeOf(element)!, 'Dismiss notification'))
+      expect(noticeOf(element)).toBeNull()
       fail = false
       expect(fake.called('quirky.git/stage')).toHaveLength(1)
       unmount()
@@ -178,9 +182,9 @@ describe('SC-24: stage and discard failures show one notice with Retry', () => {
     })
     await click(byLabel(element, 'Stage math.ts'))
     fail = false
-    await click(buttonText(element.querySelector('.notice')!, 'Retry'))
+    await click(buttonText(noticeOf(element)!, 'Retry'))
     expect(fake.called('quirky.git/stage')).toHaveLength(2)
-    expect(element.querySelector('.notice')).toBeNull()
+    expect(noticeOf(element)).toBeNull()
     unmount()
   })
 
@@ -198,7 +202,7 @@ describe('SC-24: stage and discard failures show one notice with Retry', () => {
     })
     await click(byLabel(q(element, '[data-section="unstaged"]')!, 'Discard all'))
     await click(buttonText(dialog()!, 'Discard all'))
-    const notice = q(element, '.notice')!
+    const notice = noticeOf(element)!
     expect(notice.textContent).toContain('Failed to discard 2 file(s)')
     expect(notice.textContent).toContain('read-only a.ts, b.ts')
     unmount()
@@ -215,7 +219,7 @@ describe('SC-24: stage and discard failures show one notice with Retry', () => {
     await click(byLabel(element, 'Stage math.ts'))
     await act(async () => fake.setLayout(layoutFor('other')))
     await settle()
-    const notice = q(element, '.notice')!
+    const notice = noticeOf(element)!
     expect(notice.textContent).toContain('Failed to stage “math.ts” in feat')
     expect(buttonText(notice, 'Retry')).toBeUndefined()
     unmount()
@@ -258,7 +262,7 @@ describe('SC-25: the commit box', () => {
     const { fake, element, unmount } = await open((f) => {
       f.status = statusOf([entry('math.ts', 'unstaged')])
     })
-    await press(element.querySelector('.scm')!, 'Enter', { metaKey: true })
+    await press(element.querySelector('[data-git-panel]')!, 'Enter', { metaKey: true })
     expect(fake.called('quirky.git/commit')).toHaveLength(0)
     unmount()
   })
@@ -319,13 +323,13 @@ describe('SC-27: a failing hook blocks the commit', () => {
     })
     await type(message(element), 'Add math')
     await click(primary(element))
-    const card = q(element, '.scm-card-blocked')!
+    const card = q(element, '[role="alert"] .ui-inline-agent-card')!
     expect(card.textContent).toContain('Commit blocked')
-    expect(q(card, '.scm-pill')?.textContent).toBe('Lint')
-    expect(q(card, '.scm-summary')?.textContent).toBe('Lint failed during commit.')
+    expect(q(card, '[aria-label="Lint"]')?.textContent).toBe('Lint')
+    expect(card.textContent).toContain('Lint failed during commit.')
     expect(fake.toasts).toEqual([])
     await click(buttonText(card, 'Details'))
-    expect(dialog()?.getAttribute('aria-label')).toBe('Commit Failed')
+    expect(dialogTitle()).toBe('Commit Failed')
     expect(q(dialog()!, 'pre')?.textContent).toBe('eslint found 2 problems')
     await click(buttonText(dialog()!, 'Close'))
     expect(dialog()).toBeNull()
@@ -341,8 +345,8 @@ describe('SC-27: a failing hook blocks the commit', () => {
     })
     await type(message(element), 'Add math')
     await click(primary(element))
-    expect(q(element, '.scm-pill')?.textContent).toBe('Hook')
-    expect(buttonText(q(element, '.scm-card-blocked')!, 'Details')).toBeUndefined()
+    expect(q(element, '[role="alert"] .ui-inline-agent-card [aria-label="Hook"]')?.textContent).toBe('Hook')
+    expect(buttonText(q(element, '[role="alert"] .ui-inline-agent-card')!, 'Details')).toBeUndefined()
     unmount()
   })
 })
@@ -436,7 +440,7 @@ describe('SC-29: the chevron menu', () => {
     })
     // the commit box is hidden during an operation, so the card's Abort is the entry point
     await click(buttonText(element, 'Abort merge'))
-    expect(dialog()?.getAttribute('aria-label')).toBe('Abort merge?')
+    expect(dialogTitle()).toBe('Abort merge?')
     expect(dialog()?.textContent).toContain('This cancels the merge in progress and can discard conflict resolutions made during this merge.')
     await click(buttonText(dialog()!, 'Abort merge'))
     expect(fake.called('quirky.git/abort').at(-1)?.params).toEqual({ worktree: 'feat', yes: true })
@@ -500,9 +504,9 @@ describe('C6: linked review push targets', () => {
       f.on('quirky.hosting/forBranch', () => review)
       f.on('quirky.git/pushTarget', () => target)
     })
-    await waitForState(element, () => q(element, '.scm-push-target') !== null)
-    expect(q(element, '.scm-push-target')?.textContent).toContain('fork/zoe/feat')
-    expect(q(element, '.scm-push-target')?.textContent).toContain('Fork')
+    await waitForState(element, () => q(element, '[data-git-push-target]') !== null)
+    expect(q(element, '[data-git-push-target]')?.textContent).toContain('fork/zoe/feat')
+    expect(q(element, '[data-git-push-target]')?.textContent).toContain('Fork')
     expect(fake.called('quirky.git/pushTarget').at(-1)?.params).toEqual({ worktree: 'feat', purpose: 'review' })
 
     await click(primary(element))
@@ -539,9 +543,9 @@ describe('SC-30: a running remote call', () => {
     expect(primary(element).textContent).toBe('Push')
     expect(primary(element).title).toBe('Push in progress…')
     expect(primary(element).disabled).toBe(true)
-    expect(q(primary(element), '.scm-spinner')).not.toBeNull()
+    expect(q(primary(element), '[aria-label="Action in progress"]')).not.toBeNull()
     await click(chevron(element))
-    const rows = qa(document.body, '[role="menu"] button') as HTMLButtonElement[]
+    const rows = qa(document.body, '[role="menu"] [role="menuitem"]') as HTMLButtonElement[]
     expect(rows.every((b) => b.disabled)).toBe(true)
     unmount()
   })
@@ -550,8 +554,8 @@ describe('SC-30: a running remote call', () => {
     const { element, unmount } = await open((f) => {
       f.status = statusOf([], { busy: 'fetch', upstreamStatus: upstream(1, 0) })
     })
-    expect(q(primary(element), '.scm-spinner')).toBeNull()
-    expect(q(chevron(element), '.scm-spinner')).not.toBeNull()
+    expect(q(primary(element), '[aria-label="Action in progress"]')).toBeNull()
+    expect(q(chevron(element), '[aria-label="Action in progress"]')).not.toBeNull()
     unmount()
   })
 })

@@ -54,16 +54,46 @@ export class VaultRig {
 
   static async start(options: { isolateVaultPlugin?: boolean; includeEveryAgentFixture?: boolean } = {}): Promise<VaultRig> {
     const home = mkdtempSync(join(tmpdir(), 'qv-home-'))
-    const sourceHome = mkdtempSync(join(tmpdir(), 'qv-source-'))
+    let sourceHome: string | undefined
     const previousSourceHome = process.env[SOURCE_HOME_ENV]
-    process.env[SOURCE_HOME_ENV] = sourceHome
-    const fixture: FixtureExpectation = options.includeEveryAgentFixture === false
-      ? { expected: {}, paths: {} }
-      : await writeEveryAgentFixture(sourceHome, { cwdRoot: join(sourceHome, 'workspaces') })
-    const builtinPluginsDir = createVaultBuiltinPluginsDir(home, { isolateVaultPlugin: options.isolateVaultPlugin })
-    const h = await startHarness({ home, builtinPluginsDir })
-    const connected = await h.connectWithEvents('cli')
-    return new VaultRig(h, connected.client, connected.events, home, sourceHome, fixture.expected, fixture.paths, builtinPluginsDir, previousSourceHome)
+    let harness: Harness | undefined
+    try {
+      const fixtureSourceHome = mkdtempSync(join(tmpdir(), 'qv-source-'))
+      sourceHome = fixtureSourceHome
+      process.env[SOURCE_HOME_ENV] = fixtureSourceHome
+      const fixture: FixtureExpectation = options.includeEveryAgentFixture === false
+        ? { expected: {}, paths: {} }
+        : await writeEveryAgentFixture(fixtureSourceHome, { cwdRoot: join(fixtureSourceHome, 'workspaces') })
+      const builtinPluginsDir = createVaultBuiltinPluginsDir(home, { isolateVaultPlugin: options.isolateVaultPlugin })
+      harness = await startHarness({ home, builtinPluginsDir })
+      const connected = await harness.connectWithEvents('cli')
+      return new VaultRig(harness, connected.client, connected.events, home, fixtureSourceHome, fixture.expected, fixture.paths, builtinPluginsDir, previousSourceHome)
+    } catch (error) {
+      const cleanupErrors: unknown[] = []
+      try {
+        await harness?.cleanup()
+      } catch (cleanupError) {
+        cleanupErrors.push(cleanupError)
+      }
+      try {
+        rmSync(home, { recursive: true, force: true })
+      } catch (cleanupError) {
+        cleanupErrors.push(cleanupError)
+      }
+      if (sourceHome !== undefined) {
+        try {
+          rmSync(sourceHome, { recursive: true, force: true })
+        } catch (cleanupError) {
+          cleanupErrors.push(cleanupError)
+        }
+      }
+      if (previousSourceHome === undefined) delete process.env[SOURCE_HOME_ENV]
+      else process.env[SOURCE_HOME_ENV] = previousSourceHome
+      if (cleanupErrors.length > 0) {
+        throw new AggregateError([error, ...cleanupErrors], 'VaultRig startup failed and cleanup was incomplete', { cause: error })
+      }
+      throw error
+    }
   }
 
   searchDatabaseExists(): boolean {
@@ -85,12 +115,23 @@ export class VaultRig {
   }
 
   async cleanup(): Promise<void> {
-    for (const client of this.h.clients) client.close()
-    await this.h.daemon.stop()
-    this.h.pty.stop()
-    rmSync(this.home, { recursive: true, force: true })
-    rmSync(this.sourceHome, { recursive: true, force: true })
-    if (this.previousSourceHome === undefined) delete process.env[SOURCE_HOME_ENV]
-    else process.env[SOURCE_HOME_ENV] = this.previousSourceHome
+    let failed = false
+    let firstError: unknown
+    const attempt = async (action: () => void | Promise<void>) => {
+      try {
+        await action()
+      } catch (error) {
+        if (!failed) firstError = error
+        failed = true
+      }
+    }
+    await attempt(() => this.h.cleanup())
+    await attempt(() => rmSync(this.home, { recursive: true, force: true }))
+    await attempt(() => rmSync(this.sourceHome, { recursive: true, force: true }))
+    await attempt(() => {
+      if (this.previousSourceHome === undefined) delete process.env[SOURCE_HOME_ENV]
+      else process.env[SOURCE_HOME_ENV] = this.previousSourceHome
+    })
+    if (failed) throw firstError
   }
 }

@@ -5,6 +5,7 @@ import {
   type PluginCaller,
   type EffectiveHooks,
   type PluginContext,
+  type PluginActivationDisposer,
   type ProjectGroup,
   type QuirkyEvent,
   type Repo,
@@ -37,7 +38,9 @@ import { archiveWorktree, linkReference, listReferences, unlinkReference, type R
 import { readStatusDefinitions, setStatusDefinitions } from './src/daemon/statuses'
 import { navigate, navigationHistoryMove, navigationIndex, navigationState, navigationStep, openIn } from './src/daemon/navigation'
 import { availableHosts } from './src/daemon/hosts'
-import { cleanupExpiredPreparedCheckouts, cleanupPreparedCheckouts, PREPARATION_TTL_MS } from './src/daemon/prepared'
+import { cleanupActivationPreparedCheckouts, cleanupExpiredPreparedCheckouts, cleanupPreparedCheckouts, PREPARATION_TTL_MS } from './src/daemon/prepared'
+import { registerRemoteWorkspaces } from './src/daemon/remote'
+import { registerVmEnvironments } from './src/daemon/vm'
 import type { CleanupSelection, WorktreeControl } from './src/control-types'
 
 const DEFAULT_WORKTREES_ROOT = '~/quirky/workspaces'
@@ -97,30 +100,16 @@ function originCreatorOf(caller: PluginCaller): WorktreeOriginCreator {
 }
 
 
-let releasePrepared: (() => Promise<void>) | undefined
-let releasePending: (() => void) | undefined
-let preparedExpiryTimer: ReturnType<typeof setTimeout> | undefined
-let preparedExpiryTask: Promise<void> | undefined
-let preparedExpiryActive = false
-
-/** Releases pending starts and the exact locked preparations owned by this plugin instance. */
-export async function deactivate(): Promise<void> {
-  releasePending?.()
-  releasePending = undefined
-  preparedExpiryActive = false
-  clearTimeout(preparedExpiryTimer)
-  preparedExpiryTimer = undefined
-  await preparedExpiryTask
-  preparedExpiryTask = undefined
-  const cleanup = releasePrepared
-  releasePrepared = undefined
-  await cleanup?.()
-}
-
-export async function activate(context: PluginContext): Promise<void> {
+export async function activate(context: PluginContext): Promise<PluginActivationDisposer> {
+  let releasePrepared: (() => Promise<void>) | undefined
+  let releasePending: (() => void) | undefined
+  let preparedExpiryTimer: NodeJS.Timeout | undefined
+  let preparedExpiryTask: Promise<void> | undefined
+  let preparedExpiryActive = true
   const store = openWorktreeStore(context)
+  registerRemoteWorkspaces(context, store)
+  const releaseVm = registerVmEnvironments(context, store)
   const preparationOwnerId = randomUUID()
-  preparedExpiryActive = true
 
   const fail = (kind: ErrorKind, message: string, data?: unknown) =>
     data === undefined ? context.error(kind, message) : Object.assign(context.error(kind, message), { data })
@@ -272,15 +261,10 @@ export async function activate(context: PluginContext): Promise<void> {
     suggestions: new Map(),
     pending: pendingStarts
   }
-  releasePrepared = async () => {
-    try {
-      const repos = await listRepos()
-      await poolQueue.run('prepared-worktree-pool', () => cleanupPreparedCheckouts(preparedEnv, repos))
-    } catch (error) {
-      context.log(`could not clean prepared worktrees during deactivation: ${errorMessage(error)}`)
-    }
-  }
-  await releasePrepared()
+  releasePrepared = () =>
+    poolQueue.run('prepared-worktree-pool', () => cleanupActivationPreparedCheckouts(preparedEnv))
+  const repos = await listRepos()
+  await poolQueue.run('prepared-worktree-pool', () => cleanupPreparedCheckouts(preparedEnv, repos))
   armPreparedExpiry()
 
   const removeEnv: RemoveEnv = {
@@ -429,6 +413,7 @@ export async function activate(context: PluginContext): Promise<void> {
   }
 
   const handlers: Record<string, Handler> = {
+    ownedIds,
     async list(params) {
       await reconcileDeletedGroups()
       if (params.repo === undefined && params.group === undefined) return await listEverything(listEnv, await listRepos())
@@ -643,4 +628,23 @@ export async function activate(context: PluginContext): Promise<void> {
   }
 
   await importV1Root()
+  return async () => {
+    releasePending?.()
+    releasePending = undefined
+    preparedExpiryActive = false
+    clearTimeout(preparedExpiryTimer)
+    preparedExpiryTimer = undefined
+    try {
+      await releaseVm()
+    } finally {
+      try {
+        await preparedExpiryTask
+      } finally {
+        preparedExpiryTask = undefined
+        const cleanup = releasePrepared
+        releasePrepared = undefined
+        await cleanup?.()
+      }
+    }
+  }
 }

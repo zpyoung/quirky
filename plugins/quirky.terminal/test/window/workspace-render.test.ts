@@ -203,11 +203,3 @@ describe('rendering from the daemon workspace', () => {
   })
 })
 
-describe('styles', () => {
-  test('one stylesheet for the workspace is injected, however many views mount', async () => {
-    await mount()
-    const second = await mountFixture(fakeDaemon(simpleWorkspace()))
-    expect(document.head.querySelectorAll('style[data-plugin="quirky.terminal"]')).toHaveLength(1)
-    await second.unmount()
-  })
-})

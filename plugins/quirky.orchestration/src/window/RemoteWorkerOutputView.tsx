@@ -1,3 +1,4 @@
+import { Badge, Button, EmptyState, ListRow, SectionHeader, ToolPanelFrame } from '@quirky/ui'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { UiPluginContext } from '@quirky/protocol'
 import type { DispatchId } from '../contracts'
@@ -166,28 +167,63 @@ export function RemoteWorkerOutputView({ context, input }: Props) {
     }
   }, [refresh])
 
-  if (!dispatchId) return <section role="alert">Remote output view requires a home Dispatch ID.</section>
+  if (!dispatchId) {
+    return (
+      <section role="alert">
+        <ToolPanelFrame title="Remote worker output">
+          <EmptyState message="Remote output view requires a home Dispatch ID." />
+        </ToolPanelFrame>
+      </section>
+    )
+  }
 
   const first = pages[0]
-  return <section aria-label="Remote worker output" style={{ display: 'flex', flexDirection: 'column', flex: '1 1 auto', minWidth: 0, minHeight: 0, gap: 8, padding: 12, overflow: 'auto' }}>
-    <header style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-      <strong>Remote worker output</strong>
-      <span>{first?.remote ? `Host: ${first.remote.peerId}` : 'Host: resolving'}</span>
-      <span>{first ? `Source: ${first.source}${first.archived ? ' (archived)' : ''}` : ''}</span>
-      <span>{first ? `Liveness: ${first.agentLiveness.status}` : ''}</span>
-      <button type="button" onClick={() => void refresh()} disabled={loading}>Refresh</button>
-      {first?.nextCursor ? <button type="button" onClick={() => void loadMore()} disabled={loading}>Load older output</button> : null}
-    </header>
-    {error ? <div role="alert">{error}</div> : null}
-    {first ? <>
-      {!first.sourceExact ? <p>Host output source is not exact; content is shown with its host-provided uncertainty.</p> : null}
-      {first.fallbackReason ? <p>Output fallback: {first.fallbackReason}</p> : null}
-      {first.remote ? <p>Host Dispatch: {first.remote.hostDispatchId} · incarnation {first.remote.hostIncarnation}</p> : null}
-      {first.warnings.map((warning, index) => <p key={`${warning}-${index}`}>{warning}</p>)}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        {pages.map((page, index) => <pre key={`${page.sourceIdentity}-${index}`} style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', margin: 0 }}>{page.content}</pre>)}
-      </div>
-      {first.clipping.clipped ? <p>Output page clipped at {first.clipping.maxBytes} bytes.</p> : null}
-    </> : loading ? <p>Reading output from the paired host…</p> : error ? null : <p>No output is currently available.</p>}
-  </section>
+  return (
+    <section aria-label="Remote worker output" className="ui-stack" style={{ flex: '1 1 auto', minHeight: 0, minWidth: 0, overflow: 'auto' }}>
+      <ToolPanelFrame
+        title="Remote worker output"
+        actions={
+          <div className="ui-cluster">
+            <Button onClick={() => void refresh()} disabled={loading}>Refresh</Button>
+            {first?.nextCursor ? <Button onClick={() => void loadMore()} disabled={loading}>Load older output</Button> : null}
+          </div>
+        }
+      >
+        {error && <div role="alert" className="ui-error-text">{error}</div>}
+        {first ? (
+          <div className="ui-stack">
+            <div className="ui-stack">
+              <ListRow title="Host" description={first.remote ? first.remote.peerId : 'Resolving'} />
+              <ListRow
+                title="Source"
+                description={first.source}
+                trailing={first.archived ? <Badge tone="accent">Archived</Badge> : undefined}
+              />
+              <ListRow
+                title="Agent liveness"
+                description={first.agentLiveness.reason ? `${first.agentLiveness.status} · ${first.agentLiveness.reason}` : first.agentLiveness.status}
+              />
+              <ListRow
+                title="Terminal liveness"
+                description={first.terminalLiveness}
+              />
+              {first.remote && <ListRow title="Host Dispatch" description={`${first.remote.hostDispatchId} · incarnation ${first.remote.hostIncarnation}`} />}
+            </div>
+            {!first.sourceExact && <p className="ui-text-muted">Host output source is not exact; content is shown with its host-provided uncertainty.</p>}
+            {first.fallbackReason && <p className="ui-text-muted">Output fallback: {first.fallbackReason}</p>}
+            {first.warnings.map((warning, index) => <ListRow key={`${warning}-${index}`} title="Warning" status="needs-you" description={warning} />)}
+            <SectionHeader title="Output" />
+            <div className="ui-stack">
+              {pages.map((page, index) => <pre key={`${page.sourceIdentity}-${index}`} className="ui-readout">{page.content}</pre>)}
+            </div>
+            {first.clipping.clipped && <p className="ui-text-muted">Output page clipped at {first.clipping.maxBytes} bytes.</p>}
+          </div>
+        ) : loading ? (
+          <EmptyState message="Reading output from the paired host…" />
+        ) : error ? null : (
+          <EmptyState message="No output is currently available." />
+        )}
+      </ToolPanelFrame>
+    </section>
+  )
 }

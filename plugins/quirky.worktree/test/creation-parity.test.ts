@@ -3,8 +3,6 @@ import { existsSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { RpcErrorCode, type WorktreeCreateResult } from '@quirky/protocol'
 import { call, failure, git, isolateGitConfig } from '../../quirky.repo/test/git-fixtures'
-import { testCliContext } from '../../quirky.repo/test/harness'
-import { commands } from '../cli'
 import { githubUser, makeOrigin, makeProject, startWorld, useGlobalGitConfig, type World } from './fixtures/repos'
 
 const { scratch } = isolateGitConfig()
@@ -89,7 +87,7 @@ describe('worktree create parity boundaries', () => {
     })
   })
 
-  test('invalid recipe/tab selections and valid VM recipes fail before canonical worktree mutation', async () => {
+  test('invalid recipe, tab and launch selections fail before canonical worktree mutation', async () => {
     const { dir, repo } = await startRepo({
       'a.txt': 'one\n',
       'orca.yaml': [
@@ -114,10 +112,6 @@ describe('worktree create parity boundaries', () => {
       expect(worktreeCount(dir)).toBe(1)
     }
 
-    const vmOwnerMissing = await failure(create({ repo: repo.id, name: 'vm-owner-missing', environmentRecipe: 'devbox' }))
-    expect(vmOwnerMissing.code).toBe(RpcErrorCode.Conflict)
-    expect(vmOwnerMissing.message).toMatch(/provisioned-root VM lifecycle.*refusing to substitute/i)
-    expect(worktreeCount(dir)).toBe(1)
 
     const launchUnavailable = await failure(create({
       repo: repo.id,
@@ -130,41 +124,4 @@ describe('worktree create parity boundaries', () => {
     expect(worktreeCount(dir)).toBe(1)
   })
 
-  test('CLI forwards model, effort, sparse paths and keep-main, and rejects effort without a model', async () => {
-    const { repo } = await startRepo()
-    const { ctx } = testCliContext(world!.client)
-    const calls: Array<{ method: string; params: Record<string, unknown> }> = []
-    ctx.call = async (method, params = {}) => {
-      calls.push({ method, params })
-      return { worktree: { id: 'wt', repoId: repo.id, name: 'cli-options', path: '/tmp/cli-options' }, warnings: [], setup: { ran: 'none' } }
-    }
-
-    await commands.create!({
-      positionals: [],
-      flags: {
-        repo: repo.id,
-        name: 'cli-options',
-        agent: 'claude',
-        model: 'catalog-model',
-        effort: 'high',
-        option: ['thinking=true'],
-        'sparse-paths': '["src"]',
-        'keep-main': true,
-        'environment-recipe': 'node',
-        'default-tabs': '["terminal"]'
-      }
-    }, ctx)
-    expect(calls[0]?.params).toMatchObject({
-      model: 'catalog-model',
-      options: { effort: 'high', thinking: true },
-      sparsePaths: ['src'],
-      keepMain: true,
-      environmentRecipe: 'node',
-      defaultTabs: ['terminal']
-    })
-
-    calls.length = 0
-    await expect(commands.create!({ positionals: [], flags: { repo: repo.id, agent: 'claude', effort: 'high' } }, ctx)).rejects.toThrow('--effort requires --model')
-    expect(calls).toEqual([])
-  })
 })

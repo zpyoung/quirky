@@ -251,8 +251,10 @@ test(
     expect(fileText(plainFile)).toBe(plain.replaceAll('\n', '\r'))
 
     const fromHuge = f.calls.length
+    const noticeSelector = '.toasts [role="status"], .toasts [role="alert"]'
+    const existingNotices = new Set(f.win.document.querySelectorAll(noticeSelector))
     textarea().dispatchEvent(pasteEvent('y'.repeat(20 * 1024 * 1024)))
-    await waitFor('the refusal toast', () => ([...document.querySelectorAll('.toasts .ui-toast__title')].some((toast) => toast.textContent === 'Paste is larger than 16 MiB') ? true : undefined))
+    await waitFor('a visible paste refusal', () => [...f.win.document.querySelectorAll(noticeSelector)].find((notice) => !existingNotices.has(notice)))
     expect(writesSince(f, fromHuge)).toEqual([])
     expect(textarea().value).toBe('')
   },

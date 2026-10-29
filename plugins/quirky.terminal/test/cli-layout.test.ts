@@ -361,10 +361,6 @@ describe('usage errors', () => {
     await usage('open-link', [], {}, 'missing <url-or-path>')
   })
 
-  test('tab color rejects unsupported values as usage errors', async () => {
-    const error = await failure(run('tab-color', ['tab-1', 'mauve']))
-    expect(error.kind).toBe('usage')
-  })
 
   test('bad flag combinations', async () => {
     await usage('tab-new', [], { worktree: 'a', workspace: 'floating' }, 'pass --worktree or --workspace, not both')

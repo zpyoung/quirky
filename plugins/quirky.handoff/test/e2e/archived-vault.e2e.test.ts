@@ -1,11 +1,24 @@
 import { afterEach, expect, test } from 'bun:test'
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { join, resolve } from 'node:path'
 import type { UiPluginContext } from '@quirky/protocol'
-import { builtinsDir, startHarness, type Harness } from '../../../../packages/daemon/test/helpers'
+import { startHarness, type Harness } from '../../../../packages/daemon/test/helpers'
 import { HandoffDialog } from '../../src/window/model'
 
+const PLUGINS = [
+  'quirky.repo',
+  'quirky.cli',
+  'quirky.worktree',
+  'quirky.git',
+  'quirky.agents',
+  'quirky.agent-status',
+  'quirky.session',
+  'quirky.terminal',
+  'quirky.vault',
+  'quirky.handoff'
+]
+const PLUGINS_ROOT = resolve(import.meta.dir, '../../..')
 const ENV_KEYS = [
   'HOME',
   'XDG_CONFIG_HOME',
@@ -54,7 +67,10 @@ test('Vault opens the real archived handoff dialog with provider identity and fu
   process.env.CODEX_HOME = join(sourceHome, '.codex')
   process.env.QUIRKY_AGENT_SEARCH_DIRS = emptyAgentBin
 
-  harness = await startHarness({ home: quirkyHome, builtinPluginsDir: builtinsDir() })
+  const builtinPluginsDir = join(quirkyHome, 'builtins')
+  mkdirSync(builtinPluginsDir)
+  for (const id of PLUGINS) symlinkSync(join(PLUGINS_ROOT, id), join(builtinPluginsDir, id), 'dir')
+  harness = await startHarness({ home: quirkyHome, builtinPluginsDir })
   const caller = await harness.connectWithEvents('cli')
   const window = await harness.connectWithEvents('ui')
 

@@ -1,0 +1,51 @@
+.quirky-tasks {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--ui-surface);
+  color: var(--ui-text);
+  font-size: var(--ui-font-body);
+  line-height: 1.5;
+}
+.quirky-tasks *, .quirky-tasks *::before, .quirky-tasks *::after { box-sizing: border-box; }
+.quirky-tasks > .ui-tool-panel-frame { flex: 1; min-height: 0; }
+.quirky-tasks .ui-tool-panel-frame__body { display: flex; flex-direction: column; overflow: hidden; padding: 0; }
+.tasks-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--ui-space-12);
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  padding: var(--ui-space-12);
+}
+.tasks-row { display: flex; align-items: center; flex-wrap: wrap; gap: var(--ui-space-8); }
+.tasks-settings { display: flex; flex-direction: column; gap: var(--ui-space-12); min-width: 0; }
+.tasks-settings p { color: var(--ui-muted); margin: 0; }
+.quirky-tasks p { overflow-wrap: anywhere; }
+.quirky-tasks [role='alert'] { color: var(--ui-failing); }
+.quirky-tasks a { color: var(--ui-accent); }
+.quirky-tasks h2:not(.ui-tool-panel-frame__title):not(.ui-dialog__title), .quirky-tasks h3 { margin: 0; font-size: var(--ui-font-title); }
+.quirky-tasks select, .quirky-tasks textarea, .quirky-tasks input:not([type='checkbox']):not([type='radio']) {
+  font: inherit;
+  color: var(--ui-text);
+  background: var(--ui-surface);
+  border: var(--ui-border-width) solid var(--ui-border);
+  border-radius: var(--ui-radius-control);
+  padding: var(--ui-space-6) var(--ui-space-8);
+  max-width: 100%;
+  min-width: 0;
+}
+.quirky-tasks input[type='checkbox'], .quirky-tasks input[type='radio'] { accent-color: var(--ui-accent); }
+.quirky-tasks textarea { resize: vertical; }
+.quirky-tasks :focus-visible { outline: var(--ui-focus-width) solid var(--ui-accent); outline-offset: var(--ui-focus-offset); }
+.quirky-tasks table { width: 100%; border-collapse: collapse; text-align: left; }
+.quirky-tasks th, .quirky-tasks td { padding: var(--ui-space-8); border-bottom: var(--ui-border-width) solid var(--ui-border); vertical-align: top; }
+.quirky-tasks th { font-size: var(--ui-font-label); color: var(--ui-muted); font-weight: 600; background: var(--ui-rail); }
+.tasks-overlay-root { display: contents; pointer-events: auto; }
+.tasks-sidebar { display: flex; align-items: center; gap: var(--ui-space-4); min-width: 0; }
+.tasks-sidebar-open { flex: 1; justify-content: flex-start; }

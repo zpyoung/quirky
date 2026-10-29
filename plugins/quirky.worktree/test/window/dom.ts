@@ -5,18 +5,63 @@ export const dialogs = (): HTMLElement[] => [...document.querySelectorAll<HTMLEl
 /** The dialog on top, or undefined with none open. */
 export const topDialog = (): HTMLElement | undefined => dialogs().at(-1)
 
-export const dialogNamed = (title: string): HTMLElement | undefined => dialogs().find((d) => d.getAttribute('aria-label') === title)
+export const dialogNamed = (title: string): HTMLElement | undefined => dialogs().find((dialog) => accessibleName(dialog) === title)
 
 type Control = HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement
 
-/** The input, select or textarea inside the `<label>` whose first `<span>` reads `label`. */
-export function field<T extends Control = HTMLInputElement>(root: ParentNode, label: string): T | undefined {
-  const holder = [...root.querySelectorAll('label')].find((l) => l.querySelector(':scope > span')?.textContent === label)
-  return (holder?.querySelector('input, select, textarea') ?? undefined) as T | undefined
+const normalizeText = (value: string | null | undefined): string => value?.replace(/\s+/g, ' ').trim() ?? ''
+const visibleText = (node: Node): string => {
+  if (node.nodeType === Node.TEXT_NODE) return node.textContent ?? ''
+  if (node instanceof Element && node.getAttribute('aria-hidden') === 'true') return ''
+  return [...node.childNodes].map(visibleText).join('')
 }
 
-export const button = (root: ParentNode, text: string): HTMLButtonElement | undefined =>
-  [...root.querySelectorAll<HTMLButtonElement>('button')].find((b) => b.textContent?.trim() === text)
+export function accessibleName(element: HTMLElement): string {
+  const labelledBy = element.getAttribute('aria-labelledby')?.split(/\s+/).filter(Boolean)
+  if (labelledBy?.length) {
+    return normalizeText(labelledBy.map((id) => {
+      const target = element.ownerDocument.getElementById(id)
+      return target ? visibleText(target) : ''
+    }).join(' '))
+  }
+
+  const ariaLabel = element.getAttribute('aria-label')
+  if (ariaLabel !== null) return normalizeText(ariaLabel)
+
+  const labels = (element as Control).labels
+  if (labels) {
+    const name = normalizeText([...labels].map((label) => label.textContent).join(' '))
+    if (name) return name
+  }
+
+  return normalizeText(visibleText(element))
+}
+
+export const sectionHeading = (section: ParentNode): string | undefined => {
+  const heading = section.querySelector<HTMLElement>(':scope > header h2')
+  return heading ? accessibleName(heading) : undefined
+}
+export function sectionHeadingMatches(section: ParentNode, name: string): boolean {
+  const heading = sectionHeading(section)
+  return heading === name || heading?.endsWith(` ${name}`) === true
+}
+
+export const menuItem = (root: ParentNode, label: string): HTMLElement | undefined =>
+  [...root.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((item) =>
+    accessibleName(item) === label
+  )
+
+/** Finds an input, select or textarea by its native label or ARIA name. */
+export function field<T extends Control = HTMLInputElement>(root: ParentNode, label: string): T | undefined {
+  const name = normalizeText(label)
+  return [...root.querySelectorAll<Control>('input, select, textarea')].find((control) => {
+    const nativeName = control.labels && normalizeText([...control.labels].map((candidate) => candidate.textContent).join(' '))
+    return accessibleName(control) === name || nativeName === name
+  }) as T | undefined
+}
+
+export const button = (root: ParentNode, name: string): HTMLButtonElement | undefined =>
+  [...root.querySelectorAll<HTMLButtonElement>('button')].find((candidate) => accessibleName(candidate) === name)
 
 const settle = () => Bun.sleep(25)
 
@@ -37,6 +82,13 @@ export async function click(element: HTMLElement): Promise<void> {
   element.click()
   await settle()
 }
+export async function openDisclosure(name: string): Promise<void> {
+  const summary = [...document.querySelectorAll<HTMLElement>('details > summary')].find((item) => accessibleName(item) === name)
+  if (!summary) throw new Error(`no disclosure named ${name}`)
+  const disclosure = summary.parentElement as HTMLDetailsElement
+  if (!disclosure.open) summary.click()
+  await settle()
+}
 
 /** Presses Mod+Enter (Cmd, as the headless window reports a Mac) on `element`. */
 export async function modEnter(element: HTMLElement): Promise<void> {
@@ -45,8 +97,21 @@ export async function modEnter(element: HTMLElement): Promise<void> {
 }
 
 export async function pressEscape(): Promise<void> {
-  window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+  const active = document.activeElement
+  if (active instanceof HTMLElement && active.closest('[role="menu"], [role="dialog"]')) {
+    active.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }))
+  } else {
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }))
+  }
   await settle()
 }
 
-export const toastTitles = (): string[] => [...document.querySelectorAll('.toast-title')].map((e) => e.textContent ?? '')
+
+const liveToastSelector = '[aria-live][role="status"], [aria-live][role="alert"]'
+export const toastMessages = (): string[] =>
+  [...document.querySelectorAll<HTMLElement>(liveToastSelector)].map((toast) => normalizeText(visibleText(toast)))
+
+export const toastContaining = (text: string): HTMLElement | undefined =>
+  [...document.querySelectorAll<HTMLElement>(liveToastSelector)].find((toast) =>
+    normalizeText(visibleText(toast)).includes(text)
+  )

@@ -52,6 +52,11 @@ function profileText(profile: ProfileLauncherStatus): string {
 }
 
 export const commands: CliModule['commands'] = {
+  async hostIdentity(_args, context) {
+    const identity = await context.call('quirky.cli/hostIdentity', {}) as { hostId: string; generation: string }
+    output(context, identity, `hostId: ${identity.hostId}\ngeneration: ${identity.generation}`)
+  },
+
   async commandStatus(args, context) {
     const status = await context.call('quirky.cli/commandStatus', {
       ...(stringFlag(args, context, 'path') === undefined ? {} : { path: stringFlag(args, context, 'path') }),

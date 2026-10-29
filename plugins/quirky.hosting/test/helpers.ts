@@ -179,9 +179,10 @@ export async function bootHosting(ghSource: string, options: HostingTestOptions 
   symlinkSync(join(PLUGINS_ROOT, 'quirky.hosting'), join(builtinPluginsDir, 'quirky.hosting'))
   symlinkSync(join(PLUGINS_ROOT, 'quirky.repo'), join(builtinPluginsDir, 'quirky.repo'))
   symlinkSync(join(PLUGINS_ROOT, 'quirky.worktree'), join(builtinPluginsDir, 'quirky.worktree'))
+  symlinkSync(join(PLUGINS_ROOT, 'quirky.cli'), join(builtinPluginsDir, 'quirky.cli'))
   for (const id of options.extraBuiltins ?? []) {
     if (!/^quirky\.[a-z][a-z0-9-]*$/.test(id)) throw new Error('invalid additional builtin fixture ID')
-    if (['quirky.hosting', 'quirky.repo', 'quirky.worktree'].includes(id)) continue
+    if (['quirky.hosting', 'quirky.repo', 'quirky.worktree', 'quirky.cli'].includes(id)) continue
     symlinkSync(join(PLUGINS_ROOT, id), join(builtinPluginsDir, id))
   }
   const bridgeDirectory = join(builtinPluginsDir, 'quirky.hosting-test-bridge')

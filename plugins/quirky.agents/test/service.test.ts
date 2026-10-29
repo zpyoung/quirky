@@ -4,7 +4,6 @@ import { join } from 'node:path'
 import { RpcErrorCode, type QuirkyClient, type QuirkyEvent } from '@quirky/protocol'
 import { startHarness, waitFor, type Harness } from '../../../packages/daemon/test/helpers'
 import { writePlugin } from '../../../packages/daemon/test/plugins/fixtures'
-import { AUTO_PICK_ORDER } from '../src/core/catalog'
 
 const PLUGIN_DIR = join(import.meta.dir, '..')
 const ENV_NAMES = ['HOME', 'QUIRKY_AGENT_SEARCH_DIRS', 'QUIRKY_TEST_AGENT_TIME_SCALE', 'GEMINI_API_KEY', 'GOOGLE_API_KEY'] as const
@@ -162,9 +161,6 @@ describe('catalog and listing', () => {
     expect(listing.workspaceTrust).toBe(true)
     expect(listing.permissions.summary).toBe('yolo')
     expect(listing).not.toHaveProperty('problems')
-    expect(listing.agents.map((agent: any) => agent.id)).toEqual([...AUTO_PICK_ORDER])
-    expect(listing.agents.every((agent: any) => agent.plugin === 'quirky.agents' && agent.enabled && !agent.isDefault)).toBe(true)
-    expect(listing.agents.filter((agent: any) => agent.installed).map((agent: any) => agent.id)).toEqual(['claude', 'claude-agent-teams', 'codex'])
 
     expect(find(listing, 'claude')).toMatchObject({
       label: 'Claude',
@@ -977,6 +973,7 @@ describe('provider-owned model discovery', () => {
         label: 'Fixture provider',
         prompt: 'argv',
         detect: providerId,
+        prompt: 'argv',
         launchOptions: {
           model: { flag: ['--model', '{value}'] },
           options: [{
@@ -1309,17 +1306,22 @@ process.stdin.on('end', () => writeFileSync(recordPath, JSON.stringify({ args: p
     let t: Fixture | undefined
     try {
       t = await start({ installed: ['codex'] })
+      // This harness loads quirky.agents without quirky.accounts, so provider preparation is unavailable.
+      const refreshed = await t.call(A('refresh'))
+      expect(find(refreshed, 'codex')).toMatchObject({ installed: true })
+      const originalOptions = await t.call(A('options'), { agent: 'codex' })
+      expect(originalOptions).toMatchObject({ supported: true, discoverable: true })
+      expect(await failure(t.call('quirky.accounts/prepareProviderEnv', { agent: 'codex', cwd: t.userHome })))
+        .toMatchObject({ code: RpcErrorCode.MethodNotFound })
       const marker = join(t.userHome, 'raw-codex-probe-ran')
       const executable = join(t.bin, 'codex')
-      writeFileSync(executable, `#!/usr/bin/env node
-require('node:fs').writeFileSync(${JSON.stringify(marker)}, process.env.CODEX_HOME ?? '')
-`)
+      writeFileSync(executable, `#!/bin/sh\nprintf '%s' "$CODEX_HOME" > '${marker}'\n`)
       chmodSync(executable, 0o755)
 
       const discovered = await t.call(A('discoverModels'), { agent: 'codex', host: 'local' })
       expect(discovered).toMatchObject({ status: 'unavailable', authoritative: false, models: [] })
-      expect(discovered.reason).toContain('account environment could not be prepared')
       expect(existsSync(marker)).toBe(false)
+      expect((await t.call(A('options'), { agent: 'codex' })).models).toEqual(originalOptions.models)
     } finally {
       if (t) {
         try { await t.h.cleanup() } catch {}

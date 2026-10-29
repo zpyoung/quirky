@@ -188,7 +188,7 @@ function requestsFor(method: string, threadId: string): CodexAppServerLogEntry[]
   return nativeFixture().requests().filter((entry) => entry.method === method && entry.params?.threadId === threadId)
 }
 
-async function waitForNativeTurn(loopId: string, promptPart: string): Promise<NativeTurn> {
+async function waitForNativeTurn(loopId: string, promptPart: string, timeoutMs?: number): Promise<NativeTurn> {
   return headless!.waitFor(async () => {
     const loop = await rig!.snapshot(loopId)
     if (!loop.sessionId || loop.state !== 'running') return undefined
@@ -197,7 +197,7 @@ async function waitForNativeTurn(loopId: string, promptPart: string): Promise<Na
     if (!threadId || session.status !== 'working') return undefined
     const start = requestsFor('turn/start', threadId).find((entry) => inputText(entry).includes(promptPart))
     return start ? { loop, session, threadId, start } : undefined
-  })
+  }, timeoutMs)
 }
 
 async function sessionFor(sessionId: string): Promise<NativeSession> {
@@ -317,7 +317,8 @@ test('rendered Stop Cancel and After this iteration preserve a held native turn 
     session: held.session.id,
     text: 'Public structured steering releases the held native iteration.'
   })
-  const stopped = await rig!.waitForLoop(loop.id, (snapshot) => snapshot.state === 'stopped')
+  // Public steering is human input; preserve the loop's 20-second quiet gate.
+  const stopped = await rig!.waitForLoop(loop.id, (snapshot) => snapshot.state === 'stopped', 30_000)
   const history = await rig!.call<IterationDetail[]>('quirky.loops/iterations', { loopId: loop.id })
   const native = requestsFor('turn/start', held.threadId)
   const steering = requestsFor('turn/steer', held.threadId)
@@ -330,7 +331,7 @@ test('rendered Stop Cancel and After this iteration preserve a held native turn 
   expect(steering[0]?.params?.expectedTurnId).toBe('turn-1')
   expect(inputText(steering[0]!)).toContain('Public structured steering releases the held native iteration.')
   expect(requestsFor('turn/interrupt', held.threadId)).toHaveLength(0)
-}, 30_000)
+}, 60_000)
 
 test('rendered Stop Now interrupts a held native turn and retains stopped history without lifecycle controls', async () => {
   await startNativeRig()
@@ -403,7 +404,8 @@ test('rendered Close Cancel preserves the tab, Keep running detaches the same he
     session: originalSessionId,
     text: 'Release the first queue item while its view is detached.'
   })
-  const secondTurn = await waitForNativeTurn(primary.id, 'Second queue work [hold]')
+  // The detached loop must honor the same human-input quiet gate before its next turn.
+  const secondTurn = await waitForNativeTurn(primary.id, 'Second queue work [hold]', 30_000)
   const detachedQueue = await rig!.waitForLoop(primary.id, (snapshot) => snapshot.state === 'running' && snapshot.iterationsCompleted === 1)
   expect(viewForLoop(await workspace(), primary.id)).toBeUndefined()
   expect(secondTurn.threadId).toBe(originalProviderId)
@@ -432,4 +434,4 @@ test('rendered Close Cancel preserves the tab, Keep running detaches the same he
   expect((await rig!.snapshot(sentinel.id)).state).toBe('running')
   expect((await sessionFor(sentinelTurn.session.id)).status).toBe('working')
   expect(requestsFor('turn/interrupt', sentinelTurn.threadId)).toHaveLength(0)
-}, 30_000)
+}, 60_000)

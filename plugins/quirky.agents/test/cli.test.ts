@@ -263,7 +263,7 @@ describe('agents configure', () => {
       .toMatchObject({ command: 'remote-claude', commandOverridden: true })
     expect(await source.client.callAny('quirky.agents/get', { agent: 'claude' }))
       .toMatchObject({ command: 'claude', commandOverridden: false })
-    await run('discoverModels', ctx, ['claude'], { host: 'runtime:target-owner' })
+    await run('discover-models', ctx, ['claude'], { host: 'runtime:target-owner' })
     expect(routed[1]).toEqual({
       runtime: 'target-owner',
       method: 'quirky.agents/discoverModels',
@@ -425,14 +425,14 @@ describe('agents options', () => {
   })
 
   test('discover-models requires an exact host and reports the provider result as JSON', async () => {
-    const { client } = await start()
+    const { h, client } = await start()
     const missingHost = testCliContext(client)
-    expect(await failure(run('discoverModels', missingHost.ctx, ['codex'])))
+    expect(await failure(run('discover-models', missingHost.ctx, ['codex'])))
       .toMatchObject({ message: 'missing --host', kind: 'usage' })
 
-    const json = testCliContext(client, { json: true })
-    await run('discoverModels', json.ctx, ['codex'], { host: 'local' })
-    expect(JSON.parse(json.lines[0]!)).toMatchObject({
+    const result = await runCli(['agents', 'discover-models', 'codex', '--host', 'local', '--json'], { home: h.home })
+    expect(result.code).toBe(0)
+    expect(JSON.parse(result.stdout)).toMatchObject({
       agent: 'codex',
       host: 'local',
       authoritative: false,

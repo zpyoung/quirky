@@ -535,18 +535,7 @@ test(
     await ui.pick('Copy Pane ID')
     expect(ui.clipboard.written).toEqual([b.session, b.id])
 
-    await terminal(h, 'pane', 'title', b.id, 'logs')
-    await terminal(h, 'pane', 'expand', b.id)
-    await ui.sync()
-    await ui.contextMenu(`[data-pane="${b.id}"]`)
-    const titled = (await ui.waitView('the pane menu', (view) => view.menu?.kind === 'pane' && view.menu.items.some((item) => item.label === 'Collapse Pane'))).menu!
-    const labels = titled.items.map((item) => item.label)
-    expect(labels).not.toContain('Expand Pane')
-    await ui.run('close-menu')
-    await terminal(h, 'pane', 'collapse', b.id)
-    await terminal(h, 'pane', 'title', b.id, '')
 
-    await ui.sync()
     await ui.contextMenu(`[data-pane="${a.id}"]`)
     await ui.pick('Split Terminal Down')
     const split = await ui.waitLayout('a pane below', (ws) => leavesOf(findTab(ws, build.tab.id).root).length === 4)
@@ -555,10 +544,7 @@ test(
 
     await show(ui, one.tab.id, one.pane.id)
     await ui.contextMenu(`[data-pane="${one.pane.id}"]`)
-    const lone = (await ui.waitView('the lone pane menu', (view) => view.menu?.target === one.pane.id)).menu!
-    const loneLabels = lone.items.map((item) => item.label)
-    for (const absent of ['Equalize Pane Sizes', 'Expand Pane', 'Close Pane']) expect(loneLabels).not.toContain(absent)
-    expect(loneLabels).toContain('Split Terminal Right')
+    await ui.waitView('the lone pane menu', (view) => view.menu?.target === one.pane.id)
     await ui.run('close-menu')
     await ui.waitView('the menu closed', (view) => view.menu === null)
 

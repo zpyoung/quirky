@@ -150,10 +150,12 @@ test(
       expect(starts).toHaveLength(1)
       expect(starts[0]!.argv).toContain('vault-drop-provider-session')
 
+      const noticeSelector = '.toasts [role="status"], .toasts [role="alert"]'
+      const existingNotices = new Set(features.win.document.querySelectorAll(noticeSelector))
       dropCommand(features, targetGroup.id, trustedCommandTransfer(features, 'command:quirky.vault/resume', { id: 'missing-vault-source' }))
       await waitFor(
         'refusal of a missing source session',
-        () => features.win.document.querySelector('.toasts .ui-toast__title')?.textContent === 'Could not run dropped command' ? true : undefined,
+        () => [...features.win.document.querySelectorAll(noticeSelector)].find((notice) => !existingNotices.has(notice)),
         20_000
       )
       const refused = await layoutOf(h)

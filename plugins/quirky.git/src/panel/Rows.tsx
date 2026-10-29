@@ -1,4 +1,6 @@
-import { useMemo, type DragEvent, type MouseEvent } from 'react'
+import { useMemo, useRef, type DragEvent, type MouseEvent } from 'react'
+import { Badge, Button, IconButton, ListRow } from '@quirky/ui'
+import type { UiStatus, UiTone } from '@quirky/ui'
 import type { GitChangeStatus, GitStatusEntry } from '@quirky/protocol'
 import { conflictLabel, splitPath, statusLetter } from './format'
 import { buildTree, flattenTree, type TreeNode } from './tree'
@@ -75,24 +77,39 @@ function scopedCollapsed(scope: string, collapsed: ReadonlySet<string>, tree: Tr
   return out
 }
 
+function statusFor(status: GitChangeStatus): UiStatus {
+  if (status === 'modified') return 'needs-you'
+  if (status === 'deleted') return 'failing'
+  if (status === 'renamed' || status === 'copied') return 'done'
+  if (status === 'added' || status === 'untracked') return 'working'
+  return 'idle'
+}
+
+function toneFor(status: GitChangeStatus): UiTone {
+  if (status === 'modified') return 'needs-you'
+  if (status === 'deleted') return 'failing'
+  if (status === 'renamed' || status === 'copied') return 'accent'
+  if (status === 'added' || status === 'untracked') return 'working'
+  return 'neutral'
+}
+
 function Buttons({ buttons, subject }: { buttons: RowButton[]; subject: string }) {
   if (buttons.length === 0) return null
   return (
-    <span className="scm-row-actions">
-      {buttons.map((b) => (
-        <button
-          key={b.label}
-          type="button"
-          className={`icon-button${b.destructive ? ' scm-destructive' : ''}`}
-          title={b.label}
-          aria-label={`${b.label} ${subject}`}
+    <span className="ui-cluster">
+      {buttons.map((button) => (
+        <IconButton
+          key={button.label}
+          label={`${button.label} ${subject}`}
+          title={button.label}
+          variant={button.destructive ? 'destructive' : 'secondary'}
           onClick={(event) => {
             event.stopPropagation()
-            b.run()
+            button.run()
           }}
         >
-          {b.glyph}
-        </button>
+          {button.glyph}
+        </IconButton>
       ))}
     </span>
   )
@@ -101,8 +118,8 @@ function Buttons({ buttons, subject }: { buttons: RowButton[]; subject: string }
 function Counts({ item }: { item: RowItem }) {
   return (
     <>
-      {(item.added ?? 0) > 0 && <span className="scm-added">{`+${item.added}`}</span>}
-      {(item.removed ?? 0) > 0 && <span className="scm-removed">{`−${item.removed}`}</span>}
+      {(item.added ?? 0) > 0 && <Badge tone="working" label={`${item.added} additions`}>{`+${item.added}`}</Badge>}
+      {(item.removed ?? 0) > 0 && <Badge tone="failing" label={`${item.removed} deletions`}>{`−${item.removed}`}</Badge>}
     </>
   )
 }
@@ -110,14 +127,7 @@ function Counts({ item }: { item: RowItem }) {
 function NoteCount({ count }: { count: number | undefined }) {
   if (count === undefined || count === 0) return null
   const title = `${count} ${count === 1 ? 'note' : 'notes'}`
-  return (
-    <span className="scm-note-count" title={title}>
-      <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true" focusable="false">
-        <path d="M2.5 3h11v7.5H7L4 13v-2.5H2.5z" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
-      </svg>
-      {count}
-    </span>
-  )
+  return <span data-note-count title={title}><Badge tone="neutral" label={title}>✎ {count}</Badge></span>
 }
 
 function Trailing({ item }: { item: RowItem }) {
@@ -128,16 +138,12 @@ function Trailing({ item }: { item: RowItem }) {
     return (
       <>
         <NoteCount count={item.notes} />
-        <span
-          className={`scm-badge ${unresolved ? 'scm-badge-unresolved' : 'scm-badge-resolved'}`}
-          aria-label={`${text} conflict (${conflictLabel(conflict.kind)})`}
-          title={unresolved ? undefined : 'Local session state derived from a conflict you opened here.'}
+        <Badge
+          tone={unresolved ? 'needs-you' : 'accent'}
+          label={`${text} conflict (${conflictLabel(conflict.kind)})`}
         >
-          <span className="scm-badge-icon" aria-hidden="true">
-            {unresolved ? '⚠' : '✓'}
-          </span>
-          <span className="scm-badge-text">{text}</span>
-        </span>
+          {unresolved ? '⚠' : '✓'} {text}
+        </Badge>
       </>
     )
   }
@@ -145,38 +151,35 @@ function Trailing({ item }: { item: RowItem }) {
     <>
       <NoteCount count={item.notes} />
       <Counts item={item} />
-      <span className={`scm-letter scm-status-${item.status}`}>{statusLetter(item.status)}</span>
+      <Badge tone={toneFor(item.status)} label={`Git status ${item.status}`}>{statusLetter(item.status)}</Badge>
     </>
   )
 }
 
+const ROW_STYLE = { gap: 'var(--ui-space-2)', listStyle: 'none', margin: 0, padding: 0 } as const
+
 function SubmoduleEntries({ expansion, depth, tree }: { expansion: Expansion; depth: number; tree: boolean }) {
-  const indent = tree ? { paddingLeft: (depth + 1) * 12 } : undefined
+  const indent = tree ? { paddingInlineStart: `calc(${depth + 1} * var(--ui-space-12))` } : undefined
   if (expansion.entries === null || expansion.entries.length === 0) {
     const text = expansion.failed ? 'Could not load the submodule changes' : expansion.entries === null ? 'Loading…' : 'No changes inside'
     return (
-      <li className="scm-sub-list" style={indent}>
-        <p className="scm-sub-note">{text}</p>
+      <li style={indent}>
+        <p className="ui-text-muted" data-submodule-message>{text}</p>
       </li>
     )
   }
   return (
-    <li className="scm-sub-list" style={indent}>
-      <ul className="scm-rows">
+    <li style={indent}>
+      <ul className="ui-stack" style={ROW_STYLE}>
         {expansion.entries.map((inside) => {
           const { name, dir } = splitPath(inside.path)
           return (
-            <li key={`${inside.area}:${inside.path}`} className="scm-row scm-sub-entry" title={inside.path}>
-              <span className="scm-row-main">
-                <span className={`scm-file-icon scm-status-${inside.status}`} aria-hidden="true" />
-                <span className="scm-row-text">
-                  <span className="scm-row-line">
-                    <span className="scm-row-name">{name}</span>
-                    {dir !== '' && <span className="scm-row-dir">{dir}</span>}
-                  </span>
-                </span>
-                <span className={`scm-letter scm-status-${inside.status}`}>{statusLetter(inside.status)}</span>
-              </span>
+            <li key={`${inside.area}:${inside.path}`} data-submodule-entry data-row-path={inside.path}>
+              <ListRow
+                title={<span title={inside.path}><span data-row-name>{name}</span>{dir !== '' && <span data-row-dir={dir} className="ui-text-muted">{` · ${dir}`}</span>}</span>}
+                status={statusFor(inside.status)}
+                trailing={<Badge tone={toneFor(inside.status)} label={`Git status ${inside.status}`}>{statusLetter(inside.status)}</Badge>}
+              />
             </li>
           )
         })}
@@ -189,44 +192,50 @@ function FileRow({ item, depth, tree, selected, handlers }: { item: RowItem; dep
   const { name, dir } = splitPath(item.path)
   const hint = item.entry?.submodule ? 'Stage inside submodule' : item.entry?.conflict ? conflictLabel(item.entry.conflict.kind) : null
   const expansion = handlers.expansion?.(item) ?? null
-  const onDragStart = (event: DragEvent) => {
+  const activation = useRef<{ kind: ClickKind; permanent: boolean }>({ kind: 'plain', permanent: false })
+  const onDragStart = (event: DragEvent<HTMLLIElement>) => {
     event.dataTransfer?.setData('text/plain', handlers.dragText(item))
   }
   return (
     <>
       <li
-        className={`scm-row${selected ? ' selected' : ''}`}
-        style={tree ? { paddingLeft: depth * 12 } : undefined}
+        data-row-path={item.path}
+        title={item.path}
+        style={tree ? { paddingInlineStart: `calc(${depth} * var(--ui-space-12))` } : undefined}
         draggable
+        onClickCapture={(event) => { activation.current = { kind: clickKind(event), permanent: event.detail > 1 } }}
         onDragStart={onDragStart}
         onContextMenu={(event) => {
           event.preventDefault()
           handlers.contextMenu(item, event.clientX, event.clientY)
         }}
       >
-        {expansion && (
-          <button
-            type="button"
-            className="scm-row-chevron"
-            aria-label={`${expansion.open ? 'Collapse' : 'Expand'} ${item.path}`}
-            aria-expanded={expansion.open}
-            onClick={() => handlers.toggleExpansion?.(item)}
-          >
-            {expansion.open ? '▾' : '▸'}
-          </button>
-        )}
-        <button type="button" className="scm-row-main" title={item.path} aria-pressed={selected} onClick={(event) => handlers.click(item, clickKind(event), event.detail > 1)}>
-          <span className={`scm-file-icon scm-status-${item.status}`} aria-hidden="true" />
-          <span className="scm-row-text">
-            <span className="scm-row-line">
-              <span className="scm-row-name">{name}</span>
-              {!tree && dir !== '' && <span className="scm-row-dir">{dir}</span>}
-            </span>
-            {hint !== null && <span className="scm-row-sub">{hint}</span>}
-          </span>
-          <Trailing item={item} />
-        </button>
-        <Buttons buttons={handlers.buttons(item)} subject={item.path} />
+        <div className="ui-cluster" style={{ flexWrap: 'nowrap' }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <ListRow
+              title={<span><span data-row-name>{name}</span>{!tree && dir !== '' && <span data-row-dir={dir} className="ui-text-muted">{` · ${dir}`}</span>}</span>}
+              description={hint ?? undefined}
+              status={statusFor(item.status)}
+              selected={selected}
+              trailing={
+                <span className="ui-cluster">
+                  <Trailing item={item} />
+                  <Buttons buttons={handlers.buttons(item)} subject={item.path} />
+                </span>
+              }
+              onClick={() => handlers.click(item, activation.current.kind, activation.current.permanent)}
+            />
+          </div>
+          {expansion && (
+            <IconButton
+              label={`${expansion.open ? 'Collapse' : 'Expand'} ${item.path}`}
+              aria-expanded={expansion.open}
+              onClick={() => handlers.toggleExpansion?.(item)}
+            >
+              {expansion.open ? '▾' : '▸'}
+            </IconButton>
+          )}
+        </div>
       </li>
       {expansion?.open && <SubmoduleEntries expansion={expansion} depth={depth} tree={tree} />}
     </>
@@ -243,25 +252,17 @@ function TreeRows({ scope, nodes, collapsedDirs, onToggleDir, selected, handlers
         const key = `${scope}:${node.path}`
         const collapsed = collapsedDirs.has(key)
         return (
-          <li key={key} className="scm-dir-group">
-            <div className="scm-row scm-dir" style={{ paddingLeft: node.depth * 12 }}>
-              <button
-                type="button"
-                className="scm-row-main"
-                aria-expanded={!collapsed}
-                title={node.path}
-                onClick={() => onToggleDir(key)}
-              >
-                <span className="scm-chevron" aria-hidden="true">
-                  {collapsed ? '▸' : '▾'}
-                </span>
-                <span className="scm-row-name">{node.name}</span>
-                <span className="scm-count">{node.fileCount}</span>
-              </button>
+          <li key={key} data-directory-path={node.path} data-directory-name={node.name} style={{ paddingInlineStart: `calc(${node.depth} * var(--ui-space-12))` }}>
+            <div className="ui-cluster">
+              <Button title={node.path} aria-expanded={!collapsed} onClick={() => onToggleDir(key)}>
+                <span aria-hidden="true">{collapsed ? '▸' : '▾'}</span>
+                <span>{node.name}</span>
+                <Badge label={`${node.fileCount} files`}>{node.fileCount}</Badge>
+              </Button>
               <Buttons buttons={handlers.folderButtons(node.items)} subject={node.path} />
             </div>
             {!collapsed && (
-              <ul className="scm-rows">
+              <ul className="ui-stack" style={ROW_STYLE}>
                 <TreeRows scope={scope} nodes={node.children} collapsedDirs={collapsedDirs} onToggleDir={onToggleDir} selected={selected} handlers={handlers} />
               </ul>
             )}
@@ -276,7 +277,7 @@ function TreeRows({ scope, nodes, collapsedDirs, onToggleDir, selected, handlers
 export function Rows({ scope, items, viewMode, collapsedDirs, onToggleDir, selected, handlers }: Props) {
   const tree = useMemo(() => (viewMode === 'tree' ? buildTree(items) : []), [items, viewMode])
   return (
-    <ul className="scm-rows">
+    <ul className="ui-stack" style={ROW_STYLE}>
       {viewMode === 'tree' ? (
         <TreeRows scope={scope} nodes={tree} collapsedDirs={collapsedDirs} onToggleDir={onToggleDir} selected={selected} handlers={handlers} />
       ) : (

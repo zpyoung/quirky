@@ -1,6 +1,6 @@
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import type { UiPluginContext } from '@quirky/protocol'
-import { Dialog } from '../panel/Dialog'
+import { Button, Dialog, FormRow } from '@quirky/ui'
 import { generators, hasCustomCommand, initialAgent, type AgentList } from './agents'
 import { CUSTOM_AGENT, DEFAULT_TEMPLATE } from './types'
 
@@ -21,14 +21,33 @@ export function GenerateDialog({ context, agents, onClose, onGenerate }: Props) 
   const options = [...choices.map((agent) => ({ id: agent.id, label: agent.label })), ...(hasCustomCommand(context) ? [{ id: CUSTOM_AGENT, label: 'Custom command' }] : [])]
   const [agent, setAgent] = useState(() => (agents === null ? '' : initialAgent(agents, choices)) || (options[0]?.id ?? ''))
   const [template, setTemplate] = useState(DEFAULT_TEMPLATE)
+  const agentId = useId()
+  const templateId = useId()
 
   return (
-    <Dialog title="Generate Commit Message" onClose={onClose}>
-      <p className="muted">Choose the agent and command template for this run.</p>
-      <div className="form">
-        <label>
-          Agent
-          <select aria-label="Agent" value={agent} onChange={(event) => setAgent(event.target.value)}>
+    <Dialog
+      open
+      title="Generate Commit Message"
+      onClose={onClose}
+      actions={
+        <>
+          <Button type="button" onClick={onClose}>Cancel</Button>
+          <Button type="button" variant="primary" disabled={agent === ''} onClick={() => onGenerate({ agent, template })}>
+            Generate
+          </Button>
+        </>
+      }
+    >
+      <div className="ui-stack">
+        <p className="ui-text-muted">Choose the agent and command template for this run.</p>
+        <FormRow label="Agent" htmlFor={agentId}>
+          <select
+            id={agentId}
+            className="ui-text-field__input"
+            aria-label="Agent"
+            value={agent}
+            onChange={(event) => setAgent(event.target.value)}
+          >
             {options.length === 0 && <option value="">No enabled agents</option>}
             {options.map((option) => (
               <option key={option.id} value={option.id}>
@@ -36,26 +55,18 @@ export function GenerateDialog({ context, agents, onClose, onGenerate }: Props) 
               </option>
             ))}
           </select>
-        </label>
-        <label>
-          Command template
+        </FormRow>
+        <FormRow label="Command template" htmlFor={templateId}>
           <textarea
-            className="scm-ai-template"
+            id={templateId}
+            className="ui-text-field__input"
             aria-label="Command template"
             rows={6}
             spellCheck={false}
             value={template}
             onChange={(event) => setTemplate(event.target.value)}
           />
-        </label>
-      </div>
-      <div className="dialog-actions">
-        <button type="button" onClick={onClose}>
-          Cancel
-        </button>
-        <button type="button" className="primary" disabled={agent === ''} onClick={() => onGenerate({ agent, template })}>
-          Generate
-        </button>
+        </FormRow>
       </div>
     </Dialog>
   )

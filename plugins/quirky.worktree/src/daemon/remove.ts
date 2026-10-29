@@ -8,6 +8,7 @@ import { sharedEntryProblem, symlinkedAncestor } from './carry'
 import type { BranchCleaner, BranchOutcome } from './branches'
 import { gitRunnerPath, runHookScript } from './hooks-run'
 import { birthtimeOf, joinMetadata, listEverything, type ListEnv } from './list'
+import { filesystemIdentitySource, instanceIdFor } from './identity'
 import { forgetWorktreeOrigins, rowOf, type WorktreeRow } from './store'
 
 /** What `quirky.worktree/remove` and `describeRemove` accept. */
@@ -17,13 +18,22 @@ export type RemoveParams = {
   withDescendants?: boolean
   skipArchive?: boolean
   allowFailedArchiveHook?: boolean
+  /** Refuses when this exact filesystem instance is no longer at the worktree path. */
+  expectedInstanceId?: string
   /** Internal cleanup guard: refuse live or unknown runtime state and never close sessions. */
   safeOnly?: boolean
 }
 
 export type DeleteBranchParams = { repo: string; branch: string; head: string }
 
-type Options = { force: boolean; withDescendants: boolean; skipArchive: boolean; allowFailedArchiveHook: boolean; safeOnly: boolean }
+type Options = {
+  force: boolean
+  withDescendants: boolean
+  skipArchive: boolean
+  allowFailedArchiveHook: boolean
+  expectedInstanceId?: string
+  safeOnly: boolean
+}
 
 /** A remove that is running in this daemon, so an identical request can share it. */
 export type InFlightRemove = { options: string; promise: Promise<WorktreeRemoveResult> }
@@ -62,8 +72,10 @@ const optionsOf = (params: RemoveParams): Options => ({
   withDescendants: params.withDescendants === true,
   skipArchive: params.skipArchive === true,
   allowFailedArchiveHook: params.allowFailedArchiveHook === true,
+  ...(params.expectedInstanceId === undefined ? {} : { expectedInstanceId: params.expectedInstanceId }),
   safeOnly: params.safeOnly === true
 })
+
 
 /** A workspace git no longer lists as a usable folder: `gone` has no folder, `forgotten` has a folder but no registration. */
 type Orphan = { kind: 'gone' | 'forgotten'; registration: GitRegistration | null; row: WorktreeRow | null }
@@ -211,6 +223,13 @@ export async function describeRemove(env: RemoveEnv, params: RemoveParams, ident
  * options are refused. The call returns only when everything is finished.
  */
 export async function removeWorktree(env: RemoveEnv, params: RemoveParams, identity: CallerIdentity): Promise<WorktreeRemoveResult> {
+  if (params.expectedInstanceId !== undefined &&
+    (typeof params.expectedInstanceId !== 'string' || params.expectedInstanceId.trim() === '')) {
+    throw env.fail('invalid-params', 'expectedInstanceId must be a non-empty filesystem instance identity')
+  }
+  if (params.expectedInstanceId !== undefined && params.withDescendants === true) {
+    throw env.fail('invalid-params', 'expectedInstanceId cannot be combined with withDescendants')
+  }
   const options = optionsOf(params)
   const key = JSON.stringify(options)
   const selector = params.worktree.trim()
@@ -287,6 +306,7 @@ async function removeNested(env: RemoveEnv, scope: Scope, child: Worktree, optio
 
 /** Steps 5 to 12 for one workspace that has no descendants left. */
 async function removeOne(env: RemoveEnv, scope: Scope, target: Worktree, options: Options): Promise<Piece> {
+  assertExpectedInstance(env, target, options.expectedInstanceId)
   if (options.safeOnly) {
     const blockers = await env.assertNoActiveSessions(target.id)
     if (blockers.length > 0) throw reasoned(env, 'conflict', 'runtime-safety', `could not prove ${target.name} has no live sessions: ${blockers.join('; ')}`)
@@ -306,6 +326,22 @@ function dropRow(env: RemoveEnv, target: Worktree): void {
   env.changed({ repoId: target.repoId, worktreeId: target.id })
 }
 
+/** Rechecks the kernel-visible filesystem instance, never only its path-derived row ID. */
+function assertExpectedInstance(env: RemoveEnv, target: Worktree, expectedInstanceId?: string): void {
+  if (expectedInstanceId === undefined) return
+  const identity = filesystemIdentitySource.stat(target.path)
+  const actualInstanceId = identity === null ? null : instanceIdFor(identity)
+  if (target.instanceId !== expectedInstanceId || actualInstanceId !== expectedInstanceId) {
+    throw reasoned(
+      env,
+      'conflict',
+      'instance-changed',
+      `${target.name} is no longer the filesystem instance selected for removal; refresh and select it again.`,
+      { expectedInstanceId, actualInstanceId, worktreeId: target.id }
+    )
+  }
+}
+
 /** Closes sessions for an ordinary remove; safe-only cleanup rechecks and never closes them. */
 async function closeSessions(env: RemoveEnv, target: Worktree, options: Options): Promise<string[]> {
   if (options.safeOnly) {
@@ -321,9 +357,11 @@ async function closeSessions(env: RemoveEnv, target: Worktree, options: Options)
 /** Closes its sessions and forgets the row; the folder it stands on is never touched. */
 async function removeFolderWorkspace(env: RemoveEnv, target: Worktree, options: Options): Promise<Piece> {
   const sessionErrors = await closeSessions(env, target, options)
+  assertExpectedInstance(env, target, options.expectedInstanceId)
   dropRow(env, target)
   return { removed: [target.id], kept: [], sessionErrors }
 }
+
 
 const lockedError = (env: RemoveEnv, target: Worktree, reason: string) =>
   reasoned(
@@ -352,6 +390,7 @@ async function removeOrphan(env: RemoveEnv, repo: Repo, target: Worktree, orphan
   if (orphan.kind === 'gone') {
     if (orphan.registration?.locked != null) throw lockedError(env, target, orphan.registration.locked)
     const sessionErrors = await closeSessions(env, target, options)
+    assertExpectedInstance(env, target, options.expectedInstanceId)
     await gitApi().prune(repo.path)
     const kept = await cleanBranch(env, repo, target)
     dropRow(env, target)
@@ -371,6 +410,7 @@ async function removeOrphan(env: RemoveEnv, repo: Repo, target: Worktree, orphan
     throw reasoned(env, 'conflict', 'unregistered', `${folder} is not the folder Quirky created for this workspace, so it was left alone.`, { path: folder })
   }
   const sessionErrors = await closeSessions(env, target, options)
+  assertExpectedInstance(env, target, options.expectedInstanceId)
   rmSync(folder, { recursive: true, force: true })
   dropRow(env, target)
   return { removed: [target.id], kept: [], sessionErrors }
@@ -418,16 +458,23 @@ async function removeRegistered(env: RemoveEnv, repo: Repo, target: Worktree, op
     }
   }
 
-  if (!options.skipArchive) await runArchive(env, repo, target, await loadHooks(), options)
+  if (!options.skipArchive) {
+    assertExpectedInstance(env, target, options.expectedInstanceId)
+    await runArchive(env, repo, target, await loadHooks(), options)
+  }
 
   const sessionErrors = await closeSessions(env, target, options)
+  assertExpectedInstance(env, target, options.expectedInstanceId)
   for (const link of links) {
     try {
+      assertExpectedInstance(env, target, options.expectedInstanceId)
       unlinkSync(join(target.path, link))
     } catch (error) {
+      if (options.expectedInstanceId !== undefined) throw error
       env.log(`could not remove the shared directory link ${link} of ${target.name}: ${messageOf(error)}`)
     }
   }
+  assertExpectedInstance(env, target, options.expectedInstanceId)
   try {
     await git.removeWorktree(repo.path, target.path, options.force)
   } catch (error) {
@@ -439,6 +486,7 @@ async function removeRegistered(env: RemoveEnv, repo: Repo, target: Worktree, op
   dropRow(env, target)
   return { removed: [target.id], kept, sessionErrors }
 }
+
 
 /** Step 9: the effective archive script, refusing an untrusted shared one and failing the remove if it fails. */
 async function runArchive(env: RemoveEnv, repo: Repo, target: Worktree, hooks: EffectiveHooks, options: Options): Promise<void> {

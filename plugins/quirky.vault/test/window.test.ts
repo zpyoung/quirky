@@ -48,6 +48,17 @@ async function statusOf(features: Features): Promise<SearchStatus> {
   if (!status || typeof status !== 'object' || Array.isArray(status)) throw new Error('The local search status response was invalid.')
   return status as SearchStatus
 }
+function dialogByTitle(root: ParentNode, title: string): HTMLElement | null {
+  return [...root.querySelectorAll<HTMLElement>('[role="dialog"]')].find((dialog) => {
+    const titleText = (dialog.getAttribute('aria-labelledby') ?? '')
+      .split(/\s+/)
+      .map((id) => dialog.ownerDocument.getElementById(id)?.textContent?.trim())
+      .filter(Boolean)
+      .join(' ')
+    return (titleText || dialog.getAttribute('aria-label')) === title
+  }) ?? null
+}
+
 
 function sourceHome(): string {
   return mkdtempSync(join(tmpdir(), 'quirky-vault-window-'))
@@ -192,7 +203,7 @@ test(
       if (!advanced.open) advanced.querySelector('summary')?.click()
       const clear = await until(f, () => settings.querySelector<HTMLButtonElement>('[data-vault-clear-search]'))
       clear.click()
-      const dialog = await until(f, () => f!.win.document.querySelector<HTMLElement>('[role="dialog"][aria-label="Clear search data on this computer?"]'))
+      const dialog = await until(f, () => dialogByTitle(f!.win.document, 'Clear search data on this computer?'))
       const confirm = [...dialog.querySelectorAll<HTMLButtonElement>('button')].find((button) => button.textContent?.trim() === 'Clear')
       if (!confirm) throw new Error('The clear-search confirmation did not contain its Clear button.')
       confirm.click()

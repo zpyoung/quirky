@@ -166,10 +166,10 @@ test(
 
     await f.startWindow()
     await waitFor('both status-bar contributions to mount', () => {
-      const nodes = [...document.querySelectorAll<HTMLElement>('[aria-label="Plugin status"] [data-test-status]')]
+      const nodes = [...document.querySelectorAll<HTMLElement>('footer[aria-label="Status bar"] [data-test-status]')]
       return nodes.length === 2 ? true : undefined
     })
-    expect([...document.querySelectorAll<HTMLElement>('[aria-label="Plugin status"] [data-test-status]')].map((node) => node.dataset.testStatus)).toEqual([
+    expect([...document.querySelectorAll<HTMLElement>('footer[aria-label="Status bar"] [data-test-status]')].map((node) => node.dataset.testStatus)).toEqual([
       'early',
       'late'
     ])
@@ -182,7 +182,7 @@ test(
     const disabled = await h.cli(['plugin', 'disable', 'test.status'])
     expect(disabled.code, disabled.stderr).toBe(0)
     await waitFor('status-bar mounts to be removed', () =>
-      document.querySelector('[aria-label="Plugin status"] [data-test-status]') === null ? true : undefined
+      document.querySelector('footer[aria-label="Status bar"] [data-test-status]') === null ? true : undefined
     )
     await waitFor('status-bar state to be removed', async () => (slotOf(await uiState(f), STATUS_EARLY) === undefined ? true : undefined))
   },
@@ -338,7 +338,7 @@ test(
     await waitFor('the terminal binding to run', () => (calls().length === 1 ? true : undefined))
     expect(calls()).toEqual(['in-terminal'])
 
-    const settingsButton = document.querySelector<HTMLElement>('button[aria-label="Settings"]')!
+    const settingsButton = document.querySelector<HTMLButtonElement>('button[aria-label="Settings"]')!
     settingsButton.focus()
     await waitFor('terminal focus to leave', () => (!(f.win.host as unknown as { contextValues: Map<string, boolean> }).contextValues.get('terminalFocus') ? true : undefined))
     await press('mod+j', settingsButton)

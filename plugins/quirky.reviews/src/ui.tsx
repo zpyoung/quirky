@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import type { MountFunction, UiPluginContext } from '@quirky/protocol'
+import { Button, EmptyState, StatusDot } from '@quirky/ui'
+import '@quirky/ui/styles.css'
 import { CHECKS_PANEL, CREATE_VIEW, REVIEW_VIEW, SETTINGS_VIEW, type JsonRecord, type ReviewsState } from './contracts'
 import { ReviewPage } from './detail/ReviewPage'
 import { ChecksPanel, ChecksAgentDialog } from './checks/ChecksPanel'
 import { CreateReview } from './create/CreateReview'
 import { HostingSettings } from './create/HostingSettings'
-import { REVIEWS_STYLE } from './style'
-
 function record(value: unknown): value is JsonRecord {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
 }
@@ -79,14 +79,13 @@ function Surface({ context, kind, report }: { context: UiPluginContext; kind: Su
   }, [context, refresh])
   useEffect(() => { if (state && report) report(surfaceSummary(kind, state, error !== null)) }, [state, kind, report, error])
   const fail = (failure: unknown) => context.toast('Reviews', failure instanceof Error ? failure.message : 'The action failed.', { kind: 'error' })
-  return <section className="reviews-surface" data-review-surface={kind}>
-    <style>{REVIEWS_STYLE}</style>
-    {error && <div role="alert">{error}<button onClick={() => { void refresh() }}>Retry</button></div>}
-    {!state ? <p role="status">Loading review…</p> : <>
+  return <section className="ui-stack" data-review-surface={kind} style={{ height: '100%', minHeight: 0, overflow: 'auto', padding: 'var(--ui-space-12)' }}>
+    {error && <div role="alert"><EmptyState message={error} icon={<StatusDot status="failing" label="Error" />} action={{ label: 'Retry', onAction: () => { void refresh() } }} /></div>}
+    {!state ? <p role="status" className="ui-text-muted">Loading review…</p> : <>
       {kind === 'detail' && <ReviewPage context={context} state={state} refresh={refresh} />}
       {kind === 'checks' && <ChecksPanel context={context} state={state} refresh={refresh} />}
-      {kind === 'create' && <><button onClick={() => { void context.call('quirky.reviews/close').catch(fail) }}>Back</button><CreateReview context={context} state={state} refresh={refresh} /></>}
-      {kind === 'settings' && <><button onClick={() => { void context.call('quirky.reviews/close').catch(fail) }}>Back</button><HostingSettings context={context} state={state} refresh={refresh} /></>}
+      {kind === 'create' && <><Button onClick={() => { void context.call('quirky.reviews/close').catch(fail) }}>Back</Button><CreateReview context={context} state={state} refresh={refresh} /></>}
+      {kind === 'settings' && <><Button onClick={() => { void context.call('quirky.reviews/close').catch(fail) }}>Back</Button><HostingSettings context={context} state={state} refresh={refresh} /></>}
       {(kind === 'detail' || kind === 'checks') && state.checks.agentDialog && state.checks.agentDialog.visible !== false && (state.checks.agentDialog.surface ?? 'checks') === kind && <ChecksAgentDialog context={context} state={state} refresh={refresh} />}
     </>}
   </section>

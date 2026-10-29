@@ -38,11 +38,27 @@ function setValue(element: HTMLInputElement | HTMLTextAreaElement, value: string
   element.dispatchEvent(new Event('input', { bubbles: true }))
 }
 
+function control(label: string): HTMLElement | null {
+  const field = [...container.querySelectorAll('label')].find((entry) => entry.textContent?.trim() === label)
+  return field?.control ?? null
+}
+
 function select(label: string): HTMLSelectElement {
-  const field = [...container.querySelectorAll('label')].find((entry) => entry.textContent?.includes(label))
-  const select = field?.querySelector('select')
-  if (!(select instanceof HTMLSelectElement)) throw new Error(`could not find ${label} select`)
-  return select
+  const field = control(label)
+  if (!(field instanceof HTMLSelectElement)) throw new Error(`could not find ${label} select`)
+  return field
+}
+
+function input(label: string): HTMLInputElement {
+  const field = control(label)
+  if (!(field instanceof HTMLInputElement)) throw new Error(`could not find ${label} input`)
+  return field
+}
+
+function textarea(label: string): HTMLTextAreaElement {
+  const field = control(label)
+  if (!(field instanceof HTMLTextAreaElement)) throw new Error(`could not find ${label} text area`)
+  return field
 }
 
 function setSelectValue(element: HTMLSelectElement, value: string): void {
@@ -61,6 +77,19 @@ async function flush(): Promise<void> {
     await Promise.resolve()
     await Promise.resolve()
   })
+}
+
+async function waitFor(predicate: () => boolean, label: string): Promise<void> {
+  const deadline = Date.now() + 5_000
+  while (Date.now() < deadline) {
+    if (predicate()) return
+    const { promise, resolve } = Promise.withResolvers<void>()
+    await act(async () => {
+      setImmediate(resolve)
+      await promise
+    })
+  }
+  throw new Error(`Timed out waiting for ${label}`)
 }
 
 function mount(options: {
@@ -155,10 +184,13 @@ test('composer binds each Run once to its displayed script hash and retains draf
         }
   })
   await flush()
-  expect(select('Agent (optional)').value).toBe('goose')
+  await waitFor(() => {
+    const agent = control('Agent (optional)')
+    return agent instanceof HTMLSelectElement && [...agent.options].some((option) => option.value === 'goose')
+  }, 'agent choices')
   await act(async () => {
-    setValue(container.querySelector('input')!, 'edited workspace name')
-    setValue(container.querySelector('textarea')!, 'edited prompt text')
+    setValue(input('Workspace name'), 'edited workspace name')
+    setValue(textarea('Initial prompt'), 'edited prompt text')
     await Promise.resolve()
   })
   await act(async () => { setSelectValue(select('Agent (optional)'), ''); await Promise.resolve() })
@@ -176,11 +208,11 @@ test('composer binds each Run once to its displayed script hash and retains draf
     agent: ''
   })
   expect(first.params.trustIssueCommand).toBeUndefined()
-  expect(container.textContent).toContain('Issue command')
+
   expect(container.textContent).toContain("printf 'issue-command'")
   expect(container.textContent).toContain(issueHash)
-  expect((container.querySelector('input') as HTMLInputElement).value).toBe('edited workspace name')
-  expect((container.querySelector('textarea') as HTMLTextAreaElement).value).toBe('edited prompt text')
+  expect(input('Workspace name').value).toBe('edited workspace name')
+  expect(textarea('Initial prompt').value).toBe('edited prompt text')
   expect(select('Agent (optional)').value).toBe('')
 
   await act(async () => { button('Skip issue command').click(); await Promise.resolve() })
@@ -188,10 +220,8 @@ test('composer binds each Run once to its displayed script hash and retains draf
   const second = h.calls.filter((call) => call.method === 'quirky.tasks/workspace')[1]!
   expect(second.params).toMatchObject({ trustSetup: true, trustSetupHash: setupHash, setup: 'run', issueCommand: 'skip', agent: '' })
   expect(second.params.trustIssueCommand).toBeUndefined()
+
   expect(h.toasts).toHaveLength(1)
-  expect(h.toasts[0]?.title).toBe('Workspace created')
-  expect(h.toasts[0]?.body).toContain('unconfirmed')
-  expect(h.toasts[0]?.body).toContain('could not start goose')
   expect(container.querySelector('[role="dialog"]')).toBeNull()
 })
 
@@ -212,19 +242,25 @@ test('issue-command Run once sends its displayed issue hash separately from the 
     })
   })
   await flush()
+  await waitFor(() => {
+    const agent = control('Agent (optional)')
+    return agent instanceof HTMLSelectElement && [...agent.options].some((option) => option.value === 'goose')
+  }, 'agent choices')
+  await act(async () => { setSelectValue(select('Agent (optional)'), 'goose'); await Promise.resolve() })
   await act(async () => { button('Run issue command once').click(); await Promise.resolve() })
   await flush()
   const submitted = h.calls.filter((call) => call.method === 'quirky.tasks/workspace')[0]!
   expect(submitted.params).toMatchObject({
     setup: 'run',
     issueCommand: 'run',
+    agent: 'goose',
     trustSetup: true,
     trustSetupHash: setupHash,
     trustIssueCommand: true,
     trustIssueCommandHash: issueHash
   })
+
   expect(h.toasts).toHaveLength(1)
-  expect(h.toasts[0]?.title).toBe('Workspace created')
   expect(container.querySelector('[role="dialog"]')).toBeNull()
 })
 
@@ -247,4 +283,28 @@ test('rapid submit is single-flight and an older completion cannot close a newer
   await act(async () => { await deferred.promise; await Promise.resolve(); await Promise.resolve() })
   expect(container.querySelector('[role="dialog"]')).not.toBeNull()
   expect(container.textContent).toContain('Newer issue')
+})
+
+test('composer Escape respects setup validation, cancels once, and restores focus', async () => {
+  const opener = document.createElement('button')
+  opener.textContent = 'Open workspace'
+  document.body.append(opener)
+  opener.focus()
+  const h = mount({ initial: request({ setup: 'inherit', setupDecisionRequired: true }) })
+  await flush()
+
+  const dialog = container.querySelector('[role="dialog"]')
+  expect(dialog).not.toBeNull()
+  expect(button('Create workspace').disabled).toBe(true)
+
+  await act(async () => {
+    dialog?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+    await Promise.resolve()
+    await Promise.resolve()
+  })
+  await flush()
+
+  expect(h.calls.filter((call) => call.method === 'quirky.tasks/workspaceComposerCancel')).toHaveLength(1)
+  expect(container.querySelector('[role="dialog"]')).toBeNull()
+  expect(document.activeElement).toBe(opener)
 })

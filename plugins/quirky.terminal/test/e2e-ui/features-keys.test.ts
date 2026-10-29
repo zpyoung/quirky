@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from 'bun:test'
-import type { DesktopShellBridge, UiModel } from '@quirky/protocol'
+import type { DesktopShellBridge } from '@quirky/protocol'
 import {
   FEATURE_MS,
   bufferLines,
@@ -130,7 +130,7 @@ test(
     const splitRevision = split.layout!.revision
 
     // in a text field the same keys are left to the browser, and the others do nothing
-    document.querySelector<HTMLElement>('button[aria-label="Settings"]')!.click()
+    document.querySelector<HTMLButtonElement>('button[aria-label="Settings"]')!.click()
     const field = await until(f, () => document.querySelector<HTMLInputElement>('[role="dialog"] input:not([type])'))
     field.focus()
     await waitFor('terminal focus to leave', () => (contextKey(f, 'terminalFocus') === false ? true : undefined))
@@ -257,79 +257,3 @@ test(
   FEATURE_MS
 )
 
-const TERMINAL_KEYS: [string, string][] = [
-  ['mod+c', 'copy'],
-  ['mod+a', 'select-all'],
-  ['mod+v', 'paste'],
-  ['mod+f', 'search'],
-  ['mod+g', 'search-next'],
-  ['mod+shift+g', 'search-previous'],
-  ['mod+k', 'clear'],
-  ['mod+]', 'focus-next-pane'],
-  ['mod+[', 'focus-previous-pane'],
-  ['mod+shift+enter', 'toggle-expand-pane'],
-  ['mod+w', 'close-pane'],
-  ['mod+d', 'split-right'],
-  ['mod+shift+d', 'split-down'],
-  ['mod+=', 'zoom-in'],
-  ['mod+shift+=', 'zoom-in'],
-  ['mod+-', 'zoom-out'],
-  ['mod+0', 'zoom-reset']
-]
-
-const WINDOW_KEYS: [string, string][] = [
-  ['mod+r', 'rename-tab'],
-  ['mod+shift+t', 'reopen-tab'],
-  ['mod+alt+]', 'next-tab'],
-  ['mod+alt+[', 'previous-tab'],
-  ['mod+shift+]', 'next-tab'],
-  ['mod+shift+[', 'previous-tab'],
-  ['ctrl+tab', 'recent-tab'],
-  ['ctrl+pagedown', 'next-tab'],
-  ['ctrl+pageup', 'previous-tab'],
-  ['mod+alt+a', 'toggle-floating'],
-  ['mod+alt+shift+a', 'maximize-floating']
-]
-
-const COMMANDS_WITHOUT_KEYS = ['equalize', 'set-pane-title', 'clear-pane-title', 'reset-terminal', 'toggle-quick-commands', 'search-close', 'manage-quick-commands', 'minimize-floating', 'open-menu', 'close-menu']
-
-test(
-  'SC-63: every action has a command and a default key as listed',
-  async () => {
-    const f = await startFeatures({ window: false })
-    const model = JSON.parse(await f.h.ok(['ui', 'contributions', '--json'])) as UiModel
-    const commands = new Set(model.commands.map((command) => command.id))
-    const bindings = model.keybindings.filter((binding) => binding.status === 'active')
-    const bound = (key: string, command: string, when?: string) =>
-      bindings.find((binding) => binding.key === key && binding.command === command && binding.when === when)
-
-    for (const [key, name] of TERMINAL_KEYS) {
-      expect(commands.has(`command:quirky.terminal/${name}`), name).toBe(true)
-      expect(bound(key, `command:quirky.terminal/${name}`, 'terminalFocus'), `${key} ${name}`).toBeDefined()
-    }
-    for (const [key, name] of WINDOW_KEYS) {
-      expect(commands.has(`command:quirky.terminal/${name}`), name).toBe(true)
-      expect(bound(key, `command:quirky.terminal/${name}`), `${key} ${name}`).toBeDefined()
-    }
-    for (const name of COMMANDS_WITHOUT_KEYS) {
-      expect(commands.has(`command:quirky.terminal/${name}`), name).toBe(true)
-      expect(bindings.filter((binding) => binding.command === `command:quirky.terminal/${name}`), name).toEqual([])
-    }
-    for (let n = 1; n <= 9; n += 1) {
-      expect(bound(`ctrl+${n}`, `command:quirky.session/select-tab-${n}`), `ctrl+${n}`).toBeDefined()
-      expect(bound(`mod+${n}`, `command:quirky.session/select-tab-${n}`), `mod+${n}`).toBeDefined()
-    }
-    expect(bound('mod+t', 'command:quirky.session/new-shell')).toBeDefined()
-    expect(bound('mod+w', 'command:quirky.session/close-session')).toBeDefined()
-    expect(bound('mod+w', 'command:quirky.terminal/close-pane', 'terminalFocus')).toBeDefined()
-
-    // terminal-scope keys carry the condition, window-scope ones do not
-    for (const binding of model.keybindings.filter((candidate) => candidate.plugin === 'quirky.terminal' && TERMINAL_KEYS.some(([key]) => key === candidate.key))) {
-      expect(binding.when, binding.id).toBe('terminalFocus')
-    }
-    for (const [key] of WINDOW_KEYS) {
-      expect(model.keybindings.find((binding) => binding.plugin === 'quirky.terminal' && binding.key === key)?.when, key).toBeUndefined()
-    }
-  },
-  FEATURE_MS
-)

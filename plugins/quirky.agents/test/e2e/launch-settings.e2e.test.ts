@@ -55,10 +55,6 @@ const configure = async (e2e: E2E, agent: string, ...flags: string[]) => {
   expect(result.code).toBe(0)
 }
 
-/** Option rows reduced to what the catalog tables name: ID, label, kind and the offered values. */
-const shape = (options: OptionInfo[]) => options.map((o) => ({ id: o.id, label: o.label, type: o.type, values: o.choices?.map((c) => c.value) ?? null }))
-type Shape = ReturnType<typeof shape>[number]
-const select = (id: string, label: string, values: string[]): Shape => ({ id, label, type: 'select', values })
 
 describe('the catalog (SC-1 to SC-4)', () => {
   let e2e: E2E

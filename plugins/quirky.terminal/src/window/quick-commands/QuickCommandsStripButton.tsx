@@ -1,12 +1,12 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import { createPortal } from 'react-dom'
+import { Button, IconButton } from '@quirky/ui'
 import type { UiPluginContext } from '@quirky/protocol'
 import { FLOATING_WORKSPACE, type Group, type QuickCommand } from '../../layout/types'
 import { isQuickCommandComplete, pickStripCommand } from '../../quick-commands/normalize'
 import { QuickCommandDialog } from './QuickCommandDialog'
 import { repoFirst, searchQuickCommands } from './search'
 import { CheckIcon, ChevronDownIcon, CopyIcon, PencilIcon, PlayIcon, TrashIcon, confirmAndRemove, runCommand, summaryOf, useQuickCommands } from './shared'
-import { ensureQuickCommandStyles } from './styles'
 
 type Props = {
   context: UiPluginContext
@@ -34,7 +34,6 @@ function runTitle(command: QuickCommand): string {
  * Not drawn in the floating workspace, which has no repo to scope commands to.
  */
 export function QuickCommandsStripButton({ context, workspace, group, repo, menuOpen: controlledOpen, onMenuOpenChange }: Props) {
-  useState(ensureQuickCommandStyles)
   const floating = workspace === FLOATING_WORKSPACE
   const { commands, loaded, refresh } = useQuickCommands(context, floating ? null : workspace)
   const [ownOpen, setOwnOpen] = useState(false)
@@ -88,13 +87,13 @@ export function QuickCommandsStripButton({ context, workspace, group, repo, menu
   if (commands.length === 0) {
     return (
       <div className="qc-strip">
-        <button ref={chevron} type="button" className="qc-single" aria-label="Add quick command" title="Save a quick command for this repo"
+        <button ref={chevron} type="button" className="ui-button ui-button--secondary qc-single" aria-label="Add quick command" title="Save a quick command for this repo"
           onClick={() => {
             setMenuOpen(false)
             openAdd()
           }}
         >
-          <PlayIcon size={13} />
+          <span className="ui-icon-button__icon"><PlayIcon size={13} /></span>
           <span className="qc-run-label">Command</span>
         </button>
         {menuView}
@@ -106,8 +105,9 @@ export function QuickCommandsStripButton({ context, workspace, group, repo, menu
   return (
     <div className="qc-strip">
       <div className="qc-split">
-        <button
+        <Button
           type="button"
+          className="qc-run"
           data-qc-run=""
           disabled={pick === null}
           aria-label={pick ? `Run quick command: ${pick.label}` : 'Run quick command'}
@@ -116,9 +116,17 @@ export function QuickCommandsStripButton({ context, workspace, group, repo, menu
         >
           <PlayIcon />
           <span className="qc-run-label">{pick?.label ?? 'Run'}</span>
-        </button>
-        <button ref={chevron} type="button" className="qc-more" aria-label="More quick commands" aria-haspopup="menu" aria-expanded={menuOpen} onClick={() => setMenuOpen(!menuOpen)}>
-          <ChevronDownIcon size={12} />
+        </Button>
+        <button
+          ref={chevron}
+          type="button"
+          className="ui-button ui-button--secondary ui-icon-button qc-more"
+          aria-label="More quick commands"
+          aria-haspopup="menu"
+          aria-expanded={menuOpen}
+          onClick={() => setMenuOpen(!menuOpen)}
+        >
+          <span className="ui-icon-button__icon"><ChevronDownIcon size={12} /></span>
         </button>
       </div>
       {menuView}
@@ -139,7 +147,6 @@ type MenuProps = {
   onAdd(): void
 }
 
-const MENU_WIDTH = 320
 
 function QuickCommandsMenu({ context, anchor, commands, preferred, onClose, onRun, onEdit, onDelete, onAdd }: MenuProps) {
   const [query, setQuery] = useState('')
@@ -155,7 +162,10 @@ function QuickCommandsMenu({ context, anchor, commands, preferred, onClose, onRu
 
   useLayoutEffect(() => {
     const rect = anchor.current?.getBoundingClientRect()
-    if (rect) setPlace({ left: Math.max(8, rect.right - MENU_WIDTH), top: rect.bottom + 6 })
+    if (rect) {
+      const width = menu.current?.getBoundingClientRect().width ?? 0
+      setPlace({ left: Math.max(8, rect.right - width), top: rect.bottom + 6 })
+    }
   }, [anchor])
 
   useEffect(() => {
@@ -208,7 +218,7 @@ function QuickCommandsMenu({ context, anchor, commands, preferred, onClose, onRu
     <div ref={menu} className="qc-menu" role="menu" style={{ left: place.left, top: place.top }} onKeyDown={onKeyDown}>
       <input
         ref={search}
-        className="qc-menu-search"
+        className="ui-text-field__input qc-menu-search"
         type="search"
         placeholder="Search quick commands..."
         aria-label="Search quick commands"
@@ -234,16 +244,12 @@ function QuickCommandsMenu({ context, anchor, commands, preferred, onClose, onRu
             >
               <PlayIcon />
               <span className="qc-row-main">
-                <span className="qc-label" style={{ display: 'block' }}>
-                  {command.label}
-                </span>
+                <span className="qc-label">{command.label}</span>
                 <span className="qc-body">{summaryOf(command)}</span>
               </span>
               <span className="qc-actions" role="group" aria-label="Quick command actions">
-                <button
-                  type="button"
-                  className="qc-icon-button"
-                  aria-label={`Copy ${command.label}`}
+                <IconButton
+                  label={`Copy ${command.label}`}
                   title={copied === command.id ? 'Copied' : `Copy ${command.label}`}
                   disabled={command.command === ''}
                   onClick={(event) => {
@@ -252,11 +258,9 @@ function QuickCommandsMenu({ context, anchor, commands, preferred, onClose, onRu
                   }}
                 >
                   {copied === command.id ? <CheckIcon /> : <CopyIcon />}
-                </button>
-                <button
-                  type="button"
-                  className="qc-icon-button"
-                  aria-label={`Edit ${command.label}`}
+                </IconButton>
+                <IconButton
+                  label={`Edit ${command.label}`}
                   title={`Edit ${command.label}`}
                   onClick={(event) => {
                     event.stopPropagation()
@@ -264,28 +268,27 @@ function QuickCommandsMenu({ context, anchor, commands, preferred, onClose, onRu
                   }}
                 >
                   <PencilIcon />
-                </button>
-                <button
-                  type="button"
-                  className="qc-icon-button qc-danger"
-                  aria-label={`Delete ${command.label}`}
+                </IconButton>
+                <IconButton
+                  label={`Delete ${command.label}`}
                   title={`Delete ${command.label}`}
+                  variant="destructive"
                   onClick={(event) => {
                     event.stopPropagation()
                     onDelete(command)
                   }}
                 >
                   <TrashIcon />
-                </button>
+                </IconButton>
               </span>
             </div>
           </div>
         ))}
       </div>
       <div className="qc-menu-footer">
-        <button type="button" onClick={onAdd}>
+        <Button type="button" onClick={onAdd}>
           + Command
-        </button>
+        </Button>
       </div>
     </div>,
     document.body

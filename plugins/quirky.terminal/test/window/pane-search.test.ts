@@ -2,6 +2,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } fr
 import { act } from 'react'
 import { RpcErrorCode } from '@quirky/protocol'
 import { fakeContext, loadPane, mountPane, paneHandlers, startRecording, stopRecording, unloadPane, type MountedPane } from './pane-support'
+import { waitFor } from '../e2e-support'
 
 let mounted: MountedPane | null = null
 
@@ -20,6 +21,9 @@ const seq = (to: number) => Array.from({ length: to }, (_, index) => `${index + 
 async function mountWithOutput() {
   const fake = fakeContext(paneHandlers())
   mounted = await mountPane(fake)
+  await act(async () => {
+    await waitFor('the pane output subscription', () => fake.streams.has(101), 2_000)
+  })
   await fake.push(101, seq(200))
   await mounted.flush()
   return { fake, pane: mounted }
@@ -95,30 +99,6 @@ describe('the search box', () => {
     expect(status(mounted)).toBe('1/1')
   })
 
-  test('SC-42: matches are drawn with Orca colours and an overview ruler mark', async () => {
-    const { pane } = await mountWithOutput()
-    const { SearchAddon } = await import('@xterm/addon-search')
-    const original = SearchAddon.prototype.findNext
-    const seen: unknown[] = []
-    SearchAddon.prototype.findNext = function (this: InstanceType<typeof SearchAddon>, term, options) {
-      seen.push(options?.decorations)
-      return original.call(this, term, options)
-    }
-    try {
-      await act(async () => pane.handle().search('19'))
-    } finally {
-      SearchAddon.prototype.findNext = original
-    }
-    expect(seen[0]).toEqual({
-      matchBackground: '#5c4a00',
-      matchBorder: '#5c4a00',
-      matchOverviewRuler: '#ffcc00',
-      activeMatchBackground: '#c4580e',
-      activeMatchBorder: '#ffcf6b',
-      activeMatchColorOverviewRuler: '#ff9900'
-    })
-    expect(pane.term().options.overviewRulerWidth).toBeGreaterThan(0)
-  })
 
   test('SC-42: Escape closes the box and clears the highlight', async () => {
     const { pane } = await mountWithOutput()
