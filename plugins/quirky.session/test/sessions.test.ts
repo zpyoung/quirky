@@ -1086,13 +1086,21 @@ describe('exit and reconciliation', () => {
       title: 'Claude'
     })
     await call(client, 'quirky.session/setStatus', { session: structured.id, status: 'working' })
+    const providerSession = { id: 'structured-provider-session', transcriptPath: null }
+    await call(client, 'quirky.session/setProviderSession', { session: structured.id, ...providerSession })
     h.pty.sessions.delete(lost.id)
     const again = await restartDaemon(h)
     try {
       const sessions = await call<Session[]>(again.client, 'quirky.session/list')
       expect(sessions.find((s) => s.id === lost.id)).toMatchObject({ status: 'exited' })
       expect(sessions.find((s) => s.id === kept.id)).toMatchObject({ status: 'running' })
-      expect(sessions.find((s) => s.id === structured.id)).toMatchObject({ status: 'exited' })
+      expect(sessions.find((s) => s.id === structured.id)).toMatchObject({
+        id: structured.id,
+        kind: 'structured',
+        status: 'exited',
+        cwd: structured.cwd,
+        providerSession
+      })
     } finally {
       await again.stop()
     }
@@ -1297,7 +1305,7 @@ describe('quirky.session/restore', () => {
     expect(eventsOf('quirky.session/changed').at(-1)).toMatchObject({ data: { session: { id: session.id, status: 'running' } } })
   })
   test('a cold agent restore refuses a missing provider identity without replacing the agent with a shell', async () => {
-    const session = await createSession(client, { worktree: 'id:wt_main', agent: 'codex' })
+    const session = await createSession(client, { worktree: 'id:wt_main', cwd: h.home, agent: 'codex' })
     h.pty.emit(session.id, 'retained history')
     h.pty.exit(session.id, null, { exitCause: 'host-restart' })
     await waitFor(() => changedTo('exited'))
@@ -1310,7 +1318,8 @@ describe('quirky.session/restore', () => {
   })
 
   test('cold restore replays the captured provider ID, launch snapshot and cwd in the same session', async () => {
-    const created = await createSession(client, { worktree: 'id:wt_main', agent: 'codex' })
+    const created = await createSession(client, { worktree: 'id:wt_main', cwd: h.home, agent: 'codex' })
+    h.pty.emit(created.id, 'retained history')
     const providerSession = { id: 'codex-provider-17', transcriptPath: '/transcripts/codex-17.jsonl' }
     await call(client, 'quirky.session/setProviderSession', { session: created.id, ...providerSession })
     const launch = { command: 'codex', args: '--model snapshot-model --effort high', env: { CODEX_HOME: '/captured/codex-home', CODEX_PROFILE: 'original' } }
@@ -1359,7 +1368,7 @@ describe('quirky.session/restore', () => {
       providerSession,
       fork: false
     })
-    expect((await call<Session[]>(client, 'quirky.session/list')).map((entry) => entry.id)).toEqual([created.id])
+    expect(Buffer.from(h.pty.sessions.get(created.id)!.buffer).toString()).toContain('retained history')
   })
   test('cold Codex restore re-applies provider account preparation before resolving the captured conversation', async () => {
     await h.cleanup()
@@ -1367,7 +1376,7 @@ describe('quirky.session/restore', () => {
     h = await startPluginHarness({ ...SESSION_PLUGINS, fakes: [...SESSION_PLUGINS.fakes, 'quirky.accounts'] })
     ;({ client, events } = await h.connectWithEvents('cli'))
 
-    const session = await createSession(client, { worktree: 'id:wt_main', agent: 'codex' })
+    const session = await createSession(client, { worktree: 'id:wt_main', cwd: h.home, agent: 'codex' })
     const providerSession = { id: 'codex-account-provider', transcriptPath: null }
     h.pty.emit(session.id, 'retained history')
     await call(client, 'quirky.session/setProviderSession', { session: session.id, ...providerSession })
@@ -1394,25 +1403,33 @@ describe('quirky.session/restore', () => {
 
 
   test('an unsupported cold agent restore refuses before spawning and keeps history restorable', async () => {
-    const session = await createSession(client, { worktree: 'id:wt_main', agent: 'aider' })
+    const session = await createSession(client, { worktree: 'id:wt_main', cwd: h.home, agent: 'aider' })
     h.pty.emit(session.id, 'retained history')
     await call(client, 'quirky.session/setProviderSession', { session: session.id, id: 'aider-provider-session' })
     h.pty.exit(session.id, null, { exitCause: 'host-restart' })
     await waitFor(() => changedTo('exited'))
 
     const error = await restore(session.id).catch((cause: RpcError) => cause)
-    expect(error).toMatchObject({ code: RpcErrorCode.Conflict, message: "aider can't resume sessions" })
-    expect(await sessionOf(session.id)).toMatchObject({ status: 'exited', agent: 'aider', restorable: true })
-    expect(restoreRequests(session.id)).toEqual([])
+    expect(error).toMatchObject({ code: RpcErrorCode.Conflict })
+    expect(await sessionOf(session.id)).toMatchObject({
+      status: 'exited',
+      agent: 'aider',
+      restorable: true,
+      providerSession: { id: 'aider-provider-session' }
+    })
+    expect(h.pty.requests.filter((request) => request.type === 'create' && request.sessionId === session.id)).toHaveLength(1)
     expect(Buffer.from(h.pty.sessions.get(session.id)!.buffer).toString()).toContain('retained history')
   })
 
   test('concurrent cold agent restores share one provider launch and warm restores never launch again', async () => {
-    const session = await createSession(client, { worktree: 'id:wt_main', agent: 'claude' })
-    await call(client, 'quirky.session/setProviderSession', { session: session.id, id: 'claude-provider-18' })
+    const session = await createSession(client, { worktree: 'id:wt_main', cwd: h.home, agent: 'claude' })
+    const providerSession = { id: 'claude-provider-18', transcriptPath: null }
+    await call(client, 'quirky.session/setProviderSession', { session: session.id, ...providerSession })
+    const current = await sessionOf(session.id)
     const beforeWarm = h.pty.requests.length
     const warm = await restore(session.id)
-    expect(warm).toEqual(session)
+    expect(warm).toEqual(current)
+    expect(warm).toMatchObject({ id: session.id, providerSession })
     expect(h.pty.requests.slice(beforeWarm).filter((request) => request.type === 'create')).toEqual([])
     expect(fakeAgents().calls.filter((entry) => entry.method === 'prepareResume')).toEqual([])
 
