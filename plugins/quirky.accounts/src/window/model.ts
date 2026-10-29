@@ -1,5 +1,6 @@
-import type { QuirkyEvent, UiPluginContext } from '@quirky/protocol'
-import type { AccountState, AccountSummary, AccountUiState, ConfigWarning, ManagedProvider, PendingLogin, Preferences, StaleSession, SystemAccount } from '../types'
+import type { OwnerSessionHostRef, OwnerSessionWorkspaceRef, QuirkyEvent, UiLayout, UiPluginContext } from '@quirky/protocol'
+import type { AccountState, AccountSummary, AccountUiState, ConfigWarning, ManagedProvider, OwnerCallOperation, PendingLogin, Preferences, StaleSession, SystemAccount } from '../types'
+import { DEFAULT_PREFERENCES } from '../types'
 import type { CredentialStatus, ExtraUsage as MeterExtraUsage, RateLimitResetCredits as MeterResetCredits, UsageBucket as MeterBucket, UsageProvider, UsageWindow } from '../usage'
 export type { AccountState, AccountSummary, AccountUiState, ConfigWarning, ManagedProvider, PendingLogin, Preferences, StaleSession, SystemAccount }
 export type { CredentialStatus }
@@ -38,7 +39,18 @@ export type ProviderSnapshot = {
   usageMetadata?: UsageFailure
 }
 export type UsageState = { providers: ProviderSnapshot[]; inactive: Record<string, ProviderSnapshot>; updatedAt: number }
-export type AccountUiSnapshot = { accounts: AccountState | null; usage: UsageState | null; ui: AccountUiState; credentials: CredentialStatus[]; login: PendingLogin | null; loginStarting: boolean; loginCancelling: boolean; agentDetection: AgentDetectionState; loading: boolean; refreshing: boolean; error: string | null }
+export type AccountWindowScope =
+  | { kind: 'local'; worktreeId: string | null }
+  | {
+      kind: 'remote'
+      mirrorId: string
+      owner: OwnerSessionHostRef | null
+      workspace: OwnerSessionWorkspaceRef | null
+      hostName: string | null
+      status: 'loading' | 'ready' | 'unavailable'
+      error: string | null
+    }
+export type AccountUiSnapshot = { scope: AccountWindowScope; accounts: AccountState | null; usage: UsageState | null; ui: AccountUiState; credentials: CredentialStatus[]; login: PendingLogin | null; loginStarting: boolean; loginCancelling: boolean; agentDetection: AgentDetectionState; loading: boolean; refreshing: boolean; error: string | null }
 export type SessionActionResult = 'applied' | 'selection-changed' | 'failed'
 export type ResetCreditResult = 'reset' | 'alreadyRedeemed' | 'nothingToReset' | 'noCredit' | 'scope-changed' | 'failed'
 
@@ -294,11 +306,74 @@ function eventRevision(event: QuirkyEvent): number | null {
 
 const INITIAL_UI: AccountUiState = { open: false, provider: null, expanded: null, settingsSection: null }
 const INITIAL_AGENT_DETECTION: AgentDetectionState = { status: 'loading', installedProviders: [] }
+type WorkspaceFocus =
+  | { kind: 'local'; worktreeId: string | null }
+  | { kind: 'remote'; mirrorId: string }
+
+const REMOTE_WORKSPACE_VIEW = 'view:quirky.worktree/remote'
+const LOCAL_WORKSPACE_VIEW = 'view:quirky.session/worktree'
+const OWNER_OPERATION_BY_METHOD: Record<string, OwnerCallOperation> = {
+  'quirky.accounts/list': 'list',
+  'quirky.accounts/usage': 'usage',
+  'quirky.accounts/refresh': 'refresh',
+  'quirky.accounts/inactiveUsage': 'inactiveUsage',
+  'quirky.accounts/select': 'select',
+  'quirky.accounts/credentialStatus': 'credentialStatus',
+  'quirky.agents/list': 'agentsList',
+  'quirky.agents/refresh': 'agentsRefresh'
+}
+
+function workspaceFocusFromView(view: UiLayout['view'] | undefined): WorkspaceFocus | null {
+  if (!view) return null
+  const input = isRecord(view.input) ? view.input : null
+  if (view.id === REMOTE_WORKSPACE_VIEW) {
+    return { kind: 'remote', mirrorId: typeof input?.workspace === 'string' ? input.workspace : '' }
+  }
+  if (view.id === LOCAL_WORKSPACE_VIEW && typeof input?.worktree === 'string' && input.worktree.length > 0) {
+    return { kind: 'local', worktreeId: input.worktree }
+  }
+  return null
+}
+
+function workspaceFocusFromLayout(layout: UiLayout, previous: WorkspaceFocus | null): WorkspaceFocus {
+  const current = workspaceFocusFromView(layout.view ?? undefined)
+  if (current) return current
+  if (previous) return previous
+  const tabs = layout.viewTabs ?? []
+  for (let index = tabs.length - 1; index >= 0; index -= 1) {
+    const fromTab = workspaceFocusFromView(tabs[index])
+    if (fromTab) return fromTab
+  }
+  return { kind: 'local', worktreeId: null }
+}
+function sameWorkspaceFocus(left: WorkspaceFocus, right: WorkspaceFocus): boolean {
+  if (left.kind === 'local') return right.kind === 'local'
+  return right.kind === 'remote' && left.mirrorId === right.mirrorId
+}
 
 export class AccountsUiStore {
-  private snapshot: AccountUiSnapshot = { accounts: null, usage: null, ui: INITIAL_UI, credentials: [], login: null, loginStarting: false, loginCancelling: false, agentDetection: INITIAL_AGENT_DETECTION, loading: true, refreshing: false, error: null }
+  private snapshot: AccountUiSnapshot = {
+    scope: { kind: 'local', worktreeId: null },
+    accounts: null,
+    usage: null,
+    ui: INITIAL_UI,
+    credentials: [],
+    login: null,
+    loginStarting: false,
+    loginCancelling: false,
+    agentDetection: INITIAL_AGENT_DETECTION,
+    loading: true,
+    refreshing: false,
+    error: null
+  }
   private readonly listeners = new Set<() => void>()
   private unsubscribe: (() => void) | null = null
+  private unsubscribeLayout: (() => void) | null = null
+  private workspaceFocus: WorkspaceFocus | null = null
+  private lastWorkspaceFocus: WorkspaceFocus | null = null
+  private layoutHasWorkspaceFocus = false
+  private scopeGeneration = 0
+  private localPreferences: Preferences = { ...DEFAULT_PREFERENCES, visibleProviders: [...DEFAULT_PREFERENCES.visibleProviders] }
   private stopped = false
   private accountGeneration = 0
   private usageGeneration = 0
@@ -323,26 +398,224 @@ export class AccountsUiStore {
   start(): void {
     if (this.unsubscribe || this.stopped) return
     this.unsubscribe = this.context.subscribe((event) => this.onEvent(event))
+    this.unsubscribeLayout = this.context.onLayout((layout) => this.handleLayout(layout))
+    this.handleLayout(this.context.getLayout())
+  }
+
+  stop(): void {
+    this.stopped = true
+    this.scopeGeneration += 1
+    this.accountGeneration += 1
+    this.usageGeneration += 1
+    this.credentialGeneration += 1
+    this.loginGeneration += 1
+    this.agentDetectionGeneration += 1
+    this.unsubscribe?.()
+    this.unsubscribe = null
+    this.unsubscribeLayout?.()
+    this.unsubscribeLayout = null
+    clearTimeout(this.reloadTimer)
+    clearTimeout(this.loginTimer)
+    this.reloadTimer = null
+    this.loginTimer = null
+    this.loginPollsInFlight.clear()
+    this.listeners.clear()
+  }
+
+  private handleLayout(layout: UiLayout): void {
+    if (this.stopped) return
+    const visibleWorkspace = workspaceFocusFromView(layout.view ?? undefined)
+    const next = workspaceFocusFromLayout(layout, this.lastWorkspaceFocus)
+    this.lastWorkspaceFocus = next
+    const returnedToWorkspace = visibleWorkspace !== null && !this.layoutHasWorkspaceFocus
+    this.layoutHasWorkspaceFocus = visibleWorkspace !== null
+    if (this.workspaceFocus && sameWorkspaceFocus(this.workspaceFocus, next) && !returnedToWorkspace) {
+      if (next.kind === 'local' && this.workspaceFocus.kind === 'local' && next.worktreeId !== this.workspaceFocus.worktreeId) {
+        this.workspaceFocus = next
+        this.commit({ scope: { kind: 'local', worktreeId: next.worktreeId } })
+      }
+      return
+    }
+    this.workspaceFocus = next
+    this.changeWorkspaceFocus(next)
+  }
+
+  private changeWorkspaceFocus(focus: WorkspaceFocus): void {
+    const generation = ++this.scopeGeneration
+    this.accountGeneration += 1
+    this.usageGeneration += 1
+    this.credentialGeneration += 1
+    this.agentDetectionGeneration += 1
+    this.loginGeneration += 1
+    this.loginStarting = false
+    this.loginCancelling = false
+    this.loginPollsInFlight.clear()
+    clearTimeout(this.reloadTimer)
+    clearTimeout(this.loginTimer)
+    this.reloadTimer = null
+    this.loginTimer = null
+    this.fullReloadRequested = false
+    this.minimumRevision = 0
+    this.revisionRetryUsed = false
+    this.usageMismatchReloaded = false
+    this.commit({
+      scope: focus.kind === 'local'
+        ? { kind: 'local', worktreeId: focus.worktreeId }
+        : { kind: 'remote', mirrorId: focus.mirrorId, owner: null, workspace: null, hostName: null, status: 'loading', error: null },
+      accounts: null,
+      usage: null,
+      credentials: [],
+      login: null,
+      loginStarting: false,
+      loginCancelling: false,
+      agentDetection: INITIAL_AGENT_DETECTION,
+      loading: true,
+      refreshing: false,
+      error: null
+    })
+    if (focus.kind === 'remote') void this.resolveRemoteFocus(focus, generation)
+    else this.loadScopeData()
+  }
+
+  private async resolveRemoteFocus(focus: Extract<WorkspaceFocus, { kind: 'remote' }>, generation: number): Promise<void> {
+    if (!focus.mirrorId) {
+      this.markRemoteUnavailable(focus, generation)
+      return
+    }
+    let mirrorValue: unknown
+    try {
+      mirrorValue = await this.context.call('quirky.worktree/remoteShow', { workspace: focus.mirrorId })
+    } catch {
+      this.markRemoteUnavailable(focus, generation)
+      return
+    }
+    if (this.stopped || generation !== this.scopeGeneration) return
+    const mirror = isRecord(mirrorValue) ? mirrorValue : null
+    const mirrorIdentity = isRecord(mirror?.identity) ? mirror.identity : null
+    const worktree = isRecord(mirror?.worktree) ? mirror.worktree : null
+    if (
+      !mirror || mirror.id !== focus.mirrorId ||
+      typeof mirror.hostId !== 'string' || !mirrorIdentity ||
+      typeof mirrorIdentity.hostId !== 'string' || typeof mirrorIdentity.generation !== 'string' ||
+      !worktree || typeof worktree.id !== 'string' || typeof worktree.instanceId !== 'string' ||
+      typeof mirror.fingerprint !== 'string' || typeof mirror.connected !== 'boolean'
+    ) {
+      this.markRemoteUnavailable(focus, generation)
+      return
+    }
+
+    let hostValue: unknown
+    try {
+      hostValue = await this.context.call('quirky.worktree/remoteHostStatus', { host: mirror.hostId })
+    } catch {
+      this.markRemoteUnavailable(focus, generation)
+      return
+    }
+    if (this.stopped || generation !== this.scopeGeneration) return
+    const host = isRecord(hostValue) ? hostValue : null
+    const identity = isRecord(host?.identity) ? host.identity : null
+    const runtime = isRecord(host?.runtime) ? host.runtime : null
+    if (
+      !host || !identity || !runtime ||
+      typeof host.id !== 'string' || typeof identity.hostId !== 'string' || typeof identity.generation !== 'string' ||
+      typeof runtime.id !== 'string' || typeof runtime.name !== 'string' ||
+      typeof runtime.endpoint !== 'string' || typeof runtime.grantId !== 'string' ||
+      typeof host.connected !== 'boolean'
+    ) {
+      this.markRemoteUnavailable(focus, generation)
+      return
+    }
+    if (
+      mirror.hostId !== mirrorIdentity.hostId ||
+      host.id !== mirror.hostId ||
+      identity.hostId !== mirror.hostId ||
+      identity.hostId !== mirrorIdentity.hostId ||
+      identity.generation !== mirrorIdentity.generation
+    ) {
+      this.markRemoteUnavailable(focus, generation)
+      return
+    }
+    const owner: OwnerSessionHostRef = {
+      hostId: identity.hostId,
+      identity: { hostId: identity.hostId, generation: identity.generation },
+      runtime: { id: runtime.id, endpoint: runtime.endpoint, grantId: runtime.grantId }
+    }
+    const workspace: OwnerSessionWorkspaceRef = {
+      owner,
+      mirrorId: mirror.id,
+      worktreeId: worktree.id,
+      instanceId: worktree.instanceId,
+      fingerprint: mirror.fingerprint
+    }
+    if (mirror.connected !== true || host.connected !== true) {
+      this.markRemoteUnavailable(focus, generation, runtime.name, owner, workspace)
+      return
+    }
+    this.commit({
+      scope: { kind: 'remote', mirrorId: focus.mirrorId, owner, workspace, hostName: runtime.name, status: 'ready', error: null },
+      error: null
+    })
+    this.loadScopeData()
+  }
+
+  private markRemoteUnavailable(
+    focus: Extract<WorkspaceFocus, { kind: 'remote' }>,
+    generation: number,
+    hostName: string | null = null,
+    owner: OwnerSessionHostRef | null = null,
+    workspace: OwnerSessionWorkspaceRef | null = null
+  ): void {
+    if (this.stopped || generation !== this.scopeGeneration) return
+    this.scopeGeneration += 1
+    this.accountGeneration += 1
+    this.usageGeneration += 1
+    this.credentialGeneration += 1
+    this.agentDetectionGeneration += 1
+    this.loginGeneration += 1
+    this.loginStarting = false
+    this.loginCancelling = false
+    this.loginPollsInFlight.clear()
+    clearTimeout(this.reloadTimer)
+    clearTimeout(this.loginTimer)
+    this.reloadTimer = null
+    this.loginTimer = null
+    this.fullReloadRequested = false
+    const error = 'The focused remote owner or workspace is unavailable. Local Accounts data was not substituted.'
+    this.commit({
+      scope: { kind: 'remote', mirrorId: focus.mirrorId, owner, workspace, hostName, status: 'unavailable', error },
+      accounts: null,
+      usage: null,
+      credentials: [],
+      login: null,
+      loginStarting: false,
+      loginCancelling: false,
+      agentDetection: { status: 'unavailable', installedProviders: [] },
+      loading: false,
+      refreshing: false,
+      error
+    })
+  }
+
+  private loadScopeData(): void {
+    if (this.stopped) return
     void this.loadAccounts()
     void this.loadUsage()
     void this.loadCredentials()
     void this.loadAgentDetection()
   }
 
-  stop(): void {
-    this.stopped = true
-    this.accountGeneration += 1
-    this.usageGeneration += 1
-    this.credentialGeneration += 1
-    this.loginGeneration += 1
-    this.agentDetectionGeneration += 1
-    if (this.unsubscribe) this.unsubscribe()
-    this.unsubscribe = null
-    if (this.reloadTimer) clearTimeout(this.reloadTimer)
-    if (this.loginTimer) clearTimeout(this.loginTimer)
-    this.reloadTimer = null
-    this.loginTimer = null
-    this.listeners.clear()
+  private scopedCall(
+    method: string,
+    params: Record<string, unknown> = {},
+    scope: AccountWindowScope = this.snapshot.scope
+  ): Promise<unknown> {
+    if (scope.kind === 'local') return this.context.call(method, params)
+    const operation = OWNER_OPERATION_BY_METHOD[method]
+    if (!operation) return Promise.reject(new Error('This action is not available for a remote Accounts owner.'))
+    if (scope.status !== 'ready' || !scope.owner) {
+      return Promise.reject(new Error(scope.error ?? 'The remote Accounts owner is unavailable; no local result was used.'))
+    }
+    return this.context.call('quirky.accounts/ownerCall', { owner: scope.owner, operation, params })
   }
 
   subscribe = (listener: () => void): (() => void) => {
@@ -371,20 +644,24 @@ export class AccountsUiStore {
     if (this.stopped) return
     const type = event.type
     if (type === 'quirky.agents/changed') {
-      void this.loadAgentDetection()
+      if (this.snapshot.scope.kind === 'local') void this.loadAgentDetection()
       return
     }
-
     if (type === 'quirky.accounts/changed') {
+      this.usageMismatchReloaded = false
+      if (this.snapshot.scope.kind === 'remote') {
+        void this.loadLocalPreferences()
+        return
+      }
       this.minimumRevision = Math.max(this.minimumRevision, eventRevision(event) ?? 0)
       this.revisionRetryUsed = false
-      this.usageMismatchReloaded = false
       this.accountGeneration += 1
       this.usageGeneration += 1
       this.scheduleReload()
       return
     }
     if (type === 'quirky.accounts/usageChanged') {
+      if (this.snapshot.scope.kind === 'remote') return
       this.usageGeneration += 1
       const usage = parseUsageState(eventPayload(event))
       if (usage && this.usageMatchesSelection(usage)) {
@@ -403,14 +680,34 @@ export class AccountsUiStore {
     }
   }
 
+  private async loadLocalPreferences(): Promise<void> {
+    if (this.stopped || this.snapshot.scope.kind !== 'remote') return
+    const generation = this.scopeGeneration
+    try {
+      const value = await this.context.call('quirky.accounts/list', {})
+      if (this.stopped || generation !== this.scopeGeneration || this.snapshot.scope.kind !== 'remote') return
+      const state = parseAccountState(value)
+      if (!state) return
+      this.localPreferences = state.preferences
+      if (this.snapshot.accounts) {
+        this.commit({ accounts: { ...this.snapshot.accounts, preferences: state.preferences } })
+      }
+    } catch {
+      // Local presentation preferences are independent of remote account state.
+    }
+  }
   private async loadAgentDetection(): Promise<void> {
     const generation = ++this.agentDetectionGeneration
+    const scopeGeneration = this.scopeGeneration
+    const scope = this.snapshot.scope
     try {
-      const value = await this.context.call('quirky.agents/list', {})
-      if (this.stopped || generation !== this.agentDetectionGeneration) return
+      const value = await this.scopedCall('quirky.agents/list', {}, scope)
+      if (this.stopped || generation !== this.agentDetectionGeneration || scopeGeneration !== this.scopeGeneration) return
       this.commit({ agentDetection: parseAgentDetection(value) ?? { status: 'unavailable', installedProviders: [] } })
     } catch {
-      if (!this.stopped && generation === this.agentDetectionGeneration) this.commit({ agentDetection: { status: 'unavailable', installedProviders: [] } })
+      if (!this.stopped && generation === this.agentDetectionGeneration && scopeGeneration === this.scopeGeneration) {
+        this.commit({ agentDetection: { status: 'unavailable', installedProviders: [] } })
+      }
     }
   }
 
@@ -420,9 +717,11 @@ export class AccountsUiStore {
   }
 
   private scheduleUsageReload(): void {
-    if (this.reloadTimer || this.stopped) return
+    if (this.reloadTimer !== null || this.stopped) return
+    const scopeGeneration = this.scopeGeneration
     this.reloadTimer = setTimeout(() => {
       this.reloadTimer = null
+      if (this.stopped || scopeGeneration !== this.scopeGeneration) return
       const fullReload = this.fullReloadRequested
       this.fullReloadRequested = false
       if (fullReload) {
@@ -436,69 +735,115 @@ export class AccountsUiStore {
   async loadAccounts(): Promise<void> {
     if (this.stopped) return
     const generation = ++this.accountGeneration
-    const [accountResult, uiResult] = await Promise.allSettled([
-      this.context.call('quirky.accounts/list', {}),
+    const scopeGeneration = this.scopeGeneration
+    const scope = this.snapshot.scope
+    if (scope.kind === 'remote' && scope.status !== 'ready') return
+    const [accountResult, preferencesResult, uiResult] = await Promise.allSettled([
+      this.scopedCall('quirky.accounts/list', {}, scope),
+      scope.kind === 'remote' ? this.context.call('quirky.accounts/list', {}) : Promise.resolve(null),
       this.context.call('quirky.accounts/uiState', {})
     ])
-    if (this.stopped || generation !== this.accountGeneration) return
+    if (this.stopped || generation !== this.accountGeneration || scopeGeneration !== this.scopeGeneration) return
+    if (scope.kind === 'remote' && accountResult.status === 'rejected') {
+      this.markRemoteUnavailable({ kind: 'remote', mirrorId: scope.mirrorId }, scopeGeneration, scope.hostName, scope.owner, scope.workspace)
+      return
+    }
+    if (scope.kind === 'remote' && preferencesResult.status === 'fulfilled') {
+      const local = parseAccountState(preferencesResult.value)
+      if (local) this.localPreferences = local.preferences
+    }
     const previousAccounts = this.snapshot.accounts
     let accounts = this.snapshot.accounts
     let ui = this.snapshot.ui
-    let failed = false
+    let failed = accountResult.status === 'rejected'
     if (accountResult.status === 'fulfilled') {
-      const next = parseAccountState(accountResult.value)
-      if (next && next.revision >= this.minimumRevision && (!accounts || next.revision >= accounts.revision)) {
-        accounts = next
-        this.minimumRevision = Math.max(this.minimumRevision, next.revision)
-        this.revisionRetryUsed = false
-      } else if (next && next.revision < this.minimumRevision && !this.revisionRetryUsed) {
-        this.revisionRetryUsed = true
-        this.scheduleReload()
+      const parsed = parseAccountState(accountResult.value)
+      if (!parsed && scope.kind === 'remote') {
+        this.markRemoteUnavailable({ kind: 'remote', mirrorId: scope.mirrorId }, scopeGeneration, scope.hostName, scope.owner, scope.workspace)
+        return
       }
-    } else failed = true
+      if (parsed) {
+        const next = scope.kind === 'remote' ? { ...parsed, preferences: this.localPreferences } : parsed
+        if (next.revision >= this.minimumRevision && (!accounts || next.revision >= accounts.revision)) {
+          accounts = next
+          if (scope.kind === 'local') this.localPreferences = next.preferences
+          this.minimumRevision = Math.max(this.minimumRevision, next.revision)
+          this.revisionRetryUsed = false
+        } else if (next.revision < this.minimumRevision && !this.revisionRetryUsed) {
+          this.revisionRetryUsed = true
+          this.scheduleReload()
+        }
+      } else failed = true
+    }
     if (uiResult.status === 'fulfilled') ui = parseUiState(uiResult.value) ?? ui
     if (accounts !== this.snapshot.accounts || ui !== this.snapshot.ui) {
-      this.commit({ accounts, ui, login: accounts?.pendingLogin ?? this.snapshot.login, loading: false, error: null })
+      this.commit({
+        accounts,
+        ui,
+        login: accounts?.pendingLogin ?? this.snapshot.login,
+        loading: false,
+        error: failed
+          ? scope.kind === 'remote'
+            ? 'Remote Accounts data is unavailable; no local account data was substituted.'
+            : 'Account state is temporarily unavailable.'
+          : null
+      })
       if (accounts !== previousAccounts && this.snapshot.usage && !this.usageMatchesSelection(this.snapshot.usage)) {
         this.usageMismatchReloaded = false
         void this.loadUsage()
       }
     } else if (this.snapshot.accounts === null) {
-      this.commit({ loading: false, error: failed ? 'Account state is temporarily unavailable.' : 'Account state could not be read.' })
+      this.commit({
+        loading: false,
+        error: failed ? 'Account state is temporarily unavailable.' : 'Account state could not be read.'
+      })
     }
   }
 
   async loadUsage(): Promise<void> {
     if (this.stopped) return
     const generation = ++this.usageGeneration
+    const scopeGeneration = this.scopeGeneration
+    const scope = this.snapshot.scope
+    if (scope.kind === 'remote' && scope.status !== 'ready') return
     try {
-      const value = await this.context.call('quirky.accounts/usage', {})
-      if (this.stopped || generation !== this.usageGeneration) return
+      const value = await this.scopedCall('quirky.accounts/usage', {}, scope)
+      if (this.stopped || generation !== this.usageGeneration || scopeGeneration !== this.scopeGeneration) return
       const usage = parseUsageState(value)
+      if (!usage && scope.kind === 'remote') {
+        this.markRemoteUnavailable({ kind: 'remote', mirrorId: scope.mirrorId }, scopeGeneration, scope.hostName, scope.owner, scope.workspace)
+        return
+      }
       if (usage && this.usageMatchesSelection(usage)) {
         this.usageMismatchReloaded = false
-        this.commit({ usage, loading: this.snapshot.accounts === null ? this.snapshot.loading : false })
+        this.commit({ usage, loading: this.snapshot.accounts === null ? this.snapshot.loading : false, error: null })
       } else if (usage && !this.usageMismatchReloaded) {
         this.usageMismatchReloaded = true
         this.scheduleUsageReload()
       }
     } catch {
-      if (!this.stopped && generation === this.usageGeneration && this.snapshot.usage === null) this.commit({ loading: false })
+      if (this.stopped || generation !== this.usageGeneration || scopeGeneration !== this.scopeGeneration) return
+      if (scope.kind === 'remote') {
+        this.markRemoteUnavailable({ kind: 'remote', mirrorId: scope.mirrorId }, scopeGeneration, scope.hostName, scope.owner, scope.workspace)
+      } else if (this.snapshot.usage === null) this.commit({ loading: false })
     }
   }
 
   async loadCredentials(): Promise<void> {
     if (this.stopped) return
     const generation = ++this.credentialGeneration
+    const scopeGeneration = this.scopeGeneration
+    const scope = this.snapshot.scope
+    if (scope.kind === 'remote' && scope.status !== 'ready') return
     try {
-      const value = await this.context.call('quirky.accounts/credentialStatus', {})
-      if (this.stopped || generation !== this.credentialGeneration || !Array.isArray(value)) return
+      const value = await this.scopedCall('quirky.accounts/credentialStatus', {}, scope)
+      if (this.stopped || generation !== this.credentialGeneration || scopeGeneration !== this.scopeGeneration || !Array.isArray(value)) return
       this.commit({ credentials: value.flatMap((candidate) => {
         const status = parseCredentialStatus(candidate)
         return status ? [status] : []
       }) })
     } catch {
-      // Credential status is optional to the meter UI; never replace usable account/usage state.
+      // Credential status is optional; preserve account and usage data.
     }
   }
 
@@ -515,17 +860,45 @@ export class AccountsUiStore {
     }
   }
 
+  private async scopedAct(
+    title: string,
+    method: string,
+    params: Record<string, unknown>,
+    errorCopy?: (error: unknown) => string | null,
+    scope: AccountWindowScope = this.snapshot.scope
+  ): Promise<unknown | null> {
+    const scopeGeneration = this.scopeGeneration
+    try {
+      return await this.scopedCall(method, params, scope)
+    } catch (error) {
+      if (scope.kind === 'remote') {
+        this.markRemoteUnavailable(
+          { kind: 'remote', mirrorId: scope.mirrorId },
+          scopeGeneration,
+          scope.hostName,
+          scope.owner,
+          scope.workspace
+        )
+      }
+      this.context.toast(title, errorCopy?.(error) ?? 'The request could not be completed. Please try again.')
+      return null
+    }
+  }
   private applyAccountResult(value: unknown, generation: number): AccountState | null {
     if (this.stopped || generation !== this.accountGeneration) return null
-    const state = parseAccountState(value)
-    if (!state) {
+    const parsed = parseAccountState(value)
+    if (!parsed) {
       void this.loadAccounts()
       return null
     }
+    const state = this.snapshot.scope.kind === 'remote'
+      ? { ...parsed, preferences: this.localPreferences }
+      : parsed
     if (state.revision < this.minimumRevision || (this.snapshot.accounts && state.revision < this.snapshot.accounts.revision)) {
       void this.loadAccounts()
       return null
     }
+    if (this.snapshot.scope.kind === 'local') this.localPreferences = state.preferences
     this.minimumRevision = Math.max(this.minimumRevision, state.revision)
     this.usageMismatchReloaded = false
     this.commit({ accounts: state, login: state.pendingLogin ?? this.snapshot.login, loading: false, error: null })
@@ -557,7 +930,13 @@ export class AccountsUiStore {
       if (result === null) return
       const state = parseAccountState(result)
       if (state) {
-        this.applyAccountResult(state, generation)
+        this.localPreferences = state.preferences
+        if (this.snapshot.scope.kind === 'remote') {
+          if (this.snapshot.accounts) {
+            this.commit({ accounts: { ...this.snapshot.accounts, preferences: state.preferences } })
+          } else void this.loadAccounts()
+        } else if (generation === this.accountGeneration) this.applyAccountResult(state, generation)
+        else void this.loadAccounts()
         return
       }
       if (generation !== this.accountGeneration) {
@@ -565,28 +944,34 @@ export class AccountsUiStore {
         return
       }
       const preferences = parsePreferences(isRecord(result) && 'preferences' in result ? result.preferences : result)
-      if (preferences && this.snapshot.accounts) this.commit({ accounts: { ...this.snapshot.accounts, preferences } })
-      else void this.loadAccounts()
+      if (preferences) {
+        this.localPreferences = preferences
+        if (this.snapshot.accounts) this.commit({ accounts: { ...this.snapshot.accounts, preferences } })
+        else void this.loadAccounts()
+      } else void this.loadAccounts()
     })
     await this.preferencesQueue
   }
 
   async selectAccount(provider: ManagedProvider, accountId: string | null): Promise<void> {
+    const scope = this.snapshot.scope
+    if (scope.kind === 'remote' && scope.status !== 'ready') return
     const generation = ++this.accountGeneration
     this.usageGeneration += 1
-    const result = await this.act('Could not switch accounts', 'quirky.accounts/select', { provider, accountId })
+    const result = await this.scopedAct('Could not switch accounts', 'quirky.accounts/select', { provider, accountId }, undefined, scope)
     if (result === null) return
     const selected = this.applyAccountResult(result, generation)
     if (!selected && generation !== this.accountGeneration) await this.loadAccounts()
     const state = selected ?? this.snapshot.accounts
     if (!state) return
     void this.loadUsage()
-    if (provider === 'claude' && state.active.claude === accountId && state.preferences.claudeSwitchPolicy === 'always') {
+    if (scope.kind === 'local' && provider === 'claude' && state.active.claude === accountId && state.preferences.claudeSwitchPolicy === 'always') {
       await this.restartGroups(state.staleSessions.filter((session) => session.provider === 'claude' && session.selectedId === accountId && !session.queued && !session.kept), true)
     }
   }
 
   async removeAccount(provider: ManagedProvider, accountId: string): Promise<void> {
+    if (this.snapshot.scope.kind === 'remote') return
     const account = this.snapshot.accounts?.accounts.find((candidate) => candidate.provider === provider && candidate.id === accountId)
     const providerName = provider === 'claude' ? 'Claude' : 'Codex'
     const body = provider === 'claude'
@@ -603,7 +988,7 @@ export class AccountsUiStore {
   }
 
   async beginLogin(provider: ManagedProvider, options: { label?: string; accountId?: string; copyLink?: boolean } = {}): Promise<void> {
-    if (this.loginStarting || this.snapshot.login?.status === 'pending') return
+    if (this.snapshot.scope.kind === 'remote' || this.loginStarting || this.snapshot.login?.status === 'pending') return
     this.loginStarting = true
     this.commit({ loginStarting: true })
     try {
@@ -628,7 +1013,7 @@ export class AccountsUiStore {
   }
 
   private scheduleLoginPoll(pending: PendingLogin, generation: number): void {
-    if (this.stopped || generation !== this.loginGeneration || this.loginTimer !== null || this.loginPollsInFlight.has(pending.id)) return
+    if (this.snapshot.scope.kind === 'remote' || this.stopped || generation !== this.loginGeneration || this.loginTimer !== null || this.loginPollsInFlight.has(pending.id)) return
     const current = this.snapshot.login
     if (!current || current.id !== pending.id || current.status !== 'pending') return
     this.loginTimer = setTimeout(() => {
@@ -638,7 +1023,7 @@ export class AccountsUiStore {
   }
 
   private async pollLogin(previous: PendingLogin, generation: number): Promise<void> {
-    if (this.stopped || generation !== this.loginGeneration) return
+    if (this.snapshot.scope.kind === 'remote' || this.stopped || generation !== this.loginGeneration) return
     if (this.loginPollsInFlight.has(previous.id)) return
     const current = this.snapshot.login
     if (!current || current.id !== previous.id || current.status !== 'pending') return
@@ -681,6 +1066,7 @@ export class AccountsUiStore {
   }
 
   async cancelLogin(): Promise<void> {
+    if (this.snapshot.scope.kind === 'remote') return
     const pending = this.snapshot.login
     if (!pending || this.loginCancelling) return
     this.loginCancelling = true
@@ -709,13 +1095,25 @@ export class AccountsUiStore {
 
   async refresh(provider?: string): Promise<void> {
     if (this.snapshot.refreshing) return
+    const scope = this.snapshot.scope
+    if (scope.kind === 'remote' && scope.status !== 'ready') {
+      if (scope.status === 'unavailable' && this.workspaceFocus?.kind === 'remote') {
+        this.changeWorkspaceFocus(this.workspaceFocus)
+      }
+      return
+    }
+    const scopeGeneration = this.scopeGeneration
     const generation = ++this.usageGeneration
     const detectionGeneration = provider ? null : ++this.agentDetectionGeneration
     this.commit({ refreshing: true })
-    const jobs: Promise<unknown>[] = [Promise.resolve().then(() => this.context.call('quirky.accounts/refresh', { ...(provider ? { provider } : {}), force: true }))]
-    if (!provider) jobs.push(Promise.resolve().then(() => this.context.call('quirky.agents/refresh', {})))
+    const jobs: Promise<unknown>[] = [Promise.resolve().then(() => this.scopedCall(
+      'quirky.accounts/refresh',
+      { ...(provider ? { provider } : {}), force: true },
+      scope
+    ))]
+    if (!provider) jobs.push(Promise.resolve().then(() => this.scopedCall('quirky.agents/refresh', {}, scope)))
     const results = await Promise.allSettled(jobs)
-    if (this.stopped) return
+    if (this.stopped || scopeGeneration !== this.scopeGeneration) return
     let detectionFailed = false
     if (!provider && detectionGeneration === this.agentDetectionGeneration) {
       const detectionResult = results[1]
@@ -739,15 +1137,29 @@ export class AccountsUiStore {
         this.commit({ usage })
       } else if (usage) this.scheduleUsageReload()
       else void this.loadUsage()
-    } else this.context.toast('Could not refresh usage', 'The request could not be completed. Please try again.')
+    } else {
+      this.context.toast('Could not refresh usage', 'The request could not be completed. Please try again.')
+      if (scope.kind === 'remote') {
+        this.markRemoteUnavailable(
+          { kind: 'remote', mirrorId: scope.mirrorId },
+          scopeGeneration,
+          scope.hostName,
+          scope.owner,
+          scope.workspace
+        )
+      }
+    }
     if (detectionFailed) this.context.toast('Could not re-detect agents', 'Agent detection could not be refreshed.')
     this.commit({ refreshing: false })
   }
 
   async inactiveUsage(provider: ManagedProvider): Promise<void> {
+    const scope = this.snapshot.scope
+    if (scope.kind === 'remote' && scope.status !== 'ready') return
     const generation = ++this.usageGeneration
-    const result = await this.act('Could not load inactive account usage', 'quirky.accounts/inactiveUsage', { provider })
-    if (result === null || this.stopped || generation !== this.usageGeneration) return
+    const scopeGeneration = this.scopeGeneration
+    const result = await this.scopedAct('Could not load inactive account usage', 'quirky.accounts/inactiveUsage', { provider }, undefined, scope)
+    if (result === null || this.stopped || generation !== this.usageGeneration || scopeGeneration !== this.scopeGeneration) return
     const usage = parseUsageState(result)
     if (usage && this.usageMatchesSelection(usage)) {
       this.usageMismatchReloaded = false
@@ -756,6 +1168,7 @@ export class AccountsUiStore {
   }
 
   async restart(sessions: string[], selectionRevision: number, yes = false): Promise<SessionActionResult> {
+    if (this.snapshot.scope.kind === 'remote') return 'failed'
     const generation = ++this.accountGeneration
     let selectionChanged = false
     const result = await this.act('Could not restart sessions', 'quirky.accounts/restart', { sessions, selectionRevision, ...(yes ? { yes: true } : {}) }, (error) => {
@@ -774,6 +1187,7 @@ export class AccountsUiStore {
   }
 
   async keep(sessions: string[], selectionRevision: number): Promise<SessionActionResult> {
+    if (this.snapshot.scope.kind === 'remote') return 'failed'
     const generation = ++this.accountGeneration
     let selectionChanged = false
     const result = await this.act('Could not keep the current account', 'quirky.accounts/keep', { sessions, selectionRevision }, (error) => {
@@ -800,6 +1214,7 @@ export class AccountsUiStore {
   }
 
   async setCredential(provider: string, kind: string, value: string): Promise<boolean> {
+    if (this.snapshot.scope.kind === 'remote') return false
     if (!value) return false
     const result = await this.act('Could not save provider credential', 'quirky.accounts/setCredential', { provider, kind, value })
     if (result === null) return false
@@ -811,6 +1226,7 @@ export class AccountsUiStore {
   }
 
   async clearCredential(provider: string, kind: string): Promise<boolean> {
+    if (this.snapshot.scope.kind === 'remote') return false
     const result = await this.act('Could not clear provider credential', 'quirky.accounts/clearCredential', { provider, kind })
     if (result === null) return false
     const status = parseCredentialStatus(result)
@@ -835,6 +1251,7 @@ export class AccountsUiStore {
   }
 
   async consumeResetCredit(idempotencyKey: string, expectedScope: ResetExpectedScope): Promise<ResetCreditResult> {
+    if (this.snapshot.scope.kind === 'remote') return 'failed'
     let scopeChanged = false
     const result = await this.act('Could not reset Codex limits', 'quirky.accounts/consumeResetCredit', { idempotencyKey, expectedScope, yes: true }, (error) => {
       const message = isRecord(error) && typeof error.message === 'string' ? error.message : ''
