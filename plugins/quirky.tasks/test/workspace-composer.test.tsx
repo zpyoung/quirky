@@ -63,6 +63,19 @@ async function flush(): Promise<void> {
   })
 }
 
+async function waitFor(predicate: () => boolean, label: string): Promise<void> {
+  const deadline = Date.now() + 5_000
+  while (Date.now() < deadline) {
+    if (predicate()) return
+    const { promise, resolve } = Promise.withResolvers<void>()
+    await act(async () => {
+      setImmediate(resolve)
+      await promise
+    })
+  }
+  throw new Error(`Timed out waiting for ${label}`)
+}
+
 function mount(options: {
   initial?: WorkspaceComposerRequest
   workspace?(params: RecordValue, count: number): Promise<unknown>
@@ -155,7 +168,10 @@ test('composer binds each Run once to its displayed script hash and retains draf
         }
   })
   await flush()
-  expect(select('Agent (optional)').value).toBe('goose')
+  await waitFor(
+    () => [...select('Agent (optional)').options].some((option) => option.value === 'goose'),
+    'agent choices'
+  )
   await act(async () => {
     setValue(container.querySelector('input')!, 'edited workspace name')
     setValue(container.querySelector('textarea')!, 'edited prompt text')
@@ -212,12 +228,18 @@ test('issue-command Run once sends its displayed issue hash separately from the 
     })
   })
   await flush()
+  await waitFor(
+    () => [...select('Agent (optional)').options].some((option) => option.value === 'goose'),
+    'agent choices'
+  )
+  await act(async () => { setSelectValue(select('Agent (optional)'), 'goose'); await Promise.resolve() })
   await act(async () => { button('Run issue command once').click(); await Promise.resolve() })
   await flush()
   const submitted = h.calls.filter((call) => call.method === 'quirky.tasks/workspace')[0]!
   expect(submitted.params).toMatchObject({
     setup: 'run',
     issueCommand: 'run',
+    agent: 'goose',
     trustSetup: true,
     trustSetupHash: setupHash,
     trustIssueCommand: true,
