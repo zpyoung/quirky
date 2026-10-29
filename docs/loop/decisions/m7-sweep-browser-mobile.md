@@ -330,5 +330,50 @@
 - **Revisit if:** current composed source still fails; diagnose exact remaining cause rather than infer success from merge.
 - **Source:** supersedes m7-sweep-browser-mobile D16 (one-catchup interpretation only); locked by docs/loop/LOOP.md normal end phase
 
+## D31: Reconcile all38 pinned incoming logs and preserve current ownership
+- **Question:** Which side of the actual composition conflicts is authoritative?
+- **Options:** choose a branch wholesale; infer truncated logs; reconcile exact pinned canonical decisions and independent item changes.
+- **Chose:** mergeb2bc379d at27d9a08b85a62478712e7652a3d7bb1424fdc5cb. Three read-only scouts read all38 Git-archived incoming logs completely, including raw long lines/Progress; no conflict with Native/explicit Watch, grants/leases, CAS/Markdown, sanitized no-engine counts or intrinsic feedback. Preserve canonical full Browser/Mobile owner logs, own count/link public docs and two mobile Mac markers, canonical whitespace in consent fixture, all independent canonical runner entries. Omit the stale public open-drag-failure paragraph: our actual repaired Browser gate passes, while the owner's historical failure/follow-up remains intact in its decision log/queue.
+- **Why:** preserves feature-owned authority and honest historical/current evidence without deleting another item's disposition or manufacturing Native capability. Incoming signed-host/native notification prerequisites stay blocked, not implemented by alternate APIs.
+- **Evidence:** exact /tmp/quirky-l7-final-incoming.tar; SweepFinalBindingsA13logs/B13logs/C12logs complete coverage; six conflict resolutions; actual merge commit. The previously failing Settings/Structured/loop prerequisite files now pass3/3remote0retry38.67s without extra code/shims.
+- **Reversibility:** medium
+- **Confidence:** high for complete binding reconciliation and exercised composition
+- **Revisit if:** an actual merge-result failure identifies a further concrete contract conflict.
+- **Source:** locked by pinned incoming decisions and normal LOOP step5
+
+## D32: Verify the current coherent tree rather than relabel earlier partial gates
+- **Question:** What current evidence is available after prerequisite composition?
+- **Options:** reuse older isolated passes; claim whole-repo green; run the complete owned/importer gate and fresh actual source UI.
+- **Chose:** frozen install repairs only dependency links after the actual missing @quirky/ui build error. Current build passes16.61s and full types28.66s. Current composed consumer gate passes189remote+15macOS files, flaky[], in388.63s, covering Protocol, Terminal, Mobile, Browser, apps/mobile, scripts, workspace flows and Git merge preview. The whole-importer historical failure is still retained with unknown unrecorded totals; no universal repository clearance is inferred.
+- **Why:** current owner context resolves the three composition failures without compatibility behavior. Full-output capture preserves current scope before the mechanical prepass's tail limit; no source/timeout/retry change hides a failure.
+- **Evidence:** /tmp/quirky-l7-final-composed-q81vUT/{resolve,model,prepass}.json PASS atb2bc379d; captured composed-owned/build-refreshed/types-refreshed logs. Fresh real daemon/PTY/encrypted-phone UI20261029T030018-0354 passes2tabs/1session→3tabs/1session, intrinsic creation feedback, real save and exact Saved bytes after page replacement. Actual current CLI returns count3. UI end oktrue, service exit0/homeRemovedtrue. Favicon404 fixture finding and build icon warning retained; no Native window/OS or managed Chrome launch is claimed by this last UI run.
+- **Reversibility:** easy
+- **Confidence:** high for named current boundaries; native-only handoffs and historical whole-suite scope remain qualified
+- **Revisit if:** final review's accepted fix or canonical merge changes the exercised behavior.
+- **Source:** locked by docs/loop/LOOP.md verification; assumed — autonomous for bounded capture
+
+## D33: Close one actual no-tools cross-family final round without a fix batch
+- **Question:** What did Final Round1 actually conclude, and which assurance limits remain?
+- **Options:** infer a clean review from model availability; reroll discovery; accept the actual three chained deep lens results at their stated scope.
+- **Chose:** actual fresh Google Gemini high promote/refute stages for C correctness, S spec and X security, each --no-tools through the shipped-CLI memoryargv launcher. Parent read raw fenced empty promote arrays, raw empty fresh-refute arrays, exit/command receipts, all three PASS gates and full-family manifests. Each has0findings/advisories/contests/suppressions/questions/reviewer-generated limitations, with no excluded/unreviewed paths. No accepted finding exists, so no fix batch or second discovery round is run.
+- **Why:** actual bounded review plus deterministic204file/API/UI evidence is the completion bar, not a universal guarantee. Models could not independently inspect unchanged files or reproduce commands. C coordinator reports global placeholder replacement repeated artifact text outside the intended data fence (507.3KB promote/932.7KB refute); no-tools isolation held and valid actual stages completed, but the gate does not validate prompt framing. Preserve that caveat rather than relabel it perfect assurance. One pre-dispatch /tmp realpath preparation issue was corrected before any stage and did not change source.
+- **Evidence:** /tmp/quirky-l7-final-composed-q81vUT/{C,S,X} raw prompts/responses/commands/exits, claims/merge/gate/manifest; artifact0196a96f9d4fc5d725dcd06093186406e2b00834aea344c7fe11850db9b58c99,230943bytes/4346-line staged metric; verifiedgoogle/gemini-3.1-pro-preview:high, OpenAI author/full-family independence; prepass388633ms/exit0.
+- **Adjudication:** no IDs/findings to accept or reject; no unresolved product review finding requires a new BLOCKERS entry. Existing blocked/native/other-owner entries remain unchanged.
+- **Reversibility:** easy
+- **Confidence:** high for performed protocol/current tests; bounded static assurance with the explicit C framing caveat
+- **Revisit if:** actual canonical merge-result evidence or native handoff contradicts exercised behavior.
+- **Source:** locked by docs/loop/LOOP.md one final round; assumed — autonomous for bounded assurance
+
+## D34: Retain raw evidence before required temporary cleanup and use the canonical controller
+- **Question:** Where does review/check evidence survive removal of owned temporary directories?
+- **Options:** leave only ephemeral paths; commit private runtime artifacts; retain an ignored local archive and public scoped receipt.
+- **Chose:** keep completion.json, archive-inventory.json and raw-evidence.tar.gz under .orca/loops/omp-until-done-deaecbdd/evidence/m7-sweep-browser-mobile. The archive contains23explicit owned temporary entries/231members and is readable; it preserves actual prompts/responses/chains, full check logs, old failed snapshots and reproduction programs. Actual UI reports/screenshots remain in the existing ignored .quirk run directories. Do not stage those artifacts or inherited .serena/test.ts/test-migrated.test.ts. Shared cross-lane coordination files remain available to their consumers.
+- **Why:** the controlling loop requires cleanup after land, not loss of audit history. No source/model/check remains running; proc inventory shows every owned runtime service exited. Finishing workflow's integration choice is fixed to commit/detach/canonical queue.ts land, never push/main/direct integration work.
+- **Evidence:** actual archive creation4206235bytes and tar listing231members; source/gate/UI receipts above; completion.json records scope and limitations with landing still pending.
+- **Reversibility:** easy
+- **Confidence:** high for retained evidence and quiescence; only actual controller output can establish landing
+- **Revisit if:** canonical land reports a concrete conflict/type failure; follow its recovery path and preserve new evidence.
+- **Source:** locked by docs/loop/LOOP.md landing/cleanup
+
 ## Progress
-All implementation and explicit committed prerequisites integrated through07aaacc1; no second routine roadmap merge. Count/feedback/UI/CLI/PTY smokes passed and resources closed. Current consumer capture identifies completed Protocol/Terminal repairs now consumed; obsolete app loop RPC wiring pin removed. Real annotation semantics pass11.73s, temporary diagnostics removed with all meaningful two-selection/privacy/retention coverage. All writers stopped; current full build/types/owned Browser/Mobile/Terminal/Protocol/apps/scripts/helper checks follow on the composed tree. Old whole-suite failure/tail-loss and exact broad owner limits retained, not called green. Final models undispatched; next freeze current code artifact/chain, actual no-tools C/S/X Final Round1 plus one fix batch/checks, explicit remaining findings/limits, then commit/detach canonical land and own scratch cleanup.
+Ready for canonical land. Coherent sourceb2bc379d against27d9a08b has all38incoming logs reconciled;204owned/importer files/no flakes, build16.61s/full types28.66s and current real encrypted-phone/web/PTY/CLI smoke pass with cleanup. Actual no-tools full-family C/S/X deep Final Round1 all PASS with zero findings; no fix batch needed. C framing/static-review limits, historical failed/partial gates and native/other-owner prerequisites remain explicit. Raw evidence retained in the ignored loop archive; all actors/checks/runtime services returned, component worktrees removed, inherited files untouched. Commit this final receipt, detach and canonical absolute queue.ts land m7-sweep-browser-mobile; await actual result, recover only if it names a concrete failure, then remove owned temporary entries/merged branches and record authoritative loop notes. No whole-repository/native-device or global-queue completion claim.
