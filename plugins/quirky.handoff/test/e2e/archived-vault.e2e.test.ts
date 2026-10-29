@@ -8,6 +8,7 @@ import { HandoffDialog } from '../../src/window/model'
 
 const PLUGINS = [
   'quirky.repo',
+  'quirky.cli',
   'quirky.worktree',
   'quirky.git',
   'quirky.agents',
