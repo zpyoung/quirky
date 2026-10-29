@@ -10,7 +10,7 @@ const CURRENT_VIEW = 'view:acme.attention/current'
 
 function installRealPlugins(installed: string): void {
   mkdirSync(installed, { recursive: true })
-  for (const id of ['quirky.repo', 'quirky.worktree', 'quirky.ask']) {
+  for (const id of ['quirky.repo', 'quirky.cli', 'quirky.worktree', 'quirky.ask']) {
     symlinkSync(resolve(import.meta.dir, '../../../', 'plugins', id), join(installed, id))
   }
   installUiPlugin(
