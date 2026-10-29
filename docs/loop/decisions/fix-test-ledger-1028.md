@@ -132,5 +132,27 @@
 - **Revisit if:** a real fixture consumer needs descendant ARIA computation that this delta breaks
 - **Source:** assumed — autonomous
 
+## D13: Consume incoming decisions and reconcile the independently registered provider
+- **Question:** Did the sole integration catch-up change a binding contract or introduce a duplicate?
+- **Options:** override incoming ownership; keep both handler keys; consume all logs and preserve exactly one existing provider
+- **Chose:** One clean `git merge build/roadmap`, then consumed all incoming decision logs through D entries/Progress: Hosting, Orchestration, packages-protocol, Repo, scripts-ui-review, Tasks, Terminal, Terminal-dock, Vault and ui-final-review. No locked conflict with this repair. Preserve their scope boundaries, remote/native/platform limits, exact authority/settlement/lifecycle rules and qualified review disclosures. Repo D9 explicitly assigns the shared DOM base case here and requires exactly one ownedIds entry.
+- **Why:** The textual auto-merge retained Repo's ownedIds before list plus this branch's identical ownedIds after origins. Actual typecheck caught TS1117 at main.ts499. Removed this branch's duplicate, retaining Repo's original registration and the same function/contract. This is merge reconciliation, not a new API, alias or implementation. The first postmerge typecheck exit2/43.19s remains recorded; corrected typecheck is pending. The single-provider actual subprocess API/CLI smoke then passed again, exit0/2.41s, including stale snapshot refusal, detachment, same-root recovery and exact CLI entry.
+- **Evidence:** merge output; IncomingLedgerDecisions full ten-log consumption; docs/loop/decisions/fix-test-repo-1028.md D9; final-types.log/.result.json; main.ts handler map; final-macos-smoke-single-provider.log/.result.json
+- **Reversibility:** easy
+- **Confidence:** high for merge error and exercised reconciled route
+- **Revisit if:** landing identifies a concrete conflict with another lane
+- **Source:** locked by docs/loop/decisions/fix-test-repo-1028.md D9
+
+## D14: Keep the fixture deadline change and runtime qualification bounded
+- **Question:** Is the last timeout correction reviewed without broadening runtime guarantees?
+- **Options:** infer unlimited timing safety; silently treat the prior isolated retry as clean; independently review its narrow fixture scope and rerun
+- **Chose:** The Gemini harness-only slice returned No findings/STATUS:PASS, exit0 in64.8s. Its tools remained read/grep/find/ls only. All changed code has scoped cross-family review; no accepted finding remains and no reviewer execution/write grant was needed. No production deadline, paid-provider authentication, native UI or other-platform guarantee is made.
+- **Why:** The module is a test-only shared real-daemon fixture; all its consumers require that lifecycle budget. Existing60-second fixture convention bounds setup/CLI/teardown without adding application retries. The original helper FAIL and the independent rejection are retained in D12. The macOS smoke still emits the observed Worktree deactivation warning; do not suppress it or infer its cause.
+- **Evidence:** review-budget.log and .result.json; D11/D12; final-macos-smoke-single-provider.log:3; authoritative LOOP platforms/native limits
+- **Reversibility:** easy
+- **Confidence:** high for tool grants, observed review and smoke; no wider qualification
+- **Revisit if:** the budgeted current gate fails or a live consumer shows a distinct error
+- **Source:** deferred: platform
+
 ## Progress
-All named Ledger behavior tests have passing observations; final import fixture budget correction, its narrow independent review, sole roadmap catch-up/read incoming decisions, final affected proof and typecheck remain. Two broad failed receipts and one flaky green receipt are preserved, not claimed clean. Actual private daemon/API/CLI smoke and guarded browser observations are recorded. Next: commit budget/decisions, finish remaining scoped review, catch up once, run final gates, then detach/canonical land exactly this item and await authoritative receipt.
+All named Ledger behavior scenarios have passing observations, with raw earlier broad failures/flaky receipt retained. Independent scoped reviews are complete; the sole helper High claim was explicitly refuted, not suppressed. Sole integration catch-up is complete and all ten incoming decision logs were consumed. Typecheck caught and source now removes a merge-created duplicate ownedIds; real single-provider daemon/API/CLI smoke passed. Await current corrected typecheck and final broad gate; finish a clean in-scope Ledger/Repo/scripts gate, retain queued Worktree failures honestly, then commit/detach/canonical land exactly this item and await authoritative receipt.
