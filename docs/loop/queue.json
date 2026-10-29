@@ -2301,7 +2301,8 @@
       "deps": [
         "fix-test-git-1028"
       ],
-      "status": "todo"
+      "status": "in-progress",
+      "lane": 12
     },
     {
       "id": "fix-test-worktree-1028",
