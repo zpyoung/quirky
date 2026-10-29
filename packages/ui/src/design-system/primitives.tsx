@@ -38,6 +38,9 @@ export function TextField({ label, help, error, id: providedId, className, 'aria
     <div className="ui-text-field">
       <label className="ui-text-field__label" htmlFor={id}>{label}</label>
       <input
+        autoCapitalize="off"
+        autoCorrect="off"
+        spellCheck={false}
         {...props}
         id={id}
         className={classNames('ui-text-field__input', className)}

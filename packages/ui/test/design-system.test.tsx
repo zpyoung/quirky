@@ -142,6 +142,16 @@ describe('shared graphite components', () => {
     expect(container.textContent).toContain('Message is required')
   })
 
+  test('text fields hold names and paths, so the OS does not capitalize or correct them unless asked', async () => {
+    await render(<><TextField label="Name" /><TextField label="Title" autoCapitalize="sentences" spellCheck /></>)
+    const [name, title] = [...container.querySelectorAll('input')]
+    expect(name!.getAttribute('autocapitalize')).toBe('off')
+    expect(name!.getAttribute('autocorrect')).toBe('off')
+    expect(name!.getAttribute('spellcheck')).toBe('false')
+    expect(title!.getAttribute('autocapitalize')).toBe('sentences')
+    expect(title!.getAttribute('spellcheck')).toBe('true')
+  })
+
   test('multiline and selection fields preserve native form values and accessible error ownership', async () => {
     await render(<form>
       <span id="existing-help">Inherited description</span>
