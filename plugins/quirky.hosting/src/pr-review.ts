@@ -1049,7 +1049,7 @@ export function createPRLookup(env: HostingEnv): PRLookup {
     } catch {
       return { ready: false, reason: 'git_unavailable', message: 'The configured Git remotes could not be read.' }
     }
-    if (!names.split(/\\r?\\n/u).some((name) => name === remote)) {
+    if (!names.split(/\r?\n/u).some((name) => name === remote)) {
       return { ready: false, reason: 'remote_unavailable', message: 'The configured push remote no longer exists.' }
     }
     let output: string
@@ -1058,7 +1058,7 @@ export function createPRLookup(env: HostingEnv): PRLookup {
     } catch {
       return { ready: false, reason: 'push_url_unavailable', message: 'The configured push URL could not be read.' }
     }
-    const urls = output.split(/\\r?\\n/u).map((url) => url.trim()).filter(Boolean)
+    const urls = output.split(/\r?\n/u).map((url) => url.trim()).filter(Boolean)
     if (urls.length !== 1) {
       return {
         ready: false,
