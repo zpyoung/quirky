@@ -10,6 +10,7 @@ import { startHeadlessWindow, type HeadlessWindow } from './fixtures/headless-wi
 const SAMPLE_DISTRO = resolve(import.meta.dir, '../../../distros/sample')
 const SIDEBAR = 'sidebar-section:quirky.worktree/worktrees'
 const SOURCE_CONTROL = 'panel:quirky.git/source-control'
+const SOURCE_CONTROL_ACTIVITY = 'activity-item:quirky.sidebar-extras/source-control'
 const QUESTIONS = 'panel:quirky.ask/questions'
 const SESSION_VIEW = 'view:quirky.session/worktree'
 
@@ -107,6 +108,7 @@ test('SC-59: the M0 exit test, through the CLI only', async () => {
 
   expect(slotOf(stock, SIDEBAR)?.plugin).toBe('quirky.worktree')
   expect(slotOf(stock, SOURCE_CONTROL)).toBeDefined()
+  expect(slotOf(stock, SOURCE_CONTROL_ACTIVITY)).toBeDefined()
   expect((await quirky(['git', 'status'])).code).toBe(0)
 
   const installed = await quirky(['distro', 'install', SAMPLE_DISTRO, '--yes'])
@@ -122,6 +124,7 @@ test('SC-59: the M0 exit test, through the CLI only', async () => {
     report: { flat: true, worktrees: [{ id: main.id, name: main.name }] }
   })
   expect(flat.slots.filter((slot) => slot.kind === 'panel').map((slot) => slot.id)).not.toContain(SOURCE_CONTROL)
+  expect(slotOf(flat, SOURCE_CONTROL_ACTIVITY)).toBeUndefined()
   const unknown = await quirky(['git', 'status'])
   expect(unknown.code).not.toBe(0)
   expect(unknown.stderr).toContain('unknown command')
@@ -135,6 +138,7 @@ test('SC-59: the M0 exit test, through the CLI only', async () => {
   })
   expect(slotOf(restored, SIDEBAR)).toMatchObject({ title: 'Worktrees', plugin: 'quirky.worktree' })
   expect(slotOf(restored, SOURCE_CONTROL)).toBeDefined()
+  expect(slotOf(restored, SOURCE_CONTROL_ACTIVITY)).toBeDefined()
   expect((await quirky(['git', 'status'])).code).toBe(0)
 
   const sessions = (await agent.callAny('quirky.session/list', {})) as Session[]

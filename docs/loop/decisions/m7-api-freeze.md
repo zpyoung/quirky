@@ -154,5 +154,60 @@
 - **Revisit if:** module execution moves to another host or version domain
 - **Source:** assumed — autonomous
 
+## D15: Build the early freeze item against the pending owner's shared contract
+- **Question:** queue deps reports m7-session-extras-owner-host-flows pending while this early item is already claimed.
+- **Options:** end the turn; build without its branch; merge its available shared contracts and wait for ready before landing
+- **Chose:** read its D1-D4 and merge build/m7-session-extras-owner-host-flows (944d7da5) into this branch; it adds specs and public runtime-owner reference types. Repeat canonical deps in this same turn until ready.
+- **Why:** authoritative LOOP's early-item rule forbids ending while a dependency is merely still building. Owner-host decisions preserve the existing API and don't conflict with versioning; its future fixture declarations will be reconciled at final catch-up.
+- **Evidence:** actual canonical deps ready:false pending:[m7-session-extras-owner-host-flows]; git merge output4files189insertions; incoming decision log D1-D4
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** the pending dependency becomes blocked or changes a frozen public contract
+- **Source:** locked by docs/loop/LOOP.md
+
+## D16: Preserve orphaned-load teardown while revalidating present metadata
+- **Question:** The composed gate found three existing UI lifecycle tests timing out after the new post-import declaration check.
+- **Options:** weaken lifecycle tests/timeouts; reject every disappeared declaration after import; retain pre-import gate and recheck present metadata while allowing the existing orphan cleanup transition
+- **Chose:** the last option. An import begun under valid metadata may finish when its contribution departs, then follows the existing activate/deactivate cleanup and teardown-wait path; changed or incompatible present metadata still rejects.
+- **Why:** treating departure as an import error revoked the pending session before a disposer could run, breaking re-enable and command serialization. Canonical focused rerun passed both daemon API-version and all UI host-unit tests after the fix.
+- **Evidence:** initial canonical60-file result58passed2failed; UI lifecycle failures at test lines1110/1146/1192; focused2-file suite ok:true flaky:[] in12.83s including UI rebuild
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** an in-flight code replacement bypasses the present-metadata floor check
+- **Source:** assumed — autonomous
+
+## D17: Keep compatibility refusal distinct from a different-distro conflict
+- **Question:** The new atomicity test installed stable then attempted a differently named future distro and received Conflict before parsing.
+- **Options:** change production precedence; weaken expected error; exercise an upgrade of the same installed pack/plugin with an incompatible floor
+- **Chose:** replace stable/acme.stable with a candidate of the same identities targeting1.1.0; preserve InvalidParams and all before/after state assertions
+- **Why:** the existing one-distro rule is correct. The test must reach API preflight rather than assert a new precedence not requested.
+- **Evidence:** initial failure expected-32602 got-32009 at api-version.test.ts239; DistroService.prepare; focused2-file rerun passed
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** distro replacement semantics are explicitly changed
+- **Source:** locked by docs/loop/decisions/m0-core.md
+
+## D18: Disable the separate Source Control activity in the published sample
+- **Question:** Actual web use showed the Git panel and CLI group absent, but a Source Control activity button still visible.
+- **Options:** hide it with renderer special cases; disable all sidebar extras; add its stable contribution ID to the sample pack's disable list
+- **Chose:** add activity-item:quirky.sidebar-extras/source-control alongside quirky.git; removing the pack restores both
+- **Why:** the later sidebar-extras plugin owns this affordance independently. A distro is the supported stable-ID mechanism and should genuinely turn Source Control off in current stock Quirky.
+- **Evidence:** using-apps-like-a-user run20261029T042251-1b31 screenshot/tree3, first goal pass and second fail; manifest owner at plugins/quirky.sidebar-extras/quirky-plugin.json; added real CLI/UI state regression failed before the pack edit and passed after (canonical1-file suite flaky:[]); later fixed run20261029T042517-8509 shows no Source Control tool
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** the activity's stable owner/ID changes in a major API release
+- **Source:** assumed — autonomous
+
+## D19: Restore worker contamination before the integration barrier
+- **Question:** A worker accidentally applied relative file edits to the parent worktree.
+- **Options:** accept unattributed edits; restore only its attributable test changes and reapply them under absolute owned paths
+- **Chose:** the latter; all later tools used absolute worker paths. Parent barrier verified only its own decision-log edit and inherited .serena remained dirty; three component HEADs stayed a961bb62 and write scopes passed.
+- **Why:** branch isolation is an integrity boundary; reports alone do not substitute for the source audit.
+- **Evidence:** worker correction messages; actual parent/worker status at barrier; JS scope audit24/78/18files; semantic audit63JSONs only apiVersion added
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** a worker tool again resolves a relative path outside its assigned worktree
+- **Source:** assumed — autonomous
+
 ## Progress
-Specs committed at c0a9b7bd; actual Codex bounded review found F1 (accepted, amended both specs). Shared public signatures and comparator being committed before dispatch. Next: disjoint runtime, distributed-fixture and executing-host/example slices, parent-only verification and final Gemini review. Scratch `/tmp/quirky-m7-api-freeze-lane12.AAiuFD`. Canonical queue deps retry running with3600s deadline. No human asks. Only this item may be completed this iteration.
+All three audited worker branches merged (88221520,6f1e2714,9aa743a3) and their worktrees removed immediately. Initial composed typecheck29.46s and full macOS build16.50s passed. Canonical targeted60-file gate found a new fixture scenario error and three UI teardown regressions; both repaired with focused2-file suite passing. Actual daemon/CLI/real-PTY smoke passed version reporting, compatible package7.3.2 execution, future direct/distro refusal and sample install. Web dogfood exposed separate Source Control affordance; pack fixed via stable-ID disable, real CLI/UI regression red then green, composed typecheck passed48.38s. Fixed web run active; finish goals, remove pack, stop owned runtime, run full suite/scripts/final review. Pending early dependency queue deps remains in flight; wait until ready before sole roadmap catch-up/land. Scratch `/tmp/quirky-m7-api-freeze-lane12.AAiuFD`; no human asks.

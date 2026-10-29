@@ -210,8 +210,8 @@ describe('daemon plugin API version freeze', () => {
       main: 'main.ts',
       contributes: { method: [{ id: 'hello' }] }
     }, 1500)
-    const invalidDistro = makeDistro(makeTempDir(), 'future', {
-      id: 'acme.future',
+    const invalidDistro = makeDistro(makeTempDir(), 'stable', {
+      id: 'acme.stable',
       name: 'Future plugin',
       version: '1.0.0',
       apiVersion: '1.1.0',
@@ -237,7 +237,7 @@ describe('daemon plugin API version freeze', () => {
 
     for (const refusal of [inspected, installed]) {
       expect(refusal.code).toBe(RpcErrorCode.InvalidParams)
-      expect(refusal.message).toContain('acme.future')
+      expect(refusal.message).toContain('acme.stable')
       expect(refusal.message).toContain('1.1.0')
       expect(refusal.message).toContain(PLUGIN_API_VERSION)
     }

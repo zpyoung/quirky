@@ -837,7 +837,7 @@ export class WindowPluginHost {
         throw new LoadFailure(`${pluginId} failed to load: ${messageOf(error)}`)
       }
       if (session.revoked) return
-      checkDeclaration()
+      if (this.state.model?.modules[pluginId]) checkDeclaration()
       if (!isPluginModule(imported)) {
         throw new LoadFailure(`${pluginId} failed to load: module does not export activate`)
       }
