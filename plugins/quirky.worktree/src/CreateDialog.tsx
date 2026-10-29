@@ -897,10 +897,10 @@ export function CreateDialog({ context, repos, worktrees, repoId, onRepoChange, 
                 {defaultTabWarnings.map((warning) => <p className="ui-text-muted" role="status" key={warning}>{warning}</p>)}
                 {recipeDiagnostics.map((diagnostic) => <p className="ui-text-muted" role="status" key={`${diagnostic.index}:${diagnostic.field ?? ''}`}>{diagnostic.message}</p>)}
                 {(project?.hooks?.environmentRecipes?.length ?? 0) > 0 && (
-                  <button type="button" onClick={() => {
+                  <Button type="button" onClick={() => {
                     context.openView('view:quirky.worktree/environments', { repo: repoId })
                     onClose()
-                  }}>Manage VM environments and review lifecycle commands</button>
+                  }}>Manage VM environments and review lifecycle commands</Button>
                 )}
             {(setup || asksForSetup) && (
               <section className="ui-stack">

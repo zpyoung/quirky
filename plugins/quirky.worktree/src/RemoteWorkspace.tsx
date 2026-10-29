@@ -16,11 +16,11 @@ type ReadScreen = { lines: string[]; cols: number; rows: number; alt: boolean }
 type HostStatus = { id: string; runtime: { id: string; name: string; endpoint: string; grantId: string }; identity: { hostId: string; generation: string }; connected: boolean; error: string | null }
 type Preview = RemoteCleanupPreview
 
-const bodyStyle: CSSProperties = { display: 'grid', gap: 14, padding: 18, maxWidth: 1100, margin: '0 auto' }
-const cardStyle: CSSProperties = { border: '1px solid var(--border)', borderRadius: 8, padding: 14 }
-const rowStyle: CSSProperties = { display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 8 }
+const bodyStyle: CSSProperties = { display: 'grid', gap: 'var(--ui-space-16)', padding: 'var(--ui-space-16)', maxWidth: 'var(--ui-dialog-wide-width)', margin: '0 auto' }
+const cardStyle: CSSProperties = { border: 'var(--ui-border-width) solid var(--ui-border)', borderRadius: 'var(--ui-radius-control)', padding: 'var(--ui-space-16)' }
+const rowStyle: CSSProperties = { display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 'var(--ui-space-8)' }
 const buttonStyle: CSSProperties = { cursor: 'pointer' }
-const monoStyle: CSSProperties = { fontFamily: 'var(--font-mono, ui-monospace, monospace)', overflowWrap: 'anywhere' }
+const monoStyle: CSSProperties = { fontFamily: 'var(--ui-font-mono)', overflowWrap: 'anywhere' }
 
 function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
@@ -357,7 +357,7 @@ export function RemoteWorkspace({ context, workspace }: Props) {
       <header style={{ ...cardStyle, ...rowStyle, justifyContent: 'space-between' }}>
         <div>
           <h1 style={{ margin: 0 }}>{mirror?.worktree.name ?? 'Remote workspace'}</h1>
-          <div style={{ opacity: 0.8, marginTop: 4 }}>
+          <div style={{ opacity: 0.8, marginTop: 'var(--ui-space-4)' }}>
             {host ? `${host.runtime.name} · ${host.identity.hostId} · generation ${host.identity.generation}` : 'Checking owner identity…'}
           </div>
         </div>
@@ -374,7 +374,7 @@ export function RemoteWorkspace({ context, workspace }: Props) {
       {mirror && (
         <section aria-label="Remote workspace details" style={cardStyle}>
           <h2>Remote workspace details</h2>
-          <dl style={{ display: 'grid', gridTemplateColumns: 'minmax(110px, max-content) 1fr', gap: '6px 14px', margin: 0 }}>
+          <dl style={{ display: 'grid', gridTemplateColumns: 'max-content minmax(0, 1fr)', gap: 'var(--ui-space-6) var(--ui-space-16)', margin: 0 }}>
             <dt>Host</dt><dd style={monoStyle}>{mirror.hostId}</dd>
             <dt>Project</dt><dd>{mirror.worktree.repoId}</dd>
             <dt>Remote path</dt><dd style={monoStyle}>{mirror.worktree.path}</dd>
@@ -383,7 +383,7 @@ export function RemoteWorkspace({ context, workspace }: Props) {
             <dt>Instance</dt><dd style={monoStyle}>{mirror.worktree.instanceId}</dd>
           </dl>
           {!mirror.connected && <p role="status">This is a saved snapshot only; remote reads and actions are blocked until the exact owner and instance are available.</p>}
-          <div style={{ ...rowStyle, marginTop: 12 }}>
+          <div style={{ ...rowStyle, marginTop: 'var(--ui-space-12)' }}>
             <button type="button" disabled={disabled} style={buttonStyle} onClick={() => { void removeWorkspace() }}>Remove Remote Workspace…</button>
             <button type="button" disabled={disabled} style={buttonStyle} onClick={() => { void previewCleanup() }}>Preview Canonical Cleanup</button>
           </div>
@@ -393,7 +393,7 @@ export function RemoteWorkspace({ context, workspace }: Props) {
       <section aria-label="Remote changes" style={cardStyle}>
         <h2>Changes</h2>
         {mirror?.worktree.kind === 'folder' ? <p>Folder workspaces do not have Git changes.</p> : <>
-        <div style={{ opacity: 0.8, marginBottom: 8 }}>Branch: {status?.branch ?? mirror?.worktree.branch ?? 'Unknown'} · Operation: {status?.operation ?? (connected ? 'unknown' : 'unavailable')}</div>
+        <div style={{ opacity: 0.8, marginBottom: 'var(--ui-space-8)' }}>Branch: {status?.branch ?? mirror?.worktree.branch ?? 'Unknown'} · Operation: {status?.operation ?? (connected ? 'unknown' : 'unavailable')}</div>
         {files.length === 0 ? <p>{connected ? 'No changed files were reported.' : 'Remote changes are unavailable.'}</p> : (
           <ul>{files.map((change) => (
             <li key={changeKey(change)}>
@@ -405,9 +405,9 @@ export function RemoteWorkspace({ context, workspace }: Props) {
           ))}</ul>
         )}
         {diff && (
-          <div aria-label={`Diff for ${diff.path}`} style={{ marginTop: 10 }}>
+          <div aria-label={`Diff for ${diff.path}`} style={{ marginTop: 'var(--ui-space-12)' }}>
             <h3 style={monoStyle}>{diff.path}{diff.binary ? ' (binary)' : ''}</h3>
-            {!diff.binary && <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+            {!diff.binary && <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--ui-space-8)' }}>
               <pre style={{ ...cardStyle, overflow: 'auto', whiteSpace: 'pre-wrap' }}>{diff.original}</pre>
               <pre style={{ ...cardStyle, overflow: 'auto', whiteSpace: 'pre-wrap' }}>{diff.modified}</pre>
             </div>}
@@ -428,14 +428,14 @@ export function RemoteWorkspace({ context, workspace }: Props) {
           <button type="button" disabled={disabled} style={buttonStyle} onClick={() => { void createSession() }}>New Remote Shell</button>
           <button type="button" disabled={disabled || !selectedSession} style={buttonStyle} onClick={() => { void readTerminal() }}>Read Screen</button>
         </div>
-        <form onSubmit={(event) => { void writeTerminal(event) }} style={{ ...rowStyle, marginTop: 10 }}>
+        <form onSubmit={(event) => { void writeTerminal(event) }} style={{ ...rowStyle, marginTop: 'var(--ui-space-12)' }}>
           <label htmlFor="remote-terminal-input">Send input to selected remote session</label>
           <input
             id="remote-terminal-input"
             value={terminalInput}
             onChange={(event) => setTerminalInput(event.currentTarget.value)}
             disabled={disabled || !selectedSession}
-            style={{ flex: '1 1 300px' }}
+            style={{ flex: '1 1 var(--ui-form-column-width)' }}
           />
           <button type="submit" disabled={disabled || !selectedSession || terminalInput.length === 0} style={buttonStyle}>Send</button>
         </form>
