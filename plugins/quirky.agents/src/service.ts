@@ -479,6 +479,7 @@ export class AgentsService {
         entry,
         config: this.configs.get(entry.id),
         ...this.picks(entry, params),
+        ...(typeof params.cwd === 'string' ? { cwd: params.cwd } : {}),
         ...(params.prompt === undefined ? {} : { prompt: params.prompt as string }),
         ...(params.submitPrompt === undefined ? {} : { submitPrompt: params.submitPrompt as boolean })
       })
@@ -486,7 +487,7 @@ export class AgentsService {
   }
 
 
-  pick = (params: Params): { agent: string } => {
+  pick =(params: Params): { agent: string } => {
     const forAgentTab = params.forAgentTab === true
     const configs = this.configs.all()
     const installed = (id: string) => this.detection.installed(id)

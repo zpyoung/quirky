@@ -134,18 +134,18 @@ function readSettingsFile(path: string): string {
   }
 }
 
-function loadSettings(value: string, cwd: string): Record<string, unknown> {
+function loadSettings(value: string, cwd: string | undefined): Record<string, unknown> {
   const trimmed = value.trim()
   if (trimmed.startsWith('{') || trimmed.startsWith('[')) return parseJsonObject(value, '--settings JSON')
 
-  const path = isAbsolute(value) ? value : resolve(cwd, value)
+  const path = isAbsolute(value) ? value : resolve(cwd ?? process.cwd(), value)
   return parseJsonObject(readSettingsFile(path), `--settings file ${path}`)
 }
 
 /** Extracts all pre-terminator --settings JSON/files and returns the remaining tokens. */
 export function parseSettingsArguments(
   tokens: readonly string[],
-  cwd: string,
+  cwd: string | undefined,
   valueFlags: readonly string[] = []
 ): ParsedSettingsArguments {
   const args: string[] = []
