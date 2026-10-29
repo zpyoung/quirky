@@ -2265,7 +2265,8 @@
         "m7-sweep-sessions",
         "m7-vm-and-owner-bound-host-workspaces"
       ],
-      "status": "todo"
+      "status": "in-progress",
+      "lane": 7
     },
     {
       "id": "m2-sidebar-extras-followup",
