@@ -2251,8 +2251,7 @@
       "deps": [
         "m7-test-triage"
       ],
-      "status": "in-progress",
-      "lane": 5
+      "status": "done"
     },
     {
       "id": "fix-test-accounts-1028",
