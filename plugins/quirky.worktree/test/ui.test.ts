@@ -1422,6 +1422,35 @@ describe('agent status presentation', () => {
     }
   })
 })
+test.each([true, false])('sleep overrides live session activity and wake restores it (show activity: %s)', async (showActivity) => {
+  const h = setup()
+  h.world.sessions = [session('s1', 'w2', 'running')]
+  h.world.options.showSleeping = true
+  if (!showActivity) h.world.options.showProperties = h.world.options.showProperties.filter((property) => property !== 'activity')
+  await h.mountInto(host)
+  const row = () => rowOf('fix-login', 'api')
+  const activeStatus = row().querySelector('[aria-label^="Status: "]')?.getAttribute('aria-label')
+  if (showActivity) expect(row().textContent).toContain('Running')
+
+  await contextMenu(openButton(row())!)
+  await click(itemNamed('Sleep'))
+  await h.emit({ type: 'quirky.worktree/changed', data: { repoId: 'r1' } })
+  expect(openButton(row())?.getAttribute('aria-label')).toBe('Wake and open fix-login')
+  expect(row().textContent).toContain('Sleeping')
+  expect(row().textContent).not.toContain('Running')
+  if (showActivity) expect(row().querySelector('[aria-label^="Status: "]')?.getAttribute('aria-label')).toBe('Status: idle')
+
+  await contextMenu(openButton(row())!)
+  await click(itemNamed('Wake'))
+  await h.emit({ type: 'quirky.worktree/changed', data: { repoId: 'r1' } })
+  expect(openButton(row())?.getAttribute('aria-label')).toBe('Open fix-login')
+  expect(row().textContent).not.toContain('Sleeping')
+  if (showActivity) {
+    expect(row().textContent).toContain('Running')
+    expect(row().querySelector('[aria-label^="Status: "]')?.getAttribute('aria-label')).toBe(activeStatus)
+  }
+})
+
 test('stock worktree controls persist options, reveal sleeping rows and wake without replacing the session', async () => {
   const h = setup()
   h.world.options = { ...DEFAULT_STOCK_OPTIONS, groupBy: 'status', sortBy: 'name', showSleeping: false, filterRepoIds: [], showProperties: [...DEFAULT_STOCK_OPTIONS.showProperties] }
