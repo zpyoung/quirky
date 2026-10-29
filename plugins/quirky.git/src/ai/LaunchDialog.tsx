@@ -24,8 +24,8 @@ type Props = {
   worktree: string
   action: FixAction
   onClose(): void
-  /** Starts the agent; resolves with whether it started, so a refusal keeps the dialog open. */
-  start(launch: LaunchParams): Promise<boolean>
+  /** Starts the agent; resolves with null once it started, or why not, which keeps the dialog open. */
+  start(launch: LaunchParams): Promise<string | null>
 }
 
 /**
@@ -69,6 +69,7 @@ function LaunchForm({ context, action, preview, agents, onClose, start }: FormPr
   const [saveRecipe, setSaveRecipe] = useState(true)
   const [scope, setScope] = useState<'repo' | 'global'>('repo')
   const [starting, setStarting] = useState(false)
+  const [failure, setFailure] = useState<string | null>(null)
   const agentId = useId()
   const templateId = useId()
   const saveRecipeId = useId()
@@ -87,8 +88,9 @@ function LaunchForm({ context, action, preview, agents, onClose, start }: FormPr
 
   const go = async () => {
     setStarting(true)
+    setFailure(null)
     const includeChoices = saving || optionsChanged || agent !== initial
-    const started = await start({
+    const refusal = await start({
       agent,
       args,
       template,
@@ -96,7 +98,8 @@ function LaunchForm({ context, action, preview, agents, onClose, start }: FormPr
       ...(saving ? { save: scope } : {})
     })
     setStarting(false)
-    if (started) onClose()
+    if (refusal === null) onClose()
+    else setFailure(refusal)
   }
 
   return (
@@ -170,6 +173,11 @@ function LaunchForm({ context, action, preview, agents, onClose, start }: FormPr
           )}
         </div>
       </div>
+      {failure !== null && (
+        <p className="ui-error-text" role="alert">
+          {failure}
+        </p>
+      )}
       <div className="ui-cluster">
         <Button type="button" onClick={onClose}>Cancel</Button>
         <Button type="button" variant="primary" disabled={agent === '' || usable.length === 0 || starting} onClick={() => void go()}>

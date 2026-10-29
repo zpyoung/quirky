@@ -18,24 +18,26 @@ export type AiFix = {
   busy: boolean
   /**
    * Opens an agent tab for the action: with the saved recipe and default agent, or with what
-   * a launch dialog chose. Toasts the outcome; resolves with whether the agent started.
+   * a launch dialog chose. Toasts the outcome; resolves with null once the agent started, or with
+   * why it did not.
    */
-  start(action: FixAction, launch?: LaunchParams): Promise<boolean>
+  start(action: FixAction, launch?: LaunchParams): Promise<string | null>
 }
 
 /** Starts AI Fix and Resolve with AI launches in one worktree. */
 export function useAiFix(context: UiPluginContext, worktree: string): AiFix {
   const [busy, setBusy] = useState(false)
   const start = useCallback(
-    async (action: FixAction, launch?: LaunchParams): Promise<boolean> => {
+    async (action: FixAction, launch?: LaunchParams): Promise<string | null> => {
       setBusy(true)
       try {
         await context.call('quirky.git/aiFix', { worktree, action, ...launch })
         context.toast(STARTED[action], '')
-        return true
+        return null
       } catch (error) {
-        context.toast('Could not start an AI agent', messageOf(error))
-        return false
+        const message = messageOf(error)
+        context.toast('Could not start an AI agent', message, { kind: 'error' })
+        return message
       } finally {
         setBusy(false)
       }

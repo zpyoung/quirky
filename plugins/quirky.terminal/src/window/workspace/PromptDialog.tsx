@@ -7,16 +7,18 @@ export type NewSessionRequest = { agent: string; background: boolean; label: str
 
 type Props = {
   request: NewSessionRequest
+  pending: boolean
+  error: string | null
   onSubmit: (prompt: string) => void
   onClose: () => void
 }
 
 /** Asks for the first prompt of a new agent session; a background session cannot start without one. */
-export function PromptDialog({ request, onSubmit, onClose }: Props) {
+export function PromptDialog({ request, pending, error, onSubmit, onClose }: Props) {
   const promptId = useId()
   const [prompt, setPrompt] = useState('')
   const required = request.background
-  const canSubmit = !required || prompt.trim().length > 0
+  const canSubmit = !pending && (!required || prompt.trim().length > 0)
 
   const submit = (event: FormEvent) => {
     event.preventDefault()
@@ -39,6 +41,7 @@ export function PromptDialog({ request, onSubmit, onClose }: Props) {
             }}
           />
         </FormRow>
+        {error !== null ? <div className="ui-error-text" role="alert">{error}</div> : null}
         <div className="ui-dialog__actions qt-dialog-actions">
           <Button type="button" variant="secondary" onClick={onClose}>
             Cancel

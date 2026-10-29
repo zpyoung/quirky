@@ -236,6 +236,33 @@ describe('SC-22: the + menu', () => {
     expect(callsTo(view.fake, 'newTab')).toEqual([])
   })
 
+  test('a failed agent start keeps the dialog open with the error and the typed prompt', async () => {
+    const view = await mount()
+    view.daemon.fail('newTab', -32603, 'quirky.agents/plan failed')
+    await open(view)
+    await click(row(view, 'Claude'))
+    await type(view.q<HTMLTextAreaElement>('[role="dialog"] textarea')!, 'fix it')
+    await click(view.q('[role="dialog"] button[type="submit"]'))
+    expect(view.q('[role="dialog"] [role="alert"]')?.textContent).toContain('quirky.agents/plan failed')
+    expect(view.q<HTMLTextAreaElement>('[role="dialog"] textarea')!.value).toBe('fix it')
+  })
+
+  test('a failed background start keeps the dialog open with the error', async () => {
+    const ws = makeWorkspace(group('grp-1', [tab('tab-1', pane('pane-1', 's-1'), { defaultTitle: 'Terminal 1' })], { activeTab: 'tab-1' }))
+    const view = (mounted = await mountFixture(fakeDaemon(ws, { agents: AGENTS }), {
+      extra: {
+        'quirky.structured/create': () => {
+          throw new Error('quirky.agents/plan failed')
+        }
+      }
+    }))
+    await open(view)
+    await click(row(view, 'Claude (background)'))
+    await type(view.q<HTMLTextAreaElement>('[role="dialog"] textarea')!, 'go')
+    await click(view.q('[role="dialog"] button[type="submit"]'))
+    expect(view.q('[role="dialog"] [role="alert"]')?.textContent).toContain('quirky.agents/plan failed')
+  })
+
   test('Agent settings opens the agents view', async () => {
     const view = await mount()
     await open(view)
