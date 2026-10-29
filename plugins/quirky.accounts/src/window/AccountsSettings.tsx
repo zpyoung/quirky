@@ -27,7 +27,9 @@ function statusBadge(account: AccountSummary, activeId: string | null): { text: 
 }
 
 function LoginLinkNotice({ context, store, pending, provider }: { context: UiPluginContext; store: AccountsUiStore; pending: PendingLogin | null; provider: ManagedProvider }) {
-  const loginCancelling = useStore(store).loginCancelling
+  const snapshot = useStore(store)
+  const loginCancelling = snapshot.loginCancelling
+  const remoteOwner = snapshot.scope.kind === 'remote'
   const [opening, setOpening] = useState(false)
   const [openError, setOpenError] = useState(false)
   if (!pending || pending.provider !== provider) return null
@@ -38,7 +40,7 @@ function LoginLinkNotice({ context, store, pending, provider }: { context: UiPlu
     {isCodex && pending.status === 'pending' && <p>Copy it to finish signing in somewhere else — a private window, or another profile.</p>}
     {pending.status === 'error' && <p className="status-error">Sign-in failed. Check the provider CLI and try again.</p>}
     {loginUrl && <div className="login-actions">
-      <Button type="button" onClick={async () => {
+      <Button type="button" disabled={remoteOwner} onClick={async () => {
         try {
           await navigator.clipboard.writeText(loginUrl)
           store.notify('Sign-in link copied', isCodex ? 'Open it in a private window or another browser profile.' : 'Open it in a private window to sign in with a different account.')
@@ -46,7 +48,7 @@ function LoginLinkNotice({ context, store, pending, provider }: { context: UiPlu
           store.notify('Could not copy the link', 'Use the Open link to continue sign-in in your browser.')
         }
       }}>Copy link</Button>
-      {isCodex && <Button type="button" disabled={opening} onClick={async () => {
+      {isCodex && <Button type="button" disabled={remoteOwner || opening} onClick={async () => {
         setOpening(true)
         setOpenError(false)
         try {
@@ -59,7 +61,7 @@ function LoginLinkNotice({ context, store, pending, provider }: { context: UiPlu
       }}>{opening ? 'Opening…' : 'Open'}</Button>}
     </div>}
     {openError && <p className="status-error" role="alert">Could not open the sign-in link. Try again or use Copy link to open it in your browser.</p>}
-    {pending.status === 'pending' && <Button type="button" disabled={loginCancelling} onClick={() => void store.cancelLogin()}>{loginCancelling ? 'Cancelling…' : 'Cancel'}</Button>}
+    {pending.status === 'pending' && <Button type="button" disabled={remoteOwner || loginCancelling} onClick={() => void store.cancelLogin()}>{loginCancelling ? 'Cancelling…' : 'Cancel'}</Button>}
   </div>
 }
 
@@ -67,6 +69,8 @@ function LoginLinkNotice({ context, store, pending, provider }: { context: UiPlu
 function AccountRow({ store, provider, account, state }: { store: AccountsUiStore; provider: ManagedProvider; account: AccountSummary; state: AccountState }) {
   const snapshot = useStore(store)
   const loginBusy = snapshot.loginStarting || snapshot.login?.status === 'pending'
+  const remoteOwner = snapshot.scope.kind === 'remote'
+  const scopeUnavailable = snapshot.scope.kind === 'remote' && snapshot.scope.status !== 'ready'
   const [removing, setRemoving] = useState(false)
   const removalLock = useRef(false)
   const badges = statusBadge(account, state.active[provider])
@@ -92,14 +96,14 @@ function AccountRow({ store, provider, account, state }: { store: AccountsUiStor
       selected={state.active[provider] === account.id}
       trailing={<span className="account-actions">
         {account.needsSignIn
-          ? <Button type="button" disabled={loginBusy} onClick={() => void store.beginLogin(provider, { accountId: account.id })}>{provider === 'claude' ? 'Sign in again' : 'Re-authenticate'}</Button>
-          : <Button type="button" aria-label={`Select ${providerName} account ${account.label}`} disabled={state.active[provider] === account.id} onClick={() => void store.selectAccount(provider, account.id)}>{state.active[provider] === account.id ? 'Active' : 'Select'}</Button>}
-        <Button type="button" variant="destructive" aria-label={`Remove ${providerName} account ${account.label}`} disabled={removing} onClick={() => void remove()}>{removing ? 'Removing…' : 'Remove'}</Button>
+          ? <Button type="button" disabled={remoteOwner || loginBusy} onClick={() => void store.beginLogin(provider, { accountId: account.id })}>{provider === 'claude' ? 'Sign in again' : 'Re-authenticate'}</Button>
+          : <Button type="button" aria-label={`Select ${providerName} account ${account.label}`} disabled={scopeUnavailable || state.active[provider] === account.id} onClick={() => void store.selectAccount(provider, account.id)}>{state.active[provider] === account.id ? 'Active' : 'Select'}</Button>}
+        <Button type="button" variant="destructive" aria-label={`Remove ${providerName} account ${account.label}`} title={remoteOwner ? 'Account removal is available on this device only.' : undefined} disabled={remoteOwner || removing} onClick={() => void remove()}>{removing ? 'Removing…' : 'Remove'}</Button>
       </span>}
     />
     {account.needsSignIn && provider === 'claude' && <details className="account-more">
       <summary aria-label="More sign-in options">More sign-in options</summary>
-      <Button type="button" disabled={loginBusy} onClick={() => void store.beginLogin('claude', { accountId: account.id, copyLink: true })}>Copy sign-in link instead</Button>
+      <Button type="button" disabled={remoteOwner || loginBusy} onClick={() => void store.beginLogin('claude', { accountId: account.id, copyLink: true })}>Copy sign-in link instead</Button>
     </details>}
   </div>
 }
@@ -107,6 +111,8 @@ function AccountRow({ store, provider, account, state }: { store: AccountsUiStor
 function ManagedAccountsSection({ context, store, provider }: { context: UiPluginContext; store: AccountsUiStore; provider: ManagedProvider }) {
   const snapshot = useStore(store)
   const state = snapshot.accounts
+  const remoteOwner = snapshot.scope.kind === 'remote'
+  const scopeUnavailable = snapshot.scope.kind === 'remote' && snapshot.scope.status !== 'ready'
   const providerName = provider === 'claude' ? 'Claude' : 'Codex'
   const system = state?.systemDefault[provider]
   const accounts = (state?.accounts ?? []).filter((account) => account.provider === provider).sort(accountSort)
@@ -118,9 +124,9 @@ function ManagedAccountsSection({ context, store, provider }: { context: UiPlugi
   return <div className="account-stack">
     <section className="section-card">
       <SectionHeader title={`${providerName} accounts`} />
-      <p className="settings-description">Optional. Quirky can use your normal {providerName} login; add accounts only if you want quick switching without moving chat sessions. Managed accounts keep their sign-in context separate on this device.</p>
-      <p className="settings-description">Account changes apply to future {providerName} launches. Running sessions keep the account they started with.</p>
-      <SectionHeader title="Accounts" actions={<small>Showing accounts for this device. New accounts are added there.</small>} />
+      <p className="settings-description">Optional. Quirky can use your normal {providerName} login; add accounts only if you want quick switching without moving chat sessions. Managed sign-ins remain separate {snapshot.scope.kind === 'remote' ? `on ${snapshot.scope.hostName ?? 'the remote owner'}` : 'on this device'}.</p>
+      <p className="settings-description">Account changes apply to future {providerName} launches {snapshot.scope.kind === 'remote' ? `on ${snapshot.scope.hostName ?? 'the remote owner'}` : 'on this device'}. Running sessions keep the account they started with.</p>
+      <SectionHeader title="Accounts" actions={<small>{snapshot.scope.kind === 'remote' ? `Showing saved accounts on ${snapshot.scope.hostName ?? 'the remote owner'}.` : 'Showing accounts for this device. New accounts are added there.'}</small>} />
       <div className="account-list">
         <ListRow
           title={<><strong>{system?.email ? `System default: ${system.email}` : 'System default'}</strong>{state?.active[provider] === null && <Badge tone="accent">Active</Badge>}{provider === 'codex' && system && !system.hasAuth && <Badge tone="needs-you">Needs sign-in</Badge>}</>}
@@ -132,7 +138,7 @@ function ManagedAccountsSection({ context, store, provider }: { context: UiPlugi
           selected={state?.active[provider] === null}
           trailing={<span className="account-actions">
             {system?.hasAuth && <Badge>{system.authKind === 'api-key' ? 'API key' : 'Signed in'}</Badge>}
-            <Button type="button" aria-label={`Select ${providerName} System default`} disabled={!state || state.active[provider] === null} onClick={() => void store.selectAccount(provider, null)}>{state?.active[provider] === null ? 'Active' : 'Select'}</Button>
+            <Button type="button" aria-label={`Select ${providerName} System default`} disabled={!state || state.active[provider] === null || scopeUnavailable} onClick={() => void store.selectAccount(provider, null)}>{state?.active[provider] === null ? 'Active' : 'Select'}</Button>
           </span>}
         />
         {accounts.length ? accounts.map((account) => <AccountRow key={account.id} store={store} provider={provider} account={account} state={state!} />) : <EmptyState message={`No managed ${providerName} accounts yet.`} />}
@@ -142,14 +148,15 @@ function ManagedAccountsSection({ context, store, provider }: { context: UiPlugi
         {configWarnings.map((warning, index) => <p className="status-error" key={`${warning.accountId ?? 'system'}-${warning.kind}-${index}`}>{warning.message}</p>)}
       </section>}
       {provider === 'claude' ? <div className="details-actions">
-        <Button type="button" disabled={Boolean(anyPending)} onClick={() => void store.beginLogin('claude')}>{anyPending ? 'Signing in…' : 'Add Account'}</Button>
-        <details><summary aria-label="More sign-in options">More sign-in options</summary><Button type="button" disabled={Boolean(anyPending)} onClick={() => void store.beginLogin('claude', { copyLink: true })}>Copy sign-in link instead</Button></details>
-      </div> : <Button type="button" disabled={Boolean(anyPending)} onClick={() => void store.beginLogin('codex')}>{anyPending ? 'Signing in…' : 'Add Account'}</Button>}
+        <Button type="button" disabled={remoteOwner || Boolean(anyPending)} onClick={() => void store.beginLogin('claude')}>{anyPending ? 'Signing in…' : 'Add Account'}</Button>
+        <details><summary aria-label="More sign-in options">More sign-in options</summary><Button type="button" disabled={remoteOwner || Boolean(anyPending)} onClick={() => void store.beginLogin('claude', { copyLink: true })}>Copy sign-in link instead</Button></details>
+      </div> : <Button type="button" disabled={remoteOwner || Boolean(anyPending)} onClick={() => void store.beginLogin('codex')}>{anyPending ? 'Signing in…' : 'Add Account'}</Button>}
       {pending?.provider === provider && <LoginLinkNotice key={pending.id} context={context} store={store} pending={pending} provider={provider} />}
     </section>
     {provider === 'claude' && <section className="section-card">
       <SectionHeader title="When you switch accounts while Claude is running" />
       <p className="settings-description">Restarting continues each running conversation on the new account.</p>
+      {remoteOwner && <small className="muted">This switch policy applies to accounts on this device; it does not configure the remote owner.</small>}
       <SelectField label="Claude running-session switch policy" id="claude-switch-policy" value={state?.preferences.claudeSwitchPolicy ?? 'ask'} onChange={(event) => {
         const value = event.currentTarget.value
         if (value === 'ask' || value === 'always' || value === 'never') void store.setPreferences({ claudeSwitchPolicy: value })
@@ -196,17 +203,17 @@ function sourceName(source: string): string {
   return 'Provider sign-in'
 }
 
-function CredentialField({ store, provider, kind, inputType, statuses }: { store: AccountsUiStore; provider: string; kind: string; inputType: 'password' | 'text' | 'url'; statuses: CredentialStatus[] }) {
+function CredentialField({ store, provider, kind, inputType, statuses, disabled = false }: { store: AccountsUiStore; provider: string; kind: string; inputType: 'password' | 'text' | 'url'; statuses: CredentialStatus[]; disabled?: boolean }) {
   const [value, setValue] = useState('')
   const [saving, setSaving] = useState(false)
   const [clearing, setClearing] = useState(false)
   const [actionError, setActionError] = useState<string | null>(null)
   const actionLock = useRef(false)
   const status = statuses.find((candidate) => candidate.provider === provider && candidate.kind === kind)
-  const busy = saving || clearing
+  const busy = saving || clearing || disabled
   const save = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-    if (!value || actionLock.current) return
+    if (!value || disabled || actionLock.current) return
     actionLock.current = true
     setSaving(true)
     setActionError(null)
@@ -219,7 +226,7 @@ function CredentialField({ store, provider, kind, inputType, statuses }: { store
     }
   }
   const clear = async () => {
-    if (actionLock.current) return
+    if (disabled || actionLock.current) return
     actionLock.current = true
     setClearing(true)
     setActionError(null)
@@ -242,15 +249,16 @@ function CredentialField({ store, provider, kind, inputType, statuses }: { store
 
 function MeterCredentials({ store }: { store: AccountsUiStore }) {
   const snapshot = useStore(store)
+  const remoteOwner = snapshot.scope.kind === 'remote'
   return <div className="account-stack">
     <section className="section-card">
       <SectionHeader title="Provider meter credentials" />
-      <p className="settings-description">Credential values are stored by the accounts service. Values never appear in account state or usage reports. Password fields clear after a successful save.</p>
+      <p className="settings-description">Credential values are stored by the accounts service. Values never appear in account state or usage reports. Password fields clear after a successful save.{remoteOwner ? ' Edit meter credentials on this device, not through the remote Accounts view.' : ''}</p>
     </section>
     {Object.values(CREDENTIAL_FIELDS).flat().map((group) => <section className="section-card" key={group.provider}>
       <SectionHeader title={group.label} />
       <p className="settings-description">{group.help}</p>
-      {group.kinds.map((field) => <CredentialField key={field.kind} store={store} provider={group.provider} kind={field.kind} inputType={field.input} statuses={snapshot.credentials} />)}
+      {group.kinds.map((field) => <CredentialField key={field.kind} store={store} provider={group.provider} kind={field.kind} inputType={field.input} statuses={snapshot.credentials} disabled={remoteOwner} />)}
     </section>)}
   </div>
 }
@@ -333,7 +341,7 @@ export function AccountsSettings({ context, store, report }: { context: UiPlugin
   return <div className="accounts-ui settings-shell">
     <nav className="settings-nav" aria-label="AI Provider Accounts settings">
       <SectionHeader title="AI Provider Accounts" actions={<span className="settings-nav-actions">
-        <Button type="button" onClick={() => void store.refresh()}>Refresh usage</Button>
+        <Button type="button" disabled={snapshot.refreshing || (snapshot.scope.kind === 'remote' && snapshot.scope.status === 'loading')} onClick={() => void store.refresh()}>Refresh usage</Button>
         <Button type="button" onClick={() => context.closeView()}>Close settings</Button>
       </span>} />
       <Tabs label="AI Provider Accounts settings" items={SETTINGS_TABS} value={section} onChange={(id) => void store.setUiState({ settingsSection: id })} />
@@ -341,6 +349,13 @@ export function AccountsSettings({ context, store, report }: { context: UiPlugin
     <main className="settings-content" aria-label={`${SETTINGS_SECTIONS.find((item) => item.id === section)?.title ?? 'Accounts'} settings`}>
       <section>
         <SectionHeader title={SETTINGS_SECTIONS.find((item) => item.id === section)?.title ?? 'Accounts'} actions={snapshot.refreshing ? <small className="loading-indicator" role="status">Refreshing…</small> : undefined} />
+        {snapshot.scope.kind === 'remote' && <p className={snapshot.scope.status === 'unavailable' ? 'status-error' : ''} role="status">
+          {snapshot.scope.status === 'loading'
+            ? `Loading Accounts from ${snapshot.scope.hostName ?? 'the remote owner'}…`
+            : snapshot.scope.status === 'unavailable'
+              ? `${snapshot.scope.hostName ?? 'Remote owner'} is unavailable.`
+              : `Accounts on ${snapshot.scope.hostName ?? 'the remote owner'}. Remote sign-in and reauthentication are unavailable.`}
+        </p>}
         {snapshot.error && <p className="status-error" role="alert">{snapshot.error}</p>}
         <SettingsSection key={section} context={context} store={store} id={section} />
       </section>
