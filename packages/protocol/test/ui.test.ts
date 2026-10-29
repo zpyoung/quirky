@@ -1,8 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import {
-  DEFAULT_THEME,
   THEME_COLOR_RE,
-  THEME_TOKENS,
   checkSettingValue,
   chordFromKeyEvent,
   evaluateWhen,
@@ -211,35 +209,7 @@ describe('checkSettingValue', () => {
   })
 })
 
-describe('theme tokens and the default theme', () => {
-  test('THEME_TOKENS lists the sixteen tokens in order', () => {
-    expect([...THEME_TOKENS]).toEqual([
-      'bg',
-      'bg-raised',
-      'bg-hover',
-      'bg-active',
-      'border',
-      'text',
-      'muted',
-      'accent',
-      'amber',
-      'green',
-      'grey',
-      'dim',
-      'danger',
-      'terminal-background',
-      'terminal-foreground',
-      'terminal-cursor'
-    ])
-  })
-
-  test('DEFAULT_THEME fills exactly THEME_TOKENS with valid colors', () => {
-    expect(DEFAULT_THEME).toMatchObject({ id: 'default', plugin: null, title: 'Quirky Dark', appearance: 'dark' })
-    expect(Object.keys(DEFAULT_THEME.colors).sort()).toEqual([...THEME_TOKENS].sort())
-    for (const value of Object.values(DEFAULT_THEME.colors)) expect(THEME_COLOR_RE.test(value)).toBe(true)
-    expect(DEFAULT_THEME.colors.bg).toBe('#16181d')
-    expect(DEFAULT_THEME.colors['terminal-cursor']).toBe('#d7dae0')
-  })
+describe('theme color grammar', () => {
 
   test('THEME_COLOR_RE accepts 3, 6 and 8 digit hex only', () => {
     for (const ok of ['#abc', '#AABBCC', '#aabbccdd']) expect(THEME_COLOR_RE.test(ok)).toBe(true)

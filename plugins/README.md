@@ -2,6 +2,14 @@
 
 This directory holds Quirky's built-in plugins, one per subdirectory, each with a `quirky-plugin.json` manifest. The daemon finds it through `QUIRKY_BUILTIN_PLUGINS_DIR`.
 
+## Removing a project
+
+`quirky repo rm <selector>` forgets the selected project and its settings/group
+membership, but leaves its repository and worktree directories on disk. It closes
+only sessions owned by that project; another project with the same name keeps
+its sessions. If an owned session cannot close, removal fails and the project
+stays available for retry. Re-adding a removed project starts with fresh settings.
+
 ## Terminal workspace
 
 Terminal views stay in the center; **Terminal sessions** and **Quick commands** open
