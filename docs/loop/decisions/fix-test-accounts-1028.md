@@ -68,5 +68,27 @@ The preliminary model mismatch occurred under the fixture's private HOME and pre
 - **Revisit if:** native provider/OS acceptance supplies a contradictory observation.
 - **Source:** assumed — autonomous
 
+## D7: Preserve all incoming decisions in the sole integration catch-up
+- **Question:** Does the integration merge require an account-contract change?
+- **Options:** skip incoming decisions; absorb unrelated repair work; read every incoming log and preserve independent responsibilities.
+- **Chose:** clean merge423d62c77ec3a1734e36d7fc52652ded11f886a3, then read all five incoming logs completely through their Progress sections.
+- **Why:** Protocol D1–D5, Repo D1–D10, Scripts UI-review D1–D4, Terminal Dock D1–D6, and final UI review D1–D8 do not conflict. The only incoming production source change is Worktree ownership registration; account contracts remain unchanged. Full integrated typecheck/UI lint/root/mobile/prepared-desktop passes51.82s, and the private runtime repeats its exact three scenarios successfully in2.48s after cleanup.
+- **Evidence:** AccountsIncomingDecisions full read report; incoming decision logs; integrated typecheck and runtime receipts in the evidence archive; authoritative queue deps returns ready:true/pending:[].
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** authoritative landing reports an integration conflict or type error.
+- **Source:** locked by incoming decision logs and docs/loop/LOOP.md
+
+## D8: Preserve the actual bounded review verdict and suppression limit
+- **Question:** What did the independent review clear, and should its Keychain-assertion suggestion be applied?
+- **Options:** describe the review as finding nothing; restore mock argument echoes; preserve the machine result and independently adjudicate the one claim.
+- **Chose:** standard Gemini3.1ProPreview/google high, fresh promote and refute contexts, full family independence; machine PASS with0surviving/0blocking/0advisory findings and1suppressed claim. Do not restore mock argument echoes.
+- **Why:** The live final prepass passes12/12Accounts files with no flaky files in31.045s. Promote raises removed security.log checks asHIGH; fresh refute retains the observation but reduces it toLOW because production is unchanged and those mock arguments do not prove credential ownership. The evidence gate suppresses it as falsified because its file-line quote is a patch hunk rather than live source. That anchor failure is not proof the conceptual observation is false. The caller rejects the proposed restoration because incidental mock echoes must be removed; the replacement verifies actual selected-profile deletion and other-account credential bytes/selection. Native Keychain behavior remains unclaimed.
+- **Evidence:** review-final/{promote,refute,merged,gate,manifest,prepass}.json and raw prompts/responses; artifact81a93030ca34ddafd8508b4a4c885298be0da899dca18056b8a2fd5788469ad6; fixed two-file range ececceed..7e75168a.
+- **Reversibility:** easy
+- **Confidence:** high for executed review and scoped fixture/API observations; no completeness guarantee
+- **Revisit if:** a stateful native Keychain scenario demonstrates wrong credential targeting.
+- **Source:** assumed — autonomous
+
 ## Progress
-Source-only fixes committed as dd457205 and7e75168a. No production changes. Current local API21/21, private runtime, scripts127/0/1125assertions and full typecheck pass; exact final Accounts prepass and bounded independent review are running on the final source. Next: collect actual verdicts, catch up build/roadmap once, read incoming binding decisions, rerun integrated typecheck and affected regression/runtime, then canonical queue land. Broader Agents failures remain explicitly owned and retained; no native OS/provider SDK/UI acceptance claim.
+Verified and ready for canonical land. Source-only fixes dd457205 and7e75168a, docs b59259ec, sole integration merge423d62c77ec3a1734e36d7fc52652ded11f886a3. Final canonical Accounts12/12/no flakes31.045s; local API21/21/142assertions; full integrated typecheck51.82s; scripts127/0/1125assertions93.56s; actual private API/generated-CLI-handler/filesystem smoke before and after integration passes, with awaited cleanup. Standard independent review machine PASS is qualified byD8. All implementers, review/scout/check/runtime jobs returned; no owned runtime remains. Queue deps ready:true. Preserve final evidence, commit this receipt, detach and canonical queue land, then read back exact item done and remove only owned scratch. No all-consumer, native Keychain, real provider SDK, native PTY or UI acceptance claim.
