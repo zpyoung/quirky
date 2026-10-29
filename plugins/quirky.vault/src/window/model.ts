@@ -631,6 +631,11 @@ export class VaultWindowModel {
 }
 
 export function isResumable(row: VaultRow): boolean {
-  return row.presence === 'present' && row.hostId === 'local' && (row.messageCount > 0 || (row.queuedMessageCount ?? 0) > 0 || (row.subagentTranscriptCount ?? 0) > 0 || row.previewMessages?.some((message) => message.role === 'user' || message.role === 'assistant') === true)
+  return row.presence === 'present' &&
+    (row.hostId === 'local' || !row.hostId.startsWith('vault-host:')) &&
+    (row.messageCount > 0 ||
+      (row.queuedMessageCount ?? 0) > 0 ||
+      (row.subagentTranscriptCount ?? 0) > 0 ||
+      row.previewMessages?.some((message) => message.role === 'user' || message.role === 'assistant') === true)
 }
 
