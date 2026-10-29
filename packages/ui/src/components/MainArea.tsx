@@ -2,11 +2,19 @@ import { IconButton, Tabs } from '../design-system'
 import { usePluginHost, usePluginState } from '../context'
 import { PluginSlot } from '../plugins/PluginSlot'
 import { useRegion } from '../plugins/useRegion'
+import { useAttention } from '../shell/attention'
+
+/** What the center says with no view open: it asks for a repo only when none has been added. */
+export function emptyMainMessage({ views, repos }: { views: number; repos: number | null }): string {
+  if (views === 0) return 'Nothing to show here.'
+  return repos ? 'Pick a worktree to get started.' : 'Add a repo and pick a worktree to get started.'
+}
 
 /** The active center contribution and only the view contributions actually opened in this window. */
 export function MainArea() {
   const { model, layout, windowRoute } = usePluginState()
   const host = usePluginHost()
+  const { snapshot } = useAttention()
   const region = useRegion('view')
   const viewId = windowRoute ? windowRoute.view ?? undefined : layout.view?.id
   const view = viewId ? model?.views.find((candidate) => candidate.id === viewId) : undefined
@@ -53,7 +61,7 @@ export function MainArea() {
         )}
         {!windowRoute && !view && model && (
           <p className="empty">
-            {model.views.length === 0 ? 'Nothing to show here.' : 'Add a repo and pick a worktree to get started.'}
+            {emptyMainMessage({ views: model.views.length, repos: snapshot.repos?.length ?? null })}
           </p>
         )}
       </div>
