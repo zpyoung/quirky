@@ -33,5 +33,49 @@
 - **Revisit if:** owned test execution proves an isolation leak.
 - **Source:** assumed — autonomous
 
+## D4: Consume the ownership provider repair from its existing owner
+- **Question:** Should the CLI bypass the failing ownership lookup to restore repo removal?
+- **Options:** CLI fallback or repo special case; duplicate provider repair; consume the repo owner's committed correction.
+- **Chose:** merge lane 10 checkpoint `1fb3789e9762959d60033d48cd78ff46605543af`.
+- **Why:** The initial canonical CLI suite reproduced three actual repo-removal failures. `ownedIds` existed and was declared, but the Worktree handler map omitted it. The checkpoint registers that existing method without changing its ownership, authorization, cleanup, or failure semantics. Lane 10 owns `fix-test-repo-1028`; its decision log D1–D5 was read before consuming the checkpoint.
+- **Evidence:** `plugins/quirky.worktree/main.ts:306-310`; its handlers table; `plugins/quirky.repo/src/projects.ts:135-169`; `/tmp/quirky-lane8-cli-repo-coordination.md`; initial canonical 22-remote/1-macOS CLI file run.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** a real owned-session removal fails after registration.
+- **Source:** locked by docs/loop/decisions/fix-test-repo-1028.md D3
+
+## D5: Delete incidental mirrors while retaining behavioral transitions
+- **Question:** Which stale assertions represent a supported consumer contract?
+- **Options:** repin `Quirky Dark` to `Follow system` and extend the complete valid-flag inventory; remove those mirrors and preserve actual state/error behavior.
+- **Chose:** delete the exact unknown-flag wording/inventory test and headed UI-table inventory test; consolidate default-dependent theme rows into explicit Solar/Lunar active/chosen/unavailable transitions; consolidate v1 output copies into CLI lifecycle, selectors, and environment precedence.
+- **Why:** The baseline also reproduced four theme failures and one UI failure caused solely by a display-title change, plus the stale flag inventory. No CLI rendering source defect was demonstrated. The retained lifecycle checks real daemon state and exact PTY input/output, then observes session/worktree/repo removal; aliases are exercised rather than compared to duplicated output. Negative marker checks also require the inactive row to exist.
+- **Evidence:** `packages/cli/test/cli.e2e.test.ts`; `theme.test.ts`; `ui.test.ts`; `v1-words.e2e.test.ts`; component commits `d54ef7b1` and `3eb14589`.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** a documented machine-output or consumer behavior changes.
+- **Source:** assumed — autonomous
+
+## D6: Preserve private runtime proof and qualify the configured retry
+- **Question:** What has actually been verified?
+- **Options:** infer success from test changes; run real private CLI/PTY/Git and canonical scoped suites.
+- **Chose:** run the standalone real-process smoke and the canonical CLI/repo package gate, reporting the gate's configured retry rather than claiming no flakes.
+- **Why:** The 5.22-second smoke used fresh private daemon `QUIRKY_HOME`, private process `HOME`, real Git, and a real PTY. It created a checkout and shell, observed the shell's printed marker, removed the repo while its shell was live, verified no running owned shell and no registered repo, and retained the checkout on disk. Both private homes were removed by ProcessScope cleanup. The caught-up canonical gate passed 29 remote files plus one macOS file after `v1-words.e2e.test.ts` passed its configured isolated retry. Its initial beforeEach exceeded the fixture watchdog and afterEach saw undefined `h`; this is not proof of a product failure or of load as the cause. No assertion, deadline, retry policy, or fixture exception was weakened.
+- **Evidence:** `.quirk/build-loop/fix-test-packages-cli-1028/runtime-smoke.json`; canonical CLI/repo run, 92.07 seconds; targeted canonical `ownedIds` regression passed one file with no retries, 21.01 seconds; root typecheck/UI lint/mobile/desktop checks passed, 53.57 seconds.
+- **Reversibility:** easy
+- **Confidence:** high for observed paths; no full-repository claim
+- **Revisit if:** current post-review checks identify a remaining failure.
+- **Source:** assumed — autonomous
+
+## D7: The single roadmap catch-up preserves incoming ownership
+- **Question:** Do the incoming Hosting, Tasks, or Vault decisions conflict with this repair?
+- **Options:** broaden CLI changes; retain each area's existing authority and acceptance boundary.
+- **Chose:** retain those boundaries after reading every incoming log completely.
+- **Why:** Hosting D1–D6 (71 lines), Tasks D1–D9 and qualifications (107 lines), and Vault D1–D11 (125 lines) introduce no CLI signature, theme-marker, repo-removal, or selector conflict. Their partial UI/native/review evidence remains qualified and is not claimed by this item.
+- **Evidence:** `docs/loop/decisions/fix-test-hosting-1028.md`; `fix-test-tasks-1028.md`; `fix-test-vault-1028.md`; completed `IncomingCliContracts` read-only report.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** controller landing exposes a concrete conflicting integration change.
+- **Source:** assumed — autonomous
+
 ## Progress
-Claimed one item on lane 8. Base `0be7e675cbd63c41969811f74d889229c5ca85e3`. Read-only failure mapping and the canonical current CLI suite are running. Next: classify current failures, dispatch disjoint bounded repairs, exercise real CLI runtime behavior, merge roadmap once, complete the bounded final review/check gates, and land through the absolute canonical queue controller. No other item may be claimed in this iteration.
+Both disjoint CLI components have been audited, parent-committed, merged, and their temporary worktrees removed. The owned provider checkpoint is integrated. The single final roadmap catch-up and incoming-log reads are complete. Real private CLI/PTY/Git smoke, the canonical 29-remote/1-macOS CLI/repo gate (one disclosed configured retry), targeted ownedIds regression, and root typecheck passed. Required script check is complete; next record its exact final result, run the single bounded read-only cross-family review and one accepted fix batch if necessary, rerun affected checks after any source change, then commit/detach and land through the absolute canonical controller. No second item may be claimed.
