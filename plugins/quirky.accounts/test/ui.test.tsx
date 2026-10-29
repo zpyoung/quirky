@@ -202,6 +202,24 @@ function buttonByText(name: string): HTMLButtonElement {
   if (!(element instanceof HTMLButtonElement)) throw new Error(`Missing button: ${name}`)
   return element
 }
+function inputByLabel(root: ParentNode, text: string): HTMLInputElement {
+  const label = [...root.querySelectorAll<HTMLLabelElement>('label')].find((candidate) => candidate.textContent?.trim() === text)
+  const input = label?.control
+  if (!(input instanceof HTMLInputElement)) throw new Error(`Missing input: ${text}`)
+  return input
+}
+function dialogByTitle(root: ParentNode, title: string): HTMLElement | null {
+  return [...root.querySelectorAll<HTMLElement>('[role="dialog"][aria-labelledby]')].find((dialog) => {
+    const titleText = (dialog.getAttribute('aria-labelledby') ?? '')
+      .split(/\s+/)
+      .map((id) => dialog.ownerDocument.getElementById(id)?.textContent?.trim())
+      .filter(Boolean)
+      .join(' ')
+    return titleText === title
+  }) ?? null
+}
+
+
 
 
 test('a late account-list response cannot replace a newer selected account in Usage', async () => {
@@ -259,7 +277,7 @@ test('a reset confirmation keeps the displayed Codex scope and request ID across
   expect(container.textContent).toContain('Offer shown for Account A')
   expect(container.textContent).toContain('Account B')
 
-  const confirmation = container.querySelector('[aria-label=\"Reset Codex limits confirmation\"]')
+  const confirmation = dialogByTitle(container, 'Reset Codex limits confirmation')
   if (!(confirmation instanceof HTMLElement)) throw new Error('Missing Codex reset confirmation')
   const reset = [...confirmation.querySelectorAll('button')].find((button) => button.textContent?.trim() === 'Reset now')
   if (!(reset instanceof HTMLButtonElement)) throw new Error('Missing Codex reset confirmation button')
@@ -302,8 +320,7 @@ test('Gemini CLI OAuth credential refresh requires an explicit setting change', 
   await settle()
 
   await act(async () => { buttonByText('Gemini CLI (legacy)').click() })
-  const checkbox = container.querySelector('[aria-label=\"Allow Gemini CLI OAuth credential refresh\"]')
-  if (!(checkbox instanceof HTMLInputElement)) throw new Error('Missing Gemini OAuth consent toggle')
+  const checkbox = inputByLabel(container, 'Allow Gemini CLI OAuth credential refresh')
   expect(checkbox.checked).toBe(false)
 
   await act(async () => { checkbox.click() })
@@ -355,7 +372,7 @@ test('unconfigured Usage opens setup without expanding the status bar and keeps 
   expect(preferencesValue.hidden).toBe(true)
   const statusBar = container.querySelector('.usage-status-bar')
   if (!(statusBar instanceof HTMLElement)) throw new Error('Missing Usage status bar root')
-  expect(statusBar.style.display).toBe('none')
+  expect(container.querySelector('[aria-label="Open Usage"]')).toBeNull()
 
   const openCommand = provided.get('command:quirky.accounts/open')
   if (typeof openCommand !== 'function') throw new Error('Missing Usage open command')

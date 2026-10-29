@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalS
 import { createPortal } from 'react-dom'
 import { createRoot } from 'react-dom/client'
 import type { Session, UiPluginContext } from '@quirky/protocol'
+import { Badge, Button, ContextMenuList, EmptyState, FormRow, IconButton, SectionHeader, SelectField, Tabs, TextField, type ContextMenuItem } from '@quirky/ui'
 import { HISTORY_AGENTS } from '../agents'
 import type { HostedSession, ViewState } from '../types'
 import { EvidenceText } from './evidence'
@@ -15,7 +16,6 @@ import {
   type VaultSnapshot,
   type VaultViewReport
 } from './model'
-import { injectVaultStyles } from './styles'
 
 const ROW_HEIGHT = 76
 const GROUP_HEIGHT = 32
@@ -151,7 +151,7 @@ function SearchDisclosure({ enabled, busy, onEnable, searchTip }: { enabled: boo
         <p>{SEARCH_PRIVACY_DISCLOSURE}</p>
       </>
       : <p><strong>Enable full-text search?</strong> {SEARCH_PRIVACY_DISCLOSURE}</p>}
-    <div className="qvh-consent-actions"><button type="button" className="qvh-button qvh-primary" data-vault-enable-search disabled={busy} onClick={onEnable}>{promoting ? 'Turn on session search' : 'Enable'}</button><span className="qvh-muted">Until enabled, this box filters session titles only.</span></div>
+    <div className="qvh-consent-actions"><Button variant="primary" data-vault-enable-search disabled={busy} onClick={onEnable}>{promoting ? 'Turn on session search' : 'Enable'}</Button><span className="qvh-muted">Until enabled, this box filters session titles only.</span></div>
   </div>
 }
 
@@ -200,9 +200,8 @@ function SearchEvidence({ row }: { row: VaultRow }) {
 }
 
 function ActionButton({ label, onClick, disabled = false }: { label: string; onClick(): void; disabled?: boolean }) {
-  return <button type="button" className="qvh-button" disabled={disabled} onClick={(event) => { event.stopPropagation(); onClick() }}>{label}</button>
+  return <Button className="qvh-action-button" disabled={disabled} onClick={(event) => { event.stopPropagation(); onClick() }}>{label}</Button>
 }
-
 function SessionDetails({
   context,
   row,
@@ -313,19 +312,19 @@ function SessionDetails({
           throw new Error(reason)
         }
       }).catch((error: unknown) => onError(messageOf(error)))} />
-      <button type="button" className="qvh-button" data-vault-retry-details onClick={() => setAttempt((value) => value + 1)}>Retry source details</button>
-      <button type="button" className="qvh-button" onClick={onClose}>Hide details</button>
+      <Button className="qvh-action-button" data-vault-retry-details onClick={() => setAttempt((value) => value + 1)}>Retry source details</Button>
+      <Button className="qvh-action-button" onClick={onClose}>Hide details</Button>
     </div>
     {!detail.firstPromptLoaded ? <div className="qvh-muted" role="status">Loading first prompt…</div> : null}
     {!detail.sessionLoaded && previewMessages.length === 0 ? <div className="qvh-muted" role="status">Loading latest turns…</div> : null}
     {!detail.subagentsLoaded && (row.subagentTranscriptCount ?? 0) > 0 ? <div className="qvh-muted" role="status">Loading subagents…</div> : null}
-    {detail.errors.length ? <div className="qvh-error" role="alert">Could not inspect this source. {detail.errors.join('; ')} <button type="button" className="qvh-button" onClick={() => setAttempt((value) => value + 1)}>Retry</button></div> : null}
+    {detail.errors.length ? <div className="qvh-error" role="alert">Could not inspect this source. {detail.errors.join('; ')} <Button className="qvh-action-button" onClick={() => setAttempt((value) => value + 1)}>Retry</Button></div> : null}
     {row.presence !== 'present' ? <div className="qvh-error" role="status">{row.presence === 'missing' ? 'The source transcript is no longer available.' : 'The source transcript availability could not be verified.'} Resume and file actions are unavailable.</div> : null}
-    {detail.firstPromptLoaded && detail.firstPrompt !== null ? <section className="qvh-detail-section"><span className="qvh-detail-label">First prompt</span><div className="qvh-first-prompt" data-vault-first-prompt>{detail.firstPrompt}</div><button type="button" className="qvh-button" onClick={() => void copyFirstPrompt()}>Copy first prompt</button></section> : detail.firstPromptLoaded ? <div className="qvh-muted" data-vault-first-prompt-unavailable>No first prompt is available.</div> : null}
+    {detail.firstPromptLoaded && detail.firstPrompt !== null ? <section className="qvh-detail-section"><span className="qvh-detail-label">First prompt</span><div className="qvh-first-prompt" data-vault-first-prompt>{detail.firstPrompt}</div><Button className="qvh-action-button" onClick={() => void copyFirstPrompt()}>Copy first prompt</Button></section> : detail.firstPromptLoaded ? <div className="qvh-muted" data-vault-first-prompt-unavailable>No first prompt is available.</div> : null}
     <section className="qvh-detail-section"><span className="qvh-detail-label">Latest turns</span>
       {previewMessages.length ? previewMessages.slice(-5).map((message, index) => <div className="qvh-turn" key={`${message.timestamp ?? 'none'}:${index}`}><span className="qvh-role">{messageRole(message.role)}</span>{message.text}</div>) : detail.sessionLoaded ? <div className="qvh-muted">No conversation preview available.</div> : null}
     </section>
-    {detail.subagents.length ? <section className="qvh-detail-section"><span className="qvh-detail-label">Subagents</span><div className="qvh-subagents">{detail.subagents.map((agent) => <button type="button" className="qvh-button" key={agent.id} onClick={() => void context.call('quirky.vault/openSource', { id: agent.id, mode: 'view' }).then(requireSourceOpened).catch((error: unknown) => onError(messageOf(error)))}>{agent.title || agent.sessionId} · {agentLabel(agent.agent)}</button>)}</div></section> : null}
+    {detail.subagents.length ? <section className="qvh-detail-section"><span className="qvh-detail-label">Subagents</span><div className="qvh-subagents">{detail.subagents.map((agent) => <Button className="qvh-action-button" key={agent.id} onClick={() => void context.call('quirky.vault/openSource', { id: agent.id, mode: 'view' }).then(requireSourceOpened).catch((error: unknown) => onError(messageOf(error)))}>{agent.title || agent.sessionId} · {agentLabel(agent.agent)}</Button>)}</div></section> : null}
   </div>
 }
 
@@ -371,30 +370,43 @@ function SessionRow({
   const [dragAllowed, setDragAllowed] = useState(false)
   const [menuPosition, setMenuPosition] = useState({ top: 8, left: 8 })
   const commandDragToken = useRef<string | null>(null)
-  const menuAnchor = useRef<HTMLButtonElement>(null)
+  const menuAnchor = useRef<HTMLSpanElement>(null)
   const sessionRow = useRef<HTMLElement>(null)
   const actionMenuRef = useRef<HTMLDivElement>(null)
+  const menuWasOpen = useRef(false)
+  const restoreFocusOnMenuClose = useRef(false)
   useEffect(() => () => cancelCommandDrag(context, commandDragToken), [context])
+  useEffect(() => {
+    if (menuOpen) {
+      menuWasOpen.current = true
+    } else if (menuWasOpen.current) {
+      menuWasOpen.current = false
+      if (restoreFocusOnMenuClose.current) {
+        restoreFocusOnMenuClose.current = false
+        sessionRow.current?.focus()
+      }
+    }
+  }, [menuOpen])
   useLayoutEffect(() => {
     if (!menuOpen) return
-    const anchor = menuAnchor.current
-    const menu = actionMenuRef.current
+    const anchor = menuAnchor.current?.querySelector<HTMLButtonElement>('button')
+    const menu = actionMenuRef.current?.querySelector<HTMLElement>('[role="menu"]')
     const view = anchor?.ownerDocument.defaultView
     if (!anchor || !menu || !view) return
+    const spacing = Number.parseFloat(view.getComputedStyle(anchor.ownerDocument.documentElement).getPropertyValue('--ui-space-8')) || 8
     const positionMenu = () => {
       const rect = anchor.getBoundingClientRect()
-      const maxHeight = Math.max(80, view.innerHeight - 16)
-      menu.style.maxHeight = `${Math.min(480, maxHeight)}px`
-      const height = Math.min(menu.scrollHeight || 480, maxHeight)
-      const width = Math.min(menu.scrollWidth || 220, view.innerWidth - 16)
-      let top = rect.bottom + 4
-      if (top + height > view.innerHeight - 8) top = rect.top - height - 4
-      top = Math.max(8, Math.min(top, view.innerHeight - height - 8))
-      const left = Math.max(8, Math.min(rect.right - width, view.innerWidth - width - 8))
+      const menuRect = menu.getBoundingClientRect()
+      const height = menuRect.height
+      const width = menuRect.width
+      let top = rect.bottom + spacing
+      if (top + height > view.innerHeight - spacing) top = rect.top - height - spacing
+      top = Math.max(spacing, Math.min(top, view.innerHeight - height - spacing))
+      const left = Math.max(spacing, Math.min(rect.right - width, view.innerWidth - width - spacing))
       setMenuPosition({ top, left })
     }
     positionMenu()
-    menu.querySelector<HTMLButtonElement>('[role=\"menuitem\"]:not(:disabled)')?.focus()
+    menu.querySelector<HTMLButtonElement>('[role="menuitem"]:not(:disabled)')?.focus()
     view.addEventListener('resize', positionMenu)
     anchor.ownerDocument.addEventListener('scroll', positionMenu, true)
     return () => {
@@ -494,6 +506,25 @@ function SessionRow({
     else context.toast('Session already missing', 'The source was not present; no other files were changed.')
     onDelete()
   }
+  const deleteEnabled = ['gemini', 'copilot', 'cursor', 'hermes', 'devin', 'openclaw', 'droid', 'pi', 'omp', 'claude', 'codebuddy', 'rovo', 'grok', 'cline'].includes(row.agent) && row.hostId === 'local' && row.presence !== 'unverifiable'
+  const actionMenuItems: ContextMenuItem[] = [
+    { label: 'Resume in New Tab', enabled: resumable, onSelect: () => runMenuAction(onResume) },
+    { label: 'Resume in Worktree', enabled: resumable && Boolean(row.cwd), onSelect: () => runMenuAction(onResumeWorktree) },
+    { label: 'Resume in New Terminal', enabled: resumable, onSelect: () => runMenuAction(onResume) },
+    { label: 'Copy Resume Command', enabled: resumable, onSelect: () => runMenuAction(() => void commandCopy()) },
+    { label: 'Hand Off to Another Agent', enabled: resumable, onSelect: () => runMenuAction(onHandoff) },
+    { label: 'Jump to Original Pane', onSelect: () => runMenuAction(() => void action('jump', { target: 'pane' })) },
+    { label: 'Jump to Worktree', onSelect: () => runMenuAction(() => void action('jump', { target: 'worktree' })) },
+    { label: 'Jump to Folder', onSelect: () => runMenuAction(() => void action('jump', { target: 'folder' })) },
+    { label: 'Open Log', enabled: canReveal(row), onSelect: () => runMenuAction(() => onOpenSource('open')) },
+    { label: 'Reveal Log', enabled: canReveal(row), onSelect: () => runMenuAction(() => onOpenSource('reveal')) },
+    { label: 'Open Working Directory', enabled: row.hostId === 'local' && Boolean(row.cwd) && row.presence === 'present', onSelect: () => runMenuAction(() => void action('openWorkingDirectory')) },
+    { label: 'Copy Session ID', onSelect: () => runMenuAction(() => void copyText(row.sessionId, 'Session ID copied')) },
+    { label: 'Copy First Prompt', enabled: row.presence === 'present', onSelect: () => runMenuAction(() => void copyFirstPrompt()) },
+    { label: 'Copy Log Path', enabled: Boolean(row.filePath), onSelect: () => runMenuAction(() => void copyText(row.filePath!, 'Log path copied')) },
+    { label: 'Show Details', onSelect: () => runMenuAction(onExpand) },
+    { label: 'Delete', danger: true, enabled: deleteEnabled, onSelect: () => runMenuAction(() => void deleteSession()) }
+  ]
   return <article
     ref={sessionRow}
     className={`qvh-session-row${expanded ? ' qvh-expanded' : ''}`}
@@ -531,12 +562,12 @@ function SessionRow({
   >
     <div className="qvh-row-top">
       <div className="qvh-row-title">
-        <button type="button" className="qvh-row-title-button" onClick={(event) => { event.stopPropagation(); onSelect() }}>{row.title || row.sessionId}</button>
+        <Button className="qvh-row-title-button" onClick={(event) => { event.stopPropagation(); onSelect() }}>{row.title || row.sessionId}</Button>
       </div>
       <div className="qvh-inline-actions">
-        <button type="button" className="qvh-icon-button" aria-label="Resume session" title="Resume" disabled={!resumable} onClick={(event) => { event.stopPropagation(); onResume() }}>↻</button>
-        <button type="button" className="qvh-icon-button" aria-label="Toggle session details" title={expanded ? 'Hide details' : 'Show details'} onClick={(event) => { event.stopPropagation(); onExpand() }}>{expanded ? '−' : '⌄'}</button>
-        <button ref={menuAnchor} type="button" className="qvh-icon-button" aria-label="Session actions" title="Session actions" aria-haspopup="menu" aria-expanded={menuOpen} onClick={handleMenu}>⋯</button>
+        <IconButton className="qvh-row-action" label="Resume session" title="Resume" disabled={!resumable} onClick={(event) => { event.stopPropagation(); onResume() }}>↻</IconButton>
+        <IconButton className="qvh-row-action" label="Toggle session details" title={expanded ? 'Hide details' : 'Show details'} onClick={(event) => { event.stopPropagation(); onExpand() }}>{expanded ? '−' : '⌄'}</IconButton>
+        <span ref={menuAnchor} className="qvh-menu-anchor"><IconButton className="qvh-row-action" label="Session actions" title="Session actions" aria-haspopup="menu" aria-expanded={menuOpen} onClick={handleMenu}>⋯</IconButton></span>
       </div>
     </div>
     <div className="qvh-row-meta">
@@ -549,29 +580,16 @@ function SessionRow({
     </div>
     {row.evidence ? <SearchEvidence row={row} /> : row.previewMessages?.length ? <div className="qvh-row-snippet"><span className="qvh-role">{messageRole(row.previewMessages.at(-1)!.role)}</span>{row.previewMessages.at(-1)!.text}</div> : null}
     {row.presence !== 'present' ? <div className="qvh-muted">Transcript {row.presence === 'missing' ? 'no longer available' : 'availability could not be verified'}</div> : null}
-    {menuOpen && menuAnchor.current ? createPortal(<div ref={actionMenuRef} role="menu" className="qvh-action-menu" data-vault-actions={row.id} style={{ top: menuPosition.top, left: menuPosition.left }} onClick={(event) => event.stopPropagation()} onKeyDown={(event: KeyboardEvent<HTMLDivElement>) => {
-      if (event.key !== 'Escape') return
-      event.preventDefault()
-      event.stopPropagation()
-      onCloseMenu()
-      sessionRow.current?.focus()
+    {menuOpen && menuAnchor.current ? createPortal(<div ref={actionMenuRef} className="qvh-action-menu" data-vault-actions={row.id} style={{ top: menuPosition.top, left: menuPosition.left }} onClick={(event) => event.stopPropagation()} onKeyDownCapture={(event) => {
+      if (event.key === 'Escape') restoreFocusOnMenuClose.current = true
     }}>
-      <button role="menuitem" disabled={!resumable} onClick={() => runMenuAction(onResume)}>Resume in New Tab</button>
-      <button role="menuitem" disabled={!resumable || !row.cwd} onClick={() => runMenuAction(onResumeWorktree)}>Resume in Worktree</button>
-      <button role="menuitem" disabled={!resumable} onClick={() => runMenuAction(onResume)}>Resume in New Terminal</button>
-      <button role="menuitem" disabled={!resumable} onClick={() => runMenuAction(() => void commandCopy())}>Copy Resume Command</button>
-      <button role="menuitem" disabled={!resumable} onClick={() => runMenuAction(onHandoff)}>Hand Off to Another Agent</button>
-      <button role="menuitem" onClick={() => runMenuAction(() => void action('jump', { target: 'pane' }))}>Jump to Original Pane</button>
-      <button role="menuitem" onClick={() => runMenuAction(() => void action('jump', { target: 'worktree' }))}>Jump to Worktree</button>
-      <button role="menuitem" onClick={() => runMenuAction(() => void action('jump', { target: 'folder' }))}>Jump to Folder</button>
-      <button role="menuitem" disabled={!canReveal(row)} onClick={() => runMenuAction(() => onOpenSource('open'))}>Open Log</button>
-      <button role="menuitem" disabled={!canReveal(row)} onClick={() => runMenuAction(() => onOpenSource('reveal'))}>Reveal Log</button>
-      <button role="menuitem" disabled={row.hostId !== 'local' || !row.cwd || row.presence !== 'present'} onClick={() => runMenuAction(() => void action('openWorkingDirectory'))}>Open Working Directory</button>
-      <button role="menuitem" onClick={() => runMenuAction(() => void copyText(row.sessionId, 'Session ID copied'))}>Copy Session ID</button>
-      <button role="menuitem" disabled={row.presence !== 'present'} onClick={() => runMenuAction(() => void copyFirstPrompt())}>Copy First Prompt</button>
-      <button role="menuitem" disabled={!row.filePath} onClick={() => runMenuAction(() => void copyText(row.filePath!, 'Log path copied'))}>Copy Log Path</button>
-      <button role="menuitem" onClick={() => runMenuAction(onExpand)}>Show Details</button>
-      <button role="menuitem" className="qvh-danger" disabled={!['gemini', 'copilot', 'cursor', 'hermes', 'devin', 'openclaw', 'droid', 'pi', 'omp', 'claude', 'codebuddy', 'rovo', 'grok', 'cline'].includes(row.agent) || row.hostId !== 'local' || row.presence === 'unverifiable'} onClick={() => runMenuAction(() => void deleteSession())}>Delete</button>
+      <ContextMenuList
+        items={actionMenuItems}
+        label="Session actions"
+        autoFocus={false}
+        onClose={onCloseMenu}
+        onChoose={(item) => { onCloseMenu(); item.onSelect?.() }}
+      />
     </div>, menuAnchor.current.ownerDocument.body) : null}
     {expanded ? <SessionDetails
       context={context}
@@ -832,38 +850,47 @@ function HistoryPanel({ context, report }: HistoryPanelProps) {
   const totalLimit = snapshot.view.sessionLimit
 
   return <div className="qvh-root" ref={root} data-narrow={width < 300 ? 'true' : 'false'} data-vault-history onKeyDown={keyDown}>
-    <header className="qvh-header">
-      <div className="qvh-heading"><div className="qvh-title">{width < 300 ? 'Agents' : 'Agent Session History'}</div><div className="qvh-subtitle">{snapshot.list.result || snapshot.view.query ? 'Indexed history' : 'Resume past sessions'}</div></div>
-      <div className="qvh-head-actions">
-        <select className="qvh-select qvh-host-select" aria-label="History host" value={snapshot.view.host} onChange={(event) => void model.setView({ host: event.currentTarget.value }).catch(() => {})}>
+    <div className="qvh-header">
+      <SectionHeader title={width < 300 ? 'Agents' : 'Agent Session History'} actions={<div className="qvh-head-actions">
+        <SelectField label="Host" id="qvh-host-select" className="qvh-host-select" aria-label="History host" value={snapshot.view.host} onChange={(event) => void model.setView({ host: event.currentTarget.value }).catch(() => {})}>
           <option value="local">Local Mac</option><option value="all">All hosts</option>
           {snapshot.hostOutcomes.filter((host) => host.hostId !== 'local' && host.hostId !== 'all').map((host) => <option key={host.hostId} value={host.hostId}>{host.label}{host.kind === 'ok' ? '' : ` · ${host.kind}`}</option>)}
-        </select>
-        <button type="button" className="qvh-icon-button" aria-label="View options" aria-expanded={optionsOpen} title="View options" data-vault-adjustment-count={adjustmentCount(snapshot.view)} onClick={() => setOptionsOpen((open) => !open)}>
-          ⛭{adjustmentCount(snapshot.view) ? <span className="qvh-adjustment">{adjustmentCount(snapshot.view)}</span> : null}
-        </button>
-        <button type="button" className="qvh-icon-button" aria-label="Refresh Session History" title="Refresh Session History" data-vault-refresh disabled={snapshot.list.loading || snapshot.search.loading} onClick={() => {
+        </SelectField>
+        <IconButton label="View options" aria-expanded={optionsOpen} title="View options" data-vault-adjustment-count={adjustmentCount(snapshot.view)} onClick={() => setOptionsOpen((open) => !open)}>
+          <span aria-hidden="true">⛭</span>{adjustmentCount(snapshot.view) ? <Badge tone="accent">{adjustmentCount(snapshot.view)}</Badge> : null}
+        </IconButton>
+        <IconButton label="Refresh Session History" title="Refresh Session History" data-vault-refresh disabled={snapshot.list.loading || snapshot.search.loading} onClick={() => {
           if (!snapshot.viewReady) void model.retryView()
           else if (snapshot.searchStatus?.enabled && snapshot.view.query.trim()) void model.runSearch({ freshness: 'wait-until-current' })
           else void model.refreshList(true)
-        }}>↻</button>
-      </div>
-    </header>
+        }}>↻</IconButton>
+      </div>} />
+      <div className="qvh-subtitle">{snapshot.list.result || snapshot.view.query ? 'Indexed history' : 'Resume past sessions'}</div>
+    </div>
     <div className="qvh-controls">
       <div className="qvh-control-line">
-        <div className="qvh-scope-switch" role="group" aria-label="History scope">
-          {(['workspace', 'project', 'all'] as const).map((value) => <button type="button" key={value} aria-pressed={scope === value} disabled={!scopeAvailability[value]} title={!scopeAvailability[value] ? value === 'workspace' ? 'A current worktree is required.' : 'A current project is required.' : undefined} onClick={() => void model.setView({ scope: value }).catch(() => {})}>{value === 'workspace' ? 'Workspace' : value === 'project' ? 'Project' : 'All'}</button>)}
+        <div className="qvh-scope-switch">
+          <Tabs
+            label="History scope"
+            items={[
+              { id: 'workspace', label: 'Workspace', disabled: !scopeAvailability.workspace },
+              { id: 'project', label: 'Project', disabled: !scopeAvailability.project },
+              { id: 'all', label: 'All' }
+            ]}
+            value={scope}
+            onChange={(value) => void model.setView({ scope: value as ViewState['scope'] }).catch(() => {})}
+          />
         </div>
-        <label className="qvh-search-line">
-          <input ref={searchInput} className="qvh-input" type="search" aria-label="Search sessions" placeholder="Search sessions" data-vault-search value={snapshot.view.query} onChange={(event) => setQuery(event.currentTarget.value)} />
-        </label>
+        <div className="qvh-search-line">
+          <TextField ref={searchInput} className="qvh-search-input" label="Search sessions" type="search" aria-label="Search sessions" placeholder="Search sessions" data-vault-search value={snapshot.view.query} onChange={(event) => setQuery(event.currentTarget.value)} />
+        </div>
       </div>
       {snapshot.view.host === 'local' && !snapshot.searchStatus?.enabled ? <SearchDisclosure enabled={false} busy={snapshot.searchStatus === null} searchTip={snapshot.searchTip} onEnable={() => void model.setSearchEnabled(true, 'local').catch((error) => context.toast('Could not enable search', `Try again. ${messageOf(error)}`))} /> : null}
       <div className="qvh-query-status" role="status" aria-live="polite" data-vault-query-status data-vault-search-error={snapshot.search.error ? 'true' : undefined}>
         {searchMessage.message}
         {searchMessage.repaired ? <span data-vault-query-repaired>{searchMessage.repaired}</span> : null}
         {searchMessage.limits.map((limit) => <span key={limit.id} data-vault-truncation={limit.id}>{limit.text}</span>)}
-        {searchMessage.retry && snapshot.view.query.trim() ? <button type="button" className="qvh-button" data-vault-retry-search disabled={snapshot.search.loading} onClick={() => void model.runSearch({ freshness: 'wait-until-current' })}>Retry search</button> : null}
+        {searchMessage.retry && snapshot.view.query.trim() ? <Button data-vault-retry-search disabled={snapshot.search.loading} onClick={() => void model.runSearch({ freshness: 'wait-until-current' })}>Retry search</Button> : null}
       </div>
     </div>
     {optionsOpen ? <ViewOptions model={model} snapshot={snapshot} onClose={() => setOptionsOpen(false)} /> : null}
@@ -872,27 +899,26 @@ function HistoryPanel({ context, report }: HistoryPanelProps) {
     </div>
     {snapshot.hostOutcomes.filter((host) => host.kind !== 'ok').map((host) => <div className="qvh-issue" role="status" key={host.hostId}>{host.label}: {host.reason ?? (host.kind === 'unavailable' ? 'This host does not provide history search.' : 'This host could not be reached.')}</div>)}
     {snapshot.list.result?.issues.map((issue, index) => <div className="qvh-issue" role="status" key={`${issue.hostId}:${issue.filePath ?? issue.root ?? index}`}>{issue.kind === 'notice' ? 'Notice: ' : 'History source issue: '}{issue.reason}</div>)}
-    {snapshot.list.error ? <div className="qvh-error" role="alert">{snapshot.list.error} <button type="button" className="qvh-button" onClick={() => snapshot.viewReady ? void model.refreshList(true) : void model.retryView()}>Retry</button></div> : null}
+    {snapshot.list.error ? <div className="qvh-error" role="alert">{snapshot.list.error} <Button onClick={() => snapshot.viewReady ? void model.refreshList(true) : void model.retryView()}>Retry</Button></div> : null}
     <div className="qvh-sortbar">
       <strong>{snapshot.view.query.trim() && snapshot.searchStatus?.enabled ? `${snapshot.search.response?.kind === 'results' ? snapshot.search.response.hits.length : 0} matches` : `${allRows.length} of ${snapshot.list.result?.total ?? 0} sessions`}</strong>
-      <label className="qvh-muted" htmlFor="qvh-sort">Sort</label>
-      <select id="qvh-sort" className="qvh-select" aria-label="Sort sessions" value={snapshot.view.query.trim() && snapshot.searchStatus?.enabled ? snapshot.view.searchSort : snapshot.view.browseSort} onChange={(event) => {
+      <SelectField label="Sort" id="qvh-sort" aria-label="Sort sessions" value={snapshot.view.query.trim() && snapshot.searchStatus?.enabled ? snapshot.view.searchSort : snapshot.view.browseSort} onChange={(event) => {
         if (snapshot.view.query.trim() && snapshot.searchStatus?.enabled) void model.setView({ searchSort: event.currentTarget.value as ViewState['searchSort'] }).catch(() => {})
         else void model.setView({ browseSort: event.currentTarget.value as ViewState['browseSort'] }).catch(() => {})
       }}>
         {snapshot.view.query.trim() && snapshot.searchStatus?.enabled ? <><option value="relevance">Most relevant</option><option value="newest">Newest</option></> : <><option value="updated">Last updated</option><option value="created">Created</option></>}
-      </select>
+      </SelectField>
     </div>
     <div className="qvh-list" ref={list} data-vault-virtual-list onScroll={(event) => { setScrollTop(event.currentTarget.scrollTop); setMenuId(null) }}>
       {grouped.entries.length ? <div className="qvh-list-spacer" style={{ height: grouped.totalHeight }}>
         {virtual.map(({ entry, top, height }) => {
           const style: CSSProperties = { transform: `translateY(${top}px)`, height }
-          if (entry.kind === 'group') return <div className="qvh-virtual-item" key={entry.id} style={style}><div className="qvh-group-heading"><button type="button" aria-label={`${entry.collapsed ? 'Expand' : 'Collapse'} ${entry.label}`} aria-expanded={!entry.collapsed} onClick={() => setCollapsed((current) => {
+          if (entry.kind === 'group') return <div className="qvh-virtual-item" key={entry.id} style={style}><div className="qvh-group-heading"><IconButton className="qvh-group-toggle" label={`${entry.collapsed ? 'Expand' : 'Collapse'} ${entry.label}`} aria-expanded={!entry.collapsed} title={`${entry.collapsed ? 'Expand' : 'Collapse'} ${entry.label}`} onClick={() => setCollapsed((current) => {
             const next = new Set(current)
             if (next.has(entry.id)) next.delete(entry.id)
             else next.add(entry.id)
             return next
-          })}>{entry.collapsed ? '›' : '⌄'}</button><strong>{entry.label}</strong><span className="qvh-group-count">{entry.count}</span></div></div>
+          })}>{entry.collapsed ? '›' : '⌄'}</IconButton><strong>{entry.label}</strong><Badge>{entry.count}</Badge></div></div>
           const row = entry.row
           const expanded = snapshot.view.expandedIds.includes(row.id)
           return <div className="qvh-virtual-item" key={entry.id} style={style}><SessionRow
@@ -920,15 +946,20 @@ function HistoryPanel({ context, report }: HistoryPanelProps) {
             }}
           /></div>
         })}
-      </div> : <div className={snapshot.list.error ? 'qvh-error' : 'qvh-empty'} role={snapshot.list.error ? 'alert' : 'status'}>{emptyListText(snapshot, noAgents, allRows)}{!snapshot.list.error && !noAgents && !snapshot.list.loading && allRows.length === 0 && snapshot.view.query.trim() ? <button type="button" className="qvh-button" onClick={() => setQuery('')}>Clear search</button> : null}</div>}
+      </div> : snapshot.list.error
+        ? <div className="qvh-error" role="alert">{emptyListText(snapshot, noAgents, allRows)}</div>
+        : <div className="qvh-empty" role="status"><EmptyState
+          message={emptyListText(snapshot, noAgents, allRows)}
+          action={!noAgents && !snapshot.list.loading && allRows.length === 0 && snapshot.view.query.trim() ? { label: 'Clear search', onAction: () => setQuery('') } : undefined}
+        /></div>}
     </div>
     <div className="qvh-list-footer">
-      {pageHasMore ? <button type="button" className="qvh-button" data-vault-load-more onClick={() => {
+      {pageHasMore ? <Button data-vault-load-more onClick={() => {
         if (snapshot.view.query.trim() && snapshot.searchStatus?.enabled) void model.loadMoreSearch()
         else if (totalLimit === 250) void model.setView({ sessionLimit: 500 }).catch(() => {})
         else if (totalLimit === 500) void model.setView({ sessionLimit: 1000 }).catch(() => {})
         else if (totalLimit === 1000) void model.setView({ sessionLimit: null }).catch(() => {})
-      }} disabled={snapshot.list.loading || snapshot.search.loading}>{snapshot.view.query.trim() && snapshot.searchStatus?.enabled ? 'Load more matches' : 'Show more sessions'}</button> : null}
+      }} disabled={snapshot.list.loading || snapshot.search.loading}>{snapshot.view.query.trim() && snapshot.searchStatus?.enabled ? 'Load more matches' : 'Show more sessions'}</Button> : null}
       {snapshot.view.sessionLimit === null ? <div className="qvh-footer-count">Unlimited history can take longer to scan and may slow the app.</div> : null}
     </div>
     {snapshot.actionError ? <div className="qvh-error" role="alert">{snapshot.actionError}</div> : null}
@@ -939,32 +970,40 @@ function ViewOptions({ model, snapshot, onClose }: { model: VaultWindowModel; sn
   const disabled = new Set(snapshot.view.disabledAgents)
   const option = (patch: Partial<ViewState>) => void model.setView(patch).catch(() => {})
   return <div className="qvh-view-options" role="dialog" aria-label="View options" data-vault-view-options>
-    <div className="qvh-option-toolbar"><strong className="qvh-options-title">View options</strong><button type="button" className="qvh-button" onClick={onClose}>Close</button></div>
+    <SectionHeader title="View options" actions={<Button onClick={onClose}>Close</Button>} />
     <section className="qvh-options-section">
-      <div className="qvh-options-title">Agents</div>
-      <div className="qvh-option-toolbar"><button type="button" className="qvh-button" onClick={() => option({ disabledAgents: [] })}>Select all</button><button type="button" className="qvh-button" onClick={() => option({ disabledAgents: [...HISTORY_AGENTS] })}>Clear</button></div>
-      <div className="qvh-agent-list">{HISTORY_AGENTS.map((agent) => <label key={agent}><input type="checkbox" checked={!disabled.has(agent)} onChange={(event) => {
-        const next = new Set(disabled)
-        if (event.currentTarget.checked) next.delete(agent)
-        else next.add(agent)
-        option({ disabledAgents: [...next] })
-      }} />{agentLabel(agent)}</label>)}</div>
+      <SectionHeader title="Agents" actions={<div className="qvh-option-toolbar"><Button onClick={() => option({ disabledAgents: [] })}>Select all</Button><Button onClick={() => option({ disabledAgents: [...HISTORY_AGENTS] })}>Clear</Button></div>} />
+      <div className="qvh-agent-list">{HISTORY_AGENTS.map((agent) => <FormRow key={agent} label={agentLabel(agent)} htmlFor={`qvh-agent-${agent}`}>
+        <input id={`qvh-agent-${agent}`} type="checkbox" checked={!disabled.has(agent)} onChange={(event) => {
+          const next = new Set(disabled)
+          if (event.currentTarget.checked) next.delete(agent)
+          else next.add(agent)
+          option({ disabledAgents: [...next] })
+        }} />
+      </FormRow>)}</div>
     </section>
-    <section className="qvh-options-section"><div className="qvh-options-title">Group</div><div className="qvh-option-line"><label><input type="radio" name="qvh-group" checked={snapshot.view.group === 'project'} onChange={() => option({ group: 'project' })} />Project</label><label><input type="radio" name="qvh-group" checked={snapshot.view.group === 'folder'} onChange={() => option({ group: 'folder' })} />Folder</label><label><input type="radio" name="qvh-group" checked={snapshot.view.group === 'agent'} onChange={() => option({ group: 'agent' })} />Agent</label></div></section>
-    <section className="qvh-options-section"><div className="qvh-option-line"><label><input type="checkbox" checked={snapshot.view.hideEmptySessions} onChange={(event) => option({ hideEmptySessions: event.currentTarget.checked })} />Hide empty sessions</label></div></section>
     <section className="qvh-options-section">
-      <div className="qvh-options-title">History depth</div>
-      <select className="qvh-select" aria-label="History depth" value={snapshot.view.sessionLimit === null ? 'unlimited' : String(snapshot.view.sessionLimit)} onChange={(event) => option({ sessionLimit: event.currentTarget.value === 'unlimited' ? null : Number(event.currentTarget.value) as 250 | 500 | 1000 })}>
+      <SectionHeader title="Group" />
+      <div className="qvh-option-line" role="group" aria-label="Group sessions by">
+        <FormRow label="Project" htmlFor="qvh-group-project"><input id="qvh-group-project" type="radio" name="qvh-group" checked={snapshot.view.group === 'project'} onChange={() => option({ group: 'project' })} /></FormRow>
+        <FormRow label="Folder" htmlFor="qvh-group-folder"><input id="qvh-group-folder" type="radio" name="qvh-group" checked={snapshot.view.group === 'folder'} onChange={() => option({ group: 'folder' })} /></FormRow>
+        <FormRow label="Agent" htmlFor="qvh-group-agent"><input id="qvh-group-agent" type="radio" name="qvh-group" checked={snapshot.view.group === 'agent'} onChange={() => option({ group: 'agent' })} /></FormRow>
+      </div>
+    </section>
+    <section className="qvh-options-section">
+      <FormRow label="Hide empty sessions" htmlFor="qvh-hide-empty"><input id="qvh-hide-empty" type="checkbox" checked={snapshot.view.hideEmptySessions} onChange={(event) => option({ hideEmptySessions: event.currentTarget.checked })} /></FormRow>
+    </section>
+    <section className="qvh-options-section">
+      <SelectField label="History depth" id="qvh-history-depth" value={snapshot.view.sessionLimit === null ? 'unlimited' : String(snapshot.view.sessionLimit)} onChange={(event) => option({ sessionLimit: event.currentTarget.value === 'unlimited' ? null : Number(event.currentTarget.value) as 250 | 500 | 1000 })}>
         <option value="250">250 · Recommended</option><option value="500">500 · May be slower</option><option value="1000">1,000</option><option value="unlimited">Unlimited · Slowest</option>
-      </select>
+      </SelectField>
       <p className="qvh-option-warning">Larger histories can slow the entire app, especially on remote hosts. Unlimited scans all available history.</p>
     </section>
-    <section className="qvh-options-section"><button type="button" className="qvh-button" disabled={adjustmentCount(snapshot.view) === 0} onClick={() => void model.resetView().catch(() => {})}>Reset view</button></section>
+    <section className="qvh-options-section"><Button disabled={adjustmentCount(snapshot.view) === 0} onClick={() => void model.resetView().catch(() => {})}>Reset view</Button></section>
   </div>
 }
 
 export function mountHistoryPanel(context: UiPluginContext, element: HTMLElement, props: { report?(state: unknown): void }): () => void {
-  injectVaultStyles(element.ownerDocument)
   Object.assign(element.style, { display: 'flex', flexDirection: 'column', flex: '1', minHeight: '0', minWidth: '0', position: 'relative' })
   const root = createRoot(element)
   root.render(<HistoryPanel context={context} report={props.report} />)
