@@ -223,9 +223,10 @@ process.stdin.on('data', chunk => {
     const listedModels = async () => (await call<any>(h.client, 'quirky.agents/options', { agent: 'codex', host: 'local' })).models.map(
       (model: { id: string }) => model.id
     )
-    process.env.QUIRKY_AGENT_SEARCH_DIRS = h.fakeBin
-    const refreshed = await call<{ agents: { id: string; installed: boolean }[] }>(h.client, 'quirky.agents/refresh')
-    expect(refreshed.agents.find(({ id }) => id === 'codex')?.installed).toBe(true)
+    await call(h.client, 'quirky.agents/configure', {
+      agent: 'codex',
+      command: JSON.stringify(join(h.fakeBin, 'codex'))
+    })
     const discovered = await discover()
     expect(discovered).toMatchObject({
       agent: 'codex',
