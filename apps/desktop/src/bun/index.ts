@@ -3,7 +3,7 @@ import { existsSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { QuirkyClient } from '@quirky/protocol'
 import { ensureDaemon, quirkyHome, rpcUrl, type RuntimeInfo } from '@quirky/protocol/node'
-import { ApplicationMenu, BrowserView, BrowserWindow, Tray, Utils, app, type ApplicationMenuItemConfig } from 'electrobun/main'
+import { ApplicationMenu, BrowserView, BrowserWindow, Tray, Updater, Utils, app, type ApplicationMenuItemConfig } from 'electrobun/main'
 import { maintainConnection } from './connection'
 import { setDockBadge } from './dock'
 import { desktopWindowRouteUrl, folderPickerResult } from './desktop-window-route'
@@ -26,6 +26,13 @@ import { daemonUrl, errorPageHtml } from './page'
 import { findRepoRoot, resolveRuntimeEnv, trayDotPath } from './paths'
 import { createNativeBrowserHandlers, type NativeBrowserHostRPC } from './native-browser'
 import { playSound } from './sound'
+import {
+  UPDATE_APPLY_ACTION,
+  UPDATE_CHECK_ACTION,
+  createUpdateController,
+  trayMenuWithUpdates,
+  updateActionFromEvent
+} from './updates'
 import { loadViewMenuSettings, toggleViewMenuSetting, viewMenuSettingFromEvent, type ViewMenuSetting } from './view-menu'
 
 const WINDOW_TITLE = 'Quirky'
@@ -244,18 +251,20 @@ function onTrayClicked(event: unknown): void {
     stopping = true
     app.quit()
   }
+  runUpdateAction(updateActionFromEvent(event))
 }
 
 const trayDotImage = trayDotPath(pathOptions)
 let trayModel: TrayState = { visible: true, dot: false }
 let tray: Tray | null = null
 let trayShowsDot = false
+let readyUpdateVersion: string | null = null
 
 function createTray(dot: boolean): Tray {
   const created = dot
     ? new Tray({ title: 'Q', image: trayDotImage, template: false, width: 16, height: 16 })
     : new Tray({ title: 'Q' })
-  created.setMenu(TRAY_MENU)
+  created.setMenu(trayMenuWithUpdates(TRAY_MENU, readyUpdateVersion))
   created.on('tray-clicked', onTrayClicked)
   return created
 }
@@ -302,14 +311,31 @@ async function refreshShowMenuBarIcon(connected: QuirkyClient): Promise<void> {
 }
 
 const nativeViewMenu: ApplicationMenuItemConfig & { submenu: ApplicationMenuItemConfig[] } = { label: 'View', submenu: [] }
+const quirkyMenu: ApplicationMenuItemConfig & { submenu: ApplicationMenuItemConfig[] } = { label: 'Quirky', submenu: [] }
 const applicationMenu: ApplicationMenuItemConfig[] = [
-  { label: 'Quirky', submenu: [{ role: 'about' }, { type: 'divider' }, { role: 'hide' }, { role: 'hideOthers' }, { role: 'showAll' }, { type: 'divider' }, { role: 'quit' }] },
+  quirkyMenu,
   { label: 'Edit', submenu: [{ role: 'undo' }, { role: 'redo' }, { type: 'divider' }, { role: 'cut' }, { role: 'copy' }, { role: 'paste' }, { role: 'selectAll' }] },
   nativeViewMenu,
   { label: 'Window', submenu: [{ role: 'minimize' }, { role: 'zoom' }, { role: 'close' }] }
 ]
 let menuRequest = 0
+function renderQuirkyMenu(): void {
+  quirkyMenu.submenu = [
+    { role: 'about' },
+    { label: 'Check for Updates…', action: UPDATE_CHECK_ACTION },
+    { label: 'Restart to Update', action: UPDATE_APPLY_ACTION, hidden: readyUpdateVersion === null },
+    { type: 'divider' },
+    { role: 'hide' },
+    { role: 'hideOthers' },
+    { role: 'showAll' },
+    { type: 'divider' },
+    { role: 'quit' }
+  ]
+}
+let viewMenuItems: ViewMenuSetting[] = []
 function renderApplicationMenu(items: ViewMenuSetting[]): void {
+  viewMenuItems = items
+  renderQuirkyMenu()
   nativeViewMenu.submenu = items.map(item => ({ label: item.label, checked: item.checked, action: `view-setting:${encodeURIComponent(item.id)}` }))
   if (items.length > 0) nativeViewMenu.submenu.push({ type: 'divider' })
   nativeViewMenu.submenu.push({ role: 'toggleFullScreen' })
@@ -323,6 +349,11 @@ async function refreshViewMenu(connected: QuirkyClient): Promise<void> {
   } catch (error) { console.warn('reading View menu settings failed:', error) }
 }
 ApplicationMenu.on('application-menu-clicked', event => {
+  const updateAction = updateActionFromEvent(event)
+  if (updateAction) {
+    runUpdateAction(updateAction)
+    return
+  }
   const setting = viewMenuSettingFromEvent(event)
   const connected = client
   if (!setting || !connected) return
@@ -334,6 +365,27 @@ ApplicationMenu.on('application-menu-clicked', event => {
     })
 })
 renderApplicationMenu([])
+
+const updates = createUpdateController({
+  updater: Updater,
+  notify: ({ title, body }) => Utils.showNotification({ title, body, silent: true }),
+  onReady: (version) => {
+    readyUpdateVersion = version
+    tray?.setMenu(trayMenuWithUpdates(TRAY_MENU, version))
+    renderApplicationMenu(viewMenuItems)
+  },
+  schedule: (fn, ms) => {
+    const timer = setTimeout(fn, ms)
+    return () => clearTimeout(timer)
+  }
+})
+
+function runUpdateAction(action: ReturnType<typeof updateActionFromEvent>): void {
+  if (action === UPDATE_CHECK_ACTION) void updates.checkNow()
+  if (action === UPDATE_APPLY_ACTION) void updates.restart()
+}
+
+void updates.start()
 
 let latest: RuntimeInfo | null = null
 

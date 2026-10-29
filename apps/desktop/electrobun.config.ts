@@ -24,5 +24,8 @@ export default {
     win: {
       bundleCEF: false
     }
+  },
+  release: {
+    baseUrl: 'https://github.com/zpyoung/quirky/releases/latest/download'
   }
 } satisfies ElectrobunConfig

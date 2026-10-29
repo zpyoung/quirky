@@ -27,17 +27,29 @@ The app is unsigned. If macOS refuses to open the copy, run
 
 ## Releases
 
-The `Build and release` GitHub Actions workflow builds the app on every push to `main` and every
-pull request; the run's `quirky-macos-arm64` artifact holds the zipped app. Pushing a `v*` tag also
-sets the app version from the tag and publishes a GitHub release:
+Installed apps update themselves from the latest GitHub release. About 30 seconds after launch and
+every 4 hours after that, the app reads `stable-macos-arm64-update.json` from
+`https://github.com/zpyoung/quirky/releases/latest/download`. When that build differs from the
+running one, it downloads it in the background, posts a notification, and adds **Restart to Update**
+to the Quirky menu and the tray menu. **Check for Updates…** in both menus checks on demand and
+reports "You're up to date" or the failure. `bun run dev` builds never check.
+
+To cut a release, tag the commit you want to ship and push the tag:
 
 ```sh
-git tag v0.2.0 && git push origin v0.2.0
+git tag vX.Y.Z && git push origin vX.Y.Z
 ```
 
-To install a release on another Apple Silicon Mac, download `Quirky-macos-arm64.zip`, unzip it into
-`~/Applications`, and clear the quarantine flag as above. The release also carries Electrobun's
-`stable-macos-arm64-update.json` and app tarball for a future in-app updater.
+The `Build and release` GitHub Actions workflow builds the app on every push to `main` and every
+pull request; the run's `quirky-macos-arm64` artifact holds the zipped app. A `v*` tag also sets the
+app version from the tag and publishes a GitHub release with `Quirky-macos-arm64.zip` and the update
+files the apps fetch (`stable-macos-arm64-update.json` and the app tarball). Mark a release as a
+pre-release or draft to keep installed apps from picking it up, because `latest` skips both.
+
+To install a release on another Apple Silicon Mac for the first time, download
+`Quirky-macos-arm64.zip`, unzip it into `~/Applications`, and clear the quarantine flag as above.
+Later updates need no manual steps. An update restarts only the app shell, so a daemon that is
+already running keeps running until you stop it.
 
 ## External command and profile launchers
 
