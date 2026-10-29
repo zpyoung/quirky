@@ -154,7 +154,7 @@
       },
       {
         "id": "get",
-        "description": "Returns the current local source metadata for a host-qualified session ID, or null when it is gone.",
+        "description": "Returns source metadata for a host-qualified session ID. Registered-owner file and managed-home paths are redacted.",
         "readOnly": true,
         "params": { "type": "object", "properties": { "id": { "type": "string" } }, "required": ["id"] },
         "result": {
@@ -212,7 +212,7 @@
       },
       {
         "id": "firstPrompt",
-        "description": "Reads the full first user prompt on demand for a local session.",
+        "description": "Reads the full first user prompt on demand for a local or registered-owner session.",
         "readOnly": true,
         "params": { "type": "object", "properties": { "id": { "type": "string" } }, "required": ["id"] },
         "result": {
@@ -225,7 +225,7 @@
       },
       {
         "id": "subagents",
-        "description": "Returns child transcripts supported by the source agent parser.",
+        "description": "Returns host-qualified child transcripts supported by the source agent parser.",
         "readOnly": true,
         "params": { "type": "object", "properties": { "id": { "type": "string" } }, "required": ["id"] },
         "result": {
@@ -764,25 +764,65 @@
       },
       {
         "id": "resume",
-        "description": "Resumes a present local source through quirky.session and optionally adopts it into an explicit terminal group.",
+        "description": "Resumes a local source or an authenticated owner source in its selected canonical workspace.",
         "params": {
           "type": "object",
           "properties": {
             "id": { "type": "string" },
             "group": { "type": "string" },
             "worktree": { "type": "string" },
-            "fork": { "type": "boolean" }
+            "fork": { "type": "boolean" },
+            "remote": {
+              "type": "object",
+              "description": "Exact registered source-owner workspace reference; exclusive with group and worktree.",
+              "additionalProperties": false,
+              "properties": {
+                "owner": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "hostId": { "type": "string" },
+                    "identity": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": {
+                        "hostId": { "type": "string" },
+                        "generation": { "type": "string" }
+                      },
+                      "required": ["hostId", "generation"]
+                    },
+                    "runtime": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": {
+                        "id": { "type": "string" },
+                        "endpoint": { "type": "string" },
+                        "grantId": { "type": "string" }
+                      },
+                      "required": ["id", "endpoint", "grantId"]
+                    }
+                  },
+                  "required": ["hostId", "identity", "runtime"]
+                },
+                "mirrorId": { "type": "string" },
+                "worktreeId": { "type": "string" },
+                "instanceId": { "type": "string" },
+                "fingerprint": { "type": "string" }
+              },
+              "required": ["owner", "mirrorId", "worktreeId", "instanceId", "fingerprint"]
+            }
           },
           "required": ["id"]
         },
         "result": {
           "type": "object",
-          "description": "The direct quirky.session Session returned by resumeExternal.",
+          "description": "Local resumes return their direct Session; registered-owner resumes return a host-qualified session summary without remote paths or launch data.",
           "properties": {
             "id": { "type": "string" },
             "kind": { "type": "string", "enum": ["terminal", "structured"] },
             "agent": { "type": "string" },
             "worktreeId": { "type": "string" },
+            "hostId": { "type": "string", "description": "Present for an owner-qualified remote result." },
             "cwd": { "type": "string" },
             "title": { "type": "string" },
             "status": { "type": "string", "enum": ["starting", "running", "working", "waiting", "done", "exited"] },
@@ -853,10 +893,35 @@
             },
             "unread": { "description": "One of agent, bell or notification, null, or absent when not unread." }
           },
-          "required": [
-            "id", "kind", "agent", "worktreeId", "cwd", "title", "status", "createdAt", "lastActivityAt",
-            "exitCode", "exitSignal", "exitCause", "restorable"
-          ]
+          "required": ["id", "kind", "agent", "worktreeId", "status", "createdAt"]
+        }
+      },
+      {
+        "id": "ownerResume",
+        "description": "Resumes an owner-local source in an exact canonical owner worktree after revalidating its producer instance. Callable only through a full owner-cli grant.",
+        "params": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "id": { "type": "string", "description": "Owner-local Vault source ID, not a caller path." },
+            "worktree": { "type": "string", "description": "Exact canonical owner worktree ID." },
+            "expectedInstanceId": { "type": "string" },
+            "fork": { "type": "boolean" }
+          },
+          "required": ["id", "worktree", "expectedInstanceId"]
+        },
+        "result": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "id": { "type": "string" },
+            "kind": { "type": "string", "enum": ["terminal", "structured"] },
+            "agent": { "type": "string" },
+            "worktreeId": { "type": "string" },
+            "status": { "type": "string", "enum": ["starting", "running", "working", "waiting", "done", "exited"] },
+            "createdAt": { "type": "number" }
+          },
+          "required": ["id", "kind", "agent", "worktreeId", "status", "createdAt"]
         }
       },
       {
@@ -946,6 +1011,15 @@
         }
       }
     ],
+    "vault-host": [
+      {
+        "id": "owner-cli",
+        "description": "Owner-host Vault methods reached only through pinned owner-cli runtime calls.",
+        "label": "Registered owner hosts",
+        "methodPrefix": "quirky.vault",
+        "ownerRuntime": true
+      }
+    ],
     "event": [
       {
         "id": "searchTipChanged",
@@ -1013,7 +1087,50 @@
         "title": "Resume Agent Session",
         "args": {
           "type": "object",
-          "properties": { "id": { "type": "string" }, "group": { "type": "string" }, "worktree": { "type": "string" } },
+          "properties": {
+            "id": { "type": "string" },
+            "group": { "type": "string" },
+            "worktree": { "type": "string" },
+            "remote": {
+              "type": "object",
+              "description": "Exact OwnerSessionWorkspaceRef for a registered source-owner workspace.",
+              "additionalProperties": false,
+              "properties": {
+                "owner": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "hostId": { "type": "string" },
+                    "identity": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": {
+                        "hostId": { "type": "string" },
+                        "generation": { "type": "string" }
+                      },
+                      "required": ["hostId", "generation"]
+                    },
+                    "runtime": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": {
+                        "id": { "type": "string" },
+                        "endpoint": { "type": "string" },
+                        "grantId": { "type": "string" }
+                      },
+                      "required": ["id", "endpoint", "grantId"]
+                    }
+                  },
+                  "required": ["hostId", "identity", "runtime"]
+                },
+                "mirrorId": { "type": "string" },
+                "worktreeId": { "type": "string" },
+                "instanceId": { "type": "string" },
+                "fingerprint": { "type": "string" }
+              },
+              "required": ["owner", "mirrorId", "worktreeId", "instanceId", "fingerprint"]
+            }
+          },
           "required": ["id"]
         }
       }
@@ -1053,10 +1170,10 @@
       },
       { "id": "search-status", "summary": "show transcript search status", "flags": { "host": { "type": "string", "description": "local, all, or an effective host ID." } } },
       { "id": "search-tip", "summary": "show the Vault-owned session-search tip state" },
-      { "id": "enable", "summary": "enable local transcript search", "flags": { "history-days": { "type": "integer", "description": "Retain this many days; omit for all history." } } },
+      { "id": "enable", "summary": "enable transcript search on the local host, one registered owner, or all hosts", "flags": { "history-days": { "type": "integer", "description": "Retain this many days; omit for all history." }, "host": { "type": "string", "description": "local, all, or a registered host ID." } } },
       { "id": "clear", "summary": "turn off search and clear its disposable index" },
       { "id": "get", "summary": "inspect one agent session", "positionals": [{ "name": "id", "description": "Host-qualified vault session ID.", "required": true }] },
-      { "id": "resume", "summary": "resume a local agent session", "positionals": [{ "name": "id", "description": "Host-qualified vault session ID.", "required": true }], "flags": { "group": { "type": "string", "description": "Explicit terminal tab group." }, "worktree": { "type": "string", "description": "Destination workspace selector." }, "fork": { "type": "boolean", "description": "Fork the provider session." } } },
+      { "id": "resume", "summary": "resume a local or registered owner agent session", "positionals": [{ "name": "id", "description": "Host-qualified vault session ID.", "required": true }], "flags": { "group": { "type": "string", "description": "Explicit local terminal tab group." }, "worktree": { "type": "string", "description": "Local workspace selector." }, "remote": { "type": "string", "description": "OwnerSessionWorkspaceRef JSON; exclusive with --group and --worktree." }, "fork": { "type": "boolean", "description": "Fork the provider session." } } },
       { "id": "delete", "summary": "move a local agent session to macOS Trash", "positionals": [{ "name": "id", "description": "Host-qualified vault session ID.", "required": true }] },
       { "id": "view", "summary": "read or update daemon-owned vault view preferences", "flags": { "group": { "type": "string", "description": "project, folder or agent." }, "browse-sort": { "type": "string", "description": "updated or created.", "enum": ["updated", "created"] }, "search-sort": { "type": "string", "description": "relevance or newest.", "enum": ["relevance", "newest"] }, "hide-empty-sessions": { "type": "boolean", "description": "Hide empty sessions." }, "session-limit": { "type": "integer", "description": "250, 500, 1000 or 0 for unlimited." }, "host": { "type": "string", "description": "local, all, or host ID." }, "scope": { "type": "string", "description": "workspace, project or all.", "enum": ["workspace", "project", "all"] }, "query": { "type": "string", "description": "Transient query." } } },
       { "id": "open", "summary": "open Agent Session History", "flags": { "agent": { "type": "string", "description": "Pre-filter by agent." }, "session": { "type": "string", "description": "Preselect a provider session ID." }, "query": { "type": "string", "description": "Focus with this query." } } },

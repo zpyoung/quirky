@@ -54,10 +54,28 @@ async function openHistory(context: UiPluginContext, value?: unknown): Promise<v
 async function resumeCommand(context: UiPluginContext, value?: unknown): Promise<unknown> {
   const args = asRecord(value)
   const id = inputString(args.id)
-  if (id === null) throw new Error('A valid local vault session ID is required to resume.')
+  if (id === null) throw new Error('A valid host-qualified vault session ID is required to resume.')
   const group = inputString(args.group, 256)
   const worktree = inputString(args.worktree, 256)
   if ((group === null) !== (worktree === null)) throw new Error('A drop target must identify both its group and worktree.')
+  if (args.remote !== undefined) {
+    const remote = asRecord(args.remote)
+    const owner = asRecord(remote.owner)
+    const hostId = inputString(owner.hostId, 256)
+    const mirrorId = inputString(remote.mirrorId, 256)
+    const targetWorktree = inputString(remote.worktreeId, 256)
+    if (hostId === null || mirrorId === null || targetWorktree === null) {
+      throw new Error('A remote resume target must identify its registered owner workspace.')
+    }
+    if (group !== null || worktree !== null) throw new Error('A remote resume target cannot be combined with a local group or worktree.')
+    const result = await context.call('quirky.vault/resume', { id, remote })
+    const session = asRecord(result)
+    if (session.hostId !== hostId || typeof session.id !== 'string' || session.worktreeId !== targetWorktree) {
+      throw new Error('The vault did not resume the source on the selected owner workspace.')
+    }
+    context.openView('view:quirky.worktree/remote', { workspace: mirrorId })
+    return result
+  }
   const result = await context.call('quirky.vault/resume', {
     id,
     ...(group === null ? {} : { group, worktree })
