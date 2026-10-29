@@ -148,6 +148,10 @@ are journaled and status comes from native events. Command/file permissions beco
 client connection; answering resumes the waiting provider. Cancellation denies approval;
 disabling the creating plugin stops its owned runners and cancels their pending approvals.
 
+Structured runners and their leases belong to the daemon. After a daemon restart, startup marks
+their old session records exited while retaining the provider conversation and launch snapshot
+for explicit resume. Terminal processes that still live in the independent PTY host stay running.
+
 Stop a connected runner before resuming its conversation:
 
 ```sh
