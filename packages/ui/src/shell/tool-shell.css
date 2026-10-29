@@ -29,6 +29,11 @@
   min-height: 0;
 }
 
+/* dialogs render in place, and this region's stacking context otherwise sits under the tool panels */
+.shell-main-region:has(.ui-dialog-backdrop) {
+  z-index: 2;
+}
+
 .shell-main-region > .main {
   width: 100%;
   height: 100%;
