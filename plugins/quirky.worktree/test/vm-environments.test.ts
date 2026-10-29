@@ -4,7 +4,7 @@ import { chmodSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync }
 import { join } from 'node:path'
 import type { OwnerHostIdentity, PluginContext, PluginStore, RegisteredOwnerHost, Worktree } from '@quirky/protocol'
 import { makeTempHome } from '../../../packages/daemon/test/helpers'
-import { environmentRecipeHash, migrateVmEnvironments, registerVmEnvironments, runVmProcessBounded } from '../src/daemon/vm'
+import { environmentRecipeHash, matchesRetainedVmWorkspaceOrigin, migrateVmEnvironments, registerVmEnvironments, runVmProcessBounded } from '../src/daemon/vm'
 import type { VmEnvironment, VmEnvironmentRecipe } from '../src/vm-types'
 
 const guestIdentity: OwnerHostIdentity = { hostId: 'guest-host-stable', generation: 'activation-7' }
@@ -45,6 +45,9 @@ let registeredHost: RegisteredOwnerHost
 let hostRegistered: boolean
 let envRecipe: VmEnvironmentRecipe
 let savedRuntime: Record<string, unknown>
+let remoteMirror: typeof mirror
+let remoteMirrorVisible: boolean
+let failNextRotatedAttach: boolean
 let disposeVm: (() => Promise<void>) | undefined
 let previousHome: string | undefined
 let previousQuirkyHome: string | undefined
@@ -75,7 +78,7 @@ beforeEach(() => {
     'case "$1" in',
     "  --version) echo 'limactl version 1.0.0';;",
     '  list) cat "$QUIRKY_TEST_LIMA_STATE";;',
-    "  start) name=\"$2\"; dir=\"$QUIRKY_TEST_LIMA_ROOT/$name\"; count_file=\"$QUIRKY_TEST_LIMA_START_COUNT\"; count=0; if [ -f \"$count_file\" ]; then count=$(cat \"$count_file\"); fi; count=$((count+1)); printf '%s' \"$count\" > \"$count_file\"; if [ \"$count\" -ge 2 ]; then printf '{\"hostId\":\"guest-host-stable\",\"generation\":\"activation-8\"}' > \"$QUIRKY_TEST_GUEST_IDENTITY\"; fi; mkdir -p \"$dir\"; printf '{\"name\":\"%s\",\"status\":\"Running\",\"dir\":\"%s\"}\\n' \"$name\" \"$dir\" > \"$QUIRKY_TEST_LIMA_STATE\";;",
+    "  start) name=\"$2\"; dir=\"$QUIRKY_TEST_LIMA_ROOT/$name\"; count_file=\"$QUIRKY_TEST_LIMA_START_COUNT\"; count=0; if [ -f \"$count_file\" ]; then count=$(cat \"$count_file\"); fi; count=$((count+1)); printf '%s' \"$count\" > \"$count_file\"; if [ \"$count\" -eq 2 ]; then printf '{\"hostId\":\"guest-host-stable\",\"generation\":\"activation-8\"}' > \"$QUIRKY_TEST_GUEST_IDENTITY\"; fi; mkdir -p \"$dir\"; printf '{\"name\":\"%s\",\"status\":\"Running\",\"dir\":\"%s\"}\\n' \"$name\" \"$dir\" > \"$QUIRKY_TEST_LIMA_STATE\";;",
     "  stop) name=\"$2\"; dir=\"$QUIRKY_TEST_LIMA_ROOT/$name\"; printf '{\"name\":\"%s\",\"status\":\"Stopped\",\"dir\":\"%s\"}\\n' \"$name\" \"$dir\" > \"$QUIRKY_TEST_LIMA_STATE\";;",
     '  delete) name="$3"; rm -rf "$QUIRKY_TEST_LIMA_ROOT/$name"; printf "[]" > "$QUIRKY_TEST_LIMA_STATE";;',
     '  shell) cat "$QUIRKY_TEST_GUEST_IDENTITY";;',
@@ -97,6 +100,9 @@ beforeEach(() => {
   process.env.QUIRKY_TEST_LIMA_ROOT = limaRoot
   process.env.QUIRKY_TEST_LIMA_START_COUNT = startCountPath
   envRecipe = { ...recipe, create: createScript({ pairingCode: 'owner-cli-offer', workspaceSelector: 'wt_guest_01' }) }
+  remoteMirror = mirror
+  remoteMirrorVisible = true
+  failNextRotatedAttach = false
   calls = []
   savedRuntime = { ...runtimeSummary }
   registeredHost = {
@@ -151,7 +157,11 @@ beforeEach(() => {
       }
       if (method === 'quirky.worktree/remoteHostRegister') {
         hostRegistered = true
-        registeredHost = { ...registeredHost, identity: currentGuestIdentity() }
+        const identity = currentGuestIdentity()
+        if (remoteMirror.identity.hostId !== identity.hostId || remoteMirror.identity.generation !== identity.generation) {
+          remoteMirror = { ...remoteMirror, connected: false }
+        }
+        registeredHost = { ...registeredHost, identity }
         return registeredHost
       }
       if (method === 'quirky.cli/runtimeCall') {
@@ -160,7 +170,15 @@ beforeEach(() => {
         registeredHost = { ...registeredHost, identity }
         return { runtime: registeredHost.runtime, result: identity }
       }
-      if (method === 'quirky.worktree/remoteAttach') return currentMirror(true)
+      if (method === 'quirky.worktree/remoteAttach') {
+        if (failNextRotatedAttach && currentGuestIdentity().generation === 'activation-8') {
+          failNextRotatedAttach = false
+          throw new Error('simulated attachment interruption')
+        }
+        remoteMirror = currentMirror(true)
+        remoteMirrorVisible = true
+        return remoteMirror
+      }
       if (method === 'quirky.worktree/remoteHostStatus') {
         if (!hostRegistered) throw new Error('registered host not found')
         const connected = readFileSync(statePath, 'utf8').includes('Running')
@@ -181,8 +199,11 @@ beforeEach(() => {
         return { hosts: [{ ...registeredHost, connected }] }
       }
       if (method === 'quirky.worktree/remoteList') {
-        const connected = readFileSync(statePath, 'utf8').includes('Running')
-        return { workspaces: [currentMirror(connected)] }
+        if (!remoteMirrorVisible) return { workspaces: [] }
+        const identity = currentGuestIdentity()
+        const connected = readFileSync(statePath, 'utf8').includes('Running') &&
+          remoteMirror.identity.hostId === identity.hostId && remoteMirror.identity.generation === identity.generation
+        return { workspaces: [{ ...remoteMirror, connected }] }
       }
       if (method === 'quirky.worktree/remoteRefresh') {
         if (!readFileSync(statePath, 'utf8').includes('Running')) throw new Error('guest owner unreachable while Lima is stopped')
@@ -194,6 +215,7 @@ beforeEach(() => {
         expect(params.expectedRuntime).toMatchObject({ id: savedRuntime.id, endpoint: savedRuntime.endpoint, grantId: savedRuntime.grantId })
         expect(params.yes).toBe(true)
         hostRegistered = false
+        remoteMirrorVisible = false
         return { ok: true, detached: 1 }
       }
       if (method === 'quirky.cli/runtimeList') return { runtimes: [savedRuntime] }
@@ -251,6 +273,25 @@ test('terminates a spawned descendant with its bounded process group', async () 
 })
 
 
+test('recognizes a retained VM workspace origin across owner generations without authorizing replacements', () => {
+  const retained = {
+    hostId: 'registered-guest-host',
+    identity: { hostId: 'guest-host-stable', generation: 'activation-7' },
+    worktree: { id: worktree.id, instanceId: worktree.instanceId }
+  }
+  const current = {
+    hostId: 'registered-guest-host',
+    identity: { hostId: 'guest-host-stable', generation: 'activation-8' },
+    worktree: { id: worktree.id, instanceId: worktree.instanceId }
+  }
+  expect(matchesRetainedVmWorkspaceOrigin(retained, current)).toBe(true)
+  expect(matchesRetainedVmWorkspaceOrigin(retained, { ...current, hostId: 'replacement-registration' })).toBe(false)
+  expect(matchesRetainedVmWorkspaceOrigin(retained, { ...current, identity: { ...current.identity, hostId: 'replacement-guest' } })).toBe(false)
+  expect(matchesRetainedVmWorkspaceOrigin(retained, { ...current, worktree: { ...current.worktree, id: 'replacement-worktree' } })).toBe(false)
+  expect(matchesRetainedVmWorkspaceOrigin(retained, { ...current, worktree: { ...current.worktree, instanceId: 'replacement-instance' } })).toBe(false)
+})
+
+
 test('rejects create consent when any full-lifecycle script changes before provisioning', async () => {
   const approved = environmentRecipeHash(envRecipe)
   envRecipe = { ...envRecipe, suspend: 'limactl stop --force "$QUIRKY_VM_NAME"' }
@@ -278,7 +319,7 @@ test('reports a missing Lima executable without falling back to another backend'
   expect(readFileSync(logPath, 'utf8')).toBe('')
 })
 
-test.skipIf(process.platform !== 'darwin')('runs trusted scripts through an isolated Lima boundary and rejects a stale VM instance fence', async () => {
+test.skipIf(process.platform !== 'darwin')('reattaches the exact guest workspace after generation rotation and recovers an interrupted attach without replaying create', async () => {
   const created = vmFromResult(await method('vmCreate')({ repo: 'repo_local', recipe: envRecipe.id, trustHash: environmentRecipeHash(envRecipe) }))
   expect(created.state).toBe('running')
   expect(created.remoteWorkspace).toEqual(mirror)
@@ -292,6 +333,19 @@ test.skipIf(process.platform !== 'darwin')('runs trusted scripts through an isol
     connected: false,
     worktree: { id: worktree.id, instanceId: worktree.instanceId }
   })
+
+  failNextRotatedAttach = true
+  await expect(method('vmResume')({ vm: created.id, instanceId: created.instanceId })).rejects.toThrow(/simulated attachment interruption/)
+  const interrupted = vmFromResult(method('vmShow')({ vm: created.id }))
+  expect(interrupted.state).toBe('failed')
+  expect(interrupted.ownerHost).toMatchObject({ identity: { hostId: guestIdentity.hostId, generation: 'activation-8' } })
+  expect(interrupted.remoteWorkspace).toMatchObject({
+    id: mirror.id,
+    identity: { hostId: guestIdentity.hostId, generation: 'activation-7' },
+    connected: false,
+    worktree: { id: worktree.id, instanceId: worktree.instanceId }
+  })
+
   const resumed = vmFromResult(await method('vmResume')({ vm: created.id, instanceId: created.instanceId }))
   expect(resumed.state).toBe('running')
   expect(resumed.remoteWorkspace).toMatchObject({
@@ -303,10 +357,48 @@ test.skipIf(process.platform !== 'darwin')('runs trusted scripts through an isol
     fingerprint: 'remote-fingerprint-02'
   })
   expect(resumed.remoteWorkspace?.id).not.toBe(mirror.id)
+  expect(readFileSync(join(home, 'lima-start-count'), 'utf8')).toBe('2')
+  expect(calls.filter((call) => call.method === 'quirky.cli/runtimeAdd')).toHaveLength(1)
+  expect(calls.filter((call) => call.method === 'quirky.worktree/remoteAttach')).toHaveLength(3)
+  expect(calls.filter((call) => call.method === 'quirky.worktree/remoteAttach').map((call) => call.params.worktree))
+    .toEqual([worktree.id, worktree.id, worktree.id])
   await method('vmDestroy')({ vm: created.id, instanceId: created.instanceId })
   expect(JSON.parse(readFileSync(statePath, 'utf8'))).toEqual([])
   expect(calls.some((call) => call.method === 'quirky.worktree/remoteHostForget' && call.params.detach === true)).toBe(true)
   expect(calls.some((call) => call.method === 'quirky.cli/runtimeRemove' && call.params.selector === 'runtime-vm-01')).toBe(true)
+})
+
+test.skipIf(process.platform !== 'darwin')('reattaches the retained VM workspace after local host and mirror detachment', async () => {
+  const created = vmFromResult(await method('vmCreate')({ repo: 'repo_local', recipe: envRecipe.id, trustHash: environmentRecipeHash(envRecipe) }))
+  hostRegistered = false
+  remoteMirrorVisible = false
+
+  const resumed = vmFromResult(await method('vmResume')({ vm: created.id, instanceId: created.instanceId }))
+  expect(resumed.state).toBe('running')
+  expect(resumed.remoteWorkspace).toMatchObject({
+    id: 'mirror_guest_02',
+    hostId: registeredHost.id,
+    identity: { hostId: guestIdentity.hostId, generation: 'activation-8' },
+    worktree: { id: worktree.id, instanceId: worktree.instanceId },
+    connected: true,
+    fingerprint: 'remote-fingerprint-02'
+  })
+  expect(calls.filter((call) => call.method === 'quirky.worktree/remoteList')).toHaveLength(0)
+  expect(calls.filter((call) => call.method === 'quirky.worktree/remoteAttach').map((call) => call.params.worktree))
+    .toEqual([worktree.id, worktree.id])
+})
+
+test.skipIf(process.platform !== 'darwin')('reattaches an already-running VM workspace with its same-generation mirror', async () => {
+  const created = vmFromResult(await method('vmCreate')({ repo: 'repo_local', recipe: envRecipe.id, trustHash: environmentRecipeHash(envRecipe) }))
+  writeFileSync(join(home, 'lima-start-count'), '2', { mode: 0o600 })
+
+  const resumed = vmFromResult(await method('vmResume')({ vm: created.id, instanceId: created.instanceId }))
+  expect(resumed.state).toBe('running')
+  expect(resumed.remoteWorkspace).toEqual(mirror)
+  expect(resumed.ownerHost).toMatchObject({ identity: guestIdentity, connected: true })
+  expect(readFileSync(identityPath, 'utf8')).toBe(JSON.stringify(guestIdentity))
+  expect(calls.filter((call) => call.method === 'quirky.worktree/remoteList')).toHaveLength(0)
+  expect(readFileSync(join(home, 'lima-start-count'), 'utf8')).toBe('3')
 })
 test.skipIf(process.platform !== 'darwin')('refuses lifecycle scripts against a Lima VM recreated under the same name', async () => {
   const created = vmFromResult(await method('vmCreate')({ repo: 'repo_local', recipe: envRecipe.id, trustHash: environmentRecipeHash(envRecipe) }))

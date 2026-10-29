@@ -231,6 +231,11 @@ function publicVm(context: PluginContext, row: VmRow): VmEnvironment {
   const recipe = recipeFromRow(context, row)
   const identity = parseStoredIdentity(context, row)
   const mirror = parseMirror(context, row)
+
+  // A saved mirror is a historical snapshot, not a live network probe. Treat availability as unknown unless the running record, saved owner epoch, and mirror all agree.
+  const mirrorConnected = row.state === 'running' && row.host_id !== null && mirror !== null && identity !== null &&
+    mirror.hostId === row.host_id && sameIdentity(mirror.identity, identity) && mirror.connected
+  const remoteWorkspace = mirror === null ? null : { ...mirror, connected: mirrorConnected }
   return {
     id: row.id,
     name: row.recipe_name,
@@ -250,8 +255,8 @@ function publicVm(context: PluginContext, row: VmRow): VmEnvironment {
       updatedAt: row.operation_updated_at
     },
     error: row.error,
-    ownerHost: row.host_id === null || identity === null ? null : { id: row.host_id, identity, connected: mirror?.connected ?? false },
-    remoteWorkspace: mirror,
+    ownerHost: row.host_id === null || identity === null ? null : { id: row.host_id, identity, connected: mirrorConnected },
+    remoteWorkspace,
     guestCreateResult: parseGuestCreateResult(context, row),
     createdAt: row.created_at,
     updatedAt: row.updated_at
@@ -976,6 +981,22 @@ function mirrorForWorkspace(context: PluginContext, row: VmRow, workspaces: unkn
   return { id: previous.id, hostId: previous.hostId, identity, worktree, connected: value.connected, fingerprint: value.fingerprint }
 }
 
+
+type VmWorkspaceOrigin = {
+  hostId: string
+  identity: Pick<OwnerHostIdentity, 'hostId' | 'generation'>
+  worktree: { id: string; instanceId: string }
+}
+
+/** Checks historical origin only (stable host, workspace and instance; not generation). It never authorizes a current owner operation; authenticate the current endpoint and generation separately. */
+export function matchesRetainedVmWorkspaceOrigin(retained: VmWorkspaceOrigin, current: VmWorkspaceOrigin): boolean {
+  return retained.hostId === current.hostId &&
+    retained.identity.hostId === current.identity.hostId &&
+    retained.worktree.id === current.worktree.id &&
+    retained.worktree.instanceId === current.worktree.instanceId
+}
+
+
 async function refreshStoppedMirror(context: VmContext, service: VmService, row: VmRow): Promise<VmRemoteWorkspace> {
   if (row.host_id === null) conflict(context, `VM ${row.id} has no registered owner host to refresh`)
   const identity = parseStoredIdentity(context, row)
@@ -1231,12 +1252,15 @@ async function reconcileGuestAfterResume(context: VmContext, store: PluginStore,
   if (current.mirror_json !== null) {
     const previous = parseMirror(context, current)
     const savedIdentity = parseStoredIdentity(context, current)
-    if (!previous || !savedIdentity || previous.hostId !== host.id || !sameIdentity(previous.identity, savedIdentity) ||
-      previous.worktree.id !== current.worktree_id || previous.worktree.instanceId !== current.worktree_instance_id ||
-      current.worktree_id === null || current.worktree_instance_id === null) {
-      conflict(context, 'Saved VM mirror no longer matches its exact offline owner/workspace instance')
+    if (!previous || !savedIdentity || !sameIdentity(savedIdentity, host.identity) ||
+      current.worktree_id === null || current.worktree_instance_id === null ||
+      !matchesRetainedVmWorkspaceOrigin(previous, {
+        hostId: host.id,
+        identity: host.identity,
+        worktree: { id: current.worktree_id, instanceId: current.worktree_instance_id }
+      })) {
+      conflict(context, 'Saved VM mirror no longer identifies this exact host and workspace origin')
     }
-    // Mirror ids include the current host generation; reattach the same workspace to obtain its new id.
     const attached = await context.call('quirky.worktree/remoteAttach', { host: host.id, worktree: current.worktree_id })
     assertServiceActive(context, service)
     mirror = validateMirror(context, attached, host, { id: current.worktree_id, instanceId: current.worktree_instance_id })

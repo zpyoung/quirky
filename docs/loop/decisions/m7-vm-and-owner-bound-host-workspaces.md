@@ -187,5 +187,16 @@
 - **Revisit if:** The generation-rotating boundary or resource reuse regression fails.
 - **Source:** assumed — autonomous
 
+## D18: Separate historical attachment origin from current resume authority
+- **Question:** Did the first resume repair actually close the accepted generation-rotation defect, and what stopped the second pre-pass?
+- **Options:** Equate old mirror generation with the new saved identity; require an old offline registry row; validate retained origin independently and require a fresh current attachment.
+- **Chose:** Preserve the latest authenticated registration for retry/retirement, compare historical registered-host ID, stable guest-host ID and exact worktree ID/instance only as origin evidence, then validate a fresh remoteAttach against the current generation. Old public mirror existence or offline status is not a resume prerequisite. Keep suspend's separate physical-stop and offline-owner proof. Add a portable origin-relation regression and bounded macOS lifecycle recovery cases. Delete the repository hook test that merely pinned the incidental no-file default object instead of repinning extra fields.
+- **Why:** Bounded spec closure showed that the first repair still compared old-generation history against the overwritten current identity. Source inspection also showed that requiring old connected:false history would reject healthy same-generation reconciliation or detached public mirrors. Historical metadata is not current action authority; the independently authenticated owner and fresh attachment supply that authority.
+- **Evidence:** spec review closure at vm.ts1233–1237; subsequent resume history precondition at vm.ts1259–1262; ready-v2/prepass.json records 26pass/1fail in hooks.test.ts while typecheck/build passed. Neither red pre-pass dispatched an independent code model. Hardware lifecycle execution remains unobserved.
+- **Reversibility:** medium
+- **Confidence:** high for the source contradiction; fresh portable and final checks follow
+- **Revisit if:** Current attachment can bypass original-instance validation, or retained origin rejects a legitimate authenticated generation rotation.
+- **Source:** assumed — autonomous
+
 ## Progress
 Feature source and current sibling logic/technical maps are prepared. Three initial component worktrees are removed; all source implementers returned. One clean roadmap catch-up consumed all20 incoming logs. The prior named19-file gate, full typecheck and packaged build pass; the actual API/CLI/production-component proof is preserved with its limits. End-phase final review is now being staged against a fixed feature baseline; its deterministic pre-pass adds the owned-preparation regression. Browser, SSH tunnel, remote scenario and throwaway product-tree bundles are closed/removed. One native capability successor is verified. Next: capture the frozen source/spec artifact, run the independent final round, adjudicate and fix accepted findings once, rerun the exact checks, update the archived receipt, commit and canonical land; end only after the verdict and owned cleanup.
