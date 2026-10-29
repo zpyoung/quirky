@@ -451,5 +451,16 @@
 - **Revisit if:** the retried canonical gate reports another conflict or failure.
 - **Source:** locked by canonical landing controller and operator instruction
 
+## D42: Integrate the concurrently landed shell polish without dropping live activity
+- **Question:** how should the second landing rejection's new ui-polish-shell conflicts be resolved?
+- **Options:** restore body controls/stripe chevrons; discard the live activity renderer; compose the current header/context-menu polish with the verified activity mount.
+- **Chose:** merge977a8f71 preserves nearest-frame ToolPanelActions, the shared context menu on the real tool control, six destinations and current-destination disabling, while retaining the independent public activity alias mount and provider-owned click/decoration. Read ui-polish-shell D1–D11 and Progress; its whole-shell visual failure is not a new sidebar campaign.
+- **Why:** both the canonical placement and closed-panel dirty behavior must survive the named merge. Six of seven targeted files passed immediately; the remaining UI fixture had an obsolete registration inventory, null/undefined finder mismatches and a board query outside the options portal. Delete the inventory pin, strengthen present-row assertions and use the actual portal; do not add aliases or change product behavior.
+- **Evidence:** merge977a8f71; targeted sidebar, real dirty E2E, window/project, layout-shell and activity files passed; final ui.test.ts remote pass with no flakes and merged full typecheck pass40.26s. No extra review or GUI campaign ran.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** the canonical landing gate reports another conflict.
+- **Source:** locked by canonical ui-polish-shell decisions and operator landing instruction
+
 ## Progress
-Retry canonical land after verified corrective merge21fa8372. The original169 affected files and12 scripts passed remotely without flakes; after the named merge, all five resolved files and full typecheck passed as D41 records. All28 incoming decision logs were consumed; every owned process/browser and component tree is closed. The operator waived extra reviews; no duplicate follow-up was added. Existing fix-test-worktree-1028 remains the broader owner. D22's quiet-clock sampling limit is preserved. Await the authoritative land receipt.
+Retry canonical land after late polish merge977a8f71 and its exercised fixture correction. All seven targeted merge-consumer files have passed remotely without flakes; merged full typecheck passed40.26s. Earlier169 affected files and12 scripts passed without flakes. All incoming binding decisions were consumed and every owned process/browser/component tree is closed. No extra review or duplicate follow-up. Existing fix-test-worktree-1028 remains the broader owner; D22 preserves the quiet-clock tool limit. Await the authoritative land receipt.

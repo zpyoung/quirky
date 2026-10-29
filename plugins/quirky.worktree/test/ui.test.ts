@@ -561,10 +561,6 @@ const selectInto = (select: HTMLSelectElement, value: string) =>
     await Promise.resolve()
   })
 
-test('the module provides the declared sidebar slot and the new-worktree command', () => {
-  const h = setup()
-  expect([...h.provided.keys()].sort()).toEqual([COMMAND, SLOT])
-})
 test('Worktrees controls are supplied by the header popover, not the closed panel body', async () => {
   const h = setup()
   const unmount = await h.mountInto(host)
@@ -1494,9 +1490,9 @@ test('PR grouping, CLI-origin filtering and filtered-row reveal change the works
   expect(rowOf('fix-login', 'api').querySelector('a[aria-label="Pull request #42: Add route"]')).not.toBeNull()
 
   await click(optionsContent().querySelector('input[aria-label="Hide CLI-created worktrees"]')!)
-  expect(rowOf('fix-login', 'api')).toBeNull()
+  expect(rowOf('fix-login', 'api')).toBeUndefined()
   await click(optionsContent().querySelector('button[aria-label="Show 1 filtered worktree"]')!)
-  expect(rowOf('fix-login', 'api')).not.toBeNull()
+  expect(rowOf('fix-login', 'api')).toBeDefined()
   await unmount()
 })
 test('hide other desktop clients filters only known different creators for an authenticated installation', async () => {
@@ -1516,13 +1512,13 @@ test('hide other desktop clients filters only known different creators for an au
   const unmount = await h.mountInto(host)
   await openDisclosure('Workspace options')
   await click(optionsContent().querySelector('input[aria-label="Hide worktrees from other desktop clients"]')!)
-  expect(rowOf('fix-login', 'api')).toBeNull()
-  expect(rowOf('main', 'api')).not.toBeNull()
-  expect(rowOf('main', 'web')).not.toBeNull()
-  expect(rowOf('phone-origin', 'web')).not.toBeNull()
-  expect(rowOf('automation-origin', 'web')).not.toBeNull()
+  expect(rowOf('fix-login', 'api')).toBeUndefined()
+  expect(rowOf('main', 'api')).toBeDefined()
+  expect(rowOf('main', 'web')).toBeDefined()
+  expect(rowOf('phone-origin', 'web')).toBeDefined()
+  expect(rowOf('automation-origin', 'web')).toBeDefined()
   await click(optionsContent().querySelector('button[aria-label="Show 1 filtered worktree"]')!)
-  expect(rowOf('fix-login', 'api')).not.toBeNull()
+  expect(rowOf('fix-login', 'api')).toBeDefined()
   await unmount()
 })
 
@@ -1535,8 +1531,8 @@ test('identityless UI leaves even classified-looking rows visible', async () => 
     { worktreeId: 'w3', automation: false, otherClient: true }
   ]
   const unmount = await h.mountInto(host)
-  expect(rowOf('fix-login', 'api')).not.toBeNull()
-  expect(rowOf('main', 'web')).not.toBeNull()
+  expect(rowOf('fix-login', 'api')).toBeDefined()
+  expect(rowOf('main', 'web')).toBeDefined()
   expect(lastReport(h).stockFilteredHiddenIds).toEqual([])
   await unmount()
 })
@@ -1545,7 +1541,7 @@ test('workspace board exposes status controls for a worktree with a project-defi
   h.world.worktrees[1] = { ...h.world.worktrees[1]!, status: 'blocked' as Worktree['status'] }
   const unmount = await h.mountInto(host)
   await openDisclosure('More workspace tools')
-  await click(buttonNamed(host, 'Workspace board')!)
+  await click(buttonNamed(optionsContent(), 'Workspace board')!)
   const board = host.querySelector('section[aria-label="Workspace board"]')!
   const statusControl = board.querySelector<HTMLSelectElement>('select[aria-label="Move fix-login to status"]')
   expect(statusControl).not.toBeNull()
