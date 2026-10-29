@@ -2181,8 +2181,7 @@
       "deps": [
         "m7-test-triage"
       ],
-      "status": "in-progress",
-      "lane": 9
+      "status": "done"
     },
     {
       "id": "fix-test-ledger-1028",
