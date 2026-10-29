@@ -121,6 +121,17 @@
 - **Revisit if:** The remaining flow lands and its actual managed-page scenario passes.
 - **Source:** deferred: SC5 managed-browser drag
 
+## D12: Preserve captured destination confirmation through the landing retry
+- **Question:** How should the first landing conflict be resolved?
+- **Options:** Drop the destination assertion with incoming copy-only removals; preserve its meaningful security check.
+- **Chose:** Retain expect(confirmations[0]?.body).toContain(REVIEW.label) without changing the product label or confirmation behavior.
+- **Why:** The first canonical land safely refused a merge conflict at the assertion. Unlike explanatory wording, the captured destination label is a consumer-visible safety invariant. The retry merge preserves all incoming restyles and independent repairs.
+- **Evidence:** First land exited1/1.35s; conflict only at cookie-import-window.test.tsx:247-250. Merge49b57702 keeps the assertion. Canonical remote UI checks then passed2/2files0retries14.70s. BrowserRetryBindings reviewed the19incoming logs and found no conflicting Browser contract; lane7 still owns automation and the SC5 drag follow-up.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** The destination named to the user differs from the exact accepted job destination.
+- **Source:** assumed — autonomous
+
 ## Progress
 First wave integrated: UI test-only component ebec3ad5 audited at unchanged HEAD9b68ce76 and merged; component worktree removed after preserving inherited .serena via path-only stash. af5fa2fc includes harness, routing and README. Real CLI/browser smoke passed with privateHomeRemoved:true. Typecheck passed (176.08s); scripts passed126/0/1101 assertions (277.55s; before the operator's remote-only note).
 
@@ -130,4 +141,6 @@ Both second-wave workers returned and passed HEAD/scope audits. Automation stopp
 
 Single roadmap catchup complete with all4incoming decision logs read. Fresh canonical remote UI+scripts14/14files passed0retries30.98s; canonical import1/1file passed0retries16.58s. Lane7 scoped5e57ad16 consumed as c580694c; no competing automation source edits. Final affected browser suite17remote passed,6of7macOS passed, sole remaining SC5drag4pass1fail54assertions repeated by the configured retry (120.01s total). Final typecheck passed60.72s.
 
-Operator-directed landing now: external watcher cancelled, all agents/checks returned, no owned browser/app remains; unstarted final model review skipped. Exactly one remaining-flow item fix-browser-remaining-flows-1028 added, with existing lane7 owner as prerequisite. BLOCKERS and README retain the red flow explicitly. Next: commit, detach, canonical queue land and await its result; delete only owned scratch after successful land. Do not claim browser package green or whole queue complete.
+Operator-directed landing retry: first canonical land refused a merge conflict without changing integration. Merged current roadmap as49b57702, retained meaningful captured Review confirmation, read incoming19decision logs through BrowserRetryBindings (no contract conflict), and rechecked UI through the canonical remote runner (2/2files passed0retries14.70s). Merged root/UIlint/mobile/desktop typecheck passed33.90s. External watcher remains cancelled; no new debugging or review wait, no second follow-up.
+
+Next: commit this evidence, detach, canonical queue land and await its result; delete only owned scratch after successful land. No browser-package-green or whole-queue-complete claim.
