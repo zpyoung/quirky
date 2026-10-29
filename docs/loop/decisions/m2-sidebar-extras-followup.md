@@ -253,5 +253,71 @@
 - **Revisit if:** missing-group recovery changes execution ownership or any unrelated metadata.
 - **Source:** locked by research/orca-features/sidebar-extras.md
 
+## D24: Consume the landed shell, shared controls and script repairs without compatibility layers
+- **Question:** how should the corrective roadmap merge affect this continuation?
+- **Options:** retain legacy slot/DOM assumptions; consume the current public model and migrate fixtures.
+- **Chose:** merge current roadmap as b2b82c58, resolve the four fixture conflicts without restoring old CSS or copy inventories, and read all thirty incoming decision logs through the incoming-decision audit. Preserve original contribution IDs, exact-window input ownership, canonical daemon UI state, shared ContextMenu/ListRow controls, and Ask confirmation authority. No binding conflict required an override.
+- **Why:** the approved shell owns placement; a test expecting a legacy host or inline menu must not dictate a production compatibility path. The incoming script repair also supplies explicit process.env and isolated review captures rather than masking malformed reports.
+- **Evidence:** b2b82c58; SidebarFinalIncoming audit of all D/Progress sections; source ownership/membership/path-selector guards retained. UI lint, root/mobile/desktop compilation and UI build passed45.15s after removing only stale ignored generated phone assets from the source tree.
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** a canonical public contribution or ownership invariant is lost.
+- **Source:** locked by docs/loop/decisions/ui-shell-slots.md and incoming shared-control decisions
+
+## D25: Refute the dirty-marker failure from its original visual evidence
+- **Question:** did the appearance run show a stale Source Control activity marker after cleaning?
+- **Options:** change production decoration; inspect the actual activity item rather than the separate header badge.
+- **Chose:** retain the original report and adjudicate the apparent failure as a visual misread. Dirty obs-3 contains the red activity marker; clean obs-10 does not. The lingering generic badge belongs to the separate top-header button, not the right-side Source Control activity item. The actor confirmed the correction from the same evidence; no verdict rewrite or new mutation was used to conceal a failure.
+- **Why:** changing the working activity decoration would solve the wrong element.
+- **Evidence:** guarded run20261028T234022-66ea, obs-3/10 PNGs and trees; clean tree top-header e19/e339 versus activity e511; independently inspected dirty/clean crops; SidebarAppearanceUser adjudication.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** the actual activity item retains decoration after a fresh clean response.
+- **Source:** assumed — autonomous
+
+## D26: Prove the empty owning-project placeholder on the current shell
+- **Question:** does grouping every workspace make its owning project disappear?
+- **Options:** infer from projection tests; exercise all five rows through visible menus.
+- **Chose:** create a run-owned PlaceholderProof group, assign main/feature/docs/old/aging through actual controls, inspect the empty API project header, then delete only that created group and verify restoration. Preserve seed projects/groups.
+- **Why:** this closes the actual-surface placeholder case without substituting API writes for menu interaction.
+- **Evidence:** guarded run20261029T003357-6753 report pass; obs-17 shows all five rows with API identity and the empty API header; obs-20 restores rows and the feature child chip. End closed the browser, kept_open=[] and cleanup_errors=[].
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** empty project visibility or restored lineage regresses.
+- **Source:** locked by research/orca-features/sidebar-extras.md
+
+## D27: Repair current-contract fixture failures before dispatching final reviewers
+- **Question:** can a failed prepass be presented as a completed final review?
+- **Options:** dispatch against a red gate; preserve the failed receipt and migrate the failing fixtures first.
+- **Chose:** the367.373s remote prepass stopped before model dispatch. Of61 affected files,46 passed and15 failed. Split current-shell window/report fixtures, shared-control DOM fixtures, and Ask/dependency/activity API fixtures into disjoint corrective slices, with parent integration and no mid-flight checks. Investigate the isolated list timeout from retained evidence rather than increasing timeouts by default.
+- **Why:** visible UI was mounted during legacy readiness timeouts; menu and editable-element queries also targeted obsolete DOM. Consent failures must be repaired at the fixture authority, not by weakening production confirmation. Unmounted activity defaults are not proof of mounted behavior.
+- **Evidence:** retained acceptance-full.log and final-review/prepass.json; no final-review model dispatch occurred. The suite remains remote per D21, including scripts and single-file checks.
+- **Reversibility:** easy
+- **Confidence:** high about failures; individual causes remain subject to corrective verification
+- **Revisit if:** migrated meaningful scenarios expose a production defect.
+- **Source:** assumed — autonomous
+
+## D28: Keep user documentation about behavior, not the verification transcript
+- **Question:** what does the README reader need after the continuation?
+- **Options:** preserve stale header/deferred-parity prose; document current controls and link the acceptance contract.
+- **Chose:** Reader: plugin/API users — Decision: organize and filter worktrees safely. Replace old-header placement text with current rolling-window controls, validation, selected-row recovery, divider behavior and closed-tool decoration. Name Git/Git eligibility and Project-only membership drag; link the continuation spec. Keep verification/adjudication history here rather than in the README.
+- **Why:** the six-slot shell superseded header placement, while eligibility and non-destructive behavior remain user-facing contracts. No section removal or unrelated README rewrite is needed.
+- **Evidence:** README Public plugin UI and grouping APIs; logic.md locked decisions and SC-01–17.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** public controls or eligibility change.
+- **Source:** assumed — autonomous
+
+## D29: Preserve the list timeout as an uncertainty, not a justification to widen timeouts
+- **Question:** does the single five-second list failure establish a daemon deadlock?
+- **Options:** raise the timeout or change list concurrency; inspect the retained failure and verify the integrated batch first.
+- **Chose:** no source or timeout change. The failing test lists both projects, renames one checkout away, and requires only the remaining listable project. Its ordinary real-Git fixture has no special blocking wait or missing dependency. Git exit143 and ConnectionLost appear after timeout cleanup; they do not establish an earlier hang. Isolate this file after the integration barrier if needed.
+- **Why:** concurrent load is plausible, but not proven. Retain the failure and the invariant instead of manufacturing a fix from the cleanup symptom.
+- **Evidence:** acceptance-full.log667–702; list.test.ts123–132; real-project.ts14–28/42–43; src/daemon/list.ts173–190; shared harness cleanup136–154; SidebarListTimeout read-only audit.
+- **Reversibility:** easy
+- **Confidence:** high that no code change is justified by this receipt; low about the timeout's underlying cause
+- **Revisit if:** isolated verification or a later full run demonstrates a repeatable failure.
+- **Source:** assumed — autonomous
+
 ## Progress
-Source and fixture corrections through38bf690 plus6298bf91 are integrated; canonical provider7d19f1d0, tracker componentf676dd4e and renderer component3e453bfb remain. Three integration-only test typing errors were corrected without runtime fallbacks; root/mobile/desktop compilation and UI build passed31.69s after the correction (UI lint had already passed). Guarded membership/drag/group closures, custom/hidden and complete Live exception checks have evidence; quiet timing is the explicit D22 tool partial. All completed browser/daemon fixtures are closed. Remaining: dirty/separators/public-item UI on one fresh fixture, combined remote affected/scripts gate plus final build, bounded three-lens final review and accepted fix batch if needed, final docs/progress and canonical land. Dependency readiness is true; no global completion claim.
+Current source is b2b82c58 plus the README update. Core/source corrections and prior fixture components are integrated; all thirty incoming decision logs were audited. Current-shell empty-project UI passed and its browser closed. Separator persistence is undergoing a two-run fresh-page proof on the sole owned fixture. The latest remote prepass is red as D27 records; three disjoint corrective workers are migrating current shell/DOM/Ask fixtures, with no checks mid-flight. No final code-review model has run yet. Remaining: integrate and remotely verify corrections, complete/close the separator fixture, final build and three-lens review with one accepted fix batch, record complete criterion evidence, commit and canonical land. Dependency readiness is true; quiet aging retains the explicit D22 observation limit. No global completion claim.

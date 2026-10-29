@@ -10,14 +10,17 @@ Satisfies [conceptual model](logic.md#conceptual-model-and-data-flow). `plugins/
 
 Satisfies [scenarios](logic.md#behavior--scenarios). Paths relative to repository root `/Users/zpyoung/orca/workspaces/quirky/build-lane-4`:
 
-- `plugins/quirky.worktree/src/Menu.tsx`, `workspaceMenu(worktree, descendants, groups, repo, on, statuses)` at132: eligibility branch at199 requires owning repo Git as well as worktree Git; fallback uses existing project actions.
-- `plugins/quirky.worktree/src/Tree.tsx`, `changeMembership` at412, drag resolution near395 and handlers715: share eligibility across start/preview/drop/mutation; check current `options.groupBy` at membership drag boundaries, not manual reorder boundaries.
+- `plugins/quirky.worktree/src/Menu.tsx`, `workspaceMenu` at33: eligibility at96 requires owning repo Git as well as worktree Git; missing-target removal at119 stays reachable; folder-owner project actions begin at123.
+- `plugins/quirky.worktree/src/Tree.tsx`, preview reset at496, drag resolution at503, guarded mutation at520, and drop at862: share eligibility across start/preview/drop/mutation; recheck current `options.groupBy` at membership drag boundaries, not manual reorder boundaries.
 - `plugins/quirky.worktree/src/ActivityFilters.tsx`: `WINDOW_OPTIONS` labels; change displayed rolling labels without changing six serialized window values.
 - `plugins/quirky.worktree/src/useSidebarActivity.ts:227-232`: current sixty-second clock refresh and unmount cleanup; retain unless a regression proves a flaw.
 - `plugins/quirky.sidebar-extras/src/daemon/projection.ts:72-158,235-272`: optional missing method differs from failed provider; positive live facts override unrelated failure. Agent status reads canonical freshness-adjusted display, not stale Session.agentStatus snapshots.
 - `plugins/quirky.sidebar-extras/src/daemon/state.ts:181-207,291-365`: strict hydration, client identity, persistent visits and session exits.
 - `plugins/quirky.sidebar-extras/test/activity.test.ts`, `api.test.ts`, `dirty.test.ts`, `ui.test.ts`: daemon/runtime/race edges.
 - `plugins/quirky.worktree/test/sidebar-extras-ui.test.ts`: renderer interaction and quiet aging; `sidebar-extras.e2e.test.ts`: real daemon/CLI plus mounted window; `sidebar-membership.test.ts`: canonical identity/CAS; `plugins/quirky.repo/test/sidebar-groups.test.ts`: durable hierarchy/deletion.
+- `plugins/quirky.worktree/main.ts`: the existing `ownedIds` provider is registered in the handler map, so folder/project ownership reads reach the canonical implementation.
+- `plugins/quirky.worktree/src/daemon/project.ts:142`: hosting project resolution uses the public `path:` selector for the owning repo; normalized tracker identity persists without changing worktree lineage.
+- `plugins/quirky.worktree/src/GroupDialogs.tsx`: a verified empty deletion preview discloses that no ledgers are affected; loading/error/null previews do not make that claim.
 
 ## Contracts & interfaces
 
