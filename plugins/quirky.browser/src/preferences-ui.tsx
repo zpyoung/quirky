@@ -21,7 +21,7 @@ export function registerPreferencesUi(context: UiPluginContext): void {
       throw new Error('A pending confirmed profile clear request is required.')
     }
     if (!context.nativeBrowser.available) throw new Error('Native Browser profile clearing requires the desktop window.')
-    if (!context.nativeBrowser.clearPartitionAvailable) throw new Error('Native profile clearing is unavailable: the SDK provides no deletion completion acknowledgement. Cookies, Chrome data and profile metadata were preserved.')
+    if (!context.nativeBrowser.clearPartitionAvailable) throw new Error('Native profile clearing is unavailable: this Mac cannot confirm native website-data removal (macOS 14 or later is required). Cookies, Chrome data and profile metadata were preserved.')
     const claim = await context.call('quirky.browser/profileClearNativeClaim', { request: args.request }) as { partition: string }
     if (!/^persist:quirky-browser-(?:default|profile_[0-9a-f]{32})$/.test(claim.partition)) {
       throw new Error('The profile clear request did not name a Browser partition.')

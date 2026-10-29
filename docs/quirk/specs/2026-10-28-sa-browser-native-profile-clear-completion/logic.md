@@ -5,6 +5,8 @@ Blocked at feasibility, 2026-10-28. Requirements and recommended defaults resolv
 
 **Amendments:** None. This spec retains predecessor sa-browser-profiles-settings D9/D21 rather than superseding their native safety requirements.
 
+- 2026-10-29: unblocked by Quirky's Electrobun fork patch `patch/storage-clear-completion`, which supplies both prerequisites through public WebKit calls: a clear that reports WebKit's completion, and a per-partition store identifier set before view creation plus a live-view identifier read. The Technical decisions section below describes the blocked state it replaces; decision log D6–D10 record the implementation and what was verified.
+
 ## Purpose and conceptual model
 Complete browser.md section2.5's Default cookies/site-data clear and inactive isolated-profile removal across both engines. A profile combines a native Browser partition with the plugin's Chrome directory and profile metadata. Completion means native website data is gone before the Chrome-side clear/removal and success response. Invoking a native function is not this completion signal.
 

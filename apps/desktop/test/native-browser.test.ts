@@ -3,6 +3,8 @@ import { NATIVE_BROWSER_NAVIGATION_RULES } from '@quirky/protocol'
 import {
   createNativeBrowserHandlers,
   isNativeBrowserNavigationAllowed,
+  nativeBrowserPreloadSource,
+  type NativeBrowserHostDeps,
   type NativeBrowserViewPort
 } from '../src/bun/native-browser'
 
@@ -17,6 +19,7 @@ class BrowserViewModel implements NativeBrowserViewPort {
   readonly renderer: 'native' | 'cef'
   readonly allowedProtocols: { views: boolean; appData: boolean }
   url: string
+  storageIdentifier: string | null
   navigationRules: string | null = null
   zoom = 1
   removed = false
@@ -31,6 +34,7 @@ class BrowserViewModel implements NativeBrowserViewPort {
     renderer?: 'native' | 'cef'
     appData?: boolean
     url?: string
+    storageIdentifier?: string | null
   }) {
     this.id = options.id
     this.windowId = options.windowId ?? 12
@@ -40,6 +44,7 @@ class BrowserViewModel implements NativeBrowserViewPort {
     this.renderer = options.renderer ?? 'native'
     this.allowedProtocols = { views: true, appData: options.appData ?? false }
     this.url = options.url ?? 'about:blank'
+    this.storageIdentifier = options.storageIdentifier ?? null
   }
 
   setNavigationRules(rules: string[]): void {
@@ -63,16 +68,27 @@ class BrowserViewModel implements NativeBrowserViewPort {
     return this.zoom
   }
 
+  getStorageIdentifier(): string | null {
+    return this.storageIdentifier
+  }
+
   remove(): void {
     this.calls.push('remove')
     this.removed = true
   }
 }
 
-function rig(views: BrowserViewModel[]) {
+const UNSUPPORTED_STORAGE: NativeBrowserHostDeps['storage'] = {
+  identifierFor: () => null,
+  prepare: () => ({ storageIdentifier: null }),
+  clear: () => { throw new Error('Native browser profile clearing is unavailable') }
+}
+
+function rig(views: BrowserViewModel[], storage = UNSUPPORTED_STORAGE) {
   const handlers = createNativeBrowserHandlers({
     getWindow: () => ({ id: 12, webview: { id: 34 } }),
-    getView: (id) => views.find((view) => view.id === id && !view.removed)
+    getView: (id) => views.find((view) => view.id === id && !view.removed),
+    storage
   })
   return { handlers }
 }
@@ -161,5 +177,45 @@ describe('native browser host bridge model', () => {
     expect(child.removed).toBe(false)
     await handlers.release({ viewId: 17, owner: 'actual-owner' })
     expect(child.removed).toBe(true)
+  })
+
+  test('a view whose native store is not its profile store is never claimed', async () => {
+    const identifier = '9B0C5E52-8F3A-4C1D-9E7B-2A6F4D8C1E35'
+    const storage: NativeBrowserHostDeps['storage'] = { ...UNSUPPORTED_STORAGE, identifierFor: () => identifier }
+    for (const child of [
+      new BrowserViewModel({ id: 20 }),
+      new BrowserViewModel({ id: 21, storageIdentifier: crypto.randomUUID() })
+    ]) {
+      const { handlers } = rig([child], storage)
+      await expect(handlers.claim({ viewId: child.id, owner: 'owner', partition: PARTITION })).rejects.toThrow(/not using its profile storage/)
+      expect(child.calls).toEqual([])
+    }
+
+    const owned = new BrowserViewModel({ id: 22, storageIdentifier: identifier.toLowerCase() })
+    const { handlers } = rig([owned], storage)
+    await handlers.claim({ viewId: 22, owner: 'owner', partition: PARTITION })
+    expect(owned.calls).toEqual(['policy'])
+  })
+
+  test('prepare and clear go to the shared profile storage', async () => {
+    const calls: string[] = []
+    const { handlers } = rig([], {
+      identifierFor: () => null,
+      prepare: (partition) => { calls.push(`prepare:${partition}`); return { storageIdentifier: 'id' } },
+      clear: (partition) => { calls.push(`clear:${partition}`); return { cleared: true } }
+    })
+
+    await expect(handlers.prepare({ partition: PARTITION })).resolves.toEqual({ storageIdentifier: 'id' })
+    await expect(handlers.clear({ partition: PARTITION })).resolves.toEqual({ cleared: true })
+    expect(calls).toEqual([`prepare:${PARTITION}`, `clear:${PARTITION}`])
+  })
+
+  test('the trusted preload learns whether native clears are confirmed', () => {
+    const bundle = '(()=>{globalThis.seen=QUIRKY_NATIVE_BROWSER_CLEAR_AVAILABLE})();'
+    for (const available of [true, false]) {
+      const scope: { seen?: boolean } = {}
+      new Function('globalThis', nativeBrowserPreloadSource(bundle, available))(scope)
+      expect(scope.seen).toBe(available)
+    }
   })
 })

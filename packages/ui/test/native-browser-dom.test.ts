@@ -273,3 +273,60 @@ test('native evaluation times out when guest work never settles', async () => {
     await guest.cleanup()
   }
 }, 8000)
+
+test('the profile store is assigned before the guest view exists', async () => {
+  const element = document.createElement('div')
+  document.body.append(element)
+  const partition = `persist:quirky-browser-profile_${crypto.randomUUID().replaceAll('-', '')}`
+  const events: string[] = []
+  const mounted = Promise.withResolvers<GuestView>()
+  const released = Promise.withResolvers<void>()
+  announceGuest = (guest) => { events.push('guest'); mounted.resolve(guest) }
+  const capability = createNativeBrowserCapability(createElectrobunNativeBrowserAdapter({
+    async prepareNativeBrowserPartition(params) {
+      events.push(`prepare:${params.partition}:${element.querySelector('electrobun-webview') ? 'late' : 'first'}`)
+      return { storageIdentifier: '9B0C5E52-8F3A-4C1D-9E7B-2A6F4D8C1E35' }
+    },
+    async claimNativeBrowserView() { events.push('claim'); return { zoomFactor: 1 } },
+    async setNativeBrowserZoom({ level }) { return { zoomFactor: Math.pow(1.2, level) } },
+    async releaseNativeBrowserView() { released.resolve(); return { released: true } }
+  }))
+  const handle = capability.mount(element, { id: crypto.randomUUID(), url: 'about:blank', zoom: 0, partition, onState() {} })
+  try {
+    const guest = await mounted.promise
+    expect(guest.getAttribute('partition')).toBe(partition)
+    await Bun.sleep(0)
+    expect(events).toEqual([`prepare:${partition}:first`, 'guest', 'claim'])
+  } finally {
+    handle.dispose()
+    await released.promise
+    element.remove()
+  }
+})
+
+test('a failed store assignment never creates a guest view', async () => {
+  const element = document.createElement('div')
+  document.body.append(element)
+  let claims = 0
+  const states: Array<string | null> = []
+  const capability = createNativeBrowserCapability(createElectrobunNativeBrowserAdapter({
+    async prepareNativeBrowserPartition() { throw new Error('native browser profile storage could not be assigned') },
+    async claimNativeBrowserView() { claims += 1; return { zoomFactor: 1 } },
+    async setNativeBrowserZoom() { return { zoomFactor: 1 } },
+    async releaseNativeBrowserView() { return { released: true } }
+  }))
+  const handle = capability.mount(element, {
+    id: crypto.randomUUID(), url: 'about:blank', zoom: 0,
+    partition: `persist:quirky-browser-profile_${crypto.randomUUID().replaceAll('-', '')}`,
+    onState: (state) => states.push(state.error)
+  })
+  try {
+    await Bun.sleep(10)
+    expect(element.querySelector('electrobun-webview')).toBeNull()
+    expect(claims).toBe(0)
+    expect(states).toContain('native browser profile storage could not be assigned')
+  } finally {
+    handle.dispose()
+    element.remove()
+  }
+})

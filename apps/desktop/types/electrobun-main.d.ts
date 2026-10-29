@@ -38,11 +38,20 @@ export class BrowserView {
   setNavigationRules(rules: string[]): void
   setPageZoom(factor: number): void
   getPageZoom(): number
+  getStorageIdentifier(): string | null
   remove(): void
   static getById(id: number): BrowserView | undefined
   static defineRPC<Schema>(config: unknown): unknown
 }
 
+type StorageResult = { status: string; reason?: string }
+
+export const Session: {
+  fromPartition(partition: string): {
+    setStorageIdentifier(identifier: string): StorageResult
+    clearStorageData(types: 'all'): StorageResult
+  }
+}
 
 export class Electroview {
   constructor(options: { rpc: unknown })

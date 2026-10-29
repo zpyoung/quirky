@@ -9,6 +9,7 @@ import {
   type FolderPickerRequest,
   type FolderPickerResult
 } from '@quirky/protocol'
+import type { NativeBrowserStorage } from './native-browser-storage'
 
 export type NativeBrowserHostRPC = {
   bun: {
@@ -24,6 +25,14 @@ export type NativeBrowserHostRPC = {
       releaseNativeBrowserView: {
         params: { viewId: number; owner: string }
         response: { released: true }
+      }
+      prepareNativeBrowserPartition: {
+        params: { partition: string }
+        response: { storageIdentifier: string | null }
+      }
+      clearNativeBrowserPartition: {
+        params: { partition: string }
+        response: { cleared: true }
       }
       readClipboardText: { params: {}; response: string }
       pickFolder: { params: FolderPickerRequest; response: FolderPickerResult }
@@ -50,18 +59,22 @@ export type NativeBrowserViewPort = {
   setNavigationRules(rules: string[]): void
   setPageZoom(factor: number): void
   getPageZoom(): number
+  getStorageIdentifier(): string | null
   remove(): void
 }
 
 export type NativeBrowserHostDeps = {
   getWindow(): { id: number; webview: { id: number } } | null
   getView(id: number): NativeBrowserViewPort | undefined
+  storage: Pick<NativeBrowserStorage, 'identifierFor' | 'prepare' | 'clear'>
 }
 
 export type NativeBrowserHandlers = {
   claim(params: NativeBrowserHostRPC['bun']['requests']['claimNativeBrowserView']['params']): Promise<{ zoomFactor: number }>
   setZoom(params: NativeBrowserHostRPC['bun']['requests']['setNativeBrowserZoom']['params']): Promise<{ zoomFactor: number }>
   release(params: NativeBrowserHostRPC['bun']['requests']['releaseNativeBrowserView']['params']): Promise<{ released: true }>
+  prepare(params: NativeBrowserHostRPC['bun']['requests']['prepareNativeBrowserPartition']['params']): Promise<{ storageIdentifier: string | null }>
+  clear(params: NativeBrowserHostRPC['bun']['requests']['clearNativeBrowserPartition']['params']): Promise<{ cleared: true }>
   dispose(): void
 }
 
@@ -86,6 +99,11 @@ export function isNativeBrowserNavigationAllowed(raw: string): boolean {
   if (url.protocol === 'about:') return url.href === 'about:blank'
   if (url.protocol === 'http:' || url.protocol === 'https:') return url.username === '' && url.password === ''
   return url.protocol === 'file:'
+}
+
+/** Prefixes the trusted shell preload with whether this host can confirm native profile clears. */
+export function nativeBrowserPreloadSource(bundle: string, clearAvailable: boolean): string {
+  return `const QUIRKY_NATIVE_BROWSER_CLEAR_AVAILABLE = ${clearAvailable ? 'true' : 'false'};\n${bundle}`
 }
 
 /** Only the trusted BrowserWindow RPC may claim and zoom a native browser view. */
@@ -119,6 +137,10 @@ export function createNativeBrowserHandlers(deps: NativeBrowserHostDeps): Native
         !view.sandbox || view.renderer !== 'native' || view.partition !== params.partition ||
         view.allowedProtocols.appData || view.url !== 'about:blank'
       ) throw invalidChild()
+      const storageIdentifier = deps.storage.identifierFor(params.partition)
+      if (storageIdentifier !== null && view.getStorageIdentifier()?.toUpperCase() !== storageIdentifier) {
+        throw new Error('native browser view is not using its profile storage')
+      }
       if (claim && !deps.getView(claim.viewId)) claim = null
       if (claim && (claim.viewId !== params.viewId || claim.owner !== params.owner)) {
         throw new Error('window already has a native browser view')
@@ -151,6 +173,12 @@ export function createNativeBrowserHandlers(deps: NativeBrowserHostDeps): Native
       if (view.windowId !== window.id || view.hostWebviewId !== window.webview.id) throw invalidChild()
       view.remove()
       return { released: true }
+    },
+    async prepare(params) {
+      return deps.storage.prepare(params.partition)
+    },
+    async clear(params) {
+      return deps.storage.clear(params.partition)
     },
     dispose() {
       const active = claim

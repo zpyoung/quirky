@@ -5,9 +5,11 @@ import type {
   NativeBrowserState
 } from '@quirky/protocol'
 import {
+  createElectrobunNativeBrowserAdapter,
   createNativeBrowserCapability,
   type NativeBrowserAdapter,
-  type NativeBrowserAdapterHandle
+  type NativeBrowserAdapterHandle,
+  type NativeBrowserShellBridge
 } from '../src/native-browser'
 
 const TEST_PARTITION = `persist:quirky-browser-profile_${crypto.randomUUID().replaceAll('-', '')}`
@@ -276,13 +278,63 @@ describe('native browser capability', () => {
     expect(bridge.clearCalls).toEqual([])
   })
 
-  test('native clear is unavailable until the SDK can confirm completion', async () => {
+  test('native clear is unavailable until the host can confirm completion', async () => {
     const bridge = new BrowserBridgeModel()
     const capability = createNativeBrowserCapability(bridge)
 
     expect(capability.clearPartitionAvailable).toBe(false)
-    await expect(capability.clearPartition(TEST_PARTITION)).rejects.toThrow(/no completion signal/i)
+    await expect(capability.clearPartition(TEST_PARTITION)).rejects.toThrow(/cannot confirm native website-data removal/i)
     await expect(capability.clearPartition('persist:default')).rejects.toThrow(/unsupported browser partition/i)
     expect(bridge.clearCalls).toEqual([])
+  })
+})
+
+describe('Electrobun native browser adapter clearing', () => {
+  const shell = (storage: Partial<NativeBrowserShellBridge>): NativeBrowserShellBridge => ({
+    claimNativeBrowserView: async () => ({ zoomFactor: 1 }),
+    setNativeBrowserZoom: async () => ({ zoomFactor: 1 }),
+    releaseNativeBrowserView: async () => ({ released: true }),
+    ...storage
+  })
+
+  test('an older desktop host without storage support keeps the refusal', async () => {
+    const cleared: string[] = []
+    for (const bridge of [
+      shell({}),
+      shell({ clearPartitionAvailable: false, clearNativeBrowserPartition: async ({ partition }) => { cleared.push(partition); return { cleared: true } } }),
+      shell({ clearPartitionAvailable: true })
+    ]) {
+      const capability = createNativeBrowserCapability(createElectrobunNativeBrowserAdapter(bridge))
+      expect(capability.clearPartitionAvailable).toBe(false)
+      await expect(capability.clearPartition(TEST_PARTITION)).rejects.toThrow(/cannot confirm native website-data removal/i)
+    }
+    expect(cleared).toEqual([])
+  })
+
+  test('a host that confirms completion clears only Browser partitions', async () => {
+    const cleared: string[] = []
+    const capability = createNativeBrowserCapability(createElectrobunNativeBrowserAdapter(shell({
+      clearPartitionAvailable: true,
+      clearNativeBrowserPartition: async ({ partition }) => { cleared.push(partition); return { cleared: true } }
+    })))
+
+    expect(capability.clearPartitionAvailable).toBe(true)
+    await capability.clearPartition(TEST_PARTITION)
+    await expect(capability.clearPartition('persist:default')).rejects.toThrow(/unsupported browser partition/i)
+    expect(cleared).toEqual([TEST_PARTITION])
+  })
+
+  test('a host failure or unconfirmed reply rejects the clear', async () => {
+    const failing = createNativeBrowserCapability(createElectrobunNativeBrowserAdapter(shell({
+      clearPartitionAvailable: true,
+      clearNativeBrowserPartition: async () => { throw new Error('Native website-data removal did not complete (failed: timeout)') }
+    })))
+    await expect(failing.clearPartition(TEST_PARTITION)).rejects.toThrow(/did not complete/)
+
+    const unconfirmed = createNativeBrowserCapability(createElectrobunNativeBrowserAdapter(shell({
+      clearPartitionAvailable: true,
+      clearNativeBrowserPartition: async () => ({}) as { cleared: true }
+    })))
+    await expect(unconfirmed.clearPartition(TEST_PARTITION)).rejects.toThrow(/did not confirm/)
   })
 })
