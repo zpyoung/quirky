@@ -25,6 +25,9 @@ There are no Ask-specific user settings.
 
 ## Presentation and attention
 
+Questions stays in the shell's Ask tool (right top by default). Cards, fields, options, validation and result summaries use shared graphite components and semantic tokens in dark and light; the host still owns the tool frame and placement. Draft timing, answer envelopes and attention behavior are unchanged. Sanitized option previews use the shared read-only iframe presentation, follow the host appearance live, and keep their empty sandbox and restrictive networkless/scriptless CSP.
+
+
 - Option previews accept `markdown` or `html`. They use the package-local unified Markdown/GFM, raw-HTML and `rehype-sanitize` pipeline, then stringify sanitized markup into an iframe with an empty `sandbox` and restrictive CSP. No server-side React module is required in the browser. Script, forms, navigation/URL attributes, external resources, images/media and embedded documents are removed or blocked. Links have no navigation attributes. Hiding a preview removes its frame; normal selection and free-text answers remain available.
 - A terminal answer, cancellation, or timeout summary is presentation-only and remains in Questions for four seconds. It does not change durable FIFO state or the pending badge. A stale pending snapshot cannot restore a recently resolved ask. A promoted ask remains the queue head and is counted normally.
 - Questions auto-opens only when a surfaced ask's exact session is the active session in the focused worktree view and the view has focus. It opens only if no panel is selected; opening the panel preserves terminal focus. A later user panel choice is not replaced by refreshes. Unfocused and session-null asks are not used to steal focus; the Questions badge and manual panel remain available.

@@ -1,3 +1,4 @@
+import { Button, EmptyState, SelectField, TextField } from '@quirky/ui'
 import { useState } from 'react'
 import type { MobileNetworkInterface } from '@quirky/protocol'
 
@@ -51,39 +52,47 @@ export function NetworkPicker({ interfaces, customAddresses, selectedAddress, bu
   }
 
   return (
-    <div className="mobile-network">
-      <label className="mobile-field">
-        This computer’s address
-        <select className="mobile-select" aria-label="Network address" value={selectedAddress} disabled={busy} onChange={(event) => onSelect(event.target.value)}>
-          <option value="">Choose an address</option>
-          {interfaces.map((network, index) => (
-            <option key={`${network.name}-${network.address}`} value={network.address}>
-              {index === 0 ? 'Recommended · ' : ''}{network.kind} · {network.name} ({network.address})
-            </option>
-          ))}
-          {uniqueCustom.map((address) => (
-            <option key={`custom-${address}`} value={address}>Custom · {address}</option>
-          ))}
-        </select>
-      </label>
+    <div className="ui-stack">
+      <SelectField
+        label="This computer’s address"
+        aria-label="Network address"
+        value={selectedAddress}
+        disabled={busy}
+        onChange={(event) => onSelect(event.target.value)}
+      >
+        <option value="">Choose an address</option>
+        {interfaces.map((network, index) => (
+          <option key={`${network.name}-${network.address}`} value={network.address}>
+            {index === 0 ? 'Recommended · ' : ''}{network.kind} · {network.name} ({network.address})
+          </option>
+        ))}
+        {uniqueCustom.map((address) => (
+          <option key={`custom-${address}`} value={address}>Custom · {address}</option>
+        ))}
+      </SelectField>
       {interfaces.length === 0 && uniqueCustom.length === 0 && (
-        <p className="mobile-muted">No reachable address is available yet. Connect to Wi-Fi or Tailscale, or add an address manually.</p>
+        <EmptyState message="No reachable address is available yet. Connect to Wi-Fi or Tailscale, or add an address manually." />
       )}
-      <div className="mobile-actions">
-        <button className="mobile-button" type="button" disabled={busy} onClick={() => void refresh()}>Refresh network interfaces</button>
+      <div className="ui-cluster">
+        <Button disabled={busy} onClick={() => void refresh()}>Refresh network interfaces</Button>
         {customAddresses.length > 0 && selectedAddress && customAddresses.includes(selectedAddress) && (
-          <button className="mobile-button" type="button" disabled={busy} onClick={() => void remove()}>Remove selected custom address</button>
+          <Button disabled={busy} onClick={() => void remove()}>Remove selected custom address</Button>
         )}
       </div>
-      <div className="mobile-address-row">
-        <label className="mobile-field">
-          Add custom address
-          <input aria-label="Custom address" maxLength={16384} value={draft} disabled={busy || customAddresses.length >= 50} onChange={(event) => setDraft(event.target.value)} placeholder="host, host:port, or ws(s):// URL" />
-        </label>
-        <button className="mobile-button" type="button" disabled={busy || !draft.trim() || customAddresses.length >= 50} onClick={() => void add()}>Add custom address</button>
+      <TextField
+        label="Add custom address"
+        aria-label="Custom address"
+        maxLength={16384}
+        value={draft}
+        disabled={busy || customAddresses.length >= 50}
+        onChange={(event) => setDraft(event.target.value)}
+        placeholder="host, host:port, or ws(s):// URL"
+      />
+      <div className="ui-cluster">
+        <Button disabled={busy || !draft.trim() || customAddresses.length >= 50} onClick={() => void add()}>Add custom address</Button>
       </div>
-      {customAddresses.length >= 50 && <p className="mobile-muted">You can save up to 50 custom addresses. Remove one before adding another.</p>}
-      {error && <p className="mobile-error" role="alert">{error}</p>}
+      {customAddresses.length >= 50 && <p className="ui-text-muted">You can save up to 50 custom addresses. Remove one before adding another.</p>}
+      {error && <p className="ui-error-text" role="alert">{error}</p>}
     </div>
   )
 }

@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import type { UiPluginContext } from '@quirky/protocol'
+import { Button, Dialog, TextField } from '@quirky/ui'
 import { addProject, FolderPickerUnavailableError, importFolder, messageOf, pickNativeFolder, scanFolder } from './actions'
-import { Dialog } from './Dialog'
 import type { DialogState } from './report'
 
 type Props = {
@@ -83,30 +83,27 @@ export function AddProjectDialog({ context, onClose, onStep }: Props) {
     const { path: folder, count } = step
     const name = group.trim()
     return (
-      <Dialog title="Import repositories" onClose={onClose}>
-        <p className="dialog-message">{`Found ${count} ${count === 1 ? 'repository' : 'repositories'} in ${folder}`}</p>
+      <Dialog open title="Import repositories" onClose={onClose}>
+        <p className="ui-text-muted">{`Found ${count} ${count === 1 ? 'repository' : 'repositories'} in ${folder}`}</p>
         <form
-          className="form"
+          className="ui-stack"
           onSubmit={(event) => {
             event.preventDefault()
             if (name) void finish(() => importFolder(context, folder, name))
           }}
         >
-          <p className="dialog-message">Group these repositories?</p>
-          <label>
-            <span>Group name</span>
-            <input autoFocus value={group} onChange={(event) => setGroup(event.target.value)} />
-          </label>
-          <div className="dialog-actions">
-            <button type="button" onClick={onClose}>
+          <p className="ui-text-muted">Group these repositories?</p>
+          <TextField label="Group name" id="add-project-group-name" autoFocus value={group} onChange={(event) => setGroup(event.target.value)} />
+          <div className="ui-actions">
+            <Button type="button" onClick={onClose}>
               Cancel
-            </button>
-            <button type="button" disabled={busy} onClick={() => void finish(() => importFolder(context, folder))}>
+            </Button>
+            <Button type="button" disabled={busy} onClick={() => void finish(() => importFolder(context, folder))}>
               No, import separately
-            </button>
-            <button type="submit" className="primary" disabled={busy || !name}>
+            </Button>
+            <Button type="submit" variant="primary" disabled={busy || !name}>
               Yes, import as group
-            </button>
+            </Button>
           </div>
         </form>
       </Dialog>
@@ -116,45 +113,49 @@ export function AddProjectDialog({ context, onClose, onStep }: Props) {
   if (step.kind === 'folder') {
     const folder = step.path
     return (
-      <Dialog title="Open as Folder" onClose={onClose}>
-        <p className="dialog-message">
+      <Dialog open title="Open as Folder" onClose={onClose}>
+        <p className="ui-text-muted">
           This folder isn't a Git repository. You'll have the editor, terminal, and search, but Git-based features won't be available.
         </p>
-        <div className="dialog-actions">
-          <button type="button" onClick={onClose}>
+        <div className="ui-actions">
+          <Button type="button" onClick={onClose}>
             Cancel
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
-            className="primary"
+            variant="primary"
             autoFocus
             disabled={busy}
             onClick={() => void finish(async () => (await addProject(context, folder, true)) === 'added')}
           >
             Open as Folder
-          </button>
+          </Button>
         </div>
       </Dialog>
     )
   }
 
   return (
-    <Dialog title="Add project" onClose={onClose}>
-      <form className="form" onSubmit={submit}>
-        <label>
-          <span>Path</span>
-          <input autoFocus value={path} onChange={(event) => setPath(event.target.value)} placeholder="/path/to/repository" />
-        </label>
-        <div className="dialog-actions">
-          <button type="button" onClick={onClose}>
+    <Dialog open title="Add project" onClose={onClose}>
+      <form className="ui-stack" onSubmit={submit}>
+        <TextField
+          label="Path"
+          id="add-project-path"
+          autoFocus
+          value={path}
+          onChange={(event) => setPath(event.target.value)}
+          placeholder="/path/to/repository"
+        />
+        <div className="ui-actions">
+          <Button type="button" onClick={onClose}>
             Cancel
-          </button>
-          <button type="button" disabled={busy} onClick={() => void browse()}>
+          </Button>
+          <Button type="button" disabled={busy} onClick={() => void browse()}>
             Browse
-          </button>
-          <button type="submit" className="primary" disabled={busy || !path.trim()}>
+          </Button>
+          <Button type="submit" variant="primary" disabled={busy || !path.trim()}>
             Add
-          </button>
+          </Button>
         </div>
       </form>
     </Dialog>

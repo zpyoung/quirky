@@ -1,5 +1,7 @@
-import { useEffect, useState, type CSSProperties } from 'react'
-import type { DisplayStatus, WorktreeGlyph } from './status'
+import { useEffect, useState } from 'react'
+import { Badge, type UiStatus } from '@quirky/ui'
+import type { AgentDisplayState } from '@quirky/protocol'
+import type { DisplayStatus } from './status'
 
 const TICK_MS = 60_000
 
@@ -13,26 +15,32 @@ export function useNow(): number {
   return now
 }
 
-/** A worktree's dot: the agent's display state when a session reports one, else the coarse status. */
-export function StatusDot({ glyph }: { glyph: WorktreeGlyph | null }) {
-  if (!glyph) return <span className="dot dot-none" aria-hidden />
-  if (glyph.kind === 'agent') {
-    const { display, label, percent } = glyph
-    return (
-      <span
-        className={`glyph glyph-${display}${percent === null ? '' : ' glyph-ring'}`}
-        style={percent === null ? undefined : ({ '--progress': `${percent}%` } as CSSProperties)}
-        title={label}
-        role="img"
-        aria-label={label}
-      />
-    )
+export function semanticStatus(value: AgentDisplayState | DisplayStatus): UiStatus {
+  switch (value) {
+    case 'working':
+    case 'monitoring':
+      return 'working'
+    case 'waiting':
+    case 'permission':
+    case 'blocked':
+      return 'needs-you'
+    case 'failed':
+      return 'failing'
+    case 'done':
+      return 'done'
+    case 'running':
+      return 'queued'
+    case 'interrupted':
+    case 'unverifiable':
+    case 'unconfirmed':
+    case 'idle':
+    case 'exited':
+      return 'idle'
   }
-  const status: DisplayStatus = glyph.status
-  return <span className={`dot dot-${status}`} title={status} role="img" aria-label={status} />
 }
 
-/** The card's glyph for a worktree marked unread: a filled amber bell. */
+
+/** A worktree's glyph for unread activity, styled as a shared badge. */
 export function UnreadBell() {
-  return <span className="glyph glyph-unread" title="Unread" role="img" aria-label="Unread" />
+  return <Badge tone="accent" label="Unread">Unread</Badge>
 }
