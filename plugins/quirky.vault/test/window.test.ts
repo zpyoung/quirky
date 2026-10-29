@@ -49,13 +49,13 @@ async function statusOf(features: Features): Promise<SearchStatus> {
   return status as SearchStatus
 }
 function dialogByTitle(root: ParentNode, title: string): HTMLElement | null {
-  return [...root.querySelectorAll<HTMLElement>('[role="dialog"][aria-labelledby]')].find((dialog) => {
+  return [...root.querySelectorAll<HTMLElement>('[role="dialog"]')].find((dialog) => {
     const titleText = (dialog.getAttribute('aria-labelledby') ?? '')
       .split(/\s+/)
       .map((id) => dialog.ownerDocument.getElementById(id)?.textContent?.trim())
       .filter(Boolean)
       .join(' ')
-    return titleText === title
+    return (titleText || dialog.getAttribute('aria-label')) === title
   }) ?? null
 }
 
