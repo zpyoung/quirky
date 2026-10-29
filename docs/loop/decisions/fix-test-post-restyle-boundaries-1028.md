@@ -88,5 +88,49 @@
 - **Revisit if:** a supported icon is rejected or invalid tool metadata is accepted through the public plugin manifest.
 - **Source:** assumed — autonomous
 
+## D9: Preserve the seven incoming decision logs and their existing owners
+- **Question:** Does the single roadmap catch-up change this test-only repair's authority?
+- **Options:** absorb incoming VM/native/provider fixes; preserve their contracts and keep the eight-file boundary.
+- **Chose:** Consume all seven incoming logs through every D choice/source and Progress: Accounts, Agents, Ledger, packages-CLI, scripts-profile-timeout, native-notification/signed-host and VM/owner-bound-host-workspaces. Preserve activation-attempt-owned disposers, one ownedIds registration, exact caller/window/saved-runtime/host generation identities, real confirmation/retention, supported shared controls, private homes and all qualified review/native/hardware limits. No conflict with these five test-file changes was found.
+- **Why:** Incoming source adds real activation cleanup and owner-bound workspace contracts, not permission to restore obsolete UI assumptions or infer OS notification authority. Current native successor is blocked on SDK callbacks/authorized signing; this item does not claim those flows.
+- **Evidence:** sole clean roadmap merge after24996684,68files; complete IncomingBoundaryLogs extraction plus exact long CLI assurance/Progress and VM D13 raw reads; scripts/suite.ts96–121 private HOME/QUIRKY_HOME and cleanup.
+- **Reversibility:** medium
+- **Confidence:** high for the preserved boundary; broad verification remains pending
+- **Revisit if:** the owning-suite or controller result identifies a concrete concurrent contract conflict.
+- **Source:** locked by incoming decision logs
+
+## D10: Retain current complete owning-suite proof and bounded actual-surface evidence
+- **Question:** Which final checks are actually exercised, and what remains intentionally unchanged?
+- **Options:** extrapolate to the whole repository/native UI; report this repair's exact owning boundary.
+- **Chose:** Caught-up canonical packages/daemon, packages/ui, quirky.ask, quirky.notifications and scripts passed164/164 remote files, zero failed and flaky:[], exit0/185.05s. Real typecheck prepass passed UI lint/root/mobile/prepared desktop in30.718s. Actual native-field component browser proof and current daemon activity/three-process singleton smoke passed. Production code, public types, docs/changelog, feature specs and native handoffs remain intentionally unchanged: this repair changes fixtures/assertions only and no product flow or API.
+- **Why:** The initial current red cases were faithful fixture/presentation/emulator corrections, not demonstrated production defects. Existing Notifications and lock repairs are reused. No full-repository, real provider, OS banner/signing, visual redesign score or all-platform clearance follows.
+- **Evidence:** owning-suite.json and fields-browser.json beside notes; runtime-proof.json; review/prepass.json; final named8/8 canonical gate.
+- **Reversibility:** easy
+- **Confidence:** high for exercised scope
+- **Revisit if:** controller landing or a concrete consumer regression contradicts one of these results.
+- **Source:** assumed — autonomous
+
+## D11: Reject reviewer context contamination and recover only the invalid review stage
+- **Question:** Can the initial mechanical PASS be treated as independent review after the promoter reads author decisions?
+- **Options:** accept its empty findings; silently repeat discovery; preserve the failed assurance and enforce a no-tools recovery over the fixed artifact.
+- **Chose:** Preserve the initial raw promote/refute and gate/manifests but reject their independence claim. The promoter had only read/search tools yet read this author's decision log despite an explicit prohibition. Retry the failed review context with fresh no-tools promote and refute processes over the identical source-only patch plus staged source excerpts, reusing the successful typecheck prepass/model/resolve. No source change, new discovery scope or code fix batch is inferred.
+- **Why:** Structural independence requires withholding author reasoning. A tool prompt alone did not enforce that boundary. The no-tools recovery cannot reach decision logs; any reduced context/reproduction limit must stay explicit. Actual original promote/refute returned[]; zero claims are not evidence that the protocol breach was harmless.
+- **Evidence:** promote.0.stderr43 records the prohibited decision-log read; original artifact hash7b7dd8f72f452626872800eff43ecaaf669e0de9322df79d6a0f74f854b494fc and runf6affa5423531318; recover-review.py dispatches pi-watch --no-tools with fresh stage contexts.
+- **Reversibility:** easy for unchanged source; original lost independence cannot be retroactively repaired
+- **Confidence:** high for detected breach; recovery verdict pending
+- **Revisit if:** recovered stages find a supported defect or cannot issue a valid bounded verdict.
+- **Source:** assumed — autonomous
+
+## D12: Retain the recovered LOW advisory without restoring incidental error-format coverage
+- **Question:** Does recovered F1 require restoring the deleted override-error wording test?
+- **Options:** restore a formatting mirror; add redundant base-validator coverage; retain the bounded advisory and explicit user-directed deletion.
+- **Chose:** The recovered standard Gemini/google high promote/fresh-refute machine gate reports PASS with0blockers,1LOW advisory,0suppressed,0contested,0limitations,0questions and no excluded/unreviewed paths. Retain F1 in BLOCKERS rather than call it closed. No code fix batch: the claim concerns intentionally removed error-format coverage, not a demonstrated production validation defect; the task expressly requires deleting incidental wording mirrors. Existing shared unknown/type and tool metadata validation tests remain.
+- **Why:** Fresh refutation kept the coverage observation but downgraded HIGH to LOW because the underlying validator remains covered. No-tools recovery prevents author-context access but limits review to the staged artifact/source context; it supplies no runtime reproduction. Original contaminated assurance remains rejected. The final canonical164/164 suite, real typecheck and actual component/API/process smokes establish the separate exercised boundary.
+- **Evidence:** recovered-promote/refute raw responses, recovered-gate.json and recovered-manifest.json for artifact7b7dd8f72f452626872800eff43ecaaf669e0de9322df79d6a0f74f854b494fc, runf6affa5423531318; BLOCKERS open review findings; owning-suite.json.
+- **Reversibility:** easy
+- **Confidence:** high for bounded findings/dispositions, not comprehensive review coverage
+- **Revisit if:** a concrete override admission bug bypasses the shared validator or another consumer requires a stable error-format contract.
+- **Source:** locked by item title's delete-incidental-mirrors requirement
+
 ## Progress
-Current integration consumed at branch creation. Initial canonical remote eight-file reproduction is running. Three exclusive workers investigate daemon, shared-fields/Ask and Notifications; no worker checks or commits permitted. Parent must receive output before approving behavioral changes, run actual executable/surface smoke and final remote checks/typecheck, catch up build/roadmap once and read incoming decisions, commit/detach/canonical land. Exactly one item this iteration; no global completion/stuck result observed.
+Ready for canonical land of exactly this item. Source24996684 and the single roadmap merge retain only five test-file changes; no production behavior, authority, deadline or alias changed. Current owning canonical gate164/164/no flakes185.05s and actual typecheck30.718s pass. Native-field component browser and post-catch-up daemon activity/three-process singleton smokes passed with private-home cleanup. All seven incoming logs consumed. Bounded standard cross-family review recovery passes with one explicitly retained LOW advisory and the original contamination/no-tools limits recorded. All workers/review/check/runtime jobs returned; no owned browser/runtime remains. Commit this receipt and BLOCKERS, detach, run the absolute canonical queue land command and await its actual outcome. Remove only owned scratch after successful landing. No second item or global completion/stuck claim.
