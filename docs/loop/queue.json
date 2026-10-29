@@ -2321,8 +2321,7 @@
         "m7-test-triage",
         "m2-sidebar-extras-followup"
       ],
-      "status": "in-progress",
-      "lane": 10
+      "status": "done"
     },
     {
       "id": "m7-api-freeze",
