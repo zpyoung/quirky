@@ -43,7 +43,6 @@ export class VaultRig {
         const pluginDir = join(PLUGINS_ROOT, id)
         if (options.isolateVaultModule && id === 'quirky.vault') {
           cpSync(pluginDir, join(builtinPluginsDir, id), { recursive: true })
-          symlinkSync(join(PLUGINS_ROOT, '..', 'node_modules'), join(builtinPluginsDir, id, 'node_modules'), 'dir')
         } else {
           symlinkSync(pluginDir, join(builtinPluginsDir, id), 'dir')
         }
