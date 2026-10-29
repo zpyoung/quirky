@@ -133,7 +133,7 @@ test('plugin configuration is strict, unique, and limited to known immediate dir
   expect(() => parsePluginConfig('[1]', ['example.plugin'])).toThrow()
 })
 
-test('root lint scans UI source, skips fixtures, and enforces opted-in plugins without linting generated Mobile pages', () => {
+test('root lint scans UI source, skips fixtures, and enforces opted-in plugins', () => {
   const root = mkdtempSync(join(tmpdir(), 'ui-lint-enforcement-'))
   const put = (relativePath: string, content: string) => {
     const path = join(root, relativePath)
@@ -175,25 +175,61 @@ test('root lint scans UI source, skips fixtures, and enforces opted-in plugins w
     expect(enforced.diagnostics.some((message) => message.includes('packages/ui/src/vendor'))).toBe(false)
     expect(enforced.diagnostics.some((message) => message.includes('packages/ui/src/fixtures'))).toBe(false)
 
-    put('plugins/quirky.mobile/src/view.tsx', `export const view = <div style={{ color: 'var(--ui-text)' }} />`)
-    put('plugins/quirky.mobile/assets/icons/mark.svg', '<svg><path fill="var(--ui-text)" /></svg>')
-    put('plugins/quirky.mobile/assets/mobile/page.css', '.generated { color: #ff0000; padding: 13px; }')
-    put('plugins/quirky.mobile/assets/mobile/page.js', `const view = <div style={{ color: '#ff0000' }} />`)
-    put('plugins/quirky.mobile/assets/mobile/index.html', '<div style="color: #ff0000; padding: 13px"></div>')
-    put('scripts/ui-lint-plugins.json', '["quirky.mobile"]')
-
-    expect(run()).toEqual({ status: 0, diagnostics: [] })
-
-    put('plugins/quirky.mobile/src/view.tsx', `export const view = <div style={{ color: '#ff0000' }} />`)
-    put('plugins/quirky.mobile/assets/icons/mark.svg', '<svg><path fill="#ff0000" /></svg>')
-    const mobileEnforced = run()
-    expect(mobileEnforced.status).toBe(1)
-    expect(mobileEnforced.diagnostics.some((message) => message.includes('plugins/quirky.mobile/src/view.tsx') && message.includes('ui/no-raw-color'))).toBe(true)
-    expect(mobileEnforced.diagnostics.some((message) => message.includes('plugins/quirky.mobile/assets/icons/mark.svg') && message.includes('ui/no-raw-color'))).toBe(true)
-    expect(mobileEnforced.diagnostics.some((message) => message.includes('plugins/quirky.mobile/assets/mobile/'))).toBe(false)
-
     put('scripts/ui-lint-plugins.json', '["../outside"]')
     expect(run().status).toBe(1)
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
+test('repository inventory ignores generated artifacts but still enforces tracked and new plugin source', () => {
+  const root = mkdtempSync(join(tmpdir(), 'ui-lint-git-inventory-'))
+  const put = (name: string, content: string) => {
+    const path = join(root, name)
+    mkdirSync(dirname(path), { recursive: true })
+    writeFileSync(path, content)
+  }
+  const git = (...args: string[]) => {
+    const result = Bun.spawnSync(['git', ...args], {
+      cwd: root,
+      env: {
+        PATH: process.env.PATH,
+        HOME: root,
+        QUIRKY_HOME: root,
+        GIT_CONFIG_GLOBAL: '/dev/null',
+        GIT_CONFIG_SYSTEM: '/dev/null',
+        GIT_CONFIG_NOSYSTEM: '1'
+      }
+    })
+    if (result.exitCode !== 0) throw new Error(result.stderr.toString())
+  }
+  const run = () => {
+    const diagnostics: string[] = []
+    const originalError = console.error
+    console.error = (...values: unknown[]) => diagnostics.push(values.join(' '))
+    try {
+      return { status: runUiLint(root), diagnostics }
+    } finally {
+      console.error = originalError
+    }
+  }
+  try {
+    git('init', '--quiet')
+    put('.gitignore', 'plugins/example/generated/\nplugins/example/ignored-source.tsx\n')
+    put('packages/ui/src/prose.ts', 'export const title = "Fixture"')
+    put('scripts/ui-lint-plugins.json', '["example"]')
+    put('plugins/example/generated/page.css', '.card { color: red; padding: 13px; }')
+    expect(run()).toEqual({ status: 0, diagnostics: [] })
+
+    put('plugins/example/ignored-source.tsx', 'export const tracked = <div style={{ color: "red" }} />')
+    git('add', '--force', '--', 'plugins/example/ignored-source.tsx')
+    put('plugins/example/source.tsx', 'export const fresh = <div style={{ color: "red" }} />')
+    const enforced = run()
+    expect(enforced.status).toBe(1)
+    expect(enforced.diagnostics.map((line) => line.match(/^(.*?):\d+:\d+ (ui\/[^:]+):/)?.slice(1))).toEqual([
+      ['plugins/example/ignored-source.tsx', 'ui/no-raw-color'],
+      ['plugins/example/source.tsx', 'ui/no-raw-color']
+    ])
   } finally {
     rmSync(root, { recursive: true, force: true })
   }

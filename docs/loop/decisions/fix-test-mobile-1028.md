@@ -154,5 +154,16 @@
 - **Revisit if:** a genuine provider activation race contradicts the exact producer identity or canonical land reports a concrete source/type failure
 - **Source:** assumed — autonomous
 
+## D15: Recover the controller's concurrent merge conflict with the canonical Git inventory
+- **Question:** What must change after the actual first land refusal?
+- **Options:** bypass the controller; retain competing plugin-path exclusions; adopt the incoming general source inventory
+- **Chose:** required recovery merge reads fix-test-heimdall D1–D12, fix-test-loops D1–D11 and ui-restyle-accounts D1–D15 completely, including raw omitted lines. Preserve nullable certified liveness, connection-owned approval waits/cancellation and the20-second quiet gate, and Accounts/Vault shared presentation/required-choice authority. Resolve both lint conflicts in favor of Accounts' repository Git inventory, remove our obsolete plugin-specific exclusion and duplicate Mobile-only fixture section, retain semantic assertion cleanup plus the incoming ignored/tracked/new-source regression.
+- **Why:** first canonical land of399a7eb8 failed with a real concurrent merge conflict. Incoming Accounts D13 addresses the same generated bundle cause using the repository's existing cached+nonignored source convention, retaining force-tracked ignored source and ordinary new source, with fail-closed Git errors and non-Git fallback. One canonical owner avoids a second path-specific convention. No protected loop file or authority policy changed.
+- **Evidence:** bg14 exit1/1.50s; recovery conflicts4/5 in scripts/ui-lint.ts; incoming three complete decision logs and tests; canonical Accounts D13; exact resolver writes and removal of stale excludedSubdirectory. Fresh recovery gates and current runtime proof follow before retry.
+- **Reversibility:** easy
+- **Confidence:** high for source conflict resolution, recovery runtime/typecheck pending
+- **Revisit if:** the current source inventory or composed mobile runtime fails verification
+- **Source:** supersedes fix-test-mobile-1028 D11 (inventory mechanism only); locked by ui-restyle-accounts D13
+
 ## Progress
-Ready for canonical land. All implementers, static validator/closure, tests, compiler and actual smoke processes have returned; no owned daemon/Chrome/PTY/service remains. One bounded fix batch closes both final static findings, with exact pre-review/post-batch qualification retained. Current full Mobile/apps-mobile/scripts/workspace/Git consumers pass55remote+2macOS files/no flakes; full typecheck passes45.41s; actual Watch fresh-frame smoke passes4.85s and private homes removed. Sole roadmap catch-up and incoming decision reads complete. Next: commit source/tests/README/logs, detach, canonical land and await actual merge-result gate; remove owned scratch after success. Separate Hosting/Tasks/Reviews repairs remain named, not a whole-repository pass claim.
+Actual first canonical land refused concurrent source merge. Required recovery is resolved: all three incoming logs read completely, canonical Git source inventory replaces our path-specific exclusion, duplicate test section removed while tracked/new/ignored behavioral coverage stays. No acceptance scope reduced. Next: finish merge commit, run fresh full Mobile/apps-mobile/scripts/workspace/Git gate and typecheck plus current runtime smoke, archive recovery qualification, commit/detach and retry canonical land. All earlier jobs/agents/resources returned; no further proactive catch-up.

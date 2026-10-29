@@ -1,4 +1,5 @@
 [
+  "quirky.accounts",
   "quirky.ask",
   "quirky.notifications",
   "quirky.structured",
@@ -21,6 +22,7 @@
   "quirky.session-info",
   "quirky.terminal",
   "quirky.terminal-dock",
+  "quirky.vault",
   "quirky.mobile",
   "quirky.cli",
   "quirky.palette",

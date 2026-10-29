@@ -1,4 +1,4 @@
-import { readFileSync, readdirSync, statSync } from 'node:fs'
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
 import { dirname, extname, join, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import * as ts from 'typescript'
@@ -1011,16 +1011,33 @@ function shouldSkipPath(path: string): boolean {
   return /(?:^|[.-])(?:test|spec|fixture|fixtures)\.[^.]+$/i.test(file)
 }
 
-function collectSourceFiles(directory: string, excludedSubdirectory?: string): string[] {
+/** Build artifacts are not source; tracked files remain enforced even when ignored. */
+function repositorySourceFiles(root: string): ReadonlySet<string> | undefined {
+  if (!existsSync(join(root, '.git'))) return undefined
+  const result = Bun.spawnSync(['git', 'ls-files', '--cached', '--others', '--exclude-standard', '-z'], {
+    cwd: root,
+    env: {
+      PATH: process.env.PATH,
+      HOME: root,
+      QUIRKY_HOME: root,
+      GIT_CONFIG_GLOBAL: '/dev/null',
+      GIT_CONFIG_SYSTEM: '/dev/null',
+      GIT_CONFIG_NOSYSTEM: '1'
+    }
+  })
+  if (result.exitCode !== 0) throw new Error(`Cannot enumerate repository source: ${result.stderr.toString().trim()}`)
+  return new Set(result.stdout.toString().split('\0').filter(Boolean).map((path) => resolve(root, path)))
+}
+
+function collectSourceFiles(directory: string, repositoryFiles?: ReadonlySet<string>): string[] {
   const results: string[] = []
   const visit = (path: string) => {
     const entries = readdirSync(path, { withFileTypes: true }).sort((left, right) => compareText(left.name, right.name))
     for (const entry of entries) {
       const absolute = join(path, entry.name)
-      const relativePath = relative(directory, absolute)
-      if (entry.isSymbolicLink() || shouldSkipPath(relativePath) || (entry.isDirectory() && relativePath === excludedSubdirectory)) continue
+      if (entry.isSymbolicLink() || shouldSkipPath(relative(directory, absolute))) continue
       if (entry.isDirectory()) visit(absolute)
-      else if (entry.isFile() && sourceExtensions.has(extname(entry.name).toLowerCase())) results.push(absolute)
+      else if (entry.isFile() && sourceExtensions.has(extname(entry.name).toLowerCase()) && (!repositoryFiles || repositoryFiles.has(absolute))) results.push(absolute)
     }
   }
   visit(directory)
@@ -1043,13 +1060,14 @@ export function runUiLint(root = resolve(dirname(fileURLToPath(import.meta.url))
     ensureDirectory(uiSourceRoot, 'packages/ui/src')
     ensureDirectory(pluginsRoot, 'plugins')
     const pluginIds = parsePluginConfig(readFileSync(configPath, 'utf8'), immediatePluginDirectories(pluginsRoot))
+    const repositoryFiles = repositorySourceFiles(root)
     const files = [
-      ...collectSourceFiles(uiSourceRoot).map((path) => ({ path, plugin: false })),
+      ...collectSourceFiles(uiSourceRoot, repositoryFiles).map((path) => ({ path, plugin: false })),
       ...pluginIds.flatMap((id) => {
         const pluginRoot = resolve(pluginsRoot, id)
         if (relative(pluginsRoot, pluginRoot).startsWith('..') || pluginRoot === pluginsRoot) throw new Error(`Invalid plugin directory path: ${id}`)
         ensureDirectory(pluginRoot, `plugin ${id}`)
-        return collectSourceFiles(pluginRoot, id === 'quirky.mobile' ? join('assets', 'mobile') : undefined).map((path) => ({ path, plugin: true }))
+        return collectSourceFiles(pluginRoot, repositoryFiles).map((path) => ({ path, plugin: true }))
       })
     ]
     const diagnostics = files.flatMap(({ path, plugin }) => {
