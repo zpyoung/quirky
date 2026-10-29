@@ -1,5 +1,6 @@
 {
   "id": "quirky.worktree",
+  "apiVersion": "1.0.0",
   "name": "Heimdall owner acceptance worktree",
   "version": "1.0.0",
   "main": "main.ts",

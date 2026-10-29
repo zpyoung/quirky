@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from 'bun:test'
-import type { ApiDescription } from '@quirky/protocol'
+import { PLUGIN_API_VERSION, type ApiDescription } from '@quirky/protocol'
 import { addSavedRuntimeTarget, listSavedRuntimeTargets } from '@quirky/protocol/node'
 import type { MobileSocket } from '@quirky/protocol/paired-client'
 import { makeTestPeer, DEVICE_ID, DEVICE_TOKEN } from '../../../apps/mobile/test/transport-peer'
@@ -13,7 +13,7 @@ function setup() {
   const local = new FakeDaemon().start()
   cleanups.push(() => local.stop())
   const description: ApiDescription = {
-    schemaVersion: 2, daemonVersion: 'paired-fixture', protocolVersion: 1,
+    schemaVersion: 2, daemonVersion: 'paired-fixture', protocolVersion: 1, pluginApiVersion: PLUGIN_API_VERSION,
     methods: [
       { name: 'quirky.worktree/list', plugin: 'quirky.worktree', readOnly: true, params: { type: 'object', properties: {}, additionalProperties: false }, result: { type: 'array', items: { type: 'object' } } },
       { name: 'quirky.worktree/resolve', plugin: 'quirky.worktree', readOnly: true, params: { type: 'object', properties: { selector: { type: 'string' } }, required: ['selector'] }, result: { type: 'object' } }

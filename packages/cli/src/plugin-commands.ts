@@ -1,4 +1,5 @@
 import {
+  pluginApiCompatibilityError,
   validateValue,
   type ApiCliCommandEntry,
   type ApiDescription,
@@ -73,6 +74,8 @@ export function cliContextFor(ctx: Context): CliContext {
 
 async function runModule(entry: ApiCliCommandEntry, module: string, args: ParsedArgs, ctx: Context): Promise<void> {
   checkPositionals(entry, args)
+  const compatibilityError = pluginApiCompatibilityError(entry.apiVersion)
+  if (compatibilityError) throw new StderrFailure(`${entry.plugin}: ${compatibilityError}`)
   let loaded: Partial<CliModule>
   try {
     loaded = (await import(module)) as Partial<CliModule>

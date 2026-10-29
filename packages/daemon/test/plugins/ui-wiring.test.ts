@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test } from 'bun:test'
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { RpcErrorCode } from '@quirky/protocol'
+import { PLUGIN_API_VERSION, RpcErrorCode } from '@quirky/protocol'
 import { makeTempHome, startHarness, waitFor, type Harness } from '../helpers'
 import { makeTempDir, removeTempDirs, writeModulePlugin, writePlugin } from './fixtures'
 
@@ -63,7 +63,7 @@ describe('UI plugin API wiring', () => {
     const model = await client.call('ui.contributions', {})
     expect(model.views).toMatchObject([{ id: 'view:acme.ui/board', plugin: 'acme.ui', title: 'Board', module: '/plugins/acme.ui/ui/main.js' }])
     expect(model.settings.map((entry) => entry.id)).toEqual([SETTING])
-    expect(model.modules['acme.ui']).toEqual({ url: '/plugins/acme.ui/ui/main.js', provides: ['view:acme.ui/board'] })
+    expect(model.modules['acme.ui']).toEqual({ url: '/plugins/acme.ui/ui/main.js', provides: ['view:acme.ui/board'], apiVersion: PLUGIN_API_VERSION })
     expect(model.theme).toEqual({ chosen: 'default', active: 'default' })
   })
 

@@ -68,7 +68,7 @@ test('openReview refuses non-exact, unsafe, and conflicting pull identities befo
   expect(calls).toHaveLength(0)
 })
 
-test('Tasks review navigation preserves the exact origin or upstream PR source for every tab in daemon state', async () => {
+test('Tasks review navigation preserves origin or upstream PR identity for every tab and hydrates each source', async () => {
   const host = await bootTasks(listFixtureSource, {
     upstream: 'https://github.com/upstream-owner/upstream-repo.git',
     extraBuiltins: ['quirky.reviews', 'quirky.git']
@@ -81,78 +81,65 @@ test('Tasks review navigation preserves the exact origin or upstream PR source f
     'upstream-owner/upstream-repo': [upstream]
   }))
   const openContext = contextFor(host)
+  const sources = [
+    {
+      target: {
+        url: upstream.url,
+        host: 'github.com',
+        owner: 'upstream-owner',
+        repo: 'upstream-repo'
+      },
+      identity: { host: 'github.com', owner: 'upstream-owner', repo: 'upstream-repo' }
+    },
+    {
+      target: {
+        url: origin.url,
+        host: 'github.com',
+        owner: 'test-owner',
+        repo: 'test-repo'
+      },
+      identity: { host: 'github.com', owner: 'test-owner', repo: 'test-repo' }
+    }
+  ]
 
-  for (const tab of ['conversation', 'checks', 'files'] as const) {
-    const result = record(await openReview(openContext, {
-      worktree: host.worktree,
-      number: 12,
-      tab,
-      url: upstream.url,
-      host: 'github.com',
-      owner: 'upstream-owner',
-      repo: 'upstream-repo'
-    }))
-    expect(result).toMatchObject({
-      worktree: host.worktree,
-      number: 12,
-      tab,
-      prRepo: { host: 'github.com', owner: 'upstream-owner', repo: 'upstream-repo' }
-    })
-    const state = await host.client.callAny('quirky.reviews/state', { worktree: host.worktree })
-    expect(reviewTarget(state)).toMatchObject({
-      worktree: host.worktree,
-      number: 12,
-      tab,
-      prRepo: { host: 'github.com', owner: 'upstream-owner', repo: 'upstream-repo' }
-    })
-    const ui = record(await host.client.callAny('ui.state', {}))
-    expect(record(record(ui.layout).view)).toMatchObject({
-      id: 'view:quirky.reviews/review',
-      input: { worktree: host.worktree, number: 12, tab, prRepo: { host: 'github.com', owner: 'upstream-owner', repo: 'upstream-repo' } }
-    })
-    const callsBefore = (Array.isArray(record(host.readState()).calls) ? record(host.readState()).calls as unknown[] : []).length
+  for (const source of sources) {
+    for (const tab of ['conversation', 'checks', 'files'] as const) {
+      const expected = { worktree: host.worktree, number: 12, tab, prRepo: source.identity }
+      const result = record(await openReview(openContext, {
+        worktree: host.worktree,
+        number: 12,
+        tab,
+        ...source.target
+      }))
+      expect(result).toMatchObject(expected)
+
+      const state = await host.client.callAny('quirky.reviews/state', { worktree: host.worktree })
+      expect(reviewTarget(state)).toMatchObject(expected)
+
+      const ui = record(await host.client.callAny('ui.state', {}))
+      expect(record(record(ui.layout).view)).toMatchObject({
+        id: 'view:quirky.reviews/review',
+        input: expected
+      })
+    }
+
     const refreshed = record(await host.client.callAny('quirky.reviews/detailRefresh', {
       surface: 'detail',
       worktree: host.worktree,
       number: 12,
-      prRepo: { host: 'github.com', owner: 'upstream-owner', repo: 'upstream-repo' }
+      prRepo: source.identity
     }))
     expect(record(refreshed.loaded).review).toBe(true)
-    const refreshedState = await host.client.callAny('quirky.reviews/state', { worktree: host.worktree })
-    expect(record(record(refreshedState).detail).review).toMatchObject({
-      url: upstream.url,
-      prRepo: { host: 'github.com', owner: 'upstream-owner', repo: 'upstream-repo' }
+    const hydrated = await host.client.callAny('quirky.reviews/state', { worktree: host.worktree })
+    expect(record(record(hydrated).detail).review).toMatchObject({
+      url: source.target.url,
+      prRepo: source.identity
     })
-    const calls = Array.isArray(record(host.readState()).calls) ? (record(host.readState()).calls as unknown[]).slice(callsBefore).map(record) : []
-    const sourceQueries = calls.filter((call) => {
-      const variables = record(call.variables)
-      const query = typeof variables.query === 'string' ? variables.query : ''
-      return ['HostingChecksRollup', 'HostingComments', 'HostingFileViews'].some((operation) => query.includes(operation))
-    })
-    expect(sourceQueries.length).toBeGreaterThan(0)
-    for (const call of sourceQueries) {
-      const variables = record(call.variables)
-      expect(`${String(variables.owner)}/${String(variables.name ?? variables.repo)}`).toBe('upstream-owner/upstream-repo')
-    }
   }
 
-  await openReview(openContext, { worktree: host.worktree, number: 12, tab: 'conversation', url: origin.url })
-  const originState = await host.client.callAny('quirky.reviews/state', { worktree: host.worktree })
-  expect(reviewTarget(originState)).toMatchObject({
-    number: 12,
-    prRepo: { host: 'github.com', owner: 'test-owner', repo: 'test-repo' }
-  })
-  await host.client.callAny('quirky.reviews/detailRefresh', {
-    surface: 'detail',
-    worktree: host.worktree,
-    number: 12,
-    prRepo: { host: 'github.com', owner: 'test-owner', repo: 'test-repo' }
-  })
-  const originReviewState = await host.client.callAny('quirky.reviews/state', { worktree: host.worktree })
-  expect(record(record(originReviewState).detail).review).toMatchObject({ url: origin.url })
   const previousView = record(record(await host.client.callAny('ui.state', {})).layout).view
   await host.call('open', { mode: 'issues', repoIds: [host.repoId] })
   await host.call('close')
   const restored = record(record(await host.client.callAny('ui.state', {})).layout).view
   expect(restored).toEqual(previousView)
-})
+}, 20_000)

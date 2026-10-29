@@ -1,5 +1,6 @@
 {
   "id": "quirky.session",
+  "apiVersion": "1.0.0",
   "name": "Sessions",
   "version": "0.1.0",
   "description": "Terminal and structured agent sessions in a worktree.",

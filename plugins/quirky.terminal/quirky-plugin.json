@@ -1,5 +1,6 @@
 {
   "id": "quirky.terminal",
+  "apiVersion": "1.0.0",
   "name": "Terminal",
   "version": "0.1.0",
   "description": "Terminal input and output for sessions that run in a PTY.",

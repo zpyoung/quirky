@@ -5,6 +5,7 @@ import { dirname, join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import type { Harness } from '../helpers'
 import { startHarness } from '../helpers'
+import { PLUGIN_API_VERSION } from '@quirky/protocol'
 
 let harness: Harness | undefined
 let home: string | undefined
@@ -32,7 +33,7 @@ describe('PluginContext.workerEntrypoint', () => {
     write(join(pluginDir, 'main.ts'), `export function activate(context) { context.provide('method:acme.worker/resolve', ({name}) => context.workerEntrypoint(name)) }`)
     write(join(pluginDir, 'src', 'scanner.ts'), 'export const ready = true')
     write(join(pluginDir, 'quirky-plugin.json'), JSON.stringify({
-      id: 'acme.worker', name: 'Worker fixture', version: '1.0.0', main: 'main.ts',
+      id: 'acme.worker', name: 'Worker fixture', version: '1.0.0', apiVersion: PLUGIN_API_VERSION, main: 'main.ts',
       workers: { scanner: 'src/scanner.ts' },
       contributes: { method: [{ id: 'resolve', readOnly: true, params: { type: 'object', properties: { name: { type: 'string' } }, required: ['name'] }, result: { type: 'string' } }] }
     }))

@@ -26,7 +26,7 @@ describe('bundle worker entrypoints', () => {
   test('bundles each declared source worker and rewrites its mapping to the packaged file', async () => {
     const dir = join(src, 'quirky.demo')
     write(join(dir, 'quirky-plugin.json'), JSON.stringify({
-      id: 'quirky.demo', name: 'Demo', version: '1.0.0', main: 'main.ts',
+      id: 'quirky.demo', apiVersion: '1.0.0', name: 'Demo', version: '1.0.0', main: 'main.ts',
       workers: { scanner: 'src/worker.ts' }
     }))
     write(join(dir, 'main.ts'), 'export const main = true')
@@ -43,7 +43,7 @@ describe('bundle worker entrypoints', () => {
   test('refuses traversal before writing a worker bundle', async () => {
     const dir = join(src, 'quirky.demo')
     write(join(dir, 'quirky-plugin.json'), JSON.stringify({
-      id: 'quirky.demo', name: 'Demo', version: '1.0.0', main: 'main.ts', workers: { scanner: '../outside.ts' }
+      id: 'quirky.demo', apiVersion: '1.0.0', name: 'Demo', version: '1.0.0', main: 'main.ts', workers: { scanner: '../outside.ts' }
     }))
     write(join(dir, 'main.ts'), 'export const main = true')
     await expect(bundlePlugins(src, out)).rejects.toThrow(/quirky\.demo.*worker.*inside/i)

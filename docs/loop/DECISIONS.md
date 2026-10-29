@@ -137,6 +137,11 @@ files, not this one.
 | hard | high | [m0-registry D12](decisions/m0-registry.md) | Every contribution is declared in the manifest, and code can only provide declared ones | assumed — autonomous |
 | hard | high | [m0-registry D23](decisions/m0-registry.md) | Choose declarative contributions with lazily loaded code | assumed — autonomous |
 | hard (engine/data boundary) | high | [sa-browser-design-mode D2](decisions/sa-browser-design-mode.md) | Preserve Native and exact-page Watch engine identity | locked by docs/architecture.md |
+| hard | high | [m7-api-freeze D2](decisions/m7-api-freeze.md) | Require canonical stable SemVer apiVersion declarations | supersedes m0-registry D15 |
+| hard | high | [m7-api-freeze D3](decisions/m7-api-freeze.md) | Keep same-major older API floors compatible | assumed — autonomous |
+| hard | high | [m7-api-freeze D10](decisions/m7-api-freeze.md) | Freeze author-facing declarations, not kernel internals or renderer DOM | locked by docs/roadmap.md |
+| hard | high | [m7-api-freeze D11](decisions/m7-api-freeze.md) | Preserve trust, confirmation, authentication and activation semantics | locked by docs/architecture.md |
+| hard | high | [m7-api-freeze D14](decisions/m7-api-freeze.md) | Gate each executing host before module import | assumed — autonomous |
 | hard (engine and acceptance boundary) | high | [sa-browser-pane-native-events D1](decisions/sa-browser-pane-native-events.md) | Keep this item scoped to the deferred Native page-event flows | locked by docs/architecture.md and docs/loop/decisions/sa-browser-pane.md |
 | hard (security boundary) | high | [sa-browser-pane-native-events D3](decisions/sa-browser-pane-native-events.md) | Keep certificate approval loopback-only and external launches explicitly approved | locked by browser.md and docs/loop/decisions/sa-browser-pane.md D5 |
 | hard | high | [m7-terminal-runtime-native-and-worktree-parity D2](decisions/m7-terminal-runtime-native-and-worktree-parity.md) | Resolve API, CLI and integration gray areas with exact caller and target identity | locked by docs/architecture.md; assumed — autonomous |
@@ -787,6 +792,13 @@ files, not this one.
 | medium | high | [m6-orchestration-ui D5](decisions/m6-orchestration-ui.md) | Preserve uncertainty, identity and terminal ownership | locked by research/orca-features/orchestration.md |
 | medium | high | [m6-orchestration-ui D8](decisions/m6-orchestration-ui.md) | Resolve navigation in one public daemon operation, including context-only Dispatches | locked by research/orca-features/orchestration.md |
 | medium | high | [m6-orchestration-ui D15](decisions/m6-orchestration-ui.md) | Compose canonical service migrations and routing before retrying the land | assumed — autonomous |
+| medium | high | [m7-api-freeze D4](decisions/m7-api-freeze.md) | No implicit upgrade for missing declarations | assumed — autonomous |
+| medium | high | [m7-api-freeze D5](decisions/m7-api-freeze.md) | Preserve strict manifest fields and existing error transport | locked by docs/loop/decisions/m0-registry.md |
+| medium | high | [m7-api-freeze D6](decisions/m7-api-freeze.md) | Validate bundled plugins before any distro mutation | locked by docs/loop/decisions/m0-core.md |
+| medium | high | [m7-api-freeze D7](decisions/m7-api-freeze.md) | Expose the host release in the existing API catalog | assumed — autonomous |
+| medium | high | [m7-api-freeze D8](decisions/m7-api-freeze.md) | Keep all version domains distinct | assumed — autonomous |
+| medium | high | [m7-api-freeze D15](decisions/m7-api-freeze.md) | Build the early freeze item against the pending owner's shared contract | locked by docs/loop/LOOP.md |
+| medium | high | [m7-api-freeze D16](decisions/m7-api-freeze.md) | Preserve orphaned-load teardown while revalidating present metadata | assumed — autonomous |
 | medium (visible interaction contract) | high | [sa-browser-pane-native-events D2](decisions/sa-browser-pane-native-events.md) | Resolve interaction and error-state gray areas without weakening source semantics | locked by browser.md and docs/loop/decisions/sa-browser-pane.md D5 |
 | medium (native ownership contracts) | high | [sa-browser-pane-native-events D4](decisions/sa-browser-pane-native-events.md) | Preserve download ownership and OAuth opener/body fidelity | locked by browser.md and docs/loop/decisions/sa-browser-pane.md D5 |
 | medium (platform-specific host support) | high | [sa-browser-pane-native-events D8](decisions/sa-browser-pane-native-events.md) | Defer other-platform native capability validation | deferred: platform |
@@ -3021,6 +3033,19 @@ files, not this one.
 | easy | high | [m6-orchestration-ui D11](decisions/m6-orchestration-ui.md) | Preserve sidebar workspace layout and isolate actual UI proof | assumed — autonomous |
 | easy | high | [m6-orchestration-ui D12](decisions/m6-orchestration-ui.md) | Keep catch-up and review provenance explicit | assumed — autonomous |
 | easy | high | [m6-orchestration-ui D14](decisions/m6-orchestration-ui.md) | Keep guarded dogfood limits separate from actual isolated-browser proof | assumed — autonomous |
+| easy | high | [m7-api-freeze D1](decisions/m7-api-freeze.md) | Use autonomous API/Integration/Docs design | locked by docs/loop/LOOP.md |
+| easy | high | [m7-api-freeze D9](decisions/m7-api-freeze.md) | Publish the existing sample in repository source | locked by docs/loop/decisions/m0-core.md |
+| easy | high | [m7-api-freeze D12](decisions/m7-api-freeze.md) | Verify end-phase code and use a reachable cross-family reviewer | assumed — autonomous |
+| easy | high | [m7-api-freeze D13](decisions/m7-api-freeze.md) | Claim only macOS evidence | deferred: platform |
+| easy | high | [m7-api-freeze D17](decisions/m7-api-freeze.md) | Keep compatibility refusal distinct from a different-distro conflict | locked by docs/loop/decisions/m0-core.md |
+| easy | high | [m7-api-freeze D18](decisions/m7-api-freeze.md) | Disable all independent Source Control launch affordances in the sample | assumed — autonomous |
+| easy | high | [m7-api-freeze D19](decisions/m7-api-freeze.md) | Restore worker contamination before the integration barrier | assumed — autonomous |
+| easy | high | [m7-api-freeze D20](decisions/m7-api-freeze.md) | Close fixture dependency sets over the real Worktree requirements | assumed — autonomous |
+| easy | high | [m7-api-freeze D21](decisions/m7-api-freeze.md) | Preserve real origin/upstream hydration while removing duplicate request-shape checks | assumed — autonomous |
+| easy | high | [m7-api-freeze D22](decisions/m7-api-freeze.md) | Synchronize independent activity and panel snapshots before the Git commit transition | assumed — autonomous |
+| easy | high | [m7-api-freeze D23](decisions/m7-api-freeze.md) | Keep the original standalone Automations predecessor across a settings detour | locked by plugins/quirky.automations/README.md |
+| easy | high for exercised compiler/source integration; no final whole-suite or model-review assurance claimed | [m7-api-freeze D24](decisions/m7-api-freeze.md) | Inherit the operator's restored build-first final landing gate | supersedes m7-api-freeze D12 remaining verification policy, per locked operator amendment recorded in m7-session-extras-owner-host-flows D10–D11 |
+| easy | high for parsing and registry state; not a new ui/owner-host acceptance run | [m7-api-freeze D25](decisions/m7-api-freeze.md) | Check the merged published declarations without hiding source-directory diagnostics | assumed — autonomous |
 | easy | high | [fix-test-agents-1028 D1](decisions/fix-test-agents-1028.md) | Repair the reported agent failures without weakening behavior | assumed — autonomous |
 | easy | high | [fix-test-agents-1028 D2](decisions/fix-test-agents-1028.md) | Use isolated implementers and the canonical test runner | assumed — autonomous |
 | easy | high for missing prompt and desired safety boundary; no historical reason-value attribution | [fix-test-agents-1028 D3](decisions/fix-test-agents-1028.md) | Fix valid provider fixtures and assert safety outcomes, not reason prose | assumed — autonomous; locked by docs/quirk/specs/2026-10-27-m3-accounts/logic.md |

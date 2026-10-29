@@ -560,6 +560,7 @@ describe('quirky.accounts daemon API acceptance', () => {
     mkdirSync(source, { recursive: true, mode: 0o700 })
     writeFileSync(join(source, 'quirky-plugin.json'), JSON.stringify({
       id: 'acme.accounts-prepare',
+      apiVersion: '1.0.0',
       name: 'Accounts prepare replacement',
       version: '1.0.0',
       main: 'main.ts',

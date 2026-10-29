@@ -1,5 +1,6 @@
 {
   "id": "quirky.session",
+  "apiVersion": "1.0.0",
   "name": "Session (fake)",
   "version": "0.0.0",
   "main": "main.ts",

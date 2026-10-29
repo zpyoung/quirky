@@ -184,9 +184,12 @@ function commandEntry(
       : flagsFromParams(methodSchemas.get(method), new Set(positionals.map((item) => item.param)))
   const suffix = effectiveCliWords(contribution.name, data.words)
   const withGroup = (word: string) => (suffix === '' ? word : `${word} ${suffix}`)
+  const apiVersion = group.info.apiVersion
+  if (apiVersion === undefined) throw new Error(`plugin ${group.info.id} has no validated apiVersion`)
   return {
     id: contribution.id,
     plugin: contribution.plugin,
+    apiVersion,
     words: withGroup(group.words),
     aliasWords: group.aliases.map(withGroup),
     summary: data.summary as string,

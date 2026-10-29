@@ -1,5 +1,6 @@
 {
   "id": "quirky.ledger",
+  "apiVersion": "1.0.0",
   "name": "Project Ledger",
   "version": "0.1.0",
   "description": "Durable typed project and project-group engineering observations with revision history and replay-safe imports.",

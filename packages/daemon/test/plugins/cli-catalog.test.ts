@@ -1,6 +1,6 @@
 import { afterAll, afterEach, beforeAll, describe, expect, test } from 'bun:test'
 import { join } from 'node:path'
-import { type ApiDescription, type PluginInfo } from '@quirky/protocol'
+import { PLUGIN_API_VERSION, type ApiDescription, type PluginInfo } from '@quirky/protocol'
 import { KERNEL_CLI_GROUPS } from '../../src/plugins/cli-catalog'
 import { makeTempHome, startHarness, type Harness } from '../helpers'
 import { makeTempDir, moduleSource, removeTempDirs, writePlugin } from './fixtures'
@@ -123,6 +123,7 @@ describe('api.describe cli section', () => {
     expect(byId.get('cli-command:quirky.worktree/fancy')).toEqual({
       id: 'cli-command:quirky.worktree/fancy',
       plugin: 'quirky.worktree',
+      apiVersion: PLUGIN_API_VERSION,
       words: 'worktree fancy view',
       aliasWords: ['wt fancy view'],
       summary: 'Runs plugin code',

@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, expect, test } from 'bun:test'
 import { mkdirSync, mkdtempSync, realpathSync, rmSync } from 'node:fs'
 import { join, resolve } from 'node:path'
-import type { Ask, QuirkyClient, Repo, Session, UiSlotState, UiState, Worktree } from '@quirky/protocol'
+import { PLUGIN_API_VERSION, type Ask, type ApiCatalog, type DistroInspection, type QuirkyClient, type Repo, type Session, type UiSlotState, type UiState, type Worktree } from '@quirky/protocol'
 import { createFakeGit, useTestGit } from '@quirky/git/testing'
 import { spawnCli } from '../../cli/test/fixtures/fake-daemon'
 import { builtinsDir, makeTempHome, startHarness, type Harness } from '../../daemon/test/helpers'
@@ -10,6 +10,8 @@ import { startHeadlessWindow, type HeadlessWindow } from './fixtures/headless-wi
 const SAMPLE_DISTRO = resolve(import.meta.dir, '../../../distros/sample')
 const SIDEBAR = 'sidebar-section:quirky.worktree/worktrees'
 const SOURCE_CONTROL = 'panel:quirky.git/source-control'
+const SOURCE_CONTROL_ACTIVITY = 'activity-item:quirky.sidebar-extras/source-control'
+const EDITOR_SOURCE_CONTROL = 'command:quirky.editor/source-control'
 const QUESTIONS = 'panel:quirky.ask/questions'
 const SESSION_VIEW = 'view:quirky.session/worktree'
 
@@ -98,8 +100,17 @@ async function stateWhere(check: (state: UiState) => boolean): Promise<UiState> 
 
 test('SC-59: the M0 exit test, through the CLI only', async () => {
   const stock = await stateWhere((state) => slotOf(state, SIDEBAR)?.report !== undefined)
+  const inspected = await quirky(['distro', 'inspect', SAMPLE_DISTRO, '--json'])
+  expect(inspected.code).toBe(0)
+  const inspection = JSON.parse(inspected.stdout) as DistroInspection
+  expect(inspection.plugins.map(({ id }) => id)).toContain('sample.sidebar')
+  const catalog = JSON.parse(await ok(['api', '--json'])) as ApiCatalog
+  expect(catalog.pluginApiVersion).toBe(PLUGIN_API_VERSION)
+  expect(catalog.uiCommands.some((command) => command.id === EDITOR_SOURCE_CONTROL)).toBe(true)
+
   expect(slotOf(stock, SIDEBAR)?.plugin).toBe('quirky.worktree')
   expect(slotOf(stock, SOURCE_CONTROL)).toBeDefined()
+  expect(slotOf(stock, SOURCE_CONTROL_ACTIVITY)).toBeDefined()
   expect((await quirky(['git', 'status'])).code).toBe(0)
 
   const installed = await quirky(['distro', 'install', SAMPLE_DISTRO, '--yes'])
@@ -115,6 +126,9 @@ test('SC-59: the M0 exit test, through the CLI only', async () => {
     report: { flat: true, worktrees: [{ id: main.id, name: main.name }] }
   })
   expect(flat.slots.filter((slot) => slot.kind === 'panel').map((slot) => slot.id)).not.toContain(SOURCE_CONTROL)
+  expect(slotOf(flat, SOURCE_CONTROL_ACTIVITY)).toBeUndefined()
+  const disabledCatalog = JSON.parse(await ok(['api', '--json'])) as ApiCatalog
+  expect(disabledCatalog.uiCommands.some((command) => command.id === EDITOR_SOURCE_CONTROL)).toBe(false)
   const unknown = await quirky(['git', 'status'])
   expect(unknown.code).not.toBe(0)
   expect(unknown.stderr).toContain('unknown command')
@@ -128,7 +142,10 @@ test('SC-59: the M0 exit test, through the CLI only', async () => {
   })
   expect(slotOf(restored, SIDEBAR)).toMatchObject({ title: 'Worktrees', plugin: 'quirky.worktree' })
   expect(slotOf(restored, SOURCE_CONTROL)).toBeDefined()
+  expect(slotOf(restored, SOURCE_CONTROL_ACTIVITY)).toBeDefined()
   expect((await quirky(['git', 'status'])).code).toBe(0)
+  const restoredCatalog = JSON.parse(await ok(['api', '--json'])) as ApiCatalog
+  expect(restoredCatalog.uiCommands.some((command) => command.id === EDITOR_SOURCE_CONTROL)).toBe(true)
 
   const sessions = (await agent.callAny('quirky.session/list', {})) as Session[]
   expect(sessions.find((session) => session.id === shell.id)?.status).toBe('running')

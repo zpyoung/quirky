@@ -1,5 +1,6 @@
 {
   "id": "quirky.ask",
+  "apiVersion": "1.0.0",
   "name": "Ask (fake)",
   "version": "0.0.0",
   "main": "main.ts",

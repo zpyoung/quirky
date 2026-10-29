@@ -93,7 +93,8 @@ function installMedia(matches: boolean): TestMediaQuery {
 function model(active: string, chosen = active, extra?: ThemeInfo): UiModel {
   return {
     themes: [DEFAULT_THEME, DARK_THEME, LIGHT_THEME, ...(extra ? [extra] : [])],
-    theme: { chosen, active }
+    theme: { chosen, active },
+    modules: {}
   } as UiModel
 }
 

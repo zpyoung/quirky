@@ -1,5 +1,6 @@
 {
   "id": "quirky.loops",
+  "apiVersion": "1.0.0",
   "name": "Background loops",
   "version": "0.1.0",
   "description": "Durable Claude and Codex background loops with until-done, queue, and interval presets.",

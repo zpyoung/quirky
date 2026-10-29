@@ -88,7 +88,7 @@ async function start(): Promise<ProjectFixture> {
   mkdirSync(builtinPluginsDir, { recursive: true })
   writeFileSync(captureFile, '')
   writeFileSync(controlFile, '{}')
-  for (const pluginId of ['quirky.repo', 'quirky.agents', 'quirky.checks', 'quirky.structured', 'quirky.session', 'quirky.ask']) {
+  for (const pluginId of ['quirky.repo', 'quirky.cli', 'quirky.agents', 'quirky.checks', 'quirky.structured', 'quirky.session', 'quirky.ask']) {
     symlinkSync(join(PLUGINS_ROOT, pluginId), join(builtinPluginsDir, pluginId))
   }
   installWrapper(builtinPluginsDir, 'quirky.worktree', captureFile, controlFile)

@@ -37,6 +37,8 @@ export type ApiCliFlag = ApiFlagEntry & { param: string }
 export type ApiCliCommandEntry = {
   id: string
   plugin: string
+  /** Declaring plugin's minimum API release, checked by the local CLI host before import. */
+  apiVersion: string
   words: string
   aliasWords: string[]
   summary: string
@@ -53,6 +55,8 @@ export type ApiDescription = {
   schemaVersion: typeof CATALOG_SCHEMA_VERSION
   daemonVersion: string
   protocolVersion: number
+  /** Stable plugin-author API release hosted by this daemon. */
+  pluginApiVersion: string
   methods: ApiMethodEntry[]
   events: ApiEventEntry[]
   uiCommands: ApiUiCommandEntry[]

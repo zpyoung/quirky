@@ -1,5 +1,6 @@
 {
   "id": "acme.owner-worker-kind",
+  "apiVersion": "1.0.0",
   "name": "Heimdall owner worker acceptance kind",
   "version": "1.0.0",
   "main": "main.ts",

@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import {
   DEFAULT_THEME,
   CATALOG_SCHEMA_VERSION,
+  PLUGIN_API_VERSION,
   PROTOCOL_VERSION,
   type ClientRole,
   RpcErrorCode,
@@ -234,6 +235,7 @@ export class FakeDaemon {
 
   addCliCommand(entry: Partial<ApiCliCommandEntry> & Pick<ApiCliCommandEntry, 'id' | 'plugin' | 'words'>): ApiCliCommandEntry {
     const full: ApiCliCommandEntry = {
+      apiVersion: PLUGIN_API_VERSION,
       aliasWords: [],
       summary: '',
       positionals: [],
@@ -378,11 +380,12 @@ export class FakeDaemon {
     return full
   }
 
-  private describe() {
+  private describe(): ApiDescription {
     return {
       schemaVersion: CATALOG_SCHEMA_VERSION,
       daemonVersion: '0.0.0-fake',
       protocolVersion: PROTOCOL_VERSION,
+      pluginApiVersion: PLUGIN_API_VERSION,
       methods: [...this.methods.values()].map(({ entry }) => entry).sort((a, b) => (a.name < b.name ? -1 : 1)),
       events: [],
       uiCommands: [],

@@ -1,5 +1,6 @@
 {
   "id": "acme.stdin-delivery",
+  "apiVersion": "1.0.0",
   "name": "Acme stdin delivery",
   "version": "1.0.0",
   "description": "Test plugin: moves antigravity and omp to paste delivery so their Enter timing can be observed.",

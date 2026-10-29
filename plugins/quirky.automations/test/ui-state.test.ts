@@ -24,6 +24,8 @@ test('scripted automation navigation retains filters and restores predecessor wi
   await client.callAny('quirky.automations/close', {})
   const after = await client.callAny('ui.state', {}) as { layout: UiLayout }
   expect(after.layout.view).toEqual(before.layout.view)
+  const retained = await client.callAny('quirky.automations/uiState', {}) as AutomationUiState
+  expect(retained.navigation).toMatchObject({ page: 'runs', query: 'audit', status: 'paused', runStatus: 'failed' })
 }, 20_000)
 
 test('automation tool navigation, editor opening, close, and settings return preserve the center', async () => {

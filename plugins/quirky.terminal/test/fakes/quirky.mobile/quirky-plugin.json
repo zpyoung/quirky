@@ -1,5 +1,6 @@
 {
   "id": "quirky.mobile",
+  "apiVersion": "1.0.0",
   "name": "Mobile Test Transport",
   "version": "0.0.0",
   "main": "main.ts",

@@ -1,13 +1,22 @@
 import { afterEach, expect, test } from 'bun:test'
 import { isolateGitConfig } from '../../../quirky.repo/test/git-fixtures'
-import { buttonText, click, q, qa, rowContainerOf, rowOf, sectionHeadings, text, type } from './dom'
-import { badge, boot, sc1, shutdown } from './world'
+import { click, primary, primaryNow, q, qa, rowContainerOf, rowOf, sectionHeadings, text, type } from './dom'
+import { boot, sc1, shutdown } from './world'
 
 const { scratch } = isolateGitConfig()
 const SLOW = 60_000
 afterEach(shutdown)
 
 const sectionCounts = () => qa('[data-section-count]').map(text)
+const sourceControlStatus = () => {
+  const button = qa('button').find((item) => item.getAttribute('aria-label')?.startsWith('Source Control'))
+  if (!button) return null
+  return {
+    count: text(button) || null,
+    label: button.getAttribute('aria-label') ?? '',
+    clean: qa('[aria-label]', button).some((element) => /no uncommitted changes/i.test(element.getAttribute('aria-label') ?? ''))
+  }
+}
 
 test('SC-8: the panel shows Orca\'s layout against a real daemon', async () => {
   const w = await boot(scratch)
@@ -48,27 +57,45 @@ test('SC-8: the panel shows Orca\'s layout against a real daemon', async () => {
   expect(w.problems()).toEqual([])
 }, SLOW)
 
-test('SC-11: the panel toggle shows the uncommitted count, then nothing once everything is committed', async () => {
+test('SC-11: the Source Control activity toggle shows the uncommitted count, then clears when everything is committed', async () => {
   const w = await boot(scratch)
-  expect(badge()).toBeNull()
+  expect(sourceControlStatus()?.count ?? null).toBeNull()
   sc1(w)
-  await w.win.waitFor(() => badge())
-  expect(badge()).toEqual({ count: '4', title: 'Source Control — 4 uncommitted changes' })
+  const shown = await w.win.waitFor(() => {
+    const status = sourceControlStatus()
+    return status?.count ? status : undefined
+  })
+  expect(shown.count).toBe('4')
+  expect(shown.label).toMatch(/\b4\b.*uncommitted changes?/i)
+  await w.win.waitFor(() => rowOf('math.ts', 'unstaged'))
 
   w.git('add', '-A')
   await w.win.waitFor(() => !rowOf('math.ts', 'unstaged'))
   await type(q('textarea[aria-label="Commit message"]') as HTMLTextAreaElement, 'everything')
-  await click(buttonText('Commit'))
-  await w.win.waitFor(() => badge() === null)
+  expect(primaryNow()).toMatchObject({ label: 'Commit', enabled: true })
+  const previousHead = w.git('rev-parse', 'HEAD')
+  await click(primary())
+  await w.win.waitFor(() =>
+    w.git('rev-parse', 'HEAD') !== previousHead &&
+    w.git('status', '--porcelain') === ''
+  )
   expect(w.git('status', '--porcelain')).toBe('')
+  await w.win.waitFor(() => {
+    const status = sourceControlStatus()
+    return status !== null && status.count === null && status.clean
+  })
+  expect(sourceControlStatus()?.count ?? null).toBeNull()
   expect(w.problems()).toEqual([])
 }, SLOW)
 
-test('SC-11: a capped status shows 1000 on the toggle', async () => {
+test('SC-11: a capped status shows the capped count on the Source Control activity toggle', async () => {
   const w = await boot(scratch)
   for (let i = 0; i < 1100; i++) w.write(`many/f${i}.txt`, `${i}\n`)
-  const shown = await w.win.waitFor(() => badge(), 15_000)
-  expect(shown.count).toBe('1000')
-  expect(shown.title).toBe('Source Control — 1000+ uncommitted changes')
+  const shown = await w.win.waitFor(() => {
+    const status = sourceControlStatus()
+    return status?.count ? status : undefined
+  }, 15_000)
+  expect(shown.count).toBe('1000+')
+  expect(shown.label).toMatch(/1000\+.*uncommitted changes?/i)
   await w.win.waitFor(async () => (await w.report())?.capped === true)
 }, SLOW)

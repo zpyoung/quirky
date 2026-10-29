@@ -1,5 +1,6 @@
 {
   "id": "acme.override",
+  "apiVersion": "1.0.0",
   "name": "Acme override",
   "version": "1.0.0",
   "description": "Replaces the built-in codex entry for e2e tests.",

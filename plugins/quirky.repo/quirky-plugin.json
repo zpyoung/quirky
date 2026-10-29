@@ -1,5 +1,6 @@
 {
   "id": "quirky.repo",
+  "apiVersion": "1.0.0",
   "name": "Repositories",
   "version": "0.1.0",
   "description": "Projects Quirky knows about: git repositories and plain folders, their groups, settings and hooks, and the selectors that name them.",

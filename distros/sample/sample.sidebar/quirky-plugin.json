@@ -2,6 +2,7 @@
   "id": "sample.sidebar",
   "name": "Flat worktree sidebar",
   "version": "1.0.0",
+  "apiVersion": "1.0.0",
   "description": "Replaces the worktree sidebar section with one flat list of every worktree.",
   "ui": "ui.js",
   "overrides": [

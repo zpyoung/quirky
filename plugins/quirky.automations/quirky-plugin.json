@@ -1,5 +1,6 @@
 {
   "id": "quirky.automations",
+  "apiVersion": "1.0.0",
   "name": "Automations",
   "version": "0.1.0",
   "description": "Durable scheduled and manual structured agent runs.",
