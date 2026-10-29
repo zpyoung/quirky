@@ -490,7 +490,7 @@ test('SC-33: the window asks before running an untrusted shared script', async (
   await w.win.waitFor(async () => (await setupSessions('t5'))?.length === 1)
 }, 60_000)
 
-test('SC-42: the Update dialog edits the display name and notes', async () => {
+test('SC-42: Rename edits the sidebar display name and notes without moving the worktree', async () => {
   const w = await boot()
   const api = await addProject(w, 'api')
   const fix = ((await w.agent.callAny('quirky.worktree/create', { repo: api.repo.id, name: 'fix-login' })) as WorktreeCreateResult).worktree
@@ -498,8 +498,8 @@ test('SC-42: the Update dialog edits the display name and notes', async () => {
 
   const card = await w.win.waitFor(() => worktreeRow('fix-login'))
   await click(button(card, 'Actions for fix-login')!)
-  const update = await w.win.waitFor(() => menuItem(document, 'Update…'))
-  await click(update)
+  const rename = await w.win.waitFor(() => menuItem(document, 'Rename…'))
+  await click(rename)
 
   const dialog = await w.win.waitFor(() => dialogNamed('Workspace details'))
   expect(await reportedDialog(w, 'update')).toEqual({ kind: 'update', worktreeId: fix.id })
