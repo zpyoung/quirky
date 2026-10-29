@@ -38,7 +38,7 @@ test('SC-60: the file diff opens titled, scrolled to the first change, moves wit
 
   expect(text(q('[data-git-view-root] h2'))).toBe('math.ts (diff)')
   const editor = modifiedEditor(EditorView)
-  await w.win.waitFor(() => selectedLine(editor) === 'line three')
+  await w.win.waitFor(() => selectedLine(editor) === 'line three' && !(byLabel('Previous change') as HTMLButtonElement).disabled && !(byLabel('Next change') as HTMLButtonElement).disabled)
   expect((byLabel('Previous change') as HTMLButtonElement).disabled).toBe(false)
   expect((byLabel('Next change') as HTMLButtonElement).disabled).toBe(false)
   expect(text(q('[data-branch-name]'))).toBe('zoe/feat')

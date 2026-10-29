@@ -3,7 +3,7 @@ import { EditorView } from '@codemirror/view'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { isolateGitConfig } from '../../../quirky.repo/test/git-fixtures'
-import { buttonText, byLabel, click, modS, primary, q, qa, rowOf, text, toasts } from './dom'
+import { buttonText, byLabel, click, dialogNamed, modS, primary, q, qa, rowOf, text, toasts } from './dom'
 import { boot, DIFF_VIEW, openView, shutdown } from './world'
 
 const { scratch } = isolateGitConfig()
@@ -21,7 +21,7 @@ test('SC-41: a sync that stops on a conflict leads, in the window, to Continue m
   peer.commit({ 'math.ts': 'a\nb\nTHEIRS\nd\ne\n' }, 'theirs')
   peer.push('zoe/feat')
   w.git('fetch', '-q')
-  await w.win.waitFor(() => text(primary()) === 'Sync')
+  await w.win.waitFor(() => text(primary()) === 'Sync' && !primary().disabled)
 
   await click(primary())
   const conflict = await w.win.waitFor(() => reviewConflictCard())
@@ -51,7 +51,7 @@ test('SC-41: a sync that stops on a conflict leads, in the window, to Continue m
 
   const stage = await w.win.waitFor(() => byLabel('Stage math.ts', q('[data-section="conflicts"]') ?? document))
   await click(stage)
-  const banner = await w.win.waitFor(() => qa('[role="status"]').find((card) => text(q('h3', card)) === 'Merge in progress'))
+  const banner = await w.win.waitFor(() => qa('[role="status"]').find((card) => buttonText('Continue merge', card) !== undefined))
   expect(buttonText('Continue merge', banner)).toBeDefined()
   expect(q('[role="img"][aria-label^="Resolved locally conflict"]')).not.toBeNull()
 
@@ -73,12 +73,12 @@ test('SC-43: Abort merge in the window confirms first and returns to the pre-mer
   peer.commit({ 'math.ts': 'a\nb\nTHEIRS\nd\ne\n' }, 'theirs')
   peer.push('zoe/feat')
   w.git('fetch', '-q')
-  await w.win.waitFor(() => text(primary()) === 'Sync')
+  await w.win.waitFor(() => text(primary()) === 'Sync' && !primary().disabled)
   await click(primary())
   const conflict = await w.win.waitFor(() => reviewConflictCard())
 
   await click(buttonText('Abort merge', conflict))
-  const dialog = await w.win.waitFor(() => qa('[role="dialog"]').find((d) => d.getAttribute('aria-label') === 'Abort merge?'))
+  const dialog = await w.win.waitFor(() => dialogNamed('Abort merge?'))
   await click(buttonText('Abort merge', dialog))
   await w.win.waitFor(() => !buttonText('Abort merge'))
   expect(w.git('rev-parse', 'HEAD')).toBe(before)

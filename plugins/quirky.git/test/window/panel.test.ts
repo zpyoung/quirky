@@ -35,10 +35,12 @@ test('SC-10: opening a terminal from a clean Source Control panel opens its sess
   await w.win.waitFor(() => q('[data-git-content] section p'))
   await click(buttonText('Open terminal'))
   const terminal = await w.win.waitFor(async () => {
-    const view = await openView(w)
-    return view?.id === SESSION_VIEW && typeof view.input?.session === 'string' ? view : undefined
+    const view = (await w.state()).slots.find((slot) => slot.id === SESSION_VIEW)?.report
+    return view && typeof view === 'object' && 'worktree' in view && view.worktree === w.feat.id &&
+      'active' in view && typeof view.active === 'string' ? view : undefined
   })
-  expect(terminal.input?.worktree).toBe(w.feat.id)
+  const openedSession = await w.agent.callAny('quirky.session/get', { session: terminal.active })
+  expect(openedSession).toMatchObject({ cwd: w.dir, agent: 'shell' })
 
   const notes = join(scratch(), 'notes')
   mkdirSync(notes, { recursive: true })

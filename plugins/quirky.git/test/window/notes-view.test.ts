@@ -28,7 +28,7 @@ test('NA-1: the "+" beside line 12 adds a note that every part of the window sho
   await w.win.waitFor(async () => (await openView(w))?.id === DIFF_VIEW)
   await w.win.waitFor(() => q('[data-git-view-root] [contenteditable]'))
   const view = modifiedEditor(EditorView)
-  expect(q('button[aria-label^="Show "]')).toBeNull()
+  expect(q('[data-git-view-root] button[aria-label^="Show "][aria-label*="AI note"]')).toBeNull()
 
   lineContent(view, 12).dispatchEvent(new MouseEvent('mousemove', { bubbles: true }))
   const plus = await w.win.waitFor(() => byLabel('Add note for the AI'))
@@ -57,7 +57,7 @@ test('NA-1: the "+" beside line 12 adds a note that every part of the window sho
 
   await click(byLabel('Delete note', q('[data-note-card="saved"]')!))
   await w.win.waitFor(async () => (await stored(w)).length === 0)
-  await w.win.waitFor(() => q('[data-note-card="saved"]') === null && q('button[aria-label^="Show "]') === null && q('section[aria-label="Notes"]') === null)
+  await w.win.waitFor(() => q('[data-note-card="saved"]') === null && q('[data-git-view-root] button[aria-label^="Show "][aria-label*="AI note"]') === null && q('section[aria-label="Notes"]') === null)
   expect(w.problems()).toEqual([])
 }, SLOW)
 

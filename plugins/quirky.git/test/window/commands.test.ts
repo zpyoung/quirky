@@ -3,7 +3,7 @@ import { EditorView } from '@codemirror/view'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { isolateGitConfig } from '../../../quirky.repo/test/git-fixtures'
-import { click, modifiedEditor, q, qa, rowOf, sectionHeadings, stubIntersectionObserver, text } from './dom'
+import { buttonText, click, modifiedEditor, q, qa, rowOf, sectionHeadings, stubIntersectionObserver, text } from './dom'
 import { BASE_FILES, boot, DIFF_VIEW, openView, PANEL, sc1, shutdown, type World } from './world'
 
 const { scratch } = isolateGitConfig()
@@ -219,7 +219,7 @@ test('SC-65: the panel report and an explicit top-level diff view report their s
   expect(opened).toMatchObject({ view: { id: DIFF_VIEW, input: viewInput } })
   const view = await w.win.waitFor(async () => {
     const report = await w.viewReport()
-    return report?.mode === 'file' && report.source === 'unstaged' && report.path === 'math.ts' ? report : undefined
+    return report?.mode === 'file' && report.source === 'unstaged' && report.path === 'math.ts' && report.changes === 2 && report.currentChange === 1 ? report : undefined
   })
   expect(view).toMatchObject({
     mode: 'file',

@@ -78,7 +78,7 @@ test('Source Control preview replaces only a clean hosted tab, promotes on doubl
   clickRow('math.ts')
   const first = await world.win.waitFor(async () => {
     const tabs = diffTabs(await terminalWorkspace(world))
-    return tabs.find(({ tab }) => record(tab.input).path === 'math.ts') ?? null
+    return tabs.find(({ tab }) => record(tab.input).path === 'math.ts' && record(tab.input).tabId === tab.id) ?? null
   })
   expect(first.tab.preview).toBe(true)
   const previewId = first.tab.id
@@ -86,7 +86,7 @@ test('Source Control preview replaces only a clean hosted tab, promotes on doubl
   clickRow('README.md')
   const replaced = await world.win.waitFor(async () => {
     const tabs = diffTabs(await terminalWorkspace(world))
-    return tabs.find(({ tab }) => tab.id === previewId && record(tab.input).path === 'README.md') ?? null
+    return tabs.find(({ tab }) => tab.id === previewId && record(tab.input).path === 'README.md' && record(tab.input).tabId === tab.id) ?? null
   })
   expect(replaced.tab.preview).toBe(true)
   expect(diffTabs(await terminalWorkspace(world))).toHaveLength(1)
@@ -94,7 +94,7 @@ test('Source Control preview replaces only a clean hosted tab, promotes on doubl
   clickRow('README.md', 2)
   const promoted = await world.win.waitFor(async () => {
     const current = diffTabs(await terminalWorkspace(world)).find(({ tab }) => tab.id === previewId)
-    return current?.tab.preview === false ? current : null
+    return current?.tab.preview === false && record(current.tab.input).tabId === current.tab.id && record(current.tab.input).preview === false ? current : null
   })
   expect(promoted.tab.id).toBe(previewId)
 
@@ -127,7 +127,7 @@ test('dirty hosted diffs refuse close and are never replaced by another preview'
   clickRow('math.ts')
   const opened = await world.win.waitFor(async () => {
     const tabs = diffTabs(await terminalWorkspace(world))
-    return tabs.find(({ tab }) => record(tab.input).path === 'math.ts') ?? null
+    return tabs.find(({ tab }) => record(tab.input).path === 'math.ts' && record(tab.input).tabId === tab.id) ?? null
   })
   await world.win.waitFor(() => q('[data-git-view-root] [contenteditable]'))
   const editor = modifiedEditor(EditorView, q('[data-diff-editor]')!)

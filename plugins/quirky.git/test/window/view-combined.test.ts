@@ -96,6 +96,7 @@ test('SC-62: unstaged sections of a combined diff are editable and save', async 
   const w = await boot(scratch)
   w.write('a.ts', 'changed a\n')
   await w.win.waitFor(() => rowOf('a.ts'))
+  await w.run('open-changes', { area: 'unstaged' })
   await w.win.waitFor(() => q('[data-git-view-root] section[data-path="a.ts"] [contenteditable]'))
   const editor = modifiedEditor(EditorView, q('[data-git-view-root] section[data-path="a.ts"]')!)
   editor.dispatch({ changes: { from: 0, insert: 'mine ' } })
@@ -120,8 +121,12 @@ test('SC-63: big, image and binary diffs show their fallbacks, and a draft past 
   writeFileSync(join(w.dir, 'logo.png'), PNG_B)
   writeFileSync(join(w.dir, 'blob.bin'), Buffer.from([0, 9, 9, 0, 4, 4]))
   await w.win.waitFor(() => rowOf('big.txt') && rowOf('logo.png') && rowOf('blob.bin'), 20_000)
+  await w.run('open-changes', { area: 'unstaged' })
 
   const big = await w.win.waitFor(() => q('[data-git-view-root] section[data-path="big.txt"]'))
+  await w.run('load-diff', { path: 'big.txt' })
+  await w.run('load-diff', { path: 'logo.png' })
+  await w.run('load-diff', { path: 'blob.bin' })
   await w.win.waitFor(() => q('[role="status"]', big))
   expect(text(q('[role="status"]', big)!)).toContain('This diff is too large to display safely')
 
@@ -140,6 +145,7 @@ test('SC-63: a draft that crosses the display limit is replaced by the fallback 
   await w.win.waitFor(() => q('[data-git-view-root] [contenteditable]'))
   const draft = 'x'.repeat(6_000_001)
   const editor = modifiedEditor(EditorView)
+  editor.dispatch({ changes: { from: 0, to: editor.state.doc.length, insert: draft } })
   await w.win.waitFor(() => q('[data-git-view-root] [role="region"]'), 10_000)
   await w.win.waitFor(() => q('[data-git-view-root] [contenteditable]') === null)
   expect((buttonText('Save', q('[data-git-view-root] [role="region"]')!) as HTMLButtonElement).disabled).toBe(false)

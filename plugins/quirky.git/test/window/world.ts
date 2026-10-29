@@ -47,7 +47,7 @@ export type World = {
   state(): Promise<UiState>
   /** The panel's last report. */
   report(): Promise<any>
-  /** The diff view's last report. */
+  /** The explicit top-level diff mount's report; embedded hosted views have no slot report. */
   viewReport(): Promise<any>
   run(command: string, args?: unknown): Promise<unknown>
   /** Console errors and failed plugin slots seen since the window opened; empty when all is well. */
@@ -264,10 +264,19 @@ function groupsIn(node: WorkspaceNode): WorkspaceGroup[] {
   return node.kind === 'group' ? [node] : [...groupsIn(node.first), ...groupsIn(node.second)]
 }
 
-/** The active hosted view in this worktree's terminal workspace, or null. */
+/** The selected top-level view, or its settled active hosted tab when the terminal owns it. */
 export async function openView(w: World): Promise<{ id: string; input?: Record<string, unknown> } | null> {
-  const { workspace } = await w.agent.callAny('quirky.terminal/workspace', { workspace: w.feat.id }) as { workspace: TerminalWorkspace }
+  const root = (await w.state()).layout.view
+  if (!root) return null
+  const input = typeof root.input === 'object' && root.input !== null && !Array.isArray(root.input)
+    ? root.input as Record<string, unknown>
+    : undefined
+  const shown = { id: root.id, ...(input === undefined ? {} : { input }) }
+  if (root.id !== SESSION_VIEW || typeof input?.worktree !== 'string') return shown
+  const { workspace } = await w.agent.callAny('quirky.terminal/workspace', { workspace: input.worktree }) as { workspace: TerminalWorkspace }
   const group = groupsIn(workspace.root).find((candidate) => candidate.id === workspace.activeGroup)
   const tab = group?.tabs.find((candidate) => candidate.id === group.activeTab)
-  return tab?.kind === 'view' ? { id: tab.viewId, ...(tab.input === undefined ? {} : { input: tab.input }) } : null
+  if (tab?.kind !== 'view') return shown
+  if (tab.viewId === DIFF_VIEW && tab.input?.tabId !== tab.id) return null
+  return { id: tab.viewId, ...(tab.input === undefined ? {} : { input: tab.input }) }
 }
