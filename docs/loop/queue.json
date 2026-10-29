@@ -2057,6 +2057,26 @@
       "status": "done"
     },
     {
+      "id": "fix-test-orchestration-1028",
+      "milestone": "M7",
+      "title": "Repair end-phase plugins/quirky.orchestration failures from baseline 97aaa12d (full evidence docs/loop/reports/m7-test-triage.json, area plugins/quirky.orchestration). Files and exact failed tests: plugins/quirky.orchestration/test/federation-engine.test.ts: paired daemon worker-start executes only on the selected host and replays one durable receipt; remote retain, stop, release/archive, and abandon affect only the exact host worker | plugins/quirky.orchestration/test/federation-mail-acceptance.test.ts: paired daemons preserve FIFO mail and ask identity; a rejected home completion leaves the host unsettled | plugins/quirky.orchestration/test/peer-transport.test.ts: paired loopback peers expose safe status and reject methods outside the method ceiling; remote status and hook-status reads retain exact peer identity without copying remote rows; provider model discovery executes on the exact authenticated peer without local fallback; unpair revokes saved peer credentials; peer-listen CLI reads its credential from a private file without printing it | plugins/quirky.orchestration/test/services/submission-preflight.test.ts: session callers cannot register a service submission hook; submission callback methods cannot escape the registering plugin namespace | plugins/quirky.orchestration/test/federation-surface.test.ts: home reads and controls the exact host worker, preserves host output provenance, and archives before release | plugins/quirky.orchestration/test/acceptance-api.test.ts: quirky.orchestration daemon API acceptance > A2 a live background Ask survives unknown session evidence and resolves unavailable only after exact exit proof | plugins/quirky.orchestration/test/setup-migration.test.ts: daemon activation upgrades the prior canonical service store once and preserves its data and policy. Reproduce via canonical suite; fix consumer-visible defects and delete incidental wording/source/default/inventory mirror assertions rather than repinning them. Preserve fresh private process homes and cleanup. Cross-plugin failures must coordinate with the owning repair, not introduce aliases or bypasses.",
+      "docs": [],
+      "deps": [
+        "m7-test-triage"
+      ],
+      "status": "done"
+    },
+    {
+      "id": "fix-test-handoff-1028",
+      "milestone": "M7",
+      "title": "Repair end-phase plugins/quirky.handoff failures from baseline 97aaa12d (full evidence docs/loop/reports/m7-test-triage.json, area plugins/quirky.handoff). Files and exact failed tests: plugins/quirky.handoff/test/service.test.ts: SC-6: a new worktree is created only at Start, and only with a name > a blank name is an invalid target and a named one creates nothing | plugins/quirky.handoff/test/service-drafts.test.ts: the plugin declares what it provides > every H1 method, both events and the CLI commands are in the catalog. Reproduce via canonical suite; fix consumer-visible defects and delete incidental wording/source/default/inventory mirror assertions rather than repinning them. Preserve fresh private process homes and cleanup. Cross-plugin failures must coordinate with the owning repair, not introduce aliases or bypasses.",
+      "docs": [],
+      "deps": [
+        "m7-test-triage"
+      ],
+      "status": "done"
+    },
+    {
       "id": "m7-sweep-sessions",
       "milestone": "M7",
       "docs": [
@@ -2113,16 +2133,6 @@
       "lane": 1
     },
     {
-      "id": "fix-test-orchestration-1028",
-      "milestone": "M7",
-      "title": "Repair end-phase plugins/quirky.orchestration failures from baseline 97aaa12d (full evidence docs/loop/reports/m7-test-triage.json, area plugins/quirky.orchestration). Files and exact failed tests: plugins/quirky.orchestration/test/federation-engine.test.ts: paired daemon worker-start executes only on the selected host and replays one durable receipt; remote retain, stop, release/archive, and abandon affect only the exact host worker | plugins/quirky.orchestration/test/federation-mail-acceptance.test.ts: paired daemons preserve FIFO mail and ask identity; a rejected home completion leaves the host unsettled | plugins/quirky.orchestration/test/peer-transport.test.ts: paired loopback peers expose safe status and reject methods outside the method ceiling; remote status and hook-status reads retain exact peer identity without copying remote rows; provider model discovery executes on the exact authenticated peer without local fallback; unpair revokes saved peer credentials; peer-listen CLI reads its credential from a private file without printing it | plugins/quirky.orchestration/test/services/submission-preflight.test.ts: session callers cannot register a service submission hook; submission callback methods cannot escape the registering plugin namespace | plugins/quirky.orchestration/test/federation-surface.test.ts: home reads and controls the exact host worker, preserves host output provenance, and archives before release | plugins/quirky.orchestration/test/acceptance-api.test.ts: quirky.orchestration daemon API acceptance > A2 a live background Ask survives unknown session evidence and resolves unavailable only after exact exit proof | plugins/quirky.orchestration/test/setup-migration.test.ts: daemon activation upgrades the prior canonical service store once and preserves its data and policy. Reproduce via canonical suite; fix consumer-visible defects and delete incidental wording/source/default/inventory mirror assertions rather than repinning them. Preserve fresh private process homes and cleanup. Cross-plugin failures must coordinate with the owning repair, not introduce aliases or bypasses.",
-      "docs": [],
-      "deps": [
-        "m7-test-triage"
-      ],
-      "status": "done"
-    },
-    {
       "id": "fix-test-tasks-1028",
       "milestone": "M7",
       "title": "Repair end-phase plugins/quirky.tasks failures from baseline 97aaa12d (full evidence docs/loop/reports/m7-test-triage.json, area plugins/quirky.tasks). Files and exact failed tests: plugins/quirky.tasks/test/projects-ui.test.tsx: Project Start reports post-create outcomes truthfully and stays linked; Project query overrides remain isolated and survive switching views; board moves clear into No Status and failed moves restore the confirmed column; restricted Project rows stay read-only, refresh errors retain rows, and unknown sources offer repo addition | plugins/quirky.tasks/test/remaining-list-issue.test.ts: a delayed issue list cannot repaint the PR view after a mode switch; a failed assignee edit preserves an earlier successful status change in the rendered row; quiet adoption retains a confirmed status while search indexing lags, then adopts the indexed row; a failed later reviewer request retains an earlier confirmed reviewer update; confirmed issue comments remain visible after a lagging detail read. Reproduce via canonical suite; fix consumer-visible defects and delete incidental wording/source/default/inventory mirror assertions rather than repinning them. Preserve fresh private process homes and cleanup. Cross-plugin failures must coordinate with the owning repair, not introduce aliases or bypasses.",
@@ -2176,16 +2186,6 @@
       ],
       "status": "in-progress",
       "lane": 9
-    },
-    {
-      "id": "fix-test-handoff-1028",
-      "milestone": "M7",
-      "title": "Repair end-phase plugins/quirky.handoff failures from baseline 97aaa12d (full evidence docs/loop/reports/m7-test-triage.json, area plugins/quirky.handoff). Files and exact failed tests: plugins/quirky.handoff/test/service.test.ts: SC-6: a new worktree is created only at Start, and only with a name > a blank name is an invalid target and a named one creates nothing | plugins/quirky.handoff/test/service-drafts.test.ts: the plugin declares what it provides > every H1 method, both events and the CLI commands are in the catalog. Reproduce via canonical suite; fix consumer-visible defects and delete incidental wording/source/default/inventory mirror assertions rather than repinning them. Preserve fresh private process homes and cleanup. Cross-plugin failures must coordinate with the owning repair, not introduce aliases or bypasses.",
-      "docs": [],
-      "deps": [
-        "m7-test-triage"
-      ],
-      "status": "done"
     },
     {
       "id": "fix-test-ledger-1028",
@@ -2289,6 +2289,16 @@
       "status": "todo"
     },
     {
+      "id": "fix-test-post-restyle-boundaries-1028",
+      "milestone": "M7",
+      "title": "Repair newly observed post-restyle/shared-boundary failures from the caught-up full consumer snapshot1793233308424-27725 (682/877 remote files passed; full raw and extracted evidence held by lane8; see fix-test-orchestration-1028 decisions/BLOCKERS). These exact cases are not named by the completed baseline repair titles. Consume current integration first, because the broad snapshot preceded later lanes lands; do not duplicate already repaired cases. Exact files/tests: packages/daemon/test/plugins/ui-kinds.test.ts: activity-item, sidebar-section and panel entries > sidebar-section rejects unknown fields and a non-string description; activity-item, sidebar-section and panel entries > panel rejects unknown fields and a non-string description; overrides of UI kinds > are labelled with the full ID | packages/daemon/test/plugins/sidebar-activity-api.test.ts: activity items are catalogued and report their mounted state while panels remain closed; disabling an override restores the prior activity-item owner in the catalog and state | packages/daemon/test/lock.test.ts: two daemon processes started together > exactly one keeps running and the other exits 0 | packages/ui/test/design-system.test.tsx: shared graphite components > multiline and selection fields preserve native form values and accessible error ownership | plugins/quirky.ask/test/ui.test.ts: the Questions panel module > SC-21: the card shows each type with its controls; the Questions panel module > Q2: an API answer immediately shows its terminal summary | plugins/quirky.ask/test/panel.test.ts: the Questions panel > SC-31: another open panel stays as it is | plugins/quirky.notifications/test/window-view.test.ts: SC-48: the sound controls > SC-48: Custom shows the typed path under the select only while Custom is the sound; SC-48: the sound controls > SC-48: a refused path shows the reason under the field and saves nothing; SC-48: the sound controls > a failed preview call is shown as the reason too; SC-48: the sound controls > picking a built-in sound closes an open path field; SC-48: the sound controls > with Custom stored, the Custom line shows and Change reopens the field with the path; saving and following settings > the view reports the settings and the custom path field state | plugins/quirky.notifications/test/loops.test.ts: loop notifications through the central policy > needs-you events pass through the same policy and keep the loop-specific event key. Keep current shared components and public caller/connection identities; delete incidental wording/source/default/inventory mirrors rather than repinning them. For daemon lock, investigate observed exit/result evidence without inferring load. Use only bun scripts/suite.ts, fresh private HOME/QUIRKY_HOME and owned process cleanup; no aliases, suppressions, deadline increases or real state.",
+      "docs": [],
+      "deps": [
+        "fix-test-orchestration-1028"
+      ],
+      "status": "todo"
+    },
+    {
       "id": "m7-api-freeze",
       "milestone": "M7",
       "title": "Plugin API 1.0: freeze and version the API, manifests declare their API version, publish an example distro",
@@ -2349,20 +2359,11 @@
         "fix-test-scripts-profile-timeout-1028",
         "m7-native-notification-and-signed-terminal-host",
         "fix-test-reviews-tool-1028",
-        "fix-browser-remaining-flows-1028"
+        "fix-browser-remaining-flows-1028",
+        "fix-test-post-restyle-boundaries-1028"
       ],
       "status": "todo",
       "early": true
-    },
-    {
-      "id": "fix-test-post-restyle-boundaries-1028",
-      "milestone": "M7",
-      "title": "Repair newly observed post-restyle/shared-boundary failures from the caught-up full consumer snapshot1793233308424-27725 (682/877 remote files passed; full raw and extracted evidence held by lane8; see fix-test-orchestration-1028 decisions/BLOCKERS). These exact cases are not named by the completed baseline repair titles. Consume current integration first, because the broad snapshot preceded later lanes lands; do not duplicate already repaired cases. Exact files/tests: packages/daemon/test/plugins/ui-kinds.test.ts: activity-item, sidebar-section and panel entries > sidebar-section rejects unknown fields and a non-string description; activity-item, sidebar-section and panel entries > panel rejects unknown fields and a non-string description; overrides of UI kinds > are labelled with the full ID | packages/daemon/test/plugins/sidebar-activity-api.test.ts: activity items are catalogued and report their mounted state while panels remain closed; disabling an override restores the prior activity-item owner in the catalog and state | packages/daemon/test/lock.test.ts: two daemon processes started together > exactly one keeps running and the other exits 0 | packages/ui/test/design-system.test.tsx: shared graphite components > multiline and selection fields preserve native form values and accessible error ownership | plugins/quirky.ask/test/ui.test.ts: the Questions panel module > SC-21: the card shows each type with its controls; the Questions panel module > Q2: an API answer immediately shows its terminal summary | plugins/quirky.ask/test/panel.test.ts: the Questions panel > SC-31: another open panel stays as it is | plugins/quirky.notifications/test/window-view.test.ts: SC-48: the sound controls > SC-48: Custom shows the typed path under the select only while Custom is the sound; SC-48: the sound controls > SC-48: a refused path shows the reason under the field and saves nothing; SC-48: the sound controls > a failed preview call is shown as the reason too; SC-48: the sound controls > picking a built-in sound closes an open path field; SC-48: the sound controls > with Custom stored, the Custom line shows and Change reopens the field with the path; saving and following settings > the view reports the settings and the custom path field state | plugins/quirky.notifications/test/loops.test.ts: loop notifications through the central policy > needs-you events pass through the same policy and keep the loop-specific event key. Keep current shared components and public caller/connection identities; delete incidental wording/source/default/inventory mirrors rather than repinning them. For daemon lock, investigate observed exit/result evidence without inferring load. Use only bun scripts/suite.ts, fresh private HOME/QUIRKY_HOME and owned process cleanup; no aliases, suppressions, deadline increases or real state.",
-      "docs": [],
-      "deps": [
-        "fix-test-orchestration-1028"
-      ],
-      "status": "todo"
     }
   ]
 }
