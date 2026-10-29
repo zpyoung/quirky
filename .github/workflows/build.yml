@@ -1,0 +1,83 @@
+name: Build and release
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
+env:
+  BUN_VERSION: 1.4.0
+  HUTCH_VERSION: 0.28.1
+
+jobs:
+  build:
+    name: Build macOS app
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - name: Install hutch
+        run: |
+          curl -fsSL https://hutch.blackboard.sh/hutch/install.sh | sh -s -- --version "$HUTCH_VERSION"
+          echo "$HOME/.hutch/bin" >> "$GITHUB_PATH"
+
+      - name: Set app version from tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          sed -i '' "s/version: '[^']*'/version: '$version'/" apps/desktop/electrobun.config.ts
+          grep -q "version: '$version'" apps/desktop/electrobun.config.ts
+
+      - run: bun install --frozen-lockfile
+
+      - name: Typecheck
+        run: bun run typecheck
+
+      - name: Build
+        run: bun run build
+
+      - name: Package
+        run: |
+          mkdir -p dist
+          ditto -c -k --keepParent apps/desktop/build/Quirky.app dist/Quirky-macos-arm64.zip
+          cp apps/desktop/artifacts/* dist/
+          ls -la dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: quirky-macos-arm64
+          path: dist/
+          if-no-files-found: error
+
+  release:
+    name: Publish release
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: quirky-macos-arm64
+          path: dist
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist/* \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "Quirky $GITHUB_REF_NAME" \
+            --generate-notes
