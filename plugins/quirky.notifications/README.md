@@ -39,3 +39,7 @@ A newly created or surfaced Ask never sends an immediate banner. Only the still-
 On expiry, the service uses the same policy path as other notifications. It calls the public `quirky.session/setUnread` and `quirky.worktree/set` methods when those targets are not viewed, then emits the existing public `quirky.notifications/attention` event with `source: "ask"`. The event and markers do not arise at registration. `status.pendingAsks` and the badge count surfaced heads only, never queued/resolved asks.
 
 No new settings or private cross-plugin store writes are used for Ask attention. Native notification permission/click/dismiss behavior remains a shell capability; this plugin does not emulate it.
+
+## Watcher transition attention
+
+Heimdall approval requests and terminal transitions enter the same notification policy as other sources. Disabling notification delivery suppresses both the native request and its toast, but not the worktree attention marker. Repeated observations of one pending approval do not produce another notification. A terminal notification carries the watcher's final state and reason and opens that exact watcher's Fleet detail.

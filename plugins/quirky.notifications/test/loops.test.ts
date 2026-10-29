@@ -235,10 +235,12 @@ describe('loop notifications through the central policy', () => {
     expect(notification.title).toBe('Loop needs you')
     expect(notification.body.startsWith('Needs approval')).toBe(true)
     expect(notification.key).toBe(`loop:${loop.id}:needs-you`)
-    const asks = await workspace.client.callAny('quirky.ask/list', { pendingOnly: true }) as { id: string; sessionId: string | null }[]
-    const ask = asks.find((candidate) => candidate.sessionId === snapshot.sessionId)
-    expect(ask).toBeDefined()
-    if (ask) await workspace.client.callAny('quirky.ask/cancel', { askId: ask.id })
-  }, 15_000)
+    // A waiting session can publish needs-you before its asynchronous Ask registration completes.
+    const ask = await waitForAsync(async () => {
+      const asks = await workspace.client.callAny('quirky.ask/list', { pendingOnly: true }) as { id: string; sessionId: string | null }[]
+      return asks.find((candidate) => candidate.sessionId === snapshot.sessionId)
+    }, 10_000)
+    await workspace.client.callAny('quirky.ask/cancel', { askId: ask.id })
+  }, 30_000)
 })
 
