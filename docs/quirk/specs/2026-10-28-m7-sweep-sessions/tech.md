@@ -1,6 +1,6 @@
 # Session extras sweep technical specification
 
-Status: Local repairs and canonical owner cutovers implemented. One bounded cross-family review completed: C/X PASS; S retains a policy-rejected test-mirror restoration finding, recorded without relabeling its NEEDS_FIXES gate. Final post-review checks remain required. Visual/native limits remain explicit in the decision log.
+Status: Local repairs and canonical owner cutovers implemented. Post-review ten-directory acceptance passes270remote+5Mac files without flakes; scripts12, full typecheck and packaged build pass. One bounded cross-family review completed: C/X PASS, S NEEDS_FIXES retained with a policy-rejected test-mirror restoration finding. Host-composition successor registered; visual/native limits remain explicit.
 Logic: [scope and scenarios](logic.md#behavior-and-acceptance-matrix).
 
 ## Architecture

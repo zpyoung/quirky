@@ -299,5 +299,27 @@ The deterministic combined-scratch prepass returned25 path findings, not a clean
 - **Revisit if:** A reproducible consumer-visible schema/CLI/identity regression is identified, rather than a missing static snapshot.
 - **Source:** locked by mandatory permanent-test policy; assumed — autonomous review adjudication per LOOP
 
+## D28: Register exactly one still-unbuilt feature-composition successor
+- **Question:** Did the newly completed VM/workspace prerequisite already implement the three prepared application-level host flows?
+- **Options:** Assume generic routing supplies them; add duplicates; recheck immutable canonical data and register only genuinely unbuilt composition.
+- **Chose:** Canonical snapshotc3cdbea08a9a9df17334ab9e3e4995ff4f537878 still lacks focused-owner Accounts selection/sign-in, a production Vault host contributor and host-qualified Handoff target/probe/delivery/lineage. Register only m7-session-extras-owner-host-flows, depending on this item and the now-done VM/workspace owner. Absolute canonical queue add succeeded; readback atcadb41ab2102120730de45add9ebaabf359cda4d shows exactly one ID/status todo/deps intact.
+- **Why:** The first scout result used the old item checkout and was discarded as noncanonical. Parent materialized13exact Git-object files and canonical queue facts; a fresh scoped read found the VM owner's D5/D12/D21 ship generic remote-workspace/VM surfaces, not these app integrations. Structured inspection of30production manifests finds zero vault-host contributors. Accounts remains provider/account-scoped; Handoff target/probe remains worktree/local-path scoped. The existing done Vault test-repair item is not a duplicate implementation owner.
+- **Evidence:** successor-prereq/canonical-facts.json and immutable snapshot; corrected scout report; complete current VM owner decision/source evidence; host-flow-followup.json; host-flow-successor-receipt.json; canonical deps for this item ready:true/pending[].
+- **Reversibility:** medium
+- **Confidence:** high for exact missing feature boundaries and unique registration; successor must use the shipped full-owner authority, not synthetic hosts or borrowed grants.
+- **Revisit if:** The successor's implementing lane finds a later canonical owner already supplies an exact flow.
+- **Source:** deferred: paired-owner Accounts/Vault/Handoff composition — explicit user/LOOP implementation-successor policy
+
+## D29: Finish with the actual post-review gate, not historical or peer totals
+- **Question:** What is ready for canonical landing after the sole review/disposition batch?
+- **Options:** Relabel old or peer results; run further discovery; retain exact current bounded proof and land.
+- **Chose:** Post-review fed339b4 source passes270remote+5Mac files with flaky[], scripts12/12, full typecheck32.070s and packaged build16.955s; total722.84s. No product code changed during/after review, and both real runtime probes and their cleanup assertions remain applicable. C/X PASS and S NEEDS_FIXES/caller rejection remain distinct. Native three scenarios stay pending; guarded A1pass/A2A3partial/15unattempted report stays partial.
+- **Why:** All reachable local behavior, current affected consumers and mandatory compiler/build gates are exercised. Paired-host composition has one actual queued implementation owner. No new Ask read API, wait/identity/digest weakening, account authority shim, source-file mutation, real provider invocation or global877-file passing claim is introduced.
+- **Evidence:** post-review/result.json/check-0.log/check-1.log; source-after.json; actual runtime receipts and archived/removed transports; native m7-sweep-sessions.json; actual guarded report20261028T215248-54b3; canonical successor registration.
+- **Reversibility:** easy
+- **Confidence:** high for exercised API/CLI/process/check boundaries; explicitly bounded for visual/native/provider-service outcomes.
+- **Revisit if:** Canonical land names a concrete conflict or merge-result failure.
+- **Source:** locked by LOOP/operator verification and landing contract; assumed — autonomous bounded evidence
+
 ## Progress
-One final round is complete over2ea45ce9/54paths: C/X PASS0, S NEEDS_FIXES1 formally retained; caller rejects S1's prohibited snapshot/forwarding restoration and documents behavioral counter-evidence. No source drift, reviewer code edits or accepted code findings. No second discovery round is authorized. Current full275-file gate, scripts12, types/build and actual runtime proof pass with disclosed Handoff timing retries and partial web/native limits. Next commit this one documentation/disposition batch, run post-review build/tests, register the one genuine unbuilt host-flow successor just before canonical land, then wait for the authoritative receipt and archive/clean only owned residue.
+Ready for canonical land. Post-review270remote+5Mac/no-flakes, scripts12, full typecheck and packaged build pass; real five-owner and canonical startup/sleep/history probes passed with private cleanup. Source reviewed once: C/X PASS0, S NEEDS_FIXES1/caller-rejected restoration recorded in BLOCKERS; no accepted code finding or second discovery. Exactly one genuine implementation successor is registered, with actual canonical owner prerequisite done; web/native limits remain honest. Commit only final evidence/spec updates, detach and invoke the absolute canonical queue.ts land for this item. On named conflict/failure perform only required recovery while preserving canonical owner semantics and incoming binding decisions; do not claim a receipt before the controller returns. Archive/clean owned scratch after success, preserve inherited metadata and end exactly this iteration.

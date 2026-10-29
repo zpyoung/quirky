@@ -62,7 +62,7 @@ See [the technical specification](tech.md) for the exact file scopes, inherited 
 No new research swarm under LOOP. Existing M3 decisions and feature docs provide evidence: native CLI credential isolation, generation-fenced disposable indexes, explicit PTY receipt boundaries and event-driven focus prevent duplicate authority and false success.
 
 ## Deferred ideas
-The source audit found genuinely unbuilt paired-owner composition: focused-owner Accounts state/sign-in gates, a shipped production Vault host contributor/actions, and host-qualified Handoff detection/reachability/secret-warning/delivery/lineage. Preserve those requirements in the single implementation successor `m7-session-extras-owner-host-flows`, dependent on this item and `m7-vm-and-owner-bound-host-workspaces`; register it through the canonical queue just before landing. Local core remains independently usable. Test-only forwarders, phone/worker grants and local fallback do not implement these flows. Native-only/platform exclusions retain their existing handoffs. No verification-only follow-up is authorized.
+The source audit found genuinely unbuilt paired-owner composition: focused-owner Accounts state/sign-in gates, a shipped production Vault host contributor/actions, and host-qualified Handoff detection/reachability/secret-warning/delivery/lineage. Those exact requirements are registered in the single implementation successor `m7-session-extras-owner-host-flows`, dependent on this item and `m7-vm-and-owner-bound-host-workspaces` (now done). Canonical registration `cadb41ab` contains exactly one such ID. The later canonical `c3cdbea0` prerequisite check still finds all three integrations unbuilt and zero production Vault host contributors across30manifests. Local core remains independently usable; test-only forwarders, phone/worker grants and local fallback do not implement these flows. Native-only/platform exclusions retain existing handoffs; no verification-only follow-up was added.
 
 ## Glossary
 - **Source identity:** agent plus provider session/transcript and host, independent of title.
@@ -71,7 +71,7 @@ The source audit found genuinely unbuilt paired-owner composition: focused-owner
 - **Native handoff:** pending OS-only scenario, never a claimed headless pass.
 
 ## Status & amendments
-Status: Approved autonomously per LOOP.md. Tech spec required: crosses public UI/daemon boundary and touches at least three source files. Self-reviewed against all five docs and current completion source: no requirement intentionally narrowed.
+Status: Local repairs and canonical owner cutovers implemented and verified through the actual daemon/CLI/native PTY and affected suites. One genuine host-composition successor is registered; requirements are retained there, not claimed implemented here. Guarded web evidence remains partial under the recorded tool/operator limitation, with three native-only scenarios pending. Formal review S1 remains recorded with caller rejection; no clean whole-parity or whole-repository claim.
 
 **Amendments:** 2026-10-28 — Initial sweep contract. Historical Vault/Dock failures are classified using their later fixes, not repeated as current missing implementation. Normal end-phase verification applies because triage is claimed.
 
