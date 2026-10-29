@@ -382,6 +382,8 @@ records the implemented flows and the remaining editor/hosted-target completion 
   kernel, with each milestone's exit test.
 - [plugins/README.md](plugins/README.md): built-in command groups, including the Heimdall
   fleet, watcher controls and optional Claude owner API.
+- [docs/plugin-api.md](docs/plugin-api.md): the frozen Plugin API 1.0 author contract, compatibility
+  policy and manifest/module lifecycle.
 - [docs/stack-proposal.md](docs/stack-proposal.md): how the stack choice was settled, including the
   native Swift option, with the measurements.
 - [research/orca-features/](research/orca-features/README.md): how each Orca feature Quirky keeps

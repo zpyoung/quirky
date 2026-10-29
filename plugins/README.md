@@ -2,6 +2,10 @@
 
 This directory holds Quirky's built-in plugins, one per subdirectory, each with a `quirky-plugin.json` manifest. The daemon finds it through `QUIRKY_BUILTIN_PLUGINS_DIR`.
 
+Plugin authors: read the [Plugin API 1.0 reference](../docs/plugin-api.md) for the stable
+manifest, import, compatibility and lifecycle contract. Its linked protocol declarations are the
+detailed type reference.
+
 ## Removing a project
 
 `quirky repo rm <selector>` forgets the selected project and its settings/group

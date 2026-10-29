@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
-import { RpcError, RpcErrorCode, type ApiDescription, type ApiMethodEntry, type Schema } from '@quirky/protocol'
+import { PLUGIN_API_VERSION, RpcError, RpcErrorCode, type ApiDescription, type ApiMethodEntry, type Schema } from '@quirky/protocol'
 import { resolveCommands } from '../src/catalog'
 import { COMMANDS } from '../src/commands'
 import type { Command } from '../src/commands/types'
@@ -581,6 +581,7 @@ describe('generatedCommands', () => {
     schemaVersion: 2,
     daemonVersion: 'x',
     protocolVersion: 1,
+    pluginApiVersion: PLUGIN_API_VERSION,
     methods,
     events: [],
     uiCommands: [],

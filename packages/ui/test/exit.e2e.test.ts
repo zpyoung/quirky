@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, expect, test } from 'bun:test'
 import { mkdirSync, mkdtempSync, realpathSync, rmSync } from 'node:fs'
 import { join, resolve } from 'node:path'
-import type { Ask, QuirkyClient, Repo, Session, UiSlotState, UiState, Worktree } from '@quirky/protocol'
+import { PLUGIN_API_VERSION, type Ask, type ApiCatalog, type DistroInspection, type QuirkyClient, type Repo, type Session, type UiSlotState, type UiState, type Worktree } from '@quirky/protocol'
 import { createFakeGit, useTestGit } from '@quirky/git/testing'
 import { spawnCli } from '../../cli/test/fixtures/fake-daemon'
 import { builtinsDir, makeTempHome, startHarness, type Harness } from '../../daemon/test/helpers'
@@ -98,6 +98,13 @@ async function stateWhere(check: (state: UiState) => boolean): Promise<UiState> 
 
 test('SC-59: the M0 exit test, through the CLI only', async () => {
   const stock = await stateWhere((state) => slotOf(state, SIDEBAR)?.report !== undefined)
+  const inspected = await quirky(['distro', 'inspect', SAMPLE_DISTRO, '--json'])
+  expect(inspected.code).toBe(0)
+  const inspection = JSON.parse(inspected.stdout) as DistroInspection
+  expect(inspection.plugins.map(({ id }) => id)).toContain('sample.sidebar')
+  const catalog = JSON.parse(await ok(['api', '--json'])) as ApiCatalog
+  expect(catalog.pluginApiVersion).toBe(PLUGIN_API_VERSION)
+
   expect(slotOf(stock, SIDEBAR)?.plugin).toBe('quirky.worktree')
   expect(slotOf(stock, SOURCE_CONTROL)).toBeDefined()
   expect((await quirky(['git', 'status'])).code).toBe(0)

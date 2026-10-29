@@ -1,5 +1,6 @@
 import { afterEach, expect, test } from 'bun:test'
 import { join } from 'node:path'
+import { PLUGIN_API_VERSION } from '@quirky/protocol'
 import { makeTempHome, startHarness, type Harness } from '../../daemon/test/helpers'
 import { writePlugin } from '../../daemon/test/plugins/fixtures'
 import { startHeadlessWindow, type HeadlessWindow } from './fixtures/headless-window'
@@ -12,6 +13,7 @@ test('Settings opens a contributed preferences view and removes its link when it
   const home = makeTempHome()
   writePlugin(join(home, 'plugins'), {
     id: 'acme.preferences', name: 'Preferences fixture', version: '1.0.0', ui: 'ui.js',
+    apiVersion: PLUGIN_API_VERSION,
     contributes: { view: [
       { id: 'preferences', title: 'Fixture preferences', settings: true },
       { id: 'ordinary', title: 'Ordinary work' }
