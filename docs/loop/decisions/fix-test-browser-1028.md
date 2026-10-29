@@ -99,6 +99,28 @@
 - **Revisit if:** A correctly separated readable family is skipped or an armed write barrier fails to settle.
 - **Source:** assumed — autonomous
 
+## D10: Stop the external wait and land with one bounded remaining-flow follow-up
+- **Question:** Should this item continue waiting for lane7's next automation checkpoint?
+- **Options:** Wait indefinitely; stop the watcher, run the affected browser suite and land with remaining behavior explicitly owned.
+- **Chose:** Stop bg_8, run bun scripts/suite.ts plugins/quirky.browser and bun run typecheck, then land. Record remaining behavior in at most one follow-up; do not claim the browser package passes if its suite is red. Skip the unstarted final model review under this landing override.
+- **Why:** The operator reported an hour of stalled waiting and explicitly instructed this cutover. The previous worker had stopped without writes; the cancelled job only watched a shared checkpoint file and owned no browser or app.
+- **Evidence:** Operator interjection in this iteration; tool confirmed bg_8 cancelled. Final suite bg_9 and typecheck bg_10 started immediately; results recorded below when delivered.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** The final typecheck identifies a change that cannot land safely.
+- **Source:** assumed — autonomous
+
+## D11: Defer only the remaining SC5 drag flow under the operator's landing ruling
+- **Question:** What remains after the operator-requested final affected suite?
+- **Options:** Keep waiting or debugging; hide the failure; land with one explicit remaining-flow item.
+- **Chose:** Add fix-browser-remaining-flows-1028, dependent on this item and the existing lane7 m7-sweep-browser-mobile owner. It must consume the committed helper repair first and preserve actual drag assertions.
+- **Why:** The final canonical suite passed all17remote files without retries and6of7macOS files; the sole remaining file fails SC5 at native drag. Its configured retry repeats the same failure. The operator explicitly authorized this bounded deferral, not a false green claim.
+- **Evidence:** Final suite exited1/120.01s; extras-automation4pass1fail54assertions17.06s, retry4pass1fail54assertions16.17s; error browser_error: native browser action drag failed. Canonical queue add accepted the single follow-up JSON without error. Final typecheck passed60.72s; canonical remote UI+scripts14/14files passed30.98s; import file passed16.58s.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** The remaining flow lands and its actual managed-page scenario passes.
+- **Source:** deferred: SC5 managed-browser drag
+
 ## Progress
 First wave integrated: UI test-only component ebec3ad5 audited at unchanged HEAD9b68ce76 and merged; component worktree removed after preserving inherited .serena via path-only stash. af5fa2fc includes harness, routing and README. Real CLI/browser smoke passed with privateHomeRemoved:true. Typecheck passed (176.08s); scripts passed126/0/1101 assertions (277.55s; before the operator's remote-only note).
 
@@ -106,4 +128,6 @@ Canonical affected suite exited1 (275.75s): remote17files accepted after prefere
 
 Both second-wave workers returned and passed HEAD/scope audits. Automation stopped with zero writes for lane7 ownership; import04b0d49d integrated. Reused import worker at unchanged cf8645f returned only test/import.test.ts changes;1f60a947 integrated. All component worktrees removed after preserving inherited .serena in path-only stashes; parent metadata untouched.
 
-Single roadmap catchup complete with all4incoming decision logs read. Fresh canonical remote UI+scripts14/14files passed0retries30.98s. Canonical import1/1file passed0retries16.58s. Shared lane8 checkpoint contains committed UI/consent/family/gate changes. Consumed lane7 scoped5e57ad16 as c580694c: selectAll/macOS edit commands and helper pointer fields, fixture CORS/viewport corrections. Lane7's published proof is4pass1fail with remaining drag action, so no final browser-green or review yet. Await its next committed helper repair without duplicating source work, then canonical browser package, final review/typecheck and canonical queue land. All future tests use suite.ts; no owned browser or app remains running.
+Single roadmap catchup complete with all4incoming decision logs read. Fresh canonical remote UI+scripts14/14files passed0retries30.98s; canonical import1/1file passed0retries16.58s. Lane7 scoped5e57ad16 consumed as c580694c; no competing automation source edits. Final affected browser suite17remote passed,6of7macOS passed, sole remaining SC5drag4pass1fail54assertions repeated by the configured retry (120.01s total). Final typecheck passed60.72s.
+
+Operator-directed landing now: external watcher cancelled, all agents/checks returned, no owned browser/app remains; unstarted final model review skipped. Exactly one remaining-flow item fix-browser-remaining-flows-1028 added, with existing lane7 owner as prerequisite. BLOCKERS and README retain the red flow explicitly. Next: commit, detach, canonical queue land and await its result; delete only owned scratch after successful land. Do not claim browser package green or whole queue complete.
