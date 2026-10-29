@@ -88,5 +88,39 @@
 - **Revisit if:** Real PTY history, canonical regressions or merge-result verification disagrees.
 - **Source:** assumed — autonomous
 
+## D9: Complete one bounded independent review over the repaired session boundary
+- **Question:** What independent assurance accompanies the passing integrated gates?
+- **Options:** Trust worker reports; run repeated discovery campaigns; one fixed-artifact standard cross-family promote/refute review.
+- **Chose:** Standard Gemini high-reasoning promote and fresh-context refute, with mechanical resolve/prepass/model/claims/merge/gate/manifest. The reviewed 558-line source/test/README patch excludes author decision logs and reasoning. The explicit standard depth is bounded rather than three separate lenses or an exhaustive review.
+- **Why:** Both real reviewer dispatches returned empty finding arrays; the gate returned PASS with full family independence and zero blocking, advisory, suppressed, contested, limitation, question, excluded or unreviewed entries. An additional source-hash audit confirmed no source drift or inherited-metadata changes during review.
+- **Evidence:** Review source 8bcccb80aa33b85222b1db2fbf8e642db53363d4; run7b0abafe64ac3fc1; artifact0e89ca539613a35266283cd4c00449fdb4af179f7266c56a8bf1a3807d126e88; canonical launches-test prepass exit0/19.607s; actual review chain exit0/517.54s; raw prompts, replies, gate and manifest preserved.
+- **Reversibility:** easy
+- **Confidence:** high for performed protocol; bounded for completeness
+- **Revisit if:** A new consumer failure contradicts the reviewed boundary.
+- **Source:** assumed — autonomous
+
+## D10: Close the static fake-account result declaration mismatch in one bounded batch
+- **Question:** Does the separate static plugin validator require a repair after the formal review?
+- **Options:** Treat the formal PASS as covering all later changes; leave an inaccurate fake result contract; align the fixture declaration and rerun affected gates.
+- **Chose:** Accept V1 at low severity and declare the actual preparation result fields: open env map, nullable shellInit/account DTOs, optional resumeTranscriptPath, and the same required fields as the public preparation contract. No new production API, grant or validation path.
+- **Why:** The fake's empty-object schema contradicted the object it returns. Matching that existing public result makes schema-aware fixture consumers truthful. The formal review remains explicitly pre-batch; static finding closure and fresh tests/typecheck/runtime smoke cover the later fixture-only delta. No permanent source/schema-copy test is added.
+- **Evidence:** SessionFixtureContractValidation V1 at fake accounts quirky-plugin.json:60; fake main.ts:21; actual quirky.accounts/prepare result schema; final bounded batch changes only the fake result declaration.
+- **Reversibility:** easy
+- **Confidence:** high; static closure and post-batch current suite/typecheck/runtime pass
+- **Revisit if:** The preparation provider's result shape changes.
+- **Source:** assumed — autonomous
+
+## D11: Land only after current post-batch gates and private cleanup
+- **Question:** What establishes the final state without overstating UI, native-provider or review coverage?
+- **Options:** Reuse the pre-batch suite and formal PASS; run fresh affected verification and retain exact limits.
+- **Chose:** Fresh canonical session/structured suite:38 files passed,0 failed, flaky[] in78.25s. Fresh full frozen-install/UIlint/root/mobile/prepared-desktop typecheck plus actual private runtime smoke exited0 in35.68s. The earlier integrated12-file scripts gate passed and no script changed afterward. Static V1 closure confirms the corrected result schema; the formal review remains bounded to8bcccb80.
+- **Why:** Covers the only later delta (fixture result schema) and the actual daemon/PTY paths without relabeling earlier evidence. The real Codex-shaped executable is a controlled local provider fixture, not a claim of native Codex-service integration. No renderer or native OS surface changed; no UI/native acceptance is inferred. All component trees are removed, unknown metadata preserved and private daemon/PTY/home cleanup observed.
+- **Evidence:** Canonical final suite-result ok:true/flaky:[]; full typecheck chain exit0; smoke receipts s_dd403a997166 (same-session cold restore/provider/history), s_1a5ab058117f (structured restart), s_df7aad5c5d32 (terminal survival/history/wake); PRIVATE_SESSION_DAEMON_PTY_AND_HOME_CLEANED; authoritative queue deps ready:true/pending[]; fix-batch scope and metadata audit.
+- **Reversibility:** easy
+- **Confidence:** high for exercised code/API/process boundaries; bounded for unexercised native/UI surfaces
+- **Revisit if:** Canonical landing reports a concrete merge or typecheck failure.
+- **Source:** locked by docs/loop/LOOP.md verification and landing; assumed — autonomous for bounded proof
+
+
 ## Progress
-Both isolated fixture components passed authoritative scope/HEAD audits, were committed and merged, and their worktrees were removed after preserving inherited metadata. Production change remains only structured startup finalization. Current source b59fea9c includes the documentation and regression boundaries; the sole roadmap catch-up imported fix-test-mobile-1028 decisions D1-D16, all read and compatible. Full integrated session/structured and typecheck/scripts gates are running; current private actual restart/sleep/wake/cold-agent smoke passes with cleanup. Next: collect gates, perform the bounded independent final review, record evidence and use canonical queue landing.
+Ready for canonical landing. Current post-batch38-file session/structured suite, full typecheck and actual private restart/sleep/wake/cold-agent smoke pass with cleanup;12 integrated script files pass. Standard independent Gemini review passed before the low fixture-only batch, whose exact finding is statically closed and freshly verified. All incoming decisions are read and compatible, all workers/review/runtime jobs returned, both component trees removed after metadata preservation, and authoritative deps is ready. Next: commit this evidence and the fixture result declaration, detach, run the canonical absolute queue.ts land, await its actual verdict, preserve the landing receipt and remove only owned scratch after success.
