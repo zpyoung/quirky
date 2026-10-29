@@ -97,9 +97,71 @@ quirky wt project-set api --shared-directories '[".env.local"]'
 
 Project Settings and `quirky wt project-set --shared-directories '[".env.local","config/private"]'` store per-project shared paths. The existing carry owner validates and links those ignored directories together with `EffectiveHooks.sharedDirectories`. Add Project and project Worktree Location expose the public native `desktop.folder.pick` dialog; cancellation keeps the typed draft, and shells without the picker return a conflict instead of imitating it in the browser.
 
-Configured `defaultTabs` are parsed from the selected commit, validated before create, and composed through `quirky.terminal/newTab` with `activate:false`; command text shares setup trust, and exact tab colors are set through the terminal owner. A bounded pool of at most three detached, locked preparations expires after five minutes, is hidden from ordinary worktree lists only while its exact recorded lock identity is intact, and is claimed by canonical create only for an exact repo/base/owner match. `environmentRecipes` still require a real VM runtime and attachment owner; they are refused rather than run as local shell commands. `worktree host-list` reports authenticated peer IDs/revisions/fingerprints. `quirky worktree create --on-runtime runtime:<selector> --repo <remote-repo> <name>` calls `quirky.worktree/create` through `quirky.cli/runtimeCall` on a saved owner-cli target and returns its exact runtime identity and remote create result. It does not create a local mirror or activate a remote path in the local UI. Unknown and phone-scoped targets fail without local fallback; default-tab and trust choices still pass through the canonical create pipeline on the selected runtime.
+Configured `defaultTabs` are parsed from the selected commit, validated before create, and composed through `quirky.terminal/newTab` with `activate:false`; command text shares setup trust, and exact tab colors are set through the terminal owner. A bounded pool of at most three detached, locked preparations expires after five minutes, is hidden from ordinary worktree lists only while its exact recorded lock identity is intact, and is claimed by canonical create only for an exact repo/base/owner match. VM recipes use the Lima lifecycle and guest attachment owner described below, never ordinary shell tabs. `worktree host-list` still reports authenticated federation peers, not owner-grant registrations. `quirky worktree create --on-runtime runtime:<selector> --repo <remote-repo> <name>` creates only on that saved owner runtime and returns its exact identity and result; it does not implicitly attach a local mirror or activate a remote path locally. Unknown and phone-scoped targets fail without local fallback.
 
 Desktop creator IDs are stored only from an authenticated `role:ui` hello and compared caller-relatively through `quirky.worktree/origins`; the public projection never returns those IDs. A valid ID from the exact `ui.window.self` connection is an installation UUID, not hardware or an OS account. Identityless UI, phone, plugin, owner-CLI, legacy and external origins remain unknown for desktop comparison; a socket or window connection ID is never a creator identity.
+
+## Registered remote owner workspaces
+
+Register a saved **owner-cli** target, then refresh its actual workspaces. The Remote workspaces sidebar exposes the same registration, explicit replacement, refresh and exact-window navigation flow.
+
+```sh
+quirky worktree remote-host-add <saved-target-id>
+quirky worktree remote-refresh <registered-host-id>
+quirky worktree remote-list --host <registered-host-id> --json
+quirky worktree remote-open <mirror-id> --window <conn-id>
+quirky worktree remote-call <mirror-id> --operation changes
+```
+
+`quirky.cli/hostIdentity` issues a persisted host UUID and a fresh activation generation. `quirky.cli/runtimeCall` optionally accepts `expectedRuntime:{id,endpoint,grantId}` and `expectedHost:{hostId,generation}`. It checks the saved credential pin before connecting, then checks host identity on the same authenticated connection before forwarding. Registered workspace operations always supply both pins; a label, UI installation UUID or path cannot substitute for either.
+
+Host registrations and mirror snapshots survive local restarts. `remoteHostList`/`remoteHostStatus` probe connectivity, while `remoteList` retains snapshots, including unavailable ones. A remote restart, changed grant, revoked credential or replaced workspace instance invalidates old selections. Explicit `remote-host-add <target> --replace` accepts the current authenticated registration; refresh produces current instance-bound mirrors. The sidebar also supports replacing a registration with a different saved target. Unknown state never means inactive or safe.
+
+The remote-specific view reads owner-fenced changes/diffs, sessions and terminal screens; shell creation/input stays on the selected owner and exact workspace. `remoteCall` accepts only its fixed operation set and rejects foreign sessions, arbitrary method overrides and unsafe paths. Remote paths are displayed as owner data, never inserted into local worktree rows or opened as local folders.
+
+Direct removal uses the current mirror fingerprint and canonical non-forced, safe-only removal with a final filesystem-instance check. Cleanup uses the separate live canonical cleanup fingerprint and its eligibility/blockers:
+
+```sh
+quirky worktree remote-remove <mirror-id> --fingerprint <mirror-fingerprint> --confirm --yes
+quirky worktree remote-cleanup-preview <mirror-id> --json
+quirky worktree remote-cleanup-remove <mirror-id> --fingerprint <cleanup-fingerprint> --confirm --yes
+quirky worktree remote-host-forget <host-id> --detach --confirm --yes
+```
+
+Confirmed source deletion forwards that consent to the owner rather than opening a second hidden ask. Lost or unverified outcomes are not replayed. Host forget/detach removes local registration and mirror rows only; it does not delete remote workspaces or shared saved credentials.
+
+## Trusted Lima environment recipes
+
+Prerequisites: macOS, a genuine Lima installation (`limactl` on `PATH`, or absolute `QUIRKY_LIMACTL`), repository `environmentRecipes`, and recipe scripts that provision a guest with the `quirky` CLI and a reachable owner-cli daemon. Quirky does not install Lima or replace the guest with a local shell. VM environments is available from the remote sidebar and the New workspace dialog's recipe area.
+
+```sh
+quirky worktree vm-doctor --json
+quirky worktree vm-recipes <project> --json
+quirky worktree vm-create <project> <recipe-id> --trust-hash <reviewed-sha256>
+quirky worktree vm-list --json
+quirky worktree vm-show <vm-id> --json
+quirky worktree vm-suspend <vm-id> --instance <instance-id>
+quirky worktree vm-resume <vm-id> --instance <instance-id>
+quirky worktree vm-destroy <vm-id> --instance <instance-id> --yes
+```
+
+Consent hashes the normalized recipe ID, name, description, checkout mode and every lifecycle command/disable flag. The UI shows the commands and exact hash before one-shot approval. Existing VM records retain their immutable approved snapshot. Scripts run with user privileges, not in a sandbox.
+
+Lifecycle command search prepends the verified Lima executable's directory without adding an implicit working-directory entry when inherited `PATH` is absent or empty. Existing nonempty `PATH` entries remain the host's policy; this is not a sandbox. Use an explicit `./...` command when a trusted recipe intentionally executes a project file.
+
+Create scripts run from the local project directory and receive `QUIRKY_VM_NAME`, `QUIRKY_VM_OPERATION_ID` and `QUIRKY_VM_OUTPUT_PATH`; the output path is a pre-created private mode-0600 file. Additional recipe/repo metadata and the selected Lima executable are provided in the environment. Write at most 16 KiB of JSON, with no extra keys:
+
+- `checkoutMode: provisioned-root`: `{"pairingCode":"<guest owner offer>","workspaceSelector":"<exact guest worktree ID>"}`
+- `checkoutMode: orca-worktree`: `{"pairingCode":"<guest owner offer>","repo":"<guest project selector>","name":"<guest worktree name>"}`
+
+The service verifies Lima's actual instance directory identity and compares `quirky api call quirky.cli/hostIdentity --json` inside the guest with the authenticated saved endpoint. Only then does it attach the existing guest workspace or perform canonical guest creation. Credentials and script stdout are not public receipts. `worktree create --environment-recipe <id> --trust-environment-recipe-hash <hash>` uses this same owner; supported ordinary create choices pass to the guest in `orca-worktree` mode. `provisioned-root` refuses choices it cannot honor instead of ignoring them.
+
+Suspend/resume/destroy run only configured commands and verify the resulting backend state. A stopped Lima guest is powered off, not a RAM-preserving pause. Lifecycle requests require the observed instance fence; a same-name replacement with a different backend directory identity refuses before scripts. Active create operations cannot be suspended, resumed or destroyed concurrently. Resume reauthenticates the current guest generation and reattaches the original workspace instance; historical mirror IDs or a detached local mirror registry do not authorize or prevent that fresh attachment. Failed records retain historical evidence, not a current connection guarantee. Destroy retires attachments and the exact saved target created by this VM only after backend absence is proved; unrelated credentials remain.
+
+Provisioning can outlast a normal request timeout. Inspect the existing durable record with `vm-list`/`vm-show`; a new create is a different VM, not a retry. Failed/interrupted records keep their backend and attachment evidence. Unverified backend instances or uncertain guest-create outcomes refuse replay; explicit resume/reconciliation and destroy retain those safety checks.
+
+VM subprocess groups and prepared-checkout resources belong to one plugin activation. Stopping or replacing another daemon's activation cannot dispose this activation's resources.
+
 ## Issue-derived startup prompts
 
 Creating a GitHub issue worktree with an agent passes the raw issue URL through `quirky.worktree/create` to the public `quirky.session/create` API. That issue-derived prompt is left as a draft by default. `submitPrompt` can explicitly override the default; generic user-written prompts retain the session API's existing submitted default.

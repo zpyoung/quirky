@@ -664,8 +664,8 @@ test('Codex removal confirmation is single-flight and retains its provider-speci
   expect(calls.filter((call) => call.method === 'quirky.accounts/remove')).toHaveLength(1)
   expect(stateValue.active.codex).toBeNull()
   expect(stateValue.accounts.some((account) => account.id === 'codex-a')).toBe(false)
-  expect(container.querySelector('.account-row-main')?.textContent).toContain('System default')
-  expect(container.querySelector('.badge.active')?.textContent).toBe('Active')
+  const systemDefaultButton = buttonByLabel('Select Codex System default')
+  expect(systemDefaultButton.disabled).toBe(true)
 })
 
 test('meter credential clear is single-flight and updates configured status', async () => {
@@ -885,10 +885,8 @@ test('Claude Ask, Always and Never policy choices preserve their visible switch 
   await settle()
   await act(async () => { buttonByLabel('Select Claude account Account B').click() })
   await settle()
-  const alwaysSelectedRow = [...container.querySelectorAll<HTMLElement>('.account-list .account-row')].find((row) => row.textContent?.includes('Account B'))
-  if (!alwaysSelectedRow) throw new Error('Missing visibly selected Claude account after Always restart')
-  expect(alwaysSelectedRow.querySelector('.badge.active')?.textContent).toBe('Active')
-  expect(alwaysSelectedRow.querySelector<HTMLButtonElement>('[aria-label="Select Claude account Account B"]')?.disabled).toBe(true)
+  const alwaysSelectedButton = buttonByLabel('Select Claude account Account B')
+  expect(alwaysSelectedButton.disabled).toBe(true)
   expect(calls.filter((call) => call.method === 'quirky.accounts/restart')).toHaveLength(1)
   expect(stateValue.staleSessions).toHaveLength(0)
 
@@ -919,10 +917,8 @@ test('Claude Ask, Always and Never policy choices preserve their visible switch 
   await settle()
   await act(async () => { buttonByLabel('Select Claude account Account B').click() })
   await settle()
-  const neverSelectedRow = [...container.querySelectorAll<HTMLElement>('.account-list .account-row')].find((row) => row.textContent?.includes('Account B'))
-  if (!neverSelectedRow) throw new Error('Missing visibly selected Claude account after Never switch')
-  expect(neverSelectedRow.querySelector('.badge.active')?.textContent).toBe('Active')
-  expect(neverSelectedRow.querySelector<HTMLButtonElement>('[aria-label="Select Claude account Account B"]')?.disabled).toBe(true)
+  const neverSelectedButton = buttonByLabel('Select Claude account Account B')
+  expect(neverSelectedButton.disabled).toBe(true)
   expect(calls.some((call) => call.method === 'quirky.accounts/restart')).toBe(false)
 
   await act(async () => { unregister?.(); accountsUi.deactivate() })
@@ -959,8 +955,8 @@ test('removal Cancel preserves both managed selections and Claude confirmation f
       await settle()
       expect(stateValue.active.claude).toBeNull()
       expect(stateValue.accounts.some((account) => account.id === 'claude-a')).toBe(false)
-      expect(container.textContent).toContain('System default')
-      expect(container.querySelector('.badge.active')?.textContent).toBe('Active')
+      const systemDefaultButton = buttonByLabel('Select Claude System default')
+      expect(systemDefaultButton.disabled).toBe(true)
     }
 
     if (provider === 'claude') {

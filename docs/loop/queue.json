@@ -1569,8 +1569,7 @@
       "deps": [
         "m7-terminal-owner-provisioning-and-selector-flows"
       ],
-      "status": "in-progress",
-      "lane": 6
+      "status": "done"
     },
     {
       "id": "ui-restyle-terminal",
@@ -1952,7 +1951,7 @@
       "deps": [
         "m7-vm-and-owner-bound-host-workspaces"
       ],
-      "status": "todo"
+      "status": "blocked"
     },
     {
       "id": "fix-test-heimdall-1028",
@@ -2186,6 +2185,55 @@
       "status": "done"
     },
     {
+      "id": "fix-test-packages-cli-1028",
+      "milestone": "M7",
+      "title": "Repair end-phase packages/cli failures from baseline 97aaa12d (full evidence docs/loop/reports/m7-test-triage.json, area packages/cli). Files and exact failed tests: packages/cli/test/v1-words.e2e.test.ts: SC-20: v1 command lines run through the plugins > SC-20: text output keeps v1 tables and records; SC-20: v1 command lines run through the plugins > SC-20: --json output keeps v1 shapes; SC-20: v1 command lines run through the plugins > SC-20: repo and worktree positionals take selectors and v1 plain IDs | packages/cli/test/cli.e2e.test.ts: flag parsing > an unknown flag names the command and the valid flags | packages/cli/test/theme.test.ts: theme list > marks the active theme with *; theme list > marks the active theme after a choice; theme list > marks a chosen theme that is not active with (chosen); theme list > keeps a chosen theme that is no longer listed as a chosen line | packages/cli/test/ui.test.ts: ui contributions > prints one headed table per non-empty section. Reproduce via canonical suite; fix consumer-visible defects and delete incidental wording/source/default/inventory mirror assertions rather than repinning them. Preserve fresh private process homes and cleanup. Cross-plugin failures must coordinate with the owning repair, not introduce aliases or bypasses.",
+      "docs": [],
+      "deps": [
+        "m7-test-triage"
+      ],
+      "status": "done"
+    },
+    {
+      "id": "fix-test-accounts-1028",
+      "milestone": "M7",
+      "title": "Repair end-phase plugins/quirky.accounts failures from baseline 97aaa12d (full evidence docs/loop/reports/m7-test-triage.json, area plugins/quirky.accounts). Files and exact failed tests: plugins/quirky.accounts/test/accounts-api.test.ts: quirky.accounts lifecycle API and CLI > Codex app-server discovery uses the selected account, and failures preserve its model snapshot; quirky.accounts lifecycle API and CLI > remove uses the destructive confirmation convention and explicit yes removes only the managed credential name; quirky.accounts lifecycle API and CLI > Codex resume continues from the prepared target after the original profile is removed | plugins/quirky.accounts/test/profiles.test.ts: quirky.accounts profile ownership and routing > Claude history remains shared when the first account predates default history and survives its removal. Reproduce via canonical suite; fix consumer-visible defects and delete incidental wording/source/default/inventory mirror assertions rather than repinning them. Preserve fresh private process homes and cleanup. Cross-plugin failures must coordinate with the owning repair, not introduce aliases or bypasses.",
+      "docs": [],
+      "deps": [
+        "m7-test-triage"
+      ],
+      "status": "done"
+    },
+    {
+      "id": "ui-polish-shell",
+      "milestone": "UI",
+      "title": "UI redesign polish, matching the approved golden screens in docs/quirk/specs/2026-10-28-ui-redesign/logic.md: (1) the Worktrees tool opens as the plain worktree list; move Add project, Workspace options, the activity filter chips/checkboxes, Clear filters and More workspace tools behind one filter/options icon button in the Worktrees panel header; (2) remove the small dropdown chevrons rendered under every stripe icon on the left, right and bottom stripes; (3) the Primary worktree badge uses a neutral badge token, not the indigo accent, which is reserved for selection. Compare against docs/loop/reviews/ui-final-review/images/after/shell/*.png and recapture those after the fix. Use only shared components and tokens; the UI lint check must pass.",
+      "docs": [],
+      "deps": [],
+      "status": "in-progress",
+      "lane": 12
+    },
+    {
+      "id": "fix-test-reviews-tool-1028",
+      "milestone": "M7",
+      "title": "Repair actual end-phase Checks tool visibility/refresh failure: canonical remote plugins/quirky.reviews/test/review-link-ui.test.tsx case 'mounted Checks refreshes from an open six-slot tool and withdraws visibility candidates when replaced or closed' fails waitUntil at79 called from417, initial and configured isolated retry, while the other5cases pass. Observed during fix-test-mobile-1028 shared Hosting fixture consumer verification (mobile/Tasks actual quirky.cli dependency supplied); same failure before and after Ask/Settings catch-up. Fix the consumer-visible active-tool polling/visibility transition or stale behavioral fixture using current public slot contracts; never extend deadlines or pin incidental markup/copy. Existing Mobile/Hosting helper changes do not alter Reviews production. Full evidence in docs/loop/decisions/fix-test-mobile-1028.md and docs/loop/BLOCKERS.md. Run canonical suite with private homes, preserve unrelated state and clean every started process.",
+      "docs": [],
+      "deps": [
+        "m7-test-triage"
+      ],
+      "status": "done"
+    },
+    {
+      "id": "fix-test-post-restyle-boundaries-1028",
+      "milestone": "M7",
+      "title": "Repair newly observed post-restyle/shared-boundary failures from the caught-up full consumer snapshot1793233308424-27725 (682/877 remote files passed; full raw and extracted evidence held by lane8; see fix-test-orchestration-1028 decisions/BLOCKERS). These exact cases are not named by the completed baseline repair titles. Consume current integration first, because the broad snapshot preceded later lanes lands; do not duplicate already repaired cases. Exact files/tests: packages/daemon/test/plugins/ui-kinds.test.ts: activity-item, sidebar-section and panel entries > sidebar-section rejects unknown fields and a non-string description; activity-item, sidebar-section and panel entries > panel rejects unknown fields and a non-string description; overrides of UI kinds > are labelled with the full ID | packages/daemon/test/plugins/sidebar-activity-api.test.ts: activity items are catalogued and report their mounted state while panels remain closed; disabling an override restores the prior activity-item owner in the catalog and state | packages/daemon/test/lock.test.ts: two daemon processes started together > exactly one keeps running and the other exits 0 | packages/ui/test/design-system.test.tsx: shared graphite components > multiline and selection fields preserve native form values and accessible error ownership | plugins/quirky.ask/test/ui.test.ts: the Questions panel module > SC-21: the card shows each type with its controls; the Questions panel module > Q2: an API answer immediately shows its terminal summary | plugins/quirky.ask/test/panel.test.ts: the Questions panel > SC-31: another open panel stays as it is | plugins/quirky.notifications/test/window-view.test.ts: SC-48: the sound controls > SC-48: Custom shows the typed path under the select only while Custom is the sound; SC-48: the sound controls > SC-48: a refused path shows the reason under the field and saves nothing; SC-48: the sound controls > a failed preview call is shown as the reason too; SC-48: the sound controls > picking a built-in sound closes an open path field; SC-48: the sound controls > with Custom stored, the Custom line shows and Change reopens the field with the path; saving and following settings > the view reports the settings and the custom path field state | plugins/quirky.notifications/test/loops.test.ts: loop notifications through the central policy > needs-you events pass through the same policy and keep the loop-specific event key. Keep current shared components and public caller/connection identities; delete incidental wording/source/default/inventory mirrors rather than repinning them. For daemon lock, investigate observed exit/result evidence without inferring load. Use only bun scripts/suite.ts, fresh private HOME/QUIRKY_HOME and owned process cleanup; no aliases, suppressions, deadline increases or real state.",
+      "docs": [],
+      "deps": [
+        "fix-test-orchestration-1028"
+      ],
+      "status": "done"
+    },
+    {
       "id": "m7-sweep-sessions",
       "milestone": "M7",
       "docs": [
@@ -2253,50 +2301,6 @@
       "status": "todo"
     },
     {
-      "id": "fix-test-packages-cli-1028",
-      "milestone": "M7",
-      "title": "Repair end-phase packages/cli failures from baseline 97aaa12d (full evidence docs/loop/reports/m7-test-triage.json, area packages/cli). Files and exact failed tests: packages/cli/test/v1-words.e2e.test.ts: SC-20: v1 command lines run through the plugins > SC-20: text output keeps v1 tables and records; SC-20: v1 command lines run through the plugins > SC-20: --json output keeps v1 shapes; SC-20: v1 command lines run through the plugins > SC-20: repo and worktree positionals take selectors and v1 plain IDs | packages/cli/test/cli.e2e.test.ts: flag parsing > an unknown flag names the command and the valid flags | packages/cli/test/theme.test.ts: theme list > marks the active theme with *; theme list > marks the active theme after a choice; theme list > marks a chosen theme that is not active with (chosen); theme list > keeps a chosen theme that is no longer listed as a chosen line | packages/cli/test/ui.test.ts: ui contributions > prints one headed table per non-empty section. Reproduce via canonical suite; fix consumer-visible defects and delete incidental wording/source/default/inventory mirror assertions rather than repinning them. Preserve fresh private process homes and cleanup. Cross-plugin failures must coordinate with the owning repair, not introduce aliases or bypasses.",
-      "docs": [],
-      "deps": [
-        "m7-test-triage"
-      ],
-      "status": "in-progress",
-      "lane": 8
-    },
-    {
-      "id": "fix-test-accounts-1028",
-      "milestone": "M7",
-      "title": "Repair end-phase plugins/quirky.accounts failures from baseline 97aaa12d (full evidence docs/loop/reports/m7-test-triage.json, area plugins/quirky.accounts). Files and exact failed tests: plugins/quirky.accounts/test/accounts-api.test.ts: quirky.accounts lifecycle API and CLI > Codex app-server discovery uses the selected account, and failures preserve its model snapshot; quirky.accounts lifecycle API and CLI > remove uses the destructive confirmation convention and explicit yes removes only the managed credential name; quirky.accounts lifecycle API and CLI > Codex resume continues from the prepared target after the original profile is removed | plugins/quirky.accounts/test/profiles.test.ts: quirky.accounts profile ownership and routing > Claude history remains shared when the first account predates default history and survives its removal. Reproduce via canonical suite; fix consumer-visible defects and delete incidental wording/source/default/inventory mirror assertions rather than repinning them. Preserve fresh private process homes and cleanup. Cross-plugin failures must coordinate with the owning repair, not introduce aliases or bypasses.",
-      "docs": [],
-      "deps": [
-        "m7-test-triage"
-      ],
-      "status": "in-progress",
-      "lane": 9
-    },
-    {
-      "id": "fix-test-reviews-tool-1028",
-      "milestone": "M7",
-      "title": "Repair actual end-phase Checks tool visibility/refresh failure: canonical remote plugins/quirky.reviews/test/review-link-ui.test.tsx case 'mounted Checks refreshes from an open six-slot tool and withdraws visibility candidates when replaced or closed' fails waitUntil at79 called from417, initial and configured isolated retry, while the other5cases pass. Observed during fix-test-mobile-1028 shared Hosting fixture consumer verification (mobile/Tasks actual quirky.cli dependency supplied); same failure before and after Ask/Settings catch-up. Fix the consumer-visible active-tool polling/visibility transition or stale behavioral fixture using current public slot contracts; never extend deadlines or pin incidental markup/copy. Existing Mobile/Hosting helper changes do not alter Reviews production. Full evidence in docs/loop/decisions/fix-test-mobile-1028.md and docs/loop/BLOCKERS.md. Run canonical suite with private homes, preserve unrelated state and clean every started process.",
-      "docs": [],
-      "deps": [
-        "m7-test-triage"
-      ],
-      "status": "in-progress",
-      "lane": 11
-    },
-    {
-      "id": "fix-test-post-restyle-boundaries-1028",
-      "milestone": "M7",
-      "title": "Repair newly observed post-restyle/shared-boundary failures from the caught-up full consumer snapshot1793233308424-27725 (682/877 remote files passed; full raw and extracted evidence held by lane8; see fix-test-orchestration-1028 decisions/BLOCKERS). These exact cases are not named by the completed baseline repair titles. Consume current integration first, because the broad snapshot preceded later lanes lands; do not duplicate already repaired cases. Exact files/tests: packages/daemon/test/plugins/ui-kinds.test.ts: activity-item, sidebar-section and panel entries > sidebar-section rejects unknown fields and a non-string description; activity-item, sidebar-section and panel entries > panel rejects unknown fields and a non-string description; overrides of UI kinds > are labelled with the full ID | packages/daemon/test/plugins/sidebar-activity-api.test.ts: activity items are catalogued and report their mounted state while panels remain closed; disabling an override restores the prior activity-item owner in the catalog and state | packages/daemon/test/lock.test.ts: two daemon processes started together > exactly one keeps running and the other exits 0 | packages/ui/test/design-system.test.tsx: shared graphite components > multiline and selection fields preserve native form values and accessible error ownership | plugins/quirky.ask/test/ui.test.ts: the Questions panel module > SC-21: the card shows each type with its controls; the Questions panel module > Q2: an API answer immediately shows its terminal summary | plugins/quirky.ask/test/panel.test.ts: the Questions panel > SC-31: another open panel stays as it is | plugins/quirky.notifications/test/window-view.test.ts: SC-48: the sound controls > SC-48: Custom shows the typed path under the select only while Custom is the sound; SC-48: the sound controls > SC-48: a refused path shows the reason under the field and saves nothing; SC-48: the sound controls > a failed preview call is shown as the reason too; SC-48: the sound controls > picking a built-in sound closes an open path field; SC-48: the sound controls > with Custom stored, the Custom line shows and Change reopens the field with the path; saving and following settings > the view reports the settings and the custom path field state | plugins/quirky.notifications/test/loops.test.ts: loop notifications through the central policy > needs-you events pass through the same policy and keep the loop-specific event key. Keep current shared components and public caller/connection identities; delete incidental wording/source/default/inventory mirrors rather than repinning them. For daemon lock, investigate observed exit/result evidence without inferring load. Use only bun scripts/suite.ts, fresh private HOME/QUIRKY_HOME and owned process cleanup; no aliases, suppressions, deadline increases or real state.",
-      "docs": [],
-      "deps": [
-        "fix-test-orchestration-1028"
-      ],
-      "status": "in-progress",
-      "lane": 10
-    },
-    {
       "id": "m7-api-freeze",
       "milestone": "M7",
       "title": "Plugin API 1.0: freeze and version the API, manifests declare their API version, publish an example distro",
@@ -2355,22 +2359,12 @@
         "fix-test-packages-protocol-1028",
         "fix-test-scripts-ui-review-1028",
         "fix-test-scripts-profile-timeout-1028",
-        "m7-native-notification-and-signed-terminal-host",
         "fix-test-reviews-tool-1028",
         "fix-browser-remaining-flows-1028",
         "fix-test-post-restyle-boundaries-1028"
       ],
       "status": "todo",
       "early": true
-    },
-    {
-      "id": "ui-polish-shell",
-      "milestone": "UI",
-      "title": "UI redesign polish, matching the approved golden screens in docs/quirk/specs/2026-10-28-ui-redesign/logic.md: (1) the Worktrees tool opens as the plain worktree list; move Add project, Workspace options, the activity filter chips/checkboxes, Clear filters and More workspace tools behind one filter/options icon button in the Worktrees panel header; (2) remove the small dropdown chevrons rendered under every stripe icon on the left, right and bottom stripes; (3) the Primary worktree badge uses a neutral badge token, not the indigo accent, which is reserved for selection. Compare against docs/loop/reviews/ui-final-review/images/after/shell/*.png and recapture those after the fix. Use only shared components and tokens; the UI lint check must pass.",
-      "docs": [],
-      "deps": [],
-      "status": "in-progress",
-      "lane": 12
     }
   ]
 }

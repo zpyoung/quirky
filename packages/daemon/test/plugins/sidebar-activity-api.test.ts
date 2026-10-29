@@ -23,7 +23,7 @@ type ActivitySlotState = {
 }
 
 type UiActivityState = {
-  layout: { panel: string | null }
+  layout: { panel: string | null; tools: { open: Record<string, string | null> } }
   slots: ActivitySlotState[]
 }
 
@@ -78,7 +78,7 @@ function activitySlot(state: UiActivityState, id: string): ActivitySlotState | u
   return state.slots.find((slot) => slot.id === id)
 }
 
-test('activity items are catalogued and report their mounted state while panels remain closed', async () => {
+test('activity items are catalogued and report their mounted state while the legacy panel stays closed', async () => {
   const env = makeEnv()
   const id = 'activity-item:acme.activity/source-control'
   writeUiPlugin(env.installed, 'acme.activity', {
@@ -99,8 +99,14 @@ test('activity items are catalogued and report their mounted state while panels 
     }
   ])
 
+  const closed = (await client.call('ui.state', {})) as unknown as UiActivityState
+  expect(closed.layout.panel).toBeNull()
+  expect(activitySlot(closed, id)?.shown).toBe(false)
+
+  await client.call('ui.tool.open', { id })
   const initial = (await client.call('ui.state', {})) as unknown as UiActivityState
   expect(initial.layout.panel).toBeNull()
+  expect(Object.values(initial.layout.tools.open)).toContain(id)
   expect(activitySlot(initial, id)).toMatchObject({
     id,
     kind: 'activity-item',
@@ -133,7 +139,15 @@ test('disabling an override restores the prior activity-item owner in the catalo
   expect(await activityCatalog(client)).toMatchObject([
     { id, kind: 'activity-item', plugin: 'acme.activity-override', title: 'Team Source Control', order: 5 }
   ])
-  expect(activitySlot((await client.call('ui.state', {})) as unknown as UiActivityState, id)).toMatchObject({
+  const closed = (await client.call('ui.state', {})) as unknown as UiActivityState
+  expect(closed.layout.panel).toBeNull()
+  expect(activitySlot(closed, id)?.shown).toBe(false)
+
+  await client.call('ui.tool.open', { id })
+  const opened = (await client.call('ui.state', {})) as unknown as UiActivityState
+  expect(opened.layout.panel).toBeNull()
+  expect(Object.values(opened.layout.tools.open)).toContain(id)
+  expect(activitySlot(opened, id)).toMatchObject({
     id,
     plugin: 'acme.activity-override',
     title: 'Team Source Control',
@@ -149,7 +163,10 @@ test('disabling an override restores the prior activity-item owner in the catalo
   expect(await activityCatalog(client)).toMatchObject([
     { id, kind: 'activity-item', plugin: 'quirky.activity-base', title: 'Source Control', order: 10 }
   ])
-  expect(activitySlot((await client.call('ui.state', {})) as unknown as UiActivityState, id)).toMatchObject({
+  const restoredState = (await client.call('ui.state', {})) as unknown as UiActivityState
+  expect(restoredState.layout.panel).toBeNull()
+  expect(Object.values(restoredState.layout.tools.open)).toContain(id)
+  expect(activitySlot(restoredState, id)).toMatchObject({
     id,
     plugin: 'quirky.activity-base',
     title: 'Source Control',
