@@ -133,7 +133,7 @@ test('plugin configuration is strict, unique, and limited to known immediate dir
   expect(() => parsePluginConfig('[1]', ['example.plugin'])).toThrow()
 })
 
-test('root lint scans all UI source, skips fixtures and unopted plugins, and enforces opted-in plugin trees', () => {
+test('root lint scans UI source, skips fixtures, and enforces opted-in plugins without linting generated Mobile pages', () => {
   const root = mkdtempSync(join(tmpdir(), 'ui-lint-enforcement-'))
   const put = (relativePath: string, content: string) => {
     const path = join(root, relativePath)
@@ -175,6 +175,23 @@ test('root lint scans all UI source, skips fixtures and unopted plugins, and enf
     expect(enforced.diagnostics.some((message) => message.includes('plugins/example/theme.css:1:'))).toBe(true)
     expect(enforced.diagnostics.some((message) => message.includes('packages/ui/src/vendor'))).toBe(false)
     expect(enforced.diagnostics.some((message) => message.includes('packages/ui/src/fixtures'))).toBe(false)
+
+    put('plugins/quirky.mobile/src/view.tsx', `export const view = <div style={{ color: 'var(--ui-text)' }} />`)
+    put('plugins/quirky.mobile/assets/icons/mark.svg', '<svg><path fill="var(--ui-text)" /></svg>')
+    put('plugins/quirky.mobile/assets/mobile/page.css', '.generated { color: #ff0000; padding: 13px; }')
+    put('plugins/quirky.mobile/assets/mobile/page.js', `const view = <div style={{ color: '#ff0000' }} />`)
+    put('plugins/quirky.mobile/assets/mobile/index.html', '<div style="color: #ff0000; padding: 13px"></div>')
+    put('scripts/ui-lint-plugins.json', '["quirky.mobile"]')
+
+    expect(run()).toEqual({ status: 0, diagnostics: [] })
+
+    put('plugins/quirky.mobile/src/view.tsx', `export const view = <div style={{ color: '#ff0000' }} />`)
+    put('plugins/quirky.mobile/assets/icons/mark.svg', '<svg><path fill="#ff0000" /></svg>')
+    const mobileEnforced = run()
+    expect(mobileEnforced.status).toBe(1)
+    expect(mobileEnforced.diagnostics.some((message) => message.includes('plugins/quirky.mobile/src/view.tsx') && message.includes('ui/no-raw-color'))).toBe(true)
+    expect(mobileEnforced.diagnostics.some((message) => message.includes('plugins/quirky.mobile/assets/icons/mark.svg') && message.includes('ui/no-raw-color'))).toBe(true)
+    expect(mobileEnforced.diagnostics.some((message) => message.includes('plugins/quirky.mobile/assets/mobile/'))).toBe(false)
 
     put('scripts/ui-lint-plugins.json', '["../outside"]')
     expect(run().diagnostics[0]).toContain('safe immediate plugin directory ID')

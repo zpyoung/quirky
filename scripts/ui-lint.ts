@@ -1011,13 +1011,14 @@ function shouldSkipPath(path: string): boolean {
   return /(?:^|[.-])(?:test|spec|fixture|fixtures)\.[^.]+$/i.test(file)
 }
 
-function collectSourceFiles(directory: string): string[] {
+function collectSourceFiles(directory: string, excludedSubdirectory?: string): string[] {
   const results: string[] = []
   const visit = (path: string) => {
     const entries = readdirSync(path, { withFileTypes: true }).sort((left, right) => compareText(left.name, right.name))
     for (const entry of entries) {
       const absolute = join(path, entry.name)
-      if (entry.isSymbolicLink() || shouldSkipPath(relative(directory, absolute))) continue
+      const relativePath = relative(directory, absolute)
+      if (entry.isSymbolicLink() || shouldSkipPath(relativePath) || (entry.isDirectory() && relativePath === excludedSubdirectory)) continue
       if (entry.isDirectory()) visit(absolute)
       else if (entry.isFile() && sourceExtensions.has(extname(entry.name).toLowerCase())) results.push(absolute)
     }
@@ -1048,7 +1049,7 @@ export function runUiLint(root = resolve(dirname(fileURLToPath(import.meta.url))
         const pluginRoot = resolve(pluginsRoot, id)
         if (relative(pluginsRoot, pluginRoot).startsWith('..') || pluginRoot === pluginsRoot) throw new Error(`Invalid plugin directory path: ${id}`)
         ensureDirectory(pluginRoot, `plugin ${id}`)
-        return collectSourceFiles(pluginRoot).map((path) => ({ path, plugin: true }))
+        return collectSourceFiles(pluginRoot, id === 'quirky.mobile' ? join('assets', 'mobile') : undefined).map((path) => ({ path, plugin: true }))
       })
     ]
     const diagnostics = files.flatMap(({ path, plugin }) => {
