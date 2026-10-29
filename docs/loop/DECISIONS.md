@@ -1344,6 +1344,18 @@ files, not this one.
 | easy | high | [fix-flaky-quirky-worktree-window-projects D9](decisions/fix-flaky-quirky-worktree-window-projects.md) | Preserve operator ownership and catch up before final review | assumed — autonomous |
 | easy | high for exercised paths | [fix-flaky-quirky-worktree-window-projects D10](decisions/fix-flaky-quirky-worktree-window-projects.md) | Verify the affected plugin and required gates without changing shipped behavior | locked by docs/loop/LOOP.md |
 | easy | high for the confirmed timing race and existing fix; review used supplied evidence rather than independent tool execution. | [fix-flaky-quirky-worktree-window-projects D11](decisions/fix-flaky-quirky-worktree-window-projects.md) | Accept the final review and retain no duplicate implementation | assumed — autonomous |
+| easy | high | [fix-test-browser-1028 D1](decisions/fix-test-browser-1028.md) | Repair the recorded browser failures without changing public contracts | locked by docs/loop/LOOP.md |
+| easy | high | [fix-test-browser-1028 D2](decisions/fix-test-browser-1028.md) | Use omp implementers and the reachable Gemini reviewer | assumed — autonomous |
+| easy | high | [fix-test-browser-1028 D3](decisions/fix-test-browser-1028.md) | Route the four real-Chrome integration files to macOS | deferred: platform |
+| easy | high | [fix-test-browser-1028 D4](decisions/fix-test-browser-1028.md) | Preserve import behavior tests without pinning presentation copy | assumed — autonomous |
+| easy | high | [fix-test-browser-1028 D5](decisions/fix-test-browser-1028.md) | Install the real Worktrees dependency in the browser harness | assumed — autonomous |
+| easy | high | [fix-test-browser-1028 D6](decisions/fix-test-browser-1028.md) | Authorize intended destructive test calls rather than bypass confirmation | assumed — autonomous |
+| easy | high | [fix-test-browser-1028 D7](decisions/fix-test-browser-1028.md) | Consume lane 7's automation repair instead of competing with its writer | assumed — autonomous |
+| easy | high | [fix-test-browser-1028 D8](decisions/fix-test-browser-1028.md) | Preserve incoming bindings after the single roadmap catch-up | locked by docs/loop/LOOP.md |
+| easy | high | [fix-test-browser-1028 D9](decisions/fix-test-browser-1028.md) | Repair the importer fixtures rather than weaken family safety or extend deadlines | assumed — autonomous |
+| easy | high | [fix-test-browser-1028 D10](decisions/fix-test-browser-1028.md) | Stop the external wait and land with one bounded remaining-flow follow-up | assumed — autonomous |
+| easy | high | [fix-test-browser-1028 D11](decisions/fix-test-browser-1028.md) | Defer only the remaining SC5 drag flow under the operator's landing ruling | deferred: SC5 managed-browser drag |
+| easy | high | [fix-test-browser-1028 D12](decisions/fix-test-browser-1028.md) | Preserve captured destination confirmation through the landing retry | assumed — autonomous |
 | easy | high | [ui-restyle-accounts D1](decisions/ui-restyle-accounts.md) | Restyle all existing contributions without changing feature authority | locked by docs/quirk/specs/2026-10-28-ui-redesign/logic.md |
 | easy | high | [ui-restyle-accounts D3](decisions/ui-restyle-accounts.md) | Preserve truthful loading, empty/error, busy and secret-state semantics | assumed — autonomous |
 | easy | high | [ui-restyle-accounts D4](decisions/ui-restyle-accounts.md) | Enforce both plugins without exceptions or private styles | locked by docs/quirk/specs/2026-10-28-ui-redesign/logic.md |
