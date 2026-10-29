@@ -1,5 +1,6 @@
 import { afterAll, afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
+import { readFileSync } from 'node:fs'
 import { registerDom } from './register-dom'
 
 registerDom()
@@ -103,6 +104,32 @@ describe('quirky.git file diff view', () => {
     )
     await settle()
     expect(element.querySelectorAll('.cm-mergeViewEditor').length).toBe(0)
+  })
+
+  test.each(['inline', 'side-by-side'])('Markdown preview hides the %s source diff with the shared layout styles', async (layout) => {
+    const style = document.createElement('style')
+    style.textContent = readFileSync(new URL('../../../../packages/ui/src/design-system/components.css', import.meta.url), 'utf8')
+    document.head.appendChild(style)
+    try {
+      fake.settings.diffDefaultView = layout
+      fake.handlers['quirky.editor/markdownPreview'] = (params) => ({
+        leaseId: params.leaseId,
+        worktreeId: 'w1',
+        path: 'notes.md',
+        html: '<h1>Modified notes</h1>'
+      })
+      const { element } = await open(textDiff({ path: 'notes.md', original: '# Notes\n', modified: '# Modified notes\n' }), {
+        ...input, path: 'notes.md', display: 'preview'
+      })
+      expect(element.querySelector('[data-markdown-preview]')?.textContent).toBe('Modified notes')
+      const editor = element.querySelector<HTMLElement>('.cm-editor')!
+      expect(editor).not.toBeNull()
+      const ancestors: HTMLElement[] = []
+      for (let node: HTMLElement | null = editor; node !== null; node = node.parentElement) ancestors.push(node)
+      expect(ancestors.some((node) => getComputedStyle(node).display === 'none')).toBe(true)
+    } finally {
+      style.remove()
+    }
   })
 
   test('SC-60: the menu has Word Wrap and Show Whitespace, which write their settings', async () => {
