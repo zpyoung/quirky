@@ -222,6 +222,7 @@ describe('Heimdall orchestration adapter', () => {
       fingerprint: attempt.fingerprint,
       action: attempt.action,
       state: 'running',
+      dispatchId: 'ctx_fixture',
       requestId: attempt.requestId,
       workerRequest: attempt.workerRequest
     })

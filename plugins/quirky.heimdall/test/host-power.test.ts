@@ -386,17 +386,9 @@ describe('Heimdall host-power lifecycle binding', () => {
 
   test('attempts every synchronous runner fence and reports the failing watcher', async () => {
     const failFenceFor = 'watcher-fence-failure'
-    let failEmit = false
     const bothDecided = deferred<void>()
     const decidedWatchers = new Set<string>()
     const fixture = makeFixture({
-      emit: (event, value) => {
-        if (
-          failEmit && event === 'changed' && typeof value === 'object' && value !== null &&
-          'watcherId' in value && value.watcherId === failFenceFor
-        ) throw new Error('changed notification failed')
-        return false
-      },
       call: async (method, params) => {
         if (method === HOOKS.read) return snapshot('idle', Date.now)
         if (method === HOOKS.decide) {
@@ -413,7 +405,13 @@ describe('Heimdall host-power lifecycle binding', () => {
 
     await service.start()
     await bothDecided.promise
-    failEmit = true
+    const failingRunner = service.runner(failFenceFor)
+    if (!failingRunner) throw new Error('fixture runner is unavailable')
+    const suspend = failingRunner.suspend
+    failingRunner.suspend = () => {
+      suspend()
+      throw new Error('runner fence failed')
+    }
 
     let failure: unknown
     try {
@@ -426,7 +424,6 @@ describe('Heimdall host-power lifecycle binding', () => {
     expect(service.runner(failFenceFor)?.status()).toMatchObject({ state: 'held', reason: 'suspended' })
     expect(service.runner('watcher-fence-survivor')?.status()).toMatchObject({ state: 'held', reason: 'suspended' })
 
-    failEmit = false
     await service.shutdown()
   })
 })

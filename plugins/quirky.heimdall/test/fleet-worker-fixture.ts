@@ -373,8 +373,8 @@ export async function startFleetWorkerFixture(options: { fenceHoldMs?: number } 
           call<FleetSnapshot>('quirky.heimdall/fleet'),
           call<WatcherDetail | null>('quirky.heimdall/detail', target),
           call<DebugReport | null>('quirky.heimdall/debugReport', target),
-          harness!.fixture.cli(['heimdall', 'list']),
-          harness!.fixture.cli(['heimdall', 'show', watcherId]),
+          harness!.fixture.cli(['heimdall', 'list', '--json']),
+          harness!.fixture.cli(['heimdall', 'show', watcherId, '--json']),
           harness!.fixture.cli(['heimdall', 'debug', watcherId])
         ])
         return { fleet, detail, debug, cli: { list, show, debug: cliDebug } }
