@@ -1,3 +1,4 @@
+import { Button } from '@quirky/ui'
 import { useCallback, useEffect, useRef, useState, type ReactElement } from 'react'
 import type { UiPluginContext } from '@quirky/protocol'
 import { makeDiff } from '@sanity/diff-match-patch'
@@ -196,7 +197,7 @@ export function ChangesSurface(props: ChangesSurfaceProps): ReactElement {
   if (diff.status === 'error') {
     return <div className="qe-changes-message" role="alert">
       <span>Changes unavailable: {diff.message}</span>
-      <button type="button" onClick={() => void refreshDiff()}>Retry Changes</button>
+      <Button onClick={() => void refreshDiff()}>Retry Changes</Button>
     </div>
   }
 
@@ -224,12 +225,12 @@ export function ChangesSurface(props: ChangesSurfaceProps): ReactElement {
     <section className="qe-changes-surface" aria-label="Changes">
       <div className="qe-changes-toolbar" role="toolbar" aria-label="Changes view">
         {display === 'source' ? <>
-          <button type="button" aria-label="Side by side" aria-pressed={layout === 'side-by-side'} onClick={() => setLayout('side-by-side')}>Side by side</button>
-          <button type="button" aria-label="Inline" aria-pressed={layout === 'inline'} onClick={() => setLayout('inline')}>Inline</button>
-          <button type="button" aria-label="Previous change" disabled={noChanges} onClick={() => navigateChange(-1)}>Previous change</button>
-          <button type="button" aria-label="Next change" disabled={noChanges} onClick={() => navigateChange(1)}>Next change</button>
-          {buffer.kind === 'markdown' && <button type="button" aria-label="Markdown preview" onClick={() => setDisplay('markdown-preview')}>Markdown preview</button>}
-        </> : <button type="button" aria-label="Source editor" onClick={() => setDisplay('source')}>Source editor</button>}
+          <Button aria-label="Side by side" aria-pressed={layout === 'side-by-side'} onClick={() => setLayout('side-by-side')}>Side by side</Button>
+          <Button aria-label="Inline" aria-pressed={layout === 'inline'} onClick={() => setLayout('inline')}>Inline</Button>
+          <Button aria-label="Previous change" disabled={noChanges} onClick={() => navigateChange(-1)}>Previous change</Button>
+          <Button aria-label="Next change" disabled={noChanges} onClick={() => navigateChange(1)}>Next change</Button>
+          {buffer.kind === 'markdown' && <Button aria-label="Markdown preview" onClick={() => setDisplay('markdown-preview')}>Markdown preview</Button>}
+        </> : <Button aria-label="Source editor" onClick={() => setDisplay('source')}>Source editor</Button>}
       </div>
       {noChanges && <div className="qe-changes-clean" role="status">No uncommitted changes.</div>}
       {display === 'markdown-preview' && buffer.kind === 'markdown' ? <>

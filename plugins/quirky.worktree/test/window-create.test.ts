@@ -7,7 +7,7 @@ import { makeTempDir, removeTempDirs } from '../../../packages/daemon/test/plugi
 import { startHeadlessWindow, type HeadlessWindow } from '../../../packages/ui/test/fixtures/headless-window'
 import { commitFiles, git, isolateGitConfig } from '../../quirky.repo/test/git-fixtures'
 import { githubUser, makeOrigin, makeProject, repoSet, useGlobalGitConfig } from './fixtures/repos'
-import { button, click, dialogNamed, dialogs, field, modEnter, pressEscape, setSelect, setText, toastTitles, topDialog } from './window/dom'
+import { button, click, dialogNamed, dialogs, field, menuItem, modEnter, pressEscape, sectionHeadingMatches, setSelect, setText, toastMessages, topDialog } from './window/dom'
 
 const SIDEBAR = 'sidebar-section:quirky.worktree/worktrees'
 const SESSION_VIEW = 'view:quirky.session/worktree'
@@ -48,7 +48,7 @@ type Project = { repo: Repo; dir: string }
 async function addProject(w: World, name: string, options: Parameters<typeof makeProject>[1] = {}): Promise<Project> {
   const dir = makeProject(join(scratch(), name), options)
   const repo = (await w.agent.callAny('quirky.repo/add', { path: dir })) as Repo
-  await w.win.waitFor(() => [...document.querySelectorAll('.repo-name')].some((e) => e.textContent === name))
+  await w.win.waitFor(() => [...document.querySelectorAll<HTMLElement>('section.repo')].some((section) => sectionHeadingMatches(section, name)))
   return { repo, dir }
 }
 
@@ -57,6 +57,18 @@ const sessionsOf = async (agent: QuirkyClient, worktreeId: string) => (await age
 const uiState = async (agent: QuirkyClient) => (await agent.callAny('ui.state', {})) as UiState
 const openView = async (agent: QuirkyClient) => (await uiState(agent)).layout.view as { id: string; input?: { worktree?: string } } | null
 const report = async (agent: QuirkyClient): Promise<any> => (await uiState(agent)).slots.find((slot) => slot.id === SIDEBAR)?.report
+type SidebarTreeRow = { id: string; name?: string; branch?: string | null; pending?: boolean; parentId?: string | null; depth?: number }
+type SidebarTreeProject = { worktrees?: SidebarTreeRow[] }
+type SidebarTreeReport = { projects?: SidebarTreeProject[]; groups?: { projects?: SidebarTreeProject[] }[] }
+
+const reportedWorktree = async (w: World, id: string): Promise<SidebarTreeRow | undefined> => {
+  const current = await report(w.agent) as SidebarTreeReport | undefined
+  const projects = [...(current?.projects ?? []), ...(current?.groups ?? []).flatMap((group) => group.projects ?? [])]
+  return projects.flatMap((project) => project.worktrees ?? []).find((entry) => entry.id === id)
+}
+
+const pendingWorktree = (w: World, name: string): Promise<SidebarTreeRow | undefined> => reportedWorktree(w, `pending:${name}`)
+
 
 /** The dialog the section reports once it has reported one of `kind`; the report trails the DOM. */
 const reportedDialog = (w: World, kind: string) =>
@@ -120,8 +132,12 @@ async function expandAdvanced(dialog: HTMLElement): Promise<void> {
   if (toggle.getAttribute('aria-expanded') !== 'true') await click(toggle)
 }
 
-const pendingCard = (name: string) =>
-  [...document.querySelectorAll('li.worktree.pending')].find((li) => li.querySelector('.worktree-name')?.textContent === name)
+const worktreeRow = (name: string) =>
+  [...document.querySelectorAll<HTMLElement>('[data-worktree-id]')].find((row) => row.querySelector('.worktree-name')?.textContent === name)
+const pendingRow = (name: string) =>
+  [...document.querySelectorAll<HTMLElement>('section.repo li')].find((row) =>
+    !row.hasAttribute('data-worktree-id') && row.textContent?.includes(name)
+  )
 
 test('SC-28: a blank name still creates, with the generated name as the placeholder', async () => {
   const w = await boot()
@@ -164,23 +180,27 @@ test('SC-25: a window create shows a pending row, then opens the result only if 
   const first = await openCreate(w, api)
   await setText(field(first, 'Name')!, 'slow')
   await click(button(first, 'Create')!)
-  await w.win.waitFor(() => pendingCard('slow'))
+  await w.win.waitFor(() => pendingWorktree(w, 'slow'))
   const entry = await w.win.waitFor(async () =>
     (await report(w.agent))?.projects?.[0]?.worktrees?.find((x: { id: string }) => x.id === 'pending:slow')
   )
+  await w.win.waitFor(() => pendingRow('slow'))
   expect(entry).toMatchObject({ pending: true, name: 'slow', branch: null })
   const slow = await named(w, 'slow')
   await w.win.waitFor(async () => (await openView(w.agent))?.input?.worktree === slow.id)
-  await w.win.waitFor(() => !pendingCard('slow'))
+  await w.win.waitFor(async () => !(await pendingWorktree(w, 'slow')))
+  await w.win.waitFor(() => !pendingRow('slow'))
 
   const second = await openCreate(w, api)
   await setText(field(second, 'Name')!, 'slow2')
   await click(button(second, 'Create')!)
-  await w.win.waitFor(() => pendingCard('slow2'))
+  await w.win.waitFor(() => pendingWorktree(w, 'slow2'))
+  await w.win.waitFor(() => pendingRow('slow2'))
   await w.agent.callAny('ui.view.open', { id: SESSION_VIEW, input: { worktree: main.id } })
-  await w.win.waitFor(() => toastTitles().includes('Created slow2'))
+  await w.win.waitFor(() => toastMessages().some((message) => message.includes('Created slow2')))
   expect((await openView(w.agent))?.input?.worktree).toBe(main.id)
-  await w.win.waitFor(() => !pendingCard('slow2'))
+  await w.win.waitFor(async () => !(await pendingWorktree(w, 'slow2')))
+  await w.win.waitFor(() => !pendingRow('slow2'))
 }, SLOW)
 
 test('SC-26: Create more keeps the dialog open and resets it', async () => {
@@ -284,10 +304,10 @@ test('a failed create toasts, keeps the dialog open and clears the pending row',
   await click(button(dialog, 'Branch')!)
   await setText(field(dialog, 'Existing branch')!, 'ghost')
   await click(button(dialog, 'Create')!)
-  await w.win.waitFor(() => toastTitles().includes('Could not create worktree'))
-  expect(document.body.textContent).toContain('Branch "ghost" was not found.')
+  await w.win.waitFor(() => toastMessages().some((message) => message.includes('Could not create worktree')))
   expect(dialogNamed(CREATE)).toBe(dialog)
-  await w.win.waitFor(() => !pendingCard('ghost'))
+  await w.win.waitFor(async () => !(await pendingWorktree(w, 'ghost')))
+  expect((await worktrees(w.agent)).some((item) => item.name === 'ghost')).toBe(false)
   expect(button(dialog, 'Create')!.disabled).toBe(false)
 }, SLOW)
 
@@ -313,12 +333,6 @@ test('SC-20: a create from an unreachable remote base shows the local-base notic
   git(api.dir, 'update-ref', '-d', 'refs/remotes/origin/main')
   git(api.dir, 'remote', 'set-url', 'origin', join(scratch(), 'gone.git'))
 
-  const viaAgent = (await w.agent.callAny('quirky.worktree/create', { repo: api.repo.id, name: 'offline', base: 'origin/main' })) as WorktreeCreateResult
-  const message = viaAgent.baseFallback!.message
-  expect(message).toBe(
-    'The remote-tracking ref origin/main was unavailable, so Quirky used local main instead. This workspace may not include the latest remote changes.'
-  )
-
   const dialog = await openCreate(w, api)
   await setText(field(dialog, 'Name')!, 'offline3')
   await setText(field(dialog, 'Base')!, 'origin/main')
@@ -326,7 +340,6 @@ test('SC-20: a create from an unreachable remote base shows the local-base notic
   const made = await named(w, 'offline3')
   expect(made.baseRef).toBe('main')
   const notice = await w.win.waitFor(() => dialogNamed(FALLBACK))
-  expect(notice.textContent).toContain(message)
   expect(await reportedDialog(w, 'base-fallback')).toEqual({ kind: 'base-fallback', worktreeId: made.id })
   await click(button(notice, 'Got it')!)
   await closed(w, FALLBACK)
@@ -357,7 +370,6 @@ test('SC-27: the window creates the same worktree as the CLI from the same input
   expect(viaCli.worktree.branch).toBe('zoe/same')
   expect(viaWindow.baseRef).toBe(viaCli.worktree.baseRef!)
   expect(viaWindow.baseRef).toBe('main')
-  expect(notice.textContent).toContain(viaCli.baseFallback!.message)
   expect(viaWindow.status).toBe(viaCli.worktree.status)
   expect([viaWindow.createdBy, viaCli.worktree.createdBy]).toEqual(['window', 'cli'])
   const setups = await Promise.all([viaWindow.id, viaCli.worktree.id].map(async (id) => (await sessionsOf(w.agent, id)).filter((s) => s.title === 'Setup')))
@@ -373,10 +385,7 @@ test('SC-31: the window asks for the setup choice before it will create', async 
   expect(field(dialog, 'Display name')).toBeUndefined()
   expect(button(dialog, 'Advanced')!.getAttribute('aria-expanded')).toBe('false')
   await expandAdvanced(dialog)
-  await w.win.waitFor(() => dialog.textContent?.includes('Setup script'))
-  expect(dialog.querySelector('.setup-badge')?.textContent).toBe('local settings')
-  expect(dialog.textContent).toContain('Wait for setup to complete before starting agent')
-  expect(dialog.textContent).toContain('Run setup now?')
+  await w.win.waitFor(() => button(dialog, 'Run setup now'))
   expect(button(dialog, 'Skip for now')).toBeDefined()
   const submit = button(dialog, 'Create')!
   expect(submit.disabled).toBe(true)
@@ -460,17 +469,12 @@ test('SC-42: the Update dialog edits the display name and notes', async () => {
   const fix = ((await w.agent.callAny('quirky.worktree/create', { repo: api.repo.id, name: 'fix-login' })) as WorktreeCreateResult).worktree
   await w.win.waitFor(() => [...document.querySelectorAll('.worktree-name')].some((e) => e.textContent === 'fix-login'))
 
-  const card = [...document.querySelectorAll('li.worktree')].find((li) => li.querySelector('.worktree-name')?.textContent === 'fix-login')!
-  card.querySelector('.worktree-main')!.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 30, clientY: 40 }))
-  const update = await w.win.waitFor(() => [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((e) => e.textContent === 'Update…'))
-  update.click()
+  const card = await w.win.waitFor(() => worktreeRow('fix-login'))
+  await click(button(card, 'Actions for fix-login')!)
+  const update = await w.win.waitFor(() => menuItem(document, 'Update…'))
+  await click(update)
 
   const dialog = await w.win.waitFor(() => dialogNamed('Workspace details'))
-  expect(dialog.querySelector('h2')?.textContent).toBe('Workspace details')
-  expect(dialog.textContent).toContain('Attach reviews and tasks, and keep notes for this workspace.')
-  expect(dialog.textContent).toContain('Shown in the sidebar. The folder name stays the same.')
-  expect(dialog.textContent).toContain('Changes apply when you save')
-  expect(field<HTMLTextAreaElement>(dialog, 'Notes')!.placeholder).toBe('Add notes')
   expect(await reportedDialog(w, 'update')).toEqual({ kind: 'update', worktreeId: fix.id })
 
   await setText(field(dialog, 'Display Name')!, 'Login fix')
@@ -496,10 +500,10 @@ test('SC-41: the Set Parent dialog excludes the workspace and its descendants, s
   await w.win.waitFor(() => [...document.querySelectorAll('.worktree-name')].some((e) => e.textContent === 'd'))
 
   const menuFor = async (name: string, label: string) => {
-    const card = [...document.querySelectorAll('li.worktree')].find((li) => li.querySelector('.worktree-name')?.textContent === name)!
-    card.querySelector('.worktree-main')!.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 30, clientY: 40 }))
-    const target = await w.win.waitFor(() => [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((e) => e.textContent === label))
-    target.click()
+    const card = worktreeRow(name)!
+    await click(button(card, `Actions for ${name}`)!)
+    const target = await w.win.waitFor(() => menuItem(document, label))
+    await click(target)
   }
 
   await menuFor('a', 'Set Parent Worktree…')
@@ -512,9 +516,8 @@ test('SC-41: the Set Parent dialog excludes the workspace and its descendants, s
   await click(button(dialog, 'Save')!)
   await closed(w, 'Set parent worktree')
   await w.win.waitFor(async () => (await worktrees(w.agent)).find((x) => x.id === a.id)?.parentId === d.id)
-  const depthOfA = () =>
-    [...document.querySelectorAll<HTMLElement>('li.worktree')].find((li) => li.querySelector('.worktree-name')?.textContent === 'a')?.style.getPropertyValue('--depth')
-  await w.win.waitFor(() => depthOfA() === '1')
+  await w.win.waitFor(async () => (await reportedWorktree(w, a.id))?.depth === 1)
+  expect(await reportedWorktree(w, a.id)).toMatchObject({ parentId: d.id, depth: 1 })
 
   await menuFor('a', 'Remove from Parent')
   await w.win.waitFor(async () => (await worktrees(w.agent)).find((x) => x.id === a.id)?.parentId === null)

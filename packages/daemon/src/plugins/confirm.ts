@@ -1,12 +1,12 @@
 import { createHash } from 'node:crypto'
-import { RpcErrorCode, type AskEnvelope } from '@quirky/protocol'
+import { RpcErrorCode, type Ask } from '@quirky/protocol'
 import { conflict, confirmationRequired, DaemonError, internal } from '../errors'
 import type { Store } from '../store'
 import type { DispatchSource } from './dispatch'
 import { canonicalJson, LazyPruner } from './requests'
 
 const ASK_CREATE = 'quirky.ask/create'
-const ASK_WAIT = 'quirky.ask/wait'
+const ASK_LIST = 'quirky.ask/list'
 const ASKS_OFF = 'this action needs confirmation and asks are off; pass --yes'
 
 export type ConfirmStore = Pick<Store, 'getConfirmation' | 'putConfirmation' | 'markConfirmationUsed' | 'pruneConfirmations'>
@@ -125,12 +125,16 @@ export class Confirmations {
     if (!row || row.method !== method || row.digest !== digest) throw conflict('confirmation is for another call')
     if (row.used) throw conflict('confirmation already used')
 
-    let envelope: AskEnvelope
+    let asks: Ask[]
     try {
-      envelope = (await this.call(ASK_WAIT, { askId, timeoutMs: 0 }, { kernel: true })) as AskEnvelope
+      asks = (await this.call(ASK_LIST, { askId }, { kernel: true })) as Ask[]
     } catch (error) {
       throw isMethodNotFound(error) ? conflict(ASKS_OFF) : error
     }
+    // Confirmations are kernel-created local asks. Inspect their durable outcome without
+    // entering the connection-bound long-poll API or borrowing a client's session authority.
+    const envelope = asks.find((ask) => ask.id === askId)?.envelope
+    if (!envelope) throw conflict('confirmation unavailable: ask is unknown or has expired')
     if (envelope.status === 'pending') throw conflict('confirmation not answered yet')
     if (envelope.status === 'unavailable') throw conflict(`confirmation unavailable: ${envelope.reason}`)
     const answer = envelope.answers?.confirm

@@ -207,6 +207,8 @@ SectionHeader, Tabs, Badge, StatusDot, Menu, Toast, Dialog (including sheets), E
 FormRow, ToolPanelFrame and InlineAgentCard. Import their styles from `@quirky/ui/styles.css`;
 the desktop host already loads them. Components are controlled presentations: callers own
 feature state and callbacks. Theme scopes use `data-theme="dark"` or `data-theme="light"`.
+`Dialog` supports `scrollBody` when long content must scroll independently of its header and
+action footer; the default retains whole-dialog scrolling.
 
 After `bun run --filter './packages/ui' build`, open `/gallery.html` on the daemon's UI origin
 to try every component in both themes. The gallery needs no RPC token and does not connect
@@ -214,21 +216,57 @@ to the daemon.
 
 `bun run ui:lint` checks UI source for raw colors and pixel dimensions. Root
 `bun run typecheck` runs the same gate. Plugin enforcement is staged:
-`scripts/ui-lint-plugins.json` starts empty, and each `ui-restyle-*` item adds its plugin IDs.
-Unlisted legacy plugins are not checked. Listed plugins must also remove their own CSS files,
-private CSS imports, style elements and stylesheet injection; the canonical
-`@quirky/ui/styles.css` import is allowed. Use shared controls and tokens instead.
+`scripts/ui-lint-plugins.json` is the staged enforcement registry; each `ui-restyle-*` item
+adds its plugin IDs. Worktree and repository management are enforced. Unlisted legacy plugins
+are not checked. Listed plugins must remove their own CSS files, private CSS imports, style
+elements and stylesheet injection; the canonical `@quirky/ui/styles.css` import is allowed.
+Use shared controls and tokens instead.
 Only custom-property values in the two central design-system token files may define raw
 primitives. Existing host geometry remains in `compatibility-tokens.css` until its area restyle;
 new shared controls use the approved semantic tokens and size scale. Static source analysis
 does not evaluate arbitrary runtime style computations or trace imported style objects.
 
+Worktrees remains the default left-top tool. It renders repository/project management through
+the existing `quirky.repo` API rather than a separate repository panel. Rows use shared status
+dots, attention counts and a second activity line; project/worktree dialogs and panel options
+use the same graphite controls in both themes. Shared ContextMenu supports pointer-positioned
+menus with nested actions; shared Dialog supports wide content and stacked focus ownership.
+
 ### Public plugin UI and grouping APIs
 
-UI plugins can declare an `activity-item` contribution beside the right sidebar. It mounts even
-when no panel is open and uses the ordinary module, override, report and cleanup lifecycle.
-`quirky ui contributions --json` exposes `activityItems`; `quirky ui state --json` exposes each
-mounted item's report. Existing main-header panel toggles and right-column panel placement remain.
+The desktop host places tools in six movable slots: left top/bottom, right top/bottom and
+bottom left/right. Click an icon to open its tool or close that slot; drag it to another stripe
+or use its Move menu. Slot sizes, split proportions and placements persist across projects
+in the user profile. Worktrees and Changes open on first launch.
+
+`ui.contributions` exposes the effective `tools` projection alongside the original panel,
+sidebar-section and activity-item registrations. Equivalent built-in launchers share a tool;
+third-party content retains its own destination. Panels, sidebar sections and activity items
+may declare `defaultSlot` and `icon`. Views remain center contributions; the host's center tabs
+contain only opened views and retain each view's input in its exact window. Commands, settings,
+overlays and status items keep their dedicated host regions.
+
+Use the same public layout API from scripts:
+
+```sh
+quirky ui open-tool host:inbox
+quirky ui move-tool panel:quirky.ledger/ledger right-bottom
+quirky ui resize-tools --left 290 --right-split 0.6
+quirky ui close-tool left-bottom
+quirky ui state --json
+```
+
+`ui.tool.open` is idempotent; the stripe explicitly closes an already open tool.
+The existing panel/sidebar APIs update the same tool state. The obsolete editor top/side
+activity-bar setting is removed. ⌘K searches commands, tools, views and worktrees while
+preserving contributed shortcut priority. Off-worktree questions raise eight-second corner
+toasts and amber worktree/Inbox counts; dismissing a toast never answers its durable question.
+
+Ledger opens in bottom left by default; the project action menu opens its full Project Ledger
+page. Its chooser, scoped panel, entry forms, history, triage, guarded confirmations and
+staleness settings use the shared dark/light controls and tokens. Entry selection still captures
+immutable ID/revision snapshots; a presentation change never bypasses confirmation or revision
+checks. Ledger is included in the canonical UI lint plugin list.
 
 Setting declarations can provide optional `category` and `section` strings. The generic Settings
 dialog groups these declarations by category and section; uncategorized settings retain their
@@ -278,6 +316,13 @@ workspace source, so newly added plugins do not need generated per-plugin links 
 Keep those mappings aligned with `packages/protocol/package.json` exports.
 
 ## Editor documents and shared review notes
+
+The **Files** tool opens in the right-top slot by default; documents stay in center tabs.
+Editor controls, Quick Open, Save As, dirty-close and notebook trust dialogs use the shared
+graphite UI in dark and light. Source editing, Markdown modes, notebooks and file viewers keep
+their existing commands and save guards. `quirky.editor` is included in the UI lint gate:
+presentation changes must use `@quirky/ui` components and semantic tokens, with engine styles
+owned by the shared UI package rather than injected plugin CSS.
 
 New Markdown documents use collision-safe untitled placeholders. Save opens a relative-path
 Save As dialog; cancelling keeps the draft. The public `quirky.editor/saveAs` method accepts

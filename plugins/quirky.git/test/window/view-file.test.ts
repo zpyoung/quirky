@@ -34,7 +34,7 @@ test('SC-60: the file diff opens titled, scrolled to the first change, moves wit
   await w.win.waitFor(() => rowOf('math.ts'))
   await openRow(w, 'math.ts')
 
-  expect(text(q('.qgv-title'))).toBe('math.ts (diff)')
+  expect(text(q('[data-git-view-root] h2'))).toBe('math.ts (diff)')
   expect(q('.cm-mergeView')).toBeNull()
   const first = await w.win.waitFor(async () => {
     const r = await w.viewReport()
@@ -80,7 +80,7 @@ test('SC-60: the file diff opens titled, scrolled to the first change, moves wit
 test('SC-60: a file without changes disables both arrows', async () => {
   const w = await boot(scratch)
   await w.run('open-diff', { path: 'a.ts', source: 'unstaged' })
-  await w.win.waitFor(() => q('.qgv-file'))
+  await w.win.waitFor(() => q('[data-git-view-root] h2'))
   await w.win.waitFor(() => (byLabel('Next change') as HTMLButtonElement | null)?.disabled === true)
   expect((byLabel('Previous change') as HTMLButtonElement).disabled).toBe(true)
   await w.win.waitFor(async () => (await w.viewReport())?.changes === 0)
@@ -106,13 +106,13 @@ test('SC-61: an unstaged diff saves with Cmd+S, flags a file rewritten underneat
   await w.win.waitFor(async () => (await w.viewReport())?.dirty === true)
   writeFileSync(join(w.dir, 'math.ts'), 'agent rewrote this\n')
   await modS(editor)
-  const bar = await w.win.waitFor(() => q('.qgv-stale'))
+  const bar = await w.win.waitFor(() => q('[data-git-view-root] [role="alert"]'))
   expect(text(bar)).toContain('This file changed on disk since your edits. Use the banner to compare, reload, or overwrite.')
   expect(readFileSync(join(w.dir, 'math.ts'), 'utf8')).toBe('agent rewrote this\n')
   await w.win.waitFor(async () => (await w.viewReport())?.stale === true)
 
   await click(buttonText('Overwrite', bar))
-  await w.win.waitFor(() => !q('.qgv-stale'))
+  await w.win.waitFor(() => !q('[data-git-view-root] [role="alert"]'))
   expect(readFileSync(join(w.dir, 'math.ts'), 'utf8').startsWith('again\nmine\n')).toBe(true)
 
   editor = modifiedEditor(EditorView)
@@ -120,9 +120,9 @@ test('SC-61: an unstaged diff saves with Cmd+S, flags a file rewritten underneat
   await w.win.waitFor(async () => (await w.viewReport())?.dirty === true)
   writeFileSync(join(w.dir, 'math.ts'), 'second rewrite\n')
   await modS(editor)
-  const second = await w.win.waitFor(() => q('.qgv-stale'))
+  const second = await w.win.waitFor(() => q('[data-git-view-root] [role="alert"]'))
   await click(buttonText('Reload from Disk', second))
-  await w.win.waitFor(() => !q('.qgv-stale'))
+  await w.win.waitFor(() => !q('[data-git-view-root] [role="alert"]'))
   // the reload rebuilds the editor, so wait for the new one rather than reading the old
   await w.win.waitFor(() => {
     try {
@@ -159,7 +159,7 @@ test('SC-61: Revert Block and revert-change put a block back in the editor only;
   await w.win.waitFor(() => q('.cm-editor'))
   expect(q('.cm-content[contenteditable=true]')).toBeNull()
   expect(q('button[name=reject]')).toBeNull()
-  expect(text(q('.qgv-chip'))).toBe('Staged')
+  expect(text(q('[data-git-view-root] [data-diff-source="Staged"]'))).toBe('Staged')
 }, SLOW)
 
 test('SC-57: a branch diff whose merge base cannot be read says so instead of looking empty', async () => {
@@ -172,7 +172,7 @@ test('SC-57: a branch diff whose merge base cannot be read says so instead of lo
   rmSync(loose)
 
   await click(rowOf('math.ts', 'branch'))
-  await w.win.waitFor(() => q('.qgv-error'))
-  expect(text(q('.qgv-error'))).toMatch(/^Error loading diff: .+/)
+  await w.win.waitFor(() => q('[data-git-view-root] [role="alert"]'))
+  expect(text(q('[data-git-view-root] [role="alert"]'))).toMatch(/^Error loading diff: .+/)
   expect(q('.cm-editor')).toBeNull()
 }, SLOW)

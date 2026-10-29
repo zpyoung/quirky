@@ -1,4 +1,5 @@
-import { useRef, useState, type ClipboardEvent, type CSSProperties, type DragEvent, type ReactNode } from 'react'
+import { Button, Tabs, TextField } from '@quirky/ui'
+import { useRef, useState, type ClipboardEvent, type DragEvent, type ReactNode } from 'react'
 
 export type MarkdownProps = { source: string }
 export type MarkdownComposerProps = {
@@ -37,7 +38,7 @@ function renderInline(source: string, keyBase = 0): ReactNode[] {
     const token = match[0]
     if (token.startsWith('![')) {
       const url = safeHttpUrl(match[2] ?? '')
-      if (url) output.push(<img key={key} src={url} alt={match[1] ?? ''} loading="lazy" style={{ maxWidth: '100%', height: 'auto' }} />)
+      if (url) output.push(<img key={key} className="quirky-tasks-markdown-image" src={url} alt={match[1] ?? ''} loading="lazy" />)
       else output.push(token)
     } else if (token.startsWith('[')) {
       const url = safeHttpUrl(match[4] ?? '')
@@ -220,17 +221,21 @@ export function MarkdownComposer({ value, onChange, label, placeholder, disabled
     }
   }
 
-  const toolbarButton: CSSProperties = { border: '1px solid var(--border, #3a3d43)', borderRadius: 5, background: 'var(--surface, #22252b)', color: 'var(--text, #e5e7eb)', padding: '4px 8px', cursor: disabled ? 'default' : 'pointer' }
-  return <section aria-label={label} style={{ display: 'grid', gap: 8 }}>
-    <div role="tablist" aria-label={`${label} editor`} style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-      <button type="button" role="tab" aria-selected={tab === 'write'} onClick={() => setTab('write')} style={toolbarButton}>Write</button>
-      <button type="button" role="tab" aria-selected={tab === 'preview'} onClick={() => setTab('preview')} style={toolbarButton}>Preview</button>
-      {tab === 'write' && <button type="button" onClick={() => { setShowImageUrl((shown) => !shown); setImageError('') }} disabled={disabled} style={{ ...toolbarButton, marginLeft: 'auto' }}>Insert image URL</button>}
+  return <section className="quirky-tasks-markdown-composer" aria-label={label}>
+    <div className="quirky-tasks-markdown-composer__tabbar">
+      <Tabs
+        label={`${label} editor`}
+        items={[{ id: 'write', label: 'Write' }, { id: 'preview', label: 'Preview' }]}
+        value={tab}
+        onChange={(value) => { if (value === 'write' || value === 'preview') setTab(value) }}
+      />
+      {tab === 'write' && <Button type="button" className="quirky-tasks-markdown-composer__image-toggle" onClick={() => { setShowImageUrl((shown) => !shown); setImageError('') }} disabled={disabled}>Insert image URL</Button>}
     </div>
     {tab === 'write'
       ? <>
           <textarea
             ref={textarea}
+            className="quirky-tasks-markdown-composer__textarea"
             aria-label={label}
             placeholder={placeholder}
             value={value}
@@ -252,11 +257,10 @@ export function MarkdownComposer({ value, onChange, label, placeholder, disabled
             onDragOver={(event) => {
               if (event.dataTransfer.files.length > 0 || safeHttpUrl(event.dataTransfer.getData('text/uri-list') || event.dataTransfer.getData('text/plain'), 8192)) event.preventDefault()
             }}
-            style={{ width: '100%', boxSizing: 'border-box', resize: 'vertical', border: '1px solid var(--border, #3a3d43)', borderRadius: 6, background: 'var(--surface, #22252b)', color: 'var(--text, #e5e7eb)', padding: 10, font: 'inherit' }}
           />
-          {showImageUrl && <div role="group" aria-label="Insert image by URL" style={{ display: 'flex', gap: 6 }}>
-            <input
-              aria-label="Image URL"
+          {showImageUrl && <div className="quirky-tasks-markdown-composer__image-input" role="group" aria-label="Insert image by URL">
+            <TextField
+              label="Image URL"
               type="text"
               inputMode="url"
               value={imageUrl}
@@ -264,21 +268,20 @@ export function MarkdownComposer({ value, onChange, label, placeholder, disabled
               placeholder="https://example.com/image.png"
               maxLength={8192}
               disabled={disabled}
-              style={{ flex: 1, minWidth: 0, border: '1px solid var(--border, #3a3d43)', borderRadius: 5, background: 'var(--surface, #22252b)', color: 'var(--text, #e5e7eb)', padding: 7, font: 'inherit' }}
             />
-            <button type="button" disabled={disabled || imageUrl.trim().length === 0} onClick={() => {
+            <Button type="button" disabled={disabled || imageUrl.trim().length === 0} onClick={() => {
               if (insertImage(imageUrl)) {
                 setImageUrl('')
                 setShowImageUrl(false)
               }
-            }} style={toolbarButton}>Insert</button>
+            }}>Insert</Button>
           </div>}
-          <p style={{ margin: 0, color: 'var(--text-muted, #9ca3af)', fontSize: 12 }}>Paste, drop, or enter an HTTP(S) image URL.</p>
-          {imageError && <p role="alert" style={{ margin: 0, color: 'var(--danger, #f87171)' }}>{imageError}</p>}
-          {inputError && <p role="alert" style={{ margin: 0, color: 'var(--danger, #f87171)' }}>{inputError}</p>}
+          <p className="quirky-tasks-markdown-composer__hint">Paste, drop, or enter an HTTP(S) image URL.</p>
+          {imageError && <p className="quirky-tasks-markdown-composer__error" role="alert">{imageError}</p>}
+          {inputError && <p className="quirky-tasks-markdown-composer__error" role="alert">{inputError}</p>}
         </>
-      : <div role="tabpanel" aria-label={`${label} preview`} style={{ minHeight: 64, padding: 10, border: '1px solid var(--border, #3a3d43)', borderRadius: 6, color: 'var(--text, #e5e7eb)', overflowWrap: 'anywhere' }}>
-          {value.trim().length === 0 ? <span style={{ color: 'var(--text-muted, #9ca3af)' }}>Nothing to preview</span> : <Markdown source={value} />}
+      : <div className="quirky-tasks-markdown-composer__preview" role="tabpanel" aria-label={`${label} preview`}>
+          {value.trim().length === 0 ? <span className="ui-text-muted">Nothing to preview</span> : <Markdown source={value} />}
         </div>}
   </section>
 }

@@ -1,3 +1,4 @@
+import { Badge, Button, EmptyState, TextField } from '@quirky/ui'
 import { useEffect, useRef, useState } from 'react'
 import type { ItemTarget, TaskItem, TasksSurfaceProps } from '../contracts'
 import { Markdown, MarkdownComposer, safeHttpUrl } from './Markdown'
@@ -39,8 +40,6 @@ type IssueChoices = {
   message: string | null
 }
 
-const baseButton = { border: '1px solid var(--border, #3a3d43)', borderRadius: 6, background: 'var(--surface, #22252b)', color: 'var(--text, #e5e7eb)', padding: '7px 10px', cursor: 'pointer', font: 'inherit' } as const
-const muted = { color: 'var(--text-muted, #9ca3af)' } as const
 
 function record(value: unknown): RecordValue | null {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return null
@@ -489,7 +488,7 @@ export function IssueSurface(props: TasksSurfaceProps) {
     }
   }
 
-  if (!target) return <main style={{ padding: 24, color: 'var(--text, #e5e7eb)' }}><p role="status">Select an issue from Tasks or a Project view.</p></main>
+  if (!target) return <main className="quirky-tasks-issue quirky-tasks-issue--empty"><div role="status"><EmptyState message="Select an issue from Tasks or a Project view." /></div></main>
   const item = detail?.item ?? null
   const canEditDescription = detail?.viewerCanUpdate === true
   const descriptionPermissionMessage = detail?.viewerCanUpdate === false
@@ -504,66 +503,63 @@ export function IssueSurface(props: TasksSurfaceProps) {
   const stateLabel = item?.state === 'open' ? 'Open' : item?.state === 'closed' ? 'Closed' : 'Unknown state'
   const workspaceLabel = linkedWorkspace?.name ?? null
 
-  return <main style={{ maxWidth: 1120, margin: '0 auto', padding: 16, color: 'var(--text, #e5e7eb)', display: 'grid', gap: 18 }}>
-    <header style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', borderBottom: '1px solid var(--border, #3a3d43)', paddingBottom: 12 }}>
-      <button type="button" onClick={() => void navigateBack()} style={baseButton}>{projectOrigin ? 'Back to Project' : 'Back to GitHub list'}</button>
-      <span style={{ ...muted, marginRight: 'auto' }}>{issueContext(target)} · #{target.number}</span>
-      <button type="button" onClick={refreshDetails} disabled={loading} style={baseButton}>{loading ? 'Refreshing…' : 'Refresh'}</button>
-      <button type="button" onClick={() => void runLinkCommand('copy-link')} disabled={!initialUrl} style={baseButton}>Copy link</button>
-      <button type="button" onClick={() => void runLinkCommand('open-link')} disabled={!initialUrl} style={baseButton}>Open on GitHub</button>
+  return <main className="quirky-tasks-issue">
+    <header className="quirky-tasks-issue__toolbar">
+      <Button type="button" onClick={() => void navigateBack()}>{projectOrigin ? 'Back to Project' : 'Back to GitHub list'}</Button>
+      <span className="quirky-tasks-issue__context">{issueContext(target)} · #{target.number}</span>
+      <Button type="button" onClick={refreshDetails} disabled={loading}>{loading ? 'Refreshing…' : 'Refresh'}</Button>
+      <Button type="button" onClick={() => void runLinkCommand('copy-link')} disabled={!initialUrl}>Copy link</Button>
+      <Button type="button" onClick={() => void runLinkCommand('open-link')} disabled={!initialUrl}>Open on GitHub</Button>
     </header>
 
-    {linkError && <p role="alert" style={{ margin: 0, color: 'var(--danger, #f87171)' }}>{linkError}</p>}
+    {linkError && <p className="quirky-tasks-issue__error" role="alert">{linkError}</p>}
 
-    <section style={{ display: 'grid', gap: 10 }}>
-      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap' }}>
-        <div style={{ flex: 1, minWidth: 280 }}>
-          <h1 style={{ margin: '0 0 8px', fontSize: 26, lineHeight: 1.25 }}>{title}</h1>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', ...muted }}>
-            <span aria-label={`Issue state: ${stateLabel}`} style={{ ...baseButton, padding: '3px 8px', cursor: 'default' }}>{stateLabel}</span>
+    <section className="quirky-tasks-issue__summary">
+      <div className="quirky-tasks-issue__summary-heading">
+        <div className="quirky-tasks-issue__title-group">
+          <h1 className="quirky-tasks-issue__title">{title}</h1>
+          <div className="quirky-tasks-issue__meta">
+            <Badge tone={item?.state === 'closed' ? 'neutral' : 'working'} label={`Issue state: ${stateLabel}`}>{stateLabel}</Badge>
             <span>{author} opened this issue</span>
-            <span>·</span>
+            <span aria-hidden="true">·</span>
             <span title={item?.updatedAt ?? undefined}>updated {relativeTime(item?.updatedAt ?? null)}</span>
-            <span>·</span>
+            <span aria-hidden="true">·</span>
             <span>{detail?.source === 'project' ? 'GitHub Project item' : issueSourceLabel || 'GitHub issue source'}</span>
           </div>
         </div>
-        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-          <button type="button" onClick={() => void handoffWorkspace(linkedWorkspace ? 'resume' : 'start')} disabled={workspaceBusy} style={{ ...baseButton, background: 'var(--accent, #2563eb)', color: '#fff' }}>
+        <div className="quirky-tasks-issue__actions">
+          <Button type="button" variant="primary" onClick={() => void handoffWorkspace(linkedWorkspace ? 'resume' : 'start')} disabled={workspaceBusy}>
             {workspaceBusy ? 'Working…' : linkedWorkspace ? 'Open workspace' : 'Start workspace from issue'}
-          </button>
-          {linkedWorkspace && <button type="button" onClick={() => void handoffWorkspace('start', true)} disabled={workspaceBusy} style={baseButton}>Start new workspace</button>}
+          </Button>
+          {linkedWorkspace && <Button type="button" onClick={() => void handoffWorkspace('start', true)} disabled={workspaceBusy}>Start new workspace</Button>}
         </div>
       </div>
-      {workspaceLabel
-        ? <div style={{ border: '1px solid var(--border, #3a3d43)', borderRadius: 6, padding: 9, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-            <span>Workspace: <strong>{workspaceLabel}</strong></span>
-            <button type="button" onClick={() => void handoffWorkspace('unlink')} disabled={workspaceBusy} style={baseButton}>Unlink</button>
-          </div>
-        : <div style={{ border: '1px solid var(--border, #3a3d43)', borderRadius: 6, padding: 9, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-            <span>No workspace attached</span>
-            <button type="button" onClick={() => void handoffWorkspace('link')} disabled={workspaceBusy} style={baseButton}>Link current local workspace</button>
-          </div>}
+      <div className="quirky-tasks-issue__workspace">
+        <span>{workspaceLabel ? <>Workspace: <strong>{workspaceLabel}</strong></> : 'No workspace attached'}</span>
+        {workspaceLabel
+          ? <Button type="button" onClick={() => void handoffWorkspace('unlink')} disabled={workspaceBusy}>Unlink</Button>
+          : <Button type="button" onClick={() => void handoffWorkspace('link')} disabled={workspaceBusy}>Link current local workspace</Button>}
+      </div>
     </section>
 
-    {loading && !detail && <p role="status">Loading issue details…</p>}
-    {loadError && <div role="alert" style={{ border: '1px solid var(--danger, #f87171)', borderRadius: 6, padding: 10, color: 'var(--danger, #f87171)' }}>
-      {detail ? `Couldn't refresh issue details. Showing the last confirmed data: ${loadError}` : `Couldn't load issue details: ${loadError}`}
-      <button type="button" onClick={refreshDetails} style={{ ...baseButton, marginLeft: 8 }}>Retry</button>
+    {loading && !detail && <p className="quirky-tasks-issue__status" role="status">Loading issue details…</p>}
+    {loadError && <div className="quirky-tasks-issue__error-panel" role="alert">
+      <span>{detail ? `Couldn't refresh issue details. Showing the last confirmed data: ${loadError}` : `Couldn't load issue details: ${loadError}`}</span>
+      <Button type="button" onClick={refreshDetails}>Retry</Button>
     </div>}
 
     {detail && <>
-      <section aria-labelledby="issue-edit-heading" style={{ border: '1px solid var(--border, #3a3d43)', borderRadius: 8, padding: 12, display: 'grid', gap: 12 }}>
-        <h2 id="issue-edit-heading" style={{ fontSize: 16, margin: 0 }}>Issue fields</h2>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-          <label style={{ display: 'grid', gap: 4, fontSize: 13 }}>Status
+      <section className="quirky-tasks-issue__section" aria-labelledby="issue-edit-heading">
+        <h2 id="issue-edit-heading" className="quirky-tasks-issue__section-title">Issue fields</h2>
+        <div className="quirky-tasks-issue__field-row">
+          <label className="quirky-tasks-issue__field">Status
             <select aria-label="Issue status" value={item?.state === 'closed' ? 'closed' : 'open'} disabled={busy || item === null} onChange={(event) => {
               const selected = event.currentTarget.value
               if (selected === 'closed' || selected === 'closed-completed') void updateIssue({ state: 'closed', stateReason: 'completed' }, { state: 'closed' })
               else if (selected === 'closed-not-planned') void updateIssue({ state: 'closed', stateReason: 'not_planned' }, { state: 'closed' })
               else if (selected === 'closed-duplicate') setDuplicateOpen(true)
               else if (selected === 'open') void updateIssue({ state: 'open' }, { state: 'open', stateReason: undefined, duplicateOf: undefined })
-            }} style={{ ...baseButton, padding: '5px 8px' }}>
+            }} className="quirky-tasks-control">
               <option value="open">Open / reopen</option>
               <option value="closed">Closed</option>
               <option value="closed-completed">Close as completed</option>
@@ -571,105 +567,101 @@ export function IssueSurface(props: TasksSurfaceProps) {
               <option value="closed-duplicate" disabled={Boolean(target.projectId && target.itemId)}>Close as duplicate</option>
             </select>
           </label>
-          {duplicateOpen && <form onSubmit={(event) => { event.preventDefault(); void submitDuplicate() }} style={{ display: 'flex', gap: 6, alignItems: 'end' }}>
-            <label style={{ display: 'grid', gap: 4, fontSize: 13 }}>Duplicate issue number
-              <input aria-label="Duplicate issue number" inputMode="numeric" value={duplicateNumber} onChange={(event) => setDuplicateNumber(event.currentTarget.value)} style={{ ...baseButton, width: 150, padding: '5px 8px' }} />
-            </label>
-            <button type="submit" disabled={busy} style={baseButton}>Close as duplicate</button>
-            <button type="button" onClick={() => setDuplicateOpen(false)} style={baseButton}>Cancel</button>
+          {duplicateOpen && <form onSubmit={(event) => { event.preventDefault(); void submitDuplicate() }} className="quirky-tasks-issue__inline-form">
+            <TextField label="Duplicate issue number" inputMode="numeric" value={duplicateNumber} onChange={(event) => setDuplicateNumber(event.currentTarget.value)} />
+            <Button type="submit" disabled={busy}>Close as duplicate</Button>
+            <Button type="button" onClick={() => setDuplicateOpen(false)}>Cancel</Button>
           </form>}
-          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', marginLeft: 'auto' }}>
-            <span style={muted}>Labels</span>
-            {detail.item.labels.map((label) => <button key={label} type="button" aria-label={`Remove label ${label}`} disabled={busy} onClick={() => {
+          <div className="quirky-tasks-issue__labels">
+            <span className="ui-text-muted">Labels</span>
+            {detail.item.labels.map((label) => <Button key={label} type="button" aria-label={`Remove label ${label}`} disabled={busy} onClick={() => {
               const labels = detail.item.labels.filter((entry) => entry !== label)
               void updateIssue({ labels }, { labels })
-            }} style={{ ...baseButton, padding: '3px 7px' }}>{label} ×</button>)}
-            {choices.available && choices.labels.filter((label) => !detail.item.labels.includes(label)).slice(0, 8).map((label) => <button key={label} type="button" disabled={busy} onClick={() => {
+            }}>{label} ×</Button>)}
+            {choices.available && choices.labels.filter((label) => !detail.item.labels.includes(label)).slice(0, 8).map((label) => <Button key={label} type="button" disabled={busy} onClick={() => {
               const labels = [...detail.item.labels, label]
               void updateIssue({ labels }, { labels })
-            }} style={{ ...baseButton, padding: '3px 7px' }}>+ {label}</button>)}
-            <label>Add label <input aria-label="Add label" value={newLabel} onChange={(event) => setNewLabel(event.currentTarget.value)} placeholder="Add label" disabled={busy} style={{ ...baseButton, width: 130, padding: '5px 8px' }} /></label>
-            <button type="button" disabled={busy || newLabel.trim().length === 0} onClick={() => {
+            }}>+ {label}</Button>)}
+            <TextField label="Add label" value={newLabel} onChange={(event) => setNewLabel(event.currentTarget.value)} placeholder="Add label" disabled={busy} />
+            <Button type="button" disabled={busy || newLabel.trim().length === 0} onClick={() => {
               const labels = [...new Set([...detail.item.labels, newLabel.trim()])]
               setNewLabel('')
               void updateIssue({ labels }, { labels })
-            }} style={baseButton}>Add</button>
+            }}>Add</Button>
           </div>
         </div>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start', flexWrap: 'wrap' }}>
-          <div style={{ minWidth: 200, flex: 1 }}>
-            <strong style={{ fontSize: 13 }}>Assignees</strong>
-            <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', marginTop: 6 }}>
-              {detail.item.assignees.length === 0 && <span style={muted}>No one assigned</span>}
-              {detail.item.assignees.map((login) => <label key={login} style={{ ...baseButton, display: 'inline-flex', gap: 5, alignItems: 'center', padding: '3px 7px', cursor: busy ? 'default' : 'pointer' }}>
-                <input type="checkbox" checked disabled={busy} onChange={() => void updateIssue({ assignees: detail.item.assignees.filter((entry) => entry !== login) }, { assignees: detail.item.assignees.filter((entry) => entry !== login) })} />{login}
-              </label>)}
-              {choices.available && choices.assignees.filter((user) => !detail.item.assignees.includes(user.login)).slice(0, 8).map((user) => <button key={user.login} type="button" disabled={busy} onClick={() => {
-                const assignees = [...detail.item.assignees, user.login]
-                void updateIssue({ assignees }, { assignees })
-              }} style={{ ...baseButton, padding: '3px 7px' }}>+ {user.login}</button>)}
-              <label>Add assignee login <input aria-label="Add assignee login" value={newAssignee} onChange={(event) => setNewAssignee(event.currentTarget.value)} placeholder="Add assignee" disabled={busy} style={{ ...baseButton, width: 130, padding: '5px 8px' }} /></label>
-              <button type="button" disabled={busy || newAssignee.trim().length === 0} onClick={() => {
-                const assignees = [...new Set([...detail.item.assignees, newAssignee.trim()])]
-                setNewAssignee('')
-                void updateIssue({ assignees }, { assignees })
-              }} style={baseButton}>Add</button>
-            </div>
+        <div className="quirky-tasks-issue__assignee-section">
+          <strong>Assignees</strong>
+          <div className="quirky-tasks-issue__assignees">
+            {detail.item.assignees.length === 0 && <span className="ui-text-muted">No one assigned</span>}
+            {detail.item.assignees.map((login) => <label key={login} className="quirky-tasks-issue__assignee">
+              <input type="checkbox" checked disabled={busy} onChange={() => void updateIssue({ assignees: detail.item.assignees.filter((entry) => entry !== login) }, { assignees: detail.item.assignees.filter((entry) => entry !== login) })} />{login}
+            </label>)}
+            {choices.available && choices.assignees.filter((user) => !detail.item.assignees.includes(user.login)).slice(0, 8).map((user) => <Button key={user.login} type="button" disabled={busy} onClick={() => {
+              const assignees = [...detail.item.assignees, user.login]
+              void updateIssue({ assignees }, { assignees })
+            }}>+ {user.login}</Button>)}
+            <TextField label="Add assignee login" value={newAssignee} onChange={(event) => setNewAssignee(event.currentTarget.value)} placeholder="Add assignee" disabled={busy} />
+            <Button type="button" disabled={busy || newAssignee.trim().length === 0} onClick={() => {
+              const assignees = [...new Set([...detail.item.assignees, newAssignee.trim()])]
+              setNewAssignee('')
+              void updateIssue({ assignees }, { assignees })
+            }}>Add</Button>
           </div>
-          {choices.message && <p style={{ ...muted, margin: 0, flexBasis: '100%' }}>{choices.message}</p>}
-          {choiceError && <p role="alert" style={{ color: 'var(--danger, #f87171)', margin: 0 }}>{choiceError}</p>}
+          {choices.message && <p className="quirky-tasks-issue__muted">{choices.message}</p>}
+          {choiceError && <p className="quirky-tasks-issue__error" role="alert">{choiceError}</p>}
         </div>
-        {editError && <p role="alert" style={{ color: 'var(--danger, #f87171)', margin: 0 }}>{editError}</p>}
+        {editError && <p className="quirky-tasks-issue__error" role="alert">{editError}</p>}
       </section>
 
-      <section aria-labelledby="issue-description-heading" style={{ border: '1px solid var(--border, #3a3d43)', borderRadius: 8, padding: 14, display: 'grid', gap: 10 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <h2 id="issue-description-heading" style={{ fontSize: 16, margin: 0, marginRight: 'auto' }}>Description</h2>
-          {!bodyEditing && canEditDescription && <button type="button" onClick={() => { setBodyDraft(detail.item.body); bodyDraftDirty.current = false; setBodyEditing(true) }} disabled={busy} style={baseButton}>Edit description</button>}
-          {descriptionPermissionMessage && <span role="status" style={muted}>{descriptionPermissionMessage}</span>}
+      <section className="quirky-tasks-issue__section" aria-labelledby="issue-description-heading">
+        <div className="quirky-tasks-issue__section-heading">
+          <h2 id="issue-description-heading" className="quirky-tasks-issue__section-title">Description</h2>
+          {!bodyEditing && canEditDescription && <Button type="button" onClick={() => { setBodyDraft(detail.item.body); bodyDraftDirty.current = false; setBodyEditing(true) }} disabled={busy}>Edit description</Button>}
+          {descriptionPermissionMessage && <span role="status" className="ui-text-muted">{descriptionPermissionMessage}</span>}
         </div>
         {bodyEditing
           ? <>
               <MarkdownComposer value={bodyDraft} onChange={(value) => { setBodyDraft(value); bodyDraftDirty.current = true }} label="Issue description" placeholder="Describe the issue…" disabled={busy || !canEditDescription} minRows={9} onSubmit={() => void updateIssue({ body: bodyDraft }, { body: bodyDraft })} />
-              <div style={{ display: 'flex', gap: 8 }}>
-                <button type="button" onClick={() => void updateIssue({ body: bodyDraft }, { body: bodyDraft })} disabled={busy || !canEditDescription} style={baseButton}>{busy ? 'Saving…' : 'Save description'}</button>
-                <button type="button" onClick={() => { setBodyDraft(detail.item.body); bodyDraftDirty.current = false; setBodyEditing(false) }} disabled={busy} style={baseButton}>Cancel</button>
-                <span style={{ ...muted, alignSelf: 'center' }}>Cmd+Enter to save</span>
+              <div className="quirky-tasks-issue__edit-actions">
+                <Button type="button" variant="primary" onClick={() => void updateIssue({ body: bodyDraft }, { body: bodyDraft })} disabled={busy || !canEditDescription}>{busy ? 'Saving…' : 'Save description'}</Button>
+                <Button type="button" onClick={() => { setBodyDraft(detail.item.body); bodyDraftDirty.current = false; setBodyEditing(false) }} disabled={busy}>Cancel</Button>
+                <span className="ui-text-muted">Cmd+Enter to save</span>
               </div>
             </>
-          : <div style={{ overflowWrap: 'anywhere' }}><Markdown source={detail.item.body || ''} /></div>}
+          : <div className="quirky-tasks-issue__markdown"><Markdown source={detail.item.body || ''} /></div>}
       </section>
 
-      <section aria-labelledby="issue-activity-heading" style={{ border: '1px solid var(--border, #3a3d43)', borderRadius: 8, padding: 14, display: 'grid', gap: 10 }}>
-        <h2 id="issue-activity-heading" style={{ fontSize: 16, margin: 0 }}>Activity</h2>
-        {detail.timeline.length === 0 && <p style={{ ...muted, margin: 0 }}>No timeline events.</p>}
-        {detail.timeline.map((event, index) => <article key={`${event.event}-${event.createdAt ?? ''}-${index}`} style={{ borderLeft: '2px solid var(--border, #3a3d43)', paddingLeft: 10 }}>
-          <p style={{ margin: '0 0 4px' }}>{timelineLabel(event)}</p>
-          <time style={{ ...muted, fontSize: 12 }} title={event.createdAt ?? undefined}>{relativeTime(event.createdAt)}</time>
-          {event.body && <div style={{ marginTop: 6 }}><Markdown source={event.body} /></div>}
+      <section className="quirky-tasks-issue__section" aria-labelledby="issue-activity-heading">
+        <h2 id="issue-activity-heading" className="quirky-tasks-issue__section-title">Activity</h2>
+        {detail.timeline.length === 0 && <p className="quirky-tasks-issue__muted">No timeline events.</p>}
+        {detail.timeline.map((event, index) => <article key={`${event.event}-${event.createdAt ?? ''}-${index}`} className="quirky-tasks-issue__activity-event">
+          <p>{timelineLabel(event)}</p>
+          <time className="ui-text-muted" title={event.createdAt ?? undefined}>{relativeTime(event.createdAt)}</time>
+          {event.body && <div className="quirky-tasks-issue__markdown"><Markdown source={event.body} /></div>}
         </article>)}
-        {detail.truncated && <p style={{ ...muted, margin: 0 }}>Activity was truncated at the public API limit.</p>}
+        {detail.truncated && <p className="quirky-tasks-issue__muted">Activity was truncated at the public API limit.</p>}
       </section>
 
-      <section aria-labelledby="issue-comments-heading" style={{ border: '1px solid var(--border, #3a3d43)', borderRadius: 8, padding: 14, display: 'grid', gap: 10 }}>
-        <h2 id="issue-comments-heading" style={{ fontSize: 16, margin: 0 }}>Comments ({detail.comments.length})</h2>
-        {detail.comments.length === 0 && <p style={{ ...muted, margin: 0 }}>No comments yet.</p>}
-        {detail.comments.map((comment) => <article key={commentKey(comment)} style={{ border: '1px solid var(--border, #3a3d43)', borderRadius: 6, padding: 10 }}>
-          <div style={{ display: 'flex', gap: 8, marginBottom: 6 }}><strong>{comment.author ?? 'unknown author'}</strong><time style={muted} title={comment.createdAt ?? undefined}>{relativeTime(comment.createdAt)}</time></div>
+      <section className="quirky-tasks-issue__section" aria-labelledby="issue-comments-heading">
+        <h2 id="issue-comments-heading" className="quirky-tasks-issue__section-title">Comments ({detail.comments.length})</h2>
+        {detail.comments.length === 0 && <p className="quirky-tasks-issue__muted">No comments yet.</p>}
+        {detail.comments.map((comment) => <article key={commentKey(comment)} className="quirky-tasks-issue__comment">
+          <div className="quirky-tasks-issue__comment-meta"><strong>{comment.author ?? 'unknown author'}</strong><time className="ui-text-muted" title={comment.createdAt ?? undefined}>{relativeTime(comment.createdAt)}</time></div>
           <Markdown source={comment.body} />
         </article>)}
         <MarkdownComposer value={commentDraft} onChange={setCommentDraft} label="Add a comment" placeholder="Add a comment…" disabled={busy} minRows={5} onSubmit={() => void sendComment()} />
-        {commentTooLarge && <p role="status" style={{ ...muted, margin: 0 }}>Comments are limited to 65,536 UTF-8 bytes.</p>}
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <button type="button" onClick={() => void sendComment()} disabled={busy || commentDraft.trim().length === 0 || commentTooLarge} style={{ ...baseButton, background: 'var(--accent, #2563eb)', color: '#fff' }}>{busy ? 'Posting…' : 'Comment'}</button>
-          <span style={muted}>Cmd+Enter to submit</span>
-          {commentError && <p role="alert" style={{ color: 'var(--danger, #f87171)', margin: 0 }}>{commentError}</p>}
+        {commentTooLarge && <p className="quirky-tasks-issue__muted" role="status">Comments are limited to 65,536 UTF-8 bytes.</p>}
+        <div className="quirky-tasks-issue__edit-actions">
+          <Button type="button" variant="primary" onClick={() => void sendComment()} disabled={busy || commentDraft.trim().length === 0 || commentTooLarge}>{busy ? 'Posting…' : 'Comment'}</Button>
+          <span className="ui-text-muted">Cmd+Enter to submit</span>
+          {commentError && <p className="quirky-tasks-issue__error" role="alert">{commentError}</p>}
         </div>
       </section>
 
-      {detail.partialFailures.length > 0 && <div role="status" style={{ display: 'grid', gap: 6 }}>
-        {detail.partialFailures.map((failure, index) => <p key={`${index}-${failure}`} style={{ ...muted, margin: 0 }}>Some issue data is unavailable: {failure}</p>)}
-        <button type="button" onClick={refreshDetails} style={{ ...baseButton, justifySelf: 'start' }}>Retry unavailable sources</button>
+      {detail.partialFailures.length > 0 && <div className="quirky-tasks-issue__partial-failures" role="status">
+        {detail.partialFailures.map((failure, index) => <p key={`${index}-${failure}`} className="quirky-tasks-issue__muted">Some issue data is unavailable: {failure}</p>)}
+        <Button type="button" onClick={refreshDetails}>Retry unavailable sources</Button>
       </div>}
     </>}
   </main>

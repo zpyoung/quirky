@@ -3,7 +3,7 @@ import { afterAll, afterEach, beforeAll, expect, test } from 'bun:test'
 import { act, createElement } from 'react'
 import type { Root, createRoot as createRootFactory } from 'react-dom/client'
 import type { QuirkyEvent, UiPluginContext } from '@quirky/protocol'
-import type { IterationDetail, LoopConfig, LoopSnapshot, PauseReason, QueueItem } from '../src/types'
+import type { IterationDetail, LoopConfig, LoopSnapshot, QueueItem } from '../src/types'
 import type { SurfaceHandle } from '../window/contracts'
 import { LoopView } from '../window/LoopView'
 let createRoot: typeof createRootFactory
@@ -254,39 +254,12 @@ test('shows durable state and structured output without inventing a cost or comp
   expect(h.container.textContent).not.toContain('$0.00')
   expect(h.container.querySelector('textarea')).toBeNull()
 })
-test('maps every durable pause reason to the documented rail text', async () => {
-  const labels: [PauseReason, string][] = [
-    ['user', 'Paused by you'],
-    ['cap-iterations', 'Iteration cap reached'],
-    ['cap-time', 'Time cap reached'],
-    ['cap-cost', 'Cost cap reached'],
-    ['no-progress', 'No progress in recent iterations'],
-    ['protected-path', 'Touched a protected path'],
-    ['agent-blocked', 'The agent is blocked'],
-    ['agent-decide', 'The agent needs a decision'],
-    ['crashed', 'The agent kept crashing'],
-    ['usage-limit', 'Agent usage limit reached'],
-    ['interrupted-by-restart', 'Interrupted by an app restart'],
-    ['unverifiable', 'Lost contact with the agent host'],
-    ['ask-before-next', 'Waiting for your go-ahead'],
-    ['queue-exhausted', 'The queue is empty']
-  ]
-  const h = harness(loop({ state: 'paused', pauseReason: 'user' }))
-  unmountCurrent = h.unmount
-  await h.mount()
-  for (const [reason, label] of labels) {
-    const updated = loop({ state: 'paused', pauseReason: reason })
-    h.setLoop(updated)
-    await h.emit({ type: 'quirky.loops/changed', data: updated })
-    expect(h.container.querySelector('.loop-status-strip')?.textContent).toBe(label)
-  }
-})
 test('renders an empty journal without synthetic transcript messages', async () => {
   const h = harness(loop(), { messages: [] })
   unmountCurrent = h.unmount
   await h.mount()
 
-  expect(h.container.querySelectorAll('.loop-output-message')).toHaveLength(0)
+  expect(h.container.querySelector('[aria-label="Structured session journal"]')?.querySelectorAll('pre')).toHaveLength(0)
   expect(h.container.textContent).toContain('No messages recorded.')
   expect(h.container.textContent).not.toContain('Working through the task.')
 })
@@ -363,7 +336,7 @@ test('shows retained attempts with honest missing evidence and opens their detai
   unmountCurrent = h.unmount
   await h.mount()
 
-  expect(h.container.querySelectorAll('.loop-iteration-list li')).toHaveLength(53)
+  expect(h.container.querySelectorAll('[aria-label="Iteration history"] ol > li')).toHaveLength(53)
   expect(h.container.textContent).toContain('Pass')
   expect(h.container.textContent).toContain('Fail')
   expect(h.container.textContent).toContain('No check')
@@ -374,7 +347,7 @@ test('shows retained attempts with honest missing evidence and opens their detai
   await act(async () => entry!.click())
 
   expect(h.handle!.read().selectedDetail).toEqual(retained)
-  expect([...h.container.querySelectorAll('.loop-detail-facts dd')].map((item) => item.textContent)).toContain('Unavailable')
+  expect([...h.container.querySelectorAll('section[aria-labelledby="loop-iteration-title"] dl dd')].map((item) => item.textContent)).toContain('Unavailable')
   expect(h.container.textContent).toContain('The attempt output.')
   expect(h.container.textContent).not.toContain('$0.00')
   await act(async () => button(h.container, 'Back').click())

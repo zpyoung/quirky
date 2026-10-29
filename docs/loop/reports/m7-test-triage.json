@@ -1,0 +1,1982 @@
+{
+  "baseline": "97aaa12d9fdf91a966cbc78d5557e113fc9789b3",
+  "command": "bun scripts/suite.ts packages apps plugins",
+  "exitCode": 1,
+  "remote": {
+    "total": 853,
+    "passed": 701,
+    "failed": 152,
+    "result": {
+      "ok": false,
+      "flaky": []
+    }
+  },
+  "macOS": {
+    "total": 7,
+    "passed": 6,
+    "failed": 1,
+    "retry": "plugins/quirky.terminal/test/e2e.test.ts failed its configured isolated retry too"
+  },
+  "durationSeconds": 2284.91,
+  "rawEvidence": "artifact://64",
+  "note": "Names/errors extracted from captured failing-file output; duplicate summary lines deduplicated; no extra test run or root cause inference.",
+  "groups": {
+    "apps/mobile": [
+      {
+        "file": "apps/mobile/test/panels/files-tasks.test.ts",
+        "line": 6,
+        "tests": [
+          "mobile composer keeps setup and issue-command consent independent and forwards both displayed pins"
+        ],
+        "errors": [
+          "ReferenceError: clickMobileButtonContaining is not defined"
+        ]
+      },
+      {
+        "file": "apps/mobile/test/terminal-artifacts.test.tsx",
+        "line": 31,
+        "tests": [
+          "artifact routes reject paths and only authorize methods bound to the selected route and grant",
+          "Session More actions opens artifacts for the exact selected terminal session"
+        ],
+        "errors": [
+          "ReferenceError: validatePanelRoute is not defined",
+          "error: expect(received).toContainEqual(expected)"
+        ]
+      },
+      {
+        "file": "apps/mobile/test/session-tabs.test.tsx",
+        "line": 78,
+        "tests": [
+          "Browser Watch scrolls the real page using coordinates in the displayed frame"
+        ],
+        "errors": [
+          "RpcError: browser_error: browser_unavailable: no Chrome or Chromium executable was found; install Chrome or set QUIRKY_BROWSER_CHROME to its absolute executable path"
+        ]
+      },
+      {
+        "file": "apps/mobile/test/pages.test.ts",
+        "line": 33980,
+        "tests": [
+          "page bridge admits only empty-parameter loop summaries as a read-only consumer API",
+          "automation-created workspace filtering uses only durable provenance and persists its option"
+        ],
+        "errors": [
+          "error: expect(received).not.toThrow()",
+          "error: expect(received).not.toContain(expected)"
+        ]
+      },
+      {
+        "file": "apps/mobile/test/bundle.test.ts",
+        "line": 39711,
+        "tests": [
+          "verified mobile page generations > downloads contiguous bounded chunks, verifies hashes, then activates the complete generation",
+          "verified mobile page generations > rejects a build ID that does not match the canonical manifest before staging",
+          "verified mobile page generations > a failed update never activates partial or hash-mismatched bytes and leaves the previous generation usable",
+          "verified mobile page generations > rejects unsupported shell versions, unsafe asset paths, duplicate paths and oversized manifests"
+        ],
+        "errors": [
+          "error: mobile bundle route count is invalid",
+          "error: expect(received).toThrow(expected)",
+          "error: expect(received).toBe(expected)"
+        ]
+      },
+      {
+        "file": "apps/mobile/test/shell.test.ts",
+        "line": 39810,
+        "tests": [
+          "isolated page shell and generation storage > atomic generation activation exposes no partial files and keeps the prior verified generation on failure",
+          "isolated page shell and generation storage > reuses an unchanged verified generation and prunes stale cache records after activation"
+        ],
+        "errors": [
+          "error: mobile bundle route count is invalid"
+        ]
+      }
+    ],
+    "packages/daemon": [
+      {
+        "file": "packages/daemon/test/desktop-shell.test.ts",
+        "line": 115,
+        "tests": [
+          "auxiliary routes remain daemon-readable, local to their window, and pruned by the native owner close"
+        ],
+        "errors": [
+          "error: expect(received).toEqual(expected)"
+        ]
+      }
+    ],
+    "packages/ui": [
+      {
+        "file": "packages/ui/test/gallery.test.tsx",
+        "line": 167,
+        "tests": [
+          "typing, selecting a tab, and selecting a menu item update local status in both themes"
+        ],
+        "errors": [
+          "error: Gallery button not found: Open menu"
+        ]
+      },
+      {
+        "file": "packages/ui/test/terminal-theme.test.ts",
+        "line": 196,
+        "tests": [
+          "the root dark appearance stays authoritative over a light system and inherits terminal base colors"
+        ],
+        "errors": [
+          "error: expect(received).toBe(expected)"
+        ]
+      },
+      {
+        "file": "packages/ui/test/exit.e2e.test.ts",
+        "line": 7358,
+        "tests": [
+          "SC-31: an ask opens the Questions panel, badges its toggle and announces itself",
+          "SC-29: a second pending ask stays listed after the first is answered, and answering it resolves its waiter"
+        ],
+        "errors": [
+          "error: quirky ui state --json exited 143: "
+        ]
+      },
+      {
+        "file": "packages/ui/test/layout-shell.test.ts",
+        "line": 17727,
+        "tests": [
+          "a dialog taller than the window scrolls inside it, so its buttons stay reachable"
+        ],
+        "errors": [
+          "error: expect(received).toContain(expected)"
+        ]
+      },
+      {
+        "file": "packages/ui/test/routed-commands.test.ts",
+        "line": 33941,
+        "tests": [
+          "SC-41: with two windows the command runs once, in the one that last reported focus"
+        ],
+        "errors": [
+          "RpcError: multiple Quirky windows are open; specify connId"
+        ]
+      }
+    ],
+    "packages/pty-host": [
+      {
+        "file": "packages/pty-host/test/stop-with-history.test.ts",
+        "line": 224,
+        "tests": [
+          "stop with history > stops the root and descendants, retains output, and restores the same history"
+        ],
+        "errors": [
+          "error: timed out waiting for history output"
+        ]
+      }
+    ],
+    "plugins/quirky.agent-status": [
+      {
+        "file": "plugins/quirky.agent-status/test/transcript-producers.test.ts",
+        "line": 255,
+        "tests": [
+          "captured provider status producers > private OSC status facts use the captured session owner and ignore provider identity changes",
+          "captured provider status producers > private OSC status facts are fenced to the provider turn as well as the session"
+        ],
+        "errors": [
+          "error: Received value must be an array type, or both received and expected values must be strings."
+        ]
+      },
+      {
+        "file": "plugins/quirky.agent-status/test/e2e/hooks-cli.e2e.test.ts",
+        "line": 6125,
+        "tests": [
+          "SC-27: the Agent status hooks switch > off removes the entries, a restart does nothing, setup refuses while off, and on installs again"
+        ],
+        "errors": [
+          "error: expect(received).toBe(expected)"
+        ]
+      },
+      {
+        "file": "plugins/quirky.agent-status/test/hooks.test.ts",
+        "line": 18609,
+        "tests": [
+          "SC-27: the Agent status hooks switch > off removes every entry and status shows hooks_disabled; the restart touches nothing; on installs again",
+          "SC-27: the Agent status hooks switch > setup while the switch is off refuses with the switch message",
+          "SC-27: the Agent status hooks switch > remove still works while the switch is off"
+        ],
+        "errors": [
+          "RpcError: no setting setting:quirky.agent-status/hooks"
+        ]
+      }
+    ],
+    "plugins/quirky.ask": [
+      {
+        "file": "plugins/quirky.ask/test/presentation-store.test.ts",
+        "line": 294,
+        "tests": [
+          "Q2: a timeout summary is retained for four seconds outside the pending badge"
+        ],
+        "errors": [
+          "error: expect(received).toEqual(expected)"
+        ]
+      },
+      {
+        "file": "plugins/quirky.ask/test/asks.test.ts",
+        "line": 5839,
+        "tests": [
+          "the queue > SC-14: a second ask from the same session waits"
+        ],
+        "errors": [
+          "error: expect(received).toBe(expected)"
+        ]
+      },
+      {
+        "file": "plugins/quirky.ask/test/cli.test.ts",
+        "line": 6855,
+        "tests": [
+          "spec refusals > SC-3: header, label, description and default may say API token",
+          "--chunk-ms > SC-20: the real quirky binary prints the same two lines"
+        ],
+        "errors": [
+          "error: expect(received).toHaveLength(expected)"
+        ]
+      },
+      {
+        "file": "plugins/quirky.ask/test/ui.test.ts",
+        "line": 8266,
+        "tests": [
+          "the Questions panel module > SC-23: option previews render rich Markdown inside a hostile-content-free sandbox"
+        ],
+        "errors": [
+          "error: expect(received).toBeNull()"
+        ]
+      },
+      {
+        "file": "plugins/quirky.ask/test/v1-import.test.ts",
+        "line": 16387,
+        "tests": [
+          "migration 4 > adds nullable exact-owner and idempotency fields without changing imported Ask rows"
+        ],
+        "errors": [
+          "error: expect(received).toContainEqual(expected)"
+        ]
+      },
+      {
+        "file": "plugins/quirky.ask/test/panel.test.ts",
+        "line": 17287,
+        "tests": [
+          "the Questions panel > SC-31: with a window connected and no panel open, a new ask opens the panel and sends no notify",
+          "the Questions panel > SC-31: an already open Questions panel is left alone for a second ask"
+        ],
+        "errors": [
+          "error: expect(received).toBe(expected)"
+        ]
+      },
+      {
+        "file": "plugins/quirky.ask/test/confirmation.test.ts",
+        "line": 17660,
+        "tests": [
+          "quirky.ask as the confirmation backend > D20: a destructive call opens a confirm ask for the caller and runs once it is answered yes",
+          "quirky.ask as the confirmation backend > a declined confirm ask refuses the call",
+          "quirky.ask as the confirmation backend > an unavailable confirmation is a refusal and never runs the destructive method"
+        ],
+        "errors": [
+          "RpcError: quirky.ask/wait needs a client connection",
+          "error: expect(received).toMatchObject(expected)"
+        ]
+      }
+    ],
+    "plugins/quirky.browser": [
+      {
+        "file": "plugins/quirky.browser/test/cookie-import-window.test.tsx",
+        "line": 350,
+        "tests": [
+          "source detection begins only when opened and empty/error states retain file import recovery"
+        ],
+        "errors": [
+          "error: expect(received).toContain(expected)"
+        ]
+      },
+      {
+        "file": "plugins/quirky.browser/test/extras-api.test.ts",
+        "line": 400,
+        "tests": [
+          "daemon imports an explicit JSON cookie source into a managed profile",
+          "page profile methods select, report, restore Default, and clone through the public API"
+        ],
+        "errors": [
+          "RpcError: browser_unavailable: no Chrome or Chromium executable was found; install Chrome or set QUIRKY_BROWSER_CHROME to its absolute executable path"
+        ]
+      },
+      {
+        "file": "plugins/quirky.browser/test/extras-automation.test.ts",
+        "line": 447,
+        "tests": [
+          "SC3: cookies retain exact host, path, partition identity and storage stays in its profile/page scope",
+          "SC4: page profile rebinding is isolated and clone copies cookies transactionally into an independent page",
+          "SC5: history, advanced interactions, signed nth and full-page capture operate on the exact page",
+          "SC6-SC7: HAR, multiple intercept patterns, headers, emulation, clipboard and out-of-band dialog response are real",
+          "SC4 rollback: a failed cookie clone restores every destination identity"
+        ],
+        "errors": [
+          "RpcError: browser_unavailable: no Chrome or Chromium executable was found; install Chrome or set QUIRKY_BROWSER_CHROME to its absolute executable path"
+        ]
+      },
+      {
+        "file": "plugins/quirky.browser/test/extras-cli.test.ts",
+        "line": 532,
+        "tests": [
+          "CLI keeps @file text literal and reads large fill values only through explicit file mode",
+          "file import uses an explicit --file source and the dispatcher confirmation path"
+        ],
+        "errors": [
+          "RpcError: browser_unavailable: no Chrome or Chromium executable was found; install Chrome or set QUIRKY_BROWSER_CHROME to its absolute executable path",
+          "error: expect(received).toBe(expected)"
+        ]
+      },
+      {
+        "file": "plugins/quirky.browser/test/import.test.ts",
+        "line": 652,
+        "tests": [
+          "daemon import replaces only safe families and accepts explicit file and JSON bytes",
+          "daemon import reads Chromium Local State profiles, decrypts v24 rows, and skips unreadable families",
+          "daemon imports Firefox SQLite/WAL and Safari binarycookies without modifying source bytes",
+          "daemon replacement rolls back exact cookie values, reports jobs, and drains imports on shutdown"
+        ],
+        "errors": [
+          "RpcError: browser_unavailable: no Chrome or Chromium executable was found; install Chrome or set QUIRKY_BROWSER_CHROME to its absolute executable path"
+        ]
+      },
+      {
+        "file": "plugins/quirky.browser/test/preferences-window.test.tsx",
+        "line": 17620,
+        "tests": [
+          "import controls detect only after expansion, preserve the settings link, and persist hint hiding"
+        ],
+        "errors": [
+          "error: Missing button: Browser Settings"
+        ]
+      }
+    ],
+    "plugins/quirky.cli": [
+      {
+        "file": "plugins/quirky.cli/test/runtimes.test.ts",
+        "line": 574,
+        "tests": [
+          "saved paired runtime APIs retain private offers but never return credentials from add, list, show, or status",
+          "a malformed pairing offer is rejected before any saved runtime is written"
+        ],
+        "errors": [
+          "RpcError: unknown method: quirky.cli/runtime.add",
+          "error: expect(received).toThrow(expected)"
+        ]
+      }
+    ],
+    "plugins/quirky.editor": [
+      {
+        "file": "plugins/quirky.editor/test/changes-surface.test.tsx",
+        "line": 614,
+        "tests": [
+          "Changes compares HEAD to the shared draft, not staged content, in the same editable tab",
+          "Changes rejects a detached response for another lease and leaves Source available"
+        ],
+        "errors": [
+          "error: expect(received).toContain(expected)",
+          "error: Received value must be an array type, or both received and expected values must be strings."
+        ]
+      },
+      {
+        "file": "plugins/quirky.editor/test/explorer-interactions.test.ts",
+        "line": 724,
+        "tests": [
+          "Explorer interaction and expansion state are isolated by worktree"
+        ],
+        "errors": [
+          "error: quirky.orchestration is no longer active"
+        ]
+      },
+      {
+        "file": "plugins/quirky.editor/test/viewers.test.ts",
+        "line": 6052,
+        "tests": [
+          "viewer API behavior > SC-19: small quoted CSV preserves multiline UTF-8 fields across table edits and save",
+          "viewer API behavior > CSV copy returns quoted TSV in source coordinates and pastes it back losslessly"
+        ],
+        "errors": [
+          "error: expect(received).toBe(expected)",
+          "error: expect(received).toEqual(expected)"
+        ]
+      },
+      {
+        "file": "plugins/quirky.editor/test/browser-link-routing.test.tsx",
+        "line": 17332,
+        "tests": [
+          "document-link completion shows capped totals, follows keyboard selection, and inserts an extensionless atom",
+          "document-link completion accepts Tab, dismisses with Escape, and respects boundary, IME and read-only guards"
+        ],
+        "errors": [
+          "NotSupportedError: Failed to fetch from \"file:///home/quirkyci/runs/1793220642605-10455/plugins/quirky.editor/src/markdown/katex/katex.min.css\": URL scheme \"file\" is not supported.",
+          "error: expect(received).toContain(expected)",
+          "error: expect(received).toBe(expected)"
+        ]
+      }
+    ],
+    "plugins/quirky.git": [
+      {
+        "file": "plugins/quirky.git/test/pure/ai-fix-sources.test.ts",
+        "line": 760,
+        "tests": [
+          "public hosting-backed recipe source flows > PR details, code review, and conversation drafts fetch named public sources and launch through terminal/newTab"
+        ],
+        "errors": [
+          "error: expect(received).toMatchObject(expected)"
+        ]
+      },
+      {
+        "file": "plugins/quirky.git/test/window/hosted-diff.test.ts",
+        "line": 808,
+        "tests": [
+          "Source Control preview replaces only a clean hosted tab, promotes on double click or pin, and splits with Option-click",
+          "dirty hosted diffs refuse close and are never replaced by another preview",
+          "Markdown diff previews the modified side with an authorized image and releases only its hosted lease"
+        ],
+        "errors": [
+          "error: a headless window is already open"
+        ]
+      },
+      {
+        "file": "plugins/quirky.git/test/scenarios/ai.test.ts",
+        "line": 2781,
+        "tests": [
+          "recipes > NA-39: recipes are read and saved through the CLI",
+          "recipes > recipes are per action, fields clear and reset, and every save announces aiChanged",
+          "AI Fix > branch-summary recipes launch with the exact comparison source and raw arguments outrank structured picks",
+          "AI name recipes > branchName uses the current branch and committed work context, and returns a candidate without renaming",
+          "AI name recipes > conversationName uses the exact captured structured conversation and leaves its title untouched",
+          "AI name recipes > branchName raw arguments outrank structured recipe picks and invalid output does not mutate the branch"
+        ],
+        "errors": [
+          "error: expect(received).toBe(expected)",
+          "error: expect(received).toMatchObject(expected)",
+          "error: git branch --show-current: git: 'branch --show-current' is not a git command. See 'git --help'."
+        ]
+      },
+      {
+        "file": "plugins/quirky.git/test/window/panel.test.ts",
+        "line": 3192,
+        "tests": [
+          "SC-18: the row menu opens the diff, copies paths and reveals the file; dragging carries the absolute path",
+          "quirky.git/changed events refresh the panel and an open diff before the next poll"
+        ],
+        "errors": [
+          "error: waitFor timed out; the page shows: ExplorerAgent Session HistoryChecksQuestionsSource control1LedgerSession InfoQuick CommandsTerminal SessionsWorkspace optionsReview cleanupWorkspace options0Workspace boardEdit workspace statusesapi+⋯mainprimarymain⋯featzoe/feat⋯Add projectActivity .mobile-root { box-sizing: border-box; max-width: 1040px; margin: 0 auto; padding: 28px 32px 48px; color: var(--text, #d7dae0); } .mobile-root * { box-"
+        ]
+      },
+      {
+        "file": "plugins/quirky.git/test/window/remote.test.ts",
+        "line": 4168,
+        "tests": [
+          "SC-28: Force Push confirms with the daemon's question, leases on the shown commit and updates the remote",
+          "SC-32: a rejected push toasts \"pull first\" and fetches, so the ladder moves to Sync",
+          "SC-38: a failing pre-push hook shows the Push blocked card and no inline remote error"
+        ],
+        "errors": [
+          "error: waitFor timed out; the page shows: ExplorerAgent Session HistoryChecksQuestionsSource controlLedgerSession InfoQuick CommandsTerminal SessionsWorkspace optionsReview cleanupWorkspace options0Workspace boardEdit workspace statusesapi+⋯mainprimarymain⋯featzoe/feat⋯Add projectActivity .mobile-root { box-sizing: border-box; max-width: 1040px; margin: 0 auto; padding: 28px 32px 48px; color: var(--text, #d7dae0); } .mobile-root * { box-s"
+        ]
+      },
+      {
+        "file": "plugins/quirky.git/test/window/conflict-views.test.ts",
+        "line": 4219,
+        "tests": [
+          "SC-45: the conflict review lists the snapshot, then Refresh marks a staged file Resolved and a removed one Gone",
+          "SC-41: a conflict staged in a terminal without being opened in Quirky is not listed as resolved locally",
+          "SC-44: the conflict file view tints the markers, labels the blocks and wraps Next conflict",
+          "SC-44: a file deleted by them asks whether to keep it, and a file with no working copy says so"
+        ],
+        "errors": [
+          "error: waitFor timed out; the page shows: ExplorerAgent Session HistoryChecksQuestionsSource control2LedgerSession InfoQuick CommandsTerminal SessionsWorkspace optionsReview cleanupWorkspace options0Workspace boardEdit workspace statusesapi+⋯mainprimarymain⋯featzoe/feat⋯Add projectActivity .mobile-root { box-sizing: border-box; max-width: 1040px; margin: 0 auto; padding: 28px 32px 48px; color: var(--text, #d7dae0); } .mobile-root * { box-",
+          "error: waitFor timed out; the page shows: ExplorerAgent Session HistoryChecksQuestionsSource control1LedgerSession InfoQuick CommandsTerminal SessionsWorkspace optionsReview cleanupWorkspace options0Workspace boardEdit workspace statusesapi+⋯mainprimarymain⋯featzoe/feat⋯Add projectActivity .mobile-root { box-sizing: border-box; max-width: 1040px; margin: 0 auto; padding: 28px 32px 48px; color: var(--text, #d7dae0); } .mobile-root * { box-"
+        ]
+      },
+      {
+        "file": "plugins/quirky.git/test/window/primary.test.ts",
+        "line": 4312,
+        "tests": [
+          "SC-28: the primary button follows the ladder through Stage All, Commit, Push, Pull, Sync and Publish Branch",
+          "SC-28: Force Push shows when the commits behind are patch-equivalent"
+        ],
+        "errors": [
+          "error: expect(received).toEqual(expected)",
+          "error: expect(received).toBe(expected)"
+        ]
+      },
+      {
+        "file": "plugins/quirky.git/test/window/view-file.test.ts",
+        "line": 4363,
+        "tests": [
+          "SC-60: the file diff opens titled, scrolled to the first change, moves with F7 and the arrows, and Close returns to the sessions",
+          "SC-60: a file without changes disables both arrows",
+          "SC-61: an unstaged diff saves with Cmd+S, flags a file rewritten underneath, and offers Overwrite and Reload from Disk",
+          "SC-61: Revert Block and revert-change put a block back in the editor only; staged diffs are read-only",
+          "SC-57: a branch diff whose merge base cannot be read says so instead of looking empty"
+        ],
+        "errors": [
+          "error: waitFor timed out; the page shows: ExplorerAgent Session HistoryChecksQuestionsSource control1LedgerSession InfoQuick CommandsTerminal SessionsWorkspace optionsReview cleanupWorkspace options0Workspace boardEdit workspace statusesapi+⋯mainprimarymain⋯featzoe/feat⋯Add projectActivity .mobile-root { box-sizing: border-box; max-width: 1040px; margin: 0 auto; padding: 28px 32px 48px; color: var(--text, #d7dae0); } .mobile-root * { box-",
+          "error: waitFor timed out; the page shows: ExplorerAgent Session HistoryChecksQuestionsSource controlLedgerSession InfoQuick CommandsTerminal SessionsWorkspace optionsReview cleanupWorkspace options0Workspace boardEdit workspace statusesapi+⋯mainprimarymain⋯featzoe/feat⋯Add projectActivity .mobile-root { box-sizing: border-box; max-width: 1040px; margin: 0 auto; padding: 28px 32px 48px; color: var(--text, #d7dae0); } .mobile-root * { box-s",
+          "error: waitFor timed out; the page shows: ExplorerAgent Session HistoryChecksQuestionsSource control2LedgerSession InfoQuick CommandsTerminal SessionsWorkspace optionsReview cleanupWorkspace options0Workspace boardEdit workspace statusesapi+⋯mainprimarymain⋯featzoe/feat⋯Add projectActivity .mobile-root { box-sizing: border-box; max-width: 1040px; margin: 0 auto; padding: 28px 32px 48px; color: var(--text, #d7dae0); } .mobile-root * { box-"
+        ]
+      },
+      {
+        "file": "plugins/quirky.git/test/window/ai.test.ts",
+        "line": 4590,
+        "tests": [
+          "NA-40: the command opens the AI defaults view, which saves the global recipe and hides the AI buttons live"
+        ],
+        "errors": [
+          "error: expect(received).toEqual(expected)"
+        ]
+      },
+      {
+        "file": "plugins/quirky.git/test/window/github-handoff.test.ts",
+        "line": 4635,
+        "tests": [
+          "GitHub Source Control reports current PR status, ignores stale worktree replies, and hands off guarded creation to Reviews",
+          "SC-28: unpublished primary waits for current GitHub state before publishing"
+        ],
+        "errors": [
+          "RpcError: no setting setting:quirky.agent-status/hooks"
+        ]
+      },
+      {
+        "file": "plugins/quirky.git/test/window/view-combined.test.ts",
+        "line": 4741,
+        "tests": [
+          "SC-62: View all opens a combined diff with lazy sections, a Load diff for the large file and the conflict left out",
+          "SC-62: unstaged sections of a combined diff are editable and save",
+          "SC-63: big, image and binary diffs show their fallbacks, and a draft past the limit keeps its Save",
+          "SC-63: a draft that crosses the display limit is replaced by the fallback and saved with Save"
+        ],
+        "errors": [
+          "error: waitFor timed out; the page shows: ExplorerAgent Session HistoryChecksQuestionsSource control8LedgerSession InfoQuick CommandsTerminal SessionsWorkspace optionsReview cleanupWorkspace options0Workspace boardEdit workspace statusesapi+⋯mainprimarymain⋯featzoe/feat⋯Add projectActivity .mobile-root { box-sizing: border-box; max-width: 1040px; margin: 0 auto; padding: 28px 32px 48px; color: var(--text, #d7dae0); } .mobile-root * { box-",
+          "error: waitFor timed out; the page shows: ExplorerAgent Session HistoryChecksQuestionsSource control1LedgerSession InfoQuick CommandsTerminal SessionsWorkspace optionsReview cleanupWorkspace options0Workspace boardEdit workspace statusesapi+⋯mainprimarymain⋯featzoe/feat⋯Add projectActivity .mobile-root { box-sizing: border-box; max-width: 1040px; margin: 0 auto; padding: 28px 32px 48px; color: var(--text, #d7dae0); } .mobile-root * { box-",
+          "error: waitFor timed out; the page shows: ExplorerAgent Session HistoryChecksQuestionsSource control3LedgerSession InfoQuick CommandsTerminal SessionsWorkspace optionsReview cleanupWorkspace options0Workspace boardEdit workspace statusesapi+⋯mainprimarymain⋯featzoe/feat⋯Add projectActivity .mobile-root { box-sizing: border-box; max-width: 1040px; margin: 0 auto; padding: 28px 32px 48px; color: var(--text, #d7dae0); } .mobile-root * { box-"
+        ]
+      },
+      {
+        "file": "plugins/quirky.git/test/window/commands.test.ts",
+        "line": 5367,
+        "tests": [
+          "SC-64: every window command routed through ui.command.run does what its button does",
+          "SC-64: Mod+Shift+G shows the panel and F7 runs next-change",
+          "SC-65: ui state shows what the panel and the diff view display"
+        ],
+        "errors": [
+          "error: waitFor timed out; the page shows: ExplorerAgent Session HistoryChecksQuestionsSource control3LedgerSession InfoQuick CommandsTerminal SessionsWorkspace optionsReview cleanupWorkspace options0Workspace boardEdit workspace statusesapi+⋯mainprimarymain⋯featzoe/feat⋯Add projectActivity .mobile-root { box-sizing: border-box; max-width: 1040px; margin: 0 auto; padding: 28px 32px 48px; color: var(--text, #d7dae0); } .mobile-root * { box-",
+          "error: waitFor timed out; the page shows: ExplorerAgent Session HistoryChecksQuestionsSource control1LedgerSession InfoQuick CommandsTerminal SessionsWorkspace optionsReview cleanupWorkspace options0Workspace boardEdit workspace statusesapi+⋯mainprimarymain⋯featzoe/feat⋯Add projectActivity .mobile-root { box-sizing: border-box; max-width: 1040px; margin: 0 auto; padding: 28px 32px 48px; color: var(--text, #d7dae0); } .mobile-root * { box-",
+          "error: waitFor timed out; the page shows: ExplorerAgent Session HistoryChecksQuestionsSource control4LedgerSession InfoQuick CommandsTerminal SessionsWorkspace optionsReview cleanupWorkspace options0Workspace boardEdit workspace statusesapi+⋯mainprimarymain⋯featzoe/feat⋯Add projectActivity .mobile-root { box-sizing: border-box; max-width: 1040px; margin: 0 auto; padding: 28px 32px 48px; color: var(--text, #d7dae0); } .mobile-root * { box-"
+        ]
+      },
+      {
+        "file": "plugins/quirky.git/test/window/selection.test.ts",
+        "line": 5718,
+        "tests": [
+          "SC-15: click opens the diff, Shift-click selects a range, Cmd-click toggles, Escape clears"
+        ],
+        "errors": [
+          "error: waitFor timed out; the page shows: ExplorerAgent Session HistoryChecksQuestionsSource control4LedgerSession InfoQuick CommandsTerminal SessionsWorkspace optionsReview cleanupWorkspace options0Workspace boardEdit workspace statusesapi+⋯mainprimarymain⋯featzoe/feat⋯Add projectActivity .mobile-root { box-sizing: border-box; max-width: 1040px; margin: 0 auto; padding: 28px 32px 48px; color: var(--text, #d7dae0); } .mobile-root * { box-"
+        ]
+      },
+      {
+        "file": "plugins/quirky.git/test/window/conflicts.test.ts",
+        "line": 5743,
+        "tests": [
+          "SC-41: a sync that stops on a conflict leads, in the window, to Continue merge and Push",
+          "SC-43: Abort merge in the window confirms first and returns to the pre-merge commit"
+        ],
+        "errors": [
+          "error: waitFor timed out; the page shows: ExplorerAgent Session HistoryChecksQuestionsSource controlLedgerSession InfoQuick CommandsTerminal SessionsWorkspace optionsReview cleanupWorkspace options0Workspace boardEdit workspace statusesapi+⋯mainprimarymain⋯featzoe/feat⋯Add projectActivity .mobile-root { box-sizing: border-box; max-width: 1040px; margin: 0 auto; padding: 28px 32px 48px; color: var(--text, #d7dae0); } .mobile-root * { box-s"
+        ]
+      },
+      {
+        "file": "plugins/quirky.git/test/window/notes-panel.test.ts",
+        "line": 5776,
+        "tests": [
+          "NA-9, NA-10, NA-13: the shelf, the row counts and the overflow item against a real daemon"
+        ],
+        "errors": [
+          "error: waitFor timed out; the page shows: ExplorerAgent Session HistoryChecksQuestionsSource control2LedgerSession InfoQuick CommandsTerminal SessionsWorkspace optionsReview cleanupWorkspace options0Workspace boardEdit workspace statusesapi+⋯mainprimarymain⋯featzoe/feat⋯Add projectActivity .mobile-root { box-sizing: border-box; max-width: 1040px; margin: 0 auto; padding: 28px 32px 48px; color: var(--text, #d7dae0); } .mobile-root * { box-"
+        ]
+      },
+      {
+        "file": "plugins/quirky.git/test/window/compare.test.ts",
+        "line": 5802,
+        "tests": [
+          "SC-47: Committed on Branch lists what the branch changed since its base, with totals and the hover title",
+          "SC-54: the Commits dock opens a commit's combined diff and one of its files"
+        ],
+        "errors": [
+          "error: waitFor timed out; the page shows: ExplorerAgent Session HistoryChecksQuestionsSource controlLedgerSession InfoQuick CommandsTerminal SessionsWorkspace optionsReview cleanupWorkspace options0Workspace boardEdit workspace statusesapi+⋯mainprimarymain⋯featzoe/feat⋯Add projectActivity .mobile-root { box-sizing: border-box; max-width: 1040px; margin: 0 auto; padding: 28px 32px 48px; color: var(--text, #d7dae0); } .mobile-root * { box-s"
+        ]
+      },
+      {
+        "file": "plugins/quirky.git/test/window/notes-view.test.ts",
+        "line": 5987,
+        "tests": [
+          "NA-1: the \"+\" beside line 12 adds a note that every part of the window shows",
+          "NA-2, NA-14: a command-opened draft and the combined view over a real daemon"
+        ],
+        "errors": [
+          "error: waitFor timed out; the page shows: ExplorerAgent Session HistoryChecksQuestionsSource control1LedgerSession InfoQuick CommandsTerminal SessionsWorkspace optionsReview cleanupWorkspace options0Workspace boardEdit workspace statusesapi+⋯mainprimarymain⋯featzoe/feat⋯Add projectActivity .mobile-root { box-sizing: border-box; max-width: 1040px; margin: 0 auto; padding: 28px 32px 48px; color: var(--text, #d7dae0); } .mobile-root * { box-"
+        ]
+      },
+      {
+        "file": "plugins/quirky.git/test/scenarios/diff.test.ts",
+        "line": 7739,
+        "tests": [
+          "diff sources > editor Changes compares HEAD to the working file, not the staged index"
+        ],
+        "errors": [
+          "error: expect(received).toMatchObject(expected)"
+        ]
+      },
+      {
+        "file": "plugins/quirky.git/test/ui/view-combined.test.ts",
+        "line": 8181,
+        "tests": [
+          "quirky.git combined diff > the report lists sections, loaded sections and the state of the edits"
+        ],
+        "errors": [
+          "error: expect(received).toEqual(expected)"
+        ]
+      },
+      {
+        "file": "plugins/quirky.git/test/ui/view-file.test.ts",
+        "line": 15858,
+        "tests": [
+          "quirky.git file diff view > unmounting stops listening to events"
+        ],
+        "errors": [
+          "error: expect(received).toBe(expected)"
+        ]
+      },
+      {
+        "file": "plugins/quirky.git/test/scenarios/catalog.test.ts",
+        "line": 16220,
+        "tests": [
+          "SC-66: the API lists every method with its schema (CLI) > CLI catalog marks destructive Git operations and preserves typed discard flags"
+        ],
+        "errors": [
+          "error: expect(received).toEqual(expected)"
+        ]
+      },
+      {
+        "file": "plugins/quirky.git/test/ui/ai.test.ts",
+        "line": 16444,
+        "tests": [
+          "NA-24: the sparkle button > (b) a message typed: disabled, asks to clear it",
+          "NA-24: the sparkle button > (e) a commit running: \"Commit in progress…\"",
+          "NA-25: generating a message > with no recipe the sparkle opens the Generate Commit Message dialog, which runs once and saves nothing",
+          "NA-30: typing during a run keeps the box > typing keeps what was typed",
+          "NA-30: typing during a run keeps the box > typing and deleting again still keeps the box, empty",
+          "NA-33: AI Fix on the Commit blocked card > the card has the split button, whose primary starts the default agent and toasts",
+          "NA-33: AI Fix on the Commit blocked card > a refused launch toasts the daemon message",
+          "NA-33: AI Fix on the Commit blocked card > the Commit Failed details have \"Fix with AI\" beside Close",
+          "NA-33: AI Fix on the Commit blocked card > with the setting off the card and its details show no AI buttons",
+          "NA-37: Customize launch > the chevron offers Customize launch... and the dialog is prefilled from the preview",
+          "NA-37: Customize launch > Detecting agents... while the list loads, and No enabled agents with none",
+          "NA-37: Customize launch > a saved agent that is unavailable with no enabled agents still shows No enabled agents and keeps Start disabled",
+          "NA-37: Customize launch > an edited launch passes provider choices and reset fields with the saved recipe",
+          "NA-37: Customize launch > with \"All repositories\" the save goes to the global scope",
+          "NA-37: Customize launch > an untouched launch starts the agent chosen without saving anything",
+          "NA-37: Customize launch > with the save box cleared the edited launch only starts",
+          "NA-37: Customize launch > values equal to the saved recipe show \"Launch recipe already saved\" and a plain Start agent",
+          "NA-37: Customize launch > a one-off model and effort choice is passed through and saved with the recipe",
+          "NA-37: Customize launch > raw model and effort arguments disable catalog controls and say they are set by CLI arguments",
+          "NA-37: Customize launch > Reset puts the template back to {basePrompt}",
+          "NA-37: Customize launch > a refused start keeps the dialog and toasts the daemon message",
+          "NA-37: Customize launch > Cancel and Escape close it without starting anything",
+          "NA-40: the Source Control AI defaults view > name actions use distinct recipes and retain the last candidate when a later generation fails",
+          "NA-40: the Source Control AI defaults view > each change saves the global recipe at once",
+          "NA-40: the Source Control AI defaults view > settings save provider model and effort choices, then clear them when the agent changes",
+          "NA-40: the Source Control AI defaults view > the switch and the custom command write the settings"
+        ],
+        "errors": [
+          "error: expect(received).toBe(expected)",
+          "error: expect(received).toEqual(expected)",
+          "TypeError: null is not an object (evaluating 'root.querySelector')",
+          "error: nothing to click",
+          "TypeError: null is not an object (evaluating 'root.querySelectorAll')",
+          "error: expect(received).toContain(expected)"
+        ]
+      },
+      {
+        "file": "plugins/quirky.git/test/ui/commands.test.ts",
+        "line": 17073,
+        "tests": [
+          "quirky.git commands > opening views > SC-64: open-diff opens the file diff view on the path, in the open view's worktree",
+          "quirky.git commands > opening views > open-diff takes oldPath, commit and an explicit worktree, and defaults the source from the area",
+          "quirky.git commands > opening views > SC-64: open-diff with source conflict opens the conflict file view",
+          "quirky.git commands > opening views > open-diff sends placement and display through the public terminal hosted-view API",
+          "quirky.git commands > opening views > SC-64: open-changes opens the combined diff of an area",
+          "quirky.git commands > opening views > open-branch-changes, open-commit and review-conflicts",
+          "quirky.git commands > opening views > the worktree comes from the open diff view when the layout has another view",
+          "quirky.git commands > acting on the open view > a view opened with a new input replaces the old one as the target"
+        ],
+        "errors": [
+          "error: expect(received).toEqual(expected)",
+          "error: expect(received).toMatchObject(expected)"
+        ]
+      },
+      {
+        "file": "plugins/quirky.git/test/ui.test.ts",
+        "line": 17531,
+        "tests": [
+          "quirky.git source-control panel > closing the panel unsubscribes from events and layout"
+        ],
+        "errors": [
+          "error: expect(received).toEqual(expected)"
+        ]
+      },
+      {
+        "file": "plugins/quirky.git/test/pure/ai-prompts.test.ts",
+        "line": 17852,
+        "tests": [
+          "named hosting and branch prompts > pull request details preserve trusted repository, exact head, title and body"
+        ],
+        "errors": [
+          "error: expect(received).toContain(expected)"
+        ]
+      }
+    ],
+    "plugins/quirky.heimdall": [
+      {
+        "file": "plugins/quirky.heimdall/test/fleet-worker-acceptance.test.ts",
+        "line": 856,
+        "tests": [
+          "an actual Heimdall-owned worker stays inspectable but stops counting after its CLI report"
+        ],
+        "errors": [
+          "error: fixture worker dispatch indeterminate: orchestration run creation or dispatch is uncertain: params.requestId is required"
+        ]
+      },
+      {
+        "file": "plugins/quirky.heimdall/test/lease.test.ts",
+        "line": 879,
+        "tests": [
+          "atomic claims contend, expire to a higher epoch, and stale assert/release cannot affect it"
+        ],
+        "errors": [
+          "error: expect(received).toMatchObject(expected)"
+        ]
+      },
+      {
+        "file": "plugins/quirky.heimdall/test/host-power.test.ts",
+        "line": 914,
+        "tests": [
+          "Heimdall host-power lifecycle binding > fences an in-flight read, resumes with a live read, and excludes the sleeping interval from budget",
+          "Heimdall host-power lifecycle binding > restored and newly enrolled runners remain dormant while the host is suspended",
+          "Heimdall host-power lifecycle binding > removes its power subscription before shutdown and fences a pending read from stale effects",
+          "Heimdall host-power lifecycle binding > attempts every synchronous runner fence and reports the failing watcher"
+        ],
+        "errors": [
+          "error: no executable Heimdall runner for watcher watcher-restored-asleep"
+        ]
+      },
+      {
+        "file": "plugins/quirky.heimdall/test/owner-worker-acceptance.test.ts",
+        "line": 6021,
+        "tests": [
+          "owner worker messages, answers, and exact stop reach an attested native child"
+        ],
+        "errors": [
+          "error: Owned worker never became ready: {\"readOnly\":false,\"enrollment\":{\"workspaceKey\":\"local::/tmp/qa-2Bg2vV/repo\",\"workspacePath\":\"/tmp/qa-2Bg2vV/repo\",\"executionHostId\":\"local\",\"schedulerOwner\":\"daemon\",\"kindPayload\":{\"worktreeId\":\"wt_6e40e078ceb2\"},\"owner\":{\"agent\":\"claude\"},\"repoId\":\"repo_344bcbbdaa94\",\"worktreeId\":\"wt_6e40e078ceb2\",\"ownerInterventionCapability\":\"on\",\"watcherId\":\"aa23b0e6-5a49-4501-a781-e60e6312a2e3\",\"kind\":\"acme.owner-worker-kind\",\"enabled\":true,\"paused\":false,\"commandRevi",
+          "error: waitForAsync timed out"
+        ]
+      },
+      {
+        "file": "plugins/quirky.heimdall/test/owner-acceptance.test.ts",
+        "line": 6154,
+        "tests": [
+          "optional Claude owner configuration survives restart and resumes its persisted provider conversation",
+          "natural keys deduplicate provider turns while full failure detail appears in the conversation and inspection",
+          "the generated owner-ready CLI accepts an issued file and translated kind actions pass through the native capability gate",
+          "an owner human question parks until its exact escalation is answered in the same native conversation",
+          "a report accepted for stale content is held and reissued in the same provider conversation",
+          "stale, malformed, oversized, and symlink reports are refused without native attempts",
+          "continue capability boundary: owner-off",
+          "continue capability boundary: owner-gated",
+          "continue capability boundary: native-off",
+          "continue capability boundary: native-gated",
+          "continue capability boundary: both-on",
+          "a translated kind action cannot execute when its native action capability is off",
+          "disabling Heimdall stops its owner child while an unrelated structured child accepts another turn",
+          "owner abandon disarms the watcher without stopping an unrelated native conversation"
+        ],
+        "errors": [
+          "error: owner acceptance harness is not connected"
+        ]
+      },
+      {
+        "file": "plugins/quirky.heimdall/test/worker-controls.test.ts",
+        "line": 7614,
+        "tests": [
+          "native Heimdall worker controls > answers a real worker question and stops that exact live process"
+        ],
+        "errors": [
+          "error: Timed out waiting for live structured worker attachment for bc12e313-f567-4628-8c0e-175ab1d81d6e; last observed state: {\"status\":{\"state\":\"unreachable\",\"reason\":\"lease-unverifiable\",\"nextPulseAtMs\":1793222656021,\"consecutiveErrors\":0,\"consecutiveGateHolds\":0},\"enrollment\":{\"workspaceKey\":\"local::/tmp/heimdall-native-worker-uUAtX9/quirky-home/plugin-data/quirky.heimdall-control-fixture/workspaces/native-worker\",\"workspacePath\":\"/tmp/heimdall-native-worker-uUAtX9/quirky-home/plugin-data/qui"
+        ]
+      },
+      {
+        "file": "plugins/quirky.heimdall/test/runner.test.ts",
+        "line": 15918,
+        "tests": [
+          "Heimdall runner gate and budget behavior > journals provider answers as shadow observations without changing action authority"
+        ],
+        "errors": [
+          "error: expect(received).toBe(expected)"
+        ]
+      },
+      {
+        "file": "plugins/quirky.heimdall/test/control-acceptance.test.ts",
+        "line": 16095,
+        "tests": [
+          "Heimdall operators through daemon API and real CLI > daemon delete confirmation is exact and single-use; cancellation never removes history",
+          "Heimdall operators through daemon API and real CLI > foreign targets and unverifiable workers fail closed through public command API"
+        ],
+        "errors": [
+          "error: expect(received).toMatchObject(expected)"
+        ]
+      },
+      {
+        "file": "plugins/quirky.heimdall/test/control-api.test.ts",
+        "line": 17919,
+        "tests": [
+          "Heimdall control API > returns an applied stop receipt while fleet publication is still pending"
+        ],
+        "errors": [
+          "TypeError: fleet.command is not a function. (In 'fleet.command(request, expectedIncarnation)', 'fleet.command' is undefined)"
+        ]
+      },
+      {
+        "file": "plugins/quirky.heimdall/test/orchestration.test.ts",
+        "line": 39775,
+        "tests": [
+          "Heimdall orchestration adapter > owner-run worker evidence drives billable contact and malformed rows cannot appear live"
+        ],
+        "errors": [
+          "error: expect(received).toBe(expected)"
+        ]
+      }
+    ],
+    "plugins/quirky.mobile": [
+      {
+        "file": "plugins/quirky.mobile/test/browser-watch.test.ts",
+        "line": 941,
+        "tests": [
+          "mobile Watch uses real worktree tab identity, bounded frames and connection-owned leases"
+        ],
+        "errors": [
+          "RpcError: browser_error: browser_unavailable: no Chrome or Chromium executable was found; install Chrome or set QUIRKY_BROWSER_CHROME to its absolute executable path"
+        ]
+      },
+      {
+        "file": "plugins/quirky.mobile/test/panels-activity-tasks.test.ts",
+        "line": 966,
+        "tests": [
+          "paired mobile workspace consent carries content pins through both hooks and executes each approved script"
+        ],
+        "errors": [
+          "error: expected trustHash to be a string"
+        ]
+      },
+      {
+        "file": "plugins/quirky.mobile/test/session-tabs.test.ts",
+        "line": 1057,
+        "tests": [
+          "public mobile Markdown APIs preserve actual tab identity, bounded drafts and dirty-close decisions"
+        ],
+        "errors": [
+          "RpcError: unknown method: quirky.browser/paneState"
+        ]
+      }
+    ],
+    "plugins/quirky.loops": [
+      {
+        "file": "plugins/quirky.loops/test/ui-native-controls.test.ts",
+        "line": 1003,
+        "tests": [
+          "rendered Stop Cancel and After this iteration preserve a held native turn until structured steering settles it",
+          "rendered Close Cancel preserves the tab, Keep running detaches the same held queue turn, and Stop loop leaves its native sentinel live"
+        ],
+        "errors": [
+          "error: waitForAsync timed out",
+          "error: waitFor timed out; the page shows: Workspace optionsReview cleanupWorkspace options0Workspace boardEdit workspace statusesloop-workspace+⋯mainprimarymain⋯Add project⚙AgentsQuestionsSource controlQuick CommandsTerminal SessionsAgentsManage AI agents, set a default, and customize commands.Default AgentDefaults for new agents.AutoClaudeClaude Agent TeamsCodexBlank TerminalAgent PermissionsHow much agents can do without asking you. Age"
+        ]
+      },
+      {
+        "file": "plugins/quirky.loops/test/api.test.ts",
+        "line": 5133,
+        "tests": [
+          "quirky.loops public API > L06: approval asks move a loop to needs-you and answering resumes observation"
+        ],
+        "errors": [
+          "TypeError: undefined is not an object (evaluating 'rig.sends')"
+        ]
+      }
+    ],
+    "plugins/quirky.orchestration": [
+      {
+        "file": "plugins/quirky.orchestration/test/federation-engine.test.ts",
+        "line": 1089,
+        "tests": [
+          "paired daemon worker-start executes only on the selected host and replays one durable receipt",
+          "remote retain, stop, release/archive, and abandon affect only the exact host worker"
+        ],
+        "errors": [
+          "error: federated worker-start failed (1): quirky: invalid_argument: invalid_argument: no worktree matches floating; use id:, name:, branch:, path: or current",
+          "error: quirky.orchestration is no longer active"
+        ]
+      },
+      {
+        "file": "plugins/quirky.orchestration/test/federation-mail-acceptance.test.ts",
+        "line": 1154,
+        "tests": [
+          "paired daemons preserve FIFO mail and ask identity; a rejected home completion leaves the host unsettled"
+        ],
+        "errors": [
+          "error: orchestration send exit 2: "
+        ]
+      },
+      {
+        "file": "plugins/quirky.orchestration/test/peer-transport.test.ts",
+        "line": 1178,
+        "tests": [
+          "paired loopback peers expose safe status and reject methods outside the method ceiling",
+          "remote status and hook-status reads retain exact peer identity without copying remote rows",
+          "provider model discovery executes on the exact authenticated peer without local fallback",
+          "unpair revokes saved peer credentials",
+          "peer-listen CLI reads its credential from a private file without printing it"
+        ],
+        "errors": [
+          "error: expect(received).toBe(expected)",
+          "RpcError: The exact paired host could not complete the request.",
+          "error: expect(received).toMatchObject(expected)",
+          "error: quirky.orchestration is no longer active"
+        ]
+      },
+      {
+        "file": "plugins/quirky.orchestration/test/services/submission-preflight.test.ts",
+        "line": 1285,
+        "tests": [
+          "session callers cannot register a service submission hook",
+          "submission callback methods cannot escape the registering plugin namespace"
+        ],
+        "errors": [
+          "error: expect(received).rejects.toThrow(expected)"
+        ]
+      },
+      {
+        "file": "plugins/quirky.orchestration/test/federation-surface.test.ts",
+        "line": 1458,
+        "tests": [
+          "home reads and controls the exact host worker, preserves host output provenance, and archives before release"
+        ],
+        "errors": [
+          "error: expect(received).toBe(expected)"
+        ]
+      },
+      {
+        "file": "plugins/quirky.orchestration/test/acceptance-api.test.ts",
+        "line": 4963,
+        "tests": [
+          "quirky.orchestration daemon API acceptance > A2 a live background Ask survives unknown session evidence and resolves unavailable only after exact exit proof"
+        ],
+        "errors": [
+          "error: waitForAsync timed out"
+        ]
+      },
+      {
+        "file": "plugins/quirky.orchestration/test/setup-migration.test.ts",
+        "line": 33914,
+        "tests": [
+          "daemon activation upgrades the prior canonical service store once and preserves its data and policy"
+        ],
+        "errors": [
+          "error: expect(received).toBe(expected)"
+        ]
+      }
+    ],
+    "plugins/quirky.notifications": [
+      {
+        "file": "plugins/quirky.notifications/test/ask-escalation.test.ts",
+        "line": 1138,
+        "tests": [
+          "delayed ask notifications > Q3: resolution and FIFO head replacement cancel the old timer and the promoted head gets a full delay"
+        ],
+        "errors": []
+      },
+      {
+        "file": "plugins/quirky.notifications/test/gates.test.ts",
+        "line": 4029,
+        "tests": [
+          "delivery gates > SC-18: every source goes through the same gates",
+          "attention events > SC-43: the attention event goes out whatever the switches say, for attention sources only"
+        ],
+        "errors": [
+          "error: waitFor timed out"
+        ]
+      },
+      {
+        "file": "plugins/quirky.notifications/test/heimdall.test.ts",
+        "line": 8133,
+        "tests": [
+          "Heimdall transitions use the sole notification policy > a new exact approval delivers once; folded repeats do not notify again",
+          "Heimdall transitions use the sole notification policy > terminal transition honors the shared enabled switch and emits no native or toast event when disabled",
+          "Heimdall transitions use the sole notification policy > terminal transition delivers the real final reason and opens its detail"
+        ],
+        "errors": [
+          "error: waitForAsync timed out"
+        ]
+      }
+    ],
+    "plugins/quirky.session": [
+      {
+        "file": "plugins/quirky.session/test/workspace-sleep.test.ts",
+        "line": 1325,
+        "tests": [
+          "workspace sleep and wake > retains shell history and stops descendants across daemon restart; sleep and wake are idempotent",
+          "workspace sleep and wake > resumes an agent with its stored provider conversation identity",
+          "workspace sleep and wake > normal structured resume propagates its provider identity while using workspace admission",
+          "workspace sleep and wake > workspace wake admits the structured provider update without deadlocking",
+          "workspace sleep and wake > does not wake an old session into a replacement worktree at the same path",
+          "workspace sleep and wake > retains a partial stop and retries the live session without losing history",
+          "workspace sleep and wake > retains a partial wake error and retries with the original provider identity"
+        ],
+        "errors": [
+          "error: waitFor timed out",
+          "RpcError: params.transcriptPath must be a string"
+        ]
+      },
+      {
+        "file": "plugins/quirky.session/test/sessions.test.ts",
+        "line": 6465,
+        "tests": [
+          "exit and reconciliation > a daemon restart marks sessions the host no longer has as exited and leaves live ones",
+          "quirky.session/restore > cold restore replays the captured provider ID, launch snapshot and cwd in the same session",
+          "quirky.session/restore > cold Codex restore re-applies provider account preparation before resolving the captured conversation",
+          "quirky.session/restore > an unsupported cold agent restore refuses before spawning and keeps history restorable",
+          "quirky.session/restore > concurrent cold agent restores share one provider launch and warm restores never launch again"
+        ],
+        "errors": [
+          "error: expect(received).toMatchObject(expected)",
+          "RpcError: the session's folder /fake/alpha no longer exists; its terminal history remains available with quirky terminal history",
+          "RpcError: unknown method: quirky.agents/plan",
+          "error: expect(received).toEqual(expected)"
+        ]
+      },
+      {
+        "file": "plugins/quirky.session/test/cli.test.ts",
+        "line": 7812,
+        "tests": [
+          "session restore > the restore CLI resumes a cold agent in place from its provider session",
+          "the CLI catalog > SC-17: lists the session group, its commands and its methods under quirky.session/"
+        ],
+        "errors": [
+          "RpcError: the session's folder /fake/alpha no longer exists; its terminal history remains available with quirky terminal history",
+          "error: expect(received).toEqual(expected)"
+        ]
+      },
+      {
+        "file": "plugins/quirky.session/test/sessions-launch.test.ts",
+        "line": 40291,
+        "tests": [
+          "SessionService.create > a provider session saved while spawn is in flight survives the launch"
+        ],
+        "errors": [
+          "error: expect(received).toEqual(expected)"
+        ]
+      }
+    ],
+    "plugins/quirky.tasks": [
+      {
+        "file": "plugins/quirky.tasks/test/projects-ui.test.tsx",
+        "line": 1486,
+        "tests": [
+          "Project Start reports post-create outcomes truthfully and stays linked",
+          "Project query overrides remain isolated and survive switching views",
+          "board moves clear into No Status and failed moves restore the confirmed column",
+          "restricted Project rows stay read-only, refresh errors retain rows, and unknown sources offer repo addition"
+        ],
+        "errors": [
+          "error: button containing \"Start work on Improve project table\" was not rendered",
+          "TypeError: null is not an object (evaluating 'inst.tag')",
+          "error: Timed out waiting for applied Table query",
+          "error: Timed out waiting for initial Project table",
+          "error: button containing \"Start work on Unknown source issue\" was not rendered"
+        ]
+      },
+      {
+        "file": "plugins/quirky.tasks/test/remaining-list-issue.test.ts",
+        "line": 1766,
+        "tests": [
+          "a delayed issue list cannot repaint the PR view after a mode switch",
+          "a failed assignee edit preserves an earlier successful status change in the rendered row",
+          "quiet adoption retains a confirmed status while search indexing lags, then adopts the indexed row",
+          "a failed later reviewer request retains an earlier confirmed reviewer update",
+          "confirmed issue comments remain visible after a lagging detail read"
+        ],
+        "errors": []
+      }
+    ],
+    "plugins/quirky.terminal": [
+      {
+        "file": "plugins/quirky.terminal/test/artifacts-api.test.ts",
+        "line": 1574,
+        "tests": [
+          "binds a grant to the authenticated mobile device, not its connection or request fields",
+          "caps discovered artifacts at fifty while reporting scan limits",
+          "requires live kernel launch authority even when terminal metadata names an existing local file",
+          "expires grants at five minutes and refresh keeps the original preview revision through disk changes",
+          "refuses a same-path inode replacement before writing through the pinned descriptor",
+          "refuses a capability after its terminal process incarnation changes",
+          "shutdown drops every in-memory artifact grant"
+        ],
+        "errors": [
+          "error: expected listed artifacts, got refused",
+          "error: expect(received).toMatchObject(expected)"
+        ]
+      },
+      {
+        "file": "plugins/quirky.terminal/test/artifacts.test.ts",
+        "line": 1672,
+        "tests": [
+          "discovers only printed outside-worktree files and saves from the exact preview across CLI connections",
+          "refuses stale revisions without changing external bytes and rejects a repointed parent symlink",
+          "bounds text previews and keeps binary and raster files read-only",
+          "a second authenticated mobile device cannot use another device’s artifact grant"
+        ],
+        "errors": [
+          "error: expected listed artifacts, got refused"
+        ]
+      },
+      {
+        "file": "plugins/quirky.terminal/test/emulator.test.ts",
+        "line": 1726,
+        "tests": [
+          "simulator CLI lists real provider-format devices and the API returns only the exact selected device frame"
+        ],
+        "errors": [
+          "error: expect(received).toEqual(expected)"
+        ]
+      },
+      {
+        "file": "plugins/quirky.terminal/test/e2e.test.ts",
+        "line": 2117,
+        "tests": [
+          "SC-23: kill asks first, force-quits the session and keeps its output"
+        ],
+        "errors": [
+          "error: expect(received).toBe(expected)"
+        ]
+      },
+      {
+        "file": "plugins/quirky.terminal/test/e2e-ui/workspace-panes.test.ts",
+        "line": 2962,
+        "tests": [
+          "SC-39: the pane menu"
+        ],
+        "errors": [
+          "error: expect(received).toMatchObject(expected)"
+        ]
+      },
+      {
+        "file": "plugins/quirky.terminal/test/e2e/tabs.test.ts",
+        "line": 4278,
+        "tests": [
+          "SC-14: the CLI asks before closing a running command unless --yes"
+        ],
+        "errors": [
+          "error: expect(received).toContain(expected)"
+        ]
+      },
+      {
+        "file": "plugins/quirky.terminal/test/e2e-ui/workspace-view.test.ts",
+        "line": 4435,
+        "tests": [
+          "SC-71: opening a requested background structured session selects its transcript without creating a shell"
+        ],
+        "errors": [
+          "error: expect(received).toEqual(expected)"
+        ]
+      },
+      {
+        "file": "plugins/quirky.terminal/test/e2e-ui/features-search.test.ts",
+        "line": 5637,
+        "tests": [
+          "SC-73: Enter and Cmd+G in the search box step"
+        ],
+        "errors": [
+          "TypeError: null is not an object (evaluating 'input.focus')"
+        ]
+      },
+      {
+        "file": "plugins/quirky.terminal/test/cli-layout.test.ts",
+        "line": 15551,
+        "tests": [
+          "usage errors > tab color accepts only the ten names"
+        ],
+        "errors": [
+          "error: expect(received).toMatchObject(expected)"
+        ]
+      },
+      {
+        "file": "plugins/quirky.terminal/test/window/wiring-commands.test.ts",
+        "line": 16261,
+        "tests": [
+          "what the module provides > every contribution the manifest declares or overrides, and nothing else"
+        ],
+        "errors": [
+          "error: expect(received).toEqual(expected)"
+        ]
+      },
+      {
+        "file": "plugins/quirky.terminal/test/window/pane-attach.test.ts",
+        "line": 33757,
+        "tests": [
+          "settings apply live > padding and background opacity apply to the pane surface"
+        ],
+        "errors": [
+          "error: expect(received).toBe(expected)"
+        ]
+      },
+      {
+        "file": "plugins/quirky.terminal/test/ui.test.ts",
+        "line": 39616,
+        "tests": [
+          "the plugin module > provides every contribution the manifest declares or overrides, the Sessions panel and its command among them"
+        ],
+        "errors": [
+          "error: expect(received).toEqual(expected)"
+        ]
+      },
+      {
+        "file": "plugins/quirky.terminal/test/ui-manifest.test.ts",
+        "line": 40174,
+        "tests": [
+          "the commands and default keys > SC-63: the keys, commands and conditions are exactly those of the tech spec"
+        ],
+        "errors": [
+          "error: expect(received).toEqual(expected)"
+        ]
+      },
+      {
+        "file": "plugins/quirky.terminal/test/window/settings.test.ts",
+        "line": 40263,
+        "tests": [
+          "pane settings > the defaults match the fake context and every manifest setting the pane reads"
+        ],
+        "errors": [
+          "error: expect(received).toEqual(expected)"
+        ]
+      }
+    ],
+    "plugins/quirky.worktree": [
+      {
+        "file": "plugins/quirky.worktree/test/automation-provenance.test.ts",
+        "line": 1819,
+        "tests": [
+          "worktree automation provenance API > rejects malformed requests and caller-supplied snapshots before creating Git workspaces"
+        ],
+        "errors": [
+          "error: expect(received).toEqual(expected)"
+        ]
+      },
+      {
+        "file": "plugins/quirky.worktree/test/automation-sidebar-api.test.ts",
+        "line": 1854,
+        "tests": [
+          "hideAutomationCreated persists per client and filters provenance without matching API creators or name prefixes"
+        ],
+        "errors": [
+          "error: expect(received).toBe(expected)"
+        ]
+      },
+      {
+        "file": "plugins/quirky.worktree/test/automation-sidebar.test.tsx",
+        "line": 1883,
+        "tests": [
+          "lazy details preserve provenance and open the exact recorded automation and older run",
+          "a confirmed missing definition disables definition navigation",
+          "a successful complete history scan proves the recorded run was pruned",
+          "failed availability reads are not reported as deleted",
+          "a disabled automation plugin is unavailable rather than deleted",
+          "unmount prevents a pending availability response from changing the report",
+          "plugin events recheck expanded availability and a collapsed request cannot replace the next workspace"
+        ],
+        "errors": [
+          "TypeError: undefined is not an object (evaluating 'attributed.textContent')",
+          "error: no automation details toggle for wt-auto"
+        ]
+      },
+      {
+        "file": "plugins/quirky.worktree/test/creation-parity.test.ts",
+        "line": 2147,
+        "tests": [
+          "worktree create parity boundaries > sparse paths are validated before worktree creation and selected files are materialized",
+          "worktree create parity boundaries > keep-main fast-forwards only the exact clean primary branch to its fetched remote base",
+          "worktree create parity boundaries > keep-main leaves a dirty primary checkout untouched and reports no behind claim"
+        ],
+        "errors": []
+      },
+      {
+        "file": "plugins/quirky.worktree/test/default-tabs-create.test.ts",
+        "line": 2219,
+        "tests": [
+          "create applies selected shared default tabs through the terminal owner without stealing focus",
+          "invalid default-tab selections and untrusted shared commands refuse before creating a worktree"
+        ],
+        "errors": []
+      },
+      {
+        "file": "plugins/quirky.worktree/test/control.test.ts",
+        "line": 2265,
+        "tests": [
+          "stock worktree options > manual reorder updates persisted ordering without changing pins or nested membership",
+          "reversible sleep and wake > unknown per-window visibility refuses sleep rather than closing another window view",
+          "safe cleanup preview and removal > preview exposes the supported blockers and still identifies a genuinely unused clean workspace",
+          "safe cleanup preview and removal > cleanup revalidates exact window visibility before canonical removal"
+        ],
+        "errors": [
+          "error: expect(received).toBeLessThan(expected)",
+          "RpcError: multiple Quirky windows are open; specify connId",
+          "RpcError: this action needs confirmation and asks are off; pass --yes"
+        ]
+      },
+      {
+        "file": "plugins/quirky.worktree/test/origins-api.test.ts",
+        "line": 2373,
+        "tests": [
+          "quirky.worktree/origins public API > the actual automation producer is distinguished from generic API and its origin persists across restart"
+        ],
+        "errors": [
+          "RpcError: unknown method: quirky.automations/create"
+        ]
+      },
+      {
+        "file": "plugins/quirky.worktree/test/prepared-create.test.ts",
+        "line": 2413,
+        "tests": [
+          "the CLI prefetch is consumed by canonical create only for the exact repo and base",
+          "dirty, sparse, and existing-branch creates never claim a prepared checkout",
+          "restart removes only the exact owned preparation and preserves a foreign locked worktree"
+        ],
+        "errors": [
+          "error: expect(received).toMatchObject(expected)",
+          "error: expect(received).not.toContain(expected)"
+        ]
+      },
+      {
+        "file": "plugins/quirky.worktree/test/window-navigation.test.ts",
+        "line": 2538,
+        "tests": [
+          "navigation history and open-in are isolated by exact kernel UI connection",
+          "create activation refuses an untargeted multiwindow before worktree mutation",
+          "sleep parks only the selected window view and leaves sessions and other layouts alive",
+          "sleep resolves explicit view selectors before parking and refuses unknown view owners",
+          "compare-and-close refuses a stale inspected view without closing the newly selected view",
+          "navigation CLI targets the selected numeric window and refuses missing window identities"
+        ],
+        "errors": []
+      },
+      {
+        "file": "plugins/quirky.worktree/test/parity.test.ts",
+        "line": 2656,
+        "tests": [
+          "remaining workspace options are durable and truthful > PR grouping, activity/project sorting, manual project order, card properties, and data-backed filters persist through API and CLI",
+          "external worktree visibility and project identity > external show/hide/inherit policy and inbox suppression preserve the checkout",
+          "external worktree visibility and project identity > project identity fields survive restart without changing the repo path",
+          "archived cleanup classification > an archived workspace becomes a seven-day cleanup candidate only after the boundary and remains fingerprinted",
+          "workspace navigation and Open in > navigation refuses ambiguous multi-window routing without changing the visible view"
+        ],
+        "errors": [
+          "error: expect(received).toThrow(expected)",
+          "error: expect(received).toBe(expected)",
+          "RpcError: trackerProject must be an HTTPS URL to a real provider project",
+          "RpcError: multiple Quirky windows are open; specify connId"
+        ]
+      },
+      {
+        "file": "plugins/quirky.worktree/test/window-create.test.ts",
+        "line": 3241,
+        "tests": [
+          "SC-28: Mod+Enter submits the dialog",
+          "SC-25: a window create shows a pending row, then opens the result only if you stayed",
+          "SC-26: Create more keeps the dialog open and resets it",
+          "the Base field starts at the project base and is sent only when changed",
+          "the Advanced fields reach the new workspace",
+          "the project select switches the placeholder and the report follows it",
+          "SC-20: a create from an unreachable remote base shows the local-base notice",
+          "SC-27: the window creates the same worktree as the CLI from the same input",
+          "SC-31: the window asks for the setup choice before it will create",
+          "SC-33: the window asks before running an untrusted shared script"
+        ],
+        "errors": [
+          "error: waitFor timed out; the page shows: ExplorerAgent Session HistoryChecksQuestionsSource controlLedgerSession InfoQuick CommandsTerminal SessionsWorkspace optionsReview cleanupWorkspace options0Workspace boardEdit workspace statusesapi+⋯mainprimarymain⋯dolphinfishzoe/dolphinfish⋯Add projectActivity .mobile-root { box-sizing: border-box; max-width: 1040px; margin: 0 auto; padding: 28px 32px 48px; color: var(--text, #d7dae0); } .mobile-",
+          "error: waitFor timed out; the page shows: ExplorerAgent Session HistoryChecksQuestionsSource controlLedgerSession InfoQuick CommandsTerminal SessionsWorkspace optionsReview cleanupShow 1 filtered worktreeWorkspace options0Hidden worktree groupsReview 1 hidden external worktree in api475dbd28-c86b-4a65-81d4-7091f1e9e6d8 · detached · /tmp/qwc-root-VC9kxM/.quirky-preparing/475dbd28-c86b-4a65-81d4-7091f1e9e6d8Show in worktree listKeep hiddenD",
+          "error: waitFor timed out; the page shows: ExplorerAgent Session HistoryChecksQuestionsSource controlLedgerSession InfoQuick CommandsTerminal SessionsWorkspace optionsReview cleanupWorkspace options0Workspace boardEdit workspace statusesapi+⋯mainprimarymain⋯damselfishzoe/damselfish⋯Add projectNew workspaceProjectapiSmartGitHubBranchNameNameEnter a workspace name, #issue number, or GitHub URL.BaseAgentNoneWorktree Create More Test AgentAdva",
+          "error: waitFor timed out; the page shows: ExplorerAgent Session HistoryChecksQuestionsSource controlLedgerSession InfoQuick CommandsTerminal SessionsWorkspace optionsReview cleanupWorkspace options0Workspace boardEdit workspace statusesapi+⋯mainprimarymain⋯codzoe/cod⋯Add projectActivity .mobile-root { box-sizing: border-box; max-width: 1040px; margin: 0 auto; padding: 28px 32px 48px; color: var(--text, #d7dae0); } .mobile-root * { box-siz",
+          "error: expect(received).toBe(expected)",
+          "error: waitFor timed out; the page shows: ExplorerAgent Session HistoryChecksQuestionsSource controlLedgerSession InfoQuick CommandsTerminal SessionsWorkspace optionsReview cleanupWorkspace options0Workspace boardEdit workspace statusesapi+⋯mainprimarymain⋯web+⋯mainprimarymain⋯orcazoe/orca⋯Add projectActivity .mobile-root { box-sizing: border-box; max-width: 1040px; margin: 0 auto; padding: 28px 32px 48px; color: var(--text, #d7dae0); } .",
+          "error: waitFor timed out; the page shows: ExplorerAgent Session HistoryChecksQuestionsSource controlLedgerSession InfoQuick CommandsTerminal SessionsWorkspace optionsReview cleanupWorkspace options0Workspace boardEdit workspace statusesapi+⋯mainprimarymain⋯filefishzoe/filefish⋯offlinezoe/offline⋯Add projectWorkspace created from a local baseThe remote-tracking ref origin/main was unavailable, so Quirky used local main instead. This worksp",
+          "error: waitFor timed out; the page shows: ExplorerAgent Session HistoryChecksQuestionsSource controlLedgerSession InfoQuick CommandsTerminal SessionsWorkspace optionsReview cleanupWorkspace options0Workspace boardEdit workspace statusesapi1+⋯mainprimarymain⋯croakerzoe/croaker⋯api2+⋯mainprimarymain⋯Add projectWorkspace created from a local baseThe remote-tracking ref origin/main was unavailable, so Quirky used local main instead. This work",
+          "error: waitFor timed out; the page shows: ExplorerAgent Session HistoryChecksQuestionsSource controlLedgerSession InfoQuick CommandsTerminal SessionsWorkspace optionsReview cleanupWorkspace options0Workspace boardEdit workspace statusesapi+⋯mainprimarymain⋯anemonefishzoe/anemonefish⋯Add projectActivity .mobile-root { box-sizing: border-box; max-width: 1040px; margin: 0 auto; padding: 28px 32px 48px; color: var(--text, #d7dae0); } .mobile-",
+          "error: waitFor timed out; the page shows: ExplorerAgent Session HistoryChecksQuestionsSource controlLedgerSession InfoQuick CommandsTerminal SessionsWorkspace optionsReview cleanupWorkspace options0Workspace boardEdit workspace statusesapi+⋯mainprimarymain⋯volutezoe/volute⋯Add projectActivity .mobile-root { box-sizing: border-box; max-width: 1040px; margin: 0 auto; padding: 28px 32px 48px; color: var(--text, #d7dae0); } .mobile-root * { b"
+        ]
+      },
+      {
+        "file": "plugins/quirky.worktree/test/window-projects.test.ts",
+        "line": 3567,
+        "tests": [
+          "SC-9: Remove Project closes terminals, leaves folders and forgets metadata"
+        ],
+        "errors": [
+          "error: waitFor timed out; the page shows: ExplorerAgent Session HistoryChecksQuestionsSource controlLedgerSession InfoQuick CommandsTerminal SessionsWorkspace optionsReview cleanupWorkspace options0Workspace boardEdit workspace statusesapi+⋯mainprimarymain⋯Login fixzoe/fix-login⋯Add projectRemove ProjectThis only removes api from Quirky. It is still on your disk. 2 open terminals in this project will be closed.CancelRemoveActivity .mobile"
+        ]
+      },
+      {
+        "file": "plugins/quirky.worktree/test/setup.test.ts",
+        "line": 5419,
+        "tests": [
+          "SC-39: .worktreeinclude copies gitignored files and shared directories are linked (CLI) > the text output lists each warning on its own line after the record"
+        ],
+        "errors": [
+          "error: expect(received).toHaveLength(expected)"
+        ]
+      },
+      {
+        "file": "plugins/quirky.worktree/test/sidebar-extras.e2e.test.ts",
+        "line": 5554,
+        "tests": [
+          "SC-02/08/10/17: real CLI and sidebar share activity preferences, selected workspace, and membership",
+          "SC-16/17: appearance setting changes separators through CLI without changing sidebar row identity"
+        ],
+        "errors": [
+          "error: waitFor timed out; the page shows: ExplorerAgent Session HistoryChecksQuestionsSource controlLedgerSession InfoQuick CommandsTerminal SessionsWorkspace optionsReview cleanupGroup byProjectStatusPull requestNoneSort byRecentAgent activityNameProjectManualProject orderManualRecent activityapi↑↓Compact cardsShow propertiesBranchNotesPull requestIssueAutomationAgent activityShow sleepingHide CLI-createdHide default branchHide detached ",
+          "error: waitFor timed out; the page shows: ExplorerAgent Session HistoryChecksQuestionsSource controlLedgerSession InfoQuick CommandsTerminal SessionsWorkspace optionsReview cleanupWorkspace options0Workspace boardEdit workspace statuses▾Team⋯api+⋯mainprimarymain⋯featureTest/feature⋯Add projectActivity .mobile-root { box-sizing: border-box; max-width: 1040px; margin: 0 auto; padding: 28px 32px 48px; color: var(--text, #d7dae0); } .mobile-r"
+        ]
+      },
+      {
+        "file": "plugins/quirky.worktree/test/worktree.test.ts",
+        "line": 15677,
+        "tests": [
+          "repo removal and worktree ownership > ownedIds lists the main worktree and the created ones; removing the repo forgets them"
+        ],
+        "errors": [
+          "RpcError: quirky.worktree did not provide method:quirky.worktree/ownedIds"
+        ]
+      },
+      {
+        "file": "plugins/quirky.worktree/test/metadata.test.ts",
+        "line": 15781,
+        "tests": [
+          "SC-9: removing a project drops its metadata > adding the project again shows the worktree with no display name (API)"
+        ],
+        "errors": [
+          "RpcError: quirky.worktree did not provide method:quirky.worktree/ownedIds"
+        ]
+      },
+      {
+        "file": "plugins/quirky.worktree/test/folder.test.ts",
+        "line": 16158,
+        "tests": [
+          "SC-12: a folder project lists its primary and creates folder workspaces (CLI) > removing the project drops its folder workspaces"
+        ],
+        "errors": [
+          "RpcError: quirky.worktree did not provide method:quirky.worktree/ownedIds"
+        ]
+      },
+      {
+        "file": "plugins/quirky.worktree/test/sidebar-membership.test.ts",
+        "line": 16331,
+        "tests": [
+          "worktree identity and delayed group assignment > zero-birthtime path replacement is rejected using the held directory device and inode"
+        ],
+        "errors": [
+          "TypeError: store.get is not a function. (In 'store.get(\"SELECT value FROM meta WHERE key = ?\", STATUS_KEY)', 'store.get' is undefined)"
+        ]
+      },
+      {
+        "file": "plugins/quirky.worktree/test/v1-import.test.ts",
+        "line": 17940,
+        "tests": [
+          "SC-26: a v1 home carries over > repos, the worktree ownership map and the worktrees root are imported once",
+          "SC-26: a v1 home carries over > a session in an imported-owned worktree still closes with its repo when git cannot list it",
+          "SC-26: a v1 home carries over > a second start copies nothing again"
+        ],
+        "errors": [
+          "RpcError: quirky.worktree did not provide method:quirky.worktree/ownedIds"
+        ]
+      },
+      {
+        "file": "plugins/quirky.worktree/test/ui.test.ts",
+        "line": 18002,
+        "tests": [
+          "SC-35: renders repos and worktrees and reports them with status and selection",
+          "SC-36: the selected row follows the open view input",
+          "SC-37: clicking a worktree opens the session view on it",
+          "SC-43: opening an unread worktree marks it read",
+          "shows no status dots and reports null statuses when quirky.session is off",
+          "status follows the session events",
+          "refreshes the tree on repo, group and worktree changes",
+          "a plugin.changed event reloads the tree and the sessions",
+          "SC-44: groups, the Pinned section, the primary badge, nested children and status labels",
+          "SC-43: the card menu opens and closes on Escape and outside click",
+          "SC-43: Move to Status, Pin and Mark Unread call set; the current values read the other way",
+          "a failed set becomes a toast",
+          "SC-43: Copy Path and Copy Worktree Name use the clipboard and a failure toasts",
+          "SC-59: the primary worktree has Delete disabled with a tooltip",
+          "a parent offers Delete with Descendants and removes them together",
+          "Update and Set Parent open their dialogs and the report names them",
+          "SC-47: Delete asks in the window and passes force and yes with no ask card",
+          "the delete dialog leaves out the change count for no changes or a failed status",
+          "a cancelled delete removes nothing",
+          "Don't ask again turns the setting off first and toasts",
+          "with confirmDelete off, Delete removes at once",
+          "a refused delete toasts the failure with its message, and the card is not left showing Deleting",
+          "a delete that keeps its branch shows a notice whose Delete branch calls deleteBranch",
+          "the new-worktree dialog forwards catalog model options, sparse paths and keep-main",
+          "the new-worktree dialog creates a worktree through a pending row and opens it",
+          "a create is not opened when the view changed meanwhile, and a toast names it",
+          "a setup-decision-required refusal opens the setup choice instead of a toast, and the answer goes with the retry",
+          "SC-42: Update saves the display name and notes through set",
+          "SC-41: Set Parent offers the other workspaces, not the workspace or its descendants",
+          "agent status glyphs > working draws glyph-working with the label \"Working\"",
+          "agent status glyphs > monitoring draws glyph-monitoring with the label \"Monitoring background tasks\"",
+          "agent status glyphs > waiting draws glyph-waiting with the label \"Waiting for input\"",
+          "agent status glyphs > permission draws glyph-permission with the label \"Needs attention\"",
+          "agent status glyphs > blocked draws glyph-blocked with the label \"Blocked\"",
+          "agent status glyphs > failed draws glyph-failed with the label \"Failed\"",
+          "agent status glyphs > interrupted draws glyph-interrupted with the label \"Interrupted\"",
+          "agent status glyphs > done draws glyph-done with the label \"Done\"",
+          "agent status glyphs > unverifiable draws glyph-unverifiable with the label \"No recent update\"",
+          "agent status glyphs > idle draws glyph-idle with the label \"Idle\"",
+          "agent status glyphs > unconfirmed draws glyph-unconfirmed with the label \"Couldn't confirm\"",
+          "agent status glyphs > SC-35: the card follows its most urgent session as they change",
+          "agent status glyphs > a session with no summary keeps the coarse dot",
+          "agent status glyphs > SC-36: progress shows a ring on live states only",
+          "agent status glyphs > an unfinished state with no evidence for 30 minutes decays, and a done one does not",
+          "agent status glyphs > a one-minute tick shows decay and updates the report with no event",
+          "stock worktree controls persist options, reveal sleeping rows and wake without replacing the session",
+          "PR grouping, CLI-origin filtering and filtered-row reveal change the workspace list",
+          "workspace board renders project-defined status labels for matching worktrees",
+          "cleanup review prevents blocked selection and supports ignoring and restoring suggestions",
+          "Escape dismisses cleanup review and leaves the workspace available"
+        ],
+        "errors": [
+          "TypeError: undefined is not an object (evaluating 'rowOf(\"fix-login\", \"api\").className')",
+          "TypeError: undefined is not an object (evaluating 'rowOf(\"main\", \"web\").className')",
+          "TypeError: undefined is not an object (evaluating 'rowOf(\"fix-login\", \"api\").querySelector')",
+          "error: expect(received).toBe(expected)",
+          "error: expect(received).not.toBeUndefined()",
+          "error: expect(received).toEqual(expected)",
+          "TypeError: undefined is not an object (evaluating 'rowOf(\"main\", \"api\").querySelector')",
+          "TypeError: undefined is not an object (evaluating 'this[PropertySymbol.value]')",
+          "TypeError: undefined is not an object (evaluating 'pending.className')",
+          "TypeError: undefined is not an object (evaluating 'element.click')",
+          "error: expect(received).toContain(expected)",
+          "TypeError: undefined is not an object (evaluating 'rowOf(\"fix-login\", \"api\").textContent')"
+        ]
+      },
+      {
+        "file": "plugins/quirky.worktree/test/sidebar-extras-ui.test.ts",
+        "line": 18695,
+        "tests": [
+          "SC-03: diversion keeps an empty project placeholder and returning a parent restores child nesting",
+          "SC-05: cancelling group deletion preserves its subtree; confirming releases nested memberships",
+          "SC-01: new group creation is guarded by the selected Git worktree identity",
+          "SC-02/06: loose membership menus move and remove one worktree, and folder rows offer only project actions",
+          "SC-02: moving a Git project moves every repo row without changing loose worktree membership",
+          "SC-04: current painted geometry joins, no-ops, leaves only at the owning repo, and ignores unrelated sections",
+          "SC-08/11/12: filters use exact windows, validate custom days on Enter and blur, and recover an empty list",
+          "Custom days commits on blur without Enter and rejects an invalid blur without changing the window",
+          "SC-10/13: Live preserves selected, unknown, folder and default rows; visits are identity-keyed and idempotent",
+          "disabled extras falls back to the ordinary tree, while ordinary failures report unavailability",
+          "review filters use server preferences, compose with activity, and clear independently",
+          "hosting review events refresh only active filters and late projections cannot restore stale visibility",
+          "quiet activity aging refreshes at sixty seconds without store events",
+          "section separators mark top-level boundaries only with Pinned first",
+          "automation filtering uses only durable attribution and appears in visible counts"
+        ],
+        "errors": [
+          "error: expect(received).toBe(expected)",
+          "error: no action button for main",
+          "error: no action button for other",
+          "error: no action button for feature",
+          "TypeError: undefined is not an object (evaluating 'source().dispatchEvent')",
+          "error: no activity window option Custom",
+          "error: expect(received).toBeDefined()",
+          "TypeError: undefined is not an object (evaluating 'element.click')",
+          "error: expect(received).toContain(expected)"
+        ]
+      },
+      {
+        "file": "plugins/quirky.worktree/test/loop-status.test.tsx",
+        "line": 33848,
+        "tests": [
+          "selects each worktree loop by priority, update recency, and stable ID with strict attachment evidence",
+          "unread keeps its bell while JSON retains the loop, and an empty snapshot removes the projection",
+          "disconnects and failed refreshes make cached needs-you unverifiable until fresh evidence returns",
+          "a stale initial summary response cannot overwrite the snapshot invalidated by a loop event",
+          "plugin disable clears cached rows and fences a delayed summaries response"
+        ],
+        "errors": [
+          "error: worktree w-priority is missing from the sidebar report",
+          "error: worktree w-unread is missing from the sidebar report",
+          "error: worktree w-needs-you is missing from the sidebar report",
+          "error: worktree w-stale is missing from the sidebar report",
+          "error: worktree w-disabled is missing from the sidebar report"
+        ]
+      },
+      {
+        "file": "plugins/quirky.worktree/test/github-composer.test.ts",
+        "line": 34070,
+        "tests": [
+          "Smart # references resolve authoritatively and create from the canonical PR URL",
+          "a pasted GitHub PR URL is an authoritative source lookup",
+          "GitHub search shows mixed labelled items, selected source, external link, clear, and issue base option",
+          "an issue-derived agent prompt keeps its raw URL as an unsubmitted draft by default",
+          "a person can explicitly submit an issue-derived prompt and generic prompts remain submitted by default",
+          "plain Smart text offers an explicit name choice and branch/name modes retain existing behavior",
+          "Smart text searches local and remote branches through the public Git API",
+          "Name mode keeps blank generated-name creation available",
+          "create more resets the selected source, name, query, agent and setup choice",
+          "shared setup and issue trust choices accumulate across create retries",
+          "Run once binds consent to the shown hash and asks again when the shared script changes",
+          "Always trust on changed content replaces the earlier one-time pin",
+          "Run once and Always cannot proceed when the untrusted-script error has no hash",
+          "Project Settings edits the local GitHub issue command and shows shared command trust"
+        ],
+        "errors": [
+          "error: unexpected UI call ui.window.self",
+          "TypeError: undefined is not an object (evaluating 'create.params')",
+          "error: expect(received).toMatchObject(expected)",
+          "error: unexpected call ui.window.self",
+          "error: expect(received).toBeNull()",
+          "error: UI did not reach the expected state"
+        ]
+      },
+      {
+        "file": "plugins/quirky.worktree/test/ui-report.test.ts",
+        "line": 39847,
+        "tests": [
+          "a removing worktree and a pending create are reported with their flags"
+        ],
+        "errors": [
+          "error: expect(received).toEqual(expected)"
+        ]
+      }
+    ],
+    "plugins/quirky.vault": [
+      {
+        "file": "plugins/quirky.vault/test/window-parity.test.ts",
+        "line": 1973,
+        "tests": [
+          "SC-08: Settings reports real index counts and focuses search; connection errors expose a retry that recovers against the daemon",
+          "SC-15/16: a stale real index page replaces the old result set, and independently reachable limits are visible"
+        ],
+        "errors": [
+          "error: expect(received).toContain(expected)",
+          "error: waitFor timed out; the page shows: ExplorerAgent Session HistoryChecksQuestionsSource controlLedgerSession InfoQuick CommandsTerminal SessionsWorkspace optionsReview cleanupWorkspace options0Workspace boardEdit workspace statusesapi+⋯mainprimarymain⋯Add projectActivity .mobile-root { box-sizing: border-box; max-width: 1040px; margin: 0 auto; padding: 28px 32px 48px; color: var(--text, #d7dae0); } .mobile-root * { box-sizing: border"
+        ]
+      },
+      {
+        "file": "plugins/quirky.vault/test/flows.test.ts",
+        "line": 5318,
+        "tests": [
+          "vault public acceptance flows > real host contributions preserve identity, expose partial availability, redact remote paths, and fail honestly"
+        ],
+        "errors": [
+          "RpcError: vault worker is closed"
+        ]
+      }
+    ],
+    "plugins/quirky.hosting": [
+      {
+        "file": "plugins/quirky.hosting/test/pr.test.ts",
+        "line": 3825,
+        "tests": [
+          "quirky.hosting PR reads > review push selects the fork head rather than base origin and pushes only to that exact configured remote",
+          "quirky.hosting PR reads > review push revalidates each target and refuses unsafe, stale, closed, ambiguous or detached destinations before any push"
+        ],
+        "errors": [
+          "error: expect(received).toMatchObject(expected)",
+          "error: expect(received).toBe(expected)"
+        ]
+      }
+    ],
+    "plugins/quirky.handoff": [
+      {
+        "file": "plugins/quirky.handoff/test/service.test.ts",
+        "line": 4689,
+        "tests": [
+          "SC-6: a new worktree is created only at Start, and only with a name > a blank name is an invalid target and a named one creates nothing"
+        ],
+        "errors": [
+          "RpcError: not a git repository: /tmp/qf-28SbMg/quirky; pass --folder to add it as a folder project"
+        ]
+      },
+      {
+        "file": "plugins/quirky.handoff/test/service-drafts.test.ts",
+        "line": 4911,
+        "tests": [
+          "the plugin declares what it provides > every H1 method, both events and the CLI commands are in the catalog"
+        ],
+        "errors": [
+          "error: expect(received).toEqual(expected)"
+        ]
+      }
+    ],
+    "plugins/quirky.ledger": [
+      {
+        "file": "plugins/quirky.ledger/test/window.test.ts",
+        "line": 4799,
+        "tests": [
+          "SC-17 and SC-11: project settings and owner-removal previews retain ledger snapshots"
+        ],
+        "errors": [
+          "error: waitFor timed out; the page shows: ExplorerAgent Session HistoryChecksQuestionsSource controlLedgerSession InfoQuick CommandsTerminal SessionsWorkspace optionsReview cleanupWorkspace options0Workspace boardEdit workspace statusesapi+⋯mainprimarymain⋯Add projectRemove ProjectThis only removes api from Quirky. It is still on your disk.Ledger records retained: 1 entry across 1 ledger will be retained and detached as needed.CancelRemov"
+        ]
+      },
+      {
+        "file": "plugins/quirky.ledger/test/ledger.test.ts",
+        "line": 7069,
+        "tests": [
+          "Project ledger API: review, bulk operations and confirmation > a destructive API call requires the standard confirmation and consumes the answer once",
+          "Project ledger API: owner lifecycle and attachment > removal preview snapshots guard repo removal; retained entries detach and reattach eagerly on re-add",
+          "Project ledger API: owner lifecycle and attachment > recovers a project ledger from its canonical repository root when no origin remote exists",
+          "Project ledger API: owner lifecycle and attachment > canonical project identity preserves non-GitHub path case and nondefault ports",
+          "Project ledger API: owner lifecycle and attachment > ambiguous live codebase matches remain detached until a unique project is available",
+          "Project ledger API: owner lifecycle and attachment > detached ledgers can be explicitly attached to an empty same-tier owner with equivalence history"
+        ],
+        "errors": [
+          "RpcError: quirky.ask/wait needs a client connection",
+          "RpcError: quirky.worktree did not provide method:quirky.worktree/ownedIds"
+        ]
+      },
+      {
+        "file": "plugins/quirky.ledger/test/import-cli.test.ts",
+        "line": 7527,
+        "tests": [
+          "Project ledger CLI: positional, flag, text, JSON and exit contracts > attach is scriptable; detached ledgers remain directly readable and can be removed with a revision snapshot",
+          "Project ledger CLI: legacy import formats and replay safety > automatic same-codebase recovery preserves import identity and deletion tombstones",
+          "Project ledger CLI: legacy import formats and replay safety > equivalent project attachment reuses a unique imported source anchor without creating a duplicate"
+        ],
+        "errors": [
+          "RpcError: quirky.worktree did not provide method:quirky.worktree/ownedIds"
+        ]
+      }
+    ],
+    "packages/cli": [
+      {
+        "file": "packages/cli/test/v1-words.e2e.test.ts",
+        "line": 6996,
+        "tests": [
+          "SC-20: v1 command lines run through the plugins > SC-20: text output keeps v1 tables and records",
+          "SC-20: v1 command lines run through the plugins > SC-20: --json output keeps v1 shapes",
+          "SC-20: v1 command lines run through the plugins > SC-20: repo and worktree positionals take selectors and v1 plain IDs"
+        ],
+        "errors": [
+          "error: quirky repo rm api exited 1: quirky: quirky.worktree did not provide method:quirky.worktree/ownedIds",
+          "error: quirky repo rm api --json exited 1: ",
+          "error: quirky repo rm repo_95040ede70c9 exited 1: quirky: quirky.worktree did not provide method:quirky.worktree/ownedIds"
+        ]
+      },
+      {
+        "file": "packages/cli/test/cli.e2e.test.ts",
+        "line": 34033,
+        "tests": [
+          "flag parsing > an unknown flag names the command and the valid flags"
+        ],
+        "errors": [
+          "error: expect(received).toContain(expected)"
+        ]
+      },
+      {
+        "file": "packages/cli/test/theme.test.ts",
+        "line": 39511,
+        "tests": [
+          "theme list > marks the active theme with *",
+          "theme list > marks the active theme after a choice",
+          "theme list > marks a chosen theme that is not active with (chosen)",
+          "theme list > keeps a chosen theme that is no longer listed as a chosen line"
+        ],
+        "errors": [
+          "error: expect(received).toEqual(expected)"
+        ]
+      },
+      {
+        "file": "packages/cli/test/ui.test.ts",
+        "line": 39661,
+        "tests": [
+          "ui contributions > prints one headed table per non-empty section"
+        ],
+        "errors": [
+          "error: expect(received).toEqual(expected)"
+        ]
+      }
+    ],
+    "plugins/quirky.repo": [
+      {
+        "file": "plugins/quirky.repo/test/projects.test.ts",
+        "line": 7232,
+        "tests": [
+          "SC-9: removing a project > forgets it and its settings, takes it out of its group, and leaves the folder"
+        ],
+        "errors": [
+          "RpcError: quirky.worktree did not provide method:quirky.worktree/ownedIds"
+        ]
+      },
+      {
+        "file": "plugins/quirky.repo/test/repo.test.ts",
+        "line": 7984,
+        "tests": [
+          "quirky.repo methods > remove forgets the repo and emits changed; removing it again is NotFound",
+          "SC-10: repo selectors > remove takes a selector",
+          "remove closes the repo sessions > only the sessions of the removed repo are closed",
+          "remove closes the repo sessions > sessions still close when git can no longer list the repo worktrees",
+          "remove closes the repo sessions > a same-named repo keeps its sessions",
+          "remove closes the repo sessions > a session in an externally created worktree closes with its repo after the directory is gone",
+          "remove closes the repo sessions > a failed close keeps the repo so removal can be retried",
+          "remove closes the repo sessions > without quirky.session the repo is removed with nothing to close"
+        ],
+        "errors": [
+          "RpcError: quirky.worktree did not provide method:quirky.worktree/ownedIds"
+        ]
+      },
+      {
+        "file": "plugins/quirky.repo/test/cli.test.ts",
+        "line": 17024,
+        "tests": [
+          "SC-20: quirky repo commands keep v1 output > rm prints \"removed <repo>\" and takes selectors",
+          "SC-20: quirky repo commands keep v1 output > rm --json prints the method result"
+        ],
+        "errors": [
+          "RpcError: quirky.worktree did not provide method:quirky.worktree/ownedIds"
+        ]
+      },
+      {
+        "file": "plugins/quirky.repo/test/hooks.test.ts",
+        "line": 17785,
+        "tests": [
+          "effectiveHooks: reading the shared file > no file means no hooks, the default startup policy and no warnings"
+        ],
+        "errors": [
+          "error: expect(received).toEqual(expected)"
+        ]
+      }
+    ],
+    "plugins/quirky.terminal-dock": [
+      {
+        "file": "plugins/quirky.terminal-dock/test/defects.e2e.test.ts",
+        "line": 7499,
+        "tests": [
+          "Codex transcript evidence clears a snapshot send despite a stale composer prompt"
+        ],
+        "errors": [
+          "RpcError: no setting setting:quirky.agent-status/hooks"
+        ]
+      }
+    ],
+    "plugins/quirky.agents": [
+      {
+        "file": "plugins/quirky.agents/test/service.test.ts",
+        "line": 7634,
+        "tests": [
+          "provider-owned model discovery > only a bounded provider probe replaces the exact local catalog; empty, malformed and failed probes preserve it",
+          "provider-owned model discovery > Codex discovery refuses to run under a raw inherited home when account preparation is unavailable"
+        ],
+        "errors": [
+          "RpcError: unknown agent: fixture-model-provider",
+          "error: expect(received).toContain(expected)"
+        ]
+      },
+      {
+        "file": "plugins/quirky.agents/test/cli.test.ts",
+        "line": 15982,
+        "tests": [
+          "the CLI catalog > lists the agents group with every command and the methods each calls"
+        ],
+        "errors": [
+          "error: expect(received).toEqual(expected)"
+        ]
+      },
+      {
+        "file": "plugins/quirky.agents/test/core/entry.test.ts",
+        "line": 40014,
+        "tests": [
+          "validateEntry > links must be http(s) URLs"
+        ],
+        "errors": [
+          "error: expected the entry to be invalid"
+        ]
+      }
+    ],
+    "plugins/quirky.accounts": [
+      {
+        "file": "plugins/quirky.accounts/test/accounts-api.test.ts",
+        "line": 16911,
+        "tests": [
+          "quirky.accounts lifecycle API and CLI > Codex app-server discovery uses the selected account, and failures preserve its model snapshot",
+          "quirky.accounts lifecycle API and CLI > remove uses the destructive confirmation convention and explicit yes removes only the managed credential name",
+          "quirky.accounts lifecycle API and CLI > Codex resume continues from the prepared target after the original profile is removed"
+        ],
+        "errors": [
+          "error: expect(received).toMatchObject(expected)",
+          "RpcError: quirky.ask/wait needs a client connection"
+        ]
+      },
+      {
+        "file": "plugins/quirky.accounts/test/profiles.test.ts",
+        "line": 33811,
+        "tests": [
+          "quirky.accounts profile ownership and routing > Claude history remains shared when the first account predates default history and survives its removal"
+        ],
+        "errors": [
+          "RpcError: quirky.ask/wait needs a client connection"
+        ]
+      }
+    ],
+    "plugins/quirky.sidebar-extras": [
+      {
+        "file": "plugins/quirky.sidebar-extras/test/activity.test.ts",
+        "line": 17576,
+        "tests": [
+          "workspace activity projection > uses maximum activity and departure recency before creation and repository fallbacks"
+        ],
+        "errors": [
+          "error: expect(received).toBe(expected)"
+        ]
+      }
+    ],
+    "packages/protocol": [
+      {
+        "file": "packages/protocol/test/ui.test.ts",
+        "line": 39923,
+        "tests": [
+          "theme tokens and the default theme > DEFAULT_THEME fills exactly THEME_TOKENS with valid colors"
+        ],
+        "errors": [
+          "error: expect(received).toMatchObject(expected)"
+        ]
+      },
+      {
+        "file": "packages/protocol/test/kernel-schemas.test.ts",
+        "line": 40061,
+        "tests": [
+          "kernel method schemas > read-only and destructive methods are flagged",
+          "kernel method schemas > only the hello, subscribe and ui window methods are connection methods",
+          "kernel event schemas > cover every event type"
+        ],
+        "errors": [
+          "error: expect(received).toEqual(expected)"
+        ]
+      }
+    ]
+  }
+}

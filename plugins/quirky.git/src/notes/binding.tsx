@@ -94,7 +94,6 @@ export function useNotesBinding(context: UiPluginContext, worktree: string, note
                 <SendMenu
                   context={live.current.context}
                   worktree={live.current.worktree}
-                  className="qgv-note-action"
                   scopes={[{ id: 'note', label: 'This note', notes: [note], params: { scope: 'note', id: note.id } }]}
                 />
               }

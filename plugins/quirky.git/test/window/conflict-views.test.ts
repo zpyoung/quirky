@@ -19,7 +19,7 @@ async function mergeConflict(w: World, files: string[]): Promise<void> {
   await w.win.waitFor(() => q('.scm-card-conflict'))
 }
 
-const reviewRows = () => qa('.qgv-review-row').map((r) => text(r))
+const reviewRows = () => qa('[data-git-view-root] nav[aria-label="Files"] [data-path]').map((r) => text(r))
 
 test('SC-45: the conflict review lists the snapshot, then Refresh marks a staged file Resolved and a removed one Gone', async () => {
   const w = await boot(scratch)
@@ -28,8 +28,8 @@ test('SC-45: the conflict review lists the snapshot, then Refresh marks a staged
   await w.win.waitFor(async () => (await openView(w))?.id === DIFF_VIEW)
   await w.win.waitFor(() => reviewRows().length === 2)
   expect(reviewRows()).toEqual(['a.tsUnresolvedOpen', 'b.tsUnresolvedOpen'])
-  expect(text(q('.qgv-scroll'))).toMatch(/^2 unresolved conflicts · Snapshot captured at .+\.$/)
-  expect(text(q('.qgv-review h3'))).toBe('Files')
+  expect(text(q('[data-git-view-root]')!)).toMatch(/^2 unresolved conflicts · Snapshot captured at .+\.$/)
+  expect(text(q('[data-git-view-root] nav[aria-label="Files"] h2'))).toBe('Files')
   await w.win.waitFor(async () => (await w.viewReport())?.conflicts === 2)
 
   writeFileSync(join(w.dir, 'a.ts'), 'merged\n')
@@ -37,9 +37,9 @@ test('SC-45: the conflict review lists the snapshot, then Refresh marks a staged
   w.git('rm', '-q', '-f', 'b.ts')
   await click(buttonText('Refresh'))
   await w.win.waitFor(() => reviewRows().join() === 'a.tsResolved,b.tsGone')
-  expect(text(q('.qgv-notice'))).toContain('All conflicts resolved')
-  expect(text(q('.qgv-notice'))).toContain('This review snapshot no longer has any live unresolved conflicts.')
-  expect(text(q('.qgv-scroll'))).not.toContain('unresolved conflicts ·')
+  expect(text(q('[data-git-view-root] [role="region"][aria-label="All conflicts resolved"]'))).toContain('All conflicts resolved')
+  expect(text(q('[data-git-view-root] [role="region"][aria-label="All conflicts resolved"]'))).toContain('This review snapshot no longer has any live unresolved conflicts.')
+  expect(text(q('[data-git-view-root]'))).not.toContain('unresolved conflicts ·')
   await click(buttonText('Dismiss'))
   await w.win.waitFor(async () => (await openView(w))?.id === SESSION_VIEW)
   expect(w.problems()).toEqual([])
@@ -62,12 +62,12 @@ test('SC-44: the conflict file view tints the markers, labels the blocks and wra
   const w = await boot(scratch)
   await mergeConflict(w, ['a.ts'])
   await click(rowOf('a.ts', 'conflicts'))
-  await w.win.waitFor(() => q('.cm-editor') && text(q('.qgv-counter')) === '1 / 1')
-  expect(text(q('.qgv-banner'))).toContain('Unresolved conflict · Both modified')
-  expect(qa('.qg-conflict-label').map(text)).toEqual(['Current change', 'Incoming change', 'End conflict'])
-  expect(qa('.qg-conflict-marker').length).toBe(3)
+  await w.win.waitFor(() => q('[data-git-view-root] .cm-editor') && text(q('[data-git-view-root] [aria-label="Conflict 1 of 1"]')) === '1 / 1')
+  expect(text(q('[data-git-view-root] [role="status"]'))).toContain('Unresolved conflict · Both modified')
+  expect(qa('[data-git-view-root] .ui-editor-conflict-label').map(text)).toEqual(['Current change', 'Incoming change', 'End conflict'])
+  expect(qa('[data-git-view-root] .ui-editor-conflict-marker').length).toBe(3)
   await click(byLabel('Next conflict'))
-  expect(text(q('.qgv-counter'))).toBe('1 / 1')
+  expect(text(q('[data-git-view-root] [aria-label="Conflict 1 of 1"]'))).toBe('1 / 1')
 }, SLOW)
 
 test('SC-44: a file deleted by them asks whether to keep it, and a file with no working copy says so', async () => {
@@ -84,9 +84,9 @@ test('SC-44: a file deleted by them asks whether to keep it, and a file with no 
   expect(w.git('status', '--porcelain')).toContain('UD a.ts')
 
   await click(rowOf('a.ts', 'conflicts'))
-  await w.win.waitFor(() => q('.qgv-banner'))
-  expect(text(q('.qgv-banner'))).toContain('Deleted by them')
-  expect(text(q('.qgv-banner'))).toContain('Decide whether to keep the file or accept deletion')
+  await w.win.waitFor(() => q('[data-git-view-root] [role="status"]'))
+  expect(text(q('[data-git-view-root] [role="status"]'))).toContain('Deleted by them')
+  expect(text(q('[data-git-view-root] [role="status"]'))).toContain('Decide whether to keep the file or accept deletion')
   expect(readFileSync(join(w.dir, 'a.ts'), 'utf8')).toBe('ours a\n')
   expect(w.problems()).toEqual([])
 }, SLOW)

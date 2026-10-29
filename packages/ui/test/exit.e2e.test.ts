@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, realpathSync, rmSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import type { Ask, QuirkyClient, Repo, Session, UiSlotState, UiState, Worktree } from '@quirky/protocol'
 import { createFakeGit, useTestGit } from '@quirky/git/testing'
-import { runCli, spawnCli } from '../../cli/test/fixtures/fake-daemon'
+import { spawnCli } from '../../cli/test/fixtures/fake-daemon'
 import { builtinsDir, makeTempHome, startHarness, type Harness } from '../../daemon/test/helpers'
 import { startHeadlessWindow, type HeadlessWindow } from './fixtures/headless-window'
 
@@ -21,7 +21,27 @@ let agent: QuirkyClient
 let repo: Repo
 let main: Worktree
 let shell: Session
-const asking: ReturnType<typeof spawnCli>[] = []
+const cliProcesses = new Set<Bun.Subprocess>()
+
+function ownCli(args: string[], options: Parameters<typeof spawnCli>[1]) {
+  const proc = spawnCli(args, options)
+  cliProcesses.add(proc)
+  void proc.exited.then(() => cliProcesses.delete(proc))
+  return proc
+}
+
+async function runCliOwned(
+  args: string[],
+  options: Parameters<typeof spawnCli>[1]
+): Promise<{ code: number; stdout: string; stderr: string }> {
+  const proc = ownCli(args, options)
+  const [stdout, stderr, code] = await Promise.all([
+    new Response(proc.stdout).text(),
+    new Response(proc.stderr).text(),
+    proc.exited
+  ])
+  return { code, stdout, stderr }
+}
 
 // happy-dom swaps these globals for its own, and the in-process daemon answers the CLI's
 // HTTP requests with whichever `Response` is global when it builds the reply
@@ -48,17 +68,16 @@ beforeEach(async () => {
 })
 
 afterEach(async () => {
-  for (const proc of asking.splice(0)) {
-    proc.kill()
-    await proc.exited
-  }
+  const processes = [...cliProcesses]
+  for (const proc of processes) proc.kill()
+  await Promise.all(processes.map((proc) => proc.exited))
   await win.stop()
   await harness.cleanup()
   useTestGit(null)
   rmSync(scratch, { recursive: true, force: true })
 })
 
-const quirky = (args: string[]) => runCli(args, { home: harness.home, cwd: apiDir })
+const quirky = (args: string[]) => runCliOwned(args, { home: harness.home, cwd: apiDir })
 
 async function ok(args: string[]): Promise<string> {
   const result = await quirky(args)
@@ -129,10 +148,9 @@ test('SC-35: ui state includes the sidebar and session view reports', async () =
 })
 
 /** Starts `quirky ask` with one confirm question and returns its process and the lines it has printed so far. */
-function startAsk(question: string): { proc: ReturnType<typeof spawnCli>; lines: string[] } {
+function startAsk(question: string) {
   const spec = JSON.stringify({ questions: [{ id: 'go', type: 'confirm', question }] })
-  const proc = spawnCli(['ask', '--spec', spec], { home: harness.home, cwd: apiDir })
-  asking.push(proc)
+  const proc = ownCli(['ask', '--spec', spec], { home: harness.home, cwd: apiDir })
   const lines: string[] = []
   void (async () => {
     const reader = proc.stdout.getReader()
@@ -153,32 +171,79 @@ function startAsk(question: string): { proc: ReturnType<typeof spawnCli>; lines:
 const pendingAsks = async () => (await agent.callAny('quirky.ask/list', { pendingOnly: true })) as Ask[]
 const questionsReport = (state: UiState) => slotOf(state, QUESTIONS)?.report as { pending: { askId: string }[] } | undefined
 
-test('SC-31: an ask opens the Questions panel, badges its toggle and announces itself', async () => {
-  expect((await uiState()).layout.panel).toBeNull()
-  startAsk('First?')
+test('SC-31: a sessionless CLI ask badges Questions without changing the selected view, and appears when opened', async () => {
+  const before = await uiState()
+  expect(before.layout).toMatchObject({
+    view: { id: SESSION_VIEW, input: { worktree: main.id, session: shell.id } },
+    focus: 'view'
+  })
+  const ask = startAsk('First?')
+  await win.waitFor(() => ask.lines.length >= 1)
+  const registered = JSON.parse(ask.lines[0]!) as { status: string; askId: string }
+  expect(registered.status).toBe('registered')
 
-  const open = await stateWhere((state) => state.layout.panel === QUESTIONS && questionsReport(state)?.pending.length === 1)
-  expect(open.layout.panel).toBe(QUESTIONS)
+  const pending = await win.waitFor(async () => {
+    const [current] = await pendingAsks()
+    return current?.id === registered.askId ? current : undefined
+  })
+  expect(pending.sessionId).toBeNull()
   await win.waitFor(() => win.host.getState().badges[QUESTIONS] === 1)
-  expect(harness.notifications).toEqual([{ title: 'Question', body: 'First?' }])
+  expect(harness.notifications).toEqual([])
+
+  const unchanged = await uiState()
+  expect(unchanged.layout).toEqual(before.layout)
+  expect(unchanged.windows.map((window) => window.focused)).toEqual(before.windows.map((window) => window.focused))
+
+  await agent.callAny('ui.panel.open', { id: QUESTIONS })
+  const open = await stateWhere(
+    (state) =>
+      state.layout.panel === QUESTIONS &&
+      questionsReport(state)?.pending.some((item) => item.askId === registered.askId) === true
+  )
+  expect(questionsReport(open)?.pending.map((item) => item.askId)).toEqual([registered.askId])
 })
 
 test('SC-29: a second pending ask stays listed after the first is answered, and answering it resolves its waiter', async () => {
   const first = startAsk('First?')
   await win.waitFor(() => first.lines.length >= 1)
-  const second = startAsk('Second?')
-  await stateWhere((state) => questionsReport(state)?.pending.length === 2)
-  const [one, two] = await pendingAsks()
+  const firstRegistered = JSON.parse(first.lines[0]!) as { status: string; askId: string }
+  expect(firstRegistered.status).toBe('registered')
 
-  await agent.callAny('quirky.ask/answer', { askId: one!.id, answers: { go: { value: true, source: 'input' } } })
-  const remaining = await stateWhere((state) => questionsReport(state)?.pending.length === 1)
-  expect(questionsReport(remaining)?.pending[0]?.askId).toBe(two!.id)
-  expect((await pendingAsks()).map((ask) => ask.id)).toEqual([two!.id])
+  const second = startAsk('Second?')
+  await win.waitFor(() => second.lines.length >= 1)
+  const secondRegistered = JSON.parse(second.lines[0]!) as { status: string; askId: string }
+  expect(secondRegistered.status).toBe('registered')
+
+  await agent.callAny('ui.panel.open', { id: QUESTIONS })
+  const both = await stateWhere((state) => questionsReport(state)?.pending.length === 2)
+  expect(questionsReport(both)?.pending.map((ask) => ask.askId)).toEqual([
+    firstRegistered.askId,
+    secondRegistered.askId
+  ])
+  expect((await pendingAsks()).map((ask) => ask.id)).toEqual([firstRegistered.askId, secondRegistered.askId])
+
+  await agent.callAny('quirky.ask/answer', {
+    askId: firstRegistered.askId,
+    answers: { go: { value: true, source: 'input' } }
+  })
+  const remaining = await stateWhere(
+    (state) =>
+      questionsReport(state)?.pending.length === 1 &&
+      questionsReport(state)?.pending[0]?.askId === secondRegistered.askId
+  )
+  expect(questionsReport(remaining)?.pending[0]?.askId).toBe(secondRegistered.askId)
+  expect((await pendingAsks()).map((ask) => ask.id)).toEqual([secondRegistered.askId])
   await win.waitFor(() => win.host.getState().badges[QUESTIONS] === 1)
 
-  await agent.callAny('quirky.ask/answer', { askId: two!.id, answers: { go: { value: true, source: 'input' } } })
+  await win.waitFor(() => first.lines.length === 2)
+  expect(JSON.parse(first.lines[1]!)).toMatchObject({ status: 'answered', askId: firstRegistered.askId })
+  expect(await first.proc.exited).toBe(0)
+
+  await agent.callAny('quirky.ask/answer', {
+    askId: secondRegistered.askId,
+    answers: { go: { value: true, source: 'input' } }
+  })
   await win.waitFor(() => second.lines.length === 2)
-  expect(JSON.parse(second.lines[0]!)).toEqual({ status: 'registered', askId: two!.id })
-  expect(JSON.parse(second.lines[1]!)).toMatchObject({ status: 'answered', askId: two!.id })
+  expect(JSON.parse(second.lines[1]!)).toMatchObject({ status: 'answered', askId: secondRegistered.askId })
   expect(await second.proc.exited).toBe(0)
 })

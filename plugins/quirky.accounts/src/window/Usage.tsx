@@ -110,8 +110,8 @@ export function UsagePreferencesControls({ store, preferences }: { store: Accoun
 
 const PROVIDER_LABELS_LIST = Object.entries(PROVIDER_LABELS) as [ProviderId, string][]
 
-function EmptyUsage({ store, statusBar = false }: { store: AccountsUiStore; statusBar?: boolean }) {
-  return <div className={`usage-cta${statusBar ? ' usage-status-cta' : ''}`}>
+function EmptyUsage({ store }: { store: AccountsUiStore }) {
+  return <div className="usage-cta">
     <h2>Configure usage tracking</h2>
     <p>Connect your AI provider accounts to see their usage in real time and easily switch between accounts.</p>
     <div className="details-actions">
@@ -186,7 +186,7 @@ function AccountSwitcher({ store, provider, state, usage }: { store: AccountsUiS
         const active = account.id === selectedId
         const accountUsage = active
           ? usage?.providers.find((item) => item.provider === provider && item.accountId === account.id)
-          : usage?.inactive[account.id]
+          : usage?.inactive[`${provider}:${account.id}`]
         return <div className="account-row" key={account.id}>
           <div className="account-row-main"><strong>{account.label}</strong><small>{[account.email, account.organization, account.lastAuthenticatedAt ? `Signed in ${new Date(account.lastAuthenticatedAt).toLocaleDateString()}` : null].filter(Boolean).join(' · ') || 'Managed account'}</small>{account.needsSignIn && <small className="status-error">Sign in again to use this account.</small>}<InactiveUsage snapshot={accountUsage} direction={state?.preferences.direction ?? 'used'} active={active} /></div>
           <div className="account-actions">{active && <span className="badge active">Active</span>}{account.needsSignIn && <span className="badge warning">Needs sign-in</span>}<button type="button" aria-label={`Select ${ProviderName} account ${account.label}`} disabled={!state || account.needsSignIn || active} onClick={() => void store.selectAccount(provider, account.id)}>{active ? 'Active' : account.needsSignIn ? 'Needs sign-in' : 'Select'}</button></div>
@@ -448,7 +448,7 @@ export function StatusBarUsage({ store, report }: { store: AccountsUiStore; repo
     visibleProviders: hidden ? [] : visibleChips.map((provider) => provider.provider),
     visibleProviderStatus: hidden ? [] : visibleChips.map((provider) => ({ provider: provider.provider, label: PROVIDER_LABELS[provider.provider], status: snapshotStatus(provider).label, usedPercent: maxUsed(provider) })),
     collapsedProviders: hidden ? [] : collapsed.map((provider) => provider.provider),
-    emptyCtaVisible: !hidden && showEmptyCta && !snapshot.ui.open,
+    emptyCtaVisible: !hidden && showEmptyCta && snapshot.ui.open,
     ui: { popoverOpen: snapshot.ui.open, provider: snapshot.ui.provider && isProvider(snapshot.ui.provider) ? snapshot.ui.provider : null, expanded: snapshot.ui.expanded }
   }
   useStableReport(report, reportState)
@@ -466,9 +466,7 @@ export function StatusBarUsage({ store, report }: { store: AccountsUiStore; repo
     <style>{ACCOUNTS_CSS}</style>
     {!hidden && <>
       <button ref={triggerRef} type="button" className="usage-trigger" aria-label="Open Usage" aria-expanded={snapshot.ui.open} onClick={() => void store.setUiState({ open: !snapshot.ui.open })}>Usage <small>{preferences?.direction === 'remaining' ? 'Remaining' : 'Used'}</small></button>
-      {showEmptyCta
-        ? !snapshot.ui.open && <EmptyUsage store={store} statusBar />
-        : <div className="usage-chips" aria-label="Provider usage status bar">
+      {!showEmptyCta && <div className="usage-chips" aria-label="Provider usage status bar">
             {visibleChips.map((provider) => <StatusChip key={provider.provider} snapshot={provider} preferences={preferences ?? DEFAULT_USAGE_PREFERENCES} />)}
             {collapsed.length > 0 && <button type="button" className="usage-chip" aria-label={`${collapsed.length} more providers`} title={tooltip} onClick={() => void store.setUiState({ open: true })}>+{collapsed.length}</button>}
           </div>}
@@ -529,10 +527,9 @@ export function AccountSwitchDialog({ store, report }: { store: AccountsUiStore;
   const submissionLock = useRef(false)
   const state = snapshot.accounts
   const askSessions = state?.preferences.claudeSwitchPolicy === 'ask'
-    ? state.staleSessions.filter((session) => session.provider === 'claude' && !session.kept)
+    ? state.staleSessions.filter((session) => session.provider === 'claude' && !session.kept && !session.queued)
     : []
-  const queued = state?.staleSessions.filter((session) => session.provider === 'claude' && session.queued && !session.kept) ?? []
-  const currentVisible = [...askSessions, ...queued.filter((session) => !askSessions.some((candidate) => candidate.sessionId === session.sessionId))]
+  const currentVisible = askSessions
   const dialogKey = state ? `${state.active.claude ?? 'system'}:${state.revision}` : 'loading'
   const visible = [...currentVisible, ...(pinnedSessions?.key === dialogKey ? pinnedSessions.sessions.filter((session) => !currentVisible.some((candidate) => candidate.sessionId === session.sessionId)) : [])]
   const dontAskAgain = dontAskChoice.key === dialogKey && dontAskChoice.checked

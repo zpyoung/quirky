@@ -1,3 +1,5 @@
+import { useId } from 'react'
+import { Button, FormRow, SelectField, TextArea, TextField } from '@quirky/ui'
 import type { LoopConfig, LoopCreateInput, LoopSnapshot } from '../src/types'
 import type { ConfigFieldsProps, DraftValidation, LoopDraft } from './contracts'
 
@@ -185,241 +187,210 @@ export function validateDraft(
 }
 
 export function ConfigFields(props: ConfigFieldsProps) {
+  const checkboxId = useId()
   const { draft, onChange, errors, workspaceKind, showCost, editing, disabled } = props
-  const error = (name: string) => {
-    const message = errors[name]
-    return message ? <span className="loop-field-error" role="alert">{message}</span> : null
-  }
   const isDisabled = disabled === true
   return (
-    <section className="loop-settings" aria-label="Loop settings">
+    <section className="ui-stack" aria-label="Loop settings">
       {editing ? (
-        <label className="loop-field">
-          <span>Pacing</span>
-          <select
-            aria-label="Pacing"
-            value={draft.pacingKind}
-            disabled={isDisabled}
-            onChange={(event) => onChange({ pacingKind: event.currentTarget.value as LoopDraft['pacingKind'] })}
-          >
-            <option value="on-idle">As soon as the agent is idle</option>
-            <option value="interval">On an interval</option>
-          </select>
-        </label>
+        <SelectField
+          label="Pacing"
+          aria-label="Pacing"
+          value={draft.pacingKind}
+          disabled={isDisabled}
+          onChange={(event) => onChange({ pacingKind: event.currentTarget.value as LoopDraft['pacingKind'] })}
+        >
+          <option value="on-idle">As soon as the agent is idle</option>
+          <option value="interval">On an interval</option>
+        </SelectField>
       ) : (
-        <label className="loop-field">
-          <span>Run</span>
-          <select
-            aria-label="Run"
-            value={draft.preset}
-            disabled={isDisabled}
-            onChange={(event) => onChange({ preset: event.currentTarget.value as LoopDraft['preset'] })}
-          >
-            <option value="until-done">Until done</option>
-            <option value="interval">On an interval</option>
-            <option value="queue">Queue</option>
-          </select>
-        </label>
+        <SelectField
+          label="Run"
+          aria-label="Run"
+          value={draft.preset}
+          disabled={isDisabled}
+          onChange={(event) => onChange({ preset: event.currentTarget.value as LoopDraft['preset'] })}
+        >
+          <option value="until-done">Until done</option>
+          <option value="interval">On an interval</option>
+          <option value="queue">Queue</option>
+        </SelectField>
       )}
       {(editing ? draft.pacingKind === 'interval' : draft.preset === 'interval') && (
-        <div className="loop-field-grid">
-          <label className="loop-field">
-            <span>Run every (minutes)</span>
-            <input
-              aria-label="Run every (minutes)"
-              type="text"
-              inputMode="numeric"
-              value={draft.intervalMinutes}
-              disabled={isDisabled}
-              onChange={(event) => onChange({ intervalMinutes: event.currentTarget.value })}
-            />
-            {error('intervalMinutes')}
-          </label>
-          <label className="loop-field">
-            <span>Counted from</span>
-            <select
-              aria-label="Counted from"
-              value={draft.anchor}
-              disabled={isDisabled}
-              onChange={(event) => onChange({ anchor: event.currentTarget.value as LoopDraft['anchor'] })}
-            >
-              <option value="from-end">End of the last iteration</option>
-              <option value="wall-clock">The clock</option>
-            </select>
-          </label>
+        <div className="ui-stack">
+          <TextField
+            label="Run every (minutes)"
+            aria-label="Run every (minutes)"
+            type="text"
+            inputMode="numeric"
+            value={draft.intervalMinutes}
+            disabled={isDisabled}
+            error={errors.intervalMinutes}
+            onChange={(event) => onChange({ intervalMinutes: event.currentTarget.value })}
+          />
+          <SelectField
+            label="Counted from"
+            aria-label="Counted from"
+            value={draft.anchor}
+            disabled={isDisabled}
+            onChange={(event) => onChange({ anchor: event.currentTarget.value as LoopDraft['anchor'] })}
+          >
+            <option value="from-end">End of the last iteration</option>
+            <option value="wall-clock">The clock</option>
+          </SelectField>
         </div>
       )}
-      <label className="loop-field">
-        <span>Session</span>
-        <select
-          aria-label="Session"
-          value={draft.sessionPolicy}
-          disabled={isDisabled}
-          onChange={(event) => onChange({ sessionPolicy: event.currentTarget.value as LoopDraft['sessionPolicy'] })}
-        >
-          <option value="fresh">Fresh</option>
-          <option value="continue">Continue</option>
-        </select>
-      </label>
+      <SelectField
+        label="Session"
+        aria-label="Session"
+        value={draft.sessionPolicy}
+        disabled={isDisabled}
+        onChange={(event) => onChange({ sessionPolicy: event.currentTarget.value as LoopDraft['sessionPolicy'] })}
+      >
+        <option value="fresh">Fresh</option>
+        <option value="continue">Continue</option>
+      </SelectField>
       {editing && draft.preset === 'queue' && (
-        <label className="loop-check-field">
+        <FormRow label="Start over when the queue is empty" htmlFor={`${checkboxId}-repeat-queue`}>
           <input
+            id={`${checkboxId}-repeat-queue`}
             type="checkbox"
             checked={draft.repeatQueue}
             disabled={isDisabled}
             onChange={(event) => onChange({ repeatQueue: event.currentTarget.checked })}
           />
-          <span>Start over when the queue is empty</span>
-        </label>
+        </FormRow>
       )}
-      <label className="loop-field">
-        <span>Maximum iterations</span>
-        <input
-          aria-label="Maximum iterations"
-          type="text"
-          inputMode="numeric"
-          value={draft.maxIterations}
-          disabled={isDisabled}
-          onChange={(event) => onChange({ maxIterations: event.currentTarget.value })}
-        />
-        {error('maxIterations')}
-      </label>
-      <button
-        type="button"
-        className="loop-advanced-toggle"
+      <TextField
+        label="Maximum iterations"
+        aria-label="Maximum iterations"
+        type="text"
+        inputMode="numeric"
+        value={draft.maxIterations}
+        disabled={isDisabled}
+        error={errors.maxIterations}
+        onChange={(event) => onChange({ maxIterations: event.currentTarget.value })}
+      />
+      <Button
         aria-expanded={draft.advanced}
         disabled={isDisabled}
         onClick={() => onChange({ advanced: !draft.advanced })}
       >
         <span aria-hidden="true">{draft.advanced ? '▾' : '▸'}</span> Advanced
-      </button>
+      </Button>
       {draft.advanced && (
-        <div className="loop-advanced-fields">
-          <label className="loop-field">
-            <span>Done check command</span>
-            <input
-              aria-label="Done check command"
-              type="text"
-              value={draft.checkCommand}
-              placeholder="Runs in the workspace. Exit code 0 means the work is done."
-              disabled={isDisabled}
-              onChange={(event) => onChange({ checkCommand: event.currentTarget.value })}
-            />
-          </label>
+        <div className="ui-stack">
+          <TextField
+            label="Done check command"
+            aria-label="Done check command"
+            type="text"
+            value={draft.checkCommand}
+            placeholder="Runs in the workspace. Exit code 0 means the work is done."
+            disabled={isDisabled}
+            onChange={(event) => onChange({ checkCommand: event.currentTarget.value })}
+          />
           {draft.checkCommand.trim() !== '' && (
-            <div className="loop-field-grid">
-              <label className="loop-field">
-                <span>Check timeout (seconds)</span>
-                <input
-                  aria-label="Check timeout (seconds)"
-                  type="text"
-                  inputMode="numeric"
-                  value={draft.checkTimeout}
-                  disabled={isDisabled}
-                  onChange={(event) => onChange({ checkTimeout: event.currentTarget.value })}
-                />
-                {error('checkTimeout')}
-              </label>
-              <label className="loop-field">
-                <span>Run the check</span>
-                <select
-                  aria-label="Run the check"
-                  value={draft.checkWhen}
-                  disabled={isDisabled}
-                  onChange={(event) => onChange({ checkWhen: event.currentTarget.value as LoopDraft['checkWhen'] })}
-                >
-                  <option value="every-iteration">After every iteration</option>
-                  <option value="on-claim">When the agent says it is done</option>
-                </select>
-              </label>
+            <div className="ui-stack">
+              <TextField
+                label="Check timeout (seconds)"
+                aria-label="Check timeout (seconds)"
+                type="text"
+                inputMode="numeric"
+                value={draft.checkTimeout}
+                disabled={isDisabled}
+                error={errors.checkTimeout}
+                onChange={(event) => onChange({ checkTimeout: event.currentTarget.value })}
+              />
+              <SelectField
+                label="Run the check"
+                aria-label="Run the check"
+                value={draft.checkWhen}
+                disabled={isDisabled}
+                onChange={(event) => onChange({ checkWhen: event.currentTarget.value as LoopDraft['checkWhen'] })}
+              >
+                <option value="every-iteration">After every iteration</option>
+                <option value="on-claim">When the agent says it is done</option>
+              </SelectField>
             </div>
           )}
-          <label className="loop-field">
-            <span>Done condition</span>
-            <textarea
-              aria-label="Done condition"
-              value={draft.evaluatorCondition}
-              placeholder="A second agent reads the changes and judges whether this is true."
-              rows={2}
-              disabled={isDisabled}
-              onChange={(event) => onChange({ evaluatorCondition: event.currentTarget.value })}
-            />
-          </label>
-          <label className="loop-field">
-            <span>Maximum active minutes</span>
-            <input
-              aria-label="Maximum active minutes"
-              type="text"
-              inputMode="numeric"
-              value={draft.maxActiveMinutes}
-              disabled={isDisabled}
-              onChange={(event) => onChange({ maxActiveMinutes: event.currentTarget.value })}
-            />
-            {error('maxActiveMinutes')}
-          </label>
+          <TextArea
+            label="Done condition"
+            aria-label="Done condition"
+            value={draft.evaluatorCondition}
+            placeholder="A second agent reads the changes and judges whether this is true."
+            rows={2}
+            disabled={isDisabled}
+            onChange={(event) => onChange({ evaluatorCondition: event.currentTarget.value })}
+          />
+          <TextField
+            label="Maximum active minutes"
+            aria-label="Maximum active minutes"
+            type="text"
+            inputMode="numeric"
+            value={draft.maxActiveMinutes}
+            disabled={isDisabled}
+            error={errors.maxActiveMinutes}
+            onChange={(event) => onChange({ maxActiveMinutes: event.currentTarget.value })}
+          />
           {showCost && (
-            <label className="loop-field">
-              <span>Maximum cost (USD)</span>
-              <input
-                aria-label="Maximum cost (USD)"
-                type="text"
-                inputMode="decimal"
-                value={draft.maxCostUsd}
-                disabled={isDisabled}
-                onChange={(event) => onChange({ maxCostUsd: event.currentTarget.value })}
-              />
-              {error('maxCostUsd')}
-            </label>
-          )}
-          <label className="loop-field">
-            <span>Protected paths</span>
-            <textarea
-              aria-label="Protected paths"
-              value={draft.protectedPaths}
-              placeholder="One path or glob per line"
-              rows={2}
+            <TextField
+              label="Maximum cost (USD)"
+              aria-label="Maximum cost (USD)"
+              type="text"
+              inputMode="decimal"
+              value={draft.maxCostUsd}
               disabled={isDisabled}
-              onChange={(event) => onChange({ protectedPaths: event.currentTarget.value })}
+              error={errors.maxCostUsd}
+              onChange={(event) => onChange({ maxCostUsd: event.currentTarget.value })}
             />
-          </label>
-          <label className="loop-check-field">
+          )}
+          <TextArea
+            label="Protected paths"
+            aria-label="Protected paths"
+            value={draft.protectedPaths}
+            placeholder="One path or glob per line"
+            rows={2}
+            disabled={isDisabled}
+            onChange={(event) => onChange({ protectedPaths: event.currentTarget.value })}
+          />
+          <FormRow label="Pause after 3 iterations with no changes" htmlFor={`${checkboxId}-no-progress`}>
             <input
+              id={`${checkboxId}-no-progress`}
               type="checkbox"
               checked={draft.noProgress}
               disabled={isDisabled}
               onChange={(event) => onChange({ noProgress: event.currentTarget.checked })}
             />
-            <span>Pause after 3 iterations with no changes</span>
-          </label>
+          </FormRow>
           {workspaceKind === 'git' && (
-            <label className="loop-check-field">
+            <FormRow label="Commit a checkpoint after each iteration" htmlFor={`${checkboxId}-checkpoint-commits`}>
               <input
+                id={`${checkboxId}-checkpoint-commits`}
                 type="checkbox"
                 checked={draft.checkpointCommits}
                 disabled={isDisabled}
                 onChange={(event) => onChange({ checkpointCommits: event.currentTarget.checked })}
               />
-              <span>Commit a checkpoint after each iteration</span>
-            </label>
+            </FormRow>
           )}
-          <label className="loop-check-field">
+          <FormRow label="Ask before each new iteration" htmlFor={`${checkboxId}-ask-before-next`}>
             <input
+              id={`${checkboxId}-ask-before-next`}
               type="checkbox"
               checked={draft.askBeforeNext}
               disabled={isDisabled}
               onChange={(event) => onChange({ askBeforeNext: event.currentTarget.checked })}
             />
-            <span>Ask before each new iteration</span>
-          </label>
-          <label className="loop-check-field">
+          </FormRow>
+          <FormRow label="Resume when the usage limit resets" htmlFor={`${checkboxId}-resume-at-limit-reset`}>
             <input
+              id={`${checkboxId}-resume-at-limit-reset`}
               type="checkbox"
               checked={draft.resumeAtLimitReset}
               disabled={isDisabled}
               onChange={(event) => onChange({ resumeAtLimitReset: event.currentTarget.checked })}
             />
-            <span>Resume when the usage limit resets</span>
-          </label>
+          </FormRow>
         </div>
       )}
     </section>

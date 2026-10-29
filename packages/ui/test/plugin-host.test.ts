@@ -387,7 +387,7 @@ describe('window plugin host against a real daemon', () => {
     shell.stop()
   })
 
-  test('SC-10: a command opens a view with an input', async () => {
+  test('SC-10: commands open views with inputs, and closing the active view restores the prior tab', async () => {
     const page = 'view:acme.notes/page'
     const other = 'view:acme.notes/other'
     const open = 'command:acme.notes/open'
@@ -434,9 +434,12 @@ describe('window plugin host against a real daemon', () => {
     expect(shell.seen[1]!.element.text).toBe('{}')
 
     await t.host.runCommand(close)
-    await waitFor(() => t.state().openView === null)
+    await waitFor(() => t.state().openView?.id === page)
     expect(t.lines()).toContain('cleanup other')
-    expect(t.state().slots).toEqual({})
+    expect(t.slot(other)).toBeUndefined()
+    await t.mounted(page)
+    expect(t.state().openView).toEqual({ id: page, input: { noteId: 'n1' } })
+    expect(t.state().slots[page]).toEqual({ status: 'mounted' })
     shell.stop()
   })
 

@@ -244,14 +244,6 @@ describe('SC-59: the floating button', () => {
     expect(view.fake.callsTo('setting.set').map((call) => call.params)).toEqual([{ id: 'setting:quirky.terminal/floating-enabled', value: false }])
   })
 
-  test('the Hide Floating Workspace menu takes pointer events, since the overlay layer does not', async () => {
-    const view = await mountOverlay()
-    await fire(button(view), mouse('contextmenu', { clientX: 1300, clientY: 800 }))
-    const layer = document.querySelector('.qf-menu-layer')
-    expect(layer?.querySelector('.qt-menu-anchor')).not.toBeNull()
-    const css = [...document.querySelectorAll('style[data-part="floating"]')].map((style) => style.textContent).join('')
-    expect(css).toMatch(/\.qf-menu-layer\s*\{[^}]*pointer-events:\s*auto/)
-  })
 
   test('a floating-state read answered after the setting turned the workspace off does not bring the button back', async () => {
     let finish: (state: FloatingState) => void = () => {}

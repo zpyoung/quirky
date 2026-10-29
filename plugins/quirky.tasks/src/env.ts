@@ -1,4 +1,4 @@
-import { validateValue, type PluginContext, type Schema, type UiLayout } from '@quirky/protocol'
+import { UI_TOOL_SLOTS, validateValue, type PluginContext, type Schema, type UiLayout, type UiToolSlot } from '@quirky/protocol'
 import { TASKS_VIEW, TASKS_SETTINGS_VIEW, type TaskNavigation, type TaskPreferences, type TaskRepo, type TasksEnv, type TasksState } from './contracts'
 
 const providers = ['github', 'gitlab', 'linear', 'jira']
@@ -116,6 +116,43 @@ function validateNavigation(context: PluginContext, input: Partial<TaskNavigatio
   return patch
 }
 
+type TasksToolState = { layout: UiLayout | null; slot: UiToolSlot | null }
+
+async function currentTasksToolState(context: PluginContext): Promise<TasksToolState> {
+  const [stateValue, modelValue] = await Promise.all([
+    context.call('ui.state', {}),
+    context.call('ui.contributions', {})
+  ])
+  if (!record(stateValue) || !record(stateValue.layout)) return { layout: null, slot: null }
+  const layout = stateValue.layout as unknown as UiLayout
+  if (!record(layout.tools) || !record(modelValue) || !Array.isArray(modelValue.tools)) return { layout, slot: null }
+  const tools = layout.tools
+  if (!record(tools.placements) || !record(tools.open)) return { layout, slot: null }
+  const taskTool = modelValue.tools.find((entry) =>
+    record(entry) && entry.contributionId === TASKS_VIEW && typeof entry.id === 'string'
+  )
+  if (!record(taskTool) || typeof taskTool.id !== 'string') return { layout, slot: null }
+  const slot = tools.placements[taskTool.id]
+  if (typeof slot !== 'string' || !(UI_TOOL_SLOTS as readonly string[]).includes(slot) || tools.open[slot] !== taskTool.id) {
+    return { layout, slot: null }
+  }
+  return { layout, slot: slot as UiToolSlot }
+}
+
+async function restoreTasksCenterFromSettings(
+  context: PluginContext,
+  returningFromSettings: boolean,
+  result: TasksState
+): Promise<void> {
+  if (!returningFromSettings) return
+  const current = await currentTasksToolState(context)
+  if (current.slot === null || current.layout?.view?.id !== TASKS_SETTINGS_VIEW) return
+  await context.call('ui.view.open', {
+    id: TASKS_VIEW,
+    input: { navigation: result.navigation, revision: result.revision }
+  })
+}
+
 export function createTasksEnv(context: PluginContext): TasksEnv {
   const store = context.openStore(['CREATE TABLE task_state (key TEXT PRIMARY KEY, value TEXT NOT NULL)'])
   let state = defaultState()
@@ -149,6 +186,7 @@ export function createTasksEnv(context: PluginContext): TasksEnv {
     },
     async navigate(input) {
       const patch = validateNavigation(context, input)
+      const toolState = await currentTasksToolState(context)
       const current = state.navigation
       const modeChanged = 'mode' in patch && patch.mode !== current.mode
       const contextChanged = modeChanged || ('query' in patch && patch.query !== current.query) || ('repoIds' in patch && JSON.stringify(patch.repoIds) !== JSON.stringify(current.repoIds)) || ('source' in patch && patch.source !== current.source)
@@ -161,7 +199,9 @@ export function createTasksEnv(context: PluginContext): TasksEnv {
         }
         if (patch.mode && patch.mode !== current.mode && !('query' in patch)) next.navigation.query = patch.mode === 'prs' ? 'is:pr is:open' : 'is:issue is:open'
       })
-      await context.call('ui.view.open', { id: TASKS_VIEW, input: { navigation: result.navigation, revision: result.revision } })
+      if (toolState.slot === null || toolState.layout?.view?.id === TASKS_VIEW) {
+        await context.call('ui.view.open', { id: TASKS_VIEW, input: { navigation: result.navigation, revision: result.revision } })
+      }
       return result
     },
     async repositories() {
@@ -190,25 +230,46 @@ export function coreMethods(env: TasksEnv) {
     repositories: () => env.repositories(),
     async open(params: Record<string, unknown>) {
       const layoutState = await context.call('ui.state', {})
+      let returningFromSettings = false
       if (record(layoutState) && record(layoutState.layout)) {
         const view = layoutState.layout.view
-        if (view === null || (record(view) && typeof view.id === 'string' && view.id !== TASKS_VIEW && view.id !== TASKS_SETTINGS_VIEW)) env.previousView = view as UiLayout['view']
+        returningFromSettings = record(view) && view.id === TASKS_SETTINGS_VIEW
+        if (view === null || (record(view) && typeof view.id === 'string' && view.id !== TASKS_VIEW && view.id !== TASKS_SETTINGS_VIEW)) {
+          env.previousView = view as UiLayout['view']
+        }
       }
-      if (opened) return env.navigate({ detail: null, newIssue: false, ...params })
+      if (opened) {
+        const result = await env.navigate({ detail: null, newIssue: false, ...params })
+        await restoreTasksCenterFromSettings(context, returningFromSettings, result)
+        return result
+      }
       const { preferences } = env.read()
       const mode = ['prs', 'mine', 'needs-review'].includes(preferences.defaultTaskViewPreset) ? 'prs' : 'issues'
       const query = preferences.defaultTaskViewPreset === 'mine' ? 'author:@me is:pr is:open' : preferences.defaultTaskViewPreset === 'needs-review' ? 'review-requested:@me is:pr is:open' : preferences.defaultTaskViewPreset === 'assigned' ? 'assignee:@me is:issue is:open' : mode === 'prs' ? 'is:pr is:open' : 'is:issue is:open'
       const initial: Partial<TaskNavigation> = { source: preferences.defaultTaskSource, repoIds: preferences.defaultRepoSelection, mode, detail: null, newIssue: false, ...params }
       const result = await env.navigate({ ...initial, query: typeof params.query === 'string' ? params.query : initial.mode === mode ? query : initial.mode === 'prs' ? 'is:pr is:open' : 'is:issue is:open' })
       opened = true
+      await restoreTasksCenterFromSettings(context, returningFromSettings, result)
       return result
     },
     navigate: (params: Record<string, unknown>) => env.navigate(params),
     async settings() {
+      const taskTool = await currentTasksToolState(context)
+      const view = taskTool.layout?.view ?? null
+      if (taskTool.layout) {
+        if (view === null) env.previousView = null
+        else if (view.id !== TASKS_VIEW && view.id !== TASKS_SETTINGS_VIEW) env.previousView = view
+      }
+      if (taskTool.slot !== null) opened = true
       await context.call('ui.view.open', { id: TASKS_SETTINGS_VIEW })
       return { opened: true }
     },
     async close() {
+      const taskTool = await currentTasksToolState(context)
+      if (taskTool.slot !== null && taskTool.layout?.view?.id !== TASKS_VIEW) {
+        await context.call('ui.tool.close', { slot: taskTool.slot })
+        return { closed: true }
+      }
       const previous = env.previousView
       if (previous) await context.call('ui.view.open', { id: previous.id, ...(previous.input !== undefined ? { input: previous.input } : {}) })
       else await context.call('ui.view.close', {})

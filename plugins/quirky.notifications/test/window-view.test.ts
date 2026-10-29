@@ -142,7 +142,7 @@ async function open(fake: Fake) {
   const root = element
   const q = (selector: string) => root.querySelector(selector) as HTMLElement | null
   const row = (id: string) => q(`[data-setting="${id}"]`)!
-  const switchOf = (id: string) => row(id).querySelector('[role="switch"]') as HTMLButtonElement
+  const switchOf = (id: string) => row(id).querySelector('[role="switch"]') as HTMLInputElement
   const select = () => q('select') as HTMLSelectElement
   const slider = () => q('input[type="range"]') as HTMLInputElement | null
   const pathField = () => q('input[type="text"]') as HTMLInputElement | null
@@ -189,7 +189,7 @@ const declared = (id: string) => manifest.contributes.setting.find((entry) => en
 describe('SC-47: Settings > Notifications at its defaults', () => {
   test('SC-47: the view shows the title, the subtitle, the rows in order, and the test button last', async () => {
     const v = await open(fakeContext())
-    expect(v.q('h1')!.textContent).toBe('Notifications')
+    expect(v.q('h2')!.textContent).toBe('Notifications')
     expect(v.text()).toContain('Native desktop notifications for agent activity and terminal events.')
     expect([...v.root.querySelectorAll('[data-setting]')].map((node) => node.getAttribute('data-setting'))).toEqual(SETTING_ORDER)
     const last = [...v.root.querySelectorAll('button')].at(-1)!
@@ -213,7 +213,7 @@ describe('SC-47: Settings > Notifications at its defaults', () => {
     expect(v.select().value).toBe('system')
     expect(v.select().selectedOptions[0]!.textContent).toBe('System Default')
     expect(v.slider()).toBeNull()
-    expect(v.q('.notif-custom')).toBeNull()
+    expect(v.q('code')).toBeNull()
   })
 
   test('SC-47: the sound options are System Default, the nine built-ins in order, then Choose Custom File', async () => {
@@ -253,7 +253,7 @@ describe('SC-48: the sound controls', () => {
     expect(slider.step).toBe('5')
     expect(slider.getAttribute('aria-label')).toBe('Notification sound volume')
     expect(slider.value).toBe('100')
-    expect(v.q('.notif-volume')!.textContent).toContain('100%')
+    expect(v.text()).toContain('100%')
   })
 
   test('SC-48: Custom shows the typed path under the select only while Custom is the sound', async () => {
@@ -271,11 +271,10 @@ describe('SC-48: the sound controls', () => {
       { id: SETTING('sound'), value: 'custom' }
     ])
     expect(v.pathField()).toBeNull()
-    const line = v.q('.notif-custom')!
-    expect(line.textContent).toBe('Custom: /Users/me/ping.wav')
-    expect(line.querySelector('code')).not.toBeNull()
+    const pathCode = v.q('code')!
+    expect(pathCode.parentElement!.textContent).toBe('Custom: /Users/me/ping.wav')
     await v.choose('bong')
-    expect(v.q('.notif-custom')).toBeNull()
+    expect(v.q('code')).toBeNull()
     expect(v.text()).not.toContain('Custom: ')
   })
 
@@ -317,7 +316,8 @@ describe('SC-48: the sound controls', () => {
 
   test('with Custom stored, the Custom line shows and Change reopens the field with the path', async () => {
     const v = await open(fakeContext({}, { sound: 'custom', customSoundPath: '/tmp/ping.wav' }))
-    expect(v.q('.notif-custom')!.textContent).toBe('Custom: /tmp/ping.wav')
+    const pathCode = v.q('code')!
+    expect(pathCode.parentElement!.textContent).toBe('Custom: /tmp/ping.wav')
     expect(v.select().selectedOptions[0]!.textContent).toBe('Change Custom File')
     await v.click(v.button('Change'))
     expect(v.pathField()!.value).toBe('/tmp/ping.wav')
@@ -329,7 +329,7 @@ describe('SC-48: the sound controls', () => {
     const slider = v.slider()!
     await v.type(slider, '40')
     expect(fake.callsTo('setting.set')).toEqual([])
-    expect(v.q('.notif-volume')!.textContent).toContain('40%')
+    expect(v.text()).toContain('40%')
     await v.fire(slider, 'change')
     await settle()
     expect(fake.callsTo('setting.set').map((call) => call.params)).toEqual([{ id: SETTING('volume'), value: 40 }])
@@ -345,21 +345,18 @@ describe('SC-48: the sound controls', () => {
   })
 })
 
-describe('SC-49: turning notifications off dims what depends on it', () => {
-  test('SC-49: every dependent control is disabled and dimmed, and Show Menu Bar Icon is not', async () => {
+describe('SC-49: turning notifications off disables what depends on it', () => {
+  test('SC-49: every dependent control is disabled, and Show Menu Bar Icon is not', async () => {
     const fake = fakeContext({}, { sound: 'bong' })
     const v = await open(fake)
     await v.click(v.switchOf('enabled'))
     expect(fake.callsTo('setting.set').map((call) => call.params)).toEqual([{ id: SETTING('enabled'), value: false }])
     for (const id of DEPENDENT) {
-      expect(v.row(id).classList.contains('notif-dim')).toBe(true)
-      const control = v.row(id).querySelector('button, select') as HTMLButtonElement | HTMLSelectElement
+      const control = v.row(id).querySelector('button, select, input') as HTMLButtonElement | HTMLSelectElement | HTMLInputElement
       expect(control.disabled).toBe(true)
     }
     expect(v.slider()!.disabled).toBe(true)
     expect(v.button('Send Test Notification')!.disabled).toBe(true)
-    expect(v.button('Send Test Notification')!.classList.contains('notif-dim')).toBe(true)
-    expect(v.row('showMenuBarIcon').classList.contains('notif-dim')).toBe(false)
     expect(v.switchOf('showMenuBarIcon').disabled).toBe(false)
     expect(v.switchOf('enabled').disabled).toBe(false)
   })
@@ -369,7 +366,6 @@ describe('SC-49: turning notifications off dims what depends on it', () => {
     expect(v.switchOf('terminalBell').disabled).toBe(true)
     await v.click(v.switchOf('enabled'))
     expect(v.switchOf('terminalBell').disabled).toBe(false)
-    expect(v.row('terminalBell').classList.contains('notif-dim')).toBe(false)
     expect(v.button('Send Test Notification')!.disabled).toBe(false)
   })
 })

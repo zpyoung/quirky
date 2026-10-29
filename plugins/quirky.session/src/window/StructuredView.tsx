@@ -1,11 +1,46 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { useEffect, useId, useRef, useState, type CSSProperties, type FormEvent } from 'react'
 import { RpcErrorCode, type Session, type StructuredMessage, type UiPluginContext } from '@quirky/protocol'
+import { Button, EmptyState, FormRow, SectionHeader } from '@quirky/ui'
 import { MessageRow } from './MessageRow'
 import { mergeMessages, visibleMessages } from './transcript'
 
 const NO_MESSAGES: StructuredMessage[] = []
 
 const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error))
+
+const layout = {
+  display: 'flex',
+  flex: 1,
+  flexDirection: 'column',
+  minHeight: 0,
+  minWidth: 0,
+  color: 'var(--ui-text)',
+  background: 'var(--ui-surface)'
+} satisfies CSSProperties
+
+const transcript = {
+  display: 'flex',
+  flex: 1,
+  flexDirection: 'column',
+  gap: 'var(--ui-space-8)',
+  minHeight: 0,
+  minWidth: 0,
+  overflowY: 'auto',
+  padding: 'var(--ui-space-8)'
+} satisfies CSSProperties
+
+const form = {
+  display: 'flex',
+  alignItems: 'flex-end',
+  gap: 'var(--ui-space-8)',
+  minWidth: 0,
+  padding: 'var(--ui-space-8)',
+  borderTop: 'var(--ui-border-width) solid var(--ui-border)'
+} satisfies CSSProperties
+
+const field = { flex: '1 1 auto', minWidth: 0 } satisfies CSSProperties
+const textarea = { fontFamily: 'var(--ui-font-body)', resize: 'vertical' } satisfies CSSProperties
+const ended = { padding: 'var(--ui-space-8)', color: 'var(--ui-muted)', borderTop: 'var(--ui-border-width) solid var(--ui-border)' } satisfies CSSProperties
 
 /** Transcript of a structured (no PTY) session with an input box for follow-up turns. */
 export function StructuredView({ context, session }: { context: UiPluginContext; session: Session }) {
@@ -14,6 +49,8 @@ export function StructuredView({ context, session }: { context: UiPluginContext;
   const [text, setText] = useState('')
   const [showAll, setShowAll] = useState(false)
   const scroller = useRef<HTMLDivElement>(null)
+  const showAllId = useId()
+  const messageId = useId()
   const messages = visibleMessages(stored, showAll)
 
   useEffect(() => {
@@ -71,49 +108,64 @@ export function StructuredView({ context, session }: { context: UiPluginContext;
     }
   }
 
-  if (off) return <p className="muted pad">Structured sessions are off</p>
+  if (off) return <EmptyState message="Structured sessions are off" />
 
   const exited = session.status === 'exited'
 
   return (
-    <div className="structured">
-      <div className="transcript-bar">
-        <label>
-          <input type="checkbox" checked={showAll} onChange={(event) => setShowAll(event.target.checked)} />
-          Show all events
-        </label>
-      </div>
-      <div className="transcript" ref={scroller}>
-        {messages.length === 0 && <p className="muted pad">No messages yet.</p>}
+    <div style={layout}>
+      <SectionHeader
+        title="Transcript"
+        actions={
+          <FormRow label="Show all events" htmlFor={showAllId}>
+            <input
+              id={showAllId}
+              type="checkbox"
+              checked={showAll}
+              style={{ accentColor: 'var(--ui-accent)' }}
+              onChange={(event) => setShowAll(event.target.checked)}
+            />
+          </FormRow>
+        }
+      />
+      <div style={transcript} ref={scroller} role="log" aria-live="polite">
+        {messages.length === 0 && <EmptyState message="No messages yet." />}
         {messages.map((message) => (
           <MessageRow key={message.seq} message={message} />
         ))}
       </div>
       {exited ? (
-        <div className="session-ended">session ended</div>
+        <div style={ended} role="status">session ended</div>
       ) : (
         <form
-          className="structured-input"
+          style={form}
           onSubmit={(event: FormEvent) => {
             event.preventDefault()
             void send()
           }}
         >
-          <textarea
-            rows={2}
-            value={text}
-            placeholder="Message (Enter to send, Shift+Enter for a new line)"
-            onChange={(event) => setText(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
-                event.preventDefault()
-                void send()
-              }
-            }}
-          />
-          <button type="submit" className="primary" disabled={!text.trim()}>
+          <div style={field}>
+            <FormRow label="Message" htmlFor={messageId}>
+              <textarea
+                id={messageId}
+                rows={2}
+                value={text}
+                placeholder="Message (Enter to send, Shift+Enter for a new line)"
+                className="ui-text-field__input"
+                style={textarea}
+                onChange={(event) => setText(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
+                    event.preventDefault()
+                    void send()
+                  }
+                }}
+              />
+            </FormRow>
+          </div>
+          <Button type="submit" variant="primary" disabled={!text.trim()}>
             Send
-          </button>
+          </Button>
         </form>
       )}
     </div>

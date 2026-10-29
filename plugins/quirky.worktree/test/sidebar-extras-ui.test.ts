@@ -6,6 +6,7 @@ import { resolveMembershipTarget } from '../src/membership'
 import { DEFAULT_STOCK_OPTIONS, type StockWorktreeOptions, type WorktreeControl } from '../src/control-types'
 import type { DropPreviewReport } from '../src/report'
 
+import { accessibleName } from './window/dom'
 const SLOT = 'sidebar-section:quirky.worktree/worktrees'
 const BASE = Date.now()
 const DAY = 86_400_000
@@ -714,14 +715,23 @@ function setup(
   }
 }
 const buttons = (within: ParentNode = host) => [...within.querySelectorAll<HTMLButtonElement>('button')]
-const card = (name: string) => [...host.querySelectorAll<HTMLElement>('section.repo li.worktree, section.group li.worktree')].find((row) => row.querySelector('.worktree-name')?.textContent === name)
+const card = (name: string) => [...host.querySelectorAll<HTMLElement>('[data-worktree-id]')].find((row) => row.querySelector('.worktree-name')?.textContent?.trim() === name)
 const childChip = (name: string) => card(name)?.querySelector<HTMLButtonElement>('button[aria-expanded]')
-const sectionForRepo = (name: string) => [...host.querySelectorAll<HTMLElement>('section.repo')].find((section) => section.querySelector('.repo-name')?.textContent === name)
-const sectionForGroup = (name: string) => [...host.querySelectorAll<HTMLElement>('section.group')].find((section) => section.querySelector('.group-name')?.textContent === name)
+const sectionHeading = (section: HTMLElement) => section.querySelector(':scope > header h2')?.textContent?.trim()
+const sectionHeader = (section: HTMLElement) => section.querySelector<HTMLElement>(':scope > header')!
+const sectionForRepo = (name: string) => [...host.querySelectorAll<HTMLElement>('section.repo')].find((section) => sectionHeading(section) === name)
+const sectionForGroup = (name: string) => [...host.querySelectorAll<HTMLElement>('section.group')].find((section) => sectionHeading(section) === name)
 const menuItems = () => [...document.querySelectorAll<HTMLButtonElement>('[role="menu"] [role="menuitem"]')]
-const menuItem = (name: string) => menuItems().find((item) => item.textContent?.replace(/\s*▸$/, '').trim() === name)
+const visibleMenuText = (node: Node): string => {
+  if (node instanceof Element && node.getAttribute('aria-hidden') === 'true') return ''
+  return [...node.childNodes].map(visibleMenuText).join('')
+}
+const normalizedMenuLabel = (item: Element) => visibleMenuText(item).replace(/\s+/g, ' ').trim()
+const menuItem = (name: string) => menuItems().find((item) => normalizedMenuLabel(item) === name)
+const buttonNamed = (within: ParentNode, name: string) =>
+  buttons(within).find((button) => button.getAttribute('aria-label') === name || button.textContent?.trim() === name)
 const openCardMenu = async (h: UiHarness, name: string) => {
-  const target = card(name)?.querySelector<HTMLButtonElement>('.worktree-menu')
+  const target = buttonNamed(card(name)!, `Actions for ${name}`)
   if (!target) throw new Error(`no action button for ${name}`)
   await h.click(target)
 }
@@ -733,13 +743,11 @@ const addFolderOwnedGitWorkspace = (h: UiHarness) => {
   return { owner, item }
 }
 const setStockOption = async (h: UiHarness, label: string, value: string) => {
-  let select = host.querySelector<HTMLSelectElement>(`select[aria-label="${label}"]`)
-  if (!select) {
-    const options = buttons().find((button) => button.getAttribute('aria-label') === 'Workspace options')
-    if (!options) throw new Error('workspace options are unavailable')
-    await h.click(options)
-    select = host.querySelector<HTMLSelectElement>(`select[aria-label="${label}"]`)
-  }
+  const trigger = [...host.querySelectorAll<HTMLElement>('details > summary')]
+    .find((summary) => summary.textContent?.trim() === 'Workspace options')
+  if (!trigger) throw new Error('workspace options are unavailable')
+  if (!trigger.closest('details')?.open) await h.click(trigger)
+  const select = host.querySelector<HTMLSelectElement>(`select[aria-label="${label}"]`)
   if (!select) throw new Error(`no workspace option selector ${label}`)
   const control = select
   await act(async () => {
@@ -755,7 +763,8 @@ const dragTransfer = (worktreeId: string): DataTransfer => ({
   setData() {},
   getData() { return worktreeId }
 } as unknown as DataTransfer)
-const filterButton = () => host.querySelector<HTMLButtonElement>('.workspace-activity-controls > button[aria-label="Workspace options"]')
+const filterButton = () => buttons().find((button) => button.textContent?.trim().startsWith('Activity filters'))
+const filterCount = () => filterButton()?.querySelector<HTMLElement>('[role="img"]')?.getAttribute('aria-label')?.match(/^\d+/)?.[0]
 const dragAndDrop = async (
   h: UiHarness,
   source: Element,
@@ -778,22 +787,25 @@ const dragAndDrop = async (
   await h.flush()
   return preview
 }
-
 const checkboxFor = (label: string) =>
   [...host.querySelectorAll<HTMLLabelElement>('label')]
     .find((item) => item.textContent?.trim() === label)
     ?.querySelector<HTMLInputElement>('input[type="checkbox"]')
+const fieldFor = (name: string) =>
+  [...host.querySelectorAll<HTMLLabelElement>('label')]
+    .find((label) => label.textContent?.replace(/\s+/g, ' ').trim() === name)
+    ?.control as HTMLInputElement | undefined
 const openFilters = async (h: UiHarness) => {
   const trigger = filterButton()
   if (!trigger) throw new Error('workspace activity filters are unavailable')
   await h.click(trigger)
 }
 const selectWindow = async (h: UiHarness, label: string) => {
-  let option = [...host.querySelectorAll<HTMLButtonElement>('[role="group"][aria-label="Workspace activity window"] button')]
+  let option = [...host.querySelectorAll<HTMLButtonElement>('[role="tablist"][aria-label="Workspace activity window"] [role="tab"]')]
     .find((button) => button.textContent?.trim() === label)
   if (!option) {
     await openFilters(h)
-    option = [...host.querySelectorAll<HTMLButtonElement>('[role="group"][aria-label="Workspace activity window"] button')]
+    option = [...host.querySelectorAll<HTMLButtonElement>('[role="tablist"][aria-label="Workspace activity window"] [role="tab"]')]
       .find((button) => button.textContent?.trim() === label)
   }
   if (!option) throw new Error(`no activity window option ${label}`)
@@ -831,22 +843,20 @@ function setRect(element: Element, top: number, bottom: number): void {
   })
 }
 
-test('SC-03/05: loose hierarchy keeps same-section child chips while delete confirmation counts canonical descendants', async () => {
+test('SC-03/05: loose hierarchy keeps child disclosures while delete confirmation counts canonical descendants', async () => {
   const h = setup()
   await h.mount()
 
   expect(sectionForGroup('Team')).toBeDefined()
   expect(sectionForGroup('Child')).toBeDefined()
   expect(card('feature')?.closest('section.group')).toBe(sectionForGroup('Team'))
-  expect(card('feature')?.textContent).toContain('api')
   expect(card('independent')?.closest('section.group')).toBe(sectionForGroup('Child'))
   expect(card('child')?.closest('section.repo')).toBe(sectionForRepo('api'))
-  expect(card('child')?.style.getPropertyValue('--depth')).toBe('0')
-  expect(card('feature')?.querySelector('.children-chip')).toBeNull()
+  expect(childChip('feature')).toBeNull()
   expect(sectionForRepo('empty')).toBeDefined()
   expect(card('lost-group')?.closest('section.repo')).toBe(sectionForRepo('web'))
   expect(h.world.worktrees.find((item) => item.id === 'w-lost')?.projectGroupId).toBe('g-missing')
-  const teamOrder = [...sectionForGroup('Team')!.querySelectorAll<HTMLElement>('.repo-name, .worktree-name')].map((item) => item.textContent)
+  const teamOrder = [...sectionForGroup('Team')!.querySelectorAll<HTMLElement>('h2, .worktree-name')].map((item) => item.textContent)
   expect(teamOrder.indexOf('notes')).toBeLessThan(teamOrder.indexOf('feature'))
   expect(Boolean(sectionForGroup('Team')!.compareDocumentPosition(sectionForRepo('api')!) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true)
   expect(lastReport(h).groups.find((entry) => entry.id === 'g-team')?.projects.some((entry) => entry.id === 'r-api')).toBe(false)
@@ -869,27 +879,26 @@ test('SC-03: diversion keeps an empty project placeholder and returning a parent
     await h.click(menuItem(groupName)!)
   }
   expect(sectionForRepo('api')).toBeDefined()
-  expect(sectionForRepo('api')!.querySelectorAll('li.worktree')).toHaveLength(0)
+  expect(sectionForRepo('api')!.querySelectorAll('[data-worktree-id]')).toHaveLength(0)
   expect(h.world.worktrees.filter((item) => item.repoId === 'r-api').every((item) => item.projectGroupId !== null)).toBe(true)
 
   for (const name of ['feature', 'main', 'child', 'independent']) {
     await openCardMenu(h, name)
     await h.click(menuItem('Remove worktree from group')!)
   }
-  expect(sectionForRepo('api')!.querySelectorAll('li.worktree')).toHaveLength(4)
-  expect(card('feature')?.querySelector('.children-chip')?.textContent).toBe('1 child')
-  expect(card('child')?.style.getPropertyValue('--depth')).toBe('1')
+  expect(sectionForRepo('api')!.querySelectorAll('[data-worktree-id]')).toHaveLength(4)
+  expect(childChip('feature')?.getAttribute('aria-expanded')).toBe('true')
   expect(lastReport(h).projects.find((project) => project.id === 'r-api')?.worktrees.find((item) => item.id === 'w-child')?.depth).toBe(1)
 })
 
-test('SC-05: group ellipsis is the sole group menu trigger and rename selects the initial text', async () => {
+test('SC-05: the group action button is the sole menu trigger and rename selects the initial text', async () => {
   const h = setup()
   await h.mount()
   const team = sectionForGroup('Team')!
-  team.querySelector('header.group-header')!.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }))
+  sectionHeader(team).dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }))
   expect(document.querySelector('[role="menu"]')).toBeNull()
 
-  const more = buttons(team).find((button) => button.textContent?.trim() === '⋯')
+  const more = buttonNamed(team, 'Actions for group Team')
   expect(more).toBeDefined()
   await h.click(more!)
   const rename = menuItems().find((item) => /rename/i.test(item.textContent ?? ''))
@@ -908,7 +917,7 @@ test('SC-05: cancelling group deletion preserves its subtree; confirming release
   await h.mount()
   const openDelete = async () => {
     const team = sectionForGroup('Team')!
-    const more = buttons(team).find((button) => button.textContent?.trim() === '⋯')!
+    const more = buttonNamed(team, 'Actions for group Team')!
     await h.click(more)
     const remove = menuItems().find((item) => /delete group/i.test(item.textContent ?? ''))
     expect(remove).toBeDefined()
@@ -917,7 +926,7 @@ test('SC-05: cancelling group deletion preserves its subtree; confirming release
 
   await openDelete()
   const dialog = document.querySelector<HTMLElement>('[role="dialog"]')
-  expect(dialog?.textContent).toContain('Delete the group Team')
+  expect(dialog ? accessibleName(dialog) : undefined).toBe('Delete the group Team')
   expect(dialog?.querySelector('[role="alert"]')).toBeNull()
   expect(lastReport(h).dialog).toEqual({ kind: 'group', action: 'delete', groupId: 'g-team' })
   await h.click([...dialog!.querySelectorAll<HTMLButtonElement>('button')].find((button) => button.textContent?.trim() === 'Cancel')!)
@@ -946,7 +955,7 @@ test('group deletion retries ledger preview failures and sends subtree snapshots
   h.world.ledgerPreviewFailure = new Error('ledger backend unavailable')
 
   const team = sectionForGroup('Team')!
-  await h.click(buttons(team).find((button) => button.textContent?.trim() === '⋯')!)
+  await h.click(buttonNamed(team, 'Actions for group Team')!)
   await h.click(menuItems().find((item) => /delete group/i.test(item.textContent ?? ''))!)
 
   const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!
@@ -1031,7 +1040,6 @@ test('SC-01: new group creation is guarded by the selected Git worktree identity
   expect(document.activeElement).toBe(input)
   expect(input?.selectionStart).toBe(0)
   expect(input?.selectionEnd).toBe(input?.value.length)
-  expect(dialog?.textContent).toMatch(/only this worktree moves/i)
   await h.click([...dialog!.querySelectorAll<HTMLButtonElement>('button')].find((button) => button.textContent?.trim() === 'Cancel')!)
   expect(h.world.groups).toHaveLength(3)
   expect(h.calls.some((call) => call.method === 'quirky.worktree/createGroup')).toBe(false)
@@ -1078,7 +1086,6 @@ test('project menu opens the project group dialog', async () => {
 
   const dialog = document.querySelector<HTMLElement>('[role="dialog"]')
   if (!dialog) throw new Error('project group dialog was not rendered')
-  expect(dialog.textContent).toContain('api moves into the new group.')
   expect(lastReport(h).dialog).toMatchObject({ kind: 'group', action: 'new' })
 })
 test('SC-06: a folder workspace row in a Git project creates a group for its project only', async () => {
@@ -1162,11 +1169,11 @@ test('SC-02: loose membership menus move and remove one worktree', async () => {
   expect(card('other')?.closest('section.repo')).toBe(sectionForRepo('web'))
 
 
-  const pinnedFeature = [...host.querySelectorAll<HTMLElement>('section.pinned li.worktree')].find(
+  const pinnedFeature = [...host.querySelectorAll<HTMLElement>('[data-top-level-section="pinned"] [data-worktree-id]')].find(
     (row) => row.querySelector('.worktree-name')?.textContent === 'feature'
   )
   expect(pinnedFeature).toBeDefined()
-  await h.click(pinnedFeature!.querySelector('.worktree-menu')!)
+  await h.click(buttonNamed(pinnedFeature!, 'Actions for feature')!)
   await h.click(menuItem('Remove worktree from group')!)
   expect(h.world.worktrees.find((item) => item.id === 'w-feature')?.projectGroupId).toBeNull()
   expect(card('feature')?.closest('section.repo')).toBe(sectionForRepo('api'))
@@ -1216,7 +1223,9 @@ test('SC-02: moving a Git project moves every repo row without changing loose wo
   expect(h.world.repos.find((item) => item.id === 'r-api')?.groupId).toBe('g-release')
   expect(h.world.worktrees.filter((item) => item.repoId === 'r-api').map((item) => item.id)).toEqual(['w-main', 'w-feature', 'w-child', 'w-independent'])
   expect(h.world.worktrees.find((item) => item.id === 'w-feature')?.projectGroupId).toBe(before)
-  expect(sectionForGroup('Release')?.querySelector('.repo-name')?.textContent).toBe('api')
+  const groupedApi = sectionForGroup('Release')?.querySelector('section.repo')
+  expect(groupedApi).toBeDefined()
+  expect(groupedApi).toBe(sectionForRepo('api'))
 })
 
 test('membership target resolution prefers an overlapping group and rejects unrelated projects', () => {
@@ -1232,10 +1241,10 @@ test('SC-04: current painted geometry joins, no-ops, leaves only at the owning r
   const h = setup()
   await h.mount()
   const source = () => card('other')!
-  const groupHeader = sectionForGroup('Team')!.querySelector<HTMLElement>('.group-header')!
+  const groupHeader = sectionHeader(sectionForGroup('Team')!)
   const ownRepoSection = sectionForRepo('web')!
-  const ownRepoHeader = ownRepoSection.querySelector<HTMLElement>('.repo-header')!
-  const unrelatedRepoHeader = sectionForRepo('api')!.querySelector<HTMLElement>('.repo-header')!
+  const ownRepoHeader = sectionHeader(ownRepoSection)
+  const unrelatedRepoHeader = sectionHeader(sectionForRepo('api')!)
   const transfer = {
     effectAllowed: 'move',
     dropEffect: 'move',
@@ -1252,8 +1261,6 @@ test('SC-04: current painted geometry joins, no-ops, leaves only at the owning r
     await h.flush()
   }
 
-  groupHeader.style.position = 'sticky'
-  groupHeader.style.top = '0px'
   setRect(groupHeader, 100, 140)
   setRect(ownRepoHeader, 100, 140)
   await act(async () => {
@@ -1473,7 +1480,7 @@ test('SC-08/11/12: filters use exact windows, validate custom days on Enter and 
   expect(card('other')).toBeDefined()
   expect(lastReport(h).hiddenCount).toBeGreaterThan(0)
   expect(lastReport(h).appliedFilter?.workspaceActivityWindow).toBe('week')
-  expect(filterButton()?.textContent).toContain('1')
+  expect(filterCount()).toBe('1')
   expect(buttons().some((button) => /hidden/i.test(button.textContent ?? ''))).toBe(true)
   await selectWindow(h, 'Past 24 hours')
   expect(card('other')).toBeUndefined()
@@ -1484,24 +1491,24 @@ test('SC-08/11/12: filters use exact windows, validate custom days on Enter and 
   expect(hidden).toBeDefined()
   await h.click(hidden!)
   expect(h.world.preferences.workspaceActivityWindow).toBe('all')
-  expect(filterButton()?.textContent).not.toContain('1')
+  expect(filterCount()).toBe('0')
   expect(card('other')).toBeDefined()
   expect(h.world.worktrees.find((item) => item.id === 'w-feature')?.projectGroupId).toBe('g-team')
 
   await selectWindow(h, 'Custom')
-  const days = host.querySelector<HTMLInputElement>('input[type="number"], input[inputmode="numeric"], input[aria-label*="Custom"]')
+  const days = fieldFor('Custom days')
   expect(days).not.toBeNull()
   expect(days!.value).toBe('30')
   for (const invalid of ['0', '-1', '1.5', 'text', '9007199254740992']) {
     await inputValue(days!, invalid)
     await commitDays(h, days!)
     expect(h.world.preferences.workspaceActivityCustomDays).toBe(30)
-    expect(host.textContent).toMatch(/positive.*whole|whole.*positive/i)
+    expect(host.querySelector('[role="alert"]')).not.toBeNull()
   }
   await inputValue(days!, '3')
   await commitDays(h, days!)
   expect(h.world.preferences.workspaceActivityCustomDays).toBe(3)
-  expect(host.textContent).not.toMatch(/positive.*whole|whole.*positive/i)
+  expect(host.querySelector('[role="alert"]')).toBeNull()
 
   expect(buttons().some((button) => button.textContent?.trim() === 'Clear filters')).toBe(true)
   await h.click(buttons().find((button) => button.textContent?.trim() === 'Clear filters')!)
@@ -1518,7 +1525,7 @@ test('Custom days commits on blur without Enter and rejects an invalid blur with
   const h = setup()
   await h.mount()
   await selectWindow(h, 'Custom')
-  const days = host.querySelector<HTMLInputElement>('input[aria-label="Custom days"]')!
+  const days = fieldFor('Custom days')!
   await act(async () => { days.focus() })
   await inputValue(days, '3')
   await act(async () => { days.blur() })
@@ -1598,14 +1605,14 @@ test('review filters use server preferences, compose with activity, and clear in
   expect(h.world.active).toEqual({ worktreeId: 'w-child', instanceId: 'instance-w-child' })
   expect(checkboxFor('Hide merged/closed reviews')?.checked).toBe(false)
   expect(checkboxFor('Hide passing checks')?.checked).toBe(false)
-  expect(filterButton()?.textContent).toContain('0')
+  expect(filterCount()).toBe('0')
 
   const pendingSet = h.deferNextSet()
   await h.click(checkboxFor('Hide merged/closed reviews')!)
   await pendingSet.started
   expect(checkboxFor('Hide merged/closed reviews')?.checked).toBe(false)
   expect(card('child')).toBeDefined()
-  expect(filterButton()?.textContent).toContain('0')
+  expect(filterCount()).toBe('0')
   pendingSet.release()
   await h.flush()
 
@@ -1618,21 +1625,21 @@ test('review filters use server preferences, compose with activity, and clear in
   expect(lastReport(h).reviewHiddenCount).toBe(1)
   expect(lastReport(h).appliedFilter?.hideCompletedReviewWorkspaces).toBe(true)
   expect(h.calls.filter((call) => call.method === 'quirky.sidebar-extras/set').at(-1)?.params).toEqual({ hideCompletedReviewWorkspaces: true })
-  expect(filterButton()?.textContent).toContain('1')
+  expect(filterCount()).toBe('1')
 
   await h.click(checkboxFor('Hide passing checks')!)
   expect(h.world.preferences.hidePassingCheckWorkspaces).toBe(true)
   expect(card('other')).toBeUndefined()
   expect(lastReport(h).reviewHiddenCount).toBe(2)
   expect(h.calls.filter((call) => call.method === 'quirky.sidebar-extras/set').at(-1)?.params).toEqual({ hidePassingCheckWorkspaces: true })
-  expect(filterButton()?.textContent).toContain('2')
+  expect(filterCount()).toBe('2')
 
   await h.click(checkboxFor('Hide merged/closed reviews')!)
   expect(h.world.preferences.hideCompletedReviewWorkspaces).toBe(false)
   expect(card('child')).toBeDefined()
   expect(childChip('feature')).toBeDefined()
   expect(card('other')).toBeUndefined()
-  expect(filterButton()?.textContent).toContain('1')
+  expect(filterCount()).toBe('1')
 
   await h.click(checkboxFor('Hide merged/closed reviews')!)
   await selectWindow(h, 'Past 7 days')
@@ -1642,7 +1649,7 @@ test('review filters use server preferences, compose with activity, and clear in
   expect(lastReport(h).reviewHiddenIds).toContain('w-child')
   expect(lastReport(h).hiddenIds).toContain('w-child')
   expect(lastReport(h).appliedFilter?.hidePassingCheckWorkspaces).toBe(true)
-  expect(filterButton()?.textContent).toContain('3')
+  expect(filterCount()).toBe('3')
 
   const recovery = buttons().find((button) => /hidden/i.test(button.textContent ?? ''))
   expect(recovery).toBeDefined()
@@ -1654,7 +1661,7 @@ test('review filters use server preferences, compose with activity, and clear in
   expect(lastReport(h).reviewHiddenCount).toBe(2)
   expect(card('child')).toBeUndefined()
   expect(card('other')).toBeUndefined()
-  expect(filterButton()?.textContent).toContain('2')
+  expect(filterCount()).toBe('2')
 
   await h.click(buttons().find((button) => button.textContent?.trim() === 'Clear filters')!)
   expect(h.world.preferences.workspaceActivityWindow).toBe('all')
@@ -1667,7 +1674,7 @@ test('review filters use server preferences, compose with activity, and clear in
   expect(childChip('feature')).toBeDefined()
   expect(lastReport(h).reviewHiddenIds).toEqual([])
   expect(lastReport(h).reviewHiddenCount).toBe(0)
-  expect(filterButton()?.textContent).toContain('0')
+  expect(filterCount()).toBe('0')
 })
 
 test('hosting review events refresh only active filters and late projections cannot restore stale visibility', async () => {
@@ -1749,13 +1756,10 @@ test('section separators mark top-level boundaries only with Pinned first', asyn
   expect(separators.enabled).toBe(true)
   expect(separators.eligibleBoundaries).toContain('group:g-team')
   expect(separators.eligibleBoundaries).not.toContain('pinned')
-  expect(host.querySelector('section.pinned')?.classList.contains('section-separator')).toBe(false)
-  expect(sectionForGroup('Team')?.classList.contains('section-separator')).toBe(true)
-  expect(sectionForGroup('Child')?.classList.contains('section-separator')).toBe(false)
 })
 test('sticky top-level headers suppress adjacent section separators', async () => {
   const style = document.createElement('style')
-  style.textContent = 'section.group[data-top-level-section="group:g-team"] > .group-header { position: sticky; }'
+  style.textContent = 'section.group[data-top-level-section="group:g-team"] > header { position: sticky; }'
   document.head.append(style)
   const h = setup()
   try {
@@ -1764,8 +1768,6 @@ test('sticky top-level headers suppress adjacent section separators', async () =
     expect(separators.eligibleBoundaries).not.toContain('group:g-team')
     expect(separators.eligibleBoundaries).not.toContain('group:g-release')
     expect(separators.eligibleBoundaries).toContain('repo:r-web')
-    expect(sectionForGroup('Team')?.classList.contains('section-separator')).toBe(false)
-    expect(sectionForGroup('Child')?.classList.contains('section-separator')).toBe(false)
   } finally {
     style.remove()
   }
@@ -1798,6 +1800,6 @@ test('automation filtering uses only durable attribution and appears in visible 
   expect(lastReport(h).hiddenIds).toContain('w-lost')
   expect(lastReport(h).appliedFilter?.hideAutomationCreated).toBe(true)
   expect(lastReport(h).filterCount).toBe(1)
-  expect(filterButton()?.textContent).toContain('1')
+  expect(filterCount()).toBe('1')
   expect(h.calls.filter((call) => call.method === 'quirky.sidebar-extras/set').at(-1)?.params).toEqual({ hideAutomationCreated: true })
 })

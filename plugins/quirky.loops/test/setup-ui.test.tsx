@@ -452,8 +452,8 @@ test('folder setup hides checkpoints and reveals check controls only after a com
 
   expect(readSetup(view.handle).workspaceKind).toBe('folder')
   expect(readSetup(view.handle).showCost).toBe(true)
-  const advanced = host.querySelector<HTMLButtonElement>('.loop-advanced-toggle')
-  if (advanced === null) throw new Error('The Advanced control did not render.')
+  const advanced = [...host.querySelectorAll<HTMLButtonElement>('button')].find((button) => button.textContent?.includes('Advanced'))
+  if (advanced === undefined) throw new Error('The Advanced control did not render.')
   await act(async () => {
     advanced.click()
   })

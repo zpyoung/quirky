@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import type { Repo, UiPluginContext, Worktree } from '@quirky/protocol'
+import { Button, Dialog, FormRow } from '@quirky/ui'
 import { setWorktree } from './actions'
-import { Dialog } from './Dialog'
 import { workspaceOption } from './report'
 
 type Props = { context: UiPluginContext; worktree: Worktree; worktrees: Worktree[]; repos: Repo[]; onClose(): void }
@@ -38,25 +38,24 @@ export function ParentDialog({ context, worktree, worktrees, repos, onClose }: P
   }
 
   return (
-    <Dialog title="Set parent worktree" onClose={onClose}>
-      <form className="form" onSubmit={save}>
-        <label>
-          <span>Parent worktree</span>
-          <select autoFocus value={parent} onChange={(event) => setParent(event.target.value)}>
+    <Dialog open title="Set parent worktree" onClose={onClose}>
+      <form className="ui-stack" onSubmit={save}>
+        <FormRow label="Parent worktree" htmlFor="worktree-parent">
+          <select id="worktree-parent" autoFocus className="ui-text-field__input" value={parent} onChange={(event) => setParent(event.target.value)}>
             {candidates.map((w) => (
               <option key={w.id} value={w.id}>
                 {workspaceOption(w, repos)}
               </option>
             ))}
           </select>
-        </label>
-        <div className="dialog-actions">
-          <button type="button" onClick={onClose}>
+        </FormRow>
+        <div className="ui-actions">
+          <Button type="button" onClick={onClose}>
             Cancel
-          </button>
-          <button type="submit" className="primary" disabled={busy || !parent}>
+          </Button>
+          <Button type="submit" variant="primary" disabled={busy || !parent}>
             Save
-          </button>
+          </Button>
         </div>
       </form>
     </Dialog>

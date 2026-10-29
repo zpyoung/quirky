@@ -1,8 +1,8 @@
 import { useState, type FormEvent } from 'react'
 import type { UiPluginContext, Worktree } from '@quirky/protocol'
+import { Button, Dialog, FormRow, SectionHeader, TextField } from '@quirky/ui'
 import type { WorktreeReference } from './parity-types'
 import { messageOf, setWorktree } from './actions'
-import { Dialog } from './Dialog'
 
 type EditableWorktree = Worktree & { references?: WorktreeReference[] }
 type Props = { context: UiPluginContext; worktree: EditableWorktree; onClose(): void }
@@ -52,46 +52,49 @@ export function UpdateDialog({ context, worktree, onClose }: Props) {
   }
 
   return (
-    <Dialog title="Workspace details" onClose={onClose}>
-      <p className="muted">Attach reviews and tasks, and keep notes for this workspace.</p>
-      <form className="form" onSubmit={save}>
-        <label>
-          <span>Display Name</span>
-          <input autoFocus value={displayName} onChange={(event) => setDisplayName(event.target.value)} placeholder={folderName} />
-          <small className="muted">Shown in the sidebar. The folder name stays the same.</small>
-        </label>
-        <label>
-          <span>Notes</span>
-          <textarea rows={6} value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="Add notes" />
-          <small className="muted">Markdown is supported.</small>
-        </label>
-        <section className="form-group" aria-label="Linked references">
-          <h3>Linked work</h3>
-          {references.length === 0 ? <p className="muted">No references linked.</p> : (
-            <ul>
+    <Dialog open title="Workspace details" onClose={onClose}>
+      <p className="ui-text-muted">Attach reviews and tasks, and keep notes for this workspace.</p>
+      <form className="ui-stack" onSubmit={save}>
+        <TextField
+          label="Display Name"
+          id="workspace-display-name"
+          autoFocus
+          value={displayName}
+          onChange={(event) => setDisplayName(event.target.value)}
+          placeholder={folderName}
+          help="Shown in the sidebar. The folder name stays the same."
+        />
+        <FormRow label="Notes" htmlFor="workspace-notes" help="Markdown is supported.">
+          <textarea
+            id="workspace-notes"
+            rows={6}
+            className="ui-text-field__input"
+            value={notes}
+            onChange={(event) => setNotes(event.target.value)}
+            placeholder="Add notes"
+          />
+        </FormRow>
+        <section className="ui-stack" aria-label="Linked references">
+          <SectionHeader title="Linked work" />
+          {references.length === 0 ? <p className="ui-text-muted">No references linked.</p> : (
+            <ul className="ui-tree">
               {references.map((reference) => (
-                <li key={reference.id}>
-                  <span>{reference.label} · {reference.url}</span>
-                  <button type="button" aria-label={`Unlink ${reference.label}`} onClick={() => void unlinkReference(reference)}>Unlink</button>
+                <li className="ui-tree-item ui-cluster" key={reference.id}>
+                  <span className="ui-text-ellipsis">{reference.label} · {reference.url}</span>
+                  <Button type="button" aria-label={`Unlink ${reference.label}`} onClick={() => void unlinkReference(reference)}>Unlink</Button>
                 </li>
               ))}
             </ul>
           )}
-          <label>
-            <span>Reference URL</span>
-            <input value={referenceUrl} onChange={(event) => setReferenceUrl(event.target.value)} placeholder="https://…" />
-          </label>
-          <label>
-            <span>Reference label</span>
-            <input value={referenceLabel} onChange={(event) => setReferenceLabel(event.target.value)} placeholder="APP-42" />
-          </label>
-          <button type="button" disabled={referenceUrl.trim() === ''} onClick={() => void addReference()}>Add reference</button>
-          <small className="muted">Links are displayed as text here and are never executed by the worktree plugin.</small>
+          <TextField label="Reference URL" id="workspace-reference-url" value={referenceUrl} onChange={(event) => setReferenceUrl(event.target.value)} placeholder="https://…" />
+          <TextField label="Reference label" id="workspace-reference-label" value={referenceLabel} onChange={(event) => setReferenceLabel(event.target.value)} placeholder="APP-42" />
+          <Button type="button" disabled={referenceUrl.trim() === ''} onClick={() => void addReference()}>Add reference</Button>
+          <p className="ui-help-text">Links are displayed as text here and are never executed by the worktree plugin.</p>
         </section>
-        <div className="dialog-actions dialog-actions-spread">
-          <span className="muted">Changes apply when you save</span>
-          <button type="button" onClick={onClose}>Cancel</button>
-          <button type="submit" className="primary" disabled={busy}>Save</button>
+        <div className="ui-actions">
+          <span className="ui-text-muted">Changes apply when you save</span>
+          <Button type="button" onClick={onClose}>Cancel</Button>
+          <Button type="submit" variant="primary" disabled={busy}>Save</Button>
         </div>
       </form>
     </Dialog>

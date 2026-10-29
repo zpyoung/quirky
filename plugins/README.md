@@ -2,6 +2,44 @@
 
 This directory holds Quirky's built-in plugins, one per subdirectory, each with a `quirky-plugin.json` manifest. The daemon finds it through `QUIRKY_BUILTIN_PLUGINS_DIR`.
 
+## Terminal workspace
+
+Terminal views stay in the center; **Terminal sessions** and **Quick commands** open
+in the bottom-left tool slot by default and can be moved with the host's tool controls.
+Workspace tabs, pane actions, search, floating terminals, quick-command dialogs and the
+agent composer use the shared graphite controls in dark and light appearances.
+Existing terminal palette overrides, shortcuts, split layouts and pane-owned drafts
+are unchanged. Context menus render above adjacent tools, including nested command menus.
+
+See the [terminal presentation specification](../docs/quirk/specs/2026-10-28-ui-restyle-terminal/logic.md).
+
+## Supervised-work presentation
+
+**Heimdall** opens its fleet in the left-bottom tool slot by default. Orchestration
+settings and remote-worker output, Session handoff settings and previews, and
+background-loop setup and views use the shared graphite controls in both themes.
+Multiline instructions, searchable handoff destinations, secret-marked editable
+previews, queue drafts and confirmation dialogs retain their existing public APIs
+and lifecycle rules. A visual or theme change does not approve, launch or cancel work.
+
+See the [supervised-work presentation specification](../docs/quirk/specs/2026-10-28-ui-restyle-orchestration/logic.md).
+
+## Settings and utility presentation
+
+The host **Settings** window uses shared graphite forms and keeps edits local until
+Save; Cancel leaves stored preferences unchanged. Application and terminal appearance
+continue to use their existing theme controls. Plugin settings sections and dedicated
+settings links remain available from the same window.
+
+Desktop **Mobile**, **CLI settings**, command search and the Source Control activity
+contribution use the same dark/light controls. Mobile pairing offers remain deliberately
+visible only in the pairing surface; CLI pairing-offer entry stays masked. Launcher
+replacement confirmations, unavailable-target guards and device revocation behavior
+are unchanged. The phone application's presentation is not part of this restyle.
+
+See the [settings presentation specification](../docs/quirk/specs/2026-10-28-ui-restyle-settings/logic.md).
+
+
 ## Terminal dock
 
 `quirky.terminal-dock` provides an opt-in composer below recognized terminal agents.
@@ -481,8 +519,14 @@ isolated Default storage and a run-owned system-browser session before clicking.
 ## GitHub Tasks
 
 `quirky.tasks` supplies Tasks lists, issue detail/creation, Project tables/boards/roadmaps,
-and the shared workspace composer. Its generated commands use the `tasks` group:
+and the shared workspace composer.
 
+Tasks is a host-owned tool in the left-bottom slot by default; moving it uses the
+shared tool layout. Its list, issue/Project surfaces, workspace composer and
+settings use `@quirky/ui` controls and canonical graphite tokens in both themes.
+The host stylesheet supplies those styles once; the plugin injects no private CSS.
+
+Generated commands use the `tasks` group:
 ```sh
 quirky tasks open --mode issues --json
 quirky tasks open --mode prs --page 3 --json
@@ -882,6 +926,11 @@ supports nested/empty details sections, collapsible headings and `[[document lin
 unsupported forms still open in Source mode rather than silently losing content.
 Document-link completion is keyboard-accessible and does not run during IME composition.
 
+Explorer **Copy Path** copies the exact absolute path; **Copy Relative Path** is relative
+to the worktree even when Explorer displays a subfolder. Multi-selection copies one path
+per line without shell quoting. Row drags into a terminal retain worktree ownership and
+insert shell-escaped paths; **Open in Terminal** uses the selected directory directly.
+
 The buffer's optional `diskWritable` is advisory effective OS access, separate from the
 format's `readOnly` capability. A readable non-writable Markdown file can keep drafts and
 local review notes. The actual save is authoritative: denial retains the draft and dirty
@@ -912,4 +961,17 @@ preferences retain conservative corrupt-state recovery. Separator presentation e
 first, host-adjacent, sticky and nested boundaries without changing row geometry.
 
 [Completion contracts and acceptance scenarios](../docs/quirk/specs/2026-10-28-m7-editor-source-control-completion/logic.md).
+
+## Saved CLI runtimes
+
+`quirky cli runtime add --name <name> --code <pairing-offer>` saves a paired
+target in the private `QUIRKY_HOME` store (mode `0600`). Treat the offer as a
+credential even when its token is encoded in a pairing URL. Add, list, show and
+status return only credential-free summaries; using a saved target resolves its
+private offer for the encrypted connection. Malformed offers are rejected before
+the runtime store is created.
+
+Remove a saved target with `quirky cli runtime remove --selector <id> --yes`.
+Removal prevents new connections through that saved selector; it does not revoke
+the remote device grant or terminate an already established connection.
 

@@ -1,6 +1,6 @@
+import { Badge, Button, Tabs, TextField } from '@quirky/ui'
 import { useEffect, useRef, useState, type ChangeEvent, type KeyboardEvent } from 'react'
 import type { ActivityPreferencePatch, ActivityWindow, SidebarProjection } from './useSidebarActivity'
-
 const WINDOWS: Array<{ value: ActivityWindow; label: string }> = [
   { value: 'all', label: 'All' },
   { value: 'live-only', label: 'Live only' },
@@ -9,14 +9,16 @@ const WINDOWS: Array<{ value: ActivityWindow; label: string }> = [
   { value: 'month', label: 'Past 30 days' },
   { value: 'custom', label: 'Custom' }
 ]
+const WINDOW_TABS = WINDOWS.map(({ value, label }) => ({ id: value, label }))
 
 type Props = {
   projection: SidebarProjection | null
   error: string | null
+  loading?: boolean
   setPreferences(patch: ActivityPreferencePatch): Promise<boolean>
 }
 
-export function ActivityFilters({ projection, error, setPreferences }: Props) {
+export function ActivityFilters({ projection, error, loading = false, setPreferences }: Props) {
   const [open, setOpen] = useState(false)
   const [daysDraft, setDaysDraft] = useState<{ value: string; basedOn: number } | null>(null)
   const [daysError, setDaysError] = useState<string | null>(null)
@@ -59,53 +61,45 @@ export function ActivityFilters({ projection, error, setPreferences }: Props) {
     event.preventDefault()
     commitDays()
   }
-  if (!projection && !error) return null
+  if (!projection && !error && !loading) return null
 
   return (
-    <div className="workspace-activity-controls">
+    <div className="ui-stack">
       {projection && (
-        <button
-          className="workspace-options-button"
-          type="button"
-          aria-expanded={open}
-          aria-label="Workspace options"
-          onClick={() => setOpen((value) => !value)}
-        >
-          Workspace options<span className="badge" aria-label={`${badge} active filter${badge === 1 ? '' : 's'}`}>{badge}</span>
-        </button>
+        <div className="ui-cluster ui-toolbar">
+          <Button
+            type="button"
+            aria-expanded={open}
+            aria-controls="workspace-activity-filter-options"
+            onClick={() => setOpen((value) => !value)}
+          >
+            Activity filters <Badge label={`${badge} active filter${badge === 1 ? '' : 's'}`}>{badge}</Badge>
+          </Button>
+        </div>
       )}
       {open && projection && preferences && (
-        <div className="workspace-options" role="group" aria-label="Filters">
-          <div className="workspace-filter-options" role="group" aria-label="Workspace activity window">
-            {WINDOWS.map((option) => (
-              <button
-                type="button"
-                key={option.value}
-                aria-pressed={window === option.value}
-                className={window === option.value ? 'active' : undefined}
-                onClick={() => void setPreferences({ workspaceActivityWindow: option.value })}
-              >
-                {option.label}
-              </button>
-            ))}
-          </div>
+        <div id="workspace-activity-filter-options" className="ui-stack" role="group" aria-label="Activity filters">
+          <Tabs
+            label="Workspace activity window"
+            items={WINDOW_TABS}
+            value={window ?? 'all'}
+            onChange={(value) => void setPreferences({ workspaceActivityWindow: value as ActivityWindow })}
+          />
           {window === 'custom' && (
-            <label className="workspace-custom-days">
-              <span>Custom days</span>
-              <input
-                type="text"
-                inputMode="numeric"
-                aria-label="Custom days"
-                value={days}
-                onChange={updateDays}
-                onBlur={commitDays}
-                onKeyDown={onDaysKeyDown}
-              />
-            </label>
+            <TextField
+              id="workspace-activity-custom-days"
+              label="Custom days"
+              type="text"
+              inputMode="numeric"
+              value={days}
+              onChange={updateDays}
+              onBlur={commitDays}
+              onKeyDown={onDaysKeyDown}
+              error={daysError ?? undefined}
+            />
           )}
-          {window === 'custom' && daysError && <p className="form-error" role="alert">{daysError}</p>}
           {window === 'live-only' && (
-            <label className="workspace-default-branch">
+            <label className="ui-checkbox-label">
               <input
                 type="checkbox"
                 checked={preferences.alwaysShowDefaultBranchWorkspace}
@@ -114,7 +108,7 @@ export function ActivityFilters({ projection, error, setPreferences }: Props) {
               <span>Except default branch</span>
             </label>
           )}
-          <label>
+          <label className="ui-checkbox-label">
             <input
               type="checkbox"
               checked={preferences.hideCompletedReviewWorkspaces}
@@ -122,7 +116,7 @@ export function ActivityFilters({ projection, error, setPreferences }: Props) {
             />
             <span>Hide merged/closed reviews</span>
           </label>
-          <label>
+          <label className="ui-checkbox-label">
             <input
               type="checkbox"
               checked={preferences.hidePassingCheckWorkspaces}
@@ -130,7 +124,7 @@ export function ActivityFilters({ projection, error, setPreferences }: Props) {
             />
             <span>Hide passing checks</span>
           </label>
-          <label>
+          <label className="ui-checkbox-label">
             <input
               type="checkbox"
               checked={preferences.hideAutomationCreated ?? false}
@@ -138,31 +132,33 @@ export function ActivityFilters({ projection, error, setPreferences }: Props) {
             />
             <span>Hide automation-created</span>
           </label>
-          <button
-            className="workspace-clear-filters"
-            type="button"
-            onClick={() => void setPreferences({
-              workspaceActivityWindow: 'all',
-              hideCompletedReviewWorkspaces: false,
-              hidePassingCheckWorkspaces: false,
-              hideAutomationCreated: false
-            })}
-          >
-            Clear filters
-          </button>
+          <div className="ui-cluster ui-actions">
+            <Button
+              type="button"
+              onClick={() => void setPreferences({
+                workspaceActivityWindow: 'all',
+                hideCompletedReviewWorkspaces: false,
+                hidePassingCheckWorkspaces: false,
+                hideAutomationCreated: false
+              })}
+            >
+              Clear filters
+            </Button>
+          </div>
         </div>
       )}
       {projection && projection.hiddenCount > 0 && (
-        <button className="workspace-hidden-count" type="button" onClick={() => void setPreferences({ workspaceActivityWindow: 'all' })}>
+        <Button type="button" onClick={() => void setPreferences({ workspaceActivityWindow: 'all' })}>
           Show {projection.hiddenCount} hidden {projection.hiddenCount === 1 ? 'workspace' : 'workspaces'}
-        </button>
+        </Button>
       )}
       {projection && projection.automationHiddenCount > 0 && (
-        <p className="workspace-hidden-count" role="status">
+        <p className="ui-text-muted" role="status">
           {projection.automationHiddenCount} automation-created {projection.automationHiddenCount === 1 ? 'workspace' : 'workspaces'} hidden
         </p>
       )}
-      {error && <p className="workspace-activity-error" role="alert">Workspace activity filters unavailable: {error}</p>}
+      {loading && !projection && <p className="ui-text-muted" role="status">Loading workspace activity filters…</p>}
+      {error && <p className="ui-error-text" role="alert">Workspace activity filters unavailable: {error}</p>}
     </div>
   )
 }

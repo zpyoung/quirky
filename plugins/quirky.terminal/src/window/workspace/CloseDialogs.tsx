@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useId, useState } from 'react'
+import { Button, FormRow } from '@quirky/ui'
 import { Dialog } from './Dialog'
 
 type Props = {
@@ -9,11 +10,13 @@ type Props = {
 }
 
 function DontAsk({ label, checked, onChange }: { label: string; checked: boolean; onChange: (value: boolean) => void }) {
+  const id = useId()
   return (
-    <label className="qt-check">
-      <input type="checkbox" checked={checked} onChange={(event) => onChange(event.target.checked)} />
-      <span>{label}</span>
-    </label>
+    <div className="qt-check">
+      <FormRow label={label} htmlFor={id}>
+        <input id={id} type="checkbox" checked={checked} onChange={(event) => onChange(event.target.checked)} />
+      </FormRow>
+    </div>
   )
 }
 
@@ -26,13 +29,13 @@ export function CloseRunningDialog({ agent, tabLabel, onCancel, onConfirm }: Pro
       <p className="qt-dialog-text">{agent ? "Closing this terminal will stop the agent's current work." : 'Closing this terminal will stop the command running inside it.'}</p>
       {tabLabel ? <p className="qt-dialog-name">{tabLabel}</p> : null}
       <DontAsk label="Don't ask again for running terminals" checked={dontAsk} onChange={setDontAsk} />
-      <div className="qt-dialog-actions">
-        <button type="button" onClick={onCancel}>
+      <div className="ui-dialog__actions qt-dialog-actions">
+        <Button variant="secondary" onClick={onCancel}>
           Cancel
-        </button>
-        <button type="button" className="qt-primary qt-danger" autoFocus onClick={() => onConfirm(dontAsk)}>
+        </Button>
+        <Button type="button" variant="destructive" autoFocus onClick={() => onConfirm(dontAsk)}>
           {agent ? 'Stop Agent' : 'Stop and Close'}
-        </button>
+        </Button>
       </div>
     </Dialog>
   )
@@ -46,13 +49,13 @@ export function ClosePinnedDialog({ tabLabel, onCancel, onConfirm }: Props) {
       <p className="qt-dialog-text">This tab is pinned. Are you sure you want to close it?</p>
       {tabLabel ? <p className="qt-dialog-name">{tabLabel}</p> : null}
       <DontAsk label="Don't ask again for pinned tabs" checked={dontAsk} onChange={setDontAsk} />
-      <div className="qt-dialog-actions">
-        <button type="button" onClick={onCancel}>
+      <div className="ui-dialog__actions qt-dialog-actions">
+        <Button variant="secondary" onClick={onCancel}>
           Cancel
-        </button>
-        <button type="button" className="qt-primary qt-danger" autoFocus onClick={() => onConfirm(dontAsk)}>
+        </Button>
+        <Button variant="destructive" autoFocus onClick={() => onConfirm(dontAsk)}>
           Close
-        </button>
+        </Button>
       </div>
     </Dialog>
   )
