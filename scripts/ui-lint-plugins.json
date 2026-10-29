@@ -1,5 +1,8 @@
 [
   "quirky.accounts",
+  "quirky.ask",
+  "quirky.notifications",
+  "quirky.structured",
   "quirky.tasks",
   "quirky.automations",
   "quirky.agents",

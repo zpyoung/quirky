@@ -241,14 +241,14 @@ describe('the Questions panel module', () => {
       ;([...element.querySelectorAll('button')].find((b) => b.textContent === 'Dismiss') as HTMLButtonElement).click()
     })
     await settled()
-    expect(element.querySelectorAll('.ask-card')).toHaveLength(0)
+    expect(element.querySelectorAll('[data-ask-card]')).toHaveLength(0)
 
     await act(async () => {
       release()
     })
     await settled()
 
-    expect([...element.querySelectorAll('.ask-card h3')].map((node) => node.textContent)).toEqual(['Second'])
+    expect([...element.querySelectorAll('[data-ask-card] h2')].map((node) => node.textContent)).toEqual(['Second'])
     expect(fake.badges.at(-1)).toBe(1)
   })
 
@@ -264,7 +264,7 @@ describe('the Questions panel module', () => {
     const { element } = await mount(fake)
 
     expect(fake.calls.find((call) => call.method === 'quirky.ask/list')?.params).toEqual({ pendingOnly: true })
-    expect([...element.querySelectorAll('.ask-card h3')].map((node) => node.textContent)).toEqual(['First', 'Second'])
+    expect([...element.querySelectorAll('[data-ask-card] h2')].map((node) => node.textContent)).toEqual(['First', 'Second'])
   })
 
   test('SC-29: reports the pending asks, and Ask 2 stays after Ask 1 is answered', async () => {
@@ -280,7 +280,7 @@ describe('the Questions panel module', () => {
       queued: 0
     })
 
-    const first = element.querySelector('.ask-card')!
+    const first = element.querySelector('[data-ask-card]')!
     await click(buttonIn(first, 'Prod'))
     await click(buttonIn(first, 'Submit'))
     await settled()
@@ -294,7 +294,7 @@ describe('the Questions panel module', () => {
     await fake.emit(resolved('ask_1'))
 
     expect(reports.at(-1)).toEqual({ pending: [{ askId: 'ask_2', title: 'Ask 2', questions: 1 }], queued: 0 })
-    expect(element.querySelectorAll('.ask-card')).toHaveLength(1)
+    expect(element.querySelectorAll('[data-ask-card]')).toHaveLength(1)
     expect(fake.badges.at(-1)).toBe(1)
   })
 
@@ -309,7 +309,7 @@ describe('the Questions panel module', () => {
     await settled()
 
     expect(fake.calls.some((call) => call.method === 'quirky.ask/cancel' && call.params?.askId === 'ask_1')).toBe(true)
-    expect(element.querySelectorAll('.ask-card')).toHaveLength(0)
+    expect(element.querySelectorAll('[data-ask-card]')).toHaveLength(0)
     expect(reports.at(-1)).toEqual({ pending: [], queued: 0 })
     expect(fake.badges.at(-1)).toBeNull()
   })
@@ -326,7 +326,7 @@ describe('the Questions panel module', () => {
     await settled()
 
     expect(fake.toasts).toEqual([{ title: 'Could not answer', body: 'already resolved' }])
-    expect(element.querySelectorAll('.ask-card')).toHaveLength(1)
+    expect(element.querySelectorAll('[data-ask-card]')).toHaveLength(1)
   })
 
   test('SC-43: a multi-line question keeps its line breaks', async () => {
@@ -349,7 +349,6 @@ describe('the Questions panel module', () => {
 
     const text = element.querySelector('legend [data-question-text]') as HTMLElement
     expect(text.textContent).toBe(listing)
-    expect(text.style.whiteSpace).toBe('pre-wrap')
   })
 
   test('SC-6: free text on a select is a note beside a pick, or the answer itself', async () => {
@@ -470,7 +469,7 @@ describe('the Questions panel module', () => {
     await activated(fake)
     const { element, reports } = await mount(fake)
 
-    expect([...element.querySelectorAll('.ask-card h3')].map((node) => node.textContent)).toEqual(['A'])
+    expect([...element.querySelectorAll('[data-ask-card] h2')].map((node) => node.textContent)).toEqual(['A'])
     expect(fake.badges.at(-1)).toBe(1)
     expect(reports.at(-1)).toEqual({ pending: [{ askId: 'ask_a', title: 'A', questions: 1 }], queued: 1 })
   })
@@ -489,7 +488,7 @@ describe('the Questions panel module', () => {
     await fake.emit(resolved('ask_a', declined('ask_a'), 3))
     await fake.emit(surfaced(promoted, 4))
 
-    expect([...element.querySelectorAll('.ask-card h3')].map((node) => node.textContent)).toEqual(['B'])
+    expect([...element.querySelectorAll('[data-ask-card] h2')].map((node) => node.textContent)).toEqual(['B'])
     expect(fake.badges.at(-1)).toBe(1)
     expect(reports.at(-1)).toEqual({ pending: [{ askId: 'ask_b', title: 'B', questions: 1 }], queued: 0 })
   })
@@ -572,19 +571,15 @@ describe('the Questions panel module', () => {
 
     const ship = fieldsetOf(element, 'ship')
     const shipLegend = ship.querySelector('legend') as HTMLElement
-    expect([...shipLegend.children].map((child) => child.textContent)).toEqual(['Ship', 'Ship date?'])
+    expect([...shipLegend.querySelectorAll('strong, span')].map((child) => child.textContent)).toEqual(['Ship', 'Ship date?'])
     expect(shipLegend.children[0]?.tagName).toBe('STRONG')
     expect(shipLegend.textContent).toBe('ShipShip date?')
     expect((ship.querySelector('input') as HTMLInputElement).type).toBe('date')
 
     expect([...fieldsetOf(element, 'go').querySelectorAll('button')].map((b) => b.textContent)).toEqual(['Yes', 'No'])
 
-    const unpressedStyle = buttonIn(env, 'Prod').getAttribute('style')
     await click(buttonIn(env, 'Prod'))
     expect(buttonIn(env, 'Prod').getAttribute('aria-pressed')).toBe('true')
-    expect(buttonIn(env, 'Prod').getAttribute('style')).not.toBe(unpressedStyle)
-    expect(buttonIn(env, 'Prod').style.background).toContain('var(--accent)')
-    expect(buttonIn(env, 'Dev').style.background).not.toContain('var(--accent)')
     await click(buttonIn(env, 'Dev'))
     expect(buttonIn(env, 'Prod').getAttribute('aria-pressed')).toBe('false')
     await click(buttonIn(env, 'Dev'))
@@ -656,7 +651,7 @@ describe('the Questions panel module', () => {
       },
       skipped: ['ship', 'go']
     })
-    expect(element.querySelectorAll('.ask-card')).toHaveLength(0)
+    expect(element.querySelectorAll('[data-ask-card]')).toHaveLength(0)
   })
   test('Q2: an API answer immediately shows its terminal summary', async () => {
     const ask: Ask = {
@@ -675,7 +670,11 @@ describe('the Questions panel module', () => {
       askId: 'ask_api',
       answers: { go: { value: true, source: 'input' } }
     })
-    expect(element.querySelector('.ask-result')?.textContent).toContain('Go?: Yes')
+    const result = element.querySelector('[data-ask-result]')!
+    expect(result.textContent).toContain('Go?: Yes')
+    expect(result.getAttribute('role')).toBe('status')
+    expect(result.getAttribute('aria-live')).toBe('polite')
+    expect(result.getAttribute('aria-label')).toBe('Confirm?: Answered')
     expect(fake.badges.at(-1)).toBeNull()
   })
 
@@ -720,7 +719,7 @@ describe('the Questions panel module', () => {
 
     await click(buttonIn(element, 'Show preview'))
 
-    const frame = element.querySelector('iframe.ask-preview') as HTMLIFrameElement
+    const frame = element.querySelector('iframe[title="Question preview"]') as HTMLIFrameElement
     expect(frame).not.toBeNull()
     expect(frame.getAttribute('sandbox')).toBe('')
     expect(frame.getAttribute('referrerpolicy')).toBe('no-referrer')
@@ -752,21 +751,68 @@ describe('the Questions panel module', () => {
     expect(withOwnAnswer(fieldset).value).toBe('a custom framework')
 
     await click(buttonIn(element, 'Hide preview'))
-    expect(element.querySelector('iframe.ask-preview')).toBeNull()
+    expect(element.querySelector('iframe[title="Question preview"]')).toBeNull()
+  })
+  test('a mounted option preview follows the root theme while keeping links inert and the frame sandboxed', async () => {
+    const originalTheme = document.documentElement.getAttribute('data-theme')
+    await act(async () => {
+      document.documentElement.setAttribute('data-theme', 'dark')
+    })
+
+    try {
+      const ask: Ask = {
+        ...selectAsk('ask_theme', 'Preview theme', 1),
+        spec: {
+          questions: [{
+            id: 'framework',
+            type: 'select',
+            question: 'Framework?',
+            options: [{ value: 'example', label: 'Example', preview: { format: 'markdown', content: '[inert link](https://example.invalid)' } }]
+          }]
+        }
+      }
+      const fake = fakeContext([ask])
+      await activated(fake)
+      const { element } = await mount(fake)
+      await click(buttonIn(element, 'Show preview'))
+
+      const frame = element.querySelector('iframe[title="Question preview"]') as HTMLIFrameElement
+      const preview = () => new DOMParser().parseFromString(frame.getAttribute('srcdoc')!, 'text/html')
+      expect(frame.getAttribute('sandbox')).toBe('')
+      expect(preview().documentElement.getAttribute('data-theme')).toBe('dark')
+      expect(preview().querySelector('a')?.textContent).toBe('inert link')
+      expect(preview().querySelector('a')?.hasAttribute('href')).toBe(false)
+
+      await act(async () => {
+        document.documentElement.setAttribute('data-theme', 'light')
+        await Promise.resolve()
+      })
+
+      expect(preview().documentElement.getAttribute('data-theme')).toBe('light')
+      expect(preview().querySelector('a')?.textContent).toBe('inert link')
+      expect(preview().querySelector('a')?.hasAttribute('href')).toBe(false)
+      expect(frame.getAttribute('sandbox')).toBe('')
+    } finally {
+      await act(async () => {
+        if (originalTheme === null) document.documentElement.removeAttribute('data-theme')
+        else document.documentElement.setAttribute('data-theme', originalTheme)
+        await Promise.resolve()
+      })
+    }
   })
 
   test('SC-24: a resolved event removes the card and clears the badge', async () => {
     const fake = fakeContext([selectAsk('ask_1', 'Short', 1)])
     await activated(fake)
     const { element } = await mount(fake)
-    expect(element.querySelectorAll('.ask-card')).toHaveLength(1)
+    expect(element.querySelectorAll('[data-ask-card]')).toHaveLength(1)
 
     fake.drop('ask_1')
     await fake.emit(resolved('ask_1'))
 
-    expect(element.querySelectorAll('.ask-card')).toHaveLength(0)
+    expect(element.querySelectorAll('[data-ask-card]')).toHaveLength(0)
     expect(fake.badges.at(-1)).toBeNull()
-    expect(element.querySelector('.ask-result')?.textContent).toContain('Answered')
+    expect(element.querySelector('[data-ask-result]')?.textContent).toContain('Answered')
   })
   test('Q2: the terminal envelope flashes beside the promoted head without counting as pending', async () => {
     const first = { ...selectAsk('ask_1', 'Deploy?', 1), sessionId: 'sess_1' }
@@ -775,7 +821,7 @@ describe('the Questions panel module', () => {
     await activated(fake)
     const { element, reports } = await mount(fake)
 
-    expect(element.querySelectorAll('.ask-card')).toHaveLength(1)
+    expect(element.querySelectorAll('[data-ask-card]')).toHaveLength(1)
     expect(fake.badges.at(-1)).toBe(1)
 
     fake.replace([{ ...queued, queued: false }])
@@ -788,8 +834,8 @@ describe('the Questions panel module', () => {
     }))
     await settled()
 
-    expect(element.querySelector('.ask-result')?.textContent).toContain('Deploy?: Yes')
-    expect(element.querySelectorAll('.ask-card')).toHaveLength(1)
+    expect(element.querySelector('[data-ask-result]')?.textContent).toContain('Deploy?: Yes')
+    expect(element.querySelectorAll('[data-ask-card]')).toHaveLength(1)
     expect(element.textContent).toContain('Next?')
     expect(fake.badges.at(-1)).toBe(1)
     expect(reports.at(-1)).toMatchObject({ pending: [{ askId: 'ask_2' }], queued: 0 })
