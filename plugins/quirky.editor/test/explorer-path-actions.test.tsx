@@ -188,6 +188,7 @@ function makeContext(fixture: Fixture): UiPluginContext {
     nativeBrowser: {} as UiPluginContext['nativeBrowser'],
     pluginId: 'quirky.editor',
     log() {},
+    nativeDropPaths: async () => null,
     readClipboardText: async () => '',
     provide() {},
     call: (method, params = {}) => fixture.uiClient.callAny(method, params),

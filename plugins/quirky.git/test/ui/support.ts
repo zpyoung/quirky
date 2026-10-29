@@ -71,6 +71,7 @@ export function fakeContext(layout: UiLayout = layoutFor(null)): Fake {
     context: {
       pluginId: 'quirky.git',
       nativeBrowser: createNativeBrowserCapability(),
+      nativeDropPaths: async () => null,
       readClipboardText: async () => '',
       log() {},
       provide: (id, implementation) => void fake.provided.set(id, implementation),

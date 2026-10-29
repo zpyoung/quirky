@@ -201,6 +201,10 @@ async function importDroppedUris(context: UiPluginContext, worktree: string, dir
     if (url.protocol !== 'file:') throw new Error(`Unsupported dropped URL: ${line}`)
     return decodeURIComponent(url.pathname)
   })
+  return importSourcePaths(context, worktree, directory, paths)
+}
+
+async function importSourcePaths(context: UiPluginContext, worktree: string, directory: string, paths: string[]): Promise<string[]> {
   if (paths.length > MAX_UPLOADS) throw new Error(`Import is limited to ${MAX_UPLOADS} files.`)
   const metadataBytes = paths.reduce((total, path) => total + sizeOfName(path), 0)
   if (metadataBytes > MAX_UPLOAD_METADATA_BYTES) throw new Error('Dropped path names exceed the 256 KiB metadata limit.')
@@ -213,6 +217,26 @@ async function importDroppedUris(context: UiPluginContext, worktree: string, dir
   const imported = result.paths ?? (result.path ? [result.path] : [])
   if (imported.length === 0) throw new Error('The dropped files could not be imported.')
   return imported
+}
+
+/**
+ * Worktree paths to open for OS files dropped on a document. With the drop's source paths, files
+ * already inside the worktree open in place and the rest are imported as collision-safe copies
+ * beside the document; without them, every file is imported.
+ */
+export async function droppedFileTargets(
+  context: UiPluginContext,
+  buffer: { root: string; worktreeId: string; relativePath: string },
+  files: File[]
+): Promise<string[]> {
+  const directory = parentDirectory(buffer.relativePath)
+  const sourcePaths = await context.nativeDropPaths(files)
+  if (!sourcePaths) return uploadFiles(context, buffer.worktreeId, directory, files)
+  const rootPrefix = buffer.root.endsWith('/') ? buffer.root : `${buffer.root}/`
+  const inside = sourcePaths.filter((path) => path.startsWith(rootPrefix)).map((path) => path.slice(rootPrefix.length))
+  const outside = sourcePaths.filter((path) => !path.startsWith(rootPrefix))
+  const imported = outside.length > 0 ? await importSourcePaths(context, buffer.worktreeId, directory, outside) : []
+  return [...inside, ...imported]
 }
 
 /** One session-free hosted document view inside the terminal workspace. */
@@ -900,7 +924,7 @@ function DocumentBody({ context, input }: { context: UiPluginContext; input: Doc
     const files = Array.from(event.dataTransfer.files)
     if (files.length > 0) {
       event.preventDefault()
-      const imported = await uploadFiles(context, buffer.worktreeId, parentDirectory(buffer.relativePath), files)
+      const imported = await droppedFileTargets(context, buffer, files)
       for (let index = 0; index < imported.length; index++) {
         await context.call('quirky.editor/open', { worktree: buffer.worktreeId, path: imported[index], focus: index === imported.length - 1, preview: false })
       }

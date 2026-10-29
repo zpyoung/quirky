@@ -302,6 +302,13 @@ export type UiPluginContext = {
   log(message: string): void
   /** Reads plain text from this window's clipboard: native desktop pasteboard, Web Clipboard API otherwise. */
   readClipboardText(): Promise<string>
+  /**
+   * The original absolute paths of the OS file drop this window just received, one per entry of
+   * `files` (a drop's `DataTransfer.files`) and in that order. Null in browser shells, on platforms
+   * whose runtime can't report source paths, and when no native drop matches those files. Call it
+   * from the `drop` handler. Plugin API 1.1.0.
+   */
+  nativeDropPaths(files: ArrayLike<{ name: string }>): Promise<string[] | null>
   /** Registers the implementation of a code-backed contribution this plugin declares; throws for any other ID. */
   provide(contributionId: string, implementation: unknown): void
   /** Invokes a daemon or plugin method. */

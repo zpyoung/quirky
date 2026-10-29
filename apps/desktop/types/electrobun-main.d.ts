@@ -16,7 +16,13 @@ export class BrowserWindow {
     rpc?: unknown
   })
   readonly id: number
-  webview: { readonly id: number; loadURL(url: string): void; loadHTML(html: string): void }
+  webview: {
+    readonly id: number
+    loadURL(url: string): void
+    loadHTML(html: string): void
+    supportsDropSourcePaths(): boolean
+    on(name: 'drop-source-paths', handler: (event: unknown) => void): void
+  }
   on(name: string, handler: (event: unknown) => void): void
   show(): void
   activate(): void

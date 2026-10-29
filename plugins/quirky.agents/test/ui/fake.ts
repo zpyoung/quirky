@@ -24,6 +24,7 @@ export function fakeContext(handlers: Record<string, Handler> = {}) {
   const context: UiPluginContext = {
     pluginId: 'quirky.agents',
     nativeBrowser: createNativeBrowserCapability(),
+    nativeDropPaths: async () => null,
     readClipboardText: async () => '',
     log() {},
     provide(id, implementation) {

@@ -72,6 +72,13 @@ The plugin API release is separate from other version numbers:
 
 Use SemVer for future Plugin API releases: increment the **major** for incompatible author-contract changes, **minor** for backward-compatible author-facing additions, and **patch** for backward-compatible corrections. Set a plugin's `apiVersion` to the earliest stable release that supplies every API feature it uses. Hosts compare that minimum against their own `PLUGIN_API_VERSION`; they do not infer a floor from the package, application, daemon, wire or catalog version.
 
+## Releases since 1.0.0
+
+- **1.1.0** adds `UiPluginContext.nativeDropPaths(files)`: the original absolute paths of an OS file
+  drop the window just received, or null where the desktop shell can't report them (browser
+  shells, Linux, Windows, runtimes without the capability). A plugin that calls it declares
+  `apiVersion` 1.1.0.
+
 ## Example
 
 The [sample distro README](../distros/sample/README.md) walks through inspection, installation, UI state and removal. Its [bundled sidebar manifest](../distros/sample/sample.sidebar/quirky-plugin.json) is a complete small example of an API 1.0 declaration.

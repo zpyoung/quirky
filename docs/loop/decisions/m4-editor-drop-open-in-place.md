@@ -66,5 +66,49 @@
 - **Revisit if:** a supported API permits real native acceptance on macOS and later platform hosts
 - **Source:** deferred: platform
 
+## D7: Unblock through the approved Electrobun fork patch
+- **Question:** Where do real Finder source paths come from now that a native patch is allowed?
+- **Options:** keep blocking; fork patch that reads file URLs from the drag pasteboard; CEF renderer swap
+- **Chose:** fork branch `patch/drop-source-paths`: Electrobun WKWebViews are an `ElectrobunWKWebView` subclass whose `performDragOperation:` reads `NSPasteboardURLReadingFileURLsOnlyKey` file URLs, calls `super`, and emits a native-only `drop-source-paths` webview event for accepted drops. `BrowserView.supportsDropSourcePaths()` is true for macOS WKWebView and false for CEF, Linux and Windows. The SDK's event bridge refuses the event name from page script.
+- **Why:** the fork spec approves this patch for this item. Public `NSDraggingDestination`/`NSPasteboard` API only; the page still gets its normal DOM drop. The native test drives a real `ElectrobunWKWebView` through `draggingEntered:`/`draggingUpdated:`/`performDragOperation:` and sees both the reported paths and the page's own `drop` with the same files.
+- **Evidence:** fork commits 3a84328d, 659c89de; `package/src/native/macos/drop_source_paths.h`; `package/scripts/test-macos-drop-source-paths.sh`; docs/quirk/specs/2026-10-29-electrobun-fork/logic.md (The 8 items)
+- **Reversibility:** medium (Quirky depends on the fork until upstream merges an equivalent)
+- **Confidence:** high
+- **Revisit if:** upstream ships its own drop-path API, or CEF needs the same capability
+- **Source:** supersedes m4-editor-drop-open-in-place D4
+
+## D8: Carry paths bun → shell webview → plugin context, correlated by the drop's own files
+- **Question:** How does the editor's DOM drop get the paths of that same drop?
+- **Options:** daemon-routed kernel event; window-local `subscribe` event plus plugin-side buffering; `UiPluginContext.nativeDropPaths(files)` backed by the shell bridge
+- **Chose:** bun listens to `drop-source-paths` on the shell window's own webview and sends `dropSourcePaths` over the typed shell RPC (`NativeBrowserHostRPC.webview.messages`). The trusted preload keeps unclaimed reports for 2 s. `DesktopShellBridge.nativeDropPaths(fileNames)` and `UiPluginContext.nativeDropPaths(files)` claim the report whose paths pair one-to-one by basename with the dropped `File` names, waiting up to 500 ms. Plugin API goes to 1.1.0; the editor declares `apiVersion` 1.1.0.
+- **Why:** the native report and the DOM drop travel separately and either may arrive first, so the page needs a claim with a short wait. The identity comes from the native report; the name check only confirms that report belongs to this drop (a mismatched or missing report yields null, never a guess). A daemon event would lose the window identity, and every plugin wanting drop paths would reimplement the correlation. The public plugin API grows rather than the editor reaching into the shell (roadmap rule).
+- **Evidence:** apps/desktop/src/bun/drop-source-paths.ts; apps/desktop/src/bun/index.ts createWindow; apps/desktop/src/bun/native-browser-preload.ts; packages/ui/src/plugins/host.ts; packages/protocol/src/ui.ts; docs/plugin-api.md "Releases since 1.0.0"
+- **Reversibility:** medium (public plugin API addition)
+- **Confidence:** medium (500 ms wait chosen without measured latency on a loaded machine)
+- **Revisit if:** real Finder drops show the report arriving later than 500 ms, or Electrobun delivers paths inside the DOM drop itself
+- **Source:** assumed — autonomous
+
+## D9: Editor drops open in place; Explorer folder drops still import
+- **Question:** Which drop targets change behavior?
+- **Options:** editor documents only; editor and Explorer folders
+- **Chose:** `DocumentSurface` drops: sources inside the realpath'd worktree root open in place (existing tab reuse/focus via `quirky.editor/open`), others go through `mutate import` with `sourcePaths` (collision-safe copies beside the document). When `nativeDropPaths` returns null (browser shells, Linux, Windows, CEF, runtimes without the capability, unmatched drops) the m2-editor D19 import-all upload path runs unchanged. Explorer folder drops keep importing.
+- **Why:** Orca's editor group opens in-worktree drops and imports the rest (editor.md line 17); its Explorer imports OS drops into the target folder (editor.md line 415). A dropped directory inside the worktree goes to `open` and fails with the daemon's error rather than being copied.
+- **Evidence:** plugins/quirky.editor/src/window/DocumentSurface.tsx droppedFileTargets; plugins/quirky.editor/test/native-drop.test.ts
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** Explorer folder drops should also open in place, or in-worktree directory drops need their own behavior
+- **Source:** supersedes m2-editor D19
+
+## D10: Record what was and wasn't verified
+- **Question:** What does this session's evidence prove?
+- **Options:** claim Finder parity from tests; claim only what was run
+- **Chose:** claim only what ran. Verified: the fork's native test (real `ElectrobunWKWebView`, real drag pasteboard, synthetic `NSDraggingInfo`), its source contract and event-bridge tests, the native symbol contract, all failing on v2.0.5 and passing with the patch; the private devkit build `2.0.5-quirky.0-drop-source-paths`; root and desktop typechecks against that devkit; the preload bundling for the browser; desktop inbox/match tests; the UI host test; and a real-daemon editor test proving open-in-place for an in-worktree source, a `report copy.txt` import for an outside source, and D19 import for a pathless drop. Not verified: a real Finder drag in the running app, because that takes over the shared Mac's pointer and windows; it is pending in docs/loop/native/m4-editor-drop-open-in-place.json. Linux and Windows report unsupported by construction and weren't run.
+- **Why:** LOOP.md requires evidence for every pass claim.
+- **Evidence:** see Progress
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** the native scenario runs
+- **Source:** deferred: platform
+
 ## Progress
-Blocked at step 3 (brainstorming feasibility), before specs/implementation. No supported dropped-source-path API exists in the inspected installed 2.0.4 or latest published 2.0.5 surfaces. The executable public-module/source audit exited 0; no actual Finder/native acceptance or feature completion is claimed. Preserve the evidence archive in this lane's ignored iteration folder, commit this decision record, rename the branch to blocked/m4-editor-drop-open-in-place, detach, and invoke canonical queue.ts block with the external blocker entry. The next attempt requires an upstream supported API or explicit native-patch/fork approval.
+Unblocked by the fork patch (D7). Implemented D8 and D9 on `zpyoung/eb-m4-editor-drop-open-in-place`. The `apps/desktop/hutch.config.ts` pin stays at 2.0.4 in the commit; it moves to the `2.0.5-quirky.N` release that carries `patch/drop-source-paths` when the coordinator merges. Until then this branch needs that devkit to run. Remaining: the pending native Finder-drag scenario.

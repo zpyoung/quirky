@@ -1,0 +1,12 @@
+{
+  "item": "m4-editor-drop-open-in-place",
+  "spec": "docs/loop/decisions/m4-editor-drop-open-in-place.md",
+  "scenarios": [
+    {
+      "id": "SC-9-native-open-in-place",
+      "title": "On macOS with the Electrobun devkit that carries patch/drop-source-paths, drag a file that is already inside the open worktree from Finder onto an editor document: its existing tab is reused or it opens at its own path, and no `name copy.ext` appears. Drag a file from outside the worktree onto the same document: a collision-safe copy is imported beside the document and opened. Drag both in one drop: the inside file opens in place and the outside file is imported.",
+      "status": "pending",
+      "summary": "Needs a real Finder drag in the desktop app, which the item session could not perform without taking over the shared Mac's pointer. Native WKWebView drop delivery is covered by the fork's scripts/test-macos-drop-source-paths.sh; routing is covered by plugins/quirky.editor/test/native-drop.test.ts."
+    }
+  ]
+}

@@ -1,5 +1,6 @@
 import type { DesktopShellBridge, NativeDesktopCapabilities } from '@quirky/protocol'
 import { Electroview } from 'electrobun/view'
+import { createDropSourcePathsInbox } from './drop-source-paths'
 import type { NativeBrowserHostRPC } from './native-browser'
 
 type NativeBrowserPreloadBridge = {
@@ -15,6 +16,7 @@ type DesktopRequestBridge = {
   revealItem(params: NativeBrowserHostRPC['bun']['requests']['revealItem']['params']): Promise<NativeBrowserHostRPC['bun']['requests']['revealItem']['response']>
   activateOwner(params: NativeBrowserHostRPC['bun']['requests']['activateOwner']['params']): Promise<NativeBrowserHostRPC['bun']['requests']['activateOwner']['response']>
   readClipboardText(params: NativeBrowserHostRPC['bun']['requests']['readClipboardText']['params']): Promise<NativeBrowserHostRPC['bun']['requests']['readClipboardText']['response']>
+  dropSourcePathsSupported(params: NativeBrowserHostRPC['bun']['requests']['dropSourcePathsSupported']['params']): Promise<NativeBrowserHostRPC['bun']['requests']['dropSourcePathsSupported']['response']>
 }
 
 const DESKTOP_CAPABILITIES: NativeDesktopCapabilities = {
@@ -32,7 +34,10 @@ declare global {
 }
 
 // This runs only in Quirky's trusted shell BrowserWindow. Sandboxed guest webviews never receive this preload.
-const rpc = Electroview.defineRPC<NativeBrowserHostRPC>({ handlers: { requests: {}, messages: {} } })
+const dropSourcePaths = createDropSourcePathsInbox()
+const rpc = Electroview.defineRPC<NativeBrowserHostRPC>({
+  handlers: { requests: {}, messages: { dropSourcePaths: ({ paths }: { paths: string[] }) => dropSourcePaths.receive(paths) } }
+})
 new Electroview({ rpc })
 const requests = (rpc as unknown as { request: NativeBrowserPreloadBridge & DesktopRequestBridge }).request
 
@@ -43,6 +48,8 @@ const bridge: NativeBrowserPreloadBridge = {
   releaseNativeBrowserView: (params) => requests.releaseNativeBrowserView(params)
 }
 
+let dropSourcePathsSupported: Promise<boolean> | null = null
+
 const desktopBridge: DesktopShellBridge = {
   capabilities: DESKTOP_CAPABILITIES,
   readClipboardText: () => requests.readClipboardText({}),
@@ -50,7 +57,12 @@ const desktopBridge: DesktopShellBridge = {
   openWindow: (request, ownerShell) => requests.openWindow({ request, ownerShell }),
   closeWindow: (windowId) => requests.closeWindow({ windowId }),
   revealItem: (params) => requests.revealItem(params),
-  activateOwner: (windowId) => requests.activateOwner({ windowId })
+  activateOwner: (windowId) => requests.activateOwner({ windowId }),
+  async nativeDropPaths(fileNames) {
+    dropSourcePathsSupported ??= requests.dropSourcePathsSupported({}).catch(() => false)
+    if (!(await dropSourcePathsSupported)) return null
+    return dropSourcePaths.take(fileNames)
+  }
 }
 
 Object.defineProperty(window, '__quirkyDesktopHost', {
