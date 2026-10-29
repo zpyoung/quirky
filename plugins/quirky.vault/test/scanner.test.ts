@@ -242,4 +242,32 @@ describe('vault source scanner', () => {
     await expect(vault.deleteTargets(claude.id)).rejects.toThrow('invalid-path')
     expect(await readFile(outside, 'utf8')).toBe('{}\n')
   })
+  test('parses only discovered candidates with current in-root files', async () => {
+    const home = await temporaryHome()
+    const { filePath } = await writeClaudeFixture(home)
+    const outsideRoot = await temporaryHome()
+    const outside = join(outsideRoot, 'outside.jsonl')
+    await writeFile(outside, '{}\n')
+    const vault = scanner(home)
+    const discovery = await vault.discover()
+    const candidate = discovery.candidates.find((item) => item.filePath === filePath)!
+
+    candidate.root = outsideRoot
+    candidate.metadata = { ...candidate.metadata, subagent: true }
+    const parsed = await vault.parse(candidate)
+    expect(parsed?.filePath).toBe(filePath)
+    expect(parsed?.subagent).toBeUndefined()
+    expect(await vault.parse({ ...candidate, filePath: outside })).toBeNull()
+
+    vault.invalidate(parsed!.id)
+    expect(await vault.parse(candidate)).toBeNull()
+
+    const refreshed = await vault.discover()
+    const refreshedCandidate = refreshed.candidates.find((item) => item.filePath === filePath)!
+    expect((await vault.parse(refreshedCandidate))?.id).toBe(parsed!.id)
+    await rm(filePath, { force: true })
+    await symlink(outside, filePath)
+    expect(await vault.parse(refreshedCandidate)).toBeNull()
+  })
+
 })

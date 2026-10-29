@@ -2140,8 +2140,7 @@
       "deps": [
         "m7-test-triage"
       ],
-      "status": "in-progress",
-      "lane": 12
+      "status": "done"
     },
     {
       "id": "fix-test-terminal-1028",
@@ -2172,8 +2171,7 @@
       "deps": [
         "m7-test-triage"
       ],
-      "status": "in-progress",
-      "lane": 5
+      "status": "done"
     },
     {
       "id": "fix-test-hosting-1028",
@@ -2183,8 +2181,7 @@
       "deps": [
         "m7-test-triage"
       ],
-      "status": "in-progress",
-      "lane": 9
+      "status": "done"
     },
     {
       "id": "fix-test-ledger-1028",
@@ -2227,7 +2224,8 @@
       "deps": [
         "m7-test-triage"
       ],
-      "status": "todo"
+      "status": "in-progress",
+      "lane": 12
     },
     {
       "id": "fix-test-agents-1028",
@@ -2237,7 +2235,8 @@
       "deps": [
         "m7-test-triage"
       ],
-      "status": "todo"
+      "status": "in-progress",
+      "lane": 5
     },
     {
       "id": "fix-test-accounts-1028",
@@ -2247,7 +2246,8 @@
       "deps": [
         "m7-test-triage"
       ],
-      "status": "todo"
+      "status": "in-progress",
+      "lane": 9
     },
     {
       "id": "fix-test-packages-protocol-1028",

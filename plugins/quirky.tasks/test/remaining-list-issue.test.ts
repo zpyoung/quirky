@@ -4,7 +4,7 @@ import { mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { spawnSync } from 'node:child_process'
 import * as React from 'react'
-import { createRoot, type Root } from 'react-dom/client'
+import type { Root, createRoot as CreateRoot } from 'react-dom/client'
 import type { ItemTarget, TasksState } from '../src/contracts'
 import type { UiPluginContext } from '@quirky/protocol'
 import { TasksList } from '../src/list/TasksList'
@@ -15,6 +15,8 @@ import { issueFixtureSource, seedIssueFixture } from './fixtures/issue'
 import { useReviewNavigation } from '../src/list/useReviewNavigation'
 
 const hosts: TasksTest[] = []
+let createRoot: typeof CreateRoot
+
 const roots: { root: Root; container: HTMLElement }[] = []
 afterEach(async () => {
   for (const mounted of roots.splice(0).reverse()) {
@@ -31,10 +33,13 @@ const nativeGlobals = [
 const runtimeGlobals = nativeGlobals.map((name) => [name, (globalThis as Record<string, unknown>)[name]] as const)
 const reactGlobal = globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
 const previousActEnvironment = reactGlobal.IS_REACT_ACT_ENVIRONMENT
-beforeAll(() => {
+beforeAll(async () => {
   GlobalRegistrator.register()
   for (const [name, value] of runtimeGlobals) if (value !== undefined) Object.defineProperty(globalThis, name, { value, writable: true, configurable: true })
   reactGlobal.IS_REACT_ACT_ENVIRONMENT = true
+  // React DOM binds its scheduler at import; register happy-dom before loading it.
+  const reactDom = await import('react-dom/client')
+  createRoot = reactDom.createRoot
 })
 afterAll(async () => {
   await GlobalRegistrator.unregister()
@@ -49,6 +54,11 @@ function record(value: unknown): Record<string, unknown> {
 function values(value: unknown): unknown[] { return Array.isArray(value) ? value : [] }
 function taskState(value: unknown): TasksState { return value as TasksState }
 function fixtureState(host: TasksTest): Record<string, unknown> { return record(host.readState()) }
+function fixtureItem(host: TasksTest, number: number): Record<string, unknown> {
+  const item = values(record(fixtureState(host).items)['test-owner/test-repo']).map(record).find((entry) => entry.number === number)
+  if (!item) throw new Error(`fixture item #${number} was not found`)
+  return item
+}
 function ReviewNavigationHarness(props: { context: UiPluginContext; target: ItemTarget; errors: string[] }) {
   const open = useReviewNavigation(props.context, (message) => props.errors.push(message))
   return React.createElement('button', { type: 'button', onClick: () => { void open(props.target, 'checks') } }, 'Open review')
@@ -117,21 +127,27 @@ function repoIds(value: unknown): string[] {
 }
 
 type CallWaiter = { method: string; resolve(): void }
+type CallReceipt = { method: string; params: Record<string, unknown>; value?: unknown; error?: unknown; completed: boolean }
 type CallHold = {
   method: string
   predicate?: (params: Record<string, unknown>) => boolean
   reached: Promise<void>
   reach(): void
+  wasReached(): boolean
   released: Promise<void>
   release(): void
   finished: Promise<void>
   finish(): void
+  wasFinished(): boolean
 }
 function uiContext(host: TasksTest) {
   const waiters: CallWaiter[] = []
   const holds: CallHold[] = []
+  const receipts: CallReceipt[] = []
   const context = {
     call: async (method: string, params: Record<string, unknown> = {}) => {
+      const receipt: CallReceipt = { method, params, completed: false }
+      receipts.push(receipt)
       const completeWaiters = () => {
         const index = waiters.findIndex((waiter) => waiter.method === method)
         if (index >= 0) waiters.splice(index, 1)[0]!.resolve()
@@ -140,9 +156,12 @@ function uiContext(host: TasksTest) {
       try {
         result = await host.client.callAny(method, { worktree: host.worktree, ...params })
       } catch (error) {
+        receipt.error = error
+        receipt.completed = true
         completeWaiters()
         throw error
       }
+      receipt.value = result
       completeWaiters()
       const holdIndex = holds.findIndex((hold) => hold.method === method && (!hold.predicate || hold.predicate(params)))
       if (holdIndex >= 0) {
@@ -151,6 +170,7 @@ function uiContext(host: TasksTest) {
         await hold.released
         hold.finish()
       }
+      receipt.completed = true
       return result
     },
     executeCommand: (command: string, params: Record<string, unknown> = {}) => host.client.callAny(command.replace(/^command:/u, ''), { worktree: host.worktree, ...params }),
@@ -159,6 +179,7 @@ function uiContext(host: TasksTest) {
   } as unknown as UiPluginContext
   return {
     context,
+    receipts,
     wait(method: string): Promise<void> {
       const deferred = Promise.withResolvers<void>()
       waiters.push({ method, resolve: deferred.resolve })
@@ -168,20 +189,32 @@ function uiContext(host: TasksTest) {
       const reached = Promise.withResolvers<void>()
       const released = Promise.withResolvers<void>()
       const finished = Promise.withResolvers<void>()
+      let wasReached = false
+      let wasFinished = false
       const hold: CallHold = {
         method,
         predicate,
         reached: reached.promise,
-        reach: () => reached.resolve(),
+        reach: () => { wasReached = true; reached.resolve() },
+        wasReached: () => wasReached,
         released: released.promise,
         release: () => released.resolve(),
         finished: finished.promise,
-        finish: () => finished.resolve()
+        finish: () => { wasFinished = true; finished.resolve() },
+        wasFinished: () => wasFinished
       }
       holds.push(hold)
-      return { reached: reached.promise, finished: finished.promise, release: hold.release }
+      return { reached: reached.promise, wasReached: hold.wasReached, finished: finished.promise, wasFinished: hold.wasFinished, release: hold.release }
     }
   }
+}
+
+function completedCall(
+  receipts: CallReceipt[],
+  method: string,
+  predicate: (receipt: CallReceipt) => boolean = () => true
+): boolean {
+  return receipts.some((receipt) => receipt.method === method && receipt.completed && predicate(receipt))
 }
 
 async function mount(element: React.ReactElement): Promise<{ container: HTMLElement; root: Root }> {
@@ -200,6 +233,55 @@ function button(container: HTMLElement, text: string): HTMLButtonElement {
   const found = [...container.querySelectorAll('button')].find((candidate) => candidate.textContent?.trim() === text)
   if (!found) throw new Error(`button not found: ${text}`)
   return found
+}
+
+async function waitForUi(predicate: () => boolean, label: string): Promise<void> {
+  const deadline = Date.now() + 20_000
+  while (Date.now() < deadline) {
+    if (predicate()) return
+    const { promise, resolve } = Promise.withResolvers<void>()
+    await React.act(async () => {
+      setImmediate(resolve)
+      await promise
+    })
+  }
+  throw new Error(`Timed out waiting for ${label}`)
+}
+
+function listItemState(value: unknown, number: number): string | null {
+  const item = values(record(value).items).map(record).find((entry) => entry.number === number)
+  return typeof item?.state === 'string' ? item.state : null
+}
+
+function closedStatusMenuOpen(container: HTMLElement): boolean {
+  const menu = container.querySelector('[role="menu"]')
+  if (!menu) return false
+  const items = [...menu.querySelectorAll('[role="menuitem"]')]
+  const open = items.find((item) => item.textContent?.trim() === 'Open')
+  const close = items.find((item) => item.textContent?.trim() === 'Close as completed')
+  return open instanceof HTMLButtonElement && close instanceof HTMLButtonElement && !open.disabled && close.disabled
+}
+
+function setTextareaValue(element: HTMLTextAreaElement, value: string): void {
+  const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set
+  if (!setter) throw new Error('Textarea value setter is unavailable')
+  setter.call(element, value)
+  element.dispatchEvent(new Event('input', { bubbles: true }))
+}
+
+function menuItem(container: HTMLElement, name: string): HTMLButtonElement {
+  const found = [...container.querySelectorAll('[role="menuitem"]')].find((candidate) => candidate.textContent?.trim() === name)
+  if (!(found instanceof HTMLButtonElement)) throw new Error(`menu item not found: ${name}`)
+  return found
+}
+
+async function expectClosedIssueStatus(container: HTMLElement): Promise<void> {
+  const trigger = container.querySelector('tbody button[aria-haspopup="menu"]')
+  if (!(trigger instanceof HTMLButtonElement)) throw new Error('issue status menu button was not rendered')
+  await click(trigger)
+  expect(menuItem(container, 'Open').disabled).toBe(false)
+  expect(menuItem(container, 'Close as completed').disabled).toBe(true)
+  await click(trigger)
 }
 
 
@@ -346,20 +428,17 @@ test('an origin switch prevents a lagging upstream refresh from repainting the c
   await host.call('navigate', { mode: 'issues', repoIds: [host.repoId], query: 'is:issue is:open' })
   const state = taskState(await host.call('state'))
   const driver = uiContext(host)
-  const initialList = driver.wait('quirky.tasks/list')
   const mounted = await mount(React.createElement(TasksList, { context: driver.context, state, refresh: async () => undefined }))
-  await React.act(async () => { await initialList })
-  expect(mounted.container.textContent).toContain('Upstream issue 7')
+  await waitForUi(() => mounted.container.textContent?.includes('Upstream issue 7') === true, 'initial upstream issue row')
 
   const oldRefresh = driver.hold('quirky.tasks/list', (params) => params.noCache === true)
-  const oldRead = driver.wait('quirky.tasks/list')
-  await React.act(async () => { button(mounted.container, 'Refresh').click(); await oldRead; await oldRefresh.reached })
-  const sourceWrite = driver.wait('quirky.tasks/row')
-  const originList = driver.wait('quirky.tasks/list')
-  await React.act(async () => { button(mounted.container, 'Origin').click(); await sourceWrite; await originList })
-  expect(mounted.container.textContent).toContain('Origin issue 7')
+  await React.act(async () => { button(mounted.container, 'Refresh').click() })
+  await waitForUi(() => oldRefresh.wasReached(), 'delayed upstream refresh')
+  await React.act(async () => { button(mounted.container, 'Origin').click() })
+  await waitForUi(() => mounted.container.textContent?.includes('Origin issue 7') === true, 'confirmed origin issue row')
 
-  await React.act(async () => { oldRefresh.release(); await oldRefresh.finished })
+  oldRefresh.release()
+  await waitForUi(() => oldRefresh.wasFinished(), 'released stale upstream response')
   expect(mounted.container.textContent).toContain('Origin issue 7')
   expect(mounted.container.textContent).not.toContain('Upstream issue 7')
 }, 30_000)
@@ -377,27 +456,25 @@ test('a delayed issue list cannot repaint the PR view after a mode switch', asyn
   const initialState = taskState(await host.call('state'))
   const driver = uiContext(host)
   const oldResponse = driver.hold('quirky.tasks/list', (params) => params.mode === 'issues')
-  const firstLoad = driver.wait('quirky.tasks/list')
   const mounted = await mount(React.createElement(TasksList, { context: driver.context, state: initialState, refresh: async () => undefined }))
-  await React.act(async () => { await firstLoad; await oldResponse.reached })
+  await waitForUi(() => oldResponse.wasReached(), 'initial issue list request')
 
   const nextState = {
     ...initialState,
     navigation: { ...initialState.navigation, mode: 'prs' as const, query: 'is:pr is:open' }
   }
-  const nextLoad = driver.wait('quirky.tasks/list')
-  const checksLoaded = driver.wait('quirky.tasks/checks')
-  const metadataLoaded = driver.wait('quirky.tasks/mergeMetadata')
   await React.act(async () => {
     mounted.root.render(React.createElement(TasksList, { context: driver.context, state: nextState, refresh: async () => undefined }))
-    await nextLoad
-    await checksLoaded
-    await metadataLoaded
   })
-  expect(mounted.container.textContent).toContain('Pull request 12')
+  await waitForUi(
+    () => completedCall(driver.receipts, 'quirky.tasks/list', (receipt) => receipt.params.mode === 'prs')
+      && mounted.container.textContent?.includes('Pull request 12') === true,
+    'current PR list result'
+  )
   expect(mounted.container.textContent).not.toContain('Issue 7')
 
-  await React.act(async () => { oldResponse.release(); await oldResponse.finished })
+  oldResponse.release()
+  await waitForUi(() => oldResponse.wasFinished(), 'release of the delayed issue response')
   expect(mounted.container.textContent).toContain('Pull request 12')
   expect(mounted.container.textContent).not.toContain('Issue 7')
 }, 30_000)
@@ -411,32 +488,47 @@ test('a failed assignee edit preserves an earlier successful status change in th
   await host.call('navigate', { mode: 'issues', repoIds: [host.repoId], query: 'is:issue' })
   const state = taskState(await host.call('state'))
   const driver = uiContext(host)
-  const firstList = driver.wait('quirky.tasks/list')
   const mounted = await mount(React.createElement(TasksList, { context: driver.context, state, refresh: async () => undefined }))
-  await React.act(async () => { await firstList })
+  await waitForUi(
+    () => completedCall(driver.receipts, 'quirky.tasks/list', (receipt) => receipt.params.mode === 'issues')
+      && mounted.container.querySelector('tbody tr') !== null,
+    'initial issue row'
+  )
 
-  const statusMenu = mounted.container.querySelector('tbody button[aria-haspopup="menu"]')
-  await click(statusMenu)
-  const closeRequest = driver.wait('quirky.tasks/row')
-  await React.act(async () => { button(mounted.container, 'Close as completed').click(); await closeRequest })
-  expect(mounted.container.textContent).toContain('Closed ▾')
+  await click(mounted.container.querySelector('tbody button[aria-haspopup="menu"]'))
+  await React.act(async () => { menuItem(mounted.container, 'Close as completed').click() })
+  await waitForUi(
+    () => fixtureItem(host, 7).state === 'closed'
+      && completedCall(driver.receipts, 'quirky.tasks/row', (receipt) => receipt.params.action === 'issueStatus')
+      && mounted.container.querySelector('[role="menu"]') === null,
+    'confirmed issue status update'
+  )
+  await expectClosedIssueStatus(mounted.container)
 
-  const current = fixtureState(host)
-  host.writeState({ ...current, failIssueUpdate: true })
-  const optionsRead = driver.wait('quirky.tasks/options')
+  host.writeState({ ...fixtureState(host), failIssueUpdate: true })
   const assigneeButton = mounted.container.querySelector('tbody button[aria-haspopup="dialog"]')
-  await React.act(async () => { if (!(assigneeButton instanceof HTMLElement)) throw new Error('assignee button was not rendered'); assigneeButton.click(); await optionsRead })
+  await React.act(async () => {
+    if (!(assigneeButton instanceof HTMLElement)) throw new Error('assignee button was not rendered')
+    assigneeButton.click()
+  })
+  await waitForUi(() => {
+    const dialog = mounted.container.querySelector('[role="dialog"]')
+    return dialog !== null && [...dialog.querySelectorAll('label')].some((label) => label.textContent?.includes('fixture-user'))
+  }, 'assignable user choice')
   const selectable = [...mounted.container.querySelectorAll('label')].find((label) => label.textContent?.includes('fixture-user'))
   const checkbox = selectable?.querySelector('input[type="checkbox"]')
   if (!(checkbox instanceof HTMLInputElement)) throw new Error('assignable user checkbox was not rendered')
   await click(checkbox)
-  const failedUpdate = driver.wait('quirky.tasks/row')
-  const adoptionRead = driver.wait('quirky.tasks/list')
-  await React.act(async () => { button(mounted.container, 'Save assignees').click(); await failedUpdate })
-  await React.act(async () => { await adoptionRead })
+  await React.act(async () => { button(mounted.container, 'Save assignees').click() })
+  await waitForUi(() => {
+    const alert = mounted.container.querySelector('[role="alert"]')
+    return completedCall(driver.receipts, 'quirky.tasks/row', (receipt) =>
+      receipt.params.action === 'assignees' && receipt.error instanceof Error &&
+      alert?.textContent?.includes(receipt.error.message) === true)
+  }, 'failed assignee update')
 
-  expect(mounted.container.textContent).toContain('Closed ▾')
-  expect(mounted.container.textContent).toContain('fixture issue update failure')
+  expect(fixtureItem(host, 7).state).toBe('closed')
+  await expectClosedIssueStatus(mounted.container)
 }, 30_000)
 
 test('quiet adoption retains a confirmed status while search indexing lags, then adopts the indexed row', async () => {
@@ -447,25 +539,51 @@ test('quiet adoption retains a confirmed status while search indexing lags, then
   await host.call('navigate', { mode: 'issues', repoIds: [host.repoId], query: 'is:issue' })
   const state = taskState(await host.call('state'))
   const driver = uiContext(host)
-  const firstList = driver.wait('quirky.tasks/list')
   const mounted = await mount(React.createElement(TasksList, { context: driver.context, state, refresh: async () => undefined }))
-  await React.act(async () => { await firstList })
+  await waitForUi(
+    () => completedCall(driver.receipts, 'quirky.tasks/list', (receipt) => receipt.params.mode === 'issues')
+      && mounted.container.querySelector('tbody tr') !== null,
+    'initial issue row'
+  )
   host.writeState({
     ...fixtureState(host),
     lagSearch: { repository: 'test-owner/test-repo', remaining: 1, items: [issue] }
   })
 
   await click(mounted.container.querySelector('tbody button[aria-haspopup="menu"]'))
-  const rowCall = driver.wait('quirky.tasks/row')
-  const firstQuietRead = driver.wait('quirky.tasks/list')
-  await React.act(async () => { button(mounted.container, 'Close as completed').click(); await rowCall })
-  await React.act(async () => { await firstQuietRead })
-  const secondQuietRead = driver.wait('quirky.tasks/list')
-  await React.act(async () => { await secondQuietRead })
+  await React.act(async () => { menuItem(mounted.container, 'Close as completed').click() })
+  await waitForUi(
+    () => fixtureItem(host, 7).state === 'closed'
+      && completedCall(driver.receipts, 'quirky.tasks/row', (receipt) => receipt.params.action === 'issueStatus')
+      && mounted.container.querySelector('[role="menu"]') === null,
+    'confirmed issue status update'
+  )
+  const statusTrigger = mounted.container.querySelector('tbody button[aria-haspopup="menu"]')
+  await click(statusTrigger)
 
-  expect(mounted.container.textContent).toContain('Closed ▾')
+  const staleIndexReturned = () => completedCall(
+    driver.receipts,
+    'quirky.tasks/list',
+    (receipt) => receipt.params.noCache === true && listItemState(receipt.value, 7) === 'open'
+  )
+  const indexedRowReturned = () => completedCall(
+    driver.receipts,
+    'quirky.tasks/list',
+    (receipt) => receipt.params.noCache === true && listItemState(receipt.value, 7) === 'closed'
+  )
+  await waitForUi(
+    () => staleIndexReturned() && closedStatusMenuOpen(mounted.container),
+    'confirmed status through the stale indexed result'
+  )
   expect(record(fixtureState(host).lagSearch).remaining).toBe(0)
-  expect(record(values(record(fixtureState(host).items)['test-owner/test-repo'])[0]).state).toBe('closed')
+  expect(fixtureItem(host, 7).state).toBe('closed')
+  await waitForUi(
+    () => indexedRowReturned() && closedStatusMenuOpen(mounted.container),
+    'adoption of the indexed closed row'
+  )
+
+  expect(record(fixtureState(host).lagSearch).remaining).toBe(0)
+  expect(fixtureItem(host, 7).state).toBe('closed')
 }, 30_000)
 
 test('a failed later reviewer request retains an earlier confirmed reviewer update', async () => {
@@ -477,37 +595,45 @@ test('a failed later reviewer request retains an earlier confirmed reviewer upda
   await host.call('navigate', { mode: 'prs', repoIds: [host.repoId], query: 'is:pr is:open' })
   const state = taskState(await host.call('state'))
   const driver = uiContext(host)
-  const firstList = driver.wait('quirky.tasks/list')
-  const checksLoaded = driver.wait('quirky.tasks/checks')
-  const initialMetadata = driver.wait('quirky.tasks/mergeMetadata')
   const mounted = await mount(React.createElement(TasksList, { context: driver.context, state, refresh: async () => undefined }))
-  await React.act(async () => { await firstList; await initialMetadata; await checksLoaded })
-
   const reviewerButton = () => mounted.container.querySelector('tbody button[aria-haspopup="dialog"]')
+  await waitForUi(
+    () => completedCall(driver.receipts, 'quirky.tasks/list', (receipt) => receipt.params.mode === 'prs')
+      && reviewerButton()?.textContent?.includes('existing-reviewer') === true,
+    'initial requested reviewer state'
+  )
+
   await click(reviewerButton())
   const reviewerBox = () => mounted.container.querySelector('textarea[aria-label="Type or choose a reviewer"]')
   const input = reviewerBox()
   if (!(input instanceof HTMLTextAreaElement)) throw new Error('reviewer input was not rendered')
-  await React.act(async () => {
-    input.value = 'first-reviewer'
-    input.dispatchEvent(new Event('input', { bubbles: true }))
-  })
-  const firstWrite = driver.wait('quirky.tasks/row')
-  const reviewerAdoption = driver.wait('quirky.tasks/list')
-  await React.act(async () => { button(mounted.container, 'Request reviewers').click(); await firstWrite })
-  await React.act(async () => { await reviewerAdoption })
-  expect(reviewerButton()?.textContent).toContain('first-reviewer')
+  await React.act(async () => { setTextareaValue(input, 'first-reviewer') })
+  await React.act(async () => { button(mounted.container, 'Request reviewers').click() })
+  await waitForUi(() => {
+    const reviewers = values(fixtureItem(host, 12).requestedReviewers)
+    return reviewers.includes('first-reviewer')
+      && reviewerButton()?.textContent?.includes('first-reviewer') === true
+      && mounted.container.querySelector('[role="dialog"]') === null
+      && completedCall(driver.receipts, 'quirky.tasks/row', (receipt) => receipt.params.action === 'reviewers' && receipt.error === undefined)
+  }, 'first reviewer update')
 
   host.writeState({ ...fixtureState(host), failPRReviewerEdit: true })
   await click(reviewerButton())
   const nextInput = reviewerBox()
   if (!(nextInput instanceof HTMLTextAreaElement)) throw new Error('reviewer input was not rendered after reopening')
-  await React.act(async () => {
-    nextInput.value = 'second-reviewer'
-    nextInput.dispatchEvent(new Event('input', { bubbles: true }))
-  })
-  const failedWrite = driver.wait('quirky.tasks/row')
-  await React.act(async () => { button(mounted.container, 'Request reviewers').click(); await failedWrite })
+  await React.act(async () => { setTextareaValue(nextInput, 'second-reviewer') })
+  await React.act(async () => { button(mounted.container, 'Request reviewers').click() })
+  await waitForUi(() => {
+    const reviewers = values(fixtureItem(host, 12).requestedReviewers)
+    const alert = mounted.container.querySelector('[role="alert"]')
+    return reviewers.includes('first-reviewer')
+      && !reviewers.includes('second-reviewer')
+      && reviewerButton()?.textContent?.includes('first-reviewer') === true
+      && reviewerButton()?.textContent?.includes('second-reviewer') !== true
+      && completedCall(driver.receipts, 'quirky.tasks/row', (receipt) =>
+        receipt.params.action === 'reviewers' && receipt.error instanceof Error &&
+        alert?.textContent?.includes(receipt.error.message) === true)
+  }, 'failed later reviewer update')
 
   expect(reviewerButton()?.textContent).toContain('first-reviewer')
   expect(reviewerButton()?.textContent).not.toContain('second-reviewer')
@@ -533,31 +659,35 @@ test('confirmed issue comments remain visible after a lagging detail read', asyn
   })
   const state = taskState(await host.call('state'))
   const driver = uiContext(host)
-  const initialDetail = driver.wait('quirky.tasks/issue')
-  const choiceReads = [driver.wait('quirky.tasks/issueChoices'), driver.wait('quirky.tasks/issueChoices'), driver.wait('quirky.tasks/issueChoices')]
   const mounted = await mount(React.createElement(IssueSurface, { context: driver.context, state, refresh: async () => undefined }))
-  await React.act(async () => { await initialDetail; await Promise.all(choiceReads) })
-  expect(mounted.container.textContent).toContain('original comment')
+  await waitForUi(() => mounted.container.textContent?.includes('original comment') === true, 'initial issue detail')
 
   const commentBox = mounted.container.querySelector('textarea[aria-label="Add a comment"]')
   if (!(commentBox instanceof HTMLTextAreaElement)) throw new Error('issue comment composer was not rendered')
-  await React.act(async () => {
-    commentBox.value = 'confirmed new comment'
-    commentBox.dispatchEvent(new Event('input', { bubbles: true }))
-  })
-  const posted = driver.wait('quirky.tasks/issueComment')
-  await React.act(async () => { button(mounted.container, 'Comment').click(); await posted })
-  expect(mounted.container.textContent).toContain('confirmed new comment')
+  await React.act(async () => { setTextareaValue(commentBox, 'confirmed new comment') })
+  await React.act(async () => { button(mounted.container, 'Comment').click() })
+  const commentsSection = () => mounted.container.querySelector('section[aria-labelledby="issue-comments-heading"]')
+  const visibleCommentCount = () => commentsSection()?.querySelectorAll('article').length ?? 0
+  await waitForUi(
+    () => completedCall(driver.receipts, 'quirky.tasks/issueComment')
+      && mounted.container.textContent?.includes('confirmed new comment') === true
+      && visibleCommentCount() === 2,
+    'confirmed issue comment'
+  )
 
-  const updated = fixtureState(host)
-  host.writeState({ ...updated, laggingCommentReads: 1 })
-  const refreshRead = driver.wait('quirky.tasks/issue')
+  host.writeState({ ...fixtureState(host), laggingCommentReads: 1 })
   const refreshButton = [...mounted.container.querySelectorAll('button')].find((candidate) => candidate.textContent?.trim() === 'Refresh')
   await React.act(async () => {
     if (!(refreshButton instanceof HTMLElement)) throw new Error('issue refresh button was not rendered')
     refreshButton.click()
-    await refreshRead
   })
-  expect(mounted.container.textContent).toContain('confirmed new comment')
-  expect(mounted.container.textContent).toContain('Comments (2)')
+  await waitForUi(
+    () => completedCall(driver.receipts, 'quirky.tasks/issue', (receipt) =>
+      receipt.params.refresh === true && values(record(receipt.value).comments).length === 1)
+      && refreshButton instanceof HTMLButtonElement && !refreshButton.disabled
+      && mounted.container.textContent?.includes('confirmed new comment') === true
+      && visibleCommentCount() === 2,
+    'confirmed comment after a lagging detail read'
+  )
+  expect(fixtureState(host).laggingCommentReads).toBe(0)
 }, 30_000)

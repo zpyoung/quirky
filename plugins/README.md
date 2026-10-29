@@ -965,6 +965,11 @@ snapshot before mutation; a missing or ambiguous head target never falls back to
 another repository. Force push retains its explicit lease and confirmation. No remote is
 created and no public caller-supplied push URL is accepted.
 
+PR-created workspaces retain the explicit PR link, so a base-repository `origin`
+can coexist with a different configured fork push remote. An unlinked branch
+lookup instead requires a PR head matching `origin`; adding a fork remote alone
+does not link that branch. Multiple push URLs on the selected remote are refused.
+
 Sidebar activity reads canonical current agent display evidence; stale rows alone do not
 establish liveness. Quiet time windows refresh without unrelated events, and client-local
 preferences retain conservative corrupt-state recovery. Separator presentation excludes
