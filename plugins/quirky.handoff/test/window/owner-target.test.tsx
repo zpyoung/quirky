@@ -82,6 +82,8 @@ describe('SC-45 and S5: a remote target owns its agent selection and stale respo
     await settle()
     expect(targetRequests.get('a')).toEqual({ target: { remote: ownerA } })
     expect(overlay.last().disabled).toContain('start:agents-loading')
+    expect(await fake.run('start')).toEqual({ ok: false, reason: 'cannot-start' })
+    expect(startRequests).toEqual([])
 
     await fake.run('set', { field: 'worktree', value: ownerB.mirrorId })
     await settle()
@@ -110,6 +112,48 @@ describe('SC-45 and S5: a remote target owns its agent selection and stale respo
       error: 'The selected remote workspace changed. Refresh the target and review it again.',
       controls: { target: { remote: ownerB }, agent: 'remote-bot', note: 'keep this remote review' }
     })
+  })
+
+  test('reopening a remote-target draft keeps its valid saved agent through owner validation', async () => {
+    const owner = remoteRef('host-draft', 'runtime-draft', 'mirror-draft', 'wt-remote-draft')
+    const pendingAgents = deferred<{ state: 'ready'; list: { id: string; label: string }[]; defaultAgent: string | null }>()
+    const { fake, overlay } = await opened(
+      (world) => {
+        world.candidates = [
+          ...world.candidates,
+          { id: owner.mirrorId, name: 'Saved workspace', path: '/remote-draft/W', kind: 'git', branch: 'main', remote: owner, hostName: 'Saved owner' }
+        ]
+        world.drafts.set(JSON.stringify({ session: 's_1' }), {
+          controls: {
+            target: { remote: owner },
+            agent: 'remote-codex',
+            relationship: 'continues',
+            context: 'focused',
+            include: { repoState: true, diffBodies: true, openEditorTabs: false },
+            templateId: null,
+            note: 'saved remote note'
+          },
+          preview: null
+        })
+      },
+      {
+        'quirky.handoff/targetAgents': () => pendingAgents.promise
+      }
+    )
+
+    expect(overlay.last().controls).toMatchObject({ target: { remote: owner }, agent: 'remote-codex', note: 'saved remote note' })
+    expect(overlay.last().agents.state).toBe('loading')
+    expect(overlay.last().disabled).toContain('start:agents-loading')
+    expect(await fake.run('start')).toEqual({ ok: false, reason: 'cannot-start' })
+    expect(fake.callsTo('start')).toEqual([])
+
+    pendingAgents.resolve({
+      state: 'ready',
+      list: [{ id: 'remote-codex', label: 'Remote Codex' }, { id: 'remote-claude', label: 'Remote Claude' }],
+      defaultAgent: 'remote-claude'
+    })
+    await settle()
+    expect(overlay.last().controls.agent).toBe('remote-codex')
   })
 
   test('an owner-qualified archived source opens the local review dialog with owner-verified, redacted details', async () => {

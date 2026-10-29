@@ -206,6 +206,37 @@ describe('SC-58, SC-59 and SC-60: Cancel and Escape keep a draft', () => {
     expect(overlay.last().controls).toMatchObject({ note: '', agent: 'claude', include: { diffBodies: false } })
   })
 
+  test('SC-58: a restored agent stays selected until target validation, then unavailable agents cannot start', async () => {
+    let targetAgentCalls = 0
+    const firstAgents = {
+      state: 'ready' as const,
+      list: [{ id: 'claude', label: 'Claude' }, { id: 'codex', label: 'Codex' }],
+      defaultAgent: 'claude'
+    }
+    const pendingAgents = Promise.withResolvers<{
+      state: 'ready'
+      list: { id: string; label: string }[]
+      defaultAgent: string | null
+    }>()
+    const { overlay, fake } = await opened(() => {}, {
+      'quirky.handoff/targetAgents': () => (++targetAgentCalls === 1 ? firstAgents : pendingAgents.promise)
+    })
+    await fake.run('set', { field: 'agent', value: 'codex' })
+    await fake.run('cancel', { via: 'button' })
+
+    await fake.run('open', { session: 's_1' })
+    await settle()
+    expect(overlay.last().controls.agent).toBe('codex')
+    expect(overlay.last().agents.state).toBe('loading')
+    expect(overlay.last().disabled).toContain('start:agents-loading')
+    expect(await fake.run('start')).toEqual({ ok: false, reason: 'cannot-start' })
+    expect(fake.callsTo('start')).toEqual([])
+
+    pendingAgents.resolve({ state: 'ready', list: [{ id: 'claude', label: 'Claude' }], defaultAgent: 'claude' })
+    await settle()
+    expect(overlay.last().controls.agent).toBe('claude')
+  })
+
   test('SC-59: Escape with focus in the note saves the draft and closes, and the note is back on reopen', async () => {
     const { overlay, fake } = await opened()
     const note = overlay.view.q('textarea[aria-label="Steering note"]') as HTMLTextAreaElement

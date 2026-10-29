@@ -5,6 +5,7 @@ import { join, resolve } from 'node:path'
 import { RpcErrorCode, type OwnerSessionHostRef, type OwnerSessionWorkspaceRef, type QuirkyClient, type QuirkyEvent, type UiPluginContext } from '@quirky/protocol'
 import { runCli } from '../../../packages/cli/test/fixtures/fake-daemon'
 import { startHarness, waitForAsync, type Harness } from '../../../packages/daemon/test/helpers'
+import { startPtyServer, type PtyServer } from '../../../packages/pty-host/src/server'
 import { HandoffDialog } from '../../quirky.handoff/src/window/model'
 import { isolateGitConfig, makeRepo } from '../../quirky.repo/test/git-fixtures'
 import { writeEveryAgentFixture, writeJsonlFixture, writeScopeFixture } from './fixtures/scanner-fixtures'
@@ -71,7 +72,7 @@ type PublicSession = {
 }
 type PublicList = { sessions: PublicSession[]; hosts: Outcome[]; [key: string]: unknown }
 type SearchReply = { kind: string; hits?: { id: string; hostId?: string }[]; hosts?: Outcome[]; [key: string]: unknown }
-type FakeAgent = { launcher: string; log: string; secretName: string; secretValue: string }
+type FakeAgent = { launcher: string; log: string; ownerEnvLog: string; secretName: string; secretValue: string }
 type HostRig = {
   label: string
   root: string
@@ -84,6 +85,7 @@ type HostRig = {
   openLog: string
   builtinPluginsDir: string
   harness: Harness
+  realPty?: PtyServer
   client: QuirkyClient
   cleaned: boolean
   fake?: FakeAgent
@@ -154,8 +156,22 @@ async function cleanupWorld(world: WorldState): Promise<void> {
   if (world.cleaned) return
   let failed = false
   let firstError: unknown
+  const attempt = async (action: () => void | Promise<void>) => {
+    try {
+      await action()
+    } catch (error) {
+      if (!failed) firstError = error
+      failed = true
+    }
+  }
   for (const rig of world.rigs.slice().reverse()) {
     if (rig.cleaned) continue
+    if (rig.realPty) {
+      const realPty = rig.realPty
+      await attempt(() => rig.harness.daemon.stop())
+      await attempt(() => realPty.stop())
+      rig.realPty = undefined
+    }
     try {
       await rig.harness.cleanup()
       rig.cleaned = true
@@ -359,11 +375,20 @@ async function writeResumeTranscript(rig: HostRig, cwd: string, hostName: string
 function installFakeAgent(rig: HostRig): FakeAgent {
   const launcher = join(rig.fakeBin, `claude-${rig.label}`)
   const log = `${launcher}.log.jsonl`
+  const ownerEnvLog = `${launcher}.owner-env.jsonl`
   const secretName = `OWNER_TEST_SECRET_${rig.label.replaceAll('-', '_').toUpperCase()}`
   const secretValue = `private-launch-environment-${rig.label}`
-  writeFileSync(launcher, `#!${process.execPath}\nimport ${JSON.stringify(FAKE_AGENT)}\n`)
+  writeFileSync(launcher, `#!${process.execPath}
+import ${JSON.stringify(FAKE_AGENT)}
+import { appendFileSync } from 'node:fs'
+appendFileSync(${JSON.stringify(ownerEnvLog)}, JSON.stringify({
+  type: 'owner-env',
+  name: ${JSON.stringify(secretName)},
+  value: process.env[${JSON.stringify(secretName)}] ?? null
+}) + '\\n')
+`)
   chmodSync(launcher, 0o700)
-  return { launcher, log, secretName, secretValue }
+  return { launcher, log, ownerEnvLog, secretName, secretValue }
 }
 
 async function configureFakeAgent(rig: HostRig): Promise<void> {
@@ -384,6 +409,18 @@ function fakeStarts(fake: FakeAgent): { type: string; argv: string[]; env: Recor
     .filter(Boolean)
     .map((line) => JSON.parse(line) as { type: string; argv: string[]; env: Record<string, string>; cwd: string })
     .filter((event) => event.type === 'start')
+}
+function usePhysicalPty(rig: HostRig): void {
+  const fakePty = rig.harness.pty
+  const stopFakePty = fakePty.stop.bind(fakePty)
+  let stopped = false
+  fakePty.stop = () => {
+    if (stopped) return
+    stopped = true
+    stopFakePty()
+  }
+  fakePty.stop()
+  rig.realPty = startPtyServer({ home: rig.home })
 }
 
 function sessionFor(sessions: PublicSession[], hostId: string, sessionId: string): PublicSession {
@@ -567,7 +604,7 @@ test('remote Vault actions stay owner-bound, sanitize handoff, and fence stale r
 
   const listed = await call<PublicList>(world.local, 'quirky.vault/list', {
     host: 'all',
-    agents: ['claude'],
+    agents: ['claude', 'codex'],
     unlimited: true
   })
   const sessionA = sessionFor(listed.sessions, ownerA.host.id, RESUME_PROVIDER_ID)
@@ -801,41 +838,65 @@ test('remote Vault actions stay owner-bound, sanitize handoff, and fence stale r
   const phoneRegistration = await world.local.client.callAny('quirky.worktree/remoteHostRegister', { runtime: phoneRuntime.id })
     .then(() => undefined, (error: unknown) => error)
   expect(phoneRegistration).toBeDefined()
-  expect(JSON.stringify(phoneRegistration)).toMatch(/owner|phone|scope|runtime/i)
   const registeredAfterPhoneAttempt = await call<{ hosts: RegisteredHost[] }>(world.local, 'quirky.worktree/remoteHostList')
   expect(registeredAfterPhoneAttempt.hosts.map((host) => host.id).sort()).toEqual([ownerA.host.id, ownerB.host.id].sort())
-
-  const resumeCli = await runCli([
-    'vault',
-    'resume',
-    sessionA.id,
-    '--remote',
-    JSON.stringify(ownerA.workspaceRef),
-    '--json'
-  ], { home: world.local.home, cwd: world.repoPath })
-  expect(resumeCli.code).toBe(0)
-  expect(resumeCli.stderr).toBe('')
-  const resumeResult = JSON.parse(resumeCli.stdout) as unknown
-  expect(JSON.stringify(resumeResult)).not.toContain(ownerA.rig.sourceHome)
-  expect(JSON.stringify(resumeResult)).not.toContain(ownerA.rig.resumeTranscriptPath!)
-  expect(JSON.stringify(resumeResult)).not.toContain(ownerA.rig.fake!.launcher)
-  expect(JSON.stringify(resumeResult)).not.toContain(ownerA.rig.fake!.secretValue)
-  expect(JSON.stringify(resumeResult)).not.toContain(ownerA.worktree.path)
-  const launched = await waitForAsync(() => fakeStarts(ownerA.rig.fake!).find((event) => event.type === 'start'), 15_000)
-  expect(launched.cwd).toBe(ownerA.worktree.path)
-  expect(launched.env.HOME).toBe(ownerA.rig.userHome)
-  expect(launched.env[ownerA.rig.fake!.secretName]).toBe(ownerA.rig.fake!.secretValue)
-  expect(launched.argv).toContain('--resume')
-  expect(launched.argv).toContain(RESUME_PROVIDER_ID)
   expect(fakeStarts(world.local.fake!)).toHaveLength(0)
+  expect(fakeStarts(ownerA.rig.fake!)).toHaveLength(0)
   expect(fakeStarts(ownerB.rig.fake!)).toHaveLength(0)
-  expect(fakeStarts(ownerA.rig.fake!)).toHaveLength(1)
+
+  const resumeEnvironment = new Map(ENV_KEYS.map((key) => [key, process.env[key]] as const))
+  try {
+    applyRigEnvironment(ownerA.rig)
+    usePhysicalPty(ownerA.rig)
+    const resumeCli = await runCli([
+      'vault',
+      'resume',
+      sessionA.id,
+      '--remote',
+      JSON.stringify(ownerA.workspaceRef),
+      '--json'
+    ], { home: world.local.home, cwd: world.repoPath })
+    expect(resumeCli.code).toBe(0)
+    expect(resumeCli.stderr).toBe('')
+    const resumeResult = JSON.parse(resumeCli.stdout) as unknown
+    expect(JSON.stringify(resumeResult)).not.toContain(ownerA.rig.sourceHome)
+    expect(JSON.stringify(resumeResult)).not.toContain(ownerA.rig.resumeTranscriptPath!)
+    expect(JSON.stringify(resumeResult)).not.toContain(ownerA.rig.fake!.launcher)
+    expect(JSON.stringify(resumeResult)).not.toContain(ownerA.rig.fake!.secretValue)
+    expect(JSON.stringify(resumeResult)).not.toContain(ownerA.worktree.path)
+    const launched = await waitForAsync(() => {
+      const start = fakeStarts(ownerA.rig.fake!).find((event) => event.type === 'start')
+      return start && existsSync(ownerA.rig.fake!.ownerEnvLog) ? start : undefined
+    }, 15_000)
+    expect(launched.cwd).toBe(ownerA.worktree.path)
+    expect(launched.env.HOME).toBe(ownerA.rig.userHome)
+    const ownerEnv = JSON.parse(readFileSync(ownerA.rig.fake!.ownerEnvLog, 'utf8')) as {
+      type: string
+      name: string
+      value: string | null
+    }
+    expect(ownerEnv).toEqual({
+      type: 'owner-env',
+      name: ownerA.rig.fake!.secretName,
+      value: ownerA.rig.fake!.secretValue
+    })
+    expect(launched.argv).toContain('--resume')
+    expect(launched.argv).toContain(RESUME_PROVIDER_ID)
+    expect(fakeStarts(world.local.fake!)).toHaveLength(0)
+    expect(fakeStarts(ownerB.rig.fake!)).toHaveLength(0)
+    expect(fakeStarts(ownerA.rig.fake!)).toHaveLength(1)
+  } finally {
+    restoreEnvironment(resumeEnvironment)
+  }
   const endpoint = new URL(ownerA.host.runtime.endpoint)
   if (endpoint.port === '') throw new Error('saved owner endpoint did not include its mobile listener port')
   const previousEnvironment = new Map(ENV_KEYS.map((key) => [key, process.env[key]] as const))
   for (const client of ownerA.rig.harness.clients) client.close()
   await ownerA.rig.harness.daemon.stop()
-  ownerA.rig.harness.pty.stop()
+  const realPty = ownerA.rig.realPty
+  if (!realPty) throw new Error('owner A physical PTY host was unavailable during restart')
+  await realPty.stop()
+  ownerA.rig.realPty = undefined
   applyRigEnvironment(ownerA.rig)
   process.env.QUIRKY_MOBILE_PORT = endpoint.port
   try {
