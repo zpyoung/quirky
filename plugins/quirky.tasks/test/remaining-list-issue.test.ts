@@ -4,7 +4,7 @@ import { mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { spawnSync } from 'node:child_process'
 import * as React from 'react'
-import { createRoot, type Root } from 'react-dom/client'
+import type { Root, createRoot as CreateRoot } from 'react-dom/client'
 import type { ItemTarget, TasksState } from '../src/contracts'
 import type { UiPluginContext } from '@quirky/protocol'
 import { TasksList } from '../src/list/TasksList'
@@ -15,6 +15,8 @@ import { issueFixtureSource, seedIssueFixture } from './fixtures/issue'
 import { useReviewNavigation } from '../src/list/useReviewNavigation'
 
 const hosts: TasksTest[] = []
+let createRoot: typeof CreateRoot
+
 const roots: { root: Root; container: HTMLElement }[] = []
 afterEach(async () => {
   for (const mounted of roots.splice(0).reverse()) {
@@ -31,10 +33,13 @@ const nativeGlobals = [
 const runtimeGlobals = nativeGlobals.map((name) => [name, (globalThis as Record<string, unknown>)[name]] as const)
 const reactGlobal = globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
 const previousActEnvironment = reactGlobal.IS_REACT_ACT_ENVIRONMENT
-beforeAll(() => {
+beforeAll(async () => {
   GlobalRegistrator.register()
   for (const [name, value] of runtimeGlobals) if (value !== undefined) Object.defineProperty(globalThis, name, { value, writable: true, configurable: true })
   reactGlobal.IS_REACT_ACT_ENVIRONMENT = true
+  // React DOM binds its scheduler at import; register happy-dom before loading it.
+  const reactDom = await import('react-dom/client')
+  createRoot = reactDom.createRoot
 })
 afterAll(async () => {
   await GlobalRegistrator.unregister()
@@ -200,6 +205,28 @@ function button(container: HTMLElement, text: string): HTMLButtonElement {
   const found = [...container.querySelectorAll('button')].find((candidate) => candidate.textContent?.trim() === text)
   if (!found) throw new Error(`button not found: ${text}`)
   return found
+}
+
+function setTextareaValue(element: HTMLTextAreaElement, value: string): void {
+  const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set
+  if (!setter) throw new Error('Textarea value setter is unavailable')
+  setter.call(element, value)
+  element.dispatchEvent(new Event('input', { bubbles: true }))
+}
+
+function menuItem(container: HTMLElement, name: string): HTMLButtonElement {
+  const found = [...container.querySelectorAll('[role="menuitem"]')].find((candidate) => candidate.textContent?.trim() === name)
+  if (!(found instanceof HTMLButtonElement)) throw new Error(`menu item not found: ${name}`)
+  return found
+}
+
+async function expectClosedIssueStatus(container: HTMLElement): Promise<void> {
+  const trigger = container.querySelector('tbody button[aria-haspopup="menu"]')
+  if (!(trigger instanceof HTMLButtonElement)) throw new Error('issue status menu button was not rendered')
+  await click(trigger)
+  expect(menuItem(container, 'Open').disabled).toBe(false)
+  expect(menuItem(container, 'Close as completed').disabled).toBe(true)
+  await click(trigger)
 }
 
 
@@ -390,10 +417,8 @@ test('a delayed issue list cannot repaint the PR view after a mode switch', asyn
   const metadataLoaded = driver.wait('quirky.tasks/mergeMetadata')
   await React.act(async () => {
     mounted.root.render(React.createElement(TasksList, { context: driver.context, state: nextState, refresh: async () => undefined }))
-    await nextLoad
-    await checksLoaded
-    await metadataLoaded
   })
+  await React.act(async () => { await Promise.all([nextLoad, checksLoaded, metadataLoaded]) })
   expect(mounted.container.textContent).toContain('Pull request 12')
   expect(mounted.container.textContent).not.toContain('Issue 7')
 
@@ -418,8 +443,9 @@ test('a failed assignee edit preserves an earlier successful status change in th
   const statusMenu = mounted.container.querySelector('tbody button[aria-haspopup="menu"]')
   await click(statusMenu)
   const closeRequest = driver.wait('quirky.tasks/row')
-  await React.act(async () => { button(mounted.container, 'Close as completed').click(); await closeRequest })
-  expect(mounted.container.textContent).toContain('Closed ▾')
+  await React.act(async () => { menuItem(mounted.container, 'Close as completed').click(); await closeRequest })
+  expect(record(values(record(fixtureState(host).items)['test-owner/test-repo'])[0]).state).toBe('closed')
+  await expectClosedIssueStatus(mounted.container)
 
   const current = fixtureState(host)
   host.writeState({ ...current, failIssueUpdate: true })
@@ -435,7 +461,8 @@ test('a failed assignee edit preserves an earlier successful status change in th
   await React.act(async () => { button(mounted.container, 'Save assignees').click(); await failedUpdate })
   await React.act(async () => { await adoptionRead })
 
-  expect(mounted.container.textContent).toContain('Closed ▾')
+  expect(record(values(record(fixtureState(host).items)['test-owner/test-repo'])[0]).state).toBe('closed')
+  await expectClosedIssueStatus(mounted.container)
   expect(mounted.container.textContent).toContain('fixture issue update failure')
 }, 30_000)
 
@@ -458,12 +485,14 @@ test('quiet adoption retains a confirmed status while search indexing lags, then
   await click(mounted.container.querySelector('tbody button[aria-haspopup="menu"]'))
   const rowCall = driver.wait('quirky.tasks/row')
   const firstQuietRead = driver.wait('quirky.tasks/list')
-  await React.act(async () => { button(mounted.container, 'Close as completed').click(); await rowCall })
+  await React.act(async () => { menuItem(mounted.container, 'Close as completed').click(); await rowCall })
   await React.act(async () => { await firstQuietRead })
   const secondQuietRead = driver.wait('quirky.tasks/list')
+  expect(record(values(record(fixtureState(host).items)['test-owner/test-repo'])[0]).state).toBe('closed')
+  await expectClosedIssueStatus(mounted.container)
   await React.act(async () => { await secondQuietRead })
 
-  expect(mounted.container.textContent).toContain('Closed ▾')
+  await expectClosedIssueStatus(mounted.container)
   expect(record(fixtureState(host).lagSearch).remaining).toBe(0)
   expect(record(values(record(fixtureState(host).items)['test-owner/test-repo'])[0]).state).toBe('closed')
 }, 30_000)
@@ -489,8 +518,7 @@ test('a failed later reviewer request retains an earlier confirmed reviewer upda
   const input = reviewerBox()
   if (!(input instanceof HTMLTextAreaElement)) throw new Error('reviewer input was not rendered')
   await React.act(async () => {
-    input.value = 'first-reviewer'
-    input.dispatchEvent(new Event('input', { bubbles: true }))
+    setTextareaValue(input, 'first-reviewer')
   })
   const firstWrite = driver.wait('quirky.tasks/row')
   const reviewerAdoption = driver.wait('quirky.tasks/list')
@@ -503,8 +531,7 @@ test('a failed later reviewer request retains an earlier confirmed reviewer upda
   const nextInput = reviewerBox()
   if (!(nextInput instanceof HTMLTextAreaElement)) throw new Error('reviewer input was not rendered after reopening')
   await React.act(async () => {
-    nextInput.value = 'second-reviewer'
-    nextInput.dispatchEvent(new Event('input', { bubbles: true }))
+    setTextareaValue(nextInput, 'second-reviewer')
   })
   const failedWrite = driver.wait('quirky.tasks/row')
   await React.act(async () => { button(mounted.container, 'Request reviewers').click(); await failedWrite })
@@ -542,8 +569,7 @@ test('confirmed issue comments remain visible after a lagging detail read', asyn
   const commentBox = mounted.container.querySelector('textarea[aria-label="Add a comment"]')
   if (!(commentBox instanceof HTMLTextAreaElement)) throw new Error('issue comment composer was not rendered')
   await React.act(async () => {
-    commentBox.value = 'confirmed new comment'
-    commentBox.dispatchEvent(new Event('input', { bubbles: true }))
+    setTextareaValue(commentBox, 'confirmed new comment')
   })
   const posted = driver.wait('quirky.tasks/issueComment')
   await React.act(async () => { button(mounted.container, 'Comment').click(); await posted })
@@ -559,5 +585,6 @@ test('confirmed issue comments remain visible after a lagging detail read', asyn
     await refreshRead
   })
   expect(mounted.container.textContent).toContain('confirmed new comment')
-  expect(mounted.container.textContent).toContain('Comments (2)')
+  const commentsSection = mounted.container.querySelector('section[aria-labelledby="issue-comments-heading"]')
+  expect(commentsSection?.querySelectorAll('article')).toHaveLength(2)
 }, 30_000)
