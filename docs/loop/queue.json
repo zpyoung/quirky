@@ -1735,8 +1735,7 @@
         "ui-restyle-ask",
         "ui-restyle-settings"
       ],
-      "status": "in-progress",
-      "lane": 11
+      "status": "done"
     },
     {
       "id": "fix-flaky-terminal-features-pane",
@@ -2255,8 +2254,7 @@
       "deps": [
         "m7-test-triage"
       ],
-      "status": "in-progress",
-      "lane": 12
+      "status": "done"
     },
     {
       "id": "fix-test-scripts-ui-review-1028",

@@ -1147,6 +1147,11 @@ files, not this one.
 | easy | high for observed results; root cause remains unknown | [m3-accounts-remaining-flows D18](decisions/m3-accounts-remaining-flows.md) | Keep the full verifier after an intermittent script timeout | assumed — autonomous; preserves m3-accounts D35's no-waiver precedent |
 | easy | high | [m3-accounts-remaining-flows D19](decisions/m3-accounts-remaining-flows.md) | Preserve both guides during required land-conflict recovery | locked by incoming decision logs and LOOP land-failure protocol |
 | easy | high for observed executions; historical timeout cause remains unknown | [m3-accounts-remaining-flows D20](decisions/m3-accounts-remaining-flows.md) | Diagnose the guardian path without guessing or changing the gate | assumed — autonomous |
+| easy | high | [fix-test-packages-protocol-1028 D1](decisions/fix-test-packages-protocol-1028.md) | Repair the reported protocol assertions without repinning inventories | locked by docs/loop/LOOP.md |
+| easy | high | [fix-test-packages-protocol-1028 D2](decisions/fix-test-packages-protocol-1028.md) | The four reported failures are stale snapshots, not broken public contracts | assumed — autonomous |
+| easy | high | [fix-test-packages-protocol-1028 D3](decisions/fix-test-packages-protocol-1028.md) | Remove adjacent source mirrors and keep validation and safety invariants | assumed — autonomous |
+| easy | high | [fix-test-packages-protocol-1028 D4](decisions/fix-test-packages-protocol-1028.md) | Verify existing consumers without broadening the repair | assumed — autonomous |
+| easy | high | [fix-test-packages-protocol-1028 D5](decisions/fix-test-packages-protocol-1028.md) | Use the available cross-family reviewer and close this repair | assumed — autonomous |
 | easy | high | [ui-restyle-ask D1](decisions/ui-restyle-ask.md) | Apply the approved graphite system without changing feature behavior | locked by docs/quirk/specs/2026-10-28-ui-redesign/logic.md |
 | easy | high | [ui-restyle-ask D3](decisions/ui-restyle-ask.md) | Reuse the committed Structured transcript restyle from its actual owner | assumed — autonomous |
 | easy | high | [ui-restyle-ask D5](decisions/ui-restyle-ask.md) | Follow build-first execution and preserve unrelated state | locked by docs/loop/LOOP.md |
@@ -1265,6 +1270,14 @@ files, not this one.
 | easy | high | [m6-heimdall-owner D37](decisions/m6-heimdall-owner.md) | Repair roadmap typing and SDK-init fixture preconditions without changing native behavior | assumed — autonomous |
 | easy | high | [m6-heimdall-owner D40](decisions/m6-heimdall-owner.md) | Remove the final merged SDK-initialization duplicate rather than fabricate a native ID | assumed — autonomous |
 | easy | high | [m6-heimdall-owner D42](decisions/m6-heimdall-owner.md) | Replace fixture source-text rewriting with input-driven typed event production | assumed — autonomous |
+| easy | high | [ui-final-review D1](decisions/ui-final-review.md) | Publish a single Markdown comparison page, not a new UI implementation | assumed — autonomous |
+| easy | high for historical availability; runtime capture completeness must be observed | [ui-final-review D2](decisions/ui-final-review.md) | Capture historical source where genuine before evidence was not retained | assumed — autonomous |
+| easy | high | [ui-final-review D3](decisions/ui-final-review.md) | Preserve build-first and no-code boundaries while gathering the requested evidence | locked by docs/loop/LOOP.md |
+| easy | high | [ui-final-review D4](decisions/ui-final-review.md) | Isolate historical and current captures and disclose native/platform boundaries | deferred: platform |
+| easy | high for the displayed states only | [ui-final-review D5](decisions/ui-final-review.md) | Reject intended-area loading captures and publish representative surfaces with explicit limits | assumed — autonomous |
+| easy | high | [ui-final-review D6](decisions/ui-final-review.md) | Compute published image provenance from bytes rather than trusting worker metadata | assumed — autonomous |
+| easy | high for revision attribution, not later behavioral fixes | [ui-final-review D7](decisions/ui-final-review.md) | Keep immutable capture attribution through the sole integration catch-up | assumed — autonomous |
+| easy | high for exercised checks only | [ui-final-review D8](decisions/ui-final-review.md) | Land documentation and original pixels with explicit verification boundaries | locked by docs/loop/LOOP.md |
 | easy | high | [sa-browser-profile-import-ui D2](decisions/sa-browser-profile-import-ui.md) | Resolve visual, data and integration gray areas without a person | assumed — autonomous |
 | easy | high | [sa-browser-profile-import-ui D3](decisions/sa-browser-profile-import-ui.md) | Follow unattended build-first process and isolate implementation | locked by docs/loop/LOOP.md |
 | easy | high | [sa-browser-profile-import-ui D5](decisions/sa-browser-profile-import-ui.md) | Repair actual wrapped-menu anchoring instead of bypassing hit tests | assumed — autonomous |
