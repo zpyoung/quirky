@@ -164,15 +164,24 @@ test('paired daemons preserve FIFO mail and ask identity; a rejected home comple
     event.type === 'started' && event.sessionId === processExitSessionId)
   if (typeof processExitProcess?.pid !== 'number') throw new Error('the second host process did not publish its real PID')
   process.kill(processExitProcess.pid, 'SIGTERM')
+  const settledHome = await eventually(
+    () => home.fixture.call('quirky.orchestration/workerShow', {
+      dispatchId: processExitStart.receipt.dispatchId,
+    }) as Promise<WorkerShowResult>,
+    (result) => result.dispatch.failureCount === 1 && result.dispatch.status === 'failed' &&
+      result.worker?.state === 'failed' && result.worker.stage === 'process_exited',
+    'the home Dispatch to settle from the persisted exact host process-exit observation',
+  )
+  expect(settledHome.dispatch.status).toBe('failed')
   const exitedHome = await eventually(
     () => owner.show(processExitStart.runId),
     (detail) => detail.workers.some((worker) =>
       worker.dispatchId === processExitStart.receipt.dispatchId && worker.assignmentActive === false),
-    'the home attempt to settle from the persisted exact host process-exit observation',
+    'the service owner to reflect the exited home attempt',
   )
   expect(exitedHome.workers.find((worker) => worker.dispatchId === processExitStart.receipt.dispatchId)?.state).toBe('exited')
   const exitDispatch = await home.fixture.call('quirky.orchestration/dispatchShow', {
     taskId: processExitStart.receipt.taskId,
   }) as { dispatch: { status: string } }
-  expect(exitDispatch.dispatch.status).not.toBe('dispatched')
+  expect(exitDispatch.dispatch.status).toBe('failed')
 }, 180_000)
