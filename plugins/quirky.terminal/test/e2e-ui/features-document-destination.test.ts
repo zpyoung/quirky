@@ -21,11 +21,13 @@ test('New Markdown from a non-active split opens the real editor document in tha
   if (!blank) throw new Error('Markdown creation picker is missing its Blank Markdown action')
   blank.click()
 
-  const result = await waitFor('the new document in its requested group', async () => {
+  const result = await waitFor('the new document selected in its requested group', async () => {
     const workspace = await layoutOf(f.h)
     const group = groupsOf(workspace).find((candidate) => candidate.id === destination)
     const documentTab = group?.tabs.find((tab) => isViewTab(tab) && tab.viewId === 'view:quirky.editor/document')
-    return documentTab && isViewTab(documentTab) ? { workspace, group: group!, documentTab } : undefined
+    return documentTab && isViewTab(documentTab) && workspace.activeGroup === destination && group?.activeTab === documentTab.id
+      ? { workspace, group, documentTab }
+      : undefined
   })
   expect(result.workspace.activeGroup).toBe(destination)
   expect(result.group.activeTab).toBe(result.documentTab.id)

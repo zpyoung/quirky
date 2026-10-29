@@ -67,5 +67,71 @@
 - **Revisit if:** A valid current user interaction demonstrates a production defect rather than an obsolete oracle.
 - **Source:** assumed — autonomous
 
+## D7: Keep missing-session errors visible instead of restoring the prior pane
+- **Question:** Should SC-76's invalid-session tail expect the old pane's focus report?
+- **Options:** Restore implicit fallback; remove the superseded tail and retain the explicit missing-session scenario.
+- **Chose:** Keep SC-76's valid exact pane/group selection checks and remove only its obsolete invalid-session fallback expectation. SC-72 retains missing/wrong-worktree refusal, no-shell and unchanged-layout behavior.
+- **Why:** The two old/new expectations contradicted one another in the same file. A request for a missing session must not silently substitute another session. The initial SC-76 run also logged xterm renderer disposal errors; their cause remains unproven and no production workaround is introduced.
+- **Evidence:** plugins/quirky.terminal/test/e2e-ui/workspace-view.test.ts SC-76 and SC-72; initial canonical failure old-focus report timeout and xterm syncScrollArea error.
+- **Reversibility:** easy
+- **Confidence:** high for conflicting oracles; no diagnosed cause for the renderer error.
+- **Revisit if:** A valid session request no longer selects its exact pane.
+- **Source:** assumed — autonomous
+
+## D8: Preserve the three incoming owners and their bounded evidence
+- **Question:** Does the single roadmap catch-up require a contract change?
+- **Options:** Diverge from incoming lifecycle, Browser or Editor contracts; preserve them and exercise the composed terminal behavior.
+- **Chose:** Read fix-test-browser-1028 D1–D12, fix-test-editor-1028 D1–D19 and fix-test-session-1028 D1–D11, including Progress, in full. Preserve exact simulator/file authority, structured startup reconciliation, owned process cleanup, no fallback aliases, shared controls and canonical source-admission rules.
+- **Why:** The clean merge brought 30 changed files and no terminal production or fixture conflicts. Session startup reconciliation distinguishes daemon-owned structured sessions from surviving live terminals; it does not change requested-session adoption. Browser native drag remains with its explicit owner and is not declared passed here.
+- **Evidence:** source6a885635 followed by the sole git merge build/roadmap; three incoming decision logs; fresh composed daemon/API/CLI smoke exit0 7.50s with both success markers and TERMINAL_SMOKE_CLEANED.
+- **Reversibility:** easy
+- **Confidence:** high for read contracts and exercised smoke; complete suite pending.
+- **Revisit if:** Canonical terminal verification or landing reveals a concrete conflict.
+- **Source:** locked by incoming decision logs
+
+## D9: Await the completed Markdown selection rather than the first persisted tab
+- **Question:** Why did the document-destination test observe the exact tab but the prior active group?
+- **Options:** Relax destination selection; change Editor/Terminal ownership; wait for the existing asynchronous creation-and-focus operation to finish.
+- **Chose:** Keep all final destination, active-tab, rich-mode and original-group assertions, and make their condition wait include the requested active group/tab.
+- **Why:** QuickOpenOverlay.createMarkdown awaits Markdown creation, then separately opens that returned path with focus:true. The test previously returned at the intermediate persisted tab, before focus completion. The first UI/window gate observed this boundary and its configured isolated retry passed. The corrected exact-file canonical gate passed without retries.
+- **Evidence:** plugins/quirky.editor/src/window/QuickOpenOverlay.tsx:143-160; plugins/quirky.terminal/test/e2e-ui/features-document-destination.test.ts; first UI/window gate53/57remote pass, document retry1/1; corrected document1/1,29.86s; latest dialog three-file gate3/3,150.26s.
+- **Reversibility:** easy
+- **Confidence:** high for the two-stage source contract and observed state; no production focus defect claimed.
+- **Revisit if:** Completion never selects the exact requested group and tab.
+- **Source:** assumed — autonomous
+
+## D10: Run one bounded cross-family review over the fixed fixture artifact
+- **Question:** What independent assurance accompanies the repair?
+- **Options:** Trust worker reports; repeat open-ended discovery; one fixed-artifact standard promote/refute protocol.
+- **Chose:** Google Gemini high-reasoning promote and independent fresh-context refute over the 432-line source/test/README/routing artifact, excluding author decision logs and reasoning. Mechanical resolve, compiler prepass, model selection, claims, merge, gate and manifest all exited0. Both real dispatches returned empty finding arrays.
+- **Why:** The gate is PASS with full family independence and zero blocking, advisory, suppressed, contested, limitation, question, excluded or unreviewed entries for that fixed artifact. This is not exhaustive UI/native qualification. The later four-line pane-search fixture-readiness correction is explicitly outside that formal artifact and receives separate checks rather than relabeling the review.
+- **Evidence:** run e846ca1515138475; artifact0d161271ee5e1035d66346bde6279bbe698dce3f5289b97b98af10f1de64fb14; prepass bun run typecheck41.946s; review chain186.45s; actual raw stage outputs and gate/manifest.
+- **Reversibility:** easy
+- **Confidence:** high for performed protocol and scope, bounded for completeness.
+- **Revisit if:** An exercised consumer boundary contradicts the reviewed tests.
+- **Source:** assumed — autonomous
+
+## D11: Wait for a pane's actual subscription before injecting its output
+- **Question:** Why did the composed full suite reach undefined streams.get(101) in pane-search setup?
+- **Options:** Make fake push silently drop/wait; add a fixed sleep; wait explicitly for the valid fixture's actual subscription.
+- **Chose:** Only mountWithOutput waits under React act for fake.streams.has(101), bounded at2 seconds, before pushing bytes. Preserve the fake's strict delivery behavior, every search assertion, all default production and test deadlines, and shared mount semantics for failed/non-live attachments.
+- **Why:** mountPane's one-tick settle is not a subscription-ready contract. The observed stack fails before search behavior, at output injection into an absent stream. Tests intending failed/non-live attach must still expose no stream rather than forcing all mounts to wait for one.
+- **Evidence:** composed full suite95/98remote pass, pane-search undefined stream stack at ui-fake.ts:168 and mountWithOutput:23; test/window/pane-support.tsx:88-103.
+- **Reversibility:** easy
+- **Confidence:** high for the missing subscription boundary; no production timing or output-loss defect claimed.
+- **Revisit if:** The valid fixture cannot subscribe within the bounded readiness wait or preserves wrong stream identity.
+- **Source:** assumed — autonomous
+
+## D12: Land with the complete owning gate and separately checked final fixture delta
+- **Question:** What final evidence closes this item without overstating earlier snapshots or native qualification?
+- **Options:** Relabel intermediate red runs; rerun an open-ended review campaign; retain exact snapshots and exercised acceptance.
+- **Chose:** Final owning canonical run passed98/98remote plus5/5macOS files, with no retries/flaky entries, in468.50s. That snapshot predates only D11's four-line subscription-readiness fixture correction, which independently passed its full file1/1 with no retry in22.53s and final full typecheck40.17s. The current dialog three-file gate passed3/3 in150.26s; document-destination1/1 in29.86s; scripts12/12 in55.93s.
+- **Why:** All named baseline files and the reached current shared-control regressions have exercised behavior coverage or explicitly removed incidental mirrors. No production API, authority, timeout, alias, provider, platform-support or UI behavior changed. The final actual composed daemon/API/CLI smoke passed7.50s with artifact save, pending/accepted kill, child reaping and retained history, then removed its private home.
+- **Evidence:** canonical owning suite-result ok:true/flaky:[]; final scoped suite and typecheck receipts; TERMINAL_MACOS_ARTIFACT_SMOKE_OK, TERMINAL_KILL_CONFIRMATION_SMOKE_OK, TERMINAL_SMOKE_CLEANED; D10 formal review scope/manifest.
+- **Reversibility:** easy
+- **Confidence:** high for exercised tests/API/process boundaries; no OS-native, paid-provider, visual-browser or all-platform qualification inferred.
+- **Revisit if:** Canonical merged-result typecheck or later consumer evidence contradicts these checks.
+- **Source:** locked by docs/loop/LOOP.md verification and landing
+
 ## Progress
-All two-wave implementers returned and scoped diffs contain only assigned test files. Production terminal/host code remains unchanged. Mac-bound scenarios3/3, destructive lifecycle2/2, scripts12/12 and explicit status/alert refusal scenarios2/2 pass canonically. Real isolated daemon/API/CLI artifact save and confirmed kill smoke passed with cleanup. Initial whole terminal run failed21remote files plus the macOS paste fixture; integrated UI/window regression run is pending. Typecheck passed54.41s. Parent corrected remaining Quick Commands dialog aria-label lookup and keyboard event origin after source inspection. Next catch up roadmap once, read incoming decisions, run final full owning suite/typecheck and bounded review, record results, commit/detach and land this item only.
+Ready for canonical land. Complete owning gate98remote+5macOS passed with no retries; final pane-search fixture delta independently passed and final full typecheck passed. Scripts12/12 and real composed API/CLI smoke passed with private cleanup. Standard Google/Gemini review passed on its recorded pre-pane-search artifact; no review finding remains open. All workers, models, checks and runtime processes have returned. Commit final receipt/tests, detach, run the authoritative absolute queue.ts land and await its result before ending this iteration. Remove only owned temporary scratch after successful landing; inherited .serena remains untouched.

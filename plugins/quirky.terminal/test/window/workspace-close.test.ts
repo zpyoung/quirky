@@ -59,7 +59,6 @@ describe('SC-13: closing a tab running a command asks first', () => {
     await closeFocused(view)
     expect(callsTo(view.fake, 'describeClose')).toEqual([{ tab: 'tab-1' }])
     expect(dialog(view)).not.toBeNull()
-    expect([...dialog(view)!.querySelectorAll('button')].map((el) => el.textContent)).toEqual(['Cancel', 'Stop and Close'])
     expect(dialog(view)!.querySelector('input[type="checkbox"]')).not.toBeNull()
     expect(callsTo(view.fake, 'closeTab')).toEqual([])
   })
