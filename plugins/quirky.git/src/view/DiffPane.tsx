@@ -6,7 +6,7 @@ import type { NotesBinding } from '../notes/binding'
 import { markComposerUsed, registerComposer, type NoteComposer } from '../notes/composers'
 import type { Note } from '../notes/useNotes'
 import { messageOf, reasonOf } from './data'
-import { BinaryNotice, ImagePanes, TooLargeNotice } from './Fallbacks'
+import { BinaryNotice, ImagePanes, NoChangesNotice, TooLargeNotice } from './Fallbacks'
 import { tooLargeFor, type TooLarge } from './limits'
 import { createMerge, type MergeHandle } from './merge'
 import type { DiffSettings } from './settings'
@@ -87,6 +87,14 @@ export function DiffPane(props: PaneProps) {
   if (diff.kind === 'image') return <ImagePanes diff={diff} />
   if (diff.kind === 'binary' || diff.binary) return <BinaryNotice />
   if (diff.tooLarge) return <TooLargeNotice tooLarge={diff.tooLarge} />
+  if (diff.original === diff.modified) {
+    return (
+      <>
+        <NoChangesNotice />
+        <TextPane {...props} />
+      </>
+    )
+  }
   return <TextPane {...props} />
 }
 
