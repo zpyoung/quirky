@@ -2877,6 +2877,18 @@ files, not this one.
 | easy | high for the identified setup and dispatch semantics; final native acceptance not yet passing | [m6-heimdall-control D14](decisions/m6-heimdall-control.md) | Require an acknowledged dispatch, not merely a live process or completed work | assumed — autonomous |
 | easy | high for the exercised complete native worker-control flow | [m6-heimdall-control D15](decisions/m6-heimdall-control.md) | Exercise a blocking Ask rather than invent a pending one-way message | locked by docs/roadmap.md |
 | easy | high | [m6-heimdall-control D16](decisions/m6-heimdall-control.md) | Verify observable settlement rather than incidental exit metadata or callback timing | assumed — autonomous |
+| easy | high | [fix-test-heimdall-1028 D1](decisions/fix-test-heimdall-1028.md) | Repair the triaged Heimdall failures without changing authority boundaries | locked by docs/loop/LOOP.md |
+| easy | high | [fix-test-heimdall-1028 D2](decisions/fix-test-heimdall-1028.md) | Use recorded baseline failures as the initial failing evidence | assumed — autonomous |
+| easy | high | [fix-test-heimdall-1028 D3](decisions/fix-test-heimdall-1028.md) | Isolate three repair components and use the reachable cross-family reviewer | assumed — autonomous |
+| easy | high | [fix-test-heimdall-1028 D4](decisions/fix-test-heimdall-1028.md) | Replace obsolete control-test assumptions without relaxing authority | assumed — autonomous |
+| easy | high | [fix-test-heimdall-1028 D5](decisions/fix-test-heimdall-1028.md) | Fix missing mutation identity at the consumer, not the orchestration authority | assumed — autonomous |
+| easy | high | [fix-test-heimdall-1028 D6](decisions/fix-test-heimdall-1028.md) | Give fixtures truthful private workspace authority instead of suppressing lease failures | assumed — autonomous |
+| easy | high | [fix-test-heimdall-1028 D7](decisions/fix-test-heimdall-1028.md) | Drive the test read fence explicitly and drain its public API call | assumed — autonomous |
+| easy | high | [fix-test-heimdall-1028 D8](decisions/fix-test-heimdall-1028.md) | Preserve the exercised authority scenarios while correcting their last setup errors | assumed — autonomous |
+| easy | high for exercised paths; no real os sleep cycle, ui or native-banner acceptance claim | [fix-test-heimdall-1028 D9](decisions/fix-test-heimdall-1028.md) | Report the integrated pre-review gate and runtime evidence with their actual limits | assumed — autonomous |
+| easy | high for the recorded protocol and scope only | [fix-test-heimdall-1028 D10](decisions/fix-test-heimdall-1028.md) | Run one bounded independent review and retain its exact snapshot boundary | assumed — autonomous |
+| easy | high | [fix-test-heimdall-1028 D11](decisions/fix-test-heimdall-1028.md) | Preserve certified liveness when heartbeat metadata is null | supersedes fix-test-heimdall-1028 D5 (contact-timestamp interpretation only) |
+| easy | high for exercised api/cli, lifecycle, lease, power-binding and owner cases; real os sleep/native notification/ui acceptance unchanged | [fix-test-heimdall-1028 D12](decisions/fix-test-heimdall-1028.md) | Close the final narrowed repair with fresh consumer-visible proof | assumed — autonomous |
 | easy | high | [sb-mobile-app-panels D3](decisions/sb-mobile-app-panels.md) | Use night-mode autonomous workflow and isolated implementations | locked by docs/loop/LOOP.md |
 | easy | high | [sb-mobile-app-panels D4](decisions/sb-mobile-app-panels.md) | Pair OpenAI omp workers with Gemini reviewer | assumed — autonomous |
 | easy | high | [sb-mobile-app-panels D7](decisions/sb-mobile-app-panels.md) | Bind subscription cancellation to an authenticated device and generation | assumed — autonomous |

@@ -17,6 +17,7 @@ const PLUGIN_DIR = dirname(dirname(fileURLToPath(import.meta.url)))
 const REPO_ROOT = resolve(PLUGIN_DIR, '../..')
 const STRUCTURED_DIR = join(REPO_ROOT, 'plugins/quirky.structured')
 const FAKES_DIR = join(STRUCTURED_DIR, 'test/fakes')
+const WORKTREE_PLUGIN_DIR = join(PLUGIN_DIR, 'test/owner-fakes/worktree-plugin')
 const KIND_PLUGIN_DIR = join(PLUGIN_DIR, 'test/owner-fakes/kind-plugin')
 const ORCHESTRATION_PLUGIN_DIR = join(PLUGIN_DIR, 'test/owner-fakes/orchestration-plugin')
 const CLI_ENTRY = join(REPO_ROOT, 'packages/cli/src/main.ts')
@@ -103,7 +104,7 @@ function makeBuiltinPluginsDir(): string {
     'quirky.heimdall': PLUGIN_DIR,
     'quirky.structured': STRUCTURED_DIR,
     'quirky.session': join(FAKES_DIR, 'quirky.session'),
-    'quirky.worktree': join(FAKES_DIR, 'quirky.worktree'),
+    'quirky.worktree': WORKTREE_PLUGIN_DIR,
     'quirky.ask': join(FAKES_DIR, 'quirky.ask'),
     'quirky.agents': join(FAKES_DIR, 'quirky.agents'),
     'quirky.orchestration': ORCHESTRATION_PLUGIN_DIR,
@@ -129,7 +130,10 @@ async function boot(options: {
   const scope = processScope ?? createProcessScope(home)
   if (scope.home !== home) throw new Error('scripted provider scope must use the daemon home')
   processScope = scope
-  if (world.worktree.path === '/fake/alpha') world.worktree.path = makeTempDir('owner-workspace-')
+  if (world.worktree.path === '/fake/alpha') {
+    world.worktree.path = makeTempDir('owner-workspace-')
+    world.worktree.kind = 'folder'
+  }
   structuredRunners = runners
   workspaceSerial = 0
   globals.__structuredFakes = world

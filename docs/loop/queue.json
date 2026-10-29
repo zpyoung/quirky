@@ -1956,6 +1956,26 @@
       "status": "todo"
     },
     {
+      "id": "fix-test-heimdall-1028",
+      "milestone": "M7",
+      "title": "Repair end-phase plugins/quirky.heimdall failures from baseline 97aaa12d (full evidence docs/loop/reports/m7-test-triage.json, area plugins/quirky.heimdall). Files and exact failed tests: plugins/quirky.heimdall/test/fleet-worker-acceptance.test.ts: an actual Heimdall-owned worker stays inspectable but stops counting after its CLI report | plugins/quirky.heimdall/test/lease.test.ts: atomic claims contend, expire to a higher epoch, and stale assert/release cannot affect it | plugins/quirky.heimdall/test/host-power.test.ts: Heimdall host-power lifecycle binding > fences an in-flight read, resumes with a live read, and excludes the sleeping interval from budget; Heimdall host-power lifecycle binding > restored and newly enrolled runners remain dormant while the host is suspended; Heimdall host-power lifecycle binding > removes its power subscription before shutdown and fences a pending read from stale effects; Heimdall host-power lifecycle binding > attempts every synchronous runner fence and reports the failing watcher | plugins/quirky.heimdall/test/owner-worker-acceptance.test.ts: owner worker messages, answers, and exact stop reach an attested native child | plugins/quirky.heimdall/test/owner-acceptance.test.ts: optional Claude owner configuration survives restart and resumes its persisted provider conversation; natural keys deduplicate provider turns while full failure detail appears in the conversation and inspection; the generated owner-ready CLI accepts an issued file and translated kind actions pass through the native capability gate; an owner human question parks until its exact escalation is answered in the same native conversation; a report accepted for stale content is held and reissued in the same provider conversation; stale, malformed, oversized, and symlink reports are refused without native attempts; continue capability boundary: owner-off; continue capability boundary: owner-gated; continue capability boundary: native-off; continue capability boundary: native-gated; continue capability boundary: both-on; a translated kind action cannot execute when its native action capability is off; disabling Heimdall stops its owner child while an unrelated structured child accepts another turn; owner abandon disarms the watcher without stopping an unrelated native conversation | plugins/quirky.heimdall/test/worker-controls.test.ts: native Heimdall worker controls > answers a real worker question and stops that exact live process | plugins/quirky.heimdall/test/runner.test.ts: Heimdall runner gate and budget behavior > journals provider answers as shadow observations without changing action authority | plugins/quirky.heimdall/test/control-acceptance.test.ts: Heimdall operators through daemon API and real CLI > daemon delete confirmation is exact and single-use; cancellation never removes history; Heimdall operators through daemon API and real CLI > foreign targets and unverifiable workers fail closed through public command API | plugins/quirky.heimdall/test/control-api.test.ts: Heimdall control API > returns an applied stop receipt while fleet publication is still pending | plugins/quirky.heimdall/test/orchestration.test.ts: Heimdall orchestration adapter > owner-run worker evidence drives billable contact and malformed rows cannot appear live. Reproduce via canonical suite; fix consumer-visible defects and delete incidental wording/source/default/inventory mirror assertions rather than repinning them. Preserve fresh private process homes and cleanup. Cross-plugin failures must coordinate with the owning repair, not introduce aliases or bypasses.",
+      "docs": [],
+      "deps": [
+        "m7-test-triage"
+      ],
+      "status": "done"
+    },
+    {
+      "id": "fix-test-loops-1028",
+      "milestone": "M7",
+      "title": "Repair end-phase plugins/quirky.loops failures from baseline 97aaa12d (full evidence docs/loop/reports/m7-test-triage.json, area plugins/quirky.loops). Files and exact failed tests: plugins/quirky.loops/test/ui-native-controls.test.ts: rendered Stop Cancel and After this iteration preserve a held native turn until structured steering settles it; rendered Close Cancel preserves the tab, Keep running detaches the same held queue turn, and Stop loop leaves its native sentinel live | plugins/quirky.loops/test/api.test.ts: quirky.loops public API > L06: approval asks move a loop to needs-you and answering resumes observation. Reproduce via canonical suite; fix consumer-visible defects and delete incidental wording/source/default/inventory mirror assertions rather than repinning them. Preserve fresh private process homes and cleanup. Cross-plugin failures must coordinate with the owning repair, not introduce aliases or bypasses.",
+      "docs": [],
+      "deps": [
+        "m7-test-triage"
+      ],
+      "status": "done"
+    },
+    {
       "id": "m7-sweep-sessions",
       "milestone": "M7",
       "docs": [
@@ -2054,17 +2074,6 @@
       "lane": 1
     },
     {
-      "id": "fix-test-heimdall-1028",
-      "milestone": "M7",
-      "title": "Repair end-phase plugins/quirky.heimdall failures from baseline 97aaa12d (full evidence docs/loop/reports/m7-test-triage.json, area plugins/quirky.heimdall). Files and exact failed tests: plugins/quirky.heimdall/test/fleet-worker-acceptance.test.ts: an actual Heimdall-owned worker stays inspectable but stops counting after its CLI report | plugins/quirky.heimdall/test/lease.test.ts: atomic claims contend, expire to a higher epoch, and stale assert/release cannot affect it | plugins/quirky.heimdall/test/host-power.test.ts: Heimdall host-power lifecycle binding > fences an in-flight read, resumes with a live read, and excludes the sleeping interval from budget; Heimdall host-power lifecycle binding > restored and newly enrolled runners remain dormant while the host is suspended; Heimdall host-power lifecycle binding > removes its power subscription before shutdown and fences a pending read from stale effects; Heimdall host-power lifecycle binding > attempts every synchronous runner fence and reports the failing watcher | plugins/quirky.heimdall/test/owner-worker-acceptance.test.ts: owner worker messages, answers, and exact stop reach an attested native child | plugins/quirky.heimdall/test/owner-acceptance.test.ts: optional Claude owner configuration survives restart and resumes its persisted provider conversation; natural keys deduplicate provider turns while full failure detail appears in the conversation and inspection; the generated owner-ready CLI accepts an issued file and translated kind actions pass through the native capability gate; an owner human question parks until its exact escalation is answered in the same native conversation; a report accepted for stale content is held and reissued in the same provider conversation; stale, malformed, oversized, and symlink reports are refused without native attempts; continue capability boundary: owner-off; continue capability boundary: owner-gated; continue capability boundary: native-off; continue capability boundary: native-gated; continue capability boundary: both-on; a translated kind action cannot execute when its native action capability is off; disabling Heimdall stops its owner child while an unrelated structured child accepts another turn; owner abandon disarms the watcher without stopping an unrelated native conversation | plugins/quirky.heimdall/test/worker-controls.test.ts: native Heimdall worker controls > answers a real worker question and stops that exact live process | plugins/quirky.heimdall/test/runner.test.ts: Heimdall runner gate and budget behavior > journals provider answers as shadow observations without changing action authority | plugins/quirky.heimdall/test/control-acceptance.test.ts: Heimdall operators through daemon API and real CLI > daemon delete confirmation is exact and single-use; cancellation never removes history; Heimdall operators through daemon API and real CLI > foreign targets and unverifiable workers fail closed through public command API | plugins/quirky.heimdall/test/control-api.test.ts: Heimdall control API > returns an applied stop receipt while fleet publication is still pending | plugins/quirky.heimdall/test/orchestration.test.ts: Heimdall orchestration adapter > owner-run worker evidence drives billable contact and malformed rows cannot appear live. Reproduce via canonical suite; fix consumer-visible defects and delete incidental wording/source/default/inventory mirror assertions rather than repinning them. Preserve fresh private process homes and cleanup. Cross-plugin failures must coordinate with the owning repair, not introduce aliases or bypasses.",
-      "docs": [],
-      "deps": [
-        "m7-test-triage"
-      ],
-      "status": "in-progress",
-      "lane": 9
-    },
-    {
       "id": "fix-test-mobile-1028",
       "milestone": "M7",
       "title": "Repair end-phase plugins/quirky.mobile failures from baseline 97aaa12d (full evidence docs/loop/reports/m7-test-triage.json, area plugins/quirky.mobile). Files and exact failed tests: plugins/quirky.mobile/test/browser-watch.test.ts: mobile Watch uses real worktree tab identity, bounded frames and connection-owned leases | plugins/quirky.mobile/test/panels-activity-tasks.test.ts: paired mobile workspace consent carries content pins through both hooks and executes each approved script | plugins/quirky.mobile/test/session-tabs.test.ts: public mobile Markdown APIs preserve actual tab identity, bounded drafts and dirty-close decisions. Reproduce via canonical suite; fix consumer-visible defects and delete incidental wording/source/default/inventory mirror assertions rather than repinning them. Preserve fresh private process homes and cleanup. Cross-plugin failures must coordinate with the owning repair, not introduce aliases or bypasses.",
@@ -2074,16 +2083,6 @@
       ],
       "status": "in-progress",
       "lane": 12
-    },
-    {
-      "id": "fix-test-loops-1028",
-      "milestone": "M7",
-      "title": "Repair end-phase plugins/quirky.loops failures from baseline 97aaa12d (full evidence docs/loop/reports/m7-test-triage.json, area plugins/quirky.loops). Files and exact failed tests: plugins/quirky.loops/test/ui-native-controls.test.ts: rendered Stop Cancel and After this iteration preserve a held native turn until structured steering settles it; rendered Close Cancel preserves the tab, Keep running detaches the same held queue turn, and Stop loop leaves its native sentinel live | plugins/quirky.loops/test/api.test.ts: quirky.loops public API > L06: approval asks move a loop to needs-you and answering resumes observation. Reproduce via canonical suite; fix consumer-visible defects and delete incidental wording/source/default/inventory mirror assertions rather than repinning them. Preserve fresh private process homes and cleanup. Cross-plugin failures must coordinate with the owning repair, not introduce aliases or bypasses.",
-      "docs": [],
-      "deps": [
-        "m7-test-triage"
-      ],
-      "status": "done"
     },
     {
       "id": "fix-test-orchestration-1028",
@@ -2115,7 +2114,8 @@
       "deps": [
         "m7-test-triage"
       ],
-      "status": "todo"
+      "status": "in-progress",
+      "lane": 9
     },
     {
       "id": "fix-test-tasks-1028",
