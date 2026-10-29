@@ -26,7 +26,7 @@ upstream merges it.
 - **The `quirky` branch** is the fork's default branch. It holds only fork tooling: `FORK.md`, the
   ordered patch list `patches.txt`, the rebuild script and the macOS arm64 release workflow.
   Upstream's own workflows are disabled in the fork.
-- **The unified build** is the branch `quirky/v2.0.5`: the base tag, then each listed patch merged
+- **The unified build** is the branch `unified/v2.0.5`: the base tag, then each listed patch merged
   in list order, then one commit that sets the fork version and adds the release workflow. The
   rebuild script regenerates it from scratch, so it's force-pushed and never edited by hand.
 - **A release** is an immutable tag `v2.0.5-quirky.N` on the unified build, with the macOS arm64
@@ -117,16 +117,16 @@ or later. Those features report unsupported on older macOS.
    - **Given** `patches.txt` already lists `patch/webview-user-agent`, and
      `patch/hard-reload-load-failed` is finished
    - **When** the session adds its patch to the list and rebuilds the unified branch
-   - **Then** `quirky/v2.0.5` is regenerated as the tag plus both patches in list order, and the
+   - **Then** `unified/v2.0.5` is regenerated as the tag plus both patches in list order, and the
      session resolves any conflict between them on the unified branch, leaving its patch branch
      based on the tag
-   - **Data before:** **patches.txt**: `patch/webview-user-agent`; **quirky/v2.0.5**: tag + user
+   - **Data before:** **patches.txt**: `patch/webview-user-agent`; **unified/v2.0.5**: tag + user
      agent patch
    - **Walkthrough:**
      1. The session appends `patch/hard-reload-load-failed` to `patches.txt`
      2. The rebuild script starts from `v2.0.5` and merges each listed patch in order
      3. Both patches add to the webview event list, so the merge conflicts; the session resolves it
-   - **Data after:** **quirky/v2.0.5**: ✓ tag + user agent patch + reload patch + version commit;
+   - **Data after:** **unified/v2.0.5**: ✓ tag + user agent patch + reload patch + version commit;
      **patch/hard-reload-load-failed**: still based on `v2.0.5`
 
 4. **SC-4: The unified build is released**
@@ -168,12 +168,12 @@ or later. Those features report unsupported on older macOS.
    - **Given** the fork on `v2.0.5` with patches listed, and upstream publishes stable `v2.0.6`
    - **When** the maintainer moves the fork to the new base
    - **Then** each listed patch is rebased onto `v2.0.6` and compared with its old version, the
-     unified branch `quirky/v2.0.6` is built, and its first release is `v2.0.6-quirky.1`; the
-     `quirky/v2.0.5` releases stay as they are
+     unified branch `unified/v2.0.6` is built, and its first release is `v2.0.6-quirky.1`; the
+     `unified/v2.0.5` releases stay as they are
    - **Data before:** **patches.txt**: 3 patches*; **Fork releases**: up to `v2.0.5-quirky.3`*
    - **Walkthrough:**
      1. The maintainer rebases each patch branch onto `v2.0.6` and compares each old and new patch
-     2. The rebuild script builds `quirky/v2.0.6`
+     2. The rebuild script builds `unified/v2.0.6`
      3. The maintainer tags it `v2.0.6-quirky.1`
    - **Data after:** **Fork releases**: `v2.0.5-quirky.1` to `.3` unchanged; ✓ `v2.0.6-quirky.1`
 
@@ -241,7 +241,7 @@ Not in scope:
 ## Decisions Locked
 
 **Branches**
-- One `patch/<name>` branch per item, cut from the base tag, plus a generated `quirky/v2.0.5`
+- One `patch/<name>` branch per item, cut from the base tag, plus a generated `unified/v2.0.5`
   rebuilt from the ordered `patches.txt`.
 - The fork's default branch `quirky` holds only fork tooling; upstream's workflows are disabled.
 
@@ -293,7 +293,7 @@ None. Discussion stayed within scope.
 - **Base tag:** the upstream stable release the fork builds on, `v2.0.5` now.
 - **Patch branch:** `patch/<name>`, one item's change, cut from the base tag.
 - **`patches.txt`:** the ordered list of patch branches in the unified build.
-- **Unified build:** the `quirky/v2.<x>.<y>` branch, regenerated from the base tag and the listed
+- **Unified build:** the `unified/v2.<x>.<y>` branch, regenerated from the base tag and the listed
   patches.
 - **Release:** an immutable `v<base>-quirky.N` tag with the macOS arm64 devkit attached.
 - **Private test version:** a session's local build of the base tag plus one patch, versioned
@@ -307,4 +307,8 @@ None. Discussion stayed within scope.
 
 **Status:** Approved 2026-10-29.
 
-**Amendments:** none.
+**Amendments:**
+
+- 2026-10-29: the unified build branch is `unified/v2.0.5`, not `quirky/v2.0.5`. Git can't hold a
+  branch named `quirky` and one under `quirky/` at once, and the tooling branch keeps the `quirky`
+  name. Behavior is unchanged.
