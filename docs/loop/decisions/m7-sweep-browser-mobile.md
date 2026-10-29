@@ -319,5 +319,16 @@
 - **Revisit if:** a current valid consumer failure remains after these committed migrations.
 - **Source:** locked by completed repair decisions and current tab-count contract
 
+## D30: Compose current owner prerequisites before the end-phase final review
+- **Question:** Should the remaining three concrete importer failures be patched against an incomplete published context?
+- **Options:** compatibility selectors/per-feature dependency shims; keep importing disconnected fixture fragments; compose the current canonical owners and reverify.
+- **Chose:** compose current build/roadmap on the item branch before Final Round1, pin/read every incoming decision, preserve all owner contracts, then freeze a new bounded source artifact. The prior no-second-catchup interpretation is superseded: LOOP's once rule is under the build-first override that ends when triage is claimed; normal end-phase step5 requires composition before final review. No new work item or product scope.
+- **Why:** current359 gate passes185/188remote and15/15Mac, but Settings fixture still targets removed button.gear, structured transcript fixtures expect the newer semantic log, and loop fixture cannot find the absent Worktree setting. Published Settings consumer migration and completed Terminal gate used newer prerequisites. Layering aliases or more partial copies would create a combination no owner verified. No final model has dispatched, so this is not a second review campaign or moving an adjudicated artifact.
+- **Evidence:** current final-owned.full.log403.986s; canonical f4befdd7 Settings test migration; TerminalD8 composed incoming Browser/Editor/Session context; normal LOOP end-phase/step5 versus build-first-only override. Old failed artifacts/prepasses remain immutable history.
+- **Reversibility:** medium
+- **Confidence:** high for observed context mismatch and normal end-phase workflow
+- **Revisit if:** current composed source still fails; diagnose exact remaining cause rather than infer success from merge.
+- **Source:** supersedes m7-sweep-browser-mobile D16 (one-catchup interpretation only); locked by docs/loop/LOOP.md normal end phase
+
 ## Progress
 All implementation and explicit committed prerequisites integrated through07aaacc1; no second routine roadmap merge. Count/feedback/UI/CLI/PTY smokes passed and resources closed. Current consumer capture identifies completed Protocol/Terminal repairs now consumed; obsolete app loop RPC wiring pin removed. Real annotation semantics pass11.73s, temporary diagnostics removed with all meaningful two-selection/privacy/retention coverage. All writers stopped; current full build/types/owned Browser/Mobile/Terminal/Protocol/apps/scripts/helper checks follow on the composed tree. Old whole-suite failure/tail-loss and exact broad owner limits retained, not called green. Final models undispatched; next freeze current code artifact/chain, actual no-tools C/S/X Final Round1 plus one fix batch/checks, explicit remaining findings/limits, then commit/detach canonical land and own scratch cleanup.
