@@ -731,6 +731,40 @@
         }
       },
       {
+        "id": "tabCounts",
+        "description": "A count-only batch of current layout tabs, including hosted views. Splits and closed history are not extra tabs; unreadable stored layouts are reported separately.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": {},
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "counts": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "worktreeId": { "type": "string" },
+                  "tabCount": { "type": "integer", "minimum": 0 }
+                },
+                "required": ["worktreeId", "tabCount"],
+                "additionalProperties": false
+              }
+            },
+            "unavailableWorktrees": {
+              "type": "array",
+              "description": "IDs whose stored layout cannot be read safely; their count is unknown.",
+              "items": { "type": "string" }
+            }
+          },
+          "required": ["counts", "unavailableWorktrees"],
+          "additionalProperties": false
+        }
+      },
+      {
         "id": "workspace",
         "description": "A workspace's layout. With `ensure`, a workspace without tabs gets its first one (adopting sessions that no pane holds).",
         "params": {
@@ -3157,6 +3191,12 @@
           { "name": "rows", "description": "terminal rows (1–500)", "required": true }
         ],
         "methods": ["quirky.terminal/claim"]
+      },
+      {
+        "id": "tab-counts",
+        "words": "tab counts",
+        "summary": "print a sanitized batch of actual layout tab counts without opening workspaces",
+        "methods": ["quirky.terminal/tabCounts"]
       },
       {
         "id": "layout",

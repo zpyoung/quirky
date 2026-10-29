@@ -42,6 +42,17 @@ remain visible under automation/other-client filters. Markdown tabs use the actu
 document and tab identity, with revision-guarded edits and saves. Markdown tabs remain available
 when the optional Browser plugin is absent or disabled.
 
+Workspace cards count the Terminal layout's current tabs, including Browser and Markdown;
+split panes, background sessions and closed history do not add tabs. Unavailable counts are
+omitted rather than inferred from session records. The same count-only batch is available with
+`quirky terminal tab counts --json` or `quirky.terminal/tabCounts`; it exposes no tab contents.
+
+Terminal links default to the phone's external browser. **Settings → Terminal links → Desktop
+Chrome Watch** instead opens the URL in a new explicit Watch tab. It does not convert Native tabs
+or silently fall back when Watch creation fails. Leaving or rebinding a page releases that
+page's terminal and Watch stream leases without closing the shared phone connection or stopping
+terminal processes.
+
 **Browser (Chrome Watch)** is explicit opt-in, with a connection-owned stream and typed controls;
 selecting an existing Native tab never converts it silently. Watch accepts typed character/key
 events with optional key codes and up to 64 KiB of UTF-8 text. Interactive native chat, dictation,

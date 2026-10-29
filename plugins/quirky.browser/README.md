@@ -167,4 +167,3 @@ Run `bun scripts/suite.ts plugins/quirky.browser` for the canonical package chec
 
 The browser harness installs the public dependencies of its real plugins, including the Worktrees dependency on `quirky.cli`. It uses temporary process homes and synthetic cookie source files and cleans up the owned browser and daemon. UI import tests verify explicit discovery, file recovery, captured destination confirmation and command execution without pinning explanatory copy or button punctuation.
 
-The end-phase browser gate still has one open managed-page drag failure in SC5 (`browser_error: native browser action drag failed`). `fix-browser-remaining-flows-1028` tracks that flow after the existing `m7-sweep-browser-mobile` helper repair; the affected package is not fully green until it passes. The import, UI, select-all and CORS fixes do not waive that scenario.
