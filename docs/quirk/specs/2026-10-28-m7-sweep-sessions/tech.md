@@ -1,6 +1,6 @@
 # Session extras sweep technical specification
 
-Status: Local flow repairs implemented and the single roadmap catch-up integrated. Current typecheck and packaged build pass; final affected-consumer verification and cross-family review are in progress. Visual/native evidence retains the limits recorded in the decision log.
+Status: Local repairs and canonical owner cutovers implemented. One bounded cross-family review completed: C/X PASS; S retains a policy-rejected test-mirror restoration finding, recorded without relabeling its NEEDS_FIXES gate. Final post-review checks remain required. Visual/native limits remain explicit in the decision log.
 Logic: [scope and scenarios](logic.md#behavior-and-acceptance-matrix).
 
 ## Architecture
@@ -64,6 +64,8 @@ COMMAND: `bun run typecheck`
 COMMAND: `bun run build`
 
 Built-web guarded campaign covers A1/A3 initial repairs plus each feature's controls/state/actions and all stopped completion goals. Native-only scenarios go in the new `docs/loop/native/m7-sweep-sessions.json` pending with owned fixtures. Fix actual UI failures at their root and rerun failed paths; no partial/unobserved pass claims. Catch up once before the final review, read every imported decision log and rerun affected checks against that merged source. Then one cross-family discovery round and one accepted-fix batch per LOOP, followed by build/tests and queue-controlled landing; no unreviewed discretionary catch-up after review.
+
+Public-contract evidence is behavioral, not a copied manifest inventory: generated Agents CLI resolves through the actual daemon; Session CLI restores/resumes and validates launch flags against committed provider/cwd state; cold restore checks actual launch env/argv, identity and refusal/no-spawn/history boundaries; Handoff retains required-input validation and real daemon contribution loading. The new Accounts generated-CLI lifecycle case and independent plugin validator cover the fixed stable command IDs. Do not restore source/catalog/default/mock-forwarding snapshots merely to satisfy review S1; retain its formal gate and caller disposition in BLOCKERS and decisions.
 
 ## Non-goals
 See [logic exclusions](logic.md#scope-and-non-goals). No plugin restyle/new shell; new UI redesign items retain ownership. This item repairs existing behavior, preserving original visuals until those owners cut over. No verification-only queue follow-up.
