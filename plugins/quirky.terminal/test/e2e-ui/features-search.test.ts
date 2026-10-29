@@ -176,6 +176,7 @@ test(
   async () => {
     const { f } = await withNumbers()
     await press('mod+f')
+    await searchOf(f, 'the search box to mount')
     await typeInto(box(), '19')
     await reads('1/12')
     box().focus()
