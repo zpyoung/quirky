@@ -49,6 +49,8 @@ Keyboard controls are Mod+Alt+Left/Right for history, Mod+Shift+Up/Down for prev
 
 `quirky.worktree/sleepPreview({worktree,withDescendants?,window?})` checks the exact selected subtree and window. For known session/worktree and Git diff views, the owner resolves `input.worktree` selectors and absolute `input.path` values through canonical worktree matching. Sleep closes a uniquely resolved view in the selected subtree with `ui.window.view.close({connId,expectedView})`, passing the inspected view unchanged; a concurrently selected replacement is never closed. Unknown, ambiguous, or malformed workspace owners block sleep before visibility state changes, while unrelated views remain open. Sleep never closes a session, kills a terminal or agent, deletes history, or starts a replacement process; live work continues in the background. Omitted `window` is compatible only with a singleton window; CLI `sleep-preview` and `sleep` accept `--window <connId>`. `wake` restores visibility without starting a process.
 
+Sleeping rows lead with “Sleeping” instead of live session activity, even when activity is hidden. Their activity indicator stays idle and shows no progress; pending questions still keep their attention indicator. Wake restores the live session activity.
+
 ```sh
 quirky worktree sleep-preview id:wt_parent --with-descendants
 quirky worktree sleep id:wt_parent --with-descendants

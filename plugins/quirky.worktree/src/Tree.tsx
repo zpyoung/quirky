@@ -180,10 +180,10 @@ function WorktreeCard({
   const archivedAt = 'archivedAt' in worktree ? (worktree as Worktree & { archivedAt: number | null }).archivedAt : null
   const activity = worktree.removing
     ? 'Deleting…'
-    : glyph
-      ? activityFor(sessions, worktree.id, now, glyph)
-      : sleeping
-        ? 'Sleeping'
+    : sleeping
+      ? 'Sleeping'
+      : glyph
+        ? activityFor(sessions, worktree.id, now, glyph)
         : archivedAt !== null
           ? 'Archived'
           : sessions === null
@@ -194,13 +194,15 @@ function WorktreeCard({
     : options.showProperties.includes('activity')
       ? worktree.removing
         ? 'queued'
-        : glyph
-          ? semanticStatus(glyph.kind === 'agent' ? glyph.display : glyph.status)
-          : sessions === null
-            ? 'queued'
-            : 'idle'
+        : sleeping
+          ? 'idle'
+          : glyph
+            ? semanticStatus(glyph.kind === 'agent' ? glyph.display : glyph.status)
+            : sessions === null
+              ? 'queued'
+              : 'idle'
       : undefined
-  const progress = !needsYou && options.showProperties.includes('activity') && glyph?.kind === 'agent'
+  const progress = !needsYou && !sleeping && options.showProperties.includes('activity') && glyph?.kind === 'agent'
     ? glyph.percent ?? undefined
     : undefined
   const open = async () => {
@@ -215,9 +217,8 @@ function WorktreeCard({
   const linkedIssue = worktree.linkedIssue
   const statusLabel = statusDefinitions.find((status) => status.id === worktree.status)?.label ?? worktree.status
   const description = [
-    options.showProperties.includes('activity') ? activity : null,
+    sleeping || options.showProperties.includes('activity') ? activity : null,
     worktree.status !== 'in-progress' ? statusLabel : null,
-    sleeping && glyph ? 'Sleeping' : null,
     archivedAt !== null && glyph ? 'Archived' : null,
     repoName,
     options.showBranch && options.showProperties.includes('branch') ? worktree.branch : null,
