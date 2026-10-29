@@ -69,6 +69,6 @@ None. Existing separately owned review-filter/remote/native/redesign work is not
 
 ## Status & amendments
 
-Status: Autonomously approved under LOOP.md; tech spec required because this continuation crosses daemon projection and renderer interaction boundaries. Self-review retains every original SC and names missing evidence rather than claiming passes.
+Status: implementation and affected-package verification complete. All seventeen original scenarios retain their API/CLI and renderer coverage; guarded reports and the quiet-clock observation limit are recorded in the decision log (D22/D34). The operator waived the extra final-review pass in D39 and directed immediate canonical landing after the affected tests.
 
 **Amendments:** 2026-10-28 — initial continuation; approved redesign placement takes precedence over old header-placement details, without removing public activity behavior.

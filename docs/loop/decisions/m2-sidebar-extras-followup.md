@@ -429,5 +429,16 @@
 - **Revisit if:** the affected-package run or canonical merge gate identifies unfinished work.
 - **Source:** locked by operator instruction in this conversation
 
+## D40: Land the green affected set without creating a duplicate follow-up
+- **Question:** is anything in the exercised repair set still open after the operator-directed checks?
+- **Options:** add another worktree repair item; repeat broader campaigns; land the green set and preserve the existing owner.
+- **Chose:** no new follow-up. The touched UI/daemon/sidebar-extras/worktree/repo command passed169/169 files with no flakes; scripts passed12/12 with no flakes. Latest full lint/root/mobile/desktop typecheck and packaged build passed47.32s. The existing todo fix-test-worktree-1028 already depends on this item and remains the broader baseline-repair owner.
+- **Why:** every current affected file passed, so another repair item would duplicate ownership. D22's real-clock sampling limit remains an explicit tool partial, not a fabricated pass or an unbuilt feature. The extra review was waived, not completed.
+- **Evidence:** repair commit72b0a879; affected remote command199.12s, scripts24.27s, both suite-result ok:true/flaky:[]; canonical queue readback for fix-test-worktree-1028. All component trees and owned runtime/browser fixtures are closed.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** the canonical merge/typecheck gate reports a failure.
+- **Source:** locked by operator instruction in this conversation
+
 ## Progress
-Operator-directed landing: all source/components are integrated and worker trees removed. Current root passed full typecheck/build47.32s; all ten corrected test files have exercised focused passes, with final window cases2/2 no flakes. All owned browsers/daemons are closed. Commit the current set, run affected UI/daemon/three plugin packages remotely, record any remainder under at most one existing/follow-up owner, and canonical land. No extra review pass or broader discretionary campaign; no final model review is claimed. D22 retains the quiet-clock observation limit. Dependency readiness is true.
+Ready for canonical land. Current source72b0a879 passed169/169 affected files and12/12 script files remotely, both without flakes. Latest full typecheck/build passed47.32s. Every original scenario has retained API/CLI/renderer coverage; guarded UI evidence and the D22 quiet-clock tool limit are preserved. All owned browsers/daemons and worker trees are closed. No extra final review is claimed or required under the operator waiver. No duplicate follow-up was added; existing fix-test-worktree-1028 owns broader baseline repair. Commit this verification record, detach and run canonical queue land; await its authoritative receipt.
