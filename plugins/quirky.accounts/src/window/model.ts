@@ -414,8 +414,8 @@ export class AccountsUiStore {
     this.unsubscribe = null
     this.unsubscribeLayout?.()
     this.unsubscribeLayout = null
-    clearTimeout(this.reloadTimer)
-    clearTimeout(this.loginTimer)
+    clearTimeout(this.reloadTimer ?? undefined)
+    clearTimeout(this.loginTimer ?? undefined)
     this.reloadTimer = null
     this.loginTimer = null
     this.loginPollsInFlight.clear()
@@ -450,8 +450,8 @@ export class AccountsUiStore {
     this.loginStarting = false
     this.loginCancelling = false
     this.loginPollsInFlight.clear()
-    clearTimeout(this.reloadTimer)
-    clearTimeout(this.loginTimer)
+    clearTimeout(this.reloadTimer ?? undefined)
+    clearTimeout(this.loginTimer ?? undefined)
     this.reloadTimer = null
     this.loginTimer = null
     this.fullReloadRequested = false
@@ -575,8 +575,8 @@ export class AccountsUiStore {
     this.loginStarting = false
     this.loginCancelling = false
     this.loginPollsInFlight.clear()
-    clearTimeout(this.reloadTimer)
-    clearTimeout(this.loginTimer)
+    clearTimeout(this.reloadTimer ?? undefined)
+    clearTimeout(this.loginTimer ?? undefined)
     this.reloadTimer = null
     this.loginTimer = null
     this.fullReloadRequested = false

@@ -339,8 +339,8 @@ function ProviderDetails({ store, provider, usage, accounts }: { store: Accounts
   const windows = providerSnapshot ? windowEntries(providerSnapshot) : []
   const managed = provider === 'claude' || provider === 'codex'
   const remoteOwner = snapshot.scope.kind === 'remote'
-  const scopeUnavailable = remoteOwner && snapshot.scope.status !== 'ready'
-  const scopeLoading = remoteOwner && snapshot.scope.status === 'loading'
+  const scopeUnavailable = snapshot.scope.kind === 'remote' && snapshot.scope.status !== 'ready'
+  const scopeLoading = snapshot.scope.kind === 'remote' && snapshot.scope.status === 'loading'
   const showClaudeSessions = accounts?.preferences.claudeSwitchPolicy === 'ask'
   const stale = accounts?.staleSessions.filter((session) => session.provider === provider && (provider === 'codex' || showClaudeSessions || session.queued || session.error)) ?? []
   const status = providerSnapshot ? snapshotStatus(providerSnapshot) : null

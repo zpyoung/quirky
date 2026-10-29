@@ -150,9 +150,17 @@ function profileIds(h: AccountsHarness, provider: 'claude' | 'codex'): string[] 
 }
 
 async function expectPolicyRejection(promise: Promise<unknown>, message: string): Promise<void> {
-  const error = await promise.then(() => null, (caught: unknown) => caught as { code?: number })
-  expect(error, message).not.toBeNull()
-  expect([RpcErrorCode.Conflict, RpcErrorCode.InvalidParams], message).toContain(error?.code)
+  const error = await promise.then(
+    () => null,
+    (caught: unknown) => {
+      if (typeof caught === 'object' && caught !== null && 'code' in caught && typeof caught.code === 'number') {
+        return { code: caught.code }
+      }
+      return null
+    }
+  )
+  if (error === null) throw new Error(message)
+  expect(error.code === RpcErrorCode.Conflict || error.code === RpcErrorCode.InvalidParams, message).toBe(true)
 }
 
 test('ownerCall reads and selects the pinned mirrored owner, keeping local accounts and usage independent, including its generated CLI route', async () => {
