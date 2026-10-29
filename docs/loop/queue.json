@@ -2401,6 +2401,20 @@
       ],
       "status": "done",
       "early": true
+    },
+    {
+      "id": "m7-public-host-registration-api",
+      "milestone": "M7",
+      "title": "Public remote-host authority for plugins: host registration and incarnation lookup, host-bound remote repo/workspace identity and availability, and generation-fenced remote worktree create/resolve, checks/run and structured/create execution, exposed through PluginContext and public quirky.* methods with schemas. This is the prerequisite named in BLOCKERS.md for m5-automations-dispatch-remote-and-args and m7-ledger-remote-host-flows; when it lands, set both to todo. Build on m7-vm-and-owner-bound-host-workspaces and keep local behavior unchanged.",
+      "docs": [
+        "docs/loop/BLOCKERS.md",
+        "docs/loop/decisions/m5-automations-dispatch-remote-and-args.md",
+        "docs/loop/decisions/m7-ledger-remote-host-flows.md"
+      ],
+      "deps": [
+        "m7-vm-and-owner-bound-host-workspaces"
+      ],
+      "status": "todo"
     }
   ]
 }
