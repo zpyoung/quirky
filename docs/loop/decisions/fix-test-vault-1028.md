@@ -22,5 +22,16 @@
 - **Revisit if:** The reviewer fails at dispatch.
 - **Source:** assumed — autonomous
 
+## D3: Repair fixture boundaries before changing product contracts
+- **Question:** Which current failures require product changes?
+- **Options:** Relax search limits or expose fallback methods; restore curated dependencies and wait for the intended asynchronous state.
+- **Chose:** Add the real quirky.cli prerequisite to curated vault fixtures; fix scoped UI selectors, actual failure barriers and valid term-limit input. Keep the 512-character public query bound.
+- **Why:** The actual private registry marks worktree invalid because quirky.cli is absent, invalidating session/terminal/vault. SC-08 matched preparing-results Retry before the debounced search failed. SC-15 passed 760 characters to an API that rejects more than 512 before engine truncation. Global status/menu-wrapper assertions also drifted after UI restyling.
+- **Evidence:** Canonical two-file run exited 1 in 144.71s: flows 0/8, window 3 pass/5 fail/1 skip; detailed traces artifact9. Private registry diagnostic showed dependency errors and completed cleanup. service.ts:365; search/engine.ts:340-342; HistoryPanel.tsx:675.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** Corrected fixtures expose a consumer-visible implementation defect.
+- **Source:** assumed — autonomous
+
 ## Progress
-Claimed on lane 5; branch created from current build/roadmap. Reading exact triage evidence and current source. Read-only VaultFailureMap investigation running. No implementation or checks claimed yet. Owned scratch: /tmp/quirky-vault-repair-lane5-RDQalGGE.
+Root causes traced. VaultHostIsolation and VaultWindowAcceptance are implementing disjoint fixture/test repairs in external component worktrees at 121a8de4. Parent added the same missing prerequisite to resume.test.ts. No source contract changed. Next: all-worker barrier/scope audit, integrate, canonical full vault/scripts/typecheck and standalone paired-daemon smoke, one catch-up and final review, authoritative landing. Owned scratch: /tmp/quirky-vault-repair-lane5-RDQalGGE.
