@@ -22,5 +22,27 @@
 - **Revisit if:** The command's published error contract is deliberately replaced.
 - **Source:** locked by docs/quirk/specs/2026-10-28-ui-screenshot-review/logic.md
 
+## D3: Treat this as an evidence-only duplicate closure, not another implementation review
+- **Question:** Which workflow remains when the exact repair and regressions have already landed?
+- **Options:** Invent a new implementation and review patch; add duplicate tests; retain the prior correction and record fresh execution evidence.
+- **Chose:** Investigation-only closure with current full script suite, actual CLI smoke, full typecheck and the queue's integration gate. No source/test/spec/changelog change, paid model dispatch, formal review round or new follow-up.
+- **Why:** No production or test change remains to review; the original repair already received a cross-family review and its accepted fixture findings were fixed. Independent read-only source investigation agrees the exact reported causes are absent. Repeating an implementation would add no consumer behavior.
+- **Evidence:** UiReviewScout source investigation; docs/loop/decisions/fix-test-scripts-1028.md D7; real CLI smoke prints UI_REVIEW_REAL_CLI_REJECTION_SMOKE_OK and UI_REVIEW_SMOKE_CLEANED, exit0. Both actual CLI children exited2; structural failure retained the validation report, invalid JSON retained the thrown manifest-read error, reviewer/capture did not start, inputs stayed unchanged, private home was deleted.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** Fresh checks identify an actual outstanding defect.
+- **Source:** assumed — autonomous
+
+## D4: Retain incoming protocol and screenshot-provenance decisions without reopening their scope
+- **Question:** Does the sole roadmap catch-up change the UI-review script repair contract?
+- **Options:** Reopen product/schema or screenshot work; preserve the incoming test-only and documentation changes.
+- **Chose:** Preserve both incoming items. Read their full decision logs including unabridged long evidence/Progress lines; no conflict with the current reviewer/validation/error-artifact contract.
+- **Why:** Protocol changes remove incidental test inventories, not runtime contracts. UI-final-review publishes original before/after PNGs with immutable source attribution, not a new score or reviewer implementation.
+- **Evidence:** Sole clean git merge build/roadmap after058d5cb2; docs/loop/decisions/fix-test-packages-protocol-1028.md D1–D5; docs/loop/decisions/ui-final-review.md D1–D8.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** Integration finds a current script consumer failure.
+- **Source:** locked by incoming decision logs
+
 ## Progress
-Current full canonical remote script suite passed12/12files, no flaky retries. No code/test edits are needed: the queued failure inventory duplicates the already-landed repair. Independent source investigation, actual private-home CLI smoke and typecheck are in progress. Next: receive them, commit this decision receipt, catch up roadmap once and read incoming decisions, final typecheck, detach and authoritative queue land. Do not claim another item this iteration.
+Current canonical remote script suite passed12/12files, no flaky retries, both before catch-up (32.80s) and after catch-up (suite plus fresh actual smoke45.97s). Both real private-home CLI smoke runs exited0 with success/CLEANED markers: malformed shape returned an error report, invalid JSON retained a manifest-read exception artifact, both command exits2, no reviewer/capture, immutable inputs, private runtime removed. Final composed full typecheck passed31.51s including canonical UI lint, root/mobile/prepared desktop. Only this decision log changes; exact failure inventory was already repaired by fix-test-scripts-1028. Sole roadmap catch-up and full incoming-log reads completed; independent scout returned. Ready to commit final receipt, detach, canonical queue land and await result, delete owned scratch, end this one-item iteration. No implementation, new test, formal review, visual/native acceptance or paid model call claimed.
