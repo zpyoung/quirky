@@ -206,6 +206,7 @@ test('root lint excludes Git-ignored generated plugin output but scans tracked p
   }
   try {
     git('init', '-q')
+    mkdirSync(join(root, 'packages/ui/src'), { recursive: true })
     put('.gitignore', 'plugins/example/mobile/assets/mobile/\n')
     put('scripts/ui-lint-plugins.json', '["example"]')
     put('plugins/example/mobile/assets/mobile/page.css', '.bad { color: #fff; }')

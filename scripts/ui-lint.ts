@@ -1035,7 +1035,7 @@ function gitIgnoredSourceFiles(root: string, files: string[]): Set<string> {
     cwd: root,
     input,
     encoding: 'utf8',
-    maxBuffer: Buffer.byteLength(input) + 1
+    maxBuffer: Math.max(64 * 1024, Buffer.byteLength(input) + 1)
   })
   if (result.error) throw new Error(`Cannot inspect Git ignore rules for UI source files: ${result.error.message}`)
   if (result.status === 128 && /not a git repository/i.test(result.stderr)) return new Set()
