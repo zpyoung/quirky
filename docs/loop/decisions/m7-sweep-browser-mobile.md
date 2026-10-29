@@ -209,5 +209,27 @@
 - **Revisit if:** a supported path-scoped tool sandbox is available or staged context cannot evaluate a required seam.
 - **Source:** assumed — autonomous
 
+## D20: Transfer existing Mobile fixture repair ownership to lane12
+- **Question:** Who owns the newly claimed fix-test-mobile-1028 item and overlapping optional Browser/fixture failures?
+- **Options:** duplicate runtime/test edits; share uncommitted files; publish existing commits and keep disjoint ownership.
+- **Chose:** lane12 owns the repair item, existing mobile-plugin test files and further optional-provider/params-scope regressions. They consumed7bf12184 as11477ce7 and published5cc0ba3d; parent consumed5cc as6cb9c6ac. The optional missing Browser MethodNotFound source hunk already matched72ef6dae, so intake adds only real CLI prerequisites, early fixture cleanup and removal of an incidental generated-name assertion. Lane7 retains PhoneLinks/S6 and the NEW count contract/admission/consumer slice, not their service.ts scope repair.
+- **Why:** one producer fix should not acquire competing variants; legitimate method params.scope is distinct from the still-forbidden caller envelope scope. Their exact-policy repair remains theirs until published.
+- **Evidence:** committed5cc0ba3d diff and actual cherry-pick6cb9c6ac; /tmp/quirky-lane12-mobile-checkpoint.json; lane12 reports real encrypted Markdown smoke45savedbytes/staleCASdenied/dirtyClosepreserved and all homes removed. Those are lane12 receipts, not a final lane7 gate.
+- **Reversibility:** easy
+- **Confidence:** high for ownership and committed intake; pending scope repair not yet verified here
+- **Revisit if:** a published prerequisite changes count admission or a final consumer gate finds a distinct production defect.
+- **Source:** assumed — autonomous
+
+## D21: Review the amended count/feedback specs with isolated actual stages
+- **Question:** Does the original S1–S6 spec review cover the later S7/S8 changes?
+- **Options:** reuse its clean result; skip amended review; run a new frozen-artifact campaign.
+- **Chose:** new deep spec-design campaign at4d253fa1, actual fresh no-tools Codex promote/refute, deterministic reference/heading prepass and claims/merge/gate/manifest. Parent read the raw empty arrays and gate/manifest. Gate PASS, zero findings/advisories/limitations/questions/suppressions/contests. Reviewer openai-codex/gpt-6.1-sol, reduced independence versus OpenAI author; this is not the final cross-family code review or runtime proof.
+- **Why:** later acceptance contracts cannot inherit assurance from an earlier artifact; tool removal preserves the new reviewer-access boundary.
+- **Evidence:** /tmp/m7-sweep-spec-s7-s8.Jbbyb8/{promote.raw.txt,refute.raw.txt,gate.json,manifest.json}; combined artifact hashf651027502bb0044276d5892d5b4c053fa025ee6dccdf52dee6d564518662d33; internal reference-resolution/section-coverage checks exit0.
+- **Reversibility:** easy
+- **Confidence:** high for actual protocol/result; reduced-family static review limitation retained
+- **Revisit if:** criteria/contracts change or production evidence contradicts them.
+- **Source:** locked by docs/loop/LOOP.md
+
 ## Progress
-All initial components and committed owner fixtures are integrated; one canonical catchup/read25bindinglogs complete. Root build after frozen dependency install passed20.65s. Actual caught-up phone UI proved live shell persistence and explicit Watch target/close without Native conversion, but uncovered real tab-count and feedback-height defects. S7/S8 contracts are approved; shared DTO/schema/CLI contracts commit before reusing PhoneLinks for the count slice. Parent feedback style change is applied but not visually closed yet. All owned smoke/browser processes are closed. Next: implement count projection/consumer with API/CLI tests, fresh UI Markdown/options/count/feedback and Phone link branch, docs, final gates, bounded no-tools cross-family review/fix batch, then land. No final completion claim.
+All initial components and committed owner fixtures are integrated; one canonical catchup/read25bindinglogs complete. Root build after frozen dependency install passed20.65s. Actual caught-up phone UI proved live shell persistence and explicit Watch target/close without Native conversion, but uncovered real tab-count and feedback-height defects. S7/S8 shared contracts committed4d253fa1; parent feedback source committed2e86019f but not visually closed. Same PhoneLinks identity now implements only the count slice in /tmp/quirky-l7-sweep-counts; amended-spec review uses actual no-tools Codex stages in parallel. Lane12 owns the repair item/existing plugin tests; consumed5cc as6cb. All owned smoke/browser processes are closed. Next: receive/audit/check/merge count slice and remove its worktree; fresh UI Markdown/options/count/feedback and Phone link branch, full suite(build/protocol imports/scripts)/types, bounded no-tools cross-family final review plus one fix batch, then land. No final completion claim.
