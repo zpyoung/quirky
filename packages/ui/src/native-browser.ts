@@ -2,8 +2,11 @@ import {
   NATIVE_BROWSER_NAVIGATION_RULES,
   NATIVE_BROWSER_PARTITION_RE,
   type NativeBrowserCapability,
+  type NativeBrowserDownloadUpdate,
   type NativeBrowserHandle,
   type NativeBrowserOptions,
+  type NativeBrowserPageAnswer,
+  type NativeBrowserPageRequest,
   type NativeBrowserRequest,
   type NativeBrowserState
 } from '@quirky/protocol'
@@ -19,6 +22,8 @@ const NATIVE_BROWSER_EVALUATION_TIMEOUT_MS = 5000
 export type NativeBrowserAdapterHandle = {
   request(request: NativeBrowserRequest): Promise<NativeBrowserState>
   evaluate(script: string): Promise<unknown>
+  answer(id: string, answer: NativeBrowserPageAnswer): Promise<boolean>
+  cancelDownload(id: string): Promise<boolean>
   dispose(): Promise<void>
 }
 
@@ -30,13 +35,22 @@ export type NativeBrowserAdapter = {
     onState: (state: NativeBrowserState) => void
   ): NativeBrowserAdapterHandle
   readonly clearPartitionAvailable: boolean
+  readonly pageRequestsAvailable: boolean
   clearPartition(partition: string): Promise<void>
 }
 
+export type NativeBrowserPageEvent =
+  | { type: 'request'; request: NativeBrowserPageRequest }
+  | { type: 'expired'; id: string }
+  | { type: 'download'; update: NativeBrowserDownloadUpdate }
+
 export type NativeBrowserShellBridge = {
-  claimNativeBrowserView(params: { viewId: number; owner: string; partition: string }): Promise<{ zoomFactor: number }>
+  claimNativeBrowserView(params: { viewId: number; owner: string; partition: string }): Promise<{ zoomFactor: number; pageRequests?: boolean }>
   setNativeBrowserZoom(params: { viewId: number; owner: string; level: number }): Promise<{ zoomFactor: number }>
   releaseNativeBrowserView(params: { viewId: number; owner: string }): Promise<{ released: true }>
+  answerNativeBrowserRequest?(params: { viewId: number; owner: string; id: string; answer: NativeBrowserPageAnswer }): Promise<{ answered: boolean }>
+  cancelNativeBrowserDownload?(params: { viewId: number; owner: string; id: string }): Promise<{ cancelled: boolean }>
+  onNativeBrowserPageEvent?(listener: (viewId: number, event: NativeBrowserPageEvent) => void): () => void
 }
 
 type Mount = {
@@ -434,6 +448,7 @@ class ElectrobunNativeBrowserMount implements NativeBrowserAdapterHandle {
   private child: WebviewTag | null = null
   private viewId: number | null = null
   private claimed = false
+  private pageRequests = false
   private disposed = false
   private disposal: Promise<void> | undefined
   private ready: Promise<void>
@@ -509,8 +524,9 @@ class ElectrobunNativeBrowserMount implements NativeBrowserAdapterHandle {
     const viewId = await this.waitForViewId(child)
     if (viewId === null || this.disposed) return
     this.viewId = viewId
-    await this.bridge.claimNativeBrowserView({ viewId, owner: this.owner, partition: this.options.partition })
+    const claim = await this.bridge.claimNativeBrowserView({ viewId, owner: this.owner, partition: this.options.partition })
     this.claimed = true
+    this.listenForPageEvents(viewId, claim.pageRequests === true)
     if (this.disposed) {
       await this.releaseClaim()
       return
@@ -582,6 +598,32 @@ class ElectrobunNativeBrowserMount implements NativeBrowserAdapterHandle {
     listen('dom-ready', (event) => this.onNavigation(event.detail))
     listen('host-message', (event) => this.onHostMessage(event.detail))
     listen('new-window-open', (event) => this.onPopup(event.detail))
+  }
+
+  private listenForPageEvents(viewId: number, enabled: boolean): void {
+    const subscribe = this.bridge.onNativeBrowserPageEvent
+    if (!enabled || !subscribe || !this.bridge.answerNativeBrowserRequest) return
+    this.pageRequests = true
+    const unsubscribe = subscribe((eventViewId, event) => {
+      if (this.disposed || eventViewId !== viewId) return
+      if (event.type === 'expired') this.options.onPageRequestExpired?.(event.id)
+      else if (event.type === 'download') this.options.onDownload?.(event.update)
+      else if (this.options.onPageRequest) this.options.onPageRequest(event.request)
+      else void this.answer(event.request.id, { accept: false }).catch(() => undefined)
+    })
+    this.onDispose(unsubscribe)
+  }
+
+  async answer(id: string, answer: NativeBrowserPageAnswer): Promise<boolean> {
+    const viewId = this.viewId
+    if (this.disposed || !this.pageRequests || viewId === null || !this.bridge.answerNativeBrowserRequest) return false
+    return (await this.bridge.answerNativeBrowserRequest({ viewId, owner: this.owner, id, answer })).answered
+  }
+
+  async cancelDownload(id: string): Promise<boolean> {
+    const viewId = this.viewId
+    if (this.disposed || !this.pageRequests || viewId === null || !this.bridge.cancelNativeBrowserDownload) return false
+    return (await this.bridge.cancelNativeBrowserDownload({ viewId, owner: this.owner, id })).cancelled
   }
 
   private invalidateEvaluations(reason: string): void {
@@ -913,6 +955,7 @@ export function createNativeBrowserCapability(adapter?: NativeBrowserAdapter): N
   return {
     available,
     clearPartitionAvailable: adapter?.clearPartitionAvailable === true,
+    pageRequestsAvailable: adapter?.pageRequestsAvailable === true,
     mount(element, options) {
       if (!adapter) throw new Error('Native browser is unavailable outside the Quirky desktop app')
       if (!options.id || !allowedUrl(options.url)) throw new Error('unsupported native browser URL')
@@ -980,6 +1023,14 @@ export function createNativeBrowserCapability(adapter?: NativeBrowserAdapter): N
             mount.evaluations.delete(evaluation)
           }
         },
+        answer: async (id, answer) => {
+          if (mount.disposed || current !== mount) return false
+          return await mount.adapterHandle.answer(id, answer)
+        },
+        cancelDownload: async (id) => {
+          if (mount.disposed || current !== mount) return false
+          return await mount.adapterHandle.cancelDownload(id)
+        },
         dispose: () => {
           void disposeMount(mount).catch(() => undefined)
         }
@@ -1001,6 +1052,7 @@ export function createNativeBrowserCapability(adapter?: NativeBrowserAdapter): N
 export function createElectrobunNativeBrowserAdapter(bridge: NativeBrowserShellBridge): NativeBrowserAdapter {
   return {
     clearPartitionAvailable: false,
+    pageRequestsAvailable: typeof bridge.onNativeBrowserPageEvent === 'function' && typeof bridge.answerNativeBrowserRequest === 'function',
     mount: (element, options, afterDispose, onState) => new ElectrobunNativeBrowserMount(element, options, bridge, afterDispose, onState),
     async clearPartition(partition) {
       if (!NATIVE_BROWSER_PARTITION_RE.test(partition)) throw new Error('unsupported browser partition')

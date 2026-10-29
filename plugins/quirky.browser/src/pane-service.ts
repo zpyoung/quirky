@@ -1,11 +1,11 @@
 import { randomUUID } from 'node:crypto'
-import { copyFileSync, constants, lstatSync, linkSync, mkdirSync, realpathSync, unlinkSync } from 'node:fs'
+import { copyFileSync, constants, existsSync, lstatSync, linkSync, mkdirSync, realpathSync, unlinkSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { basename, extname, isAbsolute, join, parse, relative, resolve, sep } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
-import { validateValue, type PluginCaller, type PluginContext, type Schema } from '@quirky/protocol'
+import { validateValue, type NativeBrowserDownloadUpdate, type NativeBrowserPageRequest, type PluginCaller, type PluginContext, type Schema } from '@quirky/protocol'
 import { readRuntime } from '@quirky/protocol/node'
-import type { PaneDownload, PaneMethod, PanePrompt, PaneState, PaneTab, PaneRequests, PaneFrame } from './pane-contract'
+import type { PaneDownload, PaneMethod, PaneNativeAction, PaneNativeDecision, PanePrompt, PaneState, PaneTab, PaneRequests, PaneFrame } from './pane-contract'
 import type { BrowserPage, BrowserStore } from './profiles/store'
 import type { BrowserRuntime, PaneControl, PaneInput, RuntimePaneDownloadProgress, RuntimePanePrompt } from './runtime/driver'
 import { fault } from './runtime/errors'
@@ -16,6 +16,8 @@ type CreatePageResult = { browserPageId: string }
 type NormalizedInput = { url: string; historyUrl: string; localPath?: string; directFile?: boolean; sourcePath?: string; error?: string }
 type PromptState = { paneId: string; watchId: string; prompt: RuntimePanePrompt; timer: ReturnType<typeof setTimeout> }
 type DownloadOwner = { paneId: string; pageId: string; guid: string; profileId: string; stagingPath: string; entry: PaneDownload }
+type NativePromptState = { paneId: string; nativeId: string; kind: PanePrompt['kind']; canProceed: boolean; timer: ReturnType<typeof setTimeout> }
+type NativeDownloadOwner = { paneId: string; nativeId: string; entry: PaneDownload }
 type WatchOwner = { pluginId: string; consumer: string }
 type WatchStart = { owner: WatchOwner; promise: Promise<{ watchId: string }> }
 type WatchLease = {
@@ -52,6 +54,10 @@ const WATCH_FRAME_ACK_TIMEOUT_MS = 30_000
 const WATCH_NO_FRAME_TIMEOUT_MS = 30_000
 const PROMPT_TIMEOUT_MS = 120_000
 const MAX_DOWNLOADS_PER_PANE = 20
+const POPUP_BUDGET = 4
+const POPUP_WINDOW_MS = 2_000
+/** Apps a Native page may ask to open, after the user approves the origin-naming prompt. */
+const NATIVE_EXTERNAL_SCHEMES = new Set(['mailto', 'tel', 'sms', 'facetime', 'facetime-audio', 'zoommtg', 'zoomus', 'msteams', 'slack'])
 const PANE_TAB_SCHEMA: Schema = {
   type: 'object',
   properties: {
@@ -250,6 +256,9 @@ export class PaneService {
   private readonly watchStarts = new Map<string, WatchStart>()
   private readonly prompts = new Map<string, PromptState>()
   private readonly downloads = new Map<string, DownloadOwner>()
+  private readonly nativePrompts = new Map<string, NativePromptState>()
+  private readonly nativeDownloads = new Map<string, NativeDownloadOwner>()
+  private readonly popupStarts = new Map<string, number[]>()
   private readonly resources = new Map<string, { url: string; revoke(): void }>()
   private active = true
 
@@ -259,7 +268,8 @@ export class PaneService {
     private readonly runtime: BrowserRuntime,
     private readonly resolveWorktree: ResolveWorktree,
     private readonly listWorktrees: () => Promise<Worktree[]>,
-    private readonly downloadDirectory = join(homedir(), 'Downloads')
+    private readonly downloadDirectory = join(homedir(), 'Downloads'),
+    private readonly promptTimeoutMs = PROMPT_TIMEOUT_MS
   ) {
     this.db = context.openStore([
       `CREATE TABLE IF NOT EXISTS browser_pane_tabs (id TEXT PRIMARY KEY, worktree_id TEXT NOT NULL, active INTEGER NOT NULL, updated_at INTEGER NOT NULL, data TEXT NOT NULL);
@@ -304,6 +314,8 @@ export class PaneService {
       case 'paneInput': return await this.paneInput(params as PaneRequests['paneInput'], caller)
       case 'paneRespond': return await this.paneRespond(params as PaneRequests['paneRespond'], caller)
       case 'paneDownload': return await this.paneDownload(params as PaneRequests['paneDownload'], caller)
+      case 'paneNativeRequest': return this.paneNativeRequest(params as PaneRequests['paneNativeRequest'], caller)
+      case 'paneNativeUpdate': return this.paneNativeUpdate(params as PaneRequests['paneNativeUpdate'], caller)
       case 'paneFrameAck': return this.paneFrameAck(params as PaneRequests['paneFrameAck'], caller)
     }
   }
@@ -388,6 +400,8 @@ export class PaneService {
     const pendingPrompts = [...this.prompts.values()]
     this.prompts.clear()
     for (const prompt of pendingPrompts) clearTimeout(prompt.timer)
+    for (const prompt of this.nativePrompts.values()) clearTimeout(prompt.timer)
+    this.nativePrompts.clear()
     for (const tab of this.tabs.values()) tab.prompts = []
     await Promise.all([...this.watchStarts.values()].map((start) => start.promise.then(() => undefined, () => undefined)))
     for (const watch of this.watches.values()) await this.stopWatch(watch)
@@ -780,6 +794,8 @@ export class PaneService {
     tab.loading = true
     tab.url = targetUrl
     tab.command = tab.mode === 'native' ? { id: randomUUID(), action: 'navigate', url: targetUrl } : null
+    // a page blocked on a dialog cannot navigate, and its answer must not reach the next page
+    if (tab.mode === 'native') this.clearPromptsForPane(tab.id)
     this.saveTab(tab)
     this.recordHistory(normalized.historyUrl, tab.title)
     this.emitChanged()
@@ -1333,11 +1349,19 @@ export class PaneService {
       this.prompts.delete(id)
       void prompt.prompt.respond({ accept: false }).catch(() => {})
     }
+    for (const [id, prompt] of this.nativePrompts) {
+      if (prompt.paneId !== paneId) continue
+      clearTimeout(prompt.timer)
+      this.nativePrompts.delete(id)
+      this.sendNative({ pane: paneId, action: 'answer', id: prompt.nativeId, prompt: id, kind: prompt.kind, accept: false })
+    }
     const tab = this.tabs.get(paneId)
     if (tab) tab.prompts = []
   }
 
   private async paneRespond(request: PaneRequests['paneRespond'], caller: PluginCaller): Promise<{ responded: true }> {
+    const native = this.nativePrompts.get(request.prompt)
+    if (native) return this.respondNative(request.prompt, native, request, caller)
     this.assertWatchOwner(request.pane, DEFAULT_WATCH_OWNER)
     const prompt = this.prompts.get(request.prompt)
     if (!prompt || prompt.paneId !== request.pane) throw fault('browser_tab_changed', 'prompt ID is stale or belongs to another pane')
@@ -1362,6 +1386,211 @@ export class PaneService {
     this.finishPrompt(prompt)
     await prompt.prompt.respond(input)
     return { responded: true }
+  }
+
+  private sendNative(action: PaneNativeAction): void {
+    this.context.emit('paneNative', action)
+  }
+
+  private requireNativeRelay(paneId: string, caller: PluginCaller): PaneTab {
+    if (caller.role !== 'ui') throw fault('invalid_argument', 'Native page requests are relayed only by the browser window that owns the view')
+    const tab = this.requirePane(paneId)
+    if (tab.mode !== 'native') throw fault('browser_tab_changed', 'this pane is not showing a Native view')
+    return tab
+  }
+
+  /** Applies browser policy to one Native page request. Anything refused is answered at once and fails closed. */
+  private paneNativeRequest(request: PaneRequests['paneNativeRequest'], caller: PluginCaller): PaneNativeDecision {
+    const tab = this.requireNativeRelay(request.pane, caller)
+    const page = request.request
+    const decline: PaneNativeDecision = { prompt: null, answer: { accept: false } }
+    if (typeof page.id !== 'string' || page.id === '') throw fault('invalid_argument', 'native request ID is required')
+    switch (page.kind) {
+      case 'download': return this.receiveNativeDownload(tab, page)
+      case 'popup': return this.allowNativePopup(tab, page) ? { prompt: null, answer: { accept: true } } : decline
+      case 'external': {
+        let scheme = ''
+        try { scheme = new URL(page.url).protocol.replace(/:$/, '').toLowerCase() } catch { return decline }
+        if (!page.userGesture || !NATIVE_EXTERNAL_SCHEMES.has(scheme)) return decline
+        return this.receiveNativePrompt(tab, page.id, {
+          kind: 'external', origin: page.origin, canProceed: false,
+          message: `${page.origin || 'This page'} wants to open ${page.url.slice(0, 2048)} in another app.`
+        })
+      }
+      case 'auth':
+        return this.receiveNativePrompt(tab, page.id, {
+          kind: 'auth', origin: page.origin, canProceed: false,
+          message: page.realm ? `${page.origin} requests authentication for ${page.realm}.` : `${page.origin} requests authentication.`
+        })
+      case 'certificate':
+        return this.receiveNativePrompt(tab, page.id, {
+          kind: 'certificate', origin: page.origin, canProceed: isLocalHost(page.host),
+          message: `The certificate for ${page.origin} could not be verified.`
+        })
+      case 'alert':
+      case 'confirm':
+      case 'prompt':
+        return this.receiveNativePrompt(tab, page.id, {
+          kind: page.kind, origin: page.origin, canProceed: false, message: page.message,
+          ...(page.kind === 'prompt' ? { defaultValue: page.defaultText ?? '' } : {})
+        })
+      default:
+        return decline
+    }
+  }
+
+  private receiveNativePrompt(
+    tab: PaneTab,
+    nativeId: string,
+    prompt: { kind: PanePrompt['kind']; origin: string; message: string; canProceed: boolean; defaultValue?: string }
+  ): PaneNativeDecision {
+    if (tab.prompts.length > 0) return { prompt: null, answer: { accept: false } }
+    const id = randomUUID()
+    const expiresAt = Date.now() + this.promptTimeoutMs
+    const timer = setTimeout(() => {
+      const current = this.nativePrompts.get(id)
+      if (!current) return
+      this.sendNative({ pane: current.paneId, action: 'answer', id: current.nativeId, prompt: id, kind: current.kind, accept: false })
+      this.finishNativePrompt(id)
+    }, this.promptTimeoutMs)
+    this.nativePrompts.set(id, { paneId: tab.id, nativeId, kind: prompt.kind, canProceed: prompt.canProceed, timer })
+    tab.prompts = [{
+      id,
+      kind: prompt.kind,
+      origin: prompt.origin.slice(0, 2048),
+      message: prompt.message.slice(0, 4096),
+      ...(prompt.defaultValue === undefined ? {} : { defaultValue: prompt.defaultValue.slice(0, 4096) }),
+      ...(prompt.kind === 'certificate' ? { canProceed: prompt.canProceed } : {}),
+      expiresAt
+    }]
+    this.saveTab(tab)
+    this.emitChanged()
+    return { prompt: id, answer: null }
+  }
+
+  private finishNativePrompt(id: string): void {
+    const prompt = this.nativePrompts.get(id)
+    if (!prompt) return
+    clearTimeout(prompt.timer)
+    this.nativePrompts.delete(id)
+    const tab = this.tabs.get(prompt.paneId)
+    if (tab) {
+      tab.prompts = tab.prompts.filter((item) => item.id !== id)
+      this.saveTab(tab)
+      this.emitChanged()
+    }
+  }
+
+  private respondNative(id: string, prompt: NativePromptState, request: PaneRequests['paneRespond'], caller: PluginCaller): { responded: true } {
+    if (prompt.paneId !== request.pane) throw fault('browser_tab_changed', 'prompt ID is stale or belongs to another pane')
+    if (prompt.kind === 'external' && request.accept && caller.role !== 'ui') throw fault('invalid_argument', 'external-app prompts can only be accepted by the browser UI')
+    if (prompt.kind === 'auth' && (request.username !== undefined || request.password !== undefined)) {
+      throw fault('invalid_argument', 'Native sign-in credentials are entered only in the browser window and never sent to the daemon')
+    }
+    if (prompt.kind === 'auth' && request.accept && caller.role !== 'ui') throw fault('invalid_argument', 'Native sign-in can only be completed in the browser window')
+    if (request.text !== undefined && Buffer.byteLength(request.text, 'utf8') > 4096) throw fault('invalid_argument', 'prompt text exceeds 4,096 UTF-8 bytes')
+    if (prompt.kind === 'certificate' && request.accept && !prompt.canProceed) {
+      this.sendNative({ pane: prompt.paneId, action: 'answer', id: prompt.nativeId, prompt: id, kind: prompt.kind, accept: false })
+      this.finishNativePrompt(id)
+      throw fault('invalid_argument', 'certificate exceptions may only proceed for loopback origins')
+    }
+    this.sendNative({
+      pane: prompt.paneId, action: 'answer', id: prompt.nativeId, prompt: id, kind: prompt.kind, accept: request.accept,
+      ...(prompt.kind === 'prompt' && request.accept ? { text: request.text ?? '' } : {})
+    })
+    this.finishNativePrompt(id)
+    return { responded: true }
+  }
+
+  private allowNativePopup(tab: PaneTab, popup: Extract<NativeBrowserPageRequest, { kind: 'popup' }>): boolean {
+    let protocol = ''
+    try { protocol = new URL(popup.url).protocol } catch { return false }
+    if (protocol !== 'http:' && protocol !== 'https:') return false
+    const now = Date.now()
+    const recent = (this.popupStarts.get(tab.id) ?? []).filter((start) => now - start < POPUP_WINDOW_MS)
+    if (recent.length >= POPUP_BUDGET) {
+      this.popupStarts.set(tab.id, recent)
+      return false
+    }
+    this.popupStarts.set(tab.id, [...recent, now])
+    return true
+  }
+
+  /** Reserves a free name in the OS Downloads directory before the native view writes anything. */
+  private receiveNativeDownload(tab: PaneTab, download: Extract<NativeBrowserPageRequest, { kind: 'download' }>): PaneNativeDecision {
+    const active = tab.downloads.filter((item) => item.state === 'downloading').length
+    if (active >= MAX_DOWNLOADS_PER_PANE) return { prompt: null, answer: { accept: false } }
+    mkdirSync(this.downloadDirectory, { recursive: true, mode: 0o700 })
+    const root = realpathSync(this.downloadDirectory)
+    const safeName = safeFileName(download.suggestedFilename)
+    const parsed = parse(safeName)
+    let path: string | undefined
+    for (let index = 0; index < 10_000 && !path; index++) {
+      const candidate = resolve(root, index === 0 ? safeName : `${parsed.name} (${index})${parsed.ext}`)
+      if (!within(root, candidate)) throw fault('browser_error', 'download destination escaped the OS Downloads directory')
+      if (!existsSync(candidate)) path = candidate
+    }
+    if (!path) throw fault('browser_error', 'a collision-free download filename could not be allocated')
+    const entry: PaneDownload = {
+      id: randomUUID(),
+      name: basename(path),
+      state: 'downloading',
+      received: 0,
+      ...(download.expectedBytes > 0 ? { total: download.expectedBytes } : {})
+    }
+    this.nativeDownloads.set(entry.id, { paneId: tab.id, nativeId: download.id, entry })
+    tab.downloads = [...tab.downloads, entry].slice(-MAX_DOWNLOADS_PER_PANE)
+    this.saveTab(tab)
+    this.emitChanged()
+    return { prompt: null, answer: { accept: true, path } }
+  }
+
+  private paneNativeUpdate(update: PaneRequests['paneNativeUpdate'], caller: PluginCaller): { updated: boolean } {
+    const tab = this.requireNativeRelay(update.pane, caller)
+    let updated = false
+    if (update.expired !== undefined) {
+      for (const [id, prompt] of this.nativePrompts) {
+        if (prompt.paneId !== tab.id || prompt.nativeId !== update.expired) continue
+        this.finishNativePrompt(id)
+        updated = true
+      }
+    }
+    if (update.download) updated = this.receiveNativeDownloadUpdate(tab, update.download) || updated
+    return { updated }
+  }
+
+  private receiveNativeDownloadUpdate(tab: PaneTab, update: NativeBrowserDownloadUpdate): boolean {
+    const owner = [...this.nativeDownloads.values()].find((candidate) => candidate.paneId === tab.id && candidate.nativeId === update.id)
+    if (!owner || owner.entry.state !== 'downloading') return false
+    const entry = owner.entry
+    if (update.path !== undefined) {
+      const root = realpathSync(this.downloadDirectory)
+      const path = resolve(update.path)
+      if (!within(root, path)) {
+        entry.state = 'error'
+        entry.error = 'Native download was written outside the OS Downloads directory.'
+      } else {
+        entry.path = path
+        entry.name = basename(path)
+      }
+    }
+    if (entry.state === 'downloading') {
+      if (update.received !== undefined && Number.isFinite(update.received)) entry.received = Math.max(0, Math.trunc(update.received))
+      if (update.total !== undefined && Number.isFinite(update.total) && update.total > 0) entry.total = Math.trunc(update.total)
+      if (update.state === 'completed') {
+        entry.state = 'completed'
+        if (entry.total !== undefined) entry.received = entry.total
+      } else if (update.state === 'failed') {
+        entry.state = update.cancelled ? 'canceled' : 'error'
+        if (!update.cancelled) entry.error = (update.error || 'Download failed.').slice(0, 1024)
+      }
+    }
+    if (entry.state !== 'downloading') this.nativeDownloads.delete(entry.id)
+    if (tab.downloads.some((item) => item.id === entry.id)) {
+      this.saveTab(tab)
+      this.emitChanged()
+    }
+    return true
   }
 
   private receiveDownloadStart(watch: WatchLease, page: BrowserPage, download: { guid: string; url: string; suggestedFilename: string; stagingPath: string }): void {
@@ -1472,12 +1701,22 @@ export class PaneService {
 
   private async paneDownload(request: PaneRequests['paneDownload'], caller: PluginCaller): Promise<{ action: string; completed: true; download?: PaneDownload }> {
     const tab = this.requirePane(request.pane)
-    this.assertWatchOwner(tab.id, DEFAULT_WATCH_OWNER)
+    if (tab.mode === 'watch') this.assertWatchOwner(tab.id, DEFAULT_WATCH_OWNER)
     const entry = tab.downloads.find((item) => item.id === request.download)
     if (!entry) throw fault('browser_tab_not_found', 'download does not exist in this pane')
+    const native = this.nativeDownloads.get(entry.id)
+    if (native && request.action === 'cancel') {
+      if (entry.state !== 'downloading') throw fault('invalid_argument', 'only an active download can be canceled')
+      this.sendNative({ pane: tab.id, action: 'cancelDownload', id: native.nativeId })
+      return { action: request.action, completed: true, download: structuredClone(entry) }
+    }
+    if (native && request.action === 'dismiss' && entry.state === 'downloading') {
+      throw fault('invalid_argument', 'cancel an active Native download before dismissing it')
+    }
     if (request.action === 'dismiss') {
       tab.downloads = tab.downloads.filter((item) => item.id !== entry.id)
       if (entry.state !== 'downloading' && entry.state !== 'paused') this.downloads.delete(entry.id)
+      this.nativeDownloads.delete(entry.id)
       this.saveTab(tab)
       this.emitChanged()
       return { action: request.action, completed: true }

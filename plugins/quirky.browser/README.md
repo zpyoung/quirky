@@ -78,7 +78,15 @@ Native is available only in the desktop shell. A plain web client explains that 
 
 `Open source file` uses public `quirky.editor/open` only with the backend's canonical in-worktree `sourcePath`; outside file URLs have no source action. `Open in Editor Preview` opens a separate editor preview tab and is not a Browser preview conversion. Selecting a supported non-HTML document suggestion navigates its backend-provided resource URL, and Browser Back returns to the prior location. Resource-backed previews do not serve `text/html`; unsupported editor previews show an error. Native `file:` navigation uses runtime authorization, and the UI does not resolve typed paths itself.
 
-The pinned Electrobun SDK has no public JavaScript-dialog, basic-auth, or certificate-response interception, no download cancellation or destination control for Native views, and no Native hard reload. Native popup events are informational; Quirky does not turn a popup URL into a replacement tab or claim to preserve named/opener-dependent OAuth windows. Those Native operations are not presented as working controls. Watch uses the managed page's CDP events for its supported prompts, downloads and typed input.
+Native page events use the same prompts, policy and download shelf as Watch, through the host's native page requests (`nativeBrowser.pageRequestsAvailable`):
+
+- `alert`, `confirm` and `prompt` show as an overlay naming the origin, and the page gets the real answer. One prompt per page; an unanswered one fails closed after 120 seconds, and navigating declines it.
+- Basic and digest sign-in credentials are typed in the overlay and go straight to the view. The daemon only learns that the user accepted, so `pane respond` can decline a Native sign-in but not complete one.
+- An untrusted certificate can proceed only for loopback hosts. An external-app link opens only for an allow-listed scheme after a user gesture, and only the browser UI can approve it.
+- A download gets a collision-free name in the OS Downloads directory before anything is written, then reports bytes, cancels on its own, and opens or reveals when complete.
+- A popup opens, at most four every two seconds and only for HTTP(S), in a small window titled by its origin. It is the page WebKit created for the opener, so `window.opener`, the window name and a form's POST body survive, and `window.close()` closes it.
+
+`beforeunload` prompts are not intercepted in Native because WKWebView has no public API for them, and Native has no hard reload. Where native page requests are unavailable, popup events stay informational and the Native prompt and download controls are not shown. Watch uses the managed page's CDP events for its supported prompts, downloads and typed input.
 
 The `defaultHomePage`, `defaultSearchEngine`, and `defaultZoom` settings apply to new panes only. Default home page is blank; the search engine defaults to Google and the zoom level to 0.
 

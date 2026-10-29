@@ -1,3 +1,5 @@
+import type { NativeBrowserDownloadUpdate, NativeBrowserPageRequest } from '@quirky/protocol'
+
 /** Browser pane public API. Native browsing does not start the automation runtime. */
 export type PaneMode = 'native' | 'watch'
 export type PaneSearchEngine = 'google' | 'duckduckgo' | 'bing' | 'kagi'
@@ -14,7 +16,13 @@ export type PaneTab = {
 }
 export type PaneState = { tabs: PaneTab[]; active: string | null; history: { url: string; title: string; visitedAt: number }[] }
 export type PaneFrame = { pane: string; watchId: string; sequence: number; data: string; width: number; height: number }
-export const PANE_METHODS = ['paneOpen', 'paneState', 'paneNavigate', 'paneControl', 'paneReport', 'paneClose', 'paneSuggestions', 'paneWatch', 'paneWatchStop', 'paneFrameAck', 'paneInput', 'paneRespond', 'paneDownload'] as const
+/** Either a visible prompt the user answers later, or an immediate answer to hand back to the native view. */
+export type PaneNativeDecision = { prompt: string | null; answer: { accept: boolean; path?: string } | null }
+/** Sent to the window that owns the Native view; `id` is the native request or download id. Never carries credentials. */
+export type PaneNativeAction =
+  | { pane: string; action: 'answer'; id: string; prompt: string; kind: PanePrompt['kind']; accept: boolean; text?: string }
+  | { pane: string; action: 'cancelDownload'; id: string }
+export const PANE_METHODS = ['paneOpen', 'paneState', 'paneNavigate', 'paneControl', 'paneReport', 'paneClose', 'paneSuggestions', 'paneWatch', 'paneWatchStop', 'paneFrameAck', 'paneInput', 'paneRespond', 'paneDownload', 'paneNativeRequest', 'paneNativeUpdate'] as const
 export type PaneMethod = typeof PANE_METHODS[number]
 /** Every method below is declared by the built-in manifest and generated CLI. */
 export type PaneRequests = {
@@ -31,4 +39,6 @@ export type PaneRequests = {
   paneRespond: { pane: string; prompt: string; accept: boolean; text?: string; username?: string; password?: string }
   paneDownload: { pane: string; download: string; action: 'cancel' | 'open' | 'reveal' | 'dismiss' }
   paneFrameAck: { pane: string; watchId: string; sequence: number; consumer?: string }
+  paneNativeRequest: { pane: string; request: NativeBrowserPageRequest }
+  paneNativeUpdate: { pane: string; expired?: string; download?: NativeBrowserDownloadUpdate }
 }

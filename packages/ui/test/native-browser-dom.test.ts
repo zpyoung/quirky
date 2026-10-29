@@ -273,3 +273,84 @@ test('native evaluation times out when guest work never settles', async () => {
     await guest.cleanup()
   }
 }, 8000)
+
+test('page requests route to the owning mount, answer through the claim, and stop after dispose', async () => {
+  const element = document.createElement('div')
+  document.body.append(element)
+  const mounted = Promise.withResolvers<GuestView>()
+  announceGuest = mounted.resolve
+  const listeners = new Set<(viewId: number, event: import('../src/native-browser').NativeBrowserPageEvent) => void>()
+  const answers: Array<{ viewId: number; owner: string; id: string; accept: boolean }> = []
+  const owners = new Set<string>()
+  const released = Promise.withResolvers<void>()
+  const capability = createNativeBrowserCapability(createElectrobunNativeBrowserAdapter({
+    async claimNativeBrowserView({ owner }) { owners.add(owner); return { zoomFactor: 1, pageRequests: true } },
+    async setNativeBrowserZoom({ level }) { return { zoomFactor: Math.pow(1.2, level) } },
+    async releaseNativeBrowserView() { released.resolve(); return { released: true } },
+    async answerNativeBrowserRequest({ viewId, owner, id, answer }) {
+      answers.push({ viewId, owner, id, accept: answer.accept })
+      return { answered: true }
+    },
+    async cancelNativeBrowserDownload({ id }) { return { cancelled: id === 'download-1' } },
+    onNativeBrowserPageEvent(listener) {
+      listeners.add(listener)
+      return () => listeners.delete(listener)
+    }
+  }))
+  expect(capability.pageRequestsAvailable).toBe(true)
+  const seen: string[] = []
+  const handle = capability.mount(element, {
+    id: crypto.randomUUID(), url: 'about:blank', zoom: 0,
+    partition: `persist:quirky-browser-profile_${crypto.randomUUID().replaceAll('-', '')}`, onState() {},
+    onPageRequest: (request) => seen.push(`request:${request.kind}:${request.id}`),
+    onPageRequestExpired: (id) => seen.push(`expired:${id}`),
+    onDownload: (update) => seen.push(`download:${update.id}:${update.state}`)
+  })
+  await mounted.promise
+  for (let attempt = 0; attempt < 50 && listeners.size === 0; attempt++) await new Promise((resolve) => setTimeout(resolve, 5))
+  const emit = (viewId: number, event: import('../src/native-browser').NativeBrowserPageEvent) => { for (const listener of listeners) listener(viewId, event) }
+
+  emit(99, { type: 'request', request: { id: '1', kind: 'alert', origin: 'https://other.test', frameUrl: '', message: 'not mine' } })
+  emit(7, { type: 'request', request: { id: '2', kind: 'confirm', origin: 'https://site.test', frameUrl: '', message: 'Sure?' } })
+  emit(7, { type: 'expired', id: '2' })
+  emit(7, { type: 'download', update: { id: 'download-1', state: 'started', path: '/tmp/a' } })
+  expect(seen).toEqual(['request:confirm:2', 'expired:2', 'download:download-1:started'])
+
+  expect(await handle.answer?.('2', { accept: true })).toBe(true)
+  expect(answers).toEqual([{ viewId: 7, owner: [...owners][0]!, id: '2', accept: true }])
+  expect(await handle.cancelDownload?.('download-1')).toBe(true)
+
+  handle.dispose()
+  await released.promise
+  expect(listeners.size).toBe(0)
+  expect(await handle.answer?.('3', { accept: true })).toBe(false)
+  element.remove()
+})
+
+test('a mount without a page request listener declines requests instead of leaving the page paused', async () => {
+  const element = document.createElement('div')
+  document.body.append(element)
+  const mounted = Promise.withResolvers<GuestView>()
+  announceGuest = mounted.resolve
+  const listeners = new Set<(viewId: number, event: import('../src/native-browser').NativeBrowserPageEvent) => void>()
+  const answers: Array<{ id: string; accept: boolean }> = []
+  const released = Promise.withResolvers<void>()
+  const handle = createNativeBrowserCapability(createElectrobunNativeBrowserAdapter({
+    async claimNativeBrowserView() { return { zoomFactor: 1, pageRequests: true } },
+    async setNativeBrowserZoom({ level }) { return { zoomFactor: Math.pow(1.2, level) } },
+    async releaseNativeBrowserView() { released.resolve(); return { released: true } },
+    async answerNativeBrowserRequest({ id, answer }) { answers.push({ id, accept: answer.accept }); return { answered: true } },
+    onNativeBrowserPageEvent(listener) { listeners.add(listener); return () => listeners.delete(listener) }
+  })).mount(element, {
+    id: crypto.randomUUID(), url: 'about:blank', zoom: 0,
+    partition: `persist:quirky-browser-profile_${crypto.randomUUID().replaceAll('-', '')}`, onState() {}
+  })
+  await mounted.promise
+  for (let attempt = 0; attempt < 50 && listeners.size === 0; attempt++) await new Promise((resolve) => setTimeout(resolve, 5))
+  for (const listener of listeners) listener(7, { type: 'request', request: { id: '4', kind: 'popup', origin: 'https://site.test', url: 'https://x.test', method: 'GET', width: null, height: null } })
+  for (let attempt = 0; attempt < 50 && answers.length === 0; attempt++) await new Promise((resolve) => setTimeout(resolve, 5))
+  expect(answers).toEqual([{ id: '4', accept: false }])
+  handle.dispose()
+  await released.promise
+  element.remove()
+})
