@@ -280,7 +280,7 @@ export function FileDiff({ context, input, settings, setSetting, report, bind, c
             )}
           </div>
         )}
-        <div hidden={showMarkdownPreview} className="ui-stack" style={{ flex: 1, minHeight: 0, minWidth: 0, overflow: 'auto' }}>
+        <div hidden={showMarkdownPreview} className="ui-stack" style={{ display: showMarkdownPreview ? 'none' : undefined, flex: 1, minHeight: 0, minWidth: 0, overflow: 'auto' }}>
           {error !== null && loaded === null ? (
             <ErrorNotice message={error} />
           ) : loaded === null ? (
