@@ -1,9 +1,12 @@
-import { afterEach, describe, expect, test } from 'bun:test'
+import { afterEach, describe, expect, setDefaultTimeout, test } from 'bun:test'
 import { join } from 'node:path'
 import { RpcErrorCode } from '@quirky/protocol'
 import { listAgents } from '../src/daemon/source'
 import type { Preview } from '../src/daemon/types'
 import { HandoffRig } from './support'
+
+// These API cases include full-builtin daemon startup and shutdown.
+setDefaultTimeout(60_000)
 
 let rig: HandoffRig
 afterEach(async () => {
