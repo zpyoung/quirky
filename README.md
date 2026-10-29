@@ -124,6 +124,10 @@ uses separate Vault module copies because both daemons run in one Bun process; d
 host must leave the other host's exact source searchable. Search-window scenarios wait for
 settled failures before retrying and exercise term truncation within the public 512-character
 query limit. Native Trash and OS integration remain separate checks.
+All-scope searches remain usable while workspace context refreshes. Indexing discovers source
+authority once per pass and still revalidates each file before reading it; opaque-ID inspection
+continues to rediscover its current source. Candidate-limit checks wait for the real index to
+finish, independently of the five-second fresh-search deadline.
 
 ## Terminal artifacts on the phone
 

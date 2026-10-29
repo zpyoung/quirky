@@ -88,5 +88,38 @@
 - **Revisit if:** a fresh consumer run identifies a failure absent from this item's final package evidence.
 - **Source:** assumed — autonomous
 
+## D9: Retain complete final gates and bounded runtime evidence
+- **Question:** What does the repaired source actually prove before landing?
+- **Options:** Infer global correctness from compilation; report the complete affected gate and separately exercised API/web behavior.
+- **Chose:** Final canonical `bun scripts/suite.ts plugins/quirky.vault scripts` passed all 36 remote files, no failed files and no flaky retries (118.42s). Root/UI-lint/mobile/desktop typecheck and full packaged build passed (combined 68.95s). Actual 601-source diagnostic plus paired-host smoke passed in 6.10s: 626 indexed files/602 Claude sessions/zero due, candidate cap true, distinct host identities/redaction and local survival after remote disable. All owned private homes were removed.
+- **Why:** This gate includes the original triaged tests, every vault consumer file from Lane 8's older inventory, scanner authority regression and existing worker mutation/sidecar/SQLite/restart/symlink coverage. The production five-second fresh-search deadline and honest freshness flag were retained. Build icon/release-URL warnings and test React teardown warnings are not relabeled warning-free. Native Trash/OS behavior is not certified by a remote skip.
+- **Evidence:** bg8 suite-result ok true, flaky []; bg9 completed typecheck/build; bg10 actual diagnostic and cleanup markers; scanner component ae167d62 after HEAD/scope audit and merge.
+- **Reversibility:** easy
+- **Confidence:** high for named exercised outcomes
+- **Revisit if:** merged gate or a real source boundary fails.
+- **Source:** assumed — autonomous
+
+## D10: Verify the shipped browser surface without foreground or real user data
+- **Question:** Which user-visible flows were actually exercised?
+- **Options:** Infer UI success from tests; run a private built-UI daemon and guarded unattended web flow.
+- **Chose:** Guarded web run 20261029T012049-7152 passed both goals: All-scope actual transcript search with highlighted evidence; associated Agent grouping and Hide empty sessions controls followed by retained exact search result. Every feature action returned OBSERVED, screenshots were read, findings were empty, no console/network errors were recorded, no test overrides, no kept-open windows or cleanup errors. No foreground or native pass claim.
+- **Why:** This used the built shipped app UI against a fresh private daemon/source home. API calls were setup only; actions went through visible UI. The initially split Changes/Vault area was expanded by its visible minimize control before result inspection.
+- **Evidence:** .quirk/using-apps-like-a-user/runs/20261029T012049-7152/report.json and obs-4/obs-7/obs-8/obs-9 screenshots; full build in D9. Service logged surfaceStopped true/privateHomesRemoved true after guarded browser closure; the drained stdin supervisor was then explicitly stopped and reported exited.
+- **Reversibility:** easy
+- **Confidence:** high for named web goals only
+- **Revisit if:** a real native or other-platform scenario reports a separate failure.
+- **Source:** assumed — autonomous
+
+## D11: Record the bounded review result and its execution-boundary violation
+- **Question:** How much assurance does the actual final Gemini review provide?
+- **Options:** Claim a formal whole-repository pass; ignore a prohibited command attempt; retain the scoped findings result with the violation explicit.
+- **Chose:** One cross-family Gemini high review of all changed Vault source/tests returned findings [] and limitations [] in 237.67s. No accepted finding or fix batch remains. Do not present this as a formal adversarial-protocol PASS. Record that, despite the explicit read-only/no-check prompt, the reviewer attempted npm run test with the scanner file. Its check attempt is not used as verification evidence.
+- **Why:** The independent final 36-file/type/build/runtime gates were already green before dispatch. A subsequent write-boundary check showed only the parent's intended README/decision-log changes and inherited .serena; no source/test mutation. A process snapshot found no remaining process containing that review test command. All reviewer/worker/check jobs returned.
+- **Evidence:** bg11 actual google/gemini-3.1-pro-preview:high tool trace and final JSON; post-review diff/status; process snapshot reviewTestProcesses []; independent gates D9.
+- **Reversibility:** easy
+- **Confidence:** high for actual returned findings and observed boundary checks; protocol assurance explicitly reduced
+- **Revisit if:** independent review or merged verification finds a concrete defect.
+- **Source:** assumed — autonomous
+
 ## Progress
-Original components returned/audited/removed. Additional ScannerIndexing component at 06d5d3a2 is repairing the reached quadratic path, scoped to scanner/index.ts and scanner.test.ts; parent owns the All guard and final selector/index-readiness barriers. All prior gates are historical, not final-source green. Paired-daemon smoke passes and cleans homes. Scripts 12/12 remote files pass without retries; last root/UI-lint/mobile/desktop typecheck passed in 55.66s before the latest source fix. Single roadmap catch-up consumed. Next: scanner barrier/audit/integration, real candidate diagnostic and full package/scripts/typecheck, bounded review, land. Scratch: /tmp/quirky-vault-repair-lane5-RDQalGGE.
+Ready for canonical landing. All implementation components returned, passed HEAD/scope audit, merged and were removed with inherited metadata preserved. Final affected 36-file suite passes without retries; typecheck/build pass; actual candidate/paired-daemon smoke and guarded two-goal shipped web flow pass. Sole normal roadmap catch-up consumed; bounded Gemini review returned no findings with D11 execution limitation. Browser closed, service cleanup logged both homes removed and supervisor exited; no owned runtime/check/agent remains. Commit final docs, detach and run the authoritative absolute queue land, await its receipt, then remove owned scratch. No extra queue item. Scratch: /tmp/quirky-vault-repair-lane5-RDQalGGE.
