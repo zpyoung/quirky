@@ -4,7 +4,7 @@ import { existsSync } from 'node:fs'
 import { RpcErrorCode, type PluginCaller, type PluginContext, type PluginStore, type QuirkyEvent } from '@quirky/protocol'
 import { HISTORY_AGENTS } from './agents'
 import { VaultActions } from './actions'
-import { discoverVaultHosts, hostedLocal, localOutcome, methodOf, outcome, qualifyPublicId, redactReason, selectHost } from './hosts'
+import { callVaultHost, decodePublicId, discoverVaultHosts, hostedLocal, localOutcome, outcome, qualifyPublicId, redactReason, selectHost } from './hosts'
 import type { VaultHost } from './hosts'
 import type {
   HostOutcome,
@@ -26,6 +26,12 @@ import type {
 } from './types'
 import { VaultViewState } from './view-state'
 import { WorkerRequestError, type VaultWorkerClient } from './worker-client'
+
+function assertOwnerHostCaller(context: PluginContext, caller: PluginCaller, hosts: VaultHost[]): void {
+  if (caller.role === 'mobile' && hosts.some((host) => host.owner !== undefined)) {
+    throw context.error('conflict', 'registered owner Vault access is unavailable to mobile callers')
+  }
+}
 
 const SEARCH_SETTING = 'setting:quirky.vault/search-enabled'
 const SEARCH_DATABASE = 'session-search.sqlite'
@@ -87,24 +93,25 @@ export class VaultService {
     this.methods = {
       list: (params, caller) => this.list(params, caller),
       cancelList: (params) => this.cancelList(params),
-      get: (params) => this.actions.get(params),
-      firstPrompt: (params) => this.actions.firstPrompt(params),
-      subagents: (params) => this.actions.subagents(params),
+      get: (params, caller) => this.actions.get(params, caller),
+      firstPrompt: (params, caller) => this.actions.firstPrompt(params, caller),
+      subagents: (params, caller) => this.actions.subagents(params, caller),
       search: (params, caller) => this.search(params, caller),
-      searchStatus: (params) => this.searchStatus(params),
+      searchStatus: (params, caller) => this.searchStatus(params, caller),
       getSearchTip: () => this.getSearchTip(),
-      setSearchEnabled: (params) => this.setSearchEnabled(params),
+      setSearchEnabled: (params, caller) => this.setSearchEnabled(params, caller),
       clearSearchIndex: () => this.clearSearchIndex(),
       getView: (_params, caller) => this.getView(caller),
       setView: (params, caller) => this.setView(params, caller),
       resetView: (_params, caller) => this.resetView(caller),
       prepareResume: (params) => this.actions.prepareResume(params),
       resume: (params, caller) => this.actions.resume(params, caller),
+      ownerResume: (params, caller) => this.actions.ownerResume(params, caller),
       deleteSession: (params) => this.actions.deleteSession(params),
       openSource: (params) => this.actions.openSource(params),
       openWorkingDirectory: (params) => this.actions.openWorkingDirectory(params),
       jump: (params) => this.actions.jump(params),
-      handoff: (params) => this.actions.handoff(params)
+      handoff: (params, caller) => this.actions.handoff(params, caller)
     }
   }
 
@@ -139,6 +146,7 @@ export class VaultService {
     const hostSelector = request.host ?? view.host
     const registry = hostSelector === 'local' ? { hosts: [], issues: [] } : await discoverVaultHosts(this.context)
     const selection = selectHost(hostSelector, registry.hosts)
+    assertOwnerHostCaller(this.context, caller, selection.hosts)
     if (selection.unavailable) {
       return {
         sessions: [],
@@ -220,10 +228,11 @@ export class VaultService {
     }
   }
 
-  searchStatus = async (params: Record<string, unknown>): Promise<PublicSearchStatus> => {
+  searchStatus = async (params: Record<string, unknown>, caller: PluginCaller): Promise<PublicSearchStatus> => {
     const selector = typeof params.host === 'string' ? params.host : 'local'
     const registry = selector === 'local' ? { hosts: [], issues: [] } : await discoverVaultHosts(this.context)
     const selection = selectHost(selector, registry.hosts)
+    assertOwnerHostCaller(this.context, caller, selection.hosts)
     const hosts: HostOutcome[] = [...registry.issues]
     let status = DEFAULT_SEARCH_STATUS
 
@@ -238,7 +247,7 @@ export class VaultService {
     if (selection.unavailable) hosts.push(selection.unavailable)
     for (const host of selection.hosts) {
       try {
-        const remote = await this.context.call(methodOf(host, 'searchStatus'), {})
+        const remote = await callVaultHost(this.context, host, 'searchStatus')
         const remoteStatus = this.remoteStatus(remote)
         if (!selection.local && selection.hosts.length === 1) status = remoteStatus
         hosts.push(outcome(host.id, host.label, 'ok', undefined, remoteStatus.filesIndexed, remoteStatus.lastReconcileAt))
@@ -250,12 +259,13 @@ export class VaultService {
   }
   getSearchTip = async (): Promise<SearchTipState> => this.enqueuePolicy(async () => this.readSearchTip())
 
-  setSearchEnabled = async (params: Record<string, unknown>): Promise<PublicSearchStatus> => {
+  setSearchEnabled = async (params: Record<string, unknown>, caller: PluginCaller): Promise<PublicSearchStatus> => {
     if (typeof params.enabled !== 'boolean') throw this.context.error('invalid-params', 'enabled must be a boolean')
     const historyDays = this.parseHistoryDays(params.historyDays)
     const selector = typeof params.host === 'string' ? params.host : 'local'
     const registry = selector === 'local' ? { hosts: [], issues: [] } : await discoverVaultHosts(this.context)
     const selection = selectHost(selector, registry.hosts)
+    assertOwnerHostCaller(this.context, caller, selection.hosts)
     const hosts: HostOutcome[] = [...registry.issues]
 
     let status = selection.local ? await this.changeLocalPolicy(params.enabled, historyDays) : DEFAULT_SEARCH_STATUS
@@ -266,7 +276,7 @@ export class VaultService {
     if (selection.unavailable) hosts.push(selection.unavailable)
     for (const host of selection.hosts) {
       try {
-        const remote = await this.context.call(methodOf(host, 'setSearchEnabled'), {
+        const remote = await callVaultHost(this.context, host, 'setSearchEnabled', {
           enabled: params.enabled,
           ...(historyDays === undefined ? {} : { historyDays })
         })
@@ -300,6 +310,7 @@ export class VaultService {
     const selector = request.host ?? view.host
     const registry = selector === 'local' ? { hosts: [], issues: [] } : await discoverVaultHosts(this.context)
     const selection = selectHost(selector, registry.hosts)
+    assertOwnerHostCaller(this.context, caller, selection.hosts)
     if (selection.unavailable) {
       return { kind: 'unavailable', reason: 'no-service', hosts: [...registry.issues, selection.unavailable] }
     }
@@ -673,7 +684,7 @@ export class VaultService {
     total: number
     hasMore: boolean
   }> {
-    const raw = await this.context.call(methodOf(host, 'list'), request as unknown as Record<string, unknown>)
+    const raw = await callVaultHost(this.context, host, 'list', request as unknown as Record<string, unknown>)
     const parsed = this.parseRemoteList(raw, host)
     if (!parsed) throw new Error('host list response does not match the vault list contract')
     return parsed
@@ -890,6 +901,10 @@ export class VaultService {
       ? row.source as RecordValue
       : undefined
     const sourceId = typeof row.sourceId === 'string' ? row.sourceId : row.id
+    if (host.owner) {
+      const ownerLocalId = typeof row.id === 'string' ? decodePublicId(row.id) : null
+      if (row.hostId !== 'local' || !ownerLocalId || ownerLocalId.hostId !== 'local' || ownerLocalId.sourceId !== sourceId) return null
+    }
     const presence = source?.presence ?? row.presence
     if (
       typeof sourceId !== 'string' ||
@@ -1000,8 +1015,8 @@ export class VaultService {
 
   private async searchRemote(host: VaultHost, request: SearchRequest): Promise<{ response: SearchResponse; outcome: HostOutcome }> {
     try {
-      const raw = await this.context.call(methodOf(host, 'search'), request as unknown as Record<string, unknown>)
-      const response = this.parseRemoteSearch(raw)
+      const raw = await callVaultHost(this.context, host, 'search', request as unknown as Record<string, unknown>)
+      const response = this.parseRemoteSearch(raw, host)
       if (!response) throw new Error('host search response does not match the vault search contract')
       const kind = response.kind === 'unavailable' ? 'unavailable' : 'ok'
       const reason = response.kind === 'unavailable' ? response.reason : undefined
@@ -1014,7 +1029,7 @@ export class VaultService {
     }
   }
 
-  private parseRemoteSearch(value: unknown): SearchResponse | null {
+  private parseRemoteSearch(value: unknown, host: VaultHost): SearchResponse | null {
     if (typeof value !== 'object' || value === null || Array.isArray(value)) return null
     const response = value as RecordValue
     if (response.kind === 'stale-cursor' || response.kind === 'malformed-cursor') return { kind: response.kind }
@@ -1047,7 +1062,7 @@ export class VaultService {
     ) return null
     const hits: SearchHit[] = []
     for (const value of response.hits) {
-      const hit = this.parseRemoteHit(value)
+      const hit = this.parseRemoteHit(value, host)
       if (!hit) return null
       hits.push(hit)
     }
@@ -1073,7 +1088,7 @@ export class VaultService {
     }
   }
 
-  private parseRemoteHit(value: unknown): SearchHit | null {
+  private parseRemoteHit(value: unknown, host: VaultHost): SearchHit | null {
     if (typeof value !== 'object' || value === null || Array.isArray(value)) return null
     const hit = value as RecordValue
     const source = typeof hit.source === 'object' && hit.source !== null && !Array.isArray(hit.source)
@@ -1094,6 +1109,17 @@ export class VaultService {
       !source ||
       (source.presence !== 'present' && source.presence !== 'missing' && source.presence !== 'unverifiable')
     ) return null
+    if (host.owner) {
+      const sourceId = typeof hit.sourceId === 'string' ? hit.sourceId : null
+      const ownerLocalId = decodePublicId(hit.id)
+      if (
+        hit.hostId !== 'local' ||
+        sourceId === null ||
+        !ownerLocalId ||
+        ownerLocalId.hostId !== 'local' ||
+        ownerLocalId.sourceId !== sourceId
+      ) return null
+    }
     if (evidence !== null) {
       if (typeof evidence !== 'object' || Array.isArray(evidence)) return null
       const item = evidence as RecordValue
@@ -1187,11 +1213,9 @@ export class VaultService {
     for (const target of pendingHosts) {
       const current = state.hosts[target.id]!
       const baseRequest = target.local ? localRequest : remoteRequest
-      const hostRequest: SearchRequest = {
-        ...baseRequest,
-        limit,
-        ...(current.cursor === null ? { cursor: undefined } : { cursor: current.cursor })
-      }
+      const hostRequest: SearchRequest = { ...baseRequest, limit }
+      delete hostRequest.cursor
+      if (typeof current.cursor === 'string') hostRequest.cursor = current.cursor
       let response: SearchResponse
       let hostOutcome: HostOutcome
       if (target.local) {
