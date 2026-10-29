@@ -267,14 +267,20 @@ describe('describeRemove and the confirmation', () => {
     fakeAsks().get(askId)!.value = true
 
     const other = await failure(call(client, 'quirky.worktree/remove', { worktree: 'fix-login', confirmation: askId }))
-    expect(other).toMatchObject({ code: RpcErrorCode.Conflict, message: 'confirmation is for another call' })
+    expect(other.code).toBe(RpcErrorCode.Conflict)
+    expect(await list(client, repo.id)).toHaveLength(3)
 
+    let removeAttempts = 0
     t!.git!.removeWorktree = async () => {
+      removeAttempts++
       throw new GitError('git worktree failed', 'fatal: refused', 128)
     }
     await failure(call(client, 'quirky.worktree/remove', { worktree: 'feature-x', confirmation: askId }))
+    expect(await list(client, repo.id)).toHaveLength(3)
     const again = await failure(call(client, 'quirky.worktree/remove', { worktree: 'feature-x', confirmation: askId }))
-    expect(again.message).toBe('confirmation already used')
+    expect(again.code).toBe(RpcErrorCode.Conflict)
+    expect(removeAttempts).toBe(1)
+    expect(await list(client, repo.id)).toHaveLength(3)
   })
 
   test('SC-44: yes removes at once and opens no ask', async () => {

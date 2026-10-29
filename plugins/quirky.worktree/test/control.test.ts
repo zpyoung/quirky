@@ -337,14 +337,15 @@ describe('safe cleanup preview and removal', () => {
     await call(w.t.client, 'quirky.sidebar-extras/activate', { worktree: null })
     const ui = await w.t.h.connect('ui')
     const { connId: uiConnId } = await ui.callAny('ui.window.self', {}) as { connId: number }
+    const secondUi = await w.t.h.connect('ui')
+    const { connId: secondUiConnId } = await secondUi.callAny('ui.window.self', {}) as { connId: number }
+    const otherWindowView = await create(w, 'other-window-view')
+    // Keep each workspace view on its exact UI connection once both windows are attached.
     await ui.callAny('ui.window.view.open', {
       connId: uiConnId,
       id: 'view:quirky.session/worktree',
       input: { worktree: `id:${active.id}` }
     })
-    const secondUi = await w.t.h.connect('ui')
-    const { connId: secondUiConnId } = await secondUi.callAny('ui.window.self', {}) as { connId: number }
-    const otherWindowView = await create(w, 'other-window-view')
     await secondUi.callAny('ui.window.view.open', {
       connId: secondUiConnId,
       id: 'view:quirky.session/worktree',
