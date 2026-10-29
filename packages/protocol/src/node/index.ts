@@ -169,6 +169,8 @@ export async function ensureDaemon(
   if (!existsSync(entry)) throw new Error(`quirkyd entry not found: ${entry}`)
   const log = openPrivateLog(join(home, 'logs', 'daemon.log'))
   const child = spawn(options.bunPath ?? process.execPath, [entry, ...(options.args ?? [])], {
+    // the shell runs from inside its app bundle, which an update moves aside and deletes
+    cwd: home,
     detached: true,
     stdio: ['ignore', log, log],
     env: { ...process.env, QUIRKY_HOME: home }

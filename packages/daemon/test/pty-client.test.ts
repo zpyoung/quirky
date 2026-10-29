@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from 'bun:test'
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { PTY_PROTOCOL_VERSION, PtyFrameDecoder, encodePtyJson, type ExitCause, type PtyFact, type PtyRequest } from '@quirky/protocol'
 import { socketPath } from '@quirky/protocol/node'
@@ -129,6 +129,19 @@ function startSilentHost(
   })
   return { shutdowns: () => shutdowns, currentProtocolHellos: () => currentProtocolHellos }
 }
+
+describe('spawning the host', () => {
+  test('starts the host in the home, not the daemon directory', async () => {
+    const dir = home()
+    const marker = join(dir, 'cwd.txt')
+    const entry = join(dir, 'record-cwd.ts')
+    writeFileSync(entry, `require('node:fs').writeFileSync(${JSON.stringify(marker)}, process.cwd())\n`)
+    const client = newClient(dir, { hostEntry: entry, connectTimeoutMs: 300 })
+    await expect(client.connect()).rejects.toThrow()
+    await waitFor(() => (existsSync(marker) ? true : undefined), 2000)
+    expect(realpathSync(readFileSync(marker, 'utf8'))).toBe(realpathSync(dir))
+  })
+})
 
 describe('protocol version handling', () => {
   test('an older host is shut down and replaced by a current one', async () => {
