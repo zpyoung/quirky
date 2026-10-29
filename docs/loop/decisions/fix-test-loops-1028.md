@@ -66,5 +66,60 @@
 - **Revisit if:** cancellation or disable leaves a wait/client pending, or a stopped owner admits a new wait
 - **Source:** assumed — autonomous
 
+## D7: Await approval registration independently of the waiting-status edge
+- **Question:** Does a needs-you snapshot guarantee the runner's asynchronous Ask registration is already visible?
+- **Options:** register before owning its client; assume one immediate list sees the ask; wait for the matching public pending Ask
+- **Chose:** L06 and the actual API smoke wait for the matching Ask through the public list. Keep the zero-completed-iterations assertion, answer that exact Ask and verify two settled iterations. L06's30second enclosing watchdog covers its existing10second state waits and the new10second registration condition.
+- **Why:** The scripted runner deliberately publishes waiting before asynchronous createAsk completes. Owning the socket before registration introduces a real setup boundary. Canonical L06 then failed twice at missing Ask after a needs-you snapshot, while the real smoke showed the same ordering; this is not an approval loss or justification to weaken client ownership.
+- **Evidence:** canonical focused run after cancellation repair: structured file passed, L06 missing-Ask at404/379ms; actual composed smoke failed the identical early assertion and cleaned up. Replaced immediate list assumption, not runtime semantics.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** the Ask never appears or answering it fails to resume observation
+- **Source:** assumed — autonomous
+
+## D8: Preserve incoming Ask restyle boundaries during the sole catch-up
+- **Question:** Does the incoming Ask/Notifications presentation cutover conflict with the bridge repair?
+- **Options:** retain obsolete UI; alter the Ask connection guard; merge the independent presentation changes
+- **Chose:** Sole clean roadmap merge after source commit c3455d12. Read ui-restyle-ask D1–D12 and Progress in full. Preserve durable validation/FIFO/drafts/approval authority, lease ownership, inert preview subpath and bounded renderer claims. No conflict or Ask runtime edit.
+- **Why:** The bridge consumes the existing public connection-only wait API; the incoming restyle preserves that API. Actual current approval and cancellation are exercised separately from incoming seeded transcript/renderer proof.
+- **Evidence:** sole merge brought22files and one decision log; full composed typecheck passed39.24s, UIlint/root/mobile/prepared-desktop. Remote scripts12/12files passed47.22s without flaky reruns. Final lifecycle and broader affected plugin checks pending.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** the current source's lifecycle verification finds an integration defect
+- **Source:** locked by docs/loop/decisions/ui-restyle-ask.md
+
+## D9: Repair newly reached acceptance fixture prerequisites without repinning presentation
+- **Question:** What does the final full owning-package run reveal beyond the three named regressions?
+- **Options:** hide the failed package result; repin the restyled panel title; fix declared dependencies and query the actual output log
+- **Chose:** Keep source/history retention acceptance. Replace the obsolete aria-label wrapper assumption with the semantic log containing the fixture's actual assistant output, not a new copy/title pin. Investigate the two structured startup/background fixture failures against the same new Worktrees→CLI dependency.
+- **Why:** Final loops+structured run reached28/31 passing files. ui-api failed only at its removed wrapper selector after35 behavioral assertions; the real output is still rendered in role=log. Its repaired full scenario passes through canonical runner1/1 in12.73s, including saved output, lifecycle, queue, CLI and close. The other two fixtures fail before their scenarios with missing setting/creator method.
+- **Evidence:** canonical31files28pass3fail225.38s; plugins/quirky.loops/test/ui-api.test.ts:429-433; LoopView.tsx903-925. Native/API/structured focused3/3 remain green.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** a fixture dependency correction does not expose the intended real acceptance path
+- **Source:** assumed — autonomous
+
+## D10: Close the owning-package repair and retain the failing broader boundary honestly
+- **Question:** Which final evidence supports landing this one repair?
+- **Options:** claim the earlier93file run passed; change independently owned plugins; land the exercised owning-package repair with exact broader failures recorded
+- **Chose:** Final canonical loops+structured boundary passes31/31files, no failures/flaky reruns,188.50s. Final canonical scripts passes12/12files47.22s; final full UIlint/root/mobile/prepared-desktop typecheck passes41.32s. The focused lifecycle/API/structured3/3 passes60.38s, and retained-output UI/API scenario1/1 passes12.73s. No whole-repository or five-plugin green claim.
+- **Why:** The three named failures and newly exposed owning-package fixture/selector issues are repaired without runtime guards, approval checks or the20second quiet gate being weakened. Wider Ask/Automations/Orchestration failures are concretely inventoried rather than attributed to an unproven earlier cause or hidden. The existing Orchestration repair on lane8 accepted a detailed current-handle handoff; no duplicate test/debug follow-up.
+- **Evidence:** final canonical31/31 suite-result ok:true/flaky:[]; final typecheck exit0; scripts12/12 suite-result ok:true/flaky:[]; docs/loop/BLOCKERS.md section fix-test-loops-1028. Both structured fixtures now include their declared real CLI dependency with startup-owner/session/selection assertions unchanged.
+- **Reversibility:** easy
+- **Confidence:** high for the named owning-package repair; no broader clearance
+- **Revisit if:** authoritative merged typecheck or the existing downstream repair demonstrates a bridge regression
+- **Source:** assumed — autonomous
+
+## D11: Keep runtime, review and platform assurances bounded
+- **Question:** What do smoke cleanup and static review establish?
+- **Options:** label all native/provider/UI/platform behavior accepted; retain only observed evidence and limits
+- **Chose:** Real disposable daemon/API approval answer→resume and visible Ask→session-stop/cancel paths pass with actual terminal envelopes, two settled iterations and exact session ownership; final combined host exit0 in3.39s with both success/cleanup markers. The native fake app-server quiet-gate smoke passes after20467ms with one settled turn, no extra start/interrupt and cleanup, exit0 in22.05s. Scoped same-family static reviewer reports no findings; no cross-family/full formal campaign or native OS visual acceptance.
+- **Why:** The fixtures exercise real Quirky API/daemon/owner paths, not real paid model execution or native menus/focus. All finite jobs/workers returned. Temporary runtime homes are removed; no browser was opened. Inactive-plugin/worktree/notification and removed-cwd Git shutdown warnings remain visible in the receipt and blocker ledger.
+- **Evidence:** actual approval and cancellation smoke success/cleanup markers; native elapsed20467ms; LoopsRepairReviewer final no-findings report; all canonical jobs completed.
+- **Reversibility:** easy
+- **Confidence:** high for the exercised paths
+- **Revisit if:** an OS-specific or real-provider lifecycle failure is reported
+- **Source:** deferred: platform
+
 ## Progress
-Named loops API/native-control files pass canonical focused verification. Actual API approval and native quiet-gate smokes passed/cleaned; cancellation refinement now passes actual real Ask stop smoke, with canonical structured/API rerun pending. Scoped static reviewer found no findings against final acquisition/drain ordering. All workers returned. Commit source, merge roadmap once, read incoming decisions, run complete affected remote suites/scripts/typecheck, rerun current API smoke and authoritative land. No global completion state observed.
+Final owning-package loops+structured suite31/31 clean188.50s; scripts12/12 clean47.22s; final full typecheck41.32s. Actual approval/cancellation and native quiet-gate smoke proof retained, shutdown warnings explicit. Sole roadmap merge complete; incoming Ask log fully read. All scouts/implementers/reviewer/jobs returned. Broader93file boundary73pass20fail is recorded in BLOCKERS with exact independent-owner inventory, not represented as passing. Commit final fixtures/readiness/receipt, detach and run authoritative queue land fix-test-loops-1028; wait for its actual result, then remove owned /tmp/quirky-lane10-loops-r8eAik and update loop notes. Do not claim another item or global completion.

@@ -429,7 +429,7 @@ test('setup, lifecycle, queue, history, close and CLI actions use real daemon an
   await cliUiCommand('ui-open', { positionals: [historyLoop.id], flags: {} })
   await waitForOverlay((report) => railIsReadyForLoop(report, historyLoop.id))
   await headless.waitFor(() =>
-    headless!.document.querySelector('[aria-label="Loop output"]')?.textContent?.includes('History fixture completed') || undefined
+    [...headless!.document.querySelectorAll('[role="log"]')].some((log) => log.textContent?.includes('History fixture completed')) || undefined
   )
   await uiCommand('action', { loopId: historyLoop.id, action: 'resume-update', params: { value: '2' } })
   await waitForOverlay((report) => railIsForLoop(report, historyLoop.id) && isRecord(report.rail) && report.rail.resumeAdd === '2')
