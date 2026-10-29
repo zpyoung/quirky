@@ -37,7 +37,7 @@ SC7. Center tabs show actually opened view contributions, preserve input when sw
 
 SC8. A question from another worktree increases Inbox and existing worktree attention without changing the selected worktree/view. A bottom-right shared toast exposes the question and primary answer. At eight seconds only the toast disappears; the question remains in Inbox. Successful answer removes the pending entry through canonical events; failure leaves the question actionable and reports the error. No fake answer or synthesized success.
 
-SC9. Status bar combines existing registered status content with canonical branch/working/needs-you summaries where available. Unknown/offline values are not invented. Theme switch changes chrome through the existing token resolver.
+SC9. Status bar combines existing registered status content with canonical branch/working/needs-you summaries where available. Summary labels stay on one line; the branch ellipsizes before activity counts lose space, and constrained summaries clip rather than overlap plugin content. Unknown/offline values are not invented. Theme switch changes chrome through the existing token resolver.
 
 ## Defect coverage
 
