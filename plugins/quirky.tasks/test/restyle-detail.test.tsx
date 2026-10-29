@@ -1,26 +1,21 @@
-import { GlobalRegistrator } from '@happy-dom/global-registrator'
 import { afterAll, afterEach, beforeAll, expect, test } from 'bun:test'
+import { registerUiDom, unregisterUiDom } from '../../quirky.loops/test/ui-dom'
 import type { UiPluginContext } from '@quirky/protocol'
 import { act, useState } from 'react'
-import { createRoot, type Root } from 'react-dom/client'
+import type { Root, createRoot as CreateRoot } from 'react-dom/client'
 import type { IssueDraft, TasksState } from '../src/contracts'
 import { NewIssueDialog } from '../src/issue/NewIssueDialog'
 
 type Mounted = { container: HTMLDivElement; root: Root }
+let createRoot: typeof CreateRoot
 
 const mounts: Mounted[] = []
-const nativeGlobals = [
-  'fetch', 'WebSocket', 'Request', 'Response', 'Headers', 'ReadableStream', 'WritableStream', 'TransformStream', 'AbortController', 'AbortSignal',
-  'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'setImmediate', 'clearImmediate', 'queueMicrotask', 'MessageChannel', 'performance'
-] as const
-const runtimeGlobals = nativeGlobals.map((name) => [name, (globalThis as Record<string, unknown>)[name]] as const)
-const reactGlobal = globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
-const previousActEnvironment = reactGlobal.IS_REACT_ACT_ENVIRONMENT
 
-beforeAll(() => {
-  GlobalRegistrator.register()
-  for (const [name, value] of runtimeGlobals) if (value !== undefined) Object.defineProperty(globalThis, name, { value, writable: true, configurable: true })
-  reactGlobal.IS_REACT_ACT_ENVIRONMENT = true
+beforeAll(async () => {
+  registerUiDom()
+  // React DOM binds its scheduler at import, so happy-dom must exist first.
+  const reactDom = await import('react-dom/client')
+  createRoot = reactDom.createRoot
 })
 
 afterEach(async () => {
@@ -31,9 +26,7 @@ afterEach(async () => {
 })
 
 afterAll(async () => {
-  await GlobalRegistrator.unregister()
-  if (previousActEnvironment === undefined) delete reactGlobal.IS_REACT_ACT_ENVIRONMENT
-  else reactGlobal.IS_REACT_ACT_ENVIRONMENT = previousActEnvironment
+  await unregisterUiDom()
 })
 
 async function waitFor(predicate: () => boolean, label: string): Promise<void> {
@@ -47,6 +40,14 @@ async function waitFor(predicate: () => boolean, label: string): Promise<void> {
     })
   }
   throw new Error(`Timed out waiting for ${label}`)
+}
+
+function titleField(container: HTMLElement): HTMLInputElement | null {
+  const dialog = container.querySelector('[role="dialog"]')
+  if (!dialog) return null
+  const label = [...dialog.querySelectorAll('label')].find((candidate) => candidate.textContent?.trim() === 'Title')
+  const control = label?.control
+  return control instanceof HTMLInputElement ? control : null
 }
 
 function NewIssueHarness(props: { context: UiPluginContext; getDraft(): IssueDraft; registerOpenSetter(setOpen: (value: boolean) => void): void }) {
@@ -99,10 +100,10 @@ test('Cancel closes New Issue without creating it and keeps the saved draft for 
   document.body.append(container)
   await act(async () => mounted.root.render(<NewIssueHarness context={context} getDraft={() => draft} registerOpenSetter={(setter) => { setOpen = setter }} />))
   await waitFor(() => {
-    const input = container.querySelector<HTMLInputElement>('[role="dialog"] input#new-issue-title')
+    const input = titleField(container)
     return input !== null && !input.disabled
   }, 'enabled New Issue title field')
-  const title = container.querySelector<HTMLInputElement>('[role="dialog"] input#new-issue-title')
+  const title = titleField(container)
   if (!title) throw new Error('New Issue title field was not rendered')
   await act(async () => {
     const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set
@@ -123,9 +124,9 @@ test('Cancel closes New Issue without creating it and keeps the saved draft for 
   if (!reopen) throw new Error('New Issue reopen control was not rendered')
   await act(async () => reopen.click())
   await waitFor(() => {
-    const input = container.querySelector<HTMLInputElement>('[role="dialog"] input#new-issue-title')
+    const input = titleField(container)
     return input !== null && !input.disabled
   }, 'reopened New Issue title field')
-  expect(container.querySelector<HTMLInputElement>('[role="dialog"] input#new-issue-title')?.value).toBe('Edited draft')
+  expect(titleField(container)?.value).toBe('Edited draft')
   expect(creates).toBe(0)
 })

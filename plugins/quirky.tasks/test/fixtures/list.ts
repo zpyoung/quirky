@@ -297,9 +297,14 @@ if (args[0] === 'api') {
     const key = repoMatch ? repoMatch[1] + '/' + repoMatch[2] : 'test-owner/test-repo'
     if (state.failList === key) fail('fixture list failure')
     const stored = Array.isArray(state.items?.[key]) ? state.items[key] : []
-    const filtered = stored.filter((item) => matches(item, query))
+    let filtered = stored.filter((item) => matches(item, query))
     const page = Number(parameters.get('page') ?? 1)
     const perPage = Number(parameters.get('per_page') ?? 30)
+    const lagSearch = isObject(state.lagSearch) ? state.lagSearch : null
+    if (perPage !== 1 && lagSearch?.repository === key && Number(lagSearch.remaining) > 0 && Array.isArray(lagSearch.items)) {
+      lagSearch.remaining = Number(lagSearch.remaining) - 1
+      filtered = lagSearch.items.filter((item) => matches(item, query))
+    }
     const items = filtered.slice((page - 1) * perPage, page * perPage).map((item) => item.kind === 'issue' ? toRestIssue(item) : toRestPull(item))
     emit({ ...(state.unknownCount === true ? {} : { total_count: filtered.length }), items })
   }
