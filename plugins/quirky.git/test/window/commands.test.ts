@@ -70,7 +70,10 @@ test('SC-64: every window command routed through ui.command.run does what its bu
       const view = await openView(w)
       return view?.id === DIFF_VIEW && view.input?.mode === 'combined' && view.input.area === 'unstaged'
     })
-    const combinedRoot = await w.win.waitFor(() => q('[data-git-view-root]'))
+    const combinedRoot = await w.win.waitFor(() => {
+      const root = q('[data-git-view-root]')
+      return root && q('section[data-path="big.txt"]', root) && q('section[data-path="math.ts"]', root) ? root : undefined
+    })
     await w.win.waitFor(() => qa('section[data-path]', combinedRoot).length === 2)
     expect(qa('section[data-path]', combinedRoot).map((section) => section.getAttribute('data-path')).sort()).toEqual(['big.txt', 'math.ts'])
 

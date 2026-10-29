@@ -7,7 +7,6 @@ import { useNotesBinding } from '../notes/binding'
 import { NotesPreview } from '../notes/NotesPreview'
 import { SendMenu } from '../notes/SendMenu'
 import { useNotes, type Note } from '../notes/useNotes'
-import { DIFF_VIEW_ID } from '../shared/view-input'
 import {
   changeSections,
   combinedTitle,
@@ -296,7 +295,6 @@ export function CombinedDiff({ context, input, settings, setSetting, report, bin
     })
   }, [summary, area, input.commit, data?.commit, report])
 
-  const open = (next: { area?: 'all' | 'branch' }) => context.openView(DIFF_VIEW_ID, { worktree, mode: 'combined', ...next })
   const title = combinedTitle(input, data?.compare ?? null, data?.commit ?? null)
   const notEmptyReason = area === 'branch' && data?.compare && data.compare.status !== 'ready' ? data.compare.message : null
   const showConflicts = (data?.excluded ?? 0) > 0 && (area === 'unstaged' || area === 'all')
@@ -322,7 +320,7 @@ export function CombinedDiff({ context, input, settings, setSetting, report, bin
               </>
             )}
             {input.commit === undefined && (
-              <Button onClick={() => open({ area: area === 'branch' ? 'all' : 'branch' })}>
+              <Button onClick={() => void context.executeCommand('command:quirky.git/open-changes', { worktree, area: area === 'branch' ? 'all' : 'branch' })}>
                 {area === 'branch' ? 'Open All Changes' : 'Open Branch Diff'}
               </Button>
             )}
@@ -370,7 +368,7 @@ export function CombinedDiff({ context, input, settings, setSetting, report, bin
               <Badge tone="needs-you">Conflicted files are reviewed separately</Badge>
               <p>This diff view excludes unresolved conflicts because the normal two-way diff pipeline is not conflict-safe.</p>
               <p>{data!.excluded} unresolved conflicts were excluded from this diff view.</p>
-              <Button onClick={() => context.openView(DIFF_VIEW_ID, { worktree, mode: 'conflicts' })}>Review conflicts</Button>
+              <Button onClick={() => void context.executeCommand('command:quirky.git/review-conflicts', { worktree })}>Review conflicts</Button>
             </section>
           )}
           {notEmptyReason && <p className="ui-text-muted" style={{ padding: 'var(--ui-space-8)' }}>{notEmptyReason}</p>}
@@ -495,9 +493,8 @@ function Section(props: SectionProps) {
               <Button onClick={() => void navigator.clipboard?.writeText(entry.path)}>Copy path</Button>
               <Button
                 onClick={() =>
-                  context.openView(DIFF_VIEW_ID, {
+                  void context.executeCommand('command:quirky.git/open-diff', {
                     worktree,
-                    mode: 'file',
                     source: entry.source,
                     path: entry.path,
                     ...(entry.oldPath ? { oldPath: entry.oldPath } : {}),

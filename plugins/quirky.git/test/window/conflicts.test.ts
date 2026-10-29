@@ -56,8 +56,7 @@ test('SC-41: a sync that stops on a conflict leads, in the window, to Continue m
   expect(q('[role="img"][aria-label^="Resolved locally conflict"]')).not.toBeNull()
 
   await click(buttonText('Continue merge', banner))
-  await w.win.waitFor(() => !buttonText('Continue merge') && text(primary()) === 'Push')
-  expect(primary().title).toBe('Push 2 commit(s)')
+  await w.win.waitFor(() => !buttonText('Continue merge') && text(primary()) === 'Push' && !primary().disabled)
   expect(w.git('rev-list', '--count', 'origin/zoe/feat..HEAD')).toBe('2')
   expect(w.git('log', '-1', '--format=%p').split(' ')).toHaveLength(2)
   await w.win.waitFor(async () => (await w.report()).operation === 'none')

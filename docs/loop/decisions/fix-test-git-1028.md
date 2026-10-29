@@ -143,5 +143,38 @@
 - **Revisit if:** current acceptance still fails after the demonstrated fixture corrections.
 - **Source:** assumed — autonomous
 
+## D14: Finish the headless platform prerequisites and audit lost actions
+- **Question:** What did the measured-runtime checks and subsequent targeted suites establish?
+- **Options:** bypass terminal rendering; increase waits; supply the existing fixture platform and restore every real user action.
+- **Chose:** Pair measured layout with the terminal fixtures' existing Canvas2D test context, restoring both prototypes. Actual hosted diagnostic then mounted the real Git editor with problems[] and cleanup in5.15s. Keep the earlier geometry-only Canvas failure and20file2pass/18fail result as failed evidence. Later targeted results were11/20pass9fail, then14/20pass6fail. A read-only audit of the entire task-owned test delta found three accidentally deleted combined-view actions; restore both open-changes calls and the actual oversized editor replacement. No renderer or deadline workaround.
+- **Why:** enabling layout exposed Happy DOM's missing native Canvas context. A test that never opens its view or applies its draft cannot prove acceptance. Parent also restored the omitted buttonText import; full source compiler then passed56.58s at4d19eb8e.
+- **Evidence:** actual diagnostics artifacts43/48/54; canonical targeted artifacts47/51; GitActionLossAudit; commits2ff52de9/cd3c2521/4d19eb8e; complete current test actions.
+- **Reversibility:** easy (test platform and drivers)
+- **Confidence:** high for exercised boundaries; not a pixel-rendering claim.
+- **Revisit if:** a native/browser renderer disagrees with the deterministic DOM fixture.
+- **Source:** assumed — autonomous
+
+## D15: Repair actual hosted navigation at its public API boundary
+- **Question:** Why did a fully acknowledged Option-click still create only one group, and why could navigation remain behind a standalone view?
+- **Options:** weaken the split assertion; add retries or legacy aliases; use the existing legal tab-owner API and canonical navigation.
+- **Chose:** Remove the forbidden workspace field from Git's moveTab call; retain tab, side, target group and revision. After final hosted identity is established, select that worktree's workspace view when a different top-level view was showing. Return the existing open promise from open-changes/open-commit. Route CombinedDiff's branch, conflict and file links through the same registered Git commands. Preserve ConflictReview's explicit standalone snapshot/return behavior and generic top-level reporting; no host/protocol API change.
+- **Why:** the actual before diagnostic surfaced “Could not open diff: params.workspace is not allowed”, with the split-marked tab stranded in its original group. After the source correction, the same real event flow produced two groups, exact active group/tab identities, split:true, no toast and problems[]. Direct combined links previously bypassed the hosted owner, and the two handlers replied before their asynchronous operation. No retry, source suppression or new schema is needed.
+- **Evidence:** actual before/after flow diagnostics; plugins/quirky.git/src/view/{hosted-tabs,commands,CombinedDiff}.tsx/ts; quirky.terminal moveTab schema/service; public hosted-diff and combined-navigation regressions; README Hosted diff navigation.
+- **Reversibility:** easy (local caller corrections)
+- **Confidence:** high for demonstrated split repair; combined and real-browser receipts follow.
+- **Revisit if:** final real navigation or source-level review contradicts tab/selection ownership.
+- **Source:** assumed — autonomous
+
+## D16: Consume the landed Hosting correction without duplicating its repair
+- **Question:** How does the other lane's canonical handoff affect the remaining GitHub creation flow?
+- **Options:** modify Hosting again; wait without doing reachable Git work; consume its exact independently landed source commit.
+- **Chose:** Read the complete Hosting D1–D6 log and exact two-file source inventory, then consume sourcec96115df only. Keep its independently verified fixtures and two newline delimiter corrections unchanged. No second unsolicited roadmap merge and no competing Hosting implementation.
+- **Why:** the owning lane explicitly handed off its canonically landed correction at roadmapbc52520e. Current pushRepository still splits on literal backslashes, which can refuse an otherwise configured creation push. The owner reports17/17/no-flake, compiler/scripts127/0 and actual exact-fork push/closed refusal; those are its evidence, not a rerun or whole-consumer pass by this lane. Its broader85/151 red remains disclosed under the original owners.
+- **Evidence:** user lane9 handoffs; git show c96115df inventory; bc52520e:docs/loop/decisions/fix-test-hosting-1028.md; current pr-review.ts:1052,1061.
+- **Reversibility:** easy (dependency integration)
+- **Confidence:** high for exact handoff/source boundary.
+- **Revisit if:** this lane's final Git consumer scenario still fails with the landed parser fix.
+- **Source:** locked by user lane9 canonical handoff
+
 ## Progress
-Second composed suite failed71/84 with13remaining files. Actual runtime diagnostic established headless zero geometry, and source established intentional absence of embedded reports. Focused six-file content migration plus parent fixture/action/hosted corrections are complete and audited; all workers returned. Next: commit current tests/docs, run targeted canonical window/UI checks and the measured runtime diagnostic plus full compiler, then full canonical suites, deep3lens Gemini review and one accepted-finding batch before canonical land. Sole roadmap catch-up remains the only unsolicited merge.
+All fixture/action repairs are committed through4d19eb8e. Parent now has three Git source caller corrections plus README and directly affected test coverage, including the demonstrated forbidden moveTab field fix. Read complete landed Hosting handoff; consume its exact source commit after committing this candidate. Next: compiler/UI build, affected canonical suites, fresh actual split/navigation/browser proof, deep3lens review and one accepted-finding batch, then final receipts and canonical land. No second unsolicited roadmap merge.

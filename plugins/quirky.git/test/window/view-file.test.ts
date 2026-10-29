@@ -54,8 +54,8 @@ test('SC-60: the file diff opens titled, scrolled to the first change, moves wit
   await w.win.waitFor(() => selectedLine(editor) === 'line three')
 
   await click(byLabel('Switch to side-by-side diff'))
-  await w.win.waitFor(() => qa('[data-git-view-root] [contenteditable]').length === 2)
-  expect(qa('[data-git-view-root] [contenteditable]')).toHaveLength(2)
+  await w.win.waitFor(() => qa('[data-git-view-root] [role="textbox"][contenteditable]').length === 2)
+  expect(qa('[data-git-view-root] [role="textbox"][contenteditable]')).toHaveLength(2)
   expect(await settingValue(w, 'diffDefaultView')).toBe('side-by-side')
   expect(byLabel('Switch to inline diff')).not.toBeNull()
 
@@ -144,6 +144,12 @@ test('SC-61: Revert Block and revert-change put a block back in the editor only;
   await w.win.waitFor(() => editor.state.sliceDoc() === numbered(60, { 50: 'line fifty' }))
   expect(editor.state.sliceDoc()).toBe(numbered(60, { 50: 'line fifty' }))
   expect(readFileSync(join(w.dir, 'math.ts'), 'utf8')).toBe(numbered(60, { 3: 'line three', 50: 'line fifty' }))
+  await w.win.waitFor(async () => {
+    const result = await w.agent.callAny('quirky.terminal/workspace', { workspace: w.feat.id }) as {
+      workspace: { root: { tabs?: Array<{ input?: { path?: string }; closeParams?: { dirty?: boolean } }> } }
+    }
+    return result.workspace.root.tabs?.some((tab) => tab.input?.path === 'math.ts' && tab.closeParams?.dirty === true)
+  })
 
   await click(rowOf('README.md', 'staged'))
   await w.win.waitFor(async () => {
