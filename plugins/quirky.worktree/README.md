@@ -59,6 +59,10 @@ Sleep state and change timestamps survive daemon restart. Exact `ui.window.state
 
 Navigation history and cleanup use the same canonical owner resolution. Each live `connId` keeps history of canonical worktree IDs; unresolved, ambiguous, or malformed workspace views block sleep and cleanup, and only the exact resolved owner receives an active-workspace cleanup blocker. Sleep preserves sessions, PTYs, history, drafts, and buffers.
 
+## Project ownership and removal
+
+`quirky.worktree/ownedIds({repo})` returns the project's primary, currently listed, and durably recorded worktree IDs. Recorded IDs remain available when Git can no longer list a checkout, so project removal can still find its sessions. Removing a project forgets metadata rather than deleting its folders; ledger removal previews retain revision-guarded records for detachment and later recovery.
+
 ## Cleanup preview and removal
 
 `quirky.worktree/cleanupPreview({})` includes 30-day idle candidates (`idle-clean`) and worktrees explicitly archived for at least seven days (`archived-7day`). Both carry a current safety fingerprint and readable blockers. `archive({worktree,archivedAt?})` and `quirky worktree archive <worktree> [--off]` set or clear archived metadata; changing that timestamp invalidates an older preview fingerprint. `cleanupIgnore({worktreeId,fingerprint})` ignores only the matching suggestion; `cleanupRestoreIgnored({})` restores ignored suggestions.
