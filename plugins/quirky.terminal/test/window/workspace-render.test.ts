@@ -48,9 +48,16 @@ describe('rendering from the daemon workspace', () => {
     const view = await mount()
     expect(view.qa('[data-group]').map((el) => el.dataset.group)).toEqual(['grp-1', 'grp-2'])
     const tabs = view.qa('[role="tab"]')
-    expect(tabs.map((el) => el.dataset.tab)).toEqual(['tab-1', 'tab-2', 'tab-3'])
+    expect(tabs.map((el) => el.closest<HTMLElement>('[data-tab]')!.dataset.tab)).toEqual(['tab-1', 'tab-2', 'tab-3'])
     expect(tabs.map((el) => el.getAttribute('aria-selected'))).toEqual(['false', 'true', 'true'])
-    expect(tabs.map((el) => el.querySelector('.qt-tab-title')!.textContent)).toEqual(['Terminal 1', 'Build', 'Hello'])
+    expect(tabs.map((el) => el.textContent)).toEqual(['Terminal 1', 'Build', 'Hello'])
+  })
+
+  test("a tab's accessible element holds only its title, so pressing it can't reach the close button", async () => {
+    const view = await mount()
+    const tab = view.qa('[role="tab"]')[0]!
+    expect(tab.querySelector('button')).toBeNull()
+    expect(tab.closest('[data-tab]')!.querySelector('.qt-tab-close')).not.toBeNull()
   })
 
   test('shows a colour dot, a pin instead of close, and a collapse icon for an expanded tab', async () => {
