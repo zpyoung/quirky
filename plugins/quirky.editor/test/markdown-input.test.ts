@@ -75,3 +75,18 @@ test('editor clipboard slices retain soft and hard line breaks', () => {
   current.view.pasteHTML(dom.innerHTML)
   expect(current.getMarkdown()).toBe(source)
 })
+
+test('internal clipboard slices preserve soft breaks in subsequent paragraphs', () => {
+  const source = 'first\nsecond\n\nthird\nfourth'
+  const current = mount(source)
+  const { dom } = current.view.serializeForClipboard(current.state.doc.slice(0, current.state.doc.content.size))
+  current.commands.clearContent()
+  current.view.pasteHTML(dom.innerHTML)
+  expect(current.getMarkdown()).toBe(source)
+})
+
+test('plain-text paste preserves repeated spaces and tabs', () => {
+  const current = mount('')
+  current.view.pasteText('alpha  beta\tgamma')
+  expect(current.getMarkdown()).toBe('alpha  beta\tgamma')
+})

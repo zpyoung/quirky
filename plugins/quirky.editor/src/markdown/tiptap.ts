@@ -1,10 +1,12 @@
-import { Editor, type Extensions } from '@tiptap/core'
+import { Editor, Extension, type Extensions } from '@tiptap/core'
 import Image from '@tiptap/extension-image'
 import Link from '@tiptap/extension-link'
 import { Mathematics } from '@tiptap/extension-mathematics'
-import Paragraph from '@tiptap/extension-paragraph'
 import { Markdown } from '@tiptap/markdown'
 import StarterKit from '@tiptap/starter-kit'
+import { DOMParser as ProseMirrorDOMParser } from '@tiptap/pm/model'
+import type { ParseOptions } from '@tiptap/pm/model'
+import { Plugin } from '@tiptap/pm/state'
 import { Table } from '@tiptap/extension-table'
 import TableCell from '@tiptap/extension-table-cell'
 import TableHeader from '@tiptap/extension-table-header'
@@ -14,18 +16,27 @@ import TaskList from '@tiptap/extension-task-list'
 import { MarkdownDocumentLink } from './DocumentLink'
 import { MarkdownToggle } from './Toggle'
 
-/** Keeps soft source newlines distinct from hard breaks during native DOM input. */
-const MarkdownParagraph = Paragraph.extend({
-  whitespace: 'pre',
-  parseHTML() {
-    return [
-      {
-        tag: 'p',
-        preserveWhitespace: false,
-        getAttrs: (element) => element.closest('[data-pm-slice]') ? false : null
-      },
-      { tag: 'p' }
-    ]
+function preserveSoftBreaks(options: ParseOptions): ParseOptions {
+  return options.preserveWhitespace === true ? { ...options, preserveWhitespace: 'full' } : options
+}
+
+/** Retains soft newlines for editor input without preserving external HTML formatting whitespace. */
+class MarkdownDOMParser extends ProseMirrorDOMParser {
+  override parse(dom: Node, options: ParseOptions = {}) {
+    return super.parse(dom, preserveSoftBreaks(options))
+  }
+
+  override parseSlice(dom: Node, options: ParseOptions = {}) {
+    return super.parseSlice(dom, preserveSoftBreaks(options))
+  }
+}
+
+const MarkdownSoftBreaks = Extension.create({
+  name: 'markdownSoftBreaks',
+  addProseMirrorPlugins() {
+    const { schema } = this.editor
+    const parser = new MarkdownDOMParser(schema, ProseMirrorDOMParser.fromSchema(schema).rules)
+    return [new Plugin({ props: { domParser: parser } })]
   }
 })
 
@@ -34,10 +45,9 @@ export function createMarkdownExtensions(): Extensions {
     StarterKit.configure({
       heading: { levels: [1, 2, 3, 4, 5] },
       link: false,
-      paragraph: false,
       trailingNode: false
     }),
-    MarkdownParagraph,
+    MarkdownSoftBreaks,
     Markdown.configure({ markedOptions: { gfm: true } }),
     MarkdownDocumentLink,
     Link.configure({
