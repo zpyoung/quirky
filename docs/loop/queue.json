@@ -2269,6 +2269,16 @@
       "status": "todo"
     },
     {
+      "id": "fix-test-reviews-tool-1028",
+      "milestone": "M7",
+      "title": "Repair actual end-phase Checks tool visibility/refresh failure: canonical remote plugins/quirky.reviews/test/review-link-ui.test.tsx case 'mounted Checks refreshes from an open six-slot tool and withdraws visibility candidates when replaced or closed' fails waitUntil at79 called from417, initial and configured isolated retry, while the other5cases pass. Observed during fix-test-mobile-1028 shared Hosting fixture consumer verification (mobile/Tasks actual quirky.cli dependency supplied); same failure before and after Ask/Settings catch-up. Fix the consumer-visible active-tool polling/visibility transition or stale behavioral fixture using current public slot contracts; never extend deadlines or pin incidental markup/copy. Existing Mobile/Hosting helper changes do not alter Reviews production. Full evidence in docs/loop/decisions/fix-test-mobile-1028.md and docs/loop/BLOCKERS.md. Run canonical suite with private homes, preserve unrelated state and clean every started process.",
+      "docs": [],
+      "deps": [
+        "m7-test-triage"
+      ],
+      "status": "todo"
+    },
+    {
       "id": "m7-api-freeze",
       "milestone": "M7",
       "title": "Plugin API 1.0: freeze and version the API, manifests declare their API version, publish an example distro",
@@ -2327,20 +2337,11 @@
         "fix-test-packages-protocol-1028",
         "fix-test-scripts-ui-review-1028",
         "fix-test-scripts-profile-timeout-1028",
-        "m7-native-notification-and-signed-terminal-host"
+        "m7-native-notification-and-signed-terminal-host",
+        "fix-test-reviews-tool-1028"
       ],
       "status": "todo",
       "early": true
-    },
-    {
-      "id": "fix-test-reviews-tool-1028",
-      "milestone": "M7",
-      "title": "Repair actual end-phase Checks tool visibility/refresh failure: canonical remote plugins/quirky.reviews/test/review-link-ui.test.tsx case 'mounted Checks refreshes from an open six-slot tool and withdraws visibility candidates when replaced or closed' fails waitUntil at79 called from417, initial and configured isolated retry, while the other5cases pass. Observed during fix-test-mobile-1028 shared Hosting fixture consumer verification (mobile/Tasks actual quirky.cli dependency supplied); same failure before and after Ask/Settings catch-up. Fix the consumer-visible active-tool polling/visibility transition or stale behavioral fixture using current public slot contracts; never extend deadlines or pin incidental markup/copy. Existing Mobile/Hosting helper changes do not alter Reviews production. Full evidence in docs/loop/decisions/fix-test-mobile-1028.md and docs/loop/BLOCKERS.md. Run canonical suite with private homes, preserve unrelated state and clean every started process.",
-      "docs": [],
-      "deps": [
-        "m7-test-triage"
-      ],
-      "status": "todo"
     }
   ]
 }
