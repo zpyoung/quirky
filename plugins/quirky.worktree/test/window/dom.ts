@@ -82,8 +82,8 @@ export async function click(element: HTMLElement): Promise<void> {
   element.click()
   await settle()
 }
-export async function openDisclosure(name: string): Promise<void> {
-  const summary = [...document.querySelectorAll<HTMLElement>('details > summary')].find((item) => accessibleName(item) === name)
+export async function openDisclosure(name: string, root: ParentNode = document): Promise<void> {
+  const summary = [...root.querySelectorAll<HTMLElement>('details > summary')].find((item) => accessibleName(item) === name)
   if (!summary) throw new Error(`no disclosure named ${name}`)
   const disclosure = summary.parentElement as HTMLDetailsElement
   if (!disclosure.open) summary.click()

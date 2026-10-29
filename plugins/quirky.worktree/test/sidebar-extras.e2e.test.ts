@@ -7,7 +7,7 @@ import { builtinsDir, makeTempHome, startHarness, type Harness } from '../../../
 import { makeTempDir, removeTempDirs } from '../../../packages/daemon/test/plugins/fixtures'
 import { startHeadlessWindow, type HeadlessWindow } from '../../../packages/ui/test/fixtures/headless-window'
 import { isolateGitConfig, makeRepo } from '../../quirky.repo/test/git-fixtures'
-import { button, click, menuItem as findMenuItem, sectionHeadingMatches } from './window/dom'
+import { button, click, dialogNamed, menuItem as findMenuItem, sectionHeadingMatches } from './window/dom'
 const SIDEBAR = 'sidebar-section:quirky.worktree/worktrees'
 const SESSION_VIEW = 'view:quirky.session/worktree'
 const REPO_ROOT = resolve(import.meta.dir, '../../..')
@@ -203,11 +203,12 @@ test('SC-02/08/10/17: real CLI and sidebar share activity preferences, selected 
   expect(initial.preferences.workspaceActivityWindow).toBe('all')
   expect(initial.active).toMatchObject({ worktreeId: feature.id })
 
-  const filter = await win.waitFor(() => [...document.querySelectorAll<HTMLButtonElement>('button[aria-label]')].find(
-    (candidate) => /workspace options|filters/i.test(candidate.getAttribute('aria-label') ?? '')
-  ))
-  await click(filter)
-  const week = await win.waitFor(() => button(document, 'Week'))
+  const optionsButton = await win.waitFor(() => button(document, 'Worktrees options'))
+  await click(optionsButton)
+  const options = await win.waitFor(() => dialogNamed('Worktrees options'))
+  const filters = await win.waitFor(() => options.querySelector<HTMLButtonElement>('button[aria-controls="workspace-activity-filter-options"]'))
+  await click(filters)
+  const week = await win.waitFor(() => button(options, 'Week'))
   await click(week)
   await win.waitFor(async () => {
     const state = (await agent.callAny('quirky.sidebar-extras/state', {})) as { preferences: { workspaceActivityWindow: string } }
