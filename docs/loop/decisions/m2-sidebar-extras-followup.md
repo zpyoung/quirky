@@ -363,5 +363,38 @@
 - **Revisit if:** the generated bundle becomes tracked source or the packaged app loses required resources.
 - **Source:** assumed — autonomous
 
+## D34: Confirm the closed-panel repair and fix the real accessible-text traversal defect
+- **Question:** what did the rebuilt UI and expanded test run actually establish?
+- **Options:** call the whole gate green because the visual bug is fixed; preserve both results and repair the remaining fixture cause.
+- **Chose:** the current-shell dirty closure passes in run20261029T012114-6c0a: dirty main retains count1 with Changes closed; switching to clean feature clears the count without reopening; one-click Changes open/minimize and Files remain usable. Parent inspected dirty/clean PNGs. Browser closed cleanly and the daemon exited0 with WEB_FIXTURE_CLEANED. The expanded450.362s remote prepass is still red:156/169 files pass,13 fail, so no final model review ran.
+- **Why:** source readback shows the real common fixture bug: visibleText/visibleMenuText recursed through childNodes but returned nothing for Text nodes. Consequently headings and text-only menu names became empty. Add the missing TEXT_NODE branch in the three existing helpers; do not infer another production layout or report-ID bug from those predicate failures.
+- **Evidence:** current closure obs-2/3/4/5/6/7/8 and report; expanded acceptance-full.log; helper correction a3b9de65. The prior full lint/root/mobile/desktop compilation and packaged build passed67.84s. Remaining investigations are scoped to residual focus/cancellation and selected-source/dependency fixtures, plus read-only classification of broad-package failures.
+- **Reversibility:** easy
+- **Confidence:** high about the helper defect and actual UI closure
+- **Revisit if:** current meaningful scenarios still fail after the text traversal correction.
+- **Source:** assumed — autonomous
+
+## D35: Preserve child autofocus and remove dependency/prose-only test assumptions
+- **Question:** which residual failures justify production changes rather than fixture masking?
+- **Options:** force focus in group tests; special-case the group caller; preserve already-focused children in shared Dialog.
+- **Chose:** shared Dialog leaves focus inside an already-focused child and uses its normal first-control fallback only when focus is outside. This preserves the group field's native autoFocus and selection, without new props or changed trap/stack behavior. LSP references returned no language server; direct consumers and current shared implementation were read.
+- **Why:** the natural SC-01 assertion failed before the fix, and Dialog unconditionally focused its header Close button after the field had focused itself. The same code affects Rename. Do not hide it with test-side input.focus().
+- **Evidence:** residual audit; GroupDialogs.tsx35–42; overlays.tsx59–66; current failure at sidebar-extras-ui.test.ts1062.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** existing stacked-dialog/trap behavior or actual group-name selection regresses.
+- **Source:** assumed — autonomous
+
+## D36: Do not alter production controls or validation to satisfy dependency and message-copy assertions
+- **Question:** how should the expanded package gate's unrelated-looking assertions be handled without broadening production scope?
+- **Options:** add disabled values to the expected form output; change TextArea/upgrade the DOM library; remove the dependency-only input and retain application assertions.
+- **Chose:** remove the disabled textarea from the mixed FormData fixture, retaining multiline/select values, distinct label ownership and error descriptions. Parent resolved and inspected the actual dependency: HappyDOM20.14.6 FormData checks disabled only for INPUT (39–42), then unconditionally appends TEXTAREA/SELECT (77–80). TextArea already forwards native props correctly. No production-control change, library patch, or wrong-browser expectation pin. Separately delete the full-ID error-wording case and validate unknown fields/invalid description/icon via existing parse acceptance, not new prose strings.
+- **Why:** these failures do not show product control/validator regressions. Icon is an admitted public presentation field; unknown unrelated fields must still reject.
+- **Evidence:** native dependency FormData.js18–83; primitives.tsx TextArea; design-system.test.tsx mixed form fixture; ui-kinds.ts allowed-field/type checks and failing ui-kinds.test.ts43–48/306–311. Existing queue status was read; no duplicate item or owner was created.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** a real browser fails disabled serialization or the public schema admits malformed presentation fields.
+- **Source:** assumed — autonomous
+
 ## Progress
-Fixture components c064c733,1e9b63fd,b27c5643 and generic activity-stripe repair28323f59 are integrated; every component tree is removed. Parent review corrected the mistaken Worktrees alias diagnosis and restored the missing-group test boundary, natural focus and lineage assertions. All owned browsers/daemons are closed. Root compilation/build is running after D33's generated-output cleanup and fourteen matcher typing corrections. Next: remote full UI/daemon plus owned plugins and scripts, current-shell dirty closure on the rebuilt UI, final three-lens review/one fix batch, complete criterion evidence and canonical land. No final-review model has run. D22 remains the quiet-clock observation limit; dependency readiness is true.
+Source28323f59 and all fixture components are integrated; build/typechecks and current-shell dirty closure have observed passes, with all owned browsers/daemons closed. The expanded169-file remote gate remains red as D34 records; the common Text-node traversal defect is now corrected in a3b9de65. Two disjoint residual fixture workers and a read-only broad-failure audit are active; no checks mid-flight. Next: integrate justified residual corrections, run targeted remote scenarios then the broad UI/daemon/owned-plugin/scripts gate, final three-lens review/one fix batch, complete criterion evidence and canonical land. No final-review model has run. D22 remains the quiet-clock observation limit; dependency readiness is true.
