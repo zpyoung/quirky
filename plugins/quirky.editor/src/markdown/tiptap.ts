@@ -16,7 +16,17 @@ import { MarkdownToggle } from './Toggle'
 
 /** Keeps soft source newlines distinct from hard breaks during native DOM input. */
 const MarkdownParagraph = Paragraph.extend({
-  whitespace: 'pre'
+  whitespace: 'pre',
+  parseHTML() {
+    return [
+      {
+        tag: 'p',
+        preserveWhitespace: false,
+        getAttrs: (element) => element.closest('[data-pm-slice]') ? false : null
+      },
+      { tag: 'p' }
+    ]
+  }
 })
 
 export function createMarkdownExtensions(): Extensions {

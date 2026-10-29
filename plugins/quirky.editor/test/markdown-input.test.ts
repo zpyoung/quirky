@@ -60,3 +60,18 @@ test('intentional hard breaks remain serializable after native input', async () 
   current.commands.insertContent({ type: 'text', text: 'third' })
   expect(current.getMarkdown()).toBe('first\nsecond edited  \nthird')
 })
+
+test('external HTML paste collapses paragraph source indentation into prose', () => {
+  const current = mount('')
+  current.view.pasteHTML('<p>\n    copied prose\n</p>')
+  expect(current.getMarkdown()).toBe('copied prose')
+})
+
+test('editor clipboard slices retain soft and hard line breaks', () => {
+  const source = 'first\nsecond  \nthird'
+  const current = mount(source)
+  const { dom } = current.view.serializeForClipboard(current.state.doc.slice(0, current.state.doc.content.size))
+  current.commands.clearContent()
+  current.view.pasteHTML(dom.innerHTML)
+  expect(current.getMarkdown()).toBe(source)
+})
