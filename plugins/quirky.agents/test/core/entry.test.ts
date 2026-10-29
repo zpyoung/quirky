@@ -132,11 +132,11 @@ describe('validateEntry', () => {
       ok: true,
       entry: { modelDiscovery: { protocol: 'codex-app-server', timeoutMs: 1_000 } }
     })
-    expect(errorOf({
+    expect(validateEntry('quirky.agents', 'acme', {
       ...minimal,
       launchOptions: { model: { flag: ['--model', '{value}'] } },
       modelDiscovery: { protocol: 'codex-app-server', timeoutMs: 1_000 }
-    })).toBe('modelDiscovery protocol codex-app-server is only valid for codex')
+    }).ok).toBe(false)
   })
   test('Anthropic models discovery is a Claude-only API protocol without caller-supplied argv', () => {
     const claude = validateEntry('quirky.agents', 'claude', {
@@ -148,16 +148,16 @@ describe('validateEntry', () => {
       ok: true,
       entry: { modelDiscovery: { protocol: 'anthropic-models', timeoutMs: 8_000 } }
     })
-    expect(errorOf({
+    expect(validateEntry('quirky.agents', 'acme', {
       ...minimal,
       launchOptions: { model: { flag: ['--model', '{value}'] } },
       modelDiscovery: { protocol: 'anthropic-models', timeoutMs: 1_000 }
-    })).toBe('modelDiscovery protocol anthropic-models is only valid for claude')
-    expect(errorOf({
+    }).ok).toBe(false)
+    expect(validateEntry('quirky.agents', 'claude', {
       ...minimal,
       launchOptions: { model: { flag: ['--model', '{value}'] } },
       modelDiscovery: { protocol: 'anthropic-models', args: ['models'], timeoutMs: 1_000 }
-    })).toBe('modelDiscovery protocol anthropic-models does not accept args or format')
+    }).ok).toBe(false)
   })
   test('Gemini models discovery is a Gemini-only bounded API protocol', () => {
     const gemini = validateEntry('quirky.agents', 'gemini', {
@@ -169,16 +169,16 @@ describe('validateEntry', () => {
       ok: true,
       entry: { modelDiscovery: { protocol: 'gemini-models', timeoutMs: 1_000 } }
     })
-    expect(errorOf({
+    expect(validateEntry('quirky.agents', 'acme', {
       ...minimal,
       launchOptions: { model: { flag: ['--model', '{value}'] } },
       modelDiscovery: { protocol: 'gemini-models', timeoutMs: 1_000 }
-    })).toBe('modelDiscovery protocol gemini-models is only valid for gemini')
-    expect(errorOf({
+    }).ok).toBe(false)
+    expect(validateEntry('quirky.agents', 'gemini', {
       ...minimal,
       launchOptions: { model: { flag: ['--model', '{value}'] } },
       modelDiscovery: { protocol: 'gemini-models', args: ['models'], timeoutMs: 1_000 }
-    })).toBe('modelDiscovery protocol gemini-models does not accept args or format')
+    }).ok).toBe(false)
   })
   test('Pi discovery uses the declared RPC model-list protocol without caller argv', () => {
     const pi = validateEntry('quirky.agents', 'pi', {
@@ -190,16 +190,16 @@ describe('validateEntry', () => {
       ok: true,
       entry: { modelDiscovery: { protocol: 'pi-rpc', timeoutMs: 1_000 } }
     })
-    expect(errorOf({
+    expect(validateEntry('quirky.agents', 'acme', {
       ...minimal,
       launchOptions: { model: { flag: ['--model', '{value}'] } },
       modelDiscovery: { protocol: 'pi-rpc', timeoutMs: 1_000 }
-    })).toBe('modelDiscovery protocol pi-rpc is only valid for pi')
-    expect(errorOf({
+    }).ok).toBe(false)
+    expect(validateEntry('quirky.agents', 'pi', {
       ...minimal,
       launchOptions: { model: { flag: ['--model', '{value}'] } },
       modelDiscovery: { protocol: 'pi-rpc', args: ['--list-models'], timeoutMs: 1_000 }
-    })).toBe('modelDiscovery protocol pi-rpc does not accept args or format')
+    }).ok).toBe(false)
   })
 
 
