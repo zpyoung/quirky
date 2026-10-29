@@ -544,7 +544,7 @@ test('incompatible API floor changes deactivate cached UI modules before reuse',
     sidebarSections: [section(plugin, 'list'), section(NOTES, 'list')],
     commands: [command(plugin, 'run')]
   })
-  for (const apiVersion of ['1.1.0', undefined, '^1.0.0', 1] as const) {
+  for (const apiVersion of ['1.2.0', undefined, '^1.0.0', 1] as const) {
     const t = setup(makeSkewModel())
     let executions = 0
     const skew = recording([`sidebar-section:${plugin}/list`, commandId], (id) =>
