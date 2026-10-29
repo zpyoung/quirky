@@ -39,7 +39,8 @@ answers agent questions. Workspace **Sleep** parks its views without stopping pr
 opening it wakes those views. **Stop sessions (retain history)** is a separate, explicit operation
 that preserves PTY history and supported agents' resume identities. Unknown workspace origins
 remain visible under automation/other-client filters. Markdown tabs use the actual editor
-document and tab identity, with revision-guarded edits and saves.
+document and tab identity, with revision-guarded edits and saves. Markdown tabs remain available
+when the optional Browser plugin is absent or disabled.
 
 Workspace cards count the Terminal layout's current tabs, including Browser and Markdown;
 split panes, background sessions and closed history do not add tabs. Unavailable counts are

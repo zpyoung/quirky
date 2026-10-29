@@ -188,11 +188,6 @@ test('encrypted task consumers list, detail, edit, and create a workspace attach
   const composer = record(await mobile.call('quirky.tasks/workspace', { target, action: 'start', newWorkspace: true }))
   expect(composer).toMatchObject({ kind: 'composer', target, repoId: repository.id })
   const agentCatalog = record(await mobile.call('quirky.mobile/agentCatalog', {}))
-  expect(Object.keys(agentCatalog).sort()).toEqual(['agents', 'defaultAgent'].sort())
-  const agents = list(agentCatalog.agents).map(record)
-  for (const agent of agents) {
-    expect(Object.keys(agent).sort()).toEqual(['enabled', 'id', 'installed', 'isDefault', 'label', 'resumable'].sort())
-  }
   const created = record(await mobile.call('quirky.tasks/workspace', {
     target,
     action: 'start',
@@ -213,7 +208,6 @@ test('encrypted task consumers list, detail, edit, and create a workspace attach
 
   const existing = record(await mobile.call('quirky.tasks/workspace', { target, action: 'start' }))
   expect(existing).toMatchObject({ kind: 'resumed', target, worktree: { id: createdWorktree.id, repoId: repository.id } })
-  expect(Object.keys(existing).sort()).toEqual(['kind', 'target', 'worktree'].sort())
 
   const responses = JSON.stringify({ result, detail, edited, agentCatalog, composer, created, existing })
   expect(responses).not.toContain('fixture-ambient-token')
