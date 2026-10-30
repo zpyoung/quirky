@@ -582,8 +582,8 @@ textarea {
 
 .toasts {
   position: fixed;
-  right: var(--compat-px-12);
-  bottom: var(--compat-px-12);
+  right: calc(var(--compat-px-40) + var(--ui-space-16));
+  bottom: calc(var(--ui-row-single) + var(--compat-px-40) + var(--ui-space-16));
   z-index: 60;
   display: flex;
   flex-direction: column;

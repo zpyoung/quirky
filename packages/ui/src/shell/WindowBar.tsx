@@ -271,6 +271,7 @@ function useAnchoredPopup() {
 type BarButtonProps = {
   buttonRef?: Ref<HTMLButtonElement>
   label?: string
+  empty?: boolean
   expanded?: boolean
   popup?: boolean
   icon?: boolean
@@ -280,13 +281,14 @@ type BarButtonProps = {
   children: ReactNode
 }
 
-function BarButton({ buttonRef, label, expanded, popup, icon, className, disabled, onClick, children }: BarButtonProps) {
+function BarButton({ buttonRef, label, empty, expanded, popup, icon, className, disabled, onClick, children }: BarButtonProps) {
   return (
     <button
       ref={buttonRef}
       type="button"
       className={['window-bar__button', icon && 'window-bar__button--icon', className, NO_DRAG].filter(Boolean).join(' ')}
       aria-label={label}
+      data-empty={empty ? '' : undefined}
       aria-haspopup={popup ? 'menu' : undefined}
       aria-expanded={popup ? expanded === true : undefined}
       disabled={disabled}
@@ -535,6 +537,7 @@ export function WindowBar({ onSettings }: WindowBarProps) {
           <BarButton
             label={`${needsYou} pending ${needsYou === 1 ? 'question' : 'questions'}`}
             className="window-bar__needs-you"
+            empty={needsYou === 0}
             onClick={() => store.openInbox()}
           >
             <StatusDot status={needsYou > 0 ? 'needs-you' : 'idle'} />

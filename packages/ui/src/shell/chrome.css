@@ -63,7 +63,6 @@
 }
 
 .window-bar__switcher {
-  font-size: var(--ui-font-title);
   min-width: 0;
 }
 
@@ -77,7 +76,7 @@
   padding-inline-end: var(--ui-space-4);
 }
 
-.window-bar__needs-you {
+.window-bar__needs-you:not([data-empty]) {
   color: var(--ui-needs-you);
 }
 
@@ -310,8 +309,8 @@ button.ui-status-bar-item:focus-visible {
   display: grid;
   gap: var(--ui-space-8);
   inline-size: max-content;
-  inset-block-end: var(--ui-space-12);
-  inset-inline-end: var(--ui-space-12);
+  inset-block-end: calc(var(--ui-row-single) + var(--compat-px-40) + var(--ui-space-16));
+  inset-inline-end: calc(var(--compat-px-40) + var(--ui-space-16));
   max-inline-size: calc(100vw - var(--ui-space-24));
   position: fixed;
   z-index: 20;

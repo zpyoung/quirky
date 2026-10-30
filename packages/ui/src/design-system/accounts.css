@@ -7,10 +7,10 @@
 
 .accounts-mount-root--bar {
   align-items: center;
-  flex: 1 1 auto;
+  flex: 0 1 auto;
   max-width: 100%;
   position: relative;
-  width: calc(var(--ui-space-24) * 32);
+  width: calc(var(--ui-space-24) * 8);
 }
 
 .accounts-mount-root--bar:has(.usage-status-bar--hidden) {
