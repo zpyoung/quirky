@@ -2,6 +2,9 @@
 /** Only persistent partitions owned by quirky.browser may be cleared or mounted. */
 export const NATIVE_BROWSER_PARTITION_RE = /^persist:quirky-browser-(?:default|profile_[0-9a-f]{32})$/
 
+/** Localhost worktree labels are `<label>.quirky.localhost`; native panes send this domain to the label proxy. */
+export const NATIVE_BROWSER_LABEL_DOMAIN = 'quirky.localhost'
+
 /** Electrobun rules: block all URLs, then allow only human-browser protocols. */
 export const NATIVE_BROWSER_NAVIGATION_RULES = ['^*', 'https://*', 'http://*', 'file://*', 'about:blank'] as const
 

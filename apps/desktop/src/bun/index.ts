@@ -3,7 +3,7 @@ import { existsSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { QuirkyClient } from '@quirky/protocol'
 import { ensureDaemon, quirkyHome, rpcUrl, type RuntimeInfo } from '@quirky/protocol/node'
-import { ApplicationMenu, BrowserView, BrowserWindow, Tray, Updater, Utils, app, type ApplicationMenuItemConfig } from 'electrobun/main'
+import { ApplicationMenu, BrowserView, BrowserWindow, Session, Tray, Updater, Utils, app, type ApplicationMenuItemConfig } from 'electrobun/main'
 import { maintainConnection } from './connection'
 import { setDockBadge } from './dock'
 import { desktopWindowRouteUrl, folderPickerResult } from './desktop-window-route'
@@ -136,7 +136,11 @@ function createWindow(
   let created: BrowserWindow | null = null
   const nativeBrowserHandlers = createNativeBrowserHandlers({
     getWindow: () => created ? { id: created.id, webview: created.webview } : null,
-    getView: (id) => BrowserView.getById(id)
+    getView: (id) => BrowserView.getById(id),
+    sessionProxy: {
+      supported: () => Session.supportsProxy,
+      set: (partition, proxy) => Session.fromPartition(partition).setProxy(proxy)
+    }
   })
   const pickFolder = async (request: NativeBrowserHostRPC['bun']['requests']['pickFolder']['params']) => {
     if (process.platform !== 'darwin') throw new Error('native directory selection is unavailable on this platform')
@@ -191,6 +195,7 @@ function createWindow(
         claimNativeBrowserView: nativeBrowserHandlers.claim,
         setNativeBrowserZoom: nativeBrowserHandlers.setZoom,
         releaseNativeBrowserView: nativeBrowserHandlers.release,
+        routeNativeBrowserLabels: nativeBrowserHandlers.routeLabels,
         pickFolder,
         openWindow,
         closeWindow,

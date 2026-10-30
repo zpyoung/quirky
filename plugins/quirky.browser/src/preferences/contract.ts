@@ -1,6 +1,7 @@
 import type { PluginContext, UiPluginContext } from '@quirky/protocol'
 import type { BrowserProfile } from '../profiles/store'
 import type { PaneTab } from '../pane-contract'
+import type { LocalhostLabelRoute } from '../localhost-labels/proxy'
 
 export type BrowserIdentityMode = 'clean' | 'native'
 export type ProfileUsage = { profile: BrowserProfile; active: boolean }
@@ -8,7 +9,7 @@ export type PreferencesState = {
   profiles: ProfileUsage[]
   identity: { selected: BrowserIdentityMode; active: BrowserIdentityMode; restartRequired: boolean; nativeSupported: false }
   imports: { available: true; destination: 'managed-chrome'; nativeSupported: false; reason: string }
-  localhostLabels: { available: false; reason: string }
+  localhostLabels: { available: true; enabled: boolean; reason: string; labels: LocalhostLabelRoute[] }
 }
 export type PreferencesAdapters = {
   listProfiles(): BrowserProfile[]
@@ -28,6 +29,7 @@ export type CookieImportPanelProps = {
   onError(message: string): void
   onImported(): Promise<void>
 }
+export type LocalhostLabelRequest = { url: string; worktree: string }
 export type BrowserLinkRequest = { url: string; worktree: string; shift?: boolean; modifier?: boolean }
 export type BrowserLinkResult = { route: 'app' | 'external'; pane?: string }
 export type RegisterPreferences = (context: PluginContext, adapters: PreferencesAdapters) => PreferencesController

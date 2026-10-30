@@ -1,0 +1,22 @@
+{
+  "item": "sa-browser-localhost-label-routing",
+  "spec": "docs/quirk/specs/2026-10-29-sa-browser-localhost-label-routing/logic.md",
+  "scenarios": [
+    {
+      "id": "SC-1",
+      "title": "With Link Routing and Localhost Worktree Labels on, a terminal link to a worktree's localhost dev server opens a Native pane at <label>.quirky.localhost",
+      "status": "pending",
+      "lastRun": null,
+      "report": null,
+      "summary": null
+    },
+    {
+      "id": "SC-2",
+      "title": "The Native pane shows the worktree's dev server at the label URL, including its scripts and a live WebSocket (for example Vite hot reload)",
+      "status": "pending",
+      "lastRun": null,
+      "report": null,
+      "summary": null
+    }
+  ]
+}

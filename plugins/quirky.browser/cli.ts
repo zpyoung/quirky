@@ -3,11 +3,12 @@ import { validateValue, type CliArgs, type CliContext, type CliModule, type Sche
 import type { BrowserMethod } from './src/runtime/catalog'
 import type { BrowserPage } from './src/profiles/store'
 
-type CliBrowserMethod = BrowserMethod | 'preferencesState' | 'profileSet' | 'profileClear' | 'profileDelete' | 'openLink'
+type CliBrowserMethod = BrowserMethod | 'preferencesState' | 'profileSet' | 'profileClear' | 'profileDelete' | 'openLink' | 'localhostLabelRegister' | 'localhostLabelList'
 type InputField = { inline: string; option: 'value' | 'expression' | 'text'; target: string; required?: boolean }
 
 const COMMAND_METHODS: Readonly<Record<string, CliBrowserMethod>> = {
   preferencesState: 'preferencesState', profileSet: 'profileSet', profileClear: 'profileClear', profileDelete: 'profileDelete', openLink: 'openLink',
+  localhostLabelRegister: 'localhostLabelRegister', localhostLabelList: 'localhostLabelList',
   profileList: 'profileList', profileCreate: 'profileCreate', profileClone: 'profileClone',
   tabList: 'tabList', tabShow: 'tabShow', tabCurrent: 'tabCurrent', tabCreate: 'tabCreate', tabSwitch: 'tabSwitch', tabClose: 'tabClose',
   tabProfileShow: 'tabProfileShow', tabProfileSet: 'tabProfileSet', tabProfileUseDefault: 'tabProfileUseDefault',
