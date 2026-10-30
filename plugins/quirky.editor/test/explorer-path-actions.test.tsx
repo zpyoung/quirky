@@ -239,7 +239,7 @@ async function waitForUi<T>(
   })
 }
 
-async function renderExplorer(fixture: Fixture): Promise<Mounted> {
+async function renderExplorer(fixture: Fixture, context = makeContext(fixture)): Promise<Mounted> {
   const element = document.createElement('div')
   document.body.append(element)
   const root = createRoot(element)
@@ -254,7 +254,7 @@ async function renderExplorer(fixture: Fixture): Promise<Mounted> {
   }
   mounted.push(surface)
   await act(async () => {
-    root.render(<ExplorerPanel context={makeContext(fixture)} report={(value) => {
+    root.render(<ExplorerPanel context={context} report={(value) => {
       if (typeof value !== 'object' || value === null || !('loading' in value) || typeof value.loading !== 'boolean') return
       fixture.reports.push({
         loading: value.loading,
@@ -379,6 +379,68 @@ test('Explorer row actions copy canonical absolute and worktree-relative paths a
   )
   expect(sessionIds).toContain(terminalSession.id)
 })
+test.each([
+  { kind: 'file', path: 'created.md', expandedParent: false },
+  { kind: 'folder', path: 'created-folder', expandedParent: false },
+  { kind: 'file', path: 'nested/created.md', expandedParent: true },
+  { kind: 'folder', path: 'nested/created-folder', expandedParent: false }
+] as const)('Explorer selects a new $kind at $path and targets it in footer actions', async ({ kind, path, expandedParent }) => {
+  const fixture = await makeFixture()
+  const context = makeContext(fixture)
+  context.confirm = async () => true
+  const panel = await renderExplorer(fixture, context)
+  const parent = join(fixture.root, 'nested')
+  if (expandedParent) {
+    await act(async () => findRow(panel.element, parent)!.click())
+    await waitForUi(() => findRow(panel.element, join(fixture.root, FILE_A)) || false)
+    await selectRow(panel.element, join(fixture.root, FILE_A))
+  } else {
+    await selectRow(panel.element, parent)
+  }
+  const previouslySelected = Array.from(panel.element.querySelectorAll<HTMLElement>('[data-path][aria-selected="true"]'))
+    .map((row) => row.dataset.path!)
+  expect(previouslySelected).toContain(expandedParent ? join(fixture.root, FILE_A) : parent)
+
+  const newButton = panel.element.querySelector<HTMLButtonElement>(`button[title="New ${kind === 'file' ? 'File' : 'Folder'}"]`)!
+  await act(async () => newButton.click())
+  const input = panel.element.querySelector<HTMLInputElement>('.qe-explorer-inline-row input')
+  expect(input).not.toBeNull()
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, path)
+    input!.dispatchEvent(new Event('input', { bubbles: true }))
+  })
+  const create = Array.from(panel.element.querySelectorAll<HTMLButtonElement>('.qe-explorer-inline-row button'))
+    .find((button) => button.textContent === 'Create')!
+  await act(async () => create.click())
+  const created = join(fixture.root, path)
+  await waitForUi(() => existsSync(created) && !panel.element.querySelector('.qe-explorer-inline-row') || false)
+  await waitForUi(() => !fixture.reports.at(-1)?.loading)
+  expect(findRow(panel.element, created)?.getAttribute('aria-selected')).toBe('true')
+  for (const previous of previouslySelected) {
+    expect(findRow(panel.element, previous)?.getAttribute('aria-selected')).not.toBe('true')
+  }
+  const state = await call<{
+    explorer: { selectedPaths: string[]; focusedPath: string }
+    buffers: { id: string; relativePath: string }[]
+    tabs: { bufferId: string }[]
+  }>(fixture.client, 'quirky.editor/state', { worktree: fixture.worktree.id })
+  expect(state.explorer.selectedPaths).toEqual([created])
+  expect(state.explorer.focusedPath).toBe(created)
+  if (kind === 'file') {
+    const buffer = state.buffers.find((entry) => entry.relativePath === path)
+    expect(buffer).toBeDefined()
+    expect(state.tabs.some((tab) => tab.bufferId === buffer!.id)).toBe(true)
+  }
+  await act(async () => footerButton(panel.element, 'Copy Path').click())
+  expect(await navigator.clipboard.readText()).toBe(created)
+  await act(async () => footerButton(panel.element, 'Copy Relative Path').click())
+  expect(await navigator.clipboard.readText()).toBe(path)
+  await act(async () => footerButton(panel.element, 'Delete').click())
+  await waitForUi(() => !existsSync(created))
+  expect(existsSync(join(fixture.root, FILE_A))).toBe(true)
+  expect(existsSync(parent)).toBe(true)
+})
+
 test('Explorer Rename closes row actions, focuses the inline field, and renames the file', async () => {
   const fixture = await makeFixture({ displayRoot: 'nested' })
   const panel = await renderExplorer(fixture)

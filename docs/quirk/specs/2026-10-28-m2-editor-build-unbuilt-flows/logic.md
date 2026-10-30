@@ -34,6 +34,9 @@ Before: visible rows folder A, folder B and 23 naturally sorted files, with A co
 ### E2: Hierarchy and keyboard scope
 Before: A collapsed. Right expands A without jumping; Right again selects its first child; Left from child selects A; Left collapses A. Name-filter rows do not expand unrelated hierarchy. Space activates selected file/folder; Enter starts rename and selects the stem. Typing or navigation in search/inline input does not move tree selection. After: API and tree expose the same selection and expansion; errors preserve existing state and are visible.
 
+### E3: Selection after creation
+Before: another file or several rows are selected. Create a file or folder at the worktree root or beneath an expanded or collapsed directory. After: the created item is visible and is the only selected and focused path in both the tree and daemon state. New File opens that file in the editor. Footer Copy Path, Copy Relative Path and Delete target the created item, not the previous selection. Reveal ancestors and refresh cached expanded listings before completing creation; panel remount retains the selection.
+
 ### N1: Idle death and restart
 Before: trusted Python notebook with selected interpreter, one completed output and idle ready kernel. Kill only its owned bridge/kernel. After: state reports dead with an error, the mounted notebook displays it without another run, outputs/draft survive and Restart kernel is enabled. Restart stops the dead session, revokes trust and resets execution state while preserving outputs/interpreter. The next explicit Run asks for fresh trust and starts a new session; old Python variables are gone. Close revokes trust and terminates owned children. Concurrent close/restart cannot resurrect a closed buffer or leave a hidden process.
 
