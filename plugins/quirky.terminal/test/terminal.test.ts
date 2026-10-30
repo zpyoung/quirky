@@ -13,6 +13,9 @@ import {
 import { rpcUrl } from '@quirky/protocol/node'
 import { waitFor, type Harness } from '../../../packages/daemon/test/helpers'
 import { call, code, createSession, startPluginHarness, TERMINAL_PLUGINS, type PluginSet } from './support'
+import { groupsInOrder, paneLeaves } from '../src/layout/tree'
+import { isTerminalTab } from '../src/layout/types'
+import type { Workspace } from '../src/layout/types'
 
 let h: Harness
 let client: QuirkyClient
@@ -456,7 +459,48 @@ describe('snapshot and history', () => {
   })
 })
 
+
 describe('sessions', () => {
+  test('projects each session tab title and worktree name from its owning layout', async () => {
+    const mainWorkspace = (await call<{ workspace: Workspace }>(
+      client,
+      'quirky.terminal/workspace',
+      { workspace: 'wt_main', ensure: true }
+    )).workspace
+    const mainTab = groupsInOrder(mainWorkspace.root)
+      .flatMap((group) => group.tabs)
+      .filter(isTerminalTab)
+      .find((tab) => paneLeaves(tab.root).some((pane) => pane.session === shell.id))
+    expect(mainTab?.defaultTitle).toBe('Terminal 1')
+
+    const other = await call<{ session: string; tab: string }>(client, 'quirky.terminal/newTab', {
+      workspace: 'wt_other',
+      agent: 'shell'
+    })
+    await call(client, 'quirky.terminal/renameTab', {
+      tab: other.tab,
+      title: 'Feature shell'
+    })
+
+    const records = await call<Session[]>(client, 'quirky.session/list', {})
+    expect([
+      records.find((session) => session.id === shell.id)?.title,
+      records.find((session) => session.id === other.session)?.title
+    ]).toEqual(['Shell', 'Shell'])
+
+    const { sessions } = await call<{
+      sessions: { sessionId: string; tabTitle: string | null; worktreeName: string | null }[]
+    }>(client, 'quirky.terminal/sessions', {})
+    expect(sessions.find((session) => session.sessionId === shell.id)).toMatchObject({
+      tabTitle: 'Terminal 1',
+      worktreeName: 'main'
+    })
+    expect(sessions.find((session) => session.sessionId === other.session)).toMatchObject({
+      tabTitle: 'Feature shell',
+      worktreeName: 'other'
+    })
+  })
+
   test('lists running sessions with their worktree and a two-segment workspace label', async () => {
     h.pty.exit(claude.id, 0)
     const { sessions } = await call<{ sessions: Record<string, unknown>[] }>(client, 'quirky.terminal/sessions', {})
@@ -475,15 +519,28 @@ describe('sessions', () => {
   test('a host session the session plugin does not know has no worktree', async () => {
     await call(client, 'quirky.session/close', { session: claude.id })
     h.pty.sessions.set('s_orphan', { ...h.pty.sessions.get(shell.id)!, info: { ...h.pty.sessions.get(shell.id)!.info, sessionId: 's_orphan', cwd: '/solo' } })
-    const { sessions } = await call<{ sessions: { sessionId: string; worktreeId: string | null; workspace: string }[] }>(
+    const { sessions } = await call<{
+      sessions: {
+        sessionId: string
+        worktreeId: string | null
+        workspace: string
+        tabTitle: string | null
+        worktreeName: string | null
+      }[]
+    }>(
       client,
       'quirky.terminal/sessions',
       {}
     )
-    expect(sessions.find((s) => s.sessionId === 's_orphan')).toMatchObject({ worktreeId: null, workspace: 'solo' })
+    expect(sessions.find((s) => s.sessionId === 's_orphan')).toMatchObject({
+      worktreeId: null,
+      workspace: 'solo',
+      cwd: '/solo',
+      tabTitle: null,
+      worktreeName: null
+    })
   })
 })
-
 describe('SC-40: the catalog', () => {
   test('lists the new methods, events and CLI commands with their flags', async () => {
     const api = (await call(client, 'api.describe', {})) as ApiDescription

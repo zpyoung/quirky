@@ -191,6 +191,27 @@ export class LayoutService {
     this.stopFocusSettings = null
   }
 
+  /** The layout-owned display title of each requested session's terminal tab, if it is mapped. */
+  tabTitlesForSessions(sessionIds: readonly string[]): Promise<Map<string, string>> {
+    const remaining = new Set(sessionIds)
+    if (remaining.size === 0) return Promise.resolve(new Map())
+    return this.queued(() => {
+      const titles = new Map<string, string>()
+      for (const workspace of this.workspaces.values()) {
+        if (remaining.size === 0) break
+        for (const tab of ops.workspaceTabs(workspace)) {
+          if (remaining.size === 0) break
+          if (!isTerminalTab(tab)) continue
+          const title = displayTitle(tab)
+          for (const pane of paneLeaves(tab.root)) {
+            if (remaining.delete(pane.session)) titles.set(pane.session, title)
+          }
+        }
+      }
+      return titles
+    })
+  }
+
   /** The workspace a selector names; none means the caller's, and a floating caller means `floating`. */
   async resolveWorkspace(selector: unknown, caller: PluginCaller): Promise<string> {
     const given = typeof selector === 'string' && selector !== '' ? selector : undefined

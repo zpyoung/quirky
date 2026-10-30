@@ -16,9 +16,13 @@ let emulator: EmulatorService | undefined
 export async function activate(context: PluginContext): Promise<void> {
   const store = context.openStore(migrations)
   const inputs = new InputTracker()
-  const terminal = new TerminalService(context, inputs)
   const layoutStore = new LayoutStore(store)
   const layoutService = new LayoutService(context, layoutStore, inputs)
+  const terminal = new TerminalService(
+    context,
+    (sessionIds) => layoutService.tabTitlesForSessions(sessionIds),
+    inputs
+  )
   const quickCommands = new QuickCommandService(context, layoutStore, layoutService, inputs, terminal)
   service = terminal
   const artifactService = new TerminalArtifactsService(context)
