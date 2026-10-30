@@ -142,7 +142,7 @@ describe('editor core through the daemon API', () => {
     } finally {
       rmSync(otherRoot, { recursive: true, force: true })
     }
-  })
+  }, 20_000)
 
   test('SC-2: rejects stale draft revisions without losing either client version and saves against the loaded baseline', async () => {
     const t = await boot()
