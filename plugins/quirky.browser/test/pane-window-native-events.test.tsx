@@ -57,31 +57,42 @@ function stateOf(...tabs: PaneTab[]): PaneState {
 }
 
 // A desktop-like Native capability: it records the mount options and every answer the window sends back.
+const PREFERENCES_STATE = {
+  profiles: [{ profile: { id: 'default', label: 'Default', scope: 'default' as const }, active: true }],
+  identity: { selected: 'clean' as const, active: 'clean' as const, restartRequired: false, nativeSupported: false as const },
+  imports: { available: true as const, destination: 'managed-chrome' as const, nativeSupported: false as const, reason: 'Cookie imports are stored in managed Chrome, not Native.' },
+  localhostLabels: { available: false as const, reason: 'A reachable worktree host mapping is not configured.' }
+}
+
 function makeContext(): UiPluginContext {
   return {
     nativeBrowser: {
       available: true,
       clearPartitionAvailable: false,
       pageRequestsAvailable: true,
+      previewAvailable: false,
       mount: (_element, options) => {
         mounted = options
         return {
-          request: async () => ({ id: options.id, url: options.url, title: '', loading: false, canGoBack: false, canGoForward: false, zoom: 0, error: null, findCurrent: 0, findTotal: 0 }),
+          request: async () => ({ id: options.id, url: options.url, title: '', loading: false, canGoBack: false, canGoForward: false, zoom: 0, error: null, findCurrent: 0, findTotal: 0, hardReloadAvailable: false }),
           evaluate: async () => null,
           answer: async (id, answer) => { answers.push([id, answer]); return true },
           cancelDownload: async () => true,
           dispose: () => {}
         }
       },
-      clearPartition: async () => { throw new Error('Native storage is unavailable in this DOM fixture.') }
+      clearPartition: async () => { throw new Error('Native storage is unavailable in this DOM fixture.') },
+      defaultUserAgent: async () => null
     },
     pluginId: 'quirky.browser',
+    nativeDropPaths: async () => null,
     log: () => {},
     readClipboardText: async () => '',
     provide: () => {},
     call: async (method, params) => {
       calls.push({ method, ...(params ? { params } : {}) })
       if (method === 'quirky.browser/paneState') return paneState
+      if (method === 'quirky.browser/preferencesState') return PREFERENCES_STATE
       if (method === 'quirky.browser/preferencesState') return { profiles: [], identity: {}, imports: {}, localhostLabels: {} }
       if (method === 'quirky.browser/paneSuggestions') return { suggestions: [] }
       if (method === 'quirky.browser/paneNativeRequest') {

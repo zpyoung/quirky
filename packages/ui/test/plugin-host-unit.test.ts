@@ -3,6 +3,7 @@ import {
   DEFAULT_THEME,
   UI_TOOL_SLOTS,
   PLUGIN_API_VERSION,
+  type NativeBrowserCapability,
   type QuirkyEvent,
   type SettingInfo,
   type ThemeInfo,
@@ -18,6 +19,7 @@ import {
 } from '@quirky/protocol'
 import { freshToolLayout, projectTools, resolveToolLayout } from '../../daemon/src/plugins/tool-layout'
 import type { DesktopWindowRoute } from '../src/desktop-bridge'
+import { createNativeBrowserCapability } from '../src/native-browser'
 import { WindowPluginHost, type HostState } from '../src/plugins/host'
 
 type Fake = { text?: string }
@@ -111,6 +113,7 @@ function setup(
     windowFocus?: WindowFocus
     windowRoute?: DesktopWindowRoute
     nativeDropPaths?: (fileNames: readonly string[]) => Promise<string[] | null>
+    nativeBrowser?: NativeBrowserCapability
   } = {}
 ) {
   let model = initial
@@ -293,7 +296,8 @@ function setup(
     activationTimeoutMs: options.activationTimeoutMs,
     windowFocus: options.windowFocus,
     windowRoute: options.windowRoute,
-    nativeDropPaths: options.nativeDropPaths
+    nativeDropPaths: options.nativeDropPaths,
+    nativeBrowser: options.nativeBrowser
   })
 
   return {
@@ -445,6 +449,27 @@ test('SC-7: concurrent mounts and commands share one import and one activation',
 
   expect(t.imports).toHaveLength(1)
   expect(record.activations).toBe(1)
+})
+
+test('a plugin sees every native browser availability its window has', async () => {
+  const nativeBrowser = {
+    ...createNativeBrowserCapability(),
+    available: true,
+    clearPartitionAvailable: true,
+    pageRequestsAvailable: true,
+    previewAvailable: true
+  }
+  const t = setup(makeModel({ sidebarSections: [section(NOTES, 'list')] }), { nativeBrowser })
+  const { module, record } = recording([LIST], () => () => {})
+  t.useModule(NOTES, module)
+  await t.host.refresh()
+  await loaded(t, NOTES)
+  expect(record.contexts[0].nativeBrowser).toMatchObject({
+    available: true,
+    clearPartitionAvailable: true,
+    pageRequestsAvailable: true,
+    previewAvailable: true
+  })
 })
 
 test('S1: refreshing loads and activates every enabled plugin with nothing shown or run', async () => {

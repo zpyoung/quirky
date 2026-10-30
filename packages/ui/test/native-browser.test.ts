@@ -333,6 +333,8 @@ describe('Electrobun native browser adapter clearing', () => {
     claimNativeBrowserView: async () => ({ zoomFactor: 1 }),
     setNativeBrowserZoom: async () => ({ zoomFactor: 1 }),
     releaseNativeBrowserView: async () => ({ released: true }),
+    routeNativeBrowserLabels: async () => ({ routed: true }),
+    nativeBrowserDefaultUserAgent: async () => ({ userAgent: null }),
     ...storage
   })
 

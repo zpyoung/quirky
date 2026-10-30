@@ -90,6 +90,7 @@ function makeContext(): UiPluginContext {
     nativeBrowser: {
       available: true,
       clearPartitionAvailable: false,
+      previewAvailable: false,
       mount: (_element, options) => {
         mounted = options
         return {
@@ -101,9 +102,11 @@ function makeContext(): UiPluginContext {
           dispose: () => {}
         }
       },
-      clearPartition: async () => { throw new Error('Native storage is unavailable in this DOM fixture.') }
+      clearPartition: async () => { throw new Error('Native storage is unavailable in this DOM fixture.') },
+      defaultUserAgent: async () => null
     },
     pluginId: 'quirky.browser',
+    nativeDropPaths: async () => null,
     log: () => {},
     readClipboardText: async () => '',
     provide: () => {},

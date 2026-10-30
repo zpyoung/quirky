@@ -2,7 +2,18 @@ import { afterAll, beforeAll, expect, test } from 'bun:test'
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
 import { act, createElement, useState } from 'react'
 import type { Root } from 'react-dom/client'
-import { createElectrobunNativeBrowserAdapter, createNativeBrowserCapability } from '../src/native-browser'
+import { createElectrobunNativeBrowserAdapter, createNativeBrowserCapability, type NativeBrowserShellBridge } from '../src/native-browser'
+
+type RequiredShell = 'claimNativeBrowserView' | 'setNativeBrowserZoom' | 'releaseNativeBrowserView'
+
+/** Fills the shell members a case doesn't exercise, so each case names only what it's about. */
+function adapterFor(bridge: Partial<NativeBrowserShellBridge> & Pick<NativeBrowserShellBridge, RequiredShell>) {
+  return createElectrobunNativeBrowserAdapter({
+    routeNativeBrowserLabels: async () => ({ routed: true }),
+    nativeBrowserDefaultUserAgent: async () => ({ userAgent: null }),
+    ...bridge
+  })
+}
 
 type GuestView = HTMLElement & {
   emitState(detail: unknown): void
@@ -65,7 +76,7 @@ async function mountGuest(claimGate?: Promise<void>, userAgent?: string) {
   const mounted = Promise.withResolvers<GuestView>()
   const released = Promise.withResolvers<void>()
   announceGuest = mounted.resolve
-  const capability = createNativeBrowserCapability(createElectrobunNativeBrowserAdapter({
+  const capability = createNativeBrowserCapability(adapterFor({
     async claimNativeBrowserView(params) {
       claims.push({ userAgent: params.userAgent })
       if (claimGate) await claimGate
@@ -292,7 +303,7 @@ test('a label URL loads only after its partition routes label hosts to the label
     const mounted = Promise.withResolvers<GuestView>()
     const released = Promise.withResolvers<void>()
     announceGuest = mounted.resolve
-    const capability = createNativeBrowserCapability(createElectrobunNativeBrowserAdapter({
+    const capability = createNativeBrowserCapability(adapterFor({
       async claimNativeBrowserView() { return { zoomFactor: 1 } },
       async setNativeBrowserZoom() { return { zoomFactor: 1 } },
       async releaseNativeBrowserView() { released.resolve(); return { released: true } },
@@ -338,7 +349,7 @@ test('a navigation that overtakes a slow label route stays current and the label
   const routing = Promise.withResolvers<void>()
   const loads: string[] = []
   announceGuest = mounted.resolve
-  const capability = createNativeBrowserCapability(createElectrobunNativeBrowserAdapter({
+  const capability = createNativeBrowserCapability(adapterFor({
     async claimNativeBrowserView() { return { zoomFactor: 1 } },
     async setNativeBrowserZoom() { return { zoomFactor: 1 } },
     async releaseNativeBrowserView() { released.resolve(); return { released: true } },
@@ -511,7 +522,7 @@ test('page requests route to the owning mount, answer through the claim, and sto
   const answers: Array<{ viewId: number; owner: string; id: string; accept: boolean }> = []
   const owners = new Set<string>()
   const released = Promise.withResolvers<void>()
-  const capability = createNativeBrowserCapability(createElectrobunNativeBrowserAdapter({
+  const capability = createNativeBrowserCapability(adapterFor({
     async claimNativeBrowserView({ owner }) { owners.add(owner); return { zoomFactor: 1, pageRequests: true } },
     async setNativeBrowserZoom({ level }) { return { zoomFactor: Math.pow(1.2, level) } },
     async releaseNativeBrowserView() { released.resolve(); return { released: true } },
@@ -563,7 +574,7 @@ test('a mount without a page request listener declines requests instead of leavi
   const listeners = new Set<(viewId: number, event: import('../src/native-browser').NativeBrowserPageEvent) => void>()
   const answers: Array<{ id: string; accept: boolean }> = []
   const released = Promise.withResolvers<void>()
-  const handle = createNativeBrowserCapability(createElectrobunNativeBrowserAdapter({
+  const handle = createNativeBrowserCapability(adapterFor({
     async claimNativeBrowserView() { return { zoomFactor: 1, pageRequests: true } },
     async setNativeBrowserZoom({ level }) { return { zoomFactor: Math.pow(1.2, level) } },
     async releaseNativeBrowserView() { released.resolve(); return { released: true } },
@@ -591,7 +602,7 @@ test('the profile store is assigned before the guest view exists', async () => {
   const mounted = Promise.withResolvers<GuestView>()
   const released = Promise.withResolvers<void>()
   announceGuest = (guest) => { events.push('guest'); mounted.resolve(guest) }
-  const capability = createNativeBrowserCapability(createElectrobunNativeBrowserAdapter({
+  const capability = createNativeBrowserCapability(adapterFor({
     async prepareNativeBrowserPartition(params) {
       events.push(`prepare:${params.partition}:${element.querySelector('electrobun-webview') ? 'late' : 'first'}`)
       return { storageIdentifier: '9B0C5E52-8F3A-4C1D-9E7B-2A6F4D8C1E35' }
@@ -622,7 +633,7 @@ test('an isolated preview mount asks the SDK for a preview view and claims it wi
   announceGuest = mounted.resolve
   const grant = { id: 'a'.repeat(32), root: '/work/report', entry: 'index.html', entryOnly: false }
   const prepared: string[] = []
-  const capability = createNativeBrowserCapability(createElectrobunNativeBrowserAdapter({
+  const capability = createNativeBrowserCapability(adapterFor({
     previewAvailable: true,
     async prepareNativeBrowserPartition({ partition }) { prepared.push(partition); return { storageIdentifier: null } },
     async claimNativeBrowserView(params) { claimed.resolve(params); return { zoomFactor: 1 } },
@@ -650,7 +661,7 @@ test('a failed store assignment never creates a guest view', async () => {
   document.body.append(element)
   let claims = 0
   const states: Array<string | null> = []
-  const capability = createNativeBrowserCapability(createElectrobunNativeBrowserAdapter({
+  const capability = createNativeBrowserCapability(adapterFor({
     async prepareNativeBrowserPartition() { throw new Error('native browser profile storage could not be assigned') },
     async claimNativeBrowserView() { claims += 1; return { zoomFactor: 1 } },
     async setNativeBrowserZoom() { return { zoomFactor: 1 } },
