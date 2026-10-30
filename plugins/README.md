@@ -797,6 +797,11 @@ A later account selection still invalidates an earlier restart choice or unspent
 Reset retries retain the displayed account/offer scope and request ID; missing credit, changed
 offers and unknown outcomes are shown separately from confirmed redemption.
 
+Usage formats additional credit balances with locale grouping and at most two decimal places;
+provider snapshots retain their full precision. The popover footer has one **Manage Accounts…**
+action, targeted to the displayed Claude or Codex provider. Long selected-account labels truncate
+before the picker chevron; the full identity remains available in its tooltip and accessible description.
+
 Full remaining UI acceptance and native-only clipboard, browser, Keychain and OS-focus checks are
 tracked in [the completion decisions](../docs/loop/decisions/m3-accounts-remaining-flows.md).
 

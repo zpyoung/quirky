@@ -610,6 +610,26 @@
   justify-content: space-between;
   min-width: 0;
 }
+.accounts-ui .account-picker {
+  align-items: center;
+  display: flex;
+  flex: 0 1 auto;
+  gap: var(--ui-space-6);
+  max-width: 100%;
+  min-width: 0;
+}
+
+.accounts-ui .account-picker-label {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.accounts-ui .account-picker-chevron {
+  flex: 0 0 auto;
+}
 
 .accounts-ui .info-line {
   align-items: baseline;
