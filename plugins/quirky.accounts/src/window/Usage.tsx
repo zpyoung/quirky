@@ -10,6 +10,7 @@ import { fitUsagePrefix } from './usage-fit'
 
 const useStore = (store: AccountsUiStore) => useSyncExternalStore(store.subscribe, store.getSnapshot)
 const MANAGE_LABEL = 'Manage Accounts…'
+const CREDIT_BALANCE_FORMATTER = new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 })
 const MODE_TABS = [{ id: 'detailed', label: 'Detailed' }, { id: 'compact', label: 'Compact' }] as const
 const DIRECTION_TABS = [{ id: 'used', label: 'Used' }, { id: 'remaining', label: 'Remaining' }] as const
 
@@ -192,11 +193,12 @@ function AccountSwitcher({ store, provider, state, usage }: { store: AccountsUiS
   const scopeUnavailable = snapshot.scope.kind === 'remote' && snapshot.scope.status !== 'ready'
   const systemActive = state?.active[provider] === null
   const ProviderName = provider === 'claude' ? 'Claude' : 'Codex'
+  const selectedLabel = selected?.label ?? (system?.email ? `System default: ${system.email}` : 'System default')
   return <section className="provider-details" aria-label={`${ProviderName} account switcher`}>
-    <div className="row-heading"><strong>{ProviderName} Account</strong><Button type="button" aria-label={expanded ? 'Collapse account choices' : 'Expand account choices'} aria-expanded={expanded} onClick={() => {
+    <div className="row-heading"><strong>{ProviderName} Account</strong><Button type="button" className="account-picker" aria-label={expanded ? 'Collapse account choices' : 'Expand account choices'} aria-description={selectedLabel} title={selectedLabel} aria-expanded={expanded} onClick={() => {
       void store.setUiState({ expanded: expanded ? null : provider })
       if (!expanded && !scopeUnavailable) void store.inactiveUsage(provider)
-    }}>{expanded ? 'Hide accounts' : selected?.label ?? (system?.email ? `System default: ${system.email}` : 'System default')}⌄</Button></div>
+    }}><span className="account-picker-label">{expanded ? 'Hide accounts' : selectedLabel}</span><span className="account-picker-chevron" aria-hidden="true">⌄</span></Button></div>
     {expanded && <div className="account-list" role="group" aria-label={`${ProviderName} account choices`}>
       <div className="account-row">
         <div className="account-row-main"><strong>{system?.email ? `System default: ${system.email}` : 'System default'}</strong><small>{displayIdentity(system ?? { email: null, authKind: 'none', hasAuth: false })}</small>{provider === 'claude' && <small>Use the system default Claude login.</small>}{provider === 'codex' && !system?.hasAuth && <small>No Codex sign-in was found for this device.</small>}{systemActive && <InactiveUsage snapshot={usage?.providers.find((item) => item.provider === provider && item.accountId === null)} direction={state?.preferences.direction ?? 'used'} active />}</div>
@@ -378,7 +380,6 @@ function ProviderDetails({ store, provider, usage, accounts }: { store: Accounts
       {remoteOwner && <small role="status">Restart and keep actions are available only on this device.</small>}
       <div className="stale-list">{stale.map((session) => <div className="stale-row" key={session.sessionId}><span>{session.accountLabel} → {session.selectedLabel}{session.busy ? ' · Busy' : ''}</span><StaleSessionActions store={store} session={session} disabled={remoteOwner || scopeUnavailable} />{session.error && <small className="status-error" role="alert">Restart failed. Retry when the session is available.</small>}</div>)}</div>
     </section>}
-    {managed && <Button type="button" onClick={() => void store.openSettingsSection(provider)}>{MANAGE_LABEL}</Button>}
     {status?.signedOut && managed && <Button type="button" disabled={remoteOwner} onClick={() => void store.openSettingsSection(provider)}>Sign in</Button>}
   </div>
 }
@@ -395,7 +396,7 @@ function formatCurrency(value: number | null, code: string): string {
 function ExtraUsageDetails({ snapshot }: { snapshot: ProviderSnapshot }) {
   const extra = snapshot.extraUsage
   if (!extra) return null
-  const balance = extra.unit === 'currency' ? formatCurrency(extra.balance, extra.currencyCode) : extra.unlimited ? 'Unlimited' : `${extra.balance} credits`
+  const balance = extra.unit === 'currency' ? formatCurrency(extra.balance, extra.currencyCode) : extra.unlimited ? 'Unlimited' : `${CREDIT_BALANCE_FORMATTER.format(extra.balance)} credits`
   return <section className="section-card" aria-label="Additional provider balance">
     <SectionHeader title={extra.unit === 'currency' ? 'Additional usage balance' : 'Additional credits'} actions={<strong>{balance}</strong>} />
     {extra.unit === 'currency' && <>

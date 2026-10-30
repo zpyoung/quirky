@@ -333,6 +333,9 @@ function dialogFooterButtonByText(dialog: HTMLElement, text: string): HTMLButton
 function findButtonByText(text: string): HTMLButtonElement | null {
   return [...container.querySelectorAll('button')].find((candidate) => candidate.textContent?.trim() === text) ?? null
 }
+function manageAccountsButtons(root: ParentNode = container): HTMLButtonElement[] {
+  return [...root.querySelectorAll<HTMLButtonElement>('button')].filter((button) => button.textContent?.trim() === 'Manage Accounts…')
+}
 
 function buttonByLabel(label: string): HTMLButtonElement {
   const button = container.querySelector(`[aria-label="${label}"]`)
@@ -440,6 +443,111 @@ test('all ten provider details show their supplied quota, reset, plan, state, so
     await act(async () => { buttonByLabel('Back to usage').click() })
     await settle()
   }
+})
+
+const creditBalanceCases = [
+  ['fractional', 62500.96119, false, `${new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 }).format(62500.96119)} credits`],
+  ['zero', 0, false, '0 credits'],
+  ['unlimited', 0, true, 'Unlimited']
+] as const
+
+for (const [kind, balance, unlimited, expected] of creditBalanceCases) {
+  test(`additional credits show the expected ${kind} balance`, async () => {
+    stateValue = makeState('codex', 81, 'Account B')
+    const usage = makeAllProviderUsage(stateValue)
+    usageValue = {
+      ...usage,
+      providers: usage.providers.map((snapshot) => snapshot.provider === 'minimax'
+        ? {
+            ...snapshot,
+            extraUsage: { unit: 'credits' as const, enabled: true, disabledReason: null, resetsAt: null, balance, unlimited }
+          }
+        : snapshot)
+    }
+    await mount('status-bar:quirky.accounts/usage')
+    await act(async () => { buttonByLabel('Open Usage').click() })
+    await settle()
+
+    const row = [...container.querySelectorAll<HTMLButtonElement>('.provider-row')].find((candidate) => candidate.textContent?.includes('MiniMax'))
+    if (!row) throw new Error('Missing MiniMax provider row')
+    await act(async () => { row.click() })
+    await settle()
+
+    const details = container.querySelector<HTMLElement>('[aria-label="MiniMax usage details"]')
+    if (!details) throw new Error('Missing MiniMax usage details')
+    const balanceCard = details.querySelector<HTMLElement>('[aria-label="Additional provider balance"]')
+    if (!balanceCard) throw new Error('Missing additional provider balance')
+    expect(balanceCard.textContent).toContain(expected)
+    if (unlimited) expect(balanceCard.textContent).not.toContain(`${balance} credits`)
+  })
+}
+
+test('Usage roster exposes one Manage Accounts action', async () => {
+  stateValue = makeState('codex', 81, 'Account B')
+  usageValue = makeAllProviderUsage(stateValue)
+  await mount('status-bar:quirky.accounts/usage')
+  await act(async () => { buttonByLabel('Open Usage').click() })
+  await settle()
+
+  expect(manageAccountsButtons()).toHaveLength(1)
+})
+
+test('Codex details expose one Manage Accounts action routed to Codex settings', async () => {
+  stateValue = makeState('codex', 81, 'Account B')
+  usageValue = makeAllProviderUsage(stateValue)
+  await mount('status-bar:quirky.accounts/usage')
+  await act(async () => { buttonByLabel('Open Usage').click() })
+  await settle()
+
+  const row = [...container.querySelectorAll<HTMLButtonElement>('.provider-row')].find((candidate) => candidate.textContent?.includes('Codex'))
+  if (!row) throw new Error('Missing Codex provider row')
+  await act(async () => { row.click() })
+  await settle()
+
+  const manageCount = manageAccountsButtons().length
+  const footerAction = container.querySelector<HTMLButtonElement>('.usage-footer button')
+  if (!footerAction) throw new Error('Missing Usage footer Manage Accounts action')
+  await act(async () => { footerAction.click() })
+  await settle()
+
+  const settingsPatch = calls.filter((call) => call.method === 'quirky.accounts/setUiState').at(-1)?.params
+  expect(settingsPatch?.settingsSection).toBe('codex')
+  expect(manageCount).toBe(1)
+})
+
+test('unmanaged provider details expose one Manage Accounts action', async () => {
+  stateValue = makeState('codex', 81, 'Account B')
+  usageValue = makeAllProviderUsage(stateValue)
+  await mount('status-bar:quirky.accounts/usage')
+  await act(async () => { buttonByLabel('Open Usage').click() })
+  await settle()
+
+  const row = [...container.querySelectorAll<HTMLButtonElement>('.provider-row')].find((candidate) => candidate.textContent?.includes('MiniMax'))
+  if (!row) throw new Error('Missing MiniMax provider row')
+  await act(async () => { row.click() })
+  await settle()
+
+  expect(manageAccountsButtons()).toHaveLength(1)
+})
+
+test('Codex account picker preserves the full selected identity as an accessible description', async () => {
+  const selectedLabel = 'long-account-picker-identity@example.test'
+  const state = makeState('codex', 81, 'Account B')
+  stateValue = { ...state, accounts: state.accounts.map((account) => ({ ...account, label: selectedLabel })) }
+  usageValue = usageFor(stateValue)
+  await mount('status-bar:quirky.accounts/usage')
+  await act(async () => { buttonByLabel('Open Usage').click() })
+  await settle()
+
+  const row = [...container.querySelectorAll<HTMLButtonElement>('.provider-row')].find((candidate) => candidate.textContent?.includes('Codex'))
+  if (!row) throw new Error('Missing Codex provider row')
+  await act(async () => { row.click() })
+  await settle()
+
+  const picker = [...container.querySelectorAll<HTMLButtonElement>('button')].find((candidate) => candidate.textContent?.trim() === `${selectedLabel}⌄`)
+  if (!picker) throw new Error('Missing Codex account picker')
+  expect(picker.getAttribute('aria-label')).toBe('Expand account choices')
+  expect(picker.getAttribute('aria-description')).toBe(selectedLabel)
 })
 
 
