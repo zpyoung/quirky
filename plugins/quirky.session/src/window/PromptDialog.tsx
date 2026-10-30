@@ -49,6 +49,9 @@ export function PromptDialog({ request, onSubmit, onClose }: Props) {
             id={id}
             aria-label={required ? 'Prompt' : 'Initial prompt (optional)'}
             autoFocus
+            autoCapitalize="off"
+            autoCorrect="off"
+            spellCheck={false}
             rows={5}
             value={prompt}
             className="ui-text-field__input"

@@ -68,6 +68,8 @@ None. No additional product feature is included.
 
 **Coordinated shared additions:** parent owns public `TextArea`/`TextAreaProps` and `SelectField`/`SelectFieldProps`, each with required label, optional help/error and native textarea/select attributes. They preserve native form participation, accessible label and description ownership, disabled behavior and caller state. The canonical shared stylesheet supplies `.ui-readout` for bounded wrapping long output, `.ui-option-list` for composed searchable selection, and `.ui-code-editor` with `.ui-secret-highlight` for CodeMirror editing/secret marks. CodeMirror retains editing authority; plugins no longer inject their own theme CSS. Existing input-only TextField remains unchanged.
 
+`TextArea`, like `TextField`, disables OS autocapitalization, autocorrection and spellchecking by default so technical text retains literal flags and quotes. Callers can explicitly opt into prose-oriented editing through native props.
+
 **Isolation:** at most three disjoint external component worktrees; each worker uses absolute paths within its assigned root, no git commits, tests, lint, formatters, builds or reviews. Parent owns lint opt-in, shared integration changes, one final typecheck and narrow real browser/API proof. The inherited .serena directory remains untouched.
 
 **Acceptance commands (parent only):** `bun scripts/ui-lint.ts`; `bun run typecheck`; `bun packages/ui/build.ts`. Expected exit0. A disposable private HOME/QUIRKY_HOME real daemon and owned Chromium verify changed surfaces and dark/light mounting; persistent evidence excludes credentials. Suites, independent screenshot score, full dogfood and native acceptance remain unclaimed.
