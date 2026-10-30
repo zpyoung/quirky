@@ -4,10 +4,10 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "QUIRKY_REPO_ROOT=\"$(cd ../.. && pwd)\" hutch electrobun dev",
+    "dev": "QUIRKY_REPO_ROOT=\"$(cd ../.. && pwd)\" bun scripts/with-electrobun-devkit.ts hutch electrobun dev",
     "bundle": "bun scripts/bundle.ts",
-    "build": "hutch electrobun prepare && bun scripts/bundle.ts --strict && rm -rf build artifacts && hutch electrobun build --env=stable && bun scripts/unpack.ts",
-    "typecheck": "hutch electrobun prepare && tsc --noEmit -p tsconfig.json",
+    "build": "bun scripts/with-electrobun-devkit.ts hutch electrobun prepare && bun scripts/bundle.ts --strict && rm -rf build artifacts && bun scripts/with-electrobun-devkit.ts hutch electrobun build --env=stable && bun scripts/unpack.ts",
+    "typecheck": "bun scripts/with-electrobun-devkit.ts hutch electrobun prepare && tsc --noEmit -p tsconfig.json",
     "test": "bun test"
   },
   "dependencies": {

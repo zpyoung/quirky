@@ -573,8 +573,10 @@ test('an isolated preview mount asks the SDK for a preview view and claims it wi
   const released = Promise.withResolvers<void>()
   announceGuest = mounted.resolve
   const grant = { id: 'a'.repeat(32), root: '/work/report', entry: 'index.html', entryOnly: false }
+  const prepared: string[] = []
   const capability = createNativeBrowserCapability(createElectrobunNativeBrowserAdapter({
     previewAvailable: true,
+    async prepareNativeBrowserPartition({ partition }) { prepared.push(partition); return { storageIdentifier: null } },
     async claimNativeBrowserView(params) { claimed.resolve(params); return { zoomFactor: 1 } },
     async setNativeBrowserZoom({ level }) { return { zoomFactor: Math.pow(1.2, level) } },
     async releaseNativeBrowserView() { released.resolve(); return { released: true } }
@@ -587,6 +589,7 @@ test('an isolated preview mount asks the SDK for a preview view and claims it wi
     expect(guest.hasAttribute('sandbox')).toBe(true)
     expect(JSON.parse(guest.getAttribute('navigation-rules') ?? '[]')).toEqual(['^*', 'quirky-preview://*', 'about:blank'])
     expect(await claimed.promise).toMatchObject({ viewId: 7, preview: grant })
+    expect(prepared).toEqual([])
   } finally {
     handle.dispose()
     await released.promise

@@ -101,7 +101,15 @@ class PreviewViewModel implements NativeBrowserViewPort {
   navigationRules: string | null = null
   handler: WorkspacePreviewHandler | null = null
   removed = false
+  userAgent: string | null = null
+  // implements page requests so only the claim's own refusal can keep a preview out of them
+  pageRequestKinds: string[] = []
   constructor(readonly id: number, readonly isolatedPreview: string | null = NATIVE_BROWSER_PREVIEW_SCHEME) {}
+  setNativeRequestHandling(kinds: string[]): boolean { this.pageRequestKinds.push(...kinds); return true }
+  respondToNativeRequest(): boolean { return true }
+  on(): void {}
+  setUserAgent(userAgent: string | null): boolean { this.userAgent = userAgent; return true }
+  getStorageIdentifier(): string | null { return null }
   setIsolatedPreviewHandler(handler: WorkspacePreviewHandler | null): void { this.handler = handler }
   setNavigationRules(rules: string[]): void { this.navigationRules = JSON.stringify(rules) }
   setPageZoom(): void {}
@@ -112,13 +120,24 @@ class PreviewViewModel implements NativeBrowserViewPort {
 describe('isolated preview claims', () => {
   const rig = (views: PreviewViewModel[]) => createNativeBrowserHandlers({
     getWindow: () => ({ id: 12, webview: { id: 34 } }),
-    getView: (id) => views.find((view) => view.id === id && !view.removed) as NativeBrowserViewPort | undefined
+    getView: (id) => views.find((view) => view.id === id && !view.removed) as NativeBrowserViewPort | undefined,
+    sessionProxy: { supported: () => false, set: () => undefined },
+    // a preview has no profile, so reaching its store at all is the bug this guards
+    storage: {
+      identifierFor: (partition) => { throw new Error(`preview touched profile storage: ${partition}`) },
+      prepare: (partition) => { throw new Error(`preview touched profile storage: ${partition}`) },
+      clear: (partition) => { throw new Error(`preview touched profile storage: ${partition}`) }
+    },
+    defaultUserAgent: () => null,
+    sendPageEvent: () => undefined
   })
 
   test('claiming an SDK isolated preview installs its rules and a handler bound to the grant', async () => {
     const view = new PreviewViewModel(7)
     const handlers = rig([view])
-    await handlers.claim({ viewId: 7, owner: 'owner', partition: '', preview: folderGrant, userAgent: null })
+    const claim = await handlers.claim({ viewId: 7, owner: 'owner', partition: '', preview: folderGrant, userAgent: null })
+    expect(claim.pageRequests).toBe(false)
+    expect(view.pageRequestKinds).toEqual([])
     expect(view.navigationRules).toBe(JSON.stringify(NATIVE_BROWSER_PREVIEW_NAVIGATION_RULES))
     expect(view.handler).not.toBeNull()
     expect((await fetchPreview(view.handler!, 'index.html')).status).toBe(200)
@@ -130,7 +149,7 @@ describe('isolated preview claims', () => {
 
   test('a preview grant never attaches to an ordinary browsing view, and a browsing claim never takes a preview', async () => {
     const ordinary = new PreviewViewModel(8, null)
-    await expect(rig([ordinary]).claim({ viewId: 8, owner: 'owner', partition: '', preview: folderGrant })).rejects.toThrow('owned sandboxed child')
+    await expect(rig([ordinary]).claim({ viewId: 8, owner: 'owner', partition: '', preview: folderGrant, userAgent: null })).rejects.toThrow('owned sandboxed child')
     expect(ordinary.handler).toBeNull()
 
     const preview = new PreviewViewModel(9)
@@ -149,7 +168,7 @@ describe('isolated preview claims', () => {
       { ...folderGrant, entry: 'a//b.html' }
     ]) {
       const view = new PreviewViewModel(10)
-      await expect(rig([view]).claim({ viewId: 10, owner: 'owner', partition: '', preview: grant })).rejects.toThrow('owned sandboxed child')
+      await expect(rig([view]).claim({ viewId: 10, owner: 'owner', partition: '', preview: grant, userAgent: null })).rejects.toThrow('owned sandboxed child')
       expect(view.navigationRules).toBeNull()
       expect(view.handler).toBeNull()
     }

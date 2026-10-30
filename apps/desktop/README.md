@@ -1,6 +1,6 @@
 # Quirky desktop shell
 
-An Electrobun 2.0.4 app (built through `hutch`) that starts or reuses the Quirky daemon, shows
+An app on Quirky's Electrobun fork (built through `hutch`) that starts or reuses the Quirky daemon, shows
 its UI in one window, and posts native notifications and the dock badge. Closing the window or
 choosing Quit Quirky in the tray menu quits only the shell; the daemon and PTY host keep running.
 
@@ -17,7 +17,7 @@ open ~/Applications/Quirky.app
 
 `bun run build` builds the UI, bundles the daemon, PTY host, CLI, UI and built-in plugins into the app, prepares the pinned Electrobun SDK, and fails if any required input is missing. The result is `apps/desktop/build/Quirky.app`.
 
-`bun run typecheck` checks the root, mobile and desktop TypeScript projects. The desktop script runs `hutch electrobun prepare` before `tsc`, so the configured Electrobun 2.0.4 SDK is available without manual preparation. Both commands require the `hutch` CLI on `PATH`.
+`bun run typecheck` checks the root, mobile and desktop TypeScript projects. The desktop script runs `hutch electrobun prepare` before `tsc`, so the pinned Electrobun SDK is available without manual preparation. `apps/desktop/hutch.config.ts` pins a release of the fork (`zpyoung/electrobun`); `scripts/with-electrobun-devkit.ts` downloads and verifies its macOS arm64 devkit into `~/.cache/quirky/electrobun-devkit` and points Hutch at it, so run Hutch through the package scripts. Set `HUTCH_ELECTROBUN_DEVKIT_ROOT` to use a local devkit build instead. Both commands require the `hutch` CLI on `PATH`.
 
 Reinstalling over a running copy: quit Quirky first (window close or tray Quit), then repeat the
 `cp -R`. Use `rm -rf ~/Applications/Quirky.app` before copying if you want a clean replace.
