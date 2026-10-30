@@ -1,3 +1,5 @@
+import { mkdirSync, writeFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
 import type { Page } from 'playwright'
 import type { UiModel } from '@quirky/protocol'
 import { PRIMARY_PROJECT, type RegisteredCaptureFixtures } from './fixtures'
@@ -26,6 +28,15 @@ const FOCUSED_TOOL_TITLE = 'Worktrees'
 const SETTLE_MS = 3_000
 const PROJECT_SWITCHER = 0
 const WORKTREE_SWITCHER = 1
+
+const SEEDED_FILES: readonly (readonly [string, string])[] = [
+  ['src/ToolShell.tsx', 'export const toolShell = 1\n'],
+  ['src/tool-shell.css', '.tool-shell { display: grid; }\n'],
+  ['src/project-tile.ts', 'export const tile = 1\n'],
+  ['package.json', '{ "name": "ui-review-fixture" }\n'],
+  ['old-notes.md', '# Notes\n']
+]
+const SEEDED_LEDGER_TITLES = ['Ran the UI tests', 'Asked to approve a merge', 'typecheck failed in design-window', 'Finished and opened a review']
 
 const TERMINAL_OUTPUT = [
   '\\033[32m$ bun test packages/ui\\033[0m',
@@ -92,12 +103,34 @@ async function activateTerminalTab(runtime: SceneRuntime, worktreeId: string, ta
  * tabs open, the four default tools open, and the Worktrees panel focused. Every step goes through
  * the same methods and clicks a person's session would; only the project and worktree data is made up.
  */
+/** Gives the selected worktree uncommitted files and the project ledger entries, so Changes and Ledger show rows as the golden does. */
+async function seedRows(runtime: SceneRuntime, worktree: { id: string; path: string; repoId: string }): Promise<void> {
+  for (const [path, text] of SEEDED_FILES) {
+    const target = join(worktree.path, path)
+    mkdirSync(dirname(target), { recursive: true })
+    writeFileSync(target, text)
+  }
+  for (const title of SEEDED_LEDGER_TITLES) {
+    await call(runtime, 'quirky.ledger/file', {
+      target: { workspaceId: worktree.id },
+      type: 'bug',
+      content: {
+        title,
+        file: { path: 'src/app.ts', base: { kind: 'project', id: worktree.repoId } },
+        description: 'Made-up review fixture.',
+        severity: 'medium'
+      }
+    })
+  }
+}
+
 export async function populateShell(runtime: SceneRuntime): Promise<void> {
   const worktree = worktreeNamed(runtime, SELECTED_WORKTREE)
   await call(runtime, 'quirky.worktree/setOptions', { filterRepoIds: [] })
   await call(runtime, 'quirky.worktree/navigate', { worktree: `id:${worktree.id}` })
   const firstVisit = runtime.scene.tabsOpenedFor !== worktree.id
   if (firstVisit) {
+    await seedRows(runtime, worktree)
     runtime.scene.terminalTabId = await openCenterTabs(runtime, worktree.id, worktree.path)
     runtime.scene.tabsOpenedFor = worktree.id
   }

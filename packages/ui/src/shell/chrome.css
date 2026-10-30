@@ -335,6 +335,9 @@ button.ui-status-bar-item:focus-visible {
 
 .shell-attention-toasts .ui-toast {
   align-items: flex-start;
+  background: var(--ui-surface);
+  border: var(--ui-border-width) solid var(--ui-border);
+  box-shadow: 0 var(--ui-space-8) var(--ui-space-24) var(--ui-shadow);
   flex-wrap: nowrap;
 }
 .shell-main-header {

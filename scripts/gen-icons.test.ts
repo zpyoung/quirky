@@ -21,6 +21,8 @@ test('an SVG with an unlisted element, an event attribute or an external referen
     'event attribute': '<svg><path d="M0,0" onload="x()"/></svg>',
     'event attribute upper': '<svg><path d="M0,0" ONCLICK = "x()"/></svg>',
     'external href': '<svg><use href="https://example.com/a.svg#b"/></svg>',
+    'encoded url': '<svg><path d="M0,0" style="fill:u&#114;l(https://example.com/a)"/></svg>',
+    'named reference': '<svg><path d="M0,0" style="fill:url&lpar;https://example.com/a)"/></svg>',
     'xlink href': '<svg><use xlink:href="//example.com/a.svg"/></svg>',
     'data href': '<svg><a href="data:text/html,x"/></svg>',
     'javascript href': '<svg><a href="javascript:alert(1)"/></svg>',

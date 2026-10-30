@@ -40,7 +40,8 @@ const UNSAFE: readonly [pattern: RegExp, reason: string][] = [
   [/<[!?]/, 'a declaration'],
   [/[\s"'/]on[a-z]+\s*=/i, 'an event attribute'],
   [/javascript\s*:/i, 'a javascript: URL'],
-  [/url\(\s*['"]?(?!#)/i, 'an external url()']
+  [/url\(\s*['"]?(?!#)/i, 'an external url()'],
+  [/&/, 'a character reference, which could spell any of the above']
 ]
 const ELEMENT = /<\s*([^\s/>]+)/g
 const HREF = /(?:xlink:)?href\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/gi

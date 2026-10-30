@@ -129,6 +129,8 @@ test('panel mode keeps refresh, triage and new on the rail, and refresh reloads 
   await settle()
   expect(listCalls(calls)).toBe(before + 1)
   expect(host.querySelector('.ui-tool-panel-frame__body')?.textContent).toContain('Frame record')
+  expect(host.querySelector('.ui-tool-panel-frame__body [aria-label="Ledger filters"]')).toBeNull()
+  await act(async () => { rail(host).querySelector<HTMLButtonElement>('button[aria-label="Filter ledger"]')!.click() })
   expect(host.querySelector('.ui-tool-panel-frame__body [aria-label="Ledger filters"]')).not.toBeNull()
 })
 
@@ -146,6 +148,8 @@ test('page mode wraps itself in a frame that carries its refresh, triage, new an
   expect(textButton(headerActions(host), 'Ledger settings')).toBeDefined()
   expect(textButton(headerActions(host), 'Delete ledger')).toBeDefined()
   expect(tabs(host).childNodes).toHaveLength(0)
+  expect(host.querySelector('.ui-tool-panel-frame__body [aria-label="Ledger filters"]')).toBeNull()
+  await act(async () => { rail(host).querySelector<HTMLButtonElement>('button[aria-label="Filter ledger"]')!.click() })
   expect(host.querySelector('.ui-tool-panel-frame__body [aria-label="Ledger filters"]')).not.toBeNull()
   const before = listCalls(calls)
   await act(async () => { refresh.click() })

@@ -455,14 +455,35 @@ test('a recent file reopens from its id in its own worktree without searching', 
   const palette = await mount({
     selected: 'wt_a',
     recents: [`file:${encodeFileId('wt_b', 'docs/a b/notes.md')}`],
-    handlers: { 'quirky.editor/open': () => ({}), 'quirky.editor/quickOpen': () => ({}) }
+    handlers: { 'ui.window.self': () => ({ connId: 4 }), 'quirky.worktree/navigate': () => ({}), 'quirky.editor/open': () => ({}), 'quirky.editor/quickOpen': () => ({}) }
   })
   await palette.click('notes.md')
   expect(searchCalls(palette)).toEqual([])
-  expect(palette.calls.filter((call) => call.method.startsWith('quirky.editor/'))).toEqual([
+  expect(palette.calls.filter((call) => call.method === 'quirky.worktree/navigate' || call.method.startsWith('quirky.editor/'))).toEqual([
+    { method: 'quirky.worktree/navigate', params: { worktree: 'wt_b', window: 4 } },
     { method: 'quirky.editor/open', params: { worktree: 'wt_b', path: 'docs/a b/notes.md', focus: true } },
     { method: 'quirky.editor/quickOpen', params: { worktree: 'wt_b', action: 'record', path: 'docs/a b/notes.md' } }
   ])
+})
+
+test('a recent file in the selected worktree opens without navigating', async () => {
+  const palette = await mount({
+    selected: 'wt_a',
+    recents: [`file:${encodeFileId('wt_a', 'notes.md')}`],
+    handlers: { 'quirky.editor/open': () => ({}), 'quirky.editor/quickOpen': () => ({}) }
+  })
+  await palette.click('notes.md')
+  expect(palette.calls.some((call) => call.method === 'quirky.worktree/navigate')).toBe(false)
+})
+
+test('a recent file whose worktree cannot be opened does not open in the background', async () => {
+  const palette = await mount({
+    selected: 'wt_a',
+    recents: [`file:${encodeFileId('wt_b', 'notes.md')}`],
+    handlers: { 'ui.window.self': () => ({ connId: 4 }), 'quirky.worktree/navigate': () => { throw new Error('gone') }, 'quirky.editor/open': () => ({}) }
+  })
+  await palette.click('notes.md')
+  expect(palette.calls.some((call) => call.method === 'quirky.editor/open')).toBe(false)
 })
 
 test('each entry kind draws its icon', async () => {

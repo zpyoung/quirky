@@ -152,6 +152,7 @@ export function LedgerApp({
   const [panelTargetOverride, setPanelTargetOverride] = useState<LedgerTarget | null>(null)
   const [scope, setScope] = useState<Scope>(mode === 'panel' ? 'worktree' : 'project')
   const [filters, setFilters] = useState<LedgerFilters>(DEFAULT_FILTERS)
+  const [filtersOpen, setFiltersOpen] = useState(false)
   const [sort, setSort] = useState<SortMode>('activity')
   const [response, setResponse] = useState<LedgerResponse | null>(null)
   const [catalog, setCatalog] = useState<LedgerResponse | null>(null)
@@ -869,6 +870,18 @@ export function LedgerApp({
       {refreshSpinner ? '…' : <ControlIcon name="arrows-clockwise" />}
     </IconButton>
   )
+  const filtering = Object.values(filters).some((value) => value !== undefined && value !== '')
+  const filterTool = (
+    <IconButton
+      label="Filter ledger"
+      title="Filter ledger"
+      aria-pressed={filtersOpen || filtering}
+      variant={filtering ? 'primary' : undefined}
+      onClick={() => setFiltersOpen((open) => !open)}
+    >
+      <ControlIcon name="funnel" />
+    </IconButton>
+  )
   const newEntryTool = (label: string) => <IconButton label={label} title={label} onClick={beginNew}><ControlIcon name="plus" /></IconButton>
 
   const renderChooser = () => (
@@ -933,7 +946,8 @@ export function LedgerApp({
         />}
         tools={<>
           {refreshTool}
-          <IconButton label="Triage" title="Triage" onClick={openTriage}><ControlIcon name="funnel" /></IconButton>
+          <IconButton label="Triage" title="Triage" onClick={openTriage}><ControlIcon name="check" /></IconButton>
+          {filterTool}
           {newEntryTool('New')}
         </>}
       >
@@ -942,7 +956,7 @@ export function LedgerApp({
           {currentSummary && currentSummary.owner === null ? 'Detached' : `${groupScope ? 'Group' : 'Project'} · ${groupScope ? workspaceGroup?.name ?? currentSummary?.ownerName ?? 'Unknown group' : currentSummary?.ownerName ?? repoName(workspaceRepo)}`}
           {scope === 'worktree' && workspace && <span> · Filed in {workspace.name ?? workspace.id}</span>}
         </div>
-        {renderFilters()}
+        {(filtersOpen || filtering) && renderFilters()}
         {directory.error && <div role="alert" className="ledger-error" style={ledgerStyles.actions}><span style={ledgerStyles.error}>Owner catalog could not be loaded: {directory.error}</span><Button type="button" onClick={() => setDirectoryRetry((value) => value + 1)}>Retry</Button></div>}
         {directory.loading && <p className="ledger-state-message" style={ledgerStyles.message}>Loading ledger…</p>}
         {!directory.loading && noWorkspace && <EmptyState message="Open a workspace to see its ledger." />}
@@ -968,7 +982,8 @@ export function LedgerApp({
       </>}
       tools={<>
         {refreshTool}
-        <IconButton label="Triage" title="Triage" onClick={openTriage}><ControlIcon name="funnel" /></IconButton>
+        <IconButton label="Triage" title="Triage" onClick={openTriage}><ControlIcon name="check" /></IconButton>
+          {filterTool}
         {newEntryTool('New entry')}
       </>}
     >
@@ -987,7 +1002,7 @@ export function LedgerApp({
       </section>}
       {catalogError && <p role="alert" className="ledger-error" style={ledgerStyles.error}>Owner catalog unavailable: {catalogError}</p>}
       {directory.error && <div role="alert" className="ledger-error" style={ledgerStyles.actions}><span style={ledgerStyles.error}>Location bases could not be loaded: {directory.error}</span><Button type="button" onClick={() => setDirectoryRetry((value) => value + 1)}>Retry</Button></div>}
-      {renderFilters()}
+      {(filtersOpen || filtering) && renderFilters()}
       {error && <div role="alert" className="ledger-error" style={ledgerStyles.actions}><span style={ledgerStyles.error}>Ledger could not be loaded: {error}</span><Button type="button" onClick={refresh}>Retry</Button></div>}
       {actionMessage && <p role="alert" className="ledger-error" style={ledgerStyles.error}>{actionMessage}</p>}
       {loading && <p className="ledger-state-message" style={ledgerStyles.message}>Loading ledger…</p>}

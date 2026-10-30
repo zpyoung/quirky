@@ -229,7 +229,7 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
     if (selectedEntryKey !== null && selectedIndex < 0) setSelectedEntryKey(null)
   }, [selectedEntryKey, selectedIndex])
 
-  const openWorktree = async (worktreeId: string) => {
+  const openWorktree = async (worktreeId: string): Promise<boolean> => {
     try {
       const self = await connection.callAny('ui.window.self', {})
       if (typeof self !== 'object' || self === null || !('connId' in self) ||
@@ -237,14 +237,17 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
         throw new Error('The daemon did not identify this window.')
       }
       await connection.callAny('quirky.worktree/navigate', { worktree: worktreeId, window: self.connId })
+      return true
     } catch (error) {
       showCommandError(connection, 'Could not open worktree', error)
+      return false
     }
   }
 
   const openFile = async (id: string) => {
     const file = decodeFileId(id)
     if (file === null) return
+    if (file.worktree !== selectedWorktree && !(await openWorktree(file.worktree))) return
     try {
       await connection.callAny('quirky.editor/open', { worktree: file.worktree, path: file.path, focus: true })
     } catch (error) {

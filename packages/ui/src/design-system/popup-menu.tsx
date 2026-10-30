@@ -5,7 +5,10 @@ import type { ContextMenuItem } from './context-menu-contracts'
 import type { PopupItem, PopupMenuProps } from './contracts'
 
 type OpenPopup = { close(): void }
-let openPopup: OpenPopup | null = null
+
+// host and plugin bundles each carry their own copy of this module, so the open popup lives on the global they share
+const OPEN_POPUP = Symbol.for('quirky.ui.openPopup')
+const popupSlot = globalThis as unknown as { [OPEN_POPUP]?: OpenPopup | null }
 
 function toMenuItem(item: PopupItem): ContextMenuItem {
   const { lead, subtitle, selected, trailing, ...rest } = item
@@ -76,11 +79,11 @@ export function PopupMenu({ anchor, items, title, searchPlaceholder, onClose }: 
 
   useLayoutEffect(() => {
     const handle: OpenPopup = { close: () => dismiss(false) }
-    const previous = openPopup
-    openPopup = handle
+    const previous = popupSlot[OPEN_POPUP]
+    popupSlot[OPEN_POPUP] = handle
     previous?.close()
     return () => {
-      if (openPopup === handle) openPopup = null
+      if (popupSlot[OPEN_POPUP] === handle) popupSlot[OPEN_POPUP] = null
     }
   }, [dismiss])
 

@@ -160,6 +160,16 @@ describe('PopupMenu', () => {
     expect(closed).toEqual(['first'])
   })
 
+  test('opening a popup closes one opened by another bundle copy of this module', async () => {
+    const slot = globalThis as unknown as Record<symbol, { close(): void } | null>
+    let closes = 0
+    slot[Symbol.for('quirky.ui.openPopup')] = { close: () => { closes += 1 } }
+    const anchor = document.createElement('button')
+    document.body.appendChild(anchor)
+    await render(<PopupMenu anchor={anchor} items={[item('One')]} onClose={() => {}} />)
+    expect(closes).toBe(1)
+  })
+
   test('a popup opened by state after another leaves exactly one', async () => {
     function Harness() {
       const [which, setWhich] = useState<'a' | 'b' | null>(null)

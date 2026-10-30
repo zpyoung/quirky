@@ -108,3 +108,7 @@
   --ui-scrim: color-mix(in srgb, var(--ui-surface) 88%, transparent);
   color: var(--ui-text);
 }
+
+[data-theme='light'] {
+  --ui-shadow: color-mix(in srgb, var(--ui-text) 18%, transparent);
+}

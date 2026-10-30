@@ -25,6 +25,11 @@
 }
 .ui-popup__empty { padding: var(--ui-space-8) var(--ui-space-12); color: var(--ui-muted); }
 .ui-popup .qt-menu-search { width: 100%; box-sizing: border-box; }
+.ui-popup .qt-menu-search input {
+  border-color: var(--ui-transparent);
+  background: var(--ui-selected);
+}
+.ui-popup .qt-menu-label.ui-stack { gap: 0; }
 .ui-popup .qt-menu-heading {
   padding: var(--ui-space-8) var(--ui-space-8) var(--ui-space-2);
   color: var(--ui-muted);
