@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type DragEvent, type MouseEvent as ReactMouseEvent } from 'react'
-import { Badge, Button, EmptyState, IconButton } from '@quirky/ui'
+import { Badge, Button, ControlIcon, EmptyState, IconButton, PopupMenu } from '@quirky/ui'
+import type { PopupItem } from '@quirky/ui'
 import { displayTitle } from '../../layout/titles'
 import { dropZone, paneLeaves, roundRatio } from '../../layout/tree'
 import type { DropZone } from '../../layout/tree'
@@ -12,20 +13,13 @@ import { activeTabOf, byPaneId, groupRects, px } from './model'
 import type { GroupDividerRect } from './model'
 import { InlineField, PaneLayer } from './PaneLayer'
 import { StatusGlyph, UnreadBell, useNow } from './StatusGlyph'
+import { hiddenTabIndexes } from './tab-overflow'
+import { leadSessionOf, tabIconOf } from './TabIcon'
 import { useBoxSize } from './useBoxSize'
 
 type Common = { controller: WorkspaceController; state: ControllerState }
 
-function TabScrollIcon({ direction }: { direction: 'left' | 'right' }) {
-  return (
-    <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-      <path d={direction === 'left' ? 'M7.5 2.5 4 6l3.5 3.5' : 'M4.5 2.5 8 6l-3.5 3.5'} />
-    </svg>
-  )
-}
-
 function TabItem({ controller, state, group, tab, index, others, now, overflow, viewportWidth }: Common & { group: Group; tab: Tab; index: number; others: Tab[]; now: number; overflow: boolean; viewportWidth: number }) {
-  const ws = state.workspace!
   const selected = group.activeTab === tab.id
   const terminal = isViewTab(tab) ? null : tab
   const leaves = terminal ? paneLeaves(terminal.root) : []
@@ -54,7 +48,7 @@ function TabItem({ controller, state, group, tab, index, others, now, overflow, 
     <div
       ref={element}
       role="presentation"
-      className={`qt-tab${selected ? ' qt-selected' : ''}${selected && ws.activeGroup === group.id ? ' qt-focused' : ''}${mark ? ' qt-drop-before' : ''}${paneTarget ? ' qt-drop-target' : ''}`}
+      className={`qt-tab${selected ? ' qt-selected' : ''}${mark ? ' qt-drop-before' : ''}${paneTarget ? ' qt-drop-target' : ''}`}
       data-tab={tab.id}
       data-pinned={tab.pinned ? 'true' : undefined}
       title={`${title}${index < 9 ? ` (⌘${index + 1})` : ''}`}
@@ -92,6 +86,7 @@ function TabItem({ controller, state, group, tab, index, others, now, overflow, 
         void controller.dropTab({ kind: 'strip', group: group.id, index: indexFor(event) })
       }}
     >
+      {tabIconOf(tab, session)}
       {terminal ? (unread ? <UnreadBell reason={unread} /> : <StatusGlyph session={session} now={now} />) : null}
       {renaming ? (
         <InlineField label="Tab title" initial={displayTitle(tab)} className="ui-text-field__input qt-rename" onCommit={(value) => void controller.commitRename(value)} onCancel={() => controller.cancelRename()} />
@@ -193,42 +188,51 @@ function GroupView({ controller, state, group }: Common & { group: Group }) {
   const body = useRef<HTMLDivElement>(null)
   const tabNavigation = useRef<HTMLDivElement>(null)
   const tabViewport = useRef<HTMLDivElement>(null)
-  const [tabScroll, setTabScroll] = useState({ overflow: false, atStart: true, atEnd: true, viewportWidth: 0 })
-  const updateTabScroll = useCallback(() => {
-    const navigation = tabNavigation.current
+  const moreButton = useRef<HTMLButtonElement>(null)
+  const [hiddenTabs, setHiddenTabs] = useState<string[]>([])
+  const [viewportWidth, setViewportWidth] = useState(0)
+  const [moreOpen, setMoreOpen] = useState(false)
+  const updateHiddenTabs = useCallback(() => {
     const viewport = tabViewport.current
-    if (!navigation || !viewport) return
-    const overflow = viewport.scrollWidth > navigation.clientWidth
-    const maxScroll = Math.max(0, viewport.scrollWidth - viewport.clientWidth)
-    if (viewport.scrollLeft > maxScroll) viewport.scrollLeft = maxScroll
-    const next = { overflow, atStart: viewport.scrollLeft <= 0, atEnd: viewport.scrollLeft >= maxScroll - 1, viewportWidth: viewport.clientWidth }
-    setTabScroll((current) =>
-      current.overflow === next.overflow && current.atStart === next.atStart && current.atEnd === next.atEnd && current.viewportWidth === next.viewportWidth ? current : next
-    )
+    if (!viewport) return
+    const items = [...viewport.children] as HTMLElement[]
+    const hidden = hiddenTabIndexes(viewport.getBoundingClientRect(), items.map((item) => item.getBoundingClientRect())).map((index) => items[index]!.dataset.tab!)
+    setHiddenTabs((current) => (current.length === hidden.length && current.every((id, index) => id === hidden[index]) ? current : hidden))
+    setViewportWidth(viewport.clientWidth)
   }, [])
+  const hasHidden = hiddenTabs.length > 0
   useLayoutEffect(() => {
     const navigation = tabNavigation.current
     const viewport = tabViewport.current
     if (!navigation || !viewport) return
-    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(updateTabScroll)
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(updateHiddenTabs)
     observer?.observe(navigation)
     observer?.observe(viewport)
     for (const item of viewport.children) observer?.observe(item)
-    viewport.addEventListener('scroll', updateTabScroll)
-    updateTabScroll()
+    viewport.addEventListener('scroll', updateHiddenTabs)
+    updateHiddenTabs()
     return () => {
       observer?.disconnect()
-      viewport.removeEventListener('scroll', updateTabScroll)
+      viewport.removeEventListener('scroll', updateHiddenTabs)
     }
-  }, [group.tabs, tabScroll.overflow, updateTabScroll])
-  const scrollTabs = (direction: -1 | 1) => {
-    const viewport = tabViewport.current
-    if (!viewport) return
-    const maxScroll = Math.max(0, viewport.scrollWidth - viewport.clientWidth)
-    viewport.scrollLeft = Math.max(0, Math.min(maxScroll, viewport.scrollLeft + direction * viewport.clientWidth))
-    updateTabScroll()
+  }, [group.tabs, hasHidden, updateHiddenTabs])
+  useEffect(() => {
+    if (!hasHidden) setMoreOpen(false)
+  }, [hasHidden])
+  const pickHidden = (id: string) => {
+    tabViewport.current?.querySelector<HTMLElement>(`[data-tab="${id}"]`)?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' })
+    void controller.activateTab(id)
   }
   const tab = activeTabOf(group)
+  const hiddenItems: PopupItem[] = group.tabs
+    .filter((entry) => hiddenTabs.includes(entry.id))
+    .map((entry) => ({
+      id: entry.id,
+      label: displayTitle(entry),
+      lead: tabIconOf(entry, leadSessionOf(entry, state.sessions)),
+      selected: entry.id === group.activeTab,
+      onSelect: () => pickHidden(entry.id)
+    }))
   const drag = state.tabDrag
   const menu = state.menu
   const dragged = drag?.tab
@@ -279,20 +283,24 @@ function GroupView({ controller, state, group }: Common & { group: Group }) {
         }}
       >
         <div className="qt-tab-navigation" ref={tabNavigation}>
-          {tabScroll.overflow ? (
-            <IconButton className="qt-icon qt-tab-scroll" label="Scroll tabs left" title="Scroll tabs left" disabled={tabScroll.atStart} onMouseDown={(event) => event.stopPropagation()} onClick={() => scrollTabs(-1)}>
-              <TabScrollIcon direction="left" />
-            </IconButton>
-          ) : null}
           <div className="qt-tabs" ref={tabViewport} role="tablist">
             {group.tabs.map((entry, index) => (
-              <TabItem key={entry.id} controller={controller} state={state} group={group} tab={entry} index={index} others={others} now={now} overflow={tabScroll.overflow} viewportWidth={tabScroll.viewportWidth} />
+              <TabItem key={entry.id} controller={controller} state={state} group={group} tab={entry} index={index} others={others} now={now} overflow={hasHidden} viewportWidth={viewportWidth} />
             ))}
           </div>
-          {tabScroll.overflow ? (
-            <IconButton className="qt-icon qt-tab-scroll" label="Scroll tabs right" title="Scroll tabs right" disabled={tabScroll.atEnd} onMouseDown={(event) => event.stopPropagation()} onClick={() => scrollTabs(1)}>
-              <TabScrollIcon direction="right" />
-            </IconButton>
+          {hasHidden ? (
+            <button
+              ref={moreButton}
+              type="button"
+              className="qt-tab-more"
+              aria-haspopup="menu"
+              aria-expanded={moreOpen}
+              onMouseDown={(event) => event.stopPropagation()}
+              onClick={() => setMoreOpen((open) => !open)}
+            >
+              <ControlIcon name="caret-down" size={12} />
+              <span>{hiddenTabs.length} more</span>
+            </button>
           ) : null}
         </div>
         <IconButton className="qt-icon qt-plus" data-plus={group.id} label="New tab" title="New tab" aria-haspopup="menu" aria-expanded={menu?.kind === 'plus' && menu.target === group.id} onMouseDown={(event) => event.stopPropagation()} onClick={(event) => toggle('plus', event)}>
@@ -302,6 +310,7 @@ function GroupView({ controller, state, group }: Common & { group: Group }) {
         <IconButton className="qt-icon qt-actions" data-actions={group.id} label="Pane actions" title="Pane actions" aria-haspopup="menu" aria-expanded={menu?.kind === 'actions' && menu.target === group.id} disabled={!split} onMouseDown={(event) => event.stopPropagation()} onClick={(event) => toggle('actions', event)}>
           …
         </IconButton>
+        {moreOpen && moreButton.current ? <PopupMenu anchor={moreButton.current} items={hiddenItems} title="Hidden tabs" onClose={() => setMoreOpen(false)} /> : null}
       </div>
       <div
         ref={body}

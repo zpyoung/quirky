@@ -816,6 +816,7 @@ export class PaneService {
         key: `browser:${tab.id}`,
         title: 'Browser',
         input: { pane: tab.id },
+        icon: { kind: 'control', name: 'globe' },
         closeMethod: 'quirky.browser/paneClose',
         closeParams: { pane: tab.id, fromTab: true },
         activate: true
