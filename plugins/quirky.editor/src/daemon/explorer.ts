@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process'
 import { lstat, readdir, stat } from 'node:fs/promises'
 import { basename, dirname, join, relative, resolve as resolvePath, sep } from 'node:path'
-import type { PluginCaller, PluginContext, PluginStore } from '@quirky/protocol'
+import { RpcErrorCode, type PluginCaller, type PluginContext, type PluginStore } from '@quirky/protocol'
 import type { ExplorerEntry, ExplorerInteraction, ExplorerNavigationKey, ExplorerParams } from '../types'
 import { FileInventory, QUICK_OPEN_MAX_ENTRIES } from './inventory'
 import { KeyedQueue } from './queue'
@@ -96,21 +96,35 @@ export class ExplorerService {
   }
 
   /** Keeps Explorer interaction paths valid after successful filesystem mutations. */
-  async clearMutationInteraction(worktreeId: string, path: string, directory: boolean): Promise<void> {
+  async clearMutationInteraction(worktreeId: string, mutationPaths: readonly string[], includeDescendants: boolean): Promise<void> {
     await this.interactionQueue.run([`explorer:${worktreeId}`], async () => {
       const current = this.interactions.get(worktreeId)
       if (current === undefined) return
-      const selectedPaths = current.selectedPaths.filter((candidate) =>
-        candidate !== path && (!directory || !this.paths.isWithin(path, candidate))
+      const affects = (candidate: string) => mutationPaths.some((path) =>
+        candidate === path || (includeDescendants && this.paths.isWithin(path, candidate))
       )
-      const focusedPath = current.focusedPath === path ||
-        (directory && current.focusedPath !== null && this.paths.isWithin(path, current.focusedPath))
-        ? null
-        : current.focusedPath
-      const selectionAnchor = current.selectionAnchor === path ||
-        (directory && current.selectionAnchor !== null && this.paths.isWithin(path, current.selectionAnchor))
-        ? null
-        : current.selectionAnchor
+      const checkedPaths = new Map<string, Promise<boolean>>()
+      const pathExists = (candidate: string): Promise<boolean> => {
+        let check = checkedPaths.get(candidate)
+        if (check === undefined) {
+          check = this.paths.entryPath(worktreeId, candidate).then(
+            () => true,
+            (error) => (error as { code?: unknown } | null)?.code !== RpcErrorCode.NotFound
+          )
+          checkedPaths.set(candidate, check)
+        }
+        return check
+      }
+      const isStale = async (candidate: string): Promise<boolean> =>
+        affects(candidate) || !(await pathExists(candidate))
+      const selectedPaths: string[] = []
+      for (const candidate of current.selectedPaths) {
+        if (!(await isStale(candidate))) selectedPaths.push(candidate)
+      }
+      let focusedPath = current.focusedPath
+      if (focusedPath !== null && await isStale(focusedPath)) focusedPath = null
+      let selectionAnchor = current.selectionAnchor
+      if (selectionAnchor !== null && await isStale(selectionAnchor)) selectionAnchor = null
       if (
         selectedPaths.length !== current.selectedPaths.length ||
         focusedPath !== current.focusedPath ||
