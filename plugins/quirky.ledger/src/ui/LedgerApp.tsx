@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { Badge, Button, Dialog, EmptyState, FormRow, IconButton, ListRow, Tabs, TextField } from '@quirky/ui'
+import { Badge, Button, ControlIcon, Dialog, EmptyState, FormRow, IconButton, ListRow, Tabs, TextField, ToolPanelFrame } from '@quirky/ui'
 import type { UiLayout, UiPluginContext } from '@quirky/protocol'
 import { currentRevisionOf, errorData, errorMessage, isConflict, ledgerRequest } from './api'
 import { LedgerDetail } from './LedgerDetail'
@@ -864,12 +864,20 @@ export function LedgerApp({
     )
   }
 
+  const refreshTool = (
+    <IconButton label="Refresh ledger" aria-busy={refreshSpinner} title={refreshSpinner ? 'Refreshing ledger…' : 'Refresh ledger'} onClick={refresh}>
+      {refreshSpinner ? '…' : <ControlIcon name="arrows-clockwise" />}
+    </IconButton>
+  )
+  const newEntryTool = (label: string) => <IconButton label={label} title={label} variant="primary" onClick={beginNew}><ControlIcon name="plus" /></IconButton>
+
   const renderChooser = () => (
+    <ToolPanelFrame
+      title="Open ledger"
+      tools={<IconButton label="Refresh ledger catalog" title="Refresh ledger catalog" disabled={catalogLoading} onClick={() => void loadCatalog()}><ControlIcon name="arrows-clockwise" /></IconButton>}
+    >
     <section className="ledger-root ledger-chooser" style={ledgerStyles.page}>
-      <header className="ledger-header" style={ledgerStyles.header}>
-        <div><h1 style={ledgerStyles.title}>Open ledger</h1><p className="ledger-summary" style={ledgerStyles.meta}>Attached and detached ledgers for this runtime</p></div>
-        <Button type="button" aria-label="Refresh ledger catalog" disabled={catalogLoading} onClick={() => void loadCatalog()}>Refresh</Button>
-      </header>
+      <p className="ledger-summary" style={ledgerStyles.meta}>Attached and detached ledgers for this runtime</p>
       {runtimeText && <p className="ledger-muted" title={runtimeText} style={ledgerStyles.meta}>Runtime identity: {response?.runtime.runtimeId ?? catalog?.runtime.runtimeId ?? 'loading'}</p>}
       {catalogError && <div className="ledger-error" role="alert" style={ledgerStyles.actions}><span style={ledgerStyles.error}>Ledger catalog could not be loaded: {catalogError}</span><Button type="button" onClick={() => void loadCatalog()}>Retry</Button></div>}
       {catalogLoading && <p className="ledger-state-message" style={ledgerStyles.message}>Loading ledgers…</p>}
@@ -891,6 +899,7 @@ export function LedgerApp({
         })}
       </ul>
     </section>
+    </ToolPanelFrame>
   )
 
   const renderPanel = () => {
@@ -904,25 +913,31 @@ export function LedgerApp({
       && !directory.loading
       && !directory.error
       && !error
+    const ownerEntryCount = (owner: LedgerOwner | null | undefined) => owner
+      ? catalog?.ledgers?.find((summary) => summary.owner?.tier === owner.tier && summary.owner.id === owner.id)?.entryCount
+      : undefined
+    const projectCount = ownerEntryCount(workspaceRepo && { tier: 'project', id: workspaceRepo.id })
+    const groupCount = ownerEntryCount(workspaceGroup && { tier: 'group', id: workspaceGroup.id })
     return (
-      <section className="ledger-root ledger-panel" aria-label="Ledger panel" style={ledgerStyles.panel}>
-        <header className="ledger-panel-header" style={ledgerStyles.actions}>
-          <IconButton label="Refresh ledger" aria-busy={refreshSpinner} title={refreshSpinner ? 'Refreshing ledger…' : 'Refresh ledger'} onClick={refresh}>{refreshSpinner ? '…' : '↻'}</IconButton>
+      <ToolPanelFrame
+        title="Ledger"
+        tabs={<Tabs
+          label="Ledger scope"
+          items={[
+            { id: 'worktree', label: workspaceFolder ? 'Folder' : 'Worktree' },
+            ...(!workspaceFolder ? [{ id: 'project', label: 'Project', count: projectCount }] : []),
+            ...(workspaceGroup ? [{ id: 'group', label: 'Group', count: groupCount }] : [])
+          ]}
+          value={scope}
+          onChange={(nextScope) => { setScope(nextScope as Scope); setPanelTargetOverride(null) }}
+        />}
+        tools={<>
+          {refreshTool}
           <Button type="button" onClick={openTriage}>Triage</Button>
-          <Button type="button" variant="primary" onClick={beginNew}>New</Button>
-        </header>
-        <div className="ledger-scope-tabs">
-          <Tabs
-            label="Ledger scope"
-            items={[
-              { id: 'worktree', label: workspaceFolder ? 'Folder' : 'Worktree' },
-              ...(!workspaceFolder ? [{ id: 'project', label: 'Project' }] : []),
-              ...(workspaceGroup ? [{ id: 'group', label: 'Group' }] : [])
-            ]}
-            value={scope}
-            onChange={(nextScope) => { setScope(nextScope as Scope); setPanelTargetOverride(null) }}
-          />
-        </div>
+          {newEntryTool('New')}
+        </>}
+      >
+      <section className="ledger-root ledger-panel" aria-label="Ledger panel" style={ledgerStyles.panel}>
         <div className="ledger-row-meta" style={ledgerStyles.meta}>
           {currentSummary && currentSummary.owner === null ? 'Detached' : `${groupScope ? 'Group' : 'Project'} · ${groupScope ? workspaceGroup?.name ?? currentSummary?.ownerName ?? 'Unknown group' : currentSummary?.ownerName ?? repoName(workspaceRepo)}`}
           {scope === 'worktree' && workspace && <span> · Filed in {workspace.name ?? workspace.id}</span>}
@@ -937,28 +952,29 @@ export function LedgerApp({
         {!directory.loading && !noWorkspace && !missingGroup && !loading && !error && visibleRows.length === 0 && <EmptyState message="No entries match this view." action={{ label: 'New entry', onAction: beginNew }} />}
         {!directory.loading && !error && !missingGroup && <ul className="ledger-entry-list" style={ledgerStyles.list}>{visibleRows.map(renderRow)}</ul>}
       </section>
+      </ToolPanelFrame>
     )
   }
 
   const renderPage = () => (
+    <ToolPanelFrame
+      title={pageTitle}
+      actions={<>
+        {(effectiveTarget?.owner?.tier === 'project' || currentSummary?.owner?.tier === 'project') && <Button type="button" onClick={() => {
+          const repoId = currentSummary?.repoId ?? effectiveTarget?.owner?.id
+          if (repoId) context.openView(LEDGER_SETTINGS_VIEW_ID, { repoId })
+        }}>Ledger settings</Button>}
+        {currentSummary && <Button type="button" variant="destructive" onClick={() => setConfirmation({ kind: 'delete-ledger', ledgerId: currentSummary.ledgerId, revision: currentSummary.revision, entryCount: currentSummary.entryCount })}>Delete ledger</Button>}
+      </>}
+      tools={<>
+        {refreshTool}
+        <Button type="button" onClick={openTriage}>Triage</Button>
+        {newEntryTool('New entry')}
+      </>}
+    >
     <section className="ledger-root ledger-page" style={ledgerStyles.page}>
-      <header className="ledger-header" style={ledgerStyles.header}>
-        <div>
-          <p className="ledger-muted" style={ledgerStyles.muted}><Button type="button" onClick={() => { returnToChooser(); void loadCatalog() }}>Open ledger</Button></p>
-          <h1 style={ledgerStyles.title}>{pageTitle}</h1>
-          <p className="ledger-summary" title={runtimeText} style={ledgerStyles.meta}>{pageTier === 'project' ? 'Project' : 'Group'} · {currentSummary ? `${currentSummary.entryCount} entries · revision ${currentSummary.revision}` : 'No ledger yet'}{response?.runtime && <span> · runtime {response.runtime.runtimeId} · profile {response.runtime.profileId}</span>}</p>
-        </div>
-        <div className="ledger-page-actions" style={ledgerStyles.actions}>
-          {(effectiveTarget?.owner?.tier === 'project' || currentSummary?.owner?.tier === 'project') && <Button type="button" onClick={() => {
-            const repoId = currentSummary?.repoId ?? effectiveTarget?.owner?.id
-            if (repoId) context.openView(LEDGER_SETTINGS_VIEW_ID, { repoId })
-          }}>Ledger settings</Button>}
-          <Button type="button" aria-label="Refresh ledger" aria-busy={refreshSpinner} title={refreshSpinner ? 'Refreshing ledger…' : 'Refresh ledger'} onClick={refresh}>{refreshSpinner ? 'Refreshing…' : 'Refresh'}</Button>
-          <Button type="button" onClick={openTriage}>Triage</Button>
-          <Button type="button" variant="primary" onClick={beginNew}>New entry</Button>
-          {currentSummary && <Button type="button" variant="destructive" onClick={() => setConfirmation({ kind: 'delete-ledger', ledgerId: currentSummary.ledgerId, revision: currentSummary.revision, entryCount: currentSummary.entryCount })}>Delete ledger</Button>}
-        </div>
-      </header>
+      <p className="ledger-muted" style={ledgerStyles.muted}><Button type="button" onClick={() => { returnToChooser(); void loadCatalog() }}>Open ledger</Button></p>
+      <p className="ledger-summary" title={runtimeText} style={ledgerStyles.meta}>{pageTier === 'project' ? 'Project' : 'Group'} · {currentSummary ? `${currentSummary.entryCount} entries · revision ${currentSummary.revision}` : 'No ledger yet'}{response?.runtime && <span> · runtime {response.runtime.runtimeId} · profile {response.runtime.profileId}</span>}</p>
       <div className="ledger-row-meta" title={runtimeText} style={ledgerStyles.meta}>{currentSummary && currentSummary.owner === null ? `Detached ${currentSummary.tier} ledger · former owner ${currentSummary.formerOwner?.id ?? 'unknown'}` : ownerForPage ? `${ownerForPage.tier} · ${currentSummary?.ownerName ?? pageTitle}` : `${pageTier} · ${pageTitle}`}</div>
       {detached && <section className="ledger-attach" aria-label="Attach detached ledger" style={ledgerStyles.section}>
         <FormRow label="Attach ledger to owner" htmlFor={`${controlId}-attach-owner`}>
@@ -985,6 +1001,7 @@ export function LedgerApp({
         <Button type="button" variant="destructive" onClick={() => beginDeleteSelections(selected, selectionTitles, entries)}>Delete selected</Button>
       </div>}
     </section>
+    </ToolPanelFrame>
   )
 
   const visible = mode === 'panel' ? renderPanel() : effectiveTarget ? renderPage() : renderChooser()
