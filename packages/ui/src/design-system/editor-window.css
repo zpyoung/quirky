@@ -70,23 +70,30 @@
 
 .qe-document-actions {
   flex: 0 0 auto;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
   justify-content: flex-start;
   width: 100%;
 }
 
 .qe-document-action-strip {
-  flex: 1 1 0;
-  flex-wrap: nowrap;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+  max-width: 100%;
   min-width: 0;
-  overflow-x: auto;
-  overflow-y: hidden;
-  white-space: nowrap;
 }
 
 .qe-document-action-strip > *,
 .qe-document-actions > .qe-file-actions {
   flex: 0 0 auto;
+}
+
+.qe-document-actions > .qe-file-actions {
+  margin-inline-start: auto;
+}
+
+.qe-mode-switch {
+  flex-wrap: wrap;
+  max-width: 100%;
 }
 
 .qe-mode-switch .ui-button[aria-pressed='true'] {
