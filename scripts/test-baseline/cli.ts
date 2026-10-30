@@ -1,4 +1,4 @@
-import { mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { parseArgs } from 'node:util'
 import type { bunTestFile } from '../suite'
@@ -8,7 +8,7 @@ import { applyIssueActions, planIssues, readOpenIssues } from './issues'
 import { renderComment, renderLocal } from './report'
 import { findSpawners, selectTests } from './select'
 import { MAX_SHARDS_MAIN, MAX_SHARDS_PR, SHARD_TARGET_MS, splitShards } from './shards'
-import type { Baseline, ChangedPath, FileResult, GhRunner, Plan, Selection, Verdict } from './types'
+import type { Attempt, Baseline, ChangedPath, FileResult, GhRunner, Plan, Selection, Verdict } from './types'
 
 const USAGE = `usage: bun scripts/test-baseline/cli.ts <command> [options]
 
@@ -114,19 +114,23 @@ function untrackedFiles(cwd: string): string[] {
 
 type Selected = { selection: Selection; graphMisses: number }
 
+/** The test files that exist in the working tree; `discover` also lists tracked files deleted but not yet staged. */
+async function presentTests(ctx: Context): Promise<string[]> {
+  const { discover } = await import('../suite')
+  return discover(ctx.cwd, []).filter((file) => existsSync(join(ctx.cwd, file)))
+}
+
 /** Builds the import graph over `codeFiles` and selects tests for `changed`. Needs `bun install` to have run. */
 async function selectFrom(ctx: Context, changed: ChangedPath[], codeFiles: string[]): Promise<Selected> {
   const { buildImportGraph } = await import('./graph')
-  const { discover } = await import('../suite')
   const graph = buildImportGraph(ctx.cwd, codeFiles)
-  const testFiles = discover(ctx.cwd, [])
+  const testFiles = await presentTests(ctx)
   const spawners = findSpawners(graph, testFiles, (path) => readFileSync(join(ctx.cwd, path), 'utf8'))
   return { selection: selectTests({ changed, testFiles, graph, spawners }), graphMisses: graph.misses }
 }
 
 async function allTests(ctx: Context, reason: string): Promise<Selection> {
-  const { discover } = await import('../suite')
-  return { mode: 'all', files: discover(ctx.cwd, []), reasons: [reason] }
+  return { mode: 'all', files: await presentTests(ctx), reasons: [reason] }
 }
 
 async function deletedTests(changed: ChangedPath[]): Promise<string[]> {
@@ -182,10 +186,24 @@ function asBaseline(value: unknown): Baseline {
   throw new Error('not a baseline')
 }
 
+const FILE_ERRORS = [null, 'timeout', 'no-report', 'exit-mismatch']
+const TEST_STATUSES = ['passed', 'failed', 'skipped']
+
+const isTestResult = (value: unknown): boolean => isRecord(value) && typeof value.key === 'string' && TEST_STATUSES.includes(value.status as string)
+
+const isAttempt = (value: unknown): value is Attempt =>
+  isRecord(value) && typeof value.exitCode === 'number' && FILE_ERRORS.includes(value.fileError as string | null) && Array.isArray(value.tests) && value.tests.every(isTestResult)
+
+const isFileResult = (value: unknown): value is FileResult =>
+  isRecord(value) &&
+  typeof value.file === 'string' &&
+  (value.platform === 'linux' || value.platform === 'macos') &&
+  typeof value.durationMs === 'number' &&
+  isAttempt(value.first) &&
+  (value.rerun === undefined || isAttempt(value.rerun))
+
 function asResults(value: unknown): FileResult[] {
-  if (Array.isArray(value) && value.every((item) => isRecord(item) && typeof item.file === 'string' && isRecord(item.first) && Array.isArray(item.first.tests))) {
-    return value as FileResult[]
-  }
+  if (Array.isArray(value) && value.every(isFileResult)) return value
   throw new Error('not a list of file results')
 }
 

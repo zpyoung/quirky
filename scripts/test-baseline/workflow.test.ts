@@ -148,6 +148,18 @@ describe('the Tests job', () => {
     expect(String(issues.if)).toContain("github.event_name == 'push'")
   })
 
+  test('files issues before publishing the baseline, and a failed filing blocks the publish', () => {
+    const list = steps('tests')
+    const issues = list.findIndex(step => step.run?.includes('cli.ts issues'))
+    const upload = list.findIndex(step => String(step.with?.name).startsWith('test-baseline-'))
+    expect(issues).toBeGreaterThanOrEqual(0)
+    expect(upload).toBeGreaterThan(issues)
+    expect(String(list[upload]!.if)).not.toMatch(/\b(always|failure|cancelled|success)\(\)/)
+    expect(list[issues]!.if).not.toMatch(/\b(always|failure|cancelled)\(\)/)
+    expect((list[issues] as Step & { 'continue-on-error'?: boolean })['continue-on-error']).toBeUndefined()
+    expect(list.findIndex(step => String(step.if).includes('outcome'))).toBe(list.length - 1)
+  })
+
   test('workflow_dispatch never publishes a baseline or files issues', () => {
     const gated = steps('tests').filter(
       step => String(step.with?.name).startsWith('test-baseline-') || step.run?.includes('cli.ts issues'),

@@ -246,6 +246,12 @@ jobs:
             fi
           } || echo "::warning::could not post the verdict comment"
 
+      - name: File issues
+        if: github.event_name == 'push' && hashFiles('out/baseline.json') != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bun scripts/test-baseline/cli.ts issues --plan plan --baseline out/baseline.json
+
       - uses: actions/upload-artifact@v4
         if: github.event_name == 'push' && hashFiles('out/baseline.json') != ''
         with:
@@ -253,12 +259,6 @@ jobs:
           path: out/baseline.json
           retention-days: 14
           if-no-files-found: error
-
-      - name: File issues
-        if: github.event_name == 'push' && hashFiles('out/baseline.json') != ''
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: bun scripts/test-baseline/cli.ts issues --plan plan --baseline out/baseline.json
 
       - name: Fail when the verdict failed
         if: always() && steps.verdict.outcome == 'failure'

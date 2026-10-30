@@ -607,6 +607,39 @@ describe('verdict', () => {
     expect(verdict?.runBroken).toBe(true)
   })
 
+  test.each([
+    ['an invalid test status', { ...passing, first: { ...passing.first, tests: [{ key: key('a.test.ts', 'ok'), status: 'unknown' }] } }],
+    ['a fileError outside the allowed values', { ...passing, first: { ...passing.first, fileError: 'exploded' } }],
+    ['a malformed rerun attempt', { ...passing, rerun: { exitCode: 'zero', fileError: null, tests: [] } }],
+    ['a missing durationMs', { file: 'a.test.ts', platform: 'linux', first: passing.first }],
+    ['an unknown platform', { ...passing, platform: 'windows' }],
+    ['a test without a key', { ...passing, first: { ...passing.first, tests: [{ status: 'passed' }] } }],
+  ])('%s sets runBroken instead of passing', async (_name, bad) => {
+    const staged = stage(planOf(), { 'linux-0.json': [bad] })
+    const { code, verdict } = await verdictOf(staged)
+    expect(code).toBe(1)
+    expect(verdict?.runBroken).toBe(true)
+    expect(verdict?.ok).toBe(false)
+  })
+
+  test('a rerun.json entry with a malformed rerun attempt sets runBroken', async () => {
+    const staged = stage(planOf(), {
+      'linux-0.json': [fileResult('a.test.ts', attempt({ bad: 'fail' }))],
+      'rerun.json': [{ ...fileResult('a.test.ts', attempt({ bad: 'fail' })), rerun: { exitCode: 0, fileError: null, tests: [{ key: key('a.test.ts', 'bad'), status: 'maybe' }] } }],
+    })
+    const { code, verdict } = await verdictOf(staged)
+    expect(code).toBe(1)
+    expect(verdict?.runBroken).toBe(true)
+  })
+
+  test('every fileError the runner can produce is accepted', async () => {
+    const errors: FileError[] = [null, 'timeout', 'no-report', 'exit-mismatch']
+    const results = errors.map((fileError, index) => fileResult(`f${index}.test.ts`, attempt({}, `f${index}.test.ts`, fileError), attempt({ ok: 'pass' }, `f${index}.test.ts`)))
+    const staged = stage(planOf({ selection: { mode: 'some', files: results.map((result) => result.file), reasons: [] } }), { 'linux-0.json': results })
+    const { verdict } = await verdictOf(staged)
+    expect(verdict?.runBroken).toBe(false)
+  })
+
   test('a missing plan sets runBroken and still reports', async () => {
     const staged = stage(null, { 'linux-0.json': [passing] })
     const { code, verdict } = await verdictOf(staged)
@@ -881,6 +914,36 @@ describe('affected', () => {
     const lines = out.join('').trim().split('\n')
     expect(lines).toEqual(expect.arrayContaining([A, IMPORTS, 'plugins/y/test/b.test.ts', 'plugins/y/test/new.test.ts']))
     expect(lines).not.toContain('packages/p/test/p.test.ts')
+  })
+
+  describe('a test file deleted from the working tree but not staged', () => {
+    const B = 'plugins/y/test/b.test.ts'
+    const bKey = key(B, 'works')
+
+    test('is not selected, including by the run-everything fallback', async () => {
+      const { dir, gh } = setup(baselineOf(sha(0), { [bKey]: 'passed' }))
+      rmSync(join(dir, B))
+      const withBaseline = harness(dir, { gh, run: fakeRun({}) })
+      expect(await runCli(['affected', '--list'], withBaseline.ctx)).toBe(0)
+      expect(withBaseline.out.join('')).toContain(A)
+      expect(withBaseline.out.join('')).not.toContain(B)
+
+      git(dir, 'update-ref', '-d', 'refs/remotes/origin/main')
+      const fallback = harness(dir, { gh: brokenGh, run: fakeRun({}) })
+      expect(await runCli(['affected', '--list'], fallback.ctx)).toBe(0)
+      expect(fallback.out.join('').trim().split('\n')).toEqual([IMPORTS, A, 'packages/p/test/p.test.ts'].sort())
+    })
+
+    test('is never run and its baseline tests are reported missing', async () => {
+      const { dir, gh } = setup(baselineOf(sha(0), { [bKey]: 'passed' }))
+      rmSync(join(dir, B))
+      const calls: Calls = { files: [], active: 0, maxActive: 0 }
+      const run = fakeRun({ [A]: [{ ok: 'pass' }], [IMPORTS]: [{ ok: 'pass' }] }, calls)
+      const { ctx, out } = harness(dir, { gh, run })
+      expect(await runCli(['affected', '--json'], ctx)).toBe(0)
+      expect(calls.files).not.toContain(B)
+      expect((JSON.parse(out.join('')) as Verdict).missing).toEqual([bKey])
+    })
   })
 
   test('--list --json prints the selection as JSON', async () => {
