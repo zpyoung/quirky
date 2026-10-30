@@ -259,6 +259,7 @@
       {
         "id": "control",
         "title": "Ledger Control",
+        "palette": false,
         "description": "Route ledger scope, filter, selection, detail and dialog actions to the mounted ledger view.",
         "args": {
           "type": "object",

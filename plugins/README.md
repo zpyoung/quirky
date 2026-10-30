@@ -960,6 +960,13 @@ than starting a replacement conversation.
 
 Use `quirky heimdall --help` and `quirky api --json` for the live commands and schemas.
 
+## Project Ledger
+
+`quirky.ledger` provides the project observation ledger and its **Open Ledger**
+entry point. **Ledger Control** is an internal command used by the mounted view
+to route its actions; it remains registered and executable but is intentionally
+omitted from the command palette.
+
 ## Editor, Git diffs and sidebar edges
 
 `quirky.editor` keeps one shared draft and disk precondition per buffer. Rich Markdown

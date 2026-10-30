@@ -48,6 +48,26 @@ Every plugin manifest must include `apiVersion`. It is independent of the plugin
 
 `apiVersion` is a minimum stable API release in canonical `major.minor.patch` form. Each component is a nonnegative safe integer with no leading zeroes except `0`. Ranges, shorthand versions, whitespace, prereleases and build suffixes are not accepted.
 
+### UI command palette visibility
+
+UI command declarations may include an optional `palette` boolean:
+
+```json
+{
+  "contributes": {
+    "command": [
+      { "id": "open", "title": "Open", "palette": true },
+      { "id": "control", "title": "Control", "palette": false }
+    ]
+  }
+}
+```
+
+Omitting `palette` is equivalent to `true`. `false` hides the command from the
+command palette only: it remains an effective UI command, can still be invoked
+through UI command routing, and can still be bound to a keybinding.
+Non-boolean values are invalid.
+
 ## Compatibility and diagnostics
 
 A host supports a declared floor only when the target and host have the same major and the target is no newer than the host, compared numerically. Thus a 1.0.0 host accepts 1.0.0; a later 1.x host accepts earlier 1.x floors. A 1.0.0 host refuses 1.1.0, and a 2.x host does not treat 1.x as compatible.

@@ -24,7 +24,7 @@ const ALLOWED_FIELDS: Record<string, readonly string[]> = {
   'settings-section': ['title', 'description', 'order'],
   view: ['title', 'description', 'settings'],
   overlay: ['title', 'description', 'order'],
-  command: ['title', 'description', 'args'],
+  command: ['title', 'description', 'args', 'palette'],
   keybinding: ['key', 'command', 'description', 'when'],
   setting: ['type', 'default', 'title', 'description', 'category', 'section', 'minimum', 'maximum', 'values', 'menu'],
   theme: ['title', 'appearance', 'colors', 'description'],
@@ -217,6 +217,9 @@ export function checkUiKindEntry(kind: string, label: string, entry: Entry, erro
   }
   if (kind === 'view' && entry.settings !== undefined && typeof entry.settings !== 'boolean') {
     errors.push(`${label}: settings must be a boolean`)
+  }
+  if (kind === 'command' && entry.palette !== undefined && typeof entry.palette !== 'boolean') {
+    errors.push(`${label}: palette must be a boolean`)
   }
   if (kind === 'command' && entry.args !== undefined) {
     for (const problem of checkSchemaDeclaration(entry.args, 'args', { object: true })) errors.push(`${label}: ${problem}`)

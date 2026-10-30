@@ -65,6 +65,7 @@ describe('SC-2: a malformed schema makes the plugin invalid', () => {
       contributes('command', { id: 'c', args: { type: 'array' } }),
       'command c: args must be an object schema',
     ],
+    ['a UI command with a non-boolean palette flag', contributes('command', { id: 'c', palette: 'false' }), 'command c: palette must be a boolean'],
   ]
 
   test.each(rows)('%s', (_name, manifest, message) => {
@@ -118,7 +119,11 @@ describe('valid schema declarations', () => {
           { id: 'bare' },
         ],
         event: [{ id: 'added', data: { type: 'object', properties: { noteId: { type: 'integer' } } } }, { id: 'plain' }],
-        command: [{ id: 'open', args: { type: 'object', properties: { id: { type: 'string' } } } }],
+        command: [
+          { id: 'open', args: { type: 'object', properties: { id: { type: 'string' } } }, palette: false },
+          { id: 'visible', palette: true },
+          { id: 'default' },
+        ],
       },
     })
     expect(parsed.ok).toBe(true)

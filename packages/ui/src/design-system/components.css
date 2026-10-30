@@ -589,6 +589,11 @@
   z-index: 0;
 }
 
+.ui-dialog-backdrop--top {
+  align-items: flex-start;
+  padding-block-start: max(var(--ui-space-16), 10vh);
+}
+
 .ui-dialog-backdrop--sheet {
   align-items: stretch;
   justify-content: flex-end;
