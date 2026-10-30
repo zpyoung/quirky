@@ -90,6 +90,8 @@ Local cleanup context is false for a registered local repo owner only when that 
 
 Existing create behavior remains the canonical `quirky.worktree/create` service. It keeps GitHub issue/PR drafts, setup and issue-command decisions, issue-command execution, and public `EffectiveHooks.sharedDirectories` carry behavior. This revision extends that create path rather than adding a second one.
 
+Plain text entered in Smart mode becomes the default display label; the worktree folder and default branch still use the sanitized name. An Advanced display name overrides it. Linked GitHub sources keep their title by default, and blank names leave the generated suggestion as a placeholder.
+
 The create dialog, API and CLI support sparse paths, safe `keepMain` fast-forwards, and agent model/option choices. Launch picks are checked by the public `quirky.agents/resolveLaunch` owner before a worktree is created, then passed to `quirky.session/create`; a receipt reports materialized sparse paths, successfully linked shared directories, the primary-checkout update outcome, and the session's actual launch settings. Sparse paths are restricted to tracked repository-relative files/directories. `--keep-main` only fast-forwards a clean primary checkout on the exact selected remote-tracking branch when it is strictly behind; it never resets or falls back to a local base.
 
 ```sh

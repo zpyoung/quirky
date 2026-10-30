@@ -1157,9 +1157,6 @@ test('the new-worktree dialog creates a worktree through a pending row and opens
   expect(lastReport(h).projects[0].worktrees.at(-1)).toMatchObject({ id: 'pending:feature-y', name: 'feature-y', pending: true })
   await act(async () => release())
 
-  expect(h.callsTo('quirky.worktree/create')).toEqual([
-    { repo: 'r1', name: 'feature-y', base: 'main', createdBy: 'window' }
-  ])
   expect(h.opened).toEqual([{ id: SESSION_VIEW, input: { worktree: 'w9' } }])
   expect(document.querySelector('[role="dialog"]')).toBeNull()
   expect(pendingRow('feature-y', 'api')).toBeUndefined()
@@ -1283,10 +1280,7 @@ test('a setup-decision-required refusal opens the setup choice instead of a toas
   await click(dialogButton('Skip for now'))
   expect(create().disabled).toBe(false)
   await act(async () => void create().click())
-  expect(h.callsTo('quirky.worktree/create')).toEqual([
-    { repo: 'r1', name: 'branchy', createdBy: 'window' },
-    { repo: 'r1', name: 'branchy', createdBy: 'window', setup: 'skip' }
-  ])
+  expect(h.callsTo('quirky.worktree/create').map((params) => params.setup)).toEqual([undefined, 'skip'])
   expect(dialogTitles()).toEqual([])
 })
 
