@@ -7,7 +7,7 @@ export { Popover } from './floating'
 export { PopupMenu } from './popup-menu'
 export { StatusBarItem } from './status-bar-item'
 export { ControlIcon, FileIcon, ProjectTile, ToolIcon } from './tool-icons'
-export { EmptyState, FormRow, ToolPanelActions, ToolPanelFrame, InlineAgentCard } from './panels'
+export { EmptyState, FormRow, ToolPanelActions, ToolPanelFrame, ToolPanelTabs, ToolPanelTools, InlineAgentCard } from './panels'
 export { uiTokens, type UiTokenName } from './tokens'
 export type {
   BadgeProps,
@@ -38,6 +38,8 @@ export type {
   ToastProps,
   ToolPanelFrameProps,
   ToolPanelActionsProps,
+  ToolPanelTabsProps,
+  ToolPanelToolsProps,
   UiAction,
   UiLayoutProps,
   UiStatus,

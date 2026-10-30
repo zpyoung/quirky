@@ -324,11 +324,14 @@ function FormRowDemo({ theme }: { theme: Theme }) {
 
 function ToolPanelFrameDemo({ theme }: { theme: Theme }) {
   const [minimized, setMinimized] = useState(false)
+  const [view, setView] = useState('details')
   const minimize = () => setMinimized(true)
   return (
     <Category name="ToolPanelFrame" theme={theme}>
       <ToolPanelFrame
         title="Local task details"
+        tabs={<Tabs label="Task views" value={view} onChange={setView} items={[{ id: 'details', label: 'Details', count: 2 }, { id: 'history', label: 'History' }]} />}
+        tools={<IconButton label="Refresh task details"><ControlIcon name="arrows-clockwise" /></IconButton>}
         onMinimize={minimize}
         actions={<Button type="button" variant="secondary" onClick={minimize}>Minimize panel</Button>}
       >

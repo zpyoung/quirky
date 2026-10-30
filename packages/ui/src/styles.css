@@ -148,6 +148,10 @@ textarea {
   flex-direction: column;
 }
 
+.app[data-window-inactive] {
+  opacity: var(--ui-window-inactive-opacity);
+}
+
 .shell-statusbar__values .plugin-status-bar-slot {
   display: flex;
   flex: 0 1 auto;

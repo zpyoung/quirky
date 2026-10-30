@@ -51,13 +51,28 @@ async function answerDesktopShellRequest(
   }
 }
 
-/** Window focus as the browser reports it. */
+function markWindowInactive(inactive: boolean): void {
+  document.querySelector('.app')?.toggleAttribute('data-window-inactive', inactive)
+}
+
+/** Marks `.app` inactive when the window is not focused now; for an `.app` that mounts after the window's focus events began. */
+export function syncWindowInactive(): void {
+  markWindowInactive(!document.hasFocus())
+}
+
+/** Window focus as the browser reports it; also keeps `data-window-inactive` on `.app` in step. */
 export function browserWindowFocus(): NonNullable<HostDeps['windowFocus']> {
   return {
     hasFocus: () => document.hasFocus(),
     subscribe(listener) {
-      const gained = () => listener(true)
-      const lost = () => listener(false)
+      const gained = () => {
+        markWindowInactive(false)
+        listener(true)
+      }
+      const lost = () => {
+        markWindowInactive(true)
+        listener(false)
+      }
       window.addEventListener('focus', gained)
       window.addEventListener('blur', lost)
       return () => {
