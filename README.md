@@ -242,6 +242,8 @@ does not load local images.
 
 `bun run test` runs the whole suite through the configured test host. Use
 `bun scripts/suite.ts <dirs>` for affected packages and `bun test <file>` for a single file.
+Run `bun run test:affected` before you push to check only the tests your change affects against the
+baseline from main. It's advisory, and the PR check decides whether a change can merge.
 
 Verify shell integration with the explicit Bash 5.2/5.3 matrix. Supply two installed GNU Bash
 executables (temporary source builds are sufficient):
