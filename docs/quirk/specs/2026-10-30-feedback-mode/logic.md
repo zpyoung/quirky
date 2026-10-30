@@ -166,7 +166,7 @@ The first version leaves out:
 **Selecting and commenting**
 
 - The mode turns on from View → Feedback Mode, the palette command, or a rebindable shortcut. The View and palette entries appear only when the setting is on.
-- The default shortcut is Cmd+Shift+K.
+- The default shortcut is Cmd+Option+K.
 - A click selects, and holding Option uses the app.
 - Comments go in a comment card and a collapsible tray, matching Browser Annotate. The tray shows only while the mode is on.
 - Terminals are selected as a whole pane. Browser pages get a chip that hands off to Browser Annotate.
@@ -207,10 +207,6 @@ The first version leaves out:
 - Screenshots, once a window capture method is confirmed.
 - A hosted feedback service for users without a GitHub account.
 - CLI access to the tray.
-- `[tech-spec]` How source maps reach the dev build, and whether a build-time plugin that writes source attributes is simpler than reading `_debugStack`.
-- `[tech-spec]` How an overlay loads only on first use.
-- `[tech-spec]` Whether Option can be detected while focus is in a terminal or native pane.
-- `[tech-spec]` Whether Cmd+Shift+K reaches the app from every focused surface.
 
 ## Glossary
 
@@ -224,4 +220,12 @@ The first version leaves out:
 
 **Status:** Design approved. The user directed execution to begin without a separate review of this written spec. Tech spec: warranted, because the work crosses plugin and host boundaries and touches more than three source files.
 
-**Amendments:** None.
+**Amendments:**
+
+- 2026-10-30, cost until first use: every plugin UI module loads when the window connects, so a small stub loads then. Selection, the tray and the plugin's daemon code still load on first use. This replaces "It costs nothing until first use" and needs no host change for overlays.
+- 2026-10-30, dev source lookup: dev builds write source attributes at build time rather than reading React's stack, which removes the WebKit risk. Component names are recorded in dev builds only, because release names are minified.
+- 2026-10-30, leaving the mode: Esc can't reach Quirky while focus is inside a Native browser page, so the banner also has an Exit button. The View item and shortcut still turn the mode off.
+- 2026-10-30, browser panes: the chip appears on Native panes only, because Browser Annotate's public command refuses Watch panes. Watch panes are selected as a whole pane, like terminals.
+- 2026-10-30, default shortcut: Cmd+Shift+K is already bound by `quirky.terminal-dock`, so the claim that it was unused was wrong. The default is Cmd+Option+K, which is free, and it works from a focused terminal. It can't work while focus is inside a Native browser page, because that page doesn't forward keys. The View item still works there.
+- 2026-10-30, plugin API: the `repository` field and new `whenSetting` uses raise the plugin API version to 1.2.0. Existing plugins are unaffected.
+- 2026-10-30, app version: comments record the version and commit stamped at build time, because the daemon's own version is a fixed 0.1.0.
