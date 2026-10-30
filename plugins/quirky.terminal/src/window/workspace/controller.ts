@@ -50,7 +50,7 @@ export type DialogState =
   | { kind: 'close-running'; title: string; target: CloseTarget; tabLabel: string; agent: boolean; notBefore: number }
   | { kind: 'close-pinned'; title: string; target: CloseTarget; tabLabel: string; notBefore: number }
   | { kind: 'switch-tabs'; title: string; group: string; order: string[]; index: number }
-  | { kind: 'new-session'; title: string; request: NewSessionRequest; group: string | null; pending?: boolean; error?: string | null }
+  | { kind: 'new-session'; title: string; request: NewSessionRequest; group: string | null; pending?: boolean; error?: string | null; startedSession?: Session }
 
 export type PaneDropTarget = { kind: 'edge'; pane: string; edge: Edge } | { kind: 'tab'; tab: string }
 
@@ -1222,10 +1222,26 @@ export class WorkspaceController {
     }
     const text = prompt.trim()
     const { request, group } = dialog
+    let startedSession = dialog.startedSession
     this.set({ dialog: { ...dialog, pending: true, error: null } })
     try {
       if (request.background) {
-        await this.context.call('quirky.structured/create', { worktree: this.workspaceId, agent: request.agent, prompt: text })
+        const session = startedSession ?? ((await this.context.call('quirky.structured/create', {
+          worktree: this.workspaceId,
+          agent: request.agent,
+          prompt: text
+        })) as Session)
+        startedSession = session
+        if (this.stopped) return
+        const targetGroup = group ?? this.ws?.activeGroup
+        const result = (await this.context.call(`${TERMINAL_PREFIX}adoptSession`, {
+          group: targetGroup,
+          session: session.id
+        })) as { workspace?: Workspace } | undefined
+        if (this.stopped) return
+        if (!result?.workspace) throw new Error(`Could not adopt session ${session.id}.`)
+        this.set({ sessions: { ...this.state.sessions, [session.id]: this.state.sessions[session.id] ?? session } })
+        this.apply(result.workspace)
       } else {
         const spec = { ...(group === null ? {} : { group }), agent: request.agent, ...(text === '' ? {} : { prompt: text }) }
         const result = (await this.context.call(`${TERMINAL_PREFIX}newTab`, { workspace: this.workspaceId, ...spec })) as { workspace?: Workspace } | undefined
@@ -1235,7 +1251,15 @@ export class WorkspaceController {
     } catch (error) {
       if (this.stopped) return
       if (hasCode(error, RpcErrorCode.Conflict)) void this.refresh()
-      this.set({ dialog: { ...dialog, pending: false, error: messageOf(error) } })
+      const message = messageOf(error)
+      this.set({
+        dialog: {
+          ...dialog,
+          ...(startedSession ? { startedSession } : {}),
+          pending: false,
+          error: startedSession ? `Session already started; could not open it: ${message}` : message
+        }
+      })
     }
   }
 

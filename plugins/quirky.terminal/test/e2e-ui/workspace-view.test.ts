@@ -302,6 +302,63 @@ test(
 )
 
 test(
+  'creating Claude (background) adopts the transcript in its menu group without a PTY',
+  async () => {
+    const ui = await startUi({ agents: ['claude'] })
+    const { h } = ui
+    await ui.waitLayout('the initial terminal tab', (workspace) => tabsOf(workspace).length === 1)
+    const firstGroup = groupsOf(await layoutOf(h))[0]!
+    const build = await openTab(h, ['--title', 'Build'], { ready: false })
+    await terminal(h, 'tab', 'move', build.tab.id, '--split', 'right', '--of', firstGroup.id)
+    const before = await layoutOf(h)
+    const targetGroup = groupsOf(before)[1]!
+    const existingSessions = new Set((await h.sessionRecords()).map((session) => session.id))
+
+    await waitFor('the second group plus button', () => ui.q(`[data-plus="${targetGroup.id}"]`))
+    ui.q(`[data-plus="${targetGroup.id}"]`)!.click()
+    await ui.waitView('the background Claude menu entry', (view) => view.menu?.items.some((item) => item.label === 'Claude (background)') === true)
+    await ui.pick('Claude (background)')
+    const prompt = 'Return exactly background-ui-proof'
+    const promptField = await ui.el<HTMLTextAreaElement>('[role="dialog"] textarea')
+    await ui.fill(promptField, prompt)
+    ui.dialogButton('Start')!.click()
+    await ui.settle()
+
+    const created = await waitFor('the real structured session', async () =>
+      (await h.sessionRecords()).find((session) => !existingSessions.has(session.id) && session.kind === 'structured' && session.agent === 'claude')
+    )
+    expect(created).toMatchObject({ kind: 'structured', agent: 'claude' })
+    const workspace = await ui.waitLayout('the structured session adopted in the chosen group', (candidate) =>
+      panesOf(candidate).some((pane) => pane.session === created.id)
+    )
+    const tab = tabsOf(workspace).find((candidate) => leavesOf(candidate.root).some((pane) => pane.session === created.id))!
+    const selectedGroup = groupsOf(workspace).find((group) => group.tabs.some((candidate) => candidate.id === tab.id))!
+    expect(titleOf(tab)).toContain('Claude')
+    expect(selectedGroup.id).toBe(targetGroup.id)
+    expect(selectedGroup.activeTab).toBe(tab.id)
+    expect(workspace.activeGroup).toBe(targetGroup.id)
+    const report = await ui.waitView('the selected Claude session state', (candidate) =>
+      candidate.active === created.id &&
+      candidate.tabs.some((entry) => entry.session === created.id && entry.agent === 'claude' && entry.group === targetGroup.id)
+    )
+    const sessionState = report.tabs.find((entry) => entry.session === created.id)!
+    expect(sessionState.status).not.toBe('exited')
+
+    const transcript = await ui.el(`[data-session="${created.id}"] .qt-structured-body [role="log"]`)
+    await waitFor('the starting prompt rendered in the transcript', () => transcript.textContent?.includes(prompt))
+    expect(await h.call('quirky.structured/messages', { session: created.id })).toEqual(
+      expect.arrayContaining([expect.objectContaining({ role: 'user', text: prompt })])
+    )
+    expect(ui.callsTo('adoptSession').at(-1)).toMatchObject({ group: targetGroup.id, session: created.id })
+    expect(await h.sessionRecord(created.id)).not.toMatchObject({ status: 'exited' })
+    expect(await h.hostRow(created.id)).toBeUndefined()
+    expect(ui.q(`[data-session="${created.id}"] .xterm`)).toBeNull()
+  },
+  SCENARIO_MS
+)
+
+
+test(
   'SC-72: a missing or wrong-worktree session selection stays visible instead of falling back',
   async () => {
     const ui = await startUi({ view: false })
