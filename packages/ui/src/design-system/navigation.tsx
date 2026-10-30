@@ -146,12 +146,17 @@ export function Menu({ label, trigger, items }: MenuProps) {
 
   useEffect(() => {
     if (!open) return
-    const firstEnabled = items.findIndex((item) => !item.disabled)
-    if (firstEnabled >= 0) {
-      setActiveIndex(firstEnabled)
-      itemRefs.current[firstEnabled]?.focus()
+    const focusedIndex = itemRefs.current.findIndex((item) => item === document.activeElement)
+    if (focusedIndex >= 0 && !items[focusedIndex]?.disabled) {
+      setActiveIndex(focusedIndex)
     } else {
-      menuRef.current?.focus()
+      const firstEnabled = items.findIndex((item) => !item.disabled)
+      if (firstEnabled >= 0) {
+        setActiveIndex(firstEnabled)
+        itemRefs.current[firstEnabled]?.focus()
+      } else {
+        menuRef.current?.focus()
+      }
     }
 
     const dismissOutside = (event: Event) => {

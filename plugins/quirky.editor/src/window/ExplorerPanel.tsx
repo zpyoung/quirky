@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type KeyboardEvent, type MouseEvent as ReactMouseEvent } from 'react'
 import type { UiPluginContext } from '@quirky/protocol'
-import { Button, IconButton, ListRow, TextField } from '@quirky/ui'
+import { Button, IconButton, ListRow, Menu, TextField } from '@quirky/ui'
 import type { ExplorerInteraction } from '../types'
 import { activeDocument } from './activeDocument'
 import { useEditorState, worktreeFromLayout } from './editorState'
@@ -965,30 +965,42 @@ export function ExplorerPanel({ context, report }: { context: UiPluginContext; r
                     {entry.isSymlink && <span title="Symbolic link">↗</span>}
                     {entry.ignored && <span aria-label="Ignored by .gitignore">⊘</span>}
                     {entry.error && <span className="qe-explorer-row-error" title={entry.error}>!</span>}
-                    <details className="qe-explorer-row-actions" onClick={(event) => {
-                      event.stopPropagation()
-                      if (!selectedPathsRef.current.includes(entry.path)) {
-                        void enqueueInteraction({
-                          action: 'select',
-                          path: entry.path,
-                          ...(searchMode === 'names' && query.trim() !== '' ? { query } : {})
-                        })
-                      }
-                    }}>
-                      <summary className="qe-disclosure-trigger" aria-label={`Actions for ${entry.name}`}>⋯</summary>
-                      <div className="qe-file-actions-menu">
-                        <Button onClick={() => startNewItem('file', entry.isDirectory ? entry.path : '.')}>New File</Button>
-                        <Button onClick={() => startNewItem('folder', entry.isDirectory ? entry.path : '.')}>New Folder</Button>
-                        <Button onClick={() => void copyPaths(false, [entry.path])}>Copy Path</Button>
-                        <Button onClick={() => void copyPaths(true, [entry.path])}>Copy Relative Path</Button>
-                        {!entry.isDirectory && <Button onClick={() => void duplicatePath(entry.path)}>Duplicate</Button>}
-                        <Button onClick={() => { setRenamePath(entry.path); setRenameValue(entry.path) }}>Rename</Button>
-                        <Button variant="destructive" onClick={() => void deleteSelected([entry.path])}>Delete</Button>
-                        {entry.isDirectory && <Button onClick={() => void openInTerminal(entry.path)}>Open in Terminal</Button>}
-                        {entry.isDirectory && <Button onClick={() => { setSearchMode('contents'); setIncludePattern(`${escapedGlob(entry.path)}/**`) }}>Find in Folder</Button>}
-                        {!entry.isDirectory && entry.name.toLowerCase().endsWith('.md') && <Button onClick={() => void openMarkdownPreview(entry.path)}>Open Markdown Preview</Button>}
-                      </div>
-                    </details>
+                    <div
+                      className="qe-explorer-row-actions"
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        if (!(event.target instanceof Element) || event.target.closest('.ui-menu__trigger') === null) return
+                        if (!selectedPathsRef.current.includes(entry.path)) {
+                          void enqueueInteraction({
+                            action: 'select',
+                            path: entry.path,
+                            ...(searchMode === 'names' && query.trim() !== '' ? { query } : {})
+                          })
+                        }
+                      }}
+                      onKeyDown={(event) => event.stopPropagation()}
+                    >
+                      <Menu
+                        label={`Actions for ${entry.name}`}
+                        trigger={<span aria-hidden="true">⋯</span>}
+                        items={[
+                          { id: 'new-file', label: 'New File', onAction: () => startNewItem('file', entry.isDirectory ? entry.path : '.') },
+                          { id: 'new-folder', label: 'New Folder', onAction: () => startNewItem('folder', entry.isDirectory ? entry.path : '.') },
+                          { id: 'copy-path', label: 'Copy Path', onAction: () => { void copyPaths(false, [entry.path]) } },
+                          { id: 'copy-relative-path', label: 'Copy Relative Path', onAction: () => { void copyPaths(true, [entry.path]) } },
+                          ...(!entry.isDirectory ? [{ id: 'duplicate', label: 'Duplicate', onAction: () => { void duplicatePath(entry.path) } }] : []),
+                          { id: 'rename', label: 'Rename', onAction: () => { setRenamePath(entry.path); setRenameValue(entry.path) } },
+                          { id: 'delete', label: 'Delete', destructive: true, onAction: () => { void deleteSelected([entry.path]) } },
+                          ...(entry.isDirectory ? [
+                            { id: 'open-in-terminal', label: 'Open in Terminal', onAction: () => { void openInTerminal(entry.path) } },
+                            { id: 'find-in-folder', label: 'Find in Folder', onAction: () => { setSearchMode('contents'); setIncludePattern(`${escapedGlob(entry.path)}/**`) } }
+                          ] : []),
+                          ...(!entry.isDirectory && entry.name.toLowerCase().endsWith('.md') ? [
+                            { id: 'open-markdown-preview', label: 'Open Markdown Preview', onAction: () => { void openMarkdownPreview(entry.path) } }
+                          ] : [])
+                        ]}
+                      />
+                    </div>
                   </>
                 }
               />
