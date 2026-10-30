@@ -248,6 +248,28 @@ describe('shared graphite components', () => {
     expect(document.activeElement).toBe(trigger)
   })
 
+  test('menus keep keyboard activation on the focused action when items rerender', async () => {
+    const actions: string[] = []
+    const items = () => [
+      { id: 'new-file', label: 'New File', onAction: () => actions.push('new-file') },
+      { id: 'rename', label: 'Rename', onAction: () => actions.push('rename') }
+    ]
+    const menu = () => <Menu label="File actions" items={items()} />
+    await render(menu())
+    await click(container.querySelector('button[aria-haspopup="menu"]')!)
+    const initialItems = [...container.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')]
+    await key(initialItems[0]!, 'ArrowDown')
+    expect(document.activeElement).toBe(initialItems[1])
+
+    await render(menu())
+    const focusedItem = document.activeElement
+    if (!(focusedItem instanceof HTMLButtonElement)) throw new Error('Expected focus to remain on a menu action')
+    await key(focusedItem, 'Enter')
+    await click(focusedItem)
+
+    expect(actions).toEqual(['rename'])
+  })
+
   test('menus dismiss after an outside interaction without running an item action', async () => {
     const onAction = () => { throw new Error('unexpected action') }
     await render(<><Menu label="Actions" items={[{ id: 'rename', label: 'Rename', onAction }]} /><button>Outside</button></>)

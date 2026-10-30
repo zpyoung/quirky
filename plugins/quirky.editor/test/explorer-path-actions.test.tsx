@@ -42,10 +42,12 @@ type Transfer = DropData & {
 const FILE_A = "nested/A O'Brien café #1? report.txt"
 const FILE_B = 'nested/B résumé #2.txt'
 const ARCHIVE_FILE = 'nested/archive/keep.txt'
+const MARKDOWN_FILE = 'nested/menu-preview.md'
 const FILES: Record<string, string> = {
   [FILE_A]: 'alpha\n',
   [FILE_B]: 'beta\n',
-  [ARCHIVE_FILE]: 'keep\n'
+  [ARCHIVE_FILE]: 'keep\n',
+  [MARKDOWN_FILE]: '# Menu preview\n'
 }
 
 let createRoot: (container: HTMLElement) => Root
@@ -264,16 +266,24 @@ async function renderExplorer(fixture: Fixture): Promise<Mounted> {
   return surface
 }
 
+function rowActionTrigger(row: HTMLElement): HTMLButtonElement {
+  const trigger = row.querySelector<HTMLButtonElement>('button[aria-label^="Actions for "]')
+  if (!trigger) throw new Error(`Missing row actions for ${row.dataset.path}`)
+  return trigger
+}
+
+function rowActionMenuOpen(row: HTMLElement): boolean {
+  return rowActionTrigger(row).getAttribute('aria-expanded') === 'true'
+}
+
 async function actionButton(row: HTMLElement, label: string): Promise<HTMLButtonElement> {
-  const actions = row.querySelector<HTMLDetailsElement>('details.qe-explorer-row-actions')
-  if (!actions) throw new Error(`Missing row actions for ${row.dataset.path}`)
-  const summary = actions.querySelector('summary')
-  if (!summary) throw new Error(`Missing row action menu for ${row.dataset.path}`)
-  if (!actions.open) {
-    await act(async () => summary.click())
-    await waitForUi(() => row.getAttribute('aria-selected') === 'true' || false)
+  const trigger = rowActionTrigger(row)
+  if (!rowActionMenuOpen(row)) {
+    await act(async () => trigger.click())
+    await waitForUi(() => rowActionMenuOpen(row) && row.getAttribute('aria-selected') === 'true' || false)
   }
-  const button = Array.from(actions.querySelectorAll<HTMLButtonElement>('button')).find((entry) => entry.textContent === label)
+  const menu = row.querySelector<HTMLElement>('[role="menu"]')
+  const button = menu && Array.from(menu.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')).find((entry) => entry.textContent?.trim() === label)
   if (!button) throw new Error(`Missing ${label} action for ${row.dataset.path}`)
   return button
 }
@@ -369,6 +379,96 @@ test('Explorer row actions copy canonical absolute and worktree-relative paths a
   )
   expect(sessionIds).toContain(terminalSession.id)
 })
+test('Explorer Rename closes row actions, focuses the inline field, and renames the file', async () => {
+  const fixture = await makeFixture({ displayRoot: 'nested' })
+  const panel = await renderExplorer(fixture)
+  const originalPath = join(fixture.root, FILE_A)
+  const renamedPath = join(fixture.root, 'nested/renamed-from-menu.txt')
+  const row = findRow(panel.element, originalPath)
+  expect(row).not.toBeNull()
+
+  const rename = await actionButton(row!, 'Rename')
+  await act(async () => rename.click())
+
+  const input = panel.element.querySelector<HTMLInputElement>('input[aria-label="Rename file"]')
+  expect(rowActionMenuOpen(row!)).toBe(false)
+  expect(input).not.toBeNull()
+  expect(document.activeElement).toBe(input)
+
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, renamedPath)
+    input!.dispatchEvent(new Event('input', { bubbles: true }))
+  })
+  await act(async () => input!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })))
+  await waitForUi(() => existsSync(renamedPath) && !existsSync(originalPath) || false)
+  await waitForUi(() => findRow(panel.element, renamedPath) || false)
+  expect(readFileSync(renamedPath, 'utf8')).toBe('alpha\n')
+  expect(findRow(panel.element, originalPath)).toBeNull()
+})
+
+test('Explorer Markdown Preview closes row actions and opens a real preview tab', async () => {
+  const fixture = await makeFixture({ displayRoot: 'nested' })
+  const panel = await renderExplorer(fixture)
+  const path = join(fixture.root, MARKDOWN_FILE)
+  const row = findRow(panel.element, path)
+  expect(row).not.toBeNull()
+
+  const preview = await actionButton(row!, 'Open Markdown Preview')
+  await act(async () => preview.click())
+
+  const opened = await waitForUi(async () => {
+    const state = await call<{
+      buffers: { id: string; relativePath: string }[]
+      tabs: { bufferId: string; mode: string }[]
+    }>(fixture.client, 'quirky.editor/state', { worktree: fixture.worktree.id })
+    const buffer = state.buffers.find((entry) => entry.relativePath === MARKDOWN_FILE)
+    return buffer && state.tabs.some((tab) => tab.bufferId === buffer.id && tab.mode === 'preview')
+      ? buffer
+      : false
+  })
+  expect(opened.relativePath).toBe(MARKDOWN_FILE)
+  expect(rowActionMenuOpen(row!)).toBe(false)
+})
+
+test('Explorer row action menus close on Escape and restore focus to the trigger', async () => {
+  const fixture = await makeFixture({ displayRoot: 'nested' })
+  const panel = await renderExplorer(fixture)
+  const row = findRow(panel.element, join(fixture.root, FILE_A))
+  expect(row).not.toBeNull()
+  const trigger = rowActionTrigger(row!)
+  const copyPath = await actionButton(row!, 'Copy Path')
+
+  await act(async () => {
+    copyPath.focus()
+    copyPath.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }))
+  })
+
+  expect(rowActionMenuOpen(row!)).toBe(false)
+  expect(document.activeElement).toBe(trigger)
+})
+
+test('Explorer row action menus dismiss on outside pointer interaction without running a menu action', async () => {
+  const fixture = await makeFixture({ displayRoot: 'nested' })
+  const panel = await renderExplorer(fixture)
+  const row = findRow(panel.element, join(fixture.root, FILE_A))
+  expect(row).not.toBeNull()
+  await actionButton(row!, 'Copy Path')
+  const outside = panel.element.querySelector<HTMLInputElement>('input[placeholder="Find files"]')
+  expect(outside).not.toBeNull()
+
+  await act(async () => {
+    outside!.dispatchEvent(new Event('pointerdown', { bubbles: true }))
+    outside!.click()
+  })
+  expect(rowActionMenuOpen(row!)).toBe(false)
+  expect(clipboardWrites).toEqual([])
+  expect(existsSync(join(fixture.root, FILE_A))).toBe(true)
+
+  await actionButton(row!, 'Copy Path')
+  await act(async () => outside!.focus())
+  expect(rowActionMenuOpen(row!)).toBe(false)
+  expect(clipboardWrites).toEqual([])
+})
 
 test('Explorer footer path actions are disabled until something is selected', async () => {
   const fixture = await makeFixture({ displayRoot: 'nested' })
@@ -378,6 +478,7 @@ test('Explorer footer path actions are disabled until something is selected', as
   await selectRow(panel.element, join(fixture.root, FILE_A))
   for (const label of ['Copy Path', 'Copy Relative Path', 'Delete']) expect(footerButton(panel.element, label).disabled).toBe(false)
 })
+
 
 test('Explorer footer copies multi-selection paths and row drags satisfy the Terminal worktree-path contract', async () => {
   const fixture = await makeFixture({ displayRoot: 'nested' })
