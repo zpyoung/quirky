@@ -7,6 +7,7 @@ import { ApplicationMenu, BrowserView, BrowserWindow, Tray, Updater, Utils, app,
 import { maintainConnection } from './connection'
 import { setDockBadge } from './dock'
 import { desktopWindowRouteUrl, folderPickerResult } from './desktop-window-route'
+import { dropSourcePathsFromEvent } from './drop-source-paths'
 import {
   TRAY_MENU,
   attentionIn,
@@ -195,7 +196,8 @@ function createWindow(
         closeWindow,
         readClipboardText: () => Utils.clipboardReadText() ?? '',
         revealItem,
-        activateOwner
+        activateOwner,
+        dropSourcePathsSupported: () => created?.webview.supportsDropSourcePaths() ?? false
       }
     }
   })
@@ -207,6 +209,13 @@ function createWindow(
     ...nativeBrowserWindowOptions
   })
   const ownedWindow = created
+  if (process.platform === 'darwin') {
+    const sendDropSourcePaths = (rpc as unknown as { send: { dropSourcePaths(message: { paths: string[] }): void } }).send
+    ownedWindow.webview.on('drop-source-paths', (event) => {
+      const paths = dropSourcePathsFromEvent(event)
+      if (paths) sendDropSourcePaths.dropSourcePaths({ paths })
+    })
+  }
   if (lifecycle.kind === 'auxiliary') {
     auxiliaryWindows.set(lifecycle.windowId, {
       ownerWindowId: lifecycle.ownerWindowId,

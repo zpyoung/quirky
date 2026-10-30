@@ -119,6 +119,7 @@ export function createShell(options: ShellOptions): AppContextValue {
     dismissToast: (key) => dismissToastByKey({ store, plugins }, key),
     log: options.log,
     readClipboardText: desktopBridge ? () => desktopBridge.readClipboardText() : undefined,
+    nativeDropPaths: desktopBridge ? (fileNames) => desktopBridge.nativeDropPaths(fileNames) : undefined,
     windowFocus: options.windowFocus,
     windowActivity: options.windowActivity,
     windowRoute: options.windowRoute

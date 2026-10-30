@@ -82,6 +82,7 @@ function makeContext(): UiPluginContext {
     },
     pluginId: 'quirky.browser',
     log: () => {},
+    nativeDropPaths: async () => null,
     readClipboardText: async () => '',
     provide: () => {},
     call: async (method, params) => {

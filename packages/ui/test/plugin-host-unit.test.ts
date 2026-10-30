@@ -105,7 +105,13 @@ type WindowFocus = NonNullable<ConstructorParameters<typeof WindowPluginHost>[0]
 
 function setup(
   initial: UiModel,
-  options: { settings?: SettingInfo[]; activationTimeoutMs?: number; windowFocus?: WindowFocus; windowRoute?: DesktopWindowRoute } = {}
+  options: {
+    settings?: SettingInfo[]
+    activationTimeoutMs?: number
+    windowFocus?: WindowFocus
+    windowRoute?: DesktopWindowRoute
+    nativeDropPaths?: (fileNames: readonly string[]) => Promise<string[] | null>
+  } = {}
 ) {
   let model = initial
   let settings = options.settings ?? []
@@ -286,7 +292,8 @@ function setup(
     log: (message) => logs.push(message),
     activationTimeoutMs: options.activationTimeoutMs,
     windowFocus: options.windowFocus,
-    windowRoute: options.windowRoute
+    windowRoute: options.windowRoute,
+    nativeDropPaths: options.nativeDropPaths
   })
 
   return {
@@ -673,6 +680,29 @@ test('SC-11: a plugin calls the daemon through its context and receives events o
   expect(received).toEqual([])
   await tick()
   expect(received).toEqual([{ type: 'acme.notes/changed', data: null }])
+})
+
+test('nativeDropPaths passes the dropped file names to the desktop shell and is null without one', async () => {
+  const asked: (readonly string[])[] = []
+  const desktop = setup(makeModel({ sidebarSections: [section(NOTES, 'list')] }), {
+    nativeDropPaths: async (fileNames) => {
+      asked.push(fileNames)
+      return ['/repo/a.md']
+    }
+  })
+  const browser = setup(makeModel({ sidebarSections: [section(NOTES, 'list')] }))
+  const results: (string[] | null)[] = []
+  for (const t of [desktop, browser]) {
+    t.useModule(NOTES, {
+      async activate(context) {
+        results.push(await context.nativeDropPaths([{ name: 'a.md' }]))
+        context.provide(LIST, () => {})
+      }
+    })
+    await t.host.refresh()
+  }
+  expect(asked).toEqual([['a.md']])
+  expect(results).toEqual([['/repo/a.md'], null])
 })
 
 test('SC-11: a listener that throws or rejects is logged with its plugin ID and does not stop the others', async () => {

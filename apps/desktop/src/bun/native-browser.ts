@@ -31,10 +31,11 @@ export type NativeBrowserHostRPC = {
       closeWindow: { params: { windowId: string }; response: DesktopWindowCloseResult }
       revealItem: { params: DesktopRevealRequest; response: DesktopRevealResult }
       activateOwner: { params: { windowId: string }; response: { activated: boolean } }
+      dropSourcePathsSupported: { params: {}; response: boolean }
     }
     messages: {}
   }
-  webview: { requests: {}; messages: {} }
+  webview: { requests: {}; messages: { dropSourcePaths: { paths: string[] } } }
 }
 
 export type NativeBrowserViewPort = {

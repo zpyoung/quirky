@@ -89,6 +89,7 @@ afterEach(async () => {
 function makeContext(): UiPluginContext {
   const context: UiPluginContext = {
     pluginId: 'quirky.browser',
+    nativeDropPaths: async () => null,
     readClipboardText: async () => '',
     log: () => {},
     provide: () => {},
