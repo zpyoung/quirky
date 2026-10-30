@@ -10,6 +10,9 @@ type SessionRow = {
   state: string
   worktreeId: string | null
   workspace: string
+  cwd: string
+  tabTitle: string | null
+  worktreeName: string | null
 }
 
 export type SessionsReport = {
@@ -61,7 +64,11 @@ export function SessionsPanel({ context, report }: Props) {
     mounted.current = true
     void refresh()
     const unsubscribe = context.subscribe((event) => {
-      if (event.type === 'quirky.session/changed' || event.type === 'quirky.session/removed') void refresh()
+      if (
+        event.type === 'quirky.session/changed' ||
+        event.type === 'quirky.session/removed' ||
+        event.type === 'quirky.terminal/layout'
+      ) void refresh()
     })
     return () => {
       mounted.current = false
@@ -131,16 +138,16 @@ export function SessionsPanel({ context, report }: Props) {
         actions={
           <span className="tt-panel-actions">
             <IconButton label="Refresh" title="Refresh" onClick={() => void refresh()}>↻</IconButton>
-            <IconButton
-              label="Kill all sessions"
+            <Button aria-label="Restart terminal host" title="Restart terminal host" onClick={() => void restart()}>Restart host</Button>
+            <Button
+              aria-label="Kill all sessions"
               title="Kill all sessions"
               variant="destructive"
               disabled={rows.length === 0}
               onClick={() => void killAll()}
             >
-              ✕
-            </IconButton>
-            <Button aria-label="Restart terminal host" title="Restart terminal host" onClick={() => void restart()}>Restart host</Button>
+              Kill all
+            </Button>
           </span>
         }
       >
@@ -159,10 +166,10 @@ export function SessionsPanel({ context, report }: Props) {
                 }}
               >
                 <ListRow
-                  title={<span className="sessions-workspace">{row.workspace}</span>}
+                  title={<span className="sessions-workspace">{row.tabTitle ?? row.cwd}</span>}
                   description={
                     <span className="tt-session-meta">
-                      <span className="sessions-id">{row.sessionId}</span>
+                      {row.worktreeName !== null && <span>{row.worktreeName}</span>}
                       <span className="tt-session-state">{row.state}</span>
                     </span>
                   }

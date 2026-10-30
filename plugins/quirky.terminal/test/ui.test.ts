@@ -6,10 +6,27 @@ import { fakeContext, settle, type FakeContext } from '../../quirky.session/test
 
 const PANEL = 'panel:quirky.terminal/sessions'
 
-type Row = { sessionId: string; state: string; pid: number; cwd: string; shellState: string; worktreeId: string | null; workspace: string }
+type Row = {
+  sessionId: string
+  state: string
+  pid: number
+  cwd: string
+  shellState: string
+  worktreeId: string | null
+  workspace: string
+  tabTitle: string | null
+  worktreeName: string | null
+}
 
-function row(sessionId: string, worktreeId: string, workspace: string): Row {
-  return { sessionId, state: 'running', pid: 100, cwd: `/tmp/${workspace}`, shellState: 'ready', worktreeId, workspace }
+function row(
+  sessionId: string,
+  worktreeId: string | null,
+  workspace: string,
+  tabTitle: string | null = null,
+  worktreeName: string | null = null,
+  cwd = `/tmp/${workspace}`
+): Row {
+  return { sessionId, state: 'running', pid: 100, cwd, shellState: 'ready', worktreeId, workspace, tabTitle, worktreeName }
 }
 
 let activateModule: (context: FakeContext['context']) => void
@@ -67,19 +84,25 @@ const button = (label: string) => element!.querySelector(`button[aria-label="${l
 const click = (target: Element) => act(async () => void target.dispatchEvent(new MouseEvent('click', { bubbles: true })))
 const rows = () => [...element!.querySelectorAll('[data-session]')] as HTMLElement[]
 
-const two = [row('s1', 'wt-main', 'w/api'), row('s2', 'wt-fix', 'api/fix-login')]
+const two = [
+  row('s1', 'wt-main', 'w/api', 'Terminal 1', 'main', '/fake/alpha'),
+  row('s2', 'wt-fix', 'api/fix-login', 'Feature login', 'fix-login', '/fake/fix-login')
+]
 
 
 describe('the Terminal Sessions panel', () => {
-  test('SC-26: lists a row per live session with its workspace, id and kill button, and reports them', async () => {
+  test('shows tab and worktree labels without exposing IDs, while reports retain session IDs', async () => {
     await openPanel(two)
-    for (const label of ['Refresh', 'Kill all sessions', 'Restart terminal host']) expect(button(label)).not.toBeNull()
-    expect(rows().map((entry) => [...entry.querySelectorAll('.sessions-workspace, .sessions-id')].map((cell) => cell.textContent))).toEqual([
-      ['w/api', 's1'],
-      ['api/fix-login', 's2']
-    ])
-    expect(button('Kill session s1')).not.toBeNull()
-    expect(button('Kill session s2')).not.toBeNull()
+    expect(rows()).toHaveLength(2)
+    expect(rows()[0]!.textContent).toContain('Terminal 1')
+    expect(rows()[0]!.textContent).toContain('main')
+    expect(rows()[1]!.textContent).toContain('Feature login')
+    expect(rows()[1]!.textContent).toContain('fix-login')
+    for (const entry of rows()) {
+      expect(entry.textContent).not.toContain(entry.dataset.session)
+      expect(entry.textContent).not.toContain('wt-main')
+      expect(entry.textContent).not.toContain('wt-fix')
+    }
     expect(reports[reports.length - 1]).toEqual({
       count: 2,
       rows: [
@@ -87,6 +110,12 @@ describe('the Terminal Sessions panel', () => {
         { sessionId: 's2', workspace: 'api/fix-login', state: 'running' }
       ]
     })
+  })
+
+  test('uses the full cwd when a live host session has no matching terminal tab', async () => {
+    await openPanel([row('s_orphan', null, 'solo', null, null, '/private/solo/project')])
+    expect(rows()[0]!.textContent).toContain('/private/solo/project')
+    expect(rows()[0]!.textContent).not.toContain('s_orphan')
   })
 
   test('SC-26: clicking a row opens that session, clicking its kill button does not', async () => {
@@ -98,12 +127,18 @@ describe('the Terminal Sessions panel', () => {
     expect(fake.opened).toHaveLength(1)
   })
 
-  test('refreshes on Refresh and on session changed and removed events', async () => {
-    await openPanel([row('s1', 'wt-main', 'w/api')])
+  test('refreshes on Refresh, session events and terminal layout renames', async () => {
+    await openPanel([row('s1', 'wt-main', 'w/api', 'Terminal 1', 'main', '/fake/alpha')])
     expect(fake.callsTo('quirky.terminal/sessions')).toHaveLength(1)
     live = two
     await click(button('Refresh'))
     expect(rows()).toHaveLength(2)
+
+    live = [row('s1', 'wt-main', 'w/api', 'Renamed main', 'main', '/fake/alpha')]
+    await fake.emit({ type: 'quirky.terminal/layout', data: { workspace: 'wt-main', revision: 2 } } as never)
+    await settle()
+    expect(rows()[0]!.textContent).toContain('Renamed main')
+
     live = [two[1]!]
     await fake.emit({ type: 'quirky.session/changed', data: {} } as never)
     await settle()

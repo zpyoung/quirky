@@ -1,5 +1,6 @@
 import {
   base64ToBytes,
+  RpcErrorCode,
   type ClientStream,
   type PluginCaller,
   type PluginContext,
@@ -9,6 +10,7 @@ import {
   type PtySubscription,
   type Session
 } from '@quirky/protocol'
+import { FLOATING_WORKSPACE } from './layout/types'
 import { InputTracker } from './input-tracker'
 import { MobileDriverService } from './mobile-driver'
 
@@ -18,6 +20,7 @@ const DEFAULT_KILL_POLL_MS = 100
 const KILL_POLLS = 65
 
 type Attachment = { connectionId: number; stream: ClientStream; sessionId: string; mobile: boolean }
+type SessionTitleLookup = (sessionIds: readonly string[]) => Promise<ReadonlyMap<string, string>>
 
 /** Output that arrived while a subscribe request was in flight, kept until its response says where the replay ends. */
 type Tap = { chunks: Uint8Array[]; total: number }
@@ -96,6 +99,7 @@ export class TerminalService {
 
   constructor(
     private readonly context: PluginContext,
+    private readonly tabTitlesForSessions: SessionTitleLookup,
     private readonly inputs: InputTracker = new InputTracker()
   ) {
     this.mobile = new MobileDriverService(context, (sessionId, work) => this.enqueue(sessionId, work))
@@ -249,17 +253,54 @@ export class TerminalService {
     })
   }
 
-  /** The running sessions of the PTY host, each with the worktree the session plugin files it under. */
-  sessions = async (): Promise<{ sessions: (PtySessionInfo & { worktreeId: string | null; workspace: string })[] }> => {
-    const [running, records] = await Promise.all([
+  /** Running PTY sessions joined to their layout tab title and worktree display name. */
+  sessions = async (): Promise<{
+    sessions: (PtySessionInfo & {
+      worktreeId: string | null
+      workspace: string
+      tabTitle: string | null
+      worktreeName: string | null
+    })[]
+  }> => {
+    const [allSessions, records] = await Promise.all([
       this.context.pty.list(),
       this.context.call('quirky.session/list', {}) as Promise<Session[]>
     ])
+    const running = allSessions.filter((info) => info.state === 'running')
     const worktrees = new Map(records.map((record) => [record.id, record.worktreeId]))
+    const worktreeIds = new Set<string>()
+    for (const info of running) {
+      const worktreeId = worktrees.get(info.sessionId)
+      if (worktreeId && worktreeId !== FLOATING_WORKSPACE) worktreeIds.add(worktreeId)
+    }
+
+    const worktreeNames = new Map<string, string>()
+    const resolveWorktreeNames = Promise.all([...worktreeIds].map(async (worktreeId) => {
+      try {
+        const worktree = await this.context.call('quirky.worktree/resolve', { selector: `id:${worktreeId}` }) as { name: string }
+        worktreeNames.set(worktreeId, worktree.name)
+      } catch (error) {
+        if ((error as { code?: unknown } | null)?.code !== RpcErrorCode.NotFound) throw error
+      }
+    }))
+    const [tabTitles] = await Promise.all([
+      this.tabTitlesForSessions(running.map((info) => info.sessionId)),
+      resolveWorktreeNames
+    ])
+
     return {
-      sessions: running
-        .filter((info) => info.state === 'running')
-        .map((info) => ({ ...info, worktreeId: worktrees.get(info.sessionId) ?? null, workspace: workspaceLabel(info.cwd) }))
+      sessions: running.map((info) => {
+        const worktreeId = worktrees.get(info.sessionId) ?? null
+        return {
+          ...info,
+          worktreeId,
+          workspace: workspaceLabel(info.cwd),
+          tabTitle: tabTitles.get(info.sessionId) ?? null,
+          worktreeName: worktreeId === null || worktreeId === FLOATING_WORKSPACE
+            ? null
+            : worktreeNames.get(worktreeId) ?? null
+        }
+      })
     }
   }
 

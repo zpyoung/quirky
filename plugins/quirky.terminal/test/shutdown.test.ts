@@ -46,7 +46,7 @@ function setup() {
     }
   } as unknown as PluginCaller
 
-  const service = new TerminalService(context)
+  const service = new TerminalService(context, async () => new Map())
   const attach = () => service.attach({ session: 's1', cols: 80, rows: 24 }, caller)
   return { service, attach, streams, unsubscribed, subscribeStarted: subscribeStarted.promise, release: (v: { replay: string; offset: number }) => releaseSubscribe(v) }
 }
@@ -108,7 +108,7 @@ describe('read-only attachments to an ended session', () => {
       }
     }
     const caller = { role: 'ui', connection: { id: 1, transport: 'websocket', openStream: () => stream } } as unknown as PluginCaller
-    const service = new TerminalService(context)
+    const service = new TerminalService(context, async () => new Map())
     await service.attach({ session: 's1', cols: 80, rows: 24 }, caller)
     return { service, closed: () => closed, unsubscribed, caller }
   }
