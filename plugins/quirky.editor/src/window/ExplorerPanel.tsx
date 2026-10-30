@@ -135,6 +135,7 @@ export function ExplorerPanel({ context, report }: { context: UiPluginContext; r
   const interactionQueue = useRef(Promise.resolve())
   const treeRef = useRef<HTMLDivElement>(null)
   const renameInputRef = useRef<HTMLInputElement>(null)
+  const searchInputRef = useRef<HTMLInputElement>(null)
   const [filterResult, setFilterResult] = useState<ExplorerListing | null>(null)
   const [searchMode, setSearchMode] = useState<'names' | 'contents'>('names')
   const [query, setQuery] = useState('')
@@ -889,6 +890,7 @@ export function ExplorerPanel({ context, report }: { context: UiPluginContext; r
       </div>
       <div className="qe-explorer-query">
         <TextField
+          ref={searchInputRef}
           className="qe-explorer-search-field"
           label={searchMode === 'names' ? 'Find files' : 'Search files'}
           placeholder={searchMode === 'names' ? 'Find files' : 'Search'}
@@ -1097,7 +1099,7 @@ export function ExplorerPanel({ context, report }: { context: UiPluginContext; r
         <Button disabled={selectedPaths.length === 0} onClick={() => void copyPaths(false)}>Copy Path</Button>
         <Button disabled={selectedPaths.length === 0 || !worktree} onClick={() => void copyPaths(true)}>Copy Relative Path</Button>
         <Button variant="destructive" disabled={selectedPaths.length === 0 || !worktree} onClick={() => void deleteSelected()}>Delete</Button>
-        <Button onClick={() => { setSearchMode('contents'); setQuery(''); setIncludePattern('') }}>Search in Files</Button>
+        <Button onClick={() => { setSearchMode('contents'); setQuery(''); setIncludePattern(''); searchInputRef.current?.focus() }}>Search in Files</Button>
       </footer>
       {rootListing?.truncated && <p className="muted">More files may be available.</p>}
       {state?.explorer.expanded.length === 0 && expanded.size > 0 && <span className="sr-only">Expanded folders are open.</span>}

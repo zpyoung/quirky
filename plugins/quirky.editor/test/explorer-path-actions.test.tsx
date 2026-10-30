@@ -617,6 +617,34 @@ test('Explorer footer path actions are disabled until something is selected', as
   for (const label of ['Copy Path', 'Copy Relative Path', 'Delete']) expect(footerButton(panel.element, label).disabled).toBe(false)
 })
 
+test('Explorer footer Search in Files focuses the contents query', async () => {
+  const fixture = await makeFixture({ displayRoot: 'nested' })
+  const panel = await renderExplorer(fixture)
+  const queryInput = panel.element.querySelector<HTMLInputElement>('input[placeholder="Find files"]')
+  expect(queryInput).not.toBeNull()
+  const contentsButton = Array.from(panel.element.querySelectorAll<HTMLButtonElement>('.qe-explorer-search-mode button'))
+    .find((button) => button.textContent === 'Contents')
+  expect(contentsButton).not.toBeUndefined()
+  const searchInFiles = footerButton(panel.element, 'Search in Files')
+
+  await act(async () => {
+    searchInFiles.focus()
+    expect(document.activeElement).toBe(searchInFiles)
+    searchInFiles.click()
+  })
+
+  expect(contentsButton?.getAttribute('aria-pressed')).toBe('true')
+  expect(panel.element.querySelector('input[placeholder="Search"]')).toBe(queryInput)
+  expect(document.activeElement).toBe(queryInput)
+
+  await act(async () => {
+    searchInFiles.focus()
+    searchInFiles.click()
+  })
+  expect(queryInput!.value).toBe('')
+  expect(document.activeElement).toBe(queryInput)
+})
+
 
 test('Explorer footer copies multi-selection paths and row drags satisfy the Terminal worktree-path contract', async () => {
   const fixture = await makeFixture({ displayRoot: 'nested' })
