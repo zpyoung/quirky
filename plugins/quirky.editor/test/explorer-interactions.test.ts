@@ -1,9 +1,9 @@
 import { expect, test } from 'bun:test'
 import { execFileSync } from 'node:child_process'
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, unlinkSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { dirname, join } from 'node:path'
-import { RpcErrorCode, type QuirkyClient, type QuirkyEvent } from '@quirky/protocol'
+import { basename, dirname, join } from 'node:path'
+import { RpcErrorCode, type MethodHandler, type PluginCaller, type QuirkyClient, type QuirkyEvent } from '@quirky/protocol'
 import { builtinsDir, makeHomeWithoutAutoHooks, startHarness, waitFor, type Harness } from '../../../packages/daemon/test/helpers'
 import { registerIsolatedEditorFixtures } from './isolated-environment'
 
@@ -247,6 +247,231 @@ test('Explorer safely resets stale anchors after collapse, filter and refresh', 
   expect(interaction(afterRefresh).selectedPaths).not.toContain(path('z-gone.txt'))
   expect(interaction(afterRefresh).focusedPath).not.toBe(path('z-gone.txt'))
   expect(interaction(afterRefresh).selectionAnchor).not.toBe(path('z-gone.txt'))
+})
+
+test('successful directory rename clears affected descendants and preserves unrelated Explorer selection', async () => {
+  const world = await fixture({
+    'folder/selected.txt': 'selected\n',
+    'folder-sibling/keep.txt': 'keep\n',
+    'occupied.txt': 'occupied\n'
+  })
+  const worktree = world.worktree.id
+  const path = (name: string) => join(world.root, name)
+  const folder = path('folder')
+  const descendant = path('folder/selected.txt')
+  const sibling = path('folder-sibling')
+
+  await explorer(world, worktree, { action: 'select', path: folder })
+  await explorer(world, worktree, { action: 'navigate', key: 'ArrowRight' })
+  await explorer(world, worktree, { action: 'select', path: descendant })
+  const beforeMutation = await explorer(world, worktree, { action: 'select', path: sibling, toggle: true })
+  expect(interaction(beforeMutation)).toEqual({
+    selectedPaths: [descendant, sibling],
+    focusedPath: sibling,
+    selectionAnchor: descendant
+  })
+
+  await expect(call(world.client, 'quirky.editor/mutate', {
+    worktree,
+    action: 'rename',
+    path: 'folder',
+    newPath: 'occupied.txt'
+  })).rejects.toMatchObject({ code: RpcErrorCode.Conflict })
+  expect((await stateOf(world, worktree)).explorer).toMatchObject({
+    selectedPaths: [descendant, sibling],
+    focusedPath: sibling,
+    selectionAnchor: descendant
+  })
+
+  await call(world.client, 'quirky.editor/mutate', {
+    worktree,
+    action: 'rename',
+    path: 'folder',
+    newPath: 'renamed-folder'
+  })
+  expect((await stateOf(world, worktree)).explorer).toMatchObject({
+    selectedPaths: [sibling],
+    focusedPath: sibling,
+    selectionAnchor: null
+  })
+})
+
+test('deleting a directory clears selected descendant focus and anchor', async () => {
+  const world = await fixture({ 'folder/selected.txt': 'selected\n' })
+  const worktree = world.worktree.id
+  const descendant = join(world.root, 'folder/selected.txt')
+
+  await explorer(world, worktree, { action: 'select', path: join(world.root, 'folder') })
+  await explorer(world, worktree, { action: 'navigate', key: 'ArrowRight' })
+  const selected = await explorer(world, worktree, { action: 'select', path: descendant })
+  expect(interaction(selected)).toEqual({
+    selectedPaths: [descendant],
+    focusedPath: descendant,
+    selectionAnchor: descendant
+  })
+
+  await call(world.client, 'quirky.editor/mutate', { worktree, action: 'delete', path: 'folder' })
+  expect((await stateOf(world, worktree)).explorer).toMatchObject({
+    selectedPaths: [],
+    focusedPath: null,
+    selectionAnchor: null
+  })
+})
+
+test.each([
+  { action: 'delete', path: 'real/delete.txt' },
+  { action: 'rename', path: 'real/rename.txt', newPath: 'real/renamed.txt' }
+])('Explorer $action clears every selected alias of the mutated file', async ({ action, path, newPath }) => {
+  const world = await fixture({
+    'real/delete.txt': 'delete\n',
+    'real/rename.txt': 'rename\n'
+  })
+  const worktree = world.worktree.id
+  const name = basename(path)
+  const lexicalPath = join(world.root, 'link', name)
+  const canonicalPath = join(world.root, path)
+  symlinkSync('real', join(world.root, 'link'), 'dir')
+  await call(world.client, 'setting.set', {
+    id: 'setting:quirky.editor/followSymlinkedDirectories',
+    value: true
+  })
+
+  const matching = await explorer(world, worktree, { action: 'filter', query: name })
+  expect(matching.entries.map((entry) => entry.path)).toContain(lexicalPath)
+  expect(matching.entries.map((entry) => entry.path)).toContain(canonicalPath)
+  await explorer(world, worktree, { action: 'select', path: lexicalPath, query: name })
+  const multiple = await explorer(world, worktree, { action: 'select', path: canonicalPath, query: name, toggle: true })
+  expect(interaction(multiple).selectedPaths).toContain(lexicalPath)
+  expect(interaction(multiple).selectedPaths).toContain(canonicalPath)
+  expect(interaction(multiple).focusedPath).toBe(canonicalPath)
+  expect(interaction(multiple).selectionAnchor).toBe(lexicalPath)
+
+  await call(world.client, 'quirky.editor/mutate', {
+    worktree,
+    action,
+    path,
+    ...(newPath === undefined ? {} : { newPath })
+  })
+  expect((await stateOf(world, worktree)).explorer).toMatchObject({
+    selectedPaths: [],
+    focusedPath: null,
+    selectionAnchor: null
+  })
+})
+
+test('Explorer mutation clears selection made through an in-worktree symlink alias', async () => {
+  const world = await fixture({ 'real/a.txt': 'selected\n' })
+  const worktree = world.worktree.id
+  const lexicalPath = join(world.root, 'link/a.txt')
+  symlinkSync('real', join(world.root, 'link'), 'dir')
+  await call(world.client, 'setting.set', {
+    id: 'setting:quirky.editor/followSymlinkedDirectories',
+    value: true
+  })
+
+  const matching = await explorer(world, worktree, { action: 'filter', query: 'link' })
+  expect(matching.entries.map((entry) => entry.path)).toContain(lexicalPath)
+  const selected = await explorer(world, worktree, { action: 'select', path: lexicalPath, query: 'link' })
+  expect(interaction(selected)).toEqual({
+    selectedPaths: [lexicalPath],
+    focusedPath: lexicalPath,
+    selectionAnchor: lexicalPath
+  })
+
+  await call(world.client, 'quirky.editor/mutate', { worktree, action: 'delete', path: 'link/a.txt' })
+  expect((await stateOf(world, worktree)).explorer).toMatchObject({
+    selectedPaths: [],
+    focusedPath: null,
+    selectionAnchor: null
+  })
+})
+
+test('Explorer deleting a followed symlink directory clears selected descendants', async () => {
+  const world = await fixture({ 'real/inside.txt': 'selected\n' })
+  const worktree = world.worktree.id
+  const lexicalDirectory = join(world.root, 'link')
+  const lexicalDescendant = join(lexicalDirectory, 'inside.txt')
+  symlinkSync('real', lexicalDirectory, 'dir')
+  await call(world.client, 'setting.set', {
+    id: 'setting:quirky.editor/followSymlinkedDirectories',
+    value: true
+  })
+
+  await explorer(world, worktree, { action: 'select', path: lexicalDirectory })
+  const expanded = await explorer(world, worktree, { action: 'navigate', key: 'ArrowRight' })
+  expect(expanded.expanded).toEqual(['link'])
+  const selected = await explorer(world, worktree, { action: 'select', path: lexicalDescendant })
+  expect(interaction(selected)).toEqual({
+    selectedPaths: [lexicalDescendant],
+    focusedPath: lexicalDescendant,
+    selectionAnchor: lexicalDescendant
+  })
+
+  await call(world.client, 'quirky.editor/mutate', { worktree, action: 'delete', path: 'link' })
+  expect((await stateOf(world, worktree)).explorer).toMatchObject({
+    selectedPaths: [],
+    focusedPath: null,
+    selectionAnchor: null
+  })
+  expect(realpathSync(join(world.root, 'real/inside.txt'))).toBe(join(world.root, 'real/inside.txt'))
+})
+
+test('Explorer delete invalidates filtered inventory before navigation can restore a stale selection', async () => {
+  const world = await fixture({ 'dist/matching.txt': 'selected\n' })
+  const worktree = world.worktree.id
+  const path = join(world.root, 'dist/matching.txt')
+  // dist files remain searchable but their watcher events are intentionally ignored.
+
+  await explorer(world, worktree, { action: 'filter', query: 'matching' })
+  await explorer(world, worktree, { action: 'select', path, query: 'matching' })
+  await call(world.client, 'quirky.editor/open', { worktree, path: 'dist/matching.txt' })
+
+  const pluginHost = world.harness.daemon.plugins
+  const resolveImplementation = pluginHost.resolveImplementation.bind(pluginHost)
+  const closeStarted = Promise.withResolvers<void>()
+  const releaseClose = Promise.withResolvers<void>()
+  pluginHost.resolveImplementation = async (id) => {
+    const implementation = await resolveImplementation(id)
+    if (id !== 'method:quirky.terminal/closeTab') return implementation
+    const closeTab = implementation as MethodHandler
+    const gatedCloseTab: MethodHandler = async (params: Record<string, unknown>, caller: PluginCaller) => {
+      closeStarted.resolve()
+      await releaseClose.promise
+      return await closeTab(params, caller)
+    }
+    return gatedCloseTab
+  }
+
+  const deletion = call(world.client, 'quirky.editor/mutate', { worktree, action: 'delete', path: 'dist/matching.txt' }).then(
+    () => ({ ok: true as const }),
+    (error: unknown) => ({ ok: false as const, error })
+  )
+  let navigation: ExplorerResult | undefined
+  let barrierError: unknown
+  try {
+    const closeReached = await Promise.race([
+      closeStarted.promise.then(() => true),
+      deletion.then(() => false)
+    ])
+    if (!closeReached) throw new Error('Delete completed before its terminal close barrier was reached')
+    navigation = await explorer(world, worktree, { action: 'navigate', key: 'Home', query: 'matching' })
+  } catch (error) {
+    barrierError = error
+  } finally {
+    releaseClose.resolve()
+    pluginHost.resolveImplementation = resolveImplementation
+  }
+
+  const result = await deletion
+  if (!result.ok) throw result.error
+  if (barrierError !== undefined) throw barrierError
+  if (navigation === undefined) throw new Error('Explorer navigation did not complete during delete')
+  expect(interaction(navigation)).toEqual({ selectedPaths: [], focusedPath: null, selectionAnchor: null })
+  expect((await stateOf(world, worktree)).explorer).toMatchObject({
+    selectedPaths: [],
+    focusedPath: null,
+    selectionAnchor: null
+  })
 })
 
 test('Explorer keeps empty trees empty', async () => {

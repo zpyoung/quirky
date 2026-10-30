@@ -2037,13 +2037,19 @@ export class EditorDaemon {
       if (await this.exists(target.path)) throw this.context.error('conflict', `Destination already exists: ${target.relativePath}`)
       await rename(source.path, target.path)
     })
+    const mutationPaths = [source.path, resolvePath(worktree.path, params.path)]
+    this.inventory.invalidate(worktree.path)
+    await this.explorerService.clearMutationInteraction(
+      worktree.id,
+      mutationPaths,
+      directory || sourceInfo.isSymbolicLink()
+    )
     await this.rekeyBuffers(worktree, source.path, target.path)
     await this.pushHistory(worktree.id, {
       kind: 'rename', worktreeId: worktree.id, root: worktree.path,
       from: source.relativePath, to: target.relativePath,
       dev: sourceInfo.dev, ino: sourceInfo.ino, directory
     })
-    this.inventory.invalidate(worktree.path)
     this.emit()
     return { path: target.relativePath }
   }
@@ -2087,6 +2093,13 @@ export class EditorDaemon {
       if (textSnapshot?.text === null) textSnapshot = null
     }
     const trashedPath = await this.moveToTrash(target.path)
+    const mutationPaths = [target.path, resolvePath(worktree.path, params.path)]
+    this.inventory.invalidate(worktree.path)
+    await this.explorerService.clearMutationInteraction(
+      worktree.id,
+      mutationPaths,
+      info.isDirectory() || info.isSymbolicLink()
+    )
     if (textSnapshot !== null && textSnapshot.text !== null) {
       await this.pushHistory(worktree.id, {
         kind: 'delete', worktreeId: worktree.id, root: worktree.path,
@@ -2103,7 +2116,6 @@ export class EditorDaemon {
       if (lastEdit) for (const listener of this.closeListeners) listener(state.buffer.id)
       if (![...this.tabs.values()].some((tab) => tab.bufferId === state.buffer.id)) this.removeBuffer(state.buffer.id)
     }
-    this.inventory.invalidate(worktree.path)
     this.emit()
     return { path: target.relativePath }
   }
