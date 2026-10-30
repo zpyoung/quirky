@@ -190,6 +190,35 @@ function worktreeAfterViewChange(next: OpenView | null, current: string | null):
   return worktree === undefined ? current : worktree
 }
 
+type WorktreeViewState = {
+  view: OpenView | null
+  viewTabs: ViewTab[]
+  worktree: string | null
+  focus?: UiLayout['focus']
+}
+
+function forgetWorktreeFromViews(
+  state: WorktreeViewState,
+  worktreeId: string,
+  inheritedFocus?: UiLayout['focus']
+): WorktreeViewState {
+  const viewTabs = state.viewTabs.filter((tab) => worktreeOf(tab) !== worktreeId)
+  const removedActiveView = state.view !== null && worktreeOf(state.view) === worktreeId
+  const view = removedActiveView ? lastViewTab(viewTabs) : state.view
+  const activeWorktree = worktreeOf(view)
+  const worktree = state.worktree === worktreeId
+    ? typeof activeWorktree === 'string' && activeWorktree !== worktreeId ? activeWorktree : null
+    : state.worktree
+  const focus = state.focus !== undefined ? state.focus : inheritedFocus
+  return {
+    ...state,
+    view,
+    viewTabs,
+    worktree,
+    ...(removedActiveView && focus === 'view' ? { focus: null } : {})
+  }
+}
+
 function focusTargetOfTool(tool: UiToolEntry): 'sidebar' | 'view' | 'panel' | undefined {
   const kind = parseContributionId(tool.contributionId ?? '')?.kind
   if (kind === 'sidebar-section') return 'sidebar'
@@ -372,6 +401,96 @@ export class LayoutService {
         focus: layout.view !== null && layout.focus === 'view' ? null : layout.focus
       }
     })
+  }
+
+  /** Removes a deleted workspace from the shared layout, every window override, and auxiliary routes. */
+  forgetWorktree(worktreeId: string): void {
+    const shared = this.layout()
+    const nextShared = {
+      ...shared,
+      ...forgetWorktreeFromViews({
+        view: shared.view,
+        viewTabs: shared.viewTabs ?? [],
+        worktree: shared.worktree ?? null,
+        focus: shared.focus
+      }, worktreeId)
+    }
+    const sharedChanged = !sameValue(shared, nextShared)
+    const affectedAuxiliary = new Map<string, AuxiliaryWindowRoute>()
+    for (const [windowId, route] of this.auxiliaryWindows) {
+      const view = route.view === null
+        ? null
+        : route.viewTabs.find((tab) => tab.id === route.view) ??
+          { id: route.view, ...(route.input === undefined ? {} : { input: route.input }) }
+      const nextView = forgetWorktreeFromViews({
+        view,
+        viewTabs: route.viewTabs,
+        worktree: route.worktree
+      }, worktreeId)
+      const nextRoute: AuxiliaryWindowRoute = {
+        ...route,
+        view: nextView.view?.id ?? null,
+        viewTabs: nextView.viewTabs,
+        worktree: nextView.worktree,
+        ...(nextView.view?.input === undefined ? {} : { input: nextView.view.input })
+      }
+      if (nextView.view?.input === undefined) delete nextRoute.input
+      if (!sameValue(route, nextRoute)) affectedAuxiliary.set(windowId, nextRoute)
+    }
+    if (!sharedChanged && this.windowViews.size === 0 && affectedAuxiliary.size === 0) return
+
+    const windows = this.openWindows()
+    const affectedWindowIds = new Set<number>()
+    if (sharedChanged) {
+      for (const conn of windows) affectedWindowIds.add(conn.id)
+    } else {
+      for (const [connId, override] of this.windowViews) {
+        if (!sameValue(override, forgetWorktreeFromViews(override, worktreeId, shared.focus))) {
+          affectedWindowIds.add(connId)
+        }
+      }
+    }
+    for (const route of affectedAuxiliary.values()) {
+      if (route.rendererConnId !== null) affectedWindowIds.add(route.rendererConnId)
+    }
+    if (!sharedChanged && affectedWindowIds.size === 0 && affectedAuxiliary.size === 0) return
+
+    const before = new Map<number, UiLayout>()
+    for (const conn of windows) {
+      if (affectedWindowIds.has(conn.id)) before.set(conn.id, this.windowLayout(conn.id))
+    }
+
+    if (sharedChanged) this.options.store.setUiState(LAYOUT_KEY, nextShared)
+    for (const [connId, override] of this.windowViews) {
+      const next = forgetWorktreeFromViews(override, worktreeId, shared.focus)
+      if (
+        override.focus === undefined &&
+        shared.focus === 'view' &&
+        nextShared.focus !== shared.focus &&
+        next.view !== null &&
+        next.focus === undefined
+      ) {
+        next.focus = shared.focus
+      }
+      if (!sameValue(override, next)) this.windowViews.set(connId, next)
+    }
+    for (const [windowId, route] of affectedAuxiliary) this.auxiliaryWindows.set(windowId, route)
+
+    if (sharedChanged) this.options.broadcastNonWindows({ type: 'ui.state.changed', layout: nextShared })
+    for (const conn of windows) {
+      const previous = before.get(conn.id)
+      if (!previous) continue
+      const layout = this.windowLayout(conn.id)
+      if (sameValue(previous, layout)) continue
+      const auxiliary = this.auxiliaryView(conn.id)
+      if (auxiliary && affectedAuxiliary.has(auxiliary.windowId)) {
+        this.options.sendTo(conn, {
+          type: 'desktop.window.changed',
+          windows: [this.auxiliaryWindowSummary(auxiliary)]
+        })
+      }
+      if (conn.subscribed) this.options.sendTo(conn, { type: 'ui.state.changed', layout })
+    }
   }
 
   /** Opens a view only in the exact live UI connection. */

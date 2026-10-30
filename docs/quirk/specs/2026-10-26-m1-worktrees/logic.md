@@ -6,6 +6,7 @@
 
 **Amendments:**
 - 2026-10-26, before build: Codex adversarial review. A create naming a project but no name uses `--repo` (one positional is always the name; SC-18, SC-21); a create from an existing branch with no name takes its folder from the branch (SC-18); an explicit `--setup skip` gives no warning, only an inherited skip does (SC-30); a wait-for-setup create returns with the agent pending (SC-38); an orphan stays deletable after a list, and Force deletes only inside the folder it was created under (SC-54); Mod+N opens the create dialog, also through the API (SC-62).
+- 2026-10-30: Deleting a workspace also removes its bound view tabs from shared, per-window and auxiliary layouts. Selection follows a surviving workspace-bound fallback or clears; global views and unrelated workspaces remain.
 
 ## Conceptual model
 
@@ -60,8 +61,12 @@ notice and the IDs of the sessions it started.
 checkout, a locked worktree, a parent whose children weren't included, and, unless forced, one with
 uncommitted or untracked changes. It runs the archive script, closes the workspace's sessions,
 removes the worktree with git, deletes the branch only if git shows its work is merged (else keeps
-it and reports it), drops the metadata and emits `quirky.worktree/changed`. The call returns when
-all of that is done.
+it and reports it), drops the metadata and emits `quirky.worktree/changed`. After the row is dropped,
+the daemon removes tabs bound to that workspace from the shared layout, each window override and
+auxiliary routes. A removed active view falls back to the last remaining tab or none. If the layout
+selected the deleted workspace, selection follows the fallback only when it belongs to another
+workspace; otherwise selection clears. Unrelated workspaces and global views remain open. The call
+returns when all of that is done.
 
 **Edit.** `quirky.worktree/set` changes metadata and emits `quirky.worktree/changed`. Every list
 joins git's worktrees with the stored metadata. The sidebar section re-reads on each event and
