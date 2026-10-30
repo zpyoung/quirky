@@ -7,6 +7,8 @@ Status: implemented with narrow isolated daemon/API and actual browser-surface s
 
 **Amendments:** 2026-10-28 — three scoped components implemented against the committed contracts. New range-coordinate inputs capture React event values synchronously after an actual first-input crash demonstrated deferred currentTarget lifetime. Existing restart trust revocation is unchanged. C1-native-clipboard is handed off pending; exercised smoke boundaries and limitations are recorded in the item decisions D12–D15.
 
+**Amendments:** 2026-10-29 — successful Explorer rename/move/delete clears affected selection, focus and anchor, including directory descendants, while preserving unrelated selection; failed mutations preserve interaction state.
+
 ## Purpose and conceptual model
 Complete four still-unbuilt interactions in the existing built-in editor. The daemon owns selection and execution state. Mounted viewers own revocable media capabilities, not the shared document. Multiple visible splits may share a buffer without sharing resource lifetime.
 
@@ -66,6 +68,8 @@ One spec replaces separate tech.md under LOOP build-first policy. Shared types a
 
 ### Explorer contract
 Existing quirky.editor/explorer gains actions navigate and select. navigate requires key from ArrowUp/ArrowDown/ArrowLeft/ArrowRight/Home/End/PageUp/PageDown; select requires authorized visible path. Both accept extend; select also accepts toggle; query selects the same filtered inventory as the visible Names mode. Interaction state contains selectedPaths, focusedPath and selectionAnchor; paths are authorized absolute worktree paths. Navigation results include interaction and expanded (existing expansion uses normalized worktree-relative paths). Explorer snapshot adds optional interaction fields for additive compatibility with existing stored/fixture state. ExplorerService owns the transitions and existing daemon emits state after interaction changes. Do not trust caller-supplied visible rows.
+
+Successful rename/move/delete clears affected selection, focus and anchor before publishing state; directory descendants are affected, unrelated selection is preserved, and failed mutations preserve interaction.
 
 ### Notebook contract
 Existing notebook actions/state schema remain; no second restart API. KernelSession gains an optional status-change notification consumed by notebook service; only the current live runtime/session publishes. Renderer observes published status and permits restart from dead without automatic trust/run. Implementer owns kernel.ts, service.ts and NotebookSurface.tsx plus focused notebook tests. All process fixtures use fresh HOME/QUIRKY_HOME and terminate exact owned children.

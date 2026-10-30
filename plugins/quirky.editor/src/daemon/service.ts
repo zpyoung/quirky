@@ -2037,6 +2037,7 @@ export class EditorDaemon {
       if (await this.exists(target.path)) throw this.context.error('conflict', `Destination already exists: ${target.relativePath}`)
       await rename(source.path, target.path)
     })
+    await this.explorerService.clearMutationInteraction(worktree.id, source.path, directory)
     await this.rekeyBuffers(worktree, source.path, target.path)
     await this.pushHistory(worktree.id, {
       kind: 'rename', worktreeId: worktree.id, root: worktree.path,
@@ -2087,6 +2088,7 @@ export class EditorDaemon {
       if (textSnapshot?.text === null) textSnapshot = null
     }
     const trashedPath = await this.moveToTrash(target.path)
+    await this.explorerService.clearMutationInteraction(worktree.id, target.path, info.isDirectory())
     if (textSnapshot !== null && textSnapshot.text !== null) {
       await this.pushHistory(worktree.id, {
         kind: 'delete', worktreeId: worktree.id, root: worktree.path,

@@ -249,6 +249,75 @@ test('Explorer safely resets stale anchors after collapse, filter and refresh', 
   expect(interaction(afterRefresh).selectionAnchor).not.toBe(path('z-gone.txt'))
 })
 
+test('successful directory rename clears affected descendants and preserves unrelated Explorer selection', async () => {
+  const world = await fixture({
+    'folder/selected.txt': 'selected\n',
+    'folder-sibling/keep.txt': 'keep\n',
+    'occupied.txt': 'occupied\n'
+  })
+  const worktree = world.worktree.id
+  const path = (name: string) => join(world.root, name)
+  const folder = path('folder')
+  const descendant = path('folder/selected.txt')
+  const sibling = path('folder-sibling')
+
+  await explorer(world, worktree, { action: 'select', path: folder })
+  await explorer(world, worktree, { action: 'navigate', key: 'ArrowRight' })
+  await explorer(world, worktree, { action: 'select', path: descendant })
+  const beforeMutation = await explorer(world, worktree, { action: 'select', path: sibling, toggle: true })
+  expect(interaction(beforeMutation)).toEqual({
+    selectedPaths: [descendant, sibling],
+    focusedPath: sibling,
+    selectionAnchor: descendant
+  })
+
+  await expect(call(world.client, 'quirky.editor/mutate', {
+    worktree,
+    action: 'rename',
+    path: 'folder',
+    newPath: 'occupied.txt'
+  })).rejects.toMatchObject({ code: RpcErrorCode.Conflict })
+  expect((await stateOf(world, worktree)).explorer).toMatchObject({
+    selectedPaths: [descendant, sibling],
+    focusedPath: sibling,
+    selectionAnchor: descendant
+  })
+
+  await call(world.client, 'quirky.editor/mutate', {
+    worktree,
+    action: 'rename',
+    path: 'folder',
+    newPath: 'renamed-folder'
+  })
+  expect((await stateOf(world, worktree)).explorer).toMatchObject({
+    selectedPaths: [sibling],
+    focusedPath: sibling,
+    selectionAnchor: null
+  })
+})
+
+test('deleting a directory clears selected descendant focus and anchor', async () => {
+  const world = await fixture({ 'folder/selected.txt': 'selected\n' })
+  const worktree = world.worktree.id
+  const descendant = join(world.root, 'folder/selected.txt')
+
+  await explorer(world, worktree, { action: 'select', path: join(world.root, 'folder') })
+  await explorer(world, worktree, { action: 'navigate', key: 'ArrowRight' })
+  const selected = await explorer(world, worktree, { action: 'select', path: descendant })
+  expect(interaction(selected)).toEqual({
+    selectedPaths: [descendant],
+    focusedPath: descendant,
+    selectionAnchor: descendant
+  })
+
+  await call(world.client, 'quirky.editor/mutate', { worktree, action: 'delete', path: 'folder' })
+  expect((await stateOf(world, worktree)).explorer).toMatchObject({
+    selectedPaths: [],
+    focusedPath: null,
+    selectionAnchor: null
+  })
+})
+
 test('Explorer keeps empty trees empty', async () => {
   const empty = await fixture({})
   const initial = await explorer(empty, empty.worktree.id, { action: 'list' })

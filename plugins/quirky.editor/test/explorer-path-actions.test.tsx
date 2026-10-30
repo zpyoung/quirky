@@ -544,6 +544,48 @@ test('Explorer Rename closes row actions, focuses the inline field, and renames 
   expect(findRow(panel.element, originalPath)).toBeNull()
 })
 
+test('Explorer rename clears stale selection before row Delete and keeps footer state authoritative', async () => {
+  const fixture = await makeFixture({ displayRoot: 'nested' })
+  const context = makeContext(fixture)
+  context.confirm = async () => true
+  const panel = await renderExplorer(fixture, context)
+  const originalPath = join(fixture.root, FILE_A)
+  const renamedPath = join(fixture.root, 'nested/renamed-selected.txt')
+  const footerActions = ['Copy Path', 'Copy Relative Path', 'Delete'] as const
+  const uiHasNoSelection = () =>
+    panel.element.querySelectorAll<HTMLElement>('[data-path][aria-selected="true"]').length === 0 &&
+    footerActions.every((label) => footerButton(panel.element, label).disabled)
+
+  await selectRow(panel.element, originalPath)
+  const row = findRow(panel.element, originalPath)
+  if (!row) throw new Error('Missing selected row for Rename')
+  const rename = await actionButton(row, 'Rename')
+  await act(async () => rename.click())
+  const input = await waitForUi(() => panel.element.querySelector<HTMLInputElement>('input[aria-label="Rename file"]') ?? false)
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, basename(renamedPath))
+    input.dispatchEvent(new Event('input', { bubbles: true }))
+  })
+  await act(async () => input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })))
+  await waitForUi(() => existsSync(renamedPath) && !existsSync(originalPath) && findRow(panel.element, renamedPath) || false)
+  await waitForUi(() => uiHasNoSelection() || false)
+  const stateAfterRename = await call<{
+    explorer: { selectedPaths: string[]; focusedPath: string | null; selectionAnchor: string | null }
+  }>(fixture.client, 'quirky.editor/state', { worktree: fixture.worktree.id })
+  expect(stateAfterRename.explorer).toMatchObject({ selectedPaths: [], focusedPath: null, selectionAnchor: null })
+
+  const renamedRow = findRow(panel.element, renamedPath)
+  if (!renamedRow) throw new Error('Missing renamed row for Delete')
+  const deleteAction = await actionButton(renamedRow, 'Delete')
+  await act(async () => deleteAction.click())
+  await waitForUi(() => !existsSync(renamedPath) && findRow(panel.element, renamedPath) === null || false)
+  await waitForUi(() => uiHasNoSelection() || false)
+  const stateAfterDelete = await call<{
+    explorer: { selectedPaths: string[]; focusedPath: string | null; selectionAnchor: string | null }
+  }>(fixture.client, 'quirky.editor/state', { worktree: fixture.worktree.id })
+  expect(stateAfterDelete.explorer).toMatchObject({ selectedPaths: [], focusedPath: null, selectionAnchor: null })
+})
+
 test('Explorer Markdown Preview closes row actions and opens a real preview tab', async () => {
   const fixture = await makeFixture({ displayRoot: 'nested' })
   const panel = await renderExplorer(fixture)

@@ -681,9 +681,6 @@ export function ExplorerPanel({ context, report }: { context: UiPluginContext; r
     setItemBusy(true)
     try {
       for (const path of paths) await context.call('quirky.editor/mutate', { worktree, action: 'delete', path, yes: true })
-      const remaining = selectedPathsRef.current.filter((path) => !paths.includes(path))
-      selectedPathsRef.current = remaining
-      setSelectedPaths(remaining)
       await loadDirectory()
     } catch (reason) {
       setError(messageOf(reason))

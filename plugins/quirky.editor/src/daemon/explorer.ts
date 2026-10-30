@@ -94,6 +94,33 @@ export class ExplorerService {
     this.interactions.clear()
     this.directoryCache.clear()
   }
+
+  /** Keeps Explorer interaction paths valid after successful filesystem mutations. */
+  async clearMutationInteraction(worktreeId: string, path: string, directory: boolean): Promise<void> {
+    await this.interactionQueue.run([`explorer:${worktreeId}`], async () => {
+      const current = this.interactions.get(worktreeId)
+      if (current === undefined) return
+      const selectedPaths = current.selectedPaths.filter((candidate) =>
+        candidate !== path && (!directory || !this.paths.isWithin(path, candidate))
+      )
+      const focusedPath = current.focusedPath === path ||
+        (directory && current.focusedPath !== null && this.paths.isWithin(path, current.focusedPath))
+        ? null
+        : current.focusedPath
+      const selectionAnchor = current.selectionAnchor === path ||
+        (directory && current.selectionAnchor !== null && this.paths.isWithin(path, current.selectionAnchor))
+        ? null
+        : current.selectionAnchor
+      if (
+        selectedPaths.length !== current.selectedPaths.length ||
+        focusedPath !== current.focusedPath ||
+        selectionAnchor !== current.selectionAnchor
+      ) {
+        this.interactions.set(worktreeId, { selectedPaths, focusedPath, selectionAnchor })
+      }
+    })
+  }
+
   private async interact(worktree: ResolvedWorktree, params: ExplorerParams): Promise<ExplorerResult> {
     if (params.action === 'navigate' && (params.key === undefined || !Object.hasOwn(NAVIGATION_KEYS, params.key))) {
       throw this.context.error('invalid-params', 'navigate requires a supported key.')
