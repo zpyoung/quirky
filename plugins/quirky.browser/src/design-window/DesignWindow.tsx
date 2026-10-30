@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { Button, EmptyState, FormRow, SectionHeader, StatusDot } from '@quirky/ui'
 import { createPortal } from 'react-dom'
+import { NATIVE_BROWSER_PREVIEW_SCHEME } from '@quirky/protocol'
 import type { NativeBrowserHandle, UiPluginContext } from '@quirky/protocol'
 import { MarkupOverlay } from '../markup/MarkupOverlay'
 import type { DesignAnnotation, DesignPayload, DesignRead, DesignScreenshot, DesignSelection, DesignTarget, DesignTargets } from '../design-contract'
@@ -850,7 +851,8 @@ export function DesignWindow({ context, pane, nativeHandle, pageHost, nativePage
     }
   }, [handleKeyboard])
   useEffect(() => {
-    if (pane?.mode !== 'native' || !nativeHandle || !focused || !usablePage || currentOperation || operationPending || markupScreenshot || draft || selectionMenu || targetsOpen) return
+    // an isolated preview's CSP refuses injected script, so shortcuts could never install there
+    if (pane?.mode !== 'native' || pane.url.startsWith(`${NATIVE_BROWSER_PREVIEW_SCHEME}://`) || !nativeHandle || !focused || !usablePage || currentOperation || operationPending || markupScreenshot || draft || selectionMenu || targetsOpen) return
     const handle = nativeHandle
     const owner = nativeShortcutOwner
     const ownerLiteral = JSON.stringify(owner)
@@ -942,7 +944,7 @@ export function DesignWindow({ context, pane, nativeHandle, pageHost, nativePage
       }
       void poll()
     }).catch((error: unknown) => {
-      if (stillCurrent()) onMessage(`Native design shortcuts could not be installed: ${errorText(error)}`, 'error')
+      if (stillCurrent() && !NATIVE_EVALUATION_BUSY.test(errorText(error))) onMessage(`Native design shortcuts could not be installed: ${errorText(error)}`, 'error')
     })
     return () => {
       active = false
