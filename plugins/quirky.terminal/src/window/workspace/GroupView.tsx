@@ -29,7 +29,7 @@ function TabItem({ controller, state, group, tab, index, others, now }: Common &
   // macOS hides the strip's scrollbar, so a selected tab past the edge would otherwise stay out of sight
   useEffect(() => {
     if (selected) element.current?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' })
-  }, [selected])
+  }, [selected, title])
   const renaming = state.rename?.kind === 'tab' && state.rename.id === tab.id
   const drag = state.tabDrag
   const mark = drag?.over?.kind === 'strip' && drag.over.group === group.id && others[drag.over.index]?.id === tab.id
