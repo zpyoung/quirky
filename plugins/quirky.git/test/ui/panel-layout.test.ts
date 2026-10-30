@@ -54,6 +54,52 @@ describe('SC-8: the panel layout', () => {
     unmount()
   })
 
+  test('right-aligns the source control actions menu with its trigger near the window edge', async () => {
+    const innerWidthDescriptor = Object.getOwnPropertyDescriptor(window, 'innerWidth')
+    const boundsDescriptor = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'getBoundingClientRect')
+    const getBoundingClientRect = HTMLElement.prototype.getBoundingClientRect
+    let trigger: HTMLElement | null = null
+    let triggerBoundsDescriptor: PropertyDescriptor | undefined
+    let unmount: (() => void) | undefined
+    try {
+      Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1280 })
+      Object.defineProperty(HTMLElement.prototype, 'getBoundingClientRect', {
+        configurable: true,
+        value: function (this: HTMLElement) {
+          if (this.classList.contains('qt-menu')) {
+            return new DOMRect(0, 0, 320, 200)
+          }
+          return getBoundingClientRect.call(this)
+        }
+      })
+      const mounted = await open()
+      unmount = mounted.unmount
+      trigger = byLabel(mounted.element, 'More source control actions')
+      expect(trigger).not.toBeNull()
+      triggerBoundsDescriptor = Object.getOwnPropertyDescriptor(trigger!, 'getBoundingClientRect')
+      Object.defineProperty(trigger!, 'getBoundingClientRect', {
+        configurable: true,
+        value: () => new DOMRect(1220, 80, 20, 20)
+      })
+      await click(trigger)
+
+      const anchor = q(document.body, '.qt-menu-anchor')!
+      const left = Number.parseFloat(anchor.style.left)
+      expect(left + 320).toBe(1240)
+      expect(left + 320).toBeLessThanOrEqual(window.innerWidth)
+    } finally {
+      if (trigger) {
+        if (triggerBoundsDescriptor) Object.defineProperty(trigger, 'getBoundingClientRect', triggerBoundsDescriptor)
+        else Reflect.deleteProperty(trigger, 'getBoundingClientRect')
+      }
+      unmount?.()
+      if (innerWidthDescriptor) Object.defineProperty(window, 'innerWidth', innerWidthDescriptor)
+      else Reflect.deleteProperty(window, 'innerWidth')
+      if (boundsDescriptor) Object.defineProperty(HTMLElement.prototype, 'getBoundingClientRect', boundsDescriptor)
+      else Reflect.deleteProperty(HTMLElement.prototype, 'getBoundingClientRect')
+    }
+  })
+
   test('the branch row reads <branch> → <base> with ↑N and the line-total chip', async () => {
     const { element, unmount } = await open()
     const row = q(element, '[data-branch-row]')!
