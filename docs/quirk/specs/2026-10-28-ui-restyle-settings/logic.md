@@ -15,6 +15,8 @@ Use shared React controls, tokens and existing layout utilities, not locally inj
 ### SC1: One Settings host
 Before: user opens Settings with existing declared values and application appearance. Walkthrough: inspect categorized sections, change a boolean/text/number/enum, cancel; reopen, change and Save. After: cancel writes nothing, Save uses existing validation/error reporting and persists only edits. Appearance remains default/system, dark/light or a registered theme through existing theme.set. Plugin navigation keeps current IDs, unavailable-module disabling and truthful errors. Shared dialog supports keyboard Escape/focus and scrolls long content without horizontal overflow.
 
+Top-level Settings groups use larger, foreground-colored, sentence-case headings; nested section labels retain the compact muted uppercase style. The hierarchy applies to categorized settings, uncategorized/plugin groups, contributed sections, theme selection and plugin-settings links without changing their controls.
+
 ### SC2: Mobile setup and settings
 Before: no paired phones. Walkthrough: open Mobile in its current slot; inspect intro/install/pair/paired stages and settings link, machine name, sidebar visibility, network choices/custom address and automatic restore. After: controls retain daemon readback and existing unavailability messaging; loading/error/empty states are readable. Settings only generates a QR on explicit action; the pairing stage retains automatic issuance. No phone-app code changes.
 

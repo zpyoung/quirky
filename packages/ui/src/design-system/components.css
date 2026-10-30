@@ -378,6 +378,13 @@
   text-transform: uppercase;
 }
 
+.ui-settings-group-heading > .ui-section-header__title {
+  color: var(--ui-text);
+  font-size: var(--ui-font-title);
+  letter-spacing: normal;
+  text-transform: none;
+}
+
 .ui-section-header__actions {
   align-items: center;
   display: flex;
