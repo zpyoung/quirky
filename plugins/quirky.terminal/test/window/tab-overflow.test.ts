@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { hiddenTabIndexes } from '../../src/window/workspace/tab-overflow'
+import { hiddenTabIndexes, tabsFit } from '../../src/window/workspace/tab-overflow'
 
 const span = (left: number, width: number) => ({ left, right: left + width })
 const row = (viewport: { left: number; right: number }, widths: number[], scroll = 0) => {
@@ -42,5 +42,13 @@ describe('hiddenTabIndexes', () => {
   test('works from a viewport that does not start at zero', () => {
     const offset = span(32, 150)
     expect(hiddenTabIndexes(offset, row(offset, [100, 100, 100]))).toEqual([1, 2])
+  })
+})
+
+describe('tabsFit', () => {
+  test('fits up to the room, allowing for rounding', () => {
+    expect(tabsFit(300, 299)).toBe(true)
+    expect(tabsFit(300, 300.4)).toBe(true)
+    expect(tabsFit(300, 302)).toBe(false)
   })
 })

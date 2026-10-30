@@ -13,7 +13,7 @@ import { activeTabOf, byPaneId, groupRects, px } from './model'
 import type { GroupDividerRect } from './model'
 import { InlineField, PaneLayer } from './PaneLayer'
 import { StatusGlyph, UnreadBell, useNow } from './StatusGlyph'
-import { hiddenTabIndexes } from './tab-overflow'
+import { hiddenTabIndexes, tabsFit } from './tab-overflow'
 import { leadSessionOf, tabIconOf } from './TabIcon'
 import { useBoxSize } from './useBoxSize'
 
@@ -193,10 +193,13 @@ function GroupView({ controller, state, group }: Common & { group: Group }) {
   const [viewportWidth, setViewportWidth] = useState(0)
   const [moreOpen, setMoreOpen] = useState(false)
   const updateHiddenTabs = useCallback(() => {
+    const navigation = tabNavigation.current
     const viewport = tabViewport.current
-    if (!viewport) return
+    if (!navigation || !viewport) return
     const items = [...viewport.children] as HTMLElement[]
-    const hidden = hiddenTabIndexes(viewport.getBoundingClientRect(), items.map((item) => item.getBoundingClientRect())).map((index) => items[index]!.dataset.tab!)
+    const hidden = tabsFit(navigation.clientWidth, viewport.scrollWidth)
+      ? []
+      : hiddenTabIndexes(viewport.getBoundingClientRect(), items.map((item) => item.getBoundingClientRect())).map((index) => items[index]!.dataset.tab!)
     setHiddenTabs((current) => (current.length === hidden.length && current.every((id, index) => id === hidden[index]) ? current : hidden))
     setViewportWidth(viewport.clientWidth)
   }, [])

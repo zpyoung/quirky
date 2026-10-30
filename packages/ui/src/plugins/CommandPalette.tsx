@@ -12,6 +12,7 @@ import {
   cycleScope,
   decodeFileId,
   entryKey,
+  exactTitleFirst,
   fileEntry,
   paletteKey,
   paletteSections,
@@ -123,16 +124,7 @@ function entriesOf(
       kind: 'worktree' as const
     }))
   ]
-  const matching = entries.filter((entry) => matches(entry, query))
-  if (query === '') return matching
-
-  const exactTitleMatches: PaletteEntry[] = []
-  const otherMatches: PaletteEntry[] = []
-  for (const entry of matching) {
-    if (entry.title.trim().toLowerCase() === query) exactTitleMatches.push(entry)
-    else otherMatches.push(entry)
-  }
-  return exactTitleMatches.concat(otherMatches)
+  return entries.filter((entry) => matches(entry, query))
 }
 
 /** Search effective commands, tools, views, worktrees and, in the selected worktree, files. */
@@ -219,7 +211,7 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
     )
     const files = fileSearchActive && fileResults?.key === fileSearchKey ? fileResults.entries : []
     return {
-      entries: files.length === 0 ? matching : [...matching, ...files],
+      entries: exactTitleFirst([...matching, ...files], filter.trim().toLowerCase()),
       worktreeIds: new Set(worktrees.map((worktree) => worktree.id))
     }
   }, [enabledAgentIds, fileResults, fileSearchActive, fileSearchKey, filter, model?.commands, model?.tools, model?.views, snapshot.errors.repos, snapshot.errors.worktrees, snapshot.repos, snapshot.worktrees, windowRoute])

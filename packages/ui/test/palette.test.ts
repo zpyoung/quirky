@@ -5,6 +5,7 @@ import {
   decodeFileId,
   encodeFileId,
   entryKey,
+  exactTitleFirst,
   fileEntry,
   filterScope,
   paletteKey,
@@ -124,5 +125,27 @@ describe('paletteKey', () => {
     expect(paletteKey('ArrowUp', 0, 3)).toEqual({ selected: 2, run: false })
     expect(paletteKey('Enter', 1, 3)).toEqual({ selected: 1, run: true })
     expect(paletteKey('Enter', 0, 0)).toEqual({ selected: 0, run: false })
+  })
+})
+
+describe('exactTitleFirst', () => {
+  const entry = (kind: PaletteEntry['kind'], title: string): PaletteEntry => ({ id: title, title, kind })
+
+  test('puts an exact file name ahead of partial matches of other kinds, keeping the rest in order', () => {
+    const ordered = exactTitleFirst(
+      [entry('command', 'Open app.ts'), entry('tool', 'app.ts tools'), entry('file', 'app.ts'), entry('file', 'app.tsx')],
+      'app.ts'
+    )
+    expect(ordered.map(({ kind, title }) => `${kind}:${title}`)).toEqual([
+      'file:app.ts',
+      'command:Open app.ts',
+      'tool:app.ts tools',
+      'file:app.tsx'
+    ])
+  })
+
+  test('leaves the order alone with no query', () => {
+    const entries = [entry('command', 'b'), entry('file', 'a')]
+    expect(exactTitleFirst(entries, '')).toEqual(entries)
   })
 })

@@ -150,6 +150,13 @@ export function paletteSections(options: {
   return sections
 }
 
+/** Moves entries whose title is exactly `query` to the front, keeping the order inside each group. */
+export function exactTitleFirst(entries: readonly PaletteEntry[], query: string): PaletteEntry[] {
+  if (query === '') return [...entries]
+  const exact = (entry: PaletteEntry) => entry.title.trim().toLowerCase() === query
+  return [...entries.filter(exact), ...entries.filter((entry) => !exact(entry))]
+}
+
 export type PaletteKey = { selected: number; run: boolean }
 
 /**

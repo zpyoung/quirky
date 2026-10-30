@@ -15,3 +15,11 @@ export function hiddenTabIndexes(viewport: Span, tabs: readonly Span[]): number[
   })
   return hidden
 }
+
+/**
+ * Whether every tab fits in `room`, the width the strip offers with no "more" button. The button
+ * takes its width from the viewport, so measuring only the viewport would keep it on screen forever.
+ */
+export function tabsFit(room: number, content: number): boolean {
+  return content <= room + ROUNDING
+}

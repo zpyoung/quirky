@@ -163,6 +163,21 @@ describe('SC-11: clicking a tab activates it', () => {
     expect(view.q('[data-pane="pane-3"]')).toBeNull()
   })
 
+  test('widening until every tab fits removes the more button, even though it took width from the viewport', async () => {
+    const resize = observeResize()
+    try {
+      const view = await mount(fakeDaemon(makeWorkspace(group('grp-1', terminalTabs(3)))))
+      const layout = installTabLayout(view, 220, { 'tab-1': 100, 'tab-2': 100, 'tab-3': 100 })
+      await flushResize(resize)
+      expect(view.q('.qt-tab-more')).not.toBeNull()
+      layout.setWidth(320)
+      await flushResize(resize)
+      expect(view.q('.qt-tab-more')).toBeNull()
+    } finally {
+      resize.restore()
+    }
+  })
+
   test('selecting a hidden tab scrolls it into view', async () => {
     const resize = observeResize()
     const scroll = spyOn(Element.prototype, 'scrollIntoView').mockImplementation(function (this: Element) {
