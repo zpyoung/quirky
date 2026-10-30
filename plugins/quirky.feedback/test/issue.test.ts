@@ -199,6 +199,34 @@ test('a comment with oversized metadata still yields a draft within the cap', ()
   expect(drafts[0]!.url.length).toBeLessThanOrEqual(URL_CAP)
 })
 
+test('oversized owner and build metadata are bounded in the fallback and the comment still appears', () => {
+  const emoji = '😀'
+  const cases: Partial<Capture>[] = [
+    { build: { version: '界'.repeat(2000), commit: 'abc', channel: 'dev' } },
+    { build: { version: 'v', commit: '界'.repeat(5000), channel: emoji.repeat(3000) } },
+    { owner: '界'.repeat(4000) },
+    { owner: emoji.repeat(8000) },
+    {
+      owner: emoji.repeat(5000),
+      elementPath: emoji.repeat(900),
+      component: emoji.repeat(2000),
+      source: emoji.repeat(2000),
+      sourceCaller: emoji.repeat(2000),
+      build: { version: emoji.repeat(5000), commit: emoji.repeat(5000), channel: emoji.repeat(5000) }
+    }
+  ]
+  for (const overrides of cases) {
+    const { drafts } = buildIssueDrafts([comment('1', 'KEEP THIS TEXT '.repeat(20), overrides)], () => REPO)
+    const draft = drafts[0]!
+    expect(draft.included).toBe(1)
+    expect(draft.url.length).toBeLessThanOrEqual(URL_CAP)
+    const body = bodyOf(draft.url)
+    expect(body).toContain('KEEP THIS TEXT')
+    expect(body).toContain('… (truncated)')
+    expect(`${titleOf(draft.url)}${body}`).not.toContain('�')
+  }
+})
+
 test('no comments yields no drafts', () => {
   expect(buildIssueDrafts([], builtinRepository)).toEqual({ drafts: [], unrouted: [] })
 })

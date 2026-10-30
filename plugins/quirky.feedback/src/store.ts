@@ -30,13 +30,41 @@ function trimmedComment(value: unknown): string | null {
   return text.length >= 1 && text.length <= MAX_COMMENT_LENGTH ? text : null
 }
 
+function isString(value: unknown): value is string {
+  return typeof value === 'string'
+}
+
+function isNullable<T>(value: unknown, check: (value: unknown) => value is T): boolean {
+  return value === null || check(value)
+}
+
+function isStringRecord(value: unknown): value is Record<string, string> {
+  const entries = record(value)
+  return entries !== null && Object.values(entries).every(isString)
+}
+
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every(isString)
+}
+
+function isRect(value: unknown): boolean {
+  const rect = record(value)
+  return rect !== null && ['x', 'y', 'width', 'height'].every((key) => typeof rect[key] === 'number' && Number.isFinite(rect[key]))
+}
+
+function isBuild(value: unknown): boolean {
+  const build = record(value)
+  return build !== null && isString(build.version) && isString(build.commit) && isString(build.channel)
+}
+
 function isCapture(value: unknown): value is Capture {
   const capture = record(value)
   if (!capture) return false
-  if (typeof capture.kind !== 'string' || !(CAPTURE_KINDS as readonly string[]).includes(capture.kind)) return false
-  if (typeof capture.owner !== 'string' || typeof capture.elementPath !== 'string' || typeof capture.selector !== 'string') return false
-  const build = record(capture.build)
-  if (!build || typeof build.version !== 'string' || typeof build.commit !== 'string' || typeof build.channel !== 'string') return false
+  if (!isString(capture.kind) || !(CAPTURE_KINDS as readonly string[]).includes(capture.kind)) return false
+  if (!isString(capture.owner) || !isString(capture.elementPath) || !isString(capture.selector)) return false
+  if (!(['role', 'accessibleName', 'visibleText', 'component', 'source', 'sourceCaller'] as const).every((key) => isNullable(capture[key], isString))) return false
+  if (!isNullable(capture.nearbyText, isStringArray) || !isNullable(capture.attributes, isStringRecord)) return false
+  if (!isRect(capture.rect) || !isStringRecord(capture.computedStyles) || !isBuild(capture.build)) return false
   try {
     return Buffer.byteLength(JSON.stringify(capture), 'utf8') <= MAX_CAPTURE_BYTES
   } catch {
@@ -102,16 +130,16 @@ function writeAtomically(path: string, data: unknown): void {
   mkdirSync(directory, { recursive: true, mode: 0o700 })
   const temp = join(directory, `.${randomUUID()}.tmp`)
   const fd = openSync(temp, 'wx', 0o600)
+  let open = true
   try {
     writeFileSync(fd, JSON.stringify(data), 'utf8')
     fsyncSync(fd)
-  } finally {
+    open = false
     closeSync(fd)
-  }
-  try {
     renameSync(temp, path)
     chmodSync(path, 0o600)
   } catch (error) {
+    if (open) try { closeSync(fd) } catch { /* the original failure is the one to report */ }
     try { unlinkSync(temp) } catch { /* temporary entry may already be gone */ }
     throw error
   }

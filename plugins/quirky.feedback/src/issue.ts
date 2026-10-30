@@ -7,6 +7,14 @@ const REPOSITORY_PATTERN = /^https:\/\/github\.com\/([A-Za-z0-9_.-]+)\/([A-Za-z0
 const BUILTIN_REPOSITORY = 'https://github.com/zpyoung/quirky'
 const TRUNCATION_MARKER = '… (truncated)'
 const COMPACT_FIELD_LENGTH = 120
+const COMPACT_METADATA_LENGTH = 40
+const MINIMAL_LENGTH = 16
+const FALLBACK_STAGES: readonly { field: number | null; metadata: number | null }[] = [
+  { field: null, metadata: null },
+  { field: COMPACT_FIELD_LENGTH, metadata: null },
+  { field: COMPACT_FIELD_LENGTH, metadata: COMPACT_METADATA_LENGTH },
+  { field: MINIMAL_LENGTH, metadata: MINIMAL_LENGTH }
+]
 
 export type IssueDraft = {
   repository: string
@@ -66,23 +74,41 @@ function urlFor(repository: string, comments: Comment[], blocks: string[]): stri
   return `${repository}/issues/new?title=${title}&body=${body}`
 }
 
-/** Fits the first comment alone by cutting its text at a code point boundary and marking the cut. */
+function withBoundedMetadata(comment: Comment, max: number | null): Comment {
+  if (max === null) return comment
+  const { owner, build } = comment.capture
+  return {
+    ...comment,
+    capture: {
+      ...comment.capture,
+      owner: clip(owner, max),
+      build: { version: clip(build.version, max), commit: clip(build.commit, max), channel: clip(build.channel, max) }
+    }
+  }
+}
+
+/**
+ * Fits the first comment alone by cutting its text at a code point boundary and marking the cut.
+ * When even an empty text overflows, owner, build and location fields shrink in stages until it fits.
+ */
 function truncatedDraft(repository: string, comment: Comment): string {
   const points = Array.from(wellFormed(comment.comment))
-  for (const fieldLimit of [null, COMPACT_FIELD_LENGTH]) {
-    const urlWith = (kept: number) =>
-      urlFor(repository, [comment], [renderComment(comment, 1, `${points.slice(0, kept).join('')}${TRUNCATION_MARKER}`, fieldLimit)])
-    if (urlWith(0).length > MAX_URL_LENGTH) continue
+  const urlAt = (stage: (typeof FALLBACK_STAGES)[number], kept: number) => {
+    const bounded = withBoundedMetadata(comment, stage.metadata)
+    return urlFor(repository, [bounded], [renderComment(bounded, 1, `${points.slice(0, kept).join('')}${TRUNCATION_MARKER}`, stage.field)])
+  }
+  for (const stage of FALLBACK_STAGES) {
+    if (urlAt(stage, 0).length > MAX_URL_LENGTH) continue
     let low = 0
     let high = points.length
     while (low < high) {
       const middle = Math.ceil((low + high) / 2)
-      if (urlWith(middle).length <= MAX_URL_LENGTH) low = middle
+      if (urlAt(stage, middle).length <= MAX_URL_LENGTH) low = middle
       else high = middle - 1
     }
-    return urlWith(low)
+    return urlAt(stage, low)
   }
-  return urlFor(repository, [comment], [renderComment(comment, 1, TRUNCATION_MARKER, COMPACT_FIELD_LENGTH)])
+  return urlAt(FALLBACK_STAGES[FALLBACK_STAGES.length - 1]!, 0)
 }
 
 function draftFor(repository: string, comments: Comment[]): IssueDraft {

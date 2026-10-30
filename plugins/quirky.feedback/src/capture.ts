@@ -82,27 +82,41 @@ export function cssEscape(value: string): string {
   return result
 }
 
-/** The text a user can read inside `root`, never entering terminal or native-host content or reading form values. */
+function renderState(element: Element, inheritedVisible: boolean): { shown: boolean; visible: boolean } {
+  if (element.hasAttribute('hidden')) return { shown: false, visible: inheritedVisible }
+  const style = safely(() => getComputedStyle(element), null)
+  if (style === null) return { shown: true, visible: inheritedVisible }
+  const visibility = style.visibility
+  return {
+    shown: style.display !== 'none',
+    visible: visibility === 'visible' ? true : visibility === 'hidden' || visibility === 'collapse' ? false : inheritedVisible
+  }
+}
+
+/** The text a user can read inside `root`, never entering terminal or native-host content, hidden subtrees or form values. */
 function walkText(root: Element): string {
   if (root.closest(BLOCKED_TEXT) !== null || SKIPPED_TAGS.has(root.localName)) return ''
   const parts: string[] = []
   let length = 0
-  const visit = (parent: Node, depth: number): void => {
+  const visit = (parent: Element, depth: number, parentVisible: boolean): void => {
     if (depth > WALK_DEPTH) return
+    const { shown, visible } = renderState(parent, parentVisible)
+    if (!shown) return
     for (const child of Array.from(parent.childNodes)) {
       if (length >= LIMIT.walkedText) return
       if (child.nodeType === 3) {
+        if (!visible) continue
         const text = child.nodeValue ?? ''
         parts.push(text)
         length += text.length
       } else if (child.nodeType === 1) {
         const element = child as Element
         if (SKIPPED_TAGS.has(element.localName) || element.matches(BLOCKED_TEXT)) continue
-        visit(element, depth + 1)
+        visit(element, depth + 1, visible)
       }
     }
   }
-  visit(root, 0)
+  visit(root, 0, true)
   return collapseWhitespace(parts.join(' '))
 }
 

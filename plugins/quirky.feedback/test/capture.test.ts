@@ -1,6 +1,10 @@
 import { afterAll, afterEach, beforeAll, beforeEach, expect, test } from 'bun:test'
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
+import { mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { captureElement, cssEscape } from '../src/capture'
+import { FeedbackStore } from '../src/store'
 
 const SENTINEL = 'TERMINAL_SENTINEL_71c2'
 const BUILD_KEYS = ['QUIRKY_BUILD_VERSION', 'QUIRKY_BUILD_COMMIT', 'QUIRKY_BUILD_CHANNEL'] as const
@@ -145,6 +149,38 @@ test('script, style and form values are never read', () => {
   const input = capture('input')
   expect(input.attributes).not.toHaveProperty('value')
   expect(JSON.stringify(input)).not.toContain('INPUT_VALUE')
+})
+
+test('hidden and display none subtrees are not part of visible text or the accessible name', () => {
+  mount(`<button id="target">Save<span hidden>OLD LABEL</span><span style="display:none">HIDDEN STATUS</span><span><b style="display:none">DEEP</b>Now</span></button>`)
+  const result = capture('#target')
+  expect(result.visibleText).toBe('Save Now')
+  expect(result.accessibleName).toBe('Save Now')
+})
+
+test('text under visibility hidden or collapse is skipped unless a descendant is visible again', () => {
+  mount(`<div id="t">Shown<div style="visibility:hidden">GONE<span style="visibility:visible">BACK</span></div><p style="visibility:collapse">COLLAPSED</p></div>`)
+  expect(capture('#t').visibleText).toBe('Shown BACK')
+})
+
+test('nearby text skips hidden siblings', () => {
+  mount(`<div><span style="display:none">HIDDEN SIBLING</span><button id="t">Go</button><span>Next</span></div>`)
+  expect(capture('#t').nearbyText).toEqual(['Next'])
+})
+
+test('every capture passes the store validation', () => {
+  mount(`<div data-plugin-slot="slot:acme.tools/x"><button id="t" class="save" aria-label="Go" data-quirky-source="a.tsx">Save<span hidden>x</span></button><a>link</a></div><div data-terminal-pane="p1"><span>T</span></div>`)
+  const dir = mkdtempSync(join(tmpdir(), 'quirky-feedback-capture-'))
+  try {
+    const store = new FeedbackStore({ dataDir: dir, error: (_kind: string, message: string) => new Error(message) } as unknown as ConstructorParameters<typeof FeedbackStore>[0])
+    for (const selector of ['#t', 'a', '[data-terminal-pane] span', 'body']) {
+      const added = store.add({ intent: 'change', comment: 'check', capture: capture(selector, true) })
+      expect(added.capture).toEqual(capture(selector, true))
+    }
+    expect(store.list().comments).toHaveLength(4)
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
 })
 
 test('secrets are redacted in text, names and attributes', () => {

@@ -1,4 +1,5 @@
-import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
+import { afterEach, beforeEach, describe, expect, spyOn, test } from 'bun:test'
+import * as fs from 'node:fs'
 import { chmodSync, existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -117,6 +118,31 @@ describe('add and list', () => {
     expect(store.list().comments).toEqual([])
   })
 
+  test('rejects every incomplete or mistyped capture field', () => {
+    const store = newStore()
+    const bad: unknown[] = []
+    for (const key of ['role', 'accessibleName', 'visibleText', 'nearbyText', 'attributes', 'rect', 'computedStyles', 'component', 'source', 'sourceCaller']) {
+      const { [key]: _omitted, ...rest } = capture() as Record<string, unknown>
+      bad.push(rest)
+    }
+    const mistyped: Record<string, unknown>[] = [
+      { role: 3 }, { accessibleName: {} }, { visibleText: 1 }, { component: [] }, { source: false }, { sourceCaller: 2 },
+      { nearbyText: 'x' }, { nearbyText: [1] }, { attributes: [] }, { attributes: { a: 1 } },
+      { computedStyles: null }, { computedStyles: [] }, { computedStyles: { a: 1 } },
+      { rect: null }, { rect: {} }, { rect: { x: 1, y: 2, width: 3 } }, { rect: { x: 1, y: 2, width: 3, height: '4' } },
+      { rect: { x: Number.NaN, y: 2, width: 3, height: 4 } }, { rect: { x: 1, y: 2, width: Number.POSITIVE_INFINITY, height: 4 } }
+    ]
+    bad.push(...mistyped.map((overrides) => capture(overrides)))
+    for (const value of bad) expect(kindOf(() => store.add(input('x', { capture: value })))).toStartWith('invalid-params')
+    expect(store.list().comments).toEqual([])
+  })
+
+  test('accepts null and empty optional capture fields', () => {
+    const store = newStore()
+    const sparse = capture({ role: null, accessibleName: null, visibleText: null, nearbyText: null, attributes: null, computedStyles: {}, selector: '' })
+    expect(store.add(input('x', { capture: sparse })).capture).toEqual(sparse)
+  })
+
   test('refuses the 51st comment as a conflict without dropping anything', () => {
     const store = newStore()
     const added: Comment[] = []
@@ -211,6 +237,29 @@ describe('persistence', () => {
     expect(newStore().list().comments).toEqual([kept])
   })
 
+  test('a write or fsync failure removes the temporary file and rethrows the original error', () => {
+    const store = newStore()
+    const kept = store.add(input('kept'))
+    for (const name of ['writeFileSync', 'fsyncSync', 'closeSync', 'renameSync'] as const) {
+      const failure = new Error(`${name} failed`)
+      const real = fs[name] as (...args: unknown[]) => unknown
+      let armed = true
+      const spy = spyOn(fs, name).mockImplementation(((...args: unknown[]) => {
+        if (armed) { armed = false; throw failure }
+        return real(...args)
+      }) as never)
+      try {
+        let thrown: unknown
+        try { store.add(input('lost')) } catch (error) { thrown = error }
+        expect(thrown).toBe(failure)
+      } finally {
+        spy.mockRestore()
+      }
+      expect(readdirSync(dir)).toEqual(['comments.json'])
+    }
+    expect(store.list().comments).toEqual([kept])
+  })
+
   test('loads the file only on the first call', () => {
     const store = newStore()
     expect(store.list().comments).toEqual([])
@@ -249,6 +298,10 @@ describe('corrupt files', () => {
   })
   test('an entry with a malformed capture is set aside', () => {
     expectRecovered(JSON.stringify({ version: 1, comments: [{ ...valid(), capture: { kind: 'element' } }] }))
+  })
+  test('an entry with an incomplete capture is set aside', () => {
+    const { rect: _rect, ...incomplete } = capture()
+    expectRecovered(JSON.stringify({ version: 1, comments: [{ ...valid(), capture: incomplete }] }))
   })
   test('an oversize file is set aside', () => expectRecovered(' '.repeat(8 * 1024 * 1024 + 1)))
 
