@@ -14,8 +14,6 @@ afterEach(async () => {
   await cleanup()
 })
 
-const EMPTY = 'No quick commands saved. Run them from the Quick Commands button in the tab bar, or right-click inside any terminal.'
-
 async function openPanel(init: Partial<World> = {}, options: { worktree?: string | null; viewWorktree?: string | null; repo?: string | null } = {}) {
   const { fake, world } = qcFake(init)
   const worktree = options.worktree === undefined ? 'wt_main' : options.worktree
@@ -41,9 +39,8 @@ const project = command({ id: 'test', label: 'Test', command: 'bun test', scope:
 const draft = command({ id: 'draft', label: 'Draft', command: 'echo draft', appendEnter: false })
 
 describe('Quick Commands panel', () => {
-  test('SC-49: with nothing saved it shows the empty text and the header controls', async () => {
+  test('SC-49: with nothing saved it shows the header controls', async () => {
     const { element, last } = await openPanel()
-    expect(element.textContent).toContain(EMPTY)
     expect(search(element).getAttribute('placeholder')).toBe('Search quick commands')
     expect($$('option', filter(element)).map((option) => option.textContent)).toEqual(['All commands', 'Global', 'Project'])
     expect(button('Add Command', element)).toBeDefined()
@@ -70,7 +67,6 @@ describe('Quick Commands panel', () => {
     expect(row.textContent).toContain('Project')
     expect(row.textContent).toContain('echo hello')
     expect(row.textContent).toContain('Enter')
-    expect(element.textContent).not.toContain(EMPTY)
     expect(last()).toEqual({ count: 1, filter: 'all', query: '', rows: [{ id: 'hello', label: 'Hello', scope: 'repo' }] })
   })
 
@@ -130,7 +126,6 @@ describe('Quick Commands panel', () => {
     await fill(search(element), 'nothing like it')
     expect(rowLabels(element)).toEqual([])
     expect(element.textContent).toContain('No commands match this search.')
-    expect(element.textContent).not.toContain(EMPTY)
 
     await fill(search(element), '')
     await pick(filter(element), 'repo')

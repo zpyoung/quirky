@@ -17,7 +17,7 @@ export type QuickCommandsReport = {
   rows: { id: string; label: string; scope: 'global' | 'repo' }[]
 }
 
-const EMPTY_TEXT = 'No quick commands saved. Run them from the Quick Commands button in the tab bar, or right-click inside any terminal.'
+const EMPTY_TEXT = 'No quick commands saved. Run them from the Command button in the tab bar, or right-click inside any terminal.'
 const FILTERS: { value: ScopeFilter; text: string }[] = [
   { value: 'all', text: 'All commands' },
   { value: 'global', text: 'Global' },
