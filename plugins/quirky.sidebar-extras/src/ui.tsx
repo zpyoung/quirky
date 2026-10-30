@@ -73,9 +73,12 @@ function unavailable(worktreeId: string | null, error: unknown): DirtyResult {
 function ActivityButton({ context, status }: { context: UiPluginContext; status: DirtyResult | null }) {
   const title = status?.title ?? STOCK_TITLE
   const unavailableStatus = status !== null && !status.available
+  const clean = status !== null && status.available && status.worktreeId !== null && !status.dirty
   const label = unavailableStatus && status.error
     ? `${title} — status unavailable: ${status.error}`
-    : title
+    : clean
+      ? `${title} — no uncommitted changes`
+      : title
   const count = status?.capped ? `${status.count}+` : String(status?.count ?? 0)
   return (
     <IconButton

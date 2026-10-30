@@ -14,7 +14,7 @@ const sourceControlStatus = () => {
   return {
     count: text(button) || null,
     label: button.getAttribute('aria-label') ?? '',
-    clean: qa('[aria-label]', button).some((element) => /no uncommitted changes/i.test(element.getAttribute('aria-label') ?? ''))
+    clean: /no uncommitted changes/i.test(button.getAttribute('aria-label') ?? '')
   }
 }
 

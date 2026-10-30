@@ -279,6 +279,18 @@ test('the item leaves its icon to the host and keeps only the button, the dirty 
   expect(item.element.querySelector('.ui-status-dot')).toBeNull()
 })
 
+test('a clean worktree still says so to assistive tech, with no dot or badge on the stripe', async () => {
+  const item = await mountItem([() => Promise.resolve(status('wt-fix', 0, false, 'Source Control'))])
+  await item.waitForDirtyCalls(1)
+  await act(async () => { await item.dirtyRequests[0]! })
+
+  const button = item.element.querySelector('button')
+  expect(button?.getAttribute('aria-label')).toBe('Source Control — no uncommitted changes')
+  expect(button?.getAttribute('title')).toBe('Source Control')
+  expect(item.element.querySelector('.ui-badge')).toBeNull()
+  expect(item.element.querySelector('.ui-status-dot')).toBeNull()
+})
+
 test('a delayed dirty response cannot overwrite a newer workspace status', async () => {
   const delayed = deferred<DirtyResult>()
   const latest = deferred<DirtyResult>()
