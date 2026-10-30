@@ -17,6 +17,8 @@ export type PluginInfo = {
   /** Validated API floor; absent when the manifest could not be parsed. */
   apiVersion?: string
   description?: string
+  /** The `https://github.com/<owner>/<repo>` URL the manifest declares. */
+  repository?: string
   source: PluginSource
   dir: string
   activation: 'lazy' | 'startup'
@@ -466,6 +468,8 @@ export type PluginManifest = {
   /** Minimum stable plugin API release required by every entrypoint, e.g. "1.0.0". */
   apiVersion: string
   description?: string
+  /** An `https://github.com/<owner>/<repo>` URL. */
+  repository?: string
   /** Relative path inside the plugin directory. */
   main?: string
   /** Relative path of the webview ES module. */
