@@ -74,8 +74,11 @@ jobs:
         with:
           bun-version: ${{ env.BUN_VERSION }}
 
-      - name: Install zsh
-        run: sudo apt-get update && sudo apt-get install -y zsh
+      - name: Install test tools
+        run: |
+          sudo apt-get update && sudo apt-get install -y zsh ripgrep
+          # ubuntu's zshrc runs compinit, which stops at a prompt over the runner's writable function directories
+          zsh -fc 'autoload -U compaudit; compaudit' | grep '^/' | xargs -r sudo chmod go-w
 
       - run: bun install --frozen-lockfile
 
@@ -167,7 +170,11 @@ jobs:
 
       - name: Install dependencies
         if: steps.failures.outputs.needed == 'true'
-        run: sudo apt-get update && sudo apt-get install -y zsh && bun install --frozen-lockfile
+        run: |
+          sudo apt-get update && sudo apt-get install -y zsh ripgrep
+          # ubuntu's zshrc runs compinit, which stops at a prompt over the runner's writable function directories
+          zsh -fc 'autoload -U compaudit; compaudit' | grep '^/' | xargs -r sudo chmod go-w
+          bun install --frozen-lockfile
 
       - name: Rerun failed files alone
         if: steps.failures.outputs.needed == 'true'
