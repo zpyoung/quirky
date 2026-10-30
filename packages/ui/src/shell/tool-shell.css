@@ -30,7 +30,8 @@
 }
 
 /* dialogs render in place, so their region must stack above app overlays */
-.shell-main-region:has(.ui-dialog-backdrop) {
+.shell-main-region:has(.ui-dialog-backdrop),
+.tool-shell:has(.ui-dialog-backdrop) {
   z-index: 41;
 }
 
