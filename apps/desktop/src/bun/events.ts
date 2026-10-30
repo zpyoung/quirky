@@ -10,6 +10,10 @@ export type NativeNotification = {
   silent: boolean
   soundFile: string | null
   volume: number
+  /** Where clicking the banner leads, as for the in-app toast. */
+  open?: { view: string; input?: unknown }
+  /** The toast key, so a click can retire the toast and a newer banner can replace this one. */
+  key?: string
 }
 
 /**
@@ -25,7 +29,9 @@ export function notificationFor(event: QuirkyEvent): NativeNotification | null {
     body: event.body,
     silent: sound === undefined || sound.file !== null,
     soundFile: sound && typeof sound.file === 'string' ? sound.file : null,
-    volume: sound?.volume ?? DEFAULT_VOLUME
+    volume: sound?.volume ?? DEFAULT_VOLUME,
+    open: event.open,
+    key: event.key
   }
 }
 

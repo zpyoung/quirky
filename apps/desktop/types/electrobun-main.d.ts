@@ -16,8 +16,15 @@ export class BrowserWindow {
     rpc?: unknown
   })
   readonly id: number
-  webview: { readonly id: number; loadURL(url: string): void; loadHTML(html: string): void }
+  webview: {
+    readonly id: number
+    loadURL(url: string): void
+    loadHTML(html: string): void
+    supportsDropSourcePaths(): boolean
+    on(name: 'drop-source-paths', handler: (event: unknown) => void): void
+  }
   on(name: string, handler: (event: unknown) => void): void
+  setTitle(title: string): void
   show(): void
   activate(): void
   close(): void
@@ -26,6 +33,15 @@ export class BrowserWindow {
 }
 
 export class BrowserView {
+  constructor(options?: {
+    windowId?: number
+    popupRequestId?: number
+    partition?: string | null
+    renderer?: 'native' | 'cef'
+    sandbox?: boolean
+    autoResize?: boolean
+    frame?: { x: number; y: number; width: number; height: number }
+  })
   readonly id: number
   readonly windowId: number
   readonly hostWebviewId?: number
@@ -35,14 +51,32 @@ export class BrowserView {
   readonly url: string | null
   readonly navigationRules: string | null
   readonly allowedProtocols: { views: boolean; appData: boolean }
+  readonly isolatedPreview: string | null
+  setIsolatedPreviewHandler(handler: ((request: Request) => Response | Promise<Response>) | null): void
   setNavigationRules(rules: string[]): void
   setPageZoom(factor: number): void
   getPageZoom(): number
+  getStorageIdentifier(): string | null
   remove(): void
+  setNativeRequestHandling(
+    kinds: Array<'dialogs' | 'auth' | 'certificates' | 'downloads' | 'popups' | 'externalApps'>,
+    options?: { timeoutMs?: number }
+  ): boolean
+  respondToNativeRequest(requestId: number, response: { accept: boolean; text?: string; username?: string; password?: string; path?: string }): boolean
+  cancelDownload(downloadId: number): boolean
+  on(name: string, handler: (event: unknown) => void): void
   static getById(id: number): BrowserView | undefined
-  static defineRPC<Schema>(config: unknown): unknown
+  static defineRPC<Schema>(config: unknown): { send: Record<string, (payload: unknown) => void> }
 }
 
+type StorageResult = { status: string; reason?: string }
+
+export const Session: {
+  fromPartition(partition: string): {
+    setStorageIdentifier(identifier: string): StorageResult
+    clearStorageData(types: 'all'): StorageResult
+  }
+}
 
 export class Electroview {
   constructor(options: { rpc: unknown })
@@ -59,7 +93,9 @@ export class Tray {
 
 export const Utils: {
   clipboardReadText(): string | null
-  showNotification(options: { title: string; body?: string; subtitle?: string; silent?: boolean }): void
+  showNotification(options: { title: string; body?: string; subtitle?: string; silent?: boolean; id?: string }): string | void
+  getNotificationPermission?: () => Promise<'not-determined' | 'denied' | 'authorized' | 'provisional' | 'unsupported'>
+  requestNotificationPermission?: () => Promise<'not-determined' | 'denied' | 'authorized' | 'provisional' | 'unsupported'>
   openFileDialog(options: {
     startingFolder?: string
     allowedFileTypes?: string

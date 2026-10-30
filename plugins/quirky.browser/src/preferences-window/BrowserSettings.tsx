@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import { Badge, Button, FormRow, SectionHeader, StatusDot, TextField } from '@quirky/ui'
-import type { BrowserPreferencesProps, ProfileUsage } from '../preferences/contract'
+import type { BrowserPreferencesProps, PreferencesState, ProfileUsage } from '../preferences/contract'
 import { BROWSER_SETTING_IDS, ProfileCreator, errorMessage, profileSourceLabel, useBrowserPreferenceData } from './shared'
 import { CookieImportPanel } from './CookieImportPanel'
 import type { BrowserWindowSettings } from './shared'
@@ -190,10 +190,10 @@ export function BrowserSettings(props: BrowserPreferencesProps & { embedded?: bo
           </select>
         </FormRow>
         <IdentityStatus selected={identitySelection} active={activeIdentity} restartRequired={restartRequired} />
-        <p style={SETTINGS_COPY_STYLE}>System webview identity cannot be changed: the public native SDK has no user-agent override.</p>
+        <NativeIdentityNote supported={preferences?.identity.nativeSupported === true} />
       </section>
 
-      <RoutingSettings settings={settings} savingSettings={savingSettings} writeSetting={writeSetting} />
+      <RoutingSettings settings={settings} localhostLabels={preferences?.localhostLabels} savingSettings={savingSettings} writeSetting={writeSetting} />
 
       <section aria-label="Import browser data" style={SETTINGS_SECTION_STYLE}>
         <SectionHeader title="Import browser data" />
@@ -203,7 +203,7 @@ export function BrowserSettings(props: BrowserPreferencesProps & { embedded?: bo
 
     {embedded && <>
       <IdentityStatus selected={identitySelection} active={activeIdentity} restartRequired={restartRequired} />
-      <p style={SETTINGS_COPY_STYLE}>System webview identity cannot be changed: the public native SDK has no user-agent override.</p>
+      <NativeIdentityNote supported={preferences?.identity.nativeSupported === true} />
       {settings.agentBrowserUseEnabled && <AgentBrowserChecklist />}
     </>}
 
@@ -212,7 +212,9 @@ export function BrowserSettings(props: BrowserPreferencesProps & { embedded?: bo
         title="Session & Cookies"
         actions={<Button type="button" variant="primary" disabled={profilePending !== null} onClick={() => { setCreateOpen(true); setActionError(null); setSuccessMessage(null) }}>Add Profile</Button>}
       />
-      <p style={SETTINGS_COPY_STYLE}>Clearing or removing profile data requires a native session-clear completion capability. It is currently unavailable; failed requests preserve profile data and metadata.</p>
+      <p style={SETTINGS_COPY_STYLE}>{context.nativeBrowser.clearPartitionAvailable
+        ? 'Clearing or removing a profile deletes its cookies and site data in both browser engines. Profiles in use cannot be cleared.'
+        : 'Clearing or removing profile data needs the Quirky desktop app on macOS 14 or later, which confirms native website-data removal. It is unavailable here; failed requests preserve profile data and metadata.'}</p>
       {preferences && <ul aria-label="Browser profiles" style={SETTINGS_LIST_STYLE}>
         {preferences.profiles.map((row) => {
           const importOpen = importOpenProfile === row.profile.id
@@ -234,10 +236,15 @@ export function BrowserSettings(props: BrowserPreferencesProps & { embedded?: bo
           </li>
         })}
       </ul>}
-      {preferences?.localhostLabels && <p style={SETTINGS_COPY_STYLE}>Localhost Worktree Labels unavailable: {preferences.localhostLabels.reason}</p>}
       {createOpen && <ProfileCreator context={context} onCreated={profileCreated} onCancel={() => setCreateOpen(false)} onError={onError} />}
     </section>
   </div>
+}
+
+function NativeIdentityNote({ supported }: { supported: boolean }) {
+  return <p style={SETTINGS_COPY_STYLE}>{supported
+    ? 'The Native browser pane follows the same active identity: Cleaned removes app tokens from the system webview user agent, Native keeps it unchanged.'
+    : 'System webview identity cannot be changed on this platform: its native webview has no user-agent override.'}</p>
 }
 
 function IdentityStatus({ selected, active, restartRequired }: { selected: 'clean' | 'native'; active: 'clean' | 'native'; restartRequired: boolean }) {
@@ -261,8 +268,9 @@ function AgentBrowserChecklist() {
   </section>
 }
 
-function RoutingSettings({ settings, savingSettings, writeSetting }: {
+function RoutingSettings({ settings, localhostLabels, savingSettings, writeSetting }: {
   settings: BrowserWindowSettings
+  localhostLabels: PreferencesState['localhostLabels'] | undefined
   savingSettings: ReadonlySet<string>
   writeSetting(id: string, value: unknown): Promise<boolean>
 }) {
@@ -276,6 +284,8 @@ function RoutingSettings({ settings, savingSettings, writeSetting }: {
     <label style={SETTINGS_TOGGLE_STYLE}><input type="checkbox" style={{ appearance: 'auto', accentColor: 'var(--ui-accent)' }} aria-label="Open links in Quirky" checked={settings.openLinksInApp} disabled={savingSettings.has(BROWSER_SETTING_IDS.openLinksInApp)} onChange={(event) => void writeSetting(BROWSER_SETTING_IDS.openLinksInApp, event.currentTarget.checked)} />Open web links in Quirky</label>
     <label style={SETTINGS_TOGGLE_STYLE}><input type="checkbox" style={{ appearance: 'auto', accentColor: 'var(--ui-accent)' }} aria-label="Invert link routing modifier" checked={settings.openLinksInAppModifierInverts} disabled={savingSettings.has(BROWSER_SETTING_IDS.openLinksInAppModifierInverts)} onChange={(event) => void writeSetting(BROWSER_SETTING_IDS.openLinksInAppModifierInverts, event.currentTarget.checked)} />Invert the Shift+modifier route for one click</label>
     <p style={SETTINGS_COPY_STYLE}>{modifierLabel}</p>
+    <label style={SETTINGS_TOGGLE_STYLE}><input type="checkbox" style={{ appearance: 'auto', accentColor: 'var(--ui-accent)' }} aria-label="Localhost Worktree Labels" checked={settings.localhostWorktreeLabelsEnabled} disabled={savingSettings.has(BROWSER_SETTING_IDS.localhostWorktreeLabelsEnabled)} onChange={(event) => void writeSetting(BROWSER_SETTING_IDS.localhostWorktreeLabelsEnabled, event.currentTarget.checked)} />Localhost Worktree Labels</label>
+    {localhostLabels && <p style={SETTINGS_COPY_STYLE}>{localhostLabels.reason}</p>}
     <FormRow label="Terminal URL clicks" htmlFor={`${settingsId}-browser-terminal-url-clicks`}>
       <select id={`${settingsId}-browser-terminal-url-clicks`} className="ui-text-field__input" style={{ appearance: 'auto' }} aria-label="Terminal URL clicks" value={settings.terminalLinkClick} disabled={savingSettings.has(BROWSER_SETTING_IDS.terminalLinkClick)} onChange={(event) => void writeSetting(BROWSER_SETTING_IDS.terminalLinkClick, event.currentTarget.value)}>
         {TERMINAL_LINK_ACTIONS.map(({ value, label }) => <option key={value} value={value}>{label}</option>)}

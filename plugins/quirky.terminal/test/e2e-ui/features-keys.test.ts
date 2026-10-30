@@ -45,6 +45,7 @@ test(
         directoryPicker: false, auxiliaryWindows: false, revealItem: false,
         notifications: { permission: false, click: false, dismiss: false }
       },
+      nativeDropPaths: async () => null,
       readClipboardText: async () => {
         if (nativeFailure) throw new Error('native pasteboard unavailable')
         return text

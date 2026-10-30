@@ -795,7 +795,7 @@
       "deps": [
         "m2-editor"
       ],
-      "status": "blocked",
+      "status": "done",
       "early": true
     },
     {
@@ -1134,7 +1134,7 @@
       "deps": [
         "sa-browser-pane"
       ],
-      "status": "blocked"
+      "status": "done"
     },
     {
       "id": "sa-browser-profile-import-ui",
@@ -1159,7 +1159,7 @@
       "deps": [
         "sa-browser-profiles-settings"
       ],
-      "status": "blocked"
+      "status": "done"
     },
     {
       "id": "sa-browser-localhost-label-routing",
@@ -1171,7 +1171,7 @@
       "deps": [
         "sa-browser-profiles-settings"
       ],
-      "status": "blocked"
+      "status": "done"
     },
     {
       "id": "sa-browser-native-profile-clear-completion",
@@ -1183,7 +1183,7 @@
       "deps": [
         "sa-browser-profiles-settings"
       ],
-      "status": "blocked"
+      "status": "done"
     },
     {
       "id": "sa-browser-pane-native-host-controls",
@@ -1195,7 +1195,7 @@
       "deps": [
         "sa-browser-pane"
       ],
-      "status": "blocked"
+      "status": "done"
     },
     {
       "id": "sa-browser-pane-workspace-preview",
@@ -1207,7 +1207,7 @@
       "deps": [
         "sa-browser-pane"
       ],
-      "status": "blocked"
+      "status": "done"
     },
     {
       "id": "m4-hosting-ui-tasks-complete-remaining-flows",

@@ -11,6 +11,7 @@ export const BROWSER_SETTING_IDS = {
   identityMode: 'setting:quirky.browser/identityMode',
   openLinksInApp: 'setting:quirky.browser/openLinksInApp',
   openLinksInAppModifierInverts: 'setting:quirky.browser/openLinksInAppModifierInverts',
+  localhostWorktreeLabelsEnabled: 'setting:quirky.browser/localhostWorktreeLabelsEnabled',
   browserImportHintHidden: 'setting:quirky.browser/browserImportHintHidden',
   agentBrowserUseEnabled: 'setting:quirky.browser/agentBrowserUseEnabled',
   terminalLinkClick: 'setting:quirky.terminal/link-click',
@@ -41,6 +42,7 @@ export type BrowserWindowSettings = {
   identityMode: IdentityMode
   openLinksInApp: boolean
   openLinksInAppModifierInverts: boolean
+  localhostWorktreeLabelsEnabled: boolean
   browserImportHintHidden: boolean
   agentBrowserUseEnabled: boolean
   terminalLinkClick: TerminalLinkAction
@@ -55,6 +57,7 @@ const SETTING_ID_BY_KEY: Record<SettingKey, string> = {
   identityMode: BROWSER_SETTING_IDS.identityMode,
   openLinksInApp: BROWSER_SETTING_IDS.openLinksInApp,
   openLinksInAppModifierInverts: BROWSER_SETTING_IDS.openLinksInAppModifierInverts,
+  localhostWorktreeLabelsEnabled: BROWSER_SETTING_IDS.localhostWorktreeLabelsEnabled,
   browserImportHintHidden: BROWSER_SETTING_IDS.browserImportHintHidden,
   agentBrowserUseEnabled: BROWSER_SETTING_IDS.agentBrowserUseEnabled,
   terminalLinkClick: BROWSER_SETTING_IDS.terminalLinkClick,
@@ -71,6 +74,7 @@ const DEFAULT_SETTINGS: BrowserWindowSettings = {
   identityMode: 'clean',
   openLinksInApp: false,
   openLinksInAppModifierInverts: false,
+  localhostWorktreeLabelsEnabled: false,
   browserImportHintHidden: false,
   agentBrowserUseEnabled: false,
   terminalLinkClick: 'actions',
@@ -115,9 +119,9 @@ function isProfileUsage(value: unknown): value is ProfileUsage {
 
 function isPreferencesState(value: unknown): value is PreferencesState {
   if (!isRecord(value) || !Array.isArray(value.profiles) || !value.profiles.every(isProfileUsage)) return false
-  if (!isRecord(value.identity) || (value.identity.selected !== 'clean' && value.identity.selected !== 'native') || (value.identity.active !== 'clean' && value.identity.active !== 'native') || typeof value.identity.restartRequired !== 'boolean' || value.identity.nativeSupported !== false) return false
+  if (!isRecord(value.identity) || (value.identity.selected !== 'clean' && value.identity.selected !== 'native') || (value.identity.active !== 'clean' && value.identity.active !== 'native') || typeof value.identity.restartRequired !== 'boolean' || typeof value.identity.nativeSupported !== 'boolean') return false
   if (!isRecord(value.imports) || value.imports.available !== true || value.imports.destination !== 'managed-chrome' || value.imports.nativeSupported !== false || typeof value.imports.reason !== 'string') return false
-  if (!isRecord(value.localhostLabels) || value.localhostLabels.available !== false || typeof value.localhostLabels.reason !== 'string') return false
+  if (!isRecord(value.localhostLabels) || value.localhostLabels.available !== true || typeof value.localhostLabels.enabled !== 'boolean' || typeof value.localhostLabels.reason !== 'string' || !Array.isArray(value.localhostLabels.labels)) return false
   return true
 }
 

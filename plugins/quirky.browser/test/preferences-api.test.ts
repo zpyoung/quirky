@@ -16,6 +16,7 @@ function preferenceHarness(options: {
   pages?: string[]
   settings?: Record<string, unknown>
   clearProfile?: (profile: string, remove: boolean) => Promise<void>
+  nativeIdentitySupported?: boolean
 } = {}) {
   const profile: BrowserProfile = { id: 'profile_0123456789abcdef0123456789abcdef', label: 'Review', scope: 'isolated' }
   const handlers = new Map<string, Handler>()
@@ -30,7 +31,8 @@ function preferenceHarness(options: {
       calls.push({ method: 'setPaneProfile', params: { pane, profile: selected } })
       return { id: pane, profileId: selected }
     },
-    clearProfile: options.clearProfile ?? (async (selected, remove) => { calls.push({ method: 'clearProfile', params: { profile: selected, remove } }) })
+    clearProfile: options.clearProfile ?? (async (selected, remove) => { calls.push({ method: 'clearProfile', params: { profile: selected, remove } }) }),
+    nativeIdentitySupported: options.nativeIdentitySupported ?? false
   }
   const context = {
     dataDir: '',
@@ -41,6 +43,7 @@ function preferenceHarness(options: {
     call: async (method: string, params: Record<string, unknown> = {}) => {
       calls.push({ method, params })
       if (method === 'quirky.browser/paneOpen') return { id: 'pane-created', worktreeId: 'wt-resolved' }
+      if (method === 'quirky.worktree/show') return { id: 'wt-feature', path: '/repos/app/.worktrees/feature-a', isMain: false, kind: 'git' }
       return { opened: true }
     },
     getSetting(name: string) { return settings[name.replace(/^quirky\.browser\//, '')] },
@@ -66,15 +69,22 @@ test('preferencesState reports profile activity and selected versus active ident
   const activeState = await harness.invoke('preferencesState') as {
     profiles: Array<{ profile: BrowserProfile; active: boolean }>
     identity: { selected: string; active: string; restartRequired: boolean; nativeSupported: boolean }
-    localhostLabels: { available: false; reason: string }
+    localhostLabels: { available: true; enabled: boolean; labels: unknown[] }
   }
   expect(activeState.profiles.find((item) => item.profile.id.startsWith('profile_'))?.active).toBe(true)
   expect(activeState.identity).toEqual({ selected: 'clean', active: 'clean', restartRequired: false, nativeSupported: false })
-  expect(activeState.localhostLabels.available).toBe(false)
+  expect(activeState.localhostLabels).toMatchObject({ available: true, enabled: false, labels: [] })
 
   harness.settings.identityMode = 'native'
   const selectedState = await harness.invoke('preferencesState') as typeof activeState
   expect(selectedState.identity).toEqual({ selected: 'native', active: 'clean', restartRequired: true, nativeSupported: false })
+})
+
+test('preferencesState reports Native identity support from the host adapter without changing restart semantics', async () => {
+  const harness = preferenceHarness({ nativeIdentitySupported: true })
+  harness.settings.identityMode = 'native'
+  const state = await harness.invoke('preferencesState') as { identity: Record<string, unknown> }
+  expect(state.identity).toEqual({ selected: 'native', active: 'clean', restartRequired: true, nativeSupported: true })
 })
 
 test('profileSet rejects invalid profile identities before mutating a pane', async () => {
@@ -267,5 +277,44 @@ test('profile storage rejects a replaced data-root symlink', () => {
     rmSync(parkedDataDir, { recursive: true, force: true })
     rmSync(outside, { recursive: true, force: true })
     rmSync(temporary, { recursive: true, force: true })
+  }
+})
+
+test('openLink opens a worktree localhost link at its routed label when Localhost Worktree Labels are on', async () => {
+  const harness = preferenceHarness({ settings: { openLinksInApp: true, localhostWorktreeLabelsEnabled: true } })
+  try {
+    expect(await harness.invoke('openLink', { url: 'http://localhost:5173/login?next=1', worktree: 'worktree-1' })).toEqual({ route: 'app', pane: 'pane-created' })
+    expect(harness.calls.find((call) => call.method === 'quirky.worktree/show')?.params).toEqual({ worktree: 'worktree-1' })
+    const opened = harness.calls.find((call) => call.method === 'quirky.browser/paneOpen')?.params as { url: string }
+    const labelled = new URL(opened.url)
+    expect(labelled.hostname).toBe('feature-a.quirky.localhost')
+    expect(`${labelled.pathname}${labelled.search}`).toBe('/login?next=1')
+    expect(await harness.invoke('localhostLabelList')).toEqual({
+      labels: [{ label: 'feature-a', worktreeId: 'wt-feature', target: 'http://localhost:5173', url: `${labelled.origin}/` }]
+    })
+
+    await harness.invoke('openLink', { url: 'https://example.test/', worktree: 'worktree-1' })
+    expect(harness.calls.filter((call) => call.method === 'quirky.browser/paneOpen').at(-1)?.params).toMatchObject({ url: 'https://example.test/' })
+  } finally {
+    harness.controller.deactivate()
+  }
+})
+
+test('localhost labels stay off by default and only accept loopback http URLs', async () => {
+  const off = preferenceHarness({ settings: { openLinksInApp: true } })
+  await off.invoke('openLink', { url: 'http://localhost:5173/', worktree: 'worktree-1' })
+  expect(off.calls.find((call) => call.method === 'quirky.browser/paneOpen')?.params).toMatchObject({ url: 'http://localhost:5173/' })
+  await expect(off.invoke('localhostLabelRegister', { url: 'http://localhost:5173/', worktree: 'worktree-1' })).rejects.toThrow('off')
+
+  const on = preferenceHarness({ settings: { localhostWorktreeLabelsEnabled: true } })
+  try {
+    for (const url of ['http://example.test:5173/', 'https://localhost:5173/', 'http://localhost/']) {
+      await expect(on.invoke('localhostLabelRegister', { url, worktree: 'worktree-1' })).rejects.toThrow('loopback')
+    }
+    const route = await on.invoke('localhostLabelRegister', { url: 'http://127.0.0.1:3000/', worktree: 'worktree-1' }) as { label: string; url: string }
+    expect(route.label).toBe('feature-a')
+    expect(new URL(route.url).hostname).toBe('feature-a.quirky.localhost')
+  } finally {
+    on.controller.deactivate()
   }
 })

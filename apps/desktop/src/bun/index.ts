@@ -1,12 +1,13 @@
 import { randomUUID } from 'node:crypto'
 import { existsSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
-import { QuirkyClient } from '@quirky/protocol'
-import { ensureDaemon, quirkyHome, rpcUrl, type RuntimeInfo } from '@quirky/protocol/node'
-import { ApplicationMenu, BrowserView, BrowserWindow, Tray, Updater, Utils, app, type ApplicationMenuItemConfig } from 'electrobun/main'
+import { NATIVE_BROWSER_NAVIGATION_RULES, QuirkyClient } from '@quirky/protocol'
+import { ensureDaemon, ensureHome, quirkyHome, rpcUrl, type RuntimeInfo } from '@quirky/protocol/node'
+import { ApplicationMenu, BrowserView, BrowserWindow, Session, Tray, Updater, Utils, app, type ApplicationMenuItemConfig } from 'electrobun/main'
 import { maintainConnection } from './connection'
 import { setDockBadge } from './dock'
 import { desktopWindowRouteUrl, folderPickerResult } from './desktop-window-route'
+import { dropSourcePathsFromEvent } from './drop-source-paths'
 import {
   TRAY_MENU,
   attentionIn,
@@ -24,7 +25,17 @@ import {
 } from './events'
 import { daemonUrl, errorPageHtml } from './page'
 import { findRepoRoot, resolveRuntimeEnv, trayDotPath } from './paths'
-import { createNativeBrowserHandlers, type NativeBrowserHostRPC } from './native-browser'
+import { createNativeBrowserHandlers, nativeBrowserPreloadSource, popupWindowTitle, type NativeBrowserHostRPC, type NativeBrowserPopup } from './native-browser'
+import { createNativeBrowserStorage, loadNativeBrowserInstallId } from './native-browser-storage'
+import {
+  NativeNotifications,
+  notificationCapabilities,
+  notificationCapabilitiesPreamble,
+  notificationIdIn,
+  readNotificationPermission,
+  registerNotificationPermission,
+  type NotificationUtils
+} from './native-notifications'
 import { playSound } from './sound'
 import {
   UPDATE_APPLY_ACTION,
@@ -68,7 +79,26 @@ async function loadNativeBrowserPreload(): Promise<string> {
   return output.text()
 }
 
-const nativeBrowserPreload = await loadNativeBrowserPreload()
+function nativeBrowserInstallId(): string | null {
+  if (process.platform !== 'darwin') return null
+  try {
+    return loadNativeBrowserInstallId(ensureHome())
+  } catch (error) {
+    console.error('native browser profile storage is unavailable:', error)
+    return null
+  }
+}
+
+const nativeBrowserStorage = createNativeBrowserStorage({
+  installId: nativeBrowserInstallId(),
+  session: (partition) => Session.fromPartition(partition)
+})
+const notificationUtils: NotificationUtils = Utils
+const nativeNotifications = new NativeNotifications(notificationUtils, randomUUID)
+const startupNotificationPermission = await readNotificationPermission(notificationUtils)
+const nativeBrowserPreload =
+  notificationCapabilitiesPreamble(notificationCapabilities(startupNotificationPermission)) +
+  nativeBrowserPreloadSource(await loadNativeBrowserPreload(), nativeBrowserStorage.supported)
 
 const logPath = join(quirkyHome(), 'logs', 'daemon.log')
 let stopping = false
@@ -133,9 +163,50 @@ function createWindow(
   lifecycle: WindowLifecycle = { kind: 'main' }
 ): BrowserWindow {
   let created: BrowserWindow | null = null
+  const popupWindows = new Set<BrowserWindow>()
+  const openPopup = (popup: NativeBrowserPopup): boolean => {
+    if (!created) return false
+    const width = Math.min(Math.max(popup.width ?? 520, 320), 1200)
+    const height = Math.min(Math.max(popup.height ?? 640, 320), 1000)
+    const popupWindow = new BrowserWindow({
+      title: popupWindowTitle(popup.url),
+      frame: { x: 160, y: 120, width, height },
+      html: '<!doctype html><title>Popup</title>',
+      url: null
+    })
+    // The adopted view is the page WebKit already created for the opener, so window.opener and a POST body survive.
+    const view = new BrowserView({
+      windowId: popupWindow.id,
+      popupRequestId: popup.requestId,
+      partition: popup.partition,
+      renderer: 'native',
+      sandbox: true,
+      autoResize: true,
+      frame: { x: 0, y: 0, width, height }
+    })
+    view.setNavigationRules([...NATIVE_BROWSER_NAVIGATION_RULES])
+    view.on('did-navigate', (event) => {
+      const url = (event as { data?: { detail?: unknown } }).data?.detail
+      if (typeof url === 'string') popupWindow.setTitle(popupWindowTitle(url))
+    })
+    view.on('close-requested', () => popupWindow.close())
+    popupWindows.add(popupWindow)
+    popupWindow.on('close', () => popupWindows.delete(popupWindow))
+    popupWindow.show()
+    popupWindow.activate()
+    return true
+  }
   const nativeBrowserHandlers = createNativeBrowserHandlers({
     getWindow: () => created ? { id: created.id, webview: created.webview } : null,
-    getView: (id) => BrowserView.getById(id)
+    getView: (id) => BrowserView.getById(id),
+    sessionProxy: {
+      supported: () => Session.supportsProxy,
+      set: (partition, proxy) => Session.fromPartition(partition).setProxy(proxy)
+    },
+    sendPageEvent: (message) => rpc.send.nativeBrowserPageEvent(message),
+    openPopup,
+    storage: nativeBrowserStorage,
+    defaultUserAgent: () => BrowserView.getDefaultUserAgent()
   })
   const pickFolder = async (request: NativeBrowserHostRPC['bun']['requests']['pickFolder']['params']) => {
     if (process.platform !== 'darwin') throw new Error('native directory selection is unavailable on this platform')
@@ -188,14 +259,21 @@ function createWindow(
     handlers: {
       requests: {
         claimNativeBrowserView: nativeBrowserHandlers.claim,
+        nativeBrowserDefaultUserAgent: nativeBrowserHandlers.defaultUserAgent,
         setNativeBrowserZoom: nativeBrowserHandlers.setZoom,
         releaseNativeBrowserView: nativeBrowserHandlers.release,
+        routeNativeBrowserLabels: nativeBrowserHandlers.routeLabels,
+        answerNativeBrowserRequest: nativeBrowserHandlers.answer,
+        cancelNativeBrowserDownload: nativeBrowserHandlers.cancelDownload,
+        prepareNativeBrowserPartition: nativeBrowserHandlers.prepare,
+        clearNativeBrowserPartition: nativeBrowserHandlers.clear,
         pickFolder,
         openWindow,
         closeWindow,
         readClipboardText: () => Utils.clipboardReadText() ?? '',
         revealItem,
-        activateOwner
+        activateOwner,
+        dropSourcePathsSupported: () => created?.webview.supportsDropSourcePaths() ?? false
       }
     }
   })
@@ -207,6 +285,13 @@ function createWindow(
     ...nativeBrowserWindowOptions
   })
   const ownedWindow = created
+  if (process.platform === 'darwin') {
+    const sendDropSourcePaths = (rpc as unknown as { send: { dropSourcePaths(message: { paths: string[] }): void } }).send
+    ownedWindow.webview.on('drop-source-paths', (event) => {
+      const paths = dropSourcePathsFromEvent(event)
+      if (paths) sendDropSourcePaths.dropSourcePaths({ paths })
+    })
+  }
   if (lifecycle.kind === 'auxiliary') {
     auxiliaryWindows.set(lifecycle.windowId, {
       ownerWindowId: lifecycle.ownerWindowId,
@@ -216,6 +301,7 @@ function createWindow(
   }
   ownedWindow.on('close', () => {
     nativeBrowserHandlers.dispose()
+    for (const popupWindow of popupWindows) popupWindow.close()
     if (lifecycle.kind === 'main') {
       for (const child of auxiliaryWindows.values()) {
         if (child.ownerWindowId === ownedWindow.id) child.window.close()
@@ -396,6 +482,27 @@ try {
   showError(error)
 }
 
+void registerNotificationPermission(notificationUtils, startupNotificationPermission).then((permission) => {
+  console.info('notification permission:', permission)
+})
+
+app.on('notification-click', (payload) => {
+  const id = notificationIdIn(payload)
+  if (!id) return
+  const connected = client
+  void nativeNotifications.click(id, {
+    showWindow,
+    call: (method, params) => connected ? connected.callAny(method, params) : Promise.resolve(undefined)
+  }).catch((error) => {
+    console.warn('opening the notification target failed:', error)
+  })
+})
+
+app.on('notification-dismiss', (payload) => {
+  const id = notificationIdIn(payload)
+  if (id) nativeNotifications.dismiss(id)
+})
+
 void maintainConnection({
   ensure: async () => {
     latest = await ensureDaemon({ replaceStale: true })
@@ -413,7 +520,7 @@ void maintainConnection({
     connected.onEvent((event) => {
       const notification = notificationFor(event)
       if (notification) {
-        Utils.showNotification({ title: notification.title, body: notification.body, silent: notification.silent })
+        nativeNotifications.show(notification)
         if (notification.soundFile) playSound(notification.soundFile, notification.volume)
       }
       const sound = soundIn(event)

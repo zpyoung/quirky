@@ -138,10 +138,10 @@ test('Browser routing CLI opens an actual worktree hosted pane and exposes truth
     expect(visible.layout.view).toMatchObject({ id: 'view:quirky.session/worktree', input: { worktree: `id:${worktree}` } })
     await expect(call(h, 'openLink', { worktree, url: 'javascript:alert(1)' })).rejects.toThrow()
     const before = await call(h, 'preferencesState') as PreferencesState
-    expect(before.localhostLabels.available).toBe(false)
+    expect(before.localhostLabels).toMatchObject({ available: true, enabled: false, labels: [] })
     await h.client.call('setting.set', { id: 'setting:quirky.browser/identityMode', value: 'native' })
     const after = await call(h, 'preferencesState') as PreferencesState
-    expect(after.identity).toMatchObject({ selected: 'native', active: 'clean', restartRequired: true, nativeSupported: false })
+    expect(after.identity).toMatchObject({ selected: 'native', active: 'clean', restartRequired: true, nativeSupported: process.platform === 'darwin' })
     expect(h.spawnCount()).toBe(0)
   } finally { await h.cleanup() }
 })
@@ -173,3 +173,38 @@ test('a claimed native clear with unknown completion never admits a new pane int
     expect(h.spawnCount()).toBe(0)
   } finally { await h.cleanup() }
 })
+
+test('Localhost Worktree Labels CLI opens a worktree localhost link at a label that reaches its server', async () => {
+  const h = await startBrowserHarness()
+  const devServer = Bun.serve({ port: 0, hostname: '127.0.0.1', fetch: (request) => new Response(`dev ${request.headers.get('host')} ${new URL(request.url).pathname}`) })
+  try {
+    const worktree = await h.addFolderWorktree('LabelRoutes')
+    await h.client.call('setting.set', { id: 'setting:quirky.browser/openLinksInApp', value: true })
+    const target = `http://localhost:${devServer.port}/login`
+    const off = await cli(h, ['browser', 'localhost-label', 'register', '--url', target, '--worktree', 'name:LabelRoutes', '--json'])
+    expect(off.code).not.toBe(0)
+    expect(off.stdout + off.stderr).toContain('Localhost Worktree Labels are off')
+
+    await h.client.call('setting.set', { id: 'setting:quirky.browser/localhostWorktreeLabelsEnabled', value: true })
+    const opened = await cli(h, ['browser', 'open-link', '--url', target, '--worktree', 'name:LabelRoutes', '--json'])
+    expect(opened.code).toBe(0)
+    const { pane: paneId } = JSON.parse(opened.stdout) as { pane: string }
+    const state = await call(h, 'paneState') as { tabs: PaneTab[] }
+    const pane = state.tabs.find((item) => item.id === paneId)
+    const labelled = new URL(pane?.url ?? '')
+    expect(labelled.hostname).toBe('labelroutes.quirky.localhost')
+    expect(labelled.pathname).toBe('/login')
+    expect(pane).toMatchObject({ worktreeId: worktree, mode: 'native' })
+
+    const listed = await cli(h, ['browser', 'localhost-label', 'list', '--json'])
+    expect(JSON.parse(listed.stdout)).toEqual({
+      labels: [{ label: 'labelroutes', worktreeId: worktree, target: `http://localhost:${devServer.port}`, url: `${labelled.origin}/` }]
+    })
+    const reply = await fetch(`http://127.0.0.1:${labelled.port}/login`, { headers: { host: labelled.host } })
+    expect(await reply.text()).toBe(`dev localhost:${devServer.port} /login`)
+    expect(h.spawnCount()).toBe(0)
+  } finally {
+    devServer.stop(true)
+    await h.cleanup()
+  }
+}, 20_000)

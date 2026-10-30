@@ -167,7 +167,8 @@ export class BrowserService {
       this.runtime,
       (selector, caller, allowNoScope) => this.resolveWorktreeTarget(selector, undefined, caller, allowNoScope),
       () => this.listWorktrees(),
-      this.dependencies.downloadDirectory
+      this.dependencies.downloadDirectory,
+      this.dependencies.promptTimeoutMs
     )
     this.design = new DesignService(context, this.runtime, () => this.panes.listPanes(), (pageId) => this.store.getPage(pageId))
   }
@@ -181,7 +182,8 @@ export class BrowserService {
       listPanes: () => this.listPanes(),
       listPageProfiles: () => this.store.listPages().map((page) => page.profileId),
       setPaneProfile: (pane, profile) => this.setPaneProfile(pane, profile),
-      clearProfile: (profile, remove) => this.profileLifecycle.clearProfile(profile, remove)
+      clearProfile: (profile, remove) => this.profileLifecycle.clearProfile(profile, remove),
+      nativeIdentitySupported: process.platform === 'darwin'
     })
   }
   async setPaneProfile(paneId: string, profileId: string): Promise<PaneTab> {
@@ -228,7 +230,7 @@ export class BrowserService {
     }
     if ((PANE_METHODS as readonly string[]).includes(name)) {
       const result = await this.panes.call(name as PaneMethod, params, caller)
-      if (name === 'paneClose' || name === 'paneWatchStop' || name === 'paneNavigate') {
+      if (name === 'paneClose' || name === 'paneWatchStop' || name === 'paneNavigate' || name === 'panePreview') {
         const pane = typeof params.pane === 'string' ? params.pane : ''
         if (pane !== '') await this.design.cancelPane(pane)
       }

@@ -1,0 +1,30 @@
+{
+  "item": "sa-browser-pane-native-host-controls",
+  "spec": "docs/quirk/specs/2026-10-28-sa-browser-pane-native-host-controls/logic.md",
+  "scenarios": [
+    {
+      "id": "HC1-native",
+      "title": "On a build pinned to a fork release with patch/hard-reload-load-failed, in a newly created run-owned profile_<32hex> partition only: open a Native pane on a loopback page served with Cache-Control max-age; Browser menu shows Hard Reload (not the unavailable note); clicking it and pressing Mod+Shift+R each reload at the unchanged URL, the server logs Cache-Control: no-cache and Pragma: no-cache, and the page shows the fresh response",
+      "status": "pending",
+      "lastRun": null,
+      "report": null,
+      "summary": null
+    },
+    {
+      "id": "HC2-native",
+      "title": "Same build and run-owned profile: typing a closed loopback port in the address bar shows Page could not load with the engine error and keeps the typed address; after the port starts serving, clicking Retry loads it and clears the error; a self-signed HTTPS loopback URL shows the certificate error without any certificate override",
+      "status": "pending",
+      "lastRun": null,
+      "report": null,
+      "summary": null
+    },
+    {
+      "id": "HC3-native",
+      "title": "Same build and run-owned profile: start a navigation to a never-accepting loopback port, then navigate to a working page before it fails; the working page stays with no error overlay, and closing the pane during a pending navigation leaves no resurrected view or late error",
+      "status": "pending",
+      "lastRun": null,
+      "report": null,
+      "summary": null
+    }
+  ]
+}

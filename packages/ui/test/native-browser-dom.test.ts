@@ -2,13 +2,28 @@ import { afterAll, beforeAll, expect, test } from 'bun:test'
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
 import { act, createElement, useState } from 'react'
 import type { Root } from 'react-dom/client'
-import { createElectrobunNativeBrowserAdapter, createNativeBrowserCapability } from '../src/native-browser'
+import { NATIVE_BROWSER_DEFAULT_MASKS, createElectrobunNativeBrowserAdapter, createNativeBrowserCapability, type NativeBrowserShellBridge } from '../src/native-browser'
+
+type RequiredShell = 'claimNativeBrowserView' | 'setNativeBrowserZoom' | 'releaseNativeBrowserView'
+
+/** Fills the shell members a case doesn't exercise, so each case names only what it's about. */
+function adapterFor(bridge: Partial<NativeBrowserShellBridge> & Pick<NativeBrowserShellBridge, RequiredShell>) {
+  return createElectrobunNativeBrowserAdapter({
+    routeNativeBrowserLabels: async () => ({ routed: true }),
+    nativeBrowserDefaultUserAgent: async () => ({ userAgent: null }),
+    ...bridge
+  })
+}
 
 type GuestView = HTMLElement & {
   emitState(detail: unknown): void
   emitEvent(name: string, detail: unknown): void
   onExecute?: (script: string) => void
   lastExecution?: string
+  listeners: Map<string, Set<(event: CustomEvent) => void>>
+  loadURL(url: string): void
+  reloadIgnoringCache?(): Promise<boolean>
+  supportsReloadIgnoringCache?(): Promise<boolean>
 }
 let announceGuest: ((guest: GuestView) => void) | undefined
 let createRoot: (element: HTMLElement) => Root
@@ -54,30 +69,35 @@ beforeAll(async () => {
 })
 afterAll(() => GlobalRegistrator.unregister())
 
-async function mountGuest(claimGate?: Promise<void>) {
+async function mountGuest(claimGate?: Promise<void>, userAgent?: string) {
+  const claims: Array<{ userAgent: string | null }> = []
   const element = document.createElement('div')
   document.body.append(element)
   const mounted = Promise.withResolvers<GuestView>()
   const released = Promise.withResolvers<void>()
   announceGuest = mounted.resolve
-  const capability = createNativeBrowserCapability(createElectrobunNativeBrowserAdapter({
-    async claimNativeBrowserView() {
+  const capability = createNativeBrowserCapability(adapterFor({
+    async claimNativeBrowserView(params) {
+      claims.push({ userAgent: params.userAgent })
       if (claimGate) await claimGate
       return { zoomFactor: 1 }
     },
+    async nativeBrowserDefaultUserAgent() { return { userAgent: 'Mozilla/5.0 (Macintosh) AppleWebKit/605.1.15 (KHTML, like Gecko)' } },
     async setNativeBrowserZoom({ level }) { return { zoomFactor: Math.pow(1.2, level) } },
-    async releaseNativeBrowserView() { released.resolve(); return { released: true } }
+    async releaseNativeBrowserView() { released.resolve(); return { released: true } },
+    async routeNativeBrowserLabels() { return { routed: true } }
   }))
   const handle = capability.mount(element, {
     id: crypto.randomUUID(), url: 'about:blank', zoom: 0,
-    partition: `persist:quirky-browser-profile_${crypto.randomUUID().replaceAll('-', '')}`, onState() {}
+    partition: `persist:quirky-browser-profile_${crypto.randomUUID().replaceAll('-', '')}`, onState() {},
+    ...(userAgent === undefined ? {} : { userAgent })
   })
   const guest = await mounted.promise
   const preload = guest?.getAttribute('preload')
   if (!guest || !preload) throw new Error('native adapter did not attach its real guest program')
   ;(window as Window & { __electrobunSendToHost?: (detail: unknown) => void }).__electrobunSendToHost = (detail) => guest.emitState(detail)
   window.eval(preload)
-  return { handle, guest, async cleanup() { handle.dispose(); await released.promise; element.remove() } }
+  return { handle, guest, claims, capability, async cleanup() { handle.dispose(); await released.promise; element.remove() } }
 }
 
 test('finding text does not replace framework-owned nodes or break a later page update', async () => {
@@ -273,3 +293,447 @@ test('native evaluation times out when guest work never settles', async () => {
     await guest.cleanup()
   }
 }, 8000)
+
+test('a label URL loads only after its partition routes label hosts to the label proxy', async () => {
+  for (const routed of [true, false]) {
+    const routes: number[] = []
+    const loads: string[] = []
+    const element = document.createElement('div')
+    document.body.append(element)
+    const mounted = Promise.withResolvers<GuestView>()
+    const released = Promise.withResolvers<void>()
+    announceGuest = mounted.resolve
+    const capability = createNativeBrowserCapability(adapterFor({
+      async claimNativeBrowserView() { return { zoomFactor: 1 } },
+      async setNativeBrowserZoom() { return { zoomFactor: 1 } },
+      async releaseNativeBrowserView() { released.resolve(); return { released: true } },
+      async routeNativeBrowserLabels({ port }) { routes.push(port); return { routed } }
+    }))
+    const handle = capability.mount(element, {
+      id: crypto.randomUUID(), url: 'about:blank', zoom: 0,
+      partition: `persist:quirky-browser-profile_${crypto.randomUUID().replaceAll('-', '')}`, onState() {}
+    })
+    const guest = await mounted.promise
+    // record loads instead of navigating; the requests below never see a completed navigation
+    Object.assign(guest, { loadURL: (url: string) => { loads.push(url) } })
+    try {
+      const label = handle.request({ action: 'navigate', url: 'http://feature-a.quirky.localhost:4100/app' })
+      label.catch(() => undefined)
+      if (routed) {
+        for (let attempt = 0; attempt < 50 && loads.length === 0; attempt += 1) await Bun.sleep(5)
+        expect(routes).toEqual([4100])
+        expect(loads).toEqual(['http://feature-a.quirky.localhost:4100/app'])
+      } else {
+        await expect(label).rejects.toThrow('macOS 14')
+        expect(routes).toEqual([4100])
+        expect(loads).toEqual([])
+        handle.request({ action: 'navigate', url: 'https://example.test/' }).catch(() => undefined)
+        for (let attempt = 0; attempt < 50 && loads.length === 0; attempt += 1) await Bun.sleep(5)
+        expect(routes).toEqual([4100])
+        expect(loads).toEqual(['https://example.test/'])
+      }
+    } finally {
+      handle.dispose()
+      await released.promise
+      element.remove()
+    }
+  }
+})
+
+test('a navigation that overtakes a slow label route stays current and the label request still settles', async () => {
+  const element = document.createElement('div')
+  document.body.append(element)
+  const mounted = Promise.withResolvers<GuestView>()
+  const released = Promise.withResolvers<void>()
+  const route = Promise.withResolvers<{ routed: boolean }>()
+  const routing = Promise.withResolvers<void>()
+  const loads: string[] = []
+  announceGuest = mounted.resolve
+  const capability = createNativeBrowserCapability(adapterFor({
+    async claimNativeBrowserView() { return { zoomFactor: 1 } },
+    async setNativeBrowserZoom() { return { zoomFactor: 1 } },
+    async releaseNativeBrowserView() { released.resolve(); return { released: true } },
+    routeNativeBrowserLabels() { routing.resolve(); return route.promise }
+  }))
+  const handle = capability.mount(element, {
+    id: crypto.randomUUID(), url: 'about:blank', zoom: 0,
+    partition: `persist:quirky-browser-profile_${crypto.randomUUID().replaceAll('-', '')}`, onState() {}
+  })
+  const guest = await mounted.promise
+  Object.assign(guest, { loadURL: (url: string) => { loads.push(url) } })
+  try {
+    await handle.request({ action: 'zoom', level: 0 })
+    const label = handle.request({ action: 'navigate', url: 'http://feature-a.quirky.localhost:4100/app' })
+    await routing.promise
+    handle.request({ action: 'navigate', url: 'https://example.test/' }).catch(() => undefined)
+    for (let attempt = 0; attempt < 50 && loads.length === 0; attempt += 1) await Bun.sleep(5)
+    route.resolve({ routed: true })
+    await label
+    expect(loads).toEqual(['https://example.test/'])
+  } finally {
+    handle.dispose()
+    await released.promise
+    element.remove()
+  }
+})
+
+test('every native mask excludes closed details and fits the comma-separated masks attribute', () => {
+  // happy-dom can't evaluate this nested :not(), so the shape is asserted here; WebKit runs it in the app
+  expect(NATIVE_BROWSER_DEFAULT_MASKS.length).toBeGreaterThan(0)
+  for (const selector of NATIVE_BROWSER_DEFAULT_MASKS) {
+    expect(selector).toEndWith(':not(details:not([open]) *)')
+    expect(selector).not.toContain(',')
+  }
+})
+
+test('an overlay opening over a still view re-syncs its masks until the view is disposed', async () => {
+  const guest = await mountGuest()
+  const overlay = document.createElement('div')
+  overlay.setAttribute('role', 'dialog')
+  try {
+    let syncs = 0
+    Object.assign(guest.guest, { syncDimensions: () => { syncs += 1 } })
+    await Bun.sleep(250)
+    expect(syncs).toBe(0)
+
+    document.body.append(overlay)
+    await Bun.sleep(250)
+    expect(syncs).toBe(1)
+
+    overlay.remove()
+    await Bun.sleep(250)
+    expect(syncs).toBe(2)
+
+    await guest.cleanup()
+    document.body.append(overlay)
+    await Bun.sleep(250)
+    expect(syncs).toBe(2)
+  } finally {
+    overlay.remove()
+  }
+})
+
+const CLOSED_URL = 'http://127.0.0.1:9/closed'
+const connectionFailure = (url: string) => ({
+  url, domain: 'NSURLErrorDomain', code: -1004, description: 'Could not connect to the server.'
+})
+
+/** Mounts a guest whose tag reports `support` for cache-bypassing reload, as the patched SDK does. */
+async function mountGuestWithHardReload(support: boolean | 'absent') {
+  const claim = Promise.withResolvers<void>()
+  const guest = await mountGuest(claim.promise)
+  const reloads: string[] = []
+  if (support !== 'absent') {
+    guest.guest.supportsReloadIgnoringCache = async () => support
+    guest.guest.reloadIgnoringCache = async () => {
+      reloads.push('reloadIgnoringCache')
+      return support
+    }
+  }
+  claim.resolve()
+  return { ...guest, reloads }
+}
+
+test('native hard reload bypasses the engine cache through the tag when the webview supports it', async () => {
+  const guest = await mountGuestWithHardReload(true)
+  try {
+    const before = await guest.handle.request({ action: 'zoom', level: 0 })
+    expect(before.hardReloadAvailable).toBe(true)
+    guest.guest.reloadIgnoringCache = async () => {
+      guest.reloads.push('reloadIgnoringCache')
+      queueMicrotask(() => guest.guest.emitEvent('did-navigate', 'about:blank'))
+      return true
+    }
+    const after = await guest.handle.request({ action: 'hardReload' })
+    expect(guest.reloads).toEqual(['reloadIgnoringCache'])
+    expect(after).toMatchObject({ url: 'about:blank', loading: false, error: null, hardReloadAvailable: true })
+  } finally {
+    await guest.cleanup()
+  }
+})
+
+test('native hard reload stays unavailable, never an ordinary reload, when the webview cannot bypass its cache', async () => {
+  for (const support of [false, 'absent'] as const) {
+    const guest = await mountGuestWithHardReload(support)
+    try {
+      const before = await guest.handle.request({ action: 'zoom', level: 0 })
+      expect(before.hardReloadAvailable).toBe(false)
+      await expect(guest.handle.request({ action: 'hardReload' })).rejects.toThrow(/hard reload is unavailable/i)
+      expect(guest.reloads).toEqual([])
+    } finally {
+      await guest.cleanup()
+    }
+  }
+})
+
+test('a native load failure keeps the requested URL, ends loading, and a retry navigation clears it', async () => {
+  const guest = await mountGuest()
+  try {
+    guest.guest.loadURL = (url) => queueMicrotask(() => {
+      guest.guest.emitEvent('will-navigate', JSON.stringify({ url, allowed: true }))
+      guest.guest.emitEvent('load-failed', connectionFailure(url))
+    })
+    const failed = await guest.handle.request({ action: 'navigate', url: CLOSED_URL })
+    expect(failed).toMatchObject({ url: CLOSED_URL, loading: false })
+    expect(failed.error).toBe('Could not connect to the server. (NSURLErrorDomain -1004)')
+
+    guest.guest.loadURL = (url) => queueMicrotask(() => {
+      guest.guest.emitEvent('will-navigate', JSON.stringify({ url, allowed: true }))
+      guest.guest.emitEvent('did-navigate', url)
+    })
+    const retried = await guest.handle.request({ action: 'navigate', url: failed.url })
+    expect(retried).toMatchObject({ url: CLOSED_URL, loading: false, error: null })
+  } finally {
+    await guest.cleanup()
+  }
+})
+
+test('a native failure after a redirect reports the redirect target the engine failed on', async () => {
+  const guest = await mountGuest()
+  const redirected = 'https://redirected.test/landing'
+  try {
+    guest.guest.loadURL = (url) => queueMicrotask(() => {
+      guest.guest.emitEvent('will-navigate', JSON.stringify({ url, allowed: true }))
+      guest.guest.emitEvent('will-navigate', JSON.stringify({ url: redirected, allowed: true }))
+      guest.guest.emitEvent('load-failed', JSON.stringify({
+        url: redirected, domain: 'NSURLErrorDomain', code: -1202, description: 'The certificate for this server is invalid.'
+      }))
+    })
+    const failed = await guest.handle.request({ action: 'navigate', url: 'https://example.test/start' })
+    expect(failed).toMatchObject({ url: redirected, loading: false, error: 'The certificate for this server is invalid. (NSURLErrorDomain -1202)' })
+  } finally {
+    await guest.cleanup()
+  }
+})
+
+test('a late native failure from an earlier navigation cannot replace the current one', async () => {
+  const guest = await mountGuest()
+  const current = 'https://example.test/current'
+  try {
+    guest.guest.loadURL = (url) => queueMicrotask(() => guest.guest.emitEvent('will-navigate', JSON.stringify({ url, allowed: true })))
+    const superseded = guest.handle.request({ action: 'navigate', url: CLOSED_URL })
+    await Promise.resolve()
+    guest.guest.loadURL = (url) => queueMicrotask(() => {
+      guest.guest.emitEvent('will-navigate', JSON.stringify({ url, allowed: true }))
+      guest.guest.emitEvent('did-navigate', url)
+    })
+    const loaded = await guest.handle.request({ action: 'navigate', url: current })
+    await superseded
+    guest.guest.emitEvent('load-failed', connectionFailure(CLOSED_URL))
+    const state = await guest.handle.request({ action: 'zoom', level: 0 })
+    expect(loaded).toMatchObject({ url: current, error: null })
+    expect(state).toMatchObject({ url: current, loading: false, error: null })
+  } finally {
+    await guest.cleanup()
+  }
+})
+
+test('a stopped or download-converted native navigation is not shown as a load error', async () => {
+  const guest = await mountGuest()
+  try {
+    guest.guest.emitEvent('will-navigate', JSON.stringify({ url: CLOSED_URL, allowed: true }))
+    guest.guest.emitEvent('load-failed', { ...connectionFailure(CLOSED_URL), code: -999, description: 'cancelled' })
+    guest.guest.emitEvent('load-failed', { ...connectionFailure(CLOSED_URL), domain: 'WebKitErrorDomain', code: 102, description: 'Frame load interrupted' })
+    const state = await guest.handle.request({ action: 'zoom', level: 0 })
+    expect(state.error).toBeNull()
+  } finally {
+    await guest.cleanup()
+  }
+})
+
+test('a disposed native view stops listening for load failures', async () => {
+  const guest = await mountGuest()
+  await guest.handle.request({ action: 'zoom', level: 0 })
+  expect(guest.guest.listeners.get('load-failed')?.size).toBe(1)
+  await guest.cleanup()
+  expect(guest.guest.listeners.get('load-failed')?.size ?? 0).toBe(0)
+})
+
+test('page requests route to the owning mount, answer through the claim, and stop after dispose', async () => {
+  const element = document.createElement('div')
+  document.body.append(element)
+  const mounted = Promise.withResolvers<GuestView>()
+  announceGuest = mounted.resolve
+  const listeners = new Set<(viewId: number, event: import('../src/native-browser').NativeBrowserPageEvent) => void>()
+  const answers: Array<{ viewId: number; owner: string; id: string; accept: boolean }> = []
+  const owners = new Set<string>()
+  const released = Promise.withResolvers<void>()
+  const capability = createNativeBrowserCapability(adapterFor({
+    async claimNativeBrowserView({ owner }) { owners.add(owner); return { zoomFactor: 1, pageRequests: true } },
+    async setNativeBrowserZoom({ level }) { return { zoomFactor: Math.pow(1.2, level) } },
+    async releaseNativeBrowserView() { released.resolve(); return { released: true } },
+    async answerNativeBrowserRequest({ viewId, owner, id, answer }) {
+      answers.push({ viewId, owner, id, accept: answer.accept })
+      return { answered: true }
+    },
+    async cancelNativeBrowserDownload({ id }) { return { cancelled: id === 'download-1' } },
+    onNativeBrowserPageEvent(listener) {
+      listeners.add(listener)
+      return () => listeners.delete(listener)
+    }
+  }))
+  expect(capability.pageRequestsAvailable).toBe(true)
+  const seen: string[] = []
+  const handle = capability.mount(element, {
+    id: crypto.randomUUID(), url: 'about:blank', zoom: 0,
+    partition: `persist:quirky-browser-profile_${crypto.randomUUID().replaceAll('-', '')}`, onState() {},
+    onPageRequest: (request) => seen.push(`request:${request.kind}:${request.id}`),
+    onPageRequestExpired: (id) => seen.push(`expired:${id}`),
+    onDownload: (update) => seen.push(`download:${update.id}:${update.state}`)
+  })
+  await mounted.promise
+  for (let attempt = 0; attempt < 50 && listeners.size === 0; attempt++) await new Promise((resolve) => setTimeout(resolve, 5))
+  const emit = (viewId: number, event: import('../src/native-browser').NativeBrowserPageEvent) => { for (const listener of listeners) listener(viewId, event) }
+
+  emit(99, { type: 'request', request: { id: '1', kind: 'alert', origin: 'https://other.test', frameUrl: '', message: 'not mine' } })
+  emit(7, { type: 'request', request: { id: '2', kind: 'confirm', origin: 'https://site.test', frameUrl: '', message: 'Sure?' } })
+  emit(7, { type: 'expired', id: '2' })
+  emit(7, { type: 'download', update: { id: 'download-1', state: 'started', path: '/tmp/a' } })
+  expect(seen).toEqual(['request:confirm:2', 'expired:2', 'download:download-1:started'])
+
+  expect(await handle.answer?.('2', { accept: true })).toBe(true)
+  expect(answers).toEqual([{ viewId: 7, owner: [...owners][0]!, id: '2', accept: true }])
+  expect(await handle.cancelDownload?.('download-1')).toBe(true)
+
+  handle.dispose()
+  await released.promise
+  expect(listeners.size).toBe(0)
+  expect(await handle.answer?.('3', { accept: true })).toBe(false)
+  element.remove()
+})
+
+test('a mount without a page request listener declines requests instead of leaving the page paused', async () => {
+  const element = document.createElement('div')
+  document.body.append(element)
+  const mounted = Promise.withResolvers<GuestView>()
+  announceGuest = mounted.resolve
+  const listeners = new Set<(viewId: number, event: import('../src/native-browser').NativeBrowserPageEvent) => void>()
+  const answers: Array<{ id: string; accept: boolean }> = []
+  const released = Promise.withResolvers<void>()
+  const handle = createNativeBrowserCapability(adapterFor({
+    async claimNativeBrowserView() { return { zoomFactor: 1, pageRequests: true } },
+    async setNativeBrowserZoom({ level }) { return { zoomFactor: Math.pow(1.2, level) } },
+    async releaseNativeBrowserView() { released.resolve(); return { released: true } },
+    async answerNativeBrowserRequest({ id, answer }) { answers.push({ id, accept: answer.accept }); return { answered: true } },
+    onNativeBrowserPageEvent(listener) { listeners.add(listener); return () => listeners.delete(listener) }
+  })).mount(element, {
+    id: crypto.randomUUID(), url: 'about:blank', zoom: 0,
+    partition: `persist:quirky-browser-profile_${crypto.randomUUID().replaceAll('-', '')}`, onState() {}
+  })
+  await mounted.promise
+  for (let attempt = 0; attempt < 50 && listeners.size === 0; attempt++) await new Promise((resolve) => setTimeout(resolve, 5))
+  for (const listener of listeners) listener(7, { type: 'request', request: { id: '4', kind: 'popup', origin: 'https://site.test', url: 'https://x.test', method: 'GET', width: null, height: null } })
+  for (let attempt = 0; attempt < 50 && answers.length === 0; attempt++) await new Promise((resolve) => setTimeout(resolve, 5))
+  expect(answers).toEqual([{ id: '4', accept: false }])
+  handle.dispose()
+  await released.promise
+  element.remove()
+})
+
+test('the profile store is assigned before the guest view exists', async () => {
+  const element = document.createElement('div')
+  document.body.append(element)
+  const partition = `persist:quirky-browser-profile_${crypto.randomUUID().replaceAll('-', '')}`
+  const events: string[] = []
+  const mounted = Promise.withResolvers<GuestView>()
+  const released = Promise.withResolvers<void>()
+  announceGuest = (guest) => { events.push('guest'); mounted.resolve(guest) }
+  const capability = createNativeBrowserCapability(adapterFor({
+    async prepareNativeBrowserPartition(params) {
+      events.push(`prepare:${params.partition}:${element.querySelector('electrobun-webview') ? 'late' : 'first'}`)
+      return { storageIdentifier: '9B0C5E52-8F3A-4C1D-9E7B-2A6F4D8C1E35' }
+    },
+    async claimNativeBrowserView() { events.push('claim'); return { zoomFactor: 1 } },
+    async setNativeBrowserZoom({ level }) { return { zoomFactor: Math.pow(1.2, level) } },
+    async releaseNativeBrowserView() { released.resolve(); return { released: true } }
+  }))
+  const handle = capability.mount(element, { id: crypto.randomUUID(), url: 'about:blank', zoom: 0, partition, onState() {} })
+  try {
+    const guest = await mounted.promise
+    expect(guest.getAttribute('partition')).toBe(partition)
+    await Bun.sleep(0)
+    expect(events).toEqual([`prepare:${partition}:first`, 'guest', 'claim'])
+  } finally {
+    handle.dispose()
+    await released.promise
+    element.remove()
+  }
+})
+
+test('an isolated preview mount asks the SDK for a preview view and claims it with its grant', async () => {
+  const element = document.createElement('div')
+  document.body.append(element)
+  const mounted = Promise.withResolvers<GuestView>()
+  const claimed = Promise.withResolvers<Record<string, unknown>>()
+  const released = Promise.withResolvers<void>()
+  announceGuest = mounted.resolve
+  const grant = { id: 'a'.repeat(32), root: '/work/report', entry: 'index.html', entryOnly: false }
+  const prepared: string[] = []
+  const capability = createNativeBrowserCapability(adapterFor({
+    previewAvailable: true,
+    async prepareNativeBrowserPartition({ partition }) { prepared.push(partition); return { storageIdentifier: null } },
+    async claimNativeBrowserView(params) { claimed.resolve(params); return { zoomFactor: 1 } },
+    async setNativeBrowserZoom({ level }) { return { zoomFactor: Math.pow(1.2, level) } },
+    async releaseNativeBrowserView() { released.resolve(); return { released: true } }
+  }))
+  const handle = capability.mount(element, { id: 'preview-pane', url: 'about:blank', zoom: 0, partition: '', preview: grant, onState() {} })
+  try {
+    const guest = await mounted.promise
+    expect(guest.getAttribute('isolated-preview')).toBe('quirky-preview')
+    expect(guest.hasAttribute('partition')).toBe(false)
+    expect(guest.hasAttribute('sandbox')).toBe(true)
+    expect(JSON.parse(guest.getAttribute('navigation-rules') ?? '[]')).toEqual(['^*', 'quirky-preview://*', 'about:blank'])
+    expect(await claimed.promise).toMatchObject({ viewId: 7, preview: grant })
+    expect(prepared).toEqual([])
+  } finally {
+    handle.dispose()
+    await released.promise
+    element.remove()
+  }
+})
+
+test('a failed store assignment never creates a guest view', async () => {
+  const element = document.createElement('div')
+  document.body.append(element)
+  let claims = 0
+  const states: Array<string | null> = []
+  const capability = createNativeBrowserCapability(adapterFor({
+    async prepareNativeBrowserPartition() { throw new Error('native browser profile storage could not be assigned') },
+    async claimNativeBrowserView() { claims += 1; return { zoomFactor: 1 } },
+    async setNativeBrowserZoom() { return { zoomFactor: 1 } },
+    async releaseNativeBrowserView() { return { released: true } }
+  }))
+  const handle = capability.mount(element, {
+    id: crypto.randomUUID(), url: 'about:blank', zoom: 0,
+    partition: `persist:quirky-browser-profile_${crypto.randomUUID().replaceAll('-', '')}`,
+    onState: (state) => states.push(state.error)
+  })
+  try {
+    await Bun.sleep(10)
+    expect(element.querySelector('electrobun-webview')).toBeNull()
+    expect(claims).toBe(0)
+    expect(states).toContain('native browser profile storage could not be assigned')
+  } finally {
+    handle.dispose()
+    element.remove()
+  }
+})
+
+test('the trusted claim carries the requested user agent, or null to keep the engine default', async () => {
+  const cleaned = 'Mozilla/5.0 (Macintosh) AppleWebKit/605.1.15 (KHTML, like Gecko)'
+  const withAgent = await mountGuest(undefined, cleaned)
+  try {
+    await withAgent.handle.request({ action: 'zoom', level: 0 })
+    expect(withAgent.claims).toEqual([{ userAgent: cleaned }])
+    expect(await withAgent.capability.defaultUserAgent()).toBe(cleaned)
+  } finally {
+    await withAgent.cleanup()
+  }
+  const engineDefault = await mountGuest()
+  try {
+    await engineDefault.handle.request({ action: 'zoom', level: 0 })
+    expect(engineDefault.claims).toEqual([{ userAgent: null }])
+  } finally {
+    await engineDefault.cleanup()
+  }
+})

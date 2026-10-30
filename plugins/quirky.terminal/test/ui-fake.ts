@@ -67,6 +67,7 @@ export function fakeContext(handlers: Record<string, Handler> = {}, settings: Re
   const context: UiPluginContext = {
     pluginId: 'quirky.terminal',
     nativeBrowser: createNativeBrowserCapability(),
+    nativeDropPaths: async () => null,
     readClipboardText: async () => (await navigator.clipboard?.readText()) ?? '',
     log() {},
     provide(id, implementation) {

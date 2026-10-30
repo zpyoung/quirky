@@ -89,12 +89,11 @@ function nativeDesktopCapabilities(params: Params): NativeDesktopCapabilities {
     permission === undefined || click === undefined || dismiss === undefined) {
     throw invalidParams('native desktop capabilities must include every supported operation')
   }
-  if (permission || click || dismiss) throw invalidParams('native notification callbacks are unavailable in this SDK')
   return {
     directoryPicker,
     auxiliaryWindows,
     revealItem,
-    notifications: { permission: false, click: false, dismiss: false }
+    notifications: { permission, click, dismiss }
   }
 }
 

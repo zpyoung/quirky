@@ -34,4 +34,6 @@ export type BrowserDependencies = {
   onControl?: (control: BrowserTestControl) => void
   /** Overrides the OS destination only for isolated runtime consumers/tests. */
   downloadDirectory?: string
+  /** Shortens the page-prompt deadline only for tests of its fail-closed path. */
+  promptTimeoutMs?: number
 }

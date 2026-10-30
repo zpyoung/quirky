@@ -10,11 +10,12 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent as ReactPointerEvent
 } from 'react'
-import type { NativeBrowserHandle, NativeBrowserRequest, NativeBrowserState, UiPluginContext } from '@quirky/protocol'
-import type { PaneCommand, PaneDownload, PaneFrame, PanePrompt, PaneState, PaneTab, PaneViewport } from '../pane-contract'
-import { acceptLatestFrame, isTextInputKey, nativePreviewNavigationUrl, nativePreviewReportUrl, paneForView, pointerToFramePoint } from './model'
+import type { NativeBrowserHandle, NativeBrowserPageRequest, NativeBrowserRequest, NativeBrowserState, UiPluginContext } from '@quirky/protocol'
+import type { PaneCommand, PaneDownload, PaneFrame, PaneNativeAction, PaneNativeDecision, PanePrompt, PaneState, PaneTab, PaneViewport } from '../pane-contract'
+import { acceptLatestFrame, isTextInputKey, nativePreviewNavigationUrl, nativePreviewReportUrl, paneAddress, paneForView, paneHistoryControls, pointerToFramePoint } from './model'
 import { DesignWindow, type DesignAction } from '../design-window/DesignWindow'
 import { BrowserImportHint, BrowserProfileMenu } from '../preferences-window/BrowserProfileMenu'
+import { nativePaneUserAgent } from '../preferences/native-identity'
 import { Badge, Button, EmptyState, FormRow, IconButton, ListRow, SectionHeader, StatusDot, TextField } from '@quirky/ui'
 
 const WORKTREE_VIEW = 'view:quirky.session/worktree'
@@ -304,7 +305,7 @@ function isPaneState(value: unknown): value is PaneState {
   return typeof value === 'object' && value !== null && Array.isArray(Reflect.get(value, 'tabs'))
 }
 
-function nativeRequest(command: PaneCommand, pane: PaneTab): NativeBrowserRequest | null {
+function nativeRequest(command: PaneCommand, pane: PaneTab, hardReloadAvailable: boolean): NativeBrowserRequest | null {
   switch (command.action) {
     case 'navigate': {
       const url = nativePreviewNavigationUrl(command.url, pane.preview?.url, window.location.href)
@@ -314,7 +315,7 @@ function nativeRequest(command: PaneCommand, pane: PaneTab): NativeBrowserReques
     case 'forward':
     case 'reload':
     case 'stop': return { action: command.action }
-    case 'hardReload': return null
+    case 'hardReload': return hardReloadAvailable ? { action: 'hardReload' } : null
     case 'find': return { action: 'find', text: command.text ?? '', ...(command.forward === undefined ? {} : { forward: command.forward }) }
     case 'zoom': return { action: 'zoom', level: command.level ?? 0 }
   }
@@ -375,12 +376,15 @@ export function BrowserPaneWindow({ context, input }: { context: UiPluginContext
   const [nativeMountRevision, setNativeMountRevision] = useState(0)
   const [nativeReady, setNativeReady] = useState(0)
   const [nativeState, setNativeState] = useState<NativeBrowserState | null>(null)
+  const [nativeUserAgent, setNativeUserAgent] = useState<{ value: string | undefined } | null>(null)
   const [pageList, setPageList] = useState<AgentPage[] | null>(null)
   const [pageListError, setPageListError] = useState<string | null>(null)
   const [pageListLoading, setPageListLoading] = useState(false)
   const [message, setMessage] = useState<{ text: string; kind: 'info' | 'error' } | null>(null)
   const [settings, setSettings] = useState(() => readSettings(context))
   const [promptValues, setPromptValues] = useState<Record<string, { text: string; username: string; password: string }>>({})
+  // Native sign-in credentials stay in this window: the daemon only learns that the user accepted.
+  const nativeCredentialsRef = useRef(new Map<string, { username: string; password: string }>())
   const [designPageHost, setDesignPageHost] = useState<HTMLDivElement | null>(null)
   const [browserFocused, setBrowserFocused] = useState(false)
 
@@ -464,6 +468,22 @@ export function BrowserPaneWindow({ context, input }: { context: UiPluginContext
         frameRef.current = accepted
         setFrame(accepted)
       }
+      if (event.type === 'quirky.browser/paneNative' && typeof event.data === 'object' && event.data !== null) {
+        const action = event.data as PaneNativeAction
+        const handle = nativeHandleRef.current
+        if (!handle || paneRef.current?.id !== action.pane || paneRef.current.mode !== 'native') return
+        if (action.action === 'cancelDownload') {
+          void handle.cancelDownload?.(action.id).catch(() => false)
+          return
+        }
+        const credentials = action.kind === 'auth' ? nativeCredentialsRef.current.get(action.prompt) : undefined
+        nativeCredentialsRef.current.delete(action.prompt)
+        void handle.answer?.(action.id, {
+          accept: action.accept,
+          ...(action.text === undefined ? {} : { text: action.text }),
+          ...(credentials && action.accept ? credentials : {})
+        }).catch(() => false)
+      }
       if (event.type === 'setting.changed' && event.id.startsWith('setting:quirky.browser/')) setSettings(readSettings(context))
     })
     return unsubscribe
@@ -471,14 +491,14 @@ export function BrowserPaneWindow({ context, input }: { context: UiPluginContext
 
   useEffect(() => {
     if (pane) {
-      if (!editingAddress) setAddress(pane.url)
+      if (!editingAddress) setAddress(paneAddress(pane))
       if (pane.id !== findPaneIdRef.current || !editingFindRef.current) {
         findPaneIdRef.current = pane.id
         findTextRef.current = pane.find.text
         setFindText(pane.find.text)
       }
     }
-  }, [pane?.id, pane?.url, pane?.find.text, editingAddress])
+  }, [pane?.id, pane?.url, pane?.document?.path, pane?.find.text, editingAddress])
   useEffect(() => {
     const activePrompts = new Set(pane?.prompts.map((prompt) => prompt.id) ?? [])
     setPromptValues((current) => {
@@ -618,14 +638,18 @@ export function BrowserPaneWindow({ context, input }: { context: UiPluginContext
   const reportNativeState = useCallback((
     native: NativeBrowserState,
     command?: PaneCommand,
-    target?: Pick<PaneTab, 'id' | 'profileId' | 'partition'>
+    target?: Pick<PaneTab, 'id' | 'profileId' | 'partition' | 'document'>
   ) => {
     const current = paneRef.current
     if (
       !mountedRef.current || !current || current.mode !== 'native' ||
-      (target && (current.id !== target.id || current.profileId !== target.profileId || current.partition !== target.partition))
+      (target && (
+        current.id !== target.id || current.profileId !== target.profileId || current.partition !== target.partition ||
+        current.document?.grant.id !== target.document?.grant.id
+      ))
     ) return
-    if (!command && current.command?.action === 'navigate' && native.url === 'about:blank') return
+    // the daemon rejects an unacknowledged report while a command is pending; that command's own report carries this state
+    if (!command && current.command) return
     void context.call('quirky.browser/paneReport', {
       pane: current.id,
       ...(command ? { command: command.id } : {}),
@@ -643,9 +667,35 @@ export function BrowserPaneWindow({ context, input }: { context: UiPluginContext
     })
   }, [context])
 
+  const relayNativeRequest = useCallback(async (handle: NativeHandle, paneId: string, request: NativeBrowserPageRequest) => {
+    try {
+      const decision = await context.call('quirky.browser/paneNativeRequest', { pane: paneId, request }) as PaneNativeDecision
+      if (decision.answer) {
+        await handle.answer?.(request.id, decision.answer)
+        if (request.kind === 'popup' && !decision.answer.accept && mountedRef.current) {
+          setMessage({ text: `A popup to ${request.url} was blocked: only HTTP(S) popups may open, at most four every two seconds.`, kind: 'info' })
+        }
+      }
+    } catch (error) {
+      await handle.answer?.(request.id, { accept: false }).catch(() => false)
+      if (mountedRef.current) setMessage({ text: errorText(error), kind: 'error' })
+    }
+  }, [context])
+
+  const nativeIdentityNeeded = pane?.mode === 'native' && context.nativeBrowser.available
+  useEffect(() => {
+    if (!nativeIdentityNeeded) return
+    let current = true
+    nativePaneUserAgent(context).then(
+      (value) => { if (current) setNativeUserAgent((previous) => previous && previous.value === value ? previous : { value }) },
+      (error: unknown) => { if (current) setNativeError(`Browser identity could not be read: ${errorText(error)}`) }
+    )
+    return () => { current = false }
+  }, [context, nativeIdentityNeeded, nativeRetry])
+
   useEffect(() => {
     const host = nativeHostRef.current
-    if (!pane || pane.mode !== 'native' || !context.nativeBrowser.available || !host) {
+    if (!pane || pane.mode !== 'native' || !context.nativeBrowser.available || !host || (pane.document && !context.nativeBrowser.previewAvailable)) {
       nativeHandleRef.current = null
       setNativeError(null)
       return
@@ -663,12 +713,15 @@ export function BrowserPaneWindow({ context, input }: { context: UiPluginContext
     let handle: NativeHandle
     setNativeState(null)
     setNativeReady(0)
+    if (!nativeUserAgent) return
     try {
       handle = context.nativeBrowser.mount(host, {
         id: pane.id,
         partition: pane.partition,
         url: pane.command?.action === 'navigate' ? 'about:blank' : pane.url,
         zoom: pane.zoom,
+        ...(pane.document ? { preview: pane.document.grant } : {}),
+        ...(nativeUserAgent.value === undefined ? {} : { userAgent: nativeUserAgent.value }),
         onState: (next) => {
           if (!mounted) return
           setNativeState(next)
@@ -678,6 +731,18 @@ export function BrowserPaneWindow({ context, input }: { context: UiPluginContext
           if (!mounted) return
           const gesture = userGesture ? 'after a user action' : 'without a user action'
           setMessage({ text: `A native popup was observed ${gesture}. Quirky cannot safely transfer named or opener-dependent windows; no URL-only popup was opened (${url}).`, kind: 'info' })
+        },
+        onPageRequest: (request) => {
+          if (!mounted) return
+          void relayNativeRequest(handle, pane.id, request)
+        },
+        onPageRequestExpired: (id) => {
+          if (!mounted) return
+          void context.call('quirky.browser/paneNativeUpdate', { pane: pane.id, expired: id }).catch(() => undefined)
+        },
+        onDownload: (update) => {
+          if (!mounted) return
+          void context.call('quirky.browser/paneNativeUpdate', { pane: pane.id, download: update }).catch(() => undefined)
         }
       })
       nativeHandleRef.current = handle
@@ -693,22 +758,22 @@ export function BrowserPaneWindow({ context, input }: { context: UiPluginContext
       if (nativeHandleRef.current === handle) nativeHandleRef.current = null
       handle.dispose()
     }
-  }, [context, pane?.id, pane?.mode, pane?.profileId, pane?.partition, context.nativeBrowser.available, reportNativeState, nativeRetry, nativeMountRevision])
+  }, [context, pane?.id, pane?.mode, pane?.profileId, pane?.partition, pane?.document?.grant.id, context.nativeBrowser.available, reportNativeState, relayNativeRequest, nativeRetry, nativeMountRevision, nativeUserAgent])
   useEffect(() => {
     if (!pane || pane.mode !== 'native' || !context.nativeBrowser.available) return
     const needsGuest = pane.url !== 'about:blank' || pane.loading || pane.command !== null || pane.canGoBack || pane.canGoForward
     if (needsGuest && !nativeHandleRef.current) setNativeMountRevision((revision) => revision + 1)
-  }, [pane?.id, pane?.mode, pane?.url, pane?.loading, pane?.command?.id, pane?.canGoBack, pane?.canGoForward, pane?.profileId, pane?.partition, context.nativeBrowser.available])
+  }, [pane?.id, pane?.mode, pane?.url, pane?.loading, pane?.command?.id, pane?.canGoBack, pane?.canGoForward, pane?.profileId, pane?.partition, pane?.document?.grant.id, context.nativeBrowser.available])
 
   useEffect(() => {
     const command = pane?.command
     const handle = nativeHandleRef.current
     if (!pane || pane.mode !== 'native' || !command || !handle || command.id === lastNativeCommandRef.current) return
-    const request = nativeRequest(command, pane)
+    const request = nativeRequest(command, pane, nativeState?.hardReloadAvailable === true)
     if (!request) {
       lastNativeCommandRef.current = command.id
       const reason = command.action === 'hardReload'
-        ? 'Hard Reload is unavailable in Native mode; the pinned SDK supports ordinary reload only.'
+        ? 'Hard Reload is unavailable in Native mode: this system webview cannot reload without its cache. Ordinary Reload is available.'
         : `Native browser cannot execute ${command.action} without a valid request.`
       setMessage({ text: reason, kind: 'info' })
       void context.call('quirky.browser/paneReport', {
@@ -726,7 +791,8 @@ export function BrowserPaneWindow({ context, input }: { context: UiPluginContext
       const current = paneRef.current
       if (
         !mountedRef.current || !current || current.id !== pane.id ||
-        current.profileId !== pane.profileId || current.partition !== pane.partition
+        current.profileId !== pane.profileId || current.partition !== pane.partition ||
+        current.document?.grant.id !== pane.document?.grant.id
       ) return
       void context.call('quirky.browser/paneReport', {
         pane: current.id,
@@ -737,7 +803,7 @@ export function BrowserPaneWindow({ context, input }: { context: UiPluginContext
         if (mountedRef.current) setMessage({ text: errorText(reportError), kind: 'error' })
       })
     })
-  }, [context, pane?.id, pane?.mode, pane?.profileId, pane?.partition, pane?.command?.id, nativeReady, reportNativeState])
+  }, [context, pane?.id, pane?.mode, pane?.profileId, pane?.partition, pane?.document?.grant.id, pane?.command?.id, nativeReady, reportNativeState])
 
   useEffect(() => {
     if (!pane || !suggestionsOpen) return
@@ -985,12 +1051,14 @@ export function BrowserPaneWindow({ context, input }: { context: UiPluginContext
 
   const respond = async (prompt: PanePrompt, accept: boolean) => {
     const values = promptValues[prompt.id] ?? { text: prompt.defaultValue ?? '', username: '', password: '' }
+    const nativeAuth = pane?.mode === 'native' && prompt.kind === 'auth'
+    if (nativeAuth && accept) nativeCredentialsRef.current.set(prompt.id, { username: values.username, password: values.password })
     await invoke('paneRespond', {
       pane: pane?.id,
       prompt: prompt.id,
       accept,
       ...(prompt.kind === 'prompt' && accept ? { text: values.text } : {}),
-      ...(prompt.kind === 'auth' && accept ? { username: values.username, password: values.password } : {})
+      ...(prompt.kind === 'auth' && accept && !nativeAuth ? { username: values.username, password: values.password } : {})
     })
     if (!mountedRef.current) return
     setPromptValues((current) => {
@@ -1022,7 +1090,7 @@ export function BrowserPaneWindow({ context, input }: { context: UiPluginContext
     : undefined
   const canUseWatch = pane?.mode === 'watch'
 
-  const activePrompt = pane?.mode === 'watch' ? pane.prompts[0] ?? null : null
+  const activePrompt = pane?.mode === 'watch' || (pane?.mode === 'native' && context.nativeBrowser.pageRequestsAvailable) ? pane.prompts[0] ?? null : null
   return (
     <div
       ref={rootRef}
@@ -1053,8 +1121,8 @@ export function BrowserPaneWindow({ context, input }: { context: UiPluginContext
       }}
     >
       <div className="qbp-toolbar" aria-label="Browser controls" style={paneStyles.toolbar}>
-        <IconButton label="Back" title="Back" disabled={!pane?.canGoBack} onClick={() => void control('back')} style={paneStyles.toolbarControl}>‹</IconButton>
-        <IconButton label="Forward" title="Forward" disabled={!pane?.canGoForward} onClick={() => void control('forward')} style={paneStyles.toolbarControl}>›</IconButton>
+        <IconButton label="Back" title="Back" disabled={!pane || !paneHistoryControls(pane).back} onClick={() => void control('back')} style={paneStyles.toolbarControl}>‹</IconButton>
+        <IconButton label="Forward" title="Forward" disabled={!pane || !paneHistoryControls(pane).forward} onClick={() => void control('forward')} style={paneStyles.toolbarControl}>›</IconButton>
         <IconButton
           label={pane?.loading ? 'Stop loading' : 'Reload'}
           title={pane?.loading ? 'Stop loading' : 'Reload'}
@@ -1137,10 +1205,10 @@ export function BrowserPaneWindow({ context, input }: { context: UiPluginContext
           <div className="ui-menu__list qbp-menu-popover" role="menu" style={paneStyles.profilePopover}>
             <div style={paneStyles.menuItems}>
             <BrowserProfileMenu context={context} pane={pane ?? undefined} inline onError={(text) => setMessage({ text, kind: 'error' })} />
-            {pane?.mode === 'watch'
+            {pane?.mode === 'watch' || (pane?.mode === 'native' && nativeState?.hardReloadAvailable)
               ? <Button className="ui-menu__item" role="menuitem" onClick={() => void control('hardReload')}>Hard Reload</Button>
               : pane?.mode === 'native'
-                ? <span className="qbp-muted" style={paneStyles.mutedText}>Hard Reload is unavailable in Native mode; ordinary Reload is available.</span>
+                ? <span className="qbp-muted" style={paneStyles.mutedText}>Hard Reload is unavailable in Native mode on this system webview; ordinary Reload is available.</span>
                 : null}
             {settings.homePage
               ? <Button className="ui-menu__item" role="menuitem" onClick={() => void navigate(settings.homePage)}>Home Page · {settings.homePage}</Button>
@@ -1251,6 +1319,12 @@ export function BrowserPaneWindow({ context, input }: { context: UiPluginContext
         onPaste={onPaste}
         onContextMenu={(event) => { if (canUseWatch) event.preventDefault() }}
       >
+        {pane?.mode === 'native' && pane.document && context.nativeBrowser.available && !context.nativeBrowser.previewAvailable ? (
+          <div className="qbp-overlay" style={paneStyles.overlay}><div className="qbp-card ui-tool-panel-frame" style={paneStyles.card}>
+            <SectionHeader title="Workspace document preview is unavailable here" />
+            <p className="ui-help-text" style={paneStyles.helpText}>This desktop host cannot isolate a workspace preview from the network, device permissions and downloads, so the document is not rendered. Open the source file instead, or go Back.</p>
+          </div></div>
+        ) : null}
         {pane?.mode === 'native' && context.nativeBrowser.available ? <div className="qbp-native-host" ref={nativeHostRef} style={{ ...paneStyles.nativeHost, ...nativeSize }} aria-label="Native browser page" /> : null}
         {pane?.mode === 'watch' && frame ? <img
           className="qbp-watch-image"
@@ -1317,7 +1391,7 @@ export function BrowserPaneWindow({ context, input }: { context: UiPluginContext
           <SectionHeader title="Page could not load" />
           <p className="qbp-error ui-error-text" style={paneStyles.errorText} role="alert">{nativeState.error}</p>
           <div className="qbp-actions" style={paneStyles.actions}>
-            <Button onClick={() => void control('reload')}>Retry</Button>
+            <Button onClick={() => void navigate(nativeState.url)}>Retry</Button>
             <Button onClick={() => setNativeState(null)}>Dismiss</Button>
           </div>
         </div></div> : null}
@@ -1336,8 +1410,13 @@ export function BrowserPaneWindow({ context, input }: { context: UiPluginContext
       {pane?.sourcePath || pane?.preview ? <div className="qbp-message" aria-label="Workspace document actions" style={paneStyles.message}>
         {pane.sourcePath ? <Button onClick={() => void openEditor(pane.sourcePath!, 'source')}>Open source file</Button> : null}
         {pane.preview ? <Button onClick={() => void openEditor(pane.preview!.path, 'preview')}>Open in Editor Preview</Button> : null}
-        {pane.mode === 'native' && pane.sourcePath && /\.html?$/i.test(pane.sourcePath) && !pane.preview
-          ? <span className="qbp-muted" style={paneStyles.mutedText}>Workspace HTML is open directly in Native; resource-backed Browser preview conversion is unavailable.</span>
+        {pane.mode === 'native' && pane.sourcePath && /\.html?$/i.test(pane.sourcePath) && !pane.preview && !pane.document
+          ? context.nativeBrowser.previewAvailable
+            ? <Button onClick={() => void invoke('panePreview', { pane: pane.id, path: pane.sourcePath! })}>Preview as workspace document</Button>
+            : <span className="qbp-muted" style={paneStyles.mutedText}>Workspace HTML is open directly in Native; isolated workspace preview is unavailable in this host.</span>
+          : null}
+        {pane.document
+          ? <span className="qbp-muted" style={paneStyles.mutedText}>Isolated workspace preview: {pane.document.grant.entryOnly ? 'only this file loads' : "only files in this document's folder load"}; network, permissions, popups and downloads are blocked.</span>
           : null}
       </div> : null}
 
@@ -1366,7 +1445,7 @@ export function BrowserPaneWindow({ context, input }: { context: UiPluginContext
         </div>
       </div> : null}
 
-      {pane?.mode === 'watch' && pane.downloads.length ? <div className="qbp-shelf" aria-label="Downloads" style={paneStyles.shelf}>
+      {pane?.downloads.length ? <div className="qbp-shelf" aria-label="Downloads" style={paneStyles.shelf}>
         <SectionHeader title="Downloads" />
         {pane.downloads.map((download) => <DownloadRow key={download.id} download={download} onAction={(action) => void invoke('paneDownload', { pane: pane.id, download: download.id, action })} />)}
       </div> : null}

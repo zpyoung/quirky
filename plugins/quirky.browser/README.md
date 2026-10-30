@@ -59,6 +59,7 @@ Browser panes are real hosted tabs in the worktree's terminal workspace. `pane o
 quirky browser pane open --worktree current --mode native --url https://example.com --json
 quirky browser pane state --worktree current --json
 quirky browser pane navigate --pane <pane-id> --input localhost:3000
+quirky browser pane preview --pane <pane-id> --path docs/report/index.html
 quirky browser pane control --pane <pane-id> --action zoom --level 1
 quirky browser pane control --pane <pane-id> --action viewport --preset mobile-m
 quirky browser pane open --worktree current --mode watch --page <page-id> --json
@@ -78,7 +79,21 @@ Native is available only in the desktop shell. A plain web client explains that 
 
 `Open source file` uses public `quirky.editor/open` only with the backend's canonical in-worktree `sourcePath`; outside file URLs have no source action. `Open in Editor Preview` opens a separate editor preview tab and is not a Browser preview conversion. Selecting a supported non-HTML document suggestion navigates its backend-provided resource URL, and Browser Back returns to the prior location. Resource-backed previews do not serve `text/html`; unsupported editor previews show an error. Native `file:` navigation uses runtime authorization, and the UI does not resolve typed paths itself.
 
-The pinned Electrobun SDK has no public JavaScript-dialog, basic-auth, or certificate-response interception, no download cancellation or destination control for Native views, and no Native hard reload. Native popup events are informational; Quirky does not turn a popup URL into a replacement tab or claim to preserve named/opener-dependent OAuth windows. Those Native operations are not presented as working controls. Watch uses the managed page's CDP events for its supported prompts, downloads and typed input.
+Native Hard Reload reloads the page while bypassing the system webview's cache, at the same URL and in the same profile; it is offered only where the webview reports that operation, which is macOS WKWebView. Elsewhere the menu says it is unavailable and the command reports that instead of falling back to an ordinary reload. When a Native navigation fails with a network or TLS error, the pane keeps the requested address, stops loading and shows the engine's error with a Retry that navigates to that address again. A stopped, superseded or download-converted navigation is not shown as an error, and a late failure from an earlier request never replaces the current one.
+
+Native page events use the same prompts, policy and download shelf as Watch, through the host's native page requests (`nativeBrowser.pageRequestsAvailable`):
+
+- `alert`, `confirm` and `prompt` show as an overlay naming the origin, and the page gets the real answer. One prompt per page; an unanswered one fails closed after 120 seconds, and navigating declines it.
+- Basic and digest sign-in credentials are typed in the overlay and go straight to the view. The daemon only learns that the user accepted, so `pane respond` can decline a Native sign-in but not complete one.
+- An untrusted certificate can proceed only for loopback hosts. An external-app link opens only for an allow-listed scheme after a user gesture, and only the browser UI can approve it.
+- A download gets a collision-free name in the OS Downloads directory before anything is written, then reports bytes, cancels on its own, and opens or reveals when complete.
+- A popup opens, at most four every two seconds and only for HTTP(S), in a small window titled by its origin. It is the page WebKit created for the opener, so `window.opener`, the window name and a form's POST body survive, and `window.close()` closes it.
+
+`beforeunload` prompts are not intercepted in Native because WKWebView has no public API for them. Where native page requests are unavailable, popup events stay informational and the Native prompt and download controls are not shown. Watch uses the managed page's CDP events for its supported prompts, downloads and typed input.
+
+### Workspace document previews
+
+`pane preview` (`panePreview`), or **Preview as workspace document** on a pane showing worktree HTML, converts a Native pane into an isolated preview of one `.html` or `.htm` file inside its worktree. The page and the files in its folder load from `quirky-preview://<grant>/…`, served by the desktop host; at the worktree root the grant reads the file alone, and dotfiles, symlinks and anything outside the folder are never served. Electrobun's isolated preview view gives the page its own throwaway storage and blocks outbound network (WebRTC included), camera, microphone, location, file pickers, popups, downloads and navigation off the grant. Back walks the preview's own history, then returns to the page it was converted from; Forward re-enters the preview. Typing an address on a preview page converts back to browsing. Grants are minted per mount and never stored, so history and saved panes hold only the document path. Previews need the macOS desktop app and the Native browser; elsewhere the pane says preview is unavailable. Watch panes refuse them.
 
 The `defaultHomePage`, `defaultSearchEngine`, and `defaultZoom` settings apply to new panes only. Default home page is blank; the search engine defaults to Google and the zoom level to 0.
 
@@ -136,7 +151,8 @@ Chrome identity is `clean` by default; it removes embedding/headless user-agent 
 
 - **Cookie import destination:** menu, toolbar hint and per-profile Settings import controls update the selected managed Chrome/Watch profile, not the separate Native WKWebView engine. Hide Hint persists and can be reversed in Settings.
 - **Native clear/removal:** `profileClear`/`profileDelete` and their `tab profile clear|delete` CLI commands require confirmation and refuse active profiles. Current SDK has no deletion completion acknowledgement; native capability rejects before invocation, preserving Chrome data/profile metadata. Successful native clear/removal is **not shipped**. `sa-browser-native-profile-clear-completion` owns the missing barrier; the one-use desktop claim command cannot bypass ordinary destructive confirmation.
-- **Native identity and localhost labels:** no supported native UA override or faithful worktree-host routing capability is available. Settings state the limits rather than store working-looking no-ops. Exact follow-ups: `sa-browser-native-identity`, `sa-browser-localhost-label-routing`.
+- **Native identity:** no supported native UA override is available. Settings state the limit rather than store a working-looking no-op. Follow-up: `sa-browser-native-identity`.
+- **Localhost Worktree Labels:** off by default. When on, a worktree's `http://localhost:<port>` link opens at `http://<label>.quirky.localhost:<proxy>/`, which a daemon-owned label proxy routes to that worktree's server, WebSockets included. Agent Chrome reaches it directly. The Native pane routes only `quirky.localhost` through Electrobun's per-partition `Session.setProxy`, which needs macOS 14 or later, and refuses label URLs where that isn't available. `browser localhost-label register|list` manage labels by hand.
 - **Native test state:** `QUIRKY_HOME` alone does not prove WKWebView storage-root isolation. Native nightly scenarios must use newly created UUID profiles only; never clear/use shared Default without independent native-root proof. Web checks cannot prove native storage isolation or deletion.
 
 
