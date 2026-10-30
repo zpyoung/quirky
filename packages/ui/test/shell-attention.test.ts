@@ -187,3 +187,98 @@ test('a failed Inbox answer remains pending and actionable until a valid answer 
   expect(answered?.envelope.answers.action).toMatchObject({ value: 'approve', label: 'Approve', source: 'option' })
   expect(attention.getSnapshot().asks?.some((ask) => ask.id === askId)).toBe(false)
 })
+test('the Inbox More below cue tracks overflow, scrolling, resize, and content changes', async () => {
+  const { env, current } = await bootAttention()
+  const originalResizeObserver = globalThis.ResizeObserver
+  const observers: Array<{
+    targets: Set<Element>
+    notify(target: Element): void
+  }> = []
+  class ControlledResizeObserver {
+    private readonly targets = new Set<Element>()
+
+    constructor(private readonly callback: ResizeObserverCallback) {
+      observers.push({
+        targets: this.targets,
+        notify: (target) => {
+          if (this.targets.has(target)) {
+            this.callback([{ target } as ResizeObserverEntry], this as unknown as ResizeObserver)
+          }
+        }
+      })
+    }
+    observe(target: Element): void { this.targets.add(target) }
+    unobserve(target: Element): void { this.targets.delete(target) }
+    disconnect(): void { this.targets.clear() }
+  }
+  globalThis.ResizeObserver = ControlledResizeObserver as unknown as typeof ResizeObserver
+
+  try {
+    await env.agent.callAny('ui.tool.open', { id: INBOX })
+    const askId = await createAsk(env, {
+      title: 'Choose a response',
+      questions: [{ id: 'reply', type: 'text', question: 'What should happen next?' }]
+    }, current)
+    const card = `[data-ask-id="${askId}"]`
+    await env.win.waitFor(() => env.win.document.querySelector(card))
+
+    const scrollport = env.win.document.querySelector<HTMLElement>('[aria-label="Pending question content"]')!
+    const content = scrollport.firstElementChild as HTMLElement
+    let clientHeight = 120
+    let scrollHeight = 120
+    let scrollTop = 0
+    Object.defineProperties(scrollport, {
+      clientHeight: { configurable: true, get: () => clientHeight },
+      scrollHeight: { configurable: true, get: () => scrollHeight },
+      scrollTop: {
+        configurable: true,
+        get: () => scrollTop,
+        set: (value: number) => { scrollTop = Math.max(0, Math.min(value, scrollHeight - clientHeight)) }
+      }
+    })
+    await env.win.waitFor(() => observers.some(({ targets }) => targets.has(scrollport)))
+    const notifyResize = (target: Element) => {
+      for (const observer of observers) observer.notify(target)
+    }
+    const updateLayout = (...targets: Element[]) => {
+      for (const target of targets) notifyResize(target)
+    }
+    const waitForCue = (visible: boolean) =>
+      env.win.waitFor(() => (buttonNamed(env, 'More below') !== undefined) === visible, 1000)
+
+    updateLayout(scrollport, content)
+    await waitForCue(false)
+
+    scrollHeight = 320
+    updateLayout(content)
+    await waitForCue(true)
+    const answerButton = buttonNamed(env, 'Answer')!
+    answerButton.focus()
+    const moreBelow = buttonNamed(env, 'More below')!
+    moreBelow.click()
+    scrollport.dispatchEvent(new Event('scroll'))
+    await waitForCue(false)
+    expect(scrollport.scrollTop).toBe(scrollHeight - clientHeight)
+    expect(env.win.document.activeElement).toBe(answerButton)
+
+    scrollTop = 0
+    clientHeight = 360
+    updateLayout(scrollport)
+    await waitForCue(false)
+    clientHeight = 80
+    updateLayout(scrollport)
+    await waitForCue(true)
+
+    scrollHeight = 80
+    updateLayout(content)
+    await waitForCue(false)
+    scrollHeight = 240
+    updateLayout(content)
+    await waitForCue(true)
+    scrollTop = 159.75
+    scrollport.dispatchEvent(new Event('scroll'))
+    await waitForCue(false)
+  } finally {
+    globalThis.ResizeObserver = originalResizeObserver
+  }
+}, 15_000)

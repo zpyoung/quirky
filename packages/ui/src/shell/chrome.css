@@ -92,11 +92,36 @@
 .shell-inbox {
   color: var(--ui-text);
   display: flex;
+  flex: 1 1 auto;
   flex-direction: column;
-  gap: var(--ui-space-8);
   min-height: 0;
-  overflow: auto;
+  min-width: 0;
+  overflow: hidden;
   padding: var(--ui-space-12);
+  width: 100%;
+}
+
+.shell-inbox__scrollport {
+  flex: 1 1 auto;
+  min-height: 0;
+  min-width: 0;
+  overflow: auto;
+}
+
+.shell-inbox__content {
+  display: grid;
+  gap: var(--ui-space-8);
+  grid-template-columns: minmax(0, 1fr);
+  min-width: 0;
+}
+
+.shell-inbox__footer {
+  background: var(--ui-surface);
+  display: flex;
+  inset-block-end: 0;
+  justify-content: center;
+  position: sticky;
+  z-index: 1;
 }
 
 .shell-inbox__list {

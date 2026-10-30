@@ -449,32 +449,72 @@ function InboxAskCard({ ask, worktrees, repos }: { ask: Ask; worktrees: Worktree
   )
 }
 
+function hasMoreBelow(scrollport: HTMLElement): boolean {
+  return scrollport.scrollHeight - scrollport.clientHeight - scrollport.scrollTop > 1
+}
+
 /** Host-owned Inbox content; pending asks are read from the daemon and never copied into local authority. */
 export function InboxPanel() {
   const { snapshot, store } = useAttention()
   const pending = snapshot.asks
   const error = snapshot.errors.asks
   const sorted = pending ?? []
+  const scrollportRef = useRef<HTMLDivElement>(null)
+  const contentRef = useRef<HTMLDivElement>(null)
+  const [showMoreBelow, setShowMoreBelow] = useState(false)
+
+  useEffect(() => {
+    const scrollport = scrollportRef.current
+    const content = contentRef.current
+    if (!scrollport || !content) return
+
+    const update = () => setShowMoreBelow(hasMoreBelow(scrollport))
+    scrollport.addEventListener('scroll', update, { passive: true })
+    const resizeObserver = new ResizeObserver(update)
+    resizeObserver.observe(scrollport)
+    resizeObserver.observe(content)
+    update()
+    return () => {
+      scrollport.removeEventListener('scroll', update)
+      resizeObserver.disconnect()
+    }
+  }, [])
+
+  const scrollToMore = () => {
+    const scrollport = scrollportRef.current
+    if (!scrollport) return
+    scrollport.scrollTop = scrollport.scrollHeight
+    setShowMoreBelow(hasMoreBelow(scrollport))
+  }
 
   return (
     <section className="shell-inbox" aria-label="Inbox questions">
-      <SectionHeader
-        title="Pending questions"
-        actions={pending !== null ? <Badge tone={pending.length > 0 ? 'needs-you' : 'neutral'}>{pending.length}</Badge> : undefined}
-      />
-      {pending === null && error === undefined && <EmptyState message="Loading pending questions…" />}
-      {error && (
-        <div className="shell-inbox__error" role="alert">
-          <p>Could not load pending questions: {error}</p>
-          <Button onClick={store.refresh}>Retry</Button>
+      <div className="shell-inbox__scrollport" role="region" aria-label="Pending question content" ref={scrollportRef}>
+        <div className="shell-inbox__content" ref={contentRef}>
+          <SectionHeader
+            title="Pending questions"
+            actions={pending !== null ? <Badge tone={pending.length > 0 ? 'needs-you' : 'neutral'}>{pending.length}</Badge> : undefined}
+          />
+          {pending === null && error === undefined && <EmptyState message="Loading pending questions…" />}
+          {error && (
+            <div className="shell-inbox__error" role="alert">
+              <p>Could not load pending questions: {error}</p>
+              <Button onClick={store.refresh}>Retry</Button>
+            </div>
+          )}
+          {pending !== null && !error && pending.length === 0 && <EmptyState message="No pending questions." />}
+          {pending !== null && !error && sorted.length > 0 && (
+            <div className="shell-inbox__list">
+              {sorted.map((ask) => <InboxAskCard key={ask.id} ask={ask} worktrees={snapshot.worktrees} repos={snapshot.repos} />)}
+            </div>
+          )}
         </div>
-      )}
-      {pending !== null && !error && pending.length === 0 && <EmptyState message="No pending questions." />}
-      {pending !== null && !error && sorted.length > 0 && (
-        <div className="shell-inbox__list">
-          {sorted.map((ask) => <InboxAskCard key={ask.id} ask={ask} worktrees={snapshot.worktrees} repos={snapshot.repos} />)}
-        </div>
-      )}
+        {showMoreBelow && (
+          <footer className="shell-inbox__footer">
+            <Button onClick={scrollToMore}>More below</Button>
+          </footer>
+        )}
+      </div>
     </section>
   )
 }
