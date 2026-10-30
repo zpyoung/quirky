@@ -43,6 +43,11 @@ function basename(path: string): string {
   return slash < 0 ? path : path.slice(slash + 1)
 }
 
+function dirname(path: string): string {
+  const slash = path.lastIndexOf('/')
+  return slash < 0 ? '.' : path.slice(0, slash)
+}
+
 function joinPath(parent: string, child: string): string {
   return parent === '.' ? child : `${parent}/${child}`
 }
@@ -152,11 +157,11 @@ export function ExplorerPanel({ context, report }: { context: UiPluginContext; r
   const inlineBlurTimer = useRef<number | undefined>(undefined)
   useEffect(() => {
     if (renamePath === null || renameInputRef.current === null) return
-    const offset = Math.max(renamePath.lastIndexOf('/'), renamePath.lastIndexOf('\\')) + 1
-    const name = renamePath.slice(offset)
+    const name = basename(renamePath)
     const extension = name.lastIndexOf('.')
-    const stemEnd = offset + (extension > 0 ? extension : name.length)
-    renameInputRef.current.setSelectionRange(offset, stemEnd)
+    const isDirectory = entryForPath(renamePath)?.isDirectory ?? false
+    const selectionEnd = !isDirectory && extension > 0 ? extension : name.length
+    renameInputRef.current.setSelectionRange(0, selectionEnd)
   }, [renamePath])
   useEffect(() => context.onLayout(() => setLayoutWorktree(worktreeFromLayout(context))), [context])
 
@@ -558,14 +563,18 @@ export function ExplorerPanel({ context, report }: { context: UiPluginContext; r
       if (currentWorktree.current === requestedWorktree) setError(messageOf(reason))
     })
   }, [context, refreshEditorState, worktree])
+  const startRename = (path: string) => {
+    setRenamePath(path)
+    setRenameValue(basename(path))
+  }
+
   const renameFocused = () => {
     const requestedWorktree = worktree
     const request = interactionQueue.current.then(() => {
       if (!requestedWorktree || currentWorktree.current !== requestedWorktree) return
       const path = focusedPathRef.current
       if (path === null || entryForPath(path) === undefined) return
-      setRenamePath(path)
-      setRenameValue(path)
+      startRename(path)
     })
     interactionQueue.current = request.then(() => undefined, () => undefined)
     void request.catch((reason: unknown) => {
@@ -618,7 +627,12 @@ export function ExplorerPanel({ context, report }: { context: UiPluginContext; r
   const renameSelected = async () => {
     if (!worktree || !renamePath || !renameValue.trim()) return
     try {
-      await context.call('quirky.editor/mutate', { worktree, action: 'rename', path: renamePath, newPath: renameValue.trim() })
+      await context.call('quirky.editor/mutate', {
+        worktree,
+        action: 'rename',
+        path: renamePath,
+        newPath: joinPath(dirname(renamePath), renameValue)
+      })
       setRenamePath(null)
       setRenameValue('')
       await loadDirectory()
@@ -992,7 +1006,7 @@ export function ExplorerPanel({ context, report }: { context: UiPluginContext; r
                           { id: 'copy-path', label: 'Copy Path', onAction: () => { void copyPaths(false, [entry.path]) } },
                           { id: 'copy-relative-path', label: 'Copy Relative Path', onAction: () => { void copyPaths(true, [entry.path]) } },
                           ...(!entry.isDirectory ? [{ id: 'duplicate', label: 'Duplicate', onAction: () => { void duplicatePath(entry.path) } }] : []),
-                          { id: 'rename', label: 'Rename', onAction: () => { setRenamePath(entry.path); setRenameValue(entry.path) } },
+                          { id: 'rename', label: 'Rename', onAction: () => startRename(entry.path) },
                           { id: 'delete', label: 'Delete', destructive: true, onAction: () => { void deleteSelected([entry.path]) } },
                           ...(entry.isDirectory ? [
                             { id: 'open-in-terminal', label: 'Open in Terminal', onAction: () => { void openInTerminal(entry.path) } },

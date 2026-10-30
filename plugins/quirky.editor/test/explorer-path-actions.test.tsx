@@ -2,7 +2,7 @@ import { afterAll, beforeAll, beforeEach, expect, test } from 'bun:test'
 import { execFileSync } from 'node:child_process'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { dirname, join } from 'node:path'
+import { basename, dirname, join } from 'node:path'
 import { act } from 'react'
 import type { Root } from 'react-dom/client'
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
@@ -32,7 +32,7 @@ type Fixture = {
   settings: Map<string, unknown>
 }
 type Mounted = { element: HTMLElement; unmount(): Promise<void> }
-type FixtureOptions = { displayRoot?: string }
+type FixtureOptions = { displayRoot?: string; extraFiles?: Record<string, string> }
 type Transfer = DropData & {
   readonly types: string[]
   effectAllowed: DataTransfer['effectAllowed']
@@ -141,7 +141,7 @@ async function makeFixture(options: FixtureOptions = {}): Promise<Fixture> {
   let harness: Harness | undefined
   try {
     home = makeHomeWithoutAutoHooks('q-editor-explorer-paths-')
-    for (const [path, text] of Object.entries(FILES)) {
+    for (const [path, text] of Object.entries({ ...FILES, ...(options.extraFiles ?? {}) })) {
       const absolute = join(root, path)
       mkdirSync(dirname(absolute), { recursive: true })
       writeFileSync(absolute, text)
@@ -458,7 +458,7 @@ test('Explorer Rename closes row actions, focuses the inline field, and renames 
   expect(document.activeElement).toBe(input)
 
   await act(async () => {
-    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, renamedPath)
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, basename(renamedPath))
     input!.dispatchEvent(new Event('input', { bubbles: true }))
   })
   await act(async () => input!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })))
@@ -616,4 +616,153 @@ test('Explorer row drops keep same-folder paths unchanged and move to a differen
   expect(existsSync(movedPath)).toBe(true)
   expect(readFileSync(movedPath, 'utf8')).toBe('alpha\n')
 })
+function replaceSelectedInputText(input: HTMLInputElement, replacement: string): void {
+  const start = input.selectionStart ?? 0
+  const end = input.selectionEnd ?? start
+  const value = input.value.slice(0, start) + replacement + input.value.slice(end)
+  const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set
+  if (!setValue) throw new Error('Input value setter is unavailable')
+  setValue.call(input, value)
+  input.setSelectionRange(start + replacement.length, start + replacement.length)
+  input.dispatchEvent(new Event('input', { bubbles: true }))
+}
+
+test('Explorer rename starts with the filename, selects its stem, and keeps the source parent', async () => {
+  const fixture = await makeFixture({
+    displayRoot: 'nested',
+    extraFiles: {
+      'nested/NOTICE': 'notice\n',
+      'nested/.env.local': 'environment\n',
+      'nested/cache.v2/inside.txt': 'inside\n'
+    }
+  })
+  const noExtension = join(fixture.root, 'nested/NOTICE')
+  const dotfile = join(fixture.root, 'nested/.env.local')
+  const dottedDirectory = join(fixture.root, 'nested/cache.v2')
+  await call(fixture.client, 'quirky.editor/explorer', {
+    worktree: fixture.worktree.id,
+    action: 'preferences',
+    showDotfiles: true
+  })
+
+  const panel = await renderExplorer(fixture)
+  const source = join(fixture.root, FILE_A)
+  const sourceRow = findRow(panel.element, source)
+  expect(sourceRow).not.toBeNull()
+  const sourceRename = await actionButton(sourceRow!, 'Rename')
+  await act(async () => sourceRename.click())
+  const input = await waitForUi(() => panel.element.querySelector<HTMLInputElement>('input[aria-label="Rename file"]') ?? false)
+  expect(input.value).toBe(basename(FILE_A))
+  expect([input.selectionStart, input.selectionEnd]).toEqual([0, basename(FILE_A).lastIndexOf('.')])
+
+  await act(async () => replaceSelectedInputText(input, 'renamed'))
+  await waitForUi(() => input.value === 'renamed.txt' || false)
+  await act(async () => {
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }))
+  })
+  const renamed = join(dirname(source), 'renamed.txt')
+  await waitForUi(() => existsSync(renamed) && !existsSync(source))
+  expect(existsSync(source)).toBe(false)
+  expect(existsSync(renamed)).toBe(true)
+  expect(readFileSync(renamed, 'utf8')).toBe('alpha\n')
+
+  const noExtensionRow = findRow(panel.element, noExtension)
+  expect(noExtensionRow).not.toBeNull()
+  await selectRow(panel.element, noExtension)
+  const tree = panel.element.querySelector<HTMLElement>('.qe-explorer-tree')
+  expect(tree).not.toBeNull()
+  await act(async () => {
+    tree!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }))
+  })
+  const keyboardInput = await waitForUi(() => panel.element.querySelector<HTMLInputElement>('input[aria-label="Rename file"]') ?? false)
+  expect(keyboardInput.value).toBe('NOTICE')
+  expect([keyboardInput.selectionStart, keyboardInput.selectionEnd]).toEqual([0, 'NOTICE'.length])
+  await act(async () => {
+    keyboardInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }))
+  })
+  await waitForUi(() => panel.element.querySelector('input[aria-label="Rename file"]') === null || false)
+  expect(existsSync(noExtension)).toBe(true)
+
+  const dotfileRow = findRow(panel.element, dotfile)
+  expect(dotfileRow).not.toBeNull()
+  const dotfileRename = await actionButton(dotfileRow!, 'Rename')
+  await act(async () => dotfileRename.click())
+  const dotfileInput = await waitForUi(() => {
+    const candidate = panel.element.querySelector<HTMLInputElement>('input[aria-label="Rename file"]')
+    return candidate?.value === '.env.local' ? candidate : false
+  })
+  expect([dotfileInput.selectionStart, dotfileInput.selectionEnd]).toEqual([0, '.env'.length])
+  await act(async () => {
+    dotfileInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }))
+  })
+  await waitForUi(() => panel.element.querySelector('input[aria-label="Rename file"]') === null || false)
+
+  const directoryRow = findRow(panel.element, dottedDirectory)
+  expect(directoryRow).not.toBeNull()
+  const directoryRename = await actionButton(directoryRow!, 'Rename')
+  await act(async () => directoryRename.click())
+  const directoryInput = await waitForUi(() => {
+    const candidate = panel.element.querySelector<HTMLInputElement>('input[aria-label="Rename file"]')
+    return candidate?.value === 'cache.v2' ? candidate : false
+  })
+  expect([directoryInput.selectionStart, directoryInput.selectionEnd]).toEqual([0, 'cache.v2'.length])
+  await act(async () => {
+    directoryInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }))
+  })
+}, 30_000)
+
+test('Explorer rename preserves backslashes that are POSIX filename characters', async () => {
+  const fixture = await makeFixture({
+    displayRoot: 'nested',
+    extraFiles: { 'nested/a\\b.txt': 'backslash filename\n' }
+  })
+  const source = join(fixture.root, 'nested/a\\b.txt')
+  const panel = await renderExplorer(fixture)
+  const row = findRow(panel.element, source)
+  expect(row).not.toBeNull()
+  await act(async () => rowActionTrigger(row!).click())
+  await waitForUi(() => rowActionMenuOpen(row!) || false)
+  const menu = row!.querySelector<HTMLElement>('[role="menu"]')
+  const renameButton = menu && Array.from(menu.querySelectorAll<HTMLButtonElement>('[role="menuitem"]'))
+    .find((button) => button.textContent?.trim() === 'Rename')
+  if (!renameButton) throw new Error('Missing Rename action for the backslash filename')
+  await act(async () => renameButton.click())
+  const input = await waitForUi(() => panel.element.querySelector<HTMLInputElement>('input[aria-label="Rename file"]') ?? false)
+  expect(input.value).toBe('a\\b.txt')
+
+  await act(async () => replaceSelectedInputText(input, 'renamed'))
+  await waitForUi(() => input.value === 'renamed.txt' || false)
+  await act(async () => {
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }))
+  })
+
+  const destination = join(dirname(source), 'renamed.txt')
+  await waitForUi(() => !existsSync(source))
+  expect(existsSync(destination)).toBe(true)
+  expect(readFileSync(destination, 'utf8')).toBe('backslash filename\n')
+}, 30_000)
+
+test('Explorer rename preserves leading spaces in a filename on submit', async () => {
+  const filename = ' leading.txt'
+  const fixture = await makeFixture({
+    displayRoot: 'nested',
+    extraFiles: { [`nested/${filename}`]: 'leading space filename\n' }
+  })
+  const source = join(fixture.root, 'nested', filename)
+  const panel = await renderExplorer(fixture)
+  const row = findRow(panel.element, source)
+  expect(row).not.toBeNull()
+  const renameButton = await actionButton(row!, 'Rename')
+  await act(async () => renameButton.click())
+  const input = await waitForUi(() => panel.element.querySelector<HTMLInputElement>('input[aria-label="Rename file"]') ?? false)
+  expect(input.value).toBe(filename)
+  await act(async () => {
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }))
+  })
+  await waitForUi(() => panel.element.querySelector('input[aria-label="Rename file"]') === null || false)
+
+  expect(existsSync(source)).toBe(true)
+  expect(readFileSync(source, 'utf8')).toBe('leading space filename\n')
+  expect(existsSync(join(dirname(source), 'leading.txt'))).toBe(false)
+}, 30_000)
 
