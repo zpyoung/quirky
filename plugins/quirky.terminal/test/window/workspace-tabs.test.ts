@@ -1,5 +1,9 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, spyOn, test } from 'bun:test'
 import { act } from 'react'
+import { readFileSync } from 'node:fs'
+import { CONTROL_ICON_MARKUP } from '../../../../packages/ui/src/design-system/icons/generated-controls'
+import { TOOL_ICON_MARKUP } from '../../../../packages/ui/src/design-system/icons/generated-tools'
+import type { TabIcon, ViewTab } from '../../src/layout/types'
 import {
   callsTo,
   click,
@@ -10,6 +14,7 @@ import {
   key,
   loadWorkspace,
   makeWorkspace,
+  session,
   mountFixture,
   mouse,
   pane,
@@ -73,22 +78,21 @@ function tabRect(left: number, width: number): DOMRect {
   return { x: left, y: 0, left, top: 0, right: left + width, bottom: 32, width, height: 32, toJSON: () => ({}) } as DOMRect
 }
 
+const MORE_WIDTH = 64
+
 function installTabLayout(view: MountedWorkspace, width: number, initialWidths: Record<string, number>) {
   const viewport = view.q<HTMLElement>('.qt-tabs')!
   const navigation = viewport.parentElement as HTMLElement
   let available = width
   let widths = initialWidths
-  const controls = () => navigation.querySelectorAll('[aria-label="Scroll tabs left"], [aria-label="Scroll tabs right"]').length
+  const moreWidth = () => (navigation.querySelector('.qt-tab-more') ? MORE_WIDTH : 0)
   const tabWidth = (item: HTMLElement) => widths[item.dataset.tab!] ?? 100
   const tabItems = () => view.qa<HTMLElement>('.qt-tabs > [data-tab]')
   Object.defineProperty(navigation, 'clientWidth', { configurable: true, get: () => available })
   Object.defineProperty(navigation, 'getBoundingClientRect', { configurable: true, value: () => tabRect(0, available) })
-  Object.defineProperty(viewport, 'clientWidth', { configurable: true, get: () => Math.max(0, available - controls() * 32) })
+  Object.defineProperty(viewport, 'clientWidth', { configurable: true, get: () => Math.max(0, available - moreWidth()) })
   Object.defineProperty(viewport, 'scrollWidth', { configurable: true, get: () => tabItems().reduce((total, item) => total + tabWidth(item), 0) })
-  Object.defineProperty(viewport, 'getBoundingClientRect', {
-    configurable: true,
-    value: () => tabRect(controls() > 0 && navigation.querySelector('[aria-label="Scroll tabs left"]') ? 32 : 0, viewport.clientWidth)
-  })
+  Object.defineProperty(viewport, 'getBoundingClientRect', { configurable: true, value: () => tabRect(0, viewport.clientWidth) })
   const refresh = () => {
     for (const item of tabItems()) {
       Object.defineProperty(item, 'getBoundingClientRect', {
@@ -96,7 +100,7 @@ function installTabLayout(view: MountedWorkspace, width: number, initialWidths: 
         value: () => {
           const items = tabItems()
           const index = items.indexOf(item)
-          const left = (viewport.getBoundingClientRect().left ?? 0) + items.slice(0, index).reduce((total, previous) => total + tabWidth(previous), 0) - viewport.scrollLeft
+          const left = items.slice(0, index).reduce((total, previous) => total + tabWidth(previous), 0) - viewport.scrollLeft
           return tabRect(left, tabWidth(item))
         }
       })
@@ -187,66 +191,113 @@ describe('SC-11: clicking a tab activates it', () => {
     }
   })
 
-  test('scroll controls reveal hidden tabs without activating them and disable at boundaries', async () => {
+  test('the scroll buttons are gone and the strip stays wheel-scrollable', async () => {
     const resize = observeResize()
     try {
       const view = await mount(fakeDaemon(makeWorkspace(group('grp-1', terminalTabs(4)))))
-      const layout = installTabLayout(view, 220, { 'tab-1': 100, 'tab-2': 100, 'tab-3': 100, 'tab-4': 100 })
+      installTabLayout(view, 220, { 'tab-1': 100, 'tab-2': 100, 'tab-3': 100, 'tab-4': 100 })
       await flushResize(resize)
-      const left = view.q<HTMLButtonElement>('[aria-label="Scroll tabs left"]')!
-      const right = view.q<HTMLButtonElement>('[aria-label="Scroll tabs right"]')!
-      expect(left.disabled).toBe(true)
-      expect(right.disabled).toBe(false)
-
-      await click(right)
-      expect(layout.visible('tab-3')).toBe(true)
-      expect(left.disabled).toBe(false)
-      await click(right)
-      expect(layout.visible('tab-4')).toBe(true)
-      expect(right.disabled).toBe(true)
-      await click(left)
-      expect(layout.visible('tab-2')).toBe(true)
-      expect(left.disabled).toBe(false)
-      await click(left)
-      expect(left.disabled).toBe(true)
-      expect(callsTo(view.fake, 'activateTab')).toEqual([])
-      expect(view.q('[data-tab="tab-1"] [role="tab"]')!.getAttribute('aria-selected')).toBe('true')
+      expect(view.q('[aria-label="Scroll tabs left"]')).toBeNull()
+      expect(view.q('[aria-label="Scroll tabs right"]')).toBeNull()
+      expect(view.q('.qt-tab-scroll')).toBeNull()
     } finally {
       resize.restore()
     }
   })
 
-  test('scroll controls disappear when resized tabs fit or tabs are removed', async () => {
+  test('"N more" appears only while tabs are hidden and counts them', async () => {
     const resize = observeResize()
     try {
       const view = await mount(fakeDaemon(makeWorkspace(group('grp-1', terminalTabs(3)))))
-      const layout = installTabLayout(view, 180, { 'tab-1': 100, 'tab-2': 100, 'tab-3': 100 })
+      const layout = installTabLayout(view, 400, { 'tab-1': 100, 'tab-2': 100, 'tab-3': 100 })
       await flushResize(resize)
-      expect(view.q('[aria-label="Scroll tabs right"]')).not.toBeNull()
+      expect(view.q('.qt-tab-more')).toBeNull()
+
+      layout.setWidth(220)
+      await flushResize(resize)
+      const more = view.q('.qt-tab-more')!
+      expect(more.textContent).toBe('2 more')
+      expect(more.nextElementSibling).toBeNull()
+      expect(more.parentElement!.nextElementSibling!.getAttribute('data-plus')).toBe('grp-1')
 
       layout.setWidth(400)
       await flushResize(resize)
-      expect(view.q('[aria-label="Scroll tabs left"]')).toBeNull()
-      expect(view.q('[aria-label="Scroll tabs right"]')).toBeNull()
-
-      layout.setWidth(180)
-      await flushResize(resize)
-      expect(view.q('[aria-label="Scroll tabs right"]')).not.toBeNull()
-      layout.setTabWidths({ 'tab-1': 50, 'tab-2': 50, 'tab-3': 50 })
-      await flushResize(resize)
-      expect(view.q('[aria-label="Scroll tabs left"]')).toBeNull()
-      expect(view.q('[aria-label="Scroll tabs right"]')).toBeNull()
+      expect(view.q('.qt-tab-more')).toBeNull()
 
       layout.setWidth(220)
-      layout.setTabWidths({ 'tab-1': 100, 'tab-2': 100, 'tab-3': 100 })
       await flushResize(resize)
-      await click(view.q('[data-tab="tab-3"] [aria-label="Close Terminal 3"]'))
-      layout.refresh()
+      expect(view.q('.qt-tab-more')).not.toBeNull()
+      layout.setTabWidths({ 'tab-1': 50, 'tab-2': 50, 'tab-3': 50 })
       await flushResize(resize)
-      expect(view.qa('[data-tab]')).toHaveLength(2)
-      expect(view.q('[aria-label="Scroll tabs left"]')).toBeNull()
-      expect(view.q('[aria-label="Scroll tabs right"]')).toBeNull()
+      expect(view.q('.qt-tab-more')).toBeNull()
     } finally {
+      resize.restore()
+    }
+  })
+
+  test('"N more" also counts tabs hidden on the left after the strip scrolls', async () => {
+    const resize = observeResize()
+    try {
+      const view = await mount(fakeDaemon(makeWorkspace(group('grp-1', terminalTabs(4)))))
+      const layout = installTabLayout(view, 220, { 'tab-1': 100, 'tab-2': 100, 'tab-3': 100, 'tab-4': 100 })
+      await flushResize(resize)
+      expect(view.q('.qt-tab-more')!.textContent).toBe('3 more')
+      layout.viewport.scrollLeft = 244
+      await fire(layout.viewport, new Event('scroll'))
+      expect(view.q('.qt-tab-more')!.textContent).toBe('3 more')
+      layout.viewport.scrollLeft = 100
+      await fire(layout.viewport, new Event('scroll'))
+      expect(view.q('.qt-tab-more')!.textContent).toBe('3 more')
+    } finally {
+      resize.restore()
+    }
+  })
+
+  test('the popup lists exactly the hidden tabs, and picking one activates it and scrolls it into view', async () => {
+    const resize = observeResize()
+    const scroll = spyOn(Element.prototype, 'scrollIntoView').mockImplementation(function (this: Element) {
+      const tab = this as HTMLElement
+      const viewport = tab.closest<HTMLElement>('.qt-tabs')
+      if (!viewport) return
+      const tabRect = tab.getBoundingClientRect()
+      const viewportRect = viewport.getBoundingClientRect()
+      if (tabRect.right > viewportRect.right) viewport.scrollLeft += tabRect.right - viewportRect.right
+    })
+    try {
+      const view = await mount(fakeDaemon(makeWorkspace(group('grp-1', terminalTabs(4)))))
+      const layout = installTabLayout(view, 220, { 'tab-1': 100, 'tab-2': 100, 'tab-3': 100, 'tab-4': 100 })
+      await flushResize(resize)
+      await click(view.q('.qt-tab-more'))
+      const rows = [...document.querySelectorAll<HTMLElement>('.ui-popup [role="menuitem"]')]
+      expect(rows.map((row) => row.textContent)).toEqual(['Terminal 2', 'Terminal 3', 'Terminal 4'])
+      expect(rows.every((row) => row.querySelector('svg.ui-tool-icon') !== null)).toBe(true)
+
+      await click(rows[2]!)
+      expect(callsTo(view.fake, 'activateTab')).toEqual([{ tab: 'tab-4' }])
+      await flushResize(resize)
+      expect(layout.visible('tab-4')).toBe(true)
+      expect(view.q('.qt-tab-more')!.textContent).toBe('3 more')
+      expect(document.querySelector('.ui-popup')).toBeNull()
+    } finally {
+      scroll.mockRestore()
+      resize.restore()
+    }
+  })
+
+  test('picking an already-selected hidden tab still scrolls it into view', async () => {
+    const resize = observeResize()
+    const scroll = spyOn(Element.prototype, 'scrollIntoView').mockImplementation(function () {})
+    try {
+      const view = await mount(fakeDaemon(makeWorkspace(group('grp-1', terminalTabs(4), { activeTab: 'tab-4' }))))
+      installTabLayout(view, 220, { 'tab-1': 100, 'tab-2': 100, 'tab-3': 100, 'tab-4': 100 })
+      await flushResize(resize)
+      scroll.mockClear()
+      await click(view.q('.qt-tab-more'))
+      const row = [...document.querySelectorAll<HTMLElement>('.ui-popup [role="menuitem"]')].find((candidate) => candidate.textContent?.includes('Terminal 4'))!
+      await click(row)
+      expect(scroll.mock.contexts.some((target) => (target as HTMLElement).dataset?.tab === 'tab-4')).toBe(true)
+    } finally {
+      scroll.mockRestore()
       resize.restore()
     }
   })
@@ -453,5 +504,111 @@ describe('SC-45 and SC-48: tab groups', () => {
   test('the actions button is disabled when the area is not split', async () => {
     const view = await mount(fakeDaemon(makeWorkspace(group('grp-1', [tab('tab-1', pane('pane-1', 's-1'))]))))
     expect(view.q<HTMLButtonElement>('[data-actions="grp-1"]')!.disabled).toBe(true)
+  })
+})
+
+function viewTab(id: string, title: string, icon?: TabIcon): ViewTab {
+  return { kind: 'view', id, viewId: 'view:test/page', key: id, title, color: 'none', pinned: false, preview: false, createdAt: '2026-10-26T00:00:00.000Z', ...(icon ? { icon } : {}) }
+}
+
+const markupOf = (markup: string) => {
+  const probe = document.createElement('div')
+  probe.innerHTML = `<svg>${markup}</svg>`
+  return probe.firstElementChild!.innerHTML
+}
+
+describe('tab icons', () => {
+  const tabIcons = (view: MountedWorkspace, id: string) => [...view.q(`[data-tab="${id}"]`)!.children].filter((child) => child.localName === 'svg')
+
+  async function mountMixed(sessions = [session('s-1')]) {
+    const tabs = [
+      tab('tab-1', pane('pane-1', 's-1'), { defaultTitle: 'Terminal 1' }),
+      viewTab('view-tool', 'Diff', { kind: 'tool', name: 'git-diff', hue: 'azure' }),
+      viewTab('view-file', 'App.tsx', { kind: 'file', path: 'src/App.tsx' }),
+      viewTab('view-control', 'Browser', { kind: 'control', name: 'globe' }),
+      viewTab('view-bare', 'Plain')
+    ]
+    return mount(fakeDaemon(makeWorkspace(group('grp-1', tabs)), { sessions }))
+  }
+
+  test('a view tab draws the icon for its kind', async () => {
+    const view = await mountMixed()
+    const tool = tabIcons(view, 'view-tool')
+    expect(tool).toHaveLength(1)
+    expect(tool[0]!.getAttribute('class')).toContain('ui-tool-icon')
+    expect(tool[0]!.innerHTML).toBe(markupOf(TOOL_ICON_MARKUP['git-diff']))
+    expect((tool[0] as unknown as HTMLElement).style.color).toBe('var(--ui-hue-azure)')
+
+    const file = tabIcons(view, 'view-file')
+    expect(file).toHaveLength(1)
+    expect(file[0]!.getAttribute('class')).toContain('ui-file-icon')
+    expect(file[0]!.getAttribute('data-icon')).toBeTruthy()
+
+    const control = tabIcons(view, 'view-control')
+    expect(control).toHaveLength(1)
+    expect(control[0]!.getAttribute('class')).toContain('ui-control-icon')
+    expect(control[0]!.innerHTML).toBe(markupOf(CONTROL_ICON_MARKUP.globe))
+  })
+
+  test('a view tab with no icon draws none and still renders its title', async () => {
+    const view = await mountMixed()
+    expect(tabIcons(view, 'view-bare')).toHaveLength(0)
+    expect(view.q('[data-tab="view-bare"] .qt-tab-title')!.textContent).toBe('Plain')
+  })
+
+  test('a terminal tab draws the terminal icon and keeps its status glyph', async () => {
+    const view = await mountMixed()
+    const icons = tabIcons(view, 'tab-1')
+    expect(icons[0]!.innerHTML).toBe(markupOf(TOOL_ICON_MARKUP['terminal-window']))
+    expect((icons[0] as unknown as HTMLElement).style.color).toBe('var(--ui-hue-cyan)')
+    expect(view.q('[data-tab="tab-1"] .qt-dot, [data-tab="tab-1"] .glyph')).not.toBeNull()
+  })
+
+  test('a terminal tab whose lead session runs an agent draws the robot and keeps its status glyph', async () => {
+    const view = await mountMixed([session('s-1', { agent: 'claude' })])
+    const icons = tabIcons(view, 'tab-1')
+    expect(icons[0]!.innerHTML).toBe(markupOf(TOOL_ICON_MARKUP.robot))
+    expect((icons[0] as unknown as HTMLElement).style.color).toBe('var(--ui-hue-lilac)')
+    expect(view.q('[data-tab="tab-1"] .qt-dot, [data-tab="tab-1"] .glyph')).not.toBeNull()
+  })
+})
+
+describe('tab strip stylesheet', () => {
+  const css = readFileSync(new URL('../../../../packages/ui/src/design-system/terminal-workspace.css', import.meta.url), 'utf8')
+  const rule = (selector: string) => {
+    const found = [...css.matchAll(/([^{}]+)\{([^{}]*)\}/g)].filter((match) => match[1]!.split(',').map((part) => part.trim()).includes(selector))
+    if (found.length === 0) throw new Error(`no rule for ${selector}`)
+    return found.map((match) => match[2]).join(' ')
+  }
+
+  test('tabs do not shrink', () => {
+    expect(rule('.qt-tab')).toMatch(/flex:\s*none/)
+  })
+
+  test('the selected tab draws its accent underline in every group', () => {
+    expect(rule('.qt-tab.qt-selected')).toMatch(/box-shadow:[^;]*var\(--ui-accent\)/)
+    expect(css).not.toMatch(/\.qt-tab\.qt-focused/)
+  })
+
+  test('a drop indicator stays visible on a selected tab', () => {
+    expect(rule('.qt-tab.qt-selected.qt-drop-before')).toMatch(/inset calc\(var\(--ui-border-width\) \* 2\) 0 0 var\(--ui-accent\)/)
+  })
+
+  test('close is transparent until the tab is selected, hovered or has focus inside', () => {
+    expect(rule('.qt-tab .qt-tab-close')).toMatch(/opacity:\s*0/)
+    const reveal = [...css.matchAll(/([^{}]+)\{[^{}]*opacity:\s*1[^{}]*\}/g)].map((match) => match[1]!)
+    const selectors = reveal.flatMap((entry) => entry.split(',').map((part) => part.trim()))
+    expect(selectors).toEqual(expect.arrayContaining(['.qt-tab.qt-selected .qt-tab-close', '.qt-tab:hover .qt-tab-close', '.qt-tab:focus-within .qt-tab-close']))
+    expect(rule('.qt-tab .qt-tab-close')).not.toMatch(/display:\s*none/)
+  })
+
+  test('the strip and the surfaces on cards use the card color, not the frame color', () => {
+    expect(rule('.qt-strip')).toMatch(/background:\s*var\(--ui-surface\)/)
+    expect(css).not.toMatch(/background:\s*var\(--ui-rail\)/)
+  })
+
+  test('the tab scroller hides its scrollbar and keeps wheel scrolling', () => {
+    expect(rule('.qt-tabs')).toMatch(/overflow-x:\s*auto/)
+    expect(rule('.qt-tabs')).toMatch(/scrollbar-width:\s*none/)
   })
 })
