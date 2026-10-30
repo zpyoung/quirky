@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Button, EmptyState, IconButton, Popover, ToolPanelActions } from '@quirky/ui'
+import { Button, ControlIcon, EmptyState, IconButton, Popover, ToolPanelActions } from '@quirky/ui'
 import type { Repo, Session, UiLayout, UiPluginContext, Worktree } from '@quirky/protocol'
 import { confirmsDelete, currentWindowId, deleteWorkspace, setWorktree, type CreateRequests, type KeptBranch, type TrustChoice, type TrustRequest } from './actions'
 import { AddProjectDialog } from './AddProjectDialog'
@@ -533,9 +533,7 @@ export function WorktreesSection({ context, report, requests, addProjectRequests
             aria-haspopup="dialog"
             onClick={() => setOptionsOpen((open) => !open)}
           >
-            <svg viewBox="0 0 24 24" width="var(--ui-icon-size)" height="var(--ui-icon-size)" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-              <path d="M4 5h16l-6.5 7.4V18l-3 1.5v-7.1L4 5Z" />
-            </svg>
+            <ControlIcon name="funnel" />
           </IconButton>
           <Popover open={optionsOpen} label="Worktrees options" anchor={optionsButton} onClose={() => setOptionsOpen(false)}>
             <div className="ui-stack">
