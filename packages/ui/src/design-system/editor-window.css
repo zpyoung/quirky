@@ -27,20 +27,21 @@
 }
 
 .qe-document-header {
-  align-items: center;
+  align-items: stretch;
   background: var(--ui-surface);
   border-bottom: var(--ui-border-width) solid var(--ui-border);
   display: flex;
   flex: 0 0 auto;
-  flex-wrap: wrap;
+  flex-direction: column;
   gap: var(--ui-space-8);
-  justify-content: space-between;
+  justify-content: flex-start;
   min-width: 0;
   padding: var(--ui-space-8) var(--ui-space-12);
 }
 
 .qe-document-path-group,
 .qe-document-actions,
+.qe-document-action-strip,
 .qe-mode-switch,
 .qe-zoom-controls {
   align-items: center;
@@ -50,8 +51,9 @@
 }
 
 .qe-document-path-group {
-  flex: 1 1 12rem;
+  flex: 0 0 auto;
   overflow: hidden;
+  width: 100%;
 }
 
 .qe-document-path.ui-button {
@@ -67,9 +69,24 @@
 }
 
 .qe-document-actions {
-  flex: 0 1 auto;
-  flex-wrap: wrap;
-  justify-content: flex-end;
+  flex: 0 0 auto;
+  flex-wrap: nowrap;
+  justify-content: flex-start;
+  width: 100%;
+}
+
+.qe-document-action-strip {
+  flex: 1 1 0;
+  flex-wrap: nowrap;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  white-space: nowrap;
+}
+
+.qe-document-action-strip > *,
+.qe-document-actions > .qe-file-actions {
+  flex: 0 0 auto;
 }
 
 .qe-mode-switch .ui-button[aria-pressed='true'] {
@@ -892,16 +909,6 @@
 }
 
 @media (max-width: 48rem) {
-  .qe-document-header {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-
-  .qe-document-actions {
-    justify-content: flex-start;
-    width: 100%;
-  }
-
   .qe-compare-columns {
     grid-template-columns: minmax(0, 1fr);
   }

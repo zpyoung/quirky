@@ -389,6 +389,10 @@ their existing commands and save guards. `quirky.editor` is included in the UI l
 presentation changes must use `@quirky/ui` components and semantic tokens, with engine styles
 owned by the shared UI package rather than injected plugin CSS.
 
+Narrow document panes keep the path above one horizontally scrollable action row. File actions
+stays visible beside that row, with its menu outside the scrolling area. Markdown formatting
+also scrolls horizontally instead of adding rows; search and review-note controls still wrap.
+
 New Markdown documents use collision-safe untitled placeholders. Save opens a relative-path
 Save As dialog; cancelling keeps the draft. The public `quirky.editor/saveAs` method accepts
 `bufferId`, `path` and `expectedRevision`, refuses existing destinations and preserves the
