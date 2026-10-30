@@ -695,6 +695,174 @@ describe('editor core through the daemon API', () => {
     expect(editorTabs.find((tab) => tab.input?.mode === 'preview')?.key).toBe(`preview:${left.id}`)
   })
 
+  test('Markdown Preview titles stay distinct through mode updates, pinning, rename, Save As and reopen', async () => {
+    const t = await boot()
+    await write(t, 'notes.md', '# Notes\n')
+    const edit = await open(t, 'notes.md', { mode: 'source', focus: false })
+    const preview = await open(t, 'notes.md', { mode: 'preview', focus: false })
+    expect(preview.id).toBe(edit.id)
+    expect(preview.openedTabId).not.toBe(edit.openedTabId)
+
+    type TerminalTab = {
+      id?: string
+      viewId?: string
+      title?: string
+      input?: { bufferId?: string; mode?: string }
+      pinned?: boolean
+      preview?: boolean
+    }
+    type TerminalGroup = { tabs?: TerminalTab[]; first?: TerminalGroup; second?: TerminalGroup }
+    const editorTabs = async (bufferId = edit.id): Promise<TerminalTab[]> => {
+      const result = await t.call<{ workspace: { root: TerminalGroup } }>('quirky.terminal/workspace', {
+        workspace: `id:${t.worktreeId}`
+      })
+      const tabs: TerminalTab[] = []
+      const visit = (group: TerminalGroup): void => {
+        for (const tab of group.tabs ?? []) {
+          if (tab.viewId === 'view:quirky.editor/document') tabs.push(tab)
+        }
+        if (group.first !== undefined) visit(group.first)
+        if (group.second !== undefined) visit(group.second)
+      }
+      visit(result.workspace.root)
+      return tabs.filter((tab) => tab.input?.bufferId === bufferId)
+    }
+    const expectTitles = async (editTabId: string, previewTabId: string, name: string): Promise<void> => {
+      const tabs = await editorTabs(edit.id)
+      expect(tabs.find((tab) => tab.id === editTabId)?.title).toBe(name)
+      expect(tabs.find((tab) => tab.id === previewTabId)?.title).toBe(`${name} (Preview)`)
+    }
+
+    await expectTitles(edit.openedTabId, preview.openedTabId, 'notes.md')
+    await t.call('quirky.editor/view', {
+      bufferId: edit.id, tabId: edit.openedTabId, action: 'update', patch: { mode: 'rich' }
+    })
+    await expectTitles(edit.openedTabId, preview.openedTabId, 'notes.md')
+    await t.call('quirky.editor/view', { bufferId: edit.id, tabId: preview.openedTabId, action: 'pin' })
+    expect((await editorTabs()).find((tab) => tab.id === preview.openedTabId)?.pinned).toBe(true)
+    await expectTitles(edit.openedTabId, preview.openedTabId, 'notes.md')
+
+    await t.call('quirky.editor/mutate', {
+      worktree: t.worktreeId, action: 'rename', path: 'notes.md', newPath: 'renamed.md'
+    })
+    await expectTitles(edit.openedTabId, preview.openedTabId, 'renamed.md')
+    expect((await t.call<{ closed: boolean }>('quirky.editor/close', {
+      bufferId: edit.id, tabId: edit.openedTabId
+    })).closed).toBe(true)
+    const reopened = await t.call<EditorBuffer | null>('quirky.editor/reopen', { worktree: t.worktreeId, focus: false })
+    expect(reopened?.id).toBe(edit.id)
+    const reopenedState = await state(t, { bufferId: edit.id })
+    const reopenedEditTab = reopenedState.tabs.find((tab) => tab.mode === 'edit')
+    expect(reopenedEditTab).toBeDefined()
+    await expectTitles(reopenedEditTab!.tabId, preview.openedTabId, 'renamed.md')
+    await t.call('quirky.editor/view', {
+      bufferId: edit.id, tabId: preview.openedTabId, action: 'returnToEdit', patch: { mode: 'source' }
+    })
+    expect((await editorTabs()).find((tab) => tab.id === preview.openedTabId)?.title).toBe('renamed.md')
+
+    const created = await t.call<{ buffer: EditorBuffer; path: string }>('quirky.editor/markdown', {
+      worktree: t.worktreeId, action: 'new'
+    })
+    const saveAsEdit = await open(t, created.path, { mode: 'source', focus: false })
+    const saveAsPreview = await open(t, created.path, { mode: 'preview', focus: false })
+    const draft = await t.call<EditorBuffer>('quirky.editor/draft', {
+      bufferId: created.buffer.id, content: '# Saved\n', expectedRevision: created.buffer.contentRevision
+    })
+    await t.call('quirky.editor/saveAs', {
+      bufferId: created.buffer.id, path: 'saved.md', expectedRevision: draft.contentRevision
+    })
+    const saveAsTabs = await editorTabs(created.buffer.id)
+    expect(saveAsTabs.find((tab) => tab.id === saveAsEdit.openedTabId)?.title).toBe('saved.md')
+    expect(saveAsTabs.find((tab) => tab.id === saveAsPreview.openedTabId)?.title).toBe('saved.md (Preview)')
+
+    await write(t, 'replaceable.md', '# Replaceable\n')
+    const replaceablePreview = await open(t, 'replaceable.md', { mode: 'preview', preview: true, focus: false })
+    const replaceableTab = (await t.call<{ tabs: { tabId: string; bufferId: string; mode: 'edit' | 'preview' }[] }>(
+      'quirky.editor/state', { bufferId: replaceablePreview.id }
+    )).tabs.find((tab) => tab.mode === 'preview')!
+    await t.call('quirky.editor/view', {
+      bufferId: replaceablePreview.id, tabId: replaceableTab.tabId, action: 'promote'
+    })
+    const promoted = await t.call<{ workspace: { root: TerminalGroup } }>('quirky.terminal/workspace', {
+      workspace: `id:${t.worktreeId}`
+    })
+    const promotedTabs: TerminalTab[] = []
+    const collectPromoted = (group: TerminalGroup): void => {
+      for (const tab of group.tabs ?? []) {
+        if (tab.viewId === 'view:quirky.editor/document' && tab.input?.bufferId === replaceablePreview.id) promotedTabs.push(tab)
+      }
+      if (group.first !== undefined) collectPromoted(group.first)
+      if (group.second !== undefined) collectPromoted(group.second)
+    }
+    collectPromoted(promoted.workspace.root)
+    expect(promotedTabs.find((tab) => tab.id === replaceableTab.tabId)).toMatchObject({
+      title: 'replaceable.md (Preview)', preview: false
+    })
+  })
+
+  test('200-character Markdown Preview titles fit terminal bounds through rename and Save As', async () => {
+    const t = await boot()
+    const originalName = `${'n'.repeat(197)}.md`
+    const renamedName = `${'r'.repeat(197)}.md`
+    expect(originalName.length).toBe(200)
+    await write(t, originalName, '# Long name\n')
+    const edit = await open(t, originalName, { mode: 'source', focus: false })
+    const preview = await open(t, originalName, { mode: 'preview', focus: false })
+
+    type TerminalTab = {
+      id?: string
+      viewId?: string
+      title?: string
+      input?: { bufferId?: string }
+    }
+    type TerminalGroup = { tabs?: TerminalTab[]; first?: TerminalGroup; second?: TerminalGroup }
+    const editorTabs = async (bufferId: string): Promise<TerminalTab[]> => {
+      const result = await t.call<{ workspace: { root: TerminalGroup } }>('quirky.terminal/workspace', {
+        workspace: `id:${t.worktreeId}`
+      })
+      const tabs: TerminalTab[] = []
+      const visit = (group: TerminalGroup): void => {
+        for (const tab of group.tabs ?? []) {
+          if (tab.viewId === 'view:quirky.editor/document' && tab.input?.bufferId === bufferId) tabs.push(tab)
+        }
+        if (group.first !== undefined) visit(group.first)
+        if (group.second !== undefined) visit(group.second)
+      }
+      visit(result.workspace.root)
+      return tabs
+    }
+    const expectTitles = async (bufferId: string, editTabId: string, previewTabId: string, name: string): Promise<void> => {
+      const tabs = await editorTabs(bufferId)
+      const editTitle = tabs.find((tab) => tab.id === editTabId)?.title
+      const previewTitle = tabs.find((tab) => tab.id === previewTabId)?.title
+      expect(editTitle).toBe(name)
+      expect(editTitle?.length).toBeLessThanOrEqual(200)
+      expect(previewTitle).toBe(`${name.slice(0, 190)} (Preview)`)
+      expect(previewTitle?.length).toBeLessThanOrEqual(200)
+    }
+
+    await expectTitles(edit.id, edit.openedTabId, preview.openedTabId, originalName)
+    await t.call('quirky.editor/mutate', {
+      worktree: t.worktreeId, action: 'rename', path: originalName, newPath: renamedName
+    })
+    await expectTitles(edit.id, edit.openedTabId, preview.openedTabId, renamedName)
+
+    const created = await t.call<{ buffer: EditorBuffer; path: string }>('quirky.editor/markdown', {
+      worktree: t.worktreeId, action: 'new'
+    })
+    const saveAsEdit = await open(t, created.path, { mode: 'source', focus: false })
+    const saveAsPreview = await open(t, created.path, { mode: 'preview', focus: false })
+    const draft = await t.call<EditorBuffer>('quirky.editor/draft', {
+      bufferId: created.buffer.id, content: '# Saved long name\n', expectedRevision: created.buffer.contentRevision
+    })
+    const saveAsName = `${'s'.repeat(197)}.md`
+    expect(saveAsName.length).toBe(200)
+    await t.call('quirky.editor/saveAs', {
+      bufferId: created.buffer.id, path: saveAsName, expectedRevision: draft.contentRevision
+    })
+    await expectTitles(created.buffer.id, saveAsEdit.openedTabId, saveAsPreview.openedTabId, saveAsName)
+  })
+
   test('SC-21/22: settings and generated commands are public, every method has schema, and disable disposes the editor lifecycle', async () => {
     const t = await boot()
     const api = await t.call<ApiDescription>('api.describe')
