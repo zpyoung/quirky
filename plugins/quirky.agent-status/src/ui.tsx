@@ -1,6 +1,6 @@
 import { createRoot } from 'react-dom/client'
 import type { Methods, MountFunction, UiPluginContext } from '@quirky/protocol'
-import { ActivityNavigation, ActivityView } from './ActivityView'
+import { ActivityView } from './ActivityView'
 import { DashboardNavigation, DashboardView, dashboardViewInput } from './DashboardView'
 import { openActivityThread } from './activity-navigation'
 
@@ -38,13 +38,14 @@ function activityInput(args: unknown): Record<string, unknown> {
 export function activate(context: UiPluginContext): void {
   const mountView: MountFunction = (element, { input }) => {
     Object.assign(element.style, { display: 'flex', flexDirection: 'column', flex: '1', minHeight: '0', minWidth: '0', overflow: 'hidden' })
-    const root = createRoot(element)
+    const root = createRoot(element, { identifierPrefix: 'quirky-agent-status-activity-view-' })
     root.render(<ActivityView context={context} input={input} />)
     return () => root.unmount()
   }
   const mountSidebar: MountFunction = (element) => {
-    const root = createRoot(element)
-    root.render(<ActivityNavigation context={context} />)
+    Object.assign(element.style, { display: 'flex', flexDirection: 'column', flex: '1', minHeight: '0', minWidth: '0', overflow: 'hidden' })
+    const root = createRoot(element, { identifierPrefix: 'quirky-agent-status-activity-sidebar-' })
+    root.render(<ActivityView context={context} embedded />)
     return () => root.unmount()
   }
   const mountDashboard: MountFunction = (element, { input }) => {
