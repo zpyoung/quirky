@@ -11,7 +11,7 @@ Back-link: [Conceptual model](logic.md#conceptual-model), [How a comment moves](
 The plugin has three layers, with dependencies in one direction:
 
 - `plugins/quirky.feedback/src/ui.tsx` is a small stub loaded at window connect. It registers the command, tracks settings and context keys, and dynamically imports the mode on first activation. Plugin UI builds already use `splitting: true` (`packages/ui/build.ts`), so that import becomes a separate chunk.
-- `plugins/quirky.feedback/src/mode/` holds the picker, comment card, tray, banner and chip. It renders inside the plugin's overlay mount and reads the host DOM directly, because plugin UI runs in the host document.
+- `plugins/quirky.feedback/src/mode/` holds the picker, comment card, tray, banner and chip. It renders in its own container appended to `document.body` and reads the host DOM directly, because plugin UI runs in the host document. It can't render inside the overlay mount: `.overlay-layer` is a stacking context at z-index 40, below context menus (60) and dialogs (1000), so a picker there couldn't cover a menu item (SC-4). The overlay mount is only the stub's lifecycle hook.
 - `plugins/quirky.feedback/main.ts` is the lazy daemon entry that owns stored comments, reached only through `quirky.feedback/*` methods.
 
 Pure modules `src/capture.ts`, `src/format.ts` and `src/issue.ts` have no React or daemon dependency.
@@ -93,7 +93,7 @@ Back-link: [SC-1, SC-3, SC-8, SC-12, SC-13](logic.md#behavior-and-scenarios), [A
 - **Banner:** shows the mode text and an Exit button that sets `active` false.
 - **Failures:** a failed daemon call keeps the card or row as it was, and shows a toast. `feedback_full` shows the limit message without opening a card.
 - **Native masks:** the banner, card, tray and chip carry `data-quirky-native-mask`. The full-window selection host never does, because masking it would hide every Native page.
-- **SC-7 order:** Annotate this page sets `active` false, waits for the mode to unmount, then runs `quirky.browser/design` with `action: annotate` and the pane.
+- **SC-7 order:** Annotate this page sets `active` false, waits for the mode to unmount, then runs `quirky.browser/design` with `action: annotate` and the pane. It runs through `context.call('ui.command.run', ...)`, because `context.executeCommand` discards the `{ started, reason }` result.
 
 ### Feedback daemon methods
 
@@ -124,6 +124,8 @@ SCHEMA: `Capture` holds `kind` (`element` | `terminal-pane` | `browser-pane`), `
 ### Picker
 
 - Uses `createSelectionOverlay` in the host document. Hover and click resolve with `document.elementsFromPoint`, skip the feedback overlay's own nodes, and take the first remaining element, so a click on the surface never reaches the app.
+- Pointer and mouse events whose target is the selection host are stopped with `stopImmediatePropagation` in a `window` capture listener, registered when the mode starts. The dismiss listeners on menus and popovers (`context-menu.tsx`, `navigation.tsx`, `floating.tsx`) listen on `window` and `document`, so this keeps an open menu open for selection (SC-4). The mode's container also stops `focusin` from bubbling to `document`, so opening a card doesn't dismiss a menu or trip a dialog's focus trap.
+- While `context.confirm` is pending, the picker is suspended: the selection host is hidden, the mode's listeners pass everything through so the dialog takes Esc, and the container drops to `z-index: 0` so the dialog shows above it.
 - While Option is held, the overlay host is `pointer-events: none`, set with `important` priority because `createSelectionOverlay` sets it that way (`selection-overlay.ts:20-23`). Toggling the inner surface isn't enough. Releasing Option restores it, and so does a window blur, so Option can't stick. `altKey` on pointer events corrects the state if a keydown was missed.
 - Turning the mode on moves focus to the surface, so keys reach the host even if a terminal had focus. A Native page never forwards keys, so inside one the banner's Exit button and the View item are the ways out.
 - Key listeners are on `window` in the capture phase. They handle Esc per SC-5 and stop propagation only for keys they consume.
