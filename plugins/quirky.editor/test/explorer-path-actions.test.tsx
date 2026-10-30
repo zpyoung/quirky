@@ -317,7 +317,7 @@ function makeTransfer(): Transfer {
   return transfer as Transfer
 }
 
-function dispatchDrag(target: HTMLElement, type: 'dragstart' | 'drop', transfer: Transfer): Event {
+function dispatchDrag(target: HTMLElement, type: 'dragstart' | 'dragover' | 'drop', transfer: Transfer): Event {
   const event = new Event(type, { bubbles: true, cancelable: true })
   Object.defineProperty(event, 'dataTransfer', { configurable: true, value: transfer })
   target.dispatchEvent(event)
@@ -339,6 +339,82 @@ async function waitForExplorerRefresh(fixture: Fixture, start: number): Promise<
     return loadingIndex >= 0 && reports.slice(loadingIndex + 1).some((report) => !report.loading) || false
   })
 }
+
+test('Explorer keeps inline create and rename controls outside the tree ownership', async () => {
+  const fixture = await makeFixture({ displayRoot: 'nested' })
+  const panel = await renderExplorer(fixture)
+  const scrollContainer = panel.element.querySelector<HTMLElement>('.qe-explorer-tree')
+  const tree = panel.element.querySelector<HTMLElement>('[role="tree"]')
+  expect(scrollContainer).not.toBeNull()
+  expect(tree).not.toBeNull()
+
+  const treeItems = Array.from(tree!.children) as HTMLElement[]
+  expect(treeItems.length).toBeGreaterThan(1)
+  expect(treeItems.every((item) => item.getAttribute('role') === 'treeitem')).toBe(true)
+  await act(async () => {
+    tree!.focus()
+    tree!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Home', bubbles: true, cancelable: true }))
+  })
+  await waitForUi(() => tree!.getAttribute('aria-activedescendant') === treeItems[0]!.id || false)
+  await act(async () => {
+    tree!.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, cancelable: true }))
+  })
+  await waitForUi(() => tree!.getAttribute('aria-activedescendant') === treeItems[1]!.id || false)
+
+  const assertInlineFormOwnership = (input: HTMLInputElement, accessibleName: string, usesAriaLabel = false) => {
+    const inlineRow = input.closest<HTMLElement>('.qe-explorer-inline-row')
+    expect(inlineRow).not.toBeNull()
+    expect(scrollContainer!.contains(inlineRow)).toBe(true)
+    expect(tree!.contains(inlineRow)).toBe(false)
+    expect(Array.from(tree!.children).every((item) => item.getAttribute('role') === 'treeitem')).toBe(true)
+    if (usesAriaLabel) {
+      expect(input.getAttribute('aria-label')).toBe(accessibleName)
+    } else {
+      const label = Array.from(inlineRow!.querySelectorAll('label')).find((candidate) => candidate.htmlFor === input.id)
+      expect(label?.textContent?.trim()).toBe(accessibleName)
+    }
+    const controls = Array.from(inlineRow!.querySelectorAll<HTMLInputElement | HTMLButtonElement>('input, button'))
+    expect(controls).toContain(input)
+    expect(controls.filter((control) => control instanceof HTMLButtonElement).map((button) => button.textContent?.trim()))
+      .toEqual(usesAriaLabel ? ['Rename', 'Cancel'] : ['Create', 'Cancel'])
+    expect(controls.every((control) => !tree!.contains(control))).toBe(true)
+    return inlineRow!
+  }
+
+  const newFile = panel.element.querySelector<HTMLButtonElement>('button[title="New File"]')
+  if (!newFile) throw new Error('Missing New File action')
+  await act(async () => newFile.click())
+  const newFileInput = await waitForUi(() => panel.element.querySelector<HTMLInputElement>('.qe-explorer-inline-row input') ?? false)
+  const newFileRow = assertInlineFormOwnership(newFileInput, 'New file name')
+  const cancelNewFile = Array.from(newFileRow.querySelectorAll<HTMLButtonElement>('button'))
+    .find((button) => button.textContent?.trim() === 'Cancel')
+  if (!cancelNewFile) throw new Error('Missing Cancel action for New File')
+  await act(async () => cancelNewFile.click())
+  await waitForUi(() => panel.element.querySelector('.qe-explorer-inline-row') === null || false)
+
+  const newFolder = panel.element.querySelector<HTMLButtonElement>('button[title="New Folder"]')
+  if (!newFolder) throw new Error('Missing New Folder action')
+  await act(async () => newFolder.click())
+  const newFolderInput = await waitForUi(() => panel.element.querySelector<HTMLInputElement>('.qe-explorer-inline-row input') ?? false)
+  const newFolderRow = assertInlineFormOwnership(newFolderInput, 'New folder name')
+  const cancelNewFolder = Array.from(newFolderRow.querySelectorAll<HTMLButtonElement>('button'))
+    .find((button) => button.textContent?.trim() === 'Cancel')
+  if (!cancelNewFolder) throw new Error('Missing Cancel action for New Folder')
+  await act(async () => cancelNewFolder.click())
+  await waitForUi(() => panel.element.querySelector('.qe-explorer-inline-row') === null || false)
+
+  const sourceRow = findRow(panel.element, join(fixture.root, FILE_A))
+  if (!sourceRow) throw new Error('Missing source row for Rename')
+  const rename = await actionButton(sourceRow, 'Rename')
+  await act(async () => rename.click())
+  const renameInput = await waitForUi(() => panel.element.querySelector<HTMLInputElement>('input[aria-label="Rename file"]') ?? false)
+  const renameRow = assertInlineFormOwnership(renameInput, 'Rename file', true)
+  const cancelRename = Array.from(renameRow.querySelectorAll<HTMLButtonElement>('button'))
+    .find((button) => button.textContent?.trim() === 'Cancel')
+  if (!cancelRename) throw new Error('Missing Cancel action for Rename')
+  await act(async () => cancelRename.click())
+  await waitForUi(() => panel.element.querySelector('.qe-explorer-inline-row') === null || false)
+})
 
 test('Explorer row actions copy canonical absolute and worktree-relative paths and open the real directory in Terminal', async () => {
   const fixture = await makeFixture({ displayRoot: 'nested' })
@@ -574,6 +650,43 @@ test('Explorer footer copies multi-selection paths and row drags satisfy the Ter
   expect(shellEscapePaths(resolved)).toBe(`'${fixture.root}/nested/A O'\\''Brien café #1? report.txt' '${fixture.root}/nested/B résumé #2.txt'`)
 })
 
+test('Explorer root drops use the full scroll-container hitbox', async () => {
+  const fixture = await makeFixture()
+  const panel = await renderExplorer(fixture)
+  const scrollContainer = panel.element.querySelector<HTMLElement>('.qe-explorer-tree')
+  if (!scrollContainer) throw new Error('Missing Explorer scroll container')
+
+  const source = join(fixture.root, FILE_A)
+  const destination = join(fixture.root, basename(FILE_A))
+  const nestedRow = findRow(panel.element, join(fixture.root, 'nested'))
+  if (!nestedRow) throw new Error('Missing nested directory row for root drop')
+  await act(async () => nestedRow.click())
+  await waitForUi(() => findRow(panel.element, source) || false)
+  const sourceRow = findRow(panel.element, source)
+  if (!sourceRow) throw new Error('Missing source row for root drop')
+  const transfer = makeTransfer()
+  await act(async () => { dispatchDrag(sourceRow, 'dragstart', transfer) })
+
+  let dragOver: Event | undefined
+  await act(async () => { dragOver = dispatchDrag(scrollContainer, 'dragover', transfer) })
+  expect(dragOver?.defaultPrevented).toBe(true)
+
+  const reportStart = fixture.reports.length
+  let drop: Event | undefined
+  await act(async () => { drop = dispatchDrag(scrollContainer, 'drop', transfer) })
+  expect(drop?.defaultPrevented).toBe(true)
+  const result = await waitForUi(() => {
+    if (existsSync(destination) && !existsSync(source)) return 'moved'
+    const alert = panel.element.querySelector('[role="alert"]')
+    return alert?.textContent ? `error: ${alert.textContent}` : false
+  })
+  expect(result).toBe('moved')
+  await waitForExplorerRefresh(fixture, reportStart)
+  expect(existsSync(source)).toBe(false)
+  expect(readFileSync(destination, 'utf8')).toBe('alpha\n')
+  expect(panel.element.querySelector('[role="alert"]')).toBeNull()
+}, 30_000)
+
 test('Explorer row drops keep same-folder paths unchanged and move to a different folder', async () => {
   const fixture = await makeFixture()
   expect(fixture.listing.root).toBe(fixture.documentRoot.path)
@@ -669,7 +782,7 @@ test('Explorer rename starts with the filename, selects its stem, and keeps the 
   const noExtensionRow = findRow(panel.element, noExtension)
   expect(noExtensionRow).not.toBeNull()
   await selectRow(panel.element, noExtension)
-  const tree = panel.element.querySelector<HTMLElement>('.qe-explorer-tree')
+  const tree = panel.element.querySelector<HTMLElement>('[role="tree"]')
   expect(tree).not.toBeNull()
   await act(async () => {
     tree!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }))

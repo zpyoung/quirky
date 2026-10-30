@@ -738,7 +738,7 @@
   padding: var(--ui-space-4) var(--ui-space-6);
 }
 
-.qe-explorer-tree:focus-visible {
+.qe-explorer-tree-content:focus-visible {
   outline: var(--ui-focus-width) solid var(--ui-accent);
   outline-offset: calc(0rem - var(--ui-focus-width));
 }

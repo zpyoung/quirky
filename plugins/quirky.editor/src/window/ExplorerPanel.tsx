@@ -914,17 +914,20 @@ export function ExplorerPanel({ context, report }: { context: UiPluginContext; r
       {searchMode === 'names' ? (
         <div
           className="qe-explorer-tree"
-          role="tree"
-          tabIndex={0}
-          ref={treeRef}
-          aria-activedescendant={focusedPath === null ? undefined : `qe-explorer-row-${encodeURIComponent(focusedPath)}`}
-          onKeyDown={onTreeKeyDown}
           onDragOver={(event) => {
             const types = event.dataTransfer.types
             if (types.includes(WORKTREE_PATHS_MIME) || types.includes('Files') || types.includes('text/uri-list')) event.preventDefault()
           }}
           onDrop={(event) => { event.preventDefault(); void dropOnFolder(event, '.').catch((reason: unknown) => setError(messageOf(reason))) }}
         >
+          <div
+            className="qe-explorer-tree-content"
+            role="tree"
+            tabIndex={0}
+            ref={treeRef}
+            aria-activedescendant={focusedPath === null ? undefined : `qe-explorer-row-${encodeURIComponent(focusedPath)}`}
+            onKeyDown={onTreeKeyDown}
+          >
           {rows.map(({ entry, depth }) => (
             <div
               key={entry.path}
@@ -1023,6 +1026,7 @@ export function ExplorerPanel({ context, report }: { context: UiPluginContext; r
               />
             </div>
           ))}
+          </div>
           {newItemKind && (
             <div className="qe-explorer-inline-row">
               <TextField
