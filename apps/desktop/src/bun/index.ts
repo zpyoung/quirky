@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { existsSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
-import { QuirkyClient } from '@quirky/protocol'
+import { NATIVE_BROWSER_NAVIGATION_RULES, QuirkyClient } from '@quirky/protocol'
 import { ensureDaemon, quirkyHome, rpcUrl, type RuntimeInfo } from '@quirky/protocol/node'
 import { ApplicationMenu, BrowserView, BrowserWindow, Session, Tray, Updater, Utils, app, type ApplicationMenuItemConfig } from 'electrobun/main'
 import { maintainConnection } from './connection'
@@ -25,7 +25,7 @@ import {
 } from './events'
 import { daemonUrl, errorPageHtml } from './page'
 import { findRepoRoot, resolveRuntimeEnv, trayDotPath } from './paths'
-import { createNativeBrowserHandlers, type NativeBrowserHostRPC } from './native-browser'
+import { createNativeBrowserHandlers, popupWindowTitle, type NativeBrowserHostRPC, type NativeBrowserPopup } from './native-browser'
 import { playSound } from './sound'
 import {
   UPDATE_APPLY_ACTION,
@@ -134,13 +134,48 @@ function createWindow(
   lifecycle: WindowLifecycle = { kind: 'main' }
 ): BrowserWindow {
   let created: BrowserWindow | null = null
+  const popupWindows = new Set<BrowserWindow>()
+  const openPopup = (popup: NativeBrowserPopup): boolean => {
+    if (!created) return false
+    const width = Math.min(Math.max(popup.width ?? 520, 320), 1200)
+    const height = Math.min(Math.max(popup.height ?? 640, 320), 1000)
+    const popupWindow = new BrowserWindow({
+      title: popupWindowTitle(popup.url),
+      frame: { x: 160, y: 120, width, height },
+      html: '<!doctype html><title>Popup</title>',
+      url: null
+    })
+    // The adopted view is the page WebKit already created for the opener, so window.opener and a POST body survive.
+    const view = new BrowserView({
+      windowId: popupWindow.id,
+      popupRequestId: popup.requestId,
+      partition: popup.partition,
+      renderer: 'native',
+      sandbox: true,
+      autoResize: true,
+      frame: { x: 0, y: 0, width, height }
+    })
+    view.setNavigationRules([...NATIVE_BROWSER_NAVIGATION_RULES])
+    view.on('did-navigate', (event) => {
+      const url = (event as { data?: { detail?: unknown } }).data?.detail
+      if (typeof url === 'string') popupWindow.setTitle(popupWindowTitle(url))
+    })
+    view.on('close-requested', () => popupWindow.close())
+    popupWindows.add(popupWindow)
+    popupWindow.on('close', () => popupWindows.delete(popupWindow))
+    popupWindow.show()
+    popupWindow.activate()
+    return true
+  }
   const nativeBrowserHandlers = createNativeBrowserHandlers({
     getWindow: () => created ? { id: created.id, webview: created.webview } : null,
     getView: (id) => BrowserView.getById(id),
     sessionProxy: {
       supported: () => Session.supportsProxy,
       set: (partition, proxy) => Session.fromPartition(partition).setProxy(proxy)
-    }
+    },
+    sendPageEvent: (message) => rpc.send.nativeBrowserPageEvent(message),
+    openPopup
   })
   const pickFolder = async (request: NativeBrowserHostRPC['bun']['requests']['pickFolder']['params']) => {
     if (process.platform !== 'darwin') throw new Error('native directory selection is unavailable on this platform')
@@ -196,6 +231,8 @@ function createWindow(
         setNativeBrowserZoom: nativeBrowserHandlers.setZoom,
         releaseNativeBrowserView: nativeBrowserHandlers.release,
         routeNativeBrowserLabels: nativeBrowserHandlers.routeLabels,
+        answerNativeBrowserRequest: nativeBrowserHandlers.answer,
+        cancelNativeBrowserDownload: nativeBrowserHandlers.cancelDownload,
         pickFolder,
         openWindow,
         closeWindow,
@@ -230,6 +267,7 @@ function createWindow(
   }
   ownedWindow.on('close', () => {
     nativeBrowserHandlers.dispose()
+    for (const popupWindow of popupWindows) popupWindow.close()
     if (lifecycle.kind === 'main') {
       for (const child of auxiliaryWindows.values()) {
         if (child.ownerWindowId === ownedWindow.id) child.window.close()

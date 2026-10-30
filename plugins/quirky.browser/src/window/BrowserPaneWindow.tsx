@@ -10,8 +10,8 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent as ReactPointerEvent
 } from 'react'
-import type { NativeBrowserHandle, NativeBrowserRequest, NativeBrowserState, UiPluginContext } from '@quirky/protocol'
-import type { PaneCommand, PaneDownload, PaneFrame, PanePrompt, PaneState, PaneTab, PaneViewport } from '../pane-contract'
+import type { NativeBrowserHandle, NativeBrowserPageRequest, NativeBrowserRequest, NativeBrowserState, UiPluginContext } from '@quirky/protocol'
+import type { PaneCommand, PaneDownload, PaneFrame, PaneNativeAction, PaneNativeDecision, PanePrompt, PaneState, PaneTab, PaneViewport } from '../pane-contract'
 import { acceptLatestFrame, isTextInputKey, nativePreviewNavigationUrl, nativePreviewReportUrl, paneForView, pointerToFramePoint } from './model'
 import { DesignWindow, type DesignAction } from '../design-window/DesignWindow'
 import { BrowserImportHint, BrowserProfileMenu } from '../preferences-window/BrowserProfileMenu'
@@ -361,6 +361,8 @@ export function BrowserPaneWindow({ context, input }: { context: UiPluginContext
   const [message, setMessage] = useState<{ text: string; kind: 'info' | 'error' } | null>(null)
   const [settings, setSettings] = useState(() => readSettings(context))
   const [promptValues, setPromptValues] = useState<Record<string, { text: string; username: string; password: string }>>({})
+  // Native sign-in credentials stay in this window: the daemon only learns that the user accepted.
+  const nativeCredentialsRef = useRef(new Map<string, { username: string; password: string }>())
   const [designPageHost, setDesignPageHost] = useState<HTMLDivElement | null>(null)
   const [browserFocused, setBrowserFocused] = useState(false)
 
@@ -443,6 +445,22 @@ export function BrowserPaneWindow({ context, input }: { context: UiPluginContext
         }
         frameRef.current = accepted
         setFrame(accepted)
+      }
+      if (event.type === 'quirky.browser/paneNative' && typeof event.data === 'object' && event.data !== null) {
+        const action = event.data as PaneNativeAction
+        const handle = nativeHandleRef.current
+        if (!handle || paneRef.current?.id !== action.pane || paneRef.current.mode !== 'native') return
+        if (action.action === 'cancelDownload') {
+          void handle.cancelDownload?.(action.id).catch(() => false)
+          return
+        }
+        const credentials = action.kind === 'auth' ? nativeCredentialsRef.current.get(action.prompt) : undefined
+        nativeCredentialsRef.current.delete(action.prompt)
+        void handle.answer?.(action.id, {
+          accept: action.accept,
+          ...(action.text === undefined ? {} : { text: action.text }),
+          ...(credentials && action.accept ? credentials : {})
+        }).catch(() => false)
       }
       if (event.type === 'setting.changed' && event.id.startsWith('setting:quirky.browser/')) setSettings(readSettings(context))
     })
@@ -623,6 +641,21 @@ export function BrowserPaneWindow({ context, input }: { context: UiPluginContext
     })
   }, [context])
 
+  const relayNativeRequest = useCallback(async (handle: NativeHandle, paneId: string, request: NativeBrowserPageRequest) => {
+    try {
+      const decision = await context.call('quirky.browser/paneNativeRequest', { pane: paneId, request }) as PaneNativeDecision
+      if (decision.answer) {
+        await handle.answer?.(request.id, decision.answer)
+        if (request.kind === 'popup' && !decision.answer.accept && mountedRef.current) {
+          setMessage({ text: `A popup to ${request.url} was blocked: only HTTP(S) popups may open, at most four every two seconds.`, kind: 'info' })
+        }
+      }
+    } catch (error) {
+      await handle.answer?.(request.id, { accept: false }).catch(() => false)
+      if (mountedRef.current) setMessage({ text: errorText(error), kind: 'error' })
+    }
+  }, [context])
+
   useEffect(() => {
     const host = nativeHostRef.current
     if (!pane || pane.mode !== 'native' || !context.nativeBrowser.available || !host) {
@@ -658,6 +691,18 @@ export function BrowserPaneWindow({ context, input }: { context: UiPluginContext
           if (!mounted) return
           const gesture = userGesture ? 'after a user action' : 'without a user action'
           setMessage({ text: `A native popup was observed ${gesture}. Quirky cannot safely transfer named or opener-dependent windows; no URL-only popup was opened (${url}).`, kind: 'info' })
+        },
+        onPageRequest: (request) => {
+          if (!mounted) return
+          void relayNativeRequest(handle, pane.id, request)
+        },
+        onPageRequestExpired: (id) => {
+          if (!mounted) return
+          void context.call('quirky.browser/paneNativeUpdate', { pane: pane.id, expired: id }).catch(() => undefined)
+        },
+        onDownload: (update) => {
+          if (!mounted) return
+          void context.call('quirky.browser/paneNativeUpdate', { pane: pane.id, download: update }).catch(() => undefined)
         }
       })
       nativeHandleRef.current = handle
@@ -673,7 +718,7 @@ export function BrowserPaneWindow({ context, input }: { context: UiPluginContext
       if (nativeHandleRef.current === handle) nativeHandleRef.current = null
       handle.dispose()
     }
-  }, [context, pane?.id, pane?.mode, pane?.profileId, pane?.partition, context.nativeBrowser.available, reportNativeState, nativeRetry, nativeMountRevision])
+  }, [context, pane?.id, pane?.mode, pane?.profileId, pane?.partition, context.nativeBrowser.available, reportNativeState, relayNativeRequest, nativeRetry, nativeMountRevision])
   useEffect(() => {
     if (!pane || pane.mode !== 'native' || !context.nativeBrowser.available) return
     const needsGuest = pane.url !== 'about:blank' || pane.loading || pane.command !== null || pane.canGoBack || pane.canGoForward
@@ -965,12 +1010,14 @@ export function BrowserPaneWindow({ context, input }: { context: UiPluginContext
 
   const respond = async (prompt: PanePrompt, accept: boolean) => {
     const values = promptValues[prompt.id] ?? { text: prompt.defaultValue ?? '', username: '', password: '' }
+    const nativeAuth = pane?.mode === 'native' && prompt.kind === 'auth'
+    if (nativeAuth && accept) nativeCredentialsRef.current.set(prompt.id, { username: values.username, password: values.password })
     await invoke('paneRespond', {
       pane: pane?.id,
       prompt: prompt.id,
       accept,
       ...(prompt.kind === 'prompt' && accept ? { text: values.text } : {}),
-      ...(prompt.kind === 'auth' && accept ? { username: values.username, password: values.password } : {})
+      ...(prompt.kind === 'auth' && accept && !nativeAuth ? { username: values.username, password: values.password } : {})
     })
     if (!mountedRef.current) return
     setPromptValues((current) => {
@@ -1002,7 +1049,7 @@ export function BrowserPaneWindow({ context, input }: { context: UiPluginContext
     : undefined
   const canUseWatch = pane?.mode === 'watch'
 
-  const activePrompt = pane?.mode === 'watch' ? pane.prompts[0] ?? null : null
+  const activePrompt = pane?.mode === 'watch' || (pane?.mode === 'native' && context.nativeBrowser.pageRequestsAvailable) ? pane.prompts[0] ?? null : null
   return (
     <div
       ref={rootRef}
@@ -1346,7 +1393,7 @@ export function BrowserPaneWindow({ context, input }: { context: UiPluginContext
         </div>
       </div> : null}
 
-      {pane?.mode === 'watch' && pane.downloads.length ? <div className="qbp-shelf" aria-label="Downloads" style={paneStyles.shelf}>
+      {pane?.downloads.length ? <div className="qbp-shelf" aria-label="Downloads" style={paneStyles.shelf}>
         <SectionHeader title="Downloads" />
         {pane.downloads.map((download) => <DownloadRow key={download.id} download={download} onAction={(action) => void invoke('paneDownload', { pane: pane.id, download: download.id, action })} />)}
       </div> : null}

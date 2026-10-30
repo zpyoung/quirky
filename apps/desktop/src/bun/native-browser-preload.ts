@@ -1,13 +1,16 @@
 import type { DesktopShellBridge, NativeDesktopCapabilities } from '@quirky/protocol'
 import { Electroview } from 'electrobun/view'
 import { createDropSourcePathsInbox } from './drop-source-paths'
-import type { NativeBrowserHostRPC } from './native-browser'
+import type { NativeBrowserHostRPC, NativeBrowserPageEvent } from './native-browser'
 
 type NativeBrowserPreloadBridge = {
   claimNativeBrowserView(params: NativeBrowserHostRPC['bun']['requests']['claimNativeBrowserView']['params']): Promise<NativeBrowserHostRPC['bun']['requests']['claimNativeBrowserView']['response']>
   setNativeBrowserZoom(params: NativeBrowserHostRPC['bun']['requests']['setNativeBrowserZoom']['params']): Promise<NativeBrowserHostRPC['bun']['requests']['setNativeBrowserZoom']['response']>
   releaseNativeBrowserView(params: NativeBrowserHostRPC['bun']['requests']['releaseNativeBrowserView']['params']): Promise<NativeBrowserHostRPC['bun']['requests']['releaseNativeBrowserView']['response']>
   routeNativeBrowserLabels(params: NativeBrowserHostRPC['bun']['requests']['routeNativeBrowserLabels']['params']): Promise<NativeBrowserHostRPC['bun']['requests']['routeNativeBrowserLabels']['response']>
+  answerNativeBrowserRequest(params: NativeBrowserHostRPC['bun']['requests']['answerNativeBrowserRequest']['params']): Promise<NativeBrowserHostRPC['bun']['requests']['answerNativeBrowserRequest']['response']>
+  cancelNativeBrowserDownload(params: NativeBrowserHostRPC['bun']['requests']['cancelNativeBrowserDownload']['params']): Promise<NativeBrowserHostRPC['bun']['requests']['cancelNativeBrowserDownload']['response']>
+  onNativeBrowserPageEvent(listener: (viewId: number, event: NativeBrowserPageEvent) => void): () => void
 }
 
 type DesktopRequestBridge = {
@@ -36,8 +39,17 @@ declare global {
 
 // This runs only in Quirky's trusted shell BrowserWindow. Sandboxed guest webviews never receive this preload.
 const dropSourcePaths = createDropSourcePathsInbox()
+const pageEventListeners = new Set<(viewId: number, event: NativeBrowserPageEvent) => void>()
 const rpc = Electroview.defineRPC<NativeBrowserHostRPC>({
-  handlers: { requests: {}, messages: { dropSourcePaths: ({ paths }: { paths: string[] }) => dropSourcePaths.receive(paths) } }
+  handlers: {
+    requests: {},
+    messages: {
+      dropSourcePaths: ({ paths }: { paths: string[] }) => dropSourcePaths.receive(paths),
+      nativeBrowserPageEvent: ({ viewId, event }: { viewId: number; event: NativeBrowserPageEvent }) => {
+        for (const listener of pageEventListeners) listener(viewId, event)
+      }
+    }
+  }
 })
 new Electroview({ rpc })
 const requests = (rpc as unknown as { request: NativeBrowserPreloadBridge & DesktopRequestBridge }).request
@@ -47,7 +59,13 @@ const bridge: NativeBrowserPreloadBridge = {
   claimNativeBrowserView: (params) => requests.claimNativeBrowserView(params),
   setNativeBrowserZoom: (params) => requests.setNativeBrowserZoom(params),
   releaseNativeBrowserView: (params) => requests.releaseNativeBrowserView(params),
-  routeNativeBrowserLabels: (params) => requests.routeNativeBrowserLabels(params)
+  routeNativeBrowserLabels: (params) => requests.routeNativeBrowserLabels(params),
+  answerNativeBrowserRequest: (params) => requests.answerNativeBrowserRequest(params),
+  cancelNativeBrowserDownload: (params) => requests.cancelNativeBrowserDownload(params),
+  onNativeBrowserPageEvent: (listener) => {
+    pageEventListeners.add(listener)
+    return () => pageEventListeners.delete(listener)
+  }
 }
 
 let dropSourcePathsSupported: Promise<boolean> | null = null

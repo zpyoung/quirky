@@ -45,6 +45,7 @@ function deferred<T>(): Deferred<T> {
 /** Stateful model of one isolated view, history, and the trusted shell bridge. */
 class BrowserBridgeModel implements NativeBrowserAdapter {
   readonly clearPartitionAvailable = false
+  readonly pageRequestsAvailable = false
   readonly children = new Map<string, ModelChild>()
   readonly clearCalls: string[] = []
   slowFirstNavigation = false
@@ -141,6 +142,8 @@ class BrowserBridgeModel implements NativeBrowserAdapter {
         }
         throw new Error('test adapter only models navigation')
       },
+      answer: async () => false,
+      cancelDownload: async () => false,
       dispose: async () => {
         const disposeGate = this.nextDispose
         this.nextDispose = null

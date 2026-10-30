@@ -167,7 +167,8 @@ export class BrowserService {
       this.runtime,
       (selector, caller, allowNoScope) => this.resolveWorktreeTarget(selector, undefined, caller, allowNoScope),
       () => this.listWorktrees(),
-      this.dependencies.downloadDirectory
+      this.dependencies.downloadDirectory,
+      this.dependencies.promptTimeoutMs
     )
     this.design = new DesignService(context, this.runtime, () => this.panes.listPanes(), (pageId) => this.store.getPage(pageId))
   }
