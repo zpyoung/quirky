@@ -435,7 +435,7 @@ test('SC-17 and SC-11: project settings and owner-removal previews retain ledger
   await chooseMenu(world, 'Project Settings…')
   const settings = await world.win.waitFor(() => dialogNamed(`Project Settings > ${world.repo.name}`))
   expect((await request(world, { operation: 'catalog' })).ledgers).toHaveLength(0)
-  await click(button(settings, 'Cancel')!)
+  await click(await world.win.waitFor(() => button(settings, 'Cancel')))
 
   await createBug(world, 'Retention snapshot')
   await projectMenu(world)
