@@ -518,6 +518,7 @@ a scenario says otherwise, so `--worktree` defaults to it.
     - **Given** `math.ts` changed in two places far apart
     - **When** the person clicks its row, presses F7, Shift+F7, switches to side-by-side, and toggles Word Wrap and Show Whitespace from the view's menu
     - **Then** the diff opens in the main area titled "math.ts (diff)", scrolled to the first change, inline by default (the Default Diff View setting); F7 and "Next change" move to the second change, Shift+F7 and "Previous change" back, both arrows disabled when there are no changes; the side-by-side toggle ("Switch to side-by-side diff") shows two panes; wrap and whitespace follow their settings; with Collapse Unchanged Regions on, unchanged runs fold into bands; the panel keeps showing **feat**; Close returns to **feat**'s sessions
+    - Read-only and editable diffs preserve line boundaries. Appending or removing a final line must not mark the preceding unchanged line as removed, added, or character-changed in either inline or side-by-side mode.
 
 61. **SC-61: unstaged diffs are editable and save safely** (UI)
     - **Given** the unstaged diff of `math.ts` open, and the staged diff of `README.md`
