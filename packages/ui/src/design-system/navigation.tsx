@@ -115,6 +115,7 @@ export function Tabs({ label, items, value, onChange }: TabsProps) {
           onKeyDown={(event) => onTabKeyDown(event, index)}
         >
           {item.label}
+          {item.count !== undefined && <span className="ui-tabs__count">{item.count}</span>}
         </button>
       ))}
     </div>

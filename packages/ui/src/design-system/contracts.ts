@@ -30,7 +30,7 @@ export type ListRowProps = {
   onClick?: () => void
 }
 export type SectionHeaderProps = Omit<HTMLAttributes<HTMLElement>, 'title'> & { title: ReactNode; titleTooltip?: string; actions?: ReactNode }
-export type TabItem = { id: string; label: string; disabled?: boolean; panelId?: string }
+export type TabItem = { id: string; label: string; count?: number; disabled?: boolean; panelId?: string }
 export type TabsProps = { label: string; items: readonly TabItem[]; value: string; onChange: (id: string) => void }
 export type MenuItem = { id: string; label: string; onAction: () => void; disabled?: boolean; destructive?: boolean; checked?: boolean }
 export type MenuProps = { label: string; trigger?: ReactNode; items: readonly MenuItem[] }
@@ -40,9 +40,13 @@ export type ToastProps = { title: string; description?: ReactNode; status?: UiSt
 export type DialogProps = { open: boolean; title: string; children: ReactNode; actions?: ReactNode; onClose?: () => void; variant?: 'dialog' | 'sheet'; placement?: 'center' | 'top'; size?: 'default' | 'wide'; closeOnBackdrop?: boolean; scrollBody?: boolean }
 export type EmptyStateProps = { message: string; action?: UiAction; icon?: ReactNode }
 export type FormRowProps = { label: string; htmlFor: string; help?: string; error?: string; children: ReactNode }
-export type ToolPanelFrameProps = { title: string; actions?: ReactNode; onMinimize?: () => void; children: ReactNode }
+export type ToolPanelFrameProps = { title: string; tabs?: ReactNode; tools?: ReactNode; actions?: ReactNode; onMinimize?: () => void; children: ReactNode }
 /** Plugin-owned controls portaled into their nearest shared tool frame header. */
 export type ToolPanelActionsProps = { children: ReactNode }
+/** Plugin-owned tool buttons portaled into their nearest shared tool frame's left rail. */
+export type ToolPanelToolsProps = { children: ReactNode }
+/** Plugin-owned tabs portaled into their nearest shared tool frame header, after the title. */
+export type ToolPanelTabsProps = { children: ReactNode }
 export type InlineAgentCardProps = { title: string; description?: ReactNode; status: UiStatus; action?: UiAction }
 export type UiLayoutProps = HTMLAttributes<HTMLDivElement>
 /** Icon props: `size` is the square edge in CSS pixels (default 16); an icon is decorative unless given a `label`. */

@@ -1,4 +1,4 @@
-import { afterAll, afterEach, beforeAll, beforeEach, expect, test } from 'bun:test'
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from 'bun:test'
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
 
 type Tracker = typeof import('../src/shell/panel-focus')
@@ -101,4 +101,42 @@ test('disposing stops tracking and removes the attribute', () => {
   expect(focused()).toHaveLength(0)
   pointerdown('#b-button')
   expect(focused()).toHaveLength(0)
+})
+
+describe('window inactive state', () => {
+  const app = () => document.querySelector('.app')!
+  const hasFocus = (value: boolean) => {
+    ;(document as { hasFocus: () => boolean }).hasFocus = () => value
+  }
+  let unsubscribe: (() => void) | null = null
+
+  beforeEach(() => {
+    document.body.innerHTML = '<div class="app"></div>'
+  })
+  afterEach(() => {
+    unsubscribe?.()
+    unsubscribe = null
+  })
+
+  test('blur marks .app inactive and focus clears it, while the host still hears the change', async () => {
+    const shell = await import('../src/shell')
+    const heard: boolean[] = []
+    const windowFocus = shell.browserWindowFocus()
+    unsubscribe = windowFocus.subscribe((focused) => heard.push(focused))
+    window.dispatchEvent(new Event('blur'))
+    expect(app().hasAttribute('data-window-inactive')).toBe(true)
+    window.dispatchEvent(new Event('focus'))
+    expect(app().hasAttribute('data-window-inactive')).toBe(false)
+    expect(heard).toEqual([false, true])
+  })
+
+  test('a window that is unfocused when the app mounts is marked, and a focused one is not', async () => {
+    const shell = await import('../src/shell')
+    hasFocus(false)
+    shell.syncWindowInactive()
+    expect(app().hasAttribute('data-window-inactive')).toBe(true)
+    hasFocus(true)
+    shell.syncWindowInactive()
+    expect(app().hasAttribute('data-window-inactive')).toBe(false)
+  })
 })

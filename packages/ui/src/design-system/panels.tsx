@@ -1,9 +1,10 @@
 import { cloneElement, Fragment, isValidElement, Children, useId, useLayoutEffect, useRef, useState } from 'react'
 import type { ReactElement, ReactNode } from 'react'
 import { createPortal } from 'react-dom'
-import type { EmptyStateProps, FormRowProps, InlineAgentCardProps, ToolPanelActionsProps, ToolPanelFrameProps } from './contracts'
+import type { EmptyStateProps, FormRowProps, InlineAgentCardProps, ToolPanelActionsProps, ToolPanelFrameProps, ToolPanelTabsProps, ToolPanelToolsProps } from './contracts'
 import { classNames } from './shared'
 import { Button, IconButton, StatusDot } from './primitives'
+import { ControlIcon } from './tool-icons'
 
 export function EmptyState({ message, action, icon }: EmptyStateProps) {
   return (
@@ -67,10 +68,11 @@ export function FormRow({ label, htmlFor, help, error, children }: FormRowProps)
 }
 
 /**
- * A tool panel's header and body. A plugin's frame mounted inside the host's frame for the same
- * panel draws only its body and moves its actions into the host header, so the panel has one header.
+ * A tool panel's header, left tool rail and body. A plugin's frame mounted inside the host's frame
+ * for the same panel draws only its body and moves its tabs, tools and actions into the host frame,
+ * so the panel has one header.
  */
-export function ToolPanelFrame({ title, actions, onMinimize, children }: ToolPanelFrameProps) {
+export function ToolPanelFrame({ title, tabs, tools, actions, onMinimize, children }: ToolPanelFrameProps) {
   const titleId = useId()
   const section = useRef<HTMLElement>(null)
   const [nested, setNested] = useState(false)
@@ -82,6 +84,8 @@ export function ToolPanelFrame({ title, actions, onMinimize, children }: ToolPan
   if (nested) {
     return (
       <>
+        {tabs !== undefined && <ToolPanelTabs>{tabs}</ToolPanelTabs>}
+        {tools !== undefined && <ToolPanelTools>{tools}</ToolPanelTools>}
         {actions !== undefined && <ToolPanelActions>{actions}</ToolPanelActions>}
         {children}
       </>
@@ -91,32 +95,60 @@ export function ToolPanelFrame({ title, actions, onMinimize, children }: ToolPan
     <section ref={section} className="ui-tool-panel-frame" data-ui-tool-panel-frame="" aria-labelledby={titleId}>
       <header className="ui-tool-panel-frame__header">
         <h2 className="ui-tool-panel-frame__title" id={titleId}>{title}</h2>
+        <div className="ui-tool-panel-frame__tabs" data-ui-tool-panel-tabs-target="" />
         <div className="ui-tool-panel-frame__actions">
           {actions}
           <span data-ui-tool-panel-action-target="" style={{ display: 'contents' }} />
-          {onMinimize && <IconButton label={`Minimize ${title}`} onClick={onMinimize}>−</IconButton>}
+          {onMinimize && <IconButton label={`Minimize ${title}`} onClick={onMinimize}><ControlIcon name="minus" /></IconButton>}
         </div>
       </header>
+      <div className="ui-tool-panel-frame__rail" data-ui-tool-panel-rail-target="" />
       <div className="ui-tool-panel-frame__body">{children}</div>
+      {tabs !== undefined && <ToolPanelTabs>{tabs}</ToolPanelTabs>}
+      {tools !== undefined && <ToolPanelTools>{tools}</ToolPanelTools>}
     </section>
   )
 }
 
-export function ToolPanelActions({ children }: ToolPanelActionsProps) {
+function useFrameTarget(selector: string) {
   const marker = useRef<HTMLSpanElement>(null)
   const [target, setTarget] = useState<HTMLElement | null>(null)
 
   useLayoutEffect(() => {
     const frame = marker.current?.closest<HTMLElement>('[data-ui-tool-panel-frame]')
-    const actionTarget = frame?.querySelector<HTMLElement>(
-      ':scope > .ui-tool-panel-frame__header > .ui-tool-panel-frame__actions > [data-ui-tool-panel-action-target]'
-    ) ?? null
-    setTarget(actionTarget)
-  }, [])
+    setTarget(frame?.querySelector<HTMLElement>(selector) ?? null)
+  }, [selector])
 
+  return { marker, target }
+}
+
+export function ToolPanelActions({ children }: ToolPanelActionsProps) {
+  const { marker, target } = useFrameTarget(
+    ':scope > .ui-tool-panel-frame__header > .ui-tool-panel-frame__actions > [data-ui-tool-panel-action-target]'
+  )
   return (
     <>
       <span ref={marker} hidden data-ui-tool-panel-actions-marker="" />
+      {target && createPortal(children, target)}
+    </>
+  )
+}
+
+export function ToolPanelTools({ children }: ToolPanelToolsProps) {
+  const { marker, target } = useFrameTarget(':scope > [data-ui-tool-panel-rail-target]')
+  return (
+    <>
+      <span ref={marker} hidden data-ui-tool-panel-tools-marker="" />
+      {target && createPortal(children, target)}
+    </>
+  )
+}
+
+export function ToolPanelTabs({ children }: ToolPanelTabsProps) {
+  const { marker, target } = useFrameTarget(':scope > .ui-tool-panel-frame__header > [data-ui-tool-panel-tabs-target]')
+  return (
+    <>
+      <span ref={marker} hidden data-ui-tool-panel-tabs-marker="" />
       {target && createPortal(children, target)}
     </>
   )

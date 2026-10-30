@@ -10,6 +10,7 @@ import { useAppState, usePluginHost, usePluginState } from './context'
 import { CommandPalette } from './plugins/CommandPalette'
 import { OverlayLayer } from './plugins/OverlayLayer'
 import { useThemeVariables } from './plugins/useThemeVariables'
+import { syncWindowInactive } from './shell'
 import { ShellStatusBar } from './shell/StatusBar'
 import {
   fitToolShellGeometry,
@@ -57,6 +58,11 @@ export function App() {
   const auxiliary = windowRoute !== null
   useShortcuts()
   useThemeVariables()
+
+  const noToken = state.connection === 'no-token'
+  useEffect(() => {
+    if (!noToken) syncWindowInactive()
+  }, [noToken])
 
   useEffect(() => {
     if (auxiliary || state.connection === 'no-token') return
