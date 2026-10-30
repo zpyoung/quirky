@@ -110,5 +110,5 @@
 }
 
 [data-theme='light'] {
-  --ui-shadow: color-mix(in srgb, var(--ui-text) 18%, transparent);
+  --ui-shadow: color-mix(in srgb, var(--ui-text) 28%, transparent);
 }

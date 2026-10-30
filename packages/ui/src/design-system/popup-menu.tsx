@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import { ContextMenuList } from './context-menu'
 import type { ContextMenuItem } from './context-menu-contracts'
 import type { PopupItem, PopupMenuProps } from './contracts'
+import { ControlIcon } from './tool-icons'
 
 type OpenPopup = { close(): void }
 
@@ -147,14 +148,17 @@ export function PopupMenu({ anchor, items, title, searchPlaceholder, onClose }: 
   if (dismissed) return null
   const label = title ?? searchPlaceholder ?? 'Menu'
   const header = searchable ? (
-    <input
-      className="ui-text-field__input qt-menu-search"
-      autoFocus
-      aria-label={searchPlaceholder}
-      placeholder={searchPlaceholder}
-      value={query}
-      onChange={(event) => setQuery(event.target.value)}
-    />
+    <div className="ui-popup__search">
+      <ControlIcon name="magnifying-glass" />
+      <input
+        className="ui-text-field__input qt-menu-search"
+        autoFocus
+        aria-label={searchPlaceholder}
+        placeholder={searchPlaceholder}
+        value={query}
+        onChange={(event) => setQuery(event.target.value)}
+      />
+    </div>
   ) : undefined
 
   return createPortal(

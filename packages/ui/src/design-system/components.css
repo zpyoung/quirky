@@ -757,7 +757,7 @@
 }
 
 .ui-tool-panel-frame__title {
-  flex: 0 1 auto;
+  flex: 0 0 auto;
   font-size: var(--ui-font-body);
   font-weight: 650;
   line-height: 1.3;
