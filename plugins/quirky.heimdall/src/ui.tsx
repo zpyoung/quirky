@@ -907,15 +907,13 @@ function HeimdallFleet({ context, input }: { context: UiPluginContext; input: un
         title="Heimdall fleet"
         actions={
           <div className="ui-cluster">
-            {snapshot && <Badge tone={snapshot.attentionCount > 0 ? 'needs-you' : 'neutral'}>{snapshot.activeCount} active · {snapshot.attentionCount} need attention</Badge>}
-            {selectedTarget !== null
-              ? <Button onClick={() => setSelectedTarget(null)}>Back to fleet</Button>
-              : <Button onClick={() => context.closeView()}>Back</Button>}
+            {selectedTarget !== null && <Button onClick={() => setSelectedTarget(null)}>Back to fleet</Button>}
             {selectedTarget === null && <Button disabled={refreshing} onClick={() => void refreshFleet()}>{refreshing ? 'Refreshing…' : 'Refresh fleet'}</Button>}
           </div>
         }
       >
-        <div className="ui-stack">
+        <div className="ui-stack" style={{ padding: 'var(--ui-space-8)' }}>
+          {snapshot && <div><Badge tone={snapshot.attentionCount > 0 ? 'needs-you' : 'neutral'}>{snapshot.activeCount} active · {snapshot.attentionCount} need attention</Badge></div>}
           {refreshError && (
             <div role="alert" className="ui-error-text">
               Fleet refresh failed; {snapshot ? 'showing the last confirmed snapshot' : 'no confirmed snapshot is available'}: {refreshError}

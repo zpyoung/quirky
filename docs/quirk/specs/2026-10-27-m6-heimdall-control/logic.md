@@ -33,6 +33,7 @@ Each public flow uses a fresh temporary QUIRKY_HOME and daemon API or CLI. Focus
 
 ### AC1 Fleet, detail and push
 Before: empty kernel; opening Heimdall shows0 active/0 need attention and empty fleet. Enroll W through a registered fixture kind. After: fleet and detail identify W/authority/revision, budgets/traces/workers; push has a newer generatedAtMs. Older push cannot overwrite newer state. Refresh failure keeps W and displays the error banner. Malformed, paused, disabled, terminal and unreachable remain inspectable.
+The fleet fits the default sidebar width: its title stays on one line, its body is padded, and counts sit in the body rather than crowding the header. The initial fleet offers Refresh fleet without a Back button. Watcher detail offers Back to fleet; Escape still returns detail to fleet, then closes the fleet.
 
 ### AC2 Ordering, buckets and glyph
 Before: rows in all eight urgency states, including tick error and unverifiable contact. After: exact urgency order then successful tick descending/name; exactly one bucket per row (Needs you, Lost contact, Active, inactive). Header active excludes paused, disabled, parked and terminal. Worktree row displays its watcher glyph/status, and disappears after deletion. Budget bar warns at80%, unlimited turns render0/∞.
