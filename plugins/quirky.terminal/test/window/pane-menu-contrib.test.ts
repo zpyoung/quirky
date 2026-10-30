@@ -65,6 +65,7 @@ async function mount(menuItems: UiMenuItemEntry[]) {
   const executed: { id: string; args: unknown }[] = []
   fake.context.executeCommand = async (id, args) => void executed.push({ id, args })
   ui.activate(fake.context)
+  fake.layout.worktree = 'wt-main'
   fake.layout.view = { id: VIEW, input: { worktree: 'wt-main' } }
   const element = document.createElement('div')
   document.body.appendChild(element)

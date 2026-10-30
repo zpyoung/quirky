@@ -303,7 +303,7 @@ function fixture() {
 }
 
 function setup(
-  layout: UiLayout = { view: null, panel: null, sidebar: true, focus: null },
+  layout: UiLayout = { worktree: null, view: null, panel: null, sidebar: true, focus: null },
   options: { disabled?: boolean; failure?: Error | null } = {}
 ): UiHarness {
   const data = fixture()
@@ -499,6 +499,7 @@ function setup(
         case 'quirky.worktree/openIn': {
           const next: UiLayout = {
             ...current,
+            worktree: typeof params.worktree === 'string' && params.worktree !== '' ? params.worktree : current.worktree ?? null,
             view: {
               id: params.target === 'changes' ? 'view:quirky.git/diff' : 'view:quirky.session/worktree',
               input: params.target === 'changes'
@@ -649,7 +650,14 @@ function setup(
     getSetting: () => undefined,
     executeCommand: async () => {},
     openView(id: string, input?: unknown) {
-      const next: UiLayout = { ...current, view: { id, input } }
+      const viewWorktree = typeof input === 'object' && input !== null && 'worktree' in input
+        ? input.worktree
+        : undefined
+      const next: UiLayout = {
+        ...current,
+        ...(typeof viewWorktree === 'string' && viewWorktree !== '' ? { worktree: viewWorktree } : {}),
+        view: { id, input }
+      }
       current = next
       for (const listener of layoutListeners) listener(next)
     },
@@ -1575,7 +1583,7 @@ test('SC-08/11/12: filters use exact windows, validate custom days on Enter and 
   await selectWindow(h, 'Past 24 hours')
   expect(card('other')).toBeUndefined()
 
-  await h.setLayout({ view: null, panel: null, sidebar: true, focus: null })
+  await h.setLayout({ worktree: null, view: null, panel: null, sidebar: true, focus: null })
   expect(card('other')).toBeUndefined()
   const hidden = buttons().find((button) => /hidden/i.test(button.textContent ?? ''))
   expect(hidden).toBeDefined()
@@ -1636,8 +1644,8 @@ test('Custom days commits on blur without Enter and rejects an invalid blur with
   expect(card('feature')).toBeUndefined()
 })
  
-test('SC-10/13: Live preserves selected, unknown, folder and default rows; visits are identity-keyed and idempotent', async () => {
-  const h = setup({ view: { id: 'view:quirky.session/worktree', input: { worktree: 'w-main' } }, panel: null, sidebar: true, focus: 'view' })
+test('SC-10/13: Live preserves the selected layout worktree and keeps visits identity-keyed and idempotent', async () => {
+  const h = setup({ worktree: 'w-main', view: { id: 'view:global' }, panel: null, sidebar: true, focus: 'view' })
   await h.mount()
   expect(h.world.active).toEqual({ worktreeId: 'w-main', instanceId: 'instance-w-main' })
   expect(card('main')).toBeDefined()
@@ -1657,11 +1665,11 @@ test('SC-10/13: Live preserves selected, unknown, folder and default rows; visit
   expect(h.world.preferences.alwaysShowDefaultBranchWorkspace).toBe(false)
   expect(card('main')).toBeDefined()
 
-  await h.setLayout({ view: { id: 'view:quirky.session/worktree', input: { worktree: 'w-other' } }, panel: null, sidebar: true, focus: 'view' })
+  await h.setLayout({ worktree: 'w-other', view: { id: 'view:quirky.session/worktree', input: { worktree: 'w-other' } }, panel: null, sidebar: true, focus: 'view' })
   expect(card('main')).toBeUndefined()
   expect(h.world.exits['w-main@instance-w-main']).toBe(BASE)
   expect(h.world.visits['w-other@instance-w-other']).toBe(BASE)
-  await h.setLayout({ view: { id: 'view:quirky.session/worktree', input: { worktree: 'w-other' } }, panel: null, sidebar: true, focus: 'view' })
+  await h.setLayout({ worktree: 'w-other', view: { id: 'view:quirky.session/worktree', input: { worktree: 'w-other' } }, panel: null, sidebar: true, focus: 'view' })
   expect(Object.keys(h.world.exits)).toEqual(['w-main@instance-w-main'])
   expect(h.world.visits['w-other@instance-w-other']).toBe(BASE)
 })
@@ -1686,7 +1694,7 @@ test('disabled extras falls back to the ordinary tree, while ordinary failures r
 })
 
 test('review filters use server preferences, compose with activity, and clear independently', async () => {
-  const h = setup({ view: { id: 'view:quirky.session/worktree', input: { worktree: 'w-child' } }, panel: null, sidebar: true, focus: 'view' })
+  const h = setup({ worktree: 'w-child', view: { id: 'view:quirky.session/worktree', input: { worktree: 'w-child' } }, panel: null, sidebar: true, focus: 'view' })
   h.world.worktrees.find((item) => item.id === 'w-child')!.projectGroupId = 'g-team'
   h.world.reviews['w-child'] = { state: 'merged', checksStatus: 'failure' }
   h.world.reviews['w-other'] = { state: 'open', checksStatus: 'success' }

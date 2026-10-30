@@ -38,6 +38,7 @@ export type Fake = {
 
 export function layoutFor(worktree: string | null): UiLayout {
   return {
+    worktree,
     view: worktree === null ? null : { id: SESSIONS_VIEW, input: { worktree } },
     panel: PANEL,
     sidebar: true,

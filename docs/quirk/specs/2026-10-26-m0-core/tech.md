@@ -377,12 +377,13 @@ Back-links: D21..D23, SC-35..SC-42.
 
 `SCHEMA:`
 ```
-UiLayout = {view: {id: string, input?: unknown} | null, panel: string | null, sidebar: boolean, focus: 'sidebar'|'view'|'panel'|null}
+UiLayout = {view: {id: string, input?: unknown} | null, worktree?: string | null, panel: string | null, sidebar: boolean, focus: 'sidebar'|'view'|'panel'|null}
 UiWindowInfo = {connId: number, name?: string, focused: boolean}
 UiSlotState = {id, kind: 'sidebar-section'|'panel'|'view', plugin, title, shown: boolean, report?: unknown}
 UiState = {windows: UiWindowInfo[], layout: UiLayout, slots: UiSlotState[]}
 ```
-- `LayoutService` reads and writes `ui_state` key `layout`; default `{view: null, panel: null, sidebar: true, focus: null}`.
+- `LayoutService` reads and writes `ui_state` key `layout`; default `{view: null, worktree: null, panel: null, sidebar: true, focus: null}`.
+- `worktree` is the independent per-window workspace selection. A view opened with a nonempty `input.worktree` updates it; explicitly passing `input.worktree: null` clears it. Opening a global view with no workspace input retains selection without modifying the view input. Closing the last view clears it. Revealing a workspace view selects its workspace. Auxiliary windows initialize selection only from their own view input.
 - Reads (`ui.state`, and the window's own) drop a `view` or `panel` that is not effective in the
   current UI model, without rewriting the stored layout until the next change.
 - Windows are connections with role `ui`. Reports are kept per `(connId, slot)` and dropped on

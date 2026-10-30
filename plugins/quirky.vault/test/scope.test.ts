@@ -122,6 +122,17 @@ test('real Workspace and Project scopes apply depth after selecting registered w
         message: { role: 'assistant', content: `Answer ${sessionId}` }
       }
     ])
+  const otherProjectPath = makeRepo(scratch())
+  const otherRepo = await vault.client.callAny('quirky.repo/add', { path: otherProjectPath }) as { id: string }
+  const otherWorktrees = await vault.client.callAny('quirky.worktree/list', { repo: otherRepo.id }) as {
+    id: string
+    path: string
+    isMain: boolean
+  }[]
+  const otherPrimary = otherWorktrees.find((worktree) => worktree.isMain)
+  if (!otherPrimary) throw new Error('the second registered Git project has no primary worktree')
+  await writeSession('scope-project-b', otherPrimary.path, base + 4_000)
+
 
   await writeSession('scope-old-primary', primary.path, base)
   await writeSession('scope-old-secondary', secondary.path, base + 2_000)
@@ -134,15 +145,22 @@ test('real Workspace and Project scopes apply depth after selecting registered w
 
   const projectClient = await connect(vault, 'ui')
   await projectClient.callAny('ui.view.open', {
+    id: 'view:quirky.session/worktree',
+    input: { worktree: secondary.id }
+  })
+  await projectClient.callAny('ui.view.open', {
     id: 'view:quirky.vault/search-settings',
     input: { repo: repo.id }
   })
   const uiState = await projectClient.callAny('ui.state', {}) as {
-    layout: { view: { id: string; input?: unknown } | null }
+    layout: { worktree?: string | null; view: { id: string; input?: unknown } | null }
   }
-  expect(uiState.layout.view).toEqual({
-    id: 'view:quirky.vault/search-settings',
-    input: { repo: repo.id }
+  expect(uiState.layout).toMatchObject({
+    worktree: secondary.id,
+    view: {
+      id: 'view:quirky.vault/search-settings',
+      input: { repo: repo.id }
+    }
   })
   expect((await api<ViewState>(projectClient, 'getView')).scope).toBe('project')
   const project = await api<PublicListResult>(projectClient, 'list', { agents: ['claude'] })
@@ -162,6 +180,30 @@ test('real Workspace and Project scopes apply depth after selecting registered w
   expect(unavailableProject.hosts).toEqual([
     expect.objectContaining({ hostId: 'local', kind: 'unavailable' })
   ])
+  await projectClient.callAny('ui.view.open', {
+    id: 'view:quirky.vault/search-settings',
+    input: { repo: otherRepo.id }
+  })
+  const projectBLayout = await projectClient.callAny('ui.state', {}) as {
+    layout: { worktree?: string | null; view: { id: string; input?: unknown } | null }
+  }
+  expect(projectBLayout.layout).toMatchObject({ worktree: secondary.id })
+  expect((await api<ViewState>(projectClient, 'getView')).scope).toBe('project')
+  const projectB = await api<PublicListResult>(projectClient, 'list', { agents: ['claude'] })
+  expect(projectB.sessions.map((session) => session.sessionId)).toEqual(['scope-project-b'])
+
+  await projectClient.callAny('ui.view.open', { id: 'view:quirky.vault/search-settings' })
+  const globalLayout = await projectClient.callAny('ui.state', {}) as {
+    layout: { worktree?: string | null; view: { id: string; input?: unknown } | null }
+  }
+  expect(globalLayout.layout).toMatchObject({
+    worktree: secondary.id,
+    view: { id: 'view:quirky.vault/search-settings' }
+  })
+  await api<ViewState>(projectClient, 'setView', { scope: 'workspace' })
+  const selectedWorkspace = await api<PublicListResult>(projectClient, 'list', { agents: ['claude'] })
+  expect(selectedWorkspace.sessions.map((session) => session.sessionId)).toEqual(['scope-old-secondary'])
+
 
   const active = await connect(vault, 'cli', { cwd: primary.path, worktreeId: primary.id })
   expect((await api<ViewState>(active, 'getView')).scope).toBe('workspace')

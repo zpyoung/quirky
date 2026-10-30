@@ -26,11 +26,11 @@ const FILTERS: { value: ScopeFilter; text: string }[] = [
 
 type Props = { context: UiPluginContext; report?(state: QuickCommandsReport): void; repo?: string | null }
 
-/** The worktree the window's view shows, kept current as the layout changes. */
-function useViewedWorktree(context: UiPluginContext): string | null {
+/** The selected worktree, kept current as the window layout changes. */
+function useSelectedWorktree(context: UiPluginContext): string | null {
   const read = () => {
-    const worktree = (context.getLayout().view?.input as { worktree?: unknown } | null | undefined)?.worktree
-    return typeof worktree === 'string' ? worktree : null
+    const worktree = context.getLayout().worktree
+    return typeof worktree === 'string' && worktree !== '' ? worktree : null
   }
   const [worktree, setWorktree] = useState(read)
   useEffect(() => {
@@ -40,10 +40,10 @@ function useViewedWorktree(context: UiPluginContext): string | null {
   return worktree
 }
 
-/** The repo of the worktree the window is showing, or null when it shows none (or the floating workspace). */
+/** The repo of the selected worktree, or null when none is selected (or the floating workspace). */
 function useCurrentRepo(context: UiPluginContext, override: string | null | undefined): string | null {
   const [repo, setRepo] = useState<string | null>(null)
-  const worktree = useViewedWorktree(context)
+  const worktree = useSelectedWorktree(context)
   useEffect(() => {
     if (override !== undefined) return
     if (worktree === null || worktree === 'floating') {
@@ -167,7 +167,7 @@ export function QuickCommandsPanel({ context, report, repo: repoOverride }: Prop
 /**
  * Mounts the panel `panel:quirky.terminal/quick-commands` into `element` and returns the function
  * that unmounts it. `report` receives the shown rows after every change; `repo` overrides the repo
- * the Add dialog preselects, which otherwise follows the worktree the window is showing.
+ * the Add dialog preselects, which otherwise follows the selected worktree.
  */
 export function mountQuickCommandsPanel(context: UiPluginContext, element: HTMLElement, props: { report?(state: QuickCommandsReport): void; repo?: string | null } = {}): () => void {
   const root = createRoot(element)

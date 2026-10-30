@@ -204,6 +204,7 @@ function makeContext(fixture: Fixture): UiPluginContext {
     togglePanel() {},
     setPalette() {},
     getLayout: () => ({
+      worktree: fixture.worktree.id,
       view: { id: 'test-view', input: { worktree: fixture.worktree.id } },
       panel: null,
       sidebar: true,

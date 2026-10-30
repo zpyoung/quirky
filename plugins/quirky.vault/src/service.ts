@@ -551,15 +551,21 @@ export class VaultService {
     }
     if (caller.role !== 'ui') return identity
     const state = await this.context.call('ui.state', {}) as {
-      layout?: { view?: { input?: unknown } | null }
+      layout?: { worktree?: unknown; view?: { input?: unknown } | null }
     }
-    const input = state.layout?.view?.input
-    if (typeof input !== 'object' || input === null || Array.isArray(input)) return identity
-    const viewInput = input as RecordValue
-    const worktreeId = viewInput.worktree
-    if (typeof worktreeId === 'string' && worktreeId !== '') return { ...identity, worktreeId }
-    const repoId = viewInput.repo
-    return typeof repoId === 'string' && repoId !== '' ? { repoId } : identity
+    const layout = state.layout
+    const input = layout?.view?.input
+    if (typeof input === 'object' && input !== null && !Array.isArray(input)) {
+      const viewInput = input as RecordValue
+      const viewWorktree = viewInput.worktree
+      if (typeof viewWorktree === 'string' && viewWorktree.trim() !== '') return { ...identity, worktreeId: viewWorktree }
+      const repoId = viewInput.repo
+      if (typeof repoId === 'string' && repoId.trim() !== '') return { repoId }
+    }
+    const selectedWorktree = layout?.worktree
+    return typeof selectedWorktree === 'string' && selectedWorktree.trim() !== ''
+      ? { worktreeId: selectedWorktree }
+      : identity
   }
 
   private async currentWorktree(identity: ScopeIdentity): Promise<{ id: string; path: string; repoId: string } | null> {

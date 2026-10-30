@@ -92,6 +92,7 @@ async function mountWithMenuItems(menuItems: UiMenuItemEntry[]) {
     executed.push({ id, args })
   }
   ui.activate(fake.context)
+  fake.layout.worktree = 'wt-main'
   fake.layout.view = { id: WORKTREE_VIEW, input: { worktree: 'wt-main' } }
 
   const element = document.createElement('div')

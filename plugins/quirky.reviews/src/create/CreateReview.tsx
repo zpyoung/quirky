@@ -1,19 +1,20 @@
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
 import { Badge, Button, FormRow, SectionHeader, StatusDot, TextField } from '@quirky/ui'
-import { isRecord, safeHttpUrl, viewWorktree } from './guards'
+import { isRecord, safeHttpUrl } from './guards'
 import type { ReviewsSurfaceProps } from '../contracts'
 function errorText(error: unknown): string {
   return error instanceof Error ? error.message : 'The operation failed.'
 }
 
-function viewInputWorktree(props: ReviewsSurfaceProps): string | null {
-  return viewWorktree(props.context.getLayout().view?.input)
+function selectedWorktree(props: ReviewsSurfaceProps): string | null {
+  const worktree = props.context.getLayout().worktree
+  return typeof worktree === 'string' && worktree.trim() !== '' ? worktree : null
 }
 
 export function CreateReview(props: ReviewsSurfaceProps) {
   const creation = props.state.creation
-  const inputWorktree = viewInputWorktree(props)
-  const worktree = creation.worktree ?? inputWorktree
+  const selectedWorktreeId = selectedWorktree(props)
+  const worktree = creation.worktree ?? selectedWorktreeId
   const currentTarget = worktree !== null && creation.worktree === worktree
   const [title, setTitle] = useState(creation.title)
   const [body, setBody] = useState(creation.body)
@@ -40,12 +41,12 @@ export function CreateReview(props: ReviewsSurfaceProps) {
   }, [creation.worktree, creation.title, creation.body, creation.base, creation.draft, creation.useTemplate])
 
   useEffect(() => {
-    if (!inputWorktree || creation.worktree === inputWorktree || creation.loading) return
+    if (creation.worktree !== null || !selectedWorktreeId || creation.loading) return
     setLocalError(null)
-    void props.context.call('quirky.reviews/createOpen', { worktree: inputWorktree })
+    void props.context.call('quirky.reviews/createOpen', { worktree: selectedWorktreeId })
       .then(() => props.refresh())
       .catch((error: unknown) => setLocalError(errorText(error)))
-  }, [inputWorktree, creation.worktree, creation.loading, props.context, props.refresh])
+  }, [selectedWorktreeId, creation.worktree, creation.loading, props.context, props.refresh])
 
   const call = async (method: string, params: Record<string, unknown> = {}) =>
     props.context.call(`quirky.reviews/${method}`, { worktree, ...params })

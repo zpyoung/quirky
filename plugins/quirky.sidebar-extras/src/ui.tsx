@@ -8,7 +8,6 @@ import type { DirtyResult } from './daemon/dirty'
 const SLOT_ID = 'activity-item:quirky.sidebar-extras/source-control'
 const PANEL_ID = 'panel:quirky.git/source-control'
 const STOCK_TITLE = 'Source Control'
-const WORKTREE_VIEW_ID = 'view:quirky.session/worktree'
 const STRUCTURED_VIEW_ID = 'view:quirky.session/structured'
 const STRUCTURED_TARGET_PREFIX = 'session:'
 const REFRESH_EVENTS: Readonly<Partial<Record<string, true>>> = {
@@ -25,15 +24,13 @@ const REFRESH_EVENTS: Readonly<Partial<Record<string, true>>> = {
 
 function layoutWorktree(layout: UiLayout): string | null {
   const view = layout.view
-  if (view?.id === WORKTREE_VIEW_ID && isPlainRecord(view.input)) {
-    const worktree = view.input.worktree
-    return typeof worktree === 'string' && worktree.length > 0 ? worktree : null
-  }
-  if (view?.id === STRUCTURED_VIEW_ID && isPlainRecord(view.input)) {
+  if (view?.id === STRUCTURED_VIEW_ID) {
+    if (!isPlainRecord(view.input)) return null
     const session = view.input.session
     return typeof session === 'string' && session.length > 0 ? `${STRUCTURED_TARGET_PREFIX}${session}` : null
   }
-  return null
+  const worktree = layout.worktree
+  return typeof worktree === 'string' && worktree.length > 0 ? worktree : null
 }
 
 function parseDirtyResult(value: unknown): DirtyResult {

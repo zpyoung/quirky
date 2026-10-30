@@ -105,7 +105,7 @@ function setup() {
   const listeners = new Set<(event: QuirkyEvent) => void | Promise<void>>()
   const layoutListeners = new Set<(layout: UiLayout) => void>()
   const provided = new Map<string, unknown>()
-  let layout: UiLayout = { view: null, panel: null, sidebar: true, focus: null }
+  let layout: UiLayout = { worktree: null, view: null, panel: null, sidebar: true, focus: null }
   const state = () => ({
     client: 'desktop',
     preferences: {
@@ -141,10 +141,17 @@ function setup() {
         ]
         case 'quirky.worktree/projectMetadataList': return [{ repoId: repo.id, identity: { displayName: null, icon: null, color: null, trackerProject: null }, externalVisibility: 'inherit', effectiveExternalVisibility: 'hide', externalInboxSuppressed: false, sharedDirectories: [] }]
         case 'quirky.worktree/navigate':
-        case 'quirky.worktree/openIn':
-          layout = { ...layout, view: { id: params.target === 'changes' ? 'view:quirky.git/diff' : 'view:quirky.session/worktree', input: { worktree: params.worktree } } }
+        case 'quirky.worktree/openIn': {
+          const id = params.target === 'changes' ? 'view:quirky.git/diff' : 'view:quirky.session/worktree'
+          const input = { worktree: params.worktree }
+          layout = {
+            ...layout,
+            worktree: typeof params.worktree === 'string' && params.worktree !== '' ? params.worktree : layout.worktree ?? null,
+            view: { id, input }
+          }
           for (const listener of layoutListeners) listener(layout)
           return { worktreeId: params.worktree, target: params.target ?? 'terminal' }
+        }
         case 'quirky.session/list': return [] as Session[]
         case 'quirky.heimdall/fleet': throw new RpcLike('not enabled', RpcErrorCode.MethodNotFound)
         case 'quirky.sidebar-extras/state': return state()
@@ -179,7 +186,17 @@ function setup() {
     subscribe(listener: (event: QuirkyEvent) => void | Promise<void>) { listeners.add(listener); return () => void listeners.delete(listener) },
     getSetting: () => undefined,
     executeCommand: async () => {},
-    openView(id: string, input?: unknown) { layout = { ...layout, view: { id, input } }; for (const listener of layoutListeners) listener(layout) },
+    openView(id: string, input?: unknown) {
+      const viewWorktree = typeof input === 'object' && input !== null && 'worktree' in input
+        ? input.worktree
+        : undefined
+      layout = {
+        ...layout,
+        ...(typeof viewWorktree === 'string' && viewWorktree !== '' ? { worktree: viewWorktree } : {}),
+        view: { id, input }
+      }
+      for (const listener of layoutListeners) listener(layout)
+    },
     closeView() {}, togglePanel() {}, getLayout: () => layout,
     onLayout(listener: (next: UiLayout) => void) { layoutListeners.add(listener); return () => void layoutListeners.delete(listener) },
     onStream: () => () => {}, onConnection: () => () => {}, confirm: async () => true, toast() {}, setPanelBadge() {}

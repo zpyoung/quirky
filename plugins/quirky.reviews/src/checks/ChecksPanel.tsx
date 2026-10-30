@@ -240,9 +240,8 @@ function messageOf(error: unknown, fallback = 'The review action failed.'): stri
 }
 
 function layoutWorktree(layout: UiLayout): string | null {
-  const input = layout.view?.input
-  if (!isRecord(input) || typeof input.worktree !== 'string' || input.worktree.trim() === '') return null
-  return input.worktree
+  const worktree = layout.worktree
+  return typeof worktree === 'string' && worktree.trim() !== '' ? worktree : null
 }
 
 function reviewStateName(state: ReviewData['state']): string {

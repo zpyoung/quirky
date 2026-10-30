@@ -1,12 +1,9 @@
 import type { GitBusyOp, GitOperation, UiLayout } from '@quirky/protocol'
 import type { SectionId } from './panel/sections'
 
-/** The worktree selector the open view was opened with, or null when no view shows a worktree. */
+/** The worktree selected for the current window, or null when none is selected. */
 export function worktreeOf(layout: UiLayout): string | null {
-  const input = layout.view?.input
-  if (typeof input !== 'object' || input === null) return null
-  const worktree = (input as { worktree?: unknown }).worktree
-  return typeof worktree === 'string' && worktree !== '' ? worktree : null
+  return layout.worktree ?? null
 }
 
 /** What the Source Control panel reports to `ui.state`; sections list counts, not rows. */

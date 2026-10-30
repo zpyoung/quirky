@@ -48,7 +48,7 @@ const FOCUS_TARGETS = ['sidebar', 'view', 'panel'] as const
 const PANEL_WIDTH_MIN = 220
 const PANEL_WIDTH_MAX = 4096
 
-const DEFAULT_LAYOUT: UiLayout = { view: null, panel: null, sidebar: true, focus: null }
+const DEFAULT_LAYOUT: UiLayout = { view: null, worktree: null, panel: null, sidebar: true, focus: null }
 
 export type LayoutServiceOptions = {
   plugins: Pick<PluginHost, 'contributions' | 'addWarning'>
@@ -72,7 +72,12 @@ export type LayoutServiceOptions = {
 type Report = { state: unknown; order: number }
 
 type ToastReport = { toasts: UiToastState[]; order: number }
-type WindowLayoutOverride = { view: UiLayout['view']; viewTabs: NonNullable<UiLayout['viewTabs']>; focus?: UiLayout['focus'] }
+type WindowLayoutOverride = {
+  view: UiLayout['view']
+  viewTabs: NonNullable<UiLayout['viewTabs']>
+  worktree: string | null
+  focus?: UiLayout['focus']
+}
 
 type PendingCommand = {
   conn: ClientConn
@@ -92,6 +97,7 @@ type PendingDesktopRequest = {
 type AuxiliaryWindowRoute = {
   windowId: string
   view: string | null
+  worktree: string | null
   viewTabs: ViewTab[]
   input?: unknown
   title?: string
@@ -171,6 +177,19 @@ function lastViewTab(tabs: ViewTab[]): OpenView | null {
   return tabs[tabs.length - 1] ?? null
 }
 
+function worktreeOf(view: OpenView | null): string | null | undefined {
+  if (view === null || !isRecord(view.input)) return undefined
+  const worktree = view.input.worktree
+  if (worktree === null) return null
+  return typeof worktree === 'string' && worktree.length > 0 ? worktree : undefined
+}
+
+function worktreeAfterViewChange(next: OpenView | null, current: string | null): string | null {
+  if (next === null) return null
+  const worktree = worktreeOf(next)
+  return worktree === undefined ? current : worktree
+}
+
 function focusTargetOfTool(tool: UiToolEntry): 'sidebar' | 'view' | 'panel' | undefined {
   const kind = parseContributionId(tool.contributionId ?? '')?.kind
   if (kind === 'sidebar-section') return 'sidebar'
@@ -182,7 +201,11 @@ function focusTargetOfTool(tool: UiToolEntry): 'sidebar' | 'view' | 'panel' | un
 function readStored(value: unknown): UiLayout {
   if (!isRecord(value)) return { ...DEFAULT_LAYOUT }
   const stored = value
-  const view = stored.view
+  const storedView = stored.view
+  const view =
+    isRecord(storedView) && typeof storedView.id === 'string'
+      ? { id: storedView.id, ...(storedView.input !== undefined ? { input: storedView.input } : {}) }
+      : null
   const storedWidths = stored.panelWidths
   const panelWidths: Record<string, number> = {}
   let hasPanelWidths = false
@@ -202,12 +225,16 @@ function readStored(value: unknown): UiLayout {
       viewTabs.set(tab.id, { id: tab.id, ...(tab.input !== undefined ? { input: tab.input } : {}) })
     }
   }
+  const worktree =
+    typeof stored.worktree === 'string'
+      ? stored.worktree
+      : stored.worktree === null
+        ? null
+        : worktreeOf(view) ?? null
   return {
-    view:
-      isRecord(view) && typeof view.id === 'string'
-        ? { id: view.id, ...(view.input !== undefined ? { input: view.input } : {}) }
-        : null,
+    view,
     viewTabs: [...viewTabs.values()],
+    worktree,
     panel: typeof stored.panel === 'string' ? stored.panel : null,
     sidebar: typeof stored.sidebar === 'boolean' ? stored.sidebar : true,
     focus: FOCUS_TARGETS.find((target) => target === stored.focus) ?? null,
@@ -319,7 +346,15 @@ export class LayoutService {
     this.requireSlot(id, 'view')
     if (jsonLength(input) > MAX_JSON_LENGTH) throw invalidParams('input is over 64 KiB')
     const view = { id, ...(input !== undefined ? { input } : {}) }
-    return this.change((layout) => ({ ...layout, view, viewTabs: viewTabOpened(layout.viewTabs ?? [], view) }))
+    return this.change((layout) => {
+      const worktree = worktreeOf(view)
+      return {
+        ...layout,
+        view,
+        viewTabs: viewTabOpened(layout.viewTabs ?? [], view),
+        worktree: worktree === undefined ? layout.worktree ?? null : worktree
+      }
+    })
   }
 
   closeView(): UiLayout {
@@ -328,10 +363,12 @@ export class LayoutService {
     if (windows.length === 1) return this.closeWindowView(windows[0]!.id)
     return this.change((layout) => {
       const viewTabs = viewTabClosed(layout.viewTabs ?? [], layout.view)
+      const view = layout.view === null ? null : lastViewTab(viewTabs)
       return {
         ...layout,
-        view: layout.view === null ? null : lastViewTab(viewTabs),
+        view,
         viewTabs,
+        worktree: worktreeAfterViewChange(view, layout.worktree ?? null),
         focus: layout.view !== null && layout.focus === 'view' ? null : layout.focus
       }
     })
@@ -343,10 +380,13 @@ export class LayoutService {
     this.requireSlot(id, 'view')
     if (jsonLength(input) > MAX_JSON_LENGTH) throw invalidParams('input is over 64 KiB')
     const view = { id, ...(input !== undefined ? { input } : {}) }
+    this.windowLayout(target.id)
     const auxiliary = this.auxiliaryView(target.id)
     if (auxiliary) {
       auxiliary.view = id
       auxiliary.viewTabs = viewTabOpened(auxiliary.viewTabs, view)
+      const auxiliaryWorktree = worktreeOf(view)
+      auxiliary.worktree = auxiliaryWorktree === undefined ? auxiliary.worktree : auxiliaryWorktree
       if (input === undefined) delete auxiliary.input
       else auxiliary.input = input
       this.options.sendTo(target, { type: 'desktop.window.changed', windows: [this.auxiliaryWindowSummary(auxiliary)] })
@@ -355,11 +395,13 @@ export class LayoutService {
 
     const previous = this.windowViewFor(target.id)
     const viewTabs = viewTabOpened(previous.viewTabs, view)
+    const worktreeUpdate = worktreeOf(view)
+    const worktree = worktreeUpdate === undefined ? previous.worktree : worktreeUpdate
     if (this.openWindows().length === 1) {
       this.windowViews.delete(target.id)
-      return this.change((layout) => ({ ...layout, view, viewTabs }))
+      return this.change((layout) => ({ ...layout, view, viewTabs, worktree }))
     }
-    this.windowViews.set(target.id, { ...previous, view, viewTabs })
+    this.windowViews.set(target.id, { ...previous, view, viewTabs, worktree })
     const next = this.windowLayout(target.id)
     this.options.sendTo(target, { type: 'ui.state.changed', layout: next })
     return next
@@ -379,6 +421,7 @@ export class LayoutService {
       const view = current === null ? null : lastViewTab(viewTabs)
       auxiliary.viewTabs = viewTabs
       auxiliary.view = view?.id ?? null
+      auxiliary.worktree = worktreeAfterViewChange(view, auxiliary.worktree)
       if (view?.input === undefined) delete auxiliary.input
       else auxiliary.input = view.input
       this.options.sendTo(target, { type: 'desktop.window.changed', windows: [this.auxiliaryWindowSummary(auxiliary)] })
@@ -388,6 +431,7 @@ export class LayoutService {
     const previous = this.windowViewFor(target.id)
     const viewTabs = viewTabClosed(previous.viewTabs, current)
     const view = current === null ? null : lastViewTab(viewTabs)
+    const worktree = worktreeAfterViewChange(view, previous.worktree)
     const focus = current !== null && currentLayout.focus === 'view' ? null : previous.focus
     if (this.openWindows().length === 1) {
       this.windowViews.delete(target.id)
@@ -395,10 +439,11 @@ export class LayoutService {
         ...layout,
         view,
         viewTabs,
+        worktree,
         focus: current !== null && currentLayout.focus === 'view' ? null : layout.focus
       }))
     }
-    this.windowViews.set(target.id, { view, viewTabs, ...(focus === undefined ? {} : { focus }) })
+    this.windowViews.set(target.id, { view, viewTabs, worktree, ...(focus === undefined ? {} : { focus }) })
     const next = this.windowLayout(target.id)
     this.options.sendTo(target, { type: 'ui.state.changed', layout: next })
     return next
@@ -709,12 +754,15 @@ export class LayoutService {
     this.requireWindow(conn)
     const route = this.auxiliaryWindows.get(request.windowId)
     if (!route || route.rendererConnId !== conn.id) throw conflict('this UI connection does not own the auxiliary window route')
+    this.windowLayout(conn.id)
     if (request.view !== null) {
       this.requireSlot(request.view, 'view')
       if (jsonLength(request.input) > MAX_JSON_LENGTH) throw invalidParams('input is over 64 KiB')
       const view = { id: request.view, ...(request.input !== undefined ? { input: request.input } : {}) }
       route.viewTabs = viewTabOpened(route.viewTabs, view)
       route.view = request.view
+      const worktreeUpdate = worktreeOf(view)
+      route.worktree = worktreeUpdate === undefined ? route.worktree : worktreeUpdate
       if (request.input === undefined) delete route.input
       else route.input = request.input
     } else {
@@ -722,6 +770,7 @@ export class LayoutService {
       route.viewTabs = viewTabClosed(route.viewTabs, current)
       const view = current === null ? null : lastViewTab(route.viewTabs)
       route.view = view?.id ?? null
+      route.worktree = worktreeAfterViewChange(view, route.worktree)
       if (view?.input === undefined) delete route.input
       else route.input = view.input
     }
@@ -830,10 +879,12 @@ export class LayoutService {
         this.settleDesktop(reply.requestId, (request) => request.reject(conflict('native desktop window identity was already registered')))
         return
       }
+      const view = { id: request.view, ...(request.input === undefined ? {} : { input: request.input }) }
       this.auxiliaryWindows.set(result.windowId, {
         windowId: result.windowId,
         view: request.view,
-        viewTabs: [{ id: request.view, ...(request.input === undefined ? {} : { input: request.input }) }],
+        viewTabs: [view],
+        worktree: worktreeOf(view) ?? null,
         ...(request.input === undefined ? {} : { input: request.input }),
         ...(request.title === undefined ? {} : { title: request.title }),
         ownerShell: { connId: conn.id, ...(conn.name ? { name: conn.name } : {}) },
@@ -880,7 +931,20 @@ export class LayoutService {
       }
     }
     if (auxiliaryRoutesChanged) this.announceDesktopWindows()
-    if (conn.role === 'ui') this.announceWindows()
+    if (conn.role === 'ui') {
+      const windows = this.openWindows()
+      const survivor = windows.length === 1 ? windows[0] : undefined
+      if (survivor && !this.auxiliaryView(survivor.id)) {
+        const override = this.windowViewFor(survivor.id)
+        this.change((layout) => ({
+          ...layout,
+          view: override.view,
+          viewTabs: override.viewTabs,
+          worktree: override.worktree
+        }))
+      }
+      this.announceWindows()
+    }
   }
 
 
@@ -1020,8 +1084,8 @@ export class LayoutService {
     const anotherOwnsView = [...this.windowViews].some(([id, override]) => id !== connId && override.view !== null)
     const usePersistedView = windows.length <= 1 || (firstWindow?.id === connId && !anotherOwnsView)
     const override = usePersistedView
-      ? { view: persisted.view, viewTabs: persisted.viewTabs ?? [] }
-      : { view: null, viewTabs: [] }
+      ? { view: persisted.view, viewTabs: persisted.viewTabs ?? [], worktree: persisted.worktree ?? null }
+      : { view: null, viewTabs: [], worktree: null }
     this.windowViews.set(connId, override)
     return override
   }
@@ -1042,12 +1106,14 @@ export class LayoutService {
       if (view !== null && !viewTabs.some((tab) => tab.id === view!.id)) viewTabs.push(view)
       auxiliary.viewTabs = viewTabs
       auxiliary.view = view?.id ?? null
+      auxiliary.worktree = worktreeAfterViewChange(view, auxiliary.worktree)
       if (view?.input === undefined) delete auxiliary.input
       else auxiliary.input = view.input
       const auxiliaryLayout: UiLayout = {
         ...layout,
         view,
         viewTabs,
+        worktree: auxiliary.worktree,
         panel: null,
         sidebar: false,
         focus: view === null ? null : 'view'
@@ -1063,9 +1129,20 @@ export class LayoutService {
     let view = override.view !== null && effectiveViews.has(override.view.id) ? override.view : null
     if (view === null && override.view !== null) view = lastViewTab(viewTabs)
     if (view !== null && !viewTabs.some((tab) => tab.id === view!.id)) viewTabs.push(view)
-    const nextOverride = { ...override, view, viewTabs }
+    const nextOverride = {
+      ...override,
+      view,
+      viewTabs,
+      worktree: worktreeAfterViewChange(view, override.worktree)
+    }
     if (!sameValue(override, nextOverride)) this.windowViews.set(connId, nextOverride)
-    return { ...layout, view, viewTabs, ...(override.focus === undefined ? {} : { focus: override.focus }) }
+    return {
+      ...layout,
+      view,
+      viewTabs,
+      worktree: nextOverride.worktree,
+      ...(override.focus === undefined ? {} : { focus: override.focus })
+    }
   }
 
 
@@ -1161,12 +1238,14 @@ export class LayoutService {
     const viewTabs = (stored.viewTabs ?? []).filter((tab) => effectiveViews.has(tab.id))
     if (view === null && stored.view !== null) view = lastViewTab(viewTabs)
     if (view !== null && !viewTabs.some((tab) => tab.id === view!.id)) viewTabs.push(view)
+    const worktree = worktreeAfterViewChange(view, stored.worktree ?? null)
     const worktrees = model.tools?.find(({ id }) => id === 'sidebar-section:quirky.worktree/worktrees')
     const sidebar = worktrees !== undefined && Object.values(tools.open).includes(worktrees.id)
     const layout: UiLayout = {
       ...stored,
       view,
       viewTabs,
+      worktree,
       panel: this.panelForOpen(tools, stored.panel),
       sidebar,
       tools

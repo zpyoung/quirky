@@ -40,10 +40,7 @@ function retainOpenDesignPages(value: unknown): void {
 function worktreeFrom(context: UiPluginContext, args: CommandArgs): string | null {
   if (typeof args.worktree === 'string' && args.worktree !== '') return args.worktree
   if (args.workspace === 'floating') return 'floating'
-  const layout = context.getLayout()
-  const input = layout.view?.input
-  if (typeof input !== 'object' || input === null || Array.isArray(input)) return null
-  const worktree = Reflect.get(input, 'worktree')
+  const worktree = context.getLayout().worktree
   return typeof worktree === 'string' && worktree !== '' ? worktree : null
 }
 

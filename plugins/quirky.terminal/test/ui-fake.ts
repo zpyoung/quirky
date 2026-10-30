@@ -61,7 +61,7 @@ export function fakeContext(handlers: Record<string, Handler> = {}, settings: Re
   const mountedViews: { viewId: string; element: HTMLElement; input: unknown; unmounted: boolean }[] = []
   const values = new Map<string, boolean>()
   const state = { confirmAnswer: true }
-  const layout: UiLayout & { palette?: boolean } = { view: null, panel: null, sidebar: true, focus: null, palette: false }
+  const layout: UiLayout & { palette?: boolean } = { worktree: null, view: null, panel: null, sidebar: true, focus: null, palette: false }
   const known = { ...TERMINAL_SETTING_DEFAULTS, ...settings }
 
   const context: UiPluginContext = {

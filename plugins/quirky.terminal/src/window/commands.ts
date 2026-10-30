@@ -42,14 +42,20 @@ function stringArg(args: Args, name: string): string | undefined {
   return typeof value === 'string' ? value : undefined
 }
 
-function viewedWorktree(context: UiPluginContext): string | null {
+function selectedWorktree(context: UiPluginContext): string | null {
+  const worktree = context.getLayout().worktree
+  return typeof worktree === 'string' && worktree !== '' ? worktree : null
+}
+
+/** The worktree whose view is mounted, used to resolve explicit pane, tab, and group targets. */
+function mountedViewWorktree(context: UiPluginContext): string | null {
   const worktree = (context.getLayout().view?.input as { worktree?: unknown } | null | undefined)?.worktree
   return typeof worktree === 'string' && worktree !== '' ? worktree : null
 }
 
-/** The controllers a command can be aimed at: the focused one, the floating one and the one the main view shows. */
+/** The controllers a command can be aimed at: the focused, floating, and mounted main-view workspaces. */
 function candidates(context: UiPluginContext): WorkspaceController[] {
-  const worktree = viewedWorktree(context)
+  const worktree = mountedViewWorktree(context)
   const all = [focusedController(), controllerFor(FLOATING_WORKSPACE), worktree === null ? null : controllerFor(worktree)]
   return all.filter((controller, index): controller is WorkspaceController => controller !== null && all.indexOf(controller) === index)
 }
@@ -295,7 +301,7 @@ export function terminalCommands(context: UiPluginContext): Record<string, Comma
 /**
  * The handlers for the `quirky.session` commands this plugin overrides, by command name: new tab,
  * close, and select tab by index, all acting on the focused workspace (the floating one while it
- * holds focus). With no workspace mounted `new-shell` still opens a tab in the worktree the window shows.
+ * holds focus). With no workspace mounted, `new-shell` uses the selected worktree.
  */
 export function sessionCommands(context: UiPluginContext): Record<string, CommandHandler> {
   const select = (index: (args: Args) => number) =>
@@ -309,7 +315,7 @@ export function sessionCommands(context: UiPluginContext): Record<string, Comman
         await controller.newTab()
         return OK
       }
-      const worktree = viewedWorktree(context)
+      const worktree = selectedWorktree(context)
       if (worktree === null) return NO_WORKSPACE
       await context.call('quirky.terminal/newTab', { workspace: worktree })
       return OK

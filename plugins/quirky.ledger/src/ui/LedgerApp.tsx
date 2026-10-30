@@ -70,9 +70,8 @@ function targetFromInput(input: unknown): LedgerTarget | null {
 }
 
 function activeWorkspace(layout: UiLayout): string | null {
-  const input = object(layout.view?.input)
-  const value = typeof input.worktree === 'string' ? input.worktree : input.workspaceId
-  return typeof value === 'string' && value.length > 0 ? value : null
+  const value = layout.worktree
+  return typeof value === 'string' && value.trim() !== '' ? value : null
 }
 
 

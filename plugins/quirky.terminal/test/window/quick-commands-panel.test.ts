@@ -16,15 +16,17 @@ afterEach(async () => {
 
 const EMPTY = 'No quick commands saved. Run them from the Quick Commands button in the tab bar, or right-click inside any terminal.'
 
-async function openPanel(init: Partial<World> = {}, options: { worktree?: string | null } = {}) {
+async function openPanel(init: Partial<World> = {}, options: { worktree?: string | null; viewWorktree?: string | null; repo?: string | null } = {}) {
   const { fake, world } = qcFake(init)
   const worktree = options.worktree === undefined ? 'wt_main' : options.worktree
-  if (worktree) fake.layout.view = { id: 'view:quirky.session/worktree', input: { worktree } }
+  fake.layout.worktree = worktree
+  const viewWorktree = options.viewWorktree === undefined ? worktree : options.viewWorktree
+  if (viewWorktree !== null) fake.layout.view = { id: 'view:quirky.session/worktree', input: { worktree: viewWorktree } }
   const element = document.createElement('div')
   document.body.appendChild(element)
   const reports: Report[] = []
   await act(async () => {
-    unmount = qc().panel.mountQuickCommandsPanel(fake.context, element, { report: (state: Report) => void reports.push(state) })
+    unmount = qc().panel.mountQuickCommandsPanel(fake.context, element, { report: (state: Report) => void reports.push(state), repo: options.repo })
   })
   await settle()
   return { fake, world, element, reports, last: () => reports.at(-1)! }
@@ -48,8 +50,11 @@ describe('Quick Commands panel', () => {
     expect(last()).toEqual({ count: 0, filter: 'all', query: '', rows: [] })
   })
 
-  test('SC-49: adding a command with Project preselected to the current repo lists it with a badge and an Enter hint', async () => {
-    const { fake, element, last } = await openPanel()
+  test('SC-49: adding a command with Project preselected to the selected repo uses the layout worktree', async () => {
+    const { fake, element, last } = await openPanel({
+      repos: [{ id: 'api', name: 'api' }, { id: 'web', name: 'web' }],
+      worktrees: { wt_main: 'api', wt_other: 'web' }
+    }, { worktree: 'wt_main', viewWorktree: 'wt_other' })
     await click(button('Add Command', element))
     const dialog = $('[role="dialog"]')!
     expect(dialog.getAttribute('aria-label')).toBe('Add Quick Command')
@@ -58,7 +63,7 @@ describe('Quick Commands panel', () => {
     await fill($<HTMLTextAreaElement>('textarea[name="command"]')!, 'echo hello')
     await key($('textarea[name="command"]')!, 'Enter', { metaKey: true })
 
-    expect(fake.callsTo('quirky.terminal/addQuickCommand')[0]!.params).toMatchObject({ label: 'Hello', command: 'echo hello', scope: 'repo', repo: 'api' })
+    expect(fake.callsTo('quirky.worktree/resolve').map((call) => call.params)).toEqual([{ selector: 'id:wt_main' }])
     expect($('[role="dialog"]')).toBeNull()
     const row = $('[data-command="hello"]', element)!
     expect(row.textContent).toContain('Hello')
@@ -74,6 +79,23 @@ describe('Quick Commands panel', () => {
     await click(button('Add Command', element))
     expect($('input[name="scope"][value="repo"]')).toBeNull()
     expect($<HTMLInputElement>('input[name="scope"][value="global"]')!.checked).toBe(true)
+  })
+
+  test('an explicit repo override remains the Add dialog target without a selected worktree', async () => {
+    const { fake, element } = await openPanel({}, { worktree: null, repo: 'api' })
+    await click(button('Add Command', element))
+    expect($<HTMLInputElement>('input[name="scope"][value="repo"]')!.checked).toBe(true)
+    await fill($<HTMLInputElement>('input[name="label"]')!, 'Explicit Repo')
+    await fill($<HTMLTextAreaElement>('textarea[name="command"]')!, 'echo explicit')
+    await key($('textarea[name="command"]')!, 'Enter', { metaKey: true })
+
+    expect(fake.callsTo('quirky.worktree/resolve')).toEqual([])
+    expect(fake.callsTo('quirky.terminal/addQuickCommand')[0]!.params).toMatchObject({
+      label: 'Explicit Repo',
+      command: 'echo explicit',
+      scope: 'repo',
+      repo: 'api'
+    })
   })
 
   test('rows show the scope badge, the command, and an Enter, Insert or Agent hint', async () => {

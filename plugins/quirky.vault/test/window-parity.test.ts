@@ -193,10 +193,25 @@ test(
       const old = listed.sessions.find((session) => session.sessionId === 'old-active-worktree-session')
       if (!old) throw new Error('The scoped history did not return the old active-worktree source.')
 
+      await features.h.call('ui.view.open', {
+        id: 'view:quirky.session/worktree',
+        input: { worktree: features.worktree }
+      })
+      await features.h.call('ui.view.open', { id: SEARCH_SETTINGS_VIEW })
+      const selectedLayout = await features.h.call('ui.state', {}) as {
+        layout: { worktree?: string | null; view: { id: string } | null }
+      }
+      expect(selectedLayout.layout).toMatchObject({
+        worktree: features.worktree,
+        view: { id: SEARCH_SETTINGS_VIEW }
+      })
       await features.h.call('quirky.vault/setView', { scope: 'workspace' })
       await runCommand(features, 'command:quirky.vault/open')
       const report = await reportOf<HistoryReport>(features, HISTORY_PANEL, 'the old active-worktree source', (state) => state.scope === 'workspace' && state.visibleIds.includes(old!.id) && !state.loading)
       expect(report.visibleIds).toContain(old.id)
+      const workspaceTab = [...features.win.document.querySelectorAll<HTMLButtonElement>('.qvh-scope-switch button')]
+        .find((button) => button.textContent?.trim() === 'Workspace')
+      expect(workspaceTab?.disabled).toBe(false)
       expect(existsSync(oldPath)).toBe(true)
 
       const all = features.win.document.querySelector<HTMLButtonElement>('.qvh-scope-switch button:last-child')
@@ -218,7 +233,7 @@ test(
   FEATURE_MS
 )
 test(
-  'SC-02: a registered repo input without a worktree resolves Project scope in the mounted history panel',
+  'SC-02: a registered repo input keeps Project scope over the retained workspace in the mounted history panel',
   async () => {
     const source = sourceHome()
     let features: Features | undefined
@@ -231,7 +246,18 @@ test(
         cwd: repo.path,
         prompt: 'A project session without an active worktree.'
       })
-      await features.h.ok(['ui', 'open-view', 'view:quirky.vault/search-settings', '--input', JSON.stringify({ repo: repo.id })])
+      await features.h.call('ui.view.open', {
+        id: 'view:quirky.session/worktree',
+        input: { worktree: features.worktree }
+      })
+      await features.h.ok(['ui', 'open-view', SEARCH_SETTINGS_VIEW, '--input', JSON.stringify({ repo: repo.id })])
+      const selectedLayout = await features.h.call('ui.state', {}) as {
+        layout: { worktree?: string | null; view: { id: string } | null }
+      }
+      expect(selectedLayout.layout).toMatchObject({
+        worktree: features.worktree,
+        view: { id: SEARCH_SETTINGS_VIEW }
+      })
       await runCommand(features, 'command:quirky.vault/open')
       const listed = await features.h.call<PublicListResult>('quirky.vault/list', { within: { repo: repo.id }, agents: ['claude'], unlimited: true })
       const projectSession = listed.sessions.find((session) => session.sessionId === 'project-only-history')

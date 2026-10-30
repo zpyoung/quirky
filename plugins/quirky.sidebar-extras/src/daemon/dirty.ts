@@ -2,7 +2,6 @@ import type { PluginContext, Worktree } from '@quirky/protocol'
 import { isPlainRecord } from './state'
 
 const STOCK_TITLE = 'Source Control'
-const WORKTREE_VIEW_ID = 'view:quirky.session/worktree'
 const STRUCTURED_VIEW_ID = 'view:quirky.session/structured'
 const WORKTREE_ID_PATTERN = /^wt_[0-9a-f]{12}$/
 
@@ -55,23 +54,21 @@ async function layoutSelector(context: PluginContext): Promise<string | null> {
   if (!isPlainRecord(state) || !isPlainRecord(state.layout)) {
     throw new Error('ui.state returned an invalid layout')
   }
-  const view = state.layout.view
-  if (view === null) return null
-  if (!isPlainRecord(view) || typeof view.id !== 'string') throw new Error('ui.state returned an invalid view')
-  if (view.id === WORKTREE_VIEW_ID) {
-    if (!isPlainRecord(view.input)) return null
-    const selector = view.input.worktree
-    return typeof selector === 'string' && selector.length > 0 ? selector : null
-  }
-  if (view.id === STRUCTURED_VIEW_ID) {
-    if (!isPlainRecord(view.input) || typeof view.input.session !== 'string' || view.input.session.length === 0) return null
-    const session = await context.call('quirky.session/get', { session: view.input.session })
-    if (!isPlainRecord(session) || typeof session.worktreeId !== 'string' || session.worktreeId.length === 0) {
-      throw new Error('quirky.session/get returned no canonical workspace identity')
+  const layout = state.layout
+  const view = layout.view
+  if (view !== null) {
+    if (!isPlainRecord(view) || typeof view.id !== 'string') throw new Error('ui.state returned an invalid view')
+    if (view.id === STRUCTURED_VIEW_ID) {
+      if (!isPlainRecord(view.input) || typeof view.input.session !== 'string' || view.input.session.length === 0) return null
+      const session = await context.call('quirky.session/get', { session: view.input.session })
+      if (!isPlainRecord(session) || typeof session.worktreeId !== 'string' || session.worktreeId.length === 0) {
+        throw new Error('quirky.session/get returned no canonical workspace identity')
+      }
+      return `id:${session.worktreeId}`
     }
-    return `id:${session.worktreeId}`
   }
-  return null
+  const selector = layout.worktree
+  return typeof selector === 'string' && selector.length > 0 ? selector : null
 }
 
 async function resolveWorktree(context: PluginContext, selector: string): Promise<Worktree> {

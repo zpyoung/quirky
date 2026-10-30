@@ -2,6 +2,7 @@ import { afterEach, describe, expect, setDefaultTimeout, test } from 'bun:test'
 import { join } from 'node:path'
 import { rmSync, writeFileSync } from 'node:fs'
 import { makeRepo } from '../../quirky.repo/test/git-fixtures'
+import type { PluginContext } from '@quirky/protocol'
 import {
   boot,
   createGitProject,
@@ -12,7 +13,7 @@ import {
   type DirtyResult,
   type TestEnvironment
 } from './support'
-
+import { readDirty } from '../src/daemon/dirty'
 setDefaultTimeout(20_000)
 
 let env: TestEnvironment | null = null
@@ -115,4 +116,57 @@ describe('sidebar-extras dirty status', () => {
     const after = await extras<DirtyResult>(env.client, 'dirty')
     expect(after).toMatchObject({ worktreeId: project.main.id, count: 1, dirty: true, available: true })
   })
+})
+test('dirty status uses layout selection in a global view', async () => {
+  const calls: { method: string; params: Record<string, unknown> }[] = []
+  const context = {
+    async call(method: string, params: Record<string, unknown> = {}) {
+      calls.push({ method, params })
+      if (method === 'ui.state') return { layout: { view: { id: 'view:global' }, worktree: 'wt-selected' } }
+      if (method === 'quirky.worktree/resolve') return { id: 'wt-selected', path: '/work/selected' }
+      if (method === 'quirky.git/status') return { entries: [{ path: 'src/change.ts' }], capped: false }
+      throw new Error(`unexpected call: ${method}`)
+    }
+  } as unknown as PluginContext
+
+  expect(await readDirty(context, {})).toMatchObject({
+    worktreeId: 'wt-selected',
+    count: 1,
+    dirty: true,
+    available: true
+  })
+  expect(calls).toEqual([
+    { method: 'ui.state', params: {} },
+    { method: 'quirky.worktree/resolve', params: { selector: 'wt-selected' } },
+    { method: 'quirky.git/status', params: { worktree: 'id:wt-selected' } }
+  ])
+})
+
+test('dirty status keeps a structured session bound to its own worktree', async () => {
+  const calls: { method: string; params: Record<string, unknown> }[] = []
+  const context = {
+    async call(method: string, params: Record<string, unknown> = {}) {
+      calls.push({ method, params })
+      if (method === 'ui.state') {
+        return {
+          layout: {
+            view: { id: 'view:quirky.session/structured', input: { session: 'session-selected' } },
+            worktree: 'wt-retained'
+          }
+        }
+      }
+      if (method === 'quirky.session/get') return { worktreeId: 'wt-session' }
+      if (method === 'quirky.worktree/resolve') return { id: 'wt-session', path: '/work/session' }
+      if (method === 'quirky.git/status') return { entries: [], capped: false }
+      throw new Error(`unexpected call: ${method}`)
+    }
+  } as unknown as PluginContext
+
+  expect(await readDirty(context, {})).toMatchObject({ worktreeId: 'wt-session', count: 0, available: true })
+  expect(calls).toEqual([
+    { method: 'ui.state', params: {} },
+    { method: 'quirky.session/get', params: { session: 'session-selected' } },
+    { method: 'quirky.worktree/resolve', params: { selector: 'id:wt-session' } },
+    { method: 'quirky.git/status', params: { worktree: 'id:wt-session' } }
+  ])
 })

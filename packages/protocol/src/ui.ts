@@ -215,6 +215,8 @@ export type UiModel = {
 /** The daemon-owned layout: open view/panel, sidebar visibility and desired panel geometry; `palette` is absent when the command palette is closed. */
 export type UiLayout = {
   view: { id: string; input?: unknown } | null
+  /** The selected worktree for this window; null when none is selected. */
+  worktree?: string | null
   panel: string | null
   sidebar: boolean
   focus: 'sidebar' | 'view' | 'panel' | null

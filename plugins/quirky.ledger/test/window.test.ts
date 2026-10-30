@@ -174,7 +174,14 @@ test('SC-13: the sidebar panel follows the active workspace, scopes and client s
       severity: 'low'
     }
   })
-  await world.agent.callAny('ui.view.open', { id: 'view:quirky.session/worktree', input: { worktree: world.workspace.id } })
+  await world.agent.callAny('ui.view.open', {
+    id: 'view:quirky.session/worktree',
+    input: { worktree: world.workspace.id }
+  })
+  await world.agent.callAny('ui.view.open', { id: LEDGER_VIEW })
+  const globalViewLayout = await uiState(world.agent)
+  expect(globalViewLayout.layout).toMatchObject({ view: { id: LEDGER_VIEW }, worktree: world.workspace.id })
+  await world.win.waitFor(() => chooserSection())
   await world.agent.callAny('ui.panel.open', { id: LEDGER_PANEL })
   const panel = await world.win.waitFor(() => document.querySelector<HTMLElement>('[aria-label="Ledger panel"]'))
   await world.win.waitFor(() => panel.querySelector('ul li'))
@@ -198,7 +205,13 @@ test('SC-13: the sidebar panel follows the active workspace, scopes and client s
   await world.win.waitFor(() => panel.querySelector('ul li'))
 
   await world.agent.callAny('ui.view.close', {})
-  await world.win.waitFor(() => panel.querySelector('ul li') === null)
+  await world.win.waitFor(async () => {
+    const layout = await uiState(world.agent)
+    return layout.layout.view?.id === 'view:quirky.session/worktree' &&
+      layout.layout.worktree === world.workspace.id &&
+      panel.querySelector('ul li') !== null
+  })
+  expect(panel.textContent).toContain('Panel origin record')
 }, SLOW)
 
 test('SC-14: Open Ledger and real owner menus route to the same attached and detached catalog-backed page', async () => {

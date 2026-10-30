@@ -807,6 +807,27 @@ describe('NA-40: the Source Control AI defaults view', () => {
     }
     unmount()
   })
+  test('uses the daemon-selected worktree when settings input omits one', async () => {
+    const fake = aiFake()
+    fake.setLayout({ ...layoutFor(null), view: { id: 'view:quirky.git/ai-settings' }, worktree: 'layout-selected' })
+    const { unmount } = mountSettings(fake, {})
+    await settle()
+    expect(fake.called('quirky.git/aiRecipe').map((call) => call.params)).toEqual(
+      ACTIONS.map((action) => ({ worktree: 'layout-selected', action }))
+    )
+    unmount()
+  })
+
+  test('keeps an explicit settings worktree input over the daemon-selected worktree', async () => {
+    const fake = aiFake()
+    fake.setLayout({ ...layoutFor(null), view: { id: 'view:quirky.git/ai-settings' }, worktree: 'layout-selected' })
+    const { unmount } = mountSettings(fake, { worktree: 'explicit-target' })
+    await settle()
+    expect(fake.called('quirky.git/aiRecipe').map((call) => call.params)).toEqual(
+      ACTIONS.map((action) => ({ worktree: 'explicit-target', action }))
+    )
+    unmount()
+  })
   test('name actions use distinct recipes and retain the last candidate when a later generation fails', async () => {
     let failName = false
     const { fake, element, unmount } = await openSettings((f) => {
