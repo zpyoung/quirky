@@ -184,7 +184,7 @@
 
 .qe-inline-rename .ui-text-field,
 .qe-explorer-inline-row .ui-text-field,
-.qe-explorer-inline-field {
+.qe-explorer-inline-row > .qe-explorer-inline-field {
   flex: 1 1 12rem;
   min-width: 0;
 }
