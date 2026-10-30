@@ -19,6 +19,8 @@ const rects = new WeakMap<Element, { left: number; top: number; width: number; h
 
 /** The size every measured workspace container reports, since happy-dom does no layout. */
 export const AREA = { width: 1000, height: 600 }
+/** Simulated `--ui-row-double` for the no-layout header-band measurement. */
+const PANE_HEADER_BAND_HEIGHT = 34
 
 /** Registers happy-dom and loads the pane and the workspace after it, since xterm reads `window` when imported. */
 export async function loadWorkspace(): Promise<WorkspaceModule> {
@@ -26,7 +28,12 @@ export async function loadWorkspace(): Promise<WorkspaceModule> {
   const original = Element.prototype.getBoundingClientRect
   Element.prototype.getBoundingClientRect = function (this: Element) {
     const own = rects.get(this)
-    const measured = own ?? (/\bqt-(panes|groups|body)\b/.test(this.getAttribute('class') ?? '') ? { left: 0, top: 0, ...AREA } : null)
+    const fallback = /\bqt-(panes|groups|body)\b/.test(this.getAttribute('class') ?? '')
+      ? { left: 0, top: 0, ...AREA }
+      : this.classList.contains('qt-pane-header-band')
+        ? { left: 0, top: 0, width: 0, height: PANE_HEADER_BAND_HEIGHT }
+        : null
+    const measured = own ?? fallback
     if (!measured) return original.call(this)
     return { ...measured, x: measured.left, y: measured.top, right: measured.left + measured.width, bottom: measured.top + measured.height, toJSON: () => ({}) } as DOMRect
   }

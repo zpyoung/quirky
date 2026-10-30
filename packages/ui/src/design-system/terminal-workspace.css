@@ -132,8 +132,11 @@ button.qt-badge.ui-button { padding: var(--ui-space-2) var(--ui-space-6); }
 .qt-title-field { min-width: calc(var(--ui-space-24) * 3); max-width: calc(var(--ui-space-24) * 7); padding: 0 var(--ui-space-4); }
 
 .qt-body { position: relative; display: flex; flex: 1; min-height: 0; flex-direction: column; }
-.qt-panes { position: relative; flex: 1; min-height: 0; overflow: hidden; }
+.qt-panes { position: relative; flex: 1; min-height: 0; overflow: hidden; --qt-pane-header-band: var(--ui-row-double); }
+.qt-pane-header-band { position: absolute; inset-block-start: 0; inset-inline-start: 0; width: 0; height: var(--qt-pane-header-band); visibility: hidden; pointer-events: none; }
 .qt-pane { position: absolute; overflow: hidden; }
+.qt-pane-content { position: absolute; inset: 0; overflow: hidden; }
+.qt-pane-content-reserved { inset-block-start: var(--qt-pane-header-band); }
 .qt-divider { position: absolute; z-index: 5; background: var(--ui-border); }
 .qt-divider:hover { background: var(--ui-accent); }
 .qt-divider-right { cursor: col-resize; }

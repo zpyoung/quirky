@@ -437,6 +437,15 @@ describe('paneRects', () => {
     expect(down.map((p) => p.height)).toEqual([50, 550])
   })
 
+  test('a vertical minimum reserves the header band without changing the horizontal minimum', () => {
+    const right = paneRects(split('right', 'right', leaf('a'), leaf('b'), 0.01), 1000, 600, 50, 3, 84).panes
+    const down = paneRects(split('down', 'down', leaf('a'), leaf('b'), 0.01), 1000, 600, 50, 3, 84).panes
+    const smallPair = paneRects(split('small', 'down', leaf('a'), leaf('b'), 0.01), 1000, 160, 50, 3, 84).panes
+    expect(right.map((pane) => pane.width)).toEqual([50, 950])
+    expect(down.map((pane) => pane.height)).toEqual([84, 516])
+    expect(smallPair.map((pane) => pane.height)).toEqual([80, 80])
+  })
+
   test('SC-24: a pair under twice the minimum splits in halves', () => {
     const { panes } = paneRects(split('s', 'right', leaf('a'), leaf('b'), 0.1), 80, 600)
     expect(panes.map((p) => p.width)).toEqual([40, 40])

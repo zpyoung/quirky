@@ -11,6 +11,8 @@ export const WORKTREE_VIEW = 'view:quirky.session/worktree'
 
 /** The size every workspace container reports, since happy-dom does no layout. */
 export const AREA = { width: 1000, height: 600 }
+/** Simulated `--ui-row-double` for the no-layout header-band measurement. */
+const PANE_HEADER_BAND_HEIGHT = 34
 /** The cell size the stubbed fit uses to turn a pane's pixels into columns and rows. */
 export const CELL = { width: 10, height: 20 }
 /** How soon the window must treat a close as a double click of the one before. */
@@ -395,12 +397,26 @@ const CHORD_KEYS: Record<string, string> = { enter: 'Enter', tab: 'Tab', pagedow
 
 const rects = new WeakMap<Element, Rect>()
 
-/** Makes workspace containers measure `AREA` and honours `setRect`; returns the function that undoes it. */
+/** Simulates workspace, header-band and dock-host boxes; `setRect` overrides individual elements. */
 function stubLayout(): () => void {
   const original = Element.prototype.getBoundingClientRect
   Element.prototype.getBoundingClientRect = function (this: Element) {
     const own = rects.get(this)
-    const measured: Rect | null = own ?? (MEASURED.test(this.getAttribute('class') ?? '') ? { left: 0, top: 0, ...AREA } : null)
+    const pane = this.classList.contains('qtd-host') ? this.closest<HTMLElement>('.qt-pane') : null
+    const paneBox = pane
+      ? {
+          left: Number.parseFloat(pane.style.left) || 0,
+          top: Number.parseFloat(pane.style.top) || 0,
+          width: Number.parseFloat(pane.style.width) || 0,
+          height: Number.parseFloat(pane.style.height) || 0
+        }
+      : null
+    const fallback: Rect | null = MEASURED.test(this.getAttribute('class') ?? '')
+      ? { left: 0, top: 0, ...AREA }
+      : this.classList.contains('qt-pane-header-band')
+        ? { left: 0, top: 0, width: 0, height: PANE_HEADER_BAND_HEIGHT }
+        : paneBox
+    const measured = own ?? fallback
     if (!measured) return original.call(this)
     return {
       ...measured,

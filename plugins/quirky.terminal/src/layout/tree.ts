@@ -303,11 +303,12 @@ function firstSize(total: number, ratio: number, minPx: number): number {
 /**
  * Lays a pane tree out in a `width` x `height` area: one rectangle per pane, tiling the area with
  * no gaps, and one rectangle per divider, `dividerPx` thick and centred on the seam between its
- * two sides (so dividers overlay the panes). No pane is drawn narrower than `minPx`, or half
- * the pair when the pair is smaller. `area` of a divider is the whole rectangle its split divides,
- * for turning a pointer position into a ratio.
+ * two sides (so dividers overlay the panes). Right splits keep panes at least `minPx` wide; down
+ * splits keep them at least `minHeightPx` tall, or half the pair when that pair is smaller. `area`
+ * of a divider is the whole rectangle its split divides, for turning a pointer position into a
+ * ratio.
  */
-export function paneRects(tree: PaneNode, width: number, height: number, minPx = 50, dividerPx = 3): { panes: PaneRect[]; dividers: DividerRect[] } {
+export function paneRects(tree: PaneNode, width: number, height: number, minPx = 50, dividerPx = 3, minHeightPx = minPx): { panes: PaneRect[]; dividers: DividerRect[] } {
   const panes: PaneRect[] = []
   const dividers: DividerRect[] = []
 
@@ -322,7 +323,7 @@ export function paneRects(tree: PaneNode, width: number, height: number, minPx =
       walk(node.first, { ...area, width: w })
       walk(node.second, { ...area, x: area.x + w, width: area.width - w })
     } else {
-      const h = firstSize(area.height, node.ratio, minPx)
+      const h = firstSize(area.height, node.ratio, minHeightPx)
       dividers.push({ split: node.id, direction: 'down', x: area.x, y: area.y + h - dividerPx / 2, width: area.width, height: dividerPx, area })
       walk(node.first, { ...area, height: h })
       walk(node.second, { ...area, y: area.y + h, height: area.height - h })

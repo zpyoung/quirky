@@ -6,6 +6,8 @@
 
 **Amendments:**
 - 2026-10-26, spec review (Codex adversarial review, D43): the view's `session` input focuses that session's pane (new SC-76); a split tab's live title is its active pane's (SC-10); Terminal first never lets a bound chord reach the webview's own default (SC-61); Restart is only for an ended pane (SC-33); "Close Split Pane" moves tabs into the nearest group of the sibling side (SC-48); an overlay's `shown` comes from its report (SC-67); SC-70 now tests the override chain instead of a per-contribution disable the registry doesn't offer; every (UI) scenario also has its CLI/API path (Behavior intro); agent scenarios use fake agent CLIs (SC-53).
+- 2026-10-29, browser smoke (SC-31): split panes reserve a stable header band across focus changes, keeping the terminal screen below the visible header.
+- 2026-10-29, SC-24: down-split minima preserve 50 px of pane content below the header band.
 
 ## Conceptual model
 
@@ -253,7 +255,7 @@ for **main**. Keys are macOS keys (`⌘` is Mod).
 24. **SC-24: resizing with a divider** (UI, CLI)
     - **Given** pane-2 | pane-3 at 0.5 in a 1000 px wide tab
     - **When** the person drags the divider 200 px left and lets go; then double-clicks it; or the agent runs `quirky terminal pane resize pane-2 --ratio 0.3`
-    - **Then** the split is 0.3 after the drag, the panes refit while dragging but each shell gets one resize when the drag ends, a pane never gets narrower than 50 px (or half the pair when the pair is smaller), and the double-click returns the pair to 0.5
+    - **Then** the split is 0.3 after the drag, the panes refit while dragging but each shell gets one resize when the drag ends, right splits keep a 50 px minimum width, down splits keep 50 px below their reserved header band (or half the pair when smaller), and the double-click returns the pair to 0.5
 
 25. **SC-25: equalize** (UI, CLI)
     - **Given** three panes side by side made by splitting right twice (0.5, then 0.5 of the right half)
@@ -292,7 +294,7 @@ for **main**. Keys are macOS keys (`⌘` is Mod).
 31. **SC-31: pane headers and closing controls** (UI)
     - **Given** split and lone-pane tabs
     - **When** the person looks at their active panes
-    - **Then** only the active split pane shows its header with its title if set, expand/collapse and close ("Close Pane" when untitled, "Remove title" when titled), and a drag handle when the tab has 2+ panes; an untitled lone pane has no empty header, a titled lone pane shows only its title/edit field, and lone tabs are closed from the tab strip
+    - **Then** only the active split pane shows its header with its title if set, expand/collapse and close ("Close Pane" when untitled, "Remove title" when titled), and a drag handle when the tab has 2+ panes; an untitled lone pane has no empty header, a titled lone pane shows only its title/edit field, and lone tabs are closed from the tab strip. Every pane in a split tab reserves the same header-height band whether focused or not, so changing focus does not resize any terminal and a shown header never overlaps its terminal screen. A titled or renaming lone pane also reserves the band, while an untitled lone pane without a rename uses the full pane area.
 
 32. **SC-32: exit 0 closes the pane, except an untouched lone pane** (CLI)
     - **Given** (a) pane-3 in a split tab where the person typed `exit`; (b) a lone pane nobody typed into whose shell exits 0 at startup

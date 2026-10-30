@@ -4,6 +4,7 @@ import { TerminalPaneView, type TerminalPaneHandle, type TerminalPaneProps } fro
 import type { WorkspaceController } from '../workspace/controller'
 import { DEFAULT_GUTTER_ROWS, dockHeight, gutterRowsAfterDrag, shouldMountDock } from './geometry'
 import { isDockState, type DockHostReport, type DockState, type DockTransport } from './types'
+import { useBoxSize } from '../workspace/useBoxSize'
 
 const COMPOSER_VIEW_ID = 'view:quirky.terminal-dock/composer'
 
@@ -15,7 +16,6 @@ type Props = Omit<TerminalPaneProps, 'ref' | 'active' | 'dragging' | 'suppressAu
   active: boolean
   dragging: boolean
   terminalEpoch: number
-  availableHeight: number
   onHandle(handle: TerminalPaneHandle | null): void
 }
 
@@ -25,7 +25,7 @@ function messageOf(error: unknown): string {
 
 /** Owns the terminal's available height and embeds the dock only through the public view API. */
 export function DockHost(props: Props) {
-  const { context, controller, paneId, sessionId, active, dragging: workspaceDragging, availableHeight, terminalEpoch, onHandle, ...terminalProps } = props
+  const { context, controller, paneId, sessionId, active, dragging: workspaceDragging, terminalEpoch, onHandle, ...terminalProps } = props
   const [dock, setDock] = useState<DockState | null>(null)
   const dockRef = useRef<DockState | null>(null)
   const [rows, setRows] = useState(DEFAULT_GUTTER_ROWS)
@@ -41,6 +41,7 @@ export function DockHost(props: Props) {
   const [hostError, setHostError] = useState<string | null>(null)
   const [mountError, setMountError] = useState<string | null>(null)
   const host = useRef<HTMLDivElement>(null)
+  const hostSize = useBoxSize(host)
   const composerHost = useRef<HTMLDivElement>(null)
   const terminalHandle = useRef<TerminalPaneHandle | null>(null)
   const onHandleRef = useRef(onHandle)
@@ -128,11 +129,11 @@ export function DockHost(props: Props) {
   const requested = Boolean(dock?.enabled && dock.supported && dock.docked)
   const shownRows = resize?.previewRows ?? rows
   const shownHeight = dockHeight(shownRows)
-  const overlayMaxHeight = Math.max(0, availableHeight - shownHeight - 6)
+  const overlayMaxHeight = Math.max(0, hostSize.height - shownHeight - 6)
   useEffect(() => {
-    const next = requested ? shouldMountDock(geometryMounted, availableHeight, dockHeight(shownRows), resize !== null) : false
+    const next = requested ? shouldMountDock(geometryMounted, hostSize.height, dockHeight(shownRows), resize !== null) : false
     if (next !== geometryMounted) setGeometryMounted(next)
-  }, [availableHeight, geometryMounted, requested, resize, shownRows])
+  }, [geometryMounted, hostSize.height, requested, resize, shownRows])
 
   const renderComposer = requested && geometryMounted
   useLayoutEffect(() => {
