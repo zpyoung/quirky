@@ -2,7 +2,7 @@ import { afterAll, beforeAll, expect, test } from 'bun:test'
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
 import { act, createElement, useState } from 'react'
 import type { Root } from 'react-dom/client'
-import { createElectrobunNativeBrowserAdapter, createNativeBrowserCapability, type NativeBrowserShellBridge } from '../src/native-browser'
+import { NATIVE_BROWSER_DEFAULT_MASKS, createElectrobunNativeBrowserAdapter, createNativeBrowserCapability, type NativeBrowserShellBridge } from '../src/native-browser'
 
 type RequiredShell = 'claimNativeBrowserView' | 'setNativeBrowserZoom' | 'releaseNativeBrowserView'
 
@@ -374,6 +374,15 @@ test('a navigation that overtakes a slow label route stays current and the label
     handle.dispose()
     await released.promise
     element.remove()
+  }
+})
+
+test('every native mask excludes closed details and fits the comma-separated masks attribute', () => {
+  // happy-dom can't evaluate this nested :not(), so the shape is asserted here; WebKit runs it in the app
+  expect(NATIVE_BROWSER_DEFAULT_MASKS.length).toBeGreaterThan(0)
+  for (const selector of NATIVE_BROWSER_DEFAULT_MASKS) {
+    expect(selector).toEndWith(':not(details:not([open]) *)')
+    expect(selector).not.toContain(',')
   }
 })
 

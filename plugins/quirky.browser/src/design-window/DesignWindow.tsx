@@ -76,6 +76,7 @@ const MAX_ANNOTATIONS = 20
 const MAX_COMMENT = 2000
 const PICKER_TIMEOUT_MS = 120_000
 const POLL_DELAY_MS = 100
+const NATIVE_EVALUATION_BUSY = /native browser evaluation (timed out|was cancelled)/
 const SCREENSHOT_MAX_BYTES = 2 * 1024 * 1024
 const WATCH_COPY_PROBE = `(() => { const active = document.activeElement; const selection = window.getSelection ? window.getSelection() : null; return { editable: !!active && (active.isContentEditable || active.tagName === 'IFRAME' || /^(INPUT|TEXTAREA|SELECT)$/.test(active.tagName)), selected: !!selection && String(selection).length > 0 }; })()`
 const designOverlayStyle: CSSProperties = { position: 'absolute', zIndex: 12, inset: 0, pointerEvents: 'none' }
@@ -924,8 +925,12 @@ export function DesignWindow({ context, pane, nativeHandle, pageHost, nativePage
           if (await runActionRef.current(result.action)) return
         }
       } catch (error) {
-        if (stillCurrent()) onMessage(`Native design shortcut polling stopped: ${errorText(error)}`, 'error')
-        return
+        if (!stillCurrent()) return
+        // a page waiting on a native dialog can't evaluate until the user answers, which isn't a failure
+        if (!NATIVE_EVALUATION_BUSY.test(errorText(error))) {
+          onMessage(`Native design shortcut polling stopped: ${errorText(error)}`, 'error')
+          return
+        }
       }
       if (stillCurrent()) timer = setTimeout(() => void poll(), POLL_DELAY_MS)
     }

@@ -20,7 +20,10 @@ import {
 
 /** The native layer sits above host DOM; these masks keep standard overlays visible. */
 /** Plugin-owned overlay elements may opt in with `data-quirky-native-mask`; standard ARIA overlays are masked too. */
-export const NATIVE_BROWSER_DEFAULT_MASKS = ['[data-quirky-native-mask]', '[role="dialog"]', '[role="menu"]', '[role="listbox"]'] as const
+// closed <details> content keeps its layout box in WebKit, so masking it would punch holes through the page
+const OUTSIDE_CLOSED_DETAILS = ':not(details:not([open]) *)'
+export const NATIVE_BROWSER_DEFAULT_MASKS = ['[data-quirky-native-mask]', '[role="dialog"]', '[role="menu"]', '[role="listbox"]']
+  .map((selector) => `${selector}${OUTSIDE_CLOSED_DETAILS}`)
 const NATIVE_BROWSER_EVALUATION_SCRIPT_MAX_BYTES = 64 * 1024
 const NATIVE_BROWSER_EVALUATION_RESULT_MAX_BYTES = 256 * 1024
 const NATIVE_BROWSER_EVALUATION_MESSAGE_MAX_BYTES = NATIVE_BROWSER_EVALUATION_RESULT_MAX_BYTES * 6 + 4096
