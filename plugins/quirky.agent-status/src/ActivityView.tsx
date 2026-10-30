@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useRef, useState, type ChangeEvent, type CSSProperties } from 'react'
-import { Badge, Button, EmptyState, FormRow, InlineAgentCard, ListRow, SectionHeader, StatusDot, TextField, type UiStatus } from '@quirky/ui'
+import { useCallback, useEffect, useId, useRef, useState, type ChangeEvent, type CSSProperties } from 'react'
+import { Badge, Button, EmptyState, FormRow, InlineAgentCard, ListRow, SectionHeader, TextField, type UiStatus } from '@quirky/ui'
 import type { QuirkyEvent, UiPluginContext } from '@quirky/protocol'
 import type { ActivityQuery, ActivityThread } from './activity-types'
 
@@ -31,6 +31,7 @@ const PAGE_STYLE: CSSProperties = {
   minWidth: 0,
   overflow: 'hidden'
 }
+const EMBEDDED_PAGE_STYLE: CSSProperties = { ...PAGE_STYLE, display: 'block', overflowY: 'auto' }
 const HEADER_STYLE: CSSProperties = { padding: 'var(--ui-space-12)' }
 const ACTIONS_STYLE: CSSProperties = { display: 'flex', flexWrap: 'wrap', gap: 'var(--ui-space-8)' }
 const FILTERS_STYLE: CSSProperties = {
@@ -143,48 +144,10 @@ function changedActivity(event: QuirkyEvent): boolean {
   return event.type === `${PLUGIN_ID}/changed` || event.type === `${PLUGIN_ID}/activityChanged`
 }
 
-export function ActivityNavigation({ context }: { context: UiPluginContext }) {
-  const [unread, setUnread] = useState(0)
 
-  const refresh = useCallback(async () => {
-    try {
-      const result = (await context.call('quirky.agent-status/activity', { unreadOnly: true })) as { threads: ActivityThread[] }
-      setUnread(result.threads.length)
-    } catch (error) {
-      context.log(`could not load Activity count: ${error instanceof Error ? error.message : String(error)}`)
-    }
-  }, [context])
-
-  useEffect(() => {
-    const unsubscribe = context.subscribe((event) => {
-      if (changedActivity(event)) void refresh()
-    })
-    const unsubscribeConnection = context.onConnection((status) => {
-      if (status === 'connected') void refresh()
-    })
-    void refresh()
-    return () => {
-      unsubscribe()
-      unsubscribeConnection()
-    }
-  }, [context, refresh])
-
-  return (
-    <Button
-      className="ui-cluster"
-      style={{ width: '100%', justifyContent: 'flex-start' }}
-      aria-label={unread > 0 ? `Activity, ${unread} unread` : 'Activity'}
-      onClick={() => void context.executeCommand(`command:${PLUGIN_ID}/openActivity`)}
-    >
-      {unread > 0 ? <StatusDot status="needs-you" /> : null}
-      <span>Activity</span>
-      {unread > 0 ? <Badge tone="needs-you">{unread}</Badge> : null}
-    </Button>
-  )
-}
-
-export function ActivityView({ context, input }: { context: UiPluginContext; input?: unknown }) {
+export function ActivityView({ context, input, embedded }: { context: UiPluginContext; input?: unknown; embedded?: boolean }) {
   const [view, setView] = useState(() => viewInput(input))
+  const controlId = useId()
   const [draftText, setDraftText] = useState(() => view.text ?? '')
   const [draftWorktree, setDraftWorktree] = useState(() => view.worktree ?? '')
   const [threads, setThreads] = useState<ActivityThread[]>([])
@@ -208,6 +171,8 @@ export function ActivityView({ context, input }: { context: UiPluginContext; inp
       if (current === generation.current) setLoading(false)
     }
   }, [context, view.group, view.text, view.unreadOnly, view.worktree])
+  const refreshRef = useRef(refresh)
+  refreshRef.current = refresh
 
   useEffect(() => {
     const unsubscribe = context.subscribe((event) => {
@@ -233,7 +198,7 @@ export function ActivityView({ context, input }: { context: UiPluginContext; inp
     if (worktree) next.worktree = worktree
     else delete next.worktree
     setView(next)
-    context.openView(VIEW_ID, next)
+    if (!embedded) context.openView(VIEW_ID, next)
   }
 
   const applyFilters = () => updateView({ text: draftText, worktree: draftWorktree })
@@ -241,7 +206,7 @@ export function ActivityView({ context, input }: { context: UiPluginContext; inp
   const markRead = async (thread: ActivityThread) => {
     try {
       await context.call('quirky.agent-status/acknowledge', { session: thread.sessionId, turn: thread.turn })
-      await refresh()
+      await refreshRef.current()
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause))
     }
@@ -251,7 +216,7 @@ export function ActivityView({ context, input }: { context: UiPluginContext; inp
     const observed = threads.filter((thread) => thread.unread)
     try {
       await Promise.all(observed.map((thread) => context.call('quirky.agent-status/acknowledge', { session: thread.sessionId, turn: thread.turn })))
-      await refresh()
+      await refreshRef.current()
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause))
     }
@@ -261,7 +226,7 @@ export function ActivityView({ context, input }: { context: UiPluginContext; inp
     const worktree = view.worktree?.trim()
     try {
       await context.call('quirky.agent-status/clearCompleted', worktree ? { worktree } : {})
-      await refresh()
+      await refreshRef.current()
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause))
     }
@@ -277,7 +242,7 @@ export function ActivityView({ context, input }: { context: UiPluginContext; inp
   const hasFilters = Boolean(view.text?.trim() || view.worktree?.trim() || view.unreadOnly)
 
   return (
-    <main style={PAGE_STYLE}>
+    <main style={embedded ? EMBEDDED_PAGE_STYLE : PAGE_STYLE}>
       <div style={HEADER_STYLE}>
         <SectionHeader
           title="Activity"
@@ -286,7 +251,7 @@ export function ActivityView({ context, input }: { context: UiPluginContext; inp
               <Button aria-label="Mark all read" disabled={!threads.some((thread) => thread.unread)} onClick={() => void markAllRead()}>
                 Mark all read
               </Button>
-              <Button aria-label="Clear completed activity" variant="destructive" onClick={() => void clearCompleted()}>
+              <Button aria-label="Clear completed activity" variant="destructive" disabled={loading || error !== null || !threads.some((thread) => thread.display === 'done' || thread.display === 'failed' || thread.display === 'interrupted')} onClick={() => void clearCompleted()}>
                 Clear completed
               </Button>
             </div>
@@ -301,23 +266,26 @@ export function ActivityView({ context, input }: { context: UiPluginContext; inp
         }}
       >
         <TextField
-          id="activity-search"
+          id={`${controlId}-search`}
           label="Search Activity"
           aria-label="Search Activity"
           type="search"
           value={draftText}
           onChange={(event: ChangeEvent<HTMLInputElement>) => setDraftText(event.currentTarget.value)}
         />
-        <TextField
-          id="activity-worktree"
-          label="Worktree ID"
-          aria-label="Worktree ID"
-          type="search"
-          value={draftWorktree}
-          onChange={(event: ChangeEvent<HTMLInputElement>) => setDraftWorktree(event.currentTarget.value)}
-        />
-        <FormRow label="Unread only" htmlFor="activity-unread">
+        {embedded ? null : (
+          <TextField
+            id={`${controlId}-worktree`}
+            label="Worktree ID"
+            aria-label="Worktree ID"
+            type="search"
+            value={draftWorktree}
+            onChange={(event: ChangeEvent<HTMLInputElement>) => setDraftWorktree(event.currentTarget.value)}
+          />
+        )}
+        <FormRow label="Unread only" htmlFor={`${controlId}-unread`}>
           <input
+            id={`${controlId}-unread`}
             aria-label="Unread only"
             type="checkbox"
             checked={view.unreadOnly === true}
@@ -325,8 +293,9 @@ export function ActivityView({ context, input }: { context: UiPluginContext; inp
             onChange={(event: ChangeEvent<HTMLInputElement>) => updateView({ unreadOnly: event.currentTarget.checked })}
           />
         </FormRow>
-        <FormRow label="Group by" htmlFor="activity-group">
+        <FormRow label="Group by" htmlFor={`${controlId}-group`}>
           <select
+            id={`${controlId}-group`}
             aria-label="Group Activity by"
             className="ui-text-field__input"
             style={{ appearance: 'auto' }}
