@@ -4,6 +4,7 @@ import { GlobalRegistrator } from '@happy-dom/global-registrator'
 import type { MountFunction, UiPluginContext } from '@quirky/protocol'
 import type { activate as Activate } from '../src/ui'
 import { ORCHESTRATION_EXAMPLES, createLatestRequestGuard, dismissSetup, isSetupDismissed } from '../src/window/setup-state'
+import { placeSetupCard } from '../src/setup-placement'
 
 type Status = {
   state: 'missing' | 'stale' | 'ready' | 'partial' | 'error'
@@ -141,6 +142,83 @@ function setInput(input: HTMLInputElement, value: string): void {
   input.dispatchEvent(new Event('input', { bubbles: true }))
   input.dispatchEvent(new Event('change', { bubbles: true }))
 }
+
+describe('floating setup card placement', () => {
+  test('prefers above a dragged trigger and stays clear of the measured status bar', () => {
+    const viewport = { width: 1200, height: 800 }
+    const button = { left: 1020, top: 620, width: 36, height: 36 }
+    const statusBar = { left: 0, top: 760, width: 1200, height: 40 }
+    const card = { width: 260, height: 180 }
+    const placement = placeSetupCard({ viewport, button, statusBar, card })
+
+    expect(placement.top + card.height).toBeLessThanOrEqual(button.top - 12)
+    expect(placement.left).toBeGreaterThanOrEqual(16)
+    expect(placement.left + card.width).toBeLessThanOrEqual(viewport.width - 16)
+    expect(placement.top).toBeGreaterThanOrEqual(16)
+    expect(placement.top + card.height).toBeLessThanOrEqual(statusBar.top - 16)
+  })
+
+  test('keeps placement inside the status bar boundary when the trigger is dragged into it', () => {
+    const button = { left: 1020, top: 756, width: 36, height: 36 }
+    const card = { width: 260, height: 180 }
+    const placement = placeSetupCard({
+      viewport: { width: 1200, height: 800 },
+      button,
+      statusBar: { top: 700 },
+      card
+    })
+
+    expect(placement.top + card.height).toBeLessThanOrEqual(700 - 16)
+    expect(placement.top + card.height).toBeLessThanOrEqual(button.top - 12)
+  })
+
+  test('uses a clear side when the trigger blocks the vertical placements', () => {
+    const button = { left: 400, top: 690, width: 36, height: 36 }
+    const card = { width: 220, height: 700 }
+    const placement = placeSetupCard({
+      viewport: { width: 800, height: 800 },
+      button,
+      statusBar: { top: 760 },
+      card
+    })
+
+    expect(placement.left).toBeGreaterThanOrEqual(button.left + button.width + 12)
+    expect(placement.left + card.width).toBeLessThanOrEqual(800 - 16)
+    expect(placement.top).toBeGreaterThanOrEqual(16)
+    expect(placement.top + card.height).toBeLessThanOrEqual(760 - 16)
+  })
+
+  test('places below a top-edge trigger when above is unavailable', () => {
+    const button = { left: 400, top: 16, width: 36, height: 36 }
+    const placement = placeSetupCard({
+      viewport: { width: 800, height: 600 },
+      button,
+      statusBar: { top: 560 },
+      card: { width: 220, height: 180 }
+    })
+
+    expect(placement.top).toBe(button.top + button.height + 12)
+    expect(placement.top).toBeGreaterThanOrEqual(16)
+    expect(placement.top + 180).toBeLessThanOrEqual(560 - 16)
+  })
+
+  test('limits a short viewport card to the largest trigger-safe vertical space', () => {
+    const button = { left: 140, top: 70, width: 36, height: 36 }
+    const placement = placeSetupCard({
+      viewport: { width: 320, height: 200 },
+      button,
+      statusBar: { top: 170 },
+      card: { width: 260, height: 320 }
+    })
+
+    expect(placement.top).toBe(16)
+    expect(placement.maxHeight).toBe(42)
+    expect(placement.top + placement.maxHeight).toBeLessThanOrEqual(button.top - 12)
+    expect(placement.top + placement.maxHeight).toBeLessThanOrEqual(170 - 16)
+    expect(placement.left).toBeGreaterThanOrEqual(16)
+    expect(placement.left + 260).toBeLessThanOrEqual(320 - 16)
+  })
+})
 
 describe('orchestration setup UI', () => {
   test('settings shows detected coverage and examples, installs only after explicit click, and validates depth', async () => {

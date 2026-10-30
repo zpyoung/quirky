@@ -6,6 +6,7 @@ Status: Implemented; daemon/CLI acceptance and actual isolated-browser smoke ver
 **Amendments:** 2026-10-28 — initial full queue-item specification.
 
 2026-10-28 — source-coverage correction during integration: valid context-only Dispatches also have navigable assigned terminals. Add one shared daemon taskTerminal target proof instead of requiring a supervised Worker or duplicating custody logic in renderers. This expands AC6 to the source's “any task ID” behavior.
+2026-10-30 — AC9 now requires the floating setup card to avoid the live draggable trigger and measured status-bar region, with reachable actions in constrained viewports.
 
 ## Purpose and conceptual model
 People install the version-matched orchestration skill, choose a nesting policy, and inspect/focus supervised workers without becoming the scheduler. Agents coordinate through the existing durable Run/Task/Dispatch/mailbox CLI. The daemon owns policy, worker identity/custody and focus state; the renderer displays evidence and invokes declared methods/commands.
@@ -62,7 +63,7 @@ Before: visible workspace coordinatorC, workersW1/W2 and nestedW3, including ano
 Before: owned active worker terminal. Programmatic preamble/terminal query response leaves owned. Type physical input; exact custody becomes user_owned/retained/user_takeover and row reports it. Settle via authorized worker report, invoke release from coordinator CLI: retained/processAction:none, same tab/process still accepts visible input. Late old-incarnation takeover cannot mark replacement, and no second renderer takeover mechanism bypasses existing guard.
 
 ### AC9 — Setup affordance and lifecycle cleanup
-Before: uninstalled skill in floating workspace. Setup affordance opens the same setup content; Dismiss persists; actual installed detection suppresses it rather than mere Install click. Disabling orchestration removes its UI contributions/subscriptions, leaves generic worktree/terminal UI usable, and no polling/timers/processes leak. Re-enable rechecks actual skill/policy/fleet and does not use stale success. Read-only paired windows never offer mutable depth. Native-only OS clipboard/window integration is recorded pending if web cannot verify it.
+Before: uninstalled skill in floating workspace. Setup affordance opens the same setup content; Dismiss persists; actual installed detection suppresses it rather than mere Install click. The card stays clear of the live draggable toggle and measured status-bar region, within viewport bounds after trigger movement or resize; in short viewports, constrain it to the largest safe space and keep Enable and Dismiss reachable by scrolling. Disabling orchestration removes its UI contributions/subscriptions, leaves generic worktree/terminal UI usable, and no polling/timers/processes leak. Re-enable rechecks actual skill/policy/fleet and does not use stale success. Read-only paired windows never offer mutable depth. Native-only OS clipboard/window integration is recorded pending if web cannot verify it.
 
 ## Recorded Orca defects / negative acceptance
 - Source stale “Settings→Experimental required” documentation is not copied: AC1/4 use orchestration with no toggle.
