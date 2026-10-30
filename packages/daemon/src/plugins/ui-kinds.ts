@@ -10,6 +10,7 @@ import {
   TERMINAL_TAB_MENU,
   THEME_TOKENS,
   UI_KINDS,
+  UI_TOOL_HUES,
   UI_TOOL_SLOTS,
   type SettingDeclaration,
 } from '@quirky/protocol'
@@ -18,9 +19,9 @@ type Entry = Record<string, unknown>
 
 const ALLOWED_FIELDS: Record<string, readonly string[]> = {
   'status-bar': ['title', 'description', 'order'],
-  'sidebar-section': ['title', 'description', 'order', 'defaultSlot', 'icon', 'whenSetting'],
-  'activity-item': ['title', 'description', 'order', 'defaultSlot', 'icon', 'whenSetting'],
-  panel: ['title', 'description', 'order', 'defaultSlot', 'icon', 'whenSetting'],
+  'sidebar-section': ['title', 'description', 'order', 'defaultSlot', 'icon', 'hue', 'whenSetting'],
+  'activity-item': ['title', 'description', 'order', 'defaultSlot', 'icon', 'hue', 'whenSetting'],
+  panel: ['title', 'description', 'order', 'defaultSlot', 'icon', 'hue', 'whenSetting'],
   'settings-section': ['title', 'description', 'order'],
   view: ['title', 'description', 'settings'],
   overlay: ['title', 'description', 'order'],
@@ -205,6 +206,9 @@ export function checkUiKindEntry(kind: string, label: string, entry: Entry, erro
   }
   if (allowed.includes('icon') && entry.icon !== undefined && !isNonEmptyString(entry.icon)) {
     errors.push(`${label}: icon must be a non-empty string`)
+  }
+  if (allowed.includes('hue') && entry.hue !== undefined && !(UI_TOOL_HUES as readonly unknown[]).includes(entry.hue)) {
+    errors.push(`${label}: hue must be one of ${UI_TOOL_HUES.join(', ')}, got ${JSON.stringify(entry.hue)}`)
   }
   if (allowed.includes('whenSetting') && entry.whenSetting !== undefined && !isNonEmptyString(entry.whenSetting)) {
     errors.push(`${label}: whenSetting must be a non-empty string`)

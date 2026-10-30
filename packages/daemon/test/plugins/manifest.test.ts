@@ -83,7 +83,7 @@ describe('parseManifest', () => {
   })
 
   test('rejects unsupported future releases and different major versions', () => {
-    for (const apiVersion of ['1.1.1', '1.2.0', '2.0.0']) {
+    for (const apiVersion of ['1.2.1', '1.3.0', '2.0.0']) {
       const errors = errorsOf({ ...base, apiVersion }).join('\n')
       expect(errors).toContain(apiVersion)
       expect(errors).toContain(PLUGIN_API_VERSION)

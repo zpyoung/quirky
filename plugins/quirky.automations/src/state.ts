@@ -46,7 +46,7 @@ async function currentAutomationToolState(context: PluginContext): Promise<Autom
   )
   if (!record(automationTool) || typeof automationTool.id !== 'string') return { layout, slot: null }
   const slot = tools.placements[automationTool.id]
-  if (typeof slot !== 'string' || !(UI_TOOL_SLOTS as readonly string[]).includes(slot) || tools.open[slot] !== automationTool.id) {
+  if (typeof slot !== 'string' || !(UI_TOOL_SLOTS as readonly string[]).includes(slot) || tools.open[slot as UiToolSlot] !== automationTool.id) {
     return { layout, slot: null }
   }
   return { layout, slot: slot as UiToolSlot }

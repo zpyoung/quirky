@@ -29,6 +29,7 @@ import {
   type UiToastState,
   type UiToolEntry,
   type UiToolLayout,
+  type UiToolPlacement,
   type UiToolSlot,
   type UiWindowInfo,
   type WindowRoute,
@@ -578,8 +579,12 @@ export class LayoutService {
     const tool = this.toolForContribution(id)
     if (!tool) throw notFound(`no tool for panel ${id}`)
     return this.change((layout) => {
-      const slot = layout.tools!.placements[tool.id]!
-      const tools = { ...layout.tools!, open: { ...layout.tools!.open, [slot]: tool.id } }
+      const slot = this.slotOfTool(layout.tools!, tool)
+      const tools = {
+        ...layout.tools!,
+        placements: { ...layout.tools!.placements, [tool.id]: slot },
+        open: { ...layout.tools!.open, [slot]: tool.id }
+      }
       return { ...layout, tools, panel: id }
     })
   }
@@ -602,7 +607,7 @@ export class LayoutService {
   closePanel(): UiLayout {
     return this.change((layout) => {
       const panelTool = layout.panel === null ? undefined : this.toolForContribution(layout.panel)
-      const slot = panelTool ? layout.tools!.placements[panelTool.id] : undefined
+      const slot = panelTool ? this.slotOfTool(layout.tools!, panelTool) : undefined
       const open = { ...layout.tools!.open }
       if (slot && open[slot] === panelTool?.id) open[slot] = null
       const tools = { ...layout.tools!, open }
@@ -620,14 +625,17 @@ export class LayoutService {
     return this.change((layout) => {
       const worktrees = this.options.ui.contributions().tools?.find(({ id }) => id === 'sidebar-section:quirky.worktree/worktrees')
       const open = { ...layout.tools!.open }
+      const placements = { ...layout.tools!.placements }
       let actualVisible = false
       if (worktrees) {
-        const slot = layout.tools!.placements[worktrees.id]!
-        if (visible) open[slot] = worktrees.id
-        else if (open[slot] === worktrees.id) open[slot] = null
+        const slot = this.slotOfTool(layout.tools!, worktrees)
+        if (visible) {
+          open[slot] = worktrees.id
+          placements[worktrees.id] = slot
+        } else if (open[slot] === worktrees.id) open[slot] = null
         actualVisible = open[slot] === worktrees.id
       }
-      const tools = { ...layout.tools!, open }
+      const tools = { ...layout.tools!, placements, open }
       return {
         ...layout,
         tools,
@@ -641,9 +649,9 @@ export class LayoutService {
   openTool(id: string): UiLayout {
     const tool = this.requireTool(id)
     return this.change((layout) => {
-      const slot = layout.tools!.placements[id]!
+      const slot = this.slotOfTool(layout.tools!, tool)
       const open = { ...layout.tools!.open, [slot]: id }
-      const tools = { ...layout.tools!, open }
+      const tools = { ...layout.tools!, placements: { ...layout.tools!.placements, [id]: slot }, open }
       const panel = this.panelForOpen(
         tools,
         parseContributionId(tool.contributionId ?? '')?.kind === 'panel' ? tool.contributionId : layout.panel
@@ -680,16 +688,17 @@ export class LayoutService {
     })
   }
 
-  moveTool(id: string, slot: UiToolSlot): UiLayout {
+  /** Moves a tool to a slot, carrying it open when it was open, or to `overflow`, which closes it. */
+  moveTool(id: string, slot: UiToolPlacement): UiLayout {
     const tool = this.requireTool(id)
-    this.requireToolSlot(slot)
+    this.requireToolPlacement(slot)
     return this.change((layout) => {
-      const previousSlot = layout.tools!.placements[id]!
-      const wasOpen = layout.tools!.open[previousSlot] === id
+      const previous = layout.tools!.placements[id]!
+      const wasOpen = previous !== 'overflow' && layout.tools!.open[previous] === id
       const open = { ...layout.tools!.open }
       if (wasOpen) {
-        open[previousSlot] = null
-        open[slot] = id
+        open[previous] = null
+        if (slot !== 'overflow') open[slot] = id
       }
       const tools = {
         ...layout.tools!,
@@ -698,9 +707,21 @@ export class LayoutService {
       }
       const panel = this.panelForOpen(
         tools,
-        wasOpen && parseContributionId(tool.contributionId ?? '')?.kind === 'panel' ? tool.contributionId : layout.panel
+        wasOpen && slot !== 'overflow' && parseContributionId(tool.contributionId ?? '')?.kind === 'panel'
+          ? tool.contributionId
+          : layout.panel
       )
-      return { ...layout, tools, panel }
+      const closedToOverflow = wasOpen && slot === 'overflow'
+      const focusTarget = closedToOverflow ? focusTargetOfTool(tool) : undefined
+      return {
+        ...layout,
+        tools,
+        panel,
+        ...(closedToOverflow && id === 'sidebar-section:quirky.worktree/worktrees' ? { sidebar: false } : {}),
+        focus: focusTarget !== undefined && layout.focus === focusTarget && (focusTarget !== 'panel' || panel === null)
+          ? null
+          : layout.focus
+      }
     })
   }
 
@@ -1398,6 +1419,16 @@ export class LayoutService {
     if (typeof slot !== 'string' || !(UI_TOOL_SLOTS as readonly string[]).includes(slot)) {
       throw invalidParams(`slot must be one of ${UI_TOOL_SLOTS.join(', ')}`)
     }
+  }
+
+  private requireToolPlacement(slot: unknown): asserts slot is UiToolPlacement {
+    if (slot !== 'overflow') this.requireToolSlot(slot)
+  }
+
+  /** The slot a tool opens into: its placement, or its default slot when it sits in overflow. */
+  private slotOfTool(tools: UiToolLayout, tool: UiToolEntry): UiToolSlot {
+    const placement = tools.placements[tool.id]
+    return placement === undefined || placement === 'overflow' ? tool.defaultSlot : placement
   }
 
   private panelForOpen(tools: UiToolLayout, preferred: string | null): string | null {

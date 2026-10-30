@@ -3243,7 +3243,6 @@
       {
         "id": "remote-workspaces",
         "title": "Remote workspaces",
-        "icon": "server",
         "order": 1
       }
     ],

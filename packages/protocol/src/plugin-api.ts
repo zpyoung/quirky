@@ -1,5 +1,5 @@
 /** Stable plugin-author API release; independent of app, wire-protocol and plugin package versions. */
-export const PLUGIN_API_VERSION = '1.1.0'
+export const PLUGIN_API_VERSION = '1.2.0'
 
 const STABLE_VERSION = /^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/
 

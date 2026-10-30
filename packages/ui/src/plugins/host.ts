@@ -18,6 +18,7 @@ import {
   type UiPluginModule,
   type UiSlotEntry,
   type UiState,
+  type UiToolPlacement,
   type UiToolResize,
   type UiToolSlot,
   type WindowRoute,
@@ -406,7 +407,8 @@ export class WindowPluginHost {
   togglePanel(id: string, open?: boolean): void {
     const tool = this.state.model?.tools?.find((candidate) => candidate.id === id || candidate.aliases.includes(id))
     if (!tool) return
-    const placement = this.state.layout.tools?.placements[tool.id] ?? tool.defaultSlot
+    const stored = this.state.layout.tools?.placements[tool.id]
+    const placement = stored === undefined || stored === 'overflow' ? tool.defaultSlot : stored
     const current = this.state.layout.tools?.open[placement]
     const wanted = open ?? current !== tool.id
     if (wanted) this.openTool(tool.id)
@@ -421,7 +423,7 @@ export class WindowPluginHost {
     this.layoutCall('ui.tool.close', { slot })
   }
 
-  moveTool(id: string, slot: UiToolSlot): void {
+  moveTool(id: string, slot: UiToolPlacement): void {
     this.layoutCall('ui.tool.move', { id, slot })
   }
 

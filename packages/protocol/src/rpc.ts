@@ -33,7 +33,7 @@ import type {
   UiToastState,
   UiWindowInfo
 } from './ui'
-import type { UiToolResize, UiToolSlot } from './tool-slots'
+import type { UiToolPlacement, UiToolResize, UiToolSlot } from './tool-slots'
 
 /** Bumped on any breaking change to `Methods`, `QuirkyEvent` or the frame layout. */
 export const PROTOCOL_VERSION = 2
@@ -132,7 +132,7 @@ export type Methods = {
   'ui.palette.set': { params: { open?: boolean }; result: UiLayout }
   'ui.tool.open': { params: { id: string }; result: UiLayout }
   'ui.tool.close': { params: { slot: UiToolSlot }; result: UiLayout }
-  'ui.tool.move': { params: { id: string; slot: UiToolSlot }; result: UiLayout }
+  'ui.tool.move': { params: { id: string; slot: UiToolPlacement }; result: UiLayout }
   'ui.tool.resize': { params: UiToolResize; result: UiLayout }
   'ui.view.open': { params: { id: string; input?: unknown }; result: UiLayout }
   'ui.view.close': { params: Record<string, never>; result: UiLayout }

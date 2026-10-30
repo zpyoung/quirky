@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test'
 import type { UiToolEntry, UiToolLayout } from '@quirky/protocol'
 import {
   clampToolResize,
+  effectiveToolPlacement,
   fitToolShellGeometry,
   getToolShellOpenSlots,
   resolveToolDropId,
@@ -34,7 +35,7 @@ const allOpen: ToolShellOpenSlots = {
 }
 
 function tool(id: string, defaultSlot: UiToolEntry['defaultSlot']): UiToolEntry {
-  return { id, title: id, icon: id, defaultSlot, contributionId: id, aliases: [] }
+  return { id, title: id, icon: id, hue: 'slate', defaultSlot, contributionId: id, aliases: [] }
 }
 
 describe('tool shell geometry and gestures', () => {
@@ -76,6 +77,27 @@ describe('tool shell geometry and gestures', () => {
       'bottom-left': false,
       'bottom-right': false
     })
+  })
+
+  test('a tool placed in overflow has no slot and never counts as open', () => {
+    const tools = [tool('tasks', 'left-bottom'), tool('changes', 'right-top')]
+    const layout: UiToolLayout = {
+      placements: { tasks: 'overflow', changes: 'right-top' },
+      order: ['tasks', 'changes'],
+      open: {
+        'left-top': null,
+        'left-bottom': 'tasks',
+        'right-top': 'changes',
+        'right-bottom': null,
+        'bottom-left': null,
+        'bottom-right': null
+      },
+      sizes
+    }
+
+    expect(effectiveToolPlacement(tools[0]!, layout)).toBeNull()
+    expect(effectiveToolPlacement(tools[1]!, layout)).toBe('right-top')
+    expect(getToolShellOpenSlots(tools, layout)).toMatchObject({ 'left-bottom': false, 'right-top': true })
   })
 
   test('contracts both side panels and the bottom panel without changing saved preferences', () => {
