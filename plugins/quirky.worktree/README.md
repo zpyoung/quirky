@@ -107,6 +107,8 @@ Desktop creator IDs are stored only from an authenticated `role:ui` hello and co
 
 Register a saved **owner-cli** target, then refresh its actual workspaces. The Remote workspaces sidebar exposes the same registration, explicit replacement, refresh and exact-window navigation flow.
 
+Open Remote workspaces from its server icon in the tool rail. Its padded panel uses the shared form controls for saved-runtime registration, owner replacement, refresh and workspace navigation, including connected and unavailable host states.
+
 ```sh
 quirky worktree remote-host-add <saved-target-id>
 quirky worktree remote-refresh <registered-host-id>

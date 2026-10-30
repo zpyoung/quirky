@@ -320,6 +320,7 @@ const TOOL_ICON_PATHS: Record<string, string> = {
   'book-open': 'M12 5c-3-2-7-2-10-1v16c3-1 7-1 10 1 3-2 7-2 10-1V4c-3-1-7-1-10 1v16',
   terminal: 'M3 4h18v16H3V4m4 4 4 4-4 4M13 16h4',
   command: 'M8 8h8v8H8V5a3 3 0 1 0-3 3h14a3 3 0 1 0-3-3v14a3 3 0 1 0 3-3H5a3 3 0 1 0 3 3V8',
+  server: 'M3 5h18v6H3V5M3 13h18v6H3v-6M7 8h.01M7 16h.01M11 8h6M11 16h6',
   'panel-left': 'M3 4h18v16H3V4M9 4v16',
   'panel-right': 'M3 4h18v16H3V4M15 4v16',
   activity: 'M2 12h5l3-9 4 18 3-9h5'
