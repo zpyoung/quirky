@@ -1,5 +1,6 @@
 import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
+import { HOOK_PATH_PREFIX, HOOK_TOKEN_HEADER } from '@quirky/protocol'
 
 const FIXTURE_FILES = {
   source: 'src/app.ts',
@@ -8,6 +9,39 @@ const FIXTURE_FILES = {
   svg: 'assets/fixture-diagram.svg',
   csv: 'data/metrics.csv'
 } as const
+
+/** The status dots the shell draws for a worktree; `idle` is a worktree with no agent session. */
+export type FixtureStatus = 'working' | 'needs-you' | 'failing' | 'done' | 'idle'
+
+export const PRIMARY_PROJECT = 'ui-review-fixture'
+
+/** Three projects, with worktrees spread across them so every status dot appears. */
+const PROJECT_WORKTREES: ReadonlyArray<{ project: string; worktrees: ReadonlyArray<{ name: string | null; status: FixtureStatus }> }> = [
+  { project: PRIMARY_PROJECT, worktrees: [
+    { name: null, status: 'idle' },
+    { name: 'ui-review-ready', status: 'working' },
+    { name: 'ui-review-notes', status: 'needs-you' }
+  ] },
+  { project: 'harbor-api', worktrees: [
+    { name: null, status: 'idle' },
+    { name: 'retry-queue', status: 'failing' }
+  ] },
+  { project: 'ledger-web', worktrees: [
+    { name: null, status: 'idle' },
+    { name: 'export-csv', status: 'done' }
+  ] }
+]
+
+const HOOK_PROMPT = { hook_event_name: 'UserPromptSubmit', prompt: 'Review the fixture change' }
+const HOOK_SEQUENCES: Record<Exclude<FixtureStatus, 'idle'>, { hooks: Array<Record<string, unknown>>; display: string }> = {
+  working: { hooks: [HOOK_PROMPT], display: 'working' },
+  'needs-you': {
+    hooks: [HOOK_PROMPT, { hook_event_name: 'PermissionRequest', tool_name: 'Bash', tool_input: { command: 'git push origin main' } }],
+    display: 'waiting'
+  },
+  failing: { hooks: [HOOK_PROMPT, { hook_event_name: 'StopFailure' }], display: 'failed' },
+  done: { hooks: [HOOK_PROMPT, { hook_event_name: 'Stop', last_assistant_message: 'Finished the review.' }], display: 'done' }
+}
 
 const INITIAL_SOURCE = [
   'export function greeting(name: string): string {',
@@ -105,9 +139,13 @@ export function createIsolatedRuntimeEnvironment(
   return env
 }
 
+export type FixtureProject = { name: string; path: string }
+
 export type PreparedCaptureFixtureHome = {
   home: string
   repoPath: string
+  /** Every project, the primary one first; its path is `repoPath`. */
+  projects: FixtureProject[]
   worktreesRoot: string
   files: Record<keyof typeof FIXTURE_FILES, string>
   cleanup(): void
@@ -117,10 +155,12 @@ export type FixtureRpcClient = {
   callAny(method: string, params?: Record<string, unknown>, options?: { timeoutMs?: number }): Promise<unknown>
 }
 
+export type FixtureWorktree = { id: string; path: string; repoId: string; name: string; isMain: boolean; status: FixtureStatus }
+
 export type RegisteredCaptureFixtures = PreparedCaptureFixtureHome & {
   repo: { id: string }
   primaryWorktree: { id: string; path: string; repoId: string; name: string }
-  worktrees: Array<{ id: string; path: string; repoId: string; name: string; isMain: boolean }>
+  worktrees: FixtureWorktree[]
 }
 
 export type EditorFixtureBuffer = { id: string; tabId: string | null; mode: 'source' | 'rich' | 'preview'; path: string; contentRevision: number }
@@ -202,9 +242,13 @@ export async function prepareCaptureFixtureHome(
 ): Promise<PreparedCaptureFixtureHome> {
   const root = resolve(home)
   const env = options.env ?? createIsolatedRuntimeEnvironment(root)
-  const repoPath = join(root, 'projects', 'ui-review-fixture')
+  const repoPath = join(root, 'projects', PRIMARY_PROJECT)
+  const projects: FixtureProject[] = PROJECT_WORKTREES.map(({ project }) => ({
+    name: project,
+    path: project === PRIMARY_PROJECT ? repoPath : join(root, 'projects', project)
+  }))
   const worktreesRoot = join(root, 'worktrees')
-  const createdPaths = [repoPath, worktreesRoot]
+  const createdPaths = [...projects.map((project) => project.path), worktreesRoot]
   let cleaned = false
   const cleanup = () => {
     if (cleaned) return
@@ -239,9 +283,19 @@ export async function prepareCaptureFixtureHome(
     await runGit(['-C', repoPath, 'add', '--all'], root, env, options.timeoutMs, options.signal)
     await runGit(['-C', repoPath, 'commit', '-m', 'Seed UI screenshot fixture'], root, env, options.timeoutMs, options.signal)
 
+    for (const project of projects.filter((candidate) => candidate.path !== repoPath)) {
+      writeFile(project.path, 'README.md', `# ${project.name}\n\nA second disposable project for renderer capture.\n`)
+      writeFile(project.path, 'src/index.ts', `export const project = ${JSON.stringify(project.name)}\n`)
+      await runGit(['init', '--initial-branch=main', project.path], root, env, options.timeoutMs, options.signal)
+      await runGit(['-C', project.path, 'config', 'user.name', 'UI Screenshot Fixture'], root, env, options.timeoutMs, options.signal)
+      await runGit(['-C', project.path, 'config', 'user.email', 'ui-review-fixture@localhost'], root, env, options.timeoutMs, options.signal)
+      await runGit(['-C', project.path, 'add', '--all'], root, env, options.timeoutMs, options.signal)
+      await runGit(['-C', project.path, 'commit', '-m', `Seed ${project.name}`], root, env, options.timeoutMs, options.signal)
+    }
+
     writeFile(repoPath, FIXTURE_FILES.source, CHANGED_SOURCE)
     writeFile(repoPath, 'src/review-note.ts', 'export const reviewNote = "untracked fixture asset"\n')
-    return { home: root, repoPath, worktreesRoot, files, cleanup }
+    return { home: root, repoPath, projects, worktreesRoot, files, cleanup }
   } catch (error) {
     cleanup()
     throw errorInHome(error, root)
@@ -289,45 +343,110 @@ export async function registerCaptureFixtures(
       id: 'setting:quirky.worktree/branchPrefix',
       value: 'none'
     }, options)
-    const added = record(await callRpc(client, 'quirky.repo/add', { path: prepared.repoPath }, options))
-    const repoId = requiredString(added.id, 'quirky.repo/add')
-    const listed = await callRpc(client, 'quirky.worktree/list', { repo: repoId }, options)
-    if (!Array.isArray(listed)) throw new Error('quirky.worktree/list did not return a worktree list')
-    const primary = listed.map(record).find((entry) => entry.path === prepared.repoPath || entry.isMain === true)
-    if (!primary) throw new Error('the fixture repository has no registered primary worktree')
-    const primaryWorktree = {
-      id: requiredString(primary.id, 'primary worktree'),
-      path: requiredString(primary.path, 'primary worktree path'),
-      repoId,
-      name: typeof primary.name === 'string' ? primary.name : 'ui-review-fixture'
-    }
-
-    const created: Array<{ id: string; path: string; repoId: string; name: string; isMain: boolean }> = [
-      { ...primaryWorktree, isMain: true }
-    ]
-    for (const name of ['ui-review-ready', 'ui-review-notes']) {
-      const result = record(await callRpc(client, 'quirky.worktree/create', {
-        repo: repoId,
-        name,
-        setup: 'skip',
-        noParent: true,
-        activate: false
-      }, options))
-      const worktree = record(result.worktree)
-      created.push({
-        id: requiredString(worktree.id, `worktree ${name}`),
-        path: requiredString(worktree.path, `worktree ${name} path`),
+    const worktrees: FixtureWorktree[] = []
+    let primaryRepoId = ''
+    let primaryWorktree: RegisteredCaptureFixtures['primaryWorktree'] | undefined
+    for (const plan of PROJECT_WORKTREES) {
+      const project = prepared.projects.find((candidate) => candidate.name === plan.project)!
+      const added = record(await callRpc(client, 'quirky.repo/add', { path: project.path }, options))
+      const repoId = requiredString(added.id, 'quirky.repo/add')
+      const listed = await callRpc(client, 'quirky.worktree/list', { repo: repoId }, options)
+      if (!Array.isArray(listed)) throw new Error('quirky.worktree/list did not return a worktree list')
+      const main = listed.map(record).find((entry) => entry.path === project.path || entry.isMain === true)
+      if (!main) throw new Error(`the fixture repository ${project.name} has no registered primary worktree`)
+      const mainWorktree = {
+        id: requiredString(main.id, 'primary worktree'),
+        path: requiredString(main.path, 'primary worktree path'),
         repoId,
-        name: typeof worktree.name === 'string' ? worktree.name : name,
-        isMain: false
-      })
+        name: typeof main.name === 'string' ? main.name : project.name
+      }
+      if (plan.project === PRIMARY_PROJECT) {
+        primaryRepoId = repoId
+        primaryWorktree = mainWorktree
+      }
+      for (const entry of plan.worktrees) {
+        if (entry.name === null) {
+          worktrees.push({ ...mainWorktree, isMain: true, status: entry.status })
+          continue
+        }
+        const result = record(await callRpc(client, 'quirky.worktree/create', {
+          repo: repoId,
+          name: entry.name,
+          setup: 'skip',
+          noParent: true,
+          activate: false
+        }, options))
+        const worktree = record(result.worktree)
+        worktrees.push({
+          id: requiredString(worktree.id, `worktree ${entry.name}`),
+          path: requiredString(worktree.path, `worktree ${entry.name} path`),
+          repoId,
+          name: typeof worktree.name === 'string' ? worktree.name : entry.name,
+          isMain: false,
+          status: entry.status
+        })
+      }
     }
-    return { ...prepared, repo: { id: repoId }, primaryWorktree, worktrees: created }
+    if (!primaryWorktree) throw new Error('the primary fixture project was not registered')
+    return { ...prepared, repo: { id: primaryRepoId }, primaryWorktree, worktrees }
   } catch (error) {
     prepared.cleanup()
     throw errorInHome(error, prepared.home)
   }
 }
+export type HookEndpoint = { port: number; hookToken: string }
+export type SeedStatusOptions = FixtureOptions & { fetch?: (url: string, init: RequestInit) => Promise<{ ok: boolean; status: number }> }
+
+/**
+ * Gives each non-idle fixture worktree one shell session and posts the agent hooks that put its row
+ * in the wanted status, then waits until the daemon reports every wanted status.
+ */
+export async function seedWorktreeStatuses(
+  client: FixtureRpcClient,
+  fixtures: RegisteredCaptureFixtures,
+  endpoint: HookEndpoint,
+  options: SeedStatusOptions
+): Promise<void> {
+  const send = options.fetch ?? ((url, init) => fetch(url, init))
+  const expected = new Map<string, string>()
+  try {
+    for (const worktree of fixtures.worktrees) {
+      if (worktree.status === 'idle') continue
+      const sequence = HOOK_SEQUENCES[worktree.status]
+      const opened = record(await callRpc(client, 'quirky.terminal/newTab', {
+        workspace: worktree.id,
+        cwd: worktree.path,
+        agent: 'shell',
+        title: `${worktree.name} agent`,
+        activate: false
+      }, options))
+      const sessionId = requiredString(opened.session, 'quirky.terminal/newTab')
+      for (const payload of sequence.hooks) {
+        checkAbort(options.signal)
+        const response = await bounded(send(`http://127.0.0.1:${endpoint.port}${HOOK_PATH_PREFIX}claude?session=${encodeURIComponent(sessionId)}`, {
+          method: 'POST',
+          headers: { [HOOK_TOKEN_HEADER]: endpoint.hookToken, 'content-type': 'application/json' },
+          body: JSON.stringify(payload)
+        }), options.timeoutMs, options.signal, 'agent hook delivery')
+        if (!response.ok) throw new Error(`agent hook was rejected with status ${response.status}`)
+      }
+      expected.set(sessionId, sequence.display)
+    }
+
+    const deadline = Date.now() + options.timeoutMs
+    for (;;) {
+      checkAbort(options.signal)
+      const rows = await callRpc(client, 'quirky.agent-status/list', {}, options)
+      const shown = new Map(Array.isArray(rows) ? rows.map(record).map((row) => [row.sessionId, row.display] as const) : [])
+      if ([...expected].every(([sessionId, display]) => shown.get(sessionId) === display)) return
+      if (Date.now() > deadline) throw new Error('agent status rows did not reach the fixture statuses')
+      await Bun.sleep(100)
+    }
+  } catch (error) {
+    throw errorInHome(error, fixtures.home)
+  }
+}
+
 export type CaptureTerminalFixture = { sessionId: string; tabId: string; paneId: string }
 
 /** Starts one real interactive shell only for selected terminal-facing UI surfaces; it runs no command. */
