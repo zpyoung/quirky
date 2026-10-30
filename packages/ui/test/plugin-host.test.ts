@@ -827,7 +827,7 @@ describe('window plugin host against a real daemon', () => {
 
   test('newer UI hosts reject skewed module floors before actual module import', async () => {
     const apiVersions: [string, unknown][] = [
-      ['acme.future', '1.2.0'],
+      ['acme.future', '1.3.0'],
       ['acme.missing', undefined],
       ['acme.malformed', '^1.0.0'],
       ['acme.nonstring', 1]
