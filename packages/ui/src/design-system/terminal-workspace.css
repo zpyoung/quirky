@@ -36,12 +36,21 @@
 .qt-strip {
   display: flex;
   flex: none;
+  container-type: inline-size;
+  container-name: qt-strip;
   align-items: stretch;
   border-bottom: var(--ui-border-width) solid var(--ui-border);
   background: var(--ui-rail);
 }
 .qt-strip.qt-drop-end { box-shadow: inset calc(var(--ui-border-width) * -2) 0 0 var(--ui-accent); }
-.qt-tabs { display: flex; flex: 0 1 auto; min-width: 0; overflow-x: auto; }
+.qt-tab-navigation { display: flex; flex: 0 1 auto; min-width: 0; }
+.qt-tabs { display: flex; flex: 1 1 auto; min-width: 0; overflow-x: auto; }
+.qt-tab-scroll { flex: none; align-self: center; margin-inline: var(--ui-space-2); }
+@container qt-strip (max-width: 210px) {
+  .qt-tab-navigation { flex-wrap: wrap; justify-content: center; }
+  .qt-tabs { flex: 1 1 100%; order: 0; }
+  .qt-tab-scroll { order: 1; }
+}
 .qt-tab {
   position: relative;
   display: flex;

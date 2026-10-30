@@ -39,7 +39,101 @@ async function mount(daemon = fakeDaemon(conceptualWorkspace()), options = {}) {
   return mounted
 }
 
+
+type ResizeHarness = { notify(): Promise<void>; restore(): void }
+
+function observeResize(): ResizeHarness {
+  const original = globalThis.ResizeObserver
+  const observers: { callback: ResizeObserverCallback; active: boolean }[] = []
+  globalThis.ResizeObserver = class {
+    private readonly entry: { callback: ResizeObserverCallback; active: boolean }
+    constructor(callback: ResizeObserverCallback) {
+      this.entry = { callback, active: true }
+      observers.push(this.entry)
+    }
+    observe() {}
+    unobserve() {}
+    disconnect() {
+      this.entry.active = false
+    }
+  } as unknown as typeof ResizeObserver
+  return {
+    async notify() {
+      await act(async () => {
+        for (const observer of observers) if (observer.active) observer.callback([], {} as ResizeObserver)
+      })
+    },
+    restore() {
+      globalThis.ResizeObserver = original
+    }
+  }
+}
+
+function tabRect(left: number, width: number): DOMRect {
+  return { x: left, y: 0, left, top: 0, right: left + width, bottom: 32, width, height: 32, toJSON: () => ({}) } as DOMRect
+}
+
+function installTabLayout(view: MountedWorkspace, width: number, initialWidths: Record<string, number>) {
+  const viewport = view.q<HTMLElement>('.qt-tabs')!
+  const navigation = viewport.parentElement as HTMLElement
+  let available = width
+  let widths = initialWidths
+  const controls = () => navigation.querySelectorAll('[aria-label="Scroll tabs left"], [aria-label="Scroll tabs right"]').length
+  const tabWidth = (item: HTMLElement) => widths[item.dataset.tab!] ?? 100
+  const tabItems = () => view.qa<HTMLElement>('.qt-tabs > [data-tab]')
+  Object.defineProperty(navigation, 'clientWidth', { configurable: true, get: () => available })
+  Object.defineProperty(navigation, 'getBoundingClientRect', { configurable: true, value: () => tabRect(0, available) })
+  Object.defineProperty(viewport, 'clientWidth', { configurable: true, get: () => Math.max(0, available - controls() * 32) })
+  Object.defineProperty(viewport, 'scrollWidth', { configurable: true, get: () => tabItems().reduce((total, item) => total + tabWidth(item), 0) })
+  Object.defineProperty(viewport, 'getBoundingClientRect', {
+    configurable: true,
+    value: () => tabRect(controls() > 0 && navigation.querySelector('[aria-label="Scroll tabs left"]') ? 32 : 0, viewport.clientWidth)
+  })
+  const refresh = () => {
+    for (const item of tabItems()) {
+      Object.defineProperty(item, 'getBoundingClientRect', {
+        configurable: true,
+        value: () => {
+          const items = tabItems()
+          const index = items.indexOf(item)
+          const left = (viewport.getBoundingClientRect().left ?? 0) + items.slice(0, index).reduce((total, previous) => total + tabWidth(previous), 0) - viewport.scrollLeft
+          return tabRect(left, tabWidth(item))
+        }
+      })
+    }
+  }
+  refresh()
+  return {
+    viewport,
+    refresh,
+    setWidth(next: number) {
+      available = next
+    },
+    setTabWidths(next: Record<string, number>) {
+      widths = next
+      refresh()
+    },
+    visible(id: string) {
+      const item = view.q<HTMLElement>(`[data-tab="${id}"]`)!
+      const itemRect = item.getBoundingClientRect()
+      const viewRect = viewport.getBoundingClientRect()
+      return itemRect.right > viewRect.left && itemRect.left < viewRect.right
+    }
+  }
+}
+
+function terminalTabs(count: number) {
+  return Array.from({ length: count }, (_, index) =>
+    tab(`tab-${index + 1}`, pane(`pane-${index + 1}`, `s-${index + 1}`), { defaultTitle: `Terminal ${index + 1}` })
+  )
+}
+
+async function flushResize(resize: ResizeHarness) {
+  await resize.notify()
+  await resize.notify()
+}
 const drag = (type: string, init: MouseEventInit = {}) => mouse(type, init)
+
 
 describe('SC-11: clicking a tab activates it', () => {
   test('a click on an inactive tab activates it by ID', async () => {
@@ -65,21 +159,95 @@ describe('SC-11: clicking a tab activates it', () => {
     expect(view.q('[data-pane="pane-3"]')).toBeNull()
   })
 
-  test('a newly selected tab is scrolled into a strip too narrow for every tab', async () => {
-    const daemon = fakeDaemon(conceptualWorkspace(), {
-      transforms: { activateTab: (ws) => ({ ...ws, root: { ...(ws.root as any), first: { ...(ws.root as any).first, activeTab: 'tab-1' } } }) }
-    })
-    const scrolled: Element[] = []
+  test('selecting a hidden tab scrolls it into view', async () => {
+    const resize = observeResize()
     const scroll = spyOn(Element.prototype, 'scrollIntoView').mockImplementation(function (this: Element) {
-      scrolled.push(this)
+      const tab = this as HTMLElement
+      const viewport = tab.closest<HTMLElement>('.qt-tabs')
+      if (!viewport) return
+      const tabRect = tab.getBoundingClientRect()
+      const viewportRect = viewport.getBoundingClientRect()
+      const maxScroll = Math.max(0, viewport.scrollWidth - viewport.clientWidth)
+      if (tabRect.left < viewportRect.left) viewport.scrollLeft = Math.max(0, viewport.scrollLeft + tabRect.left - viewportRect.left)
+      else if (tabRect.right > viewportRect.right) viewport.scrollLeft = Math.min(maxScroll, viewport.scrollLeft + tabRect.right - viewportRect.right)
     })
     try {
-      const view = await mount(daemon)
-      scrolled.length = 0
+      const view = await mount(fakeDaemon(makeWorkspace(group('grp-1', terminalTabs(3), { activeTab: 'tab-3' }))))
+      const layout = installTabLayout(view, 220, { 'tab-1': 100, 'tab-2': 100, 'tab-3': 100 })
+      await flushResize(resize)
+      expect(layout.visible('tab-3')).toBe(true)
       await click(view.q('[data-tab="tab-1"]'))
-      expect(scrolled.map((el) => (el as HTMLElement).dataset.tab)).toEqual(['tab-1'])
+      expect(layout.visible('tab-1')).toBe(true)
+      await click(view.q('[data-tab="tab-3"]'))
+      expect(layout.visible('tab-3')).toBe(true)
+      expect(callsTo(view.fake, 'activateTab')).toEqual([{ tab: 'tab-1' }, { tab: 'tab-3' }])
     } finally {
       scroll.mockRestore()
+      resize.restore()
+    }
+  })
+
+  test('scroll controls reveal hidden tabs without activating them and disable at boundaries', async () => {
+    const resize = observeResize()
+    try {
+      const view = await mount(fakeDaemon(makeWorkspace(group('grp-1', terminalTabs(4)))))
+      const layout = installTabLayout(view, 220, { 'tab-1': 100, 'tab-2': 100, 'tab-3': 100, 'tab-4': 100 })
+      await flushResize(resize)
+      const left = view.q<HTMLButtonElement>('[aria-label="Scroll tabs left"]')!
+      const right = view.q<HTMLButtonElement>('[aria-label="Scroll tabs right"]')!
+      expect(left.disabled).toBe(true)
+      expect(right.disabled).toBe(false)
+
+      await click(right)
+      expect(layout.visible('tab-3')).toBe(true)
+      expect(left.disabled).toBe(false)
+      await click(right)
+      expect(layout.visible('tab-4')).toBe(true)
+      expect(right.disabled).toBe(true)
+      await click(left)
+      expect(layout.visible('tab-2')).toBe(true)
+      expect(left.disabled).toBe(false)
+      await click(left)
+      expect(left.disabled).toBe(true)
+      expect(callsTo(view.fake, 'activateTab')).toEqual([])
+      expect(view.q('[data-tab="tab-1"] [role="tab"]')!.getAttribute('aria-selected')).toBe('true')
+    } finally {
+      resize.restore()
+    }
+  })
+
+  test('scroll controls disappear when resized tabs fit or tabs are removed', async () => {
+    const resize = observeResize()
+    try {
+      const view = await mount(fakeDaemon(makeWorkspace(group('grp-1', terminalTabs(3)))))
+      const layout = installTabLayout(view, 180, { 'tab-1': 100, 'tab-2': 100, 'tab-3': 100 })
+      await flushResize(resize)
+      expect(view.q('[aria-label="Scroll tabs right"]')).not.toBeNull()
+
+      layout.setWidth(400)
+      await flushResize(resize)
+      expect(view.q('[aria-label="Scroll tabs left"]')).toBeNull()
+      expect(view.q('[aria-label="Scroll tabs right"]')).toBeNull()
+
+      layout.setWidth(180)
+      await flushResize(resize)
+      expect(view.q('[aria-label="Scroll tabs right"]')).not.toBeNull()
+      layout.setTabWidths({ 'tab-1': 50, 'tab-2': 50, 'tab-3': 50 })
+      await flushResize(resize)
+      expect(view.q('[aria-label="Scroll tabs left"]')).toBeNull()
+      expect(view.q('[aria-label="Scroll tabs right"]')).toBeNull()
+
+      layout.setWidth(220)
+      layout.setTabWidths({ 'tab-1': 100, 'tab-2': 100, 'tab-3': 100 })
+      await flushResize(resize)
+      await click(view.q('[data-tab="tab-3"] [aria-label="Close Terminal 3"]'))
+      layout.refresh()
+      await flushResize(resize)
+      expect(view.qa('[data-tab]')).toHaveLength(2)
+      expect(view.q('[aria-label="Scroll tabs left"]')).toBeNull()
+      expect(view.q('[aria-label="Scroll tabs right"]')).toBeNull()
+    } finally {
+      resize.restore()
     }
   })
 })

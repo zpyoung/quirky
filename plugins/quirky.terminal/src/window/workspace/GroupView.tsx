@@ -1,4 +1,4 @@
-import { useEffect, useRef, type DragEvent, type MouseEvent as ReactMouseEvent } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type DragEvent, type MouseEvent as ReactMouseEvent } from 'react'
 import { Badge, Button, EmptyState, IconButton } from '@quirky/ui'
 import { displayTitle } from '../../layout/titles'
 import { dropZone, paneLeaves, roundRatio } from '../../layout/tree'
@@ -16,7 +16,15 @@ import { useBoxSize } from './useBoxSize'
 
 type Common = { controller: WorkspaceController; state: ControllerState }
 
-function TabItem({ controller, state, group, tab, index, others, now }: Common & { group: Group; tab: Tab; index: number; others: Tab[]; now: number }) {
+function TabScrollIcon({ direction }: { direction: 'left' | 'right' }) {
+  return (
+    <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d={direction === 'left' ? 'M7.5 2.5 4 6l3.5 3.5' : 'M4.5 2.5 8 6l-3.5 3.5'} />
+    </svg>
+  )
+}
+
+function TabItem({ controller, state, group, tab, index, others, now, overflow }: Common & { group: Group; tab: Tab; index: number; others: Tab[]; now: number; overflow: boolean }) {
   const ws = state.workspace!
   const selected = group.activeTab === tab.id
   const terminal = isViewTab(tab) ? null : tab
@@ -29,7 +37,7 @@ function TabItem({ controller, state, group, tab, index, others, now }: Common &
   // macOS hides the strip's scrollbar, so a selected tab past the edge would otherwise stay out of sight
   useEffect(() => {
     if (selected) element.current?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' })
-  }, [selected, title])
+  }, [selected, title, overflow])
   const renaming = state.rename?.kind === 'tab' && state.rename.id === tab.id
   const drag = state.tabDrag
   const mark = drag?.over?.kind === 'strip' && drag.over.group === group.id && others[drag.over.index]?.id === tab.id
@@ -183,6 +191,43 @@ function zoneStyle(zone: DropZone): Record<string, string> {
 function GroupView({ controller, state, group }: Common & { group: Group }) {
   const ws = state.workspace!
   const body = useRef<HTMLDivElement>(null)
+  const tabNavigation = useRef<HTMLDivElement>(null)
+  const tabViewport = useRef<HTMLDivElement>(null)
+  const [tabScroll, setTabScroll] = useState({ overflow: false, atStart: true, atEnd: true })
+  const updateTabScroll = useCallback(() => {
+    const navigation = tabNavigation.current
+    const viewport = tabViewport.current
+    if (!navigation || !viewport) return
+    const overflow = viewport.scrollWidth > navigation.clientWidth
+    const maxScroll = Math.max(0, viewport.scrollWidth - viewport.clientWidth)
+    if (viewport.scrollLeft > maxScroll) viewport.scrollLeft = maxScroll
+    const next = { overflow, atStart: viewport.scrollLeft <= 0, atEnd: viewport.scrollLeft >= maxScroll - 1 }
+    setTabScroll((current) =>
+      current.overflow === next.overflow && current.atStart === next.atStart && current.atEnd === next.atEnd ? current : next
+    )
+  }, [])
+  useLayoutEffect(() => {
+    const navigation = tabNavigation.current
+    const viewport = tabViewport.current
+    if (!navigation || !viewport) return
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(updateTabScroll)
+    observer?.observe(navigation)
+    observer?.observe(viewport)
+    for (const item of viewport.children) observer?.observe(item)
+    viewport.addEventListener('scroll', updateTabScroll)
+    updateTabScroll()
+    return () => {
+      observer?.disconnect()
+      viewport.removeEventListener('scroll', updateTabScroll)
+    }
+  }, [group.tabs, tabScroll.overflow, updateTabScroll])
+  const scrollTabs = (direction: -1 | 1) => {
+    const viewport = tabViewport.current
+    if (!viewport) return
+    const maxScroll = Math.max(0, viewport.scrollWidth - viewport.clientWidth)
+    viewport.scrollLeft = Math.max(0, Math.min(maxScroll, viewport.scrollLeft + direction * viewport.clientWidth))
+    updateTabScroll()
+  }
   const tab = activeTabOf(group)
   const drag = state.tabDrag
   const menu = state.menu
@@ -233,10 +278,22 @@ function GroupView({ controller, state, group }: Common & { group: Group }) {
           void controller.dropTab({ kind: 'strip', group: group.id, index: others.length })
         }}
       >
-        <div className="qt-tabs" role="tablist">
-          {group.tabs.map((entry, index) => (
-            <TabItem key={entry.id} controller={controller} state={state} group={group} tab={entry} index={index} others={others} now={now} />
-          ))}
+        <div className="qt-tab-navigation" ref={tabNavigation}>
+          {tabScroll.overflow ? (
+            <IconButton className="qt-icon qt-tab-scroll" label="Scroll tabs left" title="Scroll tabs left" disabled={tabScroll.atStart} onMouseDown={(event) => event.stopPropagation()} onClick={() => scrollTabs(-1)}>
+              <TabScrollIcon direction="left" />
+            </IconButton>
+          ) : null}
+          <div className="qt-tabs" ref={tabViewport} role="tablist">
+            {group.tabs.map((entry, index) => (
+              <TabItem key={entry.id} controller={controller} state={state} group={group} tab={entry} index={index} others={others} now={now} overflow={tabScroll.overflow} />
+            ))}
+          </div>
+          {tabScroll.overflow ? (
+            <IconButton className="qt-icon qt-tab-scroll" label="Scroll tabs right" title="Scroll tabs right" disabled={tabScroll.atEnd} onMouseDown={(event) => event.stopPropagation()} onClick={() => scrollTabs(1)}>
+              <TabScrollIcon direction="right" />
+            </IconButton>
+          ) : null}
         </div>
         <IconButton className="qt-icon qt-plus" data-plus={group.id} label="New tab" title="New tab" aria-haspopup="menu" aria-expanded={menu?.kind === 'plus' && menu.target === group.id} onMouseDown={(event) => event.stopPropagation()} onClick={(event) => toggle('plus', event)}>
           +
@@ -281,6 +338,7 @@ function GroupView({ controller, state, group }: Common & { group: Group }) {
     </div>
   )
 }
+
 
 /**
  * The workspace's groups. Every group is a direct child of one flat container, keyed by its ID and
