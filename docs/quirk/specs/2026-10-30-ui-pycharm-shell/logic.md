@@ -334,4 +334,6 @@ Each of these would be its own project.
 
 Approved 2026-10-30, including the decisions marked assumed. Tech spec: expected, because this crosses many files and adds native window chrome.
 
-**Amendments:** none yet.
+**Amendments:**
+
+- 2026-10-30: the icon table's Agents row is the tool registered as Heimdall. Problems and Checks output aren't registered today, so the right stripe's foot group is empty until one exists. That's the only way the running app differs from the golden screens' stripe. Remote workspaces, Activity and Dashboard weren't in the table and use `slate`, `coral` and `mint` with the icons `hard-drives`, `pulse` and `gauge`.
