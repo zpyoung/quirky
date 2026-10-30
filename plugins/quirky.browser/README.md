@@ -59,6 +59,7 @@ Browser panes are real hosted tabs in the worktree's terminal workspace. `pane o
 quirky browser pane open --worktree current --mode native --url https://example.com --json
 quirky browser pane state --worktree current --json
 quirky browser pane navigate --pane <pane-id> --input localhost:3000
+quirky browser pane preview --pane <pane-id> --path docs/report/index.html
 quirky browser pane control --pane <pane-id> --action zoom --level 1
 quirky browser pane control --pane <pane-id> --action viewport --preset mobile-m
 quirky browser pane open --worktree current --mode watch --page <page-id> --json
@@ -89,6 +90,10 @@ Native page events use the same prompts, policy and download shelf as Watch, thr
 - A popup opens, at most four every two seconds and only for HTTP(S), in a small window titled by its origin. It is the page WebKit created for the opener, so `window.opener`, the window name and a form's POST body survive, and `window.close()` closes it.
 
 `beforeunload` prompts are not intercepted in Native because WKWebView has no public API for them. Where native page requests are unavailable, popup events stay informational and the Native prompt and download controls are not shown. Watch uses the managed page's CDP events for its supported prompts, downloads and typed input.
+
+### Workspace document previews
+
+`pane preview` (`panePreview`), or **Preview as workspace document** on a pane showing worktree HTML, converts a Native pane into an isolated preview of one `.html` or `.htm` file inside its worktree. The page and the files in its folder load from `quirky-preview://<grant>/…`, served by the desktop host; at the worktree root the grant reads the file alone, and dotfiles, symlinks and anything outside the folder are never served. Electrobun's isolated preview view gives the page its own throwaway storage and blocks outbound network (WebRTC included), camera, microphone, location, file pickers, popups, downloads and navigation off the grant. Back walks the preview's own history, then returns to the page it was converted from; Forward re-enters the preview. Typing an address on a preview page converts back to browsing. Grants are minted per mount and never stored, so history and saved panes hold only the document path. Previews need the macOS desktop app and the Native browser; elsewhere the pane says preview is unavailable. Watch panes refuse them.
 
 The `defaultHomePage`, `defaultSearchEngine`, and `defaultZoom` settings apply to new panes only. Default home page is blank; the search engine defaults to Google and the zoom level to 0.
 

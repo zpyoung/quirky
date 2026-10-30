@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import type { PaneFrame } from '../src/pane-contract'
-import { acceptLatestFrame, isTextInputKey, nativePreviewNavigationUrl, nativePreviewReportUrl, paneForView, pointerToFramePoint } from '../src/window/model'
+import { acceptLatestFrame, isTextInputKey, nativePreviewNavigationUrl, nativePreviewReportUrl, paneForView, pointerToFramePoint, paneAddress, paneHistoryControls } from '../src/window/model'
 
 const frame = (watchId: string, sequence: number, pane = 'pane-a'): PaneFrame => ({
   pane,
@@ -58,5 +58,15 @@ describe('browser window model', () => {
       .toBe('/plugin-file-resources/token')
     expect(nativePreviewReportUrl('https://elsewhere.example/page', '/plugin-file-resources/token', base))
       .toBe('https://elsewhere.example/page')
+  })
+  test('shows a document page by its file and keeps Back and Forward live across a conversion', () => {
+    const document = { path: '/work/report/index.html' }
+    expect(paneAddress({ url: 'quirky-preview://0123/index.html', document })).toBe('/work/report/index.html')
+    expect(paneAddress({ url: 'https://example.com/' })).toBe('https://example.com/')
+    expect(paneHistoryControls({ canGoBack: false, canGoForward: false })).toEqual({ back: false, forward: false })
+    expect(paneHistoryControls({ canGoBack: false, canGoForward: false, convertedFrom: { kind: 'url', url: 'about:blank' } }))
+      .toEqual({ back: true, forward: false })
+    expect(paneHistoryControls({ canGoBack: false, canGoForward: false, convertedTo: { kind: 'document', path: '/work/a.html' } }))
+      .toEqual({ back: false, forward: true })
   })
 })

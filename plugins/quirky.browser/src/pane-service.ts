@@ -1,11 +1,21 @@
-import { randomUUID } from 'node:crypto'
+import { randomBytes, randomUUID } from 'node:crypto'
 import { copyFileSync, constants, existsSync, lstatSync, linkSync, mkdirSync, realpathSync, unlinkSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { basename, extname, isAbsolute, join, parse, relative, resolve, sep } from 'node:path'
+import { basename, dirname, extname, isAbsolute, join, parse, relative, resolve, sep } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
-import { validateValue, type NativeBrowserDownloadUpdate, type NativeBrowserPageRequest, type PluginCaller, type PluginContext, type Schema } from '@quirky/protocol'
+import {
+  NATIVE_BROWSER_PREVIEW_SCHEME,
+  isNativeBrowserPreviewUrl,
+  nativeBrowserPreviewUrl,
+  validateValue,
+  type NativeBrowserDownloadUpdate,
+  type NativeBrowserPageRequest,
+  type PluginCaller,
+  type PluginContext,
+  type Schema
+} from '@quirky/protocol'
 import { readRuntime } from '@quirky/protocol/node'
-import type { PaneDownload, PaneMethod, PaneNativeAction, PaneNativeDecision, PanePrompt, PaneState, PaneTab, PaneRequests, PaneFrame } from './pane-contract'
+import type { PaneConversion, PaneDocument, PaneDownload, PaneMethod, PaneNativeAction, PaneNativeDecision, PanePrompt, PaneState, PaneTab, PaneRequests, PaneFrame } from './pane-contract'
 import type { BrowserPage, BrowserStore } from './profiles/store'
 import type { BrowserRuntime, PaneControl, PaneInput, RuntimePaneDownloadProgress, RuntimePanePrompt } from './runtime/driver'
 import { fault } from './runtime/errors'
@@ -66,7 +76,8 @@ const PANE_TAB_SCHEMA: Schema = {
     canGoBack: { type: 'boolean' }, canGoForward: { type: 'boolean' }, zoom: { type: 'number' },
     viewport: { type: 'string', enum: ['default', 'mobile-s', 'mobile-m', 'mobile-l', 'tablet', 'laptop', 'laptop-l', 'desktop'] },
     command: {}, find: { type: 'object', additionalProperties: true }, prompts: { type: 'array' }, downloads: { type: 'array' },
-    profileId: { type: 'string' }, partition: { type: 'string' }, sourcePath: { type: 'string' }, preview: { type: 'object', additionalProperties: true }, tabId: { type: 'string' }
+    profileId: { type: 'string' }, partition: { type: 'string' }, sourcePath: { type: 'string' }, preview: { type: 'object', additionalProperties: true }, tabId: { type: 'string' },
+    document: { type: 'object', additionalProperties: true }, convertedFrom: { type: 'object', additionalProperties: true }, convertedTo: { type: 'object', additionalProperties: true }
   },
   required: ['id', 'worktreeId', 'mode', 'page', 'url', 'title', 'loading', 'error', 'canGoBack', 'canGoForward', 'zoom', 'viewport', 'command', 'find', 'prompts', 'downloads', 'profileId', 'partition'],
   additionalProperties: true
@@ -242,6 +253,13 @@ function isSourceDocument(path: string): boolean {
   return SOURCE_FILE_EXTENSIONS[extname(path).toLowerCase()] === true
 }
 
+function conversionValue(value: unknown): PaneConversion | undefined {
+  const conversion = objectValue(value)
+  if (conversion?.kind === 'url' && typeof conversion.url === 'string' && isSupportedSafeAddress(conversion.url)) return { kind: 'url', url: conversion.url }
+  if (conversion?.kind === 'document' && typeof conversion.path === 'string' && isAbsolute(conversion.path)) return { kind: 'document', path: conversion.path }
+  return undefined
+}
+
 function isSupportedSafeAddress(value: string): boolean {
   return value === 'about:blank' || /^https?:/i.test(value) || /^file:/i.test(value)
 }
@@ -260,6 +278,8 @@ export class PaneService {
   private readonly nativeDownloads = new Map<string, NativeDownloadOwner>()
   private readonly popupStarts = new Map<string, number[]>()
   private readonly resources = new Map<string, { url: string; revoke(): void }>()
+  /** Restored document panes waiting for paneState to mint a fresh grant. */
+  private readonly restoredDocuments = new Map<string, string>()
   private active = true
 
   constructor(
@@ -305,6 +325,7 @@ export class PaneService {
       case 'paneOpen': return await this.paneOpen(params as PaneRequests['paneOpen'], caller)
       case 'paneState': return await this.paneState(params as PaneRequests['paneState'], caller)
       case 'paneNavigate': return await this.paneNavigate(params as PaneRequests['paneNavigate'], caller)
+      case 'panePreview': return await this.panePreview(params as PaneRequests['panePreview'])
       case 'paneControl': return await this.paneControl(params as PaneRequests['paneControl'], caller)
       case 'paneReport': return await this.paneReport(params as PaneRequests['paneReport'], caller)
       case 'paneClose': return await this.paneClose(params as PaneRequests['paneClose'], caller)
@@ -429,6 +450,15 @@ export class PaneService {
       tab.profileId = typeof tab.profileId === 'string' ? tab.profileId : 'default'
       try { this.store.getProfile(tab.profileId) } catch { tab.profileId = 'default' }
       tab.partition = this.partition(tab.profileId)
+      const documentPath = objectValue(tab.document)?.path
+      delete tab.document
+      if (typeof documentPath === 'string' && isAbsolute(documentPath)) this.restoredDocuments.set(tab.id, documentPath)
+      const convertedFrom = conversionValue(tab.convertedFrom)
+      const convertedTo = conversionValue(tab.convertedTo)
+      delete tab.convertedFrom
+      delete tab.convertedTo
+      if (convertedFrom) tab.convertedFrom = convertedFrom
+      if (convertedTo) tab.convertedTo = convertedTo
       tab.command = null
       tab.loading = false
       tab.prompts = []
@@ -448,6 +478,12 @@ export class PaneService {
       const fileUrl = pathToFileURL(copy.preview.path).href
       copy.url = fileUrl
       copy.preview.url = fileUrl
+    }
+    // Only the document's path is stored: a grant URL must never outlive the mount it was minted for.
+    const documentPath = copy.document?.path ?? this.restoredDocuments.get(copy.id)
+    if (documentPath) {
+      (copy as Omit<PaneTab, 'document'> & { document?: { path: string } }).document = { path: documentPath }
+      copy.url = 'about:blank'
     }
     const existing = this.db.get<{ active: number }>('SELECT active FROM browser_pane_tabs WHERE id=?', tab.id)
     const updatedAt = Math.max(Date.now(), (this.updatedAt.get(tab.id) ?? 0) + 1)
@@ -583,6 +619,108 @@ export class PaneService {
     tab.sourcePath = this.sourcePathWithinWorktree(worktree, canonical)
     tab.url = resource.url
     return resource.url
+  }
+
+  /**
+   * Mints a fresh grant for one HTML file inside the canonical worktree. The grant reads the file's
+   * folder, except at the worktree root, where it reads the file alone: the root is where secrets
+   * live. Dot-folders are refused because the host never serves dotfiles.
+   */
+  private documentFor(worktree: Worktree, requested: string): PaneDocument {
+    const path = this.resolveWorkspaceFile(worktree, requested)
+    if (!isDirectHtml(path)) throw fault('invalid_argument', 'workspace document previews show .html or .htm files')
+    const root = realpathSync(worktree.path)
+    if (relative(root, path).split(sep).some((segment) => segment.startsWith('.'))) {
+      throw fault('invalid_argument', 'workspace documents inside hidden folders cannot be previewed')
+    }
+    const folder = dirname(path)
+    const id = randomBytes(16).toString('hex')
+    const entry = basename(path)
+    return { path, grant: { id, root: folder, entry, entryOnly: folder === root }, url: nativeBrowserPreviewUrl(id, entry) }
+  }
+
+  private departure(tab: PaneTab): PaneConversion {
+    if (tab.document) return { kind: 'document', path: tab.document.path }
+    const address = tab.preview ? pathToFileURL(tab.preview.path).href : safeHistoryAddress(tab.url)
+    return { kind: 'url', url: address && isSupportedSafeAddress(address) ? address : 'about:blank' }
+  }
+
+  /**
+   * Replaces the page with the other kind, one level deep like Orca: the new guest has no history,
+   * so the departed page becomes `convertedFrom` (Back) or, on Back's own crossing, `convertedTo`.
+   */
+  private async convertPane(tab: PaneTab, target: PaneConversion, leg?: 'return'): Promise<PaneTab> {
+    if (tab.mode !== 'native') throw fault('invalid_argument', 'workspace document previews run in the Native browser, not Watch')
+    const worktree = await this.worktreeInfo(tab.worktreeId)
+    const departed = this.departure(tab)
+    let historyUrl: string | undefined
+    if (target.kind === 'document') {
+      const document = this.documentFor(worktree, target.path)
+      if (tab.document?.path === document.path && leg === undefined) return this.copyTab(tab)
+      this.releaseResourceWhenLeaving(tab)
+      tab.document = document
+      tab.sourcePath = document.path
+      tab.url = document.url
+      tab.title = basename(document.path)
+      tab.error = null
+      tab.loading = true
+      tab.command = { id: randomUUID(), action: 'navigate', url: document.url }
+    } else {
+      const normalized = await this.normalized(target.url, worktree)
+      tab.document = undefined
+      tab.sourcePath = undefined
+      await this.applyNativeNavigation(tab, normalized)
+      historyUrl = normalized.historyUrl
+    }
+    tab.canGoBack = false
+    tab.canGoForward = false
+    tab.find = { text: '', current: 0, total: 0 }
+    tab.convertedFrom = leg === 'return' ? undefined : departed
+    tab.convertedTo = leg === 'return' ? departed : undefined
+    this.saveTab(tab)
+    if (historyUrl) this.recordHistory(historyUrl, tab.title)
+    this.emitChanged()
+    return this.copyTab(tab)
+  }
+
+  private async panePreview(request: PaneRequests['panePreview']): Promise<PaneTab> {
+    const tab = this.requirePane(request.pane)
+    this.assertWatchOwner(tab.id, DEFAULT_WATCH_OWNER)
+    if (typeof request.path !== 'string' || request.path.trim() === '') throw fault('invalid_argument', 'path is required')
+    this.restoredDocuments.delete(tab.id)
+    return await this.convertPane(tab, { kind: 'document', path: request.path.trim() })
+  }
+
+  private async ensureRestoredDocument(tab: PaneTab): Promise<void> {
+    const path = this.restoredDocuments.get(tab.id)
+    if (path === undefined) return
+    this.restoredDocuments.delete(tab.id)
+    try {
+      const document = this.documentFor(await this.worktreeInfo(tab.worktreeId), path)
+      tab.document = document
+      tab.sourcePath = document.path
+      tab.url = document.url
+    } catch {
+      tab.url = 'about:blank'
+      tab.sourcePath = undefined
+      tab.error = 'The previewed workspace document is no longer available.'
+    }
+    this.saveTab(tab)
+  }
+
+  private async applyNativeNavigation(tab: PaneTab, normalized: NormalizedInput): Promise<string> {
+    this.releaseResourceWhenLeaving(tab, normalized.directFile ? undefined : normalized.localPath)
+    const localUrl = await this.openLocalDocument(tab, normalized)
+    const targetUrl = safeUrl(localUrl)
+    tab.error = normalized.error ?? null
+    if (normalized.directFile) tab.sourcePath = normalized.sourcePath
+    else if (!normalized.localPath) tab.sourcePath = undefined
+    tab.loading = true
+    tab.url = targetUrl
+    tab.command = tab.mode === 'native' ? { id: randomUUID(), action: 'navigate', url: targetUrl } : null
+    // a page blocked on a dialog cannot navigate, and its answer must not reach the next page
+    if (tab.mode === 'native') this.clearPromptsForPane(tab.id)
+    return targetUrl
   }
 
   private async openLocalDocument(tab: PaneTab, normalized: NormalizedInput): Promise<string> {
@@ -737,6 +875,7 @@ export class PaneService {
     const worktree = selector === undefined ? undefined : await this.resolveWorktree(selector, caller, true)
     const selected = [...this.tabs.values()].filter((tab) => worktree === undefined || worktree === 'all' || tab.worktreeId === worktree)
     for (const tab of selected) {
+      if (this.restoredDocuments.has(tab.id)) await this.ensureRestoredDocument(tab)
       if (tab.preview) await this.ensureRestoredResource(tab)
       if (tab.mode === 'watch' && tab.page) {
         try {
@@ -783,19 +922,16 @@ export class PaneService {
   private async paneNavigate(request: PaneRequests['paneNavigate'], caller: PluginCaller): Promise<PaneTab> {
     const tab = this.requirePane(request.pane)
     this.assertWatchOwner(tab.id, this.watchOwner(request.consumer, caller))
+    // Leaving a document for an address is a conversion, not navigation: the preview guest can't load it.
+    if (tab.document || this.restoredDocuments.has(tab.id)) {
+      if (!tab.document) await this.ensureRestoredDocument(tab)
+      if (tab.document) return await this.convertPane(tab, { kind: 'url', url: request.input })
+    }
     const worktree = await this.worktreeInfo(tab.worktreeId)
     const normalized = await this.normalized(request.input, worktree)
-    this.releaseResourceWhenLeaving(tab, normalized.directFile ? undefined : normalized.localPath)
-    const localUrl = await this.openLocalDocument(tab, normalized)
-    const targetUrl = safeUrl(localUrl)
-    tab.error = normalized.error ?? null
-    if (normalized.directFile) tab.sourcePath = normalized.sourcePath
-    else if (!normalized.localPath) tab.sourcePath = undefined
-    tab.loading = true
-    tab.url = targetUrl
-    tab.command = tab.mode === 'native' ? { id: randomUUID(), action: 'navigate', url: targetUrl } : null
-    // a page blocked on a dialog cannot navigate, and its answer must not reach the next page
-    if (tab.mode === 'native') this.clearPromptsForPane(tab.id)
+    const targetUrl = await this.applyNativeNavigation(tab, normalized)
+    // A new address drops the crossing Forward would have taken, like any forward history.
+    tab.convertedTo = undefined
     this.saveTab(tab)
     this.recordHistory(normalized.historyUrl, tab.title)
     this.emitChanged()
@@ -887,6 +1023,10 @@ export class PaneService {
         if (request.action === 'back' || request.action === 'forward') this.recordHistory(tab.url, tab.title)
         tab.command = null
         tab.error = null
+      } else if (request.action === 'back' && !tab.canGoBack && tab.convertedFrom) {
+        return await this.convertPane(tab, tab.convertedFrom, 'return')
+      } else if (request.action === 'forward' && !tab.canGoForward && tab.convertedTo) {
+        return await this.convertPane(tab, tab.convertedTo)
       } else {
         tab.command = { id: randomUUID(), action: request.action, ...(request.text === undefined ? {} : { text: request.text }), ...(request.forward === undefined ? {} : { forward: request.forward }) }
       }
@@ -907,7 +1047,15 @@ export class PaneService {
     }
     const previousUrl = tab.url
     let untrustedFileReport = false
-    if (params.url !== undefined) {
+    if (params.url !== undefined && tab.document) {
+      // The isolated guest can't leave its grant; anything else is a stale or forged report.
+      if (params.url !== 'about:blank') {
+        if (!isNativeBrowserPreviewUrl(params.url, tab.document.grant.id)) {
+          throw fault('browser_tab_changed', 'workspace preview reported an address outside its grant')
+        }
+        tab.url = params.url
+      }
+    } else if (params.url !== undefined) {
       const currentResource = this.resources.get(tab.id)
       const resourceUrl = currentResource ? matchingResourceUrl(params.url, currentResource.url) : undefined
       if (resourceUrl) {
@@ -979,6 +1127,7 @@ export class PaneService {
     this.watchStarts.delete(tab.id)
     this.clearPromptsForPane(tab.id)
     this.releaseResource(tab.id)
+    this.restoredDocuments.delete(tab.id)
     this.tabs.delete(tab.id)
     this.updatedAt.delete(tab.id)
     this.db.run('DELETE FROM browser_pane_tabs WHERE id=?', tab.id)
@@ -1761,7 +1910,7 @@ export class PaneService {
 
   private recordHistory(url: string, title: string): void {
     const address = safeHistoryAddress(url)
-    if (address === '' || address === 'about:blank') return
+    if (address === '' || address === 'about:blank' || address.startsWith(`${NATIVE_BROWSER_PREVIEW_SCHEME}:`)) return
     const previous = this.db.get<{ visited_at: number }>('SELECT MAX(visited_at) AS visited_at FROM browser_pane_history')?.visited_at ?? 0
     const visitedAt = Math.max(Date.now(), previous + 1)
     this.db.transaction(() => {

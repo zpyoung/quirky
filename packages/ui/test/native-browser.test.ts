@@ -48,6 +48,7 @@ function deferred<T>(): Deferred<T> {
 class BrowserBridgeModel implements NativeBrowserAdapter {
   readonly clearPartitionAvailable = false
   readonly pageRequestsAvailable = false
+  previewAvailable = false
   readonly children = new Map<string, ModelChild>()
   readonly clearCalls: string[] = []
   slowFirstNavigation = false
@@ -280,6 +281,28 @@ describe('native browser capability', () => {
     expect(child.released).toBe(true)
     expect(bridge.releaseCount).toBe(1)
     expect(bridge.clearCalls).toEqual([])
+  })
+
+  test('isolated previews mount only on a host that enforces them and stay inside their grant', async () => {
+    const grant = { id: 'f'.repeat(32), root: '/work/report', entry: 'index.html', entryOnly: false }
+    const previewUrl = `quirky-preview://${grant.id}/index.html`
+    const unsupported = createNativeBrowserCapability(new BrowserBridgeModel())
+    expect(unsupported.previewAvailable).toBe(false)
+    expect(() => unsupported.mount(element, options({ url: previewUrl, preview: grant }))).toThrow('unavailable')
+
+    const model = new BrowserBridgeModel()
+    model.previewAvailable = true
+    const capability = createNativeBrowserCapability(model)
+    expect(capability.previewAvailable).toBe(true)
+    expect(() => capability.mount(element, options({ url: previewUrl, preview: { ...grant, id: 'nope' } }))).toThrow('grant')
+    expect(() => capability.mount(element, options({ url: previewUrl, preview: { ...grant, entry: '../x.html' } }))).toThrow('grant')
+    expect(() => capability.mount(element, options({ url: `quirky-preview://${'e'.repeat(32)}/index.html`, preview: grant }))).toThrow('unsupported native browser URL')
+    expect(() => capability.mount(element, options({ url: 'https://example.test/', preview: grant }))).toThrow('unsupported native browser URL')
+    expect(() => capability.mount(element, options({ url: previewUrl }))).toThrow('unsupported native browser URL')
+    const handle = capability.mount(element, options({ url: 'about:blank', partition: '', preview: grant }))
+    await expect(handle.request({ action: 'navigate', url: 'https://example.test/' })).rejects.toThrow('unsupported native browser URL')
+    await expect(handle.request({ action: 'navigate', url: 'file:///etc/hosts' })).rejects.toThrow('unsupported native browser URL')
+    handle.dispose()
   })
 
   test('native clear is unavailable until the host can confirm completion', async () => {

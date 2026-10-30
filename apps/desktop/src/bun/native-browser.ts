@@ -2,6 +2,10 @@ import {
   NATIVE_BROWSER_LABEL_DOMAIN,
   NATIVE_BROWSER_NAVIGATION_RULES,
   NATIVE_BROWSER_PARTITION_RE,
+  NATIVE_BROWSER_PREVIEW_NAVIGATION_RULES,
+  NATIVE_BROWSER_PREVIEW_SCHEME,
+  isNativeBrowserPreviewGrant,
+  type NativeBrowserPreviewGrant,
   type DesktopRevealRequest,
   type DesktopRevealResult,
   type DesktopWindowCloseResult,
@@ -15,6 +19,7 @@ import {
 } from '@quirky/protocol'
 import { isAbsolute } from 'node:path'
 import type { NativeBrowserStorage } from './native-browser-storage'
+import { createWorkspacePreviewHandler, type WorkspacePreviewHandler } from './workspace-preview'
 
 export type NativeBrowserPageEvent =
   | { type: 'request'; request: NativeBrowserPageRequest }
@@ -25,7 +30,7 @@ export type NativeBrowserHostRPC = {
   bun: {
     requests: {
       claimNativeBrowserView: {
-        params: { viewId: number; owner: string; partition: string }
+        params: { viewId: number; owner: string; partition: string; preview?: NativeBrowserPreviewGrant }
         response: { zoomFactor: number; pageRequests: boolean }
       }
       answerNativeBrowserRequest: {
@@ -82,6 +87,9 @@ export type NativeBrowserViewPort = {
   url: string | null
   navigationRules: string | null
   allowedProtocols: { views: boolean; appData: boolean }
+  /** The scheme of an SDK isolated preview; absent on SDKs without isolated previews. */
+  isolatedPreview?: string | null
+  setIsolatedPreviewHandler?(handler: WorkspacePreviewHandler | null): void
   setNavigationRules(rules: string[]): void
   setPageZoom(factor: number): void
   getPageZoom(): number
@@ -106,6 +114,7 @@ export type NativeBrowserHostDeps = {
   /** Adopts the parked popup into a host-owned window; resolves false when it could not be hosted. */
   openPopup?(popup: NativeBrowserPopup): boolean
   storage: Pick<NativeBrowserStorage, 'identifierFor' | 'prepare' | 'clear'>
+  createPreviewHandler?(grant: NativeBrowserPreviewGrant): WorkspacePreviewHandler
 }
 
 export type NativeBrowserHandlers = {
@@ -184,10 +193,15 @@ export function pageRequestFromDetail(name: string, detail: Record<string, unkno
   }
 }
 
-type Claim = { viewId: number; owner: string; partition: string }
+type Claim = { viewId: number; owner: string; partition: string; preview: boolean }
 
 function invalidChild(): Error {
   return new Error('native browser view is not an owned sandboxed child')
+}
+
+/** An isolated preview child: the SDK's fences, not a browsing partition, define what it may reach. */
+function isPreviewChild(view: NativeBrowserViewPort): boolean {
+  return view.isolatedPreview === NATIVE_BROWSER_PREVIEW_SCHEME && typeof view.setIsolatedPreviewHandler === 'function'
 }
 
 function isZoomLevel(level: number): boolean {
@@ -311,10 +325,12 @@ export function createNativeBrowserHandlers(deps: NativeBrowserHostDeps): Native
     if (!claim || claim.viewId !== viewId || claim.owner !== owner) throw new Error('native browser view is not owned by this handle')
     const view = deps.getView(viewId)
     const window = deps.getWindow()
+    const rules = claim.preview ? NATIVE_BROWSER_PREVIEW_NAVIGATION_RULES : NATIVE_BROWSER_NAVIGATION_RULES
     if (
       !view || !window || view.id !== viewId || view.windowId !== window.id || view.hostWebviewId !== window.webview.id ||
-      !view.sandbox || view.renderer !== 'native' || view.partition !== claim.partition ||
-      view.allowedProtocols.appData || view.navigationRules !== JSON.stringify(NATIVE_BROWSER_NAVIGATION_RULES)
+      !view.sandbox || view.renderer !== 'native' || isPreviewChild(view) !== claim.preview ||
+      (!claim.preview && view.partition !== claim.partition) ||
+      view.allowedProtocols.appData || view.navigationRules !== JSON.stringify(rules)
     ) {
       claim = null
       throw invalidChild()
@@ -324,17 +340,23 @@ export function createNativeBrowserHandlers(deps: NativeBrowserHostDeps): Native
 
   return {
     async claim(params) {
-      if (!Number.isSafeInteger(params.viewId) || params.viewId <= 0 || typeof params.owner !== 'string' || params.owner.length === 0 || !NATIVE_BROWSER_PARTITION_RE.test(params.partition)) {
+      const preview = params.preview !== undefined
+      if (
+        !Number.isSafeInteger(params.viewId) || params.viewId <= 0 || typeof params.owner !== 'string' || params.owner.length === 0 ||
+        (preview ? !isNativeBrowserPreviewGrant(params.preview) : !NATIVE_BROWSER_PARTITION_RE.test(params.partition))
+      ) {
         throw invalidChild()
       }
       const window = deps.getWindow()
       const view = deps.getView(params.viewId)
       if (
         !window || !view || view.windowId !== window.id || view.hostWebviewId !== window.webview.id ||
-        !view.sandbox || view.renderer !== 'native' || view.partition !== params.partition ||
+        !view.sandbox || view.renderer !== 'native' || isPreviewChild(view) !== preview ||
+        (!preview && view.partition !== params.partition) ||
         view.allowedProtocols.appData || view.url !== 'about:blank'
       ) throw invalidChild()
-      const storageIdentifier = deps.storage.identifierFor(params.partition)
+      // a preview's throwaway store has no partition and no profile identifier to check against
+      const storageIdentifier = preview ? null : deps.storage.identifierFor(params.partition)
       if (storageIdentifier !== null && view.getStorageIdentifier()?.toUpperCase() !== storageIdentifier) {
         throw new Error('native browser view is not using its profile storage')
       }
@@ -345,11 +367,17 @@ export function createNativeBrowserHandlers(deps: NativeBrowserHostDeps): Native
 
       // `webviewTagInit` creates the view before applying its policy; it always starts on inert about:blank.
       // This public SDK call completes before claim resolves and before the renderer can load a target URL.
-      view.setNavigationRules([...NATIVE_BROWSER_NAVIGATION_RULES])
-      if (view.navigationRules !== JSON.stringify(NATIVE_BROWSER_NAVIGATION_RULES)) throw new Error('native browser navigation policy was not installed')
+      const rules = preview ? NATIVE_BROWSER_PREVIEW_NAVIGATION_RULES : NATIVE_BROWSER_NAVIGATION_RULES
+      view.setNavigationRules([...rules])
+      if (view.navigationRules !== JSON.stringify(rules)) throw new Error('native browser navigation policy was not installed')
+      if (params.preview) {
+        // Until this runs the SDK answers every preview request with 404, so nothing is readable early.
+        view.setIsolatedPreviewHandler!((deps.createPreviewHandler ?? createWorkspacePreviewHandler)(params.preview))
+      }
       const zoomFactor = view.getPageZoom()
-      claim = { viewId: params.viewId, owner: params.owner, partition: params.partition }
-      const pageRequests = enablePageRequests(view)
+      claim = { viewId: params.viewId, owner: params.owner, partition: params.partition, preview }
+      // a preview's downloads, popups and prompts stay blocked: nothing may relay them to the host
+      const pageRequests = preview ? false : enablePageRequests(view)
       return { zoomFactor, pageRequests }
     },
     async answer(params) {

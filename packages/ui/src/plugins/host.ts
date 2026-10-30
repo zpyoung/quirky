@@ -956,6 +956,7 @@ export class WindowPluginHost {
       nativeBrowser: {
         available: this.nativeBrowser.available,
         clearPartitionAvailable: this.nativeBrowser.clearPartitionAvailable,
+        previewAvailable: this.nativeBrowser.previewAvailable,
         mount: live((element, options) => {
           const handle = this.nativeBrowser.mount(element, options)
           track(() => handle.dispose())

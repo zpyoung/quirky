@@ -561,6 +561,28 @@ test('the profile store is assigned before the guest view exists', async () => {
     expect(guest.getAttribute('partition')).toBe(partition)
     await Bun.sleep(0)
     expect(events).toEqual([`prepare:${partition}:first`, 'guest', 'claim'])
+test('an isolated preview mount asks the SDK for a preview view and claims it with its grant', async () => {
+  const element = document.createElement('div')
+  document.body.append(element)
+  const mounted = Promise.withResolvers<GuestView>()
+  const claimed = Promise.withResolvers<Record<string, unknown>>()
+  const released = Promise.withResolvers<void>()
+  announceGuest = mounted.resolve
+  const grant = { id: 'a'.repeat(32), root: '/work/report', entry: 'index.html', entryOnly: false }
+  const capability = createNativeBrowserCapability(createElectrobunNativeBrowserAdapter({
+    previewAvailable: true,
+    async claimNativeBrowserView(params) { claimed.resolve(params); return { zoomFactor: 1 } },
+    async setNativeBrowserZoom({ level }) { return { zoomFactor: Math.pow(1.2, level) } },
+    async releaseNativeBrowserView() { released.resolve(); return { released: true } }
+  }))
+  const handle = capability.mount(element, { id: 'preview-pane', url: 'about:blank', zoom: 0, partition: '', preview: grant, onState() {} })
+  try {
+    const guest = await mounted.promise
+    expect(guest.getAttribute('isolated-preview')).toBe('quirky-preview')
+    expect(guest.hasAttribute('partition')).toBe(false)
+    expect(guest.hasAttribute('sandbox')).toBe(true)
+    expect(JSON.parse(guest.getAttribute('navigation-rules') ?? '[]')).toEqual(['^*', 'quirky-preview://*', 'about:blank'])
+    expect(await claimed.promise).toMatchObject({ viewId: 7, preview: grant })
   } finally {
     handle.dispose()
     await released.promise
