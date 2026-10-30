@@ -2,7 +2,7 @@ import { createHash, randomUUID } from 'node:crypto'
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { chromium, type Browser, type BrowserServer, type Page } from 'playwright'
-import { type UiModel, type UiSlotEntry, type ThemeInfo } from '@quirky/protocol'
+import { type UiModel, type UiSlotEntry, type UiToolEntry, type ThemeInfo } from '@quirky/protocol'
 import { connectDaemon, isDaemonAlive, readRuntime, type RuntimeInfo } from '@quirky/protocol/node'
 import { createProcessScope, type ProcessScope } from '../test-support/process-scope'
 import {
@@ -27,6 +27,7 @@ import {
   type CaptureTheme,
   type ImageEvidence
 } from './contracts'
+import { clearScene, newSceneState, populateShell, raiseNeedsYouToast, scopeToProject, showPopupsTogether, type SceneState } from './shell-scenes'
 import {
   DEVICE_SCALE_FACTOR,
   SCREENSHOT_SIZE,
@@ -42,6 +43,7 @@ const DAEMON_ENTRY = 'packages/daemon/src/main.ts'
 const BUILD_ENTRY = 'packages/ui/build.ts'
 const CAPTURE_ROOT = 'captures'
 const CAPTURE_PROGRESS_FILE = 'capture-progress.json'
+const SHELL_TARGETS: ReadonlySet<string> = new Set(['host:shell', 'host:scoped', 'host:popups'])
 export type CaptureCell = { targetId: string; theme: CaptureTheme }
 
 type RuntimeClient = {
@@ -63,6 +65,7 @@ type CaptureRuntime = {
   editorBuffer: EditorFixtureBuffer | null
   terminalFixture: CaptureTerminalFixture | null
   pendingUiCommand: Promise<unknown> | null
+  scene: SceneState
   manifest: CaptureManifest
   secrets: string[]
   pageErrors: string[]
@@ -139,6 +142,8 @@ export function discoverCaptureTargets(model: UiModel): CaptureTarget[] {
   })
   const targets = [
     { id: 'host:shell', plugin: null, title: 'Quirky', kind: 'host' as const },
+    { id: 'host:scoped', plugin: null, title: 'Quirky scoped to one project', kind: 'host' as const },
+    { id: 'host:popups', plugin: null, title: 'Quirky with its popups open', kind: 'host' as const },
     ...model.views.map((entry) => toTarget(entry, 'view')),
     ...model.panels.map((entry) => toTarget(entry, 'panel')),
     ...model.sidebarSections.map((entry) => toTarget(entry, 'sidebar-section')),
@@ -419,6 +424,7 @@ function targetSlotSelector(target: CaptureTarget): string {
 }
 
 async function closeCurrentSurface(runtime: CaptureRuntime): Promise<void> {
+  await clearScene(runtime)
   await resolveUnsavedCloseOverlay(runtime)
   const settings = runtime.page.getByRole('dialog', { name: 'Settings', exact: true })
   if (await settings.count() > 0 && await settings.isVisible()) {
@@ -579,8 +585,16 @@ async function openTarget(runtime: CaptureRuntime, target: CaptureTarget): Promi
         await runtime.page.getByRole('dialog', { name: 'Command palette', exact: true }).waitFor({ state: 'visible', timeout: runtime.options.timeoutMs })
         return
       }
-      if (target.id !== 'host:shell') throw new Error(`unsupported host target ${target.id}`)
-      return
+      if (target.id === 'host:shell') return await populateShell(runtime)
+      if (target.id === 'host:scoped') {
+        await populateShell(runtime)
+        return await scopeToProject(runtime)
+      }
+      if (target.id === 'host:popups') {
+        await populateShell(runtime)
+        return await showPopupsTogether(runtime)
+      }
+      throw new Error(`unsupported host target ${target.id}`)
     case 'view': {
       const input = fixtureViewInput(runtime.fixtures, target, runtime.editorBuffer, runtime.terminalFixture)
       await rpc(runtime.client, 'ui.view.open', { id: target.id, input }, runtime.options.timeoutMs, runtime.options.signal)
@@ -611,11 +625,39 @@ async function openTarget(runtime: CaptureRuntime, target: CaptureTarget): Promi
     case 'activity-item':
     case 'status-bar':
       if (target.plugin === 'quirky.editor' || target.plugin === 'quirky.git') await openWorktreeContext(runtime)
+      await openSurfaceTool(runtime, target)
       return
   }
 }
 
-async function waitForStateShown(runtime: CaptureRuntime, target: CaptureTarget): Promise<void> {
+/**
+ * The tool that hosts a sidebar section or activity item, or null for a surface that always shows,
+ * such as a status bar item. Throws when no registered tool lists the target.
+ */
+export function hostingToolFor(model: Pick<UiModel, 'tools'>, target: CaptureTarget): string | null {
+  if (target.kind !== 'sidebar-section' && target.kind !== 'activity-item') return null
+  const tool = findHostingTool(model, target)
+  return tool.id
+}
+
+function findHostingTool(model: Pick<UiModel, 'tools'>, target: CaptureTarget): UiToolEntry {
+  const tool = model.tools?.find((candidate) => candidate.id === target.id || candidate.aliases.includes(target.id))
+  if (!tool) throw new Error(`no tool hosts ${target.id}`)
+  return tool
+}
+
+/** Opens the tool a sidebar section or activity item lives in, through `ui.tool.open`; a status bar item needs none. */
+export async function openSurfaceTool(runtime: Pick<CaptureRuntime, 'client' | 'model' | 'options'>, target: CaptureTarget): Promise<void> {
+  const id = hostingToolFor(runtime.model, target)
+  if (id === null) return
+  const tool = findHostingTool(runtime.model, target)
+  if (target.kind === 'sidebar-section' && tool.contributionId !== target.id) {
+    throw new Error(`${target.id} is not shown by its tool ${tool.id}, which shows ${tool.contributionId ?? 'the host Inbox'} instead`)
+  }
+  await rpc(runtime.client, 'ui.tool.open', { id }, runtime.options.timeoutMs, runtime.options.signal)
+}
+
+export async function waitForStateShown(runtime: Pick<CaptureRuntime, 'client' | 'options'>, target: CaptureTarget): Promise<void> {
   if (target.kind === 'host' || target.kind === 'settings-section' || target.kind === 'overlay') return
   const deadline = Date.now() + runtime.options.timeoutMs
   while (Date.now() < deadline) {
@@ -632,7 +674,7 @@ async function waitForStateShown(runtime: CaptureRuntime, target: CaptureTarget)
 async function inspectSurface(runtime: CaptureRuntime, target: CaptureTarget): Promise<void> {
   await waitForStateShown(runtime, target)
   if (target.kind === 'host') {
-    const element = target.id === 'host:shell'
+    const element = SHELL_TARGETS.has(target.id)
       ? runtime.page.locator('.shell-workspace')
       : runtime.page.getByRole('dialog', { name: target.title, exact: true })
     await element.waitFor({ state: 'visible', timeout: runtime.options.timeoutMs })
@@ -642,7 +684,7 @@ async function inspectSurface(runtime: CaptureRuntime, target: CaptureTarget): P
       visible: getComputedStyle(node).visibility !== 'hidden' && getComputedStyle(node).display !== 'none'
     }))
     if (!details.visible || details.rect.width <= 0 || details.rect.height <= 0) throw new Error(`${target.id} is hidden or has zero size`)
-    if (target.id !== 'host:shell' && details.text.length === 0) throw new Error(`${target.id} is empty`)
+    if (!SHELL_TARGETS.has(target.id) && details.text.length === 0) throw new Error(`${target.id} is empty`)
     if (target.id === 'host:palette' && await runtime.page.getByLabel('Filter commands').count() === 0) {
       throw new Error('host palette did not mount its command filter')
     }
@@ -744,6 +786,7 @@ async function captureOne(runtime: CaptureRuntime, target: CaptureTarget, theme:
     if (runtime.pageErrors.length > errorStart) {
       throw new Error(`renderer raised: ${runtime.pageErrors.slice(errorStart).join('; ')}`)
     }
+    if (target.id === 'host:shell') await raiseNeedsYouToast(runtime)
     image = await screenshot(runtime, path)
     if (target.id === 'overlay:quirky.editor/close') await resolveUnsavedCloseOverlay(runtime)
     return { ...cell, image, reference, status: 'captured' }
@@ -990,6 +1033,7 @@ export async function captureApplication(options: CaptureOptions): Promise<Captu
       editorBuffer,
       terminalFixture,
       pendingUiCommand: null,
+      scene: newSceneState(),
       manifest,
       secrets,
       pageErrors

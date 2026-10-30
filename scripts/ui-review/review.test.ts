@@ -304,6 +304,13 @@ test('the reviewer is told the traffic lights are native and absent from capture
   expect(prompt).toMatch(/absent from these browser-rendered captures/i)
 })
 
+test('the reviewer is told host:popups deliberately shows several popups together', async () => {
+  await reviewManifest(manifest('host:popups'), options())
+
+  const prompt = JSON.parse(readFileSync(promptLogFile, 'utf8').trim().split('\n')[0]!) as string
+  expect(prompt).toMatch(/host:popups target deliberately shows several popups at once/i)
+})
+
 test('invalid JSON and out-of-range scores are reviewer errors', async () => {
   for (const mode of ['invalid-json', 'bad-score']) {
     setEnv('UI_REVIEW_FAKE_MODE', mode)
