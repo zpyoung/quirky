@@ -62,6 +62,7 @@ export function createSession(context: UiPluginContext, hooks: { suspend(suspend
   let disposed = false
   let serial = 0
   let confirming = false
+  let saves = 0
   const listeners = new Set<() => void>()
 
   const commit = (patch: Partial<SessionState>) => {
@@ -85,17 +86,21 @@ export function createSession(context: UiPluginContext, hooks: { suspend(suspend
     },
 
     async load() {
-      const [listed, plugins] = await Promise.allSettled([
-        context.call('quirky.feedback/list'),
-        context.call('plugin.list')
-      ])
-      if (listed.status === 'rejected') toastError('Could not load feedback comments', listed.reason)
-      const result = listed.status === 'fulfilled' ? listed.value as { comments?: Comment[]; recovered?: boolean } : {}
-      commit({
-        comments: Array.isArray(result.comments) ? result.comments : [],
-        recovered: result.recovered === true,
-        owners: plugins.status === 'fulfilled' ? ownerNames(pluginsOf(plugins.value)) : {}
-      })
+      const owners = context.call('plugin.list').then(
+        (plugins) => commit({ owners: ownerNames(pluginsOf(plugins)) }),
+        () => {}
+      )
+      const comments = (async () => {
+        let result: { comments?: Comment[]; recovered?: boolean }
+        let seen: number
+        // selection is live before this answers, so a snapshot from before a save would drop it
+        do {
+          seen = saves
+          try { result = await context.call('quirky.feedback/list') as typeof result } catch (cause) { return toastError('Could not load feedback comments', cause) }
+        } while (seen !== saves)
+        commit({ comments: Array.isArray(result.comments) ? result.comments : [], recovered: result.recovered === true })
+      })()
+      await Promise.all([owners, comments])
     },
 
     ownerName(owner: string): string {
@@ -153,9 +158,11 @@ export function createSession(context: UiPluginContext, hooks: { suspend(suspend
       try {
         if (card.id === null) {
           const added = await context.call('quirky.feedback/add', { intent: card.intent, comment: text, capture: card.capture }) as Comment
-          commit({ comments: [...state.comments, added], card: cardAfterSave() })
+          saves++
+          commit({ comments: [...state.comments.filter((entry) => entry.id !== added.id), added], card: cardAfterSave() })
         } else {
           const updated = await context.call('quirky.feedback/update', { id: card.id, comment: text, intent: card.intent }) as Comment
+          saves++
           commit({ comments: state.comments.map((entry) => (entry.id === updated.id ? updated : entry)), card: cardAfterSave() })
         }
       } catch (cause) {
@@ -167,6 +174,7 @@ export function createSession(context: UiPluginContext, hooks: { suspend(suspend
 
     async remove(id: string) {
       try { await context.call('quirky.feedback/remove', { id }) } catch (cause) { return toastError('Could not delete the comment', cause) }
+      saves++
       commit({ comments: state.comments.filter((entry) => entry.id !== id), card: state.card?.id === id ? null : state.card })
     },
 
@@ -184,6 +192,7 @@ export function createSession(context: UiPluginContext, hooks: { suspend(suspend
       } catch (cause) { toastError('Could not ask for confirmation', cause) } finally { confirming = false; hooks.suspend(false) }
       if (!confirmed) return
       try { await context.call('quirky.feedback/clear') } catch (cause) { return toastError('Could not clear the comments', cause) }
+      saves++
       commit({ comments: [], card: state.card?.id === null ? state.card : null, notice: null })
     },
 

@@ -1,5 +1,5 @@
 import { createSelectionOverlay, selectionOverlayStyles } from '@quirky/ui/selection-overlay'
-import { elementAtPoint, resolveTarget, type Target } from './target'
+import { elementAtPoint, OVERLAY_ATTRIBUTE, resolveTarget, type Target } from './target'
 
 const STOPPED = new Set(['pointerdown', 'pointerup', 'mousedown', 'mouseup', 'click', 'dblclick', 'auxclick', 'contextmenu'])
 const OBSERVED = [...STOPPED, 'pointermove', 'mousemove']
@@ -66,7 +66,14 @@ export function createPicker(doc: Document, handlers: PickerHandlers): Picker {
   const onPointer = (event: Event) => {
     if (suspended) return
     const pointer = event as MouseEvent
+    const missedKeyup = held && !pointer.altKey
     setHeld(pointer.altKey)
+    // the host was still pass-through when this event was aimed, so it landed on the app
+    if (missedKeyup && STOPPED.has(pointer.type) && !(pointer.target instanceof Element && pointer.target.closest(`[${OVERLAY_ATTRIBUTE}]`) !== null)) {
+      pointer.stopImmediatePropagation()
+      pointer.preventDefault()
+      return
+    }
     if (pointer.target !== host) return
     if (STOPPED.has(pointer.type)) {
       pointer.stopImmediatePropagation()

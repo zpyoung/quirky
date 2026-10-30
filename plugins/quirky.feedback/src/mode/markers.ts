@@ -8,6 +8,8 @@ function locate(selector: string): DOMRect | null {
   try {
     const element = document.querySelector(selector)
     if (element === null || element.closest(`[${OVERLAY_ATTRIBUTE}]`) !== null) return null
+    const { visibility } = getComputedStyle(element)
+    if (visibility === 'hidden' || visibility === 'collapse') return null
     const rect = element.getBoundingClientRect()
     return rect.width > 0 && rect.height > 0 ? rect : null
   } catch {

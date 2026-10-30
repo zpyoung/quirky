@@ -199,6 +199,63 @@ describe('adding', () => {
     expect(card()!.querySelector('textarea')!.value).toBe('second')
   })
 
+  test('a comment saved while the first load is pending stays in the tray', async () => {
+    const fake = fakeContext([])
+    const call = fake.context.call as (method: string, params?: Record<string, unknown>) => Promise<unknown>
+    let release = () => {}
+    let lists = 0
+    fake.context.call = (async (method: string, params?: Record<string, unknown>) => {
+      const answer = await call(method, params)
+      // the first list answers with a snapshot from before the save
+      if (method === 'quirky.feedback/list' && ++lists === 1) await new Promise<void>((resolve) => { release = resolve })
+      return answer
+    }) as typeof fake.context.call
+    await act(async () => { teardown = mountFeedbackMode(fake.context, { annotate: async () => {} }) })
+    await flush()
+    await pick(item)
+    await type('saved early')
+    await submit()
+    expect(rows()).toHaveLength(1)
+    await act(async () => { release(); await tick(10) })
+    expect(rows()).toHaveLength(1)
+    expect(lists).toBe(2)
+  })
+
+  test('a comment saved during a load that fails stays in the tray', async () => {
+    const fake = fakeContext([])
+    const call = fake.context.call as (method: string, params?: Record<string, unknown>) => Promise<unknown>
+    let fail = () => {}
+    fake.context.call = (async (method: string, params?: Record<string, unknown>) => {
+      if (method === 'quirky.feedback/list') {
+        await new Promise<void>((resolve) => { fail = resolve })
+        throw new Error('daemon away')
+      }
+      return call(method, params)
+    }) as typeof fake.context.call
+    await act(async () => { teardown = mountFeedbackMode(fake.context, { annotate: async () => {} }) })
+    await flush()
+    await pick(item)
+    await type('saved early')
+    await submit()
+    await act(async () => { fail(); await tick(10) })
+    expect(rows()).toHaveLength(1)
+    expect(fake.toasts[0]!.title).toBe('Could not load feedback comments')
+  })
+
+  test('slow plugin names do not hold back the comments', async () => {
+    const fake = fakeContext([sample('a')])
+    const call = fake.context.call as (method: string, params?: Record<string, unknown>) => Promise<unknown>
+    let release = () => {}
+    fake.context.call = (async (method: string, params?: Record<string, unknown>) => {
+      if (method === 'plugin.list') await new Promise<void>((resolve) => { release = resolve })
+      return call(method, params)
+    }) as typeof fake.context.call
+    await act(async () => { teardown = mountFeedbackMode(fake.context, { annotate: async () => {} }) })
+    await flush()
+    expect(rows()).toHaveLength(1)
+    await act(async () => { release(); await tick(10) })
+  })
+
   test('a failed add keeps the card and shows a toast', async () => {
     const fake = await start()
     fake.failures.set('quirky.feedback/add', new Error('disk full'))
@@ -516,6 +573,17 @@ describe('dots', () => {
       await tick(40)
     })
     expect(dots()[0]!.style.left).toBe(before)
+  })
+
+  test('disappear when the element is hidden', async () => {
+    const fake = await start([sample('a')])
+    item.style.visibility = 'hidden'
+    await act(async () => {
+      for (const listener of [...fake.layoutListeners]) listener()
+      await tick(40)
+    })
+    expect(dots()).toHaveLength(0)
+    expect(rows()[0]!.querySelector('[data-feedback-stale]')).not.toBeNull()
   })
 
   test('disappear when the element goes away', async () => {

@@ -409,6 +409,25 @@ describe('option key', () => {
     expect(surfaceRestored()).toBe(true)
   })
 
+  test('the press that corrects a missed keyup does not reach the app', async () => {
+    await start()
+    key('keydown', 'Alt', { altKey: true })
+    let reached = 0
+    const menu = document.getElementById('menu')!
+    menu.addEventListener('pointerdown', () => { reached++ })
+    const press = mouse(menu, 'pointerdown', { altKey: false })
+    expect(reached).toBe(0)
+    expect(press.defaultPrevented).toBe(true)
+    expect(restored()).toBe(true)
+  })
+
+  test('the press that corrects a missed keyup still reaches the mode\'s own controls', async () => {
+    await start()
+    key('keydown', 'Alt', { altKey: true })
+    const press = mouse(reactRoot().querySelector('button')!, 'pointerdown', { altKey: false })
+    expect(press.defaultPrevented).toBe(false)
+  })
+
   test('releasing Option does not move focus', async () => {
     await start()
     const menu = document.getElementById('menu') as HTMLElement
