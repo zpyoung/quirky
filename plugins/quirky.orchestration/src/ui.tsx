@@ -1,5 +1,5 @@
 import { Button, ToolPanelFrame } from '@quirky/ui'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import type { MountFunction, QuirkyEvent, UiPluginContext } from '@quirky/protocol'
 import type { OrchestrationSkillStatus } from './ui-contracts'
@@ -13,6 +13,7 @@ import {
   SETUP_DISMISSED_EVENT,
   SETUP_STATUS_CHANGED_EVENT
 } from './window/setup-state'
+import { placeSetupCard, type PlacementRect, type SetupPlacement } from './setup-placement'
 
 const SETTINGS_VIEW_ID = 'view:quirky.orchestration/settings'
 const REMOTE_WORKER_OUTPUT_VIEW_ID = 'view:quirky.orchestration/remote-worker-output'
@@ -40,9 +41,97 @@ function errorText(error: unknown): string {
 }
 
 type FloatingSetupProps = { context: UiPluginContext; report?: (state: unknown) => void }
+function useSetupPlacement(cardRef: { current: HTMLElement | null }, enabled: boolean): SetupPlacement {
+  const [placement, setPlacement] = useState<SetupPlacement>({ left: 16, top: 16, maxHeight: window.innerHeight })
+
+  useLayoutEffect(() => {
+    const card = cardRef.current
+    if (!enabled || !card) return
+
+    let button: HTMLElement | null = null
+    let statusBar: HTMLElement | null = null
+    let resizeObserver: ResizeObserver | null = null
+    let buttonObserver: MutationObserver | null = null
+    let bodyObserver: MutationObserver | null = null
+    let active = true
+
+    const update = () => {
+      if (!active) return
+      const nextButton = document.querySelector<HTMLElement>('[data-floating-button]')
+      if (nextButton !== button) {
+        if (button) resizeObserver?.unobserve(button)
+        buttonObserver?.disconnect()
+        button = nextButton
+        if (button) {
+          resizeObserver?.observe(button)
+          if (typeof MutationObserver !== 'undefined') {
+            buttonObserver = new MutationObserver(update)
+            buttonObserver.observe(button, { attributes: true, attributeFilter: ['style'] })
+          }
+        }
+      }
+
+      const nextStatusBar = document.querySelector<HTMLElement>('[data-region="status-bar"]')
+      if (nextStatusBar !== statusBar) {
+        if (statusBar) resizeObserver?.unobserve(statusBar)
+        statusBar = nextStatusBar
+        if (statusBar) resizeObserver?.observe(statusBar)
+      }
+
+      const measure = (element: HTMLElement): PlacementRect => {
+        const { left, top, width, height } = element.getBoundingClientRect()
+        return { left, top, width, height }
+      }
+      const nextPlacement = placeSetupCard({
+        viewport: { width: window.innerWidth, height: window.innerHeight },
+        button: button ? measure(button) : null,
+        statusBar: statusBar ? measure(statusBar) : null,
+        card: measure(card)
+      })
+      setPlacement((current) =>
+        current.left === nextPlacement.left &&
+        current.top === nextPlacement.top &&
+        current.maxHeight === nextPlacement.maxHeight
+          ? current
+          : nextPlacement
+      )
+    }
+
+    resizeObserver = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(update)
+    resizeObserver?.observe(card)
+    window.addEventListener('resize', update)
+    if (typeof MutationObserver !== 'undefined' && document.body) {
+      bodyObserver = new MutationObserver((records) => {
+        const changed = records.some((record) =>
+          [...record.addedNodes, ...record.removedNodes].some((node) => {
+            if (node === button || node === statusBar) return true
+            if (node instanceof Element && ((button && node.contains(button)) || (statusBar && node.contains(statusBar)))) return true
+            if (!button && node instanceof Element && node.matches('[data-floating-button]')) return true
+            return !statusBar && node instanceof Element && node.matches('[data-region="status-bar"]')
+          })
+        )
+        if (changed) update()
+      })
+      bodyObserver.observe(document.body, { childList: true })
+    }
+    update()
+
+    return () => {
+      active = false
+      window.removeEventListener('resize', update)
+      resizeObserver?.disconnect()
+      buttonObserver?.disconnect()
+      bodyObserver?.disconnect()
+    }
+  }, [cardRef, enabled])
+
+  return placement
+}
+
 
 function FloatingSetupOverlay({ context, report }: FloatingSetupProps) {
   const guard = useMemo(() => createLatestRequestGuard(), [])
+  const cardRef = useRef<HTMLElement>(null)
   const [floating, setFloating] = useState<{ enabled: boolean; open: boolean } | null>(null)
   const [status, setStatus] = useState<OrchestrationSkillStatus | null>(null)
   const [dismissed, setDismissed] = useState(isSetupDismissed)
@@ -85,6 +174,7 @@ function FloatingSetupOverlay({ context, report }: FloatingSetupProps) {
   const hasReadySkill = status?.agents.some((agent) => agent.state === 'ready') === true
   const shown = floating?.enabled === true && floating.open && !dismissed && !hasReadySkill
   useEffect(() => { report?.({ shown, floating, status, error: error || null }) }, [shown, floating, status, error, report])
+  const placement = useSetupPlacement(cardRef, shown)
 
   if (!shown) return null
   const openSettings = async () => {
@@ -104,13 +194,18 @@ function FloatingSetupOverlay({ context, report }: FloatingSetupProps) {
 
   return (
     <aside
+      ref={cardRef}
       aria-label="Enable orchestration"
       style={{
         position: 'fixed',
-        insetInlineEnd: 'var(--ui-space-16)',
-        insetBlockEnd: 'var(--ui-space-16)',
+        left: placement.left,
+        top: placement.top,
         zIndex: 900,
-        width: 'min(30ch, calc(100vw - 2 * var(--ui-space-16)))'
+        width: 'min(30ch, calc(100vw - 2 * var(--ui-space-16)))',
+        maxHeight: placement.maxHeight,
+        overflowY: 'auto',
+        overscrollBehavior: 'contain',
+        pointerEvents: 'auto'
       }}
     >
       <ToolPanelFrame
