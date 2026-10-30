@@ -62,7 +62,7 @@ Each numbered scenario is a required real-daemon API/CLI flow with behavioral as
    - **Walkthrough:** choose Open; then Start new.
    - **Data after:** **Active workspace** W7 first; fresh composer still links Issue7.
 10. **SC10 — Task settings.** Sidebar show/hide/restore, provider visibility/default, preset and repo selection, project pins/recent/last view are scriptable and durable. Integrations show actual public CLI availability and actionable install/login/recheck guidance. Existing repository GitHub account binding remains honored, not duplicated with token entry.
-   - **Screen states:** hiding sidebar Tasks never removes the command/API route used to restore it.
+   - **Screen states:** opening Task Sources keeps the active workspace selected in the breadcrumb and Checks panel. Hiding sidebar Tasks never removes the command/API route used to restore it.
 
 ### Issue detail and creation
 11. **SC11 — Issue navigation and read.** Opening issue from list or Project shows Back to correct origin, host/repo/number, copy and external link actions, title/state/author/updated/source/attached workspace, primary Start/Open and edit strip. Readable description, Activity timeline, comments and writable controls reflect server capability. Cached content remains on refresh failure; uncached failure has Retry.
