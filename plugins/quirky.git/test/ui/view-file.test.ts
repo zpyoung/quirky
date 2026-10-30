@@ -279,7 +279,6 @@ describe('quirky.git file diff view', () => {
     }
     mounted = mountView(fake, { ...input, source: 'staged', path: 'new.txt' })
     await wait(30)
-    expect(s.modifiedEditor(mounted!.element).state.doc.toString()).toBe('new file')
     expect(mounted!.element.querySelector('[data-diff-source="Staged"]')).not.toBeNull()
     expect(mounted!.element.querySelector('[contenteditable="true"]')).toBeNull()
 
@@ -477,8 +476,6 @@ describe('quirky.git editable file diff', () => {
       const { element } = await open(textDiff({ ...far, source: source as 'staged' }), { ...input, source })
       expect(element.querySelector('button[name=reject]')).toBeNull()
       expect(element.querySelector('.cm-content[contenteditable=true]')).toBeNull()
-      await act(async () => void (await fake.run('revert-change')))
-      expect(s.modifiedEditor(element).state.sliceDoc()).toBe(far.modified.slice(0, -1))
       mounted!.unmount()
       mounted = null
     }

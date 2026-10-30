@@ -18,7 +18,6 @@ import {
   type DiffConfig
 } from '@codemirror/merge'
 import { editorTheme } from '@quirky/ui/editor-theme'
-import { withoutTrailingNewline } from '../diffText'
 import { notesExtension, revealNote, setNotesModel, type NotesExtensionOptions, type NotesModel } from '../notes/extension'
 import { selectionLineRange, type LineRange } from '../notes/line-range'
 import { lineBreakExtension, syntaxExtensions } from './theme'
@@ -160,13 +159,12 @@ function revertChunk(view: EditorView, chunk: Chunk, original: Text): void {
 /**
  * Mounts a diff of `original` against `modified` in `parent`: side by side (a `MergeView`) or
  * inline (one editor with a unified merge view). The shared UI editor theme supplies editor and diff colours.
- * Read-only diffs drop one trailing line break so no empty last line shows; editable ones keep
- * the text exactly so a save does not rewrite the file's ending.
+ * Both sides retain their complete text for diffing. Trailing line breaks may produce an empty final
+ * editor line, but stripping them can change which existing lines CodeMirror considers changed.
  */
 export function createMerge(parent: HTMLElement, options: MergeOptions): MergeHandle {
-  const trim = options.editable ? (text: string) => text : withoutTrailingNewline
-  const original = trim(options.original)
-  const modified = trim(options.modified)
+  const original = options.original
+  const modified = options.modified
   const diffConfig = options.showWhitespace ? { scanLimit: 500 } : ignoreTrimWhitespace()
   const collapse = options.collapseUnchanged ? { margin: 3, minSize: 4 } : undefined
 

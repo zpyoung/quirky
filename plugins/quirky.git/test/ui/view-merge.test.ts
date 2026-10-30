@@ -72,13 +72,71 @@ describe.each([false, true])('createMerge (side by side: %p)', (sideBySide) => {
     merge.destroy()
   })
 
-  test('an editable diff keeps its text exactly, a read-only one drops one trailing break', () => {
+  test('an editable diff keeps its text exactly', () => {
     const editable = createMerge(parent, { ...base, sideBySide, editable: true })
     expect(editable.getModified()).toBe(edited)
     editable.destroy()
-    const readOnly = createMerge(parent, { ...base, sideBySide })
-    expect(readOnly.getModified()).toBe(edited.slice(0, -1))
-    readOnly.destroy()
+  })
+
+  test('read-only appended lines leave the unchanged line unhighlighted', () => {
+    const merge = createMerge(parent, {
+      ...base,
+      sideBySide,
+      original: 'notes\n',
+      modified: 'notes\nedited from terminal\n',
+      scrollToFirst: false
+    })
+    const notesLines = Array.from(parent.querySelectorAll('.cm-line')).filter((line) => line.textContent === 'notes')
+    expect(notesLines).toHaveLength(sideBySide ? 2 : 1)
+    expect(notesLines.every((line) =>
+      !line.classList.contains('cm-changedLine') &&
+      line.querySelector('.cm-insertedLine, .cm-deletedLine, .cm-changedText') === null
+    )).toBe(true)
+    expect(Array.from(parent.querySelectorAll('.cm-insertedLine'), (line) => line.textContent))
+      .toEqual(['edited from terminal'])
+    expect(parent.querySelector('.cm-deletedLine, .cm-deletedText')).toBeNull()
+    merge.destroy()
+  })
+
+  test('read-only diffs keep unchanged lines unhighlighted before edits and appended lines', () => {
+    const modified = 'changed\nother\nappended\n'
+    const merge = createMerge(parent, {
+      ...base,
+      sideBySide,
+      original: 'notes\nother\n',
+      modified,
+      scrollToFirst: false
+    })
+    const otherLines = Array.from(parent.querySelectorAll('.cm-line')).filter((line) => line.textContent === 'other')
+    expect(otherLines).toHaveLength(sideBySide ? 2 : 1)
+    expect(otherLines.every((line) =>
+      !line.classList.contains('cm-changedLine') &&
+      line.querySelector('.cm-insertedLine, .cm-deletedLine, .cm-changedText') === null
+    )).toBe(true)
+    expect(Array.from(parent.querySelectorAll('.cm-insertedLine'), (line) => line.textContent))
+      .toEqual(['changed', 'appended'])
+    merge.destroy()
+  })
+
+  test('read-only deletions leave preceding lines unhighlighted', () => {
+    const modified = 'notes\n'
+    const merge = createMerge(parent, {
+      ...base,
+      sideBySide,
+      original: 'notes\nappended\n',
+      modified,
+      scrollToFirst: false
+    })
+    const notesLines = Array.from(parent.querySelectorAll('.cm-line')).filter((line) => line.textContent === 'notes')
+    expect(notesLines).toHaveLength(sideBySide ? 2 : 1)
+    expect(notesLines.every((line) =>
+      !line.classList.contains('cm-changedLine') &&
+      line.querySelector('.cm-insertedLine, .cm-deletedLine, .cm-changedText') === null
+    )).toBe(true)
+    expect(Array.from(parent.querySelectorAll('.cm-deletedLine'), (line) => line.textContent).filter(Boolean))
+      .toEqual(['appended'])
+    expect(parent.querySelector('.cm-insertedLine')).toBeNull()
+    merge.destroy()
   })
 
   test('onDocChange fires for edits, and Mod-s calls onSave', () => {
