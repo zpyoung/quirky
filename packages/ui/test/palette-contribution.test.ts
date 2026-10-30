@@ -4,7 +4,7 @@ import { join, resolve } from 'node:path'
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
 import { act, createElement as h } from 'react'
 import type { Root } from 'react-dom/client'
-import { PLUGIN_API_VERSION, type QuirkyClient, type QuirkyEvent, type UiCommandEntry, type UiModel, type UiPluginContext, type UiPluginModule } from '@quirky/protocol'
+import { PLUGIN_API_VERSION, type QuirkyClient, type QuirkyEvent, type UiCommandEntry, type UiModel, type UiPluginContext, type UiPluginModule, type UiToolEntry } from '@quirky/protocol'
 import type { Connection } from '../src/connection'
 import { AppContext, type AppContextValue } from '../src/context'
 import { WindowPluginHost, type HostState } from '../src/plugins/host'
@@ -243,13 +243,14 @@ function agentListing(agents: ListedAgent[]) {
   }
 }
 
-async function mountCommandPalette(loadAgents: () => Promise<unknown>, commands: UiCommandEntry[] = displayedCommands) {
+async function mountCommandPalette(loadAgents: () => Promise<unknown>, commands: UiCommandEntry[] = displayedCommands, tools: UiToolEntry[] = []) {
   const eventListeners = new Set<(event: QuirkyEvent) => void>()
   const connectedListeners = new Set<() => void>()
   const hostListeners = new Set<() => void>()
   const runCommands: string[] = []
+  const openTools: string[] = []
   const state = {
-    model: { commands, tools: [], views: [] } as unknown as UiModel,
+    model: { commands, tools, views: [] } as unknown as UiModel,
     layout: { view: null },
     windowRoute: null
   } as HostState
@@ -263,6 +264,9 @@ async function mountCommandPalette(loadAgents: () => Promise<unknown>, commands:
     },
     async runCommand(id: string) {
       runCommands.push(id)
+    },
+    openTool(id: string) {
+      openTools.push(id)
     }
   } as unknown as WindowPluginHost
   const connection = {
@@ -303,6 +307,11 @@ async function mountCommandPalette(loadAgents: () => Promise<unknown>, commands:
     has(title: string) {
       return [...container!.querySelectorAll('[role="option"]')].some((option) => option.textContent?.includes(title))
     },
+    titles() {
+      return [...container!.querySelectorAll<HTMLElement>('[role="option"]')].map((option) =>
+        option.querySelector('.ui-list-row__title')?.textContent ?? ''
+      )
+    },
     async search(query: string) {
       await act(async () => {
         const input = container!.querySelector<HTMLInputElement>('input')!
@@ -319,6 +328,9 @@ async function mountCommandPalette(loadAgents: () => Promise<unknown>, commands:
     },
     get runCommands() {
       return runCommands
+    },
+    get openTools() {
+      return openTools
     },
     async agentsChanged() {
       await act(async () => {
@@ -447,6 +459,38 @@ test('palette Enter keeps the selected agent when an earlier launch disappears',
   await palette.keyDown('Enter')
 
   expect(palette.runCommands).toEqual(['command:quirky.agents/new-codex-tab'])
+})
+
+test('palette prioritizes exact title matches while preserving result order and Enter opens the tool', async () => {
+  const commands = [
+    paletteCommand('collapse', 'Collapse', 'acme.files'),
+    paletteCommand('filter-changed', 'Filter Changed', 'acme.files'),
+    paletteCommand('search', 'Search', 'acme.files'),
+    paletteCommand('select', 'Select', 'acme.files')
+  ]
+  const tool: UiToolEntry = {
+    id: 'tool:acme.files/files',
+    title: 'Files',
+    icon: 'folder',
+    defaultSlot: 'right-top',
+    contributionId: 'acme.files',
+    aliases: []
+  }
+  const palette = await mountCommandPalette(async () => agentListing([]), commands, [tool])
+
+  await palette.search('  fIlEs  ')
+  expect(palette.titles()).toEqual(['Files', 'Collapse', 'Filter Changed', 'Search', 'Select'])
+
+  await palette.search('file')
+  expect(palette.titles()).toEqual(['Collapse', 'Filter Changed', 'Search', 'Select', 'Files'])
+
+  await palette.search('')
+  expect(palette.titles()).toEqual(['Collapse', 'Filter Changed', 'Search', 'Select', 'Files'])
+
+  await palette.search(' fIlEs ')
+  await palette.keyDown('Enter')
+  expect(palette.openTools).toEqual([tool.id])
+  expect(palette.runCommands).toEqual([])
 })
 
 test('palette reloads the agent list after the connection reconnects', async () => {

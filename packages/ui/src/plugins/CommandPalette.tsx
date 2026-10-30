@@ -4,6 +4,7 @@ import type { Connection } from '../connection'
 import { Dialog, EmptyState, ListRow, TextField } from '../design-system'
 import { useConnection, usePluginHost, usePluginState } from '../context'
 import { useAttention } from '../shell/attention'
+import { SLOT_LABELS } from '../shell/tool-slot-labels'
 import { paletteKey } from './palette'
 
 type PaletteEntry = {
@@ -79,7 +80,7 @@ function entriesOf(
     ...tools.map((tool) => ({
       id: tool.id,
       title: tool.title,
-      description: `Tool · ${tool.defaultSlot}`,
+      description: `Tool · ${SLOT_LABELS[tool.defaultSlot]}`,
       kind: 'tool' as const
     })),
     ...views.map((view) => ({
@@ -99,7 +100,16 @@ function entriesOf(
       kind: 'worktree' as const
     }))
   ]
-  return entries.filter((entry) => matches(entry, query))
+  const matching = entries.filter((entry) => matches(entry, query))
+  if (query === '') return matching
+
+  const exactTitleMatches: PaletteEntry[] = []
+  const otherMatches: PaletteEntry[] = []
+  for (const entry of matching) {
+    if (entry.title.trim().toLowerCase() === query) exactTitleMatches.push(entry)
+    else otherMatches.push(entry)
+  }
+  return exactTitleMatches.concat(otherMatches)
 }
 
 /** Search effective commands, tools, views and canonical worktree snapshots. */
