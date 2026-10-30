@@ -68,6 +68,26 @@ async function expectImageResourceUnavailable(world: World, source: string): Pro
   expect([404, 410]).toContain(response.status)
 }
 
+test('Source Control file diffs are distinguishable from an open editor tab', async () => {
+  const world = await boot(scratch, { published: false })
+  world.write('README.md', 'changed readme\n')
+  await world.agent.callAny('quirky.editor/open', {
+    worktree: `id:${world.feat.id}`,
+    path: 'README.md',
+    mode: 'source'
+  })
+  await world.win.waitFor(() => rowOf('README.md') && [...document.querySelectorAll('.qt-tab-title')].some((element) => element.textContent === 'README.md'))
+
+  clickRow('README.md')
+  const opened = await world.win.waitFor(async () => diffTabs(await terminalWorkspace(world)).find(({ tab }) =>
+    record(tab.input).path === 'README.md' && record(tab.input).tabId === tab.id
+  ))
+  await world.win.waitFor(() => q(`[data-tab="${String(opened.tab.id)}"] .qt-tab-title`))
+  const titles = [...document.querySelectorAll('.qt-tab-title')].map((element) => element.textContent)
+  expect(titles.filter((title) => title === 'README.md')).toHaveLength(1)
+  expect(titles.some((title) => title?.includes('README.md') && /\bdiff\b/i.test(title))).toBe(true)
+}, SLOW)
+
 test('Source Control preview replaces only a clean hosted tab, promotes on double click or pin, and splits with Option-click', async () => {
   const world = await boot(scratch, { published: false })
   world.write('math.ts', 'changed math\n')
