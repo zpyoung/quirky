@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalS
 import { createPortal } from 'react-dom'
 import { createRoot } from 'react-dom/client'
 import type { OwnerSessionHostRef, OwnerSessionWorkspaceRef, Session, UiPluginContext } from '@quirky/protocol'
-import { Badge, Button, ContextMenuList, EmptyState, FormRow, IconButton, SectionHeader, SelectField, Tabs, TextField, type ContextMenuItem } from '@quirky/ui'
+import { Badge, Button, ContextMenuList, ControlIcon, EmptyState, FormRow, IconButton, SectionHeader, SelectField, Tabs, TextField, ToolPanelFrame, ToolPanelTabs, ToolPanelTools, type ContextMenuItem } from '@quirky/ui'
 import { HISTORY_AGENTS } from '../agents'
 import type { HostedSession, ViewState } from '../types'
 import { EvidenceText } from './evidence'
@@ -715,11 +715,9 @@ function HistoryPanel({ context, report }: HistoryPanelProps) {
   const [menuId, setMenuId] = useState<string | null>(null)
   const [remoteResume, setRemoteResume] = useState<RemoteResumeState | null>(null)
   const remoteResumeGeneration = useRef(0)
-  const [width, setWidth] = useState(700)
   const [scrollTop, setScrollTop] = useState(0)
   const [viewportHeight, setViewportHeight] = useState(520)
   const [now, setNow] = useState(Date.now())
-  const root = useRef<HTMLDivElement>(null)
   const list = useRef<HTMLDivElement>(null)
   const searchInput = useRef<HTMLInputElement>(null)
   const listRequestKey = useRef('')
@@ -763,14 +761,6 @@ function HistoryPanel({ context, report }: HistoryPanelProps) {
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 30_000)
     return () => window.clearInterval(timer)
-  }, [])
-
-  useEffect(() => {
-    const element = root.current
-    if (!element || typeof ResizeObserver === 'undefined') return
-    const observer = new ResizeObserver((entries) => setWidth(entries[0]?.contentRect.width ?? element.clientWidth))
-    observer.observe(element)
-    return () => observer.disconnect()
   }, [])
 
   useEffect(() => {
@@ -982,38 +972,35 @@ function HistoryPanel({ context, report }: HistoryPanelProps) {
     : snapshot.list.result?.hasMore === true
   const totalLimit = snapshot.view.sessionLimit
 
-  return <div className="qvh-root" ref={root} data-narrow={width < 300 ? 'true' : 'false'} data-vault-history onKeyDown={keyDown}>
-    <div className="qvh-header">
-      <SectionHeader title={width < 300 ? 'Agents' : 'Agent Session History'} actions={<div className="qvh-head-actions">
+  return <div className="qvh-root" data-vault-history onKeyDown={keyDown}>
+    <ToolPanelTabs>
+      <Tabs
+        label="History scope"
+        items={[
+          { id: 'workspace', label: 'Workspace', disabled: !scopeAvailability.workspace },
+          { id: 'project', label: 'Project', disabled: !scopeAvailability.project },
+          { id: 'all', label: 'All' }
+        ]}
+        value={scope}
+        onChange={(value) => void model.setView({ scope: value as ViewState['scope'] }).catch(() => {})}
+      />
+    </ToolPanelTabs>
+    <ToolPanelTools>
+      <IconButton label="View options" aria-expanded={optionsOpen} title="View options" data-vault-adjustment-count={adjustmentCount(snapshot.view)} onClick={() => setOptionsOpen((open) => !open)}>
+        <ControlIcon name="gear" />{adjustmentCount(snapshot.view) ? <Badge tone="accent">{adjustmentCount(snapshot.view)}</Badge> : null}
+      </IconButton>
+      <IconButton label="Refresh Session History" title="Refresh Session History" data-vault-refresh disabled={snapshot.list.loading || snapshot.search.loading} onClick={() => {
+        if (!snapshot.viewReady) void model.retryView()
+        else if (snapshot.searchStatus?.enabled && snapshot.view.query.trim()) void model.runSearch({ freshness: 'wait-until-current' })
+        else void model.refreshList(true)
+      }}><ControlIcon name="arrows-clockwise" /></IconButton>
+    </ToolPanelTools>
+    <div className="qvh-controls">
+      <div className="qvh-control-line">
         <SelectField label="Host" id="qvh-host-select" className="qvh-host-select" aria-label="History host" value={snapshot.view.host} onChange={(event) => void model.setView({ host: event.currentTarget.value }).catch(() => {})}>
           <option value="local">Local Mac</option><option value="all">All hosts</option>
           {snapshot.hostOutcomes.filter((host) => host.hostId !== 'local' && host.hostId !== 'all').map((host) => <option key={host.hostId} value={host.hostId}>{host.label}{host.kind === 'ok' ? '' : ` · ${host.kind}`}</option>)}
         </SelectField>
-        <IconButton label="View options" aria-expanded={optionsOpen} title="View options" data-vault-adjustment-count={adjustmentCount(snapshot.view)} onClick={() => setOptionsOpen((open) => !open)}>
-          <span aria-hidden="true">⛭</span>{adjustmentCount(snapshot.view) ? <Badge tone="accent">{adjustmentCount(snapshot.view)}</Badge> : null}
-        </IconButton>
-        <IconButton label="Refresh Session History" title="Refresh Session History" data-vault-refresh disabled={snapshot.list.loading || snapshot.search.loading} onClick={() => {
-          if (!snapshot.viewReady) void model.retryView()
-          else if (snapshot.searchStatus?.enabled && snapshot.view.query.trim()) void model.runSearch({ freshness: 'wait-until-current' })
-          else void model.refreshList(true)
-        }}>↻</IconButton>
-      </div>} />
-      <div className="qvh-subtitle">{snapshot.list.result || snapshot.view.query ? 'Indexed history' : 'Resume past sessions'}</div>
-    </div>
-    <div className="qvh-controls">
-      <div className="qvh-control-line">
-        <div className="qvh-scope-switch">
-          <Tabs
-            label="History scope"
-            items={[
-              { id: 'workspace', label: 'Workspace', disabled: !scopeAvailability.workspace },
-              { id: 'project', label: 'Project', disabled: !scopeAvailability.project },
-              { id: 'all', label: 'All' }
-            ]}
-            value={scope}
-            onChange={(value) => void model.setView({ scope: value as ViewState['scope'] }).catch(() => {})}
-          />
-        </div>
         <div className="qvh-search-line">
           <TextField ref={searchInput} className="qvh-search-input" label="Search sessions" type="search" aria-label="Search sessions" placeholder="Search sessions" data-vault-search value={snapshot.view.query} onChange={(event) => setQuery(event.currentTarget.value)} />
         </div>
@@ -1167,6 +1154,9 @@ function ViewOptions({ model, snapshot, onClose }: { model: VaultWindowModel; sn
 export function mountHistoryPanel(context: UiPluginContext, element: HTMLElement, props: { report?(state: unknown): void }): () => void {
   Object.assign(element.style, { display: 'flex', flexDirection: 'column', flex: '1', minHeight: '0', minWidth: '0', position: 'relative' })
   const root = createRoot(element)
-  root.render(<HistoryPanel context={context} report={props.report} />)
+  const panel = <HistoryPanel context={context} report={props.report} />
+  // a frame that finds a host above it after first paint would remount the panel and its model
+  const hosted = element.closest('[data-ui-tool-panel-frame]') !== null
+  root.render(hosted ? panel : <ToolPanelFrame title="Agent Session History">{panel}</ToolPanelFrame>)
   return () => root.unmount()
 }
