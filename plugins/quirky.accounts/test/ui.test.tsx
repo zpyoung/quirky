@@ -249,6 +249,90 @@ test('a late account-list response cannot replace a newer selected account in Us
   expect(toastCalls).toEqual([])
 })
 
+test('the Claude status chip is an accessible button that opens Claude details and account choices', async () => {
+  listResponse = () => accountState(1, 'Current Claude account')
+  usageValue = {
+    ...emptyUsage,
+    providers: emptyUsage.providers.map((snapshot) => snapshot.provider === 'claude'
+      ? { ...snapshot, accountId: 'managed-1', status: 'ok', weekly: { usedPercent: 62, windowMinutes: 10_080, resetsAt: 1_000, resetDescription: 'soon' } }
+      : snapshot)
+  }
+  uiStateValue = { open: false, provider: 'codex', expanded: 'codex', settingsSection: null }
+  const context = makeContext()
+  await act(async () => {
+    activate(context)
+    const mount = provided.get('status-bar:quirky.accounts/usage') as (element: HTMLElement, props: { input?: unknown; report?(state: unknown): void }) => (() => void) | void
+    unregister = mount(container, {}) as (() => void) | undefined
+  })
+  await settle()
+
+  expect(container.querySelector('[role="dialog"]')).toBeNull()
+  const chip = container.querySelector('.usage-chips [data-provider="claude"]')
+  if (!(chip instanceof HTMLButtonElement)) throw new Error('Missing Claude usage chip button')
+  expect(chip.type).toBe('button')
+  expect(chip.getAttribute('aria-label')).toContain('Claude')
+  expect(chip.getAttribute('aria-label')).toContain('62% used')
+  expect(chip.getAttribute('aria-label')).toContain('Open')
+
+  await act(async () => { chip.click() })
+  await settle()
+
+  expect(container.querySelector('[aria-label="Claude usage details"]')).not.toBeNull()
+  expect(container.querySelector('[aria-label="Claude account switcher"]')).not.toBeNull()
+  expect(container.querySelector('[aria-label="Codex account switcher"]')).toBeNull()
+  expect(buttonByLabel('Expand account choices').getAttribute('aria-expanded')).toBe('false')
+})
+
+test('an unavailable Claude status chip remains an accessible action for Claude details', async () => {
+  listResponse = () => accountState(1, 'Current Claude account')
+  uiStateValue = { open: false, provider: null, expanded: null, settingsSection: null }
+  const context = makeContext()
+  await act(async () => {
+    activate(context)
+    const mount = provided.get('status-bar:quirky.accounts/usage') as (element: HTMLElement, props: { input?: unknown; report?(state: unknown): void }) => (() => void) | void
+    unregister = mount(container, {}) as (() => void) | undefined
+  })
+  await settle()
+
+  const chip = container.querySelector('.usage-chips [data-provider="claude"]')
+  if (!(chip instanceof HTMLButtonElement)) throw new Error('Missing unavailable Claude usage chip button')
+  expect(chip.getAttribute('aria-label')).toContain('Claude')
+  expect(chip.getAttribute('aria-label')).toContain('Unavailable')
+  expect(chip.getAttribute('aria-label')).toContain('Open')
+  await act(async () => { chip.click() })
+  await settle()
+
+  expect(container.querySelector('[aria-label="Claude usage details"]')).not.toBeNull()
+  expect(container.querySelector('[aria-label="Claude account switcher"]')).not.toBeNull()
+})
+
+test('the Codex status chip opens Codex details and its account switcher', async () => {
+  const scope = { accountId: 'codex-1', accountRevision: 1, offerRevision: 'codex-offer' }
+  listResponse = () => codexState(1, 'codex-1', 'Codex account')
+  usageValue = codexUsage(scope)
+  uiStateValue = { open: false, provider: 'claude', expanded: 'claude', settingsSection: null }
+  const context = makeContext()
+  await act(async () => {
+    activate(context)
+    const mount = provided.get('status-bar:quirky.accounts/usage') as (element: HTMLElement, props: { input?: unknown; report?(state: unknown): void }) => (() => void) | void
+    unregister = mount(container, {}) as (() => void) | undefined
+  })
+  await settle()
+
+  expect(container.querySelector('[role="dialog"]')).toBeNull()
+  const chip = container.querySelector('.usage-chips [data-provider="codex"]')
+  if (!(chip instanceof HTMLButtonElement)) throw new Error('Missing Codex usage chip button')
+  expect(chip.getAttribute('aria-label')).toContain('Codex')
+  expect(chip.getAttribute('aria-label')).toContain('75% used')
+  await act(async () => { chip.click() })
+  await settle()
+
+  expect(container.querySelector('[aria-label="Codex usage details"]')).not.toBeNull()
+  expect(container.querySelector('[aria-label="Codex account switcher"]')).not.toBeNull()
+  expect(container.querySelector('[aria-label="Claude account switcher"]')).toBeNull()
+  expect(buttonByLabel('Expand account choices').getAttribute('aria-expanded')).toBe('false')
+})
+
 test('a reset confirmation keeps the displayed Codex scope and request ID across selection changes and retry', async () => {
   const scopeA = { accountId: 'codex-a', accountRevision: 1, offerRevision: 'offer-a' }
   const scopeB = { accountId: 'codex-b', accountRevision: 2, offerRevision: 'offer-b' }

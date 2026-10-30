@@ -45,29 +45,45 @@ export function SnapshotLine({ snapshot }: { snapshot: ProviderSnapshot }) {
   </div>
 }
 
-function StatusChip({ snapshot, preferences }: { snapshot: ProviderSnapshot; preferences: Preferences }) {
+function StatusChip({ store, snapshot, preferences }: { store: AccountsUiStore; snapshot: ProviderSnapshot; preferences: Preferences }) {
   const state = snapshotStatus(snapshot)
   const headline = compactWindow(snapshot)
   const windows = windowEntries(snapshot)
   const tooltip = [PROVIDER_LABELS[snapshot.provider], state.label, ageLabel(snapshot.updatedAt), providerSource(snapshot)]
     .filter(Boolean).join(' · ')
-  if (snapshot.status === 'unavailable') return <span className={`usage-chip status-${state.kind}`} data-provider={snapshot.provider} title={tooltip} aria-label={`${PROVIDER_LABELS[snapshot.provider]}: ${state.label}`}>
+  const actionSummary = headline && snapshot.status !== 'idle' && snapshot.status !== 'unavailable'
+    ? `${displayPercent(headline.window.usedPercent, preferences.direction)}% ${preferences.direction}${snapshot.status === 'error' || snapshot.status === 'fetching' ? ` · ${state.label}` : ''}`
+    : state.label
+  const chipProps = {
+    type: 'button' as const,
+    'data-provider': snapshot.provider,
+    title: tooltip,
+    'aria-label': `Open ${PROVIDER_LABELS[snapshot.provider]} usage details — ${actionSummary}`,
+    onClick: () => {
+      void store.setUiState({
+        open: true,
+        provider: snapshot.provider,
+        ...(snapshot.provider === 'claude' || snapshot.provider === 'codex' ? { expanded: null } : {})
+      })
+    }
+  }
+  if (snapshot.status === 'unavailable') return <Button {...chipProps} className={`usage-chip status-${state.kind}`}>
     <Letter provider={snapshot.provider} />{preferences.density === 'normal' && <span>--</span>}
-  </span>
-  if (snapshot.status === 'idle' || snapshot.status === 'fetching' && !headline) return <span className="usage-chip status-loading loading-indicator" data-provider={snapshot.provider} title={tooltip} aria-label={`${PROVIDER_LABELS[snapshot.provider]}: ${state.label}`}>
+  </Button>
+  if (snapshot.status === 'idle' || snapshot.status === 'fetching' && !headline) return <Button {...chipProps} className="usage-chip status-loading loading-indicator">
     <Letter provider={snapshot.provider} />{preferences.density === 'normal' && <span>···</span>}
-  </span>
-  if (!headline) return <span className={`usage-chip ${snapshot.status === 'error' ? 'status-error' : 'status-loading'}`} data-provider={snapshot.provider} title={tooltip} aria-label={`${PROVIDER_LABELS[snapshot.provider]}: ${state.label}`}>
+  </Button>
+  if (!headline) return <Button {...chipProps} className={`usage-chip ${snapshot.status === 'error' ? 'status-error' : 'status-loading'}`}>
     <Letter provider={snapshot.provider} />{preferences.density === 'normal' && <span>{snapshot.status === 'error' ? '! ' : ''}{state.label}</span>}
-  </span>
-  return <span className="usage-chip" data-provider={snapshot.provider} title={tooltip} aria-label={`${PROVIDER_LABELS[snapshot.provider]} ${displayPercent(headline.window.usedPercent, preferences.direction)}% ${preferences.direction}`}>
+  </Button>
+  return <Button {...chipProps} className="usage-chip">
     <Letter provider={snapshot.provider} />
     {preferences.density === 'normal' && (preferences.mode === 'compact'
       ? <span style={{ color: meterColor(headline.window.usedPercent) }}>{displayPercent(headline.window.usedPercent, preferences.direction)}% {formatReset(headline.window)}</span>
       : <span className="usage-detailed-chip">{windows.map(({ name, window }) => <span key={name} style={{ color: meterColor(window.usedPercent) }}>{name} {displayPercent(window.usedPercent, preferences.direction)}% <i className="meter" aria-hidden="true"><i style={{ width: `${displayPercent(window.usedPercent, preferences.direction)}%`, backgroundColor: meterColor(window.usedPercent) }} /></i></span>)}</span>)}
     {snapshot.status === 'error' && <span className="status-error" aria-label={state.label}>!</span>}
     {snapshot.status === 'fetching' && <span className="loading-indicator" aria-label="Refreshing">···</span>}
-  </span>
+  </Button>
 }
 
 function UsageControls({ preferences, setPreferences }: { preferences: Preferences; setPreferences(patch: Partial<Preferences>): Promise<void> }) {
@@ -556,7 +572,7 @@ export function StatusBarUsage({ store, report }: { store: AccountsUiStore; repo
     {!hidden && <>
       <Button ref={triggerRef} type="button" className="usage-trigger" aria-label="Open Usage" aria-expanded={snapshot.ui.open} onClick={() => void store.setUiState({ open: !snapshot.ui.open })}>Usage <small>{preferences?.direction === 'remaining' ? 'Remaining' : 'Used'}</small></Button>
       {!showEmptyCta && <div ref={chipsRef} className="usage-chips" aria-label="Provider usage status bar">
-            {visibleChips.map((provider) => <StatusChip key={provider.provider} snapshot={provider} preferences={preferences ?? DEFAULT_USAGE_PREFERENCES} />)}
+            {visibleChips.map((provider) => <StatusChip key={provider.provider} store={store} snapshot={provider} preferences={preferences ?? DEFAULT_USAGE_PREFERENCES} />)}
             {collapsed.length > 0 && <Button type="button" className="usage-chip" aria-label={`${collapsed.length} more providers`} title={tooltip} onClick={() => void store.setUiState({ open: true })}>+{collapsed.length}</Button>}
           </div>}
       <IconButton ref={refreshRef} className="usage-refresh" label="Refresh rate limits" title="Refresh usage data" disabled={snapshot.refreshing || scopeLoading} onClick={() => void store.refresh()}>↻</IconButton>
@@ -569,7 +585,7 @@ export function StatusBarUsage({ store, report }: { store: AccountsUiStore; repo
       <Button type="button" onClick={() => setContextMenu(false)}>Close menu</Button>
     </div>}
     <UsagePopover store={store} accounts={snapshot.accounts} usage={snapshot.usage} credentials={snapshot.credentials} />
-    <div ref={measureRef} className="usage-measure" aria-hidden="true" inert>{chips.map((provider) => <StatusChip key={provider.provider} snapshot={provider} preferences={preferences ?? DEFAULT_USAGE_PREFERENCES} />)}</div>
+    <div ref={measureRef} className="usage-measure" aria-hidden="true" inert>{chips.map((provider) => <StatusChip key={provider.provider} store={store} snapshot={provider} preferences={preferences ?? DEFAULT_USAGE_PREFERENCES} />)}</div>
     <div ref={moreMeasureRef} className="usage-measure" aria-hidden="true" inert>{chips.map((_, index) => <Button key={index + 1} type="button" className="usage-chip" data-collapsed-count={index + 1} aria-hidden="true" tabIndex={-1} disabled>+{index + 1}</Button>)}</div>
   </div>
 }
