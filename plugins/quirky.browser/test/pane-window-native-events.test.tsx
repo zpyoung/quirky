@@ -93,6 +93,7 @@ function makeContext(): UiPluginContext {
       calls.push({ method, ...(params ? { params } : {}) })
       if (method === 'quirky.browser/paneState') return paneState
       if (method === 'quirky.browser/preferencesState') return PREFERENCES_STATE
+      if (method === 'quirky.browser/identityGet') return { active: 'native' }
       if (method === 'quirky.browser/preferencesState') return { profiles: [], identity: {}, imports: {}, localhostLabels: {} }
       if (method === 'quirky.browser/paneSuggestions') return { suggestions: [] }
       if (method === 'quirky.browser/paneNativeRequest') {
@@ -160,6 +161,8 @@ async function mountWindow(): Promise<void> {
     root.render(<BrowserPaneWindow context={makeContext()} input={{ pane: 'pane-1' }} />)
     await settleUI()
   })
+  // the mount waits on the identity lookup, which takes a varying number of turns to come back
+  for (let attempt = 0; attempt < 20 && !mounted; attempt += 1) await act(settleUI)
   if (!mounted) throw new Error('the Native view was not mounted')
 }
 

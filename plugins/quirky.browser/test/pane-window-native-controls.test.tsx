@@ -114,6 +114,7 @@ function makeContext(): UiPluginContext {
       calls.push({ method, ...(params ? { params } : {}) })
       if (method === 'quirky.browser/paneState') return paneState
       if (method === 'quirky.browser/preferencesState') return PREFERENCES_STATE
+      if (method === 'quirky.browser/identityGet') return { active: 'native' }
       if (method === 'quirky.browser/paneSuggestions') return { suggestions: [] }
       return undefined
     },
