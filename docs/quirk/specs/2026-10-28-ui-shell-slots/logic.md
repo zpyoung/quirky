@@ -31,7 +31,7 @@ SC4. Resize left/right/bottom and split two tools: values are bounded, persist p
 
 SC5. Registration coverage: all effective panel/sidebar/activity contributions have a destination (direct tool or explicit deduplicated alias); view registrations remain center view types, commands appear in search, status registrations render in the status bar, settings and overlays retain their dedicated hosts. A failed plugin shows its name and Reload within only its tool. Other tools/views remain usable.
 
-SC6. Titlebar displays canonical selected project/worktree breadcrumb and a command-search trigger labeled ⌘K. Existing shortcuts remain; ⌘K opens search without bypassing focused editor/terminal rules. Search contains commands, tools, views and worktrees; worktree activation uses the canonical selection API, never local selection.
+SC6. Titlebar displays canonical selected project/worktree breadcrumb and a command-search trigger labeled ⌘K. Existing shortcuts remain; ⌘K opens search without bypassing focused editor/terminal rules. Search contains commands, tools, views and worktrees; worktree activation uses the canonical selection API, never local selection. A search with no matches displays "No results" after worktrees load successfully.
 
 SC7. Center tabs show actually opened view contributions, preserve input when switching and close through the exact current window's route. Moving focus between a tool and the center keeps the active view mounted, preserving drafts and embedded state. Auxiliary windows retain their exact-window behavior and do not acquire global tool chrome or change other windows' views.
 
