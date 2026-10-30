@@ -1,4 +1,6 @@
+import type { UiToolHue } from '@quirky/protocol'
 import type { ButtonHTMLAttributes, HTMLAttributes, InputHTMLAttributes, ReactNode, Ref, RefObject, SelectHTMLAttributes, TextareaHTMLAttributes } from 'react'
+import type { ContextMenuItem } from './context-menu-contracts'
 
 /** Shared graphite presentation contracts; feature state and side effects stay with the caller. */
 export type UiTheme = 'dark' | 'light'
@@ -43,3 +45,25 @@ export type ToolPanelFrameProps = { title: string; actions?: ReactNode; onMinimi
 export type ToolPanelActionsProps = { children: ReactNode }
 export type InlineAgentCardProps = { title: string; description?: ReactNode; status: UiStatus; action?: UiAction }
 export type UiLayoutProps = HTMLAttributes<HTMLDivElement>
+/** Icon props: `size` is the square edge in CSS pixels (default 16); an icon is decorative unless given a `label`. */
+export type ToolIconProps = { name: string; hue: UiToolHue; size?: number; label?: string }
+export type ControlIconProps = { name: string; size?: number; label?: string }
+export type FileIconProps = { path: string; size?: number; label?: string }
+export type ProjectTileProps = { name: string; color?: string | null; size?: number; label?: string }
+export type PopupItem = ContextMenuItem & {
+  /** Leading mark such as a status dot or project tile. */
+  lead?: ReactNode
+  /** Second line under the label; the search field matches it too. */
+  subtitle?: string
+  /** Draws the pill on the row. */
+  selected?: boolean
+  /** Right-aligned content; a shortcut in `key` renders after it. */
+  trailing?: ReactNode
+}
+export type PopupMenuProps = {
+  anchor: HTMLElement
+  items: PopupItem[]
+  title?: string
+  searchPlaceholder?: string
+  onClose(): void
+}

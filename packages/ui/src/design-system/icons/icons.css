@@ -1,0 +1,32 @@
+.ui-tool-icon,
+.ui-control-icon,
+.ui-file-icon { flex: none; vertical-align: middle; }
+.ui-icon-fallback {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: var(--ui-icon-box, var(--ui-icon-size));
+  height: var(--ui-icon-box, var(--ui-icon-size));
+  color: var(--ui-muted);
+  font-size: var(--ui-font-label);
+  font-weight: 600;
+  line-height: 1;
+  text-transform: uppercase;
+}
+.ui-project-tile {
+  --ui-tile-size: var(--ui-icon-size);
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: var(--ui-tile-size);
+  height: var(--ui-tile-size);
+  border-radius: var(--ui-radius-mark);
+  color: var(--ui-tile-text);
+  font-size: calc(var(--ui-tile-size) * 0.5);
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0;
+  user-select: none;
+}

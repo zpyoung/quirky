@@ -1,7 +1,7 @@
 :root,
 [data-theme='dark'] {
   color-scheme: dark;
-  --ui-rail: #101114;
+  --ui-rail: #0c0d0f;
   --ui-surface: #16171b;
   --ui-selected: #22242b;
   --ui-border: #24262c;
@@ -11,6 +11,29 @@
   --ui-working: #4cc38a;
   --ui-needs-you: #e5b454;
   --ui-failing: #ef6b73;
+  --ui-hue-blue: #6fb3ff;
+  --ui-hue-violet: #c79bff;
+  --ui-hue-teal: #5fd0d6;
+  --ui-hue-coral: #ff9d7a;
+  --ui-hue-magenta: #e48ad0;
+  --ui-hue-slate: #9fb0c8;
+  --ui-hue-azure: #7fc4ff;
+  --ui-hue-sand: #d6b58c;
+  --ui-hue-mint: #6dd6b4;
+  --ui-hue-lilac: #b8a4ff;
+  --ui-hue-rose: #f29bb6;
+  --ui-hue-tan: #e6c3a0;
+  --ui-hue-cyan: #8fd0e8;
+  --ui-hue-plum: #c9a6f0;
+  --ui-tile-text: #ffffff;
+  --ui-tile-1: #3f6fd0;
+  --ui-tile-2: #7b52c6;
+  --ui-tile-3: #0f7f8a;
+  --ui-tile-4: #b4532f;
+  --ui-tile-5: #a8408a;
+  --ui-tile-6: #50698a;
+  --ui-tile-7: #8a6a1c;
+  --ui-tile-8: #3a7d52;
   --ui-transparent: transparent;
   --ui-font-title: 15px;
   --ui-font-body: 12px;
@@ -27,6 +50,7 @@
   --ui-radius-mark: 5px;
   --ui-radius-control: 7px;
   --ui-radius-window: 10px;
+  --ui-card-gap: 5px;
   --ui-row-single: 26px;
   --ui-row-double: 34px;
   --ui-row-compact: 32px;
@@ -41,7 +65,7 @@
 
 [data-theme='light'] {
   color-scheme: light;
-  --ui-rail: #f4f5f7;
+  --ui-rail: #eef0f3;
   --ui-surface: #ffffff;
   --ui-selected: #e7e9ef;
   --ui-border: #e3e5ea;
@@ -51,6 +75,28 @@
   --ui-working: #1f9d63;
   --ui-needs-you: #c98a0b;
   --ui-failing: #d6455d;
+  --ui-hue-blue: #2f74c0;
+  --ui-hue-violet: #7f4fc9;
+  --ui-hue-teal: #14808a;
+  --ui-hue-coral: #c9562f;
+  --ui-hue-magenta: #b3438f;
+  --ui-hue-slate: #566a84;
+  --ui-hue-azure: #2a78b8;
+  --ui-hue-sand: #8f6a3a;
+  --ui-hue-mint: #1a8a6b;
+  --ui-hue-lilac: #6a52c4;
+  --ui-hue-rose: #c04a70;
+  --ui-hue-tan: #94683c;
+  --ui-hue-cyan: #1f7f9e;
+  --ui-hue-plum: #8350bd;
+  --ui-tile-1: #2f62c0;
+  --ui-tile-2: #6c42b8;
+  --ui-tile-3: #0b6f79;
+  --ui-tile-4: #a64624;
+  --ui-tile-5: #962f7a;
+  --ui-tile-6: #44607f;
+  --ui-tile-7: #7a5c12;
+  --ui-tile-8: #2f6f45;
 }
 
 :root,

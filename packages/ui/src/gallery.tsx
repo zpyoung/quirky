@@ -1,20 +1,26 @@
 import { useRef, useState, type ReactNode } from 'react'
 import { createRoot } from 'react-dom/client'
+import type { UiToolHue } from '@quirky/protocol'
 import {
   Badge,
   Button,
+  ControlIcon,
   Dialog,
   EmptyState,
+  FileIcon,
   FormRow,
   IconButton,
   InlineAgentCard,
   ListRow,
   Menu,
+  PopupMenu,
+  ProjectTile,
   SectionHeader,
   StatusDot,
   Tabs,
   TextField,
   Toast,
+  ToolIcon,
   ToolPanelFrame
 } from '@quirky/ui'
 import '@quirky/ui/styles.css'
@@ -36,6 +42,11 @@ type CategoryName =
   | 'FormRow'
   | 'ToolPanelFrame'
   | 'InlineAgentCard'
+  | 'ToolIcon'
+  | 'ControlIcon'
+  | 'FileIcon'
+  | 'ProjectTile'
+  | 'PopupMenu'
 
 type CategoryProps = { name: CategoryName; theme: Theme; children: ReactNode }
 
@@ -344,6 +355,86 @@ function InlineAgentCardDemo({ theme }: { theme: Theme }) {
   )
 }
 
+const TOOL_ICON_SAMPLES: readonly [name: string, hue: UiToolHue][] = [
+  ['git-branch', 'blue'], ['tray', 'violet'], ['list-checks', 'teal'], ['robot', 'coral'], ['flow-arrow', 'magenta'],
+  ['device-mobile', 'slate'], ['git-diff', 'azure'], ['folders', 'sand'], ['check-circle', 'mint'],
+  ['chat-circle-dots', 'lilac'], ['git-pull-request', 'rose'], ['book-open-text', 'tan'], ['terminal-window', 'cyan'], ['command', 'plum']
+]
+const CONTROL_ICON_SAMPLES = ['plus', 'magnifying-glass', 'dots-three', 'minus', 'caret-down', 'arrows-clockwise', 'funnel', 'export', 'x', 'gear', 'globe']
+const FILE_SAMPLES = ['App.tsx', 'server.ts', 'main.py', 'lib.rs', 'main.go', 'README.md', 'package.json', 'Dockerfile', '.gitignore', 'styles.css', 'bun.lock', 'logo.png', 'unknown.xyz', 'Makefile']
+const PROJECT_SAMPLES: readonly [name: string, color: string | null][] = [
+  ['quirky', null], ['orca-fork', null], ['web_app', null], ['api', null], ['docs site', null], ['mobile', null], ['brand', '#c0408a'], ['status-clash', '#4cc38a']
+]
+
+function ToolIconDemo({ theme }: { theme: Theme }) {
+  return (
+    <Category name="ToolIcon" theme={theme}>
+      <div className="ui-cluster">
+        {TOOL_ICON_SAMPLES.map(([name, hue]) => <ToolIcon key={name} name={name} hue={hue} size={20} label={`${name} in ${hue}`} />)}
+        <ToolIcon name="not-an-icon" hue="slate" size={20} label="Unknown icon" />
+      </div>
+    </Category>
+  )
+}
+
+function ControlIconDemo({ theme }: { theme: Theme }) {
+  return (
+    <Category name="ControlIcon" theme={theme}>
+      <div className="ui-cluster">
+        {CONTROL_ICON_SAMPLES.map((name) => <ControlIcon key={name} name={name} size={20} label={name} />)}
+      </div>
+    </Category>
+  )
+}
+
+function FileIconDemo({ theme }: { theme: Theme }) {
+  return (
+    <Category name="FileIcon" theme={theme}>
+      <div className="ui-cluster">
+        {FILE_SAMPLES.map((path) => <FileIcon key={path} path={path} size={20} label={path} />)}
+      </div>
+    </Category>
+  )
+}
+
+function ProjectTileDemo({ theme }: { theme: Theme }) {
+  return (
+    <Category name="ProjectTile" theme={theme}>
+      <div className="ui-cluster">
+        {PROJECT_SAMPLES.map(([name, color]) => <ProjectTile key={name} name={name} color={color} size={24} label={`${name} project`} />)}
+      </div>
+    </Category>
+  )
+}
+
+function PopupMenuDemo({ theme }: { theme: Theme }) {
+  const [anchor, setAnchor] = useState<HTMLElement | null>(null)
+  const [choice, setChoice] = useState('No popup choice yet')
+  const choose = (label: string) => () => setChoice(`Popup choice: ${label}`)
+  return (
+    <Category name="PopupMenu" theme={theme}>
+      <Button onClick={(event) => setAnchor(event.currentTarget)}>Open popup</Button>
+      <Status name="popup">{choice}</Status>
+      {anchor ? (
+        <PopupMenu
+          anchor={anchor}
+          title="Projects"
+          searchPlaceholder="Search projects"
+          onClose={() => setAnchor(null)}
+          items={[
+            { label: 'All projects', onSelect: choose('All projects'), lead: <ControlIcon name="globe" /> },
+            { label: 'Recent', heading: true },
+            { label: 'quirky', subtitle: '4 worktrees', selected: true, lead: <ProjectTile name="quirky" />, trailing: <Badge tone="working" label="2 working">2</Badge>, onSelect: choose('quirky') },
+            { label: 'orca-fork', subtitle: '1 worktree', lead: <ProjectTile name="orca-fork" />, key: '⌘2', onSelect: choose('orca-fork') },
+            { label: 'web_app', subtitle: '3 worktrees', lead: <ProjectTile name="web_app" />, trailing: <Badge tone="needs-you" label="1 needs you">1</Badge>, onSelect: choose('web_app') },
+            { label: 'Add project', separatorBefore: true, lead: <ControlIcon name="plus" />, onSelect: choose('Add project') }
+          ]}
+        />
+      ) : null}
+    </Category>
+  )
+}
+
 function ThemeGallery({ theme, label }: { theme: Theme; label: string }) {
   return (
     <section className="ui-gallery-theme" data-theme={theme} aria-label={`${label} theme component examples`}>
@@ -364,6 +455,11 @@ function ThemeGallery({ theme, label }: { theme: Theme; label: string }) {
         <FormRowDemo theme={theme} />
         <ToolPanelFrameDemo theme={theme} />
         <InlineAgentCardDemo theme={theme} />
+        <ToolIconDemo theme={theme} />
+        <ControlIconDemo theme={theme} />
+        <FileIconDemo theme={theme} />
+        <ProjectTileDemo theme={theme} />
+        <PopupMenuDemo theme={theme} />
       </div>
     </section>
   )

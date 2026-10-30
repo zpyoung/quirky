@@ -223,3 +223,17 @@ test('the system appearance listener is removed when the hook is torn down', asy
   expect(media.listenerCount()).toBe(0)
   expect(media.removeCount).toBe(1)
 })
+
+test('the frame color is #0c0d0f in dark and #eef0f3 in light, written to --ui-rail from the theme background', async () => {
+  const media = installMedia(false)
+  await mount(model('default'), variables(DEFAULT_THEME))
+  const style = document.documentElement.style
+  expect(style.getPropertyValue('--ui-rail')).toBe('#eef0f3')
+  expect(style.getPropertyValue('--ui-rail')).toBe(style.getPropertyValue('--bg'))
+  media.setMatches(true)
+  expect(style.getPropertyValue('--ui-rail')).toBe('#0c0d0f')
+  expect(style.getPropertyValue('--ui-rail')).toBe(style.getPropertyValue('--bg'))
+  expect(DEFAULT_THEME.colors.bg).toBe('#0c0d0f')
+  expect(DARK_THEME.colors.bg).toBe('#0c0d0f')
+  expect(LIGHT_THEME.colors.bg).toBe('#eef0f3')
+})
