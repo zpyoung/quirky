@@ -10,7 +10,7 @@ import { useAppState, usePluginHost, usePluginState } from './context'
 import { CommandPalette } from './plugins/CommandPalette'
 import { OverlayLayer } from './plugins/OverlayLayer'
 import { useThemeVariables } from './plugins/useThemeVariables'
-import { ShellStatusBar, ShellTitleBar } from './shell/ShellChrome'
+import { ShellStatusBar } from './shell/StatusBar'
 import {
   fitToolShellGeometry,
   getToolShellOpenSlots,
@@ -19,6 +19,7 @@ import {
   toolShellCssVariables,
   type ToolShellChrome
 } from './shell/ToolShell'
+import { WindowBar } from './shell/WindowBar'
 
 function NoToken() {
   return (
@@ -115,7 +116,7 @@ export function App() {
         </div>
       ) : (
         <>
-          <ShellTitleBar onSettings={() => setSettingsOpen(true)} />
+          <WindowBar onSettings={() => setSettingsOpen(true)} />
           <div ref={workspace} className="shell-workspace" style={shellStyle}>
             <ToolShell
               geometry={geometry}

@@ -9,6 +9,12 @@ let harness: Harness | undefined
 let window_: HeadlessWindow | undefined
 afterEach(async () => { await window_?.stop(); window_ = undefined; await harness?.cleanup(); harness = undefined })
 
+async function openSettings(win: { click(selector: string): Promise<void>; waitFor<T>(check: () => T | undefined | null | false): Promise<T> }): Promise<void> {
+  await win.click('button[aria-label="More"]')
+  const row = await win.waitFor(() => [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((item) => item.textContent?.trim() === 'Settings'))
+  row.click()
+}
+
 test('Settings opens a contributed preferences view and removes its link when its plugin is disabled', async () => {
   const home = makeTempHome()
   writePlugin(join(home, 'plugins'), {
@@ -24,7 +30,7 @@ test('Settings opens a contributed preferences view and removes its link when it
   }` })
   harness = await startHarness({ home })
   window_ = await startHeadlessWindow({ home, runtime: harness.runtime })
-  await window_.click('button[aria-label="Settings"]')
+  await openSettings(window_)
   const button = await window_.waitFor(() => [...document.querySelectorAll('button')].find((el) => el.textContent === 'Fixture preferences'))
   expect(document.querySelector('[role="dialog"]')?.textContent).not.toContain('Ordinary work')
   button.click()
@@ -32,7 +38,7 @@ test('Settings opens a contributed preferences view and removes its link when it
   const client = await harness.connect('cli')
   expect((await client.call('ui.state', {})).layout.view).toEqual({ id: 'view:acme.preferences/preferences' })
   expect(document.querySelector('[role="dialog"]')).toBeNull()
-  await window_.click('button[aria-label="Settings"]')
+  await openSettings(window_)
   await client.call('plugin.disable', { id: 'acme.preferences' })
   await window_.waitFor(() => ![...document.querySelectorAll('button')].some((el) => el.textContent === 'Fixture preferences'))
   expect(document.querySelector('[role="dialog"]')?.textContent).toContain('Settings')

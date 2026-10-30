@@ -4,7 +4,7 @@ import { join, resolve } from 'node:path'
 import { QuirkyClient, type Ask, type AskSpec, type Repo, type Worktree } from '@quirky/protocol'
 import { rpcUrl } from '@quirky/protocol/node'
 import { makeTempDir } from '../../daemon/test/plugins/fixtures'
-import { attentionStoreFor } from '../src/shell/attention'
+import { attentionStoreFor, createAttentionStore } from '../src/shell/attention'
 import { bootWindow, closeWindows, installUiPlugin, provide, type WindowEnv } from './fixtures/window-env'
 
 const CURRENT_VIEW = 'view:acme.attention/current'
@@ -25,6 +25,12 @@ function attentionBuiltinPlugins(): string {
   for (const id of ['quirky.repo', 'quirky.worktree', 'quirky.cli', 'quirky.sidebar-extras', 'quirky.ask']) {
     symlinkSync(resolve(import.meta.dir, '../../../plugins', id), join(builtins, id))
   }
+  installUiPlugin(
+    builtins,
+    'quirky.session',
+    { view: [{ id: 'worktree', title: 'Session worktree' }] },
+    provide('view:quirky.session/worktree', `element.textContent = 'session ' + JSON.stringify(props.input ?? null)`)
+  )
   return builtins
 }
 
@@ -282,3 +288,121 @@ test('the Inbox More below cue tracks overflow, scrolling, resize, and content c
     globalThis.ResizeObserver = originalResizeObserver
   }
 }, 15_000)
+
+test('narrowing writes filterRepoIds and opens the project worktree when the selection falls outside', async () => {
+  const { env, attention, current, other, currentRepo, otherRepo } = await bootAttention()
+  expect(attention.getSnapshot().filterRepoIds).toEqual([])
+
+  expect(await attention.selectProject(otherRepo.id)).toBeNull()
+  expect(await env.agent.callAny('quirky.worktree/options', {})).toMatchObject({ filterRepoIds: [otherRepo.id] })
+  await env.win.waitFor(() => attention.getSnapshot().selectedWorktreeId === other.id)
+  expect(attention.getSnapshot().filterRepoIds).toEqual([otherRepo.id])
+
+  expect(await attention.selectProject(currentRepo.id)).toBeNull()
+  await env.win.waitFor(() => attention.getSnapshot().selectedWorktreeId === current.id)
+
+  expect(await attention.selectProject(null)).toBeNull()
+  expect(await env.agent.callAny('quirky.worktree/options', {})).toMatchObject({ filterRepoIds: [] })
+  await env.win.waitFor(() => attention.getSnapshot().filterRepoIds.length === 0)
+  expect(attention.getSnapshot().selectedWorktreeId).toBe(current.id)
+})
+
+test('the needs-you count and toast ignore the narrowed project, and Open worktree returns to All projects', async () => {
+  const { env, attention, current, other, otherRepo } = await bootAttention()
+  await attention.selectProject(otherRepo.id)
+  await env.win.waitFor(() => attention.getSnapshot().selectedWorktreeId === other.id)
+
+  const askId = await createAsk(env, {
+    title: 'Approve in the hidden project',
+    questions: [{ id: 'approve', type: 'confirm', question: 'Approve?' }]
+  }, current)
+  await env.win.waitFor(() => attention.getSnapshot().toasts.some((toast) => toast.ask.id === askId))
+  expect(attention.getSnapshot().asks?.map((ask) => ask.id)).toContain(askId)
+  expect(attention.getSnapshot().filterRepoIds).toEqual([otherRepo.id])
+  expect(attention.getSnapshot().selectedWorktreeId).toBe(other.id)
+
+  await clickButton(env, 'Open worktree')
+  await env.win.waitFor(() => attention.getSnapshot().selectedWorktreeId === current.id)
+  await env.win.waitFor(() => attention.getSnapshot().filterRepoIds.length === 0)
+  expect(await env.agent.callAny('quirky.worktree/options', {})).toMatchObject({ filterRepoIds: [] })
+  await env.win.waitFor(() => !attention.getSnapshot().toasts.some((toast) => toast.ask.id === askId))
+  expect((await pendingAsks(env)).some((ask) => ask.id === askId)).toBe(true)
+})
+
+type Call = { method: string; params: Record<string, unknown> }
+
+function fakeScopeStore(options: { filterRepoIds: string[]; selected: string | null; worktrees: Partial<Worktree>[] }) {
+  const calls: Call[] = []
+  const listeners = new Set<(event: never) => void>()
+  const connection = {
+    async callAny(method: string, params: Record<string, unknown> = {}) {
+      calls.push({ method, params })
+      switch (method) {
+        case 'quirky.repo/list':
+          return [{ id: 'r1' }, { id: 'r2' }, { id: 'empty' }]
+        case 'quirky.worktree/list':
+          return options.worktrees
+        case 'quirky.session/list':
+        case 'quirky.ask/list':
+        case 'quirky.worktree/projectMetadataList':
+          return []
+        case 'quirky.worktree/options':
+          return { filterRepoIds: options.filterRepoIds }
+        case 'ui.window.self':
+          return { connId: 7 }
+        default:
+          return {}
+      }
+    },
+    onEvent(listener: (event: never) => void) {
+      listeners.add(listener)
+      return () => void listeners.delete(listener)
+    },
+    onConnected: () => () => {}
+  }
+  const host = {
+    getState: () => ({ layout: { worktree: options.selected } }),
+    subscribe: () => () => {},
+    openView() {},
+    openTool() {}
+  }
+  const store = createAttentionStore(connection as never, host as never)
+  const stop = store.subscribe(() => {})
+  return { store, calls, stop, navigated: () => calls.filter((call) => call.method === 'quirky.worktree/navigate').map((call) => call.params) }
+}
+
+const row = (id: string, repoId: string, lastActivityAt: number): Partial<Worktree> => ({ id, repoId, lastActivityAt, createdAt: 0, name: id, removing: false })
+
+test('the scope follows the options and writes through setOptions, opening the most recently active worktree of the project', async () => {
+  const fake = fakeScopeStore({
+    filterRepoIds: ['r1'],
+    selected: 'a',
+    worktrees: [row('a', 'r1', 5), row('b', 'r2', 10), row('c', 'r2', 30), row('d', 'r2', 20)]
+  })
+  await Bun.sleep(20)
+  expect(fake.store.getSnapshot().filterRepoIds).toEqual(['r1'])
+
+  expect(await fake.store.selectProject('r2')).toBeNull()
+  expect(fake.calls.find((call) => call.method === 'quirky.worktree/setOptions')?.params).toEqual({ filterRepoIds: ['r2'] })
+  expect(fake.navigated()).toEqual([{ worktree: 'c', window: 7 }])
+  fake.stop()
+})
+
+test('narrowing keeps the selection when it is inside the project or the project has no worktrees', async () => {
+  const fake = fakeScopeStore({ filterRepoIds: [], selected: 'a', worktrees: [row('a', 'r1', 5), row('b', 'r2', 10)] })
+  await Bun.sleep(20)
+
+  expect(await fake.store.selectProject('r1')).toBeNull()
+  expect(fake.navigated()).toEqual([])
+
+  expect(await fake.store.selectProject('empty')).toBeNull()
+  expect(fake.calls.filter((call) => call.method === 'quirky.worktree/setOptions').map((call) => call.params))
+    .toEqual([{ filterRepoIds: ['r1'] }, { filterRepoIds: ['empty'] }])
+  expect(fake.navigated()).toEqual([])
+  expect(fake.store.getSnapshot().selectedWorktreeId).toBe('a')
+
+  expect(await fake.store.selectProject(null)).toBeNull()
+  expect(fake.store.getSnapshot().filterRepoIds).toEqual([])
+  expect(fake.navigated()).toEqual([])
+  fake.stop()
+})

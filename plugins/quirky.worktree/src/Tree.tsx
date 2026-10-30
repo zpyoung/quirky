@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent } from 'react'
 import type { ProjectGroup, Repo, Session, UiPluginContext, Worktree } from '@quirky/protocol'
-import { Badge, Button, ContextMenu, IconButton, ListRow, SectionHeader, StatusDot as UiStatusDot, type ContextMenuItem, type UiStatus } from '@quirky/ui'
+import { Badge, Button, ContextMenu, IconButton, ListRow, ProjectTile, SectionHeader, StatusDot as UiStatusDot, type ContextMenuItem, type UiStatus } from '@quirky/ui'
 import { DEFAULT_STOCK_OPTIONS, type StockWorktreeOptions, type WorktreeControl } from './control-types'
 import type { HeimdallWorktreeStatus } from './useTree'
 import { resolveMembershipTarget, type MembershipTarget } from './membership'
@@ -693,6 +693,10 @@ export function Tree({
   const project = (node: ProjectNode, topLevel = false, depth = 0) => {
     const { repo, rows: projectRows, pending: pendingCreates } = node
     const identity = projectIdentities[repo.id]
+    const showTile = options.groupBy === 'project' && options.filterRepoIds.length === 0
+    const projectTitle = showTile
+      ? <><ProjectTile name={repoLabel(repo)} color={identity?.color} /> {repoLabel(repo)}</>
+      : `${identity?.icon ? `${identity.icon} ` : ''}${repoLabel(repo)}`
     const sectionKey = `repo:${repo.id}`
     const separator = topLevel && eligibleBoundaries.includes(sectionKey)
     const previewing = dropPreview?.kind === 'repo' && dropPreview.id === repo.id
@@ -707,7 +711,7 @@ export function Tree({
         <SectionHeader
           hidden={options.groupBy !== 'project'}
           className={`repo-header${previewing ? ' ui-drop-target--active' : ''}`}
-          title={`${identity?.icon ? `${identity.icon} ` : ''}${repoLabel(repo)}`}
+          title={projectTitle}
           titleTooltip={repo.path}
           data-repo-target={repo.id}
           onContextMenu={(event) => {

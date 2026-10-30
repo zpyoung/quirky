@@ -3,6 +3,12 @@ import { bootWindow, closeWindows, installUiPlugin, provide, type WindowEnv } fr
 
 afterEach(closeWindows)
 
+async function openSettings(win: { click(selector: string): Promise<void>; waitFor<T>(check: () => T | undefined | null | false): Promise<T> }): Promise<void> {
+  await win.click('button[aria-label="More"]')
+  const row = await win.waitFor(() => [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((item) => item.textContent?.trim() === 'Settings'))
+  row.click()
+}
+
 const BASE = 'acme.sidebar-base'
 const OVERRIDE = 'acme.sidebar-override'
 const ACTIVITY_ITEM = `activity-item:${BASE}/source-control`
@@ -116,7 +122,7 @@ test('the Settings window renders generic category and section metadata and save
   })
   const { win, agent } = env
 
-  await win.click('button[aria-label="Settings"]')
+  await openSettings(win)
   await win.waitFor(() => win.document.querySelector('[role="dialog"]')?.textContent?.includes(dividerTitle))
   const dialog = win.document.querySelector('[role="dialog"]')!
   expect(dialog.textContent).toContain('Appearance')
@@ -134,7 +140,7 @@ test('the Settings window renders generic category and section metadata and save
   expect(unchanged).toMatchObject({ value: true })
   expect(unchanged).not.toHaveProperty('stored')
 
-  await win.click('button[aria-label="Settings"]')
+  await openSettings(win)
   await win.waitFor(() => (win.document.querySelector('[role="dialog"] input[type="checkbox"]') as HTMLInputElement | null)?.checked === true)
   await win.click('[role="dialog"] input[type="checkbox"]')
   await win.waitFor(() => !(win.document.querySelector('[role="dialog"] input[type="checkbox"]') as HTMLInputElement | null)?.checked)
@@ -145,7 +151,7 @@ test('the Settings window renders generic category and section metadata and save
     stored: { value: false, valid: true }
   })
 
-  await win.click('button[aria-label="Settings"]')
+  await openSettings(win)
   await win.waitFor(() => {
     const restored = win.document.querySelector('[role="dialog"]')
     const saved = restored?.querySelector('input[type="checkbox"]') as HTMLInputElement | null

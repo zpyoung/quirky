@@ -345,3 +345,24 @@ test('navigation CLI targets the selected numeric window and refuses missing win
   expect(badCode).not.toBe(0)
   expect(`${badOut}${badErr}`).toMatch(/window|connection|not found/i)
 })
+
+test('navigating to a worktree outside the project filter returns the panel to All projects', async () => {
+  const w = await start()
+  world = w
+  await w.harness.connectAs({}, 'ui')
+  const otherPath = makeRepo(scratch())
+  const other = await call(w.harness.client, 'quirky.repo/add', { path: otherPath }) as Repo
+  const inside = await create(w.harness.client, w.repo.id, 'inside')
+  const outside = await create(w.harness.client, other.id, 'outside')
+
+  await call(w.harness.client, 'quirky.worktree/setOptions', { filterRepoIds: [w.repo.id] })
+  await call(w.harness.client, 'quirky.worktree/navigate', { worktree: inside.id })
+  expect(await call(w.harness.client, 'quirky.worktree/options')).toMatchObject({ filterRepoIds: [w.repo.id] })
+
+  await call(w.harness.client, 'quirky.worktree/navigate', { worktree: outside.id })
+  expect(await call(w.harness.client, 'quirky.worktree/options')).toMatchObject({ filterRepoIds: [] })
+
+  await call(w.harness.client, 'quirky.worktree/setOptions', { filterRepoIds: [other.id, w.repo.id] })
+  await call(w.harness.client, 'quirky.worktree/navigationBack')
+  expect(await call(w.harness.client, 'quirky.worktree/options')).toMatchObject({ filterRepoIds: [other.id, w.repo.id] })
+})

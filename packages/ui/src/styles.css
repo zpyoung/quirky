@@ -148,9 +148,9 @@ textarea {
   flex-direction: column;
 }
 
-.shell-statusbar__plugins .plugin-status-bar-slot {
+.shell-statusbar__values .plugin-status-bar-slot {
   display: flex;
-  flex: 1 1 auto;
+  flex: 0 1 auto;
   flex-direction: row;
   align-items: center;
   min-width: 0;

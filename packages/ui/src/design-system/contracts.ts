@@ -29,7 +29,7 @@ export type ListRowProps = {
   mainLabel?: string
   onClick?: () => void
 }
-export type SectionHeaderProps = Omit<HTMLAttributes<HTMLElement>, 'title'> & { title: string; titleTooltip?: string; actions?: ReactNode }
+export type SectionHeaderProps = Omit<HTMLAttributes<HTMLElement>, 'title'> & { title: ReactNode; titleTooltip?: string; actions?: ReactNode }
 export type TabItem = { id: string; label: string; disabled?: boolean; panelId?: string }
 export type TabsProps = { label: string; items: readonly TabItem[]; value: string; onChange: (id: string) => void }
 export type MenuItem = { id: string; label: string; onAction: () => void; disabled?: boolean; destructive?: boolean; checked?: boolean }
@@ -67,3 +67,8 @@ export type PopupMenuProps = {
   searchPlaceholder?: string
   onClose(): void
 }
+/**
+ * A status bar value. With `items` it is a button that opens a `PopupMenu` titled `popupTitle` (default
+ * `label`); without them it is plain, non-interactive content. `label` names the control for assistive tech.
+ */
+export type StatusBarItemProps = { label: string; items?: PopupItem[]; popupTitle?: string; children: ReactNode }

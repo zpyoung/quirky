@@ -338,10 +338,10 @@ test(
     await waitFor('the terminal binding to run', () => (calls().length === 1 ? true : undefined))
     expect(calls()).toEqual(['in-terminal'])
 
-    const settingsButton = document.querySelector<HTMLButtonElement>('button[aria-label="Settings"]')!
-    settingsButton.focus()
+    const moreButton = document.querySelector<HTMLButtonElement>('button[aria-label="More"]')!
+    moreButton.focus()
     await waitFor('terminal focus to leave', () => (!(f.win.host as unknown as { contextValues: Map<string, boolean> }).contextValues.get('terminalFocus') ? true : undefined))
-    await press('mod+j', settingsButton)
+    await press('mod+j', moreButton)
     await waitFor('the other binding to run', () => (calls().length === 2 ? true : undefined))
     await Bun.sleep(150)
     expect(calls()).toEqual(['in-terminal', 'elsewhere'])

@@ -433,14 +433,13 @@ async function closeCurrentSurface(runtime: CaptureRuntime): Promise<void> {
 }
 
 /** The one place that knows how the shell exposes Settings; update it when the control moves. */
-function settingsControl(runtime: CaptureRuntime) {
-  return runtime.page.locator('button[aria-label="Settings"]')
-}
-
 async function openSettings(runtime: CaptureRuntime): Promise<void> {
-  const button = settingsControl(runtime)
-  if (await button.count() !== 1) throw new Error('host Settings control is unavailable')
-  await button.click({ timeout: runtime.options.timeoutMs })
+  const more = runtime.page.locator('button[aria-label="More"]')
+  if (await more.count() !== 1) throw new Error('host Overflow control is unavailable')
+  await more.click({ timeout: runtime.options.timeoutMs })
+  const settings = runtime.page.getByRole('menuitem', { name: 'Settings', exact: true })
+  if (await settings.count() !== 1) throw new Error('host Settings control is unavailable')
+  await settings.click({ timeout: runtime.options.timeoutMs })
   await runtime.page.getByRole('dialog', { name: 'Settings', exact: true }).waitFor({ state: 'visible', timeout: runtime.options.timeoutMs })
 }
 

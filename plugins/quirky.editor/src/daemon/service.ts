@@ -375,6 +375,7 @@ export class EditorDaemon {
       key: keyValue,
       input: { bufferId: buffer.id, mode },
       title: editorTabTitle(buffer.name, mode),
+      icon: { kind: 'file', path: buffer.path },
       reuse,
       ...(replaceablePreview === undefined ? {} : { replace: replaceablePreview.tabId }),
       activate: focus,

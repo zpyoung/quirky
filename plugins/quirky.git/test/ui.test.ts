@@ -23,9 +23,9 @@ describe('quirky.git source-control panel', () => {
     expect(manifest.contributes.panel.map((p: { id: string }) => `panel:${manifest.id}/${p.id}`)).toEqual([PANEL])
   })
 
-  test('SC-36: activate provides exactly the panel, view and commands the manifest declares', async () => {
+  test('SC-36: activate provides exactly the panel, view, commands and status bar item the manifest declares', async () => {
     const manifest = await Bun.file(new URL('../quirky-plugin.json', import.meta.url)).json()
-    const declared = (['panel', 'view', 'command'] as const).flatMap((kind) =>
+    const declared = (['panel', 'view', 'command', 'status-bar'] as const).flatMap((kind) =>
       (manifest.contributes[kind] as { id: string }[]).map((c) => `${kind}:${manifest.id}/${c.id}`)
     )
     const fake = fakeContext(layoutFor(null))
