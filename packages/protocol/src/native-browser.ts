@@ -12,6 +12,8 @@ export const NATIVE_BROWSER_NAVIGATION_RULES = ['^*', 'https://*', 'http://*', '
 export type NativeBrowserState = {
   id: string; url: string; title: string; loading: boolean; canGoBack: boolean; canGoForward: boolean;
   zoom: number; error: string | null; findCurrent: number; findTotal: number
+  /** Whether this view can reload while bypassing the engine cache; false keeps Hard Reload unavailable. */
+  hardReloadAvailable: boolean
 }
 export type NativeBrowserRequest =
   | { action: 'navigate'; url: string }

@@ -284,7 +284,7 @@ function isPaneState(value: unknown): value is PaneState {
   return typeof value === 'object' && value !== null && Array.isArray(Reflect.get(value, 'tabs'))
 }
 
-function nativeRequest(command: PaneCommand, pane: PaneTab): NativeBrowserRequest | null {
+function nativeRequest(command: PaneCommand, pane: PaneTab, hardReloadAvailable: boolean): NativeBrowserRequest | null {
   switch (command.action) {
     case 'navigate': {
       const url = nativePreviewNavigationUrl(command.url, pane.preview?.url, window.location.href)
@@ -294,7 +294,7 @@ function nativeRequest(command: PaneCommand, pane: PaneTab): NativeBrowserReques
     case 'forward':
     case 'reload':
     case 'stop': return { action: command.action }
-    case 'hardReload': return null
+    case 'hardReload': return hardReloadAvailable ? { action: 'hardReload' } : null
     case 'find': return { action: 'find', text: command.text ?? '', ...(command.forward === undefined ? {} : { forward: command.forward }) }
     case 'zoom': return { action: 'zoom', level: command.level ?? 0 }
   }
@@ -604,7 +604,8 @@ export function BrowserPaneWindow({ context, input }: { context: UiPluginContext
       !mountedRef.current || !current || current.mode !== 'native' ||
       (target && (current.id !== target.id || current.profileId !== target.profileId || current.partition !== target.partition))
     ) return
-    if (!command && current.command?.action === 'navigate' && native.url === 'about:blank') return
+    // the daemon rejects an unacknowledged report while a command is pending; that command's own report carries this state
+    if (!command && current.command) return
     void context.call('quirky.browser/paneReport', {
       pane: current.id,
       ...(command ? { command: command.id } : {}),
@@ -683,11 +684,11 @@ export function BrowserPaneWindow({ context, input }: { context: UiPluginContext
     const command = pane?.command
     const handle = nativeHandleRef.current
     if (!pane || pane.mode !== 'native' || !command || !handle || command.id === lastNativeCommandRef.current) return
-    const request = nativeRequest(command, pane)
+    const request = nativeRequest(command, pane, nativeState?.hardReloadAvailable === true)
     if (!request) {
       lastNativeCommandRef.current = command.id
       const reason = command.action === 'hardReload'
-        ? 'Hard Reload is unavailable in Native mode; the pinned SDK supports ordinary reload only.'
+        ? 'Hard Reload is unavailable in Native mode: this system webview cannot reload without its cache. Ordinary Reload is available.'
         : `Native browser cannot execute ${command.action} without a valid request.`
       setMessage({ text: reason, kind: 'info' })
       void context.call('quirky.browser/paneReport', {
@@ -1116,10 +1117,10 @@ export function BrowserPaneWindow({ context, input }: { context: UiPluginContext
           <div className="ui-menu__list qbp-menu-popover" role="menu" style={paneStyles.profilePopover}>
             <div style={paneStyles.menuItems}>
             <BrowserProfileMenu context={context} pane={pane ?? undefined} inline onError={(text) => setMessage({ text, kind: 'error' })} />
-            {pane?.mode === 'watch'
+            {pane?.mode === 'watch' || (pane?.mode === 'native' && nativeState?.hardReloadAvailable)
               ? <Button className="ui-menu__item" role="menuitem" onClick={() => void control('hardReload')}>Hard Reload</Button>
               : pane?.mode === 'native'
-                ? <span className="qbp-muted" style={paneStyles.mutedText}>Hard Reload is unavailable in Native mode; ordinary Reload is available.</span>
+                ? <span className="qbp-muted" style={paneStyles.mutedText}>Hard Reload is unavailable in Native mode on this system webview; ordinary Reload is available.</span>
                 : null}
             {settings.homePage
               ? <Button className="ui-menu__item" role="menuitem" onClick={() => void navigate(settings.homePage)}>Home Page · {settings.homePage}</Button>
@@ -1296,7 +1297,7 @@ export function BrowserPaneWindow({ context, input }: { context: UiPluginContext
           <SectionHeader title="Page could not load" />
           <p className="qbp-error ui-error-text" style={paneStyles.errorText} role="alert">{nativeState.error}</p>
           <div className="qbp-actions" style={paneStyles.actions}>
-            <Button onClick={() => void control('reload')}>Retry</Button>
+            <Button onClick={() => void navigate(nativeState.url)}>Retry</Button>
             <Button onClick={() => setNativeState(null)}>Dismiss</Button>
           </div>
         </div></div> : null}

@@ -73,7 +73,8 @@ class BrowserBridgeModel implements NativeBrowserAdapter {
         zoom: options.zoom,
         error: null,
         findCurrent: 0,
-        findTotal: 0
+        findTotal: 0,
+        hardReloadAvailable: false
       },
       history: ['about:blank'],
       cursor: 0,

@@ -57,6 +57,9 @@ type WebviewTag = HTMLElement & {
   off(name: string, listener: (event: CustomEvent) => void): void
   loadURL(url: string): void
   reload(): void
+  /** Absent on SDKs without cache-bypassing reload; resolves false where the renderer can't bypass its cache. */
+  reloadIgnoringCache?(): Promise<boolean>
+  supportsReloadIgnoringCache?(): Promise<boolean>
   goBack(): void
   goForward(): void
   canGoBack(): Promise<boolean>
@@ -73,6 +76,7 @@ type WebviewEventName =
   | 'host-message'
   | 'load-started'
   | 'load-finished'
+  | 'load-failed'
   | 'new-window-open'
 
 type GuestStateMessage = {
@@ -427,6 +431,46 @@ function eventUrl(detail: unknown): string | null {
   return raw && allowedUrl(raw) ? normalizeUrl(raw) : null
 }
 
+type LoadFailure = { url: string; domain: string; code: number; description: string }
+
+/** Ends a navigation without being a network or TLS failure: a stop, a supersession, or a download/policy hand-off. */
+const NON_FAILURE_LOAD_ERRORS = new Set(['NSURLErrorDomain:-999', 'WebKitErrorDomain:102', 'WebKitErrorDomain:204'])
+
+function parseLoadFailure(detail: unknown): LoadFailure | null {
+  let value = detail
+  if (typeof value === 'string') {
+    try {
+      value = JSON.parse(value)
+    } catch {
+      return null
+    }
+  }
+  if (!value || typeof value !== 'object') return null
+  const { url, domain, code, description } = value as Partial<LoadFailure>
+  if (typeof url !== 'string' || !allowedUrl(url) || typeof domain !== 'string' || !Number.isSafeInteger(code)) return null
+  if (NON_FAILURE_LOAD_ERRORS.has(`${domain}:${code}`)) return null
+  return {
+    url: normalizeUrl(url),
+    domain: domain.slice(0, 128),
+    code: code as number,
+    description: typeof description === 'string' ? description.slice(0, 300) : ''
+  }
+}
+
+/** Native will-navigate details are JSON strings carrying the target and whether policy allowed it. */
+function allowedNavigationTarget(detail: unknown): string | null {
+  let value = detail
+  if (typeof value === 'string' && value.startsWith('{')) {
+    try {
+      value = JSON.parse(value)
+    } catch {
+      return null
+    }
+  }
+  if (value && typeof value === 'object' && (value as { allowed?: unknown }).allowed === false) return null
+  return eventUrl(value)
+}
+
 function createWebviewTag(): WebviewTag {
   return document.createElement('electrobun-webview') as WebviewTag
 }
@@ -450,6 +494,8 @@ class ElectrobunNativeBrowserMount implements NativeBrowserAdapterHandle {
   private documentRevision = 0
   private navigationPending = false
   private labelProxyPort: number | null = null
+  private navigationTarget: string | null = null
+  private loadFailed = false
   private readonly pendingEvaluations = new Map<string, PendingNativeBrowserEvaluation>()
 
   constructor(
@@ -469,7 +515,8 @@ class ElectrobunNativeBrowserMount implements NativeBrowserAdapterHandle {
       zoom: options.zoom,
       error: null,
       findCurrent: 0,
-      findTotal: 0
+      findTotal: 0,
+      hardReloadAvailable: false
     }
     this.ready = this.start(afterDispose)
     void this.ready.catch((error) => {
@@ -524,7 +571,12 @@ class ElectrobunNativeBrowserMount implements NativeBrowserAdapterHandle {
       return
     }
     const actualLevel = Math.round(Math.log(initialZoom.zoomFactor) / Math.log(1.2) * 2) / 2
-    this.setState({ zoom: actualLevel, error: null })
+    const hardReloadAvailable = await child.supportsReloadIgnoringCache?.().catch(() => false) === true
+    if (this.disposed) {
+      await this.releaseClaim()
+      return
+    }
+    this.setState({ zoom: actualLevel, error: null, hardReloadAvailable })
     if (this.options.url !== 'about:blank') await this.navigateTo(this.options.url)
     else this.setState({ url: 'about:blank', loading: false })
   }
@@ -572,8 +624,10 @@ class ElectrobunNativeBrowserMount implements NativeBrowserAdapterHandle {
         this.navigationPending = true
         this.invalidateEvaluations('native browser evaluation was cancelled by navigation')
       }
+      this.loadFailed = false
       this.setState({ loading: true, error: null })
     })
+    listen('load-failed', (event) => this.onLoadFailed(event.detail))
     listen('load-finished', () => {
       this.navigationPending = false
       this.setState({ loading: false })
@@ -636,6 +690,11 @@ class ElectrobunNativeBrowserMount implements NativeBrowserAdapterHandle {
       this.navigationPending = true
       this.invalidateEvaluations('native browser evaluation was cancelled by navigation')
     }
+    const target = allowedNavigationTarget(detail)
+    if (target) {
+      this.navigationTarget = target
+      this.loadFailed = false
+    }
     const url = eventUrl(detail)
     if (!url) return
     if (this.expectedNavigation !== null) {
@@ -661,14 +720,32 @@ class ElectrobunNativeBrowserMount implements NativeBrowserAdapterHandle {
     }
     this.expectedNavigation = null
     this.navigationStarted = false
+    this.navigationTarget = null
+    this.loadFailed = false
     this.documentUrl = url
     this.setState({ url, loading: false, error: null, findCurrent: 0, findTotal: 0 })
     void this.refreshHistory()
   }
 
+  /** Only a failure of the navigation this view is currently waiting on may replace its state. */
+  private onLoadFailed(detail: unknown): void {
+    const failure = parseLoadFailure(detail)
+    if (!failure) return
+    if (failure.url !== this.expectedNavigation && failure.url !== this.navigationTarget && failure.url !== this.state.url) return
+    this.navigationPending = false
+    this.expectedNavigation = null
+    this.navigationStarted = false
+    this.navigationTarget = null
+    this.loadFailed = true
+    const reason = failure.description || 'The page could not be loaded.'
+    this.setState({ url: failure.url, loading: false, error: `${reason} (${failure.domain} ${failure.code})`, findCurrent: 0, findTotal: 0 })
+    if (this.waiter?.kind !== 'find') this.cancelWaiter()
+    void this.refreshHistory()
+  }
+
   private onGuestState(detail: unknown): void {
     const guest = parseGuestState(detail)
-    if (!guest) return
+    if (!guest || this.loadFailed) return
     const url = normalizeUrl(guest.url)
     if (url !== this.documentUrl || this.navigationPending) return
     const state = this.setState({
@@ -746,6 +823,7 @@ class ElectrobunNativeBrowserMount implements NativeBrowserAdapterHandle {
     const child = this.requireChild()
     this.expectedNavigation = target
     this.navigationStarted = false
+    this.navigationTarget = null
     const completion = this.wait('navigation', target)
     child.loadURL(target)
     return completion
@@ -829,6 +907,7 @@ class ElectrobunNativeBrowserMount implements NativeBrowserAdapterHandle {
     this.cancelWaiter()
     this.expectedNavigation = null
     this.navigationStarted = false
+    this.navigationTarget = null
     try {
       switch (request.action) {
         case 'navigate':
@@ -854,8 +933,17 @@ class ElectrobunNativeBrowserMount implements NativeBrowserAdapterHandle {
           await completion
           break
         }
-        case 'hardReload':
-          throw new Error('Hard reload is unavailable in the native browser: the pinned Electrobun SDK has no cache-bypassing reload operation')
+        case 'hardReload': {
+          const unavailable = 'Hard reload is unavailable in the native browser: this system webview has no cache-bypassing reload'
+          if (!this.state.hardReloadAvailable || !child.reloadIgnoringCache) throw new Error(unavailable)
+          const completion = this.wait('load')
+          if (!(await child.reloadIgnoringCache())) {
+            this.cancelWaiter()
+            throw new Error(unavailable)
+          }
+          await completion
+          break
+        }
         case 'stop': {
           if (!this.state.loading) return { ...this.state }
           const completion = this.wait('stopped')
@@ -950,7 +1038,8 @@ export function createNativeBrowserCapability(adapter?: NativeBrowserAdapter): N
           zoom: options.zoom,
           error: null,
           findCurrent: 0,
-          findTotal: 0
+          findTotal: 0,
+          hardReloadAvailable: false
         },
         publicHandle: undefined as unknown as NativeBrowserHandle
       }
