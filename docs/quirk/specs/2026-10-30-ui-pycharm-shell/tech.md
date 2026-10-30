@@ -177,9 +177,9 @@ PopupItem = ContextMenuItem + { lead?: ReactNode; subtitle?: string; selected?: 
 
 - Right-side order is working, needs-you, ahead and behind, checks, usage, file type. File type opens no popup. Plugin `order` values are set to fit around the host items, and `quirky.accounts/usage` keeps its `order: 30`.
 - The breadcrumb leads with `ProjectTile`.
-- Host items: breadcrumb, working count, needs-you count.
+- Host items, in `packages/ui/src/shell/StatusBar.tsx`: breadcrumb, working count, needs-you count.
 - Plugin items registered as `status-bar` contributions with `order`: `quirky.git` (ahead and behind, polling `quirky.git/status` at most every 10 seconds while mounted and on worktree events), `quirky.reviews` (checks rollup from `checksGet`), and the existing `quirky.accounts/usage`.
-- `StatusBarItem` and `PopupMenu` are the shared parts, and plugins use them for their popups.
+- `StatusBarItem` and `PopupMenu` are the shared parts, and plugins use them for their popups. `quirky.accounts/usage` keeps its existing popover, because account switching and sign-in don't fit a list popup.
 - Breadcrumb file and file type come from the active center tab. `quirky.terminal` exposes the active tab's `icon` value to the shell through a state method and a change event, adding them if none exist. With no file tab, the breadcrumb stops at the worktree and file type is hidden.
 - `data-region="status-bar"` stays on the footer.
 
@@ -190,7 +190,7 @@ PopupItem = ContextMenuItem + { lead?: ReactNode; subtitle?: string; selected?: 
 ViewTab.icon?: { kind: 'tool'; name: ToolIconName; hue: UiToolHue } | { kind: 'file'; path: string } | { kind: 'control'; name: string }
 ```
 
-- `openViewTab` accepts `icon`. The editor passes `{kind:'file', path}`, git passes `{kind:'tool', name:'git-diff', hue:'azure'}`, and the browser passes `{kind:'control', name:'globe'}`.
+- `openViewTab` and `rekeyViewTabs` accept `icon`, and `quirky.terminal/activeTabIcon` returns the active tab's. The editor passes `{kind:'file', path}`, git passes `{kind:'tool', name:'git-diff', hue:'azure'}`, and the browser passes `{kind:'control', name:'globe'}`.
 - Terminal and agent tabs draw `terminal-window` or `robot`. The existing status glyph stays, because tabs are where agent status lives.
 - Close shows only on the active or hovered tab. Tabs don't shrink.
 - `viewport` geometry at `GroupView.tsx:196-228` counts hidden tabs, and the scroll buttons are replaced by a "N more" button opening `PopupMenu`.
@@ -199,8 +199,8 @@ ViewTab.icon?: { kind: 'tool'; name: ToolIconName; hue: UiToolHue } | { kind: 'f
 ### ⌘K ([Center tabs and ⌘K](logic.md#center-tabs-and-k))
 
 - Scope tabs filter `PaletteEntry.kind`: All is everything, Worktrees is `worktree`, Commands is `command`, Files is a new `file` kind.
-- Files calls the existing `quirky.editor/search` debounced at 150ms, returning nothing and showing the empty state if the plugin is absent. Picking a file uses the editor's existing open method.
-- Recents are the last 10 ids in `UiLayout.paletteRecents`, persisted by the daemon, because a daemon-served page's origin changes with its port and `localStorage` wouldn't survive.
+- Files calls the existing `quirky.editor/quickOpen` (`action: 'search'`, fuzzy file names) debounced at 150ms, returning nothing and showing the empty state if the plugin is absent. `quirky.editor/search` matches file contents, so it doesn't fit. Picking a file uses `quirky.editor/open` and records it with `quickOpen`'s `action: 'record'`.
+- Recents are the last 10 ids in `UiLayout.paletteRecents`, persisted by the daemon, because a daemon-served page's origin changes with its port and `localStorage` wouldn't survive. `ui.palette.recent { id }` records one.
 - Entries show `ToolIcon` or `FileIcon`, and section headers split recents from matches.
 
 ### Review tooling ([How we know it's done](logic.md#how-we-know-its-done))
