@@ -3,7 +3,7 @@
 ## Status & amendments
 Status: approved autonomously after Codex promote/refute review and recorded adjudication; tech spec required by LOOP.md and subsystem scope.
 
-**Amendments:** 2026-10-27 — initial full queued scope; Codex clarified preview close identity, optimistic draft revisions and Keep/autosave holds. Later user ruling via operator: every Finder/OS drop imports a copy, including an in-worktree source; native SC-9 remains pending and open-in-place is deferred to the operator-owned follow-up.
+**Amendments:** 2026-10-27 — initial full queued scope; Codex clarified preview close identity, optimistic draft revisions and Keep/autosave holds. Later user ruling via operator: every Finder/OS drop imports a copy, including an in-worktree source; native SC-9 remains pending and open-in-place is deferred to the operator-owned follow-up. 2026-10-30 — SC-11 result clicks open a durable, unpinned normal tab and leave existing explicit pins unchanged.
 
 **Delivery amendment (D25, user ruling via operator):** land the verified core flows under the operator deadline and queue `m2-editor-complete-remaining-flows` for the exact unfinished implementations, UI defects and acceptance variants recorded in [open findings](../../../loop/BLOCKERS.md#m2-editor-open-review-findings). The full SC-1–22 below remains the completion target; this landing does not claim that entire matrix passed. Named Markdown creation is delivered; true untitled creation/Save As, rich details/toggle serialization and document-link insertion remain in that dependent item. Native SC-9 stays pending under the separate Finder-import ruling.
 
@@ -77,7 +77,7 @@ Before: an external file and a file already inside the worktree. Every Finder/OS
 Before: file inventory with recent paths and similar names. Cmd+P shows Go to file; fuzzy multi-term match, recent ranking, keyboard up/down/Enter/Escape and `README.md:3:2` open/reveal correctly. Absolute paths must still authorize within worktree; directories rejected. At 20,001 inventory entries/50 results truncation is visible; overlong query returns no results; missing ripgrep reports actionable guidance. Nested worktrees and excluded heavy folders are not traversed.
 
 ### SC-11: Contents search
-Before: files contain literal/regex/whole-word matches. Names filters paths; Contents exposes case, whole-word, regex and include/exclude globs (including commas inside braces). Search produces grouped counts and one-line previews; click result reveals/selects exact match. New query cancels older work and ignores stale results/owner changes. Cap 2,000 matches/15 seconds with visible truncation; bound 8 KiB inputs and 5 MiB files; invalid regex is a visible error. Find in Folder seeds an escaped include glob. Copy line path is scriptable.
+Before: files contain literal/regex/whole-word matches. Names filters paths; Contents exposes case, whole-word, regex and include/exclude globs (including commas inside braces). Search produces grouped counts and one-line previews; clicking a result opens a durable, unpinned normal tab, preserves existing explicit pins, and reveals/selects the exact match. New query cancels older work and ignores stale results/owner changes. Cap 2,000 matches/15 seconds with visible truncation; bound 8 KiB inputs and 5 MiB files; invalid regex is a visible error. Find in Folder seeds an escaped include glob. Copy line path is scriptable.
 The Explorer footer's Search in Files action focuses the Contents query field so typing can start immediately.
 
 ### SC-12: Markdown modes and byte preservation

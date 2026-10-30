@@ -1082,7 +1082,7 @@ export function ExplorerPanel({ context, report }: { context: UiPluginContext; r
                 const start = (match.displayColumn ?? match.column) - 1
                 const end = start + (match.displayMatchLength ?? match.matchLength)
                 return (
-                  <Button key={`${match.line}:${match.column}:${index}`} onClick={() => void openFile(file.path, { preview: false, pinned: true, line: match.line, column: match.column, matchLength: match.matchLength })}>
+                  <Button key={`${match.line}:${match.column}:${index}`} onClick={() => void openFile(file.path, { preview: false, line: match.line, column: match.column, matchLength: match.matchLength })}>
                     <span>{match.line}:{match.column}</span>
                     <code>{match.lineContent.slice(0, start)}<mark>{match.lineContent.slice(start, end)}</mark>{match.lineContent.slice(end)}</code>
                   </Button>
