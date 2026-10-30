@@ -580,6 +580,9 @@ These run in the web UI against a daemon with fakes `claude`, `codex` and `goose
       "New <Agent> tab" commands only for installed and enabled catalog agents. Disabling removes
       an explicit command; re-enabling restores it in an open palette without reloading the app.
       Pressing Cmd+Option+T opens a Claude tab (first in auto-pick order).
+    - Foreground initial prompts and required background prompts preserve typed shell flags and
+      ASCII quotes without OS autocorrection, capitalization or smart punctuation substitutions.
+      For example, `quirky ask --spec '{"question":"Pick a color"}'` reaches submission unchanged.
 
 ## Scope & non-goals
 
