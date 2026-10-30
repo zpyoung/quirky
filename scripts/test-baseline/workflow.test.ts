@@ -142,29 +142,40 @@ describe('the Tests job', () => {
     expect(String(upload.if)).toContain("hashFiles('out/baseline.json') != ''")
   })
 
-  test('files issues from the baseline on push only', () => {
-    const issues = steps('tests').find(step => step.run?.includes('cli.ts issues'))!
-    expect(issues.run).toContain('--plan plan --baseline out/baseline.json')
-    expect(String(issues.if)).toContain("github.event_name == 'push'")
+  test('files and closes issues from the baseline on push only', () => {
+    const open = steps('tests').find(step => step.run?.includes('cli.ts issues') && step.run.includes('--only open'))!
+    const close = steps('tests').find(step => step.run?.includes('cli.ts issues') && step.run.includes('--only close'))!
+    expect(open.run).toContain('--plan plan --baseline out/baseline.json')
+    expect(close.run).toContain('--plan plan --baseline out/baseline.json')
+    for (const step of [open, close]) {
+      expect(String(step.if)).toContain("github.event_name == 'push'")
+      expect(String(step.if)).toContain("hashFiles('out/baseline.json') != ''")
+    }
   })
 
-  test('files issues before publishing the baseline, and a failed filing blocks the publish', () => {
+  test('opens issues, then publishes the baseline, then closes issues, with the fail step last', () => {
     const list = steps('tests')
-    const issues = list.findIndex(step => step.run?.includes('cli.ts issues'))
+    const open = list.findIndex(step => step.run?.includes('cli.ts issues') && step.run.includes('--only open'))
     const upload = list.findIndex(step => String(step.with?.name).startsWith('test-baseline-'))
-    expect(issues).toBeGreaterThanOrEqual(0)
-    expect(upload).toBeGreaterThan(issues)
-    expect(String(list[upload]!.if)).not.toMatch(/\b(always|failure|cancelled|success)\(\)/)
-    expect(list[issues]!.if).not.toMatch(/\b(always|failure|cancelled)\(\)/)
-    expect((list[issues] as Step & { 'continue-on-error'?: boolean })['continue-on-error']).toBeUndefined()
+    const close = list.findIndex(step => step.run?.includes('cli.ts issues') && step.run.includes('--only close'))
+    expect(open).toBeGreaterThanOrEqual(0)
+    expect(upload).toBeGreaterThan(open)
+    expect(close).toBeGreaterThan(upload)
     expect(list.findIndex(step => String(step.if).includes('outcome'))).toBe(list.length - 1)
+    expect(list.length - 1).toBeGreaterThan(close)
+
+    for (const index of [open, upload, close]) {
+      expect(String(list[index]!.if)).not.toMatch(/\b(always|failure|cancelled|success)\(\)/)
+      expect((list[index] as Step & { 'continue-on-error'?: boolean })['continue-on-error']).toBeUndefined()
+    }
+    expect(list.filter(step => step.run?.includes('cli.ts issues'))).toHaveLength(2)
   })
 
-  test('workflow_dispatch never publishes a baseline or files issues', () => {
+  test('workflow_dispatch never publishes a baseline, files issues or closes them', () => {
     const gated = steps('tests').filter(
       step => String(step.with?.name).startsWith('test-baseline-') || step.run?.includes('cli.ts issues'),
     )
-    expect(gated).toHaveLength(2)
+    expect(gated).toHaveLength(3)
     for (const step of gated) expect(String(step.if)).not.toContain('workflow_dispatch')
   })
 

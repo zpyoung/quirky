@@ -16,7 +16,7 @@ const USAGE = `usage: bun scripts/test-baseline/cli.ts <command> [options]
   run-shard  --plan <dir> (--shard <index> | --macos) --out <file>
   rerun      --plan <dir> --in <dir> --out <file>
   verdict    --plan <dir> --in <dir> --out <dir> --jobs-ok <true|false>
-  issues     --plan <dir> --baseline <file>
+  issues     --plan <dir> --baseline <file> --only <open|close>
   affected   [--json] [--jobs <n>] [--list]
 `
 
@@ -415,16 +415,22 @@ async function verdictCommand(args: string[], ctx: Context): Promise<number> {
   return failed ? 1 : 0
 }
 
+/**
+ * Plans issue actions from the baseline and applies only those of one kind, so the workflow can open
+ * issues before publishing the baseline and close them only after the publish succeeded.
+ */
 async function issuesCommand(args: string[], ctx: Context): Promise<number> {
-  const values = parse(args, { plan: { type: 'string' }, baseline: { type: 'string' } })
+  const values = parse(args, { plan: { type: 'string' }, baseline: { type: 'string' }, only: { type: 'string' } })
   const planDir = need(values.plan, 'plan')
+  const only = need(values.only, 'only')
+  if (only !== 'open' && only !== 'close') throw new UsageError('--only must be open or close')
   const current = asBaseline(readJson(need(values.baseline, 'baseline')))
   const plan = readPlan(planDir)
   const previous = plan.baseline ? asBaseline(readJson(join(planDir, 'baseline.json'))) : null
   const repo = repoOf(ctx)
 
   const openIssues = await readOpenIssues(ctx.gh, repo)
-  const actions = planIssues({ previous, current, openIssues, rangeSelection: plan.rangeSelection, now: ctx.now() })
+  const actions = planIssues({ previous, current, openIssues, rangeSelection: plan.rangeSelection, now: ctx.now() }).filter((action) => action.kind === only)
   await applyIssueActions(actions, ctx.gh, repo)
   ctx.out(`issue actions: ${actions.length}\n`)
   return 0

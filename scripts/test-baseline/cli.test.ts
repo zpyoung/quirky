@@ -207,7 +207,9 @@ describe('argument handling', () => {
     ['rerun without --in', ['rerun', '--plan', 'p', '--out', 'o']],
     ['verdict with a bad --jobs-ok', ['verdict', '--plan', 'p', '--in', 'i', '--out', 'o', '--jobs-ok', 'maybe']],
     ['verdict without --jobs-ok', ['verdict', '--plan', 'p', '--in', 'i', '--out', 'o']],
-    ['issues without --baseline', ['issues', '--plan', 'p']],
+    ['issues without --baseline', ['issues', '--plan', 'p', '--only', 'open']],
+    ['issues without --only', ['issues', '--plan', 'p', '--baseline', 'b']],
+    ['issues with an invalid --only', ['issues', '--plan', 'p', '--baseline', 'b', '--only', 'both']],
     ['affected with a zero --jobs', ['affected', '--jobs', '0']],
     ['affected with a non-numeric --jobs', ['affected', '--jobs', 'many']],
   ])('%s exits 2', async (_name, argv) => {
@@ -834,7 +836,7 @@ describe('issues', () => {
     const { planDir, file } = stageIssues(previous, current, { mode: 'some', files: ['other.test.ts'], reasons: [] })
     const calls: string[][] = []
     const { ctx } = harness(dirOf('cwd'), { gh: issueGh(calls) })
-    expect(await runCli(['issues', '--plan', planDir, '--baseline', file], ctx)).toBe(0)
+    expect(await runCli(['issues', '--plan', planDir, '--baseline', file, '--only', 'open'], ctx)).toBe(0)
     const created = calls.filter((c) => c[0] === 'issue' && c[1] === 'create')
     expect(created).toHaveLength(1)
     expect(created[0]).toContain('--repo')
@@ -850,7 +852,7 @@ describe('issues', () => {
     const { planDir, file } = stageIssues(previous, current, { mode: 'some', files: ['a.test.ts'], reasons: [] })
     const calls: string[][] = []
     const { ctx } = harness(dirOf('cwd'), { gh: issueGh(calls) })
-    expect(await runCli(['issues', '--plan', planDir, '--baseline', file], ctx)).toBe(0)
+    expect(await runCli(['issues', '--plan', planDir, '--baseline', file, '--only', 'open'], ctx)).toBe(0)
     const body = calls.find((c) => c[1] === 'create')![calls.find((c) => c[1] === 'create')!.indexOf('--body') + 1]
     expect(body).not.toContain('Selection misses')
   })
@@ -860,7 +862,7 @@ describe('issues', () => {
     const { planDir, file } = stageIssues(null, current, null)
     const calls: string[][] = []
     const { ctx } = harness(dirOf('cwd'), { gh: issueGh(calls) })
-    expect(await runCli(['issues', '--plan', planDir, '--baseline', file], ctx)).toBe(0)
+    expect(await runCli(['issues', '--plan', planDir, '--baseline', file, '--only', 'open'], ctx)).toBe(0)
     expect(calls.filter((c) => c[1] === 'create')).toEqual([])
   })
 
@@ -870,8 +872,36 @@ describe('issues', () => {
     const { planDir, file } = stageIssues(previous, current, null)
     const calls: string[][] = []
     const { ctx } = harness(dirOf('cwd'), { gh: issueGh(calls, key('a.test.ts', 't')) })
-    expect(await runCli(['issues', '--plan', planDir, '--baseline', file], ctx)).toBe(0)
+    expect(await runCli(['issues', '--plan', planDir, '--baseline', file, '--only', 'close'], ctx)).toBe(0)
     expect(calls.some((c) => c[0] === 'issue' && c[1] === 'close' && c[2] === '7')).toBe(true)
+  })
+
+  describe('--only', () => {
+    function mixed() {
+      const previous = baselineOf(sha(1), { [key('a.test.ts', 'old')]: 'failed', [key('b.test.ts', 'fresh')]: 'passed' })
+      const current = baselineOf(sha(2), { [key('a.test.ts', 'old')]: 'passed', [key('b.test.ts', 'fresh')]: 'failed' })
+      return stageIssues(previous, current, null)
+    }
+
+    test('open applies only the opens', async () => {
+      const { planDir, file } = mixed()
+      const calls: string[][] = []
+      const { ctx, out } = harness(dirOf('cwd'), { gh: issueGh(calls, key('a.test.ts', 'old')) })
+      expect(await runCli(['issues', '--plan', planDir, '--baseline', file, '--only', 'open'], ctx)).toBe(0)
+      expect(calls.filter((c) => c[0] === 'issue' && c[1] === 'create')).toHaveLength(1)
+      expect(calls.filter((c) => c[0] === 'issue' && c[1] === 'close')).toEqual([])
+      expect(out.join('')).toContain('issue actions: 1')
+    })
+
+    test('close applies only the closes', async () => {
+      const { planDir, file } = mixed()
+      const calls: string[][] = []
+      const { ctx, out } = harness(dirOf('cwd'), { gh: issueGh(calls, key('a.test.ts', 'old')) })
+      expect(await runCli(['issues', '--plan', planDir, '--baseline', file, '--only', 'close'], ctx)).toBe(0)
+      expect(calls.filter((c) => c[0] === 'issue' && c[1] === 'create')).toEqual([])
+      expect(calls.filter((c) => c[0] === 'issue' && c[1] === 'close' && c[2] === '7')).toHaveLength(1)
+      expect(out.join('')).toContain('issue actions: 1')
+    })
   })
 
   test('a failing gh fails the command', async () => {
@@ -879,14 +909,14 @@ describe('issues', () => {
     const current = baselineOf(sha(2), {})
     const { planDir, file } = stageIssues(previous, current, null)
     const { ctx } = harness(dirOf('cwd'), { gh: brokenGh })
-    expect(await runCli(['issues', '--plan', planDir, '--baseline', file], ctx)).toBe(1)
+    expect(await runCli(['issues', '--plan', planDir, '--baseline', file, '--only', 'open'], ctx)).toBe(1)
   })
 
   test('an unreadable baseline file fails the command', async () => {
     const planDir = dirOf('plan')
     writePlan(planDir, planOf({ event: 'push' }))
     const { ctx } = harness(dirOf('cwd'), { gh: forbiddenGh })
-    expect(await runCli(['issues', '--plan', planDir, '--baseline', join(root, 'missing.json')], ctx)).toBe(1)
+    expect(await runCli(['issues', '--plan', planDir, '--baseline', join(root, 'missing.json'), '--only', 'open'], ctx)).toBe(1)
   })
 })
 

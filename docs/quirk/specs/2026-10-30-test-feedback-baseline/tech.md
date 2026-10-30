@@ -204,7 +204,7 @@ plan       --event <pull_request|push|workflow_dispatch> --out <dir>
 run-shard  --plan <dir> (--shard <index> | --macos) --out <file>
 rerun      --plan <dir> --in <dir> --out <file>
 verdict    --plan <dir> --in <dir> --out <dir> --jobs-ok <true|false>
-issues     --plan <dir> --baseline <file>
+issues     --plan <dir> --baseline <file> --only <open|close>
 affected   [--json] [--jobs <n>] [--list]
 ```
 
@@ -305,7 +305,7 @@ Two checks feed one result, and either one fails the verdict and blocks a baseli
 - The workflow passes `--jobs-ok ${{ !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') }}` to `verdict`. A `false` sets `runBroken`. A `skipped` job isn't a failure, because an empty selection skips the test jobs.
 - `verdict` compares `selection.files` minus `notOnCi` with the results it found, which fills `incomplete`. It catches a matrix job that reported success without results. An unreadable plan or results file also sets `runBroken`.
 
-- On `push`, when `out/baseline.json` exists, `tests` runs `issues --plan plan --baseline out/baseline.json`, then publishes the `test-baseline-${{ github.sha }}` artifact with `retention-days: 14`. A failed `issues` step blocks the upload, so the next run still sees the failure as new and retries. `previous` for `planIssues` is the plan artifact's `baseline.json`, and `rangeSelection` comes from `plan.json`, which means the `tests` job needs no history or install. The file holds `Baseline` JSON, and the artifact upload compresses it.
+- On `push`, when `out/baseline.json` exists, `tests` opens issues with `issues --plan plan --baseline out/baseline.json --only open`, publishes the `test-baseline-${{ github.sha }}` artifact with `retention-days: 14`, then closes with `--only close`. A failed open blocks the upload, so the next run still sees the failure as new and retries. Closing after the upload means a failed upload can't close an issue for a test the next run still compares against a failing baseline. A failed close is recomputed by the next run. `previous` for `planIssues` is the plan artifact's `baseline.json`, and `rangeSelection` comes from `plan.json`, which means the `tests` job needs no history or install. The file holds `Baseline` JSON, and the artifact upload compresses it.
 - On `pull_request`, `tests` writes the verdict to `$GITHUB_STEP_SUMMARY` and updates one PR comment found by a `<!-- test-baseline-verdict -->` marker. A failed comment post, as on a fork PR's read-only token, logs and doesn't change the result.
 - `workflow_dispatch` behaves like `push` but never publishes a baseline or files issues.
 - An empty selection skips the test jobs, and `tests` still runs and reports, per SC-3.
