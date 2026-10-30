@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { UiCommandEntry, UiSlotEntry, UiToolEntry, Worktree } from '@quirky/protocol'
 import type { Connection } from '../connection'
 import { Dialog, EmptyState, ListRow, TextField } from '../design-system'
@@ -16,6 +16,9 @@ type PaletteEntry = {
 function matches(entry: PaletteEntry, query: string): boolean {
   return query === '' || `${entry.title} ${entry.description ?? ''} ${entry.id} ${entry.kind}`.toLowerCase().includes(query)
 }
+function entryKey(entry: PaletteEntry): string {
+  return `${entry.kind}:${entry.id}`
+}
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
@@ -26,16 +29,48 @@ function showCommandError(connection: Connection, title: string, error: unknown)
   connection.store.dispatch({ type: 'toast', toast: { kind: 'error', title: `${title}: ${body}`, body } })
 }
 
+const AGENT_COMMAND_PREFIX = 'command:quirky.agents/new-'
+const GENERIC_AGENT_COMMAND = `${AGENT_COMMAND_PREFIX}agent-tab`
+
+function agentIdForLaunchCommand(commandId: string): string | null {
+  if (commandId === GENERIC_AGENT_COMMAND) return null
+  if (!commandId.startsWith(AGENT_COMMAND_PREFIX) || !commandId.endsWith('-tab')) return null
+  return commandId.slice(AGENT_COMMAND_PREFIX.length, -'-tab'.length)
+}
+
+function installedEnabledAgentIds(value: unknown): Set<string> {
+  if (typeof value !== 'object' || value === null || !('agents' in value) || !Array.isArray(value.agents)) {
+    return new Set()
+  }
+  const ids = new Set<string>()
+  const agents: unknown[] = value.agents
+  for (const candidate of agents) {
+    if (
+      typeof candidate !== 'object' || candidate === null ||
+      !('id' in candidate) || typeof candidate.id !== 'string' ||
+      !('installed' in candidate) || candidate.installed !== true ||
+      !('enabled' in candidate) || candidate.enabled !== true
+    ) continue
+    ids.add(candidate.id)
+  }
+  return ids
+}
+
 function entriesOf(
   commands: UiCommandEntry[],
   tools: UiToolEntry[],
   views: UiSlotEntry[],
   worktrees: Worktree[],
   projectNames: Map<string, string>,
-  query: string
+  query: string,
+  enabledAgentIds: Set<string>
 ): PaletteEntry[] {
   const entries: PaletteEntry[] = [
-    ...commands.filter((command) => command.palette !== false).map((command) => ({
+    ...commands.filter((command) => {
+      if (command.palette === false) return false
+      const agentId = agentIdForLaunchCommand(command.id)
+      return agentId === null || enabledAgentIds.has(agentId)
+    }).map((command) => ({
       id: command.id,
       title: command.title,
       description: command.description,
@@ -74,7 +109,33 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
   const { model, windowRoute } = usePluginState()
   const { snapshot } = useAttention()
   const [filter, setFilter] = useState('')
-  const [selected, setSelected] = useState(0)
+  const [selectedEntryKey, setSelectedEntryKey] = useState<string | null>(null)
+  const [enabledAgentIds, setEnabledAgentIds] = useState<Set<string>>(() => new Set())
+  useEffect(() => {
+    let mounted = true
+    let requestVersion = 0
+    const refreshAgents = async () => {
+      const version = ++requestVersion
+      try {
+        const listing = await connection.callAny('quirky.agents/list', {})
+        if (!mounted || version !== requestVersion) return
+        setEnabledAgentIds(installedEnabledAgentIds(listing))
+      } catch {
+        if (mounted && version === requestVersion) setEnabledAgentIds(new Set())
+      }
+    }
+    const unsubscribe = connection.onEvent((event) => {
+      if (event.type === 'quirky.agents/changed') void refreshAgents()
+    })
+    const unsubscribeConnected = connection.onConnected(() => void refreshAgents())
+    void refreshAgents()
+    return () => {
+      mounted = false
+      requestVersion++
+      unsubscribe()
+      unsubscribeConnected()
+    }
+  }, [connection])
   const entries = useMemo(() => {
     const projectNames = new Map<string, string>()
     if (!snapshot.errors.repos) {
@@ -86,10 +147,15 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
       model?.views ?? [],
       windowRoute || snapshot.errors.worktrees ? [] : snapshot.worktrees ?? [],
       projectNames,
-      filter.trim().toLowerCase()
+      filter.trim().toLowerCase(),
+      enabledAgentIds
     )
-  }, [filter, model?.commands, model?.tools, model?.views, snapshot.errors.repos, snapshot.errors.worktrees, snapshot.repos, snapshot.worktrees, windowRoute])
-  const current = Math.min(selected, Math.max(entries.length - 1, 0))
+  }, [enabledAgentIds, filter, model?.commands, model?.tools, model?.views, snapshot.errors.repos, snapshot.errors.worktrees, snapshot.repos, snapshot.worktrees, windowRoute])
+  const selectedIndex = selectedEntryKey === null ? -1 : entries.findIndex((entry) => entryKey(entry) === selectedEntryKey)
+  const current = selectedIndex < 0 ? 0 : selectedIndex
+  useEffect(() => {
+    if (selectedEntryKey !== null && selectedIndex < 0) setSelectedEntryKey(null)
+  }, [selectedEntryKey, selectedIndex])
 
   const openWorktree = async (worktreeId: string) => {
     try {
@@ -134,12 +200,13 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
         value={filter}
         onChange={(event) => {
           setFilter(event.target.value)
-          setSelected(0)
+          setSelectedEntryKey(null)
         }}
         onKeyDown={(event) => {
           const next = paletteKey(event.key, current, entries.length)
           if (event.key === 'ArrowDown' || event.key === 'ArrowUp') event.preventDefault()
-          setSelected(next.selected)
+          const selectedEntry = entries[next.selected]
+          setSelectedEntryKey(selectedEntry ? entryKey(selectedEntry) : null)
           if (next.run && entries[next.selected]) {
             event.preventDefault()
             run(entries[next.selected]!)
@@ -154,10 +221,10 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
         <div className="ui-option-list" role="listbox" aria-label="Search results">
           {entries.map((entry, index) => (
             <div
-              key={`${entry.kind}:${entry.id}`}
+              key={entryKey(entry)}
               role="option"
               aria-selected={index === current}
-              onMouseEnter={() => setSelected(index)}
+              onMouseEnter={() => setSelectedEntryKey(entryKey(entry))}
             >
               <ListRow
                 title={entry.title}
