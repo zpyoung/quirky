@@ -105,20 +105,25 @@ describe('tool shell geometry and gestures', () => {
     expect(fitted.rightBottomHeight).toBe(0)
   })
 
-  test('a single bottom tool stays in its configured half', () => {
+  test.each(['bottom-left', 'bottom-right'] as const)('a lone %s tool fills the dock without changing the saved split', (slot) => {
+    const preferences = { ...sizes }
     const open: ToolShellOpenSlots = {
       ...allOpen,
-      'left-top': false,
-      'left-bottom': false,
-      'right-top': false,
-      'right-bottom': false,
-      'bottom-right': false
+      'bottom-left': slot === 'bottom-left',
+      'bottom-right': slot === 'bottom-right'
     }
-    const fitted = fitToolShellGeometry(sizes, { width: 1200, height: 800 }, open, chrome)
+    const fitted = fitToolShellGeometry(preferences, { width: 1200, height: 800 }, open, chrome)
 
-    expect(fitted.bottomLeftPanelWidth).toBe(420)
-    expect(fitted.bottomRightPanelWidth).toBe(0)
+    expect(fitted.bottomLeftPanelWidth).toBe(slot === 'bottom-left' ? 1200 : 0)
+    expect(fitted.bottomRightPanelWidth).toBe(slot === 'bottom-right' ? 1200 : 0)
+    expect(fitted.bottomSplitHandleWidth).toBe(0)
     expect(fitted.bottomLeftStripeWidth + fitted.bottomRightStripeWidth).toBe(1200)
+    expect(preferences).toEqual(sizes)
+
+    const both = fitToolShellGeometry(preferences, { width: 1200, height: 800 }, allOpen, chrome)
+    expect(both.bottomSplitHandleWidth).toBe(chrome.splitter)
+    expect(both.bottomLeftPanelWidth).toBeCloseTo((1200 - chrome.splitter) * sizes.bottomSplit)
+    expect(both.bottomLeftPanelWidth + both.bottomSplitHandleWidth + both.bottomRightPanelWidth).toBe(1200)
   })
 
   test('pointer movement uses edge direction and axis extent before applying bounds', () => {

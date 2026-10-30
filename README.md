@@ -297,7 +297,8 @@ menus with nested actions; shared Dialog supports wide content and stacked focus
 The desktop host places tools in six movable slots: left top/bottom, right top/bottom and
 bottom left/right. Click an icon to open its tool or close that slot; drag it to another stripe
 or use its Move menu. Slot sizes, split proportions and placements persist across projects
-in the user profile. Worktrees and Changes open on first launch.
+in the user profile. A lone bottom tool fills the dock; opening both bottom slots restores
+their saved split and divider. Worktrees and Changes open on first launch.
 
 `ui.contributions` exposes the effective `tools` projection alongside the original panel,
 sidebar-section and activity-item registrations. Equivalent built-in launchers share a tool;

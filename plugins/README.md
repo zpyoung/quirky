@@ -18,6 +18,8 @@ stays available for retry. Re-adding a removed project starts with fresh setting
 
 Terminal views stay in the center; **Terminal sessions** and **Quick commands** open
 in the bottom-left tool slot by default and can be moved with the host's tool controls.
+Terminal sessions keeps Refresh as an icon and labels **Restart host** explicitly; restarting
+still requires confirmation before open terminals and agents restart.
 Workspace tabs, pane actions, search, floating terminals, quick-command dialogs and the
 agent composer use the shared graphite controls in dark and light appearances.
 Existing terminal palette overrides, shortcuts, split layouts and pane-owned drafts
