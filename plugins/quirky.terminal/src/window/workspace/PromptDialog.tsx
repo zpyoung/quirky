@@ -43,6 +43,9 @@ export function PromptDialog({ request, pending, started, error, onSubmit, onClo
             id={promptId}
             className="ui-text-field__input"
             autoFocus={!started}
+            autoCapitalize="off"
+            autoCorrect="off"
+            spellCheck={false}
             readOnly={pending || started}
             rows={5}
             value={prompt}
