@@ -1190,6 +1190,9 @@ export function TasksList({ context, state, refresh }: TasksSurfaceProps) {
   if (navigation.mode === 'projects') return null
   const selectedSet = new Set(selectedRepoIds)
   const selectedSourceValues = selectedRepos.map((repo) => parseSource(visibleResult?.sources[repo.id]))
+  const noGitHubRemote = selectedRepoIds.length > 0 &&
+    selectedRepos.length === selectedRepoIds.length &&
+    selectedSourceValues.every((source) => source.reason === 'missing_origin')
   const repoButtonLabel = selectedRepoIds.length === allRepoIds.length && navigation.repoIds === null
     ? 'All repositories'
     : selectedRepos.length === 1 ? selectedRepos[0]!.displayName || selectedRepos[0]!.name : `${selectedRepos.length} repositories`
@@ -1198,11 +1201,16 @@ export function TasksList({ context, state, refresh }: TasksSurfaceProps) {
   const repoOpenUrl = repoOpenIdentity?.host && repoOpenIdentity.owner && repoOpenIdentity.repo
     ? `https://${repoOpenIdentity.host}/${repoOpenIdentity.owner}/${repoOpenIdentity.repo}`
     : ''
-  const sourceContext = selectedSourceValues.length === 1
-    ? sourceLabel(selectedSourceValues[0]!)
-    : navigation.repoIds === null && !visibleResult ? 'Loading selected projects…'
-      : selectedRepoIds.length > 0 ? `${selectedRepoIds.length} projects` : 'No projects selected'
+  const sourceContext = noGitHubRemote
+    ? selectedRepos.map((repo) => repo.displayName || repo.name).join(', ')
+    : selectedSourceValues.length === 1
+      ? sourceLabel(selectedSourceValues[0]!)
+      : navigation.repoIds === null && !visibleResult ? 'Loading selected projects…'
+        : selectedRepoIds.length > 0 ? `${selectedRepoIds.length} projects` : 'No projects selected'
   const hostContext = 'GitHub'
+  const noGitHubRemoteMessage = selectedRepos.length === 1
+    ? `No GitHub remote is configured for ${selectedRepos[0]!.displayName || selectedRepos[0]!.name}. Add a GitHub remote to this repository to load GitHub tasks.`
+    : `No GitHub remotes are configured for the selected ${selectedRepos.length} repositories. Add a GitHub remote to each repository to load GitHub tasks.`
   const selectedIssueSource = issueSource.issueSource ?? 'origin'
   const originIdentity = issueSource.origin
   const distinctIssueSources = issueSource.candidates?.some((candidate) => {
@@ -1261,22 +1269,22 @@ export function TasksList({ context, state, refresh }: TasksSurfaceProps) {
         ) : mode === 'issues' && selectedIssueSource === 'upstream' && hasOneRepo ? <span aria-label="Issues use upstream source">Issues from upstream</span> : null}
       </div>
 
-      {allUnavailable ? (
+      {allUnavailable && !noGitHubRemote ? (
         <div role="alert" className="tasks-list__notice tasks-list__notice--error">
           {visibleResult?.failures.map((failure) => failure.message).join(' · ') || 'GitHub source is unavailable. Check that gh is installed and authenticated, then refresh.'}
         </div>
       ) : null}
-      {!allUnavailable && partialFailureCount > 0 ? (
+      {!noGitHubRemote && !allUnavailable && partialFailureCount > 0 ? (
         <div role="status" className="tasks-list__notice tasks-list__notice--warning">
           {sourceFailureCount > 0 ? `${sourceFailureCount} selected source read${sourceFailureCount === 1 ? '' : 's'} failed. Showing available GitHub work; retry to reload.` : `${countFailureCount} result count${countFailureCount === 1 ? '' : 's'} unavailable. Full pages offer a continuation.`}
         </div>
       ) : null}
       {localError ? <div role="alert" className="tasks-list__notice tasks-list__notice--error">{localError}{visibleResult ? ' Showing the last loaded results.' : ''}</div> : null}
-      {visibleResult?.failures.map((failure, index) => (
+      {!noGitHubRemote ? visibleResult?.failures.map((failure, index) => (
         <div key={`${failure.repoId}:${index}`} role="status" className="tasks-list__notice tasks-list__notice--warning">
           {failure.reason === 'missing_origin' ? `No GitHub source detected for ${failure.repoId} — it may have no GitHub remote.` : `${failure.repoId}: ${failure.message}`}
         </div>
-      ))}
+      )) : null}
 
       <div className="tasks-list__toolbar">
         <div role="group" aria-label="Task presets" className="tasks-list__presets">
@@ -1297,7 +1305,7 @@ export function TasksList({ context, state, refresh }: TasksSurfaceProps) {
           className="tasks-list__search-input"
         />
         <IconButton type="button" label="Clear search" title="Clear search" onClick={() => commitSearch(presetQuery(normalizedPreset(state.preferences.defaultTaskViewPreset, kind), kind))}>×</IconButton>
-        {kind === 'issue' ? <Button variant="primary" type="button" aria-label="New GitHub issue" disabled={selectedRepoIds.length === 0} onClick={() => void navigate({ newIssue: true })}>＋ New GitHub issue</Button> : null}
+        {kind === 'issue' ? <Button variant="primary" type="button" aria-label="New GitHub issue" disabled={selectedRepoIds.length === 0 || noGitHubRemote} onClick={() => void navigate({ newIssue: true })}>＋ New GitHub issue</Button> : null}
         <Button type="button" aria-label={refreshing ? 'Refreshing GitHub work' : 'Refresh GitHub work'} disabled={refreshing || selectedRepoIds.length === 0} onClick={() => void loadList(true, true)}>{refreshing ? 'Refreshing…' : 'Refresh'}</Button>
       </div>
 
@@ -1354,6 +1362,8 @@ export function TasksList({ context, state, refresh }: TasksSurfaceProps) {
         <div role="status" className="tasks-list__empty"><EmptyState message="No eligible Git repositories. Add or select a registered Git repository with a local path to load GitHub tasks." /></div>
       ) : selectedRepoIds.length === 0 ? (
         <div role="status" className="tasks-list__empty"><EmptyState message="No project sources selected. Select at least one project source so Quirky knows where to fetch GitHub tasks." action={{ label: 'Select projects', onAction: () => setRepoOpen(true) }} /></div>
+      ) : noGitHubRemote ? (
+        <div role="status" className="tasks-list__empty"><EmptyState message={noGitHubRemoteMessage} /></div>
       ) : visibleResult && tableRows.length === 0 && visibleResult.failures.every((failure) => failure.stage === 'count') ? (
         <div role="status" className="tasks-list__empty"><EmptyState message="No matching GitHub work. Change the query or clear it." action={{ label: 'Reset query', onAction: () => commitSearch(presetQuery(normalizedPreset(state.preferences.defaultTaskViewPreset, kind), kind)) }} /></div>
       ) : tableRows.length === 0 && visibleResult?.failures.length ? (

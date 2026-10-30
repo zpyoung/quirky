@@ -414,6 +414,25 @@ test('a pull request whose head advances after safety metadata cannot be merged 
   expect(persisted).toMatchObject({ state: 'open', headRefOid: nextHead })
 }, 30_000)
 
+test('a repository without an origin has one plain empty state and cannot create GitHub issues', async () => {
+  const host = await bootTasks(listFixtureSource)
+  hosts.push(host)
+  git(host.repoPath, 'remote', 'remove', 'origin')
+  await host.call('navigate', { mode: 'issues', repoIds: [host.repoId], query: 'is:issue is:open' })
+  const state = taskState(await host.call('state'))
+  const driver = uiContext(host)
+  const mounted = await mount(React.createElement(TasksList, { context: driver.context, state, refresh: async () => undefined }))
+  await waitForUi(() => completedCall(driver.receipts, 'quirky.tasks/list'), 'missing-origin list response')
+
+  expect(mounted.container.querySelector<HTMLButtonElement>('button[aria-label="New GitHub issue"]')?.disabled).toBe(true)
+  expect(mounted.container.querySelectorAll('[role="alert"]')).toHaveLength(0)
+  expect(mounted.container.querySelectorAll('.tasks-list__notice')).toHaveLength(0)
+  expect(mounted.container.querySelectorAll('.tasks-list__empty')).toHaveLength(1)
+  expect(mounted.container.querySelector('.tasks-list__empty')?.textContent).toMatch(/no GitHub remote/i)
+  expect(mounted.container.querySelector('[aria-label="Task source context"]')?.textContent).not.toMatch(/no origin|unavailable/i)
+  expect(mounted.container.textContent).not.toContain(host.repoId)
+}, 30_000)
+
 test('an origin switch prevents a lagging upstream refresh from repainting the current issue list', async () => {
   const host = await bootTasks(listFixtureSource, { upstream: 'https://github.com/upstream-owner/upstream-repo.git' })
   hosts.push(host)
