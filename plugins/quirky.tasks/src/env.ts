@@ -133,7 +133,7 @@ async function currentTasksToolState(context: PluginContext): Promise<TasksToolS
   )
   if (!record(taskTool) || typeof taskTool.id !== 'string') return { layout, slot: null }
   const slot = tools.placements[taskTool.id]
-  if (typeof slot !== 'string' || !(UI_TOOL_SLOTS as readonly string[]).includes(slot) || tools.open[slot] !== taskTool.id) {
+  if (typeof slot !== 'string' || !(UI_TOOL_SLOTS as readonly string[]).includes(slot) || tools.open[slot as UiToolSlot] !== taskTool.id) {
     return { layout, slot: null }
   }
   return { layout, slot: slot as UiToolSlot }

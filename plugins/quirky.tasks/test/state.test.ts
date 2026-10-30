@@ -1,6 +1,6 @@
 import { afterEach, expect, test } from 'bun:test'
 import { bootTasks, type TasksTest } from './helpers'
-import type { UiLayout } from '@quirky/protocol'
+import type { UiLayout, UiToolSlot } from '@quirky/protocol'
 import { TASKS_SETTINGS_VIEW, TASKS_VIEW, type TasksState } from '../src/contracts'
 
 const runs: TasksTest[] = []
@@ -33,7 +33,7 @@ test('Tasks navigation and close stay in the open tool without changing the cent
   await run.client.callAny('ui.tool.open', { id: toolId })
 
   const before = await run.client.callAny('ui.state', {}) as { layout: UiLayout }
-  const slot = before.layout.tools!.placements[toolId]!
+  const slot = before.layout.tools!.placements[toolId] as UiToolSlot
   expect(before.layout.tools!.open[slot]).toBe(toolId)
 
   await run.call('navigate', { mode: 'prs', query: 'is:pr is:open' })

@@ -472,6 +472,7 @@ test('palette prioritizes exact title matches while preserving result order and 
     id: 'tool:acme.files/files',
     title: 'Files',
     icon: 'folder',
+    hue: 'sand',
     defaultSlot: 'right-top',
     contributionId: 'acme.files',
     aliases: []

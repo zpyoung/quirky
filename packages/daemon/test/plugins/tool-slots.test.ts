@@ -1,13 +1,15 @@
 import { afterEach, describe, expect, test } from 'bun:test'
 import { join } from 'node:path'
-import { RpcErrorCode } from '@quirky/protocol'
-import type { UiModel } from '@quirky/protocol'
+import { RpcErrorCode, UI_TOOL_SLOTS } from '@quirky/protocol'
+import type { UiModel, UiSlotEntry } from '@quirky/protocol'
 import { Store } from '../../src/store'
 import { makeTempDir, removeTempDirs, writePlugin } from './fixtures'
 import { startHarness, type Harness } from '../helpers'
 import { checkUiKindEntry } from '../../src/plugins/ui-kinds'
+import { projectTools } from '../../src/plugins/tool-layout'
 
 const harnesses: Harness[] = []
+const UI_TOOL_PLACEMENTS: readonly string[] = [...UI_TOOL_SLOTS, 'overflow']
 
 afterEach(async () => {
   for (const harness of harnesses.splice(0)) await harness.cleanup()
@@ -28,7 +30,8 @@ const CUSTOM = 'panel:acme.tools/custom'
 const PLUGIN_UI = { 'ui.js': 'export function activate() {}\n' }
 
 const builtinFixtures: { id: string; contributes: Record<string, unknown> }[] = [
-  { id: 'quirky.worktree', contributes: { 'sidebar-section': [{ id: 'worktrees', title: 'Worktrees' }] } },
+  { id: 'quirky.worktree', contributes: { 'sidebar-section': [{ id: 'worktrees', title: 'Worktrees' }, { id: 'remote-workspaces', title: 'Remote workspaces' }] } },
+  { id: 'quirky.agent-status', contributes: { 'sidebar-section': [{ id: 'activity', title: 'Activity' }, { id: 'dashboard', title: 'Agent Dashboard' }] } },
   { id: 'quirky.git', contributes: { panel: [{ id: 'source-control', title: 'Source Control' }] } },
   {
     id: 'quirky.editor',
@@ -45,7 +48,7 @@ const builtinFixtures: { id: string; contributes: Record<string, unknown> }[] = 
   { id: 'quirky.reviews', contributes: { panel: [{ id: 'checks', title: 'Checks' }], view: [{ id: 'review', title: 'Pull request' }] } },
   { id: 'quirky.ask', contributes: { panel: [{ id: 'questions', title: 'Questions' }] } },
   { id: 'quirky.session-info', contributes: { panel: [{ id: 'info', title: 'Session Info' }] } },
-  { id: 'quirky.vault', contributes: { panel: [{ id: 'history', title: 'Agent Session History' }] } },
+  { id: 'quirky.vault', contributes: { panel: [{ id: 'history', title: 'Agent Session History', hue: 'rose' }] } },
   { id: 'quirky.ledger', contributes: { panel: [{ id: 'ledger', title: 'Ledger' }], 'sidebar-section': [{ id: 'ledger', title: 'Ledger' }] } },
   { id: 'quirky.terminal', contributes: { panel: [{ id: 'sessions', title: 'Terminal Sessions' }, { id: 'quick-commands', title: 'Quick Commands' }] } },
   {
@@ -53,7 +56,7 @@ const builtinFixtures: { id: string; contributes: Record<string, unknown> }[] = 
     contributes: {
       panel: [
         { id: 'outline', title: 'Outline' },
-        { id: 'custom', title: 'Custom', defaultSlot: 'bottom-right', icon: 'sparkles' }
+        { id: 'custom', title: 'Custom', defaultSlot: 'bottom-right', icon: 'sparkles', hue: 'plum' }
       ],
       'sidebar-section': [{ id: 'launcher', title: 'Launcher', defaultSlot: 'bottom-right', icon: 'rocket' }],
       'activity-item': [{ id: 'shortcuts', title: 'Shortcuts', defaultSlot: 'bottom-left', icon: 'zap' }],
@@ -177,11 +180,57 @@ describe('effective tool projection', () => {
   test('keeps third-party contributions reachable and carries validated placement and icon metadata', async () => {
     const { caller } = await start()
     const model = await caller.call('ui.contributions', {})
-    expect(tool(model, CUSTOM)).toMatchObject({ title: 'Custom', icon: 'sparkles', defaultSlot: 'bottom-right', contributionId: CUSTOM })
+    expect(tool(model, CUSTOM)).toMatchObject({ title: 'Custom', icon: 'sparkles', hue: 'plum', defaultSlot: 'bottom-right', contributionId: CUSTOM })
     expect(tool(model, 'sidebar-section:acme.tools/launcher')).toMatchObject({ defaultSlot: 'bottom-right', icon: 'rocket' })
     expect(tool(model, 'activity-item:acme.tools/shortcuts')).toMatchObject({ defaultSlot: 'bottom-left', icon: 'zap' })
     expect(tool(model, OUTLINE)).toMatchObject({ defaultSlot: 'right-bottom' })
   })
+  test('gives every tool its registered icon and hue, with manifest values winning over rules', async () => {
+    const { caller } = await start()
+    const model = await caller.call('ui.contributions', {})
+    expect(tool(model, CHANGES)).toMatchObject({ icon: 'git-diff', hue: 'azure' })
+    expect(tool(model, 'host:inbox')).toMatchObject({ icon: 'tray', hue: 'violet' })
+    expect(tool(model, 'sidebar-section:quirky.worktree/remote-workspaces')).toMatchObject({ icon: 'hard-drives', hue: 'slate' })
+    expect(tool(model, 'sidebar-section:quirky.agent-status/activity')).toMatchObject({ icon: 'pulse', hue: 'coral' })
+    expect(tool(model, 'sidebar-section:quirky.agent-status/dashboard')).toMatchObject({ icon: 'gauge', hue: 'mint' })
+    expect(tool(model, 'panel:quirky.vault/history')).toMatchObject({ icon: 'vault', hue: 'rose' })
+    expect(tool(model, 'panel:quirky.ask/questions')).toMatchObject({ icon: 'chat-circle-dots', hue: 'lilac' })
+    expect(tool(model, LEDGER)).toMatchObject({ icon: 'book-open-text', hue: 'tan' })
+    expect(tool(model, OUTLINE)).toMatchObject({ icon: 'squares-four', hue: 'slate' })
+    expect(tool(model, 'sidebar-section:acme.tools/launcher')).toMatchObject({ hue: 'slate' })
+    expect(tool(model, 'activity-item:acme.tools/shortcuts')).toMatchObject({ icon: 'zap', hue: 'slate' })
+  })
+
+  test('falls back by registration kind when a tool has no rule, icon or hue', () => {
+    const entry = (kind: UiSlotEntry['kind'], id: string): UiSlotEntry => ({ id, kind, plugin: 'acme.tools', title: id, order: 0, module: '/ui.js' })
+    const tools = projectTools({
+      panels: [entry('panel', 'panel:acme.tools/p')],
+      sidebarSections: [entry('sidebar-section', 'sidebar-section:acme.tools/s')],
+      activityItems: [entry('activity-item', 'activity-item:acme.tools/a')],
+      views: []
+    })
+    const byId = (id: string) => tools.find((candidate) => candidate.id === id)
+    expect(byId('panel:acme.tools/p')).toMatchObject({ icon: 'squares-four', hue: 'slate' })
+    expect(byId('sidebar-section:acme.tools/s')).toMatchObject({ icon: 'sidebar', hue: 'slate' })
+    expect(byId('activity-item:acme.tools/a')).toMatchObject({ icon: 'pulse', hue: 'slate' })
+  })
+
+  test('validates optional tool hue metadata on registration kinds', () => {
+    for (const kind of ['panel', 'sidebar-section', 'activity-item']) {
+      const valid: string[] = []
+      checkUiKindEntry(kind, `${kind} valid`, { id: 'valid', title: 'Valid', hue: 'rose' }, valid)
+      expect(valid).toEqual([])
+      const errors: string[] = []
+      checkUiKindEntry(kind, `${kind} invalid`, { id: 'invalid', title: 'Invalid', hue: 'neon' }, errors)
+      expect(errors).toHaveLength(1)
+      expect(errors[0]).toContain('hue')
+      expect(errors[0]).toContain('neon')
+    }
+    const unknown: string[] = []
+    checkUiKindEntry('view', 'view hue', { id: 'view', hue: 'rose' }, unknown)
+    expect(unknown).toEqual(['view hue: unknown field `hue`'])
+  })
+
   test('validates optional tool slot and icon metadata on registration kinds', () => {
     for (const kind of ['panel', 'sidebar-section', 'activity-item']) {
       const valid: string[] = []
@@ -248,6 +297,45 @@ describe('tool layout mutations', () => {
     })
   })
 
+  test('moving a tool to overflow closes it, persists, and opening it restores its default slot', async () => {
+    const env = makeEnv()
+    const first = await env.start()
+    const caller = await first.connect('cli')
+
+    await caller.call('ui.tool.open', { id: TASKS })
+    const moved = await caller.call('ui.tool.move', { id: TASKS, slot: 'overflow' })
+    expect(moved.tools?.placements[TASKS]).toBe('overflow')
+    expect(Object.values(moved.tools!.open)).not.toContain(TASKS)
+    expect(moved.tools?.open['left-bottom']).toBeNull()
+
+    const restarted = await env.restart()
+    const afterRestart = await restarted.connect('cli')
+    const stored = (await afterRestart.call('ui.state', {})).layout.tools!
+    expect(stored.placements[TASKS]).toBe('overflow')
+    expect(Object.values(stored.open)).not.toContain(TASKS)
+
+    const reopened = await afterRestart.call('ui.tool.open', { id: TASKS })
+    expect(reopened.tools?.placements[TASKS]).toBe('left-bottom')
+    expect(reopened.tools?.open['left-bottom']).toBe(TASKS)
+    for (const placement of Object.values(reopened.tools!.placements)) expect(UI_TOOL_PLACEMENTS).toContain(placement)
+  })
+
+  test('moving a closed tool to overflow leaves other open tools alone', async () => {
+    const { caller } = await start()
+    const moved = await caller.call('ui.tool.move', { id: LEDGER, slot: 'overflow' })
+    expect(moved.tools?.placements[LEDGER]).toBe('overflow')
+    expect(moved.tools?.open['left-top']).toBe(WORKTREES)
+    expect(moved.tools?.open['right-top']).toBe(CHANGES)
+  })
+
+  test('opening a panel whose tool is in overflow restores the default slot', async () => {
+    const { caller } = await start()
+    await caller.call('ui.tool.move', { id: OUTLINE, slot: 'overflow' })
+    const opened = await caller.call('ui.panel.open', { id: OUTLINE })
+    expect(opened.tools?.placements[OUTLINE]).toBe('right-bottom')
+    expect(opened.tools?.open['right-bottom']).toBe(OUTLINE)
+  })
+
   test('rejects unknown tools, invalid slots, empty resize, unexpected fields and non-finite geometry', async () => {
     const { caller } = await start()
     const before = (await caller.call('ui.state', {})).layout.tools
@@ -303,6 +391,27 @@ describe('tool layout mutations', () => {
     expect(layout.open['right-bottom']).toBeNull()
     expect(layout.open['right-top']).toBeNull()
     expect(layout.open['left-top']).toBeNull()
+  })
+
+  test('a stored overflow placement survives a layout resolve and an unknown placement falls back to the default slot', async () => {
+    const seed = {
+      view: null,
+      panel: null,
+      sidebar: true,
+      focus: null,
+      tools: {
+        placements: { [WORKTREES]: 'left-top', [LEDGER]: 'overflow', [TASKS]: 'nowhere' },
+        order: [WORKTREES, LEDGER, TASKS],
+        open: { 'left-top': WORKTREES, 'left-bottom': null, 'right-top': null, 'right-bottom': null, 'bottom-left': LEDGER, 'bottom-right': null },
+        sizes: { left: 280, right: 320, bottom: 240, leftSplit: 0.5, rightSplit: 0.5, bottomSplit: 0.5 }
+      }
+    }
+    const { caller } = await start(seed)
+    const layout = (await caller.call('ui.state', {})).layout.tools!
+    expect(layout.placements[LEDGER]).toBe('overflow')
+    expect(layout.placements[TASKS]).toBe('left-bottom')
+    expect(layout.open['bottom-left']).toBeNull()
+    expect(layout.open['left-top']).toBe(WORKTREES)
   })
 
   test('migrates legacy panel and sidebar state into tool slots and routes legacy methods to the same state', async () => {

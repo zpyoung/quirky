@@ -3,6 +3,7 @@ import {
   DARK_THEME,
   DEFAULT_THEME,
   LIGHT_THEME,
+  UI_TOOL_HUES,
   UI_TOOL_SLOTS,
   parseChord,
   parseContributionId,
@@ -354,6 +355,10 @@ export function buildUiModel(input: {
         typeof declaration.data.icon === 'string' && declaration.data.icon.length > 0
           ? declaration.data.icon
           : undefined
+      const hue =
+        (kind === 'panel' || kind === 'sidebar-section' || kind === 'activity-item')
+          ? UI_TOOL_HUES.find((candidate) => candidate === declaration.data.hue)
+          : undefined
       return {
         id: declaration.id,
         kind,
@@ -366,6 +371,7 @@ export function buildUiModel(input: {
         module: moduleOf(declaration.plugin),
         ...(defaultSlot ? { defaultSlot } : {}),
         ...(icon ? { icon } : {}),
+        ...(hue ? { hue } : {}),
         ...(kind === 'view' && declaration.data.settings === true ? { settings: true } : {})
       }
     })
