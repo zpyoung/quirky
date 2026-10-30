@@ -123,7 +123,8 @@ function activityFor(sessions: Session[] | null, worktreeId: string, now: number
     ? glyph.label.trim() || (ACTIVITY_LABELS[glyph.display] ?? glyph.display)
     : ACTIVITY_LABELS[glyph.status] ?? glyph.status
   if (!session) return activity
-  return [session.agent, session.kind, session.title.trim() || null, activity].filter(Boolean).join(' · ')
+  const identity = session.title.trim() || session.agent || session.kind
+  return [identity, activity].filter(Boolean).join(' · ')
 }
 
 type CardProps = {
