@@ -46,7 +46,8 @@ function harness(initial: { active?: boolean; enabled?: boolean } = {}) {
   const trace: string[] = []
   const handlers = {
     setWrite: null as null | ((params: Record<string, unknown>) => Promise<unknown>),
-    command: null as null | ((params: Record<string, unknown> | undefined) => Promise<unknown>)
+    command: null as null | ((params: Record<string, unknown> | undefined) => Promise<unknown>),
+    self: null as null | (() => Promise<unknown>)
   }
   const emit = (id: string, value: boolean) => {
     settings[id.split('/')[1]!] = value
@@ -64,7 +65,8 @@ function harness(initial: { active?: boolean; enabled?: boolean } = {}) {
         emit(String(params?.id), params?.value as boolean)
         return { ok: true }
       }
-      if (method === 'ui.command.run') {
+      if (method === 'ui.window.self') return handlers.self ? handlers.self() : { connId: 7 }
+      if (method === 'ui.window.command.run') {
         trace.push('run')
         return handlers.command ? handlers.command(params) : { result: { started: true } }
       }
@@ -328,9 +330,18 @@ describe('annotate this page', () => {
     const options = await started(h)
     await options.annotate('pane-1')
     expect(h.trace).toEqual(['set false', 'mode off', 'run'])
-    const run = h.calls.find((call) => call.method === 'ui.command.run')!
-    expect(run.params).toEqual({ id: 'command:quirky.browser/design', args: { action: 'annotate', pane: 'pane-1' } })
+    const run = h.calls.find((call) => call.method === 'ui.window.command.run')!
+    expect(run.params).toEqual({ connId: 7, id: 'command:quirky.browser/design', args: { action: 'annotate', pane: 'pane-1' } })
     expect(h.toasts).toHaveLength(0)
+  })
+
+  test('shows the error when the window cannot identify itself', async () => {
+    const h = harness()
+    const options = await started(h)
+    h.handlers.self = async () => { throw new Error('window gone') }
+    await options.annotate('pane-1')
+    expect(h.trace).toEqual(['set false', 'mode off'])
+    expect(h.toasts[0]!.body).toContain('window gone')
   })
 
   test('shows the reason when annotate does not start', async () => {

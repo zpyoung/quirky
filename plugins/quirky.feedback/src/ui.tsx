@@ -53,7 +53,8 @@ export function activate(context: UiPluginContext): void {
     values.active = false
     unmountMode()
     try {
-      const response = await context.call('ui.command.run', { id: BROWSER_DESIGN, args: { action: 'annotate', pane } })
+      const { connId } = await context.call('ui.window.self', {}) as { connId: number }
+      const response = await context.call('ui.window.command.run', { connId, id: BROWSER_DESIGN, args: { action: 'annotate', pane } })
       const result = (response as { result?: { started?: unknown; reason?: unknown } } | null)?.result
       if (result?.started === false) context.toast('Could not start Annotate', typeof result.reason === 'string' ? result.reason : 'Browser Annotate did not start.')
     } catch (cause) {

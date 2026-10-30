@@ -147,16 +147,19 @@ export function createSession(context: UiPluginContext, hooks: { suspend(suspend
       const text = card?.text.trim() ?? ''
       if (card === null || card.saving || text === '' || text.length > MAX_COMMENT_LENGTH) return
       patchCard({ saving: true })
+      // the card can be cancelled and replaced while the save is in flight
+      const stillOpen = () => state.card?.serial === card.serial
+      const cardAfterSave = () => (stillOpen() ? null : state.card)
       try {
         if (card.id === null) {
           const added = await context.call('quirky.feedback/add', { intent: card.intent, comment: text, capture: card.capture }) as Comment
-          commit({ comments: [...state.comments, added], card: null })
+          commit({ comments: [...state.comments, added], card: cardAfterSave() })
         } else {
           const updated = await context.call('quirky.feedback/update', { id: card.id, comment: text, intent: card.intent }) as Comment
-          commit({ comments: state.comments.map((entry) => (entry.id === updated.id ? updated : entry)), card: null })
+          commit({ comments: state.comments.map((entry) => (entry.id === updated.id ? updated : entry)), card: cardAfterSave() })
         }
       } catch (cause) {
-        patchCard({ saving: false })
+        if (stillOpen()) patchCard({ saving: false })
         if (message(cause).startsWith(FEEDBACK_FULL)) toastFull()
         else toastError('Could not save the comment', cause)
       }

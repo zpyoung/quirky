@@ -88,12 +88,12 @@ CONTRACT: `quirky.browser/design` accepts optional `pane: string` beside `action
 
 Back-link: [SC-1, SC-3, SC-8, SC-12, SC-13](logic.md#behavior-and-scenarios), [Amendments](logic.md#status--amendments).
 
-- **Dots:** a comment finds its element only through its stored `selector`, re-queried with `document.querySelector`. Capture produces a selector unique at that moment, and terminal and browser panes use their pane marker. Re-query on mode start, layout change, resize and window scroll, at most once per animation frame. A miss hides the dot and marks the row "No longer on screen". A hit never updates stored context.
+- **Dots:** a comment finds its element only through its stored `selector`, re-queried with `document.querySelector`. Capture produces a selector unique at that moment, and terminal and browser panes use their pane marker. Re-query on mode start, layout change, resize, window scroll and page DOM changes outside the mode's overlay, at most once per animation frame. A miss hides the dot and marks the row "No longer on screen". A hit never updates stored context.
 - **Tray rows:** show number, intent, comment, owner and any stale label. Clicking a row reopens its text for editing. Each row has delete, without confirmation. Clear uses `context.confirm`, and only then calls `clear`. The tray collapses to a one-line bar that stays in the mode, and the collapse state isn't stored.
 - **Banner:** shows the mode text and an Exit button that sets `active` false.
 - **Failures:** a failed daemon call keeps the card or row as it was, and shows a toast. `feedback_full` shows the limit message without opening a card.
 - **Native masks:** the banner, card, tray and chip carry `data-quirky-native-mask`. The full-window selection host never does, because masking it would hide every Native page.
-- **SC-7 order:** Annotate this page sets `active` false, waits for the mode to unmount, then runs `quirky.browser/design` with `action: annotate` and the pane. It runs through `context.call('ui.command.run', ...)`, because `context.executeCommand` discards the `{ started, reason }` result.
+- **SC-7 order:** Annotate this page sets `active` false, waits for the mode to unmount, then runs `quirky.browser/design` with `action: annotate` and the pane. It runs through `context.call('ui.window.command.run', ...)` with the connection from `ui.window.self`, because `context.executeCommand` discards the `{ started, reason }` result and `ui.command.run` refuses when more than one window is open.
 
 ### Feedback daemon methods
 
@@ -129,7 +129,7 @@ SCHEMA: `Capture` holds `kind` (`element` | `terminal-pane` | `browser-pane`), `
 - While Option is held, the overlay host and its inner surface are both `pointer-events: none`, set with `important` priority. The host needs that priority because `createSelectionOverlay` sets it that way (`selection-overlay.ts:20-23`), and the surface needs it because its own `pointer-events: auto` would otherwise still take the click. Releasing Option restores it, and so does a window blur, so Option can't stick. `altKey` on pointer events corrects the state if a keydown was missed.
 - Turning the mode on moves focus to the surface, so keys reach the host even if a terminal had focus. A Native page never forwards keys, so inside one the banner's Exit button and the View item are the ways out.
 - Key listeners are on `window` in the capture phase. They handle Esc per SC-5 and stop propagation only for keys they consume.
-- The chip is positioned from each `.qbp-native-host` rect and updates on layout and resize. Its pane id comes from `.qbp[data-browser-pane]`. Selection of Watch panes resolves to the whole `.qbp`.
+- The chip is positioned from each `.qbp-native-host` rect and updates on layout, resize and page DOM changes. Its pane id comes from `.qbp[data-browser-pane]`. Selection of Watch panes resolves to the whole `.qbp`.
 
 ### Mode lifecycle
 

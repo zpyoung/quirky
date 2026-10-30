@@ -179,6 +179,26 @@ describe('adding', () => {
     expect(fake.calls.some((call) => call.method === 'quirky.feedback/add')).toBe(false)
   })
 
+  test('a save that finishes after Cancel leaves the next draft alone', async () => {
+    const fake = await start()
+    const call = fake.context.call
+    let finish = () => {}
+    fake.context.call = (async (method: string, params?: Record<string, unknown>) => {
+      if (method === 'quirky.feedback/add') await new Promise<void>((resolve) => { finish = resolve })
+      return (call as (method: string, params?: Record<string, unknown>) => Promise<unknown>)(method, params)
+    }) as typeof fake.context.call
+    await pick(item)
+    await type('first')
+    await click(button('Add'))
+    await click(button('Cancel'))
+    await pick(item)
+    await type('second')
+    await act(async () => { finish(); await tick(10) })
+    expect(rows()).toHaveLength(1)
+    expect(card()).not.toBeNull()
+    expect(card()!.querySelector('textarea')!.value).toBe('second')
+  })
+
   test('a failed add keeps the card and shows a toast', async () => {
     const fake = await start()
     fake.failures.set('quirky.feedback/add', new Error('disk full'))
@@ -462,6 +482,27 @@ describe('dots', () => {
       await tick(40)
     })
     expect(dots()[0]!.style.left).toContain('300')
+  })
+
+  test('are re-queried when the page changes without a layout event', async () => {
+    await start([sample('a')])
+    rect(item, { x: 400, y: 30, width: 100, height: 20 })
+    await act(async () => {
+      document.getElementById('app')!.setAttribute('data-changed', '1')
+      await tick(40)
+    })
+    expect(dots()[0]!.style.left).toContain('400')
+  })
+
+  test('ignore changes inside the mode\'s own overlay', async () => {
+    await start([sample('a')])
+    const before = dots()[0]!.style.left
+    rect(item, { x: 500, y: 30, width: 100, height: 20 })
+    await act(async () => {
+      dots()[0]!.setAttribute('data-changed', '1')
+      await tick(40)
+    })
+    expect(dots()[0]!.style.left).toBe(before)
   })
 
   test('disappear when the element goes away', async () => {
