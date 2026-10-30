@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Button, EmptyState, IconButton, Popover, ToolPanelActions } from '@quirky/ui'
+import { Button, EmptyState, ExpandingIconButton, IconButton, Popover, ToolPanelActions } from '@quirky/ui'
 import type { Repo, Session, UiLayout, UiPluginContext, Worktree } from '@quirky/protocol'
 import { confirmsDelete, currentWindowId, deleteWorkspace, setWorktree, type CreateRequests, type KeptBranch, type TrustChoice, type TrustRequest } from './actions'
 import { AddProjectDialog } from './AddProjectDialog'
@@ -525,6 +525,14 @@ export function WorktreesSection({ context, report, requests }: Props) {
     <div className="ui-stack ui-panel-content">
       <ToolPanelActions>
         <>
+          {!(loaded && repos.length === 0) && (
+            <ExpandingIconButton label="Add project" onClick={openAddProject}>
+              <svg viewBox="0 0 24 24" width="var(--ui-icon-size)" height="var(--ui-icon-size)" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z" />
+                <path d="M12 10.5v5M9.5 13h5" />
+              </svg>
+            </ExpandingIconButton>
+          )}
           <IconButton
             ref={optionsButton}
             label="Worktrees options"
@@ -538,11 +546,6 @@ export function WorktreesSection({ context, report, requests }: Props) {
           </IconButton>
           <Popover open={optionsOpen} label="Worktrees options" anchor={optionsButton} onClose={() => setOptionsOpen(false)}>
             <div className="ui-stack">
-              {!(loaded && repos.length === 0) && (
-                <Button type="button" variant="primary" onClick={openAddProject}>
-                  Add project
-                </Button>
-              )}
               <StockOptions
                 options={stockOptions}
                 repos={repos}

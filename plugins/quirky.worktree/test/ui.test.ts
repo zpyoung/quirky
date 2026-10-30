@@ -134,6 +134,7 @@ type World = {
   failSet: Error | null
   /** When set, `create` waits for it, so a test can look at the pending row. */
   createGate: Promise<void> | null
+  repoListGate: Promise<void> | null
   /** Errors the next creates throw, in order. */
   createFailures: Error[]
   /** What `create` returns beyond the worktree. */
@@ -163,6 +164,7 @@ function setup(layout: UiLayout = { worktree: null, view: null, panel: null, sid
     failRemove: [],
     failSet: null,
     createGate: null,
+    repoListGate: null,
     createFailures: [],
     createExtra: {},
     changedFiles: 0,
@@ -223,6 +225,7 @@ function setup(layout: UiLayout = { worktree: null, view: null, panel: null, sid
             extraArgs: { supported: false, allowed: null, placeholder: null, message: null }
           }
         case 'quirky.repo/list':
+          await world.repoListGate
           return [...world.repos]
         case 'quirky.repo/groupList':
           return [...world.groups]
@@ -585,7 +588,7 @@ test('Worktrees controls are supplied by the header popover, not the closed pane
   expect(trigger?.getAttribute('aria-expanded')).toBe('false')
   expect(trigger?.getAttribute('aria-haspopup')).toBe('dialog')
   expect(optionsPopover()).toBeNull()
-  for (const label of ['Add project', 'Workspace options', 'Activity filters', 'More workspace tools']) {
+  for (const label of ['Workspace options', 'Activity filters', 'More workspace tools']) {
     expect(host.textContent).not.toContain(label)
   }
   expect(host.querySelector('[role="tablist"]')).toBeNull()
@@ -594,7 +597,7 @@ test('Worktrees controls are supplied by the header popover, not the closed pane
   await click(trigger!)
   const popover = optionsPopover()
   expect(popover).not.toBeNull()
-  expect(buttonNamed(popover!, 'Add project')).toBeDefined()
+  expect(buttonNamed(popover!, 'Add project')).toBeUndefined()
   const summaries = [...popover!.querySelectorAll('details > summary')].map((summary) => summary.textContent?.trim())
   expect(summaries).toContain('Workspace options')
   expect(summaries).toContain('More workspace tools')
@@ -638,11 +641,22 @@ test('SC-35: renders repos and worktrees and reports them with status and select
   expect(rowOf('fix-login', 'api').querySelector('[aria-label="Status: working"]')).not.toBeNull()
 })
 
-test('an empty tree offers Add project', async () => {
+test('the header offers Add project left of the options funnel', async () => {
+  const h = setup()
+  await h.mountInto(host)
+  const add = buttonNamed(host, 'Add project')
+  const funnel = buttonNamed(host, 'Worktrees options')
+  expect(add?.closest('header')).toBe(funnel!.closest('header'))
+  expect(add!.compareDocumentPosition(funnel!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+})
+
+test('an empty tree offers Add project only from its empty state', async () => {
   const h = setup()
   h.world.repos = []
   await h.mountInto(host)
-  expect(buttonNamed(host, 'Add project')).toBeDefined()
+  const adds = [...host.querySelectorAll('button')].filter((b) => b.getAttribute('aria-label') === 'Add project' || b.textContent === 'Add project')
+  expect(adds).toHaveLength(1)
+  expect(adds[0]!.closest('header')).toBeNull()
   await openOptions()
   expect(buttonNamed(optionsContent(), 'Add project')).toBeUndefined()
   expect(lastReport(h)).toMatchObject({ pinned: [], groups: [], projects: [], dialog: null, notices: [] })
@@ -1053,12 +1067,28 @@ test('a delete that keeps its branch shows a notice whose Delete branch calls de
   expect(lastReport(h).notices).toEqual([])
 })
 
+test('the header keeps Add project while projects load and only drops it once the list is empty', async () => {
+  const h = setup()
+  h.world.repos = []
+  let release!: () => void
+  h.world.repoListGate = new Promise((resolve) => (release = resolve))
+  await h.mountInto(host)
+  expect(host.textContent).toContain('Loading projects and worktrees')
+  expect(buttonNamed(host, 'Add project')?.closest('header')).not.toBeNull()
+
+  await act(async () => release())
+  expect(host.textContent).not.toContain('Loading projects and worktrees')
+  expect(buttonNamed(host, 'Add project')?.closest('header')).toBeNull()
+
+  h.world.repos = [...repos]
+  await h.emit({ type: 'quirky.repo/changed', data: {} })
+  expect(buttonNamed(host, 'Add project')?.closest('header')).not.toBeNull()
+})
+
 test('the Add project button opens a dialog whose Add submits the trimmed path', async () => {
   const h = setup()
   await h.mountInto(host)
-  await openOptions()
-  await click(buttonNamed(optionsContent(), 'Add project')!)
-  expect(optionsPopover()).toBeNull()
+  await click(buttonNamed(host, 'Add project')!)
   expect(lastReport(h).dialog).toEqual({ kind: 'add-project' })
   const input = document.querySelector('[role="dialog"] input') as HTMLInputElement
   const submit = dialogButton('Add')
@@ -1072,7 +1102,8 @@ test('Add project Browse uses the native picker and cancellation preserves the t
   const h = setup()
   await h.mountInto(host)
   await openOptions()
-  await click(buttonNamed(optionsContent(), 'Add project')!)
+  // a keyboard user can reach the header button with the popover open, and no pointerdown dismisses it
+  await click(buttonNamed(host, 'Add project')!)
   expect(optionsPopover()).toBeNull()
   const input = document.querySelector('[role="dialog"] input') as HTMLInputElement
   await typeInto(input, '/draft/path')

@@ -130,6 +130,8 @@ None. Discussion stayed within scope.
 
 ## Status & amendments
 
-**Status:** Design approved 2026-10-30; written spec awaiting review.
+**Status:** Approved 2026-10-30.
 
-**Amendments:** None.
+**Amendments:**
+
+- 2026-10-30, SC-2 and SC-3: panels have no fixed minimum. Dragging stops at 160px, but a narrow window scales side panels down further (108px at a 640px window with both sides open at their default sizes). The full button needs 156px, so below that it stays an icon on hover and focus and only changes color, because "never clipped" outranks growing. Below 88px the header controls wrap onto extra rows, because the resting icon no longer fits on one.

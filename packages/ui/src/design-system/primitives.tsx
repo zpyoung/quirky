@@ -1,6 +1,6 @@
 import { useId } from 'react'
 import type { CSSProperties } from 'react'
-import type { BadgeProps, ButtonProps, IconButtonProps, SelectFieldProps, StatusDotProps, TextAreaProps, TextFieldProps, UiStatus } from './contracts'
+import type { BadgeProps, ButtonProps, ExpandingIconButtonProps, IconButtonProps, SelectFieldProps, StatusDotProps, TextAreaProps, TextFieldProps, UiStatus } from './contracts'
 import { classNames } from './shared'
 
 const statusClasses: Record<UiStatus, string> = {
@@ -25,6 +25,26 @@ export function IconButton({ label, children, variant = 'secondary', type = 'but
       className={classNames('ui-button', `ui-button--${variant}`, 'ui-icon-button', className)}
     >
       <span className="ui-icon-button__icon">{children}</span>
+    </button>
+  )
+}
+
+/**
+ * An icon button that grows leftward into a primary labelled button on hover or keyboard focus, so
+ * controls to its right never move. Its accessible name is `label` in both states.
+ */
+export function ExpandingIconButton({ label, children, type = 'button', className, ...props }: ExpandingIconButtonProps) {
+  return (
+    <button
+      {...props}
+      aria-label={label}
+      type={type}
+      className={classNames('ui-button', 'ui-button--secondary', 'ui-expanding-icon-button', className)}
+    >
+      <span className="ui-icon-button__icon">{children}</span>
+      <span className="ui-expanding-icon-button__label" aria-hidden="true">
+        <span className="ui-expanding-icon-button__text">{label}</span>
+      </span>
     </button>
   )
 }

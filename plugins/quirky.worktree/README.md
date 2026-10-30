@@ -4,9 +4,9 @@ Reader: people and scripts managing worktrees — Decision: choose how the sideb
 
 ## Sidebar options
 
-Worktrees is the host-managed tool in the left-top slot by default. Add project, Workspace options,
-Activity filters and More workspace tools stay inside its panel; the latter includes the board
-and status editor. Project management uses the existing `quirky.repo` API, not a second tool.
+Worktrees is the host-managed tool in the left-top slot by default. Add project is a folder-plus
+button in its panel header. Workspace options, Activity filters and More workspace tools stay inside
+the header's options popover; the latter includes the board and status editor. Project management uses the existing `quirky.repo` API, not a second tool.
 Rows show name plus activity, with selected branch/note/status metadata on the secondary line
 and full text available on hover. Attention counts and contextual actions remain independently
 clickable. Controls, menus, dialogs and both appearances use the shared graphite system.
