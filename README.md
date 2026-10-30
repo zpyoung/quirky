@@ -294,6 +294,11 @@ dots, attention counts and a second activity line; project/worktree dialogs and 
 use the same graphite controls in both themes. Shared ContextMenu supports pointer-positioned
 menus with nested actions; shared Dialog supports wide content and stacked focus ownership.
 
+Narrow panels reflow header actions and row controls before they can crowd out names.
+Section headings stay on one line with ellipsis; full project names remain available on hover.
+The status bar reserves room for complete activity and needs-you metrics while usage adapts
+to the remaining width.
+
 ### Public plugin UI and grouping APIs
 
 The desktop host places tools in six movable slots: left top/bottom, right top/bottom and
