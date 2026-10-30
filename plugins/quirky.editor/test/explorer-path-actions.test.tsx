@@ -950,3 +950,78 @@ test('Explorer rename preserves leading spaces in a filename on submit', async (
   expect(existsSync(join(dirname(source), 'leading.txt'))).toBe(false)
 }, 30_000)
 
+test('Explorer contents results open after normal tabs without changing their pin or order', async () => {
+  const fixture = await makeFixture({ extraFiles: { 'README.md': 'needle in the README\n' } })
+  const pinned = await call<{ id: string; openedTabId: string }>(fixture.client, 'quirky.editor/open', {
+    worktree: fixture.worktree.id,
+    path: FILE_A,
+    preview: false,
+    pinned: true,
+    focus: false
+  })
+  const current = await call<{ id: string; openedTabId: string }>(fixture.client, 'quirky.editor/open', {
+    worktree: fixture.worktree.id,
+    path: FILE_B,
+    preview: false,
+    pinned: false,
+    focus: true
+  })
+  const readEditorState = () => call<{
+    buffers: { id: string; relativePath: string; pinned: boolean; preview: boolean; tabId: string | null; view: Record<string, unknown> }[]
+    tabs: { tabId: string; bufferId: string; mode: 'edit' | 'preview' }[]
+  }>(fixture.client, 'quirky.editor/state', { worktree: fixture.worktree.id })
+  const readWorkspace = async () => (await call<{ workspace: Workspace }>(
+    fixture.client,
+    'quirky.terminal/workspace',
+    { workspace: fixture.worktree.id }
+  )).workspace
+  const documentTabs = (workspace: Workspace, tabIds: string[]) => groupsInOrder(workspace.root)
+    .flatMap((group) => group.tabs.flatMap((tab) =>
+      tab.kind === 'view' && tabIds.includes(tab.id)
+        ? [{ id: tab.id, bufferId: tab.input?.bufferId, pinned: tab.pinned, preview: tab.preview }]
+        : []
+    ))
+
+  const beforeTabs = documentTabs(await readWorkspace(), [pinned.openedTabId, current.openedTabId])
+  expect(beforeTabs).toEqual([
+    { id: pinned.openedTabId, bufferId: pinned.id, pinned: true, preview: false },
+    { id: current.openedTabId, bufferId: current.id, pinned: false, preview: false }
+  ])
+
+  const panel = await renderExplorer(fixture)
+  const contentsMode = Array.from(panel.element.querySelectorAll<HTMLButtonElement>('.qe-explorer-search-mode button'))
+    .find((button) => button.textContent === 'Contents')
+  expect(contentsMode).not.toBeUndefined()
+  await act(async () => contentsMode!.click())
+  const queryInput = await waitForUi(() => panel.element.querySelector<HTMLInputElement>('input[placeholder="Search"]') ?? false)
+  await act(async () => replaceSelectedInputText(queryInput, 'needle'))
+  const searchButton = panel.element.querySelector<HTMLButtonElement>('.qe-explorer-query button')
+  expect(searchButton).not.toBeNull()
+  await act(async () => searchButton!.click())
+  const readmeResult = await waitForUi(() => {
+    const section = Array.from(panel.element.querySelectorAll<HTMLElement>('.qe-search-file'))
+      .find((entry) => entry.querySelector('h4')?.textContent === 'README.md')
+    return section?.querySelector<HTMLButtonElement>('button') ?? false
+  })
+  await act(async () => readmeResult.click())
+
+  const after = await waitForUi(async () => {
+    const state = await readEditorState()
+    const buffer = state.buffers.find((entry) => entry.relativePath === 'README.md')
+    if (!buffer || buffer.tabId === null) return false
+    return { state, buffer, tabId: buffer.tabId }
+  })
+  expect(after.buffer.view).toMatchObject({
+    byTabId: { [after.tabId]: { line: 1, column: 1 } }
+  })
+  expect(after.buffer).toMatchObject({ pinned: false, preview: false })
+  expect(after.state.tabs.map(({ tabId, bufferId, mode }) => ({ tabId, bufferId, mode }))).toEqual([
+    { tabId: pinned.openedTabId, bufferId: pinned.id, mode: 'edit' },
+    { tabId: current.openedTabId, bufferId: current.id, mode: 'edit' },
+    { tabId: after.tabId, bufferId: after.buffer.id, mode: 'edit' }
+  ])
+  expect(documentTabs(await readWorkspace(), [pinned.openedTabId, current.openedTabId, after.tabId])).toEqual([
+    ...beforeTabs,
+    { id: after.tabId, bufferId: after.buffer.id, pinned: false, preview: false }
+  ])
+}, 30_000)
