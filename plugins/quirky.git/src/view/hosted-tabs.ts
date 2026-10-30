@@ -80,7 +80,7 @@ function tabLocations(workspace: PublicWorkspace): TabLocation[] {
 
 function titleOf(input: DiffViewInput): string {
   const title = input.mode === 'file'
-    ? input.path ?? 'Diff'
+    ? input.path ? `${input.path} (Diff)` : 'Diff'
     : input.mode === 'combined'
       ? input.commit ? `Commit ${input.commit.slice(0, 8)}` : `${input.area ?? 'Changes'} Diff`
       : input.mode === 'conflicts'
