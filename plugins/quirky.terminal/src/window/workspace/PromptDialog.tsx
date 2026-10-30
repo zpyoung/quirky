@@ -52,7 +52,11 @@ export function PromptDialog({ request, pending, started, error, onSubmit, onClo
             }}
           />
         </FormRow>
-        {request.permissions ? <p className="ui-help-text">{PERMISSION_TEXT[request.permissions]} Change it in Agent settings.</p> : null}
+        {request.background
+          ? <p className="ui-help-text">Permissions: Tool approval. Requests that need approval appear in Quirky.</p>
+          : request.permissions
+            ? <p className="ui-help-text">{PERMISSION_TEXT[request.permissions]} Change it in Agent settings.</p>
+            : null}
         {started ? <p className="ui-help-text">This session has already started. Opening it will not start another agent.</p> : null}
         {error !== null ? <div className="ui-error-text" role="alert">{error}</div> : null}
         <div className="ui-dialog__actions qt-dialog-actions">

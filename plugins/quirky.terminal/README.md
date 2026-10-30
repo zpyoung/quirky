@@ -4,6 +4,8 @@
 
 **New tab → Claude (background)** runs Claude without a PTY and opens its transcript in the group where the menu was opened. The selected tab shows the session state; the transcript shows the prompt, output and follow-up input. Background sessions started elsewhere are not automatically added to terminal groups.
 
+Foreground agent sessions follow the permission mode in Agent settings. Background Claude sessions instead use tool approval; requests that need approval appear in Quirky, regardless of that foreground setting.
+
 If the session starts but its tab cannot be opened, the dialog keeps the submitted prompt read-only and offers **Open session** for that same session; it does not launch another agent.
 
 ## Closing running terminals

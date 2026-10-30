@@ -224,6 +224,23 @@ describe('SC-22: the + menu', () => {
     expect(view.q('[role="dialog"]')!.textContent).not.toContain('Permissions:')
   })
 
+  test('the Claude background dialog explains that tool approvals appear in Quirky, regardless of Agent settings', async () => {
+    const view = await mount()
+    await open(view)
+    await click(row(view, 'Claude (background)'))
+
+    const dialog = view.q('[role="dialog"]')!
+    const notice = dialog.textContent!.toLowerCase()
+    expect(notice).toContain('approval')
+    expect(notice).toContain('quirky')
+    expect(notice).not.toContain('bypass')
+    expect(notice).not.toContain('agent settings')
+
+    await click([...dialog.querySelectorAll<HTMLElement>('button')].find((el) => el.textContent === 'Cancel')!)
+    expect(callsTo(view.fake, 'quirky.structured/create')).toEqual([])
+    expect(callsTo(view.fake, 'newTab')).toEqual([])
+  })
+
   test('an empty prompt sends none', async () => {
     const view = await mount()
     await open(view)
