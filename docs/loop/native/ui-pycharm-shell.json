@@ -1,0 +1,46 @@
+{
+  "item": "ui-pycharm-shell",
+  "spec": "docs/quirk/specs/2026-10-30-ui-pycharm-shell/logic.md",
+  "scenarios": [
+    {
+      "id": "SC-bar-traffic-lights",
+      "title": "On a fresh temporary HOME and QUIRKY_HOME, the desktop window's 40-high bar holds the macOS traffic lights at its left edge with the project switcher to their right, and the lights overlap no control and sit vertically centered in the bar",
+      "status": "pending",
+      "lastRun": null,
+      "report": null,
+      "summary": null
+    },
+    {
+      "id": "SC6-bar-drag",
+      "title": "On a fresh temporary HOME and QUIRKY_HOME, dragging the desktop window from empty bar space moves the window, while pressing and dragging from the project switcher does not move it and a plain click on that switcher opens its popup",
+      "status": "pending",
+      "lastRun": null,
+      "report": null,
+      "summary": null
+    },
+    {
+      "id": "SC-bar-controls-click",
+      "title": "On a fresh temporary HOME and QUIRKY_HOME, clicking each bar control in the desktop window (project switcher, worktree switcher, New worktree, Back, Forward, New agent, its caret, the needs-you count, Search, Overflow) fires its own action and never starts a window drag, and the window does not move after any click",
+      "status": "pending",
+      "lastRun": null,
+      "report": null,
+      "summary": null
+    },
+    {
+      "id": "SC-fullscreen",
+      "title": "On a fresh temporary HOME and QUIRKY_HOME, entering macOS fullscreen on the desktop window keeps the bar's controls laid out and clickable with no gap or overlap where the traffic lights were, and leaving fullscreen puts the lights back without covering a control",
+      "status": "pending",
+      "lastRun": null,
+      "report": null,
+      "summary": null
+    },
+    {
+      "id": "SC-inactive-dim",
+      "title": "On a fresh temporary HOME and QUIRKY_HOME, bringing another macOS app to the front dims the whole Quirky window and returning to Quirky removes the dim; record whether a blur event fires in the desktop webview when another app takes focus (read data-window-inactive on .app, or log window blur), because Electrobun firing blur is unverified, and if it never fires report that the dimming cannot trigger",
+      "status": "pending",
+      "lastRun": null,
+      "report": null,
+      "summary": null
+    }
+  ]
+}

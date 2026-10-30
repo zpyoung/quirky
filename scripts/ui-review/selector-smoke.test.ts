@@ -8,7 +8,7 @@ import { captureApplication } from './capture'
 import { SCREENSHOT_SIZE, goldenFor, pngDimensions } from './goldens'
 
 const repoRoot = fileURLToPath(new URL('../..', import.meta.url))
-const BUILD_AND_CAPTURE_TIMEOUT_MS = 360_000
+const BUILD_AND_CAPTURE_TIMEOUT_MS = 600_000
 
 function chromiumExecutable(): string | null {
   try {
@@ -41,14 +41,14 @@ afterEach(() => {
 })
 
 // Fails loudly when a shell DOM change breaks the selectors capture.ts waits on.
-test.skipIf(!executable)('the real host:shell capture still matches the shell DOM', async () => {
+test.skipIf(!executable)('the real host:shell, host:scoped and host:popups captures still match the shell DOM', async () => {
   const outputDir = join(scratch, 'output')
   mkdirSync(outputDir)
 
   const manifest = await captureApplication({
     repoRoot,
     outputDir,
-    only: ['host:shell'],
+    only: ['host:shell', 'host:scoped', 'host:popups'],
     skipBuild: false,
     browserExecutable: executable!,
     themes: ['dark'],
@@ -56,10 +56,10 @@ test.skipIf(!executable)('the real host:shell capture still matches the shell DO
   })
 
   expect(manifest.failures).toEqual([])
-  expect(manifest.captures).toHaveLength(1)
-  const [capture] = manifest.captures
-  expect(capture!.targetId).toBe('host:shell')
-  expect(capture!.status).toBe('captured')
-  expect(capture!.reference.path).toBe(goldenFor('host:shell', 'dark', repoRoot))
-  expect(pngDimensions(readFileSync(capture!.image!.path))).toEqual(SCREENSHOT_SIZE)
+  expect(manifest.captures.map((capture) => capture.targetId)).toEqual(['host:shell', 'host:scoped', 'host:popups'])
+  for (const capture of manifest.captures) {
+    expect(capture.status).toBe('captured')
+    expect(capture.reference.path).toBe(goldenFor(capture.targetId, 'dark', repoRoot))
+    expect(pngDimensions(readFileSync(capture.image!.path))).toEqual(SCREENSHOT_SIZE)
+  }
 }, BUILD_AND_CAPTURE_TIMEOUT_MS)
