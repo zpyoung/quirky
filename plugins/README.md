@@ -596,6 +596,9 @@ same JSON-RPC API used by the desktop and CLI. The compatible Quirky phone app
 and its signed installation links are not distributed yet; the desktop does
 not redirect users to the incompatible Orca app or its hosted relay.
 
+The Mobile sidebar keeps its heading, controls, and onboarding steps inset from
+the panel edges using the shared panel-content spacing.
+
 The Expo source companion includes Source Control and diff-review notes,
 worktree-contained file previews/editing, GitHub Tasks and linked workspace
 creation, Claude/Codex account usage and selection, agent-history search/resume,
