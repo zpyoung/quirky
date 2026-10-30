@@ -426,7 +426,6 @@ export function ReviewPage(props: ReviewsSurfaceProps) {
   const workspaceReady = workspace.status === 'ready' && owner !== null && url !== null
 
   if (owner === null) return <main className="ui-stack" aria-label="Pull request detail">
-    <Button onClick={() => void back()}>Back to pull requests</Button>
     <SectionHeader title="No pull request selected" />
     <p>Open a pull request from Tasks or the Checks panel to view its details.</p>
   </main>

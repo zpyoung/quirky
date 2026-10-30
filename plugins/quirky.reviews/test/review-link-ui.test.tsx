@@ -704,3 +704,25 @@ test('a refused detail route remains visible and never falls back to the system 
   const currentLayout = await host.client.call('ui.state', {})
   expect(currentLayout).toEqual(previousLayout)
 }, 30_000)
+
+test('mounted detail shows Back only while a pull request is selected', async () => {
+  const { host, ui } = await bootUi(detailGhSource, { remote: 'https://github.com/source-owner/source-repo.git' })
+  host.writeState(detailSeedState())
+  const empty = await host.client.callAny('quirky.reviews/state', {}) as ReviewsState
+  const detailMount = mountDetail(ui, empty)
+  await settleUi(ui)
+
+  expect([...detailMount.element.querySelectorAll('button')].filter((candidate) => candidate.textContent?.trim() === 'Back to pull requests')).toHaveLength(0)
+  expect(detailMount.element.textContent).toContain('No pull request selected')
+
+  const selected = await detailState(host)
+  detailMount.render(selected)
+  await settleUi(ui)
+  const back = button(detailMount.element, (candidate) => candidate.textContent?.trim() === 'Back to pull requests', 'Back to pull requests')
+  expect(back.disabled).toBe(false)
+
+  detailMount.render(empty)
+  await settleUi(ui)
+  expect(detailMount.element.textContent).toContain('No pull request selected')
+  expect([...detailMount.element.querySelectorAll('button')].filter((candidate) => candidate.textContent?.trim() === 'Back to pull requests')).toHaveLength(0)
+}, 30_000)
