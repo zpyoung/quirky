@@ -100,10 +100,13 @@ describe('dragging an edge', () => {
 })
 
 describe('the floating button', () => {
-  test('SC-59: starts at the bottom right and stays inside the window', () => {
-    expect(defaultButton(VIEW)).toEqual({ x: 1400 - BUTTON_SIZE - 24, y: 900 - BUTTON_SIZE - 72 })
+  test('centers in a supplied anchor', () => {
+    expect(defaultButton(VIEW, { left: 1200, top: 700, width: 40, height: 40 })).toEqual({ x: 1202, y: 702 })
     expect(clampButton({ x: -40, y: -40 }, VIEW)).toEqual({ x: 8, y: 8 })
     expect(clampButton({ x: 5000, y: 5000 }, VIEW)).toEqual({ x: 1400 - BUTTON_SIZE - 8, y: 900 - BUTTON_SIZE - 8 })
     expect(clampButton({ x: 300, y: 200 }, VIEW)).toEqual({ x: 300, y: 200 })
+  })
+  test('falls back when the anchor has not been measured', () => {
+    expect(defaultButton(VIEW, { left: 0, top: 0, width: 0, height: 0 })).toEqual(defaultButton(VIEW))
   })
 })

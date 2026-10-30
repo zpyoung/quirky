@@ -128,6 +128,18 @@
   gap: var(--ui-space-8);
 }
 
+.tool-shell__stripe--bottom-right .tool-shell__stripe-scroll {
+  inset-inline-end: calc(var(--tool-right-rail) * var(--compat-px-1));
+}
+
+.tool-shell__overlay-button-anchor {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: calc(var(--tool-right-rail) * var(--compat-px-1));
+  height: calc(var(--tool-bottom-rail) * var(--compat-px-1));
+}
+
 .tool-shell__stripe[data-drop-target='true'] {
   outline: var(--ui-focus-width) solid var(--ui-accent);
   outline-offset: var(--compat-px-n1);

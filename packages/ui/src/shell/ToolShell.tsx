@@ -702,6 +702,7 @@ export function ToolShell({ geometry, sizes, onResizePreview, onResizeCommit }: 
           onMove={move}
         />
       ))}
+      <div className="tool-shell__overlay-button-anchor" data-overlay-button-anchor aria-hidden="true" />
       <aside className="tool-shell__panels" {...panelRegion}>
         {uniqueOpened.map(({ entry, slot }) => (
           <section className={`tool-shell__panel tool-shell__panel--${slot}`} data-tool-panel={entry.id} key={entry.id}>

@@ -457,6 +457,7 @@ for **main**. Keys are macOS keys (`⌘` is Mod).
     - **Given** the floating workspace enabled
     - **When** the person drags the floating button to another corner, right-clicks it and picks Hide Floating Workspace
     - **Then** the button stays where it was dropped after a relaunch; Hide turns the "Enable Floating Workspace" setting off, which removes the button and makes `⌘⌥A` do nothing until the setting is on again
+    - **Default placement:** when the button has no saved position, it is centered in the shell's 40×40 bottom-right overlay anchor and follows anchor, shell-workspace or window resizing; without a host anchor it keeps the viewport default, while saved and dragged positions remain viewport-clamped
 
 ### Keybindings
 
