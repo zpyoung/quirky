@@ -20,6 +20,8 @@ In a horizontally scrollable group, resizing the tab strip or changing the selec
 
 Floating documents use the editor-owned profile notes directory, resolved explicitly by `quirky.editor/documentRoot({worktree:"floating"})`. This does not grant access to HOME or arbitrary files. Markdown, editor and Browser tabs preserve the captured floating group and use their existing public owners and close/resource leases.
 
+The floating panel and toggle stay below Usage popovers and public modal overlays, so those surfaces remain readable and clickable.
+
 ## Terminal appearance and command tabs
 
 Terminal panes follow the app's dark/light appearance by default, using graphite palettes with all 16 ANSI colors. Dark and Light pin terminal panes; System follows the OS independently of the app. Appearance and terminal-setting changes apply to open panes without restarting them. Tango and bounded custom JSON palettes remain available; invalid custom data warns and falls back to the matching graphite palette.
