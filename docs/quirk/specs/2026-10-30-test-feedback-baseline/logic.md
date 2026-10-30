@@ -281,6 +281,6 @@ Build-only questions for the tech spec:
 
 ## Status & amendments
 
-**Status:** Approved. Tech spec: requested.
+**Status:** Approved. Tech spec: authored at the user's request, in [tech.md](tech.md).
 
 **Amendments:** None.
