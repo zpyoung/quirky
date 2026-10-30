@@ -666,7 +666,7 @@ export function BrowserPaneWindow({ context, input }: { context: UiPluginContext
     if (!nativeIdentityNeeded) return
     let current = true
     nativePaneUserAgent(context).then(
-      (value) => { if (current) setNativeUserAgent((previous) => previous?.value === value ? previous : { value }) },
+      (value) => { if (current) setNativeUserAgent((previous) => previous && previous.value === value ? previous : { value }) },
       (error: unknown) => { if (current) setNativeError(`Browser identity could not be read: ${errorText(error)}`) }
     )
     return () => { current = false }
