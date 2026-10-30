@@ -170,6 +170,7 @@ for **main**. Keys are macOS keys (`⌘` is Mod).
     - **Given** tabs "Terminal 1" and "Build", "Build" active
     - **When** the person clicks "Terminal 1", switches to another worktree, and comes back
     - **Then** "Terminal 1" is active again, its panes attach and show their screens, and "Build"'s panes are not mounted while hidden
+    - When the group's tabs do not fit, visible left/right scroll controls reveal hidden tabs without changing the active tab. Each control is disabled at its boundary; both disappear when the tabs fit again.
 
 12. **SC-12: closing an idle tab ends its sessions without asking** (UI, CLI)
     - **Given** tab "Build" with two idle shells at their prompt
