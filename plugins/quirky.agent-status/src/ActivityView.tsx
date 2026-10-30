@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useId, useRef, useState, type ChangeEvent, type CSSProperties } from 'react'
-import { Badge, Button, EmptyState, FormRow, InlineAgentCard, ListRow, SectionHeader, TextField, type UiStatus } from '@quirky/ui'
+import { Badge, Button, ControlIcon, EmptyState, FormRow, IconButton, InlineAgentCard, ListRow, SectionHeader, TextField, ToolPanelFrame, ToolPanelTools, type UiStatus } from '@quirky/ui'
 import type { QuirkyEvent, UiPluginContext } from '@quirky/protocol'
 import type { ActivityQuery, ActivityThread } from './activity-types'
 
@@ -32,8 +32,6 @@ const PAGE_STYLE: CSSProperties = {
   overflow: 'hidden'
 }
 const EMBEDDED_PAGE_STYLE: CSSProperties = { ...PAGE_STYLE, display: 'block', overflowY: 'auto' }
-const HEADER_STYLE: CSSProperties = { padding: 'var(--ui-space-12)' }
-const ACTIONS_STYLE: CSSProperties = { display: 'flex', flexWrap: 'wrap', gap: 'var(--ui-space-8)' }
 const FILTERS_STYLE: CSSProperties = {
   display: 'flex',
   flexDirection: 'column',
@@ -242,150 +240,151 @@ export function ActivityView({ context, input, embedded }: { context: UiPluginCo
   const hasFilters = Boolean(view.text?.trim() || view.worktree?.trim() || view.unreadOnly)
 
   return (
-    <main style={embedded ? EMBEDDED_PAGE_STYLE : PAGE_STYLE}>
-      <div style={HEADER_STYLE}>
-        <SectionHeader
-          title="Activity"
-          actions={
-            <div style={ACTIONS_STYLE}>
-              <Button aria-label="Mark all read" disabled={!threads.some((thread) => thread.unread)} onClick={() => void markAllRead()}>
-                Mark all read
-              </Button>
-              <Button aria-label="Clear completed activity" variant="destructive" disabled={loading || error !== null || !threads.some((thread) => thread.display === 'done' || thread.display === 'failed' || thread.display === 'interrupted')} onClick={() => void clearCompleted()}>
-                Clear completed
-              </Button>
-            </div>
-          }
-        />
-      </div>
-      <form
-        style={FILTERS_STYLE}
-        onSubmit={(event) => {
-          event.preventDefault()
-          applyFilters()
-        }}
-      >
-        <TextField
-          id={`${controlId}-search`}
-          label="Search Activity"
-          aria-label="Search Activity"
-          type="search"
-          value={draftText}
-          onChange={(event: ChangeEvent<HTMLInputElement>) => setDraftText(event.currentTarget.value)}
-        />
-        {embedded ? null : (
+    <ToolPanelFrame title="Activity">
+      <ToolPanelTools>
+        <IconButton label="Mark all read" title="Mark all read" disabled={!threads.some((thread) => thread.unread)} onClick={() => void markAllRead()}>
+          <ControlIcon name="check" />
+        </IconButton>
+        <IconButton
+          label="Clear completed activity"
+          title="Clear completed"
+          variant="destructive"
+          disabled={loading || error !== null || !threads.some((thread) => thread.display === 'done' || thread.display === 'failed' || thread.display === 'interrupted')}
+          onClick={() => void clearCompleted()}
+        >
+          <ControlIcon name="x" />
+        </IconButton>
+      </ToolPanelTools>
+      <main style={embedded ? EMBEDDED_PAGE_STYLE : PAGE_STYLE}>
+        <form
+          style={FILTERS_STYLE}
+          onSubmit={(event) => {
+            event.preventDefault()
+            applyFilters()
+          }}
+        >
           <TextField
-            id={`${controlId}-worktree`}
-            label="Worktree ID"
-            aria-label="Worktree ID"
+            id={`${controlId}-search`}
+            label="Search Activity"
+            aria-label="Search Activity"
             type="search"
-            value={draftWorktree}
-            onChange={(event: ChangeEvent<HTMLInputElement>) => setDraftWorktree(event.currentTarget.value)}
+            value={draftText}
+            onChange={(event: ChangeEvent<HTMLInputElement>) => setDraftText(event.currentTarget.value)}
           />
-        )}
-        <FormRow label="Unread only" htmlFor={`${controlId}-unread`}>
-          <input
-            id={`${controlId}-unread`}
-            aria-label="Unread only"
-            type="checkbox"
-            checked={view.unreadOnly === true}
-            style={{ accentColor: 'var(--ui-accent)' }}
-            onChange={(event: ChangeEvent<HTMLInputElement>) => updateView({ unreadOnly: event.currentTarget.checked })}
-          />
-        </FormRow>
-        <FormRow label="Group by" htmlFor={`${controlId}-group`}>
-          <select
-            id={`${controlId}-group`}
-            aria-label="Group Activity by"
-            className="ui-text-field__input"
-            style={{ appearance: 'auto' }}
-            value={view.group}
-            onChange={(event: ChangeEvent<HTMLSelectElement>) => updateView({ group: event.currentTarget.value as GroupBy })}
-          >
-            <option value="status">Status</option>
-            <option value="worktree">Workspace</option>
-            <option value="provider">Provider</option>
-            <option value="none">No groups</option>
-          </select>
-        </FormRow>
-        <Button type="submit" aria-label="Apply Activity filters" variant="primary">
-          Apply
-        </Button>
-      </form>
-      <div style={RESULTS_STYLE}>
-        {error ? <div className="ui-error-text" role="alert" style={MESSAGE_STYLE}>{error}</div> : null}
-        {loading && threads.length === 0 ? <p className="ui-text-muted" role="status" style={MESSAGE_STYLE}>Loading Activity…</p> : null}
-        {!loading && !error && threads.length === 0 ? (
-          <div role="status">
-            <EmptyState message={hasFilters ? 'No Activity threads match these filters.' : 'No Activity threads yet.'} />
-          </div>
-        ) : null}
-        <div className="ui-stack">
-          {grouped.map((group) => (
-            <section className="ui-stack" data-activity-group={group.key} key={group.key}>
-              {view.group !== 'none' ? <SectionHeader title={group.label} /> : null}
-              <ul style={THREAD_LIST_STYLE}>
-                {group.threads.map((thread) => {
-                  const isExpanded = expanded[thread.sessionId] === true
-                  const status = statusForDisplay(thread.display)
-                  return (
-                    <li className="ui-stack" data-session-id={thread.sessionId} key={thread.sessionId}>
-                      <InlineAgentCard
-                        title={thread.sessionName}
-                        status={status}
-                        action={{ label: 'Open', onAction: () => openThread(thread) }}
-                        description={
-                          <div className="ui-stack">
-                            <div className="ui-cluster">
-                              <span>{thread.label}</span>
-                              {thread.unread ? <Badge tone="needs-you" label="Unread">Unread</Badge> : null}
-                              <span>{thread.worktreeName} · {thread.agent} · {thread.live ? 'Available' : 'Unavailable'}</span>
+          {embedded ? null : (
+            <TextField
+              id={`${controlId}-worktree`}
+              label="Worktree ID"
+              aria-label="Worktree ID"
+              type="search"
+              value={draftWorktree}
+              onChange={(event: ChangeEvent<HTMLInputElement>) => setDraftWorktree(event.currentTarget.value)}
+            />
+          )}
+          <FormRow label="Unread only" htmlFor={`${controlId}-unread`}>
+            <input
+              id={`${controlId}-unread`}
+              aria-label="Unread only"
+              type="checkbox"
+              checked={view.unreadOnly === true}
+              style={{ accentColor: 'var(--ui-accent)' }}
+              onChange={(event: ChangeEvent<HTMLInputElement>) => updateView({ unreadOnly: event.currentTarget.checked })}
+            />
+          </FormRow>
+          <FormRow label="Group by" htmlFor={`${controlId}-group`}>
+            <select
+              id={`${controlId}-group`}
+              aria-label="Group Activity by"
+              className="ui-text-field__input"
+              style={{ appearance: 'auto' }}
+              value={view.group}
+              onChange={(event: ChangeEvent<HTMLSelectElement>) => updateView({ group: event.currentTarget.value as GroupBy })}
+            >
+              <option value="status">Status</option>
+              <option value="worktree">Workspace</option>
+              <option value="provider">Provider</option>
+              <option value="none">No groups</option>
+            </select>
+          </FormRow>
+          <Button type="submit" aria-label="Apply Activity filters" variant="primary">
+            Apply
+          </Button>
+        </form>
+        <div style={RESULTS_STYLE}>
+          {error ? <div className="ui-error-text" role="alert" style={MESSAGE_STYLE}>{error}</div> : null}
+          {loading && threads.length === 0 ? <p className="ui-text-muted" role="status" style={MESSAGE_STYLE}>Loading Activity…</p> : null}
+          {!loading && !error && threads.length === 0 ? (
+            <div role="status">
+              <EmptyState message={hasFilters ? 'No Activity threads match these filters.' : 'No Activity threads yet.'} />
+            </div>
+          ) : null}
+          <div className="ui-stack">
+            {grouped.map((group) => (
+              <section className="ui-stack" data-activity-group={group.key} key={group.key}>
+                {view.group !== 'none' ? <SectionHeader title={group.label} /> : null}
+                <ul style={THREAD_LIST_STYLE}>
+                  {group.threads.map((thread) => {
+                    const isExpanded = expanded[thread.sessionId] === true
+                    const status = statusForDisplay(thread.display)
+                    return (
+                      <li className="ui-stack" data-session-id={thread.sessionId} key={thread.sessionId}>
+                        <InlineAgentCard
+                          title={thread.sessionName}
+                          status={status}
+                          action={{ label: 'Open', onAction: () => openThread(thread) }}
+                          description={
+                            <div className="ui-stack">
+                              <div className="ui-cluster">
+                                <span>{thread.label}</span>
+                                {thread.unread ? <Badge tone="needs-you" label="Unread">Unread</Badge> : null}
+                                <span>{thread.worktreeName} · {thread.agent} · {thread.live ? 'Available' : 'Unavailable'}</span>
+                              </div>
+                              {thread.prompt ? <span>{thread.prompt}</span> : null}
+                              {thread.detail ? <span>{thread.detail}</span> : null}
                             </div>
-                            {thread.prompt ? <span>{thread.prompt}</span> : null}
-                            {thread.detail ? <span>{thread.detail}</span> : null}
-                          </div>
-                        }
-                      />
-                      <div className="ui-cluster">
-                        <Button disabled={!thread.unread} onClick={() => void markRead(thread)}>
-                          {thread.unread ? 'Mark read' : 'Read'}
-                        </Button>
-                        {thread.children.length > 0 ? (
-                          <Button
-                            aria-label={`${isExpanded ? 'Hide' : 'Show'} child agents for ${thread.sessionId}`}
-                            aria-expanded={isExpanded}
-                            onClick={() => {
-                              const expanding = !isExpanded
-                              setExpanded((previous) => ({ ...previous, [thread.sessionId]: expanding }))
-                              if (expanding && thread.unread) void markRead(thread)
-                            }}
-                          >
-                            {isExpanded ? 'Hide child agents' : `Show ${thread.children.length} child agents`}
+                          }
+                        />
+                        <div className="ui-cluster">
+                          <Button disabled={!thread.unread} onClick={() => void markRead(thread)}>
+                            {thread.unread ? 'Mark read' : 'Read'}
                           </Button>
+                          {thread.children.length > 0 ? (
+                            <Button
+                              aria-label={`${isExpanded ? 'Hide' : 'Show'} child agents for ${thread.sessionId}`}
+                              aria-expanded={isExpanded}
+                              onClick={() => {
+                                const expanding = !isExpanded
+                                setExpanded((previous) => ({ ...previous, [thread.sessionId]: expanding }))
+                                if (expanding && thread.unread) void markRead(thread)
+                              }}
+                            >
+                              {isExpanded ? 'Hide child agents' : `Show ${thread.children.length} child agents`}
+                            </Button>
+                          ) : null}
+                        </div>
+                        {isExpanded ? (
+                          <ul style={CHILDREN_STYLE}>
+                            {thread.children.map((child) => (
+                              <li data-child-id={child.id} key={`${child.kind}:${child.id}`}>
+                                <ListRow
+                                  title={child.id}
+                                  description={`${child.kind} · ${child.state}`}
+                                  status={child.state === 'working' ? 'working' : child.state === 'waiting' ? 'needs-you' : 'done'}
+                                />
+                              </li>
+                            ))}
+                          </ul>
                         ) : null}
-                      </div>
-                      {isExpanded ? (
-                        <ul style={CHILDREN_STYLE}>
-                          {thread.children.map((child) => (
-                            <li data-child-id={child.id} key={`${child.kind}:${child.id}`}>
-                              <ListRow
-                                title={child.id}
-                                description={`${child.kind} · ${child.state}`}
-                                status={child.state === 'working' ? 'working' : child.state === 'waiting' ? 'needs-you' : 'done'}
-                              />
-                            </li>
-                          ))}
-                        </ul>
-                      ) : null}
-                    </li>
-                  )
-                })}
-              </ul>
-            </section>
-          ))}
+                      </li>
+                    )
+                  })}
+                </ul>
+              </section>
+            ))}
+          </div>
         </div>
-      </div>
-    </main>
+      </main>
+    </ToolPanelFrame>
   )
 }
 

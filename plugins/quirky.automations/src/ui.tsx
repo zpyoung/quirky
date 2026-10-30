@@ -4,7 +4,7 @@ import type { MountFunction, UiPluginContext } from '@quirky/protocol'
 import { API, AUTOMATIONS_VIEW, AUTOMATIONS_SETTINGS_VIEW, type AutomationUiState } from './ui-contracts'
 import { AutomationEditor } from './editor/AutomationEditor'
 import { AutomationsPage } from './list/AutomationsPage'
-import { Button, ContextMenuList, EmptyState, FormRow, IconButton, ToolPanelFrame } from '@quirky/ui'
+import { Button, ContextMenuList, ControlIcon, EmptyState, FormRow, IconButton, ToolPanelFrame } from '@quirky/ui'
 
 function message(cause: unknown): string { return cause instanceof Error ? cause.message : String(cause) }
 function useAutomationState(context: UiPluginContext) {
@@ -50,7 +50,7 @@ function AutomationApp({ context, report }: SurfaceProps) {
   }, [state, error, report])
   return <div className="quirky-automations">
     <ToolPanelFrame title="Automations" actions={<>
-      <IconButton label="Close Automations" title="Return to previous view" onClick={() => void context.call(`${API}close`, {}).catch(cause => notify(message(cause), 'error'))}>×</IconButton>
+      <IconButton label="Close Automations" title="Return to previous view" onClick={() => void context.call(`${API}close`, {}).catch(cause => notify(message(cause), 'error'))}><ControlIcon name="x" /></IconButton>
       <Button onClick={() => void context.call(`${API}settings`, {}).catch(cause => notify(message(cause), 'error'))}>Automation settings</Button>
     </>}>
       <div className="auto-app-body">

@@ -37,21 +37,21 @@ export function SourceControl({ context, report }: Props) {
 
   return (
     <div className="ui-stack" style={{ height: '100%', minHeight: 0, gap: 0, position: 'relative' }}>
-      {worktree === null ? (
-        <ToolPanelFrame title="Source control">
+      <ToolPanelFrame title="Source control">
+        {worktree === null ? (
           <EmptyState message="Select a workspace to view changes" />
-        </ToolPanelFrame>
-      ) : (
-        <WorktreePanel
-          key={worktree}
-          context={context}
-          worktree={worktree}
-          report={report}
-          notify={notify}
-          drafts={store.current}
-          offered={offered.current}
-        />
-      )}
+        ) : (
+          <WorktreePanel
+            key={worktree}
+            context={context}
+            worktree={worktree}
+            report={report}
+            notify={notify}
+            drafts={store.current}
+            offered={offered.current}
+          />
+        )}
+      </ToolPanelFrame>
       <Notices notices={notices} current={worktree} onDismiss={dismiss} />
     </div>
   )

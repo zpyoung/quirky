@@ -275,6 +275,19 @@ test('Activity sidebar renders its empty state and disables clear-completed', as
   await cleanup()
 })
 
+test('Activity draws its title once in the frame header and keeps its row buttons on the rail', async () => {
+  const h = setup()
+  const cleanup = await h.mount(VIEW)
+  const titles = [...host.querySelectorAll('h2')].filter((heading) => heading.textContent === 'Activity')
+  expect(titles).toHaveLength(1)
+  expect(titles[0].closest('.ui-tool-panel-frame__header')).not.toBeNull()
+  expect(host.querySelector('.ui-section-header__title')?.closest('[data-activity-group]')).not.toBeNull()
+  for (const label of ['Mark all read', 'Clear completed activity']) {
+    expect(host.querySelector(`button[aria-label="${label}"]`)?.closest('.ui-tool-panel-frame__rail')).not.toBeNull()
+  }
+  await cleanup()
+})
+
 test('Activity sidebar filters and groups its populated feed in place and clears completed threads', async () => {
   const h = setup()
   const cleanup = await h.mount(SIDEBAR)
