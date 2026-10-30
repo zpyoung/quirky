@@ -4,7 +4,7 @@ import { readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { isolateGitConfig } from '../../../quirky.repo/test/git-fixtures'
 import { buttonText, byLabel, click, modS, modifiedEditor, q, qa, rowOf, text } from './dom'
-import { BASE_FILES, boot, DIFF_VIEW, openView, SESSION_VIEW, shutdown, type World } from './world'
+import { BASE_FILES, boot, DIFF_VIEW, openView, SESSION_VIEW, shutdown, viewTabs, type World } from './world'
 
 const { scratch } = isolateGitConfig()
 const SLOW = 90_000
@@ -15,6 +15,8 @@ const numbered = (n: number, change: Record<number, string> = {}) =>
 
 const FILES = { ...BASE_FILES, 'math.ts': numbered(60) }
 const selectedLine = (editor: EditorView) => editor.state.doc.lineAt(editor.state.selection.main.head).text
+const diffEditors = () =>
+  qa('[data-git-view-root] [data-diff-editor] .cm-editor').map((editor) => EditorView.findFromDOM(editor)!)
 const settingValue = async (w: World, name: string) => ((await w.agent.callAny('setting.get', { id: `setting:quirky.git/${name}` })) as { value: unknown }).value
 
 /** F7 and Shift+F7 reach the plugin through the shell's keybinding handler on window. */
@@ -158,9 +160,165 @@ test('SC-61: Revert Block and revert-change put a block back in the editor only;
   })
   expect((await openView(w))!.input).toMatchObject({ mode: 'file', source: 'staged', path: 'README.md' })
 
-  await w.win.waitFor(() => q('[data-git-view-root] [contenteditable]'))
-  expect(q('[data-git-view-root] [contenteditable="true"]')).toBeNull()
-  expect(q('[data-git-view-root] [data-diff-source="Staged"]')).not.toBeNull()
+  const readmeDiff = await w.win.waitFor(() =>
+    qa('[data-git-view-root]').find((root) => text(q('h2', root)) === 'README.md (diff)')
+  )
+  await w.win.waitFor(() => q('[contenteditable]', readmeDiff))
+  expect(q('[contenteditable="true"]', readmeDiff)).toBeNull()
+  expect(q('[data-diff-source="Staged"]', readmeDiff)).not.toBeNull()
+}, SLOW)
+
+test('qa-git-3: staging an open Changes diff keeps its comparison and unstage restores the editable diff', async () => {
+  const original = 'one\ntwo\n'
+  const modified = 'one\nchanged\n'
+  const readOnlyOriginal = original.replace(/\n$/, '')
+  const readOnlyModified = modified.replace(/\n$/, '')
+  const w = await boot(scratch, { files: FILES })
+  w.write('README.md', modified)
+  await w.win.waitFor(() => rowOf('README.md', 'unstaged'))
+  await w.agent.callAny('setting.set', { id: 'setting:quirky.git/diffDefaultView', value: 'side-by-side' })
+  await openRow(w, 'README.md')
+
+  await w.win.waitFor(() => {
+    const editors = diffEditors()
+    const next = byLabel('Next change')
+    const previous = byLabel('Previous change')
+    return editors.length === 2 &&
+      editors[0]?.state.doc.toString() === original &&
+      editors[1]?.state.doc.toString() === modified &&
+      next !== null && !next.disabled && previous !== null && !previous.disabled
+  })
+  expect(byLabel('Next change')?.disabled).toBe(false)
+  expect(byLabel('Previous change')?.disabled).toBe(false)
+  expect(q('[data-git-view-root] [data-diff-source="Staged"]')).toBeNull()
+  expect(q('[data-git-view-root] [contenteditable="true"]')).not.toBeNull()
+
+  await click(byLabel('Stage README.md'))
+  await w.win.waitFor(() => rowOf('README.md', 'staged') && !rowOf('README.md', 'unstaged'))
+  await w.win.waitFor(async () => {
+    const editors = diffEditors()
+    const next = byLabel('Next change')
+    const previous = byLabel('Previous change')
+    return q('[data-git-view-root] [data-diff-source="Staged"]') !== null &&
+      next !== null && !next.disabled && previous !== null && !previous.disabled &&
+      editors.length === 2 &&
+      editors[0]?.state.doc.toString() === readOnlyOriginal &&
+      editors[1]?.state.doc.toString() === readOnlyModified
+  })
+  expect(byLabel('Next change')?.disabled).toBe(false)
+  expect(byLabel('Previous change')?.disabled).toBe(false)
+  expect(qa('[data-git-view-root] [contenteditable="true"]')).toHaveLength(0)
+  expect(qa('[data-git-view-root] [data-diff-editor] .cm-content[contenteditable="false"]')).toHaveLength(2)
+
+  await click(byLabel('Unstage README.md'))
+  await w.win.waitFor(() => rowOf('README.md', 'unstaged') && !rowOf('README.md', 'staged'))
+  await w.win.waitFor(async () => {
+    const editors = diffEditors()
+    const next = byLabel('Next change')
+    const previous = byLabel('Previous change')
+    return q('[data-git-view-root] [data-diff-source="Staged"]') === null &&
+      next !== null && !next.disabled && previous !== null && !previous.disabled &&
+      editors.length === 2 &&
+      editors[0]?.state.doc.toString() === original &&
+      editors[1]?.state.doc.toString() === modified
+  })
+  expect(byLabel('Next change')?.disabled).toBe(false)
+  expect(byLabel('Previous change')?.disabled).toBe(false)
+  expect(q('[data-git-view-root] [contenteditable="true"]')).not.toBeNull()
+}, SLOW)
+
+test('qa-git-3: Markdown Preview and Source keep the staged diff in one hosted tab', async () => {
+  const original = 'one\ntwo\n'
+  const modified = 'one\nchanged\n'
+  const readOnlyOriginal = original.replace(/\n$/, '')
+  const readOnlyModified = modified.replace(/\n$/, '')
+  const w = await boot(scratch, { files: FILES })
+  w.write('README.md', modified)
+  await w.win.waitFor(() => rowOf('README.md', 'unstaged'))
+  await w.agent.callAny('setting.set', { id: 'setting:quirky.git/diffDefaultView', value: 'side-by-side' })
+  await click(rowOf('README.md'), { detail: 2 })
+  const opened = await w.win.waitFor(async () => {
+    const view = await openView(w)
+    return view?.id === DIFF_VIEW && view.input?.source === 'unstaged' ? view : undefined
+  })
+  expect(opened.input).toMatchObject({ source: 'unstaged', preview: false })
+  await w.win.waitFor(() => {
+    const editors = diffEditors()
+    return editors.length === 2 &&
+      editors[0]?.state.doc.toString() === original &&
+      editors[1]?.state.doc.toString() === modified
+  })
+
+  await click(byLabel('Stage README.md'))
+  await w.win.waitFor(() => q('[data-git-view-root] [data-diff-source="Staged"]'))
+  await w.win.waitFor(() => {
+    const editors = diffEditors()
+    return editors.length === 2 &&
+      editors[0]?.state.doc.toString() === readOnlyOriginal &&
+      editors[1]?.state.doc.toString() === readOnlyModified &&
+      q('[data-git-view-root] [contenteditable="true"]') === null
+  })
+  const firstTabs = await w.win.waitFor(async () => {
+    const tabs = (await viewTabs(w, DIFF_VIEW)).filter((tab) => tab.input?.path === 'README.md')
+    return tabs.length === 1 ? tabs : undefined
+  })
+  const tabId = firstTabs[0]!.id
+
+  await click(byLabel('Preview Modified Markdown'))
+  await w.win.waitFor(async () => {
+    const view = await openView(w)
+    return view?.id === DIFF_VIEW && view.input?.display === 'preview' && q('[data-markdown-preview]')
+  })
+  const previewTabs = (await viewTabs(w, DIFF_VIEW)).filter((tab) => tab.input?.path === 'README.md')
+  expect(previewTabs).toHaveLength(1)
+  expect(previewTabs[0]?.id).toBe(tabId)
+  expect(previewTabs[0]?.input).toMatchObject({ source: 'unstaged', display: 'preview' })
+
+  await click(byLabel('Show Source'))
+  await w.win.waitFor(async () => {
+    const view = await openView(w)
+    const editors = diffEditors()
+    return view?.id === DIFF_VIEW && view.input?.display === 'source' &&
+      q('[data-git-view-root] [data-diff-source="Staged"]') !== null &&
+      editors.length === 2 &&
+      editors[0]?.state.doc.toString() === readOnlyOriginal &&
+      editors[1]?.state.doc.toString() === readOnlyModified
+  })
+  const sourceTabs = (await viewTabs(w, DIFF_VIEW)).filter((tab) => tab.input?.path === 'README.md')
+  expect(sourceTabs).toHaveLength(1)
+  expect(sourceTabs[0]?.id).toBe(tabId)
+  expect(sourceTabs[0]?.input).toMatchObject({ source: 'unstaged', display: 'source' })
+}, SLOW)
+
+test('qa-git-3: opening a partly staged file from Changes keeps the index as its comparison', async () => {
+  const original = numbered(20)
+  const staged = numbered(20, { 3: 'line three staged' })
+  const modified = numbered(20, { 3: 'line three staged', 15: 'line fifteen unstaged' })
+  const w = await boot(scratch, { files: { ...FILES, 'README.md': original } })
+  w.write('README.md', modified)
+  const indexFile = join(w.dir, '.qa-git-3-partial-index')
+  writeFileSync(indexFile, staged)
+  const blob = w.git('hash-object', '-w', indexFile)
+  w.git('update-index', '--cacheinfo', `100644,${blob},README.md`)
+  rmSync(indexFile)
+  await w.win.waitFor(() => rowOf('README.md', 'staged') && rowOf('README.md', 'unstaged'))
+  await w.agent.callAny('setting.set', { id: 'setting:quirky.git/diffDefaultView', value: 'side-by-side' })
+  await openRow(w, 'README.md')
+
+  await w.win.waitFor(async () => {
+    const editors = diffEditors()
+    const next = byLabel('Next change')
+    const previous = byLabel('Previous change')
+    return next !== null && !next.disabled && previous !== null && !previous.disabled &&
+      editors.length === 2 &&
+      editors[0]?.state.doc.toString() === staged &&
+      editors[1]?.state.doc.toString() === modified
+  })
+  expect((await openView(w))!.input).toMatchObject({ source: 'unstaged', path: 'README.md' })
+  expect(byLabel('Next change')?.disabled).toBe(false)
+  expect(byLabel('Previous change')?.disabled).toBe(false)
+  expect(q('[data-git-view-root] [data-diff-source="Staged"]')).toBeNull()
+  expect(q('[data-git-view-root] [contenteditable="true"]')).not.toBeNull()
 }, SLOW)
 
 test('SC-57: a branch diff whose merge base cannot be read says so instead of looking empty', async () => {

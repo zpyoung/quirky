@@ -54,7 +54,8 @@ export function fakeContext(layout: UiLayout = layoutFor(null)): Fake {
     toasts: [],
     settings: {},
     handlers: {
-      'quirky.git/notes': () => ({ notes: [] })
+      'quirky.git/notes': () => ({ notes: [] }),
+      'quirky.git/status': () => status()
     },
     provided: new Map(),
     layout,
