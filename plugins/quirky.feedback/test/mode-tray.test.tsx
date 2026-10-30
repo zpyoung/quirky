@@ -476,7 +476,30 @@ describe('dots', () => {
   })
 })
 
+describe('dots placement', () => {
+  test('a dot is centred on the element corner and clamped inside the window', async () => {
+    await start([sample('a')])
+    const [dot] = dots()
+    expect(dot!.style.transform).toBe('translate(-50%, -50%)')
+    expect(dot!.style.left).toContain('40px')
+    expect(dot!.style.top).toContain('30px')
+    expect(dot!.style.left).toContain('100vw')
+    expect(dot!.style.top).toContain('100vh')
+  })
+})
+
 describe('panels', () => {
+  test('the card is stacked above the tray and fits the window', async () => {
+    await start([sample('a')])
+    await pick(document.getElementById('other')!)
+    const tray = root().querySelector('[data-feedback-tray]')!
+    expect(tray.compareDocumentPosition(card()!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(card()!.style.maxHeight).toContain('100vh')
+    const body = card()!.querySelector('textarea')!.closest('div[style*="overflow"]')
+    expect(body).not.toBeNull()
+    expect(card()!.lastElementChild!.contains(card()!.querySelector('[data-feedback-submit]'))).toBe(true)
+  })
+
   test('the banner, card and tray are masked and the selection host is not', async () => {
     await start([sample('a')])
     await pick(item)

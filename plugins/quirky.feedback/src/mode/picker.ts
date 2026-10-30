@@ -36,7 +36,7 @@ export function createPicker(doc: Document, handlers: PickerHandlers): Picker {
   const setHeld = (next: boolean) => {
     if (held === next) return
     held = next
-    host.style.setProperty('pointer-events', next ? 'none' : 'auto', 'important')
+    for (const element of [host, surface]) element.style.setProperty('pointer-events', next ? 'none' : 'auto', 'important')
     if (next) hideHighlight()
   }
 
@@ -47,10 +47,15 @@ export function createPicker(doc: Document, handlers: PickerHandlers): Picker {
     const box = target.getBoundingClientRect()
     if (box.width <= 0 || box.height <= 0) return hideHighlight()
     Object.assign(highlight.style, { left: `${box.left}px`, top: `${box.top}px`, width: `${box.width}px`, height: `${box.height}px` })
-    Object.assign(label.style, { left: `${box.left}px`, top: `${box.top}px` })
     label.textContent = name
+    Object.assign(label.style, { left: '0px', top: '0px' })
     highlight.hidden = false
     label.hidden = false
+    const size = label.getBoundingClientRect()
+    const above = box.top - size.height
+    const top = Math.min(Math.max(above >= 0 ? above : box.top, 0), Math.max(win.innerHeight - size.height, 0))
+    const left = Math.min(Math.max(box.left, 0), Math.max(win.innerWidth - size.width, 0))
+    Object.assign(label.style, { left: `${left}px`, top: `${top}px` })
   }
 
   const select = (event: MouseEvent) => {
