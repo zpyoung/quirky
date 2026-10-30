@@ -1,0 +1,16 @@
+.agents-ui .ui-list-row {
+  flex-wrap: wrap;
+}
+
+.agents-ui .ui-list-row__main {
+  flex: 1 1 calc(var(--ui-space-24) * 10);
+}
+
+.agents-ui .ui-list-row__trailing {
+  flex: 0 1 auto;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  margin-inline-start: auto;
+  max-width: 100%;
+  min-width: 0;
+}
