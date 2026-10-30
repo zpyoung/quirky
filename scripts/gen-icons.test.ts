@@ -12,7 +12,7 @@ import {
 
 const SAFE = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor"><path d="M0,0Z"/></svg>'
 
-test('an SVG with script, foreignObject, image, an event attribute or an external href is rejected by file name', () => {
+test('an SVG with an unlisted element, an event attribute or an external reference is rejected by file name', () => {
   const hostile: Record<string, string> = {
     script: '<svg><script>alert(1)</script></svg>',
     'script upper': '<svg><SCRIPT src="x"></SCRIPT></svg>',
@@ -23,16 +23,20 @@ test('an SVG with script, foreignObject, image, an event attribute or an externa
     'external href': '<svg><use href="https://example.com/a.svg#b"/></svg>',
     'xlink href': '<svg><use xlink:href="//example.com/a.svg"/></svg>',
     'data href': '<svg><a href="data:text/html,x"/></svg>',
-    'javascript href': '<svg><a href="javascript:alert(1)"/></svg>'
+    'javascript href': '<svg><a href="javascript:alert(1)"/></svg>',
+    'encoded html in a description': '<svg><desc><iframe srcdoc="&lt;script&gt;x()&lt;/script&gt;"></iframe></desc></svg>',
+    'style element': '<svg><style>path { fill: url(https://example.com/a) }</style></svg>',
+    'external url in an attribute': '<svg><path d="M0,0" fill="url(https://example.com/a.svg#b)"/></svg>',
+    'doctype entity': '<!DOCTYPE svg [<!ENTITY x "y">]><svg><path d="M0,0"/></svg>'
   }
   for (const [label, svg] of Object.entries(hostile)) {
     expect(() => assertSafeSvg(`bad/${label}.svg`, svg)).toThrow(`bad/${label}.svg`)
   }
 })
 
-test('plain paths and same-document references pass the rejection check', () => {
+test('plain paths, groups and same-document references pass the rejection check', () => {
   expect(() => assertSafeSvg('ok.svg', SAFE)).not.toThrow()
-  expect(() => assertSafeSvg('ok.svg', '<svg><use href="#a"/><desc>a description of a subscript</desc></svg>')).not.toThrow()
+  expect(() => assertSafeSvg('ok.svg', '<svg><g fill="url(#a)"><path d="M0,0" href="#a"/></g></svg>')).not.toThrow()
 })
 
 test('every named icon is generated and the committed files match a fresh run', () => {

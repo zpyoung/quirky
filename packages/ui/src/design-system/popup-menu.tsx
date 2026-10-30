@@ -158,6 +158,7 @@ export function PopupMenu({ anchor, items, title, searchPlaceholder, onClose }: 
     <div
       ref={root}
       className="ui-popup"
+      data-quirky-native-mask=""
       role={searchable ? 'dialog' : undefined}
       aria-label={searchable ? label : undefined}
       data-theme={themeScope(anchor)}

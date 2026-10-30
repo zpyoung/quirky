@@ -35,20 +35,24 @@ export const FILE_ICON_NAMES = [
 
 const FLAVORS = ['mocha', 'latte'] as const
 
+const ALLOWED_ELEMENTS: ReadonlySet<string> = new Set(['svg', 'g', 'path'])
 const UNSAFE: readonly [pattern: RegExp, reason: string][] = [
-  [/<\s*script\b/i, 'a script element'],
-  [/<\s*foreignObject\b/i, 'a foreignObject element'],
-  [/<\s*image\b/i, 'an image element'],
+  [/<[!?]/, 'a declaration'],
   [/[\s"'/]on[a-z]+\s*=/i, 'an event attribute'],
-  [/javascript\s*:/i, 'a javascript: URL']
+  [/javascript\s*:/i, 'a javascript: URL'],
+  [/url\(\s*['"]?(?!#)/i, 'an external url()']
 ]
+const ELEMENT = /<\s*([^\s/>]+)/g
 const HREF = /(?:xlink:)?href\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/gi
 
 /**
- * Throws, naming `file`, when `svg` could run code or fetch anything: a script, foreignObject or
- * image element, an `on*` event attribute, or an `href` that leaves the document.
+ * Throws, naming `file`, when `svg` could run code or fetch anything: any element other than svg, g
+ * and path, a declaration, an `on*` event attribute, or an `href` or `url()` that leaves the document.
  */
 export function assertSafeSvg(file: string, svg: string): void {
+  for (const [, element] of svg.matchAll(ELEMENT)) {
+    if (!ALLOWED_ELEMENTS.has(element!)) throw new Error(`${file}: rejected SVG containing a ${element} element`)
+  }
   for (const [pattern, reason] of UNSAFE) {
     if (pattern.test(svg)) throw new Error(`${file}: rejected SVG containing ${reason}`)
   }

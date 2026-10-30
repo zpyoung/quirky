@@ -87,6 +87,13 @@ describe('PopupMenu', () => {
     expect(dialog.querySelector('input')!.getAttribute('placeholder')).toBe('Search projects')
   })
 
+  test('masks the whole popup over native browser panes, so its title is covered too', async () => {
+    await render(<PopupMenu anchor={anchor} title="Projects" items={[{ label: 'One' }]} onClose={() => {}} />)
+    const masked = document.querySelector('[data-quirky-native-mask]')
+    expect(masked?.contains(document.querySelector('.ui-popup__title'))).toBe(true)
+    expect(masked?.contains(document.querySelector('[role="menu"]'))).toBe(true)
+  })
+
   test('shows the title, section headings, shortcuts, lead, subtitle and trailing content', async () => {
     await render(
       <PopupMenu
