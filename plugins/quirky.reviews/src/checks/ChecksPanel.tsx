@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent, type MouseEvent } from 'react'
 import type { UiLayout, UiPluginContext } from '@quirky/protocol'
-import { Badge, Button, Dialog, EmptyState, FormRow, IconButton, Menu, SectionHeader, StatusDot, TextField } from '@quirky/ui'
+import { Badge, Button, ControlIcon, Dialog, EmptyState, FormRow, IconButton, Menu, SectionHeader, StatusDot, TextField, ToolPanelFrame } from '@quirky/ui'
 import { CHECKS_PANEL, type JsonRecord, type ReviewData, type ReviewsSurfaceProps } from '../contracts'
 import { isRecord } from './data'
 import { ReviewActions } from '../detail/Actions'
@@ -1137,18 +1137,27 @@ export function ChecksPanel(props: ReviewsSurfaceProps) {
   const queuedCount = active.queuedComments.length
   const contentHeight = dragHeight ?? active.height
 
+  const refreshTitle = reviewRetrySeconds === null ? 'Refresh checks' : `Retry is paused for ${reviewRetrySeconds}s`
+
   return (
+    <ToolPanelFrame
+      title="Checks"
+      tools={
+        <IconButton label="Refresh checks" disabled={active.loading || reviewRetrySeconds !== null} title={refreshTitle} onClick={() => void runRefresh('manual')}>
+          <ControlIcon name="arrows-clockwise" />
+        </IconButton>
+      }
+      actions={<Menu label="More PR actions" trigger={<ControlIcon name="dots-three" />} items={actionItems} />}
+    >
     <section className="ui-stack" style={{ display: 'flex', flexDirection: 'column', minHeight: 0, maxHeight: '100%', overflow: 'hidden' }}>
       {active.error && <p role="alert"><StatusDot status="failing" label="Error" /> {active.error}{currentReview ? ' Showing the last known review status.' : ''}</p>}
       {actionError && <p role="alert"><StatusDot status="failing" label="Error" /> {actionError}</p>}
-      <header className="ui-stack" style={{ padding: 'var(--ui-space-12)' }}>
+      <div className="ui-stack" style={{ padding: 'var(--ui-space-12)' }}>
         <div className="ui-cluster">
           <span aria-hidden="true">PR</span>
           <Button title={routing.title} onClick={(event) => void openLink(currentReview.url, event)}>#{currentReview.number}</Button>
           <Badge tone={currentReview.state === 'open' ? 'working' : currentReview.state === 'merged' ? 'accent' : 'neutral'}>{reviewStateName(currentReview.state)}</Badge>
           <Button aria-label="Copy PR link" onClick={() => void copyLink(currentReview.url)}>Copy link</Button>
-          <Button aria-label="Refresh checks" disabled={active.loading || reviewRetrySeconds !== null} title={reviewRetrySeconds === null ? 'Refresh checks' : `Retry is paused for ${reviewRetrySeconds}s`} onClick={() => void runRefresh('manual')}>{reviewRetrySeconds === null ? 'Refresh' : `Refresh paused (${reviewRetrySeconds}s)`}</Button>
-          <Menu label="More PR actions" items={actionItems} />
         </div>
         <div className="ui-cluster" style={{ alignItems: 'start', justifyContent: 'space-between' }}>
           <div className="ui-stack" style={{ minWidth: 0, flex: '1 1 auto' }}>
@@ -1182,7 +1191,7 @@ export function ChecksPanel(props: ReviewsSurfaceProps) {
           <Button variant="primary" type="submit">Link PR</Button>
           <Button onClick={() => setLinkOpen(false)}>Cancel</Button>
         </form>}
-      </header>
+      </div>
 
       {stack && <section className="ui-stack" aria-label="Pull request stack">
         {stack.available ? (
@@ -1247,5 +1256,6 @@ export function ChecksPanel(props: ReviewsSurfaceProps) {
         }}
         style={{ height: 'var(--ui-space-8)', flex: '0 0 var(--ui-space-8)', cursor: 'row-resize', borderTop: 'var(--ui-border-width) solid var(--ui-border)' }} />
     </section>
+    </ToolPanelFrame>
   )
 }
