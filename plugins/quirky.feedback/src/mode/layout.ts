@@ -28,12 +28,12 @@ export function createLayout(context: UiPluginContext, win: Window): Layout {
   win.addEventListener('resize', schedule)
   win.addEventListener('scroll', schedule, true)
   const unsubscribe = context.onLayout(schedule)
-  const inOverlay = (node: Node) => node instanceof Element && node.closest(`[${OVERLAY_ATTRIBUTE}]`) !== null
+  const inOverlay = (node: Node) => (node instanceof Element ? node : node.parentElement)?.closest(`[${OVERLAY_ATTRIBUTE}]`) != null
   // the mode's own overlay is left out, or each redraw would schedule the next one
   const pageChanges = new MutationObserver((records) => {
     if (records.some((record) => !inOverlay(record.target))) schedule()
   })
-  pageChanges.observe(win.document.documentElement, { subtree: true, childList: true, attributes: true })
+  pageChanges.observe(win.document.documentElement, { subtree: true, childList: true, attributes: true, characterData: true })
 
   return {
     subscribe(listener) {

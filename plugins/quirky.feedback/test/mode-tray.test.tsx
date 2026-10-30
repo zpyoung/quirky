@@ -494,6 +494,19 @@ describe('dots', () => {
     expect(dots()[0]!.style.left).toContain('400')
   })
 
+  test('are re-queried when text on the page changes', async () => {
+    await start([sample('a')])
+    const text = document.createTextNode('short')
+    document.getElementById('app')!.append(text)
+    await act(async () => { await tick(40) })
+    rect(item, { x: 600, y: 30, width: 100, height: 20 })
+    await act(async () => {
+      text.data = 'much longer text'
+      await tick(40)
+    })
+    expect(dots()[0]!.style.left).toContain('600')
+  })
+
   test('ignore changes inside the mode\'s own overlay', async () => {
     await start([sample('a')])
     const before = dots()[0]!.style.left
