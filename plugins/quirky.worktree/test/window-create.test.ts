@@ -170,6 +170,8 @@ test('SC-28: a blank name still creates, with the generated name as the placehol
   const w = await boot()
   const api = await addProject(w, 'api')
   const dialog = await openCreate(w, api)
+  await click(button(dialog, 'Smart')!)
+  await w.win.waitFor(() => button(dialog, 'Smart')?.getAttribute('aria-selected') === 'true')
 
   const name = field(dialog, 'Name')!
   expect(name.value).toBe('')
@@ -182,8 +184,58 @@ test('SC-28: a blank name still creates, with the generated name as the placehol
   await click(submit)
   const made = await named(w, name.placeholder)
   expect(made.repoId).toBe(api.repo.id)
+  expect(made.displayName).toBeNull()
   await closed(w, CREATE)
+  const row = await w.win.waitFor(() => worktreeRow(made.name))
+  expect(listRowName(row)).toBe(name.placeholder)
   await w.win.waitFor(async () => (await openView(w.agent))?.input?.worktree === made.id)
+}, SLOW)
+
+test('Smart create keeps the typed label while using sanitized branch and folder names', async () => {
+  const w = await boot()
+  const api = await addProject(w, 'api')
+  const dialog = await openCreate(w, api)
+  await click(button(dialog, 'Smart')!)
+  await w.win.waitFor(() => button(dialog, 'Smart')?.getAttribute('aria-selected') === 'true')
+  await setText(field(dialog, 'Name')!, 'Wt Alpha_One')
+  expect(field<HTMLSelectElement>(dialog, 'Agent')!.value).toBe('')
+  await click(button(dialog, 'Create')!)
+  await closed(w, CREATE)
+
+  const row = await w.win.waitFor(() => worktreeRow('Wt Alpha_One'))
+  expect(listRowName(row)).toBe('Wt Alpha_One')
+  const gitWorktrees = git(api.dir, 'worktree', 'list', '--porcelain')
+  expect(gitWorktrees).toContain(`worktree ${join(w.root, 'api', 'Wt-Alpha_One')}`)
+  expect(gitWorktrees).toContain('branch refs/heads/zoe/Wt-Alpha_One')
+
+  await w.win.stop()
+  w.win = await startHeadlessWindow({ home: w.harness.home, runtime: w.harness.runtime })
+  await w.win.waitFor(async () => {
+    const slot = await sidebarSlot(w.agent)
+    return slot?.shown && slot.report !== undefined ? slot : undefined
+  })
+  const reopenedRow = await w.win.waitFor(() => worktreeRow('Wt Alpha_One'))
+  expect(listRowName(reopenedRow)).toBe('Wt Alpha_One')
+}, SLOW)
+
+test('editing a Smart name after choosing Name uses the edited text as the display label', async () => {
+  const w = await boot()
+  const api = await addProject(w, 'api')
+  const dialog = await openCreate(w, api)
+  await click(button(dialog, 'Smart')!)
+  await w.win.waitFor(() => button(dialog, 'Smart')?.getAttribute('aria-selected') === 'true')
+  await setText(field(dialog, 'Name')!, 'Original text')
+  await click(button(dialog, 'Use text as workspace name')!)
+  const name = field(dialog, 'Name')!
+  await setText(name, 'Edited Label')
+  await click(button(dialog, 'Create')!)
+
+  await closed(w, CREATE)
+  const row = await w.win.waitFor(() => worktreeRow('Edited Label'))
+  expect(listRowName(row)).toBe('Edited Label')
+  const gitWorktrees = git(api.dir, 'worktree', 'list', '--porcelain')
+  expect(gitWorktrees).toContain(`worktree ${join(w.root, 'api', 'Edited-Label')}`)
+  expect(gitWorktrees).toContain('branch refs/heads/zoe/Edited-Label')
 }, SLOW)
 
 test('SC-28: Mod+Enter submits the dialog', async () => {
@@ -308,6 +360,8 @@ test('the Advanced fields reach the new workspace', async () => {
   const api = await addProject(w, 'api')
   const docs = (await w.agent.callAny('quirky.worktree/create', { repo: api.repo.id, name: 'docs' })) as WorktreeCreateResult
   const dialog = await openCreate(w, api)
+  await click(button(dialog, 'Smart')!)
+  await w.win.waitFor(() => button(dialog, 'Smart')?.getAttribute('aria-selected') === 'true')
   await setText(field(dialog, 'Name')!, 'adv')
   expect(field(dialog, 'Display name')).toBeUndefined()
   await expandAdvanced(dialog)
@@ -320,6 +374,8 @@ test('the Advanced fields reach the new workspace', async () => {
   await setSelect(field<HTMLSelectElement>(dialog, 'Parent worktree')!, docs.worktree.id)
   await click(button(dialog, 'Create')!)
   const made = await named(w, 'Pretty')
+  const row = await w.win.waitFor(() => worktreeRow('Pretty'))
+  expect(listRowName(row)).toBe('Pretty')
   expect(made).toMatchObject({ displayName: 'Pretty', branch: 'zoe/custom', comment: 'remember', parentId: docs.worktree.id })
   expect(basename(made.path)).toBe('adv')
 }, SLOW)

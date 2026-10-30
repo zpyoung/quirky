@@ -477,6 +477,7 @@ export function CreateDialog({ context, repos, worktrees, repoId, onRepoChange, 
     const typedBase = base.trim()
     const startupPrompt = prompt.trim() || (source?.item.kind === 'issue' ? source.item.url : '')
     const submitPromptValue = submitPrompt ?? !(source?.item.kind === 'issue' && prompt.trim() === '')
+    const effectiveDisplayName = displayName.trim() || (!source ? workspaceName : '')
     return {
       repo: repoId,
       ...(source ? { github: source.item.url } : {}),
@@ -488,7 +489,7 @@ export function CreateDialog({ context, repos, worktrees, repoId, onRepoChange, 
       ...(Object.keys(launchPicks).length > 0 ? { options: launchPicks } : {}),
       ...(sparsePaths.length > 0 ? { sparsePaths } : {}),
       ...(keepMain ? { keepMain: true } : {}),
-      ...(displayName.trim() ? { displayName: displayName.trim() } : {}),
+      ...(effectiveDisplayName ? { displayName: effectiveDisplayName } : {}),
       ...(branchName.trim() && !fromBranch && !isPullRequest && showBranchName ? { branchName: branchName.trim() } : {}),
       ...(parent ? { parent } : {}),
       ...(note.trim() ? { comment: note.trim() } : {}),
