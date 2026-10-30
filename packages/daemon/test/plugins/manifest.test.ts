@@ -83,11 +83,31 @@ describe('parseManifest', () => {
   })
 
   test('rejects unsupported future releases and different major versions', () => {
-    for (const apiVersion of ['1.1.1', '1.2.0', '2.0.0']) {
+    for (const apiVersion of ['1.2.1', '1.3.0', '2.0.0']) {
       const errors = errorsOf({ ...base, apiVersion }).join('\n')
       expect(errors).toContain(apiVersion)
       expect(errors).toContain(PLUGIN_API_VERSION)
     }
+  })
+
+  test('accepts a GitHub repository URL', () => {
+    expect(parse({ ...base, repository: 'https://github.com/zpyoung/quirky' })).toEqual({
+      ok: true,
+      manifest: { ...base, repository: 'https://github.com/zpyoung/quirky' },
+    })
+  })
+
+  test.each([
+    ['a non-GitHub host', 'https://gitlab.com/zpyoung/quirky'],
+    ['an http URL', 'http://github.com/zpyoung/quirky'],
+    ['an extra path segment', 'https://github.com/zpyoung/quirky/issues'],
+    ['a missing repository segment', 'https://github.com/zpyoung'],
+    ['a trailing slash', 'https://github.com/zpyoung/quirky/'],
+    ['a query string', 'https://github.com/zpyoung/quirky?x=1'],
+    ['an empty string', ''],
+    ['a non-string', 1],
+  ])('rejects a repository with %s', (_name, repository) => {
+    expect(errorsOf({ ...base, repository }).join('\n')).toContain("field 'repository' must be")
   })
 
   test('reports API incompatibility alongside other manifest problems', () => {

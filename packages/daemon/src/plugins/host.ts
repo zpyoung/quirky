@@ -373,6 +373,7 @@ export class PluginHost {
       version: manifest?.version ?? '',
       ...(manifest?.apiVersion === undefined ? {} : { apiVersion: manifest.apiVersion }),
       ...(manifest?.description === undefined ? {} : { description: manifest.description }),
+      ...(manifest?.repository === undefined ? {} : { repository: manifest.repository }),
       source: discovered.source,
       dir: discovered.dir,
       activation: manifest?.activation ?? 'lazy',
