@@ -94,7 +94,8 @@ export function renderComment(verdict: Verdict, now: Date): string {
 }
 
 /**
- * The local command's output: one line per failing test with its label, then a summary line that
+ * The local command's output: one labelled line per new, known, flaky, fixed and missing test and per
+ * incomplete file, using the same labels as the PR comment, then a summary line that
  * starts with `advisory:` whenever the verdict is advisory and names the baseline commit or says
  * there was none.
  */
@@ -103,6 +104,8 @@ export function renderLocal(verdict: Verdict, _now: Date): string {
   for (const key of verdict.new) lines.push(`new: ${displayKey(key)}`)
   for (const key of verdict.known) lines.push(`known: ${displayKey(key)}`)
   for (const key of verdict.flaky) lines.push(`flaky: ${displayKey(key)}`)
+  for (const key of verdict.fixed) lines.push(`fixed: ${displayKey(key)}`)
+  for (const key of verdict.missing) lines.push(`missing: ${displayKey(key)}`)
   for (const file of verdict.incomplete) lines.push(`incomplete: ${displayKey(file)}`)
   if (verdict.runBroken) lines.push("broken: the run itself broke, so this result can't be trusted")
   if (verdict.selection.mode === 'none') lines.push('No tests were needed for this change.')

@@ -19,13 +19,22 @@ function commit(cwd: string, message: string): string {
   return git(cwd, 'rev-parse', 'HEAD')
 }
 
-type Artifact = { id: number; name: string; expired?: boolean; created_at?: string }
+type WorkflowRun = { id: number; repository_id: number; head_repository_id: number; head_branch: string; head_sha: string }
+type Artifact = { id: number; name: string; expired?: boolean; created_at?: string; workflow_run?: Partial<WorkflowRun> | null }
+
+function legitRun(name: string): WorkflowRun {
+  return { id: 1, repository_id: 10, head_repository_id: 10, head_branch: 'main', head_sha: name.replace(/^test-baseline-/, '') }
+}
 
 function fakeGh(artifacts: Artifact[], calls: string[][] = []): GhRunner {
   return async (args) => {
     calls.push(args)
     return artifacts
-      .map((a) => JSON.stringify({ id: a.id, name: a.name, expired: a.expired ?? false, created_at: a.created_at ?? '2026-10-01T00:00:00Z' }))
+      .map((a) => {
+        const entry: Record<string, unknown> = { id: a.id, name: a.name, expired: a.expired ?? false, created_at: a.created_at ?? '2026-10-01T00:00:00Z' }
+        if (a.workflow_run !== null) entry.workflow_run = { ...legitRun(a.name), ...a.workflow_run }
+        return JSON.stringify(entry)
+      })
       .join('\n')
   }
 }
@@ -90,6 +99,43 @@ describe('findBaseline', () => {
       { id: 3, name: `test-baseline-${main[2]}`, created_at: '2026-10-03T00:00:00Z' },
     ])
     expect(await findBaseline({ cwd: dir, head: branch[1], repo: REPO, gh })).toEqual({ commit: main[2], artifactId: 2 })
+  })
+
+  test('asks gh for the workflow run of each artifact', async () => {
+    const { dir, branch } = makeRepo()
+    const calls: string[][] = []
+    await findBaseline({ cwd: dir, head: branch[1], repo: REPO, gh: fakeGh([], calls) })
+    expect(calls[0].join(' ')).toContain('workflow_run')
+  })
+
+  describe('trust', () => {
+    const forgeries: [string, (commit: string) => Artifact['workflow_run']][] = [
+      ['a fork whose branch is called main', () => ({ head_repository_id: 99 })],
+      ['a branch other than main', () => ({ head_branch: 'feature' })],
+      ['a head sha that is not the named commit', () => ({ head_sha: sha(5) })],
+      ['no workflow run at all', () => null],
+      ['a workflow run without repository ids', () => ({ repository_id: undefined, head_repository_id: undefined })],
+    ]
+
+    for (const [title, run] of forgeries) {
+      test(`ignores an artifact from ${title}`, async () => {
+        const { dir, main, branch } = makeRepo()
+        const gh = fakeGh([
+          { id: 1, name: `test-baseline-${main[1]}` },
+          { id: 2, name: `test-baseline-${main[2]}`, workflow_run: run(main[2]) },
+        ])
+        expect(await findBaseline({ cwd: dir, head: branch[1], repo: REPO, gh })).toEqual({ commit: main[1], artifactId: 1 })
+      })
+
+      test(`prefers the legitimate artifact over a newer one from ${title}`, async () => {
+        const { dir, main, branch } = makeRepo()
+        const gh = fakeGh([
+          { id: 1, name: `test-baseline-${main[2]}`, created_at: '2026-10-02T00:00:00Z' },
+          { id: 2, name: `test-baseline-${main[2]}`, created_at: '2026-10-09T00:00:00Z', workflow_run: run(main[2]) },
+        ])
+        expect(await findBaseline({ cwd: dir, head: branch[1], repo: REPO, gh })).toEqual({ commit: main[2], artifactId: 1 })
+      })
+    }
   })
 
   test('returns null when no ancestor has an artifact', async () => {
@@ -258,6 +304,24 @@ describe('fetchBaseline', () => {
     await expect(fetchBaseline(found, { cwd: dir, repo: REPO, download })).rejects.toBeInstanceOf(BaselineUnavailable)
   })
 
+  test('rejects a download whose own commit differs from the one asked for', async () => {
+    const found = { commit: sha(19), artifactId: 85 }
+    const zip = zipOf(scratch, JSON.stringify(sampleBaseline(sha(20))))
+    await expect(fetchBaseline(found, { cwd: dir, repo: REPO, download: downloader(zip) })).rejects.toBeInstanceOf(BaselineUnavailable)
+    const common = git(dir, 'rev-parse', '--path-format=absolute', '--git-common-dir')
+    expect(existsSync(join(common, 'test-baseline', `${found.commit}.json`))).toBe(false)
+  })
+
+  test('downloads again when the cached copy is for a different commit', async () => {
+    const found = { commit: sha(21), artifactId: 86 }
+    const common = git(dir, 'rev-parse', '--path-format=absolute', '--git-common-dir')
+    mkdirSync(join(common, 'test-baseline'), { recursive: true })
+    writeFileSync(join(common, 'test-baseline', `${found.commit}.json`), JSON.stringify(sampleBaseline(sha(22))))
+    const baseline = sampleBaseline(found.commit, { runId: '7' })
+    const got = await fetchBaseline(found, { cwd: dir, repo: REPO, download: downloader(zipOf(scratch, JSON.stringify(baseline))) })
+    expect(got).toEqual(baseline)
+  })
+
   test('refetches when the cached file has a bad version', async () => {
     const found = { commit: sha(18), artifactId: 84 }
     const common = git(dir, 'rev-parse', '--path-format=absolute', '--git-common-dir')
@@ -310,6 +374,27 @@ describe('buildBaseline', () => {
     expect(baseline.tests).toEqual({ a1: 'failed' })
     expect(baseline.files['a.test.ts'].flaky).toBe(false)
     expect(baseline.flakeHistory).toEqual({})
+  })
+
+  test('a failed-then-skipped test is stored as failed and does not make the file flaky', () => {
+    const baseline = build([result('a.test.ts', attempt(null, ['a1', 'failed']), attempt(null, ['a1', 'skipped']))])
+    expect(baseline.tests).toEqual({ a1: 'failed' })
+    expect(baseline.files['a.test.ts'].flaky).toBe(false)
+    expect(baseline.flakeHistory).toEqual({})
+  })
+
+  test('a file is flaky when one test recovered even though another keeps failing', () => {
+    const baseline = build([
+      result('a.test.ts', attempt(null, ['a1', 'failed'], ['a2', 'failed']), attempt(null, ['a1', 'passed'], ['a2', 'failed'])),
+    ])
+    expect(baseline.tests).toEqual({ a1: 'passed', a2: 'failed' })
+    expect(baseline.files['a.test.ts'].flaky).toBe(true)
+    expect(baseline.flakeHistory).toEqual({ 'a.test.ts': [NOW.toISOString()] })
+  })
+
+  test('a cleared file error makes the file flaky even when a test in the rerun fails', () => {
+    const baseline = build([result('a.test.ts', attempt('timeout'), attempt(null, ['a1', 'failed']))])
+    expect(baseline.files['a.test.ts'].flaky).toBe(true)
   })
 
   test('a first-attempt file error that clears on rerun is flaky', () => {

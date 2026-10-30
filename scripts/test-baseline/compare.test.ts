@@ -265,6 +265,26 @@ describe('SC-10: a flake gets through and is visible', () => {
     expect(v.missing).toEqual([])
   })
 
+  test('failed first and skipped in the rerun stays failed and is new', () => {
+    const v = run({
+      baseline: base,
+      results: [file(A, attempt({ [k(A, 'x')]: 'failed' }), attempt({ [k(A, 'x')]: 'skipped' }))],
+    })
+    expect(v.new).toEqual([k(A, 'x')])
+    expect(v.flaky).toEqual([])
+    expect(v.ok).toBe(false)
+  })
+
+  test('failed first and skipped in the rerun is known when the baseline has it failed', () => {
+    const v = run({
+      baseline: baselineOf({ [k(A, 'x')]: 'failed' }),
+      results: [file(A, attempt({ [k(A, 'x')]: 'failed' }), attempt({ [k(A, 'x')]: 'skipped' }))],
+    })
+    expect(v.known).toEqual([k(A, 'x')])
+    expect(v.flaky).toEqual([])
+    expect(v.fixed).toEqual([])
+  })
+
   test('a persistent failure the baseline has is known after the rerun', () => {
     const v = run({
       baseline: baselineOf({ [k(A, 'x')]: 'failed' }),

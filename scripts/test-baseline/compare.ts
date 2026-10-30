@@ -21,7 +21,7 @@ function statuses(tests: { key: string; status: TestStatus }[]): Map<string, Tes
 function judge(first: TestStatus | undefined, rerun: TestStatus | undefined, reran: boolean): Judged | undefined {
   if (!reran) return first
   if (rerun === 'failed') return 'failed'
-  if (first === 'failed') return rerun === undefined ? 'failed' : 'flaky'
+  if (first === 'failed') return rerun === 'passed' ? 'flaky' : 'failed'
   return first ?? rerun
 }
 
@@ -38,8 +38,9 @@ const sorted = (set: Set<string>): string[] => [...set].sort()
  *
  * Contract:
  * - Pure: reads no files, runs no git, makes no network calls, and never mutates its input.
- * - A file with a rerun is judged from both attempts. A test that failed first and passed in the
- *   rerun is flaky, and a test that failed in the rerun, or failed first and is absent from it, is failed.
+ * - A file with a rerun is judged from both attempts. Only a test that failed first and passed in
+ *   the rerun is flaky. A test that failed in the rerun, or failed first and was skipped in or is
+ *   absent from the rerun, is failed.
  * - Failed tests are known when the baseline has them failed and new otherwise. With no baseline,
  *   every failure is new, and fixed and missing stay empty.
  * - A file-level result is keyed by the bare file path in new, known and flaky. A file error still

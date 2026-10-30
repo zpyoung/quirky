@@ -24,13 +24,15 @@ function statusOf(body: string): TestStatus {
 
 /**
  * The per-test results in one JUnit report, in report order. Each key is `<file>\0<classname>\0<name>`
- * with the XML entities decoded, and `#2`, `#3` appended to a key that repeats within the report. Suite
+ * with the XML entities decoded, and `#2`, `#3` appended to a key that repeats within the report. Every
+ * result in one report gets a distinct key, even when a test is literally named like a suffixed repeat. Suite
  * nesting doesn't matter, because every `<testcase>` carries its describes in `classname`. Empty or
  * test-less input gives `[]`. `file` is the path the caller ran, not the report's own `file` attribute.
  */
 export function parseJunit(xml: string, file: string): TestResult[] {
   const results: TestResult[] = []
   const seen = new Map<string, number>()
+  const used = new Set<string>()
   TESTCASE.lastIndex = 0
   for (let match = TESTCASE.exec(xml); match; match = TESTCASE.exec(xml)) {
     let body = ''
@@ -42,9 +44,12 @@ export function parseJunit(xml: string, file: string): TestResult[] {
     }
     const { name = '', classname = '' } = attributes(match[1])
     const base = [file, classname, name].join('\0')
-    const count = (seen.get(base) ?? 0) + 1
+    let count = (seen.get(base) ?? 0) + 1
+    let key = count === 1 ? base : `${base}#${count}`
+    while (used.has(key)) key = `${base}#${++count}`
     seen.set(base, count)
-    results.push({ key: count === 1 ? base : `${base}#${count}`, status: statusOf(body) })
+    used.add(key)
+    results.push({ key, status: statusOf(body) })
   }
   return results
 }

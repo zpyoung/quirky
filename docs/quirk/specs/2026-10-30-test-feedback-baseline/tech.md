@@ -183,7 +183,7 @@ findBaseline(opts: { cwd: string; head: string; repo: string; gh?: GhRunner }): 
 fetchBaseline(found, opts): Promise<Baseline>
 ```
 
-Lists artifacts named `test-baseline-<40 hex>` that aren't expired, walks `git rev-list --first-parent -n 500 <merge-base of head and origin/main>` newest first, and returns the first match. On `push`, the walk starts at the head's first parent, so a run never finds itself. Returns null when no ancestor has one, and throws a typed `BaselineUnavailable` when `gh` itself fails, because SC-11 and SC-12 treat those differently. `fetchBaseline` downloads through `gh api repos/<repo>/actions/artifacts/<id>/zip`, validates `version: 1`, and caches under `<git common dir>/test-baseline/<commit>.json` for local runs.
+Lists artifacts named `test-baseline-<40 hex>` that aren't expired and were published by a run on this repository's `main` at the commit in the name, so a fork's or another branch's run can't pose as a baseline. Then walks `git rev-list --first-parent -n 500 <merge-base of head and origin/main>` newest first, and returns the first match. On `push`, the walk starts at the head's first parent, so a run never finds itself. Returns null when no ancestor has one, and throws a typed `BaselineUnavailable` when `gh` itself fails, because SC-11 and SC-12 treat those differently. `fetchBaseline` downloads through `gh api repos/<repo>/actions/artifacts/<id>/zip`, validates `version: 1`, and caches under `<git common dir>/test-baseline/<commit>.json` for local runs.
 
 ### Issues
 

@@ -29,6 +29,12 @@ function git(cwd: string, args: string[]): string | null {
 
 type Listed = { id: number; createdAt: string }
 
+function publishedByMain(run: unknown, commit: string): boolean {
+  if (!run || typeof run !== 'object') return false
+  const { head_branch, head_sha, repository_id, head_repository_id } = run as Record<string, unknown>
+  return head_branch === 'main' && head_sha === commit && repository_id != null && head_repository_id === repository_id
+}
+
 async function listBaselines(repo: string, gh: GhRunner): Promise<Map<string, Listed>> {
   let output: string
   try {
@@ -37,7 +43,7 @@ async function listBaselines(repo: string, gh: GhRunner): Promise<Map<string, Li
       '--paginate',
       `repos/${repo}/actions/artifacts?per_page=100`,
       '--jq',
-      '.artifacts[] | {id, name, expired, created_at}',
+      '.artifacts[] | {id, name, expired, created_at, workflow_run}',
     ])
   } catch (error) {
     throw new BaselineUnavailable(`could not list artifacts for ${repo}: ${error instanceof Error ? error.message : error}`, { cause: error })
@@ -45,7 +51,7 @@ async function listBaselines(repo: string, gh: GhRunner): Promise<Map<string, Li
   const newest = new Map<string, Listed>()
   for (const line of output.split('\n')) {
     if (!line.trim()) continue
-    let artifact: { id?: unknown; name?: unknown; expired?: unknown; created_at?: unknown }
+    let artifact: { id?: unknown; name?: unknown; expired?: unknown; created_at?: unknown; workflow_run?: unknown }
     try {
       artifact = JSON.parse(line)
     } catch (error) {
@@ -53,6 +59,7 @@ async function listBaselines(repo: string, gh: GhRunner): Promise<Map<string, Li
     }
     const commit = typeof artifact.name === 'string' ? ARTIFACT_NAME.exec(artifact.name)?.[1] : undefined
     if (!commit || artifact.expired === true || typeof artifact.id !== 'number') continue
+    if (!publishedByMain(artifact.workflow_run, commit)) continue
     const createdAt = typeof artifact.created_at === 'string' ? artifact.created_at : ''
     const current = newest.get(commit)
     if (!current || createdAt > current.createdAt || (createdAt === current.createdAt && artifact.id > current.id)) {
@@ -64,6 +71,8 @@ async function listBaselines(repo: string, gh: GhRunner): Promise<Map<string, Li
 
 /**
  * Finds the nearest first-parent ancestor of `head` on main that has a stored baseline, looking back at most 500 commits.
+ * A baseline counts only when it was published by a run on this repository's main at that commit; artifacts from
+ * forks, other branches or another commit's run are ignored.
  * The walk starts at the merge base of `head` and `origin/main`, or at `head`'s first parent when `fromParent` is set
  * (a push, so a run never finds itself). Returns null when nothing matches, when there is no merge base, or when
  * `fromParent` is set on a commit with no parent. Throws `BaselineUnavailable` when `gh` fails.
@@ -106,8 +115,9 @@ async function downloadWithGh(args: string[], dest: string): Promise<void> {
 /**
  * Loads the baseline `findBaseline` returned. A copy cached at `<git common dir>/test-baseline/<commit>.json` is used
  * when valid; otherwise the artifact zip is downloaded, `baseline.json` is extracted with the system `unzip`, checked for
- * `version: 1` and cached. Throws `BaselineUnavailable` for a failed download, a missing or unreadable `baseline.json`,
- * or a wrong version. `gh` is accepted for symmetry with `findBaseline` but unused, since a zip can't pass through a
+ * `version: 1` and for a `commit` equal to `found.commit`, and cached. A cached copy that fails either check is
+ * downloaded again. Throws `BaselineUnavailable` for a failed download, a missing or unreadable `baseline.json`,
+ * a wrong version or a baseline recorded for a different commit. `gh` is accepted for symmetry with `findBaseline` but unused, since a zip can't pass through a
  * `GhRunner`; `download` receives the `gh` arguments and a path to write the zip to.
  */
 export async function fetchBaseline(
@@ -120,7 +130,7 @@ export async function fetchBaseline(
   const cached = join(cacheDir, `${found.commit}.json`)
   if (existsSync(cached)) {
     const hit = parseBaseline(readFileSync(cached, 'utf8'))
-    if (hit) return hit
+    if (hit && hit.commit === found.commit) return hit
   }
 
   mkdirSync(cacheDir, { recursive: true })
@@ -138,6 +148,9 @@ export async function fetchBaseline(
     }
     const baseline = parseBaseline(unzipped.stdout.toString())
     if (!baseline) throw new BaselineUnavailable(`artifact ${found.artifactId} holds an unreadable or unsupported baseline.json`)
+    if (baseline.commit !== found.commit) {
+      throw new BaselineUnavailable(`artifact ${found.artifactId} holds a baseline for ${baseline.commit}, not ${found.commit}`)
+    }
     const staged = join(scratch, 'baseline.json')
     writeFileSync(staged, JSON.stringify(baseline))
     renameSync(staged, cached)
@@ -149,8 +162,9 @@ export async function fetchBaseline(
 
 /**
  * Turns one complete run into the record stored for its commit. A test's status is its rerun's when the file was rerun,
- * otherwise its first attempt's; a test that failed first and is missing from the rerun stays failed. A file is flaky when
- * its first attempt failed or errored and its rerun passed cleanly. `flakeHistory` carries forward from `previous`, gains
+ * otherwise its first attempt's; a test that failed first and is missing from or skipped in the rerun stays failed. A file
+ * is flaky when a test in it failed first and passed in the rerun, or when a first-attempt `fileError` was cleared by the
+ * rerun, whatever else in the file kept failing. A file whose rerun fixed nothing is not flaky. `flakeHistory` carries forward from `previous`, gains
  * `now` for each flaky file, and keeps only dates within 7 days of `now`.
  */
 export function buildBaseline(input: { commit: string; runId: string; results: FileResult[]; previous: Baseline | null; now: Date }): Baseline {
@@ -160,13 +174,16 @@ export function buildBaseline(input: { commit: string; runId: string; results: F
 
   for (const result of input.results) {
     const last = result.rerun ?? result.first
-    const firstBad = result.first.fileError !== null || result.first.tests.some((t) => t.status === 'failed')
-    const rerunClean = result.rerun !== undefined && result.rerun.fileError === null && !result.rerun.tests.some((t) => t.status === 'failed')
-    const flaky = firstBad && rerunClean
+    const firstFailed = new Set(result.first.tests.filter((t) => t.status === 'failed').map((t) => t.key))
+    const recovered = result.rerun?.tests.some((t) => t.status === 'passed' && firstFailed.has(t.key)) ?? false
+    const errorCleared = result.first.fileError !== null && result.rerun !== undefined && result.rerun.fileError === null
+    const flaky = recovered || errorCleared
     if (flaky) flakyFiles.push(result.file)
     files[result.file] = { platform: result.platform, durationMs: result.durationMs, fileError: last.fileError, flaky }
     for (const test of result.first.tests) tests[test.key] = test.status
-    for (const test of result.rerun?.tests ?? []) tests[test.key] = test.status
+    for (const test of result.rerun?.tests ?? []) {
+      tests[test.key] = firstFailed.has(test.key) && test.status === 'skipped' ? 'failed' : test.status
+    }
   }
 
   const nowIso = input.now.toISOString()

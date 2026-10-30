@@ -177,6 +177,14 @@ describe('renderLocal', () => {
     expect(out).toContain('c.test.ts')
   })
 
+  test('lists fixed and missing tests with their labels', () => {
+    const out = renderLocal(verdict({ fixed: [key('a.test.ts', 's', 'now-passes')], missing: [key('b.test.ts', 's', 'gone')] }), NOW)
+    const lines = out.trimEnd().split('\n')
+    expect(lines).toContain('fixed: a.test.ts > s > now-passes')
+    expect(lines).toContain('missing: b.test.ts > s > gone')
+    expect(lines.at(-1)).toBe('result: 0 new failures, 0 known failures, 0 flaky, against baseline abcdef0')
+  })
+
   test('says no baseline in the summary', () => {
     const out = renderLocal(verdict({ advisory: true, baseline: null, new: [key('a.test.ts', 's', 'x')] }), NOW)
     const last = out.trimEnd().split('\n').at(-1)

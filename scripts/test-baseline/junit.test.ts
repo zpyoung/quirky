@@ -74,6 +74,24 @@ test('numbers duplicated names within a file in report order', () => {
   ])
 })
 
+test('gives every result a unique key when a name literally ends in a repeat suffix', () => {
+  const xml = wrap(`
+<testcase name="x" classname="" />
+<testcase name="x" classname=""><failure message="m" /></testcase>
+<testcase name="x#2" classname="" />`)
+  const results = parseJunit(xml, 'f')
+  expect(results.map((r) => r.key)).toEqual([key('f', '', 'x'), `${key('f', '', 'x')}#2`, `${key('f', '', 'x#2')}#2`])
+  expect(new Set(results.map((r) => r.key)).size).toBe(3)
+})
+
+test('keeps a literal suffixed name on its bare key when it comes before the repeat', () => {
+  const xml = wrap(`
+<testcase name="x" classname="" />
+<testcase name="x#2" classname="" />
+<testcase name="x" classname="" />`)
+  expect(parseJunit(xml, 'f').map((r) => r.key)).toEqual([key('f', '', 'x'), key('f', '', 'x#2'), `${key('f', '', 'x')}#3`])
+})
+
 test('keys use the file passed in, not the report attribute', () => {
   const xml = wrap(`<testcase name="t" classname="" file="other.test.ts" />`)
   expect(parseJunit(xml, 'mine.test.ts')[0].key).toBe(key('mine.test.ts', '', 't'))

@@ -12,8 +12,8 @@ function median(values: number[]): number {
 
 /**
  * Splits `files` into balanced shards by recorded duration, longest first onto the least-loaded
- * shard. A file with no entry in `durations` counts as the median of those that have one, or 5,000 ms
- * when none do. The shard count is `min(maxShards, ceil(total / targetMs))`, at least 1, and never
+ * shard. A file with no entry in `durations` counts as the median of every duration in `durations`,
+ * selected or not, or 5,000 ms when it is empty. The shard count is `min(maxShards, ceil(total / targetMs))`, at least 1, and never
  * more than the number of files so no shard is empty. Returns `[]` for no files. The result depends
  * only on the inputs' contents, not their order: ties go to the lower path, then the lower shard.
  */
@@ -23,7 +23,7 @@ export function splitShards(
   opts: { targetMs: number; maxShards: number }
 ): string[][] {
   if (files.length === 0) return []
-  const known = files.flatMap((file) => (file in durations ? [durations[file]!] : []))
+  const known = Object.values(durations)
   const fallback = known.length > 0 ? median(known) : UNKNOWN_DURATION_MS
   const weighted = files
     .map((file) => ({ file, ms: file in durations ? durations[file]! : fallback }))

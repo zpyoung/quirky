@@ -50,6 +50,13 @@ describe('splitShards', () => {
     expect(shards).toEqual([['c'], ['b', 'a'], ['new']])
   })
 
+  test('takes the median from every recorded duration, not only the selected files', () => {
+    const shards = splitShards(['new-a', 'new-b'], { old: 100 }, { targetMs: 1000, maxShards: 6 })
+    expect(shards).toEqual([['new-a', 'new-b']])
+    const wide = splitShards(['new-a', 'new-b'], { old: 1000 }, { targetMs: 1000, maxShards: 6 })
+    expect(wide).toEqual([['new-a'], ['new-b']])
+  })
+
   test('uses 5000 ms for every file when no durations are known', () => {
     const shards = splitShards(['a', 'b', 'c'], {}, { targetMs: 5000, maxShards: 10 })
     expect(shards).toEqual([['a'], ['b'], ['c']])
