@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Badge, Button, IconButton, Menu, SectionHeader } from '@quirky/ui'
-import type { GitDiff } from '@quirky/protocol'
+import type { GitDiff, GitStatus } from '@quirky/protocol'
 
 import { reuseGitDiff } from '../diffRefresh'
 import { useNotesBinding } from '../notes/binding'
@@ -40,11 +40,33 @@ export function FileDiff({ context, input, settings, setSetting, report, bind, c
   const loadedRef = useRef<Loaded | null>(null)
   const inFlight = useRef(false)
 
+  const fetchCurrentDiff = useCallback(async () => {
+    const requestedSource = source
+    let effectiveSource = requestedSource
+    if (requestedSource === 'staged' || requestedSource === 'unstaged') {
+      const status = (await context.call('quirky.git/status', { worktree: input.worktree })) as GitStatus
+      const hasConflict = status.entries.some((entry) => entry.path === path && entry.area === 'conflicts')
+      if (!hasConflict) {
+        const file = status.files.find((entry) => entry.path === path)
+        const hasStaged = file !== undefined && !file.untracked && file.index !== ' '
+        const hasUnstaged = file !== undefined && (file.worktree !== ' ' || file.untracked)
+        if (requestedSource === 'staged' && !hasStaged && hasUnstaged) effectiveSource = 'unstaged'
+        else if (requestedSource === 'unstaged' && !hasUnstaged && hasStaged) effectiveSource = 'staged'
+      }
+    }
+    return fetchDiff(context, input.worktree, {
+      path,
+      source: effectiveSource,
+      oldPath: input.oldPath,
+      commit: input.commit
+    })
+  }, [context, input.worktree, input.oldPath, input.commit, path, source])
+
   const refresh = useCallback(async () => {
     if (inFlight.current) return
     inFlight.current = true
     try {
-      const fresh = await fetchDiff(context, input.worktree, { path, source, oldPath: input.oldPath, commit: input.commit })
+      const fresh = await fetchCurrentDiff()
       const previous = loadedRef.current
       const next = reuseGitDiff(previous?.diff ?? null, fresh)
       if (previous && next === previous.diff) return
@@ -61,7 +83,7 @@ export function FileDiff({ context, input, settings, setSetting, report, bind, c
     } finally {
       inFlight.current = false
     }
-  }, [context, input.worktree, input.oldPath, input.commit, path, source])
+  }, [fetchCurrentDiff])
 
   useEffect(() => {
     void refresh()
@@ -81,13 +103,14 @@ export function FileDiff({ context, input, settings, setSetting, report, bind, c
     loadedRef.current = { ...previous, diff: { ...previous.diff, modified: content, modifiedHash: hash } }
   }, [])
   const onReload = useCallback(async () => {
-    const fresh = await fetchDiff(context, input.worktree, { path, source, oldPath: input.oldPath, commit: input.commit })
+    const fresh = await fetchCurrentDiff()
     const replaced = { diff: fresh, revision: (loadedRef.current?.revision ?? 0) + 1 }
     loadedRef.current = replaced
     setLoaded(replaced)
-  }, [context, input.worktree, input.oldPath, input.commit, path, source])
+  }, [fetchCurrentDiff])
 
-  const editable = loaded ? isEditable(source, loaded.diff) : false
+  const effectiveSource = loaded?.diff.source ?? source
+  const editable = loaded ? isEditable(effectiveSource, loaded.diff) : false
 
   bind({
     nextChange: () => void paneRef.current?.nextChange(),
@@ -106,7 +129,7 @@ export function FileDiff({ context, input, settings, setSetting, report, bind, c
   useEffect(() => {
     report({
       mode: 'file',
-      source,
+      source: effectiveSource,
       path,
       area: null,
       commit: input.commit ?? null,
@@ -116,7 +139,7 @@ export function FileDiff({ context, input, settings, setSetting, report, bind, c
       stale: state.stale,
       tooLarge: state.tooLarge
     })
-  }, [stateKey, source, path, input.commit, report])
+  }, [stateKey, effectiveSource, path, input.commit, report])
   useEffect(() => {
     if (!showMarkdownPreview || !loaded) {
       setPreviewHtml(null)
@@ -170,7 +193,7 @@ export function FileDiff({ context, input, settings, setSetting, report, bind, c
 
 
   const sideLabel = settings.sideBySide ? 'Switch to inline diff' : 'Switch to side-by-side diff'
-  const chip = SOURCE_CHIP[source]
+  const chip = SOURCE_CHIP[effectiveSource]
   const switchDisplay = () => {
     if (!markdown) return
     const display = showMarkdownPreview ? 'source' : 'preview'

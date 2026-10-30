@@ -258,6 +258,14 @@ function groupsIn(node: WorkspaceNode): WorkspaceGroup[] {
   return node.kind === 'group' ? [node] : [...groupsIn(node.first), ...groupsIn(node.second)]
 }
 
+/** All hosted view tabs with `viewId` in this worktree, including tabs in split groups. */
+export async function viewTabs(w: World, viewId: string): Promise<TerminalViewTab[]> {
+  const { workspace } = await w.agent.callAny('quirky.terminal/workspace', { workspace: w.feat.id }) as { workspace: TerminalWorkspace }
+  return groupsIn(workspace.root).flatMap((group) =>
+    group.tabs.filter((tab): tab is TerminalViewTab => tab.kind === 'view' && tab.viewId === viewId)
+  )
+}
+
 /** The selected top-level view, or its settled active hosted tab when the terminal owns it. */
 export async function openView(w: World): Promise<{ id: string; input?: Record<string, unknown> } | null> {
   const root = (await w.state()).layout.view

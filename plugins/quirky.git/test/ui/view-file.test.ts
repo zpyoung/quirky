@@ -7,7 +7,7 @@ registerDom()
 const s = await import('./support')
 afterAll(() => GlobalRegistrator.unregister())
 
-const { act, byLabel, byText, click, edit, expectOpened, failure, fakeContext, layoutFor, mountView, numbered, settle, textDiff, wait } = s
+const { act, byLabel, byText, click, edit, expectOpened, failure, fakeContext, layoutFor, mountView, numbered, settle, status, textDiff, wait } = s
 
 const far = {
   original: numbered(30),
@@ -236,6 +236,60 @@ describe('quirky.git file diff view', () => {
     await settle()
     expect(mounted.element.textContent).toBe('Open a worktree first.')
     expect(byText(mounted.element, 'Close')).toBeNull()
+  })
+  test('uses complete per-file status flags when capped entries omit the unstaged row', async () => {
+    const snapshot = status([{ path: 'README.md', area: 'staged', status: 'modified' }])
+    snapshot.files = [{ path: 'README.md', index: 'M', worktree: 'M', untracked: false }]
+    snapshot.capped = true
+    fake.handlers['quirky.git/status'] = () => snapshot
+    fake.handlers['quirky.git/diff'] = (params) => {
+      const isStaged = params.source === 'staged'
+      return textDiff({
+        path: 'README.md',
+        source: isStaged ? 'staged' : 'unstaged',
+        staged: isStaged,
+        original: isStaged ? 'one\ntwo\n' : 'one\nstaged\n',
+        modified: isStaged ? 'one\nstaged\n' : 'one\nworking\n'
+      })
+    }
+    mounted = mountView(fake, { ...input, path: 'README.md' })
+    await wait(30)
+
+    expect(s.modifiedEditor(mounted!.element).state.doc.toString()).toBe('one\nworking\n')
+    expect(mounted!.element.querySelector('[data-diff-source="Staged"]')).toBeNull()
+    expect(byLabel(mounted!.element, 'Next change')?.disabled).toBe(false)
+  })
+
+  test('unstaging a new file keeps its untracked diff visible and editable', async () => {
+    const stagedStatus = status([{ path: 'new.txt', area: 'staged', status: 'added' }])
+    stagedStatus.files = [{ path: 'new.txt', index: 'A', worktree: ' ', untracked: false }]
+    const untrackedStatus = status([{ path: 'new.txt', area: 'untracked', status: 'untracked' }])
+    untrackedStatus.files = [{ path: 'new.txt', index: '?', worktree: '?', untracked: true }]
+    let currentStatus = stagedStatus
+    fake.handlers['quirky.git/status'] = () => currentStatus
+    fake.handlers['quirky.git/diff'] = (params) => {
+      const isStaged = params.source === 'staged'
+      return textDiff({
+        path: 'new.txt',
+        source: isStaged ? 'staged' : 'unstaged',
+        staged: isStaged,
+        original: '',
+        modified: 'new file\n'
+      })
+    }
+    mounted = mountView(fake, { ...input, source: 'staged', path: 'new.txt' })
+    await wait(30)
+    expect(s.modifiedEditor(mounted!.element).state.doc.toString()).toBe('new file')
+    expect(mounted!.element.querySelector('[data-diff-source="Staged"]')).not.toBeNull()
+    expect(mounted!.element.querySelector('[contenteditable="true"]')).toBeNull()
+
+    currentStatus = untrackedStatus
+    await act(async () => fake.emit({ type: 'quirky.git/changed', data: { worktreeId: 'w1' } }))
+    await wait(30)
+    expect(s.modifiedEditor(mounted!.element).state.doc.toString()).toBe('new file\n')
+    expect(mounted!.element.querySelector('[data-diff-source="Staged"]')).toBeNull()
+    expect(mounted!.element.querySelector('[contenteditable="true"]')).not.toBeNull()
+    expect(byLabel(mounted!.element, 'Next change')?.disabled).toBe(false)
   })
 })
 
