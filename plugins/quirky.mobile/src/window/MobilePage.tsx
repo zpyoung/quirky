@@ -175,11 +175,11 @@ export function MobilePage({ context, input, report }: { context: UiPluginContex
   }
 
   if (mobile.loading && mobile.state === null) {
-    return <main className="ui-stack"><p role="status">Loading Mobile…</p></main>
+    return <main className="ui-panel-content ui-stack"><p role="status">Loading Mobile…</p></main>
   }
   if (mobile.state === null) {
     return (
-      <main className="ui-stack">
+      <main className="ui-panel-content ui-stack">
         <SectionHeader title="Mobile" />
         <p className="ui-error-text" role="alert">Unable to load Mobile settings: {mobile.error ?? 'The daemon returned no state.'}</p>
         <div className="ui-cluster"><Button onClick={() => void mobile.refresh()}>Try again</Button></div>
@@ -189,7 +189,7 @@ export function MobilePage({ context, input, report }: { context: UiPluginContex
 
   const currentStage = stage ?? 'intro'
   return (
-    <main className="ui-stack">
+    <main className="ui-panel-content ui-stack">
       <div className="ui-stack">
         <SectionHeader
           title="Mobile"
