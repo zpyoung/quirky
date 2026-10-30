@@ -257,6 +257,7 @@ export async function runFocusedBrowserDesign(action: DesignAction, targetPane?:
     if (!target) return { started: false, reason: `Browser pane ${targetPane} is not open.` }
     if (target.mode() !== 'native') return { started: false, reason: `Browser pane ${targetPane} is a Watch pane; design operations need a Native pane.` }
     if (!await focusBrowserPane(targetPane)) return { started: false, reason: `Browser pane ${targetPane} did not take focus.` }
+    if (focusedPaneId !== targetPane) return { started: false, reason: `Focus moved away from browser pane ${targetPane} before the design operation started.` }
   }
   const pane = focusedPaneId
   if (!pane) return { started: false, reason: 'No browser pane is focused.' }

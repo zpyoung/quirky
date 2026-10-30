@@ -18,7 +18,8 @@ export async function addSourceAttributes(source: string, file: string, repoRoot
     throw new Error(`${file}:${line + 1}: ${ts.flattenDiagnosticMessageText(problem.messageText, '\n')}`)
   }
 
-  const path = relative(repoRoot, file).split(sep).join('/')
+  // jsx attribute strings have no backslash escapes, only html entities
+  const path = relative(repoRoot, file).split(sep).join('/').replaceAll('&', '&amp;').replaceAll('"', '&quot;')
   const insertions: { at: number; text: string }[] = []
   const visit = (node: ts.Node) => {
     if (ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)) {

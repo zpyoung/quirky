@@ -81,6 +81,23 @@ describe('addSourceAttributes', () => {
     expect(output).toBe(`export const a = <Slot icon={<svg ${attribute}><path ${attribute} /></svg>} />\n`)
   })
 
+  test('encodes a path containing a double quote and an ampersand so the attribute decodes to the exact path and line', async () => {
+    const odd = join(repoRoot, 'plugins/a"b&amp;c/View.tsx')
+    const output = await addSourceAttributes('export const a = <p />\n', odd, repoRoot)
+    const ts = (await import('typescript')).default
+    const parsed = ts.createSourceFile('out.tsx', output, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX)
+    expect((parsed as unknown as { parseDiagnostics: unknown[] }).parseDiagnostics).toEqual([])
+
+    const attribute = (function find(node: import('typescript').Node): import('typescript').JsxAttribute | undefined {
+      if (ts.isJsxAttribute(node)) return node
+      return ts.forEachChild(node, find)
+    })(parsed)
+    const raw = attribute?.initializer && ts.isStringLiteral(attribute.initializer) ? attribute.initializer.text : ''
+    const decoded = raw.replaceAll('&quot;', '"').replaceAll('&amp;', '&')
+    expect(attribute?.name.getText(parsed)).toBe('data-quirky-source')
+    expect(decoded).toBe('plugins/a"b&amp;c/View.tsx:1')
+  })
+
   test('fails with the file name when the source does not parse', async () => {
     await expect(addSourceAttributes('export const a = <div>\n', file, repoRoot)).rejects.toThrow(file)
   })

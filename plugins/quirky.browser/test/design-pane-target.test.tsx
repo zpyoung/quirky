@@ -202,3 +202,19 @@ test('a pane argument that is not a non-empty string is rejected', async () => {
   }
   expect(focusedBrowserPane()).toBeNull()
 })
+
+test('concurrent requests for different panes never run on the other request\'s pane', async () => {
+  await mountPanes(pane('pane-1', 'native'), pane('pane-2', 'native'))
+  let results: unknown[] = []
+  await act(async () => {
+    results = await Promise.all([
+      designCommand({ action: 'cancel', pane: 'pane-1' }),
+      designCommand({ action: 'cancel', pane: 'pane-2' })
+    ])
+  })
+  const [first, second] = results as { started: boolean; reason?: string }[]
+  expect(second).toEqual({ started: true })
+  expect(first?.started).toBe(false)
+  expect(first?.reason).toContain('pane-1')
+  expect(focusedBrowserPane()).toBe('pane-2')
+})
