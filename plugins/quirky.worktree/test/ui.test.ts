@@ -10,6 +10,7 @@ import { sectionHeading } from './window/dom'
 
 const SLOT = 'sidebar-section:quirky.worktree/worktrees'
 const COMMAND = 'command:quirky.worktree/new-worktree'
+const ADD_PROJECT_COMMAND = 'command:quirky.worktree/add-project'
 const SESSION_VIEW = 'view:quirky.session/worktree'
 
 const WORKTREE_DEFAULTS: Omit<WorktreeControl, 'id' | 'repoId' | 'path' | 'branch' | 'head' | 'isMain' | 'name' | 'instanceId'> = {
@@ -183,6 +184,7 @@ function setup(layout: UiLayout = { worktree: null, view: null, panel: null, sid
   const confirmed: { title: string; body?: string }[] = []
   const toasts: { title: string; body: string }[] = []
   const opened: { id: string; input?: unknown }[] = []
+  const toggled: { id: string; open?: boolean }[] = []
   const reports: unknown[] = []
   const eventListeners = new Set<(event: QuirkyEvent) => void | Promise<void>>()
   const layoutListeners = new Set<(layout: UiLayout) => void>()
@@ -385,7 +387,9 @@ function setup(layout: UiLayout = { worktree: null, view: null, panel: null, sid
       for (const listener of layoutListeners) listener(current)
     },
     closeView() {},
-    togglePanel() {},
+    togglePanel(id: string, open?: boolean) {
+      toggled.push({ id, open })
+    },
     getLayout: () => current,
     onLayout(listener: (layout: UiLayout) => void) {
       layoutListeners.add(listener)
@@ -412,6 +416,7 @@ function setup(layout: UiLayout = { worktree: null, view: null, panel: null, sid
     confirmed,
     toasts,
     opened,
+    toggled,
     reports,
     provided,
     callsTo: (method: string) => calls.filter((c) => c.method === method).map((c) => c.params),
@@ -429,6 +434,10 @@ function setup(layout: UiLayout = { worktree: null, view: null, panel: null, sid
     runCommand: (args?: unknown) =>
       act(async () => {
         await (provided.get(COMMAND) as (args?: unknown) => unknown)(args)
+      }),
+    runAddProject: () =>
+      act(async () => {
+        await (provided.get(ADD_PROJECT_COMMAND) as () => unknown)()
       }),
     async mountInto(element: HTMLElement) {
       const frameRoot = createRoot(element)
@@ -1195,6 +1204,34 @@ test('SC-62: the new-worktree command opens the create dialog on the named, open
   await h.setLayout({ worktree: 'w3', view: { id: SESSION_VIEW, input: { worktree: 'w3' } }, panel: null, sidebar: true, focus: 'view' })
   await h.runCommand()
   expect(lastReport(h).dialog).toEqual({ kind: 'create', repoId: 'r2' })
+})
+
+test('the add-project command shows the Worktrees tool and opens the Add project dialog, mounted or not', async () => {
+  const queued = setup()
+  await queued.runAddProject()
+  expect(queued.toggled).toEqual([{ id: SLOT, open: true }])
+  await queued.mountInto(host)
+  expect(lastReport(queued).dialog).toEqual({ kind: 'add-project' })
+  expect(document.querySelector('[role="dialog"] input')).not.toBeNull()
+  await press('Escape')
+
+  document.body.innerHTML = ''
+  host = document.createElement('div')
+  document.body.append(host)
+  const live = setup()
+  await live.mountInto(host)
+  await live.runAddProject()
+  expect(live.toggled).toEqual([{ id: SLOT, open: true }])
+  expect(lastReport(live).dialog).toEqual({ kind: 'add-project' })
+})
+
+test('a project header carries the project tile under All projects and drops it once narrowed', async () => {
+  const h = setup()
+  await h.mountInto(host)
+  const tiles = () => [...host.querySelectorAll<HTMLElement>('.repo-header')].map((header) => header.querySelector('.ui-project-tile')?.textContent ?? null)
+  expect(tiles()).toEqual(['AP', 'WE'])
+  await h.emit({ type: 'quirky.worktree/optionsChanged', data: { options: { ...DEFAULT_STOCK_OPTIONS, filterRepoIds: ['r1'], showProperties: [...DEFAULT_STOCK_OPTIONS.showProperties] } } } as QuirkyEvent)
+  expect(tiles()).toEqual([null, null])
 })
 
 const untrusted = (changed = false) =>

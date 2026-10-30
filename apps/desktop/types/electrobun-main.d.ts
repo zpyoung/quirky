@@ -14,6 +14,8 @@ export class BrowserWindow {
     html: string | null
     preload?: string | null
     rpc?: unknown
+    titleBarStyle?: 'default' | 'hidden' | 'hiddenInset'
+    trafficLightOffset?: { x: number; y: number }
   })
   readonly id: number
   webview: {

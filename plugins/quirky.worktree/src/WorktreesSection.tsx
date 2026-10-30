@@ -67,7 +67,7 @@ function projectIdentitiesOf(value: unknown): Record<string, WorktreeProjectIden
   }
   return result
 }
-type Props = { context: UiPluginContext; report?(state: unknown): void; requests?: CreateRequests }
+type Props = { context: UiPluginContext; report?(state: unknown): void; requests?: CreateRequests; addProjectRequests?: CreateRequests }
 
 /** A trust question waiting for an answer; `resolve` hands it back to the create that asked. */
 type TrustPrompt = { request: TrustRequest; resolve(choice: TrustChoice): void }
@@ -122,7 +122,7 @@ function isSleeping(worktree: WorktreeControl): boolean {
 const CREATE_GRACE_MS = 5 * 60 * 1_000
 
 /** The sidebar's workspace tree with its menus, dialogs, add-project form and `ui state` report. */
-export function WorktreesSection({ context, report, requests }: Props) {
+export function WorktreesSection({ context, report, requests, addProjectRequests }: Props) {
   const { repos, groups, worktrees, sessions, otherClientByWorktree, hasAuthenticatedDesktopClient, loaded } = useTree(context)
   const now = useNow()
   const [layout, setLayout] = useState(() => context.getLayout())
@@ -232,6 +232,7 @@ export function WorktreesSection({ context, report, requests }: Props) {
   }, [context])
 
   useEffect(() => requests?.attach(setRequested), [requests])
+  useEffect(() => addProjectRequests?.attach(() => setDialog({ kind: 'add-project' })), [addProjectRequests])
 
   const selectedId = layout.worktree ?? null
   const activity = useSidebarActivity(context, selectedId, loaded)

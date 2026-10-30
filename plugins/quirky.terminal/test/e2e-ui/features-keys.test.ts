@@ -21,6 +21,12 @@ import {
 
 afterEach(stopAll)
 
+async function openSettings(f: Features): Promise<void> {
+  document.querySelector<HTMLButtonElement>('button[aria-label="More"]')!.click()
+  const row = await until(f, () => [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((item) => item.textContent?.trim() === 'Settings'))
+  row.click()
+}
+
 async function firstPane(f: Features) {
   const report = await viewReport(f, 'a mounted pane')
   const session = focusedSession(report)
@@ -131,7 +137,7 @@ test(
     const splitRevision = split.layout!.revision
 
     // in a text field the same keys are left to the browser, and the others do nothing
-    document.querySelector<HTMLButtonElement>('button[aria-label="Settings"]')!.click()
+    await openSettings(f)
     const field = await until(f, () => document.querySelector<HTMLInputElement>('[role="dialog"] input:not([type])'))
     field.focus()
     await waitFor('terminal focus to leave', () => (contextKey(f, 'terminalFocus') === false ? true : undefined))

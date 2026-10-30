@@ -16,6 +16,12 @@ import {
 
 afterEach(stopAll)
 
+async function openSettings(f: Features): Promise<void> {
+  document.querySelector<HTMLButtonElement>('button[aria-label="More"]')!.click()
+  const row = await until(f, () => [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((item) => item.textContent?.trim() === 'Settings'))
+  row.click()
+}
+
 
 const setSetting = (f: Features, name: string, value: string) => f.h.cli(['setting', 'set', `setting:quirky.terminal/${name}`, value])
 
@@ -23,7 +29,7 @@ test(
   'SC-64: canonical terminal URL click settings remain editable in Browser settings',
   async () => {
     const f = await startFeatures()
-    document.querySelector<HTMLElement>('button[aria-label="Settings"]')!.click()
+    await openSettings(f)
     const select = await until(f, () => {
       const label = [...document.querySelectorAll<HTMLLabelElement>('[role="dialog"] label')]
         .find((candidate) => candidate.textContent?.trim() === 'Terminal URL clicks')

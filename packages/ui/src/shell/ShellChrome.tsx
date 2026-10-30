@@ -5,7 +5,6 @@ import {
   Badge,
   Button,
   EmptyState,
-  IconButton,
   ListRow,
   SectionHeader,
   StatusDot,
@@ -17,8 +16,6 @@ import { PluginSlot } from '../plugins/PluginSlot'
 import { attentionStoreFor, useAttention } from './attention'
 import './chrome.css'
 
-type ShellTitleBarProps = { onSettings?: () => void }
-
 type ToastAnswer = { label: string; answers: Record<string, AskAnswer>; skipped: string[] }
 type QuestionDraft = { selected: string[]; freeText: string; text: string; confirm: boolean | null }
 type Drafts = Record<string, QuestionDraft>
@@ -26,49 +23,6 @@ const messageOf = (error: unknown): string => error instanceof Error ? error.mes
 
 function worktreeFor(snapshot: { worktrees: Worktree[] | null }, id: string | null): Worktree | undefined {
   return id ? snapshot.worktrees?.find((worktree) => worktree.id === id) : undefined
-}
-
-function repoFor(snapshot: { repos: Repo[] | null }, worktree: Worktree | undefined): Repo | undefined {
-  return worktree ? snapshot.repos?.find((repo) => repo.id === worktree.repoId) : undefined
-}
-
-/** Host-owned project/worktree breadcrumb and canonical command-search trigger. */
-export function ShellTitleBar({ onSettings }: ShellTitleBarProps = {}) {
-  const { snapshot } = useAttention()
-  const { windowRoute } = usePluginState()
-  const host = usePluginHost()
-  const selected = worktreeFor(snapshot, snapshot.selectedWorktreeId)
-  const repo = repoFor(snapshot, selected)
-  const showSearch = windowRoute === null
-  const projectLabel = repo?.displayName ?? repo?.name ?? (snapshot.selectedWorktreeId ? 'Project unavailable' : 'No project')
-  const worktreeLabel = selected?.name ?? snapshot.selectedWorktreeId ?? 'No worktree selected'
-
-  return (
-    <header className="shell-titlebar" aria-label="Window title bar">
-      <div className="shell-titlebar__breadcrumb" aria-label="Current project and worktree">
-        {windowRoute ? (
-          <strong>{windowRoute.title ?? 'Auxiliary window'}</strong>
-        ) : (
-          <>
-            <span className="shell-titlebar__project">{projectLabel}</span>
-            <span className="shell-titlebar__separator" aria-hidden="true">/</span>
-            <strong className="shell-titlebar__worktree">{worktreeLabel}</strong>
-            {snapshot.errors.worktrees && <span className="shell-titlebar__error" role="status">Worktree data unavailable</span>}
-          </>
-        )}
-      </div>
-      {showSearch && (
-        <Button
-          className="shell-titlebar__search"
-          aria-label="Search commands, tools, views, and worktrees"
-          onClick={() => host.setPalette(true)}
-        >
-          <span>Search</span><kbd>⌘K</kbd>
-        </Button>
-      )}
-      {showSearch && onSettings && <IconButton label="Settings" onClick={onSettings}>⚙</IconButton>}
-    </header>
-  )
 }
 
 /** Canonical branch/activity summary plus the effective status-bar contributions. */
@@ -521,6 +475,7 @@ export function InboxPanel() {
 
 function AttentionToast({ ask, phase, error }: { ask: Ask; phase: AttentionToastState['phase']; error?: string }) {
   const { store } = useAttention()
+  const [openError, setOpenError] = useState<string | null>(null)
   const quickAnswer = primaryAnswer(ask)
   const questionText = ask.spec.questions.map((question) => question.question).join('\n') || ask.spec.title
   const action = quickAnswer ? (
@@ -554,7 +509,20 @@ function AttentionToast({ ask, phase, error }: { ask: Ask; phase: AttentionToast
         <div className="shell-attention-toast__description">
           <p>{questionText}</p>
           {error && <p className="ui-error-text" role="alert">Could not answer: {error}</p>}
+          {openError && <p className="ui-error-text" role="alert">Could not open the worktree: {openError}</p>}
           {action}
+          {ask.worktreeId !== null && (
+            <Button
+              onClick={() => {
+                void store.openWorktree(ask.worktreeId!).then((failure) => {
+                  if (failure) setOpenError(failure)
+                  else store.dismissToast(ask.id)
+                })
+              }}
+            >
+              Open worktree
+            </Button>
+          )}
         </div>
       )}
       status="needs-you"

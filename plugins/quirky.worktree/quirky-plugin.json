@@ -3268,6 +3268,10 @@
             }
           }
         }
+      },
+      {
+        "id": "add-project",
+        "title": "Add project"
       }
     ],
     "keybinding": [
