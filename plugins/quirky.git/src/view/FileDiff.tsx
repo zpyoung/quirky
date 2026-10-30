@@ -1,10 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Badge, Button, IconButton, Menu, SectionHeader } from '@quirky/ui'
+import { Button, IconButton, Menu, SectionHeader } from '@quirky/ui'
 import type { GitDiff, GitStatus } from '@quirky/protocol'
 
 import { reuseGitDiff } from '../diffRefresh'
 import { useNotesBinding } from '../notes/binding'
-import { NotesPillContent } from '../notes/NotesPill'
 import { SendMenu } from '../notes/SendMenu'
 import { useNotes } from '../notes/useNotes'
 import { fetchDiff, isEditable, messageOf, POLL_MS, useRefreshTriggers } from './data'
@@ -15,7 +14,7 @@ import type { ModeProps } from './types'
 
 const IDLE: PaneState = { changes: 0, current: null, dirty: false, stale: false, tooLarge: false }
 
-const SOURCE_CHIP = { staged: 'Staged', branch: 'Branch', commit: 'Commit', unstaged: null } as const
+const SOURCE_LABELS = { staged: 'Staged', branch: 'Branch', commit: 'Commit', unstaged: null } as const
 
 type Loaded = { diff: GitDiff; revision: number }
 
@@ -193,7 +192,7 @@ export function FileDiff({ context, input, settings, setSetting, report, bind, c
 
 
   const sideLabel = settings.sideBySide ? 'Switch to inline diff' : 'Switch to side-by-side diff'
-  const chip = SOURCE_CHIP[effectiveSource]
+  const sourceLabel = SOURCE_LABELS[effectiveSource]
   const switchDisplay = () => {
     if (!markdown) return
     const display = showMarkdownPreview ? 'source' : 'preview'
@@ -205,9 +204,11 @@ export function FileDiff({ context, input, settings, setSetting, report, bind, c
     <div className="ui-stack" style={{ flex: 1, minHeight: 0, minWidth: 0, overflow: 'hidden' }}>
       <SectionHeader
         title={`${path} (diff)`}
+        titleTooltip={`${path} (diff)`}
+        style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto', padding: 'var(--ui-space-8)' }}
         actions={
-          <div className="ui-cluster" style={{ justifyContent: 'flex-end' }}>
-            {chip && <span data-diff-source={chip}><Badge>{chip}</Badge></span>}
+          <div className="ui-cluster" style={{ justifyContent: 'flex-end', flexWrap: 'nowrap', gap: 'var(--ui-space-4)', width: 'max-content' }}>
+            {sourceLabel && <span className="ui-text-muted" data-diff-source={sourceLabel} style={{ whiteSpace: 'nowrap' }}>{sourceLabel}</span>}
             {fileNotes.length > 0 && (
               <SendMenu
                 context={context}
@@ -218,7 +219,7 @@ export function FileDiff({ context, input, settings, setSetting, report, bind, c
                   { id: 'all', label: 'All unsent notes', notes: allNotes, params: { scope: 'all' } }
                 ]}
               >
-                <NotesPillContent count={fileNotes.length} />
+                <><span aria-hidden="true">✦</span>{' '}{fileNotes.length}</>
               </SendMenu>
             )}
             {!showMarkdownPreview && (
