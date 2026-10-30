@@ -25,16 +25,19 @@ Four layers change, each depending only on the contracts of the one below it
    methods, events, CLI commands, a Terminal Sessions panel and startup activation; the session
    view's pane passes `historyLines` and re-attaches a lost session.
 
-Libraries: `@xterm/headless` 5.5.0 stays pinned; add `@xterm/addon-serialize` **0.13.0** (exact) to
-`packages/pty-host/package.json` ([D25](../../../loop/decisions/m1-term-daemon.md)). It was installed
-and checked against headless 5.5.0 on the build machine. Nothing else is added. The desktop bundle
-(`apps/desktop/scripts/bundle.ts:14-18`) inlines the host with `Bun.build`, so the addon must be
-importable as an ES module with no workers or assets (it is).
+Libraries: `@xterm/headless` **5.5.0**, `@xterm/addon-serialize` **0.13.0**
+([D25](../../../loop/decisions/m1-term-daemon.md)) and `@xterm/addon-unicode11` **0.8.0** are pinned
+in `packages/pty-host/package.json`. Every host `Screen`, including history scratch emulators,
+uses Unicode 11 widths to match both desktop terminal views and the mobile terminal. Each consumer
+loads the same pinned Unicode addon before replay. Cursor-positioned updates after emoji must
+produce the same cells during live output and snapshot replay. The desktop bundle
+(`apps/desktop/scripts/bundle.ts:14-18`) inlines the host with `Bun.build`, so the addons must be
+importable as ES modules with no workers or assets.
 
-`COMMAND:` add the dependency
+`COMMAND:` add the dependencies
 
 ```
-bun add --cwd packages/pty-host @xterm/addon-serialize@0.13.0 --exact
+bun add --cwd packages/pty-host @xterm/addon-serialize@0.13.0 @xterm/addon-unicode11@0.8.0 --exact
 ```
 
 ## Code references

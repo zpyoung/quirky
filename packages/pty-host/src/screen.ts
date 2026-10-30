@@ -1,5 +1,6 @@
 import { Terminal } from '@xterm/headless'
 import { SerializeAddon } from '@xterm/addon-serialize'
+import { Unicode11Addon } from '@xterm/addon-unicode11'
 
 export interface ScreenSnapshot {
   ansi: string
@@ -87,6 +88,8 @@ export class Screen {
   constructor(options: ScreenOptions) {
     const { cols, rows, scrollback = 0, onReply } = options
     this.term = new Terminal({ cols, rows, scrollback, allowProposedApi: true })
+    this.term.loadAddon(new Unicode11Addon() as never)
+    this.term.unicode.activeVersion = '11'
     this.term.loadAddon(this.addon as never)
     this.term.onData((reply) => {
       if (!this.seeding) onReply?.(encoder.encode(reply))

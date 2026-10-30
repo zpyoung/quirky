@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState, forwardRef } from 'react'
 import { FitAddon } from '@xterm/addon-fit'
 import { WebLinksAddon } from '@xterm/addon-web-links'
+import { Unicode11Addon } from '@xterm/addon-unicode11'
 import { Terminal } from '@xterm/xterm'
 import '@xterm/xterm/css/xterm.css'
 import type { MobileTerminalState, PtySnapshot, PtySubscription, Session } from '@quirky/protocol'
@@ -130,7 +131,7 @@ export const TerminalView = forwardRef<TerminalViewHandle, Props>(function Termi
       })
     }
     const current = new Terminal({
-      allowProposedApi: false,
+      allowProposedApi: true,
       cursorBlink: true,
       disableStdin: true,
       fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
@@ -142,6 +143,8 @@ export const TerminalView = forwardRef<TerminalViewHandle, Props>(function Termi
     })
     const fit = new FitAddon()
     current.loadAddon(fit)
+    current.loadAddon(new Unicode11Addon())
+    current.unicode.activeVersion = '11'
     current.loadAddon(new WebLinksAddon((_event, uri) => openLink(uri)))
     current.open(container)
     if (current.textarea) {
