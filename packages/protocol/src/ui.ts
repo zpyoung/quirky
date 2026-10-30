@@ -110,6 +110,8 @@ export type UiCommandEntry = {
   title: string
   description?: string
   module: string | null
+  /** Whether the command appears in the command palette; defaults to true. */
+  palette?: boolean
 }
 
 /** The window menus a `menu-item` contribution may target. */

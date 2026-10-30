@@ -265,7 +265,9 @@ FormRow, ToolPanelFrame and InlineAgentCard. Import their styles from `@quirky/u
 the desktop host already loads them. Components are controlled presentations: callers own
 feature state and callbacks. Theme scopes use `data-theme="dark"` or `data-theme="light"`.
 `Dialog` supports `scrollBody` when long content must scroll independently of its header and
-action footer; the default retains whole-dialog scrolling.
+action footer; the default retains whole-dialog scrolling. `placement="top"` anchors dynamic
+search dialogs below the top edge instead of recentering as their content changes. The command
+palette uses this placement so its search field stays still while filtering results.
 
 After `bun run --filter './packages/ui' build`, open `/gallery.html` on the daemon's UI origin
 to try every component in both themes. The gallery needs no RPC token and does not connect

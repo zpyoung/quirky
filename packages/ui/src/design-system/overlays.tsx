@@ -52,7 +52,7 @@ const focusableSelector = [
 /** Only the top open dialog owns focus; project/trust dialogs may be siblings. */
 const dialogStack: HTMLElement[] = []
 
-export function Dialog({ open, title, children, actions, onClose, variant = 'dialog', size = 'default', closeOnBackdrop = true, scrollBody = false }: DialogProps) {
+export function Dialog({ open, title, children, actions, onClose, variant = 'dialog', placement = 'center', size = 'default', closeOnBackdrop = true, scrollBody = false }: DialogProps) {
   const dialogRef = useRef<HTMLElement | null>(null)
   const titleId = useId()
 
@@ -116,7 +116,7 @@ export function Dialog({ open, title, children, actions, onClose, variant = 'dia
 
   return (
     <div
-      className={classNames('ui-dialog-backdrop', variant === 'sheet' && 'ui-dialog-backdrop--sheet')}
+      className={classNames('ui-dialog-backdrop', variant === 'sheet' && 'ui-dialog-backdrop--sheet', variant === 'dialog' && placement === 'top' && 'ui-dialog-backdrop--top')}
       onClick={(event) => {
         if (closeOnBackdrop && event.target === event.currentTarget && dialogStack[dialogStack.length - 1] === dialogRef.current) onClose?.()
       }}

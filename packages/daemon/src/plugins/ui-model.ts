@@ -378,6 +378,7 @@ export function buildUiModel(input: {
       plugin: declaration.plugin,
       title: stringField(declaration.data, 'title') ?? declaration.name,
       ...(description !== undefined ? { description } : {}),
+      ...(typeof declaration.data.palette === 'boolean' ? { palette: declaration.data.palette } : {}),
       module: moduleOf(declaration.plugin),
     }
   })

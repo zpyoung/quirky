@@ -59,9 +59,10 @@ function writeNotesPlugin(root: string): void {
           { id: 'other', title: 'Other' }
         ],
         command: [
-          { id: 'greet', title: 'Greet', args: greetArgs },
+          { id: 'greet', title: 'Greet', args: greetArgs, palette: false },
           { id: 'boom', title: 'Boom' }
-        ]
+        ],
+        keybinding: [{ id: 'greet', key: 'mod+shift+g', command: 'greet' }]
       }
     },
     { 'ui.js': 'export function activate() {}\n' }
@@ -549,10 +550,24 @@ describe('layout changes', () => {
 })
 
 describe('routed UI commands', () => {
-  test('SC-40: the window runs the command and its result comes back', async () => {
+  test('SC-40: a palette-hidden command keeps its keybinding and routed result', async () => {
     const { harness, caller } = await start()
     const window = await openWindow(harness)
-    answerWith(window, (_id, args) => ({ result: `hello ${(args as { name: string }).name}` }))
+    const model = await window.client.call('ui.contributions', {})
+    expect(model.commands.find((command) => command.id === GREET)).toMatchObject({ palette: false })
+    expect(model.keybindings).toContainEqual({
+      id: `keybinding:${NOTES}/greet`,
+      plugin: NOTES,
+      key: 'mod+shift+g',
+      command: GREET,
+      status: 'active'
+    })
+    answerWith(window, (_id, args) => {
+      if (typeof args !== 'object' || args === null || !('name' in args) || typeof args.name !== 'string') {
+        throw new Error('Expected validated greeting arguments')
+      }
+      return { result: `hello ${args.name}` }
+    })
 
     expect(await caller.call('ui.command.run', { id: GREET, args: { name: 'zed' } })).toEqual({ result: 'hello zed' })
     expect(window.requests).toEqual([{ type: 'ui.command.request', requestId: expect.any(String), id: GREET, args: { name: 'zed' } }])

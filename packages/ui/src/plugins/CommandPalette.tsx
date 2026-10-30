@@ -35,7 +35,7 @@ function entriesOf(
   query: string
 ): PaletteEntry[] {
   const entries: PaletteEntry[] = [
-    ...commands.map((command) => ({
+    ...commands.filter((command) => command.palette !== false).map((command) => ({
       id: command.id,
       title: command.title,
       description: command.description,
@@ -125,7 +125,7 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
   if (windowRoute) return null
 
   return (
-    <Dialog open title="Command palette" onClose={onClose}>
+    <Dialog open title="Command palette" placement="top" onClose={onClose}>
       <TextField
         label="Search"
         aria-label="Search commands, tools, views, and worktrees"
