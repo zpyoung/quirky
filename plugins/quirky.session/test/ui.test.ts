@@ -513,9 +513,10 @@ describe('UI commands', () => {
     expect(fake.opened.at(-1)).toEqual({ id: VIEW, input: { worktree: WORKTREE.id, session: 'new' } })
   })
 
-  test('new-shell falls back to the worktree the layout names when no view is mounted', async () => {
+  test('new-shell uses the selected layout worktree when no workspace is mounted', async () => {
     start([shell1], { 'quirky.session/create': () => session({ id: 'new' }) })
-    fake.layout.view = { id: VIEW, input: { worktree: 'wt-other' } }
+    fake.layout.worktree = 'wt-other'
+    fake.layout.view = { id: VIEW, input: { worktree: 'wt-view' } }
     await fake.command('new-shell')
     expect(fake.callsTo('quirky.session/create')[0]!.params).toEqual({ worktree: 'wt-other', agent: 'shell' })
   })

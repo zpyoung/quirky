@@ -19,7 +19,7 @@ export function fakeContext(handlers: Record<string, Handler> = {}) {
   const connectionListeners = new Set<(status: 'connected' | 'reconnecting') => void>()
   const opened: { id: string; input: unknown }[] = []
   const toasts: { title: string; body: string }[] = []
-  const layout: UiLayout = { view: null, panel: null, sidebar: true, focus: null }
+  const layout: UiLayout = { worktree: null, view: null, panel: null, sidebar: true, focus: null }
 
   const context: UiPluginContext = {
     pluginId: 'quirky.agents',

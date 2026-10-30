@@ -28,6 +28,7 @@ function start(installed?: string[], configure?: (agents: FakeAgents) => void, w
       return { id: `s-${created.length}`, agent: params.agent } as Session
     }
   })
+  fake.layout.worktree = worktree
   if (worktree !== null) fake.layout.view = { id: SESSION_VIEW_ID, input: { worktree } }
   activate(fake.context)
 }
@@ -96,10 +97,18 @@ describe('SC-43: the agent commands', () => {
     expect(fake.toasts.map((toast) => toast.body)).toEqual(['Open a worktree first', 'Open a worktree first'])
   })
 
-  test('a layout showing another view counts as no worktree', async () => {
-    start(['codex'], undefined, null)
+  test('a selected worktree remains available when another view is open', async () => {
+    start(['codex'])
     fake.layout.view = { id: VIEW_ID }
     await fake.command('new-agent-tab')
+    expect(created).toEqual([{ worktree: 'main', agent: 'codex' }])
+  })
+
+  test('a view-specific worktree is not used when no workspace is selected', async () => {
+    start(['codex'], undefined, null)
+    fake.layout.view = { id: VIEW_ID, input: { worktree: 'main' } }
+    await fake.command('new-agent-tab')
+    expect(fake.calls.filter((call) => call.method.startsWith('quirky.session/'))).toEqual([])
     expect(fake.toasts.map((toast) => toast.body)).toEqual(['Open a worktree first'])
   })
 

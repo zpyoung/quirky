@@ -30,10 +30,7 @@ function editorStateFrom(value: unknown): EditorState {
 }
 
 export function worktreeFromLayout(context: UiPluginContext): string | undefined {
-  const input = context.getLayout().view?.input
-  if (typeof input !== 'object' || input === null || !('worktree' in input)) return undefined
-  const worktree = input.worktree
-  return typeof worktree === 'string' && worktree !== '' ? worktree : undefined
+  return context.getLayout().worktree ?? undefined
 }
 
 export function useEditorState(context: UiPluginContext, selector?: { worktree?: string; bufferId?: string }) {

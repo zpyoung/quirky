@@ -378,6 +378,7 @@ test('R16 direct Settings view lists real worktrees and loads observations witho
   document.body.append(container)
   const layout = {
     view: { id: 'view:quirky.reviews/settings' },
+    worktree: null,
     panel: null,
     sidebar: true,
     focus: null
@@ -445,6 +446,46 @@ test('R16 direct Settings view lists real worktrees and loads observations witho
     expect(container.textContent).toContain('REST')
   } finally {
     await React.act(async () => { root.unmount() })
+    container.remove()
+  }
+}, 20_000)
+test('R16 Settings view uses the selected workspace when the active view is global', async () => {
+  const host = await boot()
+  const container = document.createElement('div')
+  document.body.append(container)
+  const layout = {
+    view: { id: 'view:quirky.reviews/settings' },
+    worktree: host.worktree,
+    panel: null,
+    sidebar: true,
+    focus: null
+  } as UiLayout
+  const calls: { method: string; params: Record<string, unknown> }[] = []
+  const repositoryDefaults = Promise.withResolvers<void>()
+  const context = {
+    call(method: string, params: Record<string, unknown> = {}) {
+      calls.push({ method, params })
+      const request = host.call(method, params)
+      if (method === 'quirky.reviews/creationDefaults' && params.scope === 'repository') {
+        void request.then(() => repositoryDefaults.resolve(), repositoryDefaults.reject)
+      }
+      return request
+    },
+    getLayout: () => layout
+  } as unknown as UiPluginContext
+  const state = await stateOf(host) as unknown as ReviewsState
+  const root = createRoot(container)
+  try {
+    await React.act(async () => {
+      root.render(React.createElement(HostingSettings, { context, state, refresh: async () => {} }))
+    })
+    await React.act(async () => { await repositoryDefaults.promise })
+    expect(calls).toContainEqual({
+      method: 'quirky.reviews/creationDefaults',
+      params: { scope: 'repository', worktree: host.worktree }
+    })
+  } finally {
+    await React.act(async () => root.unmount())
     container.remove()
   }
 }, 20_000)

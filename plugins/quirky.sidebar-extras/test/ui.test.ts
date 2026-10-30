@@ -45,7 +45,8 @@ afterEach(async () => {
 
 function layout(worktree: string | null): UiLayout {
   return {
-    view: worktree === null ? null : { id: 'view:quirky.session/worktree', input: { worktree } },
+    view: worktree === null ? null : { id: 'view:global' },
+    worktree,
     panel: null,
     sidebar: true,
     focus: null
@@ -92,8 +93,10 @@ function makeTransport(responses: DirtyResponse[]) {
         dirtyRequests.push(request)
         return request
       }
+      if (method === 'quirky.session/get') return Promise.resolve({ worktreeId: 'wt-session' })
       if (method === 'quirky.sidebar-extras/activate') {
         const worktree = params.worktree
+        const worktreeId = typeof worktree === 'string' && worktree.startsWith('id:') ? worktree.slice(3) : worktree
         return Promise.resolve({
           client: 'desktop',
           preferences: {
@@ -102,7 +105,7 @@ function makeTransport(responses: DirtyResponse[]) {
             alwaysShowDefaultBranchWorkspace: true,
             workspaceActivityWindowBeforeLiveOnly: 'all'
           },
-          active: typeof worktree === 'string' ? { worktreeId: worktree, instanceId: 'ui-test-instance' } : null,
+          active: typeof worktreeId === 'string' ? { worktreeId, instanceId: 'ui-test-instance' } : null,
           visits: {},
           exits: {}
         })
@@ -296,6 +299,31 @@ test('a delayed dirty response cannot overwrite a newer workspace status', async
   })
   expectAccessibleTitle(item.element, STOCK_TITLE)
   expect(item.element.textContent).not.toContain('3')
+})
+
+test('a structured session projects its own workspace instead of the retained layout selection', async () => {
+  const staleResponse = deferred<DirtyResult>()
+  const sessionStatus = status('wt-session', 1, false, 'Source Control — 1 uncommitted change')
+  const item = await mountItem([() => staleResponse.promise, () => Promise.resolve(sessionStatus)])
+  await item.waitForDirtyCalls(1)
+
+  await item.setLayout({
+    ...layout('wt-layout'),
+    view: { id: 'view:quirky.session/structured', input: { session: 'session-1' } }
+  })
+  await item.waitForDirtyCalls(2)
+  await act(async () => { await item.dirtyRequests[1]! })
+
+  expect(item.calls.filter((call) => call.method === 'quirky.sidebar-extras/activate').at(-1)).toMatchObject({
+    params: { worktree: 'id:wt-session' }
+  })
+  expect(item.reports.at(-1)).toMatchObject({ worktreeId: 'wt-session', count: 1, available: true })
+
+  await act(async () => {
+    staleResponse.resolve(status('wt-fix', 3, false, 'Source Control — 3 uncommitted changes'))
+    await item.dirtyRequests[0]!
+  })
+  expect(item.reports.at(-1)).toMatchObject({ worktreeId: 'wt-session', count: 1, available: true })
 })
 
 test('unmounting ignores an in-flight status response and unsubscribes layout refreshes', async () => {

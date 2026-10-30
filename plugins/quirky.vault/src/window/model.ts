@@ -167,15 +167,18 @@ function mergeHostOutcomes(current: HostOutcome[], incoming: HostOutcome[], repl
   return [...merged.values()]
 }
 
-function worktreeFrom(layout: UiLayout): string | null {
-  const input = asRecord(layout.view?.input)
-  const worktree = input.worktree
+function explicitWorktreeFrom(layout: UiLayout): string | null {
+  const worktree = asRecord(layout.view?.input).worktree
+  return typeof worktree === 'string' && worktree.trim() !== '' ? worktree : null
+}
+
+function selectedWorktreeFrom(layout: UiLayout): string | null {
+  const worktree = layout.worktree
   return typeof worktree === 'string' && worktree.trim() !== '' ? worktree : null
 }
 
 function repoFrom(layout: UiLayout): string | null {
-  const input = asRecord(layout.view?.input)
-  const repo = input.repo
+  const repo = asRecord(layout.view?.input).repo
   return typeof repo === 'string' && repo.trim() !== '' ? repo : null
 }
 
@@ -314,9 +317,10 @@ export class VaultWindowModel {
 
   private async resolveScope(layout: UiLayout): Promise<void> {
     const generation = ++this.scopeGeneration
-    const worktreeSelector = worktreeFrom(layout)
+    const explicitWorktree = explicitWorktreeFrom(layout)
+    const repoSelector = repoFrom(layout)
+    const worktreeSelector = explicitWorktree ?? (repoSelector === null ? selectedWorktreeFrom(layout) : null)
     if (worktreeSelector === null) {
-      const repoSelector = repoFrom(layout)
       if (repoSelector === null) {
         this.update({ scope: { worktree: null, repo: null, worktreeName: null, repoName: null, loading: false } })
         return

@@ -76,7 +76,7 @@ export function fakeContext(handlers: Record<string, Handler> = {}, settings: Re
   const toasts: { title: string; body: string }[] = []
   const confirms: { title: string; body?: string; confirmLabel?: string }[] = []
   const state = { confirmAnswer: true }
-  const layout: UiLayout = { view: null, panel: null, sidebar: true, focus: null }
+  const layout: UiLayout = { worktree: null, view: null, panel: null, sidebar: true, focus: null }
 
   const context: UiPluginContext = {
     pluginId: 'quirky.session',

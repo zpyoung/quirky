@@ -153,7 +153,7 @@ type World = {
   folderPickFailure: Error | null
 }
 
-function setup(layout: UiLayout = { view: null, panel: null, sidebar: true, focus: null }) {
+function setup(layout: UiLayout = { worktree: null, view: null, panel: null, sidebar: true, focus: null }) {
   const world: World = {
     repos: [...repos],
     groups: [],
@@ -266,7 +266,11 @@ function setup(layout: UiLayout = { view: null, panel: null, sidebar: true, focu
           const id = params.target === 'changes' ? 'view:quirky.git/diff' : SESSION_VIEW
           const input = params.target === 'changes' ? { worktree: params.worktree, mode: 'combined', area: 'all' } : { worktree: params.worktree }
           opened.push({ id, input })
-          current = { ...current, view: { id, input } }
+          current = {
+            ...current,
+            worktree: typeof params.worktree === 'string' && params.worktree !== '' ? params.worktree : current.worktree ?? null,
+            view: { id, input }
+          }
           for (const listener of layoutListeners) listener(current)
           return { worktreeId: params.worktree, target: params.target ?? 'terminal' }
         }
@@ -370,6 +374,15 @@ function setup(layout: UiLayout = { view: null, panel: null, sidebar: true, focu
     executeCommand: async () => {},
     openView(id: string, input?: unknown) {
       opened.push({ id, input })
+      const viewWorktree = typeof input === 'object' && input !== null && 'worktree' in input
+        ? input.worktree
+        : undefined
+      current = {
+        ...current,
+        ...(typeof viewWorktree === 'string' && viewWorktree !== '' ? { worktree: viewWorktree } : {}),
+        view: { id, input }
+      }
+      for (const listener of layoutListeners) listener(current)
     },
     closeView() {},
     togglePanel() {},
@@ -595,7 +608,7 @@ test('Worktrees controls are supplied by the header popover, not the closed pane
 
 
 test('SC-35: renders repos and worktrees and reports them with status and selection', async () => {
-  const h = setup({ view: { id: SESSION_VIEW, input: { worktree: 'w2' } }, panel: null, sidebar: true, focus: 'view' })
+  const h = setup({ worktree: 'w2', view: { id: SESSION_VIEW, input: { worktree: 'w2' } }, panel: null, sidebar: true, focus: 'view' })
   await h.mountInto(host)
   expect(openButton(rowOf('fix-login', 'api'))?.getAttribute('aria-pressed')).toBe('true')
   expect(openButton(rowOf('main', 'api'))?.getAttribute('aria-pressed')).toBe('false')
@@ -633,15 +646,22 @@ test('an empty tree offers Add project', async () => {
   expect(lastReport(h)).toMatchObject({ pinned: [], groups: [], projects: [], dialog: null, notices: [] })
 })
 
-test('SC-36: the selected row follows the open view input', async () => {
+test('SC-36: the selected workspace stays highlighted across global views and clears when layout selection is null', async () => {
   const h = setup()
   await h.mountInto(host)
   expect(host.querySelector('button[aria-pressed="true"]')).toBeNull()
-  await h.setLayout({ view: { id: SESSION_VIEW, input: { worktree: 'w3' } }, panel: null, sidebar: true, focus: null })
+
+  await h.setLayout({ worktree: 'w3', view: { id: SESSION_VIEW, input: { worktree: 'w3' } }, panel: null, sidebar: true, focus: 'view' })
   expect(openButton(rowOf('main', 'web'))?.getAttribute('aria-pressed')).toBe('true')
   expect(lastReport(h).projects[1].worktrees[0].selected).toBe(true)
-  await h.setLayout({ view: null, panel: null, sidebar: true, focus: null })
+
+  await h.setLayout({ worktree: 'w3', view: { id: 'view:global/home' }, panel: null, sidebar: true, focus: null })
+  expect(openButton(rowOf('main', 'web'))?.getAttribute('aria-pressed')).toBe('true')
+  expect(lastReport(h).projects[1].worktrees[0].selected).toBe(true)
+
+  await h.setLayout({ worktree: null, view: { id: 'view:global/home' }, panel: null, sidebar: true, focus: null })
   expect(host.querySelector('button[aria-pressed="true"]')).toBeNull()
+  expect(lastReport(h).projects[1].worktrees[0].selected).toBe(false)
 })
 
 test('SC-37: clicking a worktree opens the session view on it', async () => {
@@ -1128,7 +1148,7 @@ test('a create is not opened when the view changed meanwhile, and a toast names 
   await selectNameMode()
   await typeInto(dialogField('Name')!, 'later')
   await act(async () => void (document.querySelector('[role="dialog"] button[type="submit"]') as HTMLButtonElement).click())
-  await h.setLayout({ view: { id: SESSION_VIEW, input: { worktree: 'w1' } }, panel: null, sidebar: true, focus: 'view' })
+  await h.setLayout({ worktree: 'w1', view: { id: SESSION_VIEW, input: { worktree: 'w1' } }, panel: null, sidebar: true, focus: 'view' })
   await act(async () => release())
   expect(h.opened).toEqual([])
   expect(h.toasts).toEqual([{ title: 'Created later', body: '/w/later' }])
@@ -1148,7 +1168,7 @@ test('SC-62: the new-worktree command opens the create dialog on the named, open
   expect(h.callsTo('quirky.repo/resolve')).toEqual([{ selector: 'web' }])
   await press('Escape')
 
-  await h.setLayout({ view: { id: SESSION_VIEW, input: { worktree: 'w3' } }, panel: null, sidebar: true, focus: 'view' })
+  await h.setLayout({ worktree: 'w3', view: { id: SESSION_VIEW, input: { worktree: 'w3' } }, panel: null, sidebar: true, focus: 'view' })
   await h.runCommand()
   expect(lastReport(h).dialog).toEqual({ kind: 'create', repoId: 'r2' })
 })

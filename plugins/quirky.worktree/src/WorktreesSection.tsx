@@ -73,12 +73,6 @@ type Props = { context: UiPluginContext; report?(state: unknown): void; requests
 type TrustPrompt = { request: TrustRequest; resolve(choice: TrustChoice): void }
 type Fallback = { worktreeId: string; message: string }
 
-/** The worktree the open view is about: its `input.worktree`, whichever view that is. */
-function selectedWorktree(layout: UiLayout): string | null {
-  const input = layout.view?.input
-  const id = input && typeof input === 'object' ? (input as { worktree?: unknown }).worktree : undefined
-  return typeof id === 'string' ? id : null
-}
 function orderedWorktrees(
   worktrees: WorktreeControl[],
   sortBy: StockWorktreeOptions['sortBy'],
@@ -239,7 +233,7 @@ export function WorktreesSection({ context, report, requests }: Props) {
 
   useEffect(() => requests?.attach(setRequested), [requests])
 
-  const selectedId = selectedWorktree(layout)
+  const selectedId = layout.worktree ?? null
   const activity = useSidebarActivity(context, selectedId, loaded)
   const loopStatus = useLoopStatus(context, worktrees, loaded)
   const selectedInstance = worktrees.find((worktree) => worktree.id === selectedId)?.instanceId

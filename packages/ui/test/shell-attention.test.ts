@@ -80,11 +80,15 @@ async function clickButton(env: WindowEnv, label: string): Promise<void> {
   buttonNamed(env, label)!.click()
 }
 
-test('the chrome projection reads real project/worktree snapshots and derives selection from the current view input', async () => {
+test('the chrome projection keeps the selected window worktree when a global view omits its input', async () => {
   const { env, attention, current, other, currentRepo, otherRepo } = await bootAttention()
   expect(attention.getSnapshot().selectedWorktreeId).toBe(current.id)
   expect(attention.getSnapshot().repos?.map((repo) => repo.id)).toEqual(expect.arrayContaining([currentRepo.id, otherRepo.id]))
   expect(attention.getSnapshot().worktrees?.map((worktree) => worktree.id)).toEqual(expect.arrayContaining([current.id, other.id]))
+
+  await env.agent.callAny('ui.view.open', { id: CURRENT_VIEW })
+  await env.win.waitFor(() => env.win.host.getState().layout.view?.input === undefined)
+  expect(attention.getSnapshot().selectedWorktreeId).toBe(current.id)
 
   const extraPath = makeTempDir('ui-shell-attention-added-')
   const extraRepo = await env.agent.callAny('quirky.repo/add', { path: extraPath, folder: true }) as Repo

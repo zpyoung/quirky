@@ -10,10 +10,9 @@ const PLUGIN_ID = 'quirky.session'
 const STRUCTURED_VIEW_ID = `view:${PLUGIN_ID}/structured`
 const TAB_SHORTCUTS = [1, 2, 3, 4, 5, 6, 7, 8, 9]
 
-/** The worktree the layout's open session view names, if any. */
+/** The selected worktree, if any. */
 function layoutWorktree(context: UiPluginContext): string | null {
-  const view = context.getLayout().view
-  const worktree = view?.id === WORKTREE_VIEW_ID ? (view.input as { worktree?: unknown } | undefined)?.worktree : undefined
+  const worktree = context.getLayout().worktree
   return typeof worktree === 'string' && worktree !== '' ? worktree : null
 }
 

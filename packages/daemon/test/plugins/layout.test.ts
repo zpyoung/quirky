@@ -13,6 +13,7 @@ import {
 import { rpcUrl } from '@quirky/protocol/node'
 import type { ClientConn } from '../../src/types'
 import { LayoutService } from '../../src/plugins/layout'
+import { Store } from '../../src/store'
 import { makeTempHome, startHarness, waitFor, waitForAsync, type Harness } from '../helpers'
 import { makeTempDir, removeTempDirs, writePlugin } from './fixtures'
 
@@ -484,6 +485,243 @@ describe('layout changes', () => {
     expect(changes(watcher)).toEqual([])
   })
 
+
+  test('global views retain selected worktree without changing their input', async () => {
+    const { caller } = await start()
+    const workspaceInput = { worktree: '/worktrees/one', search: 'notes' }
+    await caller.call('ui.view.open', { id: PAGE, input: workspaceInput })
+    expect((await caller.call('ui.state', {})).layout).toMatchObject({
+      worktree: '/worktrees/one',
+      view: { id: PAGE, input: workspaceInput }
+    })
+
+    await caller.call('ui.view.open', { id: OTHER_PAGE })
+    const withoutInput = (await caller.call('ui.state', {})).layout
+    expect(withoutInput).toMatchObject({ worktree: '/worktrees/one', view: { id: OTHER_PAGE } })
+    expect(withoutInput.view).toEqual({ id: OTHER_PAGE })
+
+    const filtersInput = { filters: { state: 'open' } }
+    await caller.call('ui.view.open', { id: OTHER_PAGE, input: filtersInput })
+    const withFilters = (await caller.call('ui.state', {})).layout
+    expect(withFilters).toMatchObject({
+      worktree: '/worktrees/one',
+      view: { id: OTHER_PAGE, input: filtersInput }
+    })
+    expect(withFilters.view).toEqual({ id: OTHER_PAGE, input: filtersInput })
+
+    const nextWorkspaceInput = { worktree: '/worktrees/two', filters: { state: 'review' } }
+    await caller.call('ui.view.open', { id: OTHER_PAGE, input: nextWorkspaceInput })
+    expect((await caller.call('ui.state', {})).layout).toMatchObject({
+      worktree: '/worktrees/two',
+      view: { id: OTHER_PAGE, input: nextWorkspaceInput }
+    })
+
+    const deselectedInput = { worktree: null, filters: { state: 'review' } }
+    await caller.call('ui.view.open', { id: OTHER_PAGE, input: deselectedInput })
+    expect((await caller.call('ui.state', {})).layout).toMatchObject({
+      worktree: null,
+      view: { id: OTHER_PAGE, input: deselectedInput }
+    })
+    const afterDeselectInput = { filters: { state: 'closed' } }
+    await caller.call('ui.view.open', { id: OTHER_PAGE, input: afterDeselectInput })
+    expect((await caller.call('ui.state', {})).layout).toMatchObject({
+      worktree: null,
+      view: { id: OTHER_PAGE, input: afterDeselectInput }
+    })
+
+    const restored = await caller.call('ui.view.close', {})
+    expect(restored).toMatchObject({
+      worktree: '/worktrees/one',
+      view: { id: PAGE, input: workspaceInput }
+    })
+    const closed = await caller.call('ui.view.close', {})
+    expect(closed).toMatchObject({ worktree: null, view: null, viewTabs: [] })
+  })
+
+  test('view reconciliation follows the revealed view and clears selection when no views remain', async () => {
+    const { caller } = await start()
+    await caller.call('ui.view.open', { id: PAGE, input: { worktree: '/worktrees/one' } })
+    await caller.call('ui.view.open', { id: OTHER_PAGE, input: { worktree: '/worktrees/two' } })
+
+    await caller.call('plugin.disable', { id: OTHER_PAGE })
+    expect((await caller.call('ui.state', {})).layout).toMatchObject({
+      worktree: '/worktrees/one',
+      view: { id: PAGE, input: { worktree: '/worktrees/one' } }
+    })
+
+    await caller.call('plugin.disable', { id: PAGE })
+    expect((await caller.call('ui.state', {})).layout).toMatchObject({ worktree: null, view: null, viewTabs: [] })
+  })
+
+  test('persisted layout migrates the active view worktree into the selection', async () => {
+    const env = makeEnv()
+    const legacyInput = { worktree: '/worktrees/legacy', filters: { state: 'all' } }
+    const store = new Store(join(env.home, 'quirky.db'))
+    store.setUiState('layout', {
+      view: { id: PAGE, input: legacyInput },
+      viewTabs: [{ id: PAGE, input: legacyInput }],
+      panel: null,
+      sidebar: true,
+      focus: null
+    })
+    store.close()
+
+    const harness = await env.start()
+    const caller = await harness.connect('cli')
+    expect((await caller.call('ui.state', {})).layout).toMatchObject({
+      worktree: '/worktrees/legacy',
+      view: { id: PAGE, input: legacyInput }
+    })
+
+    const filtersInput = { filters: { state: 'open' } }
+    await caller.call('ui.view.open', { id: OTHER_PAGE, input: filtersInput })
+    const restarted = await env.restart()
+    expect((await (await restarted.connect('cli')).call('ui.state', {})).layout).toMatchObject({
+      worktree: '/worktrees/legacy',
+      view: { id: OTHER_PAGE, input: filtersInput }
+    })
+  })
+
+  test('auxiliary window worktree selection is isolated from its owner', async () => {
+    const { harness, caller } = await start()
+    const shell = await openWindow(harness, 'owner')
+    const shellConnId = await windowConnId(shell.client)
+    await caller.call('ui.window.view.open', {
+      connId: shellConnId,
+      id: PAGE,
+      input: { worktree: '/worktrees/parent' }
+    })
+    await shell.client.call('desktop.shell.capabilities', {
+      directoryPicker: false,
+      auxiliaryWindows: true,
+      revealItem: false,
+      notifications: { permission: false, click: false, dismiss: false }
+    })
+
+    const shellRequest = waitFor(() => shell.events.find(
+      (event): event is Extract<QuirkyEvent, { type: 'desktop.shell.request' }> =>
+        event.type === 'desktop.shell.request' && event.action.kind === 'window-open'
+    ))
+    const opening = caller.call('desktop.window.open', {
+      view: OTHER_PAGE,
+      input: { filters: { state: 'ready' } }
+    })
+    const request = await shellRequest
+    expect(request.action.kind).toBe('window-open')
+    await shell.client.call('desktop.shell.reply', {
+      requestId: request.requestId,
+      result: { windowId: 'isolated-worktree' }
+    })
+    await opening
+
+    const auxiliary = await openWindow(harness, 'auxiliary')
+    await auxiliary.client.call('desktop.window.attach', { windowId: 'isolated-worktree', ownerShellConnId: shellConnId })
+    const auxiliaryConnId = await windowConnId(auxiliary.client)
+    expect((await caller.call('ui.window.state', { connId: auxiliaryConnId })).layout).toMatchObject({
+      worktree: null,
+      view: { id: OTHER_PAGE, input: { filters: { state: 'ready' } } }
+    })
+    await auxiliary.client.call('desktop.window.update', {
+      windowId: 'isolated-worktree',
+      view: OTHER_PAGE,
+      input: { worktree: '/worktrees/auxiliary' }
+    })
+    expect((await caller.call('ui.window.state', { connId: auxiliaryConnId })).layout).toMatchObject({
+      worktree: '/worktrees/auxiliary',
+      view: { id: OTHER_PAGE, input: { worktree: '/worktrees/auxiliary' } }
+    })
+    const deselectedInput = { worktree: null, filters: { state: 'review' } }
+    await auxiliary.client.call('desktop.window.update', {
+      windowId: 'isolated-worktree',
+      view: OTHER_PAGE,
+      input: deselectedInput
+    })
+    expect((await caller.call('ui.window.state', { connId: auxiliaryConnId })).layout).toMatchObject({
+      worktree: null,
+      view: { id: OTHER_PAGE, input: deselectedInput }
+    })
+
+    const filtersInput = { filters: { state: 'closed' } }
+    await auxiliary.client.call('desktop.window.update', {
+      windowId: 'isolated-worktree',
+      view: OTHER_PAGE,
+      input: filtersInput
+    })
+    expect((await caller.call('ui.window.state', { connId: auxiliaryConnId })).layout).toMatchObject({
+      worktree: null,
+      view: { id: OTHER_PAGE, input: filtersInput }
+    })
+    expect((await caller.call('ui.window.state', { connId: shellConnId })).layout).toMatchObject({
+      worktree: '/worktrees/parent',
+      view: { id: PAGE, input: { worktree: '/worktrees/parent' } }
+    })
+  })
+
+  test('window worktrees stay isolated and the remaining selection persists when one of two windows closes', async () => {
+    const { env, harness, caller } = await start()
+    const first = await openWindow(harness, 'first')
+    const second = await openWindow(harness, 'second')
+    const firstConnId = await windowConnId(first.client)
+    const secondConnId = await windowConnId(second.client)
+    const firstInput = { worktree: '/worktrees/first' }
+    const secondInput = { worktree: '/worktrees/second' }
+
+    await caller.call('ui.window.view.open', { connId: firstConnId, id: PAGE, input: firstInput })
+    await caller.call('ui.window.view.open', { connId: secondConnId, id: PAGE, input: secondInput })
+    expect((await caller.call('ui.window.state', { connId: firstConnId })).layout).toMatchObject({
+      worktree: '/worktrees/first'
+    })
+    expect((await caller.call('ui.window.state', { connId: secondConnId })).layout).toMatchObject({
+      worktree: '/worktrees/second'
+    })
+
+    const firstFilters = { filters: { owner: 'first' } }
+    const secondFilters = { filters: { owner: 'second' } }
+    await caller.call('ui.window.view.open', { connId: firstConnId, id: OTHER_PAGE, input: firstFilters })
+    await caller.call('ui.window.view.open', { connId: secondConnId, id: OTHER_PAGE, input: secondFilters })
+    expect((await caller.call('ui.window.state', { connId: firstConnId })).layout).toMatchObject({
+      worktree: '/worktrees/first',
+      view: { id: OTHER_PAGE, input: firstFilters }
+    })
+    expect((await caller.call('ui.window.state', { connId: secondConnId })).layout).toMatchObject({
+      worktree: '/worktrees/second',
+      view: { id: OTHER_PAGE, input: secondFilters }
+    })
+
+    const restored = await caller.call('ui.window.view.close', {
+      connId: firstConnId,
+      expectedView: { id: OTHER_PAGE, input: firstFilters }
+    })
+    expect(restored).toMatchObject({ worktree: '/worktrees/first', view: { id: PAGE, input: firstInput } })
+    const closed = await caller.call('ui.window.view.close', {
+      connId: firstConnId,
+      expectedView: { id: PAGE, input: firstInput }
+    })
+    expect(closed).toMatchObject({ worktree: null, view: null, viewTabs: [] })
+    expect((await caller.call('ui.window.state', { connId: secondConnId })).layout).toMatchObject({
+      worktree: '/worktrees/second',
+      view: { id: OTHER_PAGE, input: secondFilters }
+    })
+
+    first.client.close()
+    await waitForAsync(async () => {
+      const state = await caller.call('ui.state', {})
+      return state.windows.length === 1 ? state : undefined
+    })
+    const survivorLayout = (await caller.call('ui.window.state', { connId: secondConnId })).layout
+    expect(survivorLayout).toMatchObject({
+      worktree: '/worktrees/second',
+      view: { id: OTHER_PAGE, input: secondFilters },
+      viewTabs: [{ id: PAGE, input: secondInput }, { id: OTHER_PAGE, input: secondFilters }]
+    })
+
+    const restarted = await env.restart()
+    expect((await (await restarted.connect('cli')).call('ui.state', {})).layout).toMatchObject({
+      worktree: '/worktrees/second',
+      view: { id: OTHER_PAGE, input: secondFilters },
+      viewTabs: [{ id: PAGE, input: secondInput }, { id: OTHER_PAGE, input: secondFilters }]
+    })
+  })
   test('SC-38: the layout survives a restart on the same home', async () => {
     const env = makeEnv()
     const first = await env.start()

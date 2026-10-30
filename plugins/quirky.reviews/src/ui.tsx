@@ -112,8 +112,8 @@ export function activate(context: UiPluginContext): void {
   context.provide('command:quirky.reviews/open-create', (input?: unknown) => {
     const params: JsonRecord = record(input) ? { ...input } : {}
     if (params.worktree === undefined) {
-      const active = context.getLayout().view?.input
-      if (record(active) && typeof active.worktree === 'string') params.worktree = active.worktree
+      const selected = context.getLayout().worktree
+      if (typeof selected === 'string' && selected.trim() !== '') params.worktree = selected
     }
     if (typeof params.worktree !== 'string' || params.worktree.length === 0) throw new Error('Select a workspace before creating a pull request.')
     return context.call('quirky.reviews/createOpen', params)

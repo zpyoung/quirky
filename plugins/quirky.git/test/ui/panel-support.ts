@@ -19,6 +19,7 @@ export const PANEL = 'panel:quirky.git/source-control'
 export const DIFF_VIEW = 'view:quirky.git/diff'
 
 export const layoutFor = (worktree: string | null): UiLayout => ({
+  worktree,
   view: worktree === null ? null : { id: 'view:quirky.session/worktree', input: { worktree } },
   panel: PANEL,
   sidebar: true,

@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test } from 'bun:test'
 import { writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { PLUGIN_API_VERSION, QuirkyClient, type QuirkyEvent, type UiModel, type UiPluginContext } from '@quirky/protocol'
+import { PLUGIN_API_VERSION, QuirkyClient, type QuirkyEvent, type UiLayout, type UiModel, type UiPluginContext } from '@quirky/protocol'
 import { rpcUrl } from '@quirky/protocol/node'
 import { makeTempHome, startHarness, waitFor, type Harness } from '../../daemon/test/helpers'
 import { makeTempDir, readMarker, removeTempDirs, writeModulePlugin, writePlugin } from '../../daemon/test/plugins/fixtures'
@@ -136,6 +136,7 @@ async function boot(write: Writer, options: BootOptions = {}) {
 
   const booted = {
     harness,
+    client,
     agent,
     host,
     marker,
@@ -183,6 +184,50 @@ async function boot(write: Writer, options: BootOptions = {}) {
   await host.refresh()
   return booted
 }
+
+/** A second real window host, seeded with the route the native shell passes to an auxiliary webview. */
+async function attachHost(
+  harness: Harness,
+  route: NonNullable<ConstructorParameters<typeof WindowPluginHost>[0]['windowRoute']>
+) {
+  const client = await QuirkyClient.connect(rpcUrl(harness.runtime), { role: 'ui', subscribe: true })
+  windowClients.push(client)
+  const imports: Imported[] = []
+  const moduleDir = makeTempDir('qd-aux-mods-')
+  let fetched = 0
+  const host = new WindowPluginHost({
+    call: (method, params) => client.callAny(method, params),
+    onEvent: (listener) => client.onEvent(listener),
+    async importModule(url) {
+      const response = await fetch(`http://127.0.0.1:${harness.runtime.port}${url}`)
+      if (!response.ok) throw new Error(`HTTP ${response.status} for ${url}`)
+      const file = join(moduleDir, `m${fetched++}.js`)
+      writeFileSync(file, await response.text())
+      const mod = (await import(file)) as Imported['mod']
+      imports.push({ url, mod })
+      return mod
+    },
+    onStream: (streamId, listener) => client.onTerminalOutput(streamId, listener),
+    onConnection: () => () => {},
+    confirm: async () => true,
+    toast: () => {},
+    log: () => {},
+    windowRoute: route
+  })
+  hosts.push(host)
+  await client.call('desktop.window.attach', { windowId: route.windowId, ownerShellConnId: route.ownerShellConnId })
+  await host.refresh()
+  return {
+    client,
+    host,
+    ctx(plugin: string): UiPluginContext {
+      const found = imports.find(({ url }) => url.startsWith(`/plugins/${plugin}/`))
+      if (!found?.mod.ctx) throw new Error(`${plugin} has no context`)
+      return found.mod.ctx
+    }
+  }
+}
+
 
 /** What the shell does for the open panel or view: mount it, and dispose it when it changes or closes. */
 function followOpen(t: Booted, select: (state: HostState) => { id: string; input?: unknown } | null) {
@@ -453,6 +498,124 @@ describe('window plugin host against a real daemon', () => {
     expect(t.state().slots[page]).toEqual({ status: 'mounted' })
     shell.stop()
   })
+
+  test('an auxiliary PluginHost observes route-local layout changes without changing its owner', async () => {
+    const page = 'view:acme.notes/page'
+    const other = 'view:acme.notes/other'
+    const parentInput = { worktree: '/worktrees/parent', filters: { owner: 'parent' } }
+    const firstInput = { worktree: '/worktrees/A', filters: { owner: 'auxiliary' } }
+    const secondInput = { worktree: '/worktrees/B', filters: { state: 'open' } }
+    const t = await boot((installed, marker) =>
+      installUi(
+        installed,
+        marker,
+        'acme.notes',
+        { view: [{ id: 'page', title: 'Page' }, { id: 'other', title: 'Other' }] },
+        { activate: provideMount(page, '') }
+      )
+    )
+
+    await t.agent.call('ui.view.open', { id: page, input: parentInput })
+    const parentConnId = (await t.client.call('ui.window.self', {})).connId
+    t.show(page)
+    await t.mounted(page)
+    const parentContext = t.ctx('acme.notes')
+    await waitFor(() => parentContext.getLayout().worktree === '/worktrees/parent')
+    await t.client.call('desktop.shell.capabilities', {
+      directoryPicker: false,
+      auxiliaryWindows: true,
+      revealItem: false,
+      notifications: { permission: false, click: false, dismiss: false }
+    })
+
+    const opening = t.agent.call('desktop.window.open', { view: page, input: firstInput })
+    const request = await waitFor(() => t.events.find(
+      (event): event is Extract<QuirkyEvent, { type: 'desktop.shell.request' }> =>
+        event.type === 'desktop.shell.request' && event.action.kind === 'window-open'
+    ))
+    await t.client.call('desktop.shell.reply', {
+      requestId: request.requestId,
+      result: { windowId: 'route-layout-test' }
+    })
+    await opening
+
+    const auxiliary = await attachHost(t.harness, {
+      windowId: 'route-layout-test',
+      ownerShellConnId: parentConnId,
+      view: page,
+      input: firstInput,
+      attached: false
+    })
+    const auxiliaryConnId = (await auxiliary.client.call('ui.window.self', {})).connId
+    auxiliary.host.mount(page, asElement(el()))
+    await waitFor(() => auxiliary.host.getState().slots[page]?.status === 'mounted')
+    const context = auxiliary.ctx('acme.notes')
+    const layouts: UiLayout[] = []
+    context.onLayout((layout) => layouts.push(layout))
+    const expectAuxiliaryLayout = async (operation: () => Promise<unknown>, expected: Partial<UiLayout>) => {
+      const previous = layouts.length
+      await operation()
+      await waitFor(() => layouts.length > previous)
+      expect(context.getLayout()).toMatchObject(expected)
+      expect(layouts.at(-1)).toMatchObject(expected)
+    }
+
+    await expectAuxiliaryLayout(
+      () => auxiliary.client.call('ui.window.view.open', { connId: auxiliaryConnId, id: other, input: secondInput }),
+      { worktree: '/worktrees/B', view: { id: other, input: secondInput } }
+    )
+    await expectAuxiliaryLayout(
+      () => auxiliary.client.call('ui.window.view.close', { connId: auxiliaryConnId }),
+      { worktree: '/worktrees/A', view: { id: page, input: firstInput } }
+    )
+    const retainedAInput = { filters: { state: 'assigned' } }
+    await expectAuxiliaryLayout(
+      () => auxiliary.client.call('desktop.window.update', {
+        windowId: 'route-layout-test',
+        view: other,
+        input: retainedAInput
+      }),
+      { worktree: '/worktrees/A', view: { id: other, input: retainedAInput } }
+    )
+
+    await expectAuxiliaryLayout(
+      () => auxiliary.client.call('desktop.window.update', {
+        windowId: 'route-layout-test',
+        view: other,
+        input: secondInput
+      }),
+      { worktree: '/worktrees/B', view: { id: other, input: secondInput } }
+    )
+
+    const explicitNullInput = { worktree: null, filters: { state: 'review' } }
+    await expectAuxiliaryLayout(
+      () => auxiliary.client.call('desktop.window.update', {
+        windowId: 'route-layout-test',
+        view: other,
+        input: explicitNullInput
+      }),
+      { worktree: null, view: { id: other, input: explicitNullInput } }
+    )
+    const retainedNullInput = { filters: { state: 'closed' } }
+    await expectAuxiliaryLayout(
+      () => auxiliary.client.call('desktop.window.update', {
+        windowId: 'route-layout-test',
+        view: other,
+        input: retainedNullInput
+      }),
+      { worktree: null, view: { id: other, input: retainedNullInput } }
+    )
+
+    expect(parentContext.getLayout()).toMatchObject({
+      worktree: '/worktrees/parent',
+      view: { id: page, input: parentInput }
+    })
+    expect((await t.agent.call('ui.window.state', { connId: parentConnId })).layout).toMatchObject({
+      worktree: '/worktrees/parent',
+      view: { id: page, input: parentInput }
+    })
+  })
+
 
   test('SC-11: a UI module talks to the daemon through its context', async () => {
     const mountPlugin: Writer = (installed, marker) => {

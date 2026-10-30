@@ -53,15 +53,14 @@ export const BUILT_IN_AGENT_IDS: readonly string[] = [
   'jcode'
 ]
 
-/** The worktree the layout's open session view names, if any. */
+/** The selected worktree, if any. */
 export function layoutWorktree(context: UiPluginContext): string | null {
-  const view = context.getLayout().view
-  const worktree = view?.id === SESSION_VIEW_ID ? (view.input as { worktree?: unknown } | undefined)?.worktree : undefined
+  const worktree = context.getLayout().worktree
   return typeof worktree === 'string' && worktree !== '' ? worktree : null
 }
 
 /**
- * Starts a session of `agent` in the worktree of the open session view and opens it; with no
+ * Starts a session of `agent` in the selected worktree and opens it; with no
  * `agent`, of the one `quirky.agents/pick` chooses, which is never a plain shell. A disabled
  * agent or any failure is shown as a toast and opens nothing.
  */

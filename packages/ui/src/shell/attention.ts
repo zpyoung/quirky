@@ -2,7 +2,7 @@ import { useSyncExternalStore } from 'react'
 import type { Ask, AskAnswer, AskEnvelope, QuirkyEvent, Repo, Session, Worktree } from '@quirky/protocol'
 import type { Connection } from '../connection'
 import { useConnection, usePluginHost } from '../context'
-import type { HostState, WindowPluginHost } from '../plugins/host'
+import type { WindowPluginHost } from '../plugins/host'
 
 export const INBOX_TOOL_ID = 'host:inbox'
 export const WORKTREE_VIEW_ID = 'view:quirky.session/worktree'
@@ -49,19 +49,6 @@ const systemClock: AttentionClock = {
 
 const messageOf = (error: unknown): string => error instanceof Error ? error.message : String(error)
 
-function worktreeInput(view: { input?: unknown } | null | undefined): string | null {
-  const input = view?.input
-  if (typeof input !== 'object' || input === null || Array.isArray(input)) return null
-  const id = (input as { worktree?: unknown }).worktree
-  return typeof id === 'string' ? id : null
-}
-
-function selectedWorktree(state: HostState): string | null {
-  const route = state.windowRoute
-  if (route) return route.view === null ? null : worktreeInput({ input: route.input })
-  return worktreeInput(state.layout.view)
-}
-
 function askFromEvent(event: QuirkyEvent): Ask | null {
   if (!('data' in event) || typeof event.data !== 'object' || event.data === null) return null
   const ask = (event.data as { ask?: unknown }).ask
@@ -93,7 +80,7 @@ export function createAttentionStore(
     worktrees: null,
     sessions: null,
     asks: null,
-    selectedWorktreeId: selectedWorktree(host.getState()),
+    selectedWorktreeId: host.getState().layout.worktree ?? null,
     errors: {},
     toasts: []
   }
@@ -201,7 +188,7 @@ export function createAttentionStore(
   }
 
   const updateSelection = () => {
-    const selectedWorktreeId = selectedWorktree(host.getState())
+    const selectedWorktreeId = host.getState().layout.worktree ?? null
     if (state.selectedWorktreeId !== selectedWorktreeId) publish({ selectedWorktreeId })
   }
 

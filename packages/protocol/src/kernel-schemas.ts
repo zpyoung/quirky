@@ -252,6 +252,7 @@ const apiDescription = object(
 const uiLayout = object(
   {
     view: { description: 'The open view as {id, input?}, or null.' },
+    worktree: { description: 'The selected worktree path for this window, or null when none is selected.' },
     panel: { description: 'The open panel ID, or null.' },
     sidebar: boolean(),
     focus: { description: "'sidebar', 'view', 'panel' or null." },

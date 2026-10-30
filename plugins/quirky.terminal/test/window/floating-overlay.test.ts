@@ -110,6 +110,7 @@ async function mountOverlay(options: Options = {}) {
   const mainElement = document.createElement('div')
   if (options.withMain) {
     document.body.appendChild(mainElement)
+    fake.layout.worktree = 'wt-main'
     fake.layout.view = { id: VIEW, input: { worktree: 'wt-main' } }
     await act(async () => {
       unmountMain = fake.provided.get(VIEW)!(mainElement, { input: { worktree: 'wt-main' }, report: () => {} }) as () => void

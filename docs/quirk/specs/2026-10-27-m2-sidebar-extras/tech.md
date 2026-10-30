@@ -97,7 +97,7 @@ SCHEMA: `Projection = State & {visibleIds:string[],hiddenIds:string[],hiddenCoun
 CONTRACT: `activate` and `set` are serial per client in call-arrival order, including async selector resolution. Layout observation must await activation before fetching projection for that layout; stale-response tickets are still required. No speculative UI defaults after an ordinary API failure. Optional absence is only MethodNotFound/disabled contribution, not arbitrary exceptions.
 
 
-`dirty` uses `quirky.git/status` for requested selector, or active workspace from daemon ui layout when omitted; explicit null is no active. Return `{worktreeId,count,capped,title,dirty,available,error?}`. Count `entries` (staged/unstaged/untracked/conflict panel rows) excluding any future `submoduleRoot` detail entries; never unique paths. No active/clean has stock Source Control title. Unavailable status clears decoration and reports unavailability/error rather than manufacturing cleanliness. Existing git status is not duplicated or persisted.
+`dirty` uses `quirky.git/status` for the requested selector, or the selected workspace from daemon `UiLayout.worktree` when omitted; explicit null is no active workspace. A structured-session view retains its session-specific worktree context. Return `{worktreeId,count,capped,title,dirty,available,error?}`. Count `entries` (staged/unstaged/untracked/conflict panel rows) excluding any future `submoduleRoot` detail entries; never unique paths. No active/clean has stock Source Control title. Unavailable status clears decoration and reports unavailability/error rather than manufacturing cleanliness. Existing git status is not duplicated or persisted.
 
 ### Public UI slot and setting metadata
 

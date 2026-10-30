@@ -83,6 +83,99 @@ test('without a worktree or project context the default scope is All', async () 
   expect((await api<ViewState>(vault.client, 'getView')).scope).toBe('all')
 })
 
+test('an unscoped UI request uses its own workspace when another window is focused', async () => {
+  const vault = await start()
+  const projectPath = makeRepo(scratch())
+  const repo = await vault.client.callAny('quirky.repo/add', { path: projectPath }) as { id: string }
+  const worktrees = await vault.client.callAny('quirky.worktree/list', { repo: repo.id }) as {
+    id: string
+    path: string
+    isMain: boolean
+  }[]
+  const primary = worktrees.find((worktree) => worktree.isMain)
+  if (!primary) throw new Error('registered Git project has no primary worktree')
+  await vault.client.callAny('setting.set', {
+    id: 'setting:quirky.worktree/worktreesRoot',
+    value: join(vault.home, 'worktrees')
+  })
+  const created = await vault.client.callAny('quirky.worktree/create', { repo: repo.id, name: 'window-secondary' }) as {
+    worktree: { id: string; path: string }
+  }
+  const secondary = created.worktree
+  const writeSession = (sessionId: string, cwd: string, timestamp: number) =>
+    writeJsonlFixture(vault.sourceHome, 'claude', sessionId, [
+      {
+        type: 'user',
+        sessionId,
+        timestamp: new Date(timestamp).toISOString(),
+        cwd,
+        message: { role: 'user', content: `Window scope ${sessionId}` }
+      },
+      {
+        type: 'assistant',
+        sessionId,
+        timestamp: new Date(timestamp + 1_000).toISOString(),
+        cwd,
+        message: { role: 'assistant', content: `Answer ${sessionId}` }
+      }
+    ])
+  await writeSession('scope-window-primary', primary.path, Date.UTC(2021, 0, 1))
+  await writeSession('scope-window-secondary', secondary.path, Date.UTC(2021, 0, 2))
+
+  const first = await connect(vault, 'ui')
+  const second = await connect(vault, 'ui')
+  const { connId: firstConnId } = await first.callAny('ui.window.self', {}) as { connId: number }
+  const { connId: secondConnId } = await second.callAny('ui.window.self', {}) as { connId: number }
+  const openWorkspaceAndGlobalView = async (client: QuirkyClient, connId: number, worktreeId: string) => {
+    await client.callAny('ui.window.view.open', {
+      connId,
+      id: 'view:quirky.session/worktree',
+      input: { worktree: worktreeId }
+    })
+    await client.callAny('ui.window.view.open', { connId, id: 'view:quirky.vault/search-settings' })
+  }
+  await openWorkspaceAndGlobalView(first, firstConnId, primary.id)
+  await openWorkspaceAndGlobalView(second, secondConnId, secondary.id)
+
+  const firstState = await vault.client.callAny('ui.window.state', { connId: firstConnId }) as {
+    layout: { worktree: string | null; view: { id: string; input?: unknown } | null }
+  }
+  const secondState = await vault.client.callAny('ui.window.state', { connId: secondConnId }) as {
+    layout: { worktree: string | null; view: { id: string; input?: unknown } | null }
+  }
+  expect(firstState.layout.worktree).toBe(primary.id)
+  expect(firstState.layout.view).toEqual({ id: 'view:quirky.vault/search-settings' })
+  expect(secondState.layout.worktree).toBe(secondary.id)
+  expect(secondState.layout.view).toEqual({ id: 'view:quirky.vault/search-settings' })
+
+  await first.callAny('ui.window.focused', { focused: true })
+  const focusedState = await vault.client.callAny('ui.state', {}) as {
+    layout: { worktree: string | null }
+    windows: { connId: number; focused: boolean }[]
+  }
+  expect(focusedState.layout.worktree).toBe(primary.id)
+  expect(focusedState.windows.find((window) => window.connId === firstConnId)?.focused).toBe(true)
+
+  expect((await api<ViewState>(second, 'getView')).scope).toBe('workspace')
+  const workspace = await api<PublicListResult>(second, 'list', { agents: ['claude'] })
+  expect(workspace.sessions.map((session) => session.sessionId)).toEqual(['scope-window-secondary'])
+
+  await second.callAny('ui.window.view.open', {
+    connId: secondConnId,
+    id: 'view:quirky.vault/search-settings',
+    input: { repo: repo.id }
+  })
+  expect((await api<ViewState>(second, 'getView')).scope).toBe('project')
+  const project = await api<PublicListResult>(second, 'list', { agents: ['claude'] })
+  expect(project.sessions.map((session) => session.sessionId).sort()).toEqual([
+    'scope-window-primary',
+    'scope-window-secondary'
+  ])
+})
+
+
+
+
 
 
 test('real Workspace and Project scopes apply depth after selecting registered worktrees', async () => {
@@ -122,6 +215,17 @@ test('real Workspace and Project scopes apply depth after selecting registered w
         message: { role: 'assistant', content: `Answer ${sessionId}` }
       }
     ])
+  const otherProjectPath = makeRepo(scratch())
+  const otherRepo = await vault.client.callAny('quirky.repo/add', { path: otherProjectPath }) as { id: string }
+  const otherWorktrees = await vault.client.callAny('quirky.worktree/list', { repo: otherRepo.id }) as {
+    id: string
+    path: string
+    isMain: boolean
+  }[]
+  const otherPrimary = otherWorktrees.find((worktree) => worktree.isMain)
+  if (!otherPrimary) throw new Error('the second registered Git project has no primary worktree')
+  await writeSession('scope-project-b', otherPrimary.path, base + 4_000)
+
 
   await writeSession('scope-old-primary', primary.path, base)
   await writeSession('scope-old-secondary', secondary.path, base + 2_000)
@@ -134,15 +238,22 @@ test('real Workspace and Project scopes apply depth after selecting registered w
 
   const projectClient = await connect(vault, 'ui')
   await projectClient.callAny('ui.view.open', {
+    id: 'view:quirky.session/worktree',
+    input: { worktree: secondary.id }
+  })
+  await projectClient.callAny('ui.view.open', {
     id: 'view:quirky.vault/search-settings',
     input: { repo: repo.id }
   })
   const uiState = await projectClient.callAny('ui.state', {}) as {
-    layout: { view: { id: string; input?: unknown } | null }
+    layout: { worktree?: string | null; view: { id: string; input?: unknown } | null }
   }
-  expect(uiState.layout.view).toEqual({
-    id: 'view:quirky.vault/search-settings',
-    input: { repo: repo.id }
+  expect(uiState.layout).toMatchObject({
+    worktree: secondary.id,
+    view: {
+      id: 'view:quirky.vault/search-settings',
+      input: { repo: repo.id }
+    }
   })
   expect((await api<ViewState>(projectClient, 'getView')).scope).toBe('project')
   const project = await api<PublicListResult>(projectClient, 'list', { agents: ['claude'] })
@@ -162,6 +273,30 @@ test('real Workspace and Project scopes apply depth after selecting registered w
   expect(unavailableProject.hosts).toEqual([
     expect.objectContaining({ hostId: 'local', kind: 'unavailable' })
   ])
+  await projectClient.callAny('ui.view.open', {
+    id: 'view:quirky.vault/search-settings',
+    input: { repo: otherRepo.id }
+  })
+  const projectBLayout = await projectClient.callAny('ui.state', {}) as {
+    layout: { worktree?: string | null; view: { id: string; input?: unknown } | null }
+  }
+  expect(projectBLayout.layout).toMatchObject({ worktree: secondary.id })
+  expect((await api<ViewState>(projectClient, 'getView')).scope).toBe('project')
+  const projectB = await api<PublicListResult>(projectClient, 'list', { agents: ['claude'] })
+  expect(projectB.sessions.map((session) => session.sessionId)).toEqual(['scope-project-b'])
+
+  await projectClient.callAny('ui.view.open', { id: 'view:quirky.vault/search-settings' })
+  const globalLayout = await projectClient.callAny('ui.state', {}) as {
+    layout: { worktree?: string | null; view: { id: string; input?: unknown } | null }
+  }
+  expect(globalLayout.layout).toMatchObject({
+    worktree: secondary.id,
+    view: { id: 'view:quirky.vault/search-settings' }
+  })
+  await api<ViewState>(projectClient, 'setView', { scope: 'workspace' })
+  const selectedWorkspace = await api<PublicListResult>(projectClient, 'list', { agents: ['claude'] })
+  expect(selectedWorkspace.sessions.map((session) => session.sessionId)).toEqual(['scope-old-secondary'])
+
 
   const active = await connect(vault, 'cli', { cwd: primary.path, worktreeId: primary.id })
   expect((await api<ViewState>(active, 'getView')).scope).toBe('workspace')

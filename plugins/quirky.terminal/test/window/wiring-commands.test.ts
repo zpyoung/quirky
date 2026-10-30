@@ -77,6 +77,7 @@ async function wire(options: { mount?: boolean; settings?: Record<string, unknow
   document.body.appendChild(element)
   let unmountView: (() => void) | void = undefined
   if (options.mount !== false) {
+    fake.layout.worktree = 'wt-main'
     fake.layout.view = { id: VIEW, input: { worktree: 'wt-main' } }
     await act(async () => {
       unmountView = fake.provided.get(VIEW)!(element, { input: { worktree: 'wt-main' }, report: (state: unknown) => void reports.push(state) }) as () => void
@@ -428,9 +429,10 @@ describe('the overridden session commands', () => {
     expect(wired.calls('newTab')).toEqual([{ workspace: 'wt-main' }])
   })
 
-  test('new-shell with no workspace mounted opens a tab in the worktree the window shows', async () => {
+  test('new-shell uses the selected layout worktree when no workspace is mounted', async () => {
     const wired = await track({ mount: false })
-    wired.fake.layout.view = { id: VIEW, input: { worktree: 'wt-other' } }
+    wired.fake.layout.worktree = 'wt-other'
+    wired.fake.layout.view = { id: VIEW, input: { worktree: 'wt-view' } }
     expect(await wired.run('new-shell', undefined, 'quirky.session')).toEqual({ ok: true })
     expect(wired.calls('newTab')).toEqual([{ workspace: 'wt-other' }])
   })

@@ -86,11 +86,9 @@ function budgetValue(value: unknown): BudgetSnapshot | null {
   return { core, search, graphql, fetchedAt: Number(value.fetchedAt) }
 }
 
-function viewWorktree(props: ReviewsSurfaceProps): string | null {
-  const view = props.context.getLayout().view
-  if (!view) return null
-  const input = view.input
-  return isRecord(input) && typeof input.worktree === 'string' && input.worktree.trim() !== '' ? input.worktree : null
+function selectedWorktreeFromLayout(props: ReviewsSurfaceProps): string | null {
+  const worktree = props.context.getLayout().worktree
+  return typeof worktree === 'string' && worktree.trim() !== '' ? worktree : null
 }
 type WorkspaceOption = { id: string; name: string; path: string; branch: string | null }
 
@@ -142,8 +140,8 @@ function githubScopeCommand(check: ProviderCheck): string {
 }
 
 export function HostingSettings(props: ReviewsSurfaceProps) {
-  const inputWorktree = viewWorktree(props)
-  const [selectedWorktree, setSelectedWorktree] = useState<string | null>(() => inputWorktree ?? props.state.settings.worktree)
+  const selectedWorktreeId = selectedWorktreeFromLayout(props)
+  const [selectedWorktree, setSelectedWorktree] = useState<string | null>(() => selectedWorktreeId ?? props.state.settings.worktree)
   const worktree = selectedWorktree
   const settings = props.state.settings
   const settingsMatches = worktree !== null && settings.worktree === worktree
@@ -188,7 +186,7 @@ export function HostingSettings(props: ReviewsSurfaceProps) {
     let active = true
     setWorkspacesLoading(true)
     setWorkspacesError(null)
-    if (inputWorktree !== null) setSelectedWorktree(inputWorktree)
+    if (selectedWorktreeId !== null) setSelectedWorktree(selectedWorktreeId)
     void props.context.call('quirky.worktree/list', {})
       .then((value: unknown) => {
         if (!active) return
@@ -196,7 +194,7 @@ export function HostingSettings(props: ReviewsSurfaceProps) {
         if (workspaces === null) throw new Error('The worktree service returned an invalid workspace list.')
         setRegisteredWorktrees(workspaces)
         setSelectedWorktree((current) => {
-          const requested = inputWorktree ?? current
+          const requested = selectedWorktreeId ?? current
           return requested !== null && workspaces.some((item) => item.id === requested) ? requested : null
         })
       })
@@ -207,7 +205,7 @@ export function HostingSettings(props: ReviewsSurfaceProps) {
         if (active) setWorkspacesLoading(false)
       })
     return () => { active = false }
-  }, [props.context, inputWorktree])
+  }, [props.context, selectedWorktreeId])
 
   const refreshBudget = useCallback(async (force: boolean) => {
     const target = worktree

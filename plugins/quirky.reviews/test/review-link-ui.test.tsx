@@ -9,6 +9,7 @@ import { CHORD_PLATFORM, type QuirkyEvent, type UiLayout, type UiPluginContext, 
 import type { ReviewsState } from '../src/contracts'
 import { CHECKS_PANEL } from '../src/contracts'
 import { ChecksPanel } from '../src/checks/ChecksPanel'
+import { CreateReview } from '../src/create/CreateReview'
 import { ReviewPage } from '../src/detail/ReviewPage'
 import { activate } from '../src/ui'
 import { isRecord } from '../src/checks/data'
@@ -54,6 +55,7 @@ type UiHarness = {
   toasts: { title: string; body: string }[]
   calls: { method: string; params: Record<string, unknown>; result?: unknown }[]
   getLayout(): UiLayout
+  runCommand(id: string, args?: unknown): Promise<unknown>
   setOpenTools(open: Partial<Record<UiToolSlot, string | null>>): Promise<void>
   setBrowserSetting(name: 'openLinksInApp' | 'openLinksInAppModifierInverts', value: boolean): Promise<void>
   forgetSetting(id: string): void
@@ -90,7 +92,8 @@ async function makeUiHarness(host: HostingTest): Promise<UiHarness> {
   const calls: UiHarness['calls'] = []
   const pendingCalls: Promise<unknown>[] = []
   let layout: UiLayout = {
-    view: { id: 'view:quirky.session/worktree', input: { worktree: host.worktree } },
+    view: { id: 'view:quirky.reviews/settings' },
+    worktree: host.worktree,
     panel: null,
     sidebar: true,
     focus: 'view',
@@ -185,6 +188,11 @@ async function makeUiHarness(host: HostingTest): Promise<UiHarness> {
     toasts,
     calls,
     getLayout: () => layout,
+    async runCommand(id, args) {
+      const command = provided.get(id)
+      if (!command) throw new Error(`No registered UI command for ${id}.`)
+      return await command(args)
+    },
     async setOpenTools(open) {
       await act(async () => {
         const tools = layout.tools
@@ -405,6 +413,44 @@ function setOrigin(host: HostingTest, remote: string | null): void {
   const result = Bun.spawnSync(['git', '-C', host.repoPath, ...args], { stdout: 'pipe', stderr: 'pipe' })
   if (result.exitCode !== 0) throw new Error(`Could not update fixture origin: ${new TextDecoder().decode(result.stderr)}`)
 }
+
+test('create surfaces and open-create use the selected workspace in a global view', async () => {
+  const { host, ui } = await bootUi(checksGhSource, { branch: 'feature' })
+  const state = await checksState(host)
+  expect(state.creation.worktree).toBeNull()
+  const element = document.createElement('div')
+  document.body.append(element)
+  const root = createRoot(element)
+  try {
+    expect(ui.getLayout()).toMatchObject({
+      view: { id: 'view:quirky.reviews/settings' },
+      worktree: host.worktree
+    })
+
+    await act(async () => {
+      root.render(<CreateReview context={ui.context} state={state} refresh={async () => {}} />)
+    })
+    await settleUi(ui)
+    const createOpenCalls = () => ui.calls.filter((call) => call.method === 'quirky.reviews/createOpen')
+    expect(createOpenCalls().at(-1)).toMatchObject({ params: { worktree: host.worktree } })
+
+    const explicitCreation = structuredClone(state)
+    explicitCreation.creation.worktree = 'id:creation-target'
+    const callCountBeforeExplicitCreation = createOpenCalls().length
+    await act(async () => {
+      root.render(<CreateReview context={ui.context} state={explicitCreation} refresh={async () => {}} />)
+    })
+    await settleUi(ui)
+    expect(createOpenCalls()).toHaveLength(callCountBeforeExplicitCreation)
+    await ui.runCommand('command:quirky.reviews/open-create')
+    expect(createOpenCalls().at(-1)).toMatchObject({ params: { worktree: host.worktree } })
+    await expect(ui.runCommand('command:quirky.reviews/open-create', { worktree: 'id:explicit-target' })).rejects.toThrow()
+    expect(createOpenCalls().at(-1)).toMatchObject({ params: { worktree: 'id:explicit-target' } })
+  } finally {
+    await act(async () => root.unmount())
+    element.remove()
+  }
+}, 30_000)
 
 test('mounted Checks presents a missing GitHub origin neutrally and recovers when reopened after origin is added', async () => {
   const { host, ui } = await bootUi(checksGhSource, { branch: 'feature' })
