@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import { Terminal } from '@xterm/headless'
+import { Unicode11Addon } from '@xterm/addon-unicode11'
 import { Screen } from '../src/screen'
 
 const ESC = '\x1b'
@@ -147,6 +148,39 @@ describe('Screen snapshot', () => {
     expect(copy.modes.applicationCursorKeysMode).toBe(true)
     expect(copy.modes.mouseTrackingMode).not.toBe('none')
     expect(snapshot.cursor).toEqual({ x: 6, y: 4 })
+  })
+
+  test('Unicode 11 replay preserves statusline updates after emoji fields', async () => {
+    const cols = 50
+    const rows = 4
+    const screen = new Screen({ cols, rows })
+    const oracle = fresh(cols, rows)
+    const copy = fresh(cols, rows)
+    for (const term of [oracle, copy]) {
+      term.loadAddon(new Unicode11Addon())
+      term.unicode.activeVersion = '11'
+    }
+
+    const output =
+      `${ESC}[2J${ESC}[H🤖 OLD\r\n📊 READ\r\n📁 OLD\r\n💬 READ` +
+      `${ESC}[1;4Hqqa.12hEo8-repo${ESC}[2;4H<task-notification>${ESC}[3;4Hmain branch${ESC}[4;4H💬 inbox`
+    screen.write(output)
+    await screen.settled()
+    await feed(oracle, output)
+    await feed(copy, screen.snapshot().ansi)
+
+    expect(cells(copy)).toEqual(cells(oracle))
+    expect({ x: copy.buffer.active.cursorX, y: copy.buffer.active.cursorY }).toEqual({
+      x: oracle.buffer.active.cursorX,
+      y: oracle.buffer.active.cursorY
+    })
+
+    await Promise.all([feed(oracle, ' live'), feed(copy, ' live')])
+    expect(cells(copy)).toEqual(cells(oracle))
+    expect({ x: copy.buffer.active.cursorX, y: copy.buffer.active.cursorY }).toEqual({
+      x: oracle.buffer.active.cursorX,
+      y: oracle.buffer.active.cursorY
+    })
   })
 
   test('modes are off for a plain screen', async () => {
