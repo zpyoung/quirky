@@ -212,7 +212,9 @@ export function BrowserSettings(props: BrowserPreferencesProps & { embedded?: bo
         title="Session & Cookies"
         actions={<Button type="button" variant="primary" disabled={profilePending !== null} onClick={() => { setCreateOpen(true); setActionError(null); setSuccessMessage(null) }}>Add Profile</Button>}
       />
-      <p style={SETTINGS_COPY_STYLE}>Clearing or removing profile data requires a native session-clear completion capability. It is currently unavailable; failed requests preserve profile data and metadata.</p>
+      <p style={SETTINGS_COPY_STYLE}>{context.nativeBrowser.clearPartitionAvailable
+        ? 'Clearing or removing a profile deletes its cookies and site data in both browser engines. Profiles in use cannot be cleared.'
+        : 'Clearing or removing profile data needs the Quirky desktop app on macOS 14 or later, which confirms native website-data removal. It is unavailable here; failed requests preserve profile data and metadata.'}</p>
       {preferences && <ul aria-label="Browser profiles" style={SETTINGS_LIST_STYLE}>
         {preferences.profiles.map((row) => {
           const importOpen = importOpenProfile === row.profile.id

@@ -1,0 +1,10 @@
+{
+  "item": "sa-browser-native-profile-clear-completion",
+  "spec": "docs/quirk/specs/2026-10-28-sa-browser-native-profile-clear-completion/logic.md",
+  "scenarios": [
+    { "id": "SC5-native", "title": "Root proof before Default: with a fresh temporary QUIRKY_HOME on macOS 14+, read <QUIRKY_HOME>/desktop/native-browser-storage-id and derive the expected Default store UUID (first 16 bytes of sha256(id + '\\n' + 'persist:quirky-browser-default')). Open one Native pane on Default and confirm it loads (the host refuses to claim a guest whose live store identifier differs), and that ~/Library/WebKit/<bundle id>/WebsiteDataStore/<that UUID, lowercase> now exists. No Default scenario runs if the pane fails to claim or the directory is missing.", "status": "pending", "lastRun": null, "report": null, "summary": null },
+    { "id": "SC2-native", "title": "After SC5-native passes, load a local fixture that sets a cookie and a localStorage value in a Default Native pane, close every Default pane, then use Browser Settings > Session & Cookies > Clear cookies & site data > Clear Data. Expect no error, Default still listed, and a reopened Default Native pane on the fixture reading no cookie and no localStorage value.", "status": "pending", "lastRun": null, "report": null, "summary": null },
+    { "id": "SC3-native", "title": "Create a fresh UUID profile, store fixture cookie/localStorage in a Native pane on it, close the pane, then Remove it from Browser Settings and confirm. Expect the profile gone from the list and its Chrome directory removed; recreate nothing. A second fresh profile's fixture data stays readable throughout.", "status": "pending", "lastRun": null, "report": null, "summary": null },
+    { "id": "SC1-native", "title": "On macOS 13 (or a desktop host built on stock Electrobun), Browser Settings > Session & Cookies says clearing needs macOS 14 or later and is unavailable here; Clear Data shows the refusal and the profile's Chrome data and metadata stay.", "status": "pending", "lastRun": null, "report": null, "summary": null }
+  ]
+}

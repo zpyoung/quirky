@@ -54,6 +54,7 @@ export class BrowserView {
   setNavigationRules(rules: string[]): void
   setPageZoom(factor: number): void
   getPageZoom(): number
+  getStorageIdentifier(): string | null
   remove(): void
   setNativeRequestHandling(
     kinds: Array<'dialogs' | 'auth' | 'certificates' | 'downloads' | 'popups' | 'externalApps'>,
@@ -66,6 +67,14 @@ export class BrowserView {
   static defineRPC<Schema>(config: unknown): { send: Record<string, (payload: unknown) => void> }
 }
 
+type StorageResult = { status: string; reason?: string }
+
+export const Session: {
+  fromPartition(partition: string): {
+    setStorageIdentifier(identifier: string): StorageResult
+    clearStorageData(types: 'all'): StorageResult
+  }
+}
 
 export class Electroview {
   constructor(options: { rpc: unknown })

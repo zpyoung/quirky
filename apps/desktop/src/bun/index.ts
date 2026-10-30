@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { existsSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { NATIVE_BROWSER_NAVIGATION_RULES, QuirkyClient } from '@quirky/protocol'
-import { ensureDaemon, quirkyHome, rpcUrl, type RuntimeInfo } from '@quirky/protocol/node'
+import { ensureDaemon, ensureHome, quirkyHome, rpcUrl, type RuntimeInfo } from '@quirky/protocol/node'
 import { ApplicationMenu, BrowserView, BrowserWindow, Session, Tray, Updater, Utils, app, type ApplicationMenuItemConfig } from 'electrobun/main'
 import { maintainConnection } from './connection'
 import { setDockBadge } from './dock'
@@ -25,7 +25,8 @@ import {
 } from './events'
 import { daemonUrl, errorPageHtml } from './page'
 import { findRepoRoot, resolveRuntimeEnv, trayDotPath } from './paths'
-import { createNativeBrowserHandlers, popupWindowTitle, type NativeBrowserHostRPC, type NativeBrowserPopup } from './native-browser'
+import { createNativeBrowserHandlers, nativeBrowserPreloadSource, popupWindowTitle, type NativeBrowserHostRPC, type NativeBrowserPopup } from './native-browser'
+import { createNativeBrowserStorage, loadNativeBrowserInstallId } from './native-browser-storage'
 import { playSound } from './sound'
 import {
   UPDATE_APPLY_ACTION,
@@ -69,7 +70,21 @@ async function loadNativeBrowserPreload(): Promise<string> {
   return output.text()
 }
 
-const nativeBrowserPreload = await loadNativeBrowserPreload()
+function nativeBrowserInstallId(): string | null {
+  if (process.platform !== 'darwin') return null
+  try {
+    return loadNativeBrowserInstallId(ensureHome())
+  } catch (error) {
+    console.error('native browser profile storage is unavailable:', error)
+    return null
+  }
+}
+
+const nativeBrowserStorage = createNativeBrowserStorage({
+  installId: nativeBrowserInstallId(),
+  session: (partition) => Session.fromPartition(partition)
+})
+const nativeBrowserPreload = nativeBrowserPreloadSource(await loadNativeBrowserPreload(), nativeBrowserStorage.supported)
 
 const logPath = join(quirkyHome(), 'logs', 'daemon.log')
 let stopping = false
@@ -175,7 +190,8 @@ function createWindow(
       set: (partition, proxy) => Session.fromPartition(partition).setProxy(proxy)
     },
     sendPageEvent: (message) => rpc.send.nativeBrowserPageEvent(message),
-    openPopup
+    openPopup,
+    storage: nativeBrowserStorage
   })
   const pickFolder = async (request: NativeBrowserHostRPC['bun']['requests']['pickFolder']['params']) => {
     if (process.platform !== 'darwin') throw new Error('native directory selection is unavailable on this platform')
@@ -233,6 +249,8 @@ function createWindow(
         routeNativeBrowserLabels: nativeBrowserHandlers.routeLabels,
         answerNativeBrowserRequest: nativeBrowserHandlers.answer,
         cancelNativeBrowserDownload: nativeBrowserHandlers.cancelDownload,
+        prepareNativeBrowserPartition: nativeBrowserHandlers.prepare,
+        clearNativeBrowserPartition: nativeBrowserHandlers.clear,
         pickFolder,
         openWindow,
         closeWindow,

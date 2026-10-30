@@ -586,7 +586,7 @@ test('Session & Cookies reports unsupported native clearing without claiming dat
   await mount(<BrowserSettings {...props(context)} />)
 
   expect(container.textContent).toContain('Active')
-  expect(container.textContent).toContain('native session-clear completion capability')
+  expect(container.textContent).toContain('confirms native website-data removal. It is unavailable here')
   confirmResult = false
   await clickButton('Clear cookies & site data')
   expect(calls.filter(({ method }) => method === 'quirky.browser/profileClear')).toHaveLength(0)
@@ -600,6 +600,15 @@ test('Session & Cookies reports unsupported native clearing without claiming dat
   expect(calls).toContainEqual({ method: 'quirky.browser/profileDelete', params: { profile: REVIEW_PROFILE_ID, yes: true } })
   expect(container.textContent).toContain('Review')
   expect(container.textContent).toContain('Native partition clearing is unavailable in this runtime.')
+})
+
+test('Session & Cookies explains clearing when the desktop host confirms native removal', async () => {
+  const base = makeContext()
+  const context: UiPluginContext = { ...base, nativeBrowser: { ...base.nativeBrowser, available: true, clearPartitionAvailable: true } }
+  await mount(<BrowserSettings {...props(context)} />)
+
+  expect(container.textContent).toContain('deletes its cookies and site data in both browser engines')
+  expect(container.textContent).not.toContain('It is unavailable here')
 })
 
 test('embedded settings subscribe to shared setting changes without duplicating generic controls and clean up listeners', async () => {

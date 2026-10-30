@@ -4,6 +4,7 @@ import { createDropSourcePathsInbox } from './drop-source-paths'
 import type { NativeBrowserHostRPC, NativeBrowserPageEvent } from './native-browser'
 
 type NativeBrowserPreloadBridge = {
+  readonly clearPartitionAvailable: boolean
   claimNativeBrowserView(params: NativeBrowserHostRPC['bun']['requests']['claimNativeBrowserView']['params']): Promise<NativeBrowserHostRPC['bun']['requests']['claimNativeBrowserView']['response']>
   setNativeBrowserZoom(params: NativeBrowserHostRPC['bun']['requests']['setNativeBrowserZoom']['params']): Promise<NativeBrowserHostRPC['bun']['requests']['setNativeBrowserZoom']['response']>
   releaseNativeBrowserView(params: NativeBrowserHostRPC['bun']['requests']['releaseNativeBrowserView']['params']): Promise<NativeBrowserHostRPC['bun']['requests']['releaseNativeBrowserView']['response']>
@@ -11,6 +12,8 @@ type NativeBrowserPreloadBridge = {
   answerNativeBrowserRequest(params: NativeBrowserHostRPC['bun']['requests']['answerNativeBrowserRequest']['params']): Promise<NativeBrowserHostRPC['bun']['requests']['answerNativeBrowserRequest']['response']>
   cancelNativeBrowserDownload(params: NativeBrowserHostRPC['bun']['requests']['cancelNativeBrowserDownload']['params']): Promise<NativeBrowserHostRPC['bun']['requests']['cancelNativeBrowserDownload']['response']>
   onNativeBrowserPageEvent(listener: (viewId: number, event: NativeBrowserPageEvent) => void): () => void
+  prepareNativeBrowserPartition(params: NativeBrowserHostRPC['bun']['requests']['prepareNativeBrowserPartition']['params']): Promise<NativeBrowserHostRPC['bun']['requests']['prepareNativeBrowserPartition']['response']>
+  clearNativeBrowserPartition(params: NativeBrowserHostRPC['bun']['requests']['clearNativeBrowserPartition']['params']): Promise<NativeBrowserHostRPC['bun']['requests']['clearNativeBrowserPartition']['response']>
 }
 
 type DesktopRequestBridge = {
@@ -29,6 +32,9 @@ const DESKTOP_CAPABILITIES: NativeDesktopCapabilities = {
   revealItem: true,
   notifications: { permission: false, click: false, dismiss: false }
 }
+
+/** Set by the main process ahead of this bundle; see nativeBrowserPreloadSource. */
+declare const QUIRKY_NATIVE_BROWSER_CLEAR_AVAILABLE: boolean | undefined
 
 declare global {
   interface Window {
@@ -56,6 +62,7 @@ const requests = (rpc as unknown as { request: NativeBrowserPreloadBridge & Desk
 
 
 const bridge: NativeBrowserPreloadBridge = {
+  clearPartitionAvailable: typeof QUIRKY_NATIVE_BROWSER_CLEAR_AVAILABLE === 'boolean' && QUIRKY_NATIVE_BROWSER_CLEAR_AVAILABLE,
   claimNativeBrowserView: (params) => requests.claimNativeBrowserView(params),
   setNativeBrowserZoom: (params) => requests.setNativeBrowserZoom(params),
   releaseNativeBrowserView: (params) => requests.releaseNativeBrowserView(params),
@@ -65,7 +72,9 @@ const bridge: NativeBrowserPreloadBridge = {
   onNativeBrowserPageEvent: (listener) => {
     pageEventListeners.add(listener)
     return () => pageEventListeners.delete(listener)
-  }
+  },
+  prepareNativeBrowserPartition: (params) => requests.prepareNativeBrowserPartition(params),
+  clearNativeBrowserPartition: (params) => requests.clearNativeBrowserPartition(params)
 }
 
 let dropSourcePathsSupported: Promise<boolean> | null = null

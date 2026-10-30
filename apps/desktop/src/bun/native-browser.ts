@@ -14,6 +14,7 @@ import {
   type NativeBrowserPageRequest
 } from '@quirky/protocol'
 import { isAbsolute } from 'node:path'
+import type { NativeBrowserStorage } from './native-browser-storage'
 
 export type NativeBrowserPageEvent =
   | { type: 'request'; request: NativeBrowserPageRequest }
@@ -47,6 +48,14 @@ export type NativeBrowserHostRPC = {
         params: { viewId: number; owner: string; port: number }
         response: { routed: boolean }
       }
+      prepareNativeBrowserPartition: {
+        params: { partition: string }
+        response: { storageIdentifier: string | null }
+      }
+      clearNativeBrowserPartition: {
+        params: { partition: string }
+        response: { cleared: true }
+      }
       readClipboardText: { params: {}; response: string }
       pickFolder: { params: FolderPickerRequest; response: FolderPickerResult }
       openWindow: { params: DesktopWindowOpenRequest; response: DesktopWindowResult }
@@ -76,6 +85,7 @@ export type NativeBrowserViewPort = {
   setNavigationRules(rules: string[]): void
   setPageZoom(factor: number): void
   getPageZoom(): number
+  getStorageIdentifier(): string | null
   remove(): void
   /** Present on Electrobun builds with native page requests; false means the renderer keeps its defaults. */
   setNativeRequestHandling?(kinds: NativeRequestKind[], options?: { timeoutMs?: number }): boolean
@@ -95,6 +105,7 @@ export type NativeBrowserHostDeps = {
   sendPageEvent?(message: { viewId: number; event: NativeBrowserPageEvent }): void
   /** Adopts the parked popup into a host-owned window; resolves false when it could not be hosted. */
   openPopup?(popup: NativeBrowserPopup): boolean
+  storage: Pick<NativeBrowserStorage, 'identifierFor' | 'prepare' | 'clear'>
 }
 
 export type NativeBrowserHandlers = {
@@ -104,6 +115,8 @@ export type NativeBrowserHandlers = {
   routeLabels(params: NativeBrowserHostRPC['bun']['requests']['routeNativeBrowserLabels']['params']): Promise<{ routed: boolean }>
   answer(params: NativeBrowserHostRPC['bun']['requests']['answerNativeBrowserRequest']['params']): Promise<{ answered: boolean }>
   cancelDownload(params: NativeBrowserHostRPC['bun']['requests']['cancelNativeBrowserDownload']['params']): Promise<{ cancelled: boolean }>
+  prepare(params: NativeBrowserHostRPC['bun']['requests']['prepareNativeBrowserPartition']['params']): Promise<{ storageIdentifier: string | null }>
+  clear(params: NativeBrowserHostRPC['bun']['requests']['clearNativeBrowserPartition']['params']): Promise<{ cleared: true }>
   dispose(): void
 }
 
@@ -202,6 +215,11 @@ export function popupWindowTitle(raw: string): string {
   } catch {
     return 'Popup'
   }
+}
+
+/** Prefixes the trusted shell preload with whether this host can confirm native profile clears. */
+export function nativeBrowserPreloadSource(bundle: string, clearAvailable: boolean): string {
+  return `const QUIRKY_NATIVE_BROWSER_CLEAR_AVAILABLE = ${clearAvailable ? 'true' : 'false'};\n${bundle}`
 }
 
 /** Only the trusted BrowserWindow RPC may claim and zoom a native browser view. */
@@ -316,6 +334,10 @@ export function createNativeBrowserHandlers(deps: NativeBrowserHostDeps): Native
         !view.sandbox || view.renderer !== 'native' || view.partition !== params.partition ||
         view.allowedProtocols.appData || view.url !== 'about:blank'
       ) throw invalidChild()
+      const storageIdentifier = deps.storage.identifierFor(params.partition)
+      if (storageIdentifier !== null && view.getStorageIdentifier()?.toUpperCase() !== storageIdentifier) {
+        throw new Error('native browser view is not using its profile storage')
+      }
       if (claim && !deps.getView(claim.viewId)) claim = null
       if (claim && (claim.viewId !== params.viewId || claim.owner !== params.owner)) {
         throw new Error('window already has a native browser view')
@@ -379,6 +401,12 @@ export function createNativeBrowserHandlers(deps: NativeBrowserHostDeps): Native
       if (view.windowId !== window.id || view.hostWebviewId !== window.webview.id) throw invalidChild()
       view.remove()
       return { released: true }
+    },
+    async prepare(params) {
+      return deps.storage.prepare(params.partition)
+    },
+    async clear(params) {
+      return deps.storage.clear(params.partition)
     },
     dispose() {
       const active = claim

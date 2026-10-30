@@ -45,6 +45,7 @@ export type NativeBrowserPageEvent =
   | { type: 'expired'; id: string }
   | { type: 'download'; update: NativeBrowserDownloadUpdate }
 
+/** Storage members are optional so a shell served to an older desktop host keeps its safe refusal. */
 export type NativeBrowserShellBridge = {
   claimNativeBrowserView(params: { viewId: number; owner: string; partition: string }): Promise<{ zoomFactor: number; pageRequests?: boolean }>
   setNativeBrowserZoom(params: { viewId: number; owner: string; level: number }): Promise<{ zoomFactor: number }>
@@ -53,7 +54,13 @@ export type NativeBrowserShellBridge = {
   answerNativeBrowserRequest?(params: { viewId: number; owner: string; id: string; answer: NativeBrowserPageAnswer }): Promise<{ answered: boolean }>
   cancelNativeBrowserDownload?(params: { viewId: number; owner: string; id: string }): Promise<{ cancelled: boolean }>
   onNativeBrowserPageEvent?(listener: (viewId: number, event: NativeBrowserPageEvent) => void): () => void
+  readonly clearPartitionAvailable?: boolean
+  prepareNativeBrowserPartition?(params: { partition: string }): Promise<{ storageIdentifier: string | null }>
+  clearNativeBrowserPartition?(params: { partition: string }): Promise<{ cleared: true }>
 }
+
+const NATIVE_CLEAR_UNAVAILABLE = 'Native browser profile clearing is unavailable: this desktop host cannot confirm native website-data removal (macOS 14 or later is required)'
+
 
 type Mount = {
   adapterHandle: NativeBrowserAdapterHandle
@@ -549,6 +556,9 @@ class ElectrobunNativeBrowserMount implements NativeBrowserAdapterHandle {
 
   private async start(afterDispose: Promise<void>): Promise<void> {
     await afterDispose
+    if (this.disposed) return
+    // the profile's native store can only be chosen before its first view exists.
+    await this.bridge.prepareNativeBrowserPartition?.({ partition: this.options.partition })
     if (this.disposed) return
 
     const child = createWebviewTag()
@@ -1145,22 +1155,23 @@ export function createNativeBrowserCapability(adapter?: NativeBrowserAdapter): N
     async clearPartition(partition) {
       if (!NATIVE_BROWSER_PARTITION_RE.test(partition)) throw new Error('unsupported browser partition')
       if (!adapter) throw new Error('Native browser is unavailable outside the Quirky desktop app')
-      if (!adapter.clearPartitionAvailable) {
-        throw new Error('Native browser profile clearing is unavailable: the pinned SDK exposes no completion signal for native website-data removal')
-      }
+      if (!adapter.clearPartitionAvailable) throw new Error(NATIVE_CLEAR_UNAVAILABLE)
       await adapter.clearPartition(partition)
     }
   }
 }
 
 export function createElectrobunNativeBrowserAdapter(bridge: NativeBrowserShellBridge): NativeBrowserAdapter {
+  const clear = bridge.clearPartitionAvailable === true ? bridge.clearNativeBrowserPartition : undefined
   return {
-    clearPartitionAvailable: false,
+    clearPartitionAvailable: clear !== undefined,
     pageRequestsAvailable: typeof bridge.onNativeBrowserPageEvent === 'function' && typeof bridge.answerNativeBrowserRequest === 'function',
     mount: (element, options, afterDispose, onState) => new ElectrobunNativeBrowserMount(element, options, bridge, afterDispose, onState),
     async clearPartition(partition) {
       if (!NATIVE_BROWSER_PARTITION_RE.test(partition)) throw new Error('unsupported browser partition')
-      throw new Error('Native browser profile clearing is unavailable: the pinned SDK exposes no completion signal for native website-data removal')
+      if (!clear) throw new Error(NATIVE_CLEAR_UNAVAILABLE)
+      const result = await clear.call(bridge, { partition })
+      if (result?.cleared !== true) throw new Error('The desktop did not confirm native website-data removal.')
     }
   }
 }
