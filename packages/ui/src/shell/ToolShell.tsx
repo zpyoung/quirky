@@ -6,17 +6,10 @@ import { usePluginHost, usePluginState } from '../context'
 import { PluginSlot } from '../plugins/PluginSlot'
 import { useRegion } from '../plugins/useRegion'
 import { InboxPanel } from './ShellChrome'
+import { SLOT_LABELS } from './tool-slot-labels'
 import { useAttention } from './attention'
 import './tool-shell.css'
 
-const SLOT_LABELS: Record<UiToolSlot, string> = {
-  'left-top': 'Left top',
-  'left-bottom': 'Left bottom',
-  'right-top': 'Right top',
-  'right-bottom': 'Right bottom',
-  'bottom-left': 'Bottom left',
-  'bottom-right': 'Bottom right'
-}
 
 export type ToolShellChrome = {
   rail: number
