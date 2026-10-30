@@ -1,26 +1,29 @@
-import { useCallback, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent as ReactDragEvent, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
-import type { UiToolEntry, UiToolLayout, UiToolResize, UiToolSlot } from '@quirky/protocol'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent as ReactDragEvent, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
+import type { UiKeybinding, UiToolEntry, UiToolLayout, UiToolPlacement, UiToolResize, UiToolSlot } from '@quirky/protocol'
 import { UI_TOOL_SLOTS } from '@quirky/protocol'
-import { Badge, ContextMenu, IconButton, ToolPanelFrame, type ContextMenuItem } from '../design-system'
+import { Badge, ContextMenu, ControlIcon, IconButton, PopupMenu, ToolIcon, ToolPanelFrame, type ContextMenuItem, type PopupItem } from '../design-system'
 import { usePluginHost, usePluginState } from '../context'
 import { PluginSlot } from '../plugins/PluginSlot'
 import { useRegion } from '../plugins/useRegion'
 import { InboxPanel } from './ShellChrome'
 import { SLOT_LABELS } from './tool-slot-labels'
 import { useAttention } from './attention'
+import { trackPanelFocus } from './panel-focus'
 import './tool-shell.css'
-
 
 export type ToolShellChrome = {
   rail: number
   splitter: number
   centerMinWidth: number
   centerMinHeight: number
+  /** Space between cards; falls back to `splitter` when a caller doesn't measure it. */
+  gap?: number
 }
 
 export type ToolShellOpenSlots = Record<UiToolSlot, boolean>
 
 export type ToolShellGeometry = {
+  cardGap: number
   leftRailWidth: number
   leftPanelWidth: number
   leftEdgeWidth: number
@@ -30,25 +33,18 @@ export type ToolShellGeometry = {
   rightRailWidth: number
   bottomPanelHeight: number
   bottomEdgeHeight: number
-  bottomRailHeight: number
   centerHeight: number
   sideHeight: number
   leftTopHeight: number
   leftBottomHeight: number
   leftBottomTop: number
-  leftTopStripeHeight: number
-  leftBottomStripeHeight: number
   leftSplitHandleHeight: number
   rightTopHeight: number
   rightBottomHeight: number
   rightBottomTop: number
-  rightTopStripeHeight: number
-  rightBottomStripeHeight: number
   rightSplitHandleHeight: number
   bottomLeftPanelWidth: number
   bottomRightPanelWidth: number
-  bottomLeftStripeWidth: number
-  bottomRightStripeWidth: number
   bottomSplitHandleWidth: number
   bottomPanelTop: number
 }
@@ -119,18 +115,22 @@ export function getToolShellOpenSlots(tools: readonly UiToolEntry[], layout: UiT
   })) as ToolShellOpenSlots
 }
 
-function splitHeights(total: number, topOpen: boolean, bottomOpen: boolean, ratio: number, splitter: number) {
+function splitHeights(total: number, topOpen: boolean, bottomOpen: boolean, ratio: number, gap: number) {
   if (topOpen && bottomOpen) {
-    const handle = Math.min(total, splitter)
+    const handle = Math.min(total, gap)
     const usable = Math.max(0, total - handle)
     const top = usable * ratio
-    return { top, bottom: usable - top, bottomTop: top + handle, stripeTop: top, stripeBottom: usable - top, handle }
+    return { top, bottom: usable - top, bottomTop: top + handle, handle }
   }
-  if (topOpen) return { top: total, bottom: 0, bottomTop: total, stripeTop: total / 2, stripeBottom: total / 2, handle: 0 }
-  if (bottomOpen) return { top: 0, bottom: total, bottomTop: 0, stripeTop: total / 2, stripeBottom: total / 2, handle: 0 }
-  return { top: 0, bottom: 0, bottomTop: total, stripeTop: total / 2, stripeBottom: total / 2, handle: 0 }
+  if (topOpen) return { top: total, bottom: 0, bottomTop: total, handle: 0 }
+  if (bottomOpen) return { top: 0, bottom: total, bottomTop: 0, handle: 0 }
+  return { top: 0, bottom: 0, bottomTop: total, handle: 0 }
 }
 
+/**
+ * Sizes every card from the window. The side stripes run the full height, so the bottom panels
+ * span only the width between them, and a gap of `chrome.gap` separates each pair of open cards.
+ */
 export function fitToolShellGeometry(
   sizes: UiToolLayout['sizes'],
   viewport: { width: number; height: number },
@@ -140,7 +140,7 @@ export function fitToolShellGeometry(
   const width = positive(viewport.width)
   const height = positive(viewport.height)
   const rail = positive(chrome.rail)
-  const requestedSplitter = positive(chrome.splitter)
+  const cardGap = positive(chrome.gap ?? chrome.splitter)
   const leftOpen = open['left-top'] || open['left-bottom']
   const rightOpen = open['right-top'] || open['right-bottom']
   const bottomLeftOpen = open['bottom-left']
@@ -150,7 +150,7 @@ export function fitToolShellGeometry(
   const rightRailWidth = leftRailWidth
   const horizontalSpace = Math.max(0, width - leftRailWidth - rightRailWidth)
   const activeEdges = Number(leftOpen) + Number(rightOpen)
-  const edgeWidth = activeEdges === 0 ? 0 : Math.min(requestedSplitter, horizontalSpace / activeEdges)
+  const edgeWidth = activeEdges === 0 ? 0 : Math.min(cardGap, horizontalSpace / activeEdges)
   const leftEdgeWidth = leftOpen ? edgeWidth : 0
   const rightEdgeWidth = rightOpen ? edgeWidth : 0
   const panelSpace = Math.max(0, horizontalSpace - leftEdgeWidth - rightEdgeWidth - Math.min(positive(chrome.centerMinWidth), horizontalSpace))
@@ -162,33 +162,34 @@ export function fitToolShellGeometry(
   const rightPanelWidth = requestedRight * panelScale
   const centerWidth = Math.max(0, horizontalSpace - leftEdgeWidth - rightEdgeWidth - leftPanelWidth - rightPanelWidth)
 
-  const bottomRailHeight = Math.min(rail, height)
-  const bottomEdgeHeight = bottomOpen ? Math.min(requestedSplitter, Math.max(0, height - bottomRailHeight)) : 0
-  const verticalSpace = Math.max(0, height - bottomRailHeight - bottomEdgeHeight)
+  const bottomEdgeHeight = bottomOpen ? Math.min(cardGap, height) : 0
+  const verticalSpace = Math.max(0, height - bottomEdgeHeight)
   const centerMinimumHeight = Math.min(positive(chrome.centerMinHeight), verticalSpace)
   const bottomPanelHeight = bottomOpen
     ? Math.min(clampToolResize('bottom', sizes.bottom), Math.max(0, verticalSpace - centerMinimumHeight))
     : 0
-  const centerHeight = Math.max(0, height - bottomRailHeight - bottomEdgeHeight - bottomPanelHeight)
+  const centerHeight = Math.max(0, height - bottomEdgeHeight - bottomPanelHeight)
   const sideHeight = centerHeight
 
   const leftSplit = clampToolResize('leftSplit', sizes.leftSplit)
   const rightSplit = clampToolResize('rightSplit', sizes.rightSplit)
   const bottomSplit = clampToolResize('bottomSplit', sizes.bottomSplit)
-  const leftRows = splitHeights(sideHeight, open['left-top'], open['left-bottom'], leftSplit, requestedSplitter)
-  const rightRows = splitHeights(sideHeight, open['right-top'], open['right-bottom'], rightSplit, requestedSplitter)
+  const leftRows = splitHeights(sideHeight, open['left-top'], open['left-bottom'], leftSplit, cardGap)
+  const rightRows = splitHeights(sideHeight, open['right-top'], open['right-bottom'], rightSplit, cardGap)
 
+  const bottomSpace = horizontalSpace
   const bottomSplitHandleWidth = bottomLeftOpen && bottomRightOpen
-    ? Math.min(requestedSplitter, width)
+    ? Math.min(cardGap, bottomSpace)
     : 0
-  const bottomUsableWidth = Math.max(0, width - bottomSplitHandleWidth)
-  const stripeLeftWidth = bottomUsableWidth * bottomSplit
-  const stripeRightWidth = bottomUsableWidth - stripeLeftWidth
-  const bottomLeftPanelWidth = bottomLeftOpen ? (bottomRightOpen ? stripeLeftWidth : width) : 0
-  const bottomRightPanelWidth = bottomRightOpen ? (bottomLeftOpen ? stripeRightWidth : width) : 0
+  const bottomUsableWidth = Math.max(0, bottomSpace - bottomSplitHandleWidth)
+  const splitLeftWidth = bottomUsableWidth * bottomSplit
+  const splitRightWidth = bottomUsableWidth - splitLeftWidth
+  const bottomLeftPanelWidth = bottomLeftOpen ? (bottomRightOpen ? splitLeftWidth : bottomSpace) : 0
+  const bottomRightPanelWidth = bottomRightOpen ? (bottomLeftOpen ? splitRightWidth : bottomSpace) : 0
   const bottomPanelTop = sideHeight + bottomEdgeHeight
 
   return {
+    cardGap,
     leftRailWidth,
     leftPanelWidth,
     leftEdgeWidth,
@@ -198,25 +199,18 @@ export function fitToolShellGeometry(
     rightRailWidth,
     bottomPanelHeight,
     bottomEdgeHeight,
-    bottomRailHeight,
     centerHeight,
     sideHeight,
     leftTopHeight: leftRows.top,
     leftBottomHeight: leftRows.bottom,
     leftBottomTop: leftRows.bottomTop,
-    leftTopStripeHeight: leftRows.stripeTop,
-    leftBottomStripeHeight: leftRows.stripeBottom,
     leftSplitHandleHeight: leftRows.handle,
     rightTopHeight: rightRows.top,
     rightBottomHeight: rightRows.bottom,
     rightBottomTop: rightRows.bottomTop,
-    rightTopStripeHeight: rightRows.stripeTop,
-    rightBottomStripeHeight: rightRows.stripeBottom,
     rightSplitHandleHeight: rightRows.handle,
     bottomLeftPanelWidth,
     bottomRightPanelWidth,
-    bottomLeftStripeWidth: stripeLeftWidth,
-    bottomRightStripeWidth: stripeRightWidth,
     bottomSplitHandleWidth,
     bottomPanelTop
   }
@@ -229,7 +223,8 @@ export function readToolShellChrome(element: HTMLElement): ToolShellChrome {
     rail: read('--tool-shell-rail-width'),
     splitter: read('--tool-shell-splitter-width'),
     centerMinWidth: read('--tool-shell-center-min-width'),
-    centerMinHeight: read('--tool-shell-center-min-height')
+    centerMinHeight: read('--tool-shell-center-min-height'),
+    gap: read('--tool-shell-card-gap')
   }
 }
 
@@ -243,36 +238,23 @@ export function toolShellCssVariables(geometry: ToolShellGeometry): CSSPropertie
     '--tool-right-edge': geometry.rightEdgeWidth,
     '--tool-bottom-panel-height': geometry.bottomPanelHeight,
     '--tool-bottom-edge': geometry.bottomEdgeHeight,
-    '--tool-bottom-rail': geometry.bottomRailHeight,
     '--tool-side-height': geometry.sideHeight,
     '--tool-left-top-height': geometry.leftTopHeight,
     '--tool-left-bottom-height': geometry.leftBottomHeight,
     '--tool-left-bottom-top': geometry.leftBottomTop,
-    '--tool-left-top-stripe-height': geometry.leftTopStripeHeight,
-    '--tool-left-bottom-stripe-height': geometry.leftBottomStripeHeight,
     '--tool-left-split-handle-height': geometry.leftSplitHandleHeight,
     '--tool-right-top-height': geometry.rightTopHeight,
     '--tool-right-bottom-height': geometry.rightBottomHeight,
     '--tool-right-bottom-top': geometry.rightBottomTop,
-    '--tool-right-top-stripe-height': geometry.rightTopStripeHeight,
-    '--tool-right-bottom-stripe-height': geometry.rightBottomStripeHeight,
     '--tool-right-split-handle-height': geometry.rightSplitHandleHeight,
     '--tool-bottom-left-panel-width': geometry.bottomLeftPanelWidth,
     '--tool-bottom-right-panel-width': geometry.bottomRightPanelWidth,
-    '--tool-bottom-left-stripe-width': geometry.bottomLeftStripeWidth,
-    '--tool-bottom-right-stripe-width': geometry.bottomRightStripeWidth,
     '--tool-bottom-split-handle-width': geometry.bottomSplitHandleWidth,
     '--tool-bottom-panel-top': geometry.bottomPanelTop,
   } as CSSProperties & Record<`--tool-${string}`, number>
 }
 
-function orderedTools(tools: readonly UiToolEntry[], layout: UiToolLayout | undefined): UiToolEntry[] {
-  const seen = new Set<string>()
-  const candidates = tools.filter((tool) => {
-    if (seen.has(tool.id) || effectiveToolPlacement(tool, layout) === null) return false
-    seen.add(tool.id)
-    return true
-  })
+function sortByLayoutOrder(candidates: readonly UiToolEntry[], layout: UiToolLayout | undefined): UiToolEntry[] {
   const order = new Map((layout?.order ?? []).map((id, index) => [id, index] as const))
   return candidates
     .map((tool, index) => ({ tool, index, rank: order.get(tool.id) }))
@@ -283,6 +265,23 @@ function orderedTools(tools: readonly UiToolEntry[], layout: UiToolLayout | unde
       return left.index - right.index
     })
     .map(({ tool }) => tool)
+}
+
+function uniqueTools(tools: readonly UiToolEntry[], keep: (tool: UiToolEntry) => boolean): UiToolEntry[] {
+  const seen = new Set<string>()
+  return tools.filter((tool) => {
+    if (seen.has(tool.id) || !keep(tool)) return false
+    seen.add(tool.id)
+    return true
+  })
+}
+
+function orderedTools(tools: readonly UiToolEntry[], layout: UiToolLayout | undefined): UiToolEntry[] {
+  return sortByLayoutOrder(uniqueTools(tools, (tool) => effectiveToolPlacement(tool, layout) !== null), layout)
+}
+
+function removedTools(tools: readonly UiToolEntry[], layout: UiToolLayout | undefined): UiToolEntry[] {
+  return sortByLayoutOrder(uniqueTools(tools, (tool) => layout?.placements[tool.id] === 'overflow'), layout)
 }
 
 function toolBadge(entry: UiToolEntry, badges: Record<string, number>, titles: Record<string, string>, inboxCount: number | null) {
@@ -297,33 +296,75 @@ function toolBadge(entry: UiToolEntry, badges: Record<string, number>, titles: R
 }
 
 
-const TOOL_ICON_PATHS: Record<string, string> = {
-  'git-branch': 'M6 3v12a4 4 0 0 0 4 4h2M18 5v3a4 4 0 0 1-4 4H6M6 3a2 2 0 1 0 0 4 2 2 0 0 0 0-4M18 3a2 2 0 1 0 0 4 2 2 0 0 0 0-4M14 17a2 2 0 1 0 0 4 2 2 0 0 0 0-4',
-  'git-pull-request': 'M6 7v10M6 3a2 2 0 1 0 0 4 2 2 0 0 0 0-4M6 17a2 2 0 1 0 0 4 2 2 0 0 0 0-4M14 3h2a3 3 0 0 1 3 3v11M12 5l2-2 2 2M19 17a2 2 0 1 0 0 4 2 2 0 0 0 0-4',
-  inbox: 'M4 4h16l2 13v3H2v-3L4 4M2 14h6l2 3h4l2-3h6',
-  'list-checks': 'm3 5 2 2 3-4M11 5h10M3 12h4M11 12h10M3 19h4M11 19h10',
-  bot: 'M5 7h14v13H5V7M12 3v4M2 12h3M19 12h3M8 12h1M15 12h1M8 17h8',
-  workflow: 'M3 3h6v6H3V3M15 15h6v6h-6v-6M6 9v6a3 3 0 0 0 3 3h6M9 6h6a3 3 0 0 1 3 3v6',
-  smartphone: 'M7 2h10v20H7V2M11 18h2',
-  files: 'M8 3h8l4 4v14H8V3M16 3v5h4M4 7v14',
-  check: 'm4 12 5 5L20 6',
-  'message-circle': 'M21 11a9 9 0 0 1-13 8l-6 3 2-6A9 9 0 1 1 21 11',
-  info: 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18M12 10v7M12 7v1',
-  archive: 'M3 3h18v5H3V3M5 8v13h14V8M9 12h6',
-  'book-open': 'M12 5c-3-2-7-2-10-1v16c3-1 7-1 10 1 3-2 7-2 10-1V4c-3-1-7-1-10 1v16',
-  terminal: 'M3 4h18v16H3V4m4 4 4 4-4 4M13 16h4',
-  command: 'M8 8h8v8H8V5a3 3 0 1 0-3 3h14a3 3 0 1 0-3-3v14a3 3 0 1 0 3-3H5a3 3 0 1 0 3 3V8',
-  server: 'M3 5h18v6H3V5M3 13h18v6H3v-6M7 8h.01M7 16h.01M11 8h6M11 16h6',
-  'panel-left': 'M3 4h18v16H3V4M9 4v16',
-  'panel-right': 'M3 4h18v16H3V4M15 4v16',
-  activity: 'M2 12h5l3-9 4 18 3-9h5'
+const CHORD_GLYPHS: Record<string, string> = { mod: '⌘', ctrl: '⌃', alt: '⌥', shift: '⇧' }
+
+/** A canonical chord such as `mod+shift+g` as the platform shows it, here `⌘⇧G`. */
+export function formatChord(chord: string): string {
+  return chord
+    .split('+')
+    .map((part) => CHORD_GLYPHS[part] ?? (part.length === 1 || /^f\d+$/.test(part) ? part.toUpperCase() : `${part.slice(0, 1).toUpperCase()}${part.slice(1)}`))
+    .join('')
 }
 
-function ToolIcon({ tool }: { tool: UiToolEntry }) {
-  const path = TOOL_ICON_PATHS[tool.icon]
-  return path
-    ? <svg className="tool-shell__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={path} /></svg>
-    : <span aria-hidden="true">{tool.title.slice(0, 1)}</span>
+/** The shortcut of the first active binding aimed at the tool or one of its contribution IDs, or null. */
+export function toolShortcut(tool: UiToolEntry, keybindings: readonly UiKeybinding[]): string | null {
+  const targets = new Set([tool.id, ...(tool.contributionId === null ? [] : [tool.contributionId]), ...tool.aliases])
+  const binding = keybindings.find((candidate) => candidate.status === 'active' && targets.has(candidate.command))
+  return binding ? formatChord(binding.key) : null
+}
+
+/**
+ * The tools a stripe must hide to fit `capacity` rows. Trailing tools of the lower group go first,
+ * then trailing tools of the upper group; a `pinned` tool (one that is open) is never chosen.
+ */
+export function hideTrailingTools({ upper, lower, pinned, capacity }: {
+  upper: readonly string[]
+  lower: readonly string[]
+  pinned: ReadonlySet<string>
+  capacity: number
+}): string[] {
+  let excess = upper.length + lower.length - Math.floor(capacity)
+  const hidden: string[] = []
+  for (const id of [...lower].reverse().concat([...upper].reverse())) {
+    if (excess <= 0) break
+    if (pinned.has(id)) continue
+    hidden.push(id)
+    excess -= 1
+  }
+  return hidden
+}
+
+type StripeSide = 'left' | 'right'
+type StripePosition = 'upper' | 'lower' | 'foot'
+
+const STRIPE_SLOTS: Record<StripeSide, Record<StripePosition, UiToolSlot>> = {
+  left: { upper: 'left-top', lower: 'left-bottom', foot: 'bottom-left' },
+  right: { upper: 'right-top', lower: 'right-bottom', foot: 'bottom-right' }
+}
+const STRIPE_POSITIONS: readonly StripePosition[] = ['upper', 'lower', 'foot']
+const STRIPE_LABELS: Record<StripeSide, string> = { left: 'Left tools', right: 'Right tools' }
+
+/**
+ * How many tools the stripe's upper and lower groups can show: those showing now plus the whole
+ * rows left over in the spacer, or fewer when the stripe overflows. Null while the stripe has no
+ * measurable size, so a hidden or unlaid-out stripe never hides anything.
+ */
+function stripeCapacity(nav: HTMLElement, pitchCache: { current: number }): number | null {
+  const group = nav.querySelector<HTMLElement>('.tool-shell__group')
+  const spacer = nav.querySelector<HTMLElement>('.tool-shell__spacer')
+  const rowGap = group ? positive(Number.parseFloat(getComputedStyle(group).rowGap)) : 0
+  const toolHeight = nav.querySelector<HTMLElement>('.tool-shell__tool')?.getBoundingClientRect().height ?? 0
+  if (toolHeight > 0) pitchCache.current = toolHeight + rowGap
+  const pitch = pitchCache.current
+  if (pitch <= 0 || !spacer || nav.clientHeight <= 0) return null
+  const shown = nav.querySelectorAll('.tool-shell__group--upper .tool-shell__tool, .tool-shell__group--lower .tool-shell__tool').length
+  const overflow = Math.max(0, nav.scrollHeight - nav.clientHeight)
+  const slack = spacer.getBoundingClientRect().height - overflow
+  return shown + Math.floor(slack / pitch)
+}
+
+function sameIds(left: readonly string[], right: readonly string[]): boolean {
+  return left.length === right.length && left.every((id, index) => id === right[index])
 }
 
 function ToolItem({
@@ -351,19 +392,22 @@ function ToolItem({
   dragging: { current: string | null }
   onOpen: (id: string) => void
   onClose: (slot: UiToolSlot) => void
-  onMove: (id: string, slot: UiToolSlot) => void
+  onMove: (id: string, placement: UiToolPlacement) => void
 }) {
   const button = useRef<HTMLButtonElement>(null)
   const provider = useRef<HTMLDivElement>(null)
   const [menuPosition, setMenuPosition] = useState<{ x: number; y: number } | null>(null)
   const menuWasOpen = useRef(false)
   const closeMenu = useCallback(() => setMenuPosition(null), [])
-  const menuItems = useMemo<ContextMenuItem[]>(() => UI_TOOL_SLOTS.map((destination) => ({
-    id: destination,
-    label: SLOT_LABELS[destination],
-    enabled: destination !== placement,
-    onSelect: () => onMove(tool.id, destination)
-  })), [onMove, placement, tool.id])
+  const menuItems = useMemo<ContextMenuItem[]>(() => [
+    ...UI_TOOL_SLOTS.map((destination) => ({
+      id: destination,
+      label: SLOT_LABELS[destination],
+      enabled: destination !== placement,
+      onSelect: () => onMove(tool.id, destination)
+    })),
+    { id: 'overflow', label: 'Remove from stripe', separatorBefore: true, onSelect: () => onMove(tool.id, 'overflow') }
+  ], [onMove, placement, tool.id])
 
   useLayoutEffect(() => {
     if (menuPosition) {
@@ -387,13 +431,12 @@ function ToolItem({
   const handleDragEnd = () => { dragging.current = null }
 
   return (
-    <div className="tool-shell__tool">
+    <div className="tool-shell__tool" data-selected={selected}>
       {activityItemId
         ? (
           <div
             ref={provider}
             className="tool-shell__tool-provider"
-            data-selected={selected}
             draggable
             onDragStart={handleDragStart}
             onDragEnd={handleDragEnd}
@@ -408,6 +451,7 @@ function ToolItem({
               setMenuPosition({ x: bounds.left, y: bounds.bottom })
             }}
           >
+            <ToolIcon name={tool.icon} hue={tool.hue} />
             <PluginSlot id={activityItemId} />
           </div>
         )
@@ -435,7 +479,7 @@ function ToolItem({
             }}
             onClick={() => selected ? onClose(slot) : onOpen(tool.id)}
           >
-            <ToolIcon tool={tool} />
+            <ToolIcon name={tool.icon} hue={tool.hue} />
           </IconButton>
         )}
       {!activityItemId && badge && <Badge tone="needs-you" label={badge.title}>{badge.count}</Badge>}
@@ -452,11 +496,47 @@ function ToolItem({
   )
 }
 
-function ToolStripe({
+function OverflowButton({ tools, keybindings, onOpen }: {
+  tools: readonly UiToolEntry[]
+  keybindings: readonly UiKeybinding[]
+  onOpen: (id: string) => void
+}) {
+  const [anchor, setAnchor] = useState<HTMLElement | null>(null)
+  const items = useMemo<PopupItem[]>(() => {
+    if (tools.length === 0) return [{ id: 'none', label: 'No hidden tools', enabled: false }]
+    return tools.map((tool) => ({
+      id: tool.id,
+      label: tool.title,
+      lead: <ToolIcon name={tool.icon} hue={tool.hue} />,
+      trailing: toolShortcut(tool, keybindings) ?? undefined,
+      onSelect: () => onOpen(tool.id)
+    }))
+  }, [keybindings, onOpen, tools])
+  const dismiss = useCallback(() => setAnchor(null), [])
+
+  return (
+    <div className="tool-shell__overflow">
+      <IconButton
+        className="tool-shell__overflow-button"
+        label="More tools"
+        title="More tools"
+        aria-haspopup="menu"
+        aria-expanded={anchor !== null}
+        onClick={(event) => setAnchor(anchor === null ? event.currentTarget : null)}
+      >
+        <ControlIcon name="dots-three" />
+      </IconButton>
+      {anchor && <PopupMenu anchor={anchor} items={items} title="More tools" onClose={dismiss} />}
+    </div>
+  )
+}
+
+function StripeGroup({
+  position,
   slot,
   tools,
-  placementById,
   openId,
+  placementById,
   badges,
   badgeTitles,
   inboxCount,
@@ -467,10 +547,11 @@ function ToolStripe({
   onClose,
   onMove
 }: {
+  position: StripePosition
   slot: UiToolSlot
   tools: readonly UiToolEntry[]
-  placementById: ReadonlyMap<string, UiToolSlot>
   openId: string | null
+  placementById: ReadonlyMap<string, UiToolSlot>
   badges: Record<string, number>
   badgeTitles: Record<string, string>
   inboxCount: number | null
@@ -479,8 +560,10 @@ function ToolStripe({
   dragging: { current: string | null }
   onOpen: (id: string) => void
   onClose: (slot: UiToolSlot) => void
-  onMove: (id: string, slot: UiToolSlot) => void
+  onMove: (id: string, placement: UiToolPlacement) => void
 }) {
+  const accepts = (event: ReactDragEvent<HTMLElement>) =>
+    resolveToolDropId(dragging.current, knownIds) !== null && event.dataTransfer.types.includes('application/x-quirky-tool')
   const handleDrop = (event: ReactDragEvent<HTMLElement>) => {
     event.preventDefault()
     const id = resolveToolDropId(dragging.current, knownIds)
@@ -488,50 +571,143 @@ function ToolStripe({
     event.currentTarget.removeAttribute('data-drop-target')
     if (id) onMove(id, slot)
   }
-  const acceptDrag = (event: ReactDragEvent<HTMLElement>) => {
-    const id = resolveToolDropId(dragging.current, knownIds)
-    if (!id || !event.dataTransfer.types.includes('application/x-quirky-tool')) return
-    event.preventDefault()
-    event.dataTransfer.dropEffect = 'move'
-  }
 
   return (
-    <nav
-      className={`tool-shell__stripe tool-shell__stripe--${slot}`}
-      aria-label={`${SLOT_LABELS[slot]} tools`}
-      onDragOver={acceptDrag}
+    <div
+      className={`tool-shell__group tool-shell__group--${position}`}
+      data-slot={slot}
+      onDragOver={(event) => {
+        if (!accepts(event)) return
+        event.preventDefault()
+        event.dataTransfer.dropEffect = 'move'
+      }}
       onDrop={handleDrop}
+      onDragEnter={(event) => {
+        if (accepts(event)) event.currentTarget.setAttribute('data-drop-target', 'true')
+      }}
       onDragLeave={(event) => {
         const nextTarget = event.relatedTarget
         if (!(nextTarget instanceof Node) || !event.currentTarget.contains(nextTarget)) {
           event.currentTarget.removeAttribute('data-drop-target')
         }
       }}
-      onDragEnter={(event) => {
-        if (resolveToolDropId(dragging.current, knownIds) && event.dataTransfer.types.includes('application/x-quirky-tool')) {
-          event.currentTarget.setAttribute('data-drop-target', 'true')
-        }
-      }}
     >
-      <div className="tool-shell__stripe-scroll">
-        {tools.filter((tool) => placementById.get(tool.id) === slot).map((tool) => (
-          <ToolItem
-            key={tool.id}
-            tool={tool}
-            slot={slot}
-            openId={openId}
-            placement={placementById.get(tool.id) ?? slot}
-            badges={badges}
-            badgeTitles={badgeTitles}
-            inboxCount={inboxCount}
-            activityItemIds={activityItemIds}
-            dragging={dragging}
-            onOpen={onOpen}
-            onClose={onClose}
-            onMove={onMove}
-          />
-        ))}
-      </div>
+      {tools.map((tool) => (
+        <ToolItem
+          key={tool.id}
+          tool={tool}
+          slot={slot}
+          openId={openId}
+          placement={placementById.get(tool.id) ?? slot}
+          badges={badges}
+          badgeTitles={badgeTitles}
+          inboxCount={inboxCount}
+          activityItemIds={activityItemIds}
+          dragging={dragging}
+          onOpen={onOpen}
+          onClose={onClose}
+          onMove={onMove}
+        />
+      ))}
+    </div>
+  )
+}
+
+function ToolStripe({
+  side,
+  tools,
+  placementById,
+  open,
+  hidden,
+  overflowTools,
+  keybindings,
+  badges,
+  badgeTitles,
+  inboxCount,
+  activityItemIds,
+  knownIds,
+  dragging,
+  onHiddenChange,
+  onOpen,
+  onClose,
+  onMove
+}: {
+  side: StripeSide
+  tools: readonly UiToolEntry[]
+  placementById: ReadonlyMap<string, UiToolSlot>
+  open: UiToolLayout['open'] | undefined
+  hidden: readonly string[]
+  overflowTools: readonly UiToolEntry[]
+  keybindings: readonly UiKeybinding[]
+  badges: Record<string, number>
+  badgeTitles: Record<string, string>
+  inboxCount: number | null
+  activityItemIds: ReadonlySet<string>
+  knownIds: ReadonlySet<string>
+  dragging: { current: string | null }
+  onHiddenChange: (side: StripeSide, ids: string[]) => void
+  onOpen: (id: string) => void
+  onClose: (slot: UiToolSlot) => void
+  onMove: (id: string, placement: UiToolPlacement) => void
+}) {
+  const nav = useRef<HTMLElement>(null)
+  const pitch = useRef(0)
+  const slots = STRIPE_SLOTS[side]
+  const hiddenIds = new Set(hidden)
+  const inGroup = (position: StripePosition) => tools.filter((tool) => placementById.get(tool.id) === slots[position])
+  const groups = { upper: inGroup('upper'), lower: inGroup('lower'), foot: inGroup('foot') }
+  const pinned = new Set(STRIPE_POSITIONS.flatMap((position) => open?.[slots[position]] ?? []))
+  const signature = [
+    ...STRIPE_POSITIONS.map((position) => groups[position].map((tool) => tool.id).join(',')),
+    [...pinned].sort().join(',')
+  ].join('|')
+  const latest = useRef({ upper: [] as string[], lower: [] as string[], pinned })
+  latest.current = { upper: groups.upper.map((tool) => tool.id), lower: groups.lower.map((tool) => tool.id), pinned }
+
+  useLayoutEffect(() => {
+    const element = nav.current
+    if (!element) return
+    const fit = () => {
+      const capacity = stripeCapacity(element, pitch)
+      onHiddenChange(side, capacity === null ? [] : hideTrailingTools({ ...latest.current, capacity }))
+    }
+    fit()
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(fit)
+    observer?.observe(element)
+    window.addEventListener('resize', fit)
+    return () => {
+      observer?.disconnect()
+      window.removeEventListener('resize', fit)
+    }
+  }, [side, signature, onHiddenChange])
+
+  const group = (position: StripePosition) => (
+    <StripeGroup
+      position={position}
+      slot={slots[position]}
+      tools={groups[position].filter((tool) => !hiddenIds.has(tool.id))}
+      openId={open?.[slots[position]] ?? null}
+      placementById={placementById}
+      badges={badges}
+      badgeTitles={badgeTitles}
+      inboxCount={inboxCount}
+      activityItemIds={activityItemIds}
+      knownIds={knownIds}
+      dragging={dragging}
+      onOpen={onOpen}
+      onClose={onClose}
+      onMove={onMove}
+    />
+  )
+
+  return (
+    <nav ref={nav} className={`tool-shell__stripe tool-shell__stripe--${side}`} aria-label={STRIPE_LABELS[side]}>
+      {group('upper')}
+      <div className="tool-shell__separator" role="separator" aria-orientation="horizontal" />
+      {group('lower')}
+      {side === 'left' && <OverflowButton tools={overflowTools} keybindings={keybindings} onOpen={onOpen} />}
+      <div className="tool-shell__spacer" />
+      {group('foot')}
     </nav>
   )
 }
@@ -643,9 +819,20 @@ export function ToolShell({ geometry, sizes, onResizePreview, onResizeCommit }: 
   const knownIds = new Set(tools.map((tool) => tool.id))
   const openSlots = getToolShellOpenSlots(tools, toolLayout)
   const dragging = useRef<string | null>(null)
-  const move = useCallback((id: string, slot: UiToolSlot) => host.moveTool(id, slot), [host])
+  const [hidden, setHidden] = useState<Record<StripeSide, string[]>>({ left: [], right: [] })
+  const move = useCallback((id: string, placement: UiToolPlacement) => host.moveTool(id, placement), [host])
   const open = useCallback((id: string) => host.openTool(id), [host])
   const close = useCallback((slot: UiToolSlot) => host.closeTool(slot), [host])
+  const updateHidden = useCallback((side: StripeSide, ids: string[]) => {
+    setHidden((current) => (sameIds(current[side], ids) ? current : { ...current, [side]: ids }))
+  }, [])
+  useEffect(() => trackPanelFocus(document), [])
+
+  const hiddenIds = new Set([...hidden.left, ...hidden.right])
+  const overflowTools = uniqueTools(
+    [...removedTools(model?.tools ?? [], toolLayout), ...tools.filter((tool) => hiddenIds.has(tool.id))],
+    () => true
+  )
   const horizontalExtent =
     geometry.leftRailWidth +
     geometry.leftPanelWidth +
@@ -657,8 +844,7 @@ export function ToolShell({ geometry, sizes, onResizePreview, onResizeCommit }: 
   const verticalExtent =
     geometry.centerHeight +
     geometry.bottomPanelHeight +
-    geometry.bottomEdgeHeight +
-    geometry.bottomRailHeight
+    geometry.bottomEdgeHeight
   const leftSplitExtent = Math.max(0, geometry.sideHeight - geometry.leftSplitHandleHeight)
   const rightSplitExtent = Math.max(0, geometry.sideHeight - geometry.rightSplitHandleHeight)
 
@@ -678,19 +864,23 @@ export function ToolShell({ geometry, sizes, onResizePreview, onResizeCommit }: 
 
   return (
     <div className="tool-shell" role="group" aria-label="Tool windows">
-      {UI_TOOL_SLOTS.map((slot) => (
+      {(['left', 'right'] as const).map((side) => (
         <ToolStripe
-          key={slot}
-          slot={slot}
+          key={side}
+          side={side}
           tools={tools}
           placementById={placements}
-          openId={toolLayout?.open[slot] ?? null}
+          open={toolLayout?.open}
+          hidden={hidden[side]}
+          overflowTools={overflowTools}
+          keybindings={model?.keybindings ?? []}
           badges={badges}
           badgeTitles={badgeTitles}
           inboxCount={inboxCount}
           activityItemIds={activityItemIds}
           knownIds={knownIds}
           dragging={dragging}
+          onHiddenChange={updateHidden}
           onOpen={open}
           onClose={close}
           onMove={move}
@@ -737,7 +927,7 @@ export function ToolShell({ geometry, sizes, onResizePreview, onResizeCommit }: 
           label="Resize bottom tool split"
           keyName="bottomSplit"
           value={sizes.bottomSplit}
-          extent={geometry.bottomLeftStripeWidth + geometry.bottomRightStripeWidth}
+          extent={geometry.bottomLeftPanelWidth + geometry.bottomRightPanelWidth}
           direction={1}
           orientation="vertical"
           className="tool-shell__resize--bottom-split"

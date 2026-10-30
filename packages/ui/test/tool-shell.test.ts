@@ -4,7 +4,10 @@ import {
   clampToolResize,
   effectiveToolPlacement,
   fitToolShellGeometry,
+  formatChord,
   getToolShellOpenSlots,
+  hideTrailingTools,
+  toolShortcut,
   resolveToolDropId,
   resizeFromPointerDelta,
   type ToolShellChrome,
@@ -19,9 +22,12 @@ const sizes: UiToolLayout['sizes'] = {
   rightSplit: 0.6,
   bottomSplit: 0.35
 }
+const GAP = 5
+const RAIL = 42
 const chrome: ToolShellChrome = {
-  rail: 40,
+  rail: RAIL,
   splitter: 4,
+  gap: GAP,
   centerMinWidth: 320,
   centerMinHeight: 120
 }
@@ -108,13 +114,49 @@ describe('tool shell geometry and gestures', () => {
     expect(fitted.rightPanelWidth).toBeLessThan(preferences.right)
     expect(fitted.bottomPanelHeight).toBeLessThan(preferences.bottom)
     expect(fitted.leftRailWidth + fitted.leftPanelWidth + fitted.leftEdgeWidth + fitted.centerWidth + fitted.rightEdgeWidth + fitted.rightPanelWidth + fitted.rightRailWidth).toBeLessThanOrEqual(700)
-    expect(fitted.bottomPanelHeight + fitted.bottomRailHeight + fitted.centerHeight).toBeLessThanOrEqual(400)
+    expect(fitted.bottomPanelHeight + fitted.bottomEdgeHeight + fitted.centerHeight).toBeLessThanOrEqual(400)
 
     expect(fitted.leftTopHeight).toBeLessThan(fitted.leftBottomHeight)
     expect(fitted.rightTopHeight).toBeGreaterThan(fitted.rightBottomHeight)
     expect(fitted.leftTopHeight + fitted.leftBottomHeight + fitted.leftSplitHandleHeight).toBeCloseTo(fitted.sideHeight)
     expect(fitted.bottomLeftPanelWidth).toBeLessThan(fitted.bottomRightPanelWidth)
     expect(preferences).toEqual({ ...sizes, left: 1200, right: 1200, bottom: 1000 })
+  })
+
+  test('there is no bottom rail: the center and bottom panel share the full height, split by the card gap', () => {
+    const fitted = fitToolShellGeometry(sizes, { width: 1200, height: 800 }, allOpen, chrome)
+
+    expect('bottomRailHeight' in fitted).toBe(false)
+    expect(fitted.cardGap).toBe(GAP)
+    expect(fitted.bottomEdgeHeight).toBe(GAP)
+    expect(fitted.centerHeight + fitted.bottomEdgeHeight + fitted.bottomPanelHeight).toBe(800)
+    expect(fitted.bottomPanelTop).toBe(fitted.centerHeight + GAP)
+
+    const without = fitToolShellGeometry(sizes, { width: 1200, height: 800 }, { ...allOpen, 'bottom-left': false, 'bottom-right': false }, chrome)
+    expect(without.bottomEdgeHeight).toBe(0)
+    expect(without.centerHeight).toBe(800)
+  })
+
+  test('cards are separated by the gap and the bottom panels span the width between the stripes', () => {
+    const fitted = fitToolShellGeometry(sizes, { width: 1200, height: 800 }, allOpen, chrome)
+
+    expect(fitted.leftRailWidth).toBe(RAIL)
+    expect(fitted.rightRailWidth).toBe(RAIL)
+    expect(fitted.leftEdgeWidth).toBe(GAP)
+    expect(fitted.rightEdgeWidth).toBe(GAP)
+    expect(fitted.leftSplitHandleHeight).toBe(GAP)
+    expect(fitted.rightSplitHandleHeight).toBe(GAP)
+    expect(fitted.bottomSplitHandleWidth).toBe(GAP)
+    expect(fitted.bottomLeftPanelWidth + fitted.bottomSplitHandleWidth + fitted.bottomRightPanelWidth).toBe(1200 - 2 * RAIL)
+    expect(fitted.leftRailWidth + fitted.leftPanelWidth + fitted.leftEdgeWidth + fitted.centerWidth + fitted.rightEdgeWidth + fitted.rightPanelWidth + fitted.rightRailWidth).toBe(1200)
+  })
+
+  test('the center keeps its minimum size however large the saved panels are', () => {
+    const preferences = { ...sizes, left: 1200, right: 1200, bottom: 1000 }
+    const fitted = fitToolShellGeometry(preferences, { width: 900, height: 500 }, allOpen, chrome)
+
+    expect(fitted.centerWidth).toBeGreaterThanOrEqual(chrome.centerMinWidth)
+    expect(fitted.centerHeight).toBeGreaterThanOrEqual(chrome.centerMinHeight)
   })
 
   test('a lone open side slot fills its side while the opposite slot remains independently closed', () => {
@@ -135,17 +177,17 @@ describe('tool shell geometry and gestures', () => {
       'bottom-right': slot === 'bottom-right'
     }
     const fitted = fitToolShellGeometry(preferences, { width: 1200, height: 800 }, open, chrome)
+    const between = 1200 - 2 * RAIL
 
-    expect(fitted.bottomLeftPanelWidth).toBe(slot === 'bottom-left' ? 1200 : 0)
-    expect(fitted.bottomRightPanelWidth).toBe(slot === 'bottom-right' ? 1200 : 0)
+    expect(fitted.bottomLeftPanelWidth).toBe(slot === 'bottom-left' ? between : 0)
+    expect(fitted.bottomRightPanelWidth).toBe(slot === 'bottom-right' ? between : 0)
     expect(fitted.bottomSplitHandleWidth).toBe(0)
-    expect(fitted.bottomLeftStripeWidth + fitted.bottomRightStripeWidth).toBe(1200)
     expect(preferences).toEqual(sizes)
 
     const both = fitToolShellGeometry(preferences, { width: 1200, height: 800 }, allOpen, chrome)
-    expect(both.bottomSplitHandleWidth).toBe(chrome.splitter)
-    expect(both.bottomLeftPanelWidth).toBeCloseTo((1200 - chrome.splitter) * sizes.bottomSplit)
-    expect(both.bottomLeftPanelWidth + both.bottomSplitHandleWidth + both.bottomRightPanelWidth).toBe(1200)
+    expect(both.bottomSplitHandleWidth).toBe(GAP)
+    expect(both.bottomLeftPanelWidth).toBeCloseTo((between - GAP) * sizes.bottomSplit)
+    expect(both.bottomLeftPanelWidth + both.bottomSplitHandleWidth + both.bottomRightPanelWidth).toBe(between)
   })
 
   test('pointer movement uses edge direction and axis extent before applying bounds', () => {
@@ -160,5 +202,61 @@ describe('tool shell geometry and gestures', () => {
     expect(resolveToolDropId('ledger', ids)).toBe('ledger')
     expect(resolveToolDropId(null, ids)).toBeNull()
     expect(resolveToolDropId('external-payload', ids)).toBeNull()
+  })
+
+  describe('stripe overflow', () => {
+    const upper = ['u1', 'u2', 'u3']
+    const lower = ['l1', 'l2', 'l3']
+
+    test('nothing is hidden when every tool fits', () => {
+      expect(hideTrailingTools({ upper, lower, pinned: new Set(), capacity: 6 })).toEqual([])
+      expect(hideTrailingTools({ upper, lower, pinned: new Set(), capacity: 9 })).toEqual([])
+    })
+
+    test('trailing tools of the lower group go first, from the end', () => {
+      expect(hideTrailingTools({ upper, lower, pinned: new Set(), capacity: 4 })).toEqual(['l3', 'l2'])
+    })
+
+    test('the upper group gives up its trailing tools only after the lower group is empty', () => {
+      expect(hideTrailingTools({ upper, lower, pinned: new Set(), capacity: 2 })).toEqual(['l3', 'l2', 'l1', 'u3'])
+    })
+
+    test('an open tool is never hidden, so the next trailing tool goes instead', () => {
+      expect(hideTrailingTools({ upper, lower, pinned: new Set(['l3']), capacity: 5 })).toEqual(['l2'])
+      expect(hideTrailingTools({ upper, lower, pinned: new Set(['l1', 'l2', 'l3', 'u3']), capacity: 4 })).toEqual(['u2', 'u1'])
+    })
+
+    test('when only open tools remain, the rest stay visible even over capacity', () => {
+      expect(hideTrailingTools({ upper, lower, pinned: new Set([...upper, ...lower]), capacity: 0 })).toEqual([])
+    })
+
+    test('a capacity below zero hides every tool that is not open', () => {
+      expect(hideTrailingTools({ upper: ['a'], lower: ['b'], pinned: new Set(['a']), capacity: -3 })).toEqual(['b'])
+    })
+  })
+
+  describe('shortcuts', () => {
+    const binding = (command: string, key: string, status: 'active' | 'shadowed' = 'active') => ({
+      id: `${command}-${key}`,
+      plugin: 'acme',
+      key,
+      command,
+      status
+    })
+
+    test('chords are written the way the platform shows them', () => {
+      expect(formatChord('mod+shift+g')).toBe('⌘⇧G')
+      expect(formatChord('ctrl+alt+1')).toBe('⌃⌥1')
+      expect(formatChord('f7')).toBe('F7')
+    })
+
+    test('a tool shows the chord of an active binding aimed at it, and never an invented one', () => {
+      const changes: UiToolEntry = { ...tool('panel:acme/changes', 'right-top'), aliases: ['activity-item:acme/changes'] }
+      expect(toolShortcut(changes, [binding('panel:acme/changes', 'mod+shift+g')])).toBe('⌘⇧G')
+      expect(toolShortcut(changes, [binding('activity-item:acme/changes', 'f7')])).toBe('F7')
+      expect(toolShortcut(changes, [binding('command:acme/other', 'mod+k')])).toBeNull()
+      expect(toolShortcut(changes, [binding('panel:acme/changes', 'mod+k', 'shadowed')])).toBeNull()
+      expect(toolShortcut(changes, [])).toBeNull()
+    })
   })
 })
