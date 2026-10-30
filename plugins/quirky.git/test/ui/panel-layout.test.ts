@@ -144,8 +144,9 @@ describe('SC-8: the panel layout', () => {
     const { element, unmount } = await open()
     try {
       const row = rowOf(element, path, section)!
-      expect(q(row, '[role="img"]')?.getAttribute('aria-label')).toBe(`Git status ${status}`)
-      expect(q(row, '[aria-label^="Status:"]')).toBeNull()
+      const container = row.parentElement!
+      expect(q(container, '[aria-label^="Git status"]')?.getAttribute('aria-label')).toBe(`Git status ${status}`)
+      expect(q(container, '[aria-label^="Status:"]')).toBeNull()
     } finally {
       unmount()
     }

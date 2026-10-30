@@ -14,3 +14,5 @@
 @import './tasks-detail.css';
 @import './automations.css';
 @import './worktree-tree.css';
+@import './git-rows.css';
+@import './ledger-rows.css';

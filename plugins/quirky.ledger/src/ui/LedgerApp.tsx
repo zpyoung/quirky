@@ -846,17 +846,17 @@ export function LedgerApp({
     const currentSelection = { id: entry.id, revision: entry.revision }
     const checked = selectedKeys.has(selectionKey(currentSelection))
     return (
-      <li className="ledger-entry-row" key={entry.id} data-entry-id={entry.id} style={ledgerStyles.row}>
-        <div className="ledger-row-main" style={ledgerStyles.rowMain}>
+      <li className="ledger-entry-row" key={entry.id} data-entry-id={entry.id} style={ledgerStyles.entryRow}>
+        <div className="ledger-row-main" style={ledgerStyles.entryMain}>
           {mode === 'page' && <label className="ledger-check-row" style={ledgerStyles.check}>
             <input type="checkbox" aria-label={`Select ${entry.id} revision ${entry.revision}`} checked={checked} style={ledgerStyles.checkbox} onChange={() => toggleSelected(entry)} />
           </label>}
-          <Button type="button" variant="secondary" className="ledger-row-title" style={ledgerStyles.rowTitle} aria-label={`Show details: ${entry.id}`} onClick={() => { setActionMessage(''); void openDetail(entry) }}>
+          <Button type="button" variant="secondary" className="ledger-row-title" style={ledgerStyles.entryTitle} aria-label={`Show details: ${entry.id}`} onClick={() => { setActionMessage(''); void openDetail(entry) }}>
             <code>{entry.id}</code> · <Badge>{TYPE_LABELS[entry.type]}</Badge> · <Badge>{entry.state}</Badge>{entry.reviewed && <Badge tone="working">reviewed</Badge>} · {entryTitle(entry)}
           </Button>
           {mode === 'panel' && scope !== 'worktree' && workspaceId && entry.origin.workspaceId === workspaceId && <Badge>Filed here</Badge>}
         </div>
-        <div className="ledger-row-actions" style={ledgerStyles.actions}>
+        <div className="ledger-row-actions" style={ledgerStyles.entryActions}>
           <Button type="button" aria-label={`Edit ${entry.id}`} onClick={() => setForm({ entry })}>Edit {entry.id}</Button>
           <Button type="button" aria-label={`Review ${entry.id}`} disabled={entry.reviewed || actionBusy} onClick={() => void perRowReview(entry)}>Review {entry.id}</Button>
           <Button type="button" variant="destructive" aria-label={`Delete ${entry.id}`} onClick={() => beginDelete([entry])}>Delete {entry.id}</Button>
