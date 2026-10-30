@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { EmptyState, IconButton, ListRow, ToolPanelFrame } from '@quirky/ui'
+import { Button, EmptyState, IconButton, ListRow, ToolPanelFrame } from '@quirky/ui'
 import type { UiPluginContext } from '@quirky/protocol'
 
 // inlined: plugins can't import each other
@@ -140,7 +140,7 @@ export function SessionsPanel({ context, report }: Props) {
             >
               ✕
             </IconButton>
-            <IconButton label="Restart terminal host" title="Restart terminal host" onClick={() => void restart()}>⟳</IconButton>
+            <Button aria-label="Restart terminal host" title="Restart terminal host" onClick={() => void restart()}>Restart host</Button>
           </span>
         }
       >

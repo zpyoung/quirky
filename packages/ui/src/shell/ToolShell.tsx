@@ -191,8 +191,8 @@ export function fitToolShellGeometry(
   const bottomUsableWidth = Math.max(0, width - bottomSplitHandleWidth)
   const stripeLeftWidth = bottomUsableWidth * bottomSplit
   const stripeRightWidth = bottomUsableWidth - stripeLeftWidth
-  const bottomLeftPanelWidth = bottomLeftOpen ? stripeLeftWidth : 0
-  const bottomRightPanelWidth = bottomRightOpen ? stripeRightWidth : 0
+  const bottomLeftPanelWidth = bottomLeftOpen ? (bottomRightOpen ? stripeLeftWidth : width) : 0
+  const bottomRightPanelWidth = bottomRightOpen ? (bottomLeftOpen ? stripeRightWidth : width) : 0
   const bottomPanelTop = sideHeight + bottomEdgeHeight
 
   return {
