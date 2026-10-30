@@ -77,7 +77,6 @@
   gap: var(--ui-space-6);
   max-width: calc(var(--ui-space-24) * 9);
   padding: var(--ui-space-4) var(--ui-space-6) var(--ui-space-4) var(--ui-space-12);
-  border-inline-end: var(--ui-border-width) solid var(--ui-border);
   color: var(--ui-muted);
   white-space: nowrap;
   cursor: pointer;
