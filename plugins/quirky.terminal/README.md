@@ -16,7 +16,7 @@ Visible panes load bounded image and font-ligature renderers. Images support SIX
 
 The group menu offers New Markdown, Open Markdown and Open File in Editor through the public editor owner. The picker captures the destination group, including a non-active split. New Markdown's initial buffer open uses that same group; it does not create an extra document tab in the previously active group. Document save, close and dirty-buffer behavior remain editor-owned.
 
-In a horizontally scrollable group, changing the selected tab's title scrolls it back into view. Renaming an open file does not require selecting another tab to reveal its Close control.
+In a horizontally scrollable group, resizing the tab strip or changing the selected tab's title scrolls it back into view. Narrowing the window or renaming an open file does not require selecting another tab to reveal its Close control. Manual scrolling still lets you browse other tabs without changing the selection.
 
 Floating documents use the editor-owned profile notes directory, resolved explicitly by `quirky.editor/documentRoot({worktree:"floating"})`. This does not grant access to HOME or arbitrary files. Markdown, editor and Browser tabs preserve the captured floating group and use their existing public owners and close/resource leases.
 

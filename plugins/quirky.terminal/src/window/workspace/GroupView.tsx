@@ -24,7 +24,7 @@ function TabScrollIcon({ direction }: { direction: 'left' | 'right' }) {
   )
 }
 
-function TabItem({ controller, state, group, tab, index, others, now, overflow }: Common & { group: Group; tab: Tab; index: number; others: Tab[]; now: number; overflow: boolean }) {
+function TabItem({ controller, state, group, tab, index, others, now, overflow, viewportWidth }: Common & { group: Group; tab: Tab; index: number; others: Tab[]; now: number; overflow: boolean; viewportWidth: number }) {
   const ws = state.workspace!
   const selected = group.activeTab === tab.id
   const terminal = isViewTab(tab) ? null : tab
@@ -37,7 +37,7 @@ function TabItem({ controller, state, group, tab, index, others, now, overflow }
   // macOS hides the strip's scrollbar, so a selected tab past the edge would otherwise stay out of sight
   useEffect(() => {
     if (selected) element.current?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' })
-  }, [selected, title, overflow])
+  }, [selected, title, overflow, viewportWidth])
   const renaming = state.rename?.kind === 'tab' && state.rename.id === tab.id
   const drag = state.tabDrag
   const mark = drag?.over?.kind === 'strip' && drag.over.group === group.id && others[drag.over.index]?.id === tab.id
@@ -193,7 +193,7 @@ function GroupView({ controller, state, group }: Common & { group: Group }) {
   const body = useRef<HTMLDivElement>(null)
   const tabNavigation = useRef<HTMLDivElement>(null)
   const tabViewport = useRef<HTMLDivElement>(null)
-  const [tabScroll, setTabScroll] = useState({ overflow: false, atStart: true, atEnd: true })
+  const [tabScroll, setTabScroll] = useState({ overflow: false, atStart: true, atEnd: true, viewportWidth: 0 })
   const updateTabScroll = useCallback(() => {
     const navigation = tabNavigation.current
     const viewport = tabViewport.current
@@ -201,9 +201,9 @@ function GroupView({ controller, state, group }: Common & { group: Group }) {
     const overflow = viewport.scrollWidth > navigation.clientWidth
     const maxScroll = Math.max(0, viewport.scrollWidth - viewport.clientWidth)
     if (viewport.scrollLeft > maxScroll) viewport.scrollLeft = maxScroll
-    const next = { overflow, atStart: viewport.scrollLeft <= 0, atEnd: viewport.scrollLeft >= maxScroll - 1 }
+    const next = { overflow, atStart: viewport.scrollLeft <= 0, atEnd: viewport.scrollLeft >= maxScroll - 1, viewportWidth: viewport.clientWidth }
     setTabScroll((current) =>
-      current.overflow === next.overflow && current.atStart === next.atStart && current.atEnd === next.atEnd ? current : next
+      current.overflow === next.overflow && current.atStart === next.atStart && current.atEnd === next.atEnd && current.viewportWidth === next.viewportWidth ? current : next
     )
   }, [])
   useLayoutEffect(() => {
@@ -286,7 +286,7 @@ function GroupView({ controller, state, group }: Common & { group: Group }) {
           ) : null}
           <div className="qt-tabs" ref={tabViewport} role="tablist">
             {group.tabs.map((entry, index) => (
-              <TabItem key={entry.id} controller={controller} state={state} group={group} tab={entry} index={index} others={others} now={now} overflow={tabScroll.overflow} />
+              <TabItem key={entry.id} controller={controller} state={state} group={group} tab={entry} index={index} others={others} now={now} overflow={tabScroll.overflow} viewportWidth={tabScroll.viewportWidth} />
             ))}
           </div>
           {tabScroll.overflow ? (
