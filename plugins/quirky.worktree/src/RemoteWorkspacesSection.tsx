@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { UiPluginContext } from '@quirky/protocol'
+import { Badge, Button, EmptyState, TextField } from '@quirky/ui'
 import { isRecord as record } from './loop-status'
 import { currentWindowId } from './actions'
 
@@ -95,35 +96,48 @@ export function RemoteWorkspacesSection({ context }: { context: UiPluginContext 
     await context.call('quirky.worktree/remoteNavigate', { workspace, window: await currentWindowId(context) })
   }
 
-  return <section aria-label="Remote workspaces" className="worktrees">
-    <button type="button" disabled={busy} onClick={() => context.openView('view:quirky.worktree/environments')}>VM environments</button>
-    <form onSubmit={(event) => { event.preventDefault(); void run(register) }}>
-      <label>Saved owner runtime
-        <input aria-label="Saved owner runtime" value={runtime} disabled={busy} onChange={(event) => setRuntime(event.currentTarget.value)} placeholder="runtime ID or name" />
-      </label>
-      <label className="check-row">
+  return <section aria-label="Remote workspaces" className="ui-panel-content">
+    <Button type="button" disabled={busy} onClick={() => context.openView('view:quirky.worktree/environments')}>VM environments</Button>
+    <form className="ui-stack" onSubmit={(event) => { event.preventDefault(); void run(register) }}>
+      <TextField label="Saved owner runtime" value={runtime} disabled={busy} onChange={(event) => setRuntime(event.currentTarget.value)} placeholder="runtime ID or name" />
+      <label className="ui-checkbox-label">
         <input type="checkbox" disabled={busy} checked={replace} onChange={(event) => setReplace(event.currentTarget.checked)} />
         <span>Replace a changed owner identity or grant</span>
       </label>
-      <button type="submit" disabled={busy || runtime.trim() === ''}>Register host</button>
+      <Button type="submit" variant="primary" disabled={busy || runtime.trim() === ''}>Register host</Button>
     </form>
-    {error && <p role="alert">{error}</p>}
-    {hosts.length === 0 && <p>No owner hosts registered.</p>}
-    {hosts.map((host) => <section key={host.id} aria-label={host.name}>
-      <strong>{host.name}</strong> <span>{host.connected ? 'Connected' : 'Unavailable'}</span>
-      <button type="button" disabled={busy} onClick={() => { void run(async () => { await context.call('quirky.worktree/remoteRefresh', { host: host.id }) }) }}>Refresh</button>
-      {!host.connected && <button type="button" disabled={busy} onClick={() => { void run(async () => {
-        const accepted = await context.confirm({ title: 'Re-register owner host?', body: 'Accept the current authenticated host generation. Old workspace selections remain invalid.', confirmLabel: 'Re-register' })
-        if (!accepted) return
-        const registered = await context.call('quirky.worktree/remoteHostRegister', { runtime: host.runtimeId, replace: true })
-        if (!record(registered) || typeof registered.id !== 'string') throw new Error('Invalid owner registration.')
-        await context.call('quirky.worktree/remoteRefresh', { host: registered.id })
-      }) }}>Re-register</button>}
-      {host.error && <p role="status">{host.error}</p>}
-      <ul>{workspaces.filter((workspace) => workspace.hostId === host.id).map((workspace) => <li key={workspace.id}>
-        <button type="button" disabled={busy || !host.connected || !workspace.connected} onClick={() => { void run(() => navigate(workspace.id)) }}>{workspace.name}</button>
-        {!workspace.connected && <span> Unavailable</span>}
-      </li>)}</ul>
-    </section>)}
+    {error && <p className="ui-error-text" role="alert">{error}</p>}
+    {hosts.length === 0 ? <EmptyState message="No owner hosts registered." /> : hosts.map((host) => {
+      const hostWorkspaces = workspaces.filter((workspace) => workspace.hostId === host.id)
+      return <section key={host.id} aria-label={host.name} className="ui-stack">
+        <div className="ui-cluster">
+          <strong className="ui-text-mono" title={host.name}>{host.name}</strong>
+          <Badge tone={host.connected ? 'working' : 'needs-you'}>{host.connected ? 'Connected' : 'Unavailable'}</Badge>
+          <Button type="button" disabled={busy} onClick={() => { void run(async () => { await context.call('quirky.worktree/remoteRefresh', { host: host.id }) }) }}>Refresh</Button>
+          {!host.connected && <Button type="button" disabled={busy} onClick={() => { void run(async () => {
+            const accepted = await context.confirm({ title: 'Re-register owner host?', body: 'Accept the current authenticated host generation. Old workspace selections remain invalid.', confirmLabel: 'Re-register' })
+            if (!accepted) return
+            const registered = await context.call('quirky.worktree/remoteHostRegister', { runtime: host.runtimeId, replace: true })
+            if (!record(registered) || typeof registered.id !== 'string') throw new Error('Invalid owner registration.')
+            await context.call('quirky.worktree/remoteRefresh', { host: registered.id })
+          }) }}>Re-register</Button>}
+        </div>
+        {host.error && <p role="status" className="ui-error-text">{host.error}</p>}
+        {hostWorkspaces.length > 0 && (
+          <div className="ui-option-list" role="group" aria-label={`Workspaces on ${host.name}`}>
+            {hostWorkspaces.map((workspace) => <Button
+              key={workspace.id}
+              type="button"
+              title={workspace.name}
+              disabled={busy || !host.connected || !workspace.connected}
+              onClick={() => { void run(() => navigate(workspace.id)) }}
+            >
+              <span>{workspace.name}</span>
+              {!workspace.connected && <Badge tone="needs-you">Unavailable</Badge>}
+            </Button>)}
+          </div>
+        )}
+      </section>
+    })}
   </section>
 }
