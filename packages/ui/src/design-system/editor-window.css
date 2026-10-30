@@ -667,19 +667,14 @@
   width: 100%;
 }
 
-.qe-explorer-toolbar {
+.qe-explorer-location {
   align-items: center;
-  background: var(--ui-surface);
   border-bottom: var(--ui-border-width) solid var(--ui-border);
   display: flex;
   flex: 0 0 auto;
   flex-wrap: wrap;
   gap: var(--ui-space-4);
   padding: var(--ui-space-8);
-}
-
-.qe-explorer-toolbar .ui-button {
-  flex: 0 0 auto;
 }
 
 .qe-explorer select.qe-explorer-worktree {
@@ -787,7 +782,16 @@
 
 .qe-explorer-row.selected > .ui-list-row {
   background: var(--ui-selected);
-  border-color: var(--ui-accent);
+}
+
+[data-panel-focused] .qe-explorer-row.selected > .ui-list-row {
+  background: var(--ui-accent);
+  color: var(--ui-rail);
+}
+
+[data-panel-focused] .qe-explorer-row.selected .qe-explorer-chevron,
+[data-panel-focused] .qe-explorer-row.selected .qe-git-status {
+  color: inherit;
 }
 
 .qe-explorer-row.ignored > .ui-list-row {
