@@ -44,7 +44,7 @@ export type RemoveEnv = ListEnv & {
   removing: Set<string>
   inflight: Map<string, InFlightRemove>
   fail(kind: 'invalid-params' | 'not-found' | 'conflict', message: string, data?: unknown): Error
-  changed(data: { repoId: string; worktreeId: string }): void
+  changed(data: { repoId: string; worktreeId: string; removed?: true }): void
   repos(): Promise<Repo[]>
   resolveRepo(selector: string): Promise<Repo>
   /** The effective hooks of a project as read at `ref`. */
@@ -323,7 +323,7 @@ function dropRow(env: RemoveEnv, target: Worktree): void {
     forgetWorktreeOrigins(env.store, target.id)
     env.store.run('DELETE FROM worktrees WHERE id = ?', target.id)
   })
-  env.changed({ repoId: target.repoId, worktreeId: target.id })
+  env.changed({ repoId: target.repoId, worktreeId: target.id, removed: true })
 }
 
 /** Rechecks the kernel-visible filesystem instance, never only its path-derived row ID. */

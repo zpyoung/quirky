@@ -12,7 +12,7 @@ import {
 } from '@quirky/protocol'
 import { rpcUrl } from '@quirky/protocol/node'
 import type { ClientConn } from '../../src/types'
-import { LayoutService } from '../../src/plugins/layout'
+import { LayoutService, type LayoutServiceOptions } from '../../src/plugins/layout'
 import { Store } from '../../src/store'
 import { makeTempHome, startHarness, waitFor, waitForAsync, type Harness } from '../helpers'
 import { makeTempDir, removeTempDirs, writePlugin } from './fixtures'
@@ -132,6 +132,56 @@ async function start() {
   const harness = await env.start()
   const caller = await harness.connect('cli')
   return { env, harness, caller }
+}
+
+function testWindow(id: number): ClientConn {
+  return {
+    id,
+    role: 'ui',
+    name: `window-${id}`,
+    subscribed: true,
+    closed: false,
+    transport: 'websocket',
+    streams: new Map(),
+    nextStreamId: 1,
+    streamClosers: new Map(),
+    sendText() {},
+    sendBinary() {}
+  }
+}
+
+function makeLayoutService(connections: ClientConn[] = []) {
+  let stored: unknown
+  const sent = new Map(connections.map((conn) => [conn.id, [] as QuirkyEvent[]]))
+  const model: UiModel = {
+    sidebarSections: [],
+    statusBars: [],
+    activityItems: [],
+    panels: [],
+    views: [PAGE, OTHER_PAGE].map((id) => ({ id, kind: 'view', plugin: NOTES, title: id, order: 0, module: null })),
+    overlays: [],
+    commands: [],
+    keybindings: [],
+    settings: [],
+    settingsSections: [],
+    menuItems: [],
+    themes: [],
+    theme: { chosen: 'default', active: 'default' },
+    modules: {}
+  }
+  const options: LayoutServiceOptions = {
+    plugins: { contributions: () => [], addWarning: () => {} } as unknown as LayoutServiceOptions['plugins'],
+    store: {
+      getUiState: () => stored,
+      setUiState: (_key: string, value: unknown) => { stored = value }
+    } as unknown as LayoutServiceOptions['store'],
+    ui: { contributions: () => model },
+    clients: () => connections,
+    broadcast: () => {},
+    broadcastNonWindows: () => {},
+    sendTo: (conn, event) => sent.get(conn.id)?.push(event)
+  }
+  return { service: new LayoutService(options), sent, stored: () => stored }
 }
 
 describe('layout state', () => {
@@ -536,6 +586,87 @@ describe('layout changes', () => {
     })
     const closed = await caller.call('ui.view.close', {})
     expect(closed).toMatchObject({ worktree: null, view: null, viewTabs: [] })
+  })
+
+  test('forgetWorktree removes matching tabs from every window and preserves unrelated layouts', () => {
+    const first = testWindow(1)
+    const second = testWindow(2)
+    const unrelated = testWindow(3)
+    const { service, sent } = makeLayoutService([first, second, unrelated])
+    service.openWindowView(first.id, PAGE, { worktree: 'removed' })
+    service.openWindowView(first.id, OTHER_PAGE, { worktree: 'kept-first' })
+    service.openWindowView(second.id, PAGE, { worktree: 'kept-second' })
+    service.openWindowView(second.id, OTHER_PAGE, { worktree: 'removed' })
+    service.openWindowView(unrelated.id, PAGE, { worktree: 'unrelated' })
+    service.focus('view')
+    for (const events of sent.values()) events.length = 0
+
+    service.forgetWorktree('removed')
+
+    expect(service.windowState(first.id).layout).toMatchObject({
+      view: { id: OTHER_PAGE, input: { worktree: 'kept-first' } },
+      viewTabs: [{ id: OTHER_PAGE, input: { worktree: 'kept-first' } }],
+      worktree: 'kept-first',
+      focus: 'view'
+    })
+    expect(service.windowState(second.id).layout).toMatchObject({
+      view: { id: PAGE, input: { worktree: 'kept-second' } },
+      viewTabs: [{ id: PAGE, input: { worktree: 'kept-second' } }],
+      worktree: 'kept-second',
+      focus: null
+    })
+    expect(service.windowState(unrelated.id).layout).toMatchObject({
+      view: { id: PAGE, input: { worktree: 'unrelated' } },
+      viewTabs: [{ id: PAGE, input: { worktree: 'unrelated' } }],
+      worktree: 'unrelated',
+      focus: 'view'
+    })
+    expect(sent.get(first.id)?.filter((event) => event.type === 'ui.state.changed')).toHaveLength(1)
+    expect(sent.get(second.id)?.filter((event) => event.type === 'ui.state.changed')).toHaveLength(1)
+    expect(sent.get(unrelated.id)).toEqual([])
+  })
+
+  test('forgetWorktree preserves focus in a second window with a surviving active view', () => {
+    const first = testWindow(1)
+    const second = testWindow(2)
+    second.closed = true
+    const { service, sent } = makeLayoutService([first, second])
+    service.openWindowView(first.id, PAGE, { worktree: 'removed' })
+    service.focus('view')
+
+    second.closed = false
+    service.openWindowView(second.id, OTHER_PAGE, { worktree: 'unrelated' })
+    expect(service.windowState(second.id).layout.focus).toBe('view')
+    sent.get(second.id)!.length = 0
+
+    service.forgetWorktree('removed')
+
+    expect(service.state().layout.focus).toBeNull()
+    expect(service.windowState(second.id).layout).toMatchObject({
+      view: { id: OTHER_PAGE, input: { worktree: 'unrelated' } },
+      worktree: 'unrelated',
+      focus: 'view'
+    })
+    expect(sent.get(second.id)?.filter((event) => event.type === 'ui.state.changed')).toEqual([])
+  })
+
+  test('forgetWorktree clears stale selection but preserves an unrelated global view', () => {
+    const { service } = makeLayoutService()
+    service.openView(PAGE, { worktree: 'removed' })
+    service.openView(OTHER_PAGE)
+    expect(service.state().layout).toMatchObject({
+      worktree: 'removed',
+      view: { id: OTHER_PAGE },
+      viewTabs: [{ id: PAGE, input: { worktree: 'removed' } }, { id: OTHER_PAGE }]
+    })
+
+    service.forgetWorktree('removed')
+
+    expect(service.state().layout).toMatchObject({
+      worktree: null,
+      view: { id: OTHER_PAGE },
+      viewTabs: [{ id: OTHER_PAGE }]
+    })
   })
 
   test('view reconciliation follows the revealed view and clears selection when no views remain', async () => {

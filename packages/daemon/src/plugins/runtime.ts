@@ -330,7 +330,17 @@ export function createPluginRuntime(options: PluginRuntimeOptions): PluginRuntim
         },
         emit(event, data) {
           guard()
-          return events.emit(id, event, data)
+          const emitted = events.emit(id, event, data)
+          if (
+            id === 'quirky.worktree' &&
+            (event === 'changed' || event === 'event:quirky.worktree/changed') &&
+            isPlainObject(data) &&
+            data.removed === true &&
+            typeof data.worktreeId === 'string'
+          ) {
+            layout.forgetWorktree(data.worktreeId)
+          }
+          return emitted
         },
         subscribe(listener) {
           guard()

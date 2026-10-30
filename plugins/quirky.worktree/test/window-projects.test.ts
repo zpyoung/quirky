@@ -521,6 +521,54 @@ test('SC-57: canceling a dirty workspace deletion leaves it present', async () =
   await reportedDialog(w, null)
 }, SLOW)
 
+test('SC-57: deleting a selected workspace clears its view and selection', async () => {
+  const w = await boot()
+  const { repo } = await addApi(w)
+  const selected = await created(w.agent, { repo: repo.id, name: 'selected' })
+  await w.win.waitFor(() => card('selected'))
+
+  await click(button(card('selected')!, 'Open selected')!)
+  await w.win.waitFor(async () => {
+    const layout = (await rendererState(w.agent))?.layout
+    return layout?.worktree === selected.id && layout.view?.id === 'view:quirky.session/worktree' ? layout : undefined
+  })
+  expect((await rendererState(w.agent))?.layout).toMatchObject({
+    worktree: selected.id,
+    view: { id: 'view:quirky.session/worktree', input: { worktree: selected.id } }
+  })
+
+  await openCardMenu(w.win, 'selected')
+  await choose(w.win, 'Delete')
+  const dialog = await w.win.waitFor(() => dialogNamed('Delete Workspace'))
+  const worktreeChanges: unknown[] = []
+  w.agent.onEvent((event) => {
+    if (event.type === 'quirky.worktree/changed' && 'data' in event) worktreeChanges.push(event.data)
+  })
+  await w.agent.callAny('events.subscribe', {})
+  await click(button(dialog, 'Delete Workspace')!)
+  await closed(w, 'Delete Workspace')
+  await w.win.waitFor(async () => !(await worktrees(w.agent)).some((worktree) => worktree.id === selected.id))
+  await w.win.waitFor(() => !card('selected'))
+  await w.win.waitFor(() => worktreeChanges.some((data) =>
+    typeof data === 'object' && data !== null &&
+    'worktreeId' in data && data.worktreeId === selected.id &&
+    'removed' in data && data.removed === true
+  ))
+  await w.win.waitFor(async () => {
+    const layout = (await rendererState(w.agent))?.layout
+    return layout !== undefined && layout.worktree !== selected.id && !layout.viewTabs?.some((tab) => {
+      const input = tab.input
+      return typeof input === 'object' && input !== null && 'worktree' in input && input.worktree === selected.id
+    })
+  })
+
+  expect((await rendererState(w.agent))?.layout).toMatchObject({
+    view: null,
+    viewTabs: [],
+    worktree: null
+  })
+}, SLOW)
+
 test('SC-57: a folder workspace can be deleted', async () => {
   const w = await boot()
   const dir = join(scratch(), 'docs')
