@@ -645,9 +645,12 @@ export function ExplorerPanel({ context, report }: { context: UiPluginContext; r
       } else {
         await context.call('quirky.editor/mutate', { worktree, action: 'createFolder', path })
       }
+      await enqueueInteraction({ action: 'reveal', path })
+      await enqueueInteraction({ action: 'select', path })
+      await loadDirectory()
+      await reloadExpandedDirectories()
       setNewItemKind(null)
       setNewItemName('')
-      await loadDirectory()
       refreshEditorState()
     } catch (reason) {
       setError(messageOf(reason))
