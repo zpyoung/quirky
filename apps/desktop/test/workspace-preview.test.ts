@@ -156,7 +156,8 @@ describe('isolated preview claims', () => {
     await expect(rig([preview]).claim({
       viewId: 9,
       owner: 'owner',
-      partition: `persist:quirky-browser-profile_${'c'.repeat(32)}`
+      partition: `persist:quirky-browser-profile_${'c'.repeat(32)}`,
+      userAgent: null
     })).rejects.toThrow('owned sandboxed child')
   })
 

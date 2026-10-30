@@ -528,6 +528,7 @@ class ElectrobunNativeBrowserMount implements NativeBrowserAdapterHandle {
   private documentRevision = 0
   private navigationPending = false
   private labelProxyPort: number | null = null
+  private navigationRequest = 0
   private navigationTarget: string | null = null
   private loadFailed = false
   private readonly pendingEvaluations = new Map<string, PendingNativeBrowserEvaluation>()
@@ -896,7 +897,10 @@ class ElectrobunNativeBrowserMount implements NativeBrowserAdapterHandle {
   private async navigateTo(raw: string): Promise<NativeBrowserState> {
     const target = normalizeUrl(raw)
     this.requireChild()
+    const request = ++this.navigationRequest
     await this.routeLabel(new URL(target))
+    // routing is async, so a newer navigation can overtake this one and must not be overwritten by it
+    if (request !== this.navigationRequest) return { ...this.state }
     const child = this.requireChild()
     this.expectedNavigation = target
     this.navigationStarted = false

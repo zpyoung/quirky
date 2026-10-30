@@ -298,6 +298,9 @@ function requestRig(view: RequestingViewModel, openPopup: (popup: NativeBrowserP
   const handlers = createNativeBrowserHandlers({
     getWindow: () => ({ id: 12, webview: { id: 34 } }),
     getView: (id) => (view.id === id && !view.removed ? view : undefined),
+    sessionProxy: { supported: () => false, set: () => undefined },
+    storage: UNSUPPORTED_STORAGE,
+    defaultUserAgent: () => DEFAULT_USER_AGENT,
     sendPageEvent: ({ viewId, event }) => {
       expect(viewId).toBe(view.id)
       sent.push(event)

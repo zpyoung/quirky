@@ -329,6 +329,43 @@ test('a label URL loads only after its partition routes label hosts to the label
   }
 })
 
+test('a navigation that overtakes a slow label route stays current and the label request still settles', async () => {
+  const element = document.createElement('div')
+  document.body.append(element)
+  const mounted = Promise.withResolvers<GuestView>()
+  const released = Promise.withResolvers<void>()
+  const route = Promise.withResolvers<{ routed: boolean }>()
+  const routing = Promise.withResolvers<void>()
+  const loads: string[] = []
+  announceGuest = mounted.resolve
+  const capability = createNativeBrowserCapability(createElectrobunNativeBrowserAdapter({
+    async claimNativeBrowserView() { return { zoomFactor: 1 } },
+    async setNativeBrowserZoom() { return { zoomFactor: 1 } },
+    async releaseNativeBrowserView() { released.resolve(); return { released: true } },
+    routeNativeBrowserLabels() { routing.resolve(); return route.promise }
+  }))
+  const handle = capability.mount(element, {
+    id: crypto.randomUUID(), url: 'about:blank', zoom: 0,
+    partition: `persist:quirky-browser-profile_${crypto.randomUUID().replaceAll('-', '')}`, onState() {}
+  })
+  const guest = await mounted.promise
+  Object.assign(guest, { loadURL: (url: string) => { loads.push(url) } })
+  try {
+    await handle.request({ action: 'zoom', level: 0 })
+    const label = handle.request({ action: 'navigate', url: 'http://feature-a.quirky.localhost:4100/app' })
+    await routing.promise
+    handle.request({ action: 'navigate', url: 'https://example.test/' }).catch(() => undefined)
+    for (let attempt = 0; attempt < 50 && loads.length === 0; attempt += 1) await Bun.sleep(5)
+    route.resolve({ routed: true })
+    await label
+    expect(loads).toEqual(['https://example.test/'])
+  } finally {
+    handle.dispose()
+    await released.promise
+    element.remove()
+  }
+})
+
 const CLOSED_URL = 'http://127.0.0.1:9/closed'
 const connectionFailure = (url: string) => ({
   url, domain: 'NSURLErrorDomain', code: -1004, description: 'Could not connect to the server.'
@@ -463,6 +500,8 @@ test('a disposed native view stops listening for load failures', async () => {
   expect(guest.guest.listeners.get('load-failed')?.size).toBe(1)
   await guest.cleanup()
   expect(guest.guest.listeners.get('load-failed')?.size ?? 0).toBe(0)
+})
+
 test('page requests route to the owning mount, answer through the claim, and stop after dispose', async () => {
   const element = document.createElement('div')
   document.body.append(element)
@@ -542,6 +581,8 @@ test('a mount without a page request listener declines requests instead of leavi
   handle.dispose()
   await released.promise
   element.remove()
+})
+
 test('the profile store is assigned before the guest view exists', async () => {
   const element = document.createElement('div')
   document.body.append(element)
@@ -565,6 +606,13 @@ test('the profile store is assigned before the guest view exists', async () => {
     expect(guest.getAttribute('partition')).toBe(partition)
     await Bun.sleep(0)
     expect(events).toEqual([`prepare:${partition}:first`, 'guest', 'claim'])
+  } finally {
+    handle.dispose()
+    await released.promise
+    element.remove()
+  }
+})
+
 test('an isolated preview mount asks the SDK for a preview view and claims it with its grant', async () => {
   const element = document.createElement('div')
   document.body.append(element)
@@ -621,6 +669,9 @@ test('a failed store assignment never creates a guest view', async () => {
   } finally {
     handle.dispose()
     element.remove()
+  }
+})
+
 test('the trusted claim carries the requested user agent, or null to keep the engine default', async () => {
   const cleaned = 'Mozilla/5.0 (Macintosh) AppleWebKit/605.1.15 (KHTML, like Gecko)'
   const withAgent = await mountGuest(undefined, cleaned)
