@@ -48,6 +48,12 @@ const MAX_TRANSFER_CHUNK_BYTES = 65536
 const MAX_ACTIVE_TRANSFERS = 4
 const MAX_STAGED_TRANSFER_BYTES = 100 * 1024 * 1024
 const TRANSFER_IDLE_MS = 5 * 60 * 1000
+const PREVIEW_TITLE_SUFFIX = ' (Preview)'
+const MAX_EDITOR_TAB_TITLE_LENGTH = 200
+const editorTabTitle = (name: string, mode: EditorMode): string => mode === 'preview'
+  ? `${name.slice(0, MAX_EDITOR_TAB_TITLE_LENGTH - PREVIEW_TITLE_SUFFIX.length)}${PREVIEW_TITLE_SUFFIX}`
+  : name
+
 const VIEW_KEYS = new Set([
 'selection', 'cursor', 'cursorLine', 'cursorColumn', 'scrollTop', 'scrollLeft', 'scroll', 'zoom', 'scale', 'page', 'position',
 'wordWrap', 'showWhitespace', 'tocVisible', 'markdownTocVisible', 'frontmatterVisible', 'collapsedFiles', 'search', 'find', 'sort', 'filter', 'mode',
@@ -368,7 +374,7 @@ export class EditorDaemon {
       viewId: EDITOR_DOCUMENT_VIEW,
       key: keyValue,
       input: { bufferId: buffer.id, mode },
-      title: buffer.name,
+      title: editorTabTitle(buffer.name, mode),
       reuse,
       ...(replaceablePreview === undefined ? {} : { replace: replaceablePreview.tabId }),
       activate: focus,
@@ -735,7 +741,7 @@ export class EditorDaemon {
             tab: tab.tabId,
             key: tab.key,
             input: { bufferId: params.bufferId, mode: tab.inputMode },
-            title: nextBuffer.name,
+            title: editorTabTitle(nextBuffer.name, tab.inputMode),
             preview: tab.preview
           }))
         }) as { workspace?: TerminalWorkspace }
@@ -1595,7 +1601,7 @@ export class EditorDaemon {
           tab: mapping.tabId,
           key: mapping.key,
           input: { bufferId, mode },
-          title: current.buffer.name,
+          title: editorTabTitle(current.buffer.name, mode),
           preview: false
         }]
       }) as { workspace?: TerminalWorkspace }
@@ -1620,7 +1626,7 @@ export class EditorDaemon {
         tab: tab.tabId,
         key: tab.key,
         input: { bufferId, mode },
-        title: state.buffer.name,
+        title: editorTabTitle(state.buffer.name, mode),
         preview: tab.preview
       }))
     }) as { workspace: TerminalWorkspace }
@@ -1640,7 +1646,7 @@ export class EditorDaemon {
     const workspace = await this.context.call('quirky.terminal/rekeyViewTabs', {
       workspace: `id:${target.worktreeId}`,
       viewId: EDITOR_DOCUMENT_VIEW,
-      changes: [{ tab: target.tabId, key: target.key, input: { bufferId, mode: target.inputMode }, title: state.buffer.name, preview: false }]
+      changes: [{ tab: target.tabId, key: target.key, input: { bufferId, mode: target.inputMode }, title: editorTabTitle(state.buffer.name, target.inputMode), preview: false }]
     }) as { workspace?: TerminalWorkspace }
     if (workspace.workspace !== undefined) this.syncWorkspaceValue(target.worktreeId, workspace.workspace)
     const current = this.requireState(bufferId)
@@ -2276,7 +2282,7 @@ export class EditorDaemon {
             tab: tab.tabId,
             key: tab.key,
             input: { bufferId: previous.id, mode: tab.inputMode },
-            title: state.buffer.name,
+            title: editorTabTitle(state.buffer.name, tab.inputMode),
             preview: tab.preview
           }))
         }) as { workspace?: TerminalWorkspace }
