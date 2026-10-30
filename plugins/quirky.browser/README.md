@@ -102,7 +102,7 @@ quirky browser design format --payload '<payload-json>'
 quirky browser design send --pane <pane-id> --annotations '<annotations-json>' --session <session-id>
 ```
 
-The public UI command `quirky.browser/design` accepts `grab`, `annotate`, `draw`, or `cancel` for the focused Native pane. Native Draw returns the documented SDK capability limit.
+The public UI command `quirky.browser/design` accepts `grab`, `annotate`, `draw`, or `cancel` for the focused Native pane. Native Draw returns the documented SDK capability limit. An optional `pane` argument focuses that mounted Native pane first and runs the action there; an unmounted or Watch pane returns `{ started: false, reason }`.
 
 ## API and command surface
 

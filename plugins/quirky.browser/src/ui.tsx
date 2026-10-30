@@ -100,9 +100,11 @@ function commandHandlers(context: UiPluginContext): Record<string, BrowserComman
   return {
     'new-tab': (args) => openBrowserTab(context, args),
     design: (raw) => {
-      const action = argsOf(raw).action
+      const { action, pane } = argsOf(raw)
       if (!isDesignAction(action)) return { started: false, reason: 'Design action must be grab, annotate, draw, or cancel.' }
-      return runFocusedBrowserDesign(action)
+      if (pane === undefined) return runFocusedBrowserDesign(action)
+      if (typeof pane !== 'string' || pane === '') return { started: false, reason: 'Design pane must be a non-empty pane id.' }
+      return runFocusedBrowserDesign(action, pane)
     },
     'focus-address': () => {
       focusBrowserAddress()
