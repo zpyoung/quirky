@@ -33,9 +33,9 @@ function plutil(args: string[], missingIsEmpty = false): string | null {
   throw new Error(`plutil ${args.join(' ')} failed: ${result.stderr || result.error?.message}`)
 }
 
-if (import.meta.main && process.env.ELECTROBUN_OS === 'macos') {
+// hutch doesn't run hooks as the main module, so import.meta.main would turn this into a silent no-op
+if (process.env.ELECTROBUN_BUILD_DIR && process.env.ELECTROBUN_OS === 'macos') {
   const buildDirectory = process.env.ELECTROBUN_BUILD_DIR
-  if (!buildDirectory) throw new Error('ELECTROBUN_BUILD_DIR is not set')
   const updated = allowLabelHosts(buildDirectory)
   if (updated.length === 0) throw new Error(`no app bundle found in ${buildDirectory}`)
 }
