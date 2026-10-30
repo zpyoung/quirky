@@ -30,10 +30,10 @@ export function CloseRunningDialog({ agent, tabLabel, onCancel, onConfirm }: Pro
       {tabLabel ? <p className="qt-dialog-name">{tabLabel}</p> : null}
       <DontAsk label="Don't ask again for running terminals" checked={dontAsk} onChange={setDontAsk} />
       <div className="ui-dialog__actions qt-dialog-actions">
-        <Button variant="secondary" onClick={onCancel}>
+        <Button variant="secondary" autoFocus onClick={onCancel}>
           Cancel
         </Button>
-        <Button type="button" variant="destructive" autoFocus onClick={() => onConfirm(dontAsk)}>
+        <Button type="button" variant="destructive" onClick={() => onConfirm(dontAsk)}>
           {agent ? 'Stop Agent' : 'Stop and Close'}
         </Button>
       </div>

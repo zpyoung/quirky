@@ -71,6 +71,15 @@ describe('SC-13: closing a tab running a command asks first', () => {
     expect(callsTo(view.fake, 'closeTab')).toEqual([])
   })
 
+  test.each(['Stop sleep in Terminal 1?', 'Stop agent Claude?'])('initial focus cancels rather than confirming %s', async (describe) => {
+    const view = await mount(simpleWorkspace(), { describe })
+    await closeFocused(view)
+    expect(document.activeElement === button(view, 'Cancel')).toBe(true)
+    await click(document.activeElement)
+    expect(dialog(view)).toBeNull()
+    expect(callsTo(view.fake, 'closeTab')).toEqual([])
+  })
+
   test('Escape cancels as well', async () => {
     const view = await mount(simpleWorkspace(), RUNNING)
     await closeFocused(view)
