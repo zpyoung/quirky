@@ -2,7 +2,7 @@ import { expect, test } from 'bun:test'
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
-import { formatDiagnostic, parsePluginConfig, runUiLint, scanSourceContent } from './ui-lint'
+import { formatDiagnostic, parsePluginConfig, runUiLint, scanSourceContent, scanToolLayoutRules, scanToolManifest } from './ui-lint'
 
 function rules(source: string, file: string, options: { plugin?: boolean } = {}) {
   return scanSourceContent(file, source, options).map(({ rule }) => rule)
@@ -233,4 +233,112 @@ test('repository inventory ignores generated artifacts but still enforces tracke
   } finally {
     rmSync(root, { recursive: true, force: true })
   }
+})
+
+const MANIFEST = `{
+  "id": "example",
+  "contributes": {
+    "panel": [
+      { "id": "good", "icon": "git-branch", "hue": "blue" },
+      { "id": "bad", "icon": "nope", "hue": "chartreuse" }
+    ],
+    "sidebar-section": [
+      { "id": "no-fields", "title": "Plain" },
+      { "id": "icon-only", "icon": "robot" },
+      { "id": "hue-only", "hue": "coral" },
+      { "id": "bad-icon", "icon": "server" }
+    ],
+    "activity-item": [{ "id": "act", "icon": "activity", "hue": "mint" }],
+    "command": [{ "id": "cmd", "icon": "not-a-tool-icon", "hue": "nope" }],
+    "view": [{ "id": "view", "icon": "not-a-tool-icon" }]
+  }
+}`
+
+test('ui/tool-icon-hue reports manifest tool icons and hues outside the generated sets with file:line:col', () => {
+  const diagnostics = scanToolManifest('plugins/example/quirky-plugin.json', MANIFEST)
+  expect(diagnostics.map(({ rule }) => rule)).toEqual(Array(4).fill('ui/tool-icon-hue'))
+  expect(diagnostics.map(({ file, line, column }) => `${file}:${line}:${column}`)).toEqual([
+    'plugins/example/quirky-plugin.json:6:30',
+    'plugins/example/quirky-plugin.json:6:45',
+    'plugins/example/quirky-plugin.json:12:35',
+    'plugins/example/quirky-plugin.json:14:46'
+  ])
+  expect(diagnostics[0]!.message).toContain('"nope"')
+  expect(diagnostics[1]!.message).toContain('"chartreuse"')
+  expect(diagnostics[1]!.message).toContain('blue')
+  expect(formatDiagnostic(diagnostics[2]!)).toStartWith('plugins/example/quirky-plugin.json:12:35 ui/tool-icon-hue:')
+})
+
+test('ui/tool-icon-hue accepts manifests with no tool contributions, no icon or hue, or unparsable content', () => {
+  expect(scanToolManifest('m.json', '{ "id": "x" }')).toEqual([])
+  expect(scanToolManifest('m.json', '{ "contributes": { "panel": [{ "id": "a" }] } }')).toEqual([])
+  expect(scanToolManifest('m.json', '{ "contributes": { "panel": "nope" } }')).toEqual([])
+  expect(scanToolManifest('m.json', 'not json {')).toEqual([])
+})
+
+const RULES_SOURCE = `const RULES: { id: string; icon: string; hue?: string }[] = [
+  { id: 'a', title: 'A', icon: 'git-branch' },
+  { id: 'b', title: 'B', icon: 'files', defaultSlot: 'right-top' },
+  { id: 'c', title: 'C', icon: 'robot', hue: 'coral' },
+  { id: 'd', title: 'D', icon: 'pulse', hue: 'chartreuse' }
+]
+const OTHER = [{ icon: 'ignored', hue: 'ignored' }]`
+
+test('ui/tool-icon-hue reads the RULES table, tolerating rows that have no hue yet', () => {
+  const diagnostics = scanToolLayoutRules('packages/daemon/src/plugins/tool-layout.ts', RULES_SOURCE)
+  expect(diagnostics.map(({ line, column, rule }) => [line, column, rule])).toEqual([
+    [3, 32, 'ui/tool-icon-hue'],
+    [5, 46, 'ui/tool-icon-hue']
+  ])
+  expect(diagnostics[0]!.message).toContain('"files"')
+  expect(diagnostics[1]!.message).toContain('"chartreuse"')
+  expect(scanToolLayoutRules('x.ts', 'export const nothing = 1')).toEqual([])
+})
+
+test('root lint checks plugin manifests and the RULES table only while their switches are on', () => {
+  const root = mkdtempSync(join(tmpdir(), 'ui-lint-tool-identity-'))
+  const put = (relativePath: string, content: string) => {
+    const path = join(root, relativePath)
+    mkdirSync(dirname(path), { recursive: true })
+    writeFileSync(path, content)
+  }
+  const run = (options?: { checkToolLayoutRules?: boolean; checkPluginManifests?: boolean }) => {
+    const diagnostics: string[] = []
+    const originalError = console.error
+    console.error = (...values: unknown[]) => diagnostics.push(values.join(' '))
+    try {
+      return { status: runUiLint(root, options), diagnostics }
+    } finally {
+      console.error = originalError
+    }
+  }
+  try {
+    put('packages/ui/src/prose.ts', 'export const title = "Fixture"')
+    put('scripts/ui-lint-plugins.json', '[]')
+    put('plugins/example/quirky-plugin.json', '{ "contributes": { "panel": [{ "id": "a", "icon": "git-branch", "hue": "blue" }] } }')
+    put('packages/daemon/src/plugins/tool-layout.ts', RULES_SOURCE)
+    const rulesOnly = run({ checkToolLayoutRules: true, checkPluginManifests: true })
+    expect(rulesOnly.status).toBe(1)
+    expect(rulesOnly.diagnostics.map((line) => line.split(' ')[0])).toEqual([
+      'packages/daemon/src/plugins/tool-layout.ts:3:32',
+      'packages/daemon/src/plugins/tool-layout.ts:5:46'
+    ])
+    expect(run({ checkToolLayoutRules: false, checkPluginManifests: true })).toEqual({ status: 0, diagnostics: [] })
+
+    put('plugins/example/quirky-plugin.json', MANIFEST)
+    const manifestsOnly = run({ checkToolLayoutRules: false, checkPluginManifests: true })
+    expect(manifestsOnly.status).toBe(1)
+    expect(manifestsOnly.diagnostics).toHaveLength(4)
+    expect(manifestsOnly.diagnostics[0]).toContain('plugins/example/quirky-plugin.json:6:30 ui/tool-icon-hue')
+    expect(run({ checkToolLayoutRules: false, checkPluginManifests: false })).toEqual({ status: 0, diagnostics: [] })
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
+test('generated icon files and the vendored Catppuccin SVGs may hold raw colors', () => {
+  const svg = '<svg><path fill="#cdd6f4" stroke="#89b4fa" d="M0 0"/></svg>'
+  expect(rules(svg, 'packages/ui/src/design-system/icons/catppuccin/mocha/typescript.svg')).toEqual([])
+  expect(rules(svg, 'packages/ui/src/design-system/icons/other.svg')).not.toEqual([])
+  expect(rules("export const x = { fill: '#cdd6f4', width: '13px' }", 'packages/ui/src/design-system/icons/generated-files.ts')).toEqual([])
 })
