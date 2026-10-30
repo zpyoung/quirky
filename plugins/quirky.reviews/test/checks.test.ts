@@ -8,6 +8,7 @@ import type { JsonRecord } from '../src/contracts'
 type ReviewsTestHost = {
   client: QuirkyClient
   worktree: string
+  repoPath: string
   call(name: string, params?: Record<string, unknown>): Promise<unknown>
   writeState(value: unknown): void
   invocations(): { args: string[]; input: string; env: Record<string, string> }[]
@@ -29,6 +30,14 @@ async function boot() {
   const host = await bootReviews(checksGhSource, { branch: 'feature' })
   hosts.push(host)
   return host
+}
+
+const TEST_ORIGIN = 'https://github.com/test-owner/test-repo.git'
+
+function setOrigin(host: Pick<ReviewsTestHost, 'repoPath'>, remote: string | null): void {
+  const args = remote === null ? ['remote', 'remove', 'origin'] : ['remote', 'add', 'origin', remote]
+  const result = Bun.spawnSync(['git', '-C', host.repoPath, ...args], { stdout: 'pipe', stderr: 'pipe' })
+  if (result.exitCode !== 0) throw new Error(`Could not update fixture origin: ${new TextDecoder().decode(result.stderr)}`)
 }
 
 function stateOf(value: unknown): Record<string, unknown> {
@@ -71,6 +80,95 @@ describe('active-workspace checks', () => {
     expect(diagnostics.requiredHostAuthenticated).toBe(false)
     expect(diagnostics.ghAvailable).toBe(true)
   }, 30_000)
+
+  test('a missing origin is neutral, clears stale Checks state, and allows a later normal refresh', async () => {
+    const host = await boot()
+    host.writeState(checksFixtureState())
+    await host.call('checksRefresh', { worktree: host.worktree, force: true })
+
+    const eligible = stateOf(await host.call('state'))
+    expect(asRecord(eligible.lookup).kind).toBe('no-review')
+    expect(asRecord(eligible.eligibility).eligible).toBe(true)
+
+    setOrigin(host, null)
+    const missingOrigin = asRecord(await host.call('checksRefresh', { worktree: host.worktree, force: true }))
+    expect(missingOrigin).toMatchObject({
+      ok: true,
+      worktree: host.worktree,
+      kind: 'unsupported',
+      reason: 'missing_origin'
+    })
+    const unsupported = stateOf(await host.call('state'))
+    expect(unsupported).toMatchObject({
+      loading: false,
+      error: null,
+      lookup: { kind: 'unsupported', reason: 'missing_origin' },
+      eligibility: null,
+      review: null,
+      checks: null,
+      comments: null,
+      conflicts: null,
+      expandedChecks: [],
+      queuedComments: [],
+      commentDraft: '',
+      titleDraft: null,
+      agentDialog: null
+    })
+
+    setOrigin(host, TEST_ORIGIN)
+    host.writeState(checksFixtureState([{
+      ...checksReview(),
+      mergeable: 'CONFLICTING',
+      mergeStateStatus: 'DIRTY'
+    }], { threads: [{ id: 'PRRT_thread_12', commentId: 77, body: 'Please address this.' }] }))
+    const found = asRecord(await host.call('checksRefresh', { worktree: host.worktree }))
+    expect(found).toMatchObject({ ok: true, worktree: host.worktree, kind: 'found', number: 12 })
+
+    await host.call('checksSetTitleDraft', { worktree: host.worktree, number: 12, title: 'Keep only while review is available' })
+    await host.call('checksSetAgentDialog', {
+      surface: 'checks',
+      worktree: host.worktree,
+      number: 12,
+      action: 'fix',
+      prompt: 'Fix the failing check.'
+    })
+    const populated = stateOf(await host.call('state'))
+    expect(populated.review).toMatchObject({ number: 12 })
+    expect(populated.checks).not.toBeNull()
+    expect(populated.comments).not.toBeNull()
+    expect(populated.conflicts).not.toBeNull()
+    expect(populated.titleDraft).toBe('Keep only while review is available')
+    expect(populated.agentDialog).toMatchObject({ action: 'fix', prompt: 'Fix the failing check.' })
+
+    setOrigin(host, null)
+    const missingAgain = asRecord(await host.call('checksRefresh', { worktree: host.worktree, force: true }))
+    expect(missingAgain).toMatchObject({ ok: true, worktree: host.worktree, kind: 'unsupported', reason: 'missing_origin' })
+    const cleared = stateOf(await host.call('state'))
+    expect(cleared.generation).toBeGreaterThan(populated.generation as number)
+    expect(cleared).toMatchObject({
+      loading: false,
+      error: null,
+      lookup: { kind: 'unsupported', reason: 'missing_origin' },
+      eligibility: null,
+      review: null,
+      checks: null,
+      comments: null,
+      conflicts: null,
+      expandedChecks: [],
+      queuedComments: [],
+      commentDraft: '',
+      titleDraft: null,
+      agentDialog: null
+    })
+
+    setOrigin(host, TEST_ORIGIN)
+    const recovered = asRecord(await host.call('checksRefresh', { worktree: host.worktree }))
+    expect(recovered).toMatchObject({ ok: true, worktree: host.worktree, kind: 'found', number: 12 })
+    const restored = stateOf(await host.call('state'))
+    expect(restored.review).toMatchObject({ number: 12 })
+    expect(restored.checks).not.toBeNull()
+    expect(restored.comments).not.toBeNull()
+  }, 60_000)
   test('title drafts and agent dialog edits stay bound to the canonical active review', async () => {
     const host = await boot()
     host.writeState(checksFixtureState([checksReview()]))

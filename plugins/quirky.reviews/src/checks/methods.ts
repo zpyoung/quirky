@@ -354,7 +354,33 @@ function updateIfCurrent(env: ReviewsEnv, worktree: string, generation: number, 
   return ownerIsCurrent(env, worktree, generation)
 }
 
+function errorReason(error: unknown): string | null {
+  const data = isRecord(error) && isRecord(error.data) ? error.data : null
+  return data && typeof data.reason === 'string' ? data.reason : null
+}
+
+function unsupportedMissingOrigin(env: ReviewsEnv, worktree: string, generation: number): JsonRecord {
+  const message = 'Add a GitHub origin remote to this worktree to load its pull request checks.'
+  if (!updateIfCurrent(env, worktree, generation, (checks) => {
+    checks.lookup = { kind: 'unsupported', reason: 'missing_origin', message }
+    checks.eligibility = null
+    checks.review = null
+    checks.checks = null
+    checks.comments = null
+    checks.conflicts = null
+    checks.loading = false
+    checks.error = null
+    checks.expandedChecks = []
+    checks.queuedComments = []
+    checks.commentDraft = ''
+    checks.titleDraft = null
+    if (shouldClearChecksDialog(checks.agentDialog)) checks.agentDialog = null
+    checks.fetchedAt = Date.now()
+  })) return staleResult(worktree)
+  return { ok: true, worktree, kind: 'unsupported', reason: 'missing_origin' }
+}
 function failure(env: ReviewsEnv, worktree: string, generation: number, error: unknown, fallback: string): JsonRecord {
+  if (errorReason(error) === 'missing_origin') return unsupportedMissingOrigin(env, worktree, generation)
   const message = errorMessage(error, fallback)
   updateIfCurrent(env, worktree, generation, (checks) => {
     checks.loading = false
@@ -775,7 +801,8 @@ async function refreshChecks(env: ReviewsEnv, params: Record<string, unknown>, c
     if (eligibilityValue === null) {
       try {
         eligibilityValue = await callEligibility(env, worktree, status.head, status.branch)
-      } catch {
+      } catch (error) {
+        if (errorReason(error) === 'missing_origin') return unsupportedMissingOrigin(env, worktree.id, generation)
         // The unavailable lookup below remains authoritative; failed eligibility is not an empty result.
       }
     }
@@ -916,6 +943,11 @@ async function loadReviewDetails(
     env.call('quirky.hosting/reviewStack', { worktree: worktree.id, number: review.number, prRepo, ...(force ? { noCache: true } : {}) })
   ])
   if (!ownerIsCurrent(env, worktree.id, generation)) return staleResult(worktree.id)
+  if (
+    (checksResult.status === 'rejected' && errorReason(checksResult.reason) === 'missing_origin') ||
+    (commentsResult.status === 'rejected' && errorReason(commentsResult.reason) === 'missing_origin') ||
+    (stackResult.status === 'rejected' && errorReason(stackResult.reason) === 'missing_origin')
+  ) return unsupportedMissingOrigin(env, worktree.id, generation)
   const errors: string[] = []
   let nextChecks: JsonRecord | null = null
   let nextComments: JsonRecord | null = null

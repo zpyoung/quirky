@@ -397,6 +397,42 @@ function detailSurfaceFromChecks(state: ReviewsState): ReviewsState {
   return copy
 }
 
+
+const TEST_ORIGIN = 'https://github.com/test-owner/test-repo.git'
+
+function setOrigin(host: HostingTest, remote: string | null): void {
+  const args = remote === null ? ['remote', 'remove', 'origin'] : ['remote', 'add', 'origin', remote]
+  const result = Bun.spawnSync(['git', '-C', host.repoPath, ...args], { stdout: 'pipe', stderr: 'pipe' })
+  if (result.exitCode !== 0) throw new Error(`Could not update fixture origin: ${new TextDecoder().decode(result.stderr)}`)
+}
+
+test('mounted Checks presents a missing GitHub origin neutrally and recovers when reopened after origin is added', async () => {
+  const { host, ui } = await bootUi(checksGhSource, { branch: 'feature' })
+  host.writeState(checksFixtureState([checksReview(12)]))
+  setOrigin(host, null)
+  const initial = await checksState(host)
+
+  await ui.setOpenTools({ 'right-top': CHECKS_PANEL })
+  const mount = mountChecks(ui, initial, () => checksState(host))
+  await settleUi(ui)
+  await waitUntil(() => mount.element.textContent?.includes('GitHub origin required') === true)
+
+  expect(mount.element.textContent).toContain('GitHub origin required')
+  expect(mount.element.textContent).toContain('Add a GitHub origin remote')
+  expect([...mount.element.querySelectorAll('button')].some((candidate) => candidate.textContent?.trim().startsWith('Retry'))).toBe(false)
+  expect(mount.element.querySelector('[role="alert"]')).toBeNull()
+  expect((await checksState(host)).checks.lookup).toMatchObject({ kind: 'unsupported', reason: 'missing_origin' })
+
+  setOrigin(host, TEST_ORIGIN)
+  await ui.setOpenTools({ 'right-top': null })
+  await settleUi(ui)
+  await ui.setOpenTools({ 'right-top': CHECKS_PANEL })
+  await settleUi(ui)
+  await waitUntil(() => mount.element.textContent?.includes('#12') === true)
+
+  const recovered = await checksState(host)
+  expect(recovered.checks.review).toMatchObject({ number: 12 })
+}, 30_000)
 test('mounted Checks refreshes from an open six-slot tool and withdraws visibility candidates when replaced or closed', async () => {
   const { host, ui } = await bootUi(checksGhSource, { branch: 'feature' })
   host.writeState(checksFixtureState([checksReview(12)]))

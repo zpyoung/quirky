@@ -292,7 +292,8 @@ function pollTarget(state: ReviewsSurfaceProps['state'], worktree: string | null
   const checks = state.checks
   if (!worktree || checks.worktree !== worktree) return null
   const lookup = isRecord(checks.lookup) ? checks.lookup : null
-  if (!lookup || lookup.kind === 'suppressed' || lookup.kind === 'folder' || lookup.kind === 'git-operation' || lookup.kind === 'blocked') return null
+  if (!lookup || lookup.kind === 'suppressed' || lookup.kind === 'folder' || lookup.kind === 'git-operation' ||
+      lookup.kind === 'blocked' || lookup.kind === 'unsupported' && lookup.reason === 'missing_origin') return null
   const git = statusFromLookup(lookup)
   const branch = git && typeof git.branch === 'string' ? git.branch : null
   const localHead = git && typeof git.head === 'string' ? git.head : null
@@ -491,6 +492,12 @@ function selectStatus(state: ReviewsSurfaceProps['state'], activeWorktree: strin
   if (!activeWorktree) return { title: 'No workspace selected', message: 'Select a workspace to view checks.' }
   if (state.checks.worktree !== activeWorktree) return { title: 'Checking pull request status', message: 'Reading the active workspace before using its previous eligibility.' }
   const lookup = isRecord(state.checks.lookup) ? state.checks.lookup : null
+  if (lookup?.kind === 'unsupported' && lookup.reason === 'missing_origin') {
+    return {
+      title: 'GitHub origin required',
+      message: typeof lookup.message === 'string' ? lookup.message : 'Add a GitHub origin remote to this worktree to load its pull request checks.'
+    }
+  }
   if (lookup?.kind === 'folder') return { title: 'Checks unavailable', message: 'Checks require a Git branch and hosted review context.' }
   if (lookup?.kind === 'suppressed') {
     const number = positiveNumber(String(lookup.number ?? ''))
@@ -760,6 +767,7 @@ export function ChecksPanel(props: ReviewsSurfaceProps) {
   const [countdownNow, setCountdownNow] = useState(Date.now())
   const previousPending = useRef<boolean | null>(null)
   const pollController = useRef<ChecksPollingController | null>(null)
+  const panelEntryWorktree = useRef<string | null>(null)
   const pollPolicy = useRef<ChecksPollingPolicy>(createChecksPollingPolicy())
   const dragCleanup = useRef<(() => void) | null>(null)
   const activeWorktree = useMemo(() => layoutWorktree(layout), [layout])
@@ -775,6 +783,7 @@ export function ChecksPanel(props: ReviewsSurfaceProps) {
     else if (!titleEditing) setTitleInput(currentReview.title)
   }, [active?.titleDraft, currentReview?.headRefOid, currentReview?.number])
   const lookup = active && isRecord(active.lookup) ? active.lookup : null
+  const missingOrigin = lookup?.kind === 'unsupported' && lookup.reason === 'missing_origin'
   const eligibility = active && isRecord(active.eligibility) ? active.eligibility : null
   const currentTarget = useMemo(() => pollTarget(state, activeWorktree), [state.checks, activeWorktree])
   const currentTargetRef = useRef<ChecksPollingTarget | null>(currentTarget)
@@ -793,7 +802,17 @@ export function ChecksPanel(props: ReviewsSurfaceProps) {
   }, [])
 
   useEffect(() => {
-    if (!activeWorktree || state.checks.worktree === activeWorktree || !isPanelVisible) return
+    if (!isPanelVisible) {
+      panelEntryWorktree.current = null
+      return
+    }
+    const enteringWorktree = panelEntryWorktree.current !== activeWorktree
+    panelEntryWorktree.current = activeWorktree
+    if (!activeWorktree) return
+    if (state.checks.worktree === activeWorktree) {
+      if (!enteringWorktree || !missingOrigin) return
+      setActionError(null)
+    }
     let alive = true
     context.call('quirky.reviews/checksRefresh', { worktree: activeWorktree, force: true }).then(() => {
       if (alive) return refresh()
@@ -802,7 +821,7 @@ export function ChecksPanel(props: ReviewsSurfaceProps) {
       if (alive) setActionError(messageOf(error))
     })
     return () => { alive = false }
-  }, [activeWorktree, context, isPanelVisible, refresh, state.checks.worktree])
+  }, [activeWorktree, context, isPanelVisible, missingOrigin, refresh, state.checks.worktree])
 
   const runRefresh = useCallback(async (reason: 'manual' | 'active', worktree = activeWorktree): Promise<boolean> => {
     if (!worktree) return false
@@ -1050,8 +1069,8 @@ export function ChecksPanel(props: ReviewsSurfaceProps) {
     const busy = Boolean(active.loading)
     return (
       <section className="ui-stack" style={{ minHeight: 0, maxHeight: '100%', overflow: 'hidden' }}>
-        {actionError && <p role="alert"><StatusDot status="failing" label="Error" /> {actionError}</p>}
-        {active.error && <p role="alert"><StatusDot status="failing" label="Error" /> {active.error}</p>}
+        {!missingOrigin && actionError && <p role="alert"><StatusDot status="failing" label="Error" /> {actionError}</p>}
+        {!missingOrigin && active.error && <p role="alert"><StatusDot status="failing" label="Error" /> {active.error}</p>}
         <div className="ui-stack" style={{ padding: 'var(--ui-space-12)', overflow: 'auto' }}>
           <EmptyState message={empty.title} />
           <p>{empty.message}</p>
@@ -1081,7 +1100,9 @@ export function ChecksPanel(props: ReviewsSurfaceProps) {
           {eligibility?.eligible === true && !eligible && <p>Eligibility is stale or belongs to a different branch. Refresh to confirm the current workspace.</p>}
           {eligible && <Button variant="primary" disabled={busy} onClick={() => void openComposer()}>Create PR</Button>}
           {!eligible && eligibility?.eligible === true && <Button disabled={busy} title={eligibilityDisabledReason(state, activeWorktree) ?? undefined}>Create PR</Button>}
-          <Button disabled={busy || retrySeconds !== null} onClick={() => void runRefresh('manual')}>{retrySeconds === null ? 'Retry' : `Retry in ${retrySeconds}s`}</Button>
+          {!missingOrigin && <Button disabled={busy || retrySeconds !== null} onClick={() => void runRefresh('manual')}>
+            {retrySeconds === null ? 'Retry' : `Retry in ${retrySeconds}s`}
+          </Button>}
           {lookup?.kind === 'unavailable' && typeof lookup.message === 'string' && <p role="alert">{lookup.message}</p>}
         </div>
         <div role="separator" aria-orientation="horizontal" aria-label="Resize Checks panel" tabIndex={0}
