@@ -3,7 +3,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'no
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { bunTestFile } from '../suite'
-import { FILE_LIMIT_MS, FILES_AT_ONCE_CI, FILES_AT_ONCE_LOCAL, RERUN_LIMIT, rerunFailed, runTestFiles } from './runner'
+import { FILE_LIMIT_MS, FILES_AT_ONCE_CI, FILES_AT_ONCE_LOCAL, RERUN_LIMIT, TEST_LIMIT_MS, rerunFailed, runTestFiles } from './runner'
 import type { FileResult, Platform } from './types'
 
 type Run = typeof bunTestFile
@@ -140,6 +140,16 @@ test('hands the output of a failed attempt to log, and stays quiet about a clean
   }
   await runTestFiles({ ...options(['good.test.ts', 'bad.test.ts'], { run }), log: (text) => logged.push(text) })
   expect(logged).toEqual(['::group::bad.test.ts failed\nerror: expected M\n::endgroup::\n'])
+})
+
+test('gives each test longer than bun\'s default, because runners are slower than the machines the tests were written on', async () => {
+  const seen: string[][] = []
+  const run: Run = async (_cwd, args) => {
+    seen.push(args)
+    return { code: 0, output: '', timedOut: false }
+  }
+  await runTestFiles(options(['a.test.ts'], { run }))
+  expect(seen[0]).toContain(`--timeout=${TEST_LIMIT_MS}`)
 })
 
 test('every attempt writes its report to its own temp path and removes it', async () => {

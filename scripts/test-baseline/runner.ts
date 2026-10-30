@@ -8,6 +8,7 @@ import type { Attempt, FileError, FileResult, Platform } from './types'
 export const FILES_AT_ONCE_CI = 3
 export const FILES_AT_ONCE_LOCAL = 2
 export const FILE_LIMIT_MS = 600_000
+export const TEST_LIMIT_MS = 30_000
 export const RERUN_LIMIT = 5
 
 /** What a run needs: the files to run from `cwd`, how many at once, and how long each may take. */
@@ -37,7 +38,7 @@ async function attemptFile(opts: RunOptions, file: string): Promise<Outcome> {
     const run = opts.run ?? bunTestFile
     const { code, output, timedOut } = await run(
       opts.cwd,
-      [isAbsolute(file) ? file : `./${file}`, '--reporter=junit', `--reporter-outfile=${report}`],
+      [isAbsolute(file) ? file : `./${file}`, '--reporter=junit', `--reporter-outfile=${report}`, `--timeout=${TEST_LIMIT_MS}`],
       opts.limitMs
     )
     const durationMs = performance.now() - began

@@ -112,6 +112,12 @@ jobs:
         with:
           bun-version: ${{ env.BUN_VERSION }}
 
+      - name: Install test tools
+        run: |
+          HOMEBREW_NO_AUTO_UPDATE=1 brew install ripgrep
+          # the runner's long hostname wraps zsh's default prompt, and the tests read that prompt back
+          sudo scutil --set HostName ci && sudo hostname ci
+
       - run: bun install --frozen-lockfile
 
       - uses: actions/download-artifact@v4
