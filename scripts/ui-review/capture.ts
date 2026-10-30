@@ -11,6 +11,7 @@ import {
   openFixtureEditorBuffer,
   prepareCaptureFixtureHome,
   registerCaptureFixtures,
+  seedWorktreeStatuses,
   type CaptureTerminalFixture,
   type EditorFixtureBuffer,
   type PreparedCaptureFixtureHome,
@@ -26,14 +27,21 @@ import {
   type CaptureTheme,
   type ImageEvidence
 } from './contracts'
+import {
+  DEVICE_SCALE_FACTOR,
+  SCREENSHOT_SIZE,
+  VIEWPORT,
+  loadGoldenReferences,
+  pngDimensions,
+  referenceFor,
+  type GoldenReferences
+} from './goldens'
 
-const VIEWPORT = { width: 1340, height: 600 } as const
 const UI_DIST_RELATIVE = 'packages/ui/dist'
 const DAEMON_ENTRY = 'packages/daemon/src/main.ts'
 const BUILD_ENTRY = 'packages/ui/build.ts'
 const CAPTURE_ROOT = 'captures'
 const CAPTURE_PROGRESS_FILE = 'capture-progress.json'
-const GOLDEN_ROOT = 'docs/quirk/specs/2026-10-28-ui-redesign/img'
 export type CaptureCell = { targetId: string; theme: CaptureTheme }
 
 type RuntimeClient = {
@@ -50,6 +58,7 @@ type CaptureRuntime = {
   page: Page
   model: UiModel
   themes: Record<CaptureTheme, RendererTheme>
+  references: GoldenReferences
   fixtures: RegisteredCaptureFixtures
   editorBuffer: EditorFixtureBuffer | null
   terminalFixture: CaptureTerminalFixture | null
@@ -117,29 +126,8 @@ function sha256(data: Uint8Array | string): string {
   return createHash('sha256').update(data).digest('hex')
 }
 
-function pngDimensions(bytes: Uint8Array): { width: number; height: number } | null {
-  if (bytes.length < 24 || bytes[0] !== 0x89 || bytes[1] !== 0x50 || bytes[2] !== 0x4e || bytes[3] !== 0x47) return null
-  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
-  return { width: view.getUint32(16), height: view.getUint32(20) }
-}
-
 function evidence(path: string, bytes: Uint8Array): ImageEvidence {
   return { path: resolve(path), sha256: sha256(bytes) }
-}
-
-function referenceEvidence(repoRoot: string): Record<CaptureTheme, ImageEvidence> {
-  const references = {} as Record<CaptureTheme, ImageEvidence>
-  for (const theme of THEMES) {
-    const path = join(repoRoot, GOLDEN_ROOT, `golden-${theme}.png`)
-    if (!existsSync(path) || !statSync(path).isFile()) throw new Error(`approved ${theme} reference PNG is missing: ${path}`)
-    const bytes = readFileSync(path)
-    const dimensions = pngDimensions(bytes)
-    if (!dimensions || dimensions.width !== VIEWPORT.width || dimensions.height !== VIEWPORT.height) {
-      throw new Error(`approved ${theme} reference must be a ${VIEWPORT.width}x${VIEWPORT.height} PNG`)
-    }
-    references[theme] = evidence(path, bytes)
-  }
-  return references
 }
 
 export function discoverCaptureTargets(model: UiModel): CaptureTarget[] {
@@ -181,16 +169,16 @@ export function selectCaptureTargets(targets: CaptureTarget[], selectors: string
   return targets.filter((target) => selected.has(target.id))
 }
 
-export function captureCells(targets: CaptureTarget[]): CaptureCell[] {
-  return [
-    ...targets.map((target) => ({ targetId: target.id, theme: 'dark' as const })),
-    ...targets.map((target) => ({ targetId: target.id, theme: 'light' as const }))
-  ]
+export function captureCells(targets: CaptureTarget[], themes: readonly CaptureTheme[] = THEMES): CaptureCell[] {
+  return themes.flatMap((theme) => targets.map((target) => ({ targetId: target.id, theme })))
 }
 
 function validateOptions(options: CaptureOptions): { repoRoot: string; outputDir: string } {
   if (!Number.isFinite(options.timeoutMs) || options.timeoutMs <= 0) throw new Error('capture timeout must be a positive finite number')
   if (!Array.isArray(options.only)) throw new Error('--only selectors must be an array')
+  if (options.themes && (options.themes.length === 0 || options.themes.some((theme) => !THEMES.includes(theme)))) {
+    throw new Error('capture themes must be a non-empty subset of dark and light')
+  }
   const repoRoot = resolve(options.repoRoot)
   const outputDir = resolve(options.outputDir)
   if (!existsSync(repoRoot) || !statSync(repoRoot).isDirectory()) throw new Error(`repository root is not a directory: ${repoRoot}`)
@@ -331,7 +319,7 @@ function chooseTheme(themes: RendererTheme[], appearance: CaptureTheme): Rendere
   return selected
 }
 
-function writeThemeSelection(outputDir: string, themes: Record<CaptureTheme, RendererTheme>, references: Record<CaptureTheme, ImageEvidence>): void {
+function writeThemeSelection(outputDir: string, themes: Record<CaptureTheme, RendererTheme>, references: GoldenReferences): void {
   const path = join(outputDir, 'theme-selection.json')
   if (existsSync(path)) throw new Error(`refusing to overwrite existing evidence: ${path}`)
   writeFileSync(path, JSON.stringify({
@@ -413,7 +401,7 @@ async function waitForUiWindow(runtime: CaptureRuntime): Promise<void> {
     throwIfAborted(runtime.options.signal)
     const state = record(await rpc(runtime.client, 'ui.state', {}, runtime.options.timeoutMs, runtime.options.signal))
     if (Array.isArray(state.windows) && state.windows.length > 0) {
-      await runtime.page.locator('.app .layout').waitFor({ state: 'visible', timeout: runtime.options.timeoutMs })
+      await runtime.page.locator('.shell-workspace').waitFor({ state: 'visible', timeout: runtime.options.timeoutMs })
       return
     }
     await Bun.sleep(100)
@@ -421,14 +409,8 @@ async function waitForUiWindow(runtime: CaptureRuntime): Promise<void> {
   throw new Error('renderer did not connect to the isolated daemon')
 }
 
-async function waitForRendererModel(runtime: CaptureRuntime, model: UiModel): Promise<void> {
-  const staticSlots = model.sidebarSections.length + model.activityItems.length + model.statusBars.length
-  const expectedPanels = model.panels.length
-  await bounded(runtime.page.waitForFunction(({ staticSlots: expectedSlots, panels }) => {
-    const mounted = document.querySelectorAll('[data-plugin-slot]').length
-    const toggles = document.querySelectorAll('button.panel-toggle').length
-    return mounted >= expectedSlots && toggles === panels
-  }, { staticSlots, panels: expectedPanels }, { timeout: runtime.options.timeoutMs }), runtime.options.timeoutMs, runtime.options.signal, 'renderer contribution model')
+async function waitForRendererModel(runtime: CaptureRuntime): Promise<void> {
+  await runtime.page.locator('.tool-shell__stripe').first().waitFor({ state: 'visible', timeout: runtime.options.timeoutMs })
 }
 
 function targetSlotSelector(target: CaptureTarget): string {
@@ -450,8 +432,13 @@ async function closeCurrentSurface(runtime: CaptureRuntime): Promise<void> {
   await rpc(runtime.client, 'ui.sidebar.set', { visible: true }, runtime.options.timeoutMs, runtime.options.signal)
 }
 
+/** The one place that knows how the shell exposes Settings; update it when the control moves. */
+function settingsControl(runtime: CaptureRuntime) {
+  return runtime.page.locator('button[aria-label="Settings"]')
+}
+
 async function openSettings(runtime: CaptureRuntime): Promise<void> {
-  const button = runtime.page.locator('button.gear[aria-label="Settings"]')
+  const button = settingsControl(runtime)
   if (await button.count() !== 1) throw new Error('host Settings control is unavailable')
   await button.click({ timeout: runtime.options.timeoutMs })
   await runtime.page.getByRole('dialog', { name: 'Settings', exact: true }).waitFor({ state: 'visible', timeout: runtime.options.timeoutMs })
@@ -580,10 +567,7 @@ async function resolveUnsavedCloseOverlay(runtime: CaptureRuntime): Promise<void
 
 async function openPanel(runtime: CaptureRuntime, target: CaptureTarget): Promise<void> {
   if (target.plugin === 'quirky.editor' || target.plugin === 'quirky.git') await openWorktreeContext(runtime)
-  const toggles = runtime.page.locator('button.panel-toggle')
-  const index = await toggles.evaluateAll((buttons, title) => buttons.findIndex((button) => button.getAttribute('aria-label') === title), target.title)
-  if (index >= 0) await toggles.nth(index).click({ timeout: runtime.options.timeoutMs })
-  else await rpc(runtime.client, 'ui.panel.open', { id: target.id }, runtime.options.timeoutMs, runtime.options.signal)
+  await rpc(runtime.client, 'ui.panel.open', { id: target.id }, runtime.options.timeoutMs, runtime.options.signal)
 }
 
 async function openTarget(runtime: CaptureRuntime, target: CaptureTarget): Promise<void> {
@@ -650,7 +634,7 @@ async function inspectSurface(runtime: CaptureRuntime, target: CaptureTarget): P
   await waitForStateShown(runtime, target)
   if (target.kind === 'host') {
     const element = target.id === 'host:shell'
-      ? runtime.page.locator('.app .layout')
+      ? runtime.page.locator('.shell-workspace')
       : runtime.page.getByRole('dialog', { name: target.title, exact: true })
     await element.waitFor({ state: 'visible', timeout: runtime.options.timeoutMs })
     const details = await element.evaluate((node) => ({
@@ -741,14 +725,15 @@ async function screenshot(runtime: CaptureRuntime, path: string, diagnostic = fa
     timeout: runtime.options.timeoutMs
   }), runtime.options.timeoutMs, diagnostic ? undefined : runtime.options.signal, 'renderer screenshot')
   const dimensions = pngDimensions(bytes)
-  if (!dimensions || dimensions.width !== VIEWPORT.width || dimensions.height !== VIEWPORT.height) {
-    throw new Error(`renderer screenshot was not ${VIEWPORT.width}x${VIEWPORT.height}`)
+  if (!dimensions || dimensions.width !== SCREENSHOT_SIZE.width || dimensions.height !== SCREENSHOT_SIZE.height) {
+    throw new Error(`renderer screenshot was not ${SCREENSHOT_SIZE.width}x${SCREENSHOT_SIZE.height}`)
   }
   return evidence(path, bytes)
 }
 
 async function captureOne(runtime: CaptureRuntime, target: CaptureTarget, theme: CaptureTheme): Promise<CaptureEvidence> {
   const cell = { targetId: target.id, theme }
+  const reference = referenceFor(runtime.references, target.id, theme)
   const path = capturePath(runtime.outputDir, cell)
   const errorStart = runtime.pageErrors.length
   let image: ImageEvidence | null = null
@@ -762,7 +747,7 @@ async function captureOne(runtime: CaptureRuntime, target: CaptureTarget, theme:
     }
     image = await screenshot(runtime, path)
     if (target.id === 'overlay:quirky.editor/close') await resolveUnsavedCloseOverlay(runtime)
-    return { ...cell, image, status: 'captured' }
+    return { ...cell, image, reference, status: 'captured' }
   } catch (error) {
     if (error instanceof CaptureRuntimeError) throw error
     if (!runtime.options.signal?.aborted) {
@@ -789,12 +774,12 @@ async function captureOne(runtime: CaptureRuntime, target: CaptureTarget, theme:
       }
     }
     runtime.manifest.failures.push(`${target.id} (${theme}): ${message}`)
-    return { ...cell, image, status: 'failed', error: message }
+    return { ...cell, image, reference, status: 'failed', error: message }
   }
 }
 
-function failedCell(cell: CaptureCell, error: string): CaptureEvidence {
-  return { ...cell, image: null, status: 'failed', error }
+function failedCell(cell: CaptureCell, references: GoldenReferences, error: string): CaptureEvidence {
+  return { ...cell, image: null, reference: referenceFor(references, cell.targetId, cell.theme), status: 'failed', error }
 }
 
 async function closeOwnedRuntime(
@@ -836,7 +821,8 @@ function assertBrowserExecutable(executable: string): void {
 /** Starts the real app in a disposable home, captures every selected contribution, and cleans all owned processes. */
 export async function captureApplication(options: CaptureOptions): Promise<CaptureManifest> {
   const { repoRoot, outputDir } = validateOptions(options)
-  const references = referenceEvidence(repoRoot)
+  const selectedThemes = options.themes ?? THEMES
+  const references = loadGoldenReferences(repoRoot)
   const executable = resolve(options.browserExecutable ?? chromium.executablePath())
   assertBrowserExecutable(executable)
 
@@ -912,6 +898,7 @@ export async function captureApplication(options: CaptureOptions): Promise<Captu
 
     fixtures = await registerCaptureFixtures(activeClient, prepared, { timeoutMs: options.timeoutMs, signal: options.signal })
     const activeFixtures = fixtures
+    await seedWorktreeStatuses(activeClient, activeFixtures, { port: runtime.port, hookToken: runtime.hookToken }, { timeoutMs: options.timeoutMs, signal: options.signal })
     const model = record(await rpc(activeClient, 'ui.contributions', {}, options.timeoutMs, options.signal)) as unknown as UiModel
     if (!Array.isArray(model.views) || !Array.isArray(model.panels) || !Array.isArray(model.sidebarSections) ||
       !Array.isArray(model.activityItems) || !Array.isArray(model.statusBars) || !Array.isArray(model.overlays) ||
@@ -919,7 +906,7 @@ export async function captureApplication(options: CaptureOptions): Promise<Captu
       throw new Error('ui.contributions returned an invalid surface inventory')
     }
     const targets = selectCaptureTargets(discoverCaptureTargets(model), options.only)
-    cells = captureCells(targets)
+    cells = captureCells(targets, selectedThemes)
     const commit = (await runOwnedCommand(scope, ['git', '-C', repoRoot, 'rev-parse', 'HEAD'], repoRoot, env, options.timeoutMs, options.signal)).stdout
     if (!/^[0-9a-f]{40,64}$/i.test(commit)) throw new Error('could not identify the repository commit for the capture manifest')
     verifyUiAssets(repoRoot, model)
@@ -936,7 +923,6 @@ export async function captureApplication(options: CaptureOptions): Promise<Captu
       scope: options.only.length === 0 ? 'full' : 'filtered',
       selectors: [...options.only],
       targets,
-      references,
       captures: [],
       failures: []
     }
@@ -987,7 +973,7 @@ export async function captureApplication(options: CaptureOptions): Promise<Captu
     const browserProcess = browserServer.process()
     if (typeof browserProcess.pid === 'number') scope.track(browserProcess.pid)
     browser = await bounded(chromium.connect(browserServer.wsEndpoint(), { timeout: options.timeoutMs }), options.timeoutMs, options.signal, 'Chromium connection')
-    const context = await bounded(browser.newContext({ viewport: VIEWPORT, deviceScaleFactor: 1 }), options.timeoutMs, options.signal, 'browser context creation')
+    const context = await bounded(browser.newContext({ viewport: VIEWPORT, deviceScaleFactor: DEVICE_SCALE_FACTOR }), options.timeoutMs, options.signal, 'browser context creation')
     const page = await bounded(context.newPage(), options.timeoutMs, options.signal, 'browser page creation')
     page.setDefaultTimeout(options.timeoutMs)
     page.setDefaultNavigationTimeout(options.timeoutMs)
@@ -1000,6 +986,7 @@ export async function captureApplication(options: CaptureOptions): Promise<Captu
       page,
       model,
       themes,
+      references,
       fixtures: activeFixtures,
       editorBuffer,
       terminalFixture,
@@ -1013,7 +1000,7 @@ export async function captureApplication(options: CaptureOptions): Promise<Captu
       timeout: options.timeoutMs
     }), options.timeoutMs, options.signal, 'renderer navigation')
     await waitForUiWindow(captureRuntime)
-    await waitForRendererModel(captureRuntime, model)
+    await waitForRendererModel(captureRuntime)
     await bounded(Promise.all(activeFixtures.worktrees.map((worktree) =>
       page.locator(`[data-worktree-id=${JSON.stringify(worktree.id)}]`).waitFor({
         state: 'visible', timeout: options.timeoutMs
@@ -1024,13 +1011,13 @@ export async function captureApplication(options: CaptureOptions): Promise<Captu
       const message = sanitizedError(options.signal ? abortError(options.signal) : new Error('capture was aborted'), secrets)
       for (const cell of cells) {
         const key = `${cell.targetId}\0${cell.theme}`
-        if (!results.has(key)) results.set(key, failedCell(cell, message))
+        if (!results.has(key)) results.set(key, failedCell(cell, references, message))
       }
       manifest!.failures.push('capture aborted by caller signal')
       syncProgress()
     }
 
-    for (const theme of THEMES) {
+    for (const theme of selectedThemes) {
       if (options.signal?.aborted) {
         markAborted()
         break
@@ -1058,7 +1045,7 @@ export async function captureApplication(options: CaptureOptions): Promise<Captu
       if (options.signal?.aborted) break
     }
 
-    manifest.captures = cells.map((cell) => results.get(`${cell.targetId}\0${cell.theme}`) ?? failedCell(cell, 'capture cell was not attempted'))
+    manifest.captures = cells.map((cell) => results.get(`${cell.targetId}\0${cell.theme}`) ?? failedCell(cell, references, 'capture cell was not attempted'))
     for (const capture of manifest.captures) {
       if (capture.status === 'failed' && !manifest.failures.some((failure) => failure.startsWith(`${capture.targetId} (${capture.theme}):`))) {
         manifest.failures.push(`${capture.targetId} (${capture.theme}): ${capture.error ?? 'capture failed'}`)

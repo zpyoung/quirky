@@ -16,6 +16,8 @@ export type CaptureEvidence = {
   targetId: string
   theme: CaptureTheme
   image: ImageEvidence | null
+  /** The approved golden this capture is scored against; `goldenFor` picks it per target. */
+  reference: ImageEvidence
   status: 'captured' | 'failed'
   error?: string
 }
@@ -28,7 +30,6 @@ export type CaptureManifest = {
   scope: 'full' | 'filtered'
   selectors: string[]
   targets: CaptureTarget[]
-  references: Record<CaptureTheme, ImageEvidence>
   captures: CaptureEvidence[]
   failures: string[]
 }
@@ -38,6 +39,8 @@ export type CaptureOptions = {
   only: string[]
   skipBuild: boolean
   browserExecutable?: string
+  /** Themes to capture; defaults to both. A subset cannot be reviewed, so only diagnostics should narrow it. */
+  themes?: readonly CaptureTheme[]
   timeoutMs: number
   signal?: AbortSignal
 }
