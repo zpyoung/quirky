@@ -157,9 +157,19 @@ const moveTo = (x: number, y: number) => fire(window, mouse('mousemove', { clien
 const release = (x: number, y: number) => fire(window, mouse('mouseup', { clientX: x, clientY: y }))
 
 describe('SC-59: the floating button', () => {
-  test('sits at the bottom right until it is moved', async () => {
+  test('centers in the shell anchor and follows it when it moves', async () => {
+    let rect = { left: 600, top: 700, width: 40, height: 40 }
+    const anchor = document.createElement('div')
+    anchor.setAttribute('data-overlay-button-anchor', '')
+    anchor.getBoundingClientRect = () => rect as DOMRect
+    document.body.append(anchor)
     const view = await mountOverlay()
-    expect(at(button(view))).toMatchObject({ x: 1400 - 36 - 24, y: 900 - 36 - 72 })
+    expect(at(button(view))).toMatchObject({ x: 602, y: 702 })
+
+    rect = { left: 900, top: 600, width: 40, height: 40 }
+    await fire(window, new Event('resize'))
+    await settle()
+    expect(at(button(view))).toMatchObject({ x: 902, y: 602 })
     expect(panel(view)).toBeNull()
   })
 

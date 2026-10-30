@@ -24,18 +24,67 @@ type Local = { bounds?: FloatingBounds; button?: Point }
 
 const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error))
 
+type ButtonAnchorRect = Pick<DOMRectReadOnly, 'left' | 'top' | 'width' | 'height'>
+type Placement = { view: Viewport; anchor: ButtonAnchorRect | null }
+
 function currentViewport(): Viewport {
   return { width: window.innerWidth, height: window.innerHeight }
 }
 
-function useViewport(): Viewport {
-  const [view, setView] = useState(currentViewport)
+function measureAnchor(anchor: HTMLElement): ButtonAnchorRect {
+  const { left, top, width, height } = anchor.getBoundingClientRect()
+  return { left, top, width, height }
+}
+
+function usePlacement(): Placement {
+  const [placement, setPlacement] = useState<Placement>(() => {
+    const anchor = document.querySelector<HTMLElement>('[data-overlay-button-anchor]')
+    return { view: currentViewport(), anchor: anchor ? measureAnchor(anchor) : null }
+  })
   useEffect(() => {
-    const onResize = () => setView(currentViewport())
-    window.addEventListener('resize', onResize)
-    return () => window.removeEventListener('resize', onResize)
+    let anchor: HTMLElement | null = null
+    let observer: ResizeObserver | null = null
+    const update = () => {
+      const nextAnchor = document.querySelector<HTMLElement>('[data-overlay-button-anchor]')
+      if (nextAnchor !== anchor) {
+        observer?.disconnect()
+        observer = null
+        anchor = nextAnchor
+        if (anchor && typeof ResizeObserver !== 'undefined') {
+          observer = new ResizeObserver(update)
+          observer.observe(anchor)
+          const workspace = anchor.closest<HTMLElement>('.shell-workspace')
+          if (workspace) observer.observe(workspace)
+        }
+      }
+      const next = { view: currentViewport(), anchor: anchor ? measureAnchor(anchor) : null }
+      setPlacement((current) => {
+        const previousAnchor = current.anchor
+        const nextAnchor = next.anchor
+        if (
+          current.view.width === next.view.width &&
+          current.view.height === next.view.height &&
+          (previousAnchor === nextAnchor ||
+            (previousAnchor !== null &&
+              nextAnchor !== null &&
+              previousAnchor.left === nextAnchor.left &&
+              previousAnchor.top === nextAnchor.top &&
+              previousAnchor.width === nextAnchor.width &&
+              previousAnchor.height === nextAnchor.height))
+        ) {
+          return current
+        }
+        return next
+      })
+    }
+    update()
+    window.addEventListener('resize', update)
+    return () => {
+      window.removeEventListener('resize', update)
+      observer?.disconnect()
+    }
   }, [])
-  return view
+  return placement
 }
 
 /** Follows the mouse from `origin` until it is released; `stop` ends the drag early. */
@@ -97,7 +146,7 @@ export function FloatingOverlay({ context, report, workspaceOptions }: Props) {
   const [menu, setMenu] = useState<Point | null>(null)
   const [body, setBody] = useState<ViewReport | null>(null)
   const lastFocusSequence = useRef(0)
-  const view = useViewport()
+  const { view, anchor } = usePlacement()
   const panel = useRef<HTMLDivElement>(null)
   const suppressClick = useRef(false)
   const stopDrag = useRef<(() => void) | null>(null)
@@ -191,7 +240,7 @@ export function FloatingOverlay({ context, report, workspaceOptions }: Props) {
   }
 
   const bounds = local?.bounds ?? resolveBounds(state, view)
-  const button = local?.button ?? (state.button ? clampButton(state.button, view) : defaultButton(view))
+  const button = local?.button ?? (state.button ? clampButton(state.button, view) : defaultButton(view, anchor))
 
   const dragPanel = (event: ReactMouseEvent) => {
     if (event.button !== 0 || state.maximized || (event.target as HTMLElement).closest('button')) return

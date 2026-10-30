@@ -57,8 +57,11 @@ export function resizeBounds(start: FloatingBounds, edge: Edge, dx: number, dy: 
   return { x: left, y: top, width: right - left, height: bottom - top }
 }
 
-/** The button's place before it is dragged: the bottom right of the window. */
-export function defaultButton(view: Viewport): Point {
+/** The button's default place: centered in a shell anchor that can contain it, or at the window's bottom right otherwise. */
+export function defaultButton(view: Viewport, anchor?: Pick<DOMRectReadOnly, 'left' | 'top' | 'width' | 'height'> | null): Point {
+  if (anchor && anchor.width >= BUTTON_SIZE && anchor.height >= BUTTON_SIZE) {
+    return { x: anchor.left + (anchor.width - BUTTON_SIZE) / 2, y: anchor.top + (anchor.height - BUTTON_SIZE) / 2 }
+  }
   return clampButton({ x: view.width - BUTTON_SIZE - BUTTON_RIGHT, y: view.height - BUTTON_SIZE - BUTTON_BOTTOM }, view)
 }
 
