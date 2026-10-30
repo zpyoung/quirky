@@ -29,9 +29,9 @@
   min-height: 0;
 }
 
-/* dialogs render in place, and this region's stacking context otherwise sits under the tool panels */
+/* dialogs render in place, so their region must stack above app overlays */
 .shell-main-region:has(.ui-dialog-backdrop) {
-  z-index: 2;
+  z-index: 41;
 }
 
 .shell-main-region > .main {

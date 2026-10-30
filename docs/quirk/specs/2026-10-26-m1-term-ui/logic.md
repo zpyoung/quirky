@@ -180,7 +180,7 @@ for **main**. Keys are macOS keys (`⌘` is Mod).
 13. **SC-13: closing a tab running a command asks first** (UI)
     - **Given** tab "Terminal 1" whose shell is running `sleep 300`
     - **When** the person closes it
-    - **Then** a dialog "Stop running command?" says "Closing this terminal will stop the command running inside it." with the tab name, Cancel and "Stop and Close", and a checkbox "Don't ask again for running terminals"; Cancel keeps it; "Stop and Close" ends `sleep` and closes the tab; with the box ticked the setting "Confirm before closing running terminals" turns off and the next close doesn't ask; an agent session says "Stop this agent?" with "Stop Agent"
+    - **Then** a dialog "Stop running command?" says "Closing this terminal will stop the command running inside it." with the tab name, Cancel and "Stop and Close", and a checkbox "Don't ask again for running terminals"; Cancel keeps it; "Stop and Close" ends `sleep` and closes the tab; with the box ticked the setting "Confirm before closing running terminals" turns off and the next close doesn't ask; an agent session says "Stop this agent?" with "Stop Agent". The dialog backdrop dims the workspace and blocks interaction with floating workspace controls until the dialog is dismissed.
     - **Screen states:**
 
       | Moment | What the person sees |
