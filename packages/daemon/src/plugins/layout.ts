@@ -390,7 +390,9 @@ export class LayoutService {
       if (input === undefined) delete auxiliary.input
       else auxiliary.input = input
       this.options.sendTo(target, { type: 'desktop.window.changed', windows: [this.auxiliaryWindowSummary(auxiliary)] })
-      return this.windowLayout(target.id)
+      const next = this.windowLayout(target.id)
+      this.options.sendTo(target, { type: 'ui.state.changed', layout: next })
+      return next
     }
 
     const previous = this.windowViewFor(target.id)
@@ -425,7 +427,9 @@ export class LayoutService {
       if (view?.input === undefined) delete auxiliary.input
       else auxiliary.input = view.input
       this.options.sendTo(target, { type: 'desktop.window.changed', windows: [this.auxiliaryWindowSummary(auxiliary)] })
-      return this.windowLayout(target.id)
+      const next = this.windowLayout(target.id)
+      this.options.sendTo(target, { type: 'ui.state.changed', layout: next })
+      return next
     }
 
     const previous = this.windowViewFor(target.id)
@@ -776,6 +780,8 @@ export class LayoutService {
     }
     if (request.title !== undefined) route.title = request.title
     this.announceDesktopWindows()
+    const layout = this.windowLayout(conn.id)
+    this.options.sendTo(conn, { type: 'ui.state.changed', layout })
     return this.auxiliaryWindowSummary(route)
   }
 

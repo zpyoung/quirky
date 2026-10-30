@@ -550,7 +550,8 @@ export class VaultService {
       ...(caller.worktreeId === undefined ? {} : { worktreeId: caller.worktreeId })
     }
     if (caller.role !== 'ui') return identity
-    const state = await this.context.call('ui.state', {}) as {
+    const { connId } = await this.context.forward('ui.window.self', {}, caller) as { connId: number }
+    const state = await this.context.call('ui.window.state', { connId }) as {
       layout?: { worktree?: unknown; view?: { input?: unknown } | null }
     }
     const layout = state.layout
