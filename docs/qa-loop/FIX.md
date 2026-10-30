@@ -33,7 +33,8 @@ Your lane number is in the prompt that started you.
    files beside the code you changed, one file per `bun test <file>` (a whole plugin directory in
    one process hangs). They must pass, except a failure that also happens on `origin/main`: some
    files time out or compare `/var` with `/private/var` on this Mac. Check such a failure in a
-   scratch worktree of `origin/main` and name it in the PR body.
+   scratch worktree of `origin/main` and name it in the PR body. Before you push, run
+   `bun run test:affected`: a `new` failure is yours to fix, and a `known` one already fails on main.
 6. **PR and merge.** Use the keyring login, because the shell's `GITHUB_TOKEN` cannot push:
 
    ```sh
