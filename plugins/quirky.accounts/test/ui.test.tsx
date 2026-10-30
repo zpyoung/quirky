@@ -222,6 +222,110 @@ function dialogByTitle(root: ParentNode, title: string): HTMLElement | null {
 
 
 
+type UsageColorProvider = 'claude' | 'codex'
+
+function usageWithPercentages(values: Partial<Record<UsageColorProvider, number | null>>) {
+  return {
+    providers: providers.map((provider) => {
+      const usedPercent = provider === 'claude' || provider === 'codex' ? values[provider] ?? null : null
+      return {
+        provider,
+        accountId: provider === 'claude' ? 'managed-1' : provider === 'codex' ? 'codex-1' : null,
+        status: usedPercent === null ? 'unavailable' : 'ok',
+        error: null,
+        updatedAt: 10,
+        session: null,
+        weekly: usedPercent === null ? null : { usedPercent, windowMinutes: 10_080, resetsAt: 1_000, resetDescription: 'soon' }
+      }
+    }),
+    inactive: {},
+    updatedAt: 10
+  }
+}
+
+function accountsForDirection(direction: 'used' | 'remaining') {
+  const claude = accountState(1, 'Claude account')
+  const codex = codexState(1, 'codex-1', 'Codex account')
+  return {
+    ...claude,
+    accounts: [...claude.accounts, ...codex.accounts],
+    active: { claude: 'managed-1', codex: 'codex-1' },
+    preferences: { ...preferences, direction }
+  }
+}
+
+async function openUsageRoster(direction: 'used' | 'remaining', values: Partial<Record<UsageColorProvider, number | null>>) {
+  usageValue = usageWithPercentages(values)
+  listResponse = () => accountsForDirection(direction)
+  const context = makeContext()
+  await act(async () => {
+    activate(context)
+    const mount = provided.get('status-bar:quirky.accounts/usage') as (element: HTMLElement, props: { input?: unknown; report?(state: unknown): void }) => (() => void) | void
+    unregister = mount(container, {}) as (() => void) | undefined
+  })
+  await settle()
+  await act(async () => { buttonByLabel('Open Usage').click() })
+  await settle()
+}
+
+function rosterSummary(provider: UsageColorProvider): HTMLElement {
+  const name = provider === 'claude' ? 'Claude' : 'Codex'
+  const row = container.querySelector(`[aria-label="Open ${name} details and account switcher"]`)
+  if (!(row instanceof HTMLButtonElement)) throw new Error(`Missing ${name} roster row`)
+  const summary = row.querySelector('small')
+  if (!(summary instanceof HTMLElement)) throw new Error(`Missing ${name} roster summary`)
+  return summary
+}
+
+function assertProviderColor(provider: UsageColorProvider, color: string, direction: 'used' | 'remaining', displayedPercent: number) {
+  const summary = rosterSummary(provider)
+  expect(summary.style.color).toBe(color)
+  expect(summary.textContent).toContain(`${displayedPercent}% ${direction}`)
+  const chip = container.querySelector(`.usage-chips [data-provider="${provider}"]`)
+  if (!(chip instanceof HTMLElement)) throw new Error(`Missing ${provider} status-bar chip`)
+  const value = chip.querySelector('span[style]')
+  if (!(value instanceof HTMLElement)) throw new Error(`Missing ${provider} status-bar value`)
+  expect(value.style.color).toBe(color)
+  expect(chip.getAttribute('aria-label')).toContain(`${displayedPercent}% ${direction}`)
+}
+
+for (const direction of ['used', 'remaining'] as const) {
+  test(`Claude 90% and Codex 87% usage stay red in ${direction} mode`, async () => {
+    await openUsageRoster(direction, { claude: 90, codex: 87 })
+    assertProviderColor('claude', 'var(--ui-failing)', direction, direction === 'used' ? 90 : 10)
+    assertProviderColor('codex', 'var(--ui-failing)', direction, direction === 'used' ? 87 : 13)
+  })
+}
+
+const usageColorCases = [
+  [59, 'var(--ui-accent)'],
+  [60, 'var(--ui-needs-you)'],
+  [79, 'var(--ui-needs-you)'],
+  [80, 'var(--ui-failing)']
+] as const
+
+for (const direction of ['used', 'remaining'] as const) {
+  for (const [usedPercent, color] of usageColorCases) {
+    test(`${usedPercent}% usage uses the expected summary color in ${direction} mode`, async () => {
+      await openUsageRoster(direction, { claude: usedPercent, codex: usedPercent })
+      const displayedPercent = direction === 'used' ? usedPercent : 100 - usedPercent
+      assertProviderColor('claude', color, direction, displayedPercent)
+      assertProviderColor('codex', color, direction, displayedPercent)
+    })
+  }
+}
+
+test('no-window usage summaries retain fallback status styling', async () => {
+  await openUsageRoster('used', { claude: null, codex: null })
+  for (const provider of ['claude', 'codex'] as const) {
+    const summary = rosterSummary(provider)
+    expect(summary.classList.contains('status-muted')).toBe(true)
+    expect(summary.style.color).toBe('')
+    expect(summary.textContent).not.toMatch(/\d+%/)
+  }
+})
+
+
 test('a late account-list response cannot replace a newer selected account in Usage', async () => {
   const context = makeContext()
   await act(async () => {

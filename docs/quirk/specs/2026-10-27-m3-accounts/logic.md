@@ -54,7 +54,7 @@ Before: fresh isolated home, no provider sign-ins. Open Usage: Configure usage t
 
 ### AC2: Compact, detailed and direction
 
-Before: Claude 5h 39%, weekly 26%, model-specific weekly 0%; Codex weekly 1%. Compact shows the most-consumed window and reset duration. Detailed shows all windows/buckets and bars. Switch Used to Remaining: 39 becomes 61, 26 becomes 74, and 1 becomes 99, while urgency remains based on consumption. Preferences survive restart.
+Before: Claude 5h 39%, weekly 26%, model-specific weekly 0%; Codex weekly 1%. Compact shows the most-consumed window and reset duration. Detailed shows all windows/buckets and bars. Switch Used to Remaining: 39 becomes 61, 26 becomes 74, and 1 becomes 99, while urgency remains based on consumption. Status-bar chips and popover roster summaries share the same urgency colors: accent below 60% consumed, warning at 60%, danger at 80%. Claude 90% and Codex 87% are danger-colored in both places, including when displayed as 10% and 13% remaining. Preferences survive restart.
 
 ### AC3: Popover, drill-in and layout
 

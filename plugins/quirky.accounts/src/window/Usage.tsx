@@ -168,7 +168,7 @@ function ProviderRoster({ store, usage, accounts, preferences, credentials }: { 
         void store.setUiState({ provider: snapshot.provider, ...(snapshot.provider === 'claude' || snapshot.provider === 'codex' ? { expanded: null } : {}) })
       }}><span className="provider-row-main">
         <span className="provider-row-label"><Letter provider={snapshot.provider} /><strong>{PROVIDER_LABELS[snapshot.provider]}</strong>{snapshot.status === 'error' && <span className="status-error" aria-label={status.label}>!</span>}</span>
-        <small className={`status-${status.kind}`}>{best ? `${displayPercent(best.window.usedPercent, preferences.direction)}% ${preferences.direction} · resets ${formatReset(best.window)}` : status.label}{stale ? ` · ${stale} session${stale === 1 ? '' : 's'} on old account` : ''}</small>
+        <small className={best ? undefined : `status-${status.kind}`} style={best ? { color: meterColor(best.window.usedPercent) } : undefined}>{best ? `${displayPercent(best.window.usedPercent, preferences.direction)}% ${preferences.direction} · resets ${formatReset(best.window)}` : status.label}{stale ? ` · ${stale} session${stale === 1 ? '' : 's'} on old account` : ''}</small>
       </span>
       <span className="provider-summary" aria-hidden="true">{best ? `${displayPercent(best.window.usedPercent, preferences.direction)}%` : snapshot.status === 'unavailable' ? '--' : '›'}</span></Button>
     })}
