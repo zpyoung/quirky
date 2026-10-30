@@ -1,6 +1,7 @@
 import type { DesktopShellBridge, NativeDesktopCapabilities } from '@quirky/protocol'
 import { Electroview } from 'electrobun/view'
 import type { NativeBrowserHostRPC } from './native-browser'
+import { preloadNotificationCapabilities } from './native-notifications'
 
 type NativeBrowserPreloadBridge = {
   claimNativeBrowserView(params: NativeBrowserHostRPC['bun']['requests']['claimNativeBrowserView']['params']): Promise<NativeBrowserHostRPC['bun']['requests']['claimNativeBrowserView']['response']>
@@ -17,18 +18,19 @@ type DesktopRequestBridge = {
   readClipboardText(params: NativeBrowserHostRPC['bun']['requests']['readClipboardText']['params']): Promise<NativeBrowserHostRPC['bun']['requests']['readClipboardText']['response']>
 }
 
-const DESKTOP_CAPABILITIES: NativeDesktopCapabilities = {
-  directoryPicker: true,
-  auxiliaryWindows: true,
-  revealItem: true,
-  notifications: { permission: false, click: false, dismiss: false }
-}
-
 declare global {
   interface Window {
     __quirkyNativeBrowserHost?: NativeBrowserPreloadBridge
     __quirkyDesktopHost?: DesktopShellBridge
+    __quirkyNotificationCapabilities?: unknown
   }
+}
+
+const DESKTOP_CAPABILITIES: NativeDesktopCapabilities = {
+  directoryPicker: true,
+  auxiliaryWindows: true,
+  revealItem: true,
+  notifications: preloadNotificationCapabilities(window.__quirkyNotificationCapabilities)
 }
 
 // This runs only in Quirky's trusted shell BrowserWindow. Sandboxed guest webviews never receive this preload.

@@ -657,14 +657,11 @@ export class LayoutService {
   /** Records capabilities reported by this exact UI window's trusted native preload. */
   setDesktopCapabilities(conn: ClientConn, capabilities: NativeDesktopCapabilities): void {
     this.requireWindow(conn)
-    if (capabilities.notifications.permission || capabilities.notifications.click || capabilities.notifications.dismiss) {
-      throw invalidParams('native notification permission and callbacks are unavailable in this SDK')
-    }
     this.desktopCapabilitiesByWindow.set(conn.id, {
       directoryPicker: capabilities.directoryPicker,
       auxiliaryWindows: capabilities.auxiliaryWindows,
       revealItem: capabilities.revealItem,
-      notifications: { ...DEFAULT_DESKTOP_CAPABILITIES.notifications }
+      notifications: { ...capabilities.notifications }
     })
   }
 

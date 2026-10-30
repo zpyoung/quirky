@@ -66,5 +66,90 @@
 - **Revisit if:** The item is resumed with the required outside capability and authorization.
 - **Source:** assumed — autonomous
 
+## D7: Resume the notification half against the fork's notification patch
+- **Question:** D3 and D5 blocked both flows on missing public callbacks. Does the fork patch supply them?
+- **Options:** keep the notification half blocked; build it against the fork's `patch/notification-callbacks`, which adds the callbacks through public `UNUserNotificationCenter` calls.
+- **Chose:** resume the notification half only. The patch adds `Utils.getNotificationPermission()`, `Utils.requestNotificationPermission()`, an `id` on `showNotification` and the `notification-click` and `notification-dismiss` app events. Linux, Windows and SDKs without the patch report `unsupported`. The signed terminal-host half stays blocked (D4).
+- **Why:** the fork spec makes the patch the approved route for this item, and it uses only public UserNotifications calls, so it isn't the private SDK patch D2 and D5 ruled out.
+- **Evidence:** docs/quirk/specs/2026-10-29-electrobun-fork/logic.md "The 8 items" and SC-12; fork branch `patch/notification-callbacks` (package/src/native/macos/nativeWrapper.mm, package/src/core/main.zig, package/src/sdks/main/core/Utils.ts).
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** upstream merges a different notification API, or rejects the patch's shape.
+- **Source:** locked by docs/quirk/specs/2026-10-29-electrobun-fork/logic.md
+
+## D8: Build in the desktop shell and add no daemon method
+- **Question:** where the permission, click and dismiss behavior lives.
+- **Options:** new kernel methods so plugins can read and request permission (a Plugin API 1.1 addition); the desktop shell alone, plus truthful capability flags.
+- **Chose:** the desktop shell. It reads the permission at startup, asks once when macOS has no decision, routes clicks and releases dismissed banners. The existing `notifications` capability flags now report the SDK's support instead of a hardcoded false.
+- **Why:** Plugin API 1.0 is frozen (m7-api-freeze is done), and a new method is a minor API release that's the user's call, not this branch's. Everything here needs only Electrobun and the existing `ui.view.open` and `ui.toast.dismiss` methods.
+- **Evidence:** docs/plugin-api.md "Plugin API 1.0 freezes..." and the SemVer section; packages/protocol/src/plugin-api.ts:2; apps/desktop/src/bun/native-notifications.ts.
+- **Reversibility:** easy
+- **Confidence:** medium
+- **Revisit if:** a permission card or plugin-visible permission state is wanted; that needs a minor API release.
+- **Source:** assumed — autonomous
+
+## D9: Ask for permission once at startup, after the first window
+- **Question:** when Quirky asks macOS for notification permission (Orca's startup registration).
+- **Options:** keep the SDK's implicit request on the first banner; ask at startup when macOS has no recorded decision; never ask.
+- **Chose:** ask at startup only when the status is `not-determined`. A recorded decision is returned as is, and macOS never prompts twice.
+- **Why:** Orca registers at startup so the prompt comes before the first real notification. The SDK's implicit request waits 500 ms and then shows the banner anyway, so the first banner is usually lost.
+- **Evidence:** research/orca-features/notifications.md "macOS permission handling"; fork nativeWrapper.mm `showNotificationWithId`; apps/desktop/src/bun/native-notifications.ts `registerNotificationPermission`.
+- **Reversibility:** easy
+- **Confidence:** medium
+- **Revisit if:** the startup prompt is unwelcome before onboarding finishes.
+- **Source:** supersedes m1-notifications D23
+
+## D10: A banner click opens the toast's target and retires the toast
+- **Question:** what clicking a native banner does (notifications.md flow 2).
+- **Options:** only bring Quirky forward (m1 D26); do what clicking the in-app toast does.
+- **Chose:** show the window, open the notify event's `open` view with `ui.view.open`, then dismiss the toast with the same key. A banner with no target, or from an earlier run, only brings Quirky forward.
+- **Why:** the click now carries the banner's id, and the shell keeps each id's `open` and `key`. The toast click opens `open` and then dismisses the toast, so the banner does the same.
+- **Evidence:** packages/ui/src/components/Toasts.tsx:89-93; apps/desktop/src/bun/native-notifications.ts `click`; apps/desktop/test/native-notifications.test.ts.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** a click should focus a specific terminal pane beyond what the worktree view selects.
+- **Source:** supersedes m1-notifications D26
+
+## D11: A dismissed banner releases its target; keyed banners reuse their id
+- **Question:** what a native dismissal does, and how long the shell keeps targets.
+- **Options:** also dismiss the in-app toast; only release the target. Keep targets for 5 minutes like Orca, or until clicked, dismissed or pushed out.
+- **Chose:** release only, and keep at most 256 targets, dropping the oldest. A keyed notification's id is `key:<key>`, so a newer one replaces the banner the way it replaces the toast.
+- **Why:** Orca releases a closed banner and changes nothing else. Banners stay in Notification Center well past 5 minutes, and a time limit would lose clicks on them.
+- **Evidence:** research/orca-features/notifications.md "Native delivery" (Retention); apps/desktop/src/bun/native-notifications.ts.
+- **Reversibility:** easy
+- **Confidence:** medium
+- **Revisit if:** dismissing a banner should clear the matching unread marker or toast.
+- **Source:** assumed — autonomous
+
+## D12: Removing banners when read stays out
+- **Question:** m1 D27 deferred removing banners once their session is read. Does this item build it?
+- **Options:** add a remove-by-id call to the fork patch; leave it out.
+- **Chose:** leave it out. The patch adds permission and the click and dismiss callbacks, which is what the fork spec lists for it.
+- **Why:** removal is a separate native call and a separate upstream change. The patch stays one readable PR.
+- **Evidence:** docs/quirk/specs/2026-10-29-electrobun-fork/logic.md "The 8 items"; docs/loop/decisions/m1-notifications.md D27.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** stale banners after reading a session become a complaint.
+- **Source:** deferred: remove banners when read
+
+## D13: Verify through tests and both SDKs, not a GUI run
+- **Question:** how to verify the notification half on this Mac, and what stays unverified.
+- **Options:** launch the dev app and exercise banners; verify with tests, typechecks and the native check, and record the rest as waiting on signing.
+- **Chose:** no GUI run. The dev build's bundle id is `dev.quirky.app`, the same as the user's installed Quirky, and macOS has no notification decision recorded for it (`com.apple.ncprefs` lists no entry), so the startup request would prompt on the user's real app identity. The app would also open a window that can take focus from the other sessions' GUI checks.
+- **Why:** a notification prompt for the real identity is a persistent system change the user hasn't asked for, and the brief allows a GUI run only without disturbing other windows.
+- **Evidence:** verified on 2026-10-29:
+  - Fork: `package/src/shared/notification-callbacks.test.ts` fails 8 of 9 tests on `v2.0.5` and passes with the patch; `native-symbol-contract.test.ts` passes; `scripts/test-macos-notification-response.sh` compiles against UserNotifications and passes (default and dismiss actions map to click and dismiss, an unbundled process gets no center instead of an exception). The private devkit `2.0.5-quirky.0-notification-callbacks` builds, and its dylibs export `setNotificationHandlers`, `requestNotificationPermission` and `showNotificationWithId`.
+  - Quirky: the root `bun run typecheck` passes with the patched devkit pinned, and `apps/desktop` also typechecks against stock 2.0.4, where every new call is feature-detected and reports `unsupported`. `bun scripts/suite.ts` over native-notifications, events, desktop-shell, kernel-schemas, layout-shell and notify passes 6 of 6 files. A full-suite run had 26 of 882 files failing; the one shown is quirky.worktree `window-navigation.test.ts` (already listed in BLOCKERS under the Worktree repair), and no other test depends on the removed capability refusal (`git grep`). The full failing list wasn't kept.
+  - Not verified: a real permission prompt and its answer, a banner click opening its session, a dismissal releasing its target, and Linux or Windows reporting `unsupported` at runtime. Clicks and dismissals need an authorized app, and macOS may refuse to authorize this unsigned build. These wait on the signing identity D4 needs.
+- **Reversibility:** easy
+- **Confidence:** medium
+- **Revisit if:** a signed build exists, or a throwaway bundle id is acceptable for a GUI check.
+- **Source:** assumed — autonomous
+
 ## Progress
-Blocked at step 3, after autonomous scope/gray-area resolution and prerequisite feasibility inventory, before specs/contracts/implementation. Both remaining native flows require unavailable outside prerequisites. Commit this log, retain it on blocked/m7-native-notification-and-signed-terminal-host, detach and run the absolute canonical queue.ts block with the external blocker entry. End this one-item iteration after the command returns; no queue-wide completion or stuck marker is warranted by this item claim.
+Notification half: built and tested against the fork patch (D7-D13), with the devkit pin left at 2.0.4 in the commit. The pin moves to the fork release that holds `patch/notification-callbacks` when this branch merges. Still open before the item can complete:
+- click, dismiss and permission checks on a signed build (D13);
+- the signed terminal-host half, still blocked on an authorized signing identity (D4, D5);
+- a follow-up item for removing banners when read (D12), to add with `queue.ts add` when the item lands.
+
+Earlier progress: Blocked at step 3, after autonomous scope/gray-area resolution and prerequisite feasibility inventory, before specs/contracts/implementation. Both remaining native flows require unavailable outside prerequisites. Commit this log, retain it on blocked/m7-native-notification-and-signed-terminal-host, detach and run the absolute canonical queue.ts block with the external blocker entry. End this one-item iteration after the command returns; no queue-wide completion or stuck marker is warranted by this item claim.

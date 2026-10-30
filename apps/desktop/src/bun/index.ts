@@ -25,6 +25,15 @@ import {
 import { daemonUrl, errorPageHtml } from './page'
 import { findRepoRoot, resolveRuntimeEnv, trayDotPath } from './paths'
 import { createNativeBrowserHandlers, type NativeBrowserHostRPC } from './native-browser'
+import {
+  NativeNotifications,
+  notificationCapabilities,
+  notificationCapabilitiesPreamble,
+  notificationIdIn,
+  readNotificationPermission,
+  registerNotificationPermission,
+  type NotificationUtils
+} from './native-notifications'
 import { playSound } from './sound'
 import {
   UPDATE_APPLY_ACTION,
@@ -68,7 +77,12 @@ async function loadNativeBrowserPreload(): Promise<string> {
   return output.text()
 }
 
-const nativeBrowserPreload = await loadNativeBrowserPreload()
+const notificationUtils: NotificationUtils = Utils
+const nativeNotifications = new NativeNotifications(notificationUtils, randomUUID)
+const startupNotificationPermission = await readNotificationPermission(notificationUtils)
+const nativeBrowserPreload =
+  notificationCapabilitiesPreamble(notificationCapabilities(startupNotificationPermission)) +
+  await loadNativeBrowserPreload()
 
 const logPath = join(quirkyHome(), 'logs', 'daemon.log')
 let stopping = false
@@ -396,6 +410,27 @@ try {
   showError(error)
 }
 
+void registerNotificationPermission(notificationUtils, startupNotificationPermission).then((permission) => {
+  console.info('notification permission:', permission)
+})
+
+app.on('notification-click', (payload) => {
+  const id = notificationIdIn(payload)
+  if (!id) return
+  const connected = client
+  void nativeNotifications.click(id, {
+    showWindow,
+    call: (method, params) => connected ? connected.callAny(method, params) : Promise.resolve(undefined)
+  }).catch((error) => {
+    console.warn('opening the notification target failed:', error)
+  })
+})
+
+app.on('notification-dismiss', (payload) => {
+  const id = notificationIdIn(payload)
+  if (id) nativeNotifications.dismiss(id)
+})
+
 void maintainConnection({
   ensure: async () => {
     latest = await ensureDaemon()
@@ -413,7 +448,7 @@ void maintainConnection({
     connected.onEvent((event) => {
       const notification = notificationFor(event)
       if (notification) {
-        Utils.showNotification({ title: notification.title, body: notification.body, silent: notification.silent })
+        nativeNotifications.show(notification)
         if (notification.soundFile) playSound(notification.soundFile, notification.volume)
       }
       const sound = soundIn(event)

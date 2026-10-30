@@ -675,7 +675,7 @@ export const KERNEL_METHOD_SCHEMAS = {
     result: ok
   },
   'desktop.shell.capabilities': {
-    description: 'Reports the real native shell operations this exact UI window can fulfill. Notification permission and callbacks are unsupported by the pinned SDK. Role `ui` only.',
+    description: 'Reports the real native shell operations this exact UI window can fulfill. Notification permission, click and dismiss are true only where the Electrobun SDK of the shell reports them, which is macOS. Role `ui` only.',
     params: nativeDesktopCapabilities,
     result: ok
   },
