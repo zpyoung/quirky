@@ -32,6 +32,42 @@ async function render(node: ReactNode) {
   await act(async () => root!.render(node))
 }
 
+async function withMenuGeometry(innerWidth: number, menuWidth: number, run: () => Promise<void>) {
+  const innerWidthDescriptor = Object.getOwnPropertyDescriptor(window, 'innerWidth')
+  const boundsDescriptor = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'getBoundingClientRect')
+  const getBoundingClientRect = HTMLElement.prototype.getBoundingClientRect
+  try {
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: innerWidth })
+    Object.defineProperty(HTMLElement.prototype, 'getBoundingClientRect', {
+      configurable: true,
+      value: function (this: HTMLElement) {
+        if (this.classList.contains('qt-menu')) {
+          return new DOMRect(0, 0, menuWidth, 100)
+        }
+        return getBoundingClientRect.call(this)
+      }
+    })
+    await run()
+  } finally {
+    if (innerWidthDescriptor) Object.defineProperty(window, 'innerWidth', innerWidthDescriptor)
+    else Reflect.deleteProperty(window, 'innerWidth')
+    if (boundsDescriptor) Object.defineProperty(HTMLElement.prototype, 'getBoundingClientRect', boundsDescriptor)
+    else Reflect.deleteProperty(HTMLElement.prototype, 'getBoundingClientRect')
+  }
+}
+
+async function renderPositionedMenu(props: { x: number; align?: 'start' | 'end' }) {
+  await render(<ContextMenu
+    label="Geometry"
+    x={props.x}
+    y={20}
+    align={props.align}
+    items={[]}
+    onClose={() => {}}
+  />)
+  return document.querySelector<HTMLElement>('.qt-menu-anchor')!
+}
+
 const key = async (element: Element, value: string) => act(async () => {
   element.dispatchEvent(new KeyboardEvent('keydown', { key: value, bubbles: true, cancelable: true }))
 })
@@ -105,4 +141,25 @@ describe('shared context menu', () => {
     expect(actions).toEqual(['run'])
     expect(closes).toEqual(['close'])
   })
+  test('end-aligns the measured menu width to the requested right edge', async () => {
+    await withMenuGeometry(640, 140, async () => {
+      const anchor = await renderPositionedMenu({ x: 400, align: 'end' })
+      expect(anchor.style.left).toBe('260px')
+    })
+  })
+
+  test('clamps a left-overflowing end-aligned menu to the viewport', async () => {
+    await withMenuGeometry(640, 140, async () => {
+      const anchor = await renderPositionedMenu({ x: 80, align: 'end' })
+      expect(anchor.style.left).toBe('0px')
+    })
+  })
+
+  test('keeps start alignment as the default', async () => {
+    await withMenuGeometry(640, 140, async () => {
+      const anchor = await renderPositionedMenu({ x: 200 })
+      expect(anchor.style.left).toBe('200px')
+    })
+  })
+
 })

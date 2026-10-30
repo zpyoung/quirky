@@ -199,7 +199,7 @@ export function ContextMenuList({ items, label, onChoose, onClose, onBack, heade
 }
 
 /** A menu positioned at its caller-provided screen coordinate. */
-export function ContextMenu({ items, label, x, y, onClose, header, highlightFirst }: ContextMenuProps) {
+export function ContextMenu({ items, label, x, y, onClose, header, highlightFirst, align = 'start' }: ContextMenuProps) {
   const anchor = useRef<HTMLDivElement>(null)
   const [position, setPosition] = useState({ x, y })
 
@@ -209,7 +209,7 @@ export function ContextMenu({ items, label, x, y, onClose, header, highlightFirs
     const place = () => {
       fitMenuToViewport(menu)
       const bounds = menu.getBoundingClientRect()
-      const left = Math.max(0, Math.min(x, window.innerWidth - bounds.width))
+      const left = Math.max(0, Math.min(align === 'end' ? x - bounds.width : x, window.innerWidth - bounds.width))
       const top = Math.max(0, Math.min(y, window.innerHeight - bounds.height))
       setPosition((current) => current.x === left && current.y === top ? current : { x: left, y: top })
     }
@@ -221,7 +221,7 @@ export function ContextMenu({ items, label, x, y, onClose, header, highlightFirs
       observer.disconnect()
       window.removeEventListener('resize', place)
     }
-  }, [items, x, y, header])
+  }, [items, x, y, header, align])
 
 
   useEffect(() => {

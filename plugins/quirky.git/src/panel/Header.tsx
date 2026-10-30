@@ -54,7 +54,7 @@ export function Header({ filter, filterOpen, onFilterOpen, onFilter, viewMode, o
               title="More source control actions"
               onClick={(event) => {
                 const box = event.currentTarget.getBoundingClientRect()
-                setMenuAt({ x: box.left, y: box.bottom })
+                setMenuAt({ x: box.right, y: box.bottom })
               }}
             >
               {'⋯'}
@@ -84,7 +84,7 @@ export function Header({ filter, filterOpen, onFilterOpen, onFilter, viewMode, o
           </IconButton>
         </div>
       )}
-      {menuAt && <ContextMenu x={menuAt.x} y={menuAt.y} label="Source control actions" items={entries} onClose={() => setMenuAt(null)} />}
+      {menuAt && <ContextMenu x={menuAt.x} y={menuAt.y} align="end" label="Source control actions" items={entries} onClose={() => setMenuAt(null)} />}
     </>
   )
 }

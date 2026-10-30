@@ -41,4 +41,6 @@ export type ContextMenuProps = {
   onClose(): void
   header?: ReactNode
   highlightFirst?: boolean
+  /** The horizontal menu edge anchored at x before viewport clamping. */
+  align?: 'start' | 'end'
 }
