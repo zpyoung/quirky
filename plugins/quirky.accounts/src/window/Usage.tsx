@@ -52,8 +52,19 @@ function StatusChip({ store, snapshot, preferences }: { store: AccountsUiStore; 
   const windows = windowEntries(snapshot)
   const tooltip = [PROVIDER_LABELS[snapshot.provider], state.label, ageLabel(snapshot.updatedAt), providerSource(snapshot)]
     .filter(Boolean).join(' · ')
-  const actionSummary = headline && snapshot.status !== 'idle' && snapshot.status !== 'unavailable'
-    ? `${displayPercent(headline.window.usedPercent, preferences.direction)}% ${preferences.direction}${snapshot.status === 'error' || snapshot.status === 'fetching' ? ` · ${state.label}` : ''}`
+  const actionHeadline = headline && snapshot.status !== 'idle' && snapshot.status !== 'unavailable'
+    ? headline
+    : null
+  const reset = actionHeadline ? formatReset(actionHeadline.window) : null
+  const resetSummary = !reset || reset === 'reset time unavailable'
+    ? null
+    : reset === 'now'
+      ? 'resets now'
+      : actionHeadline && actionHeadline.window.resetsAt !== null
+        ? `resets in ${reset}`
+        : `resets ${reset}`
+  const actionSummary = actionHeadline
+    ? `${displayPercent(actionHeadline.window.usedPercent, preferences.direction)}% ${preferences.direction}${snapshot.status === 'error' || snapshot.status === 'fetching' ? ` · ${state.label}` : ''}${resetSummary ? ` · ${resetSummary}` : ''}`
     : state.label
   const chipProps = {
     type: 'button' as const,
