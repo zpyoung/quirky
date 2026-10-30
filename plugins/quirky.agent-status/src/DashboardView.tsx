@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type ChangeEvent, type CSSProperties, type FormEvent } from 'react'
-import { Badge, Button, EmptyState, FormRow, InlineAgentCard, SectionHeader, StatusDot, TextField, type UiStatus } from '@quirky/ui'
+import { Badge, Button, ControlIcon, EmptyState, FormRow, IconButton, InlineAgentCard, SectionHeader, StatusDot, TextField, ToolPanelActions, ToolPanelFrame, ToolPanelTools, type UiStatus } from '@quirky/ui'
 import type { QuirkyEvent, UiPluginContext } from '@quirky/protocol'
 import type { ActivityThread } from './activity-types'
 import type { DashboardBucket, DashboardQuery, DashboardSnapshot } from './dashboard-types'
@@ -282,115 +282,122 @@ export function DashboardView({ context, input }: { context: UiPluginContext; in
   const hasFilters = Boolean(view.text || view.project || view.workspaceStatus || view.reviewStatus)
 
   return (
-    <main style={PAGE_STYLE}>
-      <div style={HEADER_STYLE}>
-        <SectionHeader
-          title="Agent Dashboard"
-          actions={
-            <div style={ACTIONS_STYLE}>
-              <Button onClick={() => {
-                void context.executeCommand(`command:${PLUGIN_ID}/openDashboardWindow`, view).catch((cause: unknown) => {
-                  context.toast('Could not pop out the Dashboard', cause instanceof Error ? cause.message : String(cause))
-                })
-              }}>Pop out</Button>
-              {snapshot ? (
-                <Badge label="Dashboard total">
-                  {snapshot.total} total{snapshot.hiddenIdle > 0 ? ` · ${snapshot.hiddenIdle} idle hidden` : ''}
-                </Badge>
-              ) : null}
-              {snapshot && snapshot.hiddenIdle > 0 ? (
-                <Button aria-label={`Show idle threads (${snapshot.hiddenIdle})`} onClick={() => updateView({ showIdle: true })}>
-                  Show idle ({snapshot.hiddenIdle})
-                </Button>
-              ) : view.showIdle === true ? (
-                <Button aria-label="Hide idle threads" onClick={() => updateView({ showIdle: false })}>Hide idle</Button>
-              ) : null}
-            </div>
-          }
-        />
-      </div>
-      <form style={FILTERS_STYLE} onSubmit={applyFilters}>
-        <TextField
-          id="dashboard-search"
-          label="Search"
-          aria-label="Search dashboard"
-          type="search"
-          value={draftText}
-          onChange={(event: ChangeEvent<HTMLInputElement>) => setDraftText(event.currentTarget.value)}
-        />
-        <TextField
-          id="dashboard-project"
-          label="Project"
-          aria-label="Project"
-          type="search"
-          value={draftProject}
-          onChange={(event: ChangeEvent<HTMLInputElement>) => setDraftProject(event.currentTarget.value)}
-        />
-        <FormRow label="Workspace status" htmlFor="dashboard-workspace-status">
-          <select
-            aria-label="Workspace status"
-            className="ui-text-field__input"
-            style={{ appearance: 'auto' }}
-            value={draftWorkspaceStatus}
-            onChange={(event: ChangeEvent<HTMLSelectElement>) => setDraftWorkspaceStatus(event.currentTarget.value)}
-          >
-            <option value="">Any</option>
-            {WORKSPACE_STATUSES.map((entry) => <option value={entry.value} key={entry.value}>{entry.label}</option>)}
-          </select>
-        </FormRow>
-        <FormRow label="GitHub review status" htmlFor="dashboard-review-status">
-          <select
-            aria-label="GitHub review status"
-            className="ui-text-field__input"
-            style={{ appearance: 'auto' }}
-            value={draftReviewStatus}
-            onChange={(event: ChangeEvent<HTMLSelectElement>) => setDraftReviewStatus(event.currentTarget.value)}
-          >
-            <option value="">Any</option>
-            {REVIEW_STATUSES.map((entry) => <option value={entry.value} key={entry.value}>{entry.label}</option>)}
-          </select>
-        </FormRow>
-        <div style={ACTIONS_STYLE}>
-          <Button type="submit" aria-label="Apply dashboard filters" variant="primary">Apply</Button>
-          <Button aria-label="Clear dashboard filters" onClick={clearFilters}>Clear all filters</Button>
-        </div>
-      </form>
-      <div style={RESULTS_STYLE}>
-        {error ? <div className="ui-error-text" role="alert" style={MESSAGE_STYLE}>{error}</div> : null}
-        {snapshot?.unavailable.map((message) => (
-          <div className="ui-error-text" role="alert" style={MESSAGE_STYLE} key={message}>Unavailable: {message}</div>
-        ))}
-        {loading && snapshot === null ? <p className="ui-text-muted" role="status" style={MESSAGE_STYLE}>Loading Agent Dashboard…</p> : null}
-        {!loading && !error && snapshot?.total === 0 ? (
-          <div role="status">
-            <EmptyState message={hasFilters ? 'No Activity threads match these filters.' : 'No Activity threads yet.'} />
-          </div>
+    <ToolPanelFrame title="Agent Dashboard">
+      <ToolPanelActions>
+        <IconButton
+          label="Pop out"
+          title="Pop out"
+          onClick={() => {
+            void context.executeCommand(`command:${PLUGIN_ID}/openDashboardWindow`, view).catch((cause: unknown) => {
+              context.toast('Could not pop out the Dashboard', cause instanceof Error ? cause.message : String(cause))
+            })
+          }}
+        >
+          <ControlIcon name="arrows-out" />
+        </IconButton>
+      </ToolPanelActions>
+      <ToolPanelTools>
+        {snapshot && snapshot.hiddenIdle > 0 ? (
+          <IconButton label={`Show idle threads (${snapshot.hiddenIdle})`} title={`Show idle (${snapshot.hiddenIdle})`} onClick={() => updateView({ showIdle: true })}>
+            <ControlIcon name="funnel" />
+          </IconButton>
+        ) : view.showIdle === true ? (
+          <IconButton label="Hide idle threads" title="Hide idle" onClick={() => updateView({ showIdle: false })}>
+            <ControlIcon name="funnel" />
+          </IconButton>
         ) : null}
+      </ToolPanelTools>
+      <main style={PAGE_STYLE}>
         {snapshot ? (
-          <div
-            style={{
-              ...BOARD_STYLE,
-              gridTemplateColumns: view.showIdle === true
-                ? 'repeat(4, minmax(var(--ui-space-24), 1fr))'
-                : 'repeat(3, minmax(var(--ui-space-24), 1fr))'
-            }}
-          >
-            {columns.map(({ bucket, label }) => (
-              <section data-dashboard-column={bucket} key={bucket} style={COLUMN_STYLE}>
-                <SectionHeader title={label} />
-                <ul style={CARD_LIST_STYLE}>
-                  {snapshot.cards.filter((card) => card.bucket === bucket).map((card) => (
-                    <li key={card.thread.sessionId}>
-                      <DashboardCardView context={context} thread={card.thread} bucket={card.bucket} />
-                    </li>
-                  ))}
-                </ul>
-              </section>
-            ))}
+          <div style={HEADER_STYLE}>
+            <Badge label="Dashboard total">
+              {snapshot.total} total{snapshot.hiddenIdle > 0 ? ` · ${snapshot.hiddenIdle} idle hidden` : ''}
+            </Badge>
           </div>
         ) : null}
-      </div>
-    </main>
+        <form style={FILTERS_STYLE} onSubmit={applyFilters}>
+          <TextField
+            id="dashboard-search"
+            label="Search"
+            aria-label="Search dashboard"
+            type="search"
+            value={draftText}
+            onChange={(event: ChangeEvent<HTMLInputElement>) => setDraftText(event.currentTarget.value)}
+          />
+          <TextField
+            id="dashboard-project"
+            label="Project"
+            aria-label="Project"
+            type="search"
+            value={draftProject}
+            onChange={(event: ChangeEvent<HTMLInputElement>) => setDraftProject(event.currentTarget.value)}
+          />
+          <FormRow label="Workspace status" htmlFor="dashboard-workspace-status">
+            <select
+              aria-label="Workspace status"
+              className="ui-text-field__input"
+              style={{ appearance: 'auto' }}
+              value={draftWorkspaceStatus}
+              onChange={(event: ChangeEvent<HTMLSelectElement>) => setDraftWorkspaceStatus(event.currentTarget.value)}
+            >
+              <option value="">Any</option>
+              {WORKSPACE_STATUSES.map((entry) => <option value={entry.value} key={entry.value}>{entry.label}</option>)}
+            </select>
+          </FormRow>
+          <FormRow label="GitHub review status" htmlFor="dashboard-review-status">
+            <select
+              aria-label="GitHub review status"
+              className="ui-text-field__input"
+              style={{ appearance: 'auto' }}
+              value={draftReviewStatus}
+              onChange={(event: ChangeEvent<HTMLSelectElement>) => setDraftReviewStatus(event.currentTarget.value)}
+            >
+              <option value="">Any</option>
+              {REVIEW_STATUSES.map((entry) => <option value={entry.value} key={entry.value}>{entry.label}</option>)}
+            </select>
+          </FormRow>
+          <div style={ACTIONS_STYLE}>
+            <Button type="submit" aria-label="Apply dashboard filters" variant="primary">Apply</Button>
+            <Button aria-label="Clear dashboard filters" onClick={clearFilters}>Clear all filters</Button>
+          </div>
+        </form>
+        <div style={RESULTS_STYLE}>
+          {error ? <div className="ui-error-text" role="alert" style={MESSAGE_STYLE}>{error}</div> : null}
+          {snapshot?.unavailable.map((message) => (
+            <div className="ui-error-text" role="alert" style={MESSAGE_STYLE} key={message}>Unavailable: {message}</div>
+          ))}
+          {loading && snapshot === null ? <p className="ui-text-muted" role="status" style={MESSAGE_STYLE}>Loading Agent Dashboard…</p> : null}
+          {!loading && !error && snapshot?.total === 0 ? (
+            <div role="status">
+              <EmptyState message={hasFilters ? 'No Activity threads match these filters.' : 'No Activity threads yet.'} />
+            </div>
+          ) : null}
+          {snapshot ? (
+            <div
+              style={{
+                ...BOARD_STYLE,
+                gridTemplateColumns: view.showIdle === true
+                  ? 'repeat(4, minmax(var(--ui-space-24), 1fr))'
+                  : 'repeat(3, minmax(var(--ui-space-24), 1fr))'
+              }}
+            >
+              {columns.map(({ bucket, label }) => (
+                <section data-dashboard-column={bucket} key={bucket} style={COLUMN_STYLE}>
+                  <SectionHeader title={label} />
+                  <ul style={CARD_LIST_STYLE}>
+                    {snapshot.cards.filter((card) => card.bucket === bucket).map((card) => (
+                      <li key={card.thread.sessionId}>
+                        <DashboardCardView context={context} thread={card.thread} bucket={card.bucket} />
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              ))}
+            </div>
+          ) : null}
+        </div>
+      </main>
+    </ToolPanelFrame>
   )
 }
 

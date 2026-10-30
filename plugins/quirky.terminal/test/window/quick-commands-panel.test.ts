@@ -47,6 +47,16 @@ describe('Quick Commands panel', () => {
     expect(last()).toEqual({ count: 0, filter: 'all', query: '', rows: [] })
   })
 
+  test('puts Add Command on the frame rail, keeps search and scope in the body, and draws the title once', async () => {
+    const { element } = await openPanel()
+    expect(button('Add Command', element).closest('.ui-tool-panel-frame__rail')).not.toBeNull()
+    expect(search(element).closest('.ui-tool-panel-frame__body')).not.toBeNull()
+    expect(filter(element).closest('.ui-tool-panel-frame__body')).not.toBeNull()
+    expect($$('h2', element).filter((heading) => heading.textContent === 'Quick Commands')).toHaveLength(1)
+    expect($('header', element)?.classList.contains('ui-tool-panel-frame__header')).toBe(true)
+    expect($$('header', element)).toHaveLength(1)
+  })
+
   test('SC-49: adding a command with Project preselected to the selected repo uses the layout worktree', async () => {
     const { fake, element, last } = await openPanel({
       repos: [{ id: 'api', name: 'api' }, { id: 'web', name: 'web' }],
