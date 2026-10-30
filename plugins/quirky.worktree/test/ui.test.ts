@@ -1231,7 +1231,7 @@ test('a project header carries the project tile under All projects and drops it 
   const tiles = () => [...host.querySelectorAll<HTMLElement>('.repo-header')].map((header) => header.querySelector('.ui-project-tile')?.textContent ?? null)
   expect(tiles()).toEqual(['AP', 'WE'])
   await h.emit({ type: 'quirky.worktree/optionsChanged', data: { options: { ...DEFAULT_STOCK_OPTIONS, filterRepoIds: ['r1'], showProperties: [...DEFAULT_STOCK_OPTIONS.showProperties] } } } as QuirkyEvent)
-  expect(tiles()).toEqual([null, null])
+  expect(tiles()).toEqual([null])
 })
 
 const untrusted = (changed = false) =>

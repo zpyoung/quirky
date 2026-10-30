@@ -869,7 +869,7 @@ export function LedgerApp({
       {refreshSpinner ? '…' : <ControlIcon name="arrows-clockwise" />}
     </IconButton>
   )
-  const newEntryTool = (label: string) => <IconButton label={label} title={label} variant="primary" onClick={beginNew}><ControlIcon name="plus" /></IconButton>
+  const newEntryTool = (label: string) => <IconButton label={label} title={label} onClick={beginNew}><ControlIcon name="plus" /></IconButton>
 
   const renderChooser = () => (
     <ToolPanelFrame
@@ -933,7 +933,7 @@ export function LedgerApp({
         />}
         tools={<>
           {refreshTool}
-          <Button type="button" onClick={openTriage}>Triage</Button>
+          <IconButton label="Triage" title="Triage" onClick={openTriage}><ControlIcon name="funnel" /></IconButton>
           {newEntryTool('New')}
         </>}
       >
@@ -968,7 +968,7 @@ export function LedgerApp({
       </>}
       tools={<>
         {refreshTool}
-        <Button type="button" onClick={openTriage}>Triage</Button>
+        <IconButton label="Triage" title="Triage" onClick={openTriage}><ControlIcon name="funnel" /></IconButton>
         {newEntryTool('New entry')}
       </>}
     >

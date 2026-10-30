@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Button, ContextMenu, Dialog, EmptyState, IconButton, SectionHeader } from '@quirky/ui'
+import { Button, ContextMenu, Dialog, EmptyState, IconButton } from '@quirky/ui'
 import type { ContextMenuItem } from '@quirky/ui'
 import type { GitBusyOp, GitChange, GitCommit, GitStatus, GitStatusEntry, UiPluginContext } from '@quirky/protocol'
 import { CommitSparkle } from '../ai/CommitSparkle'
@@ -1043,7 +1043,6 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
   if (data.unavailable !== null) {
     return (
       <div className="ui-stack" data-git-panel ref={root} onKeyDown={onKeyDown} style={{ height: '100%', minHeight: 0, gap: 0 }}>
-        <SectionHeader title="Source control" />
         <EmptyState message={data.unavailable} action={{ label: 'Retry', onAction: () => void data.refresh() }} />
       </div>
     )

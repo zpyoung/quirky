@@ -21,6 +21,7 @@ actGlobal.IS_REACT_ACT_ENVIRONMENT = true
 const { act, createElement } = await import('react')
 const { createRoot } = await import('react-dom/client')
 const { AutomationsPage } = await import('../src/list/AutomationsPage')
+const { ToolPanelFrame } = await import('@quirky/ui')
 
 const AUTOMATION_ID = 'automation-paused'
 const EXTERNAL_JOB_ID = 'openclaw-job-1'
@@ -170,7 +171,7 @@ async function mountPage(
       notify: () => {},
       report: (state) => reports.push(state)
     }
-    await act(async () => root.render(createElement(AutomationsPage, props)))
+    await act(async () => root.render(createElement(ToolPanelFrame, { title: 'Automations', children: createElement(AutomationsPage, props) })))
   }
   await render(page, options.navigation)
   return { container, reports, render }

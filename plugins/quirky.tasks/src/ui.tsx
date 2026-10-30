@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import type { MountFunction, UiPluginContext } from '@quirky/protocol'
-import { Button, ContextMenu, EmptyState, FormRow, SectionHeader, Tabs, ToolPanelFrame } from '@quirky/ui'
+import { Button, ContextMenu, ControlIcon, EmptyState, FormRow, IconButton, SectionHeader, Tabs, ToolPanelFrame } from '@quirky/ui'
 import { TASKS_VIEW, TASKS_SETTINGS_VIEW, type TasksState, type TaskPreferences } from './contracts'
 import { TasksList, WorkspaceComposer } from './list/TasksList'
 import { IssueSurface } from './issue/IssueSurface'
@@ -120,7 +120,7 @@ function TasksApp({ context, report }: { context: UiPluginContext; report?: (sta
     catch (cause) { context.toast('Could not change Tasks view', message(cause)) }
   }
   return <div className="quirky-tasks" ref={root}>
-    <ToolPanelFrame title="Tasks" tabs={state && <Tabs label="Task mode" items={[{ id: 'issues', label: 'Issues' }, { id: 'prs', label: 'PRs' }, { id: 'projects', label: 'Projects' }]} value={state.navigation.mode} onChange={mode => void navigate(mode as 'issues' | 'prs' | 'projects')} />} onMinimize={() => void context.call('quirky.tasks/close', {}).catch(cause => context.toast('Could not close Tasks', message(cause)))} actions={<Button onClick={() => void context.call('quirky.tasks/settings', {}).catch(cause => context.toast('Could not open task settings', message(cause)))}>Task settings</Button>}>
+    <ToolPanelFrame title="Tasks" tabs={state && <Tabs label="Task mode" items={[{ id: 'issues', label: 'Issues' }, { id: 'prs', label: 'PRs' }, { id: 'projects', label: 'Projects' }]} value={state.navigation.mode} onChange={mode => void navigate(mode as 'issues' | 'prs' | 'projects')} />} onMinimize={() => void context.call('quirky.tasks/close', {}).catch(cause => context.toast('Could not close Tasks', message(cause)))} actions={<IconButton label="Task settings" title="Task settings" onClick={() => void context.call('quirky.tasks/settings', {}).catch(cause => context.toast('Could not open task settings', message(cause)))}><ControlIcon name="gear" /></IconButton>}>
       {error && <EmptyState message={error} action={{ label: 'Retry', onAction: () => void refresh() }} />}
       {!state ? <p role="status">Loading Tasks…</p> : <>
         <main className="tasks-body">{state.navigation.detail ? <IssueSurface context={context} state={state} refresh={refresh} /> : state.navigation.mode === 'projects' ? <ProjectsSurface context={context} state={state} refresh={refresh} /> : <TasksList context={context} state={state} refresh={refresh} />}</main>

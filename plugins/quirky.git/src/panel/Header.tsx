@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Badge, Button, ContextMenu, ControlIcon, IconButton, TextField, ToolPanelActions, ToolPanelTools } from '@quirky/ui'
+import { Badge, Button, ContextMenu, ControlIcon, IconButton, TextField, ToolPanelActions } from '@quirky/ui'
 import type { ContextMenuItem } from '@quirky/ui'
 import type { GitCompare, GitStatus } from '@quirky/protocol'
 import type { ViewMode } from './data'
@@ -35,7 +35,7 @@ export function Header({ filter, filterOpen, onFilterOpen, onFilter, viewMode, o
   }
   return (
     <>
-      <ToolPanelTools>
+      <ToolPanelActions>
         <IconButton
           label="Filter files by name"
           variant={filter.trim() !== '' ? 'primary' : 'secondary'}
@@ -45,8 +45,6 @@ export function Header({ filter, filterOpen, onFilterOpen, onFilter, viewMode, o
         >
           <ControlIcon name="magnifying-glass" />
         </IconButton>
-      </ToolPanelTools>
-      <ToolPanelActions>
         <IconButton
           label="More source control actions"
           aria-haspopup="menu"

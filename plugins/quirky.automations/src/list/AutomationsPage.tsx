@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
-import { Badge, Button, ContextMenuList, EmptyState, FormRow, IconButton, StatusDot, Tabs, TextField, type ContextMenuItem } from '@quirky/ui'
+import { Badge, Button, ContextMenuList, EmptyState, FormRow, IconButton, StatusDot, Tabs, TextField, ToolPanelActions, type ContextMenuItem } from '@quirky/ui'
 import type { UiPluginContext } from '@quirky/protocol'
 import type { AutomationDefinition, AutomationRun, AutomationRunsPage } from '../../types'
 import type { AutomationOwner, AutomationTargetResolution } from '../../dispatch-contract'
@@ -1232,14 +1232,12 @@ export function AutomationsPage(props: AutomationSurfaceProps) {
       return row.lastStatus ? statusLabel(row.lastStatus) : row.lastRunAt === null ? 'Never ran' : 'Status unavailable'
     }
     return <main className="auto-automations" aria-label="Automations">
-      <header className="auto-page-header">
-        <div><h1>Automations</h1><span className="auto-cell-sub">Schedule structured agent work and review its run history.</span></div>
-        <div className="auto-toolbar">
+      <ToolPanelActions>
           <Button onClick={() => void refreshAll()} disabled={refreshing} aria-label="Refresh automations">{refreshing ? 'Refreshing…' : 'Refresh automations'}</Button>
           <Button onClick={() => void navigate({ page: 'runs', automationId: null, runId: null, host: 'all' })}>Runs</Button>
           <Button variant="primary" onClick={() => void openEditor()} disabled={busyAction !== null || !canCreateLocally}>{busyAction === 'create' ? 'Opening…' : 'New Automation'}</Button>
-        </div>
-      </header>
+      </ToolPanelActions>
+      <span className="auto-cell-sub">Schedule structured agent work and review its run history.</span>
       {showSettingsLink && <div className="auto-info" role="status">The confirmation preference was saved. <Button onClick={() => { setShowSettingsLink(false); props.context.openView(AUTOMATIONS_SETTINGS_VIEW) }}>Open Settings</Button><Button onClick={() => setShowSettingsLink(false)}>Dismiss</Button></div>}
       {lastRunFilterPending && <div className="auto-info" role="status">Loading run history before applying this filter…</div>}
       {lastRunFilterUnavailable && <div className="auto-warning" role="status">Run-history filter results are incomplete because some history could not be loaded.</div>}

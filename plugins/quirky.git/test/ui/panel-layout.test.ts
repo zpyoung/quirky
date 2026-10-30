@@ -47,17 +47,17 @@ describe('SC-8: the panel layout', () => {
     unmount()
   })
 
-  test('puts the filter toggle on the frame rail and the more-actions menu in the frame header, with one title', async () => {
+  test('puts the filter toggle and the more-actions menu in the frame header, with one title', async () => {
     const { element, unmount } = await open()
     const filter = byLabel(element, 'Filter files by name')
     const more = byLabel(element, 'More source control actions')
-    expect(filter?.closest('.ui-tool-panel-frame__rail')).not.toBeNull()
+    expect(filter?.closest('.ui-tool-panel-frame__header .ui-tool-panel-frame__actions')).not.toBeNull()
     expect(more?.closest('.ui-tool-panel-frame__header .ui-tool-panel-frame__actions')).not.toBeNull()
     expect(qa(element, 'h2').filter((h) => h.textContent === 'Source control')).toHaveLength(1)
     unmount()
   })
 
-  test('keeps the filter field in the body and the toggle works from the rail', async () => {
+  test('keeps the filter field in the body and the toggle works from the header', async () => {
     const { element, unmount } = await open()
     await click(byLabel(element, 'Filter files by name'))
     const field = byLabel(element, 'Filter files…')

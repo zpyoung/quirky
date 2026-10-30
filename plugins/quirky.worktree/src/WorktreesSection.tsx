@@ -12,7 +12,7 @@ import { Notices } from './Notices'
 import { ActivityFilters } from './ActivityFilters'
 import { ProjectSettingsDialog } from './ProjectSettingsDialog'
 import { RemoveProjectDialog } from './RemoveProjectDialog'
-import { buildReport, buildTreeModel, isAddFlow, repoLabel, type DialogState, type GroupNode, type PendingCreate, type SeparatorReport, type TreeRow, type WorktreesReport } from './report'
+import { buildReport, buildTreeModel, isAddFlow, narrowTreeModel, repoLabel, type DialogState, type GroupNode, type PendingCreate, type SeparatorReport, type TreeRow, type WorktreesReport } from './report'
 import { useNow } from './StatusDot'
 import { Tree } from './Tree'
 import { TrustDialog } from './TrustDialog'
@@ -387,7 +387,10 @@ export function WorktreesSection({ context, report, requests, addProjectRequests
     () => (deleting.size === 0 ? ordered : ordered.map((worktree) => (deleting.has(worktree.id) ? { ...worktree, removing: true } : worktree))),
     [ordered, deleting]
   )
-  const model = useMemo(() => buildTreeModel(orderedRepos, groups, shown, pending, treeVisibleIds), [orderedRepos, groups, shown, pending, treeVisibleIds])
+  const model = useMemo(
+    () => narrowTreeModel(buildTreeModel(orderedRepos, groups, shown, pending, treeVisibleIds), stockOptions.filterRepoIds),
+    [orderedRepos, groups, shown, pending, treeVisibleIds, stockOptions.filterRepoIds]
+  )
   const state: WorktreesReport = useMemo(() => {
     // a stacked question is what the person is looking at, so it is what `ui state` reports
     const front: DialogState | null = trust

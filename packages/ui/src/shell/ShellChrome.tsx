@@ -464,19 +464,21 @@ function AttentionToast({ ask, phase, error }: { ask: Ask; phase: AttentionToast
           <p>{questionText}</p>
           {error && <p className="ui-error-text" role="alert">Could not answer: {error}</p>}
           {openError && <p className="ui-error-text" role="alert">Could not open the worktree: {openError}</p>}
-          {action}
-          {ask.worktreeId !== null && (
-            <Button
-              onClick={() => {
-                void store.openWorktree(ask.worktreeId!).then((failure) => {
-                  if (failure) setOpenError(failure)
-                  else store.dismissToast(ask.id)
-                })
-              }}
-            >
-              Open worktree
-            </Button>
-          )}
+          <div className="shell-attention-toast__actions">
+            {action}
+            {ask.worktreeId !== null && (
+              <Button
+                onClick={() => {
+                  void store.openWorktree(ask.worktreeId!).then((failure) => {
+                    if (failure) setOpenError(failure)
+                    else store.dismissToast(ask.id)
+                  })
+                }}
+              >
+                Open worktree
+              </Button>
+            )}
+          </div>
         </div>
       )}
       status="needs-you"

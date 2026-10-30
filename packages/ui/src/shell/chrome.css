@@ -326,8 +326,16 @@ button.ui-status-bar-item:focus-visible {
   white-space: pre-wrap;
 }
 
-.shell-attention-toast__description .ui-button {
-  justify-self: start;
+.shell-attention-toast__actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--ui-space-8);
+}
+
+.shell-attention-toasts .ui-toast {
+  align-items: flex-start;
+  flex-wrap: nowrap;
 }
 .shell-main-header {
   align-items: center;

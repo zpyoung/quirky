@@ -121,7 +121,7 @@ test('panel mode keeps refresh, triage and new on the rail, and refresh reloads 
   const host = await mountPanel(fakeContext(calls))
   const refresh = railButton(host, 'Refresh ledger')!
   expect(refresh.querySelector('svg.ui-control-icon')).not.toBeNull()
-  expect(textButton(rail(host), 'Triage')).toBeDefined()
+  expect(rail(host).querySelector('button[aria-label="Triage"]')).not.toBeNull()
   expect(railButton(host, 'New')).not.toBeNull()
   expect(host.querySelector('.ui-tool-panel-frame__body button[aria-label="Refresh ledger"]')).toBeNull()
   const before = listCalls(calls)
@@ -142,7 +142,7 @@ test('page mode wraps itself in a frame that carries its refresh, triage, new an
   const refresh = railButton(host, 'Refresh ledger')!
   expect(refresh).not.toBeNull()
   expect(railButton(host, 'New entry')).not.toBeNull()
-  expect(textButton(rail(host), 'Triage')).toBeDefined()
+  expect(rail(host).querySelector('button[aria-label="Triage"]')).not.toBeNull()
   expect(textButton(headerActions(host), 'Ledger settings')).toBeDefined()
   expect(textButton(headerActions(host), 'Delete ledger')).toBeDefined()
   expect(tabs(host).childNodes).toHaveLength(0)
