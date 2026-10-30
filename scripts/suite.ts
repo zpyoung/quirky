@@ -6,13 +6,16 @@
  * Flaky files are appended to `<git common dir>/build-loop/flakes.log` when the build loop is set up.
  *
  * When `<git common dir>/build-loop/remote-tests.json` names a host (`{"host": "user@box", "jobs": 4}`),
- * the run moves off this machine: the working tree is copied to a fresh folder there and each test
+ * optionally with an `overflow` host of the same shape, the run moves off this machine. It picks one
+ * host at the start: the first, or the overflow host when the first is down or full. A run from a land
+ * stays on a full first host. If no host can be reached the run stops before any test starts.
+ * On the chosen host the working tree is copied to a fresh folder there and each test
  * file runs in its own process, `jobs` at a time, each holding one of `slots` machine-wide locks there
  * so several runs at once share the host's cores (`slots` defaults to 8). Files start slowest first,
  * by the times logged in `~/test-slots/durations.log` there. A run from the integration or verify
  * worktree is a land, which holds the land lock while it runs, so it can use every slot while other
- *   runs share one. Files listed in scripts/test-on-macos.txt still run here, alongside. If the host
- *   can't be reached the whole run falls back to this machine.
+ *   runs share one. Files listed in scripts/test-on-macos.txt still run here, alongside. A host lost
+ *   during the run stops it.
  * Before local tests, the CLI installs frozen dependencies when the current directory has a
  * `package.json`; standalone test directories without a manifest need no install. The remote worker
  * already installs them in its fresh checkout.
@@ -27,7 +30,10 @@ import { Store } from '../packages/daemon/src/store'
 import { createProcessScope, type ProcessScope } from './test-support/process-scope'
 
 export type SuiteResult = { ok: boolean; flaky: string[] }
-type Remote = { host: string; jobs?: number; slots?: number }
+type Host = { host: string; jobs?: number; slots?: number }
+type Remote = Host & { overflow?: Host }
+export type HostState = 'free' | 'full' | 'down'
+type HostChoice = { host: Host; note?: string } | { error: string }
 type Run = (cwd: string, args: string[]) => Promise<{ code: number; output: string }>
 
 const TEST_FILE = /[._](test|spec)\.[cm]?[jt]sx?$/
@@ -288,6 +294,35 @@ export function macosOnly(list: string): Set<string> {
   return new Set(lines.filter((line) => line && !line.startsWith('#')).map((line) => line.split(/\s+/)[0]))
 }
 
+/** Whether the workers in a host's `ps` listing already take all of its `slots`. */
+export function hostLoad(processes: string, slots: number): HostState {
+  let jobs = 0
+  for (const match of processes.matchAll(/^bun scripts\/suite\.ts --worker --jobs (\d+)/gm)) jobs += Number(match[1])
+  return jobs >= slots ? 'full' : 'free'
+}
+
+/** The host a run should use, or why none can be used. Each host is checked at most once, first host first. */
+export async function chooseHost(remote: Remote, land: boolean, state: (host: Host) => Promise<HostState>): Promise<HostChoice> {
+  const first = await state(remote)
+  if (first === 'free' || (first === 'full' && land)) return { host: remote }
+  const overflow = remote.overflow
+  const second = overflow ? await state(overflow) : 'down'
+  if (overflow && second !== 'down') return { host: overflow, note: `${remote.host} is ${first}, so this run uses ${overflow.host}` }
+  if (first === 'full') {
+    const reason = overflow ? ` and overflow is unavailable because ${overflow.host} is down` : ''
+    return { host: remote, note: `${remote.host} is full${reason}, so this run queues` }
+  }
+  const hosts = overflow ? `${remote.host} and ${overflow.host} are` : `${remote.host} is`
+  return { error: `${hosts} unreachable, so no tests ran. Set QUIRKY_TEST_LOCAL=1 to run everything on this machine.` }
+}
+
+const sshTo = (host: string) => ['ssh', '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=15', host]
+
+async function hostState({ host, slots }: Host): Promise<HostState> {
+  const { code, output } = await exec([...sshTo(host), 'ps -eo args'], process.cwd(), false)
+  return code === 0 ? hostLoad(output, slots ?? 8) : 'down'
+}
+
 function remoteConfig(cwd: string): Remote | undefined {
   if (process.env.QUIRKY_TEST_LOCAL) return undefined
   const common = gitCommonDir(cwd)
@@ -296,8 +331,8 @@ function remoteConfig(cwd: string): Remote | undefined {
 }
 
 /** Runs `files` on the host; undefined when the host or the copy failed, as opposed to a test. */
-async function runRemote(cwd: string, remote: Remote, files: string[], flags: string[], land: boolean): Promise<SuiteResult | undefined> {
-  const ssh = ['ssh', '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=15', remote.host]
+async function runRemote(cwd: string, remote: Host, files: string[], flags: string[], land: boolean): Promise<SuiteResult | undefined> {
+  const ssh = sshTo(remote.host)
   const dir = `runs/${Date.now()}-${process.pid}`
   const scratch = mkdtempSync(join(tmpdir(), 'suite-remote-'))
   try {
@@ -352,24 +387,29 @@ async function main(argv: string[]): Promise<boolean> {
   const files = discover(cwd, argv)
   const here = files.filter((file) => macos.has(file))
   const there = files.filter((file) => !macos.has(file))
-  console.log(`running ${there.length} test files on ${remote.host} and ${here.length} macOS-only files here`)
-  const land = ['integration', 'verify'].includes(basename(cwd)) && basename(dirname(cwd)) === 'build-loop'
-  let localInstall: Promise<boolean> | undefined
-  const installLocal = () => localInstall ??= installLocalDependencies(cwd)
   const runLocal = async (files: string[]): Promise<SuiteResult> => {
     if (files.length === 0) return { ok: true, flaky: [] }
-    if (!(await installLocal())) return { ok: false, flaky: [] }
+    if (!(await installLocalDependencies(cwd))) return { ok: false, flaky: [] }
     return runFiles(cwd, files, flags, 1)
   }
-  const [away, local] = await Promise.all([runRemote(cwd, remote, there, flags, land), runLocal(here)])
-  if (away) {
-    if (away.flaky.length > 0) recordFlakes(cwd, away.flaky)
-    return away.ok && local.ok
+  if (there.length === 0) return (await runLocal(here)).ok
+  const land = ['integration', 'verify'].includes(basename(cwd)) && basename(dirname(cwd)) === 'build-loop'
+  const choice = await chooseHost(remote, land, hostState)
+  if ('error' in choice) {
+    console.error(choice.error)
+    return false
   }
-  console.error(`\n${remote.host} couldn't run the tests, so they run here instead`)
-  if (there.length === 0) return local.ok
-  if (!(await installLocal())) return false
-  return (await runFiles(cwd, there, flags, 1)).ok && local.ok
+  if (choice.note) console.log(choice.note)
+  console.log(`running ${there.length} test files on ${choice.host.host} and ${here.length} macOS-only files here`)
+  const runAway = async (): Promise<SuiteResult> => {
+    const result = await runRemote(cwd, choice.host, there, flags, land)
+    if (result) return result
+    console.error(`\n${choice.host.host} couldn't finish the tests, so this run stops`)
+    process.exit(1)
+  }
+  const [away, local] = await Promise.all([runAway(), runLocal(here)])
+  if (away.flaky.length > 0) recordFlakes(cwd, away.flaky)
+  return away.ok && local.ok
 }
 
 if (import.meta.main) process.exit((await main(Bun.argv.slice(2))) ? 0 : 1)

@@ -2,7 +2,7 @@ import { afterEach, beforeEach, expect, test } from 'bun:test'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { discover, macosOnly, runFiles, runSuite, slowestFirst, usableSlots } from './suite'
+import { chooseHost, discover, hostLoad, macosOnly, runFiles, runSuite, slowestFirst, usableSlots, type HostState } from './suite'
 import { createProcessScope, type ProcessScope } from './test-support/process-scope'
 
 let dir: string
@@ -360,4 +360,121 @@ test('resolves a declared workspace runtime dependency', () => {
       rmSync(fixture, { recursive: true, force: true })
     }
   }
+}, 30_000)
+
+const ovh = { host: 'quirkyci@ovh', jobs: 4, slots: 4 }
+const gcloud = { host: 'quirkyci@gcloud', jobs: 8, slots: 16 }
+const withOverflow = { ...ovh, overflow: gcloud }
+
+/** Runs chooseHost against fixed host states and records which hosts it checked. */
+async function choose(remote: typeof ovh & { overflow?: typeof gcloud }, states: Record<string, HostState>, land = false) {
+  const checked: string[] = []
+  const choice = await chooseHost(remote, land, async ({ host }) => {
+    checked.push(host)
+    return states[host]
+  })
+  return { choice, checked }
+}
+
+test('a run stays on the first host when it has room, without checking the overflow host', async () => {
+  const { choice, checked } = await choose(withOverflow, { 'quirkyci@ovh': 'free', 'quirkyci@gcloud': 'down' })
+  expect(choice).toEqual({ host: withOverflow })
+  expect(checked).toEqual(['quirkyci@ovh'])
+})
+
+test('a run overflows when the first host is full and the overflow host is up', async () => {
+  const { choice } = await choose(withOverflow, { 'quirkyci@ovh': 'full', 'quirkyci@gcloud': 'free' })
+  expect(choice).toEqual({ host: gcloud, note: 'quirkyci@ovh is full, so this run uses quirkyci@gcloud' })
+})
+
+test('a run queues on the first host when it is full and the overflow host is down', async () => {
+  const { choice } = await choose(withOverflow, { 'quirkyci@ovh': 'full', 'quirkyci@gcloud': 'down' })
+  expect(choice).toEqual({ host: withOverflow, note: 'quirkyci@ovh is full and overflow is unavailable because quirkyci@gcloud is down, so this run queues' })
+})
+
+test('a run overflows when the first host is down', async () => {
+  const { choice } = await choose(withOverflow, { 'quirkyci@ovh': 'down', 'quirkyci@gcloud': 'full' })
+  expect(choice).toEqual({ host: gcloud, note: 'quirkyci@ovh is down, so this run uses quirkyci@gcloud' })
+})
+
+test('a run stops when every host is down, naming them and the way to run locally', async () => {
+  const { choice } = await choose(withOverflow, { 'quirkyci@ovh': 'down', 'quirkyci@gcloud': 'down' })
+  if (!('error' in choice)) throw new Error('expected an error')
+  expect(choice.error).toContain('quirkyci@ovh')
+  expect(choice.error).toContain('quirkyci@gcloud')
+  expect(choice.error).toContain('QUIRKY_TEST_LOCAL=1')
+})
+
+test('a land stays on a full first host, where it already takes priority', async () => {
+  const { choice, checked } = await choose(withOverflow, { 'quirkyci@ovh': 'full', 'quirkyci@gcloud': 'free' }, true)
+  expect(choice).toEqual({ host: withOverflow })
+  expect(checked).toEqual(['quirkyci@ovh'])
+})
+
+test('a land follows the overflow rules when the first host is down', async () => {
+  const { choice } = await choose(withOverflow, { 'quirkyci@ovh': 'down', 'quirkyci@gcloud': 'free' }, true)
+  expect(choice).toEqual({ host: gcloud, note: 'quirkyci@ovh is down, so this run uses quirkyci@gcloud' })
+})
+
+test('with one host configured, a full host queues the run and a down host stops it', async () => {
+  expect((await choose(ovh, { 'quirkyci@ovh': 'full' })).choice).toEqual({ host: ovh, note: 'quirkyci@ovh is full, so this run queues' })
+  const { choice } = await choose(ovh, { 'quirkyci@ovh': 'down' })
+  if (!('error' in choice)) throw new Error('expected an error')
+  expect(choice.error).toContain('quirkyci@ovh')
+  expect(choice.error).toContain('QUIRKY_TEST_LOCAL=1')
+})
+
+test('hostLoad counts jobs of running workers against the slots, ignoring the shells that started them', () => {
+  const worker = 'bun scripts/suite.ts --worker --jobs 4 --slots 4 --land 0 --timeout=5000'
+  const shell = `bash -c export PATH="$HOME/.bun/bin:$PATH" && cd runs/1 && bun install --frozen-lockfile >/dev/null && ${worker}`
+  expect(hostLoad(`COMMAND\nsshd: quirkyci\n${shell}\n`, 4)).toBe('free')
+  expect(hostLoad(`COMMAND\n${shell}\n${worker}\nbun test ./a.test.ts\n`, 4)).toBe('full')
+  expect(hostLoad(`${worker.replace('--jobs 4', '--jobs 2')}\n`, 16)).toBe('free')
+  expect(hostLoad(`${worker.replace('--jobs 4', '--jobs 2')}\n${worker.replace('--jobs 4', '--jobs 2')}\n`, 4)).toBe('full')
+})
+
+/** Runs the suite CLI in a throwaway repo whose `ssh` is the given script and whose config names two hosts. */
+async function cliWithFakeSsh(ssh: string, files: Record<string, string>, macosList = '') {
+  Bun.spawnSync(['git', 'init', '-q'], { cwd: dir })
+  mkdirSync(join(dir, 'scripts'), { recursive: true })
+  mkdirSync(join(dir, 'bin'))
+  mkdirSync(join(dir, '.git', 'build-loop'))
+  writeFileSync(join(dir, '.git', 'build-loop', 'remote-tests.json'), JSON.stringify({ ...ovh, overflow: gcloud }))
+  writeFileSync(join(dir, 'scripts', 'test-on-macos.txt'), macosList)
+  writeFileSync(join(dir, 'bin', 'ssh'), `#!/bin/sh\n${ssh}\n`, { mode: 0o755 })
+  for (const [file, body] of Object.entries(files)) writeFileSync(join(dir, file), body)
+  const child = Bun.spawn(['bun', join(import.meta.dir, 'suite.ts'), 'pkg'], {
+    cwd: dir,
+    env: { ...process.env, PATH: `${join(dir, 'bin')}:${process.env.PATH}`, QUIRKY_TEST_LOCAL: '' },
+    stdout: 'pipe',
+    stderr: 'pipe'
+  })
+  const [out, err, code] = await Promise.all([new Response(child.stdout).text(), new Response(child.stderr).text(), child.exited])
+  return { code, output: out + err }
+}
+
+const marksRun = (marker: string) => `import { test } from 'bun:test'\nimport { writeFileSync } from 'node:fs'\ntest('runs', () => writeFileSync(${JSON.stringify(marker)}, ''))\n`
+
+test('the CLI starts no test when every host is down, including macOS-only files', async () => {
+  const marker = join(dir, 'ran')
+  const { code, output } = await cliWithFakeSsh('exit 255', { 'pkg/a.test.ts': marksRun(marker), 'pkg/mac.test.ts': marksRun(marker) }, 'pkg/mac.test.ts  needs macOS\n')
+  expect(code).toBe(1)
+  expect(output).toContain('quirkyci@ovh and quirkyci@gcloud are unreachable')
+  expect(existsSync(marker)).toBe(false)
+}, 30_000)
+
+test('the CLI stops with an error when the chosen host fails after being picked', async () => {
+  const marker = join(dir, 'ran')
+  const ssh = `case "$*" in *'ps -eo args'*) exit 0 ;; *'rm -rf'*) exit 0 ;; *) exit 1 ;; esac`
+  const { code, output } = await cliWithFakeSsh(ssh, { 'pkg/a.test.ts': marksRun(marker) })
+  expect(code).toBe(1)
+  expect(output).toContain("quirkyci@ovh couldn't finish the tests, so this run stops")
+  expect(existsSync(marker)).toBe(false)
+}, 30_000)
+
+test('the CLI needs no host for a run of only macOS-only files', async () => {
+  const marker = join(dir, 'ran')
+  const { code } = await cliWithFakeSsh('exit 255', { 'pkg/mac.test.ts': marksRun(marker) }, 'pkg/mac.test.ts  needs macOS\n')
+  expect(code).toBe(0)
+  expect(existsSync(marker)).toBe(true)
 }, 30_000)
