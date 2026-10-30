@@ -1,9 +1,12 @@
-import { Editor, type Extensions } from '@tiptap/core'
+import { Editor, Extension, type Extensions } from '@tiptap/core'
 import Image from '@tiptap/extension-image'
 import Link from '@tiptap/extension-link'
 import { Mathematics } from '@tiptap/extension-mathematics'
 import { Markdown } from '@tiptap/markdown'
 import StarterKit from '@tiptap/starter-kit'
+import { DOMParser as ProseMirrorDOMParser } from '@tiptap/pm/model'
+import type { ParseOptions } from '@tiptap/pm/model'
+import { Plugin } from '@tiptap/pm/state'
 import { Table } from '@tiptap/extension-table'
 import TableCell from '@tiptap/extension-table-cell'
 import TableHeader from '@tiptap/extension-table-header'
@@ -13,6 +16,30 @@ import TaskList from '@tiptap/extension-task-list'
 import { MarkdownDocumentLink } from './DocumentLink'
 import { MarkdownToggle } from './Toggle'
 
+function preserveSoftBreaks(options: ParseOptions): ParseOptions {
+  return options.preserveWhitespace === true ? { ...options, preserveWhitespace: 'full' } : options
+}
+
+/** Retains soft newlines for editor input without preserving external HTML formatting whitespace. */
+class MarkdownDOMParser extends ProseMirrorDOMParser {
+  override parse(dom: Node, options: ParseOptions = {}) {
+    return super.parse(dom, preserveSoftBreaks(options))
+  }
+
+  override parseSlice(dom: Node, options: ParseOptions = {}) {
+    return super.parseSlice(dom, preserveSoftBreaks(options))
+  }
+}
+
+const MarkdownSoftBreaks = Extension.create({
+  name: 'markdownSoftBreaks',
+  addProseMirrorPlugins() {
+    const { schema } = this.editor
+    const parser = new MarkdownDOMParser(schema, ProseMirrorDOMParser.fromSchema(schema).rules)
+    return [new Plugin({ props: { domParser: parser } })]
+  }
+})
+
 export function createMarkdownExtensions(): Extensions {
   return [
     StarterKit.configure({
@@ -20,6 +47,7 @@ export function createMarkdownExtensions(): Extensions {
       link: false,
       trailingNode: false
     }),
+    MarkdownSoftBreaks,
     Markdown.configure({ markedOptions: { gfm: true } }),
     MarkdownDocumentLink,
     Link.configure({
