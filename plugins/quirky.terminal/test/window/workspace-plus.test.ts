@@ -2,6 +2,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } fr
 import { act } from 'react'
 import type { UiMenuItemEntry } from '@quirky/protocol'
 import type * as UiModule from '../../src/ui'
+import type { ViewReport } from '../../src/window/workspace/controller'
 import { dropText } from '../../src/window/pane/drop'
 import { shellEscapePaths } from '../../src/shell-escape'
 import { shellEscapePaths as reexported } from '../../src/open-external'
@@ -11,12 +12,14 @@ import {
   fakeContext,
   fakeDaemon,
   group,
+  groupSplit,
   key,
   loadWorkspace,
   makeWorkspace,
   mountFixture,
   pane,
   settle,
+  session,
   startRecording,
   stopRecording,
   tab,
@@ -228,16 +231,180 @@ describe('SC-22: the + menu', () => {
     expect(callsTo(view.fake, 'newTab')).toEqual([{ workspace: 'wt-main', group: 'grp-1', agent: 'claude' }])
   })
 
-  test('Claude (background) needs a prompt and starts a session without a terminal', async () => {
-    const view = await mount()
-    await open(view)
+  test('Claude (background) adopts its returned session as the selected transcript tab in the menu group', async () => {
+    const structured = session('s-structured', { kind: 'structured', agent: 'claude', title: 'Claude (background)' })
+    const ws = makeWorkspace(
+      groupSplit(
+        'split-1',
+        'right',
+        group('grp-1', [tab('tab-1', pane('pane-1', 's-1'), { defaultTitle: 'Terminal 1' })]),
+        group('grp-2', [tab('tab-2', pane('pane-2', 's-2'), { defaultTitle: 'Build' })])
+      ),
+      { activeGroup: 'grp-1' }
+    )
+    const daemon = fakeDaemon(ws, { sessions: [session('s-1'), session('s-2')], agents: AGENTS })
+    const view = (mounted = await mountFixture(daemon, {
+      extra: {
+        'quirky.structured/create': () => {
+          daemon.sessions.push(structured)
+          return structured
+        },
+        'quirky.terminal/adoptSession': (params) => {
+          const groupId = params.group as string
+          const root = daemon.workspace.root
+          if (root.kind !== 'split' || root.first.kind !== 'group' || root.second.kind !== 'group') throw new Error('expected two groups')
+          const target = groupId === root.second.id ? root.second : root.first
+          const added = tab('tab-3', pane('pane-3', params.session as string), { defaultTitle: structured.title })
+          const updated = group(target.id, [...target.tabs, added], { activeTab: added.id, recent: [added.id, ...target.recent] })
+          const nextRoot = groupId === root.second.id ? { ...root, second: updated } : { ...root, first: updated }
+          return { workspace: daemon.set({ ...daemon.workspace, root: nextRoot, activeGroup: groupId }) }
+        }
+      }
+    }))
+    await click(view.q('[data-plus="grp-2"]'))
     await click(row(view, 'Claude (background)'))
     expect(view.q<HTMLButtonElement>('[role="dialog"] button[type="submit"]')!.disabled).toBe(true)
     await type(view.q<HTMLTextAreaElement>('[role="dialog"] textarea')!, 'go')
     await click(view.q('[role="dialog"] button[type="submit"]'))
+
     expect(view.fake.callsTo('quirky.structured/create').map((call) => call.params)).toEqual([{ worktree: 'wt-main', agent: 'claude', prompt: 'go' }])
+    expect(callsTo(view.fake, 'adoptSession')).toEqual([{ group: 'grp-2', session: 's-structured' }])
+    expect(callsTo(view.fake, 'newTab')).toEqual([])
+    expect(view.last().dialog).toBeNull()
+    expect(view.last().layout.activeGroup).toBe('grp-2')
+    const targetGroup = view.last().layout.root.second
+    expect(targetGroup.activeTab).toBe('tab-3')
+    expect(view.q('[data-tab="tab-3"] [role="tab"]')?.getAttribute('aria-selected')).toBe('true')
+    expect(view.q('[data-tab="tab-3"] .qt-tab-title')?.textContent).toBe('Claude (background)')
+    expect(view.last().tabs).toContainEqual({
+      session: 's-structured',
+      title: 'Claude (background)',
+      agent: 'claude',
+      status: 'running',
+      tab: 'tab-3',
+      group: 'grp-2',
+      pane: 'pane-3'
+    })
+    expect(view.q('[data-session="s-structured"] .xterm')).toBeNull()
+    expect(view.fake.mountedViews.map((entry) => [entry.viewId, entry.input])).toContainEqual([
+      'view:quirky.session/structured',
+      { session: 's-structured' }
+    ])
   })
 
+  test('a session status received during adoption stays current over the create response', async () => {
+    const created = session('s-structured', { kind: 'structured', agent: 'claude', title: 'Claude (background)', status: 'running' })
+    const ws = makeWorkspace(group('grp-1', [tab('tab-1', pane('pane-1', 's-1'), { defaultTitle: 'Terminal 1' })]))
+    const daemon = fakeDaemon(ws, { agents: AGENTS })
+    const { promise: adoptionStarted, resolve: announceAdoption } = Promise.withResolvers<void>()
+    const { promise: adoption, resolve: resolveAdoption } = Promise.withResolvers<{ workspace: typeof ws }>()
+    const view = (mounted = await mountFixture(daemon, {
+      extra: {
+        'quirky.structured/create': () => {
+          daemon.sessions.push(created)
+          return created
+        },
+        'quirky.terminal/adoptSession': () => {
+          const root = daemon.workspace.root
+          if (root.kind !== 'group') throw new Error('expected one group')
+          const added = tab('tab-3', pane('pane-3', created.id), { defaultTitle: created.title })
+          const workspace = daemon.set({
+            ...daemon.workspace,
+            root: group(root.id, [...root.tabs, added], { activeTab: added.id }),
+            activeGroup: root.id
+          })
+          announceAdoption()
+          return adoption
+        }
+      }
+    }))
+    await open(view)
+    await click(row(view, 'Claude (background)'))
+    await type(view.q<HTMLTextAreaElement>('[role="dialog"] textarea')!, 'go')
+    await click(view.q('[role="dialog"] button[type="submit"]'))
+    await adoptionStarted
+    expect(view.q<HTMLTextAreaElement>('[role="dialog"] textarea')?.readOnly).toBe(true)
+
+    const completed = { ...created, status: 'done' as const }
+    daemon.sessions.splice(daemon.sessions.findIndex((entry) => entry.id === created.id), 1, completed)
+    await view.fake.emit({ type: 'quirky.session/changed', data: { session: completed } })
+    resolveAdoption({ workspace: daemon.workspace })
+    await settle()
+    await settle()
+
+    const report = view.last() as ViewReport
+    expect(report.tabs.find((entry) => entry.session === created.id)).toMatchObject({
+      agent: 'claude',
+      status: 'done',
+      group: 'grp-1',
+      tab: 'tab-3'
+    })
+    expect(view.q('[data-tab="tab-3"] [role="tab"]')?.getAttribute('aria-selected')).toBe('true')
+  })
+
+
+  test('retrying a failed adoption opens the started session without creating another', async () => {
+    const started = session('s-started', { kind: 'structured', agent: 'claude', title: 'Claude (background)' })
+    const duplicate = session('s-duplicate', { kind: 'structured', agent: 'claude', title: 'Claude (background)' })
+    const ws = makeWorkspace(group('grp-1', [tab('tab-1', pane('pane-1', 's-1'), { defaultTitle: 'Terminal 1' })]))
+    const daemon = fakeDaemon(ws, { agents: AGENTS })
+    let createCount = 0
+    let adoptionCount = 0
+    const view = (mounted = await mountFixture(daemon, {
+      extra: {
+        'quirky.structured/create': () => {
+          const created = [started, duplicate][createCount++]
+          if (!created) throw new Error('unexpected third session creation')
+          daemon.sessions.push(created)
+          return created
+        },
+        'quirky.terminal/adoptSession': (params) => {
+          if (adoptionCount++ === 0) throw new Error('temporary adoption failure')
+          const root = daemon.workspace.root
+          if (root.kind !== 'group') throw new Error('expected one group')
+          const sessionId = params.session as string
+          const adopted = daemon.sessions.find((entry) => entry.id === sessionId)
+          if (!adopted) throw new Error(`unknown session ${sessionId}`)
+          const added = tab('tab-3', pane('pane-3', sessionId), { defaultTitle: adopted.title })
+          return {
+            workspace: daemon.set({
+              ...daemon.workspace,
+              root: group(root.id, [...root.tabs, added], { activeTab: added.id }),
+              activeGroup: root.id
+            })
+          }
+        }
+      }
+    }))
+    await open(view)
+    await click(row(view, 'Claude (background)'))
+    await type(view.q<HTMLTextAreaElement>('[role="dialog"] textarea')!, 'go')
+    await click(view.q('[role="dialog"] button[type="submit"]'))
+
+    const promptField = view.q<HTMLTextAreaElement>('[role="dialog"] textarea')!
+    const retryButton = view.q<HTMLButtonElement>('[role="dialog"] button[type="submit"]')!
+    const retrySurface = { readOnly: promptField.readOnly, label: retryButton.textContent?.trim() }
+    const failure = view.q('[role="dialog"] [role="alert"]')?.textContent ?? ''
+    await click(retryButton)
+
+    expect(view.fake.callsTo('quirky.structured/create')).toHaveLength(1)
+    expect(retrySurface.readOnly).toBe(true)
+    expect(retrySurface.label).toBe('Open session')
+    expect(failure).toContain('already started')
+    expect(callsTo(view.fake, 'adoptSession')).toEqual([
+      { group: 'grp-1', session: 's-started' },
+      { group: 'grp-1', session: 's-started' }
+    ])
+    expect(view.last().dialog).toBeNull()
+    const report = view.last() as ViewReport
+    expect(report.tabs.find((entry) => entry.session === started.id)).toMatchObject({
+      title: 'Claude (background)',
+      agent: 'claude',
+      group: 'grp-1',
+      tab: 'tab-3'
+    })
+    expect(view.q('[data-tab="tab-3"] [role="tab"]')?.getAttribute('aria-selected')).toBe('true')
+  })
   test('Cancel drops the dialog without starting anything', async () => {
     const view = await mount()
     await open(view)

@@ -1,5 +1,11 @@
 # Terminal panes
 
+## Background Claude sessions
+
+**New tab → Claude (background)** runs Claude without a PTY and opens its transcript in the group where the menu was opened. The selected tab shows the session state; the transcript shows the prompt, output and follow-up input. Background sessions started elsewhere are not automatically added to terminal groups.
+
+If the session starts but its tab cannot be opened, the dialog keeps the submitted prompt read-only and offers **Open session** for that same session; it does not launch another agent.
+
 ## Fork Agent Session
 
 Agent terminal panes contribute **Fork Agent Session** to the public `quirky.terminal/pane` menu after Quick Commands. The menu is hidden on plain shell panes.

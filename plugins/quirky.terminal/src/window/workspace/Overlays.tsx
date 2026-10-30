@@ -102,7 +102,7 @@ export function DialogLayer({ controller, state }: { controller: WorkspaceContro
     case 'switch-tabs':
       return <Switcher controller={controller} dialog={dialog} />
     case 'new-session':
-      return <PromptDialog request={dialog.request} pending={dialog.pending === true} error={dialog.error ?? null} onClose={() => void controller.submitNewSession(null)} onSubmit={(prompt) => void controller.submitNewSession(prompt)} />
+      return <PromptDialog request={dialog.request} pending={dialog.pending === true} started={dialog.startedSession !== undefined} error={dialog.error ?? null} onClose={() => void controller.submitNewSession(null)} onSubmit={(prompt) => void controller.submitNewSession(prompt)} />
   }
 }
 

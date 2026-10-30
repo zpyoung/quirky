@@ -17,17 +17,18 @@ const PERMISSION_TEXT: Record<PermissionMode, string> = {
 type Props = {
   request: NewSessionRequest
   pending: boolean
+  started: boolean
   error: string | null
   onSubmit: (prompt: string) => void
   onClose: () => void
 }
 
-/** Asks for the first prompt of a new agent session; a background session cannot start without one. */
-export function PromptDialog({ request, pending, error, onSubmit, onClose }: Props) {
+/** Asks for an agent's first prompt, or opens its already-started background session. */
+export function PromptDialog({ request, pending, started, error, onSubmit, onClose }: Props) {
   const promptId = useId()
   const [prompt, setPrompt] = useState('')
   const required = request.background
-  const canSubmit = !pending && (!required || prompt.trim().length > 0)
+  const canSubmit = !pending && (started || !required || prompt.trim().length > 0)
 
   const submit = (event: FormEvent) => {
     event.preventDefault()
@@ -37,11 +38,12 @@ export function PromptDialog({ request, pending, error, onSubmit, onClose }: Pro
   return (
     <Dialog title={`New ${request.label} session`} onClose={onClose}>
       <form className="qt-form" onSubmit={submit}>
-        <FormRow label={required ? 'Prompt' : 'Initial prompt (optional)'} htmlFor={promptId}>
+        <FormRow label={started ? 'Started prompt' : required ? 'Prompt' : 'Initial prompt (optional)'} htmlFor={promptId}>
           <textarea
             id={promptId}
             className="ui-text-field__input"
-            autoFocus
+            autoFocus={!started}
+            readOnly={pending || started}
             rows={5}
             value={prompt}
             onChange={(event) => setPrompt(event.target.value)}
@@ -51,13 +53,14 @@ export function PromptDialog({ request, pending, error, onSubmit, onClose }: Pro
           />
         </FormRow>
         {request.permissions ? <p className="ui-help-text">{PERMISSION_TEXT[request.permissions]} Change it in Agent settings.</p> : null}
+        {started ? <p className="ui-help-text">This session has already started. Opening it will not start another agent.</p> : null}
         {error !== null ? <div className="ui-error-text" role="alert">{error}</div> : null}
         <div className="ui-dialog__actions qt-dialog-actions">
           <Button type="button" variant="secondary" onClick={onClose}>
             Cancel
           </Button>
           <Button type="submit" variant="primary" disabled={!canSubmit}>
-            Start
+            {started ? 'Open session' : 'Start'}
           </Button>
         </div>
       </form>
