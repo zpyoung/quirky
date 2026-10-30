@@ -6,6 +6,7 @@
   "description": "Collects UI feedback comments written against captured on-screen context.",
   "activation": "lazy",
   "main": "main.ts",
+  "ui": "dist/ui.js",
   "contributes": {
     "method": [
       {"id":"list","description":"List feedback comments in insertion order; recovered is true when a corrupt comments file was set aside.","readOnly":true,"params":{"type":"object","properties":{},"additionalProperties":false},"result":{"type":"object","properties":{"comments":{"type":"array","items":{"type":"object","additionalProperties":true}},"recovered":{"type":"boolean"}},"required":["comments","recovered"],"additionalProperties":false}},
@@ -13,6 +14,19 @@
       {"id":"update","description":"Change the text or intent of one comment; captured context never changes.","params":{"type":"object","properties":{"id":{"type":"string"},"comment":{"type":"string"},"intent":{"type":"string","enum":["change","question"]}},"required":["id"],"additionalProperties":false},"result":{"type":"object","additionalProperties":true}},
       {"id":"remove","description":"Remove one feedback comment.","params":{"type":"object","properties":{"id":{"type":"string"}},"required":["id"],"additionalProperties":false},"result":{"type":"object","properties":{"removed":{"type":"boolean"}},"required":["removed"],"additionalProperties":false}},
       {"id":"clear","description":"Remove every feedback comment.","params":{"type":"object","properties":{},"additionalProperties":false},"result":{"type":"object","properties":{"cleared":{"type":"number"}},"required":["cleared"],"additionalProperties":false}}
+    ],
+    "overlay": [
+      {"id":"mode","title":"Feedback mode"}
+    ],
+    "setting": [
+      {"id":"enabled","title":"Enable Feedback Mode","description":"Lets you point at parts of Quirky and write feedback comments.","type":"boolean","default":true},
+      {"id":"active","title":"Feedback Mode","description":"Turns selection on in the main window.","type":"boolean","default":false,"menu":"view","whenSetting":"enabled"}
+    ],
+    "command": [
+      {"id":"toggle","title":"Toggle Feedback Mode","palette":true,"whenSetting":"enabled"}
+    ],
+    "keybinding": [
+      {"id":"toggle","key":"mod+alt+k","command":"toggle","description":"Toggle Feedback Mode","when":"terminalFocus || !terminalFocus","whenSetting":"enabled"}
     ]
   }
 }
