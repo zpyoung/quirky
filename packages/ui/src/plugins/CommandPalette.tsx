@@ -216,7 +216,7 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
       {snapshot.errors.worktrees && <p className="ui-error-text" role="status">Worktrees unavailable: {snapshot.errors.worktrees}</p>}
       {snapshot.worktrees === null && !snapshot.errors.worktrees && <p className="ui-text-muted" role="status">Loading worktrees…</p>}
       {entries.length === 0 && snapshot.worktrees !== null && !snapshot.errors.worktrees ? (
-        <EmptyState message="No matching contributions." />
+        <EmptyState message="No results" />
       ) : entries.length > 0 ? (
         <div className="ui-option-list" role="listbox" aria-label="Search results">
           {entries.map((entry, index) => (
