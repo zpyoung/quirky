@@ -76,7 +76,7 @@ const MAX_ANNOTATIONS = 20
 const MAX_COMMENT = 2000
 const PICKER_TIMEOUT_MS = 120_000
 const POLL_DELAY_MS = 100
-const NATIVE_EVALUATION_BUSY = /native browser evaluation (timed out|was cancelled)/
+const NATIVE_EVALUATION_BUSY = /native browser evaluation (timed out|was cancelled|is unavailable during)/
 const SCREENSHOT_MAX_BYTES = 2 * 1024 * 1024
 const WATCH_COPY_PROBE = `(() => { const active = document.activeElement; const selection = window.getSelection ? window.getSelection() : null; return { editable: !!active && (active.isContentEditable || active.tagName === 'IFRAME' || /^(INPUT|TEXTAREA|SELECT)$/.test(active.tagName)), selected: !!selection && String(selection).length > 0 }; })()`
 const designOverlayStyle: CSSProperties = { position: 'absolute', zIndex: 12, inset: 0, pointerEvents: 'none' }

@@ -24,6 +24,21 @@ import {
 const OUTSIDE_CLOSED_DETAILS = ':not(details:not([open]) *)'
 export const NATIVE_BROWSER_DEFAULT_MASKS = ['[data-quirky-native-mask]', '[role="dialog"]', '[role="menu"]', '[role="listbox"]']
   .map((selector) => `${selector}${OUTSIDE_CLOSED_DETAILS}`)
+const MASK_WATCH_INTERVAL_MS = 100
+
+function maskSignature(selectors: readonly string[]): string {
+  return selectors.flatMap((selector) => {
+    try {
+      return [...document.querySelectorAll(selector)].map((element) => {
+        const { x, y, width, height } = element.getBoundingClientRect()
+        return `${x},${y},${width},${height}`
+      })
+    } catch {
+      return []
+    }
+  }).join(';')
+}
+
 const NATIVE_BROWSER_EVALUATION_SCRIPT_MAX_BYTES = 64 * 1024
 const NATIVE_BROWSER_EVALUATION_RESULT_MAX_BYTES = 256 * 1024
 const NATIVE_BROWSER_EVALUATION_MESSAGE_MAX_BYTES = NATIVE_BROWSER_EVALUATION_RESULT_MAX_BYTES * 6 + 4096
@@ -603,6 +618,7 @@ class ElectrobunNativeBrowserMount implements NativeBrowserAdapterHandle {
     this.listen(child)
     this.element.append(child)
     child.syncDimensions(true)
+    this.watchMasks(child, masks)
 
     const viewId = await this.waitForViewId(child)
     if (viewId === null || this.disposed) return
@@ -895,6 +911,19 @@ class ElectrobunNativeBrowserMount implements NativeBrowserAdapterHandle {
     if (!waiter) return
     this.waiter = null
     waiter.resolve({ ...this.state })
+  }
+
+  /** Keeps the native view's holes in step with the overlays that need them for as long as it's mounted. */
+  private watchMasks(child: WebviewTag, masks: readonly string[]): void {
+    // the SDK only sends masks when the view's own frame changes, so an overlay opening over a still view stays hidden
+    let last = maskSignature(masks)
+    const timer = setInterval(() => {
+      const next = maskSignature(masks)
+      if (next === last) return
+      last = next
+      child.syncDimensions(true)
+    }, MASK_WATCH_INTERVAL_MS)
+    this.disposeCleanups.add(() => clearInterval(timer))
   }
 
   private async navigateTo(raw: string): Promise<NativeBrowserState> {

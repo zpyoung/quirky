@@ -386,6 +386,33 @@ test('every native mask excludes closed details and fits the comma-separated mas
   }
 })
 
+test('an overlay opening over a still view re-syncs its masks until the view is disposed', async () => {
+  const guest = await mountGuest()
+  const overlay = document.createElement('div')
+  overlay.setAttribute('role', 'dialog')
+  try {
+    let syncs = 0
+    Object.assign(guest.guest, { syncDimensions: () => { syncs += 1 } })
+    await Bun.sleep(250)
+    expect(syncs).toBe(0)
+
+    document.body.append(overlay)
+    await Bun.sleep(250)
+    expect(syncs).toBe(1)
+
+    overlay.remove()
+    await Bun.sleep(250)
+    expect(syncs).toBe(2)
+
+    await guest.cleanup()
+    document.body.append(overlay)
+    await Bun.sleep(250)
+    expect(syncs).toBe(2)
+  } finally {
+    overlay.remove()
+  }
+})
+
 const CLOSED_URL = 'http://127.0.0.1:9/closed'
 const connectionFailure = (url: string) => ({
   url, domain: 'NSURLErrorDomain', code: -1004, description: 'Could not connect to the server.'
