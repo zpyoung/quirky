@@ -281,6 +281,6 @@ Build-only questions for the tech spec:
 
 ## Status & amendments
 
-**Status:** Draft, awaiting user review.
+**Status:** Approved. Tech spec: requested.
 
 **Amendments:** None.
