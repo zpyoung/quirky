@@ -148,7 +148,7 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
         )}
         {settingsViews.length > 0 && (
           <section className="ui-stack" role="group" aria-label="Plugin settings">
-            <SectionHeader title="Plugin settings" />
+            <SectionHeader title="Plugin settings" className="ui-settings-group-heading" />
             <div className="ui-stack">
               {settingsViews.map((view) => (
                 <Button
@@ -174,12 +174,12 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
         {groups.map((group) =>
           group.kind === 'plugin' ? (
             <section key={`plugin:${group.plugin}`} className="ui-stack" role="group" aria-label={group.plugin}>
-              <SectionHeader title={group.plugin} />
+              <SectionHeader title={group.plugin} className="ui-settings-group-heading" />
               {renderFields(group.fields)}
             </section>
           ) : group.category !== undefined ? (
             <section key={`category:${group.category}`} className="ui-stack" role="group" aria-label={group.category}>
-              <SectionHeader title={group.category} />
+              <SectionHeader title={group.category} className="ui-settings-group-heading" />
               {group.sections.map((section) => (
                 <div key={`section:${section.section ?? ''}`} className="ui-stack">
                   {section.section !== undefined && <SectionHeader title={section.section} />}
@@ -195,7 +195,7 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
                 role="group"
                 aria-label={section.section ?? 'Settings'}
               >
-                <SectionHeader title={section.section ?? 'Settings'} />
+                <SectionHeader title={section.section ?? 'Settings'} className="ui-settings-group-heading" />
                 {renderFields(section.fields)}
               </section>
             ))
@@ -203,14 +203,14 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
         )}
         {settingsSections.map((section) => (
           <section key={section.id} className="ui-stack" role="group" aria-label={section.title}>
-            <SectionHeader title={section.title} />
+            <SectionHeader title={section.title} className="ui-settings-group-heading" />
             {section.description && <p className="ui-text-muted">{section.description}</p>}
             <PluginSlot id={section.id} />
           </section>
         ))}
         {themes.options.length > 1 && (
           <section className="ui-stack" role="group" aria-label="Appearance">
-            <SectionHeader title="Appearance" />
+            <SectionHeader title="Appearance" className="ui-settings-group-heading" />
             <SelectField
               id="settings-theme"
               label="Theme"
@@ -228,7 +228,7 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
         )}
         {settingsCommands.length > 0 && (
           <section className="ui-stack" role="group" aria-label="Plugin settings commands">
-            <SectionHeader title="Plugin settings" />
+            <SectionHeader title="Plugin settings" className="ui-settings-group-heading" />
             <p className="ui-text-muted">Open a plugin’s dedicated settings view.</p>
             <div className="ui-stack">
               {settingsCommands.map((command) => (
