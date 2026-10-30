@@ -6,6 +6,7 @@ import type { NativeBrowserHostRPC, NativeBrowserPageEvent } from './native-brow
 type NativeBrowserPreloadBridge = {
   readonly clearPartitionAvailable: boolean
   claimNativeBrowserView(params: NativeBrowserHostRPC['bun']['requests']['claimNativeBrowserView']['params']): Promise<NativeBrowserHostRPC['bun']['requests']['claimNativeBrowserView']['response']>
+  nativeBrowserDefaultUserAgent(params: NativeBrowserHostRPC['bun']['requests']['nativeBrowserDefaultUserAgent']['params']): Promise<NativeBrowserHostRPC['bun']['requests']['nativeBrowserDefaultUserAgent']['response']>
   setNativeBrowserZoom(params: NativeBrowserHostRPC['bun']['requests']['setNativeBrowserZoom']['params']): Promise<NativeBrowserHostRPC['bun']['requests']['setNativeBrowserZoom']['response']>
   releaseNativeBrowserView(params: NativeBrowserHostRPC['bun']['requests']['releaseNativeBrowserView']['params']): Promise<NativeBrowserHostRPC['bun']['requests']['releaseNativeBrowserView']['response']>
   routeNativeBrowserLabels(params: NativeBrowserHostRPC['bun']['requests']['routeNativeBrowserLabels']['params']): Promise<NativeBrowserHostRPC['bun']['requests']['routeNativeBrowserLabels']['response']>
@@ -67,6 +68,7 @@ const bridge: NativeBrowserPreloadBridge & { readonly previewAvailable: boolean 
   // claim still refuses a view the SDK did not create as one.
   previewAvailable: true,
   claimNativeBrowserView: (params) => requests.claimNativeBrowserView(params),
+  nativeBrowserDefaultUserAgent: (params) => requests.nativeBrowserDefaultUserAgent(params),
   setNativeBrowserZoom: (params) => requests.setNativeBrowserZoom(params),
   releaseNativeBrowserView: (params) => requests.releaseNativeBrowserView(params),
   routeNativeBrowserLabels: (params) => requests.routeNativeBrowserLabels(params),

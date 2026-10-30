@@ -5,6 +5,7 @@ import {
   NATIVE_BROWSER_PREVIEW_NAVIGATION_RULES,
   NATIVE_BROWSER_PREVIEW_SCHEME,
   isNativeBrowserPreviewGrant,
+  isNativeBrowserUserAgent,
   type NativeBrowserPreviewGrant,
   type DesktopRevealRequest,
   type DesktopRevealResult,
@@ -30,7 +31,7 @@ export type NativeBrowserHostRPC = {
   bun: {
     requests: {
       claimNativeBrowserView: {
-        params: { viewId: number; owner: string; partition: string; preview?: NativeBrowserPreviewGrant }
+        params: { viewId: number; owner: string; partition: string; preview?: NativeBrowserPreviewGrant; userAgent: string | null }
         response: { zoomFactor: number; pageRequests: boolean }
       }
       answerNativeBrowserRequest: {
@@ -40,6 +41,10 @@ export type NativeBrowserHostRPC = {
       cancelNativeBrowserDownload: {
         params: { viewId: number; owner: string; id: string }
         response: { cancelled: boolean }
+      }
+      nativeBrowserDefaultUserAgent: {
+        params: Record<string, never>
+        response: { userAgent: string | null }
       }
       setNativeBrowserZoom: {
         params: { viewId: number; owner: string; level: number }
@@ -90,7 +95,9 @@ export type NativeBrowserViewPort = {
   /** The scheme of an SDK isolated preview; absent on SDKs without isolated previews. */
   isolatedPreview?: string | null
   setIsolatedPreviewHandler?(handler: WorkspacePreviewHandler | null): void
+  userAgent: string | null
   setNavigationRules(rules: string[]): void
+  setUserAgent(userAgent: string | null): boolean
   setPageZoom(factor: number): void
   getPageZoom(): number
   getStorageIdentifier(): string | null
@@ -115,6 +122,7 @@ export type NativeBrowserHostDeps = {
   openPopup?(popup: NativeBrowserPopup): boolean
   storage: Pick<NativeBrowserStorage, 'identifierFor' | 'prepare' | 'clear'>
   createPreviewHandler?(grant: NativeBrowserPreviewGrant): WorkspacePreviewHandler
+  defaultUserAgent(): string | null
 }
 
 export type NativeBrowserHandlers = {
@@ -126,6 +134,7 @@ export type NativeBrowserHandlers = {
   cancelDownload(params: NativeBrowserHostRPC['bun']['requests']['cancelNativeBrowserDownload']['params']): Promise<{ cancelled: boolean }>
   prepare(params: NativeBrowserHostRPC['bun']['requests']['prepareNativeBrowserPartition']['params']): Promise<{ storageIdentifier: string | null }>
   clear(params: NativeBrowserHostRPC['bun']['requests']['clearNativeBrowserPartition']['params']): Promise<{ cleared: true }>
+  defaultUserAgent(): Promise<{ userAgent: string | null }>
   dispose(): void
 }
 
@@ -347,6 +356,7 @@ export function createNativeBrowserHandlers(deps: NativeBrowserHostDeps): Native
       ) {
         throw invalidChild()
       }
+      if (params.userAgent !== null && !isNativeBrowserUserAgent(params.userAgent)) throw new Error('invalid native browser user agent')
       const window = deps.getWindow()
       const view = deps.getView(params.viewId)
       if (
@@ -370,6 +380,10 @@ export function createNativeBrowserHandlers(deps: NativeBrowserHostDeps): Native
       const rules = preview ? NATIVE_BROWSER_PREVIEW_NAVIGATION_RULES : NATIVE_BROWSER_NAVIGATION_RULES
       view.setNavigationRules([...rules])
       if (view.navigationRules !== JSON.stringify(rules)) throw new Error('native browser navigation policy was not installed')
+      // still on about:blank, so the target URL's first request already carries this user agent
+      if (params.userAgent !== null && (!view.setUserAgent(params.userAgent) || view.userAgent !== params.userAgent)) {
+        throw new Error('native browser user agent override is unavailable on this platform')
+      }
       if (params.preview) {
         // Until this runs the SDK answers every preview request with 404, so nothing is readable early.
         view.setIsolatedPreviewHandler!((deps.createPreviewHandler ?? createWorkspacePreviewHandler)(params.preview))
@@ -435,6 +449,9 @@ export function createNativeBrowserHandlers(deps: NativeBrowserHostDeps): Native
     },
     async clear(params) {
       return deps.storage.clear(params.partition)
+    },
+    async defaultUserAgent() {
+      return { userAgent: deps.defaultUserAgent() }
     },
     dispose() {
       const active = claim

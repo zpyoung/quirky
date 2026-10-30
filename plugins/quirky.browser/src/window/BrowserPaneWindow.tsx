@@ -15,6 +15,7 @@ import type { PaneCommand, PaneDownload, PaneFrame, PaneNativeAction, PaneNative
 import { acceptLatestFrame, isTextInputKey, nativePreviewNavigationUrl, nativePreviewReportUrl, paneAddress, paneForView, paneHistoryControls, pointerToFramePoint } from './model'
 import { DesignWindow, type DesignAction } from '../design-window/DesignWindow'
 import { BrowserImportHint, BrowserProfileMenu } from '../preferences-window/BrowserProfileMenu'
+import { nativePaneUserAgent } from '../preferences/native-identity'
 import { Badge, Button, EmptyState, FormRow, IconButton, ListRow, SectionHeader, StatusDot, TextField } from '@quirky/ui'
 
 const WORKTREE_VIEW = 'view:quirky.session/worktree'
@@ -355,6 +356,7 @@ export function BrowserPaneWindow({ context, input }: { context: UiPluginContext
   const [nativeMountRevision, setNativeMountRevision] = useState(0)
   const [nativeReady, setNativeReady] = useState(0)
   const [nativeState, setNativeState] = useState<NativeBrowserState | null>(null)
+  const [nativeUserAgent, setNativeUserAgent] = useState<{ value: string | undefined } | null>(null)
   const [pageList, setPageList] = useState<AgentPage[] | null>(null)
   const [pageListError, setPageListError] = useState<string | null>(null)
   const [pageListLoading, setPageListLoading] = useState(false)
@@ -659,6 +661,17 @@ export function BrowserPaneWindow({ context, input }: { context: UiPluginContext
     }
   }, [context])
 
+  const nativeIdentityNeeded = pane?.mode === 'native' && context.nativeBrowser.available
+  useEffect(() => {
+    if (!nativeIdentityNeeded) return
+    let current = true
+    nativePaneUserAgent(context).then(
+      (value) => { if (current) setNativeUserAgent((previous) => previous?.value === value ? previous : { value }) },
+      (error: unknown) => { if (current) setNativeError(`Browser identity could not be read: ${errorText(error)}`) }
+    )
+    return () => { current = false }
+  }, [context, nativeIdentityNeeded, nativeRetry])
+
   useEffect(() => {
     const host = nativeHostRef.current
     if (!pane || pane.mode !== 'native' || !context.nativeBrowser.available || !host || (pane.document && !context.nativeBrowser.previewAvailable)) {
@@ -679,6 +692,7 @@ export function BrowserPaneWindow({ context, input }: { context: UiPluginContext
     let handle: NativeHandle
     setNativeState(null)
     setNativeReady(0)
+    if (!nativeUserAgent) return
     try {
       handle = context.nativeBrowser.mount(host, {
         id: pane.id,
@@ -686,6 +700,7 @@ export function BrowserPaneWindow({ context, input }: { context: UiPluginContext
         url: pane.command?.action === 'navigate' ? 'about:blank' : pane.url,
         zoom: pane.zoom,
         ...(pane.document ? { preview: pane.document.grant } : {}),
+        ...(nativeUserAgent.value === undefined ? {} : { userAgent: nativeUserAgent.value }),
         onState: (next) => {
           if (!mounted) return
           setNativeState(next)
@@ -722,7 +737,7 @@ export function BrowserPaneWindow({ context, input }: { context: UiPluginContext
       if (nativeHandleRef.current === handle) nativeHandleRef.current = null
       handle.dispose()
     }
-  }, [context, pane?.id, pane?.mode, pane?.profileId, pane?.partition, pane?.document?.grant.id, context.nativeBrowser.available, reportNativeState, relayNativeRequest, nativeRetry, nativeMountRevision])
+  }, [context, pane?.id, pane?.mode, pane?.profileId, pane?.partition, pane?.document?.grant.id, context.nativeBrowser.available, reportNativeState, relayNativeRequest, nativeRetry, nativeMountRevision, nativeUserAgent])
   useEffect(() => {
     if (!pane || pane.mode !== 'native' || !context.nativeBrowser.available) return
     const needsGuest = pane.url !== 'about:blank' || pane.loading || pane.command !== null || pane.canGoBack || pane.canGoForward

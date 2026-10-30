@@ -92,7 +92,7 @@ test('identity API writes the shared Chrome setting and reports restart semantic
   try {
     expect(await call(h, 'identitySet', { mode: 'native' })).toMatchObject({ mode: 'native', active: 'clean', restartRequired: true })
     expect(await call(h, 'identityGet')).toMatchObject({ mode: 'native', active: 'clean', restartRequired: true })
-    const preferences = await call(h, 'preferencesState') as { identity: { selected: string; active: string; restartRequired: boolean; nativeSupported: false } }
-    expect(preferences.identity).toEqual({ selected: 'native', active: 'clean', restartRequired: true, nativeSupported: false })
+    const preferences = await call(h, 'preferencesState') as { identity: { selected: string; active: string; restartRequired: boolean; nativeSupported: boolean } }
+    expect(preferences.identity).toEqual({ selected: 'native', active: 'clean', restartRequired: true, nativeSupported: process.platform === 'darwin' })
   } finally { await h.cleanup() }
 })

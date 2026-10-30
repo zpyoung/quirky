@@ -7,7 +7,7 @@ export type BrowserIdentityMode = 'clean' | 'native'
 export type ProfileUsage = { profile: BrowserProfile; active: boolean }
 export type PreferencesState = {
   profiles: ProfileUsage[]
-  identity: { selected: BrowserIdentityMode; active: BrowserIdentityMode; restartRequired: boolean; nativeSupported: false }
+  identity: { selected: BrowserIdentityMode; active: BrowserIdentityMode; restartRequired: boolean; nativeSupported: boolean }
   imports: { available: true; destination: 'managed-chrome'; nativeSupported: false; reason: string }
   localhostLabels: { available: true; enabled: boolean; reason: string; labels: LocalhostLabelRoute[] }
 }
@@ -17,6 +17,8 @@ export type PreferencesAdapters = {
   listPageProfiles(): string[]
   setPaneProfile(pane: string, profile: string): Promise<unknown>
   clearProfile(profile: string, remove: boolean): Promise<void>
+  /** Whether the desktop's Native pane can apply an identity; only the pinned macOS SDK can. */
+  nativeIdentitySupported: boolean
 }
 export type PreferencesController = { deactivate(): void }
 export type BrowserPreferencesProps = { context: UiPluginContext; pane?: PaneTab; onError(message: string): void }

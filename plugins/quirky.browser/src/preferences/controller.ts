@@ -79,7 +79,7 @@ export const registerPreferences: RegisterPreferences = (context, adapters) => {
         selected: selectedIdentity,
         active: activeIdentity,
         restartRequired: selectedIdentity !== activeIdentity,
-        nativeSupported: false
+        nativeSupported: adapters.nativeIdentitySupported
       },
       imports: { available: true, destination: 'managed-chrome', nativeSupported: false, reason: IMPORT_DESTINATION },
       localhostLabels: { available: true, enabled: labelsEnabled(), reason: LOCALHOST_LABELS, labels: labels.list() }

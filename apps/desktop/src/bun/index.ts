@@ -191,7 +191,8 @@ function createWindow(
     },
     sendPageEvent: (message) => rpc.send.nativeBrowserPageEvent(message),
     openPopup,
-    storage: nativeBrowserStorage
+    storage: nativeBrowserStorage,
+    defaultUserAgent: () => BrowserView.getDefaultUserAgent()
   })
   const pickFolder = async (request: NativeBrowserHostRPC['bun']['requests']['pickFolder']['params']) => {
     if (process.platform !== 'darwin') throw new Error('native directory selection is unavailable on this platform')
@@ -244,6 +245,7 @@ function createWindow(
     handlers: {
       requests: {
         claimNativeBrowserView: nativeBrowserHandlers.claim,
+        nativeBrowserDefaultUserAgent: nativeBrowserHandlers.defaultUserAgent,
         setNativeBrowserZoom: nativeBrowserHandlers.setZoom,
         releaseNativeBrowserView: nativeBrowserHandlers.release,
         routeNativeBrowserLabels: nativeBrowserHandlers.routeLabels,

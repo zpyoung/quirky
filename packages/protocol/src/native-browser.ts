@@ -50,6 +50,11 @@ export function isNativeBrowserPreviewUrl(raw: string, grant: string): boolean {
   }
 }
 
+/** A user agent is one header line: printable, bounded, and never able to inject another header. */
+export function isNativeBrowserUserAgent(value: unknown): value is string {
+  return typeof value === 'string' && value.length > 0 && value.length <= 1024 && !/[\u0000-\u001f\u007f]/.test(value)
+}
+
 /** A sandboxed system-webview hosted inside a plugin-owned element. Never available in a plain web client. */
 export type NativeBrowserState = {
   id: string; url: string; title: string; loading: boolean; canGoBack: boolean; canGoForward: boolean;
@@ -95,6 +100,8 @@ export type NativeBrowserOptions = {
    * blocks outbound network, permissions, downloads, popups and navigation off the grant natively.
    */
   preview?: NativeBrowserPreviewGrant
+  /** Sent from the guest's first page on; omitted keeps the system webview's own. The mount fails when the host can't apply it. */
+  userAgent?: string
   onState(state: NativeBrowserState): void
   /** Observed only where page requests are unavailable; otherwise popups arrive as `onPageRequest`. */
   onPopup?(url: string, userGesture: boolean): void
@@ -123,6 +130,8 @@ export type NativeBrowserCapability = {
   /** Whether `mount` accepts `preview`: the host enforces isolated workspace-document previews. */
   readonly previewAvailable: boolean
   mount(element: HTMLElement, options: NativeBrowserOptions): NativeBrowserHandle
+  /** The system webview's own user agent, or null when this host can't read or override it. */
+  defaultUserAgent(): Promise<string | null>
   /** Clears only dedicated browser partitions; rejects when the host cannot confirm completion. */
   clearPartition(partition: string): Promise<void>
 }

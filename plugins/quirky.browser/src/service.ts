@@ -182,7 +182,8 @@ export class BrowserService {
       listPanes: () => this.listPanes(),
       listPageProfiles: () => this.store.listPages().map((page) => page.profileId),
       setPaneProfile: (pane, profile) => this.setPaneProfile(pane, profile),
-      clearProfile: (profile, remove) => this.profileLifecycle.clearProfile(profile, remove)
+      clearProfile: (profile, remove) => this.profileLifecycle.clearProfile(profile, remove),
+      nativeIdentitySupported: process.platform === 'darwin'
     })
   }
   async setPaneProfile(paneId: string, profileId: string): Promise<PaneTab> {

@@ -118,7 +118,7 @@ describe('isolated preview claims', () => {
   test('claiming an SDK isolated preview installs its rules and a handler bound to the grant', async () => {
     const view = new PreviewViewModel(7)
     const handlers = rig([view])
-    await handlers.claim({ viewId: 7, owner: 'owner', partition: '', preview: folderGrant })
+    await handlers.claim({ viewId: 7, owner: 'owner', partition: '', preview: folderGrant, userAgent: null })
     expect(view.navigationRules).toBe(JSON.stringify(NATIVE_BROWSER_PREVIEW_NAVIGATION_RULES))
     expect(view.handler).not.toBeNull()
     expect((await fetchPreview(view.handler!, 'index.html')).status).toBe(200)

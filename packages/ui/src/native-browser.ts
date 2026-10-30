@@ -6,6 +6,7 @@ import {
   NATIVE_BROWSER_PREVIEW_SCHEME,
   isNativeBrowserPreviewGrant,
   isNativeBrowserPreviewUrl,
+  isNativeBrowserUserAgent,
   type NativeBrowserCapability,
   type NativeBrowserDownloadUpdate,
   type NativeBrowserPreviewGrant,
@@ -44,6 +45,7 @@ export type NativeBrowserAdapter = {
   readonly pageRequestsAvailable: boolean
   readonly previewAvailable: boolean
   clearPartition(partition: string): Promise<void>
+  defaultUserAgent(): Promise<string | null>
 }
 
 export type NativeBrowserPageEvent =
@@ -55,7 +57,8 @@ export type NativeBrowserPageEvent =
 export type NativeBrowserShellBridge = {
   /** Set by a desktop host whose SDK enforces isolated previews. */
   readonly previewAvailable?: boolean
-  claimNativeBrowserView(params: { viewId: number; owner: string; partition: string; preview?: NativeBrowserPreviewGrant }): Promise<{ zoomFactor: number; pageRequests?: boolean }>
+  claimNativeBrowserView(params: { viewId: number; owner: string; partition: string; preview?: NativeBrowserPreviewGrant; userAgent: string | null }): Promise<{ zoomFactor: number; pageRequests?: boolean }>
+  nativeBrowserDefaultUserAgent(params: Record<string, never>): Promise<{ userAgent: string | null }>
   setNativeBrowserZoom(params: { viewId: number; owner: string; level: number }): Promise<{ zoomFactor: number }>
   releaseNativeBrowserView(params: { viewId: number; owner: string }): Promise<{ released: true }>
   routeNativeBrowserLabels(params: { viewId: number; owner: string; port: number }): Promise<{ routed: boolean }>
@@ -604,6 +607,7 @@ class ElectrobunNativeBrowserMount implements NativeBrowserAdapterHandle {
       viewId,
       owner: this.owner,
       partition: this.options.partition,
+      userAgent: this.options.userAgent ?? null,
       ...(this.options.preview ? { preview: this.options.preview } : {})
     })
     this.claimed = true
@@ -1099,6 +1103,7 @@ export function createNativeBrowserCapability(adapter?: NativeBrowserAdapter): N
       } else if (!NATIVE_BROWSER_PARTITION_RE.test(options.partition)) throw new Error('unsupported browser partition')
       if (!options.id || !allowedUrl(options.url, options.preview)) throw new Error('unsupported native browser URL')
       if (!levelIsValid(options.zoom)) throw new Error('invalid native browser zoom level')
+      if (options.userAgent !== undefined && !isNativeBrowserUserAgent(options.userAgent)) throw new Error('invalid native browser user agent')
       const previous = current
       const afterDispose = previous ? disposeMount(previous) : lastDispose
       const mount: Mount = {
@@ -1182,6 +1187,9 @@ export function createNativeBrowserCapability(adapter?: NativeBrowserAdapter): N
       if (!adapter) throw new Error('Native browser is unavailable outside the Quirky desktop app')
       if (!adapter.clearPartitionAvailable) throw new Error(NATIVE_CLEAR_UNAVAILABLE)
       await adapter.clearPartition(partition)
+    },
+    async defaultUserAgent() {
+      return adapter ? adapter.defaultUserAgent() : null
     }
   }
 }
@@ -1198,6 +1206,9 @@ export function createElectrobunNativeBrowserAdapter(bridge: NativeBrowserShellB
       if (!clear) throw new Error(NATIVE_CLEAR_UNAVAILABLE)
       const result = await clear.call(bridge, { partition })
       if (result?.cleared !== true) throw new Error('The desktop did not confirm native website-data removal.')
+    },
+    async defaultUserAgent() {
+      return (await bridge.nativeBrowserDefaultUserAgent({})).userAgent
     }
   }
 }

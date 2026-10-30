@@ -98,7 +98,8 @@ function makeContext(): UiPluginContext {
       clearPartitionAvailable: false,
       previewAvailable: false,
       mount: () => { throw new Error('Native views are unavailable in this owned DOM fixture.') },
-      clearPartition: async () => { throw new Error('Native storage completion is unavailable in this owned DOM fixture.') }
+      clearPartition: async () => { throw new Error('Native storage completion is unavailable in this owned DOM fixture.') },
+      defaultUserAgent: async () => null
     },
     call: async (method: string, params?: Record<string, unknown>): Promise<unknown> => {
       calls.push({ method, params })
