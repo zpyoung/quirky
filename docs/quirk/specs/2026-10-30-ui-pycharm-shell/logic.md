@@ -1,6 +1,6 @@
 # Desktop shell: PyCharm's structure on calm graphite
 
-**Status:** Draft, awaiting review
+**Status:** Approved 2026-10-30
 
 The desktop window takes its structure from PyCharm: work sits on rounded cards, the Mac window bar carries the controls, one stripe on each side holds all the tool icons, and controls appear when a panel has focus. It keeps Quirky's calm graphite look and adds nothing that changes what the app can do, apart from narrowing the view to one project, the new popups and ⌘K scope tabs.
 
@@ -332,6 +332,6 @@ Each of these would be its own project.
 
 ## Status & amendments
 
-Draft, awaiting review. Tech spec: expected, because this crosses many files and adds native window chrome.
+Approved 2026-10-30, including the decisions marked assumed. Tech spec: expected, because this crosses many files and adds native window chrome.
 
 **Amendments:** none yet.
