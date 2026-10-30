@@ -125,8 +125,8 @@ async function mountOverlay(options: Options = {}) {
     reports,
     state: () => state,
     last: () => reports.at(-1),
-    q: <T extends Element = HTMLElement>(selector: string) => element.querySelector<T>(selector),
-    qa: <T extends Element = HTMLElement>(selector: string) => [...element.querySelectorAll<T>(selector)],
+    q: <T extends Element = HTMLElement>(selector: string) => document.querySelector<T>(selector),
+    qa: <T extends Element = HTMLElement>(selector: string) => [...document.querySelectorAll<T>(selector)],
     calls: (method: string) => fake.callsTo(`quirky.terminal/${method}`).map((call) => call.params),
     run: async (id: string, prefix = 'quirky.terminal') => {
       let result: unknown
@@ -176,8 +176,9 @@ describe('SC-59: the floating button', () => {
   test('sits where it was saved, pulled back inside the window', async () => {
     const view = await mountOverlay({ state: { button: { x: 300, y: 200 } } })
     expect(at(button(view))).toMatchObject({ x: 300, y: 200 })
+    await view.unmount()
     const away = await mountOverlay({ state: { button: { x: 9000, y: 9000 } } })
-    expect(at(button(away).parentElement!.querySelector('[data-floating-button]'))).toMatchObject({ x: 1400 - 36 - 8 })
+    expect(at(button(away))).toMatchObject({ x: 1400 - 36 - 8 })
   })
 
   test('a click opens the panel and the next one minimizes it', async () => {
@@ -315,8 +316,9 @@ describe('SC-55, SC-56: the panel', () => {
   test('saved bounds are used, and bounds that no longer fit are pulled inside', async () => {
     const saved = await mountOverlay({ state: { open: true, bounds: { x: 100, y: 120, width: 700, height: 500 } } })
     expect(at(panel(saved))).toEqual({ x: 100, y: 120, width: 700, height: 500 })
+    await saved.unmount()
     const off = await mountOverlay({ state: { open: true, bounds: { x: 3000, y: -40, width: 700, height: 500 } } })
-    expect(at(off.q('[data-floating-panel]'))).toEqual({ x: 700, y: 0, width: 700, height: 500 })
+    expect(at(panel(off))).toEqual({ x: 700, y: 0, width: 700, height: 500 })
   })
 
   test('the window shrinking pulls the panel inside without storing anything', async () => {
@@ -495,6 +497,7 @@ describe('SC-67: the overlay report and its events', () => {
   test('visibleSessions lists the panes the open panel shows and none while minimized', async () => {
     const open = await mountOverlay({ state: { open: true }, floatingWorkspace: oneTab() })
     expect(open.last().visibleSessions).toEqual(['s-2', 's-3', 's-4', 's-5'])
+    await open.unmount()
     const closed = await mountOverlay({ floatingWorkspace: oneTab() })
     expect(closed.last().visibleSessions).toEqual([])
   })
@@ -537,5 +540,7 @@ describe('SC-67: the overlay report and its events', () => {
     await view.unmount()
     expect(view.fake.contextValue('floatingFocus')).toBe(false)
     expect(registry.controllerFor('floating')).toBeNull()
+    expect(document.querySelector('[data-floating-button]')).toBeNull()
+    expect(document.querySelector('[data-floating-panel]')).toBeNull()
   })
 })

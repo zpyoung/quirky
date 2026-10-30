@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react'
+import { createPortal } from 'react-dom'
 import type { QuirkyEvent, UiPluginContext } from '@quirky/protocol'
 import type { FloatingBounds, FloatingState } from '../../layout/types'
 import { FLOATING_WORKSPACE } from '../../layout/types'
@@ -309,7 +310,7 @@ export function FloatingOverlay({ context, report, workspaceOptions }: Props) {
     void send({ open: !state.open })
   }
 
-  return (
+  return createPortal(
     <>
       {showPanel ? (
         <div
@@ -363,6 +364,7 @@ export function FloatingOverlay({ context, report, workspaceOptions }: Props) {
           />
         </div>
       ) : null}
-    </>
+    </>,
+    document.body
   )
 }
