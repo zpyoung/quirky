@@ -502,6 +502,8 @@ const rowIn = (within: ParentNode, name: string) =>
     return label === `Open ${name}` || label === `Wake and open ${name}`
   })?.closest<HTMLElement>('li')
 const rowOf = (name: string, repoName: string) => rowIn(projectSection(repoName), name) as HTMLElement
+const subtitleOf = (row: HTMLElement) =>
+  row.querySelector<HTMLElement>('.ui-list-row__description')?.textContent?.replace(/\s+/g, ' ').trim()
 const pendingRow = (name: string, repoName: string) =>
   [...projectSection(repoName).querySelectorAll<HTMLLIElement>('li')].find((row) => {
     const text = row.textContent?.replace(/\s+/g, ' ').trim() ?? ''
@@ -699,6 +701,31 @@ test('status follows the session events', async () => {
   expect(lastReport(h).projects[0].worktrees[0].status).toBe('done')
   await h.emit({ type: 'quirky.session/removed', data: { sessionId: 's1' } })
   expect(lastReport(h).projects[0].worktrees[1].status).toBeNull()
+})
+
+test('session subtitle shows one identity for shell and Claude sessions', async () => {
+  const h = setup()
+  h.world.sessions = [
+    { ...session('s-shell', 'w2', 'running'), title: 'Shell' },
+    { ...session('s-claude', 'w1', 'done'), agent: 'claude', title: 'Claude' }
+  ]
+  await h.mountInto(host)
+  expect(subtitleOf(rowOf('fix-login', 'api'))).toBe('Shell · Running · fix-login')
+  expect(subtitleOf(rowOf('main', 'api'))).toBe('Claude · Done · main')
+})
+
+test('session subtitle retains a custom title', async () => {
+  const h = setup()
+  h.world.sessions = [{ ...session('s1', 'w2', 'running'), title: 'Run checks' }]
+  await h.mountInto(host)
+  expect(subtitleOf(rowOf('fix-login', 'api'))).toBe('Run checks · Running · fix-login')
+})
+
+test('session subtitle falls back to the agent for a blank title', async () => {
+  const h = setup()
+  h.world.sessions = [{ ...session('s1', 'w2', 'done'), agent: 'claude', title: ' \t ' }]
+  await h.mountInto(host)
+  expect(subtitleOf(rowOf('fix-login', 'api'))).toBe('claude · Done · fix-login')
 })
 
 test('refreshes the tree on repo, group and worktree changes', async () => {
