@@ -306,7 +306,7 @@ async function runShardCommand(args: string[], ctx: Context): Promise<number> {
   if (!files) throw new UsageError(`--shard ${values.shard} is outside the plan's ${plan.linuxShards.length} shards`)
 
   const { FILE_LIMIT_MS, FILES_AT_ONCE_CI, RERUN_LIMIT, rerunFailed, runTestFiles } = await import('./runner')
-  const options = { cwd: ctx.cwd, files, platform: values.macos ? ('macos' as const) : ('linux' as const), jobs: FILES_AT_ONCE_CI, limitMs: FILE_LIMIT_MS, run: ctx.run }
+  const options = { cwd: ctx.cwd, files, platform: values.macos ? ('macos' as const) : ('linux' as const), jobs: FILES_AT_ONCE_CI, limitMs: FILE_LIMIT_MS, run: ctx.run, log: ctx.err }
   let results = await runTestFiles(options)
   if (values.macos) {
     const rerun = await rerunFailed(options, results, RERUN_LIMIT)
@@ -328,7 +328,7 @@ async function rerunCommand(args: string[], ctx: Context): Promise<number> {
   const loaded = loadResults(inDir)
   if (loaded.problems.length > 0) throw new Error(loaded.problems.join('\n'))
   const { FILE_LIMIT_MS, RERUN_LIMIT, rerunFailed } = await import('./runner')
-  const rerun = await rerunFailed({ cwd: ctx.cwd, files: [], platform: 'linux', jobs: 1, limitMs: FILE_LIMIT_MS, run: ctx.run }, loaded.results, RERUN_LIMIT)
+  const rerun = await rerunFailed({ cwd: ctx.cwd, files: [], platform: 'linux', jobs: 1, limitMs: FILE_LIMIT_MS, run: ctx.run, log: ctx.err }, loaded.results, RERUN_LIMIT)
   if (rerun.skipped) ctx.err(`more than ${RERUN_LIMIT} files failed, so none were rerun\n`)
   const written = rerun.results.filter((result, index) => result.rerun !== undefined && loaded.results[index].rerun === undefined)
   writeJson(out, written)

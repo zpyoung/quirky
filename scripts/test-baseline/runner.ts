@@ -18,6 +18,7 @@ export type RunOptions = {
   jobs: number
   limitMs: number
   run?: typeof bunTestFile
+  log?: (text: string) => void
 }
 
 type Outcome = { attempt: Attempt; durationMs: number }
@@ -34,12 +35,13 @@ async function attemptFile(opts: RunOptions, file: string): Promise<Outcome> {
   try {
     const began = performance.now()
     const run = opts.run ?? bunTestFile
-    const { code, timedOut } = await run(
+    const { code, output, timedOut } = await run(
       opts.cwd,
       [isAbsolute(file) ? file : `./${file}`, '--reporter=junit', `--reporter-outfile=${report}`],
       opts.limitMs
     )
     const durationMs = performance.now() - began
+    if (code !== 0 || timedOut) opts.log?.(`::group::${file} failed\n${output}\n::endgroup::\n`)
     const xml = existsSync(report) ? readFileSync(report, 'utf8') : ''
     const tests = parseJunit(xml, file)
     const failed = tests.some((test) => test.status === 'failed')

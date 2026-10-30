@@ -132,6 +132,16 @@ test('keeps input order, bounds concurrency by jobs, and passes the limit throug
   expect(new Set(limits)).toEqual(new Set([1234]))
 })
 
+test('hands the output of a failed attempt to log, and stays quiet about a clean one', async () => {
+  const logged: string[] = []
+  const run: Run = async (_cwd, args) => {
+    const failed = args[0].includes('bad')
+    return { code: failed ? 1 : 0, output: failed ? 'error: expected M' : 'all good', timedOut: false }
+  }
+  await runTestFiles({ ...options(['good.test.ts', 'bad.test.ts'], { run }), log: (text) => logged.push(text) })
+  expect(logged).toEqual(['::group::bad.test.ts failed\nerror: expected M\n::endgroup::\n'])
+})
+
 test('every attempt writes its report to its own temp path and removes it', async () => {
   const seen = { reports: [] as string[], calls: [] as string[] }
   const run = fake({ 'a.test.ts': { code: 1, tests: { x: 'fail' } }, 'b.test.ts': { code: 0, tests: { x: 'pass' } } }, seen)
