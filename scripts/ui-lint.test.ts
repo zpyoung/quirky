@@ -295,19 +295,19 @@ test('ui/tool-icon-hue reads the RULES table, tolerating rows that have no hue y
   expect(scanToolLayoutRules('x.ts', 'export const nothing = 1')).toEqual([])
 })
 
-test('root lint checks plugin manifests and the RULES table only while their switches are on', () => {
+test('root lint checks plugin manifests and the RULES table', () => {
   const root = mkdtempSync(join(tmpdir(), 'ui-lint-tool-identity-'))
   const put = (relativePath: string, content: string) => {
     const path = join(root, relativePath)
     mkdirSync(dirname(path), { recursive: true })
     writeFileSync(path, content)
   }
-  const run = (options?: { checkToolLayoutRules?: boolean; checkPluginManifests?: boolean }) => {
+  const run = () => {
     const diagnostics: string[] = []
     const originalError = console.error
     console.error = (...values: unknown[]) => diagnostics.push(values.join(' '))
     try {
-      return { status: runUiLint(root, options), diagnostics }
+      return { status: runUiLint(root), diagnostics }
     } finally {
       console.error = originalError
     }
@@ -317,20 +317,22 @@ test('root lint checks plugin manifests and the RULES table only while their swi
     put('scripts/ui-lint-plugins.json', '[]')
     put('plugins/example/quirky-plugin.json', '{ "contributes": { "panel": [{ "id": "a", "icon": "git-branch", "hue": "blue" }] } }')
     put('packages/daemon/src/plugins/tool-layout.ts', RULES_SOURCE)
-    const rulesOnly = run({ checkToolLayoutRules: true, checkPluginManifests: true })
+    const rulesOnly = run()
     expect(rulesOnly.status).toBe(1)
     expect(rulesOnly.diagnostics.map((line) => line.split(' ')[0])).toEqual([
       'packages/daemon/src/plugins/tool-layout.ts:3:32',
       'packages/daemon/src/plugins/tool-layout.ts:5:46'
     ])
-    expect(run({ checkToolLayoutRules: false, checkPluginManifests: true })).toEqual({ status: 0, diagnostics: [] })
 
+    put('packages/daemon/src/plugins/tool-layout.ts', 'export const RULES = []')
     put('plugins/example/quirky-plugin.json', MANIFEST)
-    const manifestsOnly = run({ checkToolLayoutRules: false, checkPluginManifests: true })
+    const manifestsOnly = run()
     expect(manifestsOnly.status).toBe(1)
     expect(manifestsOnly.diagnostics).toHaveLength(4)
     expect(manifestsOnly.diagnostics[0]).toContain('plugins/example/quirky-plugin.json:6:30 ui/tool-icon-hue')
-    expect(run({ checkToolLayoutRules: false, checkPluginManifests: false })).toEqual({ status: 0, diagnostics: [] })
+
+    put('plugins/example/quirky-plugin.json', '{ "contributes": { "panel": [{ "id": "a", "icon": "git-branch", "hue": "blue" }] } }')
+    expect(run()).toEqual({ status: 0, diagnostics: [] })
   } finally {
     rmSync(root, { recursive: true, force: true })
   }

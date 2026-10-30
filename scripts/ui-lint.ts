@@ -17,16 +17,6 @@ export type UiLintDiagnostic = {
 
 export type UiLintOptions = { plugin?: boolean }
 
-/**
- * Whether `runUiLint` applies `ui/tool-icon-hue` to the `RULES` table in `tool-layout.ts`. Switch on
- * once that table names generated icons.
- */
-export const CHECK_TOOL_LAYOUT_RULES = false
-/**
- * Whether `runUiLint` applies `ui/tool-icon-hue` to plugin manifests. Switch on once no manifest
- * names an icon outside the generated set.
- */
-export const CHECK_PLUGIN_MANIFEST_TOOLS = false
 const TOOL_LAYOUT_RULES_FILE = 'packages/daemon/src/plugins/tool-layout.ts'
 const TOOL_CONTRIBUTION_KINDS = ['panel', 'sidebar-section', 'activity-item'] as const
 
@@ -1068,8 +1058,8 @@ export function scanToolManifest(file: string, source: string): UiLintDiagnostic
 }
 
 /**
- * `ui/tool-icon-hue` for the `RULES` table in `tool-layout.ts`. Rows that have no `hue` yet pass;
- * only the `icon` and `hue` values that are present are checked.
+ * `ui/tool-icon-hue` for the `RULES` table in `tool-layout.ts`: only the `icon` and `hue` values that
+ * are present are checked.
  */
 export function scanToolLayoutRules(file: string, source: string): UiLintDiagnostic[] {
   const sourceFile = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS)
@@ -1139,7 +1129,7 @@ function ensureDirectory(path: string, label: string): void {
   }
 }
 
-export function runUiLint(root = resolve(dirname(fileURLToPath(import.meta.url)), '..'), options: { checkToolLayoutRules?: boolean; checkPluginManifests?: boolean } = {}): number {
+export function runUiLint(root = resolve(dirname(fileURLToPath(import.meta.url)), '..')): number {
   try {
     const uiSourceRoot = resolve(root, 'packages/ui/src')
     const pluginsRoot = resolve(root, 'plugins')
@@ -1158,11 +1148,11 @@ export function runUiLint(root = resolve(dirname(fileURLToPath(import.meta.url))
       })
     ]
     const toolIdentity = [
-      ...((options.checkPluginManifests ?? CHECK_PLUGIN_MANIFEST_TOOLS) ? immediatePluginDirectories(pluginsRoot) : []).flatMap((id) => {
+      ...immediatePluginDirectories(pluginsRoot).flatMap((id) => {
         const manifest = resolve(pluginsRoot, id, 'quirky-plugin.json')
         return existsSync(manifest) ? scanToolManifest(relative(root, manifest).split(sep).join('/'), readFileSync(manifest, 'utf8')) : []
       }),
-      ...((options.checkToolLayoutRules ?? CHECK_TOOL_LAYOUT_RULES) && existsSync(resolve(root, TOOL_LAYOUT_RULES_FILE))
+      ...(existsSync(resolve(root, TOOL_LAYOUT_RULES_FILE))
         ? scanToolLayoutRules(TOOL_LAYOUT_RULES_FILE, readFileSync(resolve(root, TOOL_LAYOUT_RULES_FILE), 'utf8'))
         : [])
     ]
