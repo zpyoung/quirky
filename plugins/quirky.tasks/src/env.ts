@@ -146,10 +146,14 @@ async function restoreTasksCenterFromSettings(
 ): Promise<void> {
   if (!returningFromSettings) return
   const current = await currentTasksToolState(context)
-  if (current.slot === null || current.layout?.view?.id !== TASKS_SETTINGS_VIEW) return
+  const view = current.layout?.view
+  if (current.slot === null || view?.id !== TASKS_SETTINGS_VIEW) return
+  const inputValue = view.input
+  const input = record(inputValue) ? inputValue : null
+  const worktree = typeof input?.worktree === 'string' ? input.worktree : undefined
   await context.call('ui.view.open', {
     id: TASKS_VIEW,
-    input: { navigation: result.navigation, revision: result.revision }
+    input: { navigation: result.navigation, revision: result.revision, ...(worktree !== undefined ? { worktree } : {}) }
   })
 }
 
@@ -256,12 +260,21 @@ export function coreMethods(env: TasksEnv) {
     async settings() {
       const taskTool = await currentTasksToolState(context)
       const view = taskTool.layout?.view ?? null
+      const inputValue = view?.input
+      const input = record(inputValue) ? inputValue : null
+      const previousInputValue = env.previousView?.input
+      const previousInput = record(previousInputValue) ? previousInputValue : null
+      const worktree = typeof input?.worktree === 'string'
+        ? input.worktree
+        : view?.id === TASKS_VIEW && typeof previousInput?.worktree === 'string'
+          ? previousInput.worktree
+          : undefined
       if (taskTool.layout) {
         if (view === null) env.previousView = null
         else if (view.id !== TASKS_VIEW && view.id !== TASKS_SETTINGS_VIEW) env.previousView = view
       }
       if (taskTool.slot !== null) opened = true
-      await context.call('ui.view.open', { id: TASKS_SETTINGS_VIEW })
+      await context.call('ui.view.open', { id: TASKS_SETTINGS_VIEW, ...(worktree !== undefined ? { input: { worktree } } : {}) })
       return { opened: true }
     },
     async close() {

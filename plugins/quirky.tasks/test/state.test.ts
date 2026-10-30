@@ -7,7 +7,7 @@ const runs: TasksTest[] = []
 afterEach(async () => { for (const run of runs.splice(0).reverse()) await run.cleanup() })
 const gh = `if(process.argv.includes('auth')) { console.log('Logged in to github.com account fixture (keyring)\\nActive account: true\\nToken scopes: repo,project,read:org'); } else console.log('{}')`
 
-async function boot() { const run = await bootTasks(gh); runs.push(run); return run }
+async function boot(extraBuiltins: string[] = []) { const run = await bootTasks(gh, { extraBuiltins }); runs.push(run); return run }
 
 test('Tasks open and navigation publish the exact daemon-owned view and close restores its predecessor', async () => {
   const run = await boot()
@@ -47,6 +47,46 @@ test('Tasks navigation and close stay in the open tool without changing the cent
   expect(closed.layout.tools!.open[slot]).toBeNull()
   expect(closed.layout.view).toEqual(center)
   expect(closed.layout.viewTabs).toEqual([center])
+}, 20_000)
+
+test('rail Task Sources carries the current workspace worktree through returning to Tasks', async () => {
+  const run = await boot(['quirky.agents', 'quirky.session'])
+  const toolId = 'sidebar-section:quirky.tasks/tasks'
+  const workspaceView = { id: 'view:quirky.session/worktree', input: { worktree: run.worktree } }
+  await run.client.callAny('ui.view.open', workspaceView)
+  await run.client.callAny('ui.tool.open', { id: toolId })
+
+  await run.client.callAny('quirky.tasks/settings', {})
+  let visible = await run.client.callAny('ui.state', {}) as { layout: UiLayout }
+  expect(visible.layout.view).toEqual({ id: TASKS_SETTINGS_VIEW, input: { worktree: run.worktree } })
+  expect(visible.layout.viewTabs).toContainEqual(workspaceView)
+
+  await run.client.callAny('quirky.tasks/open', {})
+  visible = await run.client.callAny('ui.state', {}) as { layout: UiLayout }
+  expect(visible.layout.view?.id).toBe(TASKS_VIEW)
+  expect(visible.layout.view?.input).toMatchObject({ worktree: run.worktree })
+  expect(visible.layout.viewTabs).toContainEqual(workspaceView)
+
+  await run.client.callAny('quirky.tasks/settings', {})
+  visible = await run.client.callAny('ui.state', {}) as { layout: UiLayout }
+  expect(visible.layout.view).toMatchObject({ id: TASKS_SETTINGS_VIEW, input: { worktree: run.worktree } })
+}, 20_000)
+
+test('Task Sources falls back to the predecessor workspace only when Tasks is the center view', async () => {
+  const run = await boot(['quirky.agents', 'quirky.session'])
+  const workspaceView = { id: 'view:quirky.session/worktree', input: { worktree: run.worktree } }
+  await run.client.callAny('ui.view.open', workspaceView)
+  await run.client.callAny('quirky.tasks/open', {})
+  await run.client.callAny('ui.tool.open', { id: 'sidebar-section:quirky.tasks/tasks' })
+
+  await run.client.callAny('quirky.tasks/settings', {})
+  let visible = await run.client.callAny('ui.state', {}) as { layout: UiLayout }
+  expect(visible.layout.view).toMatchObject({ id: TASKS_SETTINGS_VIEW, input: { worktree: run.worktree } })
+
+  await run.client.callAny('ui.view.open', { id: TASKS_SETTINGS_VIEW, input: { source: 'unrelated' } })
+  await run.client.callAny('quirky.tasks/settings', {})
+  visible = await run.client.callAny('ui.state', {}) as { layout: UiLayout }
+  expect(visible.layout.view).toEqual({ id: TASKS_SETTINGS_VIEW })
 }, 20_000)
 
 test('task preferences preserve sticky all and reject hiding the final provider without corrupting prior state', async () => {
