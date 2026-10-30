@@ -93,7 +93,9 @@ export class Tray {
 
 export const Utils: {
   clipboardReadText(): string | null
-  showNotification(options: { title: string; body?: string; subtitle?: string; silent?: boolean }): void
+  showNotification(options: { title: string; body?: string; subtitle?: string; silent?: boolean; id?: string }): string | void
+  getNotificationPermission?: () => Promise<'not-determined' | 'denied' | 'authorized' | 'provisional' | 'unsupported'>
+  requestNotificationPermission?: () => Promise<'not-determined' | 'denied' | 'authorized' | 'provisional' | 'unsupported'>
   openFileDialog(options: {
     startingFolder?: string
     allowedFileTypes?: string

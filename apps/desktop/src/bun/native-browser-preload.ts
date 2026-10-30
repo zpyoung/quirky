@@ -2,6 +2,7 @@ import type { DesktopShellBridge, NativeDesktopCapabilities } from '@quirky/prot
 import { Electroview } from 'electrobun/view'
 import { createDropSourcePathsInbox } from './drop-source-paths'
 import type { NativeBrowserHostRPC, NativeBrowserPageEvent } from './native-browser'
+import { preloadNotificationCapabilities } from './native-notifications'
 
 type NativeBrowserPreloadBridge = {
   readonly clearPartitionAvailable: boolean
@@ -27,13 +28,6 @@ type DesktopRequestBridge = {
   dropSourcePathsSupported(params: NativeBrowserHostRPC['bun']['requests']['dropSourcePathsSupported']['params']): Promise<NativeBrowserHostRPC['bun']['requests']['dropSourcePathsSupported']['response']>
 }
 
-const DESKTOP_CAPABILITIES: NativeDesktopCapabilities = {
-  directoryPicker: true,
-  auxiliaryWindows: true,
-  revealItem: true,
-  notifications: { permission: false, click: false, dismiss: false }
-}
-
 /** Set by the main process ahead of this bundle; see nativeBrowserPreloadSource. */
 declare const QUIRKY_NATIVE_BROWSER_CLEAR_AVAILABLE: boolean | undefined
 
@@ -41,7 +35,15 @@ declare global {
   interface Window {
     __quirkyNativeBrowserHost?: NativeBrowserPreloadBridge
     __quirkyDesktopHost?: DesktopShellBridge
+    __quirkyNotificationCapabilities?: unknown
   }
+}
+
+const DESKTOP_CAPABILITIES: NativeDesktopCapabilities = {
+  directoryPicker: true,
+  auxiliaryWindows: true,
+  revealItem: true,
+  notifications: preloadNotificationCapabilities(window.__quirkyNotificationCapabilities)
 }
 
 // This runs only in Quirky's trusted shell BrowserWindow. Sandboxed guest webviews never receive this preload.
