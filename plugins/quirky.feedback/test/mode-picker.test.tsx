@@ -98,13 +98,26 @@ function stack(...elements: Element[]) {
 }
 
 let app: HTMLElement
+let shadowRoot: ShadowRoot | null = null
+let attachShadow: Element['attachShadow']
+const label = () => shadowRoot!.querySelector<HTMLElement>('.label')!
 
 beforeEach(() => {
   annotated = []
+  shadowRoot = null
+  attachShadow = Element.prototype.attachShadow
+  const original = attachShadow
+  // the overlay's shadow root is closed; tests read it through an open one
+  Element.prototype.attachShadow = function (this: Element, init: ShadowRootInit) {
+    shadowRoot = original.call(this, { ...init, mode: 'open' })
+    return shadowRoot
+  }
   document.body.innerHTML = `<div id="app">
-    <button id="menu" class="menu-trigger">Menu</button>
-    <div role="menu" id="popup"><div id="item" role="menuitem">Item one</div></div>
-    <section data-terminal-pane="t1" id="term"><div class="terminal-pane-screen"><span id="termtext">SECRET OUTPUT secret-token</span></div></section>
+    <button id="menu" class="menu-trigger">Menu<span id="gear">icon</span></button>
+    <div role="menu" id="popup"><div id="item" role="menuitem"><span id="itemtext">Item one</span></div></div>
+    <div id="plain"><span id="plainspan">plain</span></div>
+
+    <section data-terminal-pane="t1" id="term"><div class="terminal-pane-screen"><button id="termbutton"><span id="termtext">SECRET OUTPUT secret-token</span></button></div></section>
     <div class="qbp" data-browser-pane="p1" id="watch"><span class="qbp-mode" data-mode="watch"></span><div id="watched">page text</div></div>
   </div>`
   app = document.getElementById('app')!
@@ -112,6 +125,7 @@ beforeEach(() => {
 })
 
 afterEach(async () => {
+  Element.prototype.attachShadow = attachShadow
   await act(async () => { teardown?.() })
   teardown = null
   document.body.innerHTML = ''
@@ -265,6 +279,76 @@ describe('picker events', () => {
     expect(capture.kind).toBe('browser-pane')
     expect(capture.selector).toBe('.qbp[data-browser-pane="p1"]')
   })
+
+  test('a span inside a button resolves to the button', async () => {
+    await start()
+    stack(document.getElementById('gear')!)
+    await act(async () => { mouse(host(), 'click') })
+    expect(reactRoot().querySelector('[data-feedback-card]')!.textContent).toContain('Comment on button')
+  })
+
+  test('a span inside a menu item resolves to the menu item', async () => {
+    const fake = await start()
+    stack(document.getElementById('itemtext')!)
+    await act(async () => { mouse(host(), 'click') })
+    expect(reactRoot().querySelector('[data-feedback-card]')!.textContent).toContain('Comment on div')
+    await type('x')
+    await submit()
+    const capture = fake.calls.find((call) => call.method === 'quirky.feedback/add')!.params!.capture as Capture
+    expect(capture.selector).toContain('item')
+  })
+
+  test('a span inside a plain div stays the span', async () => {
+    await start()
+    stack(document.getElementById('plainspan')!)
+    await act(async () => { mouse(host(), 'click') })
+    expect(reactRoot().querySelector('[data-feedback-card]')!.textContent).toContain('Comment on span')
+  })
+
+  test('a terminal pane wins over a button inside it', async () => {
+    await start()
+    stack(document.getElementById('termtext')!)
+    await act(async () => { mouse(host(), 'click') })
+    expect(reactRoot().querySelector('[data-feedback-card]')!.textContent).toContain('Terminal pane')
+  })
+
+  test('the hover highlight outlines the control, not the inner span', async () => {
+    await start()
+    rect(document.getElementById('menu')!, { x: 50, y: 60, width: 80, height: 30 })
+    rect(document.getElementById('gear')!, { x: 52, y: 62, width: 10, height: 10 })
+    stack(document.getElementById('gear')!)
+    await act(async () => { mouse(host(), 'pointermove') })
+    const highlight = shadowRoot!.querySelector<HTMLElement>('.highlight')!
+    expect(highlight.style.left).toBe('50px')
+    expect(highlight.style.width).toBe('80px')
+  })
+})
+
+describe('hover label', () => {
+  const place = async (box: { x: number; y: number; width: number; height: number }, size = { width: 60, height: 20 }) => {
+    await start()
+    const target = document.getElementById('plainspan')!
+    rect(target, box)
+    rect(label(), { x: 0, y: 0, ...size })
+    stack(target)
+    await act(async () => { mouse(host(), 'pointermove') })
+    return { left: parseFloat(label().style.left), top: parseFloat(label().style.top) }
+  }
+
+  test('sits directly above the target when there is room', async () => {
+    expect(await place({ x: 100, y: 200, width: 80, height: 30 })).toEqual({ left: 100, top: 180 })
+  })
+
+  test('drops to the top edge of the target when there is no room above', async () => {
+    expect(await place({ x: 100, y: 5, width: 80, height: 30 })).toEqual({ left: 100, top: 5 })
+  })
+
+  test('stays inside the window at the left and right edges', async () => {
+    expect((await place({ x: -30, y: 200, width: 80, height: 30 })).left).toBe(0)
+    await act(async () => { teardown!() })
+    const right = await place({ x: window.innerWidth - 10, y: 200, width: 80, height: 30 })
+    expect(right.left).toBe(window.innerWidth - 60)
+  })
 })
 
 async function type(text: string) {
@@ -285,12 +369,18 @@ describe('option key', () => {
   const passThrough = () => host().style.getPropertyValue('pointer-events') === 'none' && host().style.getPropertyPriority('pointer-events') === 'important'
   const restored = () => host().style.getPropertyValue('pointer-events') === 'auto' && host().style.getPropertyPriority('pointer-events') === 'important'
 
+  const surface = () => shadowRoot!.querySelector<HTMLElement>('.surface')!
+  const surfacePassThrough = () => surface().style.getPropertyValue('pointer-events') === 'none' && surface().style.getPropertyPriority('pointer-events') === 'important'
+  const surfaceRestored = () => surface().style.getPropertyValue('pointer-events') === 'auto' && surface().style.getPropertyPriority('pointer-events') === 'important'
+
   test('holding Option passes pointer events through with important priority', async () => {
     await start()
     key('keydown', 'Alt', { altKey: true })
     expect(passThrough()).toBe(true)
+    expect(surfacePassThrough()).toBe(true)
     key('keyup', 'Alt', { altKey: false })
     expect(restored()).toBe(true)
+    expect(surfaceRestored()).toBe(true)
   })
 
   test('a window blur releases Option', async () => {
@@ -298,6 +388,7 @@ describe('option key', () => {
     key('keydown', 'Alt', { altKey: true })
     window.dispatchEvent(new Event('blur'))
     expect(restored()).toBe(true)
+    expect(surfaceRestored()).toBe(true)
   })
 
   test('a pointer event with altKey corrects a missed keydown, and does not select', async () => {
@@ -305,6 +396,7 @@ describe('option key', () => {
     stack(document.getElementById('item')!)
     await act(async () => { mouse(host(), 'pointerdown', { altKey: true }) })
     expect(passThrough()).toBe(true)
+    expect(surfacePassThrough()).toBe(true)
     await act(async () => { mouse(host(), 'click', { altKey: true }) })
     expect(reactRoot().querySelector('[data-feedback-card]')).toBeNull()
   })
@@ -314,6 +406,7 @@ describe('option key', () => {
     key('keydown', 'Alt', { altKey: true })
     mouse(document.getElementById('menu')!, 'pointermove', { altKey: false })
     expect(restored()).toBe(true)
+    expect(surfaceRestored()).toBe(true)
   })
 
   test('releasing Option does not move focus', async () => {

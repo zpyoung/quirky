@@ -20,12 +20,12 @@ export function App({ session, layout, annotate }: Props) {
     <Banner onExit={() => void session.exit()} />
     <Dots comments={state.comments} found={found} />
     <Chips chips={chips} onComment={session.pickElement} onAnnotate={annotate} />
+    <Tray state={state} found={found} session={session} />
     {state.card !== null ? <Card key={state.card.serial} card={state.card} number={editing < 0 ? null : editing + 1} actions={{
       setText: session.setText,
       setIntent: session.setIntent,
       submit: () => void session.submit(),
       cancel: session.cancel
     }} /> : null}
-    <Tray state={state} found={found} session={session} />
   </>
 }

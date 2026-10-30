@@ -4,6 +4,10 @@ const TERMINAL_PANE = '[data-terminal-pane]'
 const BROWSER_PANE = '.qbp[data-browser-pane]'
 const NATIVE_HOST = '.qbp-native-host'
 const WATCH_MODE = '.qbp-mode[data-mode="watch"]'
+const CONTROL = [
+  'button', 'a[href]', 'input', 'select', 'textarea', 'summary', 'label',
+  ...['button', 'link', 'tab', 'menuitem', 'menuitemcheckbox', 'menuitemradio', 'option', 'switch', 'checkbox', 'radio', 'treeitem'].map((role) => `[role="${role}"]`)
+].join(', ')
 
 export type Target = { element: Element; label: string }
 
@@ -15,7 +19,8 @@ function labelOf(element: Element): string {
 
 /**
  * The element a person means when they point at `element`: a terminal or browser pane stands for
- * everything inside it, so pane content is never reached. The label is a tag name or a pane name,
+ * everything inside it, so pane content is never reached. Anywhere else a point inside a control
+ * (an icon in a button) resolves to the control, which carries the accessible name. The label is a tag name or a pane name,
  * never element text.
  */
 export function resolveTarget(element: Element): Target {
@@ -25,7 +30,8 @@ export function resolveTarget(element: Element): Target {
   if (browser !== null && browser.querySelector(WATCH_MODE) !== null) return { element: browser, label: labelOf(browser) }
   const native = element.closest(NATIVE_HOST)?.closest(BROWSER_PANE) ?? null
   if (native !== null) return { element: native, label: labelOf(native) }
-  return { element, label: labelOf(element) }
+  const control = element.closest(CONTROL) ?? element
+  return { element: control, label: labelOf(control) }
 }
 
 /** The topmost element at a point that is not part of the feedback overlay itself. */
