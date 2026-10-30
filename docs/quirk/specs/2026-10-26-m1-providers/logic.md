@@ -7,6 +7,7 @@
 **Amendments:**
 - 2026-10-26, tech-spec authoring: Claude Agent Teams launches `claude --teammate-mode in-process` with the Agent Teams environment directly, with no `quirky agents claude-teams` command, because plugin CLI commands can't pass arbitrary arguments through (SC-6, SC-37, [D29](../../../loop/decisions/m1-providers.md)). The "New <Agent> tab" commands are declared for the 45 built-in agents only, because UI commands must be declared in a manifest (SC-43, [D33](../../../loop/decisions/m1-providers.md)). `quirky agents list` returns an object holding the agent array, the default agent and the permission summary (SC-1). Resume has no `--wait`, since it carries no prompt (SC-31). A delivery still `pending` when the daemon restarts becomes `not-delivered` (SC-28).
 - 2026-10-26, Codex spec review: an agent found only in an install directory launches by its absolute path ([D43](../../../loop/decisions/m1-providers.md)); the provider-session method is `quirky.session/setProviderSession` (CLI `set-provider-session`); counts and pickers include Claude Agent Teams whenever Claude is installed (SC-1, SC-39, SC-41, SC-43); a resumed session records the launch it used (SC-31).
+- 2026-10-29, QA runtime smoke: explicit agent commands appear only for installed and enabled catalog agents; disabling removes an entry, and re-enabling restores it in an open palette without reloading. The generic default-agent command remains available (SC-41, SC-43).
 
 ## Conceptual model
 
@@ -562,7 +563,7 @@ These run in the web UI against a daemon with fakes `claude`, `codex` and `goose
 41. **SC-41: disabling an agent in the view** (UI)
     - **When** the person switches Codex off
     - **Then** its row shows "Disabled", its "Set default" button is gone, Codex leaves the Default
-      Agent row and the new-session menu
+      Agent row and new-session menu, and "New Codex tab" disappears from the palette.
 
 42. **SC-42: Refresh and the empty state** (UI)
     - **When** the person clicks Refresh on a machine with no agents on `PATH`
@@ -572,10 +573,12 @@ These run in the web UI against a daemon with fakes `claude`, `codex` and `goose
 
 43. **SC-43: the new-session menu and agent commands** (UI)
     - **When** the person opens the `+` menu, then the command palette
-    - **Then** the menu lists Shell, Claude, Claude Agent Teams, Codex, Goose, "Claude (background)"
-      and "Manage agents"
-      (which opens the Agents view); the palette has "New agent tab (default agent)" with
-      Cmd+Option+T and "New Claude tab", "New Aider tab" and the rest for every catalog agent.
+    - **Then** the menu lists Shell, "Manage agents", and choices only for installed and enabled
+      agents (Claude, Claude Agent Teams, Codex, Goose and "Claude (background)" in this example);
+      "Manage agents" opens the Agents view. The palette retains generic "New agent tab (default
+      agent)" with Cmd+Option+T regardless of individual agent availability, and lists explicit
+      "New <Agent> tab" commands only for installed and enabled catalog agents. Disabling removes
+      an explicit command; re-enabling restores it in an open palette without reloading the app.
       Pressing Cmd+Option+T opens a Claude tab (first in auto-pick order).
 
 ## Scope & non-goals
@@ -619,6 +622,9 @@ two Orca defects (SC-23, SC-35) and the disabled-agent picker question (SC-10, S
 - **Retry policy:** one paste, never retried; codex and qwen-code get one extra blind Enter (D21).
 - **Data mapping:** seven trust presets in the daemon user's home (D28).
 - **Layout, empty and error states:** the Agents view (D30, D31), the new-session menu (D32).
+- **Palette agent commands:** explicit commands are available only for installed and enabled
+  catalog agents; the generic default-agent command remains available, and an open palette
+  reflects enablement changes without reloading (SC-43).
 
 ## Industry Insights
 
