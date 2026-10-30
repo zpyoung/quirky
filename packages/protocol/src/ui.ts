@@ -224,6 +224,8 @@ export type UiLayout = {
   panelWidths?: Record<string, number>
   /** Whether the command palette is open; absent means closed. */
   palette?: boolean
+  /** The ids of the last palette entries run, newest first, at most 10; absent when none. */
+  paletteRecents?: string[]
   /** Host-owned six-slot placement, visibility and geometry, shared across projects. */
   tools?: UiToolLayout
   /** Open center view contributions, retaining each view's last input in this window. */
