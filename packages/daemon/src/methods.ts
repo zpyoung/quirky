@@ -297,6 +297,7 @@ export function createHandlers(
       if (params.open !== undefined && open === undefined) throw invalidParams('open must be a boolean')
       return layout.setPalette(open)
     },
+    'ui.palette.recent': (params) => layout.recordPaletteRecent(str(params, 'id')),
     'ui.tool.open': (params) => layout.openTool(str(params, 'id')),
     'ui.tool.close': (params) => layout.closeTool(params.slot as UiToolSlot),
     'ui.tool.move': (params) => layout.moveTool(str(params, 'id'), params.slot as UiToolPlacement),

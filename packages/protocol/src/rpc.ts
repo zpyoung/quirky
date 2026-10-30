@@ -130,6 +130,8 @@ export type Methods = {
   'ui.window.command.run': { params: WindowCommandRequest; result: { result: unknown } }
   /** Opens or closes the shared command palette; omitted `open` toggles its current state. */
   'ui.palette.set': { params: { open?: boolean }; result: UiLayout }
+  /** Records a palette entry as the most recent one, keeping at most 10; the list survives restarts. */
+  'ui.palette.recent': { params: { id: string }; result: UiLayout }
   'ui.tool.open': { params: { id: string }; result: UiLayout }
   'ui.tool.close': { params: { slot: UiToolSlot }; result: UiLayout }
   'ui.tool.move': { params: { id: string; slot: UiToolPlacement }; result: UiLayout }

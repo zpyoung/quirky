@@ -42,6 +42,8 @@ import type { PluginHost } from './host'
 import { isRecord, resolveToolLayout, TOOL_SIZE_FIELDS, validToolSize } from './tool-layout'
 
 const LAYOUT_KEY = 'layout'
+const PALETTE_RECENTS_LIMIT = 10
+const PALETTE_RECENT_ID_LIMIT = 2048
 const MAX_JSON_LENGTH = 64 * 1024
 const COMMAND_TIMEOUT_MS = 30_000
 const TOAST_DISMISS = 'ui.toast.dismiss'
@@ -261,6 +263,9 @@ function readStored(value: unknown): UiLayout {
       : stored.worktree === null
         ? null
         : worktreeOf(view) ?? null
+  const paletteRecents = Array.isArray(stored.paletteRecents)
+    ? stored.paletteRecents.filter((id): id is string => typeof id === 'string' && id !== '').slice(0, PALETTE_RECENTS_LIMIT)
+    : []
   return {
     view,
     viewTabs: [...viewTabs.values()],
@@ -269,7 +274,8 @@ function readStored(value: unknown): UiLayout {
     sidebar: typeof stored.sidebar === 'boolean' ? stored.sidebar : true,
     focus: FOCUS_TARGETS.find((target) => target === stored.focus) ?? null,
     ...(hasPanelWidths ? { panelWidths } : {}),
-    ...(stored.palette === true ? { palette: true } : {})
+    ...(stored.palette === true ? { palette: true } : {}),
+    ...(paletteRecents.length > 0 ? { paletteRecents } : {})
   }
 }
 
@@ -755,6 +761,20 @@ export class LayoutService {
       delete closed.palette
       return closed
     })
+  }
+
+  /**
+   * Records a palette entry as the most recent one, removing its earlier copy and keeping at most
+   * 10. InvalidParams for an empty or non-string id, or one over 2,048 characters.
+   */
+  recordPaletteRecent(id: unknown): UiLayout {
+    if (typeof id !== 'string' || id === '' || id.length > PALETTE_RECENT_ID_LIMIT) {
+      throw invalidParams(`id must be a non-empty string of at most ${PALETTE_RECENT_ID_LIMIT} characters`)
+    }
+    return this.change((layout) => ({
+      ...layout,
+      paletteRecents: [id, ...(layout.paletteRecents ?? []).filter((earlier) => earlier !== id)].slice(0, PALETTE_RECENTS_LIMIT)
+    }))
   }
 
   /** Moves focus to the sidebar, the view or the panel. InvalidParams for any other target. */
@@ -1264,6 +1284,7 @@ export class LayoutService {
       delete auxiliaryLayout.tools
       delete auxiliaryLayout.panelWidths
       delete auxiliaryLayout.palette
+      delete auxiliaryLayout.paletteRecents
       return auxiliaryLayout
     }
     const override = this.windowViewFor(connId)

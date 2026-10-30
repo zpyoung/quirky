@@ -262,6 +262,7 @@ const uiLayout = object(
     focus: { description: "'sidebar', 'view', 'panel' or null." },
     panelWidths: { type: 'object', additionalProperties: true, description: 'Desired width by panel ID.' },
     palette: { type: 'boolean', description: 'Whether the command palette is open; absent means closed.' },
+    paletteRecents: { type: 'array', items: { type: 'string' }, description: 'Recently run palette entry IDs, newest first; at most 10.' },
     viewTabs: listOf(uiViewTab, 'Open center view contributions, retaining each view’s latest input.'),
     tools: uiToolLayout
   },
@@ -582,6 +583,11 @@ export const KERNEL_METHOD_SCHEMAS = {
   'ui.palette.set': {
     description: 'Opens or closes the shared command palette; omitting `open` toggles its current state.',
     params: object({ open: { type: 'boolean', description: 'True opens, false closes; omitted toggles.' } }),
+    result: uiLayout
+  },
+  'ui.palette.recent': {
+    description: 'Records a palette entry as the most recent one, removing any earlier copy and keeping at most 10.',
+    params: object({ id: string('The palette entry ID, at most 2,048 characters.') }, ['id']),
     result: uiLayout
   },
   'ui.tool.open': {
