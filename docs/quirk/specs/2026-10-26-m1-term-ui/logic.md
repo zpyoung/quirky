@@ -406,7 +406,7 @@ for **main**. Keys are macOS keys (`⌘` is Mod).
 49. **SC-49: the Quick Commands panel and adding a command** (UI, CLI)
     - **Given** no quick commands
     - **When** the person opens the Quick Commands panel, clicks Add Command, fills Label "Hello", Command `echo hello`, keeps Terminal, Append Enter on and Scope Project (preselected to **api**), and presses `⌘Enter`; or the agent runs `quirky terminal quick-command add --label Hello --command 'echo hello' --scope repo`
-    - **Then** the empty panel read "No quick commands saved. Run them from the Quick Commands button in the tab bar, or right-click inside any terminal."; the dialog "Add Quick Command" shows "Saved items appear in the tab bar menu for one-click run.", disables Save until label and command are filled, limits Label to 80 and Command to 4,000 characters, and disables the Agent select for terminal commands; afterwards the panel lists "Hello", a "Project" badge, `echo hello` and an "Enter" hint; the panel's search box and "All commands" filter narrow the list
+    - **Then** the empty panel read "No quick commands saved. Run them from the Command button in the tab bar, or right-click inside any terminal."; the dialog "Add Quick Command" shows "Saved items appear in the tab bar menu for one-click run.", disables Save until label and command are filled, limits Label to 80 and Command to 4,000 characters, and disables the Agent select for terminal commands; afterwards the panel lists "Hello", a "Project" badge, `echo hello` and an "Enter" hint; the panel's search box and "All commands" filter narrow the list
     - The panel's Search and Scope fields keep matching horizontal insets aligned with the panel header.
 
 50. **SC-50: limits and normalization** (CLI)
