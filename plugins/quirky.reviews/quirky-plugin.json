@@ -4612,6 +4612,13 @@
         "order": 40
       }
     ],
+    "status-bar": [
+      {
+        "id": "checks",
+        "title": "Checks",
+        "order": 20
+      }
+    ],
     "command": [
       {
         "id": "show-checks",

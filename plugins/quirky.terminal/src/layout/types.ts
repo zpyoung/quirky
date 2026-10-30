@@ -1,3 +1,5 @@
+import type { UiToolHue } from '@quirky/protocol'
+
 /** The ten tab colours, drawn as a dot before a tab's close control. */
 export const TAB_COLORS = ['none', 'blue', 'purple', 'pink', 'red', 'orange', 'yellow', 'green', 'teal', 'gray'] as const
 export type PresetTabColor = (typeof TAB_COLORS)[number]
@@ -19,6 +21,12 @@ export const TAB_COLOR_HEX: Record<Exclude<PresetTabColor, 'none'>, string> = {
   teal: '#14b8a6',
   gray: '#9ca3af'
 }
+
+/** The mark a tab shows: a tool glyph with its hue, a file's type icon, or a control glyph. */
+export type TabIcon =
+  | { kind: 'tool'; name: string; hue: UiToolHue }
+  | { kind: 'file'; path: string }
+  | { kind: 'control'; name: string }
 
 export type SplitDirection = 'right' | 'down'
 export type Edge = 'left' | 'right' | 'top' | 'bottom'
@@ -66,6 +74,7 @@ export type ViewTab = {
   closeParams?: Record<string, unknown>
   /** Opts this hosted view into host-computed close context for its guard method. */
   closeContext?: boolean
+  icon?: TabIcon
   createdAt: string
 }
 

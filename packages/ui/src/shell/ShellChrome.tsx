@@ -7,12 +7,10 @@ import {
   EmptyState,
   ListRow,
   SectionHeader,
-  StatusDot,
   TextField,
   Toast
 } from '../design-system'
-import { useConnection, usePluginHost, usePluginState } from '../context'
-import { PluginSlot } from '../plugins/PluginSlot'
+import { useConnection, usePluginHost } from '../context'
 import { attentionStoreFor, useAttention } from './attention'
 import './chrome.css'
 
@@ -20,50 +18,6 @@ type ToastAnswer = { label: string; answers: Record<string, AskAnswer>; skipped:
 type QuestionDraft = { selected: string[]; freeText: string; text: string; confirm: boolean | null }
 type Drafts = Record<string, QuestionDraft>
 const messageOf = (error: unknown): string => error instanceof Error ? error.message : String(error)
-
-function worktreeFor(snapshot: { worktrees: Worktree[] | null }, id: string | null): Worktree | undefined {
-  return id ? snapshot.worktrees?.find((worktree) => worktree.id === id) : undefined
-}
-
-/** Canonical branch/activity summary plus the effective status-bar contributions. */
-export function ShellStatusBar() {
-  const { snapshot } = useAttention()
-  const { model, windowRoute } = usePluginState()
-  if (windowRoute) return null
-
-  const selected = snapshot.errors.worktrees ? undefined : worktreeFor(snapshot, snapshot.selectedWorktreeId)
-  const working = snapshot.errors.sessions ? undefined : snapshot.sessions?.filter((session) => session.status === 'working').length
-  const needsYou = snapshot.errors.asks ? undefined : snapshot.asks?.length
-  const statusBars = model?.statusBars ?? []
-
-  return (
-    <footer className="shell-statusbar" data-region="status-bar" aria-label="Status bar">
-      <div className="shell-statusbar__summary" aria-label="Workspace status">
-        {selected?.branch && <span className="shell-statusbar__branch">{selected.branch}</span>}
-        {working !== undefined && (
-          <span className="shell-statusbar__metric">
-            <StatusDot status={working > 0 ? 'working' : 'idle'} label={`${working} agents working`} />
-            {working} working
-          </span>
-        )}
-        {needsYou !== undefined && (
-          <span className="shell-statusbar__metric">
-            <Badge tone={needsYou > 0 ? 'needs-you' : 'neutral'} label={`${needsYou} pending questions`}>{needsYou}</Badge>
-            <span>needs you</span>
-          </span>
-        )}
-        {snapshot.errors.worktrees && <span className="shell-statusbar__unknown" role="status">Branch unavailable</span>}
-        {snapshot.errors.sessions && <span className="shell-statusbar__unknown" role="status">Agent status unavailable</span>}
-        {snapshot.errors.asks && <span className="shell-statusbar__unknown" role="status">Inbox status unavailable</span>}
-      </div>
-      {statusBars.length > 0 && (
-        <div className="shell-statusbar__plugins" aria-label="Plugin status">
-          {statusBars.map((entry) => <PluginSlot key={entry.id} id={entry.id} />)}
-        </div>
-      )}
-    </footer>
-  )
-}
 
 function initialDrafts(ask: Ask): Drafts {
   return Object.fromEntries(ask.spec.questions.map((question) => {

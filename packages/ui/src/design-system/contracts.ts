@@ -67,3 +67,8 @@ export type PopupMenuProps = {
   searchPlaceholder?: string
   onClose(): void
 }
+/**
+ * A status bar value. With `items` it is a button that opens a `PopupMenu` titled `popupTitle` (default
+ * `label`); without them it is plain, non-interactive content. `label` names the control for assistive tech.
+ */
+export type StatusBarItemProps = { label: string; items?: PopupItem[]; popupTitle?: string; children: ReactNode }

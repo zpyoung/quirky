@@ -10,7 +10,7 @@ import { useAppState, usePluginHost, usePluginState } from './context'
 import { CommandPalette } from './plugins/CommandPalette'
 import { OverlayLayer } from './plugins/OverlayLayer'
 import { useThemeVariables } from './plugins/useThemeVariables'
-import { ShellStatusBar } from './shell/ShellChrome'
+import { ShellStatusBar } from './shell/StatusBar'
 import {
   fitToolShellGeometry,
   getToolShellOpenSlots,

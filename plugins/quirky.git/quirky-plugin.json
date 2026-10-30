@@ -2845,6 +2845,13 @@
         "title": "Source control"
       }
     ],
+    "status-bar": [
+      {
+        "id": "ahead-behind",
+        "title": "Ahead and behind",
+        "order": 10
+      }
+    ],
     "view": [
       {
         "id": "diff",

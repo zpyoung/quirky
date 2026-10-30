@@ -8,6 +8,7 @@ import { ReviewPage } from './detail/ReviewPage'
 import { ChecksPanel, ChecksAgentDialog } from './checks/ChecksPanel'
 import { CreateReview } from './create/CreateReview'
 import { HostingSettings } from './create/HostingSettings'
+import { ChecksSummary } from './StatusBarItem'
 function record(value: unknown): value is JsonRecord {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
 }
@@ -26,6 +27,8 @@ function stateValue(raw: unknown): ReviewsState {
   const state = raw as unknown as ReviewsState
   return state
 }
+
+const CHECKS_STATUS_BAR = 'status-bar:quirky.reviews/checks'
 
 type SurfaceKind = 'detail' | 'checks' | 'create' | 'settings'
 
@@ -102,6 +105,11 @@ function mount(context: UiPluginContext, kind: SurfaceKind): MountFunction {
 export function activate(context: UiPluginContext): void {
   context.provide(REVIEW_VIEW, mount(context, 'detail'))
   context.provide(CHECKS_PANEL, mount(context, 'checks'))
+  context.provide(CHECKS_STATUS_BAR, (element: HTMLElement) => {
+    const root = createRoot(element)
+    root.render(<ChecksSummary context={context} />)
+    return () => root.unmount()
+  })
   context.provide(CREATE_VIEW, mount(context, 'create'))
   context.provide(SETTINGS_VIEW, mount(context, 'settings'))
   context.provide('command:quirky.reviews/show-checks', () => context.call('quirky.reviews/showChecks'))
