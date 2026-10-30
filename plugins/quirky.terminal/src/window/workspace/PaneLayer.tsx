@@ -12,7 +12,7 @@ import { isViewTab } from '../../layout/types'
 import { useBoxSize } from './useBoxSize'
 import { byPaneId, px, STRUCTURED_VIEW_ID } from './model'
 
-/** The narrowest a pane may be drawn or dragged to, unless its pair is smaller. */
+/** The minimum pane width and terminal-content height, before a vertical header band. */
 export const MIN_PANE_PX = 50
 /** How far a pane header's handle must move before a drag starts. */
 export const PANE_DRAG_THRESHOLD_PX = 5
@@ -275,7 +275,6 @@ function PaneHeader({ controller, state, tab, leaf, multi, onGrip }: { controlle
   const renaming = state.rename?.kind === 'pane' && state.rename.id === leaf.id
   const expanded = tab.expandedPane !== null
 
-  if (!multi && !leaf.title && !renaming) return null
   let close
   if (multi && leaf.title) {
     close = (
@@ -356,20 +355,23 @@ function halfOf(rect: PaneRect, edge: Edge): { left: number; top: number; width:
  */
 function TerminalPaneLayer({ controller, state, group, tab }: Props & { tab: TerminalTab }) {
   const container = useRef<HTMLDivElement>(null)
+  const headerBandElement = useRef<HTMLDivElement>(null)
   const size = useBoxSize(container)
+  const headerBandSize = useBoxSize(headerBandElement)
   const { settings, sessions, cwds, workspace } = state
   const root = controller.previewedPanes(tab.root)
   const leaves = paneLeaves(root)
   const expandedLeaf = tab.expandedPane === null ? null : (leaves.find((leaf) => leaf.id === tab.expandedPane) ?? null)
   const multi = leaves.length > 1
-  const laidOut = size.width > 0 && size.height > 0
+  const laidOut = size.width > 0 && size.height > 0 && headerBandSize.height > 0
   const thickness = settings['divider-thickness']
+  const minPaneHeight = MIN_PANE_PX + headerBandSize.height
 
   let rects: PaneRect[] = []
   let dividers: DividerRect[] = []
   if (laidOut) {
     if (expandedLeaf) rects = [{ pane: expandedLeaf.id, x: 0, y: 0, width: size.width, height: size.height }]
-    else ({ panes: rects, dividers } = paneRects(root, size.width, size.height, MIN_PANE_PX, thickness))
+    else ({ panes: rects, dividers } = paneRects(root, size.width, size.height, MIN_PANE_PX, thickness, minPaneHeight))
   }
   const rectOf = new Map(rects.map((rect) => [rect.pane, rect]))
   const shown = byPaneId(expandedLeaf ? [expandedLeaf] : leaves).filter((leaf) => rectOf.has(leaf.id))
@@ -381,7 +383,8 @@ function TerminalPaneLayer({ controller, state, group, tab }: Props & { tab: Ter
     const element = container.current
     if (!element) return
     const total = divider.direction === 'right' ? divider.area.width : divider.area.height
-    const lowest = Math.min(MIN_PANE_PX, total / 2) / total
+    const minPane = divider.direction === 'right' ? MIN_PANE_PX : minPaneHeight
+    const lowest = Math.min(minPane, total / 2) / total
     const original = splitRatioOf(tab.root, divider.split)
     let latest: { kind: 'pane'; split: string; ratio: number } | null = null
     const onMove = (move: MouseEvent) => {
@@ -452,6 +455,7 @@ function TerminalPaneLayer({ controller, state, group, tab }: Props & { tab: Ter
 
   return (
     <div ref={container} className="qt-panes" data-panes={tab.id}>
+      <div ref={headerBandElement} className="qt-pane-header-band" aria-hidden="true" />
       {shown.map((leaf) => {
         const rect = rectOf.get(leaf.id)!
         const left = px(rect.x)
@@ -460,6 +464,7 @@ function TerminalPaneLayer({ controller, state, group, tab }: Props & { tab: Ter
         const session = sessions[leaf.session]
         const focused = focusedGroup && tab.activePane === leaf.id
         const structured = session?.kind === 'structured'
+        const reserveHeaderBand = multi || Boolean(leaf.title) || (state.rename?.kind === 'pane' && state.rename.id === leaf.id)
         return (
           <div
             key={leaf.id}
@@ -475,34 +480,35 @@ function TerminalPaneLayer({ controller, state, group, tab }: Props & { tab: Ter
               controller.openMenu('pane', leaf.id, { x: event.clientX, y: event.clientY })
             }}
           >
-            {!session ? (
-              <p className="qt-muted qt-pad">Loading session...</p>
-            ) : session.kind === 'structured' ? (
-              <StructuredHost controller={controller} session={leaf.session} />
-            ) : (
-              <DockHost
-                controller={controller}
-                context={controller.context}
-                paneId={leaf.id}
-                sessionId={leaf.session}
-                workspaceId={workspace?.id}
-                cwd={cwds[leaf.session] ?? session.cwd ?? ''}
-                settings={settings}
-                active={focused}
-                interactive={leaf.exit === null && session.status !== 'exited'}
-                dragging={state.dragging}
-                terminalEpoch={state.epoch}
-                availableHeight={height}
-                onHandle={(handle) => controller.registerHandle(leaf.id, handle)}
-                onFocus={() => void controller.focusPane(leaf.id)}
-                onState={(report) => controller.setPaneState(leaf.id, report)}
-                themeSource={controller.options.themeSource ?? controller.root ?? undefined}
-                createWebgl={controller.options.createWebgl}
-              />
-            )}
+            <div className={reserveHeaderBand ? 'qt-pane-content qt-pane-content-reserved' : 'qt-pane-content'}>
+              {!session ? (
+                <p className="qt-muted qt-pad">Loading session...</p>
+              ) : session.kind === 'structured' ? (
+                <StructuredHost controller={controller} session={leaf.session} />
+              ) : (
+                <DockHost
+                  controller={controller}
+                  context={controller.context}
+                  paneId={leaf.id}
+                  sessionId={leaf.session}
+                  workspaceId={workspace?.id}
+                  cwd={cwds[leaf.session] ?? session.cwd ?? ''}
+                  settings={settings}
+                  active={focused}
+                  interactive={leaf.exit === null && session.status !== 'exited'}
+                  dragging={state.dragging}
+                  terminalEpoch={state.epoch}
+                  onHandle={(handle) => controller.registerHandle(leaf.id, handle)}
+                  onFocus={() => void controller.focusPane(leaf.id)}
+                  onState={(report) => controller.setPaneState(leaf.id, report)}
+                  themeSource={controller.options.themeSource ?? controller.root ?? undefined}
+                  createWebgl={controller.options.createWebgl}
+                />
+              )}
+            </div>
             {state.focusFlash?.pane === leaf.id ? <div key={state.focusFlash.token} className="qt-focus-flash" data-focus-flash={state.focusFlash.token} aria-hidden /> : null}
             {session ? <PaneAccessories controller={controller} sessionId={leaf.session} paneId={leaf.id} /> : null}
-            {focused ? <PaneHeader controller={controller} state={state} tab={tab} leaf={leaf} multi={multi} onGrip={(event) => startPaneDrag(leaf.id, event)} /> : null}
+            {focused && reserveHeaderBand ? <PaneHeader controller={controller} state={state} tab={tab} leaf={leaf} multi={multi} onGrip={(event) => startPaneDrag(leaf.id, event)} /> : null}
             {leaf.exit ? <ExitOverlay controller={controller} leaf={leaf} /> : null}
           </div>
         )
