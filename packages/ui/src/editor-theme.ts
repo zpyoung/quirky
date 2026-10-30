@@ -21,7 +21,7 @@ export const editorTheme: Extension = EditorView.theme({
   '.cm-gutterElement.cm-changedLineGutter, .cm-changedLineGutter': { background: 'var(--ui-working)' },
   '.cm-gutterElement.cm-deletedLineGutter, .cm-deletedLineGutter': { background: 'var(--ui-failing)' },
   '.cm-collapsedLines': { color: 'var(--ui-muted)', background: 'var(--ui-selected)', cursor: 'pointer', padding: 'var(--ui-space-2) var(--ui-space-8)', fontSize: 'var(--ui-font-label)' },
-  '.cm-chunkButtons': { position: 'absolute', insetInlineEnd: 'var(--ui-space-6)', top: 'var(--ui-space-2)' },
+  '.cm-deletedChunk .cm-chunkButtons': { position: 'sticky', float: 'right', height: '0', insetInlineEnd: 'var(--ui-space-6)' },
   '.cm-chunkButtons button': { background: 'var(--ui-selected)', color: 'var(--ui-text)', border: 'var(--ui-border-width) solid var(--ui-border)', borderRadius: 'var(--ui-radius-mark)', padding: '0 var(--ui-space-6)', fontSize: 'var(--ui-font-label)' },
   '.cm-trailingSpace': { backgroundColor: 'color-mix(in srgb, var(--ui-failing) 35%, var(--ui-transparent))' },
   '.cm-highlightSpace': { backgroundImage: 'radial-gradient(circle at 50% 55%, var(--ui-muted) 20%, var(--ui-transparent) 5%)' },
