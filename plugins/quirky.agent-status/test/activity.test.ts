@@ -27,6 +27,29 @@ const acknowledge = (params: { session?: string; turn?: string; all?: boolean })
 const threadFor = (threads: ActivityThread[], sessionId: string) => threads.find((thread) => thread.sessionId === sessionId)
 
 describe('Activity public API', () => {
+  test('filters injected task notifications without losing replies or later message prompts', async () => {
+    rig = await Rig.start()
+    await rig.hook('claude', claude('UserPromptSubmit', { prompt: 'first human request' }))
+    await rig.hook('claude', claude('Stop', { last_assistant_message: 'first response' }))
+    await rig.hook(
+      'claude',
+      claude('UserPromptSubmit', {
+        prompt: '<task-notification><task-id>task-qa</task-id><status>completed</status></task-notification>'
+      })
+    )
+    await rig.hook('claude', claude('Stop', { last_assistant_message: 'OK' }))
+
+    const completed = threadFor((await activity()).threads, 's1')!
+    expect(completed.prompt).toBe('')
+    expect(completed.prompt).not.toContain('<task-notification')
+    expect(completed.detail).toBe('OK')
+    expect(completed.display).toBe('done')
+
+    await rig.hook('claude', claude('UserPromptSubmit', { message: 'second human request' }))
+    const next = threadFor((await activity()).threads, 's1')!
+    expect(next).toMatchObject({ prompt: 'second human request', display: 'working' })
+  })
+
   test('queries attention-first threads, filters prompt/provider/workspace text, and preserves exact navigation identity', async () => {
     rig = await Rig.start({
       sessions: [

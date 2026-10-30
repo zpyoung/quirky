@@ -1,5 +1,6 @@
 import { captureProviderSession } from '../capture'
 import type { ChildOp, Inventory, Normalized, Normalizer, NormalizerCache } from '../types'
+import { userPrompt } from './shared'
 import {
   addChild,
   isAskUserQuestionTool,
@@ -244,7 +245,7 @@ function claudeFamily(source: string, payload: Record<string, unknown>, eventNam
   const newTurn = eventName === 'UserPromptSubmit'
   if (newTurn) {
     resetTurn(mem)
-    mem.prompt = promptOf(payload)
+    mem.prompt = userPrompt({ prompt: promptOf(payload) }) ?? ''
     clearChildWait(mem)
   }
   mem.question = asksQuestion ? { toolUseId } : null
