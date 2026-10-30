@@ -6,7 +6,7 @@ Compare every redesign rollout area in dark and light. Click an image for the or
 |---|---|---|
 | Before | `98dff3dcb07443154170ccf6cda583c5b0f0c060` | Historical app before the six-slot shell and area restyles, recaptured from Git. |
 | After (other areas) | `89321c1eebecd5ebed5888d9bfd0378a22573fd2` | All twelve area restyles integrated, at the immutable capture revision. |
-| After (shell polish) | `7070a851f0754707809c79c1f04764024d79542b` | Only the shell pair refreshed: plain Worktrees list, header options, quiet stripes and neutral Primary badge. |
+| After (Add project button) | `e39e47881d3139ed7a3475e4e594f1829c7b82b8` | Only the shell and Worktrees pairs refreshed: plain Worktrees list, Add project and options in the header, quiet stripes and neutral Primary badge. |
 
 The images are unaltered real-renderer captures from disposable local workspaces. Fixtures, selected tabs and panel sizes are not identical across revisions; this is not a pixel-diff baseline. [Image provenance and SHA-256 manifest](manifest.json).
 
@@ -32,7 +32,7 @@ Design references only: [approved dark golden](../../../quirk/specs/2026-10-28-u
 
 ## Window shell and tool slots
 
-Actual host window before and after the six-slot layout; synthetic repository and worktrees. The after pair includes the shell polish at the revision above; other area images retain their earlier capture points. Header options are closed so the list is first. These are actual 1340 × 600 captures, not edited goldens.
+Actual host window before and after the six-slot layout; synthetic repository and worktrees. The after pair is the Add project button revision above; other area images retain their earlier capture points. Header options are closed so the list is first. These are actual 1340 × 600 captures, not edited goldens.
 
 ### Window shell
 
@@ -150,7 +150,7 @@ Real Browser Watch toolbar and JPEG stream from an owned loopback /review page, 
 
 ## Worktrees and repositories
 
-Repository and three real Git worktrees registered through public APIs. Repository presentation is in Worktrees, not a separate invented repo panel.
+Repository and three real Git worktrees registered through public APIs. Repository presentation is in Worktrees, not a separate invented repo panel. The after pair is the Add project button revision above, with Changes minimized.
 
 ### Repository and worktree rows
 
