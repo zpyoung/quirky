@@ -43,7 +43,7 @@
   color: var(--ui-muted);
   display: flex;
   flex: 0 0 auto;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
   font-size: var(--ui-font-label);
   gap: var(--ui-space-8) var(--ui-space-16);
   justify-content: space-between;
@@ -62,12 +62,19 @@
 }
 
 .shell-statusbar__summary {
-  overflow: hidden;
-  white-space: nowrap;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  max-width: 100%;
+  overflow: visible;
+  white-space: normal;
 }
 
 .shell-statusbar__metric {
   flex-shrink: 0;
+}
+
+.shell-statusbar__plugins {
+  flex: 1 1 min-content;
 }
 
 .shell-statusbar__branch {
