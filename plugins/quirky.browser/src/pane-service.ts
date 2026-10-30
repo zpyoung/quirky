@@ -1,11 +1,21 @@
-import { randomUUID } from 'node:crypto'
-import { copyFileSync, constants, lstatSync, linkSync, mkdirSync, realpathSync, unlinkSync } from 'node:fs'
+import { randomBytes, randomUUID } from 'node:crypto'
+import { copyFileSync, constants, existsSync, lstatSync, linkSync, mkdirSync, realpathSync, unlinkSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { basename, extname, isAbsolute, join, parse, relative, resolve, sep } from 'node:path'
+import { basename, dirname, extname, isAbsolute, join, parse, relative, resolve, sep } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
-import { validateValue, type PluginCaller, type PluginContext, type Schema } from '@quirky/protocol'
+import {
+  NATIVE_BROWSER_PREVIEW_SCHEME,
+  isNativeBrowserPreviewUrl,
+  nativeBrowserPreviewUrl,
+  validateValue,
+  type NativeBrowserDownloadUpdate,
+  type NativeBrowserPageRequest,
+  type PluginCaller,
+  type PluginContext,
+  type Schema
+} from '@quirky/protocol'
 import { readRuntime } from '@quirky/protocol/node'
-import type { PaneDownload, PaneMethod, PanePrompt, PaneState, PaneTab, PaneRequests, PaneFrame } from './pane-contract'
+import type { PaneConversion, PaneDocument, PaneDownload, PaneMethod, PaneNativeAction, PaneNativeDecision, PanePrompt, PaneState, PaneTab, PaneRequests, PaneFrame } from './pane-contract'
 import type { BrowserPage, BrowserStore } from './profiles/store'
 import type { BrowserRuntime, PaneControl, PaneInput, RuntimePaneDownloadProgress, RuntimePanePrompt } from './runtime/driver'
 import { fault } from './runtime/errors'
@@ -16,6 +26,8 @@ type CreatePageResult = { browserPageId: string }
 type NormalizedInput = { url: string; historyUrl: string; localPath?: string; directFile?: boolean; sourcePath?: string; error?: string }
 type PromptState = { paneId: string; watchId: string; prompt: RuntimePanePrompt; timer: ReturnType<typeof setTimeout> }
 type DownloadOwner = { paneId: string; pageId: string; guid: string; profileId: string; stagingPath: string; entry: PaneDownload }
+type NativePromptState = { paneId: string; nativeId: string; kind: PanePrompt['kind']; canProceed: boolean; timer: ReturnType<typeof setTimeout> }
+type NativeDownloadOwner = { paneId: string; nativeId: string; entry: PaneDownload }
 type WatchOwner = { pluginId: string; consumer: string }
 type WatchStart = { owner: WatchOwner; promise: Promise<{ watchId: string }> }
 type WatchLease = {
@@ -52,6 +64,10 @@ const WATCH_FRAME_ACK_TIMEOUT_MS = 30_000
 const WATCH_NO_FRAME_TIMEOUT_MS = 30_000
 const PROMPT_TIMEOUT_MS = 120_000
 const MAX_DOWNLOADS_PER_PANE = 20
+const POPUP_BUDGET = 4
+const POPUP_WINDOW_MS = 2_000
+/** Apps a Native page may ask to open, after the user approves the origin-naming prompt. */
+const NATIVE_EXTERNAL_SCHEMES = new Set(['mailto', 'tel', 'sms', 'facetime', 'facetime-audio', 'zoommtg', 'zoomus', 'msteams', 'slack'])
 const PANE_TAB_SCHEMA: Schema = {
   type: 'object',
   properties: {
@@ -60,7 +76,8 @@ const PANE_TAB_SCHEMA: Schema = {
     canGoBack: { type: 'boolean' }, canGoForward: { type: 'boolean' }, zoom: { type: 'number' },
     viewport: { type: 'string', enum: ['default', 'mobile-s', 'mobile-m', 'mobile-l', 'tablet', 'laptop', 'laptop-l', 'desktop'] },
     command: {}, find: { type: 'object', additionalProperties: true }, prompts: { type: 'array' }, downloads: { type: 'array' },
-    profileId: { type: 'string' }, partition: { type: 'string' }, sourcePath: { type: 'string' }, preview: { type: 'object', additionalProperties: true }, tabId: { type: 'string' }
+    profileId: { type: 'string' }, partition: { type: 'string' }, sourcePath: { type: 'string' }, preview: { type: 'object', additionalProperties: true }, tabId: { type: 'string' },
+    document: { type: 'object', additionalProperties: true }, convertedFrom: { type: 'object', additionalProperties: true }, convertedTo: { type: 'object', additionalProperties: true }
   },
   required: ['id', 'worktreeId', 'mode', 'page', 'url', 'title', 'loading', 'error', 'canGoBack', 'canGoForward', 'zoom', 'viewport', 'command', 'find', 'prompts', 'downloads', 'profileId', 'partition'],
   additionalProperties: true
@@ -236,6 +253,13 @@ function isSourceDocument(path: string): boolean {
   return SOURCE_FILE_EXTENSIONS[extname(path).toLowerCase()] === true
 }
 
+function conversionValue(value: unknown): PaneConversion | undefined {
+  const conversion = objectValue(value)
+  if (conversion?.kind === 'url' && typeof conversion.url === 'string' && isSupportedSafeAddress(conversion.url)) return { kind: 'url', url: conversion.url }
+  if (conversion?.kind === 'document' && typeof conversion.path === 'string' && isAbsolute(conversion.path)) return { kind: 'document', path: conversion.path }
+  return undefined
+}
+
 function isSupportedSafeAddress(value: string): boolean {
   return value === 'about:blank' || /^https?:/i.test(value) || /^file:/i.test(value)
 }
@@ -250,7 +274,12 @@ export class PaneService {
   private readonly watchStarts = new Map<string, WatchStart>()
   private readonly prompts = new Map<string, PromptState>()
   private readonly downloads = new Map<string, DownloadOwner>()
+  private readonly nativePrompts = new Map<string, NativePromptState>()
+  private readonly nativeDownloads = new Map<string, NativeDownloadOwner>()
+  private readonly popupStarts = new Map<string, number[]>()
   private readonly resources = new Map<string, { url: string; revoke(): void }>()
+  /** Restored document panes waiting for paneState to mint a fresh grant. */
+  private readonly restoredDocuments = new Map<string, string>()
   private active = true
 
   constructor(
@@ -259,7 +288,8 @@ export class PaneService {
     private readonly runtime: BrowserRuntime,
     private readonly resolveWorktree: ResolveWorktree,
     private readonly listWorktrees: () => Promise<Worktree[]>,
-    private readonly downloadDirectory = join(homedir(), 'Downloads')
+    private readonly downloadDirectory = join(homedir(), 'Downloads'),
+    private readonly promptTimeoutMs = PROMPT_TIMEOUT_MS
   ) {
     this.db = context.openStore([
       `CREATE TABLE IF NOT EXISTS browser_pane_tabs (id TEXT PRIMARY KEY, worktree_id TEXT NOT NULL, active INTEGER NOT NULL, updated_at INTEGER NOT NULL, data TEXT NOT NULL);
@@ -295,6 +325,7 @@ export class PaneService {
       case 'paneOpen': return await this.paneOpen(params as PaneRequests['paneOpen'], caller)
       case 'paneState': return await this.paneState(params as PaneRequests['paneState'], caller)
       case 'paneNavigate': return await this.paneNavigate(params as PaneRequests['paneNavigate'], caller)
+      case 'panePreview': return await this.panePreview(params as PaneRequests['panePreview'])
       case 'paneControl': return await this.paneControl(params as PaneRequests['paneControl'], caller)
       case 'paneReport': return await this.paneReport(params as PaneRequests['paneReport'], caller)
       case 'paneClose': return await this.paneClose(params as PaneRequests['paneClose'], caller)
@@ -304,6 +335,8 @@ export class PaneService {
       case 'paneInput': return await this.paneInput(params as PaneRequests['paneInput'], caller)
       case 'paneRespond': return await this.paneRespond(params as PaneRequests['paneRespond'], caller)
       case 'paneDownload': return await this.paneDownload(params as PaneRequests['paneDownload'], caller)
+      case 'paneNativeRequest': return this.paneNativeRequest(params as PaneRequests['paneNativeRequest'], caller)
+      case 'paneNativeUpdate': return this.paneNativeUpdate(params as PaneRequests['paneNativeUpdate'], caller)
       case 'paneFrameAck': return this.paneFrameAck(params as PaneRequests['paneFrameAck'], caller)
     }
   }
@@ -388,6 +421,8 @@ export class PaneService {
     const pendingPrompts = [...this.prompts.values()]
     this.prompts.clear()
     for (const prompt of pendingPrompts) clearTimeout(prompt.timer)
+    for (const prompt of this.nativePrompts.values()) clearTimeout(prompt.timer)
+    this.nativePrompts.clear()
     for (const tab of this.tabs.values()) tab.prompts = []
     await Promise.all([...this.watchStarts.values()].map((start) => start.promise.then(() => undefined, () => undefined)))
     for (const watch of this.watches.values()) await this.stopWatch(watch)
@@ -415,6 +450,15 @@ export class PaneService {
       tab.profileId = typeof tab.profileId === 'string' ? tab.profileId : 'default'
       try { this.store.getProfile(tab.profileId) } catch { tab.profileId = 'default' }
       tab.partition = this.partition(tab.profileId)
+      const documentPath = objectValue(tab.document)?.path
+      delete tab.document
+      if (typeof documentPath === 'string' && isAbsolute(documentPath)) this.restoredDocuments.set(tab.id, documentPath)
+      const convertedFrom = conversionValue(tab.convertedFrom)
+      const convertedTo = conversionValue(tab.convertedTo)
+      delete tab.convertedFrom
+      delete tab.convertedTo
+      if (convertedFrom) tab.convertedFrom = convertedFrom
+      if (convertedTo) tab.convertedTo = convertedTo
       tab.command = null
       tab.loading = false
       tab.prompts = []
@@ -434,6 +478,12 @@ export class PaneService {
       const fileUrl = pathToFileURL(copy.preview.path).href
       copy.url = fileUrl
       copy.preview.url = fileUrl
+    }
+    // Only the document's path is stored: a grant URL must never outlive the mount it was minted for.
+    const documentPath = copy.document?.path ?? this.restoredDocuments.get(copy.id)
+    if (documentPath) {
+      (copy as Omit<PaneTab, 'document'> & { document?: { path: string } }).document = { path: documentPath }
+      copy.url = 'about:blank'
     }
     const existing = this.db.get<{ active: number }>('SELECT active FROM browser_pane_tabs WHERE id=?', tab.id)
     const updatedAt = Math.max(Date.now(), (this.updatedAt.get(tab.id) ?? 0) + 1)
@@ -569,6 +619,108 @@ export class PaneService {
     tab.sourcePath = this.sourcePathWithinWorktree(worktree, canonical)
     tab.url = resource.url
     return resource.url
+  }
+
+  /**
+   * Mints a fresh grant for one HTML file inside the canonical worktree. The grant reads the file's
+   * folder, except at the worktree root, where it reads the file alone: the root is where secrets
+   * live. Dot-folders are refused because the host never serves dotfiles.
+   */
+  private documentFor(worktree: Worktree, requested: string): PaneDocument {
+    const path = this.resolveWorkspaceFile(worktree, requested)
+    if (!isDirectHtml(path)) throw fault('invalid_argument', 'workspace document previews show .html or .htm files')
+    const root = realpathSync(worktree.path)
+    if (relative(root, path).split(sep).some((segment) => segment.startsWith('.'))) {
+      throw fault('invalid_argument', 'workspace documents inside hidden folders cannot be previewed')
+    }
+    const folder = dirname(path)
+    const id = randomBytes(16).toString('hex')
+    const entry = basename(path)
+    return { path, grant: { id, root: folder, entry, entryOnly: folder === root }, url: nativeBrowserPreviewUrl(id, entry) }
+  }
+
+  private departure(tab: PaneTab): PaneConversion {
+    if (tab.document) return { kind: 'document', path: tab.document.path }
+    const address = tab.preview ? pathToFileURL(tab.preview.path).href : safeHistoryAddress(tab.url)
+    return { kind: 'url', url: address && isSupportedSafeAddress(address) ? address : 'about:blank' }
+  }
+
+  /**
+   * Replaces the page with the other kind, one level deep like Orca: the new guest has no history,
+   * so the departed page becomes `convertedFrom` (Back) or, on Back's own crossing, `convertedTo`.
+   */
+  private async convertPane(tab: PaneTab, target: PaneConversion, leg?: 'return'): Promise<PaneTab> {
+    if (tab.mode !== 'native') throw fault('invalid_argument', 'workspace document previews run in the Native browser, not Watch')
+    const worktree = await this.worktreeInfo(tab.worktreeId)
+    const departed = this.departure(tab)
+    let historyUrl: string | undefined
+    if (target.kind === 'document') {
+      const document = this.documentFor(worktree, target.path)
+      if (tab.document?.path === document.path && leg === undefined) return this.copyTab(tab)
+      this.releaseResourceWhenLeaving(tab)
+      tab.document = document
+      tab.sourcePath = document.path
+      tab.url = document.url
+      tab.title = basename(document.path)
+      tab.error = null
+      tab.loading = true
+      tab.command = { id: randomUUID(), action: 'navigate', url: document.url }
+    } else {
+      const normalized = await this.normalized(target.url, worktree)
+      tab.document = undefined
+      tab.sourcePath = undefined
+      await this.applyNativeNavigation(tab, normalized)
+      historyUrl = normalized.historyUrl
+    }
+    tab.canGoBack = false
+    tab.canGoForward = false
+    tab.find = { text: '', current: 0, total: 0 }
+    tab.convertedFrom = leg === 'return' ? undefined : departed
+    tab.convertedTo = leg === 'return' ? departed : undefined
+    this.saveTab(tab)
+    if (historyUrl) this.recordHistory(historyUrl, tab.title)
+    this.emitChanged()
+    return this.copyTab(tab)
+  }
+
+  private async panePreview(request: PaneRequests['panePreview']): Promise<PaneTab> {
+    const tab = this.requirePane(request.pane)
+    this.assertWatchOwner(tab.id, DEFAULT_WATCH_OWNER)
+    if (typeof request.path !== 'string' || request.path.trim() === '') throw fault('invalid_argument', 'path is required')
+    this.restoredDocuments.delete(tab.id)
+    return await this.convertPane(tab, { kind: 'document', path: request.path.trim() })
+  }
+
+  private async ensureRestoredDocument(tab: PaneTab): Promise<void> {
+    const path = this.restoredDocuments.get(tab.id)
+    if (path === undefined) return
+    this.restoredDocuments.delete(tab.id)
+    try {
+      const document = this.documentFor(await this.worktreeInfo(tab.worktreeId), path)
+      tab.document = document
+      tab.sourcePath = document.path
+      tab.url = document.url
+    } catch {
+      tab.url = 'about:blank'
+      tab.sourcePath = undefined
+      tab.error = 'The previewed workspace document is no longer available.'
+    }
+    this.saveTab(tab)
+  }
+
+  private async applyNativeNavigation(tab: PaneTab, normalized: NormalizedInput): Promise<string> {
+    this.releaseResourceWhenLeaving(tab, normalized.directFile ? undefined : normalized.localPath)
+    const localUrl = await this.openLocalDocument(tab, normalized)
+    const targetUrl = safeUrl(localUrl)
+    tab.error = normalized.error ?? null
+    if (normalized.directFile) tab.sourcePath = normalized.sourcePath
+    else if (!normalized.localPath) tab.sourcePath = undefined
+    tab.loading = true
+    tab.url = targetUrl
+    tab.command = tab.mode === 'native' ? { id: randomUUID(), action: 'navigate', url: targetUrl } : null
+    // a page blocked on a dialog cannot navigate, and its answer must not reach the next page
+    if (tab.mode === 'native') this.clearPromptsForPane(tab.id)
+    return targetUrl
   }
 
   private async openLocalDocument(tab: PaneTab, normalized: NormalizedInput): Promise<string> {
@@ -723,6 +875,7 @@ export class PaneService {
     const worktree = selector === undefined ? undefined : await this.resolveWorktree(selector, caller, true)
     const selected = [...this.tabs.values()].filter((tab) => worktree === undefined || worktree === 'all' || tab.worktreeId === worktree)
     for (const tab of selected) {
+      if (this.restoredDocuments.has(tab.id)) await this.ensureRestoredDocument(tab)
       if (tab.preview) await this.ensureRestoredResource(tab)
       if (tab.mode === 'watch' && tab.page) {
         try {
@@ -769,17 +922,16 @@ export class PaneService {
   private async paneNavigate(request: PaneRequests['paneNavigate'], caller: PluginCaller): Promise<PaneTab> {
     const tab = this.requirePane(request.pane)
     this.assertWatchOwner(tab.id, this.watchOwner(request.consumer, caller))
+    // Leaving a document for an address is a conversion, not navigation: the preview guest can't load it.
+    if (tab.document || this.restoredDocuments.has(tab.id)) {
+      if (!tab.document) await this.ensureRestoredDocument(tab)
+      if (tab.document) return await this.convertPane(tab, { kind: 'url', url: request.input })
+    }
     const worktree = await this.worktreeInfo(tab.worktreeId)
     const normalized = await this.normalized(request.input, worktree)
-    this.releaseResourceWhenLeaving(tab, normalized.directFile ? undefined : normalized.localPath)
-    const localUrl = await this.openLocalDocument(tab, normalized)
-    const targetUrl = safeUrl(localUrl)
-    tab.error = normalized.error ?? null
-    if (normalized.directFile) tab.sourcePath = normalized.sourcePath
-    else if (!normalized.localPath) tab.sourcePath = undefined
-    tab.loading = true
-    tab.url = targetUrl
-    tab.command = tab.mode === 'native' ? { id: randomUUID(), action: 'navigate', url: targetUrl } : null
+    const targetUrl = await this.applyNativeNavigation(tab, normalized)
+    // A new address drops the crossing Forward would have taken, like any forward history.
+    tab.convertedTo = undefined
     this.saveTab(tab)
     this.recordHistory(normalized.historyUrl, tab.title)
     this.emitChanged()
@@ -871,6 +1023,10 @@ export class PaneService {
         if (request.action === 'back' || request.action === 'forward') this.recordHistory(tab.url, tab.title)
         tab.command = null
         tab.error = null
+      } else if (request.action === 'back' && !tab.canGoBack && tab.convertedFrom) {
+        return await this.convertPane(tab, tab.convertedFrom, 'return')
+      } else if (request.action === 'forward' && !tab.canGoForward && tab.convertedTo) {
+        return await this.convertPane(tab, tab.convertedTo)
       } else {
         tab.command = { id: randomUUID(), action: request.action, ...(request.text === undefined ? {} : { text: request.text }), ...(request.forward === undefined ? {} : { forward: request.forward }) }
       }
@@ -891,7 +1047,15 @@ export class PaneService {
     }
     const previousUrl = tab.url
     let untrustedFileReport = false
-    if (params.url !== undefined) {
+    if (params.url !== undefined && tab.document) {
+      // The isolated guest can't leave its grant; anything else is a stale or forged report.
+      if (params.url !== 'about:blank') {
+        if (!isNativeBrowserPreviewUrl(params.url, tab.document.grant.id)) {
+          throw fault('browser_tab_changed', 'workspace preview reported an address outside its grant')
+        }
+        tab.url = params.url
+      }
+    } else if (params.url !== undefined) {
       const currentResource = this.resources.get(tab.id)
       const resourceUrl = currentResource ? matchingResourceUrl(params.url, currentResource.url) : undefined
       if (resourceUrl) {
@@ -963,6 +1127,7 @@ export class PaneService {
     this.watchStarts.delete(tab.id)
     this.clearPromptsForPane(tab.id)
     this.releaseResource(tab.id)
+    this.restoredDocuments.delete(tab.id)
     this.tabs.delete(tab.id)
     this.updatedAt.delete(tab.id)
     this.db.run('DELETE FROM browser_pane_tabs WHERE id=?', tab.id)
@@ -1333,11 +1498,19 @@ export class PaneService {
       this.prompts.delete(id)
       void prompt.prompt.respond({ accept: false }).catch(() => {})
     }
+    for (const [id, prompt] of this.nativePrompts) {
+      if (prompt.paneId !== paneId) continue
+      clearTimeout(prompt.timer)
+      this.nativePrompts.delete(id)
+      this.sendNative({ pane: paneId, action: 'answer', id: prompt.nativeId, prompt: id, kind: prompt.kind, accept: false })
+    }
     const tab = this.tabs.get(paneId)
     if (tab) tab.prompts = []
   }
 
   private async paneRespond(request: PaneRequests['paneRespond'], caller: PluginCaller): Promise<{ responded: true }> {
+    const native = this.nativePrompts.get(request.prompt)
+    if (native) return this.respondNative(request.prompt, native, request, caller)
     this.assertWatchOwner(request.pane, DEFAULT_WATCH_OWNER)
     const prompt = this.prompts.get(request.prompt)
     if (!prompt || prompt.paneId !== request.pane) throw fault('browser_tab_changed', 'prompt ID is stale or belongs to another pane')
@@ -1362,6 +1535,211 @@ export class PaneService {
     this.finishPrompt(prompt)
     await prompt.prompt.respond(input)
     return { responded: true }
+  }
+
+  private sendNative(action: PaneNativeAction): void {
+    this.context.emit('paneNative', action)
+  }
+
+  private requireNativeRelay(paneId: string, caller: PluginCaller): PaneTab {
+    if (caller.role !== 'ui') throw fault('invalid_argument', 'Native page requests are relayed only by the browser window that owns the view')
+    const tab = this.requirePane(paneId)
+    if (tab.mode !== 'native') throw fault('browser_tab_changed', 'this pane is not showing a Native view')
+    return tab
+  }
+
+  /** Applies browser policy to one Native page request. Anything refused is answered at once and fails closed. */
+  private paneNativeRequest(request: PaneRequests['paneNativeRequest'], caller: PluginCaller): PaneNativeDecision {
+    const tab = this.requireNativeRelay(request.pane, caller)
+    const page = request.request
+    const decline: PaneNativeDecision = { prompt: null, answer: { accept: false } }
+    if (typeof page.id !== 'string' || page.id === '') throw fault('invalid_argument', 'native request ID is required')
+    switch (page.kind) {
+      case 'download': return this.receiveNativeDownload(tab, page)
+      case 'popup': return this.allowNativePopup(tab, page) ? { prompt: null, answer: { accept: true } } : decline
+      case 'external': {
+        let scheme = ''
+        try { scheme = new URL(page.url).protocol.replace(/:$/, '').toLowerCase() } catch { return decline }
+        if (!page.userGesture || !NATIVE_EXTERNAL_SCHEMES.has(scheme)) return decline
+        return this.receiveNativePrompt(tab, page.id, {
+          kind: 'external', origin: page.origin, canProceed: false,
+          message: `${page.origin || 'This page'} wants to open ${page.url.slice(0, 2048)} in another app.`
+        })
+      }
+      case 'auth':
+        return this.receiveNativePrompt(tab, page.id, {
+          kind: 'auth', origin: page.origin, canProceed: false,
+          message: page.realm ? `${page.origin} requests authentication for ${page.realm}.` : `${page.origin} requests authentication.`
+        })
+      case 'certificate':
+        return this.receiveNativePrompt(tab, page.id, {
+          kind: 'certificate', origin: page.origin, canProceed: isLocalHost(page.host),
+          message: `The certificate for ${page.origin} could not be verified.`
+        })
+      case 'alert':
+      case 'confirm':
+      case 'prompt':
+        return this.receiveNativePrompt(tab, page.id, {
+          kind: page.kind, origin: page.origin, canProceed: false, message: page.message,
+          ...(page.kind === 'prompt' ? { defaultValue: page.defaultText ?? '' } : {})
+        })
+      default:
+        return decline
+    }
+  }
+
+  private receiveNativePrompt(
+    tab: PaneTab,
+    nativeId: string,
+    prompt: { kind: PanePrompt['kind']; origin: string; message: string; canProceed: boolean; defaultValue?: string }
+  ): PaneNativeDecision {
+    if (tab.prompts.length > 0) return { prompt: null, answer: { accept: false } }
+    const id = randomUUID()
+    const expiresAt = Date.now() + this.promptTimeoutMs
+    const timer = setTimeout(() => {
+      const current = this.nativePrompts.get(id)
+      if (!current) return
+      this.sendNative({ pane: current.paneId, action: 'answer', id: current.nativeId, prompt: id, kind: current.kind, accept: false })
+      this.finishNativePrompt(id)
+    }, this.promptTimeoutMs)
+    this.nativePrompts.set(id, { paneId: tab.id, nativeId, kind: prompt.kind, canProceed: prompt.canProceed, timer })
+    tab.prompts = [{
+      id,
+      kind: prompt.kind,
+      origin: prompt.origin.slice(0, 2048),
+      message: prompt.message.slice(0, 4096),
+      ...(prompt.defaultValue === undefined ? {} : { defaultValue: prompt.defaultValue.slice(0, 4096) }),
+      ...(prompt.kind === 'certificate' ? { canProceed: prompt.canProceed } : {}),
+      expiresAt
+    }]
+    this.saveTab(tab)
+    this.emitChanged()
+    return { prompt: id, answer: null }
+  }
+
+  private finishNativePrompt(id: string): void {
+    const prompt = this.nativePrompts.get(id)
+    if (!prompt) return
+    clearTimeout(prompt.timer)
+    this.nativePrompts.delete(id)
+    const tab = this.tabs.get(prompt.paneId)
+    if (tab) {
+      tab.prompts = tab.prompts.filter((item) => item.id !== id)
+      this.saveTab(tab)
+      this.emitChanged()
+    }
+  }
+
+  private respondNative(id: string, prompt: NativePromptState, request: PaneRequests['paneRespond'], caller: PluginCaller): { responded: true } {
+    if (prompt.paneId !== request.pane) throw fault('browser_tab_changed', 'prompt ID is stale or belongs to another pane')
+    if (prompt.kind === 'external' && request.accept && caller.role !== 'ui') throw fault('invalid_argument', 'external-app prompts can only be accepted by the browser UI')
+    if (prompt.kind === 'auth' && (request.username !== undefined || request.password !== undefined)) {
+      throw fault('invalid_argument', 'Native sign-in credentials are entered only in the browser window and never sent to the daemon')
+    }
+    if (prompt.kind === 'auth' && request.accept && caller.role !== 'ui') throw fault('invalid_argument', 'Native sign-in can only be completed in the browser window')
+    if (request.text !== undefined && Buffer.byteLength(request.text, 'utf8') > 4096) throw fault('invalid_argument', 'prompt text exceeds 4,096 UTF-8 bytes')
+    if (prompt.kind === 'certificate' && request.accept && !prompt.canProceed) {
+      this.sendNative({ pane: prompt.paneId, action: 'answer', id: prompt.nativeId, prompt: id, kind: prompt.kind, accept: false })
+      this.finishNativePrompt(id)
+      throw fault('invalid_argument', 'certificate exceptions may only proceed for loopback origins')
+    }
+    this.sendNative({
+      pane: prompt.paneId, action: 'answer', id: prompt.nativeId, prompt: id, kind: prompt.kind, accept: request.accept,
+      ...(prompt.kind === 'prompt' && request.accept ? { text: request.text ?? '' } : {})
+    })
+    this.finishNativePrompt(id)
+    return { responded: true }
+  }
+
+  private allowNativePopup(tab: PaneTab, popup: Extract<NativeBrowserPageRequest, { kind: 'popup' }>): boolean {
+    let protocol = ''
+    try { protocol = new URL(popup.url).protocol } catch { return false }
+    if (protocol !== 'http:' && protocol !== 'https:') return false
+    const now = Date.now()
+    const recent = (this.popupStarts.get(tab.id) ?? []).filter((start) => now - start < POPUP_WINDOW_MS)
+    if (recent.length >= POPUP_BUDGET) {
+      this.popupStarts.set(tab.id, recent)
+      return false
+    }
+    this.popupStarts.set(tab.id, [...recent, now])
+    return true
+  }
+
+  /** Reserves a free name in the OS Downloads directory before the native view writes anything. */
+  private receiveNativeDownload(tab: PaneTab, download: Extract<NativeBrowserPageRequest, { kind: 'download' }>): PaneNativeDecision {
+    const active = tab.downloads.filter((item) => item.state === 'downloading').length
+    if (active >= MAX_DOWNLOADS_PER_PANE) return { prompt: null, answer: { accept: false } }
+    mkdirSync(this.downloadDirectory, { recursive: true, mode: 0o700 })
+    const root = realpathSync(this.downloadDirectory)
+    const safeName = safeFileName(download.suggestedFilename)
+    const parsed = parse(safeName)
+    let path: string | undefined
+    for (let index = 0; index < 10_000 && !path; index++) {
+      const candidate = resolve(root, index === 0 ? safeName : `${parsed.name} (${index})${parsed.ext}`)
+      if (!within(root, candidate)) throw fault('browser_error', 'download destination escaped the OS Downloads directory')
+      if (!existsSync(candidate)) path = candidate
+    }
+    if (!path) throw fault('browser_error', 'a collision-free download filename could not be allocated')
+    const entry: PaneDownload = {
+      id: randomUUID(),
+      name: basename(path),
+      state: 'downloading',
+      received: 0,
+      ...(download.expectedBytes > 0 ? { total: download.expectedBytes } : {})
+    }
+    this.nativeDownloads.set(entry.id, { paneId: tab.id, nativeId: download.id, entry })
+    tab.downloads = [...tab.downloads, entry].slice(-MAX_DOWNLOADS_PER_PANE)
+    this.saveTab(tab)
+    this.emitChanged()
+    return { prompt: null, answer: { accept: true, path } }
+  }
+
+  private paneNativeUpdate(update: PaneRequests['paneNativeUpdate'], caller: PluginCaller): { updated: boolean } {
+    const tab = this.requireNativeRelay(update.pane, caller)
+    let updated = false
+    if (update.expired !== undefined) {
+      for (const [id, prompt] of this.nativePrompts) {
+        if (prompt.paneId !== tab.id || prompt.nativeId !== update.expired) continue
+        this.finishNativePrompt(id)
+        updated = true
+      }
+    }
+    if (update.download) updated = this.receiveNativeDownloadUpdate(tab, update.download) || updated
+    return { updated }
+  }
+
+  private receiveNativeDownloadUpdate(tab: PaneTab, update: NativeBrowserDownloadUpdate): boolean {
+    const owner = [...this.nativeDownloads.values()].find((candidate) => candidate.paneId === tab.id && candidate.nativeId === update.id)
+    if (!owner || owner.entry.state !== 'downloading') return false
+    const entry = owner.entry
+    if (update.path !== undefined) {
+      const root = realpathSync(this.downloadDirectory)
+      const path = resolve(update.path)
+      if (!within(root, path)) {
+        entry.state = 'error'
+        entry.error = 'Native download was written outside the OS Downloads directory.'
+      } else {
+        entry.path = path
+        entry.name = basename(path)
+      }
+    }
+    if (entry.state === 'downloading') {
+      if (update.received !== undefined && Number.isFinite(update.received)) entry.received = Math.max(0, Math.trunc(update.received))
+      if (update.total !== undefined && Number.isFinite(update.total) && update.total > 0) entry.total = Math.trunc(update.total)
+      if (update.state === 'completed') {
+        entry.state = 'completed'
+        if (entry.total !== undefined) entry.received = entry.total
+      } else if (update.state === 'failed') {
+        entry.state = update.cancelled ? 'canceled' : 'error'
+        if (!update.cancelled) entry.error = (update.error || 'Download failed.').slice(0, 1024)
+      }
+    }
+    if (entry.state !== 'downloading') this.nativeDownloads.delete(entry.id)
+    if (tab.downloads.some((item) => item.id === entry.id)) {
+      this.saveTab(tab)
+      this.emitChanged()
+    }
+    return true
   }
 
   private receiveDownloadStart(watch: WatchLease, page: BrowserPage, download: { guid: string; url: string; suggestedFilename: string; stagingPath: string }): void {
@@ -1472,12 +1850,22 @@ export class PaneService {
 
   private async paneDownload(request: PaneRequests['paneDownload'], caller: PluginCaller): Promise<{ action: string; completed: true; download?: PaneDownload }> {
     const tab = this.requirePane(request.pane)
-    this.assertWatchOwner(tab.id, DEFAULT_WATCH_OWNER)
+    if (tab.mode === 'watch') this.assertWatchOwner(tab.id, DEFAULT_WATCH_OWNER)
     const entry = tab.downloads.find((item) => item.id === request.download)
     if (!entry) throw fault('browser_tab_not_found', 'download does not exist in this pane')
+    const native = this.nativeDownloads.get(entry.id)
+    if (native && request.action === 'cancel') {
+      if (entry.state !== 'downloading') throw fault('invalid_argument', 'only an active download can be canceled')
+      this.sendNative({ pane: tab.id, action: 'cancelDownload', id: native.nativeId })
+      return { action: request.action, completed: true, download: structuredClone(entry) }
+    }
+    if (native && request.action === 'dismiss' && entry.state === 'downloading') {
+      throw fault('invalid_argument', 'cancel an active Native download before dismissing it')
+    }
     if (request.action === 'dismiss') {
       tab.downloads = tab.downloads.filter((item) => item.id !== entry.id)
       if (entry.state !== 'downloading' && entry.state !== 'paused') this.downloads.delete(entry.id)
+      this.nativeDownloads.delete(entry.id)
       this.saveTab(tab)
       this.emitChanged()
       return { action: request.action, completed: true }
@@ -1522,7 +1910,7 @@ export class PaneService {
 
   private recordHistory(url: string, title: string): void {
     const address = safeHistoryAddress(url)
-    if (address === '' || address === 'about:blank') return
+    if (address === '' || address === 'about:blank' || address.startsWith(`${NATIVE_BROWSER_PREVIEW_SCHEME}:`)) return
     const previous = this.db.get<{ visited_at: number }>('SELECT MAX(visited_at) AS visited_at FROM browser_pane_history')?.visited_at ?? 0
     const visitedAt = Math.max(Date.now(), previous + 1)
     this.db.transaction(() => {

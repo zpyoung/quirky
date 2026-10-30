@@ -68,4 +68,9 @@ export type DesktopShellBridge = {
   closeWindow(windowId: string): Promise<DesktopWindowCloseResult>
   revealItem(request: DesktopRevealRequest): Promise<DesktopRevealResult>
   activateOwner(windowId: string): Promise<{ activated: boolean }>
+  /**
+   * The original absolute paths of the native file drop this window just received, in the order of
+   * `fileNames`; null when the runtime can't report them or no native drop matches those names.
+   */
+  nativeDropPaths(fileNames: readonly string[]): Promise<string[] | null>
 }

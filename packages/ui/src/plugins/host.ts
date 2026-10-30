@@ -42,6 +42,8 @@ export type HostDeps = {
   dismissToast?(key: string): void
   log(message: string): void
   readClipboardText?: () => Promise<string>
+  /** Source paths of the window's latest native file drop; absent outside the desktop shell. */
+  nativeDropPaths?: (fileNames: readonly string[]) => Promise<string[] | null>
   nativeBrowser?: NativeBrowserCapability
   /** Window focus, reported to the daemon so it can pick the window a routed command runs in. */
   windowFocus?: { hasFocus(): boolean; subscribe(listener: (focused: boolean) => void): () => void }
@@ -954,12 +956,15 @@ export class WindowPluginHost {
       nativeBrowser: {
         available: this.nativeBrowser.available,
         clearPartitionAvailable: this.nativeBrowser.clearPartitionAvailable,
+        pageRequestsAvailable: this.nativeBrowser.pageRequestsAvailable,
+        previewAvailable: this.nativeBrowser.previewAvailable,
         mount: live((element, options) => {
           const handle = this.nativeBrowser.mount(element, options)
           track(() => handle.dispose())
           return handle
         }),
-        clearPartition: live((partition) => this.nativeBrowser.clearPartition(partition))
+        clearPartition: live((partition) => this.nativeBrowser.clearPartition(partition)),
+        defaultUserAgent: live(() => this.nativeBrowser.defaultUserAgent())
       },
       pluginId,
       log: (message) => this.deps.log(`${pluginId}: ${message}`),
@@ -976,6 +981,10 @@ export class WindowPluginHost {
       readClipboardText: live(async () => {
         if (this.deps.readClipboardText) return this.deps.readClipboardText()
         return (await navigator.clipboard?.readText()) ?? ''
+      }),
+      nativeDropPaths: live(async (files: ArrayLike<{ name: string }>) => {
+        if (!this.deps.nativeDropPaths) return null
+        return this.deps.nativeDropPaths(Array.from(files, (file) => file.name))
       }),
       subscribe: live((listener: (event: QuirkyEvent) => void | Promise<void>) => {
         session.listeners.add(listener)

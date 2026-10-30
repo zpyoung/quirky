@@ -1,0 +1,11 @@
+{
+  "item": "sa-browser-pane-workspace-preview",
+  "spec": "docs/quirk/specs/2026-10-29-sa-browser-pane-workspace-preview/logic.md",
+  "scenarios": [
+    { "id": "SC1-SC4-native", "title": "In a run-owned UUID profile, open a Native pane on a web page, then use 'Preview as workspace document' (or quirky browser pane preview) on an owned worktree HTML fixture whose folder holds a stylesheet, script and image: the rendered page shows them; an in-folder link navigates inside the preview; Back walks that link first, then returns to the web page; Forward re-enters the preview", "status": "pending", "lastRun": null, "report": null, "summary": null },
+    { "id": "SC7-native", "title": "Preview an HTML fixture at the worktree root that references a sibling stylesheet and fetches ./.env: only the HTML renders, the stylesheet and .env requests fail", "status": "pending", "lastRun": null, "report": null, "summary": null },
+    { "id": "SC10-native", "title": "Preview a fixture that tries fetch, img, WebSocket, sendBeacon, RTCPeerConnection with a STUN server, a form post, window.open, an <a download> click and location.href to a run-owned loopback TCP+UDP listener: the listener records no connection or datagram, no window or download appears, and the pane stays on the preview", "status": "pending", "lastRun": null, "report": null, "summary": null },
+    { "id": "SC-storage-native", "title": "A previewed fixture writes localStorage and a cookie; Back to the web page, Forward into the preview again, and a second pane's preview of the same file both start with empty storage, and the run-owned browsing profile has none of it", "status": "pending", "lastRun": null, "report": null, "summary": null },
+    { "id": "SC-permissions-native", "title": "A previewed fixture calling getUserMedia, geolocation and <input type=file> gets denials with no macOS prompt or file panel", "status": "pending", "lastRun": null, "report": null, "summary": null }
+  ]
+}

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { Button, EmptyState, FormRow, SectionHeader, StatusDot } from '@quirky/ui'
 import { createPortal } from 'react-dom'
+import { NATIVE_BROWSER_PREVIEW_SCHEME } from '@quirky/protocol'
 import type { NativeBrowserHandle, UiPluginContext } from '@quirky/protocol'
 import { MarkupOverlay } from '../markup/MarkupOverlay'
 import type { DesignAnnotation, DesignPayload, DesignRead, DesignScreenshot, DesignSelection, DesignTarget, DesignTargets } from '../design-contract'
@@ -76,6 +77,7 @@ const MAX_ANNOTATIONS = 20
 const MAX_COMMENT = 2000
 const PICKER_TIMEOUT_MS = 120_000
 const POLL_DELAY_MS = 100
+const NATIVE_EVALUATION_BUSY = /native browser evaluation (timed out|was cancelled|is unavailable during)/
 const SCREENSHOT_MAX_BYTES = 2 * 1024 * 1024
 const WATCH_COPY_PROBE = `(() => { const active = document.activeElement; const selection = window.getSelection ? window.getSelection() : null; return { editable: !!active && (active.isContentEditable || active.tagName === 'IFRAME' || /^(INPUT|TEXTAREA|SELECT)$/.test(active.tagName)), selected: !!selection && String(selection).length > 0 }; })()`
 const designOverlayStyle: CSSProperties = { position: 'absolute', zIndex: 12, inset: 0, pointerEvents: 'none' }
@@ -849,7 +851,8 @@ export function DesignWindow({ context, pane, nativeHandle, pageHost, nativePage
     }
   }, [handleKeyboard])
   useEffect(() => {
-    if (pane?.mode !== 'native' || !nativeHandle || !focused || !usablePage || currentOperation || operationPending || markupScreenshot || draft || selectionMenu || targetsOpen) return
+    // an isolated preview's CSP refuses injected script, so shortcuts could never install there
+    if (pane?.mode !== 'native' || pane.url.startsWith(`${NATIVE_BROWSER_PREVIEW_SCHEME}://`) || !nativeHandle || !focused || !usablePage || currentOperation || operationPending || markupScreenshot || draft || selectionMenu || targetsOpen) return
     const handle = nativeHandle
     const owner = nativeShortcutOwner
     const ownerLiteral = JSON.stringify(owner)
@@ -924,8 +927,12 @@ export function DesignWindow({ context, pane, nativeHandle, pageHost, nativePage
           if (await runActionRef.current(result.action)) return
         }
       } catch (error) {
-        if (stillCurrent()) onMessage(`Native design shortcut polling stopped: ${errorText(error)}`, 'error')
-        return
+        if (!stillCurrent()) return
+        // a page waiting on a native dialog can't evaluate until the user answers, which isn't a failure
+        if (!NATIVE_EVALUATION_BUSY.test(errorText(error))) {
+          onMessage(`Native design shortcut polling stopped: ${errorText(error)}`, 'error')
+          return
+        }
       }
       if (stillCurrent()) timer = setTimeout(() => void poll(), POLL_DELAY_MS)
     }
@@ -937,7 +944,7 @@ export function DesignWindow({ context, pane, nativeHandle, pageHost, nativePage
       }
       void poll()
     }).catch((error: unknown) => {
-      if (stillCurrent()) onMessage(`Native design shortcuts could not be installed: ${errorText(error)}`, 'error')
+      if (stillCurrent() && !NATIVE_EVALUATION_BUSY.test(errorText(error))) onMessage(`Native design shortcuts could not be installed: ${errorText(error)}`, 'error')
     })
     return () => {
       active = false

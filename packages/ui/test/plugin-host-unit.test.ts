@@ -3,6 +3,7 @@ import {
   DEFAULT_THEME,
   UI_TOOL_SLOTS,
   PLUGIN_API_VERSION,
+  type NativeBrowserCapability,
   type QuirkyEvent,
   type SettingInfo,
   type ThemeInfo,
@@ -18,6 +19,7 @@ import {
 } from '@quirky/protocol'
 import { freshToolLayout, projectTools, resolveToolLayout } from '../../daemon/src/plugins/tool-layout'
 import type { DesktopWindowRoute } from '../src/desktop-bridge'
+import { createNativeBrowserCapability } from '../src/native-browser'
 import { WindowPluginHost, type HostState } from '../src/plugins/host'
 
 type Fake = { text?: string }
@@ -105,7 +107,14 @@ type WindowFocus = NonNullable<ConstructorParameters<typeof WindowPluginHost>[0]
 
 function setup(
   initial: UiModel,
-  options: { settings?: SettingInfo[]; activationTimeoutMs?: number; windowFocus?: WindowFocus; windowRoute?: DesktopWindowRoute } = {}
+  options: {
+    settings?: SettingInfo[]
+    activationTimeoutMs?: number
+    windowFocus?: WindowFocus
+    windowRoute?: DesktopWindowRoute
+    nativeDropPaths?: (fileNames: readonly string[]) => Promise<string[] | null>
+    nativeBrowser?: NativeBrowserCapability
+  } = {}
 ) {
   let model = initial
   let settings = options.settings ?? []
@@ -286,7 +295,9 @@ function setup(
     log: (message) => logs.push(message),
     activationTimeoutMs: options.activationTimeoutMs,
     windowFocus: options.windowFocus,
-    windowRoute: options.windowRoute
+    windowRoute: options.windowRoute,
+    nativeDropPaths: options.nativeDropPaths,
+    nativeBrowser: options.nativeBrowser
   })
 
   return {
@@ -438,6 +449,27 @@ test('SC-7: concurrent mounts and commands share one import and one activation',
 
   expect(t.imports).toHaveLength(1)
   expect(record.activations).toBe(1)
+})
+
+test('a plugin sees every native browser availability its window has', async () => {
+  const nativeBrowser = {
+    ...createNativeBrowserCapability(),
+    available: true,
+    clearPartitionAvailable: true,
+    pageRequestsAvailable: true,
+    previewAvailable: true
+  }
+  const t = setup(makeModel({ sidebarSections: [section(NOTES, 'list')] }), { nativeBrowser })
+  const { module, record } = recording([LIST], () => () => {})
+  t.useModule(NOTES, module)
+  await t.host.refresh()
+  await loaded(t, NOTES)
+  expect(record.contexts[0].nativeBrowser).toMatchObject({
+    available: true,
+    clearPartitionAvailable: true,
+    pageRequestsAvailable: true,
+    previewAvailable: true
+  })
 })
 
 test('S1: refreshing loads and activates every enabled plugin with nothing shown or run', async () => {
@@ -673,6 +705,29 @@ test('SC-11: a plugin calls the daemon through its context and receives events o
   expect(received).toEqual([])
   await tick()
   expect(received).toEqual([{ type: 'acme.notes/changed', data: null }])
+})
+
+test('nativeDropPaths passes the dropped file names to the desktop shell and is null without one', async () => {
+  const asked: (readonly string[])[] = []
+  const desktop = setup(makeModel({ sidebarSections: [section(NOTES, 'list')] }), {
+    nativeDropPaths: async (fileNames) => {
+      asked.push(fileNames)
+      return ['/repo/a.md']
+    }
+  })
+  const browser = setup(makeModel({ sidebarSections: [section(NOTES, 'list')] }))
+  const results: (string[] | null)[] = []
+  for (const t of [desktop, browser]) {
+    t.useModule(NOTES, {
+      async activate(context) {
+        results.push(await context.nativeDropPaths([{ name: 'a.md' }]))
+        context.provide(LIST, () => {})
+      }
+    })
+    await t.host.refresh()
+  }
+  expect(asked).toEqual([['a.md']])
+  expect(results).toEqual([['/repo/a.md'], null])
 })
 
 test('SC-11: a listener that throws or rejects is logged with its plugin ID and does not stop the others', async () => {

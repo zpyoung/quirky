@@ -59,6 +59,16 @@ export function paneForView<T extends { id: string }>(tabs: readonly T[], active
   if (requestedPaneId !== null) return tabs.find((tab) => tab.id === requestedPaneId) ?? null
   return tabs.find((tab) => tab.id === active) ?? null
 }
+/** What the address bar shows: a document page is identified by its file, never its grant URL. */
+export function paneAddress(pane: { url: string; document?: { path: string } }): string {
+  return pane.document ? pane.document.path : pane.url
+}
+
+/** Back and Forward stay live while a conversion is left to cross after guest history runs out. */
+export function paneHistoryControls(pane: { canGoBack: boolean; canGoForward: boolean; convertedFrom?: unknown; convertedTo?: unknown }): { back: boolean; forward: boolean } {
+  return { back: pane.canGoBack || pane.convertedFrom !== undefined, forward: pane.canGoForward || pane.convertedTo !== undefined }
+}
+
 /** Resolves only the backend-issued preview URL; ordinary typed addresses stay unchanged. */
 export function nativePreviewNavigationUrl(url: string | undefined, previewUrl: string | undefined, baseUrl: string): string | null {
   if (!url) return null

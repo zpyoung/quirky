@@ -186,9 +186,20 @@ test('auxiliary routes remain daemon-readable, local to their window, and pruned
   expect(await requester.call('desktop.window.list', {})).toEqual([])
 })
 
-test('notification callbacks remain unavailable when the SDK exposes no acknowledgement hooks', async () => {
+test('notification capabilities are false until a window reports what its SDK supports', async () => {
   harness = await startHarness({ home: makeTempHome('quirky-desktop-notify-'), builtinPluginsDir: builtinsDir() })
   const requester = await harness.connect('cli')
-  const capabilities = await requester.call('desktop.capabilities', {})
-  expect(capabilities.notifications).toEqual({ permission: false, click: false, dismiss: false })
+  expect((await requester.call('desktop.capabilities', {})).notifications)
+    .toEqual({ permission: false, click: false, dismiss: false })
+
+  const shell = await harness.connect('ui')
+  await shell.call('desktop.shell.capabilities', {
+    directoryPicker: true, auxiliaryWindows: true, revealItem: true,
+    notifications: { permission: true, click: true, dismiss: true }
+  })
+  await shell.call('ui.window.focused', { focused: true })
+  expect((await requester.call('desktop.capabilities', {})).notifications)
+    .toEqual({ permission: true, click: true, dismiss: true })
+  expect((await shell.call('desktop.capabilities', {})).notifications)
+    .toEqual({ permission: true, click: true, dismiss: true })
 })

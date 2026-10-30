@@ -3,11 +3,12 @@ import { validateValue, type CliArgs, type CliContext, type CliModule, type Sche
 import type { BrowserMethod } from './src/runtime/catalog'
 import type { BrowserPage } from './src/profiles/store'
 
-type CliBrowserMethod = BrowserMethod | 'preferencesState' | 'profileSet' | 'profileClear' | 'profileDelete' | 'openLink'
+type CliBrowserMethod = BrowserMethod | 'preferencesState' | 'profileSet' | 'profileClear' | 'profileDelete' | 'openLink' | 'localhostLabelRegister' | 'localhostLabelList'
 type InputField = { inline: string; option: 'value' | 'expression' | 'text'; target: string; required?: boolean }
 
 const COMMAND_METHODS: Readonly<Record<string, CliBrowserMethod>> = {
   preferencesState: 'preferencesState', profileSet: 'profileSet', profileClear: 'profileClear', profileDelete: 'profileDelete', openLink: 'openLink',
+  localhostLabelRegister: 'localhostLabelRegister', localhostLabelList: 'localhostLabelList',
   profileList: 'profileList', profileCreate: 'profileCreate', profileClone: 'profileClone',
   tabList: 'tabList', tabShow: 'tabShow', tabCurrent: 'tabCurrent', tabCreate: 'tabCreate', tabSwitch: 'tabSwitch', tabClose: 'tabClose',
   tabProfileShow: 'tabProfileShow', tabProfileSet: 'tabProfileSet', tabProfileUseDefault: 'tabProfileUseDefault',
@@ -27,7 +28,7 @@ const COMMAND_METHODS: Readonly<Record<string, CliBrowserMethod>> = {
   dialogAccept: 'dialogAccept', dialogDismiss: 'dialogDismiss', detectBrowsers: 'detectBrowsers',
   importFile: 'importCookies', importBrowser: 'importCookies', importStart: 'importStart', importGet: 'importGet', importList: 'importList',
   identityGet: 'identityGet', identitySet: 'identitySet', openUrl: 'openUrl', exec: 'exec',
-  paneOpen: 'paneOpen', paneState: 'paneState', paneNavigate: 'paneNavigate', paneControl: 'paneControl',
+  paneOpen: 'paneOpen', paneState: 'paneState', paneNavigate: 'paneNavigate', panePreview: 'panePreview', paneControl: 'paneControl',
   paneReport: 'paneReport', paneClose: 'paneClose', paneSuggestions: 'paneSuggestions', paneWatch: 'paneWatch',
   paneWatchStop: 'paneWatchStop', paneFrameAck: 'paneFrameAck', paneInput: 'paneInput', paneRespond: 'paneRespond', paneDownload: 'paneDownload',
   designArm: 'designArm', designRead: 'designRead', designHover: 'designHover', designCancel: 'designCancel',

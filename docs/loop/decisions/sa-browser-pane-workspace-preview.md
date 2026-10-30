@@ -79,8 +79,100 @@ Reader: the maintainer supplying the native preview capability — Decision: whi
 - **Revisit if:** other platforms enter the authorized build scope
 - **Source:** deferred: platform
 
+## D8: Supply the missing host capability as an Electrobun fork patch, enforced by public WebKit APIs
+- **Question:** How does the item get the host guarantees D4 found missing, without private pointers or a weaker engine?
+- **Options:** keep blocking; patch private WebKit SPI; add a public-API isolated preview view to the fork (`patch/isolated-preview-view`)
+- **Chose:** the fork patch. `BrowserView` gains `isolatedPreview: { scheme, handler }` and the `<electrobun-webview isolated-preview>` attribute. Natively each view gets a fresh `nonPersistentDataStore`, a `WKContentRuleList` that blocks every load except the scheme, about:, data: and blob: (installed before any navigation runs, fail-closed if compilation fails), Lockdown Mode, navigation and response policies that cancel off-scheme navigation, cmd-clicks and downloads, and delegate denials for popups, file pickers, camera, microphone and location. No views://, appdata:// or RPC bridge.
+- **Why:** this is exactly D4's "Revisit if" list, built from public WebKit/AppKit calls and enforced by the host, with CSP only as a second line.
+- **Evidence:** fork commit on `patch/isolated-preview-view` (package/src/native/macos/isolated_preview.h, nativeWrapper.mm); fork spec docs/quirk/specs/2026-10-29-electrobun-fork/logic.md.
+- **Reversibility:** medium (drops out when upstream merges an equivalent)
+- **Confidence:** high for the guarantees the native test exercises (D10)
+- **Revisit if:** upstream ships an equivalent API, or WebKit stops honoring content rules or Lockdown Mode for these loads
+- **Source:** supersedes sa-browser-pane-workspace-preview D4
+
+## D9: Close WebRTC with Lockdown Mode, measured rather than assumed
+- **Question:** Content rules can't see WebRTC, which opens UDP directly (Orca needs a separate WebRTC fence for the same reason). What closes it on WebKit?
+- **Options:** a document-start script deleting RTCPeerConnection (page-level, not a host guarantee); the private `peerConnectionEnabled` preference (SPI); a per-store proxy (macOS 14 `proxyConfigurations`); public `WKWebpagePreferences.lockdownModeEnabled`
+- **Chose:** Lockdown Mode.
+- **Why:** a probe on this Mac with loopback TCP and UDP listeners showed content rules plus navigation policy stopped every TCP connection (16 without fences) but WebRTC still sent STUN datagrams; adding Lockdown Mode made `RTCPeerConnection` undefined and sent zero datagrams. A proxy-only configuration didn't stop loopback loads at all. Lockdown Mode also removes WebAssembly, WebGL and service workers and disables the JIT, which a document preview can live without.
+- **Evidence:** scratch probe output 2026-10-29 (baseline tcp=16 udp=3; rules+nav tcp=0 udp=4; +lockdown tcp=0 udp=0; proxy only tcp=16 udp=3); the committed native test repeats the control and fenced runs.
+- **Reversibility:** easy
+- **Confidence:** high for WebRTC and the load types tested; not tested: DNS prefetch hints (see Progress)
+- **Revisit if:** a previewed document needs WebAssembly or WebGL
+- **Source:** assumed — autonomous
+
+## D10: Grants are per mount, folder-scoped, and entry-only at the worktree root
+- **Question:** What may a previewed document read?
+- **Options:** the whole worktree; the document's folder; the entry file only; Orca's folder-when-nested, entry-only-at-root rule
+- **Chose:** Orca's rule. The grant reads the document's folder when it is inside a subfolder, and only the file at the worktree root, where `.env` and other secrets sit. Dotfiles and dot-folders are never served or previewed, symlinks are refused, and containment is checked with realpath. A fresh 128-bit grant ID is minted for every mount; storage keeps only the document path.
+- **Why:** the egress fences make reading the grant harmless off-machine, but a smaller grant still limits what a page can show the user or put in its title. Per-mount IDs keep grant URLs out of history and persisted rows.
+- **Evidence:** /Users/zpyoung/PycharmProjects/orca/src/main/browser/doc-preview-grant-registry.ts (root and request-base comments); apps/desktop/src/bun/workspace-preview.ts; plugins/quirky.browser/src/pane-service.ts documentFor.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** users need "authorize this folder" like Orca's authorized roots
+- **Source:** assumed — autonomous
+
+## D11: Conversion is explicit; direct file browsing stays as sa-browser-pane locked it
+- **Question:** Does typing or pasting an in-worktree HTML path convert the pane, as Orca's address bar can?
+- **Options:** convert every in-worktree HTML path; convert only through an explicit action
+- **Chose:** explicit. `quirky.browser/panePreview({pane, path})`, `quirky browser pane preview --pane --path`, and a "Preview as workspace document" button on panes showing workspace HTML directly. Typing any address on a document page converts back to browsing. Back walks guest history first, then crosses `convertedFrom`; Forward walks guest history, then re-crosses `convertedTo`; a new address on a web page drops `convertedTo`.
+- **Why:** sa-browser-pane D17 keeps explicit local HTML navigation (including `file://` and outside-worktree files) as direct browsing, and pane.test.ts asserts it. An explicit action gives the same conversion and Back flow without changing that contract.
+- **Evidence:** docs/loop/decisions/sa-browser-pane.md D17; plugins/quirky.browser/test/pane.test.ts:120-125; Orca browser-page-conversion.ts and HtmlDocPreview.tsx (Back/Forward fallbacks).
+- **Reversibility:** easy (the address bar could call panePreview later)
+- **Confidence:** medium (product call made without a person)
+- **Revisit if:** the operator wants paste-to-convert
+- **Source:** locked by docs/loop/decisions/sa-browser-pane.md D17
+
+## D12: The desktop host serves grants; the daemon only mints them
+- **Question:** Which process answers `quirky-preview://` requests?
+- **Options:** the daemon over HTTP (D3 forbids active HTML on its origin); the desktop main process through the SDK handler
+- **Chose:** the desktop main process. The renderer passes the daemon-minted grant with its claim; the claim accepts it only for a view the SDK created as an isolated preview, installs preview navigation rules, then attaches a handler bound to that grant. Until then every request gets a 404.
+- **Why:** it keeps active HTML off the daemon origin (D3) and puts file access next to the native fences. The renderer is Quirky's trusted shell, which already carries file paths.
+- **Evidence:** apps/desktop/src/bun/native-browser.ts claim; apps/desktop/src/bun/workspace-preview.ts.
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** remote worktrees need previews; the desktop can't read their disk
+- **Source:** assumed — autonomous
+
 ## Progress
 
-Stopped at LOOP.md step 3, brainstorming/technical feasibility, before approving an implementation specification or committing contracts. Current public SDK inspection and a disposable resource-registry smoke confirm the boundaries above; no supported enforcement capability was found. The one scout completed; no background service or implementer remains. No production code or inherited untracked files were changed. Record the blocker through queue.ts block after preserving this branch as blocked/sa-browser-pane-workspace-preview.
+Built on `zpyoung/eb-sa-browser-pane-workspace-preview` against the private fork devkit
+`2.0.5-quirky.0-isolated-preview-view` (fork commit on `patch/isolated-preview-view`). The committed
+desktop pin stays at 2.0.4. It moves to the fork release that carries the patch (`2.0.5-quirky.1`
+in the unified build) when the coordinator releases it.
 
-Resume only after supported Native host hooks provide grant-scoped active HTML/assets, isolated nonpersistent storage, request/transport denial, permission/download denial and safe guest lifecycle. Then requeue/restore the preserved branch, read current integration decisions, write a single logic spec with technical final section, commit real contracts, implement conversion and Back plus public API/CLI/UI/acceptance coverage. Do not remove the current passive-resource protections or equate file/editor browsing with completion.
+### Verified, and how
+- **Host fences, real WebKit:** the fork's `scripts/test-macos-isolated-preview.sh` drives real
+  WKWebViews against in-process loopback TCP and UDP listeners. An unfenced control page opened 16 TCP
+  connections and sent 2 STUN datagrams. The same page under the preview configuration opened 0 and
+  sent 0, while in-scheme images, fetch and a POST body still worked. Two previews didn't share
+  localStorage or cookies, an unrenderable response didn't become a download, and popups never
+  reached the UI delegate. The test fails on unpatched v2.0.5.
+- **Fork wiring:** `src/shared/isolated-preview.test.js` (5 cases) and upstream's
+  `native-symbol-contract.test.ts` and SDK unit tests (254 pass) pass; the patched devkit builds and
+  exports the three new symbols from both dylibs. A Codex review found two real bugs (an empty
+  `isolated-preview` attribute fell back to an ordinary view; streamed request bodies were dropped);
+  both are fixed in the patch.
+- **Quirky:** `bun run typecheck` passes with the private devkit. `bun scripts/suite.ts` passed the 11
+  affected files (desktop native-browser and workspace-preview, UI native-browser and DOM, browser
+  pane, pane-lifecycle, pane-preview, window-model, pane-window-find, preferences-native-command,
+  preferences-window), run locally because the remote box was unreachable. A direct `bun test` of
+  the five new or changed files first failed the long conversion case at 5.48 s against bun's 5 s
+  default on a loaded machine; with a 30 s timeout the same batch passes 36 of 36. The grant handler
+  test covers traversal (encoded and backslash forms), dotfiles, symlinks, other grants, entry-only
+  root grants, HEAD and non-GET methods.
+- **Unified build:** landed after resolving conflicts with the five earlier patches. `run-patch-tests`
+  passes this patch's tests there; per-view-proxy's test fails because its source anchor
+  `NSUUID *UUIDFromString` disappears with the storage-clear-completion merge, before this patch.
+
+### Not verified, and why
+- **The running desktop app.** Driving a Quirky window would take focus on this shared Mac, where
+  seven other sessions are working, so the UI flow and the end-to-end SDK round trip (native request
+  event, TS handler, `webviewIsolatedPreviewRespond`) inside a real app weren't exercised. The native
+  scenarios are handed off in `docs/loop/native/sa-browser-pane-workspace-preview.json`.
+- **DNS prefetch hints.** Orca records that Chromium resolves `<link rel=dns-prefetch>` outside its
+  request filter. No resolver traffic could be observed here without root, so whether WebKit resolves
+  such hints inside an isolated preview is unknown. No TCP or UDP reached the listeners.
+- **Blob request bodies.** WebKit didn't pass a `Blob` POST body to the scheme handler in testing;
+  string bodies arrive. Previews only need GET, so this is documented, not worked around.
+- **Linux and Windows** report unsupported by design (D7).

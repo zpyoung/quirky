@@ -406,6 +406,8 @@ Registration update: `bun scripts/build-loop/queue.ts add /tmp/quirky-session-in
 
 ## sa-browser-pane-native-host-controls: residual Watch host-clipboard transfer
 
+**Landed in #76** on Electrobun fork release `2.0.5-quirky.1`. Its native scenarios stay pending in `docs/loop/native/`.
+
 - **Priority/severity:** P2 / medium; remaining base-pane Watch input acceptance, owned by the existing item under sa-browser-pane D23. No new queue record or title change.
 - **Observed:** guarded run20261028T094623-7210 visibly selected “Normal copy text” through cmd+a; cmd+c did not arm Grab. Paste into the host address input was empty. The URL was restored without navigation. Cause is unresolved, not asserted to be a tool limitation or a Native failure.
 - **Evidence:** `.quirk/using-apps-like-a-user/runs/20261028T094623-7210/report.md`, obs4/obs8/obs9; earlier partial report20261028T080620-50e2. The design item's public Watch regression proves macOS selection and same-guest copy/paste after CDP editing-command translation; it does not prove transfer across browser/UI clipboard contexts.
@@ -417,6 +419,8 @@ Registration update: `bun scripts/build-loop/queue.ts add /tmp/quirky-session-in
 - **Tool-only limits:** browser reload hotkeys returned no observable reload in the original campaign. The passing manual-run continuation20261028T061353-1ab4 closed its browser but reported a frontmost-restoration error; later render closure20261028T065201-fe17 ended cleanly with no kept-open windows or cleanup errors. Native menu/focus proof remains pending, not inferred from web screenshots.
 
 ## m4-editor-drop-open-in-place: blocked
+
+**Landed in #76** on Electrobun fork release `2.0.5-quirky.1`. Its native scenarios stay pending in `docs/loop/native/`.
 
 Stopped at step 3 (brainstorming feasibility). The core SC-9 behavior needs Finder's real source paths, but no supported path-bearing native drop API was found in installed Electrobun 2.0.4 or latest published 2.0.5. The item explicitly requires blocking rather than adding an unapproved native patch/fork.
 
@@ -553,6 +557,8 @@ The operator moved all testing/debugging to the end phase during this item. Its 
 
 ## sa-browser-pane-native-events: blocked
 
+**Landed in #76** on Electrobun fork release `2.0.5-quirky.1`. Its native scenarios stay pending in `docs/loop/native/`.
+
 - **Stopped at:** feasibility/design on 2026-10-28, lane 10, before implementation. The core of this follow-up is the native event capability gap already deferred by `sa-browser-pane` D5/D12/D23.
 - **Evidence:** `apps/desktop/hutch.config.ts:6-8` still selects Electrobun 2.0.4. Its public `apps/desktop/.hutch/devkit/api/sdks/main/core/BrowserView.ts:44-78,269-374`, `api/preload/webviewTag.ts:12-26,354-407` and `api/sdks/main/events/webviewEvents.ts:1-39` expose navigation/find/zoom, popup URL/gesture metadata and download notifications, not native dialog/auth/certificate response handles, browser download destination/cancel control or opener/postbody-preserving popup creation. This is an inspected public API limitation, not proof that private native callbacks do not exist.
 - **Tried:** read the authoritative LOOP, source browser.md flows 7-9, locked browser architecture and parent decisions; directly inspected the selected public SDK and trusted host wrapper; independent read-only NativeBrowserHooks scout confirmed the boundary and existing separate CDP Watch implementations. Host message boxes/file pickers and updater-download helpers do not resolve native guest challenges or own its downloads. No supported independent completion slice was established.
@@ -571,6 +577,8 @@ The operator moved all testing/debugging to the end phase during this item. Its 
 
 ## sa-browser-native-identity: blocked
 
+**Landed in #76** on Electrobun fork release `2.0.5-quirky.1`. Its native scenarios stay pending in `docs/loop/native/`.
+
 - **Stopped at:** brainstorming/technical feasibility, before implementation. This item's only flow is applying Cleaned/Native identity to the human Native system-webview, preserving the existing runtime restart boundary.
 - **Evidence:** `apps/desktop/hutch.config.ts:6-8` pins Electrobun2.0.4. Installed `apps/desktop/.hutch/devkit/api/sdks/main/core/BrowserView.ts:44-78` exposes renderer/partition but no UA creation option; `init():191-219` forwards no UA; its public class has no UA setter. A case-insensitive hook search across installed `api/sdks/main` and `api/preload` found only unrelated preload platform-marker/spoofing comments/tests, not native UA control. Quirky's `apps/desktop/src/bun/native-browser.ts:3-49` exposes claim, zoom and release, not a native UA primitive. This absence finding is limited to the pinned/installed public SDK, not every version or private implementation.
 - **Existing behavior retained:** `plugins/quirky.browser/src/preferences/controller.ts:43-57` reports nativeSupported:false and preserves selected/active/restartRequired. Chrome identity already works through its separate owned-runtime path and is not completion of this native flow. No product source changed and no native view/session/profile was started.
@@ -581,6 +589,8 @@ The operator moved all testing/debugging to the end phase during this item. Its 
 
 ## sa-browser-native-profile-clear-completion: blocked
 
+**Landed in #76** on Electrobun fork release `2.0.5-quirky.1`. Its native scenarios stay pending in `docs/loop/native/`.
+
 - **Stopped at:** specification feasibility; neither required public native prerequisite is available in the configured/projected Electrobun 2.0.4 SDK. Core Default/native clear and isolated-profile removal cannot ship; predecessor already implements safe refusal, so there is no independent unbuilt remainder to land.
 - **Evidence:** apps/desktop/hutch.config.ts:6-8 pins 2.0.4 and apps/desktop/.hutch/devkit/package.json:1 identifies the same projected version. Public SDK api/sdks/main/proc/native.ts:3360-3366 exposes SessionInstance.clearStorageData(...):void; its ABI :1102-1105 takes partition/types cstrings and returns FFIType.void. Public Session :3373-3394 supplies no acknowledgement/event/barrier. BrowserView options api/sdks/main/core/BrowserView.ts:44-78 expose partition, not native storage-root configuration; the inspected SDK API projection has no websiteDataStore/storageRoot/storagePath/userDataPath surface. This describes the public contract, not private implementation behavior.
 - **Safety contract retained:** sa-browser-profiles-settings D9/D21 require reject-before-native-invocation, retained Chrome data/profile metadata and no shared Default guest/clear without separate actual native-root isolation proof. packages/ui/src/native-browser.ts:990-1008 still advertises clearing unavailable and rejects; plugins/quirky.browser/src/preferences-ui.tsx:19-30 checks before one-use request claim; preferences-lifecycle.ts:52-87 mutates Chrome/profile metadata only after a claimed native completion acknowledgement.
@@ -589,6 +599,8 @@ The operator moved all testing/debugging to the end phase during this item. Its 
 - **Records:** docs/loop/decisions/sa-browser-native-profile-clear-completion.md D1-D5; docs/quirk/specs/2026-10-28-sa-browser-native-profile-clear-completion/logic.md. Work preserved on blocked/sa-browser-native-profile-clear-completion.
 
 ## sa-browser-localhost-label-routing: blocked
+
+**Landed in #76** on Electrobun fork release `2.0.5-quirky.1`. Its native scenarios stay pending in `docs/loop/native/`.
 
 - **Stopped at:** LOOP.md step3, native-routing feasibility prerequisite, before specs/contracts/implementation. This item is already the exact parent follow-up; no duplicate follow-up was added.
 - **Core requirement:** Localhost Worktree Labels must actually route a worktree-labelled hostname/port to the intended local server in both the human Native pane and the agent Chrome engine. Display-only rewriting or Chrome-only delivery does not satisfy its title or sa-browser-profiles-settings D4/SC7.
@@ -621,6 +633,8 @@ The operator moved all testing/debugging to the end phase during this item. Its 
 - **Review status:** the cross-family campaign remains NOT RUN. The existing end phase owns one bounded review and its confirmed blocking fixes, as well as actual browser proof of the named visible controls. Headless acceptance coverage is not a browser or native-window pass.
 - **Records:** this item's specification and decision log D1–D6 explain the policy, fixture identity, evidence limits and macOS-only boundary. The original m5-loops-ui entry above remains historical evidence rather than being rewritten.
 ## sa-browser-pane-workspace-preview: blocked
+
+**Landed in #76** on Electrobun fork release `2.0.5-quirky.1`. Its native scenarios stay pending in `docs/loop/native/`.
 
 - **Stopped at:** LOOP.md step 3, brainstorming/technical feasibility, before approved spec, contracts or implementation. The item's entire active-HTML conversion/Back flow depends on a safe Native preview capability; there is no independently complete new flow to land.
 - **Evidence:** installed Electrobun devkit is 2.0.4, macos/arm64 (`apps/desktop/.hutch/devkit/projection.json:1`). Its public `BrowserViewOptions`/methods expose sandbox, partition, navigation rules, loadURL/loadHTML and observational download events (`api/sdks/main/core/BrowserView.ts:44-76,276-298,359-374`, relative to that devkit). The inspected public surface does not expose grant-resource interception, per-guest outbound request/transport policy, permission denial or download denial/cancellation. `SessionInstance` provides cookies/storage methods and a generic ephemeral-name example, not demonstrated nonpersistent Native-guest semantics (`api/sdks/main/proc/native.ts:3346-3394`). The projection contains API/language bindings, not maintained Native implementation source here. This is a host-enforcement limit, not merely a missing Quirky protocol wrapper.
@@ -921,6 +935,8 @@ Retained ownership, NOT cleared by blocking: sa-browser-pane D23 assigns base-pa
 
 ## m7-native-notification-and-signed-terminal-host: blocked
 
+**Partly landed in #76:** the notification half is on fork release `2.0.5-quirky.1`. The signed terminal host and the click, dismiss and permission checks still need a signing identity, so this item stays blocked.
+
 - **Stopped at:** step 3, prerequisite feasibility, before specifications/contracts/implementation. This item's entire core is the two native flows explicitly conditional on external SDK and production identity prerequisites.
 - **Notification evidence:** installed Electrobun 2.0.4 public Utils.showNotification accepts title/body/subtitle/silent and returns void, with no permission/click/dismiss hooks. Current desktop capabilities truthfully declare all three false (apps/desktop/src/bun/native-browser-preload.ts:24). npm latest is 2.0.5, gitHead d06abc9edf0b4e55116129cabbfe17bf89e11791; an executed source-only inventory found its Utils.ts and all six public main/events TypeScript files byte-identical to the installed SDK. https://registry.npmjs.org/electrobun/latest and https://github.com/blackboardsh/electrobun/blob/d06abc9edf0b4e55116129cabbfe17bf89e11791/package/src/sdks/main/core/Utils.ts#L66-L122 . No native display or lifecycle acceptance is claimed.
 - **Signing evidence:** inherited parent D4 records missing authorization/zero valid signing identities; this iteration's security find-identity -v -p codesigning also returned `0 valid identities found`, exit0. That repeated inventory was unnecessary and is not production authorization. apps/desktop/electrobun.config.ts:3-27 contains no signing identity reference; apps/desktop/README.md:25-26,81 explicitly describes unsigned packaging and the prerequisite. No signing credential or production packaging authorization was supplied.
@@ -958,3 +974,7 @@ Retained ownership, NOT cleared by blocking: sa-browser-pane D23 assigns base-pa
 - **Resolution of the historical fix-test-browser-1028 SC5 entry:** consumed the landed m7-sweep-browser-mobile owner fixes5943a407 (pinned helper source/target drag selectors) and3b3cd42f (visible download fixture). No duplicate source implementation, assertion removal or deadline change. Historical failing output above remains unchanged.
 - **Current bounded evidence:** canonical `bun scripts/suite.ts plugins/quirky.browser scripts` passes30remote+7macOS files, flaky[],67.90s. Existing SC5 observes actual transferred drop payload and reaches subsequent upload/download/history/capture assertions. Fresh standalone canonical-suite smoke drives the real API and executable CLI against two actual managed pages: exactly one trusted drop/payload per explicit target and no neighbor mutation,2owned helper/Chrome launches, privateHomeRemoved:true; exit0/3.57s. Managed-page screenshot inspected. Composed full typecheck/UI lint/root/mobile/prepared desktop passes28.888s.
 - **Review and scope:** standard fresh no-tools Gemini promote/refute plus deterministic chain yields PASS/0blocking findings; both promoted hypotheses were refuted (2/2suppression, explicitly noisy—not broad clearance). No new product/permanent-test source changes or unbuilt flow remains in this assignment. Existing Native/webview, OS clipboard/keychain and other-owner blockers stay open; this is not whole-repository or all-platform acceptance. Details: docs/loop/decisions/fix-browser-remaining-flows-1028.md D1–D8.
+
+## sa-browser-pane-native-host-controls: core unblocked by the Electrobun fork
+
+The blocked entry's prerequisite now exists: Electrobun fork patch `patch/hard-reload-load-failed` adds a real cache-bypassing reload and native `load-failed` events (macOS WKWebView; Linux and Windows report unsupported). HC1–HC3 are implemented on `zpyoung/eb-sa-browser-pane-native-host-controls` and verified against a private devkit build (decision log D14). Before this item is done: cut the fork release holding the patch, move the pin in `apps/desktop/hutch.config.ts` to it, and run `docs/loop/native/sa-browser-pane-native-host-controls.json`. HC4 Watch/base-pane/profile acceptance and the residual Watch host-clipboard entry above stay open.

@@ -1,0 +1,8 @@
+{
+  "item": "sa-browser-native-identity",
+  "spec": "docs/quirk/specs/2026-10-28-sa-browser-native-identity/logic.md",
+  "scenarios": [
+    { "id": "SC1-native", "title": "On a build pinned to a fork release carrying patch/webview-user-agent, with identity Cleaned active, create a fresh UUID Browser profile and open a Native pane on it to a run-owned local HTTP server that records the User-Agent header. The first request's header and the page's navigator.userAgent agree and equal the system webview's own user agent with Quirky/Electrobun/Electron tokens removed. The pane is still the system webview and no Chrome process starts for it.", "status": "pending", "lastRun": null, "report": null, "summary": null },
+    { "id": "SC2-native", "title": "Start with Cleaned active, open the Native pane as in SC1, then run `quirky browser identity set --mode native`. Preferences report restartRequired true; hiding and reshowing the pane, and restarting the owned Chrome helper, keep the Cleaned header. After restarting the daemon, a new Native pane sends the system webview's unmodified user agent.", "status": "pending", "lastRun": null, "report": null, "summary": null }
+  ]
+}

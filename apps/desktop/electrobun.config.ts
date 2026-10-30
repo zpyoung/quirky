@@ -25,6 +25,9 @@ export default {
       bundleCEF: false
     }
   },
+  scripts: {
+    postBuild: 'scripts/allow-label-hosts.ts'
+  },
   release: {
     baseUrl: 'https://github.com/zpyoung/quirky/releases/latest/download'
   }

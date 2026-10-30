@@ -32,6 +32,12 @@ describe('notificationFor', () => {
     expect(notificationFor(event)).toMatchObject({ silent: true, soundFile: null })
   })
 
+  test('keeps the toast target and key so a banner click can open and retire it', () => {
+    const open = { view: 'view:quirky.session/worktree', input: { worktree: 'w1', session: 's1' } }
+    const event: QuirkyEvent = { type: 'notify', title: 'Claude', body: 'done', desktop: true, open, key: 'session:s1' }
+    expect(notificationFor(event)).toMatchObject({ open, key: 'session:s1' })
+  })
+
   test('falls back to the app name for a blank title', () => {
     const event: QuirkyEvent = { type: 'notify', title: '  ', body: 'hello', desktop: true }
     expect(notificationFor(event)?.title).toBe('Quirky')

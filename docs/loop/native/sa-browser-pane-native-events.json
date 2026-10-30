@@ -1,0 +1,31 @@
+{
+  "item": "sa-browser-pane-native-events",
+  "spec": "docs/quirk/specs/2026-10-29-sa-browser-pane-native-events/logic.md",
+  "scenarios": [
+    {
+      "id": "SC-1",
+      "title": "A Native page that calls confirm() and then prompt() shows each as the pane overlay naming its origin; Confirm and Submit with 'héllo 世界' give the page true and that text",
+      "status": "pending"
+    },
+    {
+      "id": "SC-2",
+      "title": "An unanswered Native confirm() closes its overlay after 120 seconds and the page receives false",
+      "status": "pending"
+    },
+    {
+      "id": "SC-3",
+      "title": "A basic-auth page shows the Native sign-in overlay; signing in with the right credentials loads the authenticated page, and pane state never contains the password",
+      "status": "pending"
+    },
+    {
+      "id": "SC-5",
+      "title": "A Native attachment download appears in the shelf with a collision-free name in Downloads, shows bytes, completes, and Show in folder reveals it in Finder",
+      "status": "pending"
+    },
+    {
+      "id": "SC-6",
+      "title": "A form POST to target=oauth opens a small window titled by the popup's origin; the popup sees window.opener and the POST body, and its window.close() closes the window",
+      "status": "pending"
+    }
+  ]
+}

@@ -5,9 +5,11 @@ import type {
   NativeBrowserState
 } from '@quirky/protocol'
 import {
+  createElectrobunNativeBrowserAdapter,
   createNativeBrowserCapability,
   type NativeBrowserAdapter,
-  type NativeBrowserAdapterHandle
+  type NativeBrowserAdapterHandle,
+  type NativeBrowserShellBridge
 } from '../src/native-browser'
 
 const TEST_PARTITION = `persist:quirky-browser-profile_${crypto.randomUUID().replaceAll('-', '')}`
@@ -45,6 +47,9 @@ function deferred<T>(): Deferred<T> {
 /** Stateful model of one isolated view, history, and the trusted shell bridge. */
 class BrowserBridgeModel implements NativeBrowserAdapter {
   readonly clearPartitionAvailable = false
+  readonly pageRequestsAvailable = false
+  previewAvailable = false
+  async defaultUserAgent(): Promise<string | null> { return null }
   readonly children = new Map<string, ModelChild>()
   readonly clearCalls: string[] = []
   slowFirstNavigation = false
@@ -73,7 +78,8 @@ class BrowserBridgeModel implements NativeBrowserAdapter {
         zoom: options.zoom,
         error: null,
         findCurrent: 0,
-        findTotal: 0
+        findTotal: 0,
+        hardReloadAvailable: false
       },
       history: ['about:blank'],
       cursor: 0,
@@ -140,6 +146,8 @@ class BrowserBridgeModel implements NativeBrowserAdapter {
         }
         throw new Error('test adapter only models navigation')
       },
+      answer: async () => false,
+      cancelDownload: async () => false,
       dispose: async () => {
         const disposeGate = this.nextDispose
         this.nextDispose = null
@@ -174,6 +182,17 @@ describe('native browser capability', () => {
     expect(capability.clearPartitionAvailable).toBe(false)
     expect(() => capability.mount(element, options())).toThrow()
     await expect(capability.clearPartition(TEST_PARTITION)).rejects.toBeInstanceOf(Error)
+    expect(await capability.defaultUserAgent()).toBeNull()
+  })
+
+  test('rejects a user agent that could break out of its header before creating a child', () => {
+    const bridge = new BrowserBridgeModel()
+    const capability = createNativeBrowserCapability(bridge)
+
+    expect(() => capability.mount(element, options({ userAgent: 'Mozilla/5.0\r\nX-Injected: 1' }))).toThrow('invalid native browser user agent')
+    expect(() => capability.mount(element, options({ userAgent: '' }))).toThrow('invalid native browser user agent')
+    expect(() => capability.mount(element, options({ userAgent: 'x'.repeat(1025) }))).toThrow('invalid native browser user agent')
+    expect(bridge.children.size).toBe(0)
   })
 
   test('rejects unsafe protocols and non-browser partitions before creating a child', () => {
@@ -276,13 +295,87 @@ describe('native browser capability', () => {
     expect(bridge.clearCalls).toEqual([])
   })
 
-  test('native clear is unavailable until the SDK can confirm completion', async () => {
+  test('isolated previews mount only on a host that enforces them and stay inside their grant', async () => {
+    const grant = { id: 'f'.repeat(32), root: '/work/report', entry: 'index.html', entryOnly: false }
+    const previewUrl = `quirky-preview://${grant.id}/index.html`
+    const unsupported = createNativeBrowserCapability(new BrowserBridgeModel())
+    expect(unsupported.previewAvailable).toBe(false)
+    expect(() => unsupported.mount(element, options({ url: previewUrl, preview: grant }))).toThrow('unavailable')
+
+    const model = new BrowserBridgeModel()
+    model.previewAvailable = true
+    const capability = createNativeBrowserCapability(model)
+    expect(capability.previewAvailable).toBe(true)
+    expect(() => capability.mount(element, options({ url: previewUrl, preview: { ...grant, id: 'nope' } }))).toThrow('grant')
+    expect(() => capability.mount(element, options({ url: previewUrl, preview: { ...grant, entry: '../x.html' } }))).toThrow('grant')
+    expect(() => capability.mount(element, options({ url: `quirky-preview://${'e'.repeat(32)}/index.html`, preview: grant }))).toThrow('unsupported native browser URL')
+    expect(() => capability.mount(element, options({ url: 'https://example.test/', preview: grant }))).toThrow('unsupported native browser URL')
+    expect(() => capability.mount(element, options({ url: previewUrl }))).toThrow('unsupported native browser URL')
+    const handle = capability.mount(element, options({ url: 'about:blank', partition: '', preview: grant }))
+    await expect(handle.request({ action: 'navigate', url: 'https://example.test/' })).rejects.toThrow('unsupported native browser URL')
+    await expect(handle.request({ action: 'navigate', url: 'file:///etc/hosts' })).rejects.toThrow('unsupported native browser URL')
+    handle.dispose()
+  })
+
+  test('native clear is unavailable until the host can confirm completion', async () => {
     const bridge = new BrowserBridgeModel()
     const capability = createNativeBrowserCapability(bridge)
 
     expect(capability.clearPartitionAvailable).toBe(false)
-    await expect(capability.clearPartition(TEST_PARTITION)).rejects.toThrow(/no completion signal/i)
+    await expect(capability.clearPartition(TEST_PARTITION)).rejects.toThrow(/cannot confirm native website-data removal/i)
     await expect(capability.clearPartition('persist:default')).rejects.toThrow(/unsupported browser partition/i)
     expect(bridge.clearCalls).toEqual([])
+  })
+})
+
+describe('Electrobun native browser adapter clearing', () => {
+  const shell = (storage: Partial<NativeBrowserShellBridge>): NativeBrowserShellBridge => ({
+    claimNativeBrowserView: async () => ({ zoomFactor: 1 }),
+    setNativeBrowserZoom: async () => ({ zoomFactor: 1 }),
+    releaseNativeBrowserView: async () => ({ released: true }),
+    routeNativeBrowserLabels: async () => ({ routed: true }),
+    nativeBrowserDefaultUserAgent: async () => ({ userAgent: null }),
+    ...storage
+  })
+
+  test('an older desktop host without storage support keeps the refusal', async () => {
+    const cleared: string[] = []
+    for (const bridge of [
+      shell({}),
+      shell({ clearPartitionAvailable: false, clearNativeBrowserPartition: async ({ partition }) => { cleared.push(partition); return { cleared: true } } }),
+      shell({ clearPartitionAvailable: true })
+    ]) {
+      const capability = createNativeBrowserCapability(createElectrobunNativeBrowserAdapter(bridge))
+      expect(capability.clearPartitionAvailable).toBe(false)
+      await expect(capability.clearPartition(TEST_PARTITION)).rejects.toThrow(/cannot confirm native website-data removal/i)
+    }
+    expect(cleared).toEqual([])
+  })
+
+  test('a host that confirms completion clears only Browser partitions', async () => {
+    const cleared: string[] = []
+    const capability = createNativeBrowserCapability(createElectrobunNativeBrowserAdapter(shell({
+      clearPartitionAvailable: true,
+      clearNativeBrowserPartition: async ({ partition }) => { cleared.push(partition); return { cleared: true } }
+    })))
+
+    expect(capability.clearPartitionAvailable).toBe(true)
+    await capability.clearPartition(TEST_PARTITION)
+    await expect(capability.clearPartition('persist:default')).rejects.toThrow(/unsupported browser partition/i)
+    expect(cleared).toEqual([TEST_PARTITION])
+  })
+
+  test('a host failure or unconfirmed reply rejects the clear', async () => {
+    const failing = createNativeBrowserCapability(createElectrobunNativeBrowserAdapter(shell({
+      clearPartitionAvailable: true,
+      clearNativeBrowserPartition: async () => { throw new Error('Native website-data removal did not complete (failed: timeout)') }
+    })))
+    await expect(failing.clearPartition(TEST_PARTITION)).rejects.toThrow(/did not complete/)
+
+    const unconfirmed = createNativeBrowserCapability(createElectrobunNativeBrowserAdapter(shell({
+      clearPartitionAvailable: true,
+      clearNativeBrowserPartition: async () => ({}) as { cleared: true }
+    })))
+    await expect(unconfirmed.clearPartition(TEST_PARTITION)).rejects.toThrow(/did not confirm/)
   })
 })

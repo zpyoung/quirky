@@ -17,7 +17,7 @@ const PREFERENCES_STATE = {
   profiles: [{ profile: { id: 'default', label: 'Default', scope: 'default' as const }, active: true }],
   identity: { selected: 'clean' as const, active: 'clean' as const, restartRequired: false, nativeSupported: false as const },
   imports: { available: true as const, destination: 'managed-chrome' as const, nativeSupported: false as const, reason: 'Cookie imports are stored in managed Chrome, not Native.' },
-  localhostLabels: { available: false as const, reason: 'A reachable worktree host mapping is not configured.' }
+  localhostLabels: { available: true as const, enabled: false, reason: 'Loopback links get worktree labels.', labels: [] }
 }
 
 beforeAll(async () => {
@@ -77,11 +77,14 @@ function makeContext(): UiPluginContext {
     nativeBrowser: {
       available: false,
       clearPartitionAvailable: false,
+      previewAvailable: false,
       mount: () => { throw new Error('Native views are unavailable in this DOM fixture.') },
-      clearPartition: async () => { throw new Error('Native storage is unavailable in this DOM fixture.') }
+      clearPartition: async () => { throw new Error('Native storage is unavailable in this DOM fixture.') },
+      defaultUserAgent: async () => null
     },
     pluginId: 'quirky.browser',
     log: () => {},
+    nativeDropPaths: async () => null,
     readClipboardText: async () => '',
     provide: () => {},
     call: async (method, params) => {
