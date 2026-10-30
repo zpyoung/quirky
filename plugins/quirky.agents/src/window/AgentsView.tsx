@@ -106,7 +106,7 @@ function Listing({ listing, store, refreshing }: { listing: AgentListing; store:
 export function AgentsView({ store }: { store: AgentsStore }) {
   const { status, listing, error, refreshing } = useSyncExternalStore(store.subscribe, store.getSnapshot)
   return (
-    <div style={s.page}>
+    <div className="agents-ui" style={s.page}>
       <ToolPanelFrame title="Agents">
         <div style={s.column}>
           <p style={s.intro}>Manage AI agents, set a default, and customize commands.</p>

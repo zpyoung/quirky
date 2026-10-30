@@ -45,6 +45,9 @@ Save; Cancel leaves stored preferences unchanged. Application and terminal appea
 continue to use their existing theme controls. Plugin settings sections and dedicated
 settings links remain available from the same window.
 
+**Agent settings** keeps agent names and launch commands readable in narrow center
+panels by wrapping card controls below the text when they no longer fit alongside it.
+
 Desktop **Mobile**, **CLI settings**, command search and the Source Control activity
 contribution use the same dark/light controls. Mobile pairing offers remain deliberately
 visible only in the pairing surface; CLI pairing-offer entry stays masked. Launcher
