@@ -61,6 +61,35 @@ describe('the active tab icon', () => {
   })
 })
 
+describe('rekeyViewTabs icon', () => {
+  test('a renamed file tab reports its new path', async () => {
+    const opened = await openView('old', { icon: { kind: 'file', path: '/work/repo/old.ts' } })
+    await terminal('rekeyViewTabs', {
+      workspace: selector,
+      viewId: VIEW,
+      changes: [{ tab: opened.tab, key: 'new', icon: { kind: 'file', path: '/work/repo/new.py' } }]
+    })
+    expect(await activeIcon()).toEqual({ kind: 'file', path: '/work/repo/new.py' })
+  })
+
+  test('a change without an icon keeps the one the tab has', async () => {
+    const icon = { kind: 'file', path: '/work/repo/kept.ts' }
+    const opened = await openView('kept', { icon })
+    await terminal('rekeyViewTabs', { workspace: selector, viewId: VIEW, changes: [{ tab: opened.tab, key: 'kept-2' }] })
+    expect(await activeIcon()).toEqual(icon)
+  })
+
+  test('rejects a malformed icon', async () => {
+    const opened = await openView('bad')
+    const error = await errorOf(terminal('rekeyViewTabs', {
+      workspace: selector,
+      viewId: VIEW,
+      changes: [{ tab: opened.tab, key: 'bad-2', icon: { kind: 'file' } }]
+    }))
+    expect(String(error)).toContain('icon')
+  })
+})
+
 describe('openViewTab icon validation', () => {
   test.each([
     ['a string', 'file'],

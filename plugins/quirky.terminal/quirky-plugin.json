@@ -946,6 +946,11 @@
                     "type": "string",
                     "description": "The new tab title; at most 200 characters."
                   },
+                  "icon": {
+                    "type": "object",
+                    "additionalProperties": true,
+                    "description": "The new tab icon: `{kind:'tool',name,hue}`, `{kind:'file',path}` or `{kind:'control',name}`."
+                  },
                   "preview": {
                     "type": "boolean",
                     "description": "Whether the tab remains a replaceable preview."

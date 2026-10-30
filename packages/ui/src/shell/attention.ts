@@ -177,14 +177,17 @@ export function createAttentionStore(
     })
   }
 
+  let scopeVersion = 0
   const setFilter = (filterRepoIds: string[]) => {
+    scopeVersion += 1
     if (!sameIds(state.filterRepoIds, filterRepoIds)) publish({ filterRepoIds })
   }
 
   const refreshScope = async () => {
+    const version = ++scopeVersion
     try {
       const ids = filterIdsOf(await connection.callAny('quirky.worktree/options', {}))
-      if (active && ids !== null) setFilter(ids)
+      if (active && version === scopeVersion && ids !== null) setFilter(ids)
     } catch {
       // the worktree plugin may be absent; the scope then stays All projects
     }

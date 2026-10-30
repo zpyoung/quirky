@@ -47,7 +47,13 @@ const SAMPLE: Check[] = [
 
 function fakeContext(initial: unknown) {
   const listeners = new Set<(event: QuirkyEvent) => void>()
+  const layoutListeners = new Set<(layout: unknown) => void>()
   const fake = {
+    layout: { view: null, panel: null, sidebar: true, focus: null, worktree: 'wt_1' } as Record<string, unknown>,
+    setWorktree: (worktree: string) => {
+      fake.layout = { ...fake.layout, worktree }
+      for (const listener of [...layoutListeners]) listener(fake.layout)
+    },
     result: initial as unknown,
     failing: false,
     calls: [] as string[],
@@ -67,7 +73,11 @@ function fakeContext(initial: unknown) {
       },
       onConnection: () => () => {},
       togglePanel: (id: string, open?: boolean) => void fake.panels.push([id, open]),
-      getLayout: () => ({ view: null, panel: null, sidebar: true, focus: null })
+      getLayout: () => fake.layout,
+      onLayout: (listener: (layout: unknown) => void) => {
+        layoutListeners.add(listener)
+        return () => layoutListeners.delete(listener)
+      }
     }
   }
   return fake
@@ -95,6 +105,34 @@ const popup = () => document.querySelector('.ui-popup')
 const menuRows = () => [...document.querySelectorAll<HTMLElement>('.ui-popup [role="menuitem"]')]
 
 describe('quirky.reviews checks status bar item', () => {
+  test('hides when the daemon holds another worktree\'s checks, and follows the selection', async () => {
+    const fake = fakeContext(checksState(SAMPLE))
+    const { element, unmount } = await mountItem(fake)
+    expect(element.textContent).toContain('Checks 2/4')
+
+    await act(async () => fake.setWorktree('wt_2'))
+    await settle()
+    expect(element.textContent).not.toContain('Checks')
+
+    fake.result = { checks: { ...checksState(SAMPLE).checks, worktree: 'wt_2' } }
+    await act(async () => fake.emit({ type: 'quirky.reviews/changed' } as unknown as QuirkyEvent))
+    await settle()
+    expect(element.textContent).toContain('Checks 2/4')
+    await unmount()
+  })
+
+  test('the popup lists every check, however many there are', async () => {
+    const many: Check[] = Array.from({ length: 45 }, (_, index) => ({ name: `check-${index}`, status: 'completed', conclusion: 'success' }))
+    const fake = fakeContext(checksState(many))
+    const { element, unmount } = await mountItem(fake)
+    await act(async () => element.querySelector('button')!.click())
+    await settle()
+    const labels = menuRows().map((row) => row.textContent)
+    expect(labels.filter((label) => label?.startsWith('check-'))).toHaveLength(45)
+    expect(labels.some((label) => label?.includes('more'))).toBe(false)
+    await unmount()
+  })
+
   test('the manifest declares the item at order 20 and activate provides it', async () => {
     const manifest = await Bun.file(new URL('../quirky-plugin.json', import.meta.url)).json()
     expect(manifest.contributes['status-bar']).toEqual([{ id: 'checks', title: 'Checks', order: 20 }])

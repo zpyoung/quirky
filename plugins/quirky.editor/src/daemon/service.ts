@@ -743,6 +743,7 @@ export class EditorDaemon {
             key: tab.key,
             input: { bufferId: params.bufferId, mode: tab.inputMode },
             title: editorTabTitle(nextBuffer.name, tab.inputMode),
+            icon: { kind: 'file', path: nextBuffer.path },
             preview: tab.preview
           }))
         }) as { workspace?: TerminalWorkspace }
@@ -2296,6 +2297,7 @@ export class EditorDaemon {
             key: tab.key,
             input: { bufferId: previous.id, mode: tab.inputMode },
             title: editorTabTitle(state.buffer.name, tab.inputMode),
+            icon: { kind: 'file', path: state.buffer.path },
             preview: tab.preview
           }))
         }) as { workspace?: TerminalWorkspace }

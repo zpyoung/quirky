@@ -733,7 +733,7 @@ export class LayoutService {
     this.checkRevision(ws, params.revision)
     if (changes.length === 0) return { workspace: ws }
 
-    const updates: { tab: string; key: string; input?: Record<string, unknown>; title?: string; preview?: boolean }[] = []
+    const updates: { tab: string; key: string; input?: Record<string, unknown>; title?: string; icon?: TabIcon; preview?: boolean }[] = []
     const byTab = new Map<string, (typeof updates)[number]>()
     for (const raw of changes) {
       if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) throw this.context.error('invalid-params', 'each change must be an object')
@@ -763,11 +763,13 @@ export class LayoutService {
       if (change.preview !== undefined && typeof change.preview !== 'boolean') {
         throw this.context.error('invalid-params', 'preview must be a boolean')
       }
+      if (change.icon !== undefined && !isTabIcon(change.icon)) throw this.context.error('invalid-params', 'icon is malformed')
       const update = {
         tab: change.tab,
         key: change.key,
         ...(input === undefined ? {} : { input }),
         ...(title === undefined ? {} : { title }),
+        ...(change.icon === undefined ? {} : { icon: change.icon as TabIcon }),
         ...(change.preview === undefined ? {} : { preview: change.preview as boolean })
       }
       updates.push(update)
@@ -791,6 +793,7 @@ export class LayoutService {
         key: update.key,
         ...(update.input === undefined ? {} : { input: update.input }),
         ...(update.title === undefined ? {} : { title: update.title }),
+        ...(update.icon === undefined ? {} : { icon: update.icon }),
         ...(update.preview === undefined ? {} : { preview: update.preview })
       })))
     }

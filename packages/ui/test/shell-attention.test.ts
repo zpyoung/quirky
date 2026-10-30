@@ -289,6 +289,24 @@ test('the Inbox More below cue tracks overflow, scrolling, resize, and content c
   }
 }, 15_000)
 
+test('a slow options read cannot overwrite a newer project selection', async () => {
+  let release: (value: unknown) => void = () => {}
+  const slow = new Promise((resolve) => { release = resolve })
+  const connection = {
+    callAny: async (method: string) => method === 'quirky.worktree/options' ? slow : method === 'quirky.worktree/setOptions' ? {} : [],
+    onEvent: () => () => {},
+    onConnected: () => () => {}
+  }
+  const host = { getState: () => ({ layout: { worktree: null } }), subscribe: () => () => {}, openTool() {}, openView() {} }
+  const store = createAttentionStore(connection as never, host as never)
+  const unsubscribe = store.subscribe(() => {})
+  await store.selectProject('r_new')
+  release({ filterRepoIds: [] })
+  await Bun.sleep(0)
+  expect(store.getSnapshot().filterRepoIds).toEqual(['r_new'])
+  unsubscribe()
+})
+
 test('narrowing writes filterRepoIds and opens the project worktree when the selection falls outside', async () => {
   const { env, attention, current, other, currentRepo, otherRepo } = await bootAttention()
   expect(attention.getSnapshot().filterRepoIds).toEqual([])
