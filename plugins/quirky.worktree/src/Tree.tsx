@@ -41,7 +41,7 @@ export type TreeProps = {
   loopsByWorktree?: ReadonlyMap<string, LoopProjection>
 }
 
-type OpenMenu = { x: number; y: number; label: string; items: ContextMenuItem[] }
+type OpenMenu = { x: number; y: number; label: string; items: ContextMenuItem[]; returnFocusTo?: HTMLElement }
 
 const plural = (count: number) => `${count} ${count === 1 ? 'child' : 'children'}`
 const EMPTY_LOOP_PROJECTIONS: ReadonlyMap<string, LoopProjection> = new Map()
@@ -580,10 +580,11 @@ export function Tree({
       })
   }
 
-  const openProjectMenu = (repo: Repo, x: number, y: number) =>
+  const openProjectMenu = (repo: Repo, x: number, y: number, returnFocusTo?: HTMLElement) =>
     setMenu({
       x,
       y,
+      returnFocusTo,
       label: `Actions for ${repoLabel(repo)}`,
       items: projectMenu(repo, groups, {
         openDialog,
@@ -739,7 +740,7 @@ export function Tree({
                   aria-haspopup="menu"
                   onClick={(event) => {
                     const bounds = event.currentTarget.getBoundingClientRect()
-                    openProjectMenu(repo, bounds.left, bounds.bottom)
+                    openProjectMenu(repo, bounds.left, bounds.bottom, event.currentTarget)
                   }}
                 >
                   ⋯

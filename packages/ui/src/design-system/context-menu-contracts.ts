@@ -39,6 +39,8 @@ export type ContextMenuProps = {
   x: number
   y: number
   onClose(): void
+  /** On root Escape, restore focus here before closing; other close paths do not restore focus. */
+  returnFocusTo?: HTMLElement
   header?: ReactNode
   highlightFirst?: boolean
   /** The horizontal menu edge anchored at x before viewport clamping. */

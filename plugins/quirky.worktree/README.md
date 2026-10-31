@@ -12,7 +12,8 @@ and full text available on hover. The activity indicator's accessible name follo
 activity; pending questions retain attention priority. Attention counts and contextual actions remain
 independently clickable. Controls, menus, dialogs and both appearances use the shared graphite system.
 Project Actions menus take keyboard focus when opened and close on Escape, including when the click
-also activates the Worktrees panel.
+also activates the Worktrees panel. When opened from the Actions button, Escape restores focus to that
+button; outside clicks and action selection close without restoring focus to the opener.
 
 Closing Rename or the Delete Workspace confirmation returns keyboard focus to that worktree's
 Actions button while its row remains visible, including after a display-name change.
