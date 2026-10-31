@@ -267,6 +267,7 @@ function DocumentBody({ context, input }: { context: UiPluginContext; input: Doc
   const [changesOpen, setChangesOpen] = useState(false)
   const sourceRef = useRef<SourceEditorHandle>(null)
   const rootRef = useRef<HTMLDivElement>(null)
+  const fileActionsRef = useRef<HTMLDetailsElement>(null)
   const activeRegistration = useRef<ActiveDocumentRegistration | null>(null)
   const editorHasFocus = useRef(false)
   const surfaceCommandHandlers = useRef(new Map<symbol, EditorSurfaceCommandHandlers>())
@@ -362,6 +363,32 @@ function DocumentBody({ context, input }: { context: UiPluginContext; input: Doc
 
   useEffect(() => () => {
     if (undoReloadTimer.current !== undefined) window.clearTimeout(undoReloadTimer.current)
+  }, [])
+
+  useEffect(() => {
+    const dismissOutside = (event: Event) => {
+      const details = fileActionsRef.current
+      if (!details?.open || !(event.target instanceof Node) || details.contains(event.target)) return
+      details.open = false
+    }
+    const dismissEscape = (event: KeyboardEvent) => {
+      const details = fileActionsRef.current
+      if (event.key !== 'Escape' || !details?.open) return
+      event.preventDefault()
+      event.stopPropagation()
+      details.open = false
+      details.querySelector('summary')?.focus()
+    }
+    document.addEventListener('pointerdown', dismissOutside)
+    document.addEventListener('click', dismissOutside, true)
+    document.addEventListener('focusin', dismissOutside)
+    document.addEventListener('keydown', dismissEscape, true)
+    return () => {
+      document.removeEventListener('pointerdown', dismissOutside)
+      document.removeEventListener('click', dismissOutside, true)
+      document.removeEventListener('focusin', dismissOutside)
+      document.removeEventListener('keydown', dismissEscape, true)
+    }
   }, [])
   const flushDrafts = useCallback(async () => {
     await draftQueue.current
@@ -1030,7 +1057,7 @@ function DocumentBody({ context, input }: { context: UiPluginContext; input: Doc
               <Button aria-label="Reset zoom" onClick={() => void saveSetting('editorFontZoomLevel', 0)}>Reset</Button>
             </div>
           </div>
-          <details className="qe-file-actions">
+          <details ref={fileActionsRef} className="qe-file-actions">
             <summary className="qe-disclosure-trigger">File actions</summary>
             <div className="qe-file-actions-menu">
               <Button onClick={() => void copyPath(false)}>Copy Path</Button>
