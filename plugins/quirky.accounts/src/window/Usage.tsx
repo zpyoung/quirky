@@ -424,9 +424,7 @@ function UsagePopover({ store, accounts, usage, credentials }: { store: Accounts
   const preferences = accounts?.preferences
   const scopeLoading = current.scope.kind === 'remote' && current.scope.status === 'loading'
   if (!current.ui.open) return null
-  return <div className="usage-popover" role="dialog" aria-label="Usage" onKeyDown={(event) => {
-    if (event.key === 'Escape' && !event.defaultPrevented) void store.setUiState({ open: false })
-  }}>
+  return <div className="usage-popover" role="dialog" aria-label="Usage">
     <SectionHeader title="Usage" actions={<span className="usage-popover-header-actions">
       <small>all agents</small>
       <IconButton label="Refresh rate limits" title="Refresh usage data" disabled={current.refreshing || scopeLoading} onClick={() => void store.refresh()}>↻</IconButton>
@@ -547,8 +545,15 @@ export function StatusBarUsage({ store, report }: { store: AccountsUiStore; repo
       if (root && event.target instanceof Node && root.contains(event.target)) return
       void store.setUiState({ open: false })
     }
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && !event.defaultPrevented) void store.setUiState({ open: false })
+    }
     document.addEventListener('pointerdown', onPointerDown)
-    return () => document.removeEventListener('pointerdown', onPointerDown)
+    document.addEventListener('keydown', onKeyDown)
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown)
+      document.removeEventListener('keydown', onKeyDown)
+    }
   }, [snapshot.ui.open, store])
 
   const hidden = preferences?.hidden ?? false
