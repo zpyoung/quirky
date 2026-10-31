@@ -2,6 +2,10 @@
 
 The Git plugin stores independent recipes for commit messages, fix/review actions, branch names, and conversation names. `aiRecipe` resolves each field from the repository recipe, then the global recipe, then the default, and reports each field's source. `setAiRecipe` saves or resets a recipe at repository or global scope.
 
+## Commit messages
+
+With staged changes and an empty commit message, the sparkle button's tooltip and accessible name both read “Generate commit message with AI” when an agent is available. Other states explain why generation is unavailable or direct you to the AI settings.
+
 ## Name candidates
 
 `aiName({ action: 'branchName' })` returns a branch-name candidate from the exact worktree's checked-out branch, resolved base comparison, committed changed paths, and staged/unstaged paths. An optional `session` adds user/assistant messages from that exact structured session as captured work-prompt context. The returned branch name must pass Git's `check-ref-format --branch` validation.
