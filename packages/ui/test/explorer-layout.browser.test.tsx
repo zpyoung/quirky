@@ -218,6 +218,160 @@ test.skipIf(!existsSync(executable))('file rows are visible and scrollable in sh
   }
 }, 60_000)
 
+test.skipIf(!existsSync(executable))('Explorer rows and controls stay usable at narrow panel widths', async () => {
+  const frame = await mountExplorer('w1')
+  const browser = await chromium.launch({ headless: true, args: process.platform === 'linux' ? ['--no-sandbox'] : [] })
+  try {
+    const page = await browser.newPage({ viewport: { width: 646, height: 600 } })
+    const styles = await designSystemStyles()
+    for (const width of [116, 128, 160, 320]) {
+      await page.setContent(`<style>${styles}</style>${slotMarkup(frame, 600, width)}`)
+      const layout = await page.evaluate(() => {
+        const panel = document.querySelector<HTMLElement>('.tool-shell__panel')!
+        const frame = document.querySelector<HTMLElement>('.ui-tool-panel-frame')!
+        const row = document.querySelector<HTMLElement>('.qe-explorer-row[data-path="/repo/file-01.txt"]')!
+        const listRow = row.querySelector<HTMLElement>('.ui-list-row')!
+        const name = row.querySelector<HTMLElement>('.qe-explorer-name')!
+        const rowAction = row.querySelector<HTMLElement>('.qe-explorer-row-action-trigger')!
+        const modeGroup = document.querySelector<HTMLElement>('.qe-explorer-search-mode')!
+        const modeButtons = Array.from(modeGroup.querySelectorAll<HTMLElement>(':scope > .ui-button'))
+        const rail = frame.querySelector<HTMLElement>('.ui-tool-panel-frame__rail')!
+        const toolButtons = Array.from(rail.querySelectorAll<HTMLElement>(':scope > .ui-icon-button'))
+        const actionSummary = frame.querySelector<HTMLElement>('.ui-tool-panel-frame__actions summary[aria-label="More Explorer Actions"]')!
+        const bounds = (element: Element | Range) => {
+          const rect = element.getBoundingClientRect()
+          return { left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom, width: rect.width, height: rect.height }
+        }
+        const textBounds = (element: Element) => {
+          const range = document.createRange()
+          range.selectNodeContents(element)
+          return bounds(range)
+        }
+        const panelBounds = bounds(panel)
+        const rowBounds = bounds(listRow)
+        const nameBounds = bounds(name)
+        const rowActionBounds = bounds(rowAction)
+        const groupBounds = bounds(modeGroup)
+        const buttonBounds = modeButtons.map(bounds)
+        const labels = modeButtons.map(textBounds)
+        const railBounds = bounds(rail)
+        const toolbarTargets = [...toolButtons, actionSummary].map(bounds)
+        const toolbarTargetsSized = toolbarTargets.every((target) => target.width >= 24 && target.height >= 24)
+        const toolbarTargetsInsidePanel = toolbarTargets.every((target) =>
+          target.left >= panelBounds.left - 0.5
+          && target.right <= panelBounds.right + 0.5
+          && target.top >= panelBounds.top - 0.5
+          && target.bottom <= panelBounds.bottom + 0.5)
+        const railScrollable = rail.scrollWidth > rail.clientWidth + 1
+
+        const toolbarTargetsSeparated = toolbarTargets.every((target, index) =>
+          toolbarTargets.slice(index + 1).every((other) =>
+            target.right <= other.left + 0.5
+            || other.right <= target.left + 0.5
+            || target.bottom <= other.top + 0.5
+            || other.bottom <= target.top + 0.5))
+        const modesContained = buttonBounds.every((button, index) =>
+          button.left >= groupBounds.left - 0.5
+          && button.right <= groupBounds.right + 0.5
+          && labels[index]!.left >= button.left - 0.5
+          && labels[index]!.right <= button.right + 0.5)
+        const rowRect = bounds(row)
+        return {
+          panelOverflow: panel.scrollWidth > panel.clientWidth + 1,
+          rowHeight: rowRect.height,
+          rowActionNameCenterDelta: Math.abs(
+            (rowActionBounds.top + rowActionBounds.bottom) / 2
+            - (nameBounds.top + nameBounds.bottom) / 2,
+          ),
+          nameWidth: nameBounds.width,
+          nameContained: nameBounds.left >= rowBounds.left - 0.5 && nameBounds.right <= rowBounds.right + 0.5,
+          nameOverflows: name.scrollWidth > name.clientWidth,
+          nameTextOverflow: getComputedStyle(name).textOverflow,
+          nameWhiteSpace: getComputedStyle(name).whiteSpace,
+          nameOverflowStyle: getComputedStyle(name).overflow,
+          modeGap: buttonBounds[1]!.left - buttonBounds[0]!.right,
+          modesContained,
+          toolbarButtonCount: toolButtons.length,
+          railContained: toolButtons.every((button) => {
+            const target = bounds(button)
+            return target.left >= railBounds.left - 0.5
+              && target.right <= railBounds.right + 0.5
+              && target.top >= railBounds.top - 0.5
+              && target.bottom <= railBounds.bottom + 0.5
+          }),
+          toolbarTargetsInsidePanel,
+          toolbarTargetsSized,
+          toolbarTargetsSeparated,
+          railScrollable,
+        }
+      })
+
+      expect(layout.panelOverflow).toBe(false)
+      expect(layout.rowHeight).toBeLessThanOrEqual(32)
+      if (width === 320) expect(layout.rowHeight).toBe(32)
+      expect(layout.rowActionNameCenterDelta).toBeLessThan(1)
+      expect(layout.nameWidth).toBeGreaterThan(0)
+      expect(layout.nameContained).toBe(true)
+      expect(layout.nameTextOverflow).toBe('ellipsis')
+      expect(layout.nameWhiteSpace).toBe('nowrap')
+      expect(layout.nameOverflowStyle).toBe('hidden')
+      if (width === 116) expect(layout.nameOverflows).toBe(true)
+      expect(layout.modeGap).toBeGreaterThanOrEqual(3.5)
+      expect(layout.modesContained).toBe(true)
+      expect(layout.toolbarButtonCount).toBeGreaterThanOrEqual(6)
+      expect(layout.toolbarTargetsSized).toBe(true)
+      expect(layout.toolbarTargetsSeparated).toBe(true)
+      if (width === 160) {
+        expect(layout.railScrollable).toBe(true)
+        const finalToolVisible = await page.locator('.ui-tool-panel-frame__rail').evaluate((element) => {
+          const rail = element as HTMLElement
+          const buttons = rail.querySelectorAll<HTMLElement>(':scope > .ui-icon-button')
+          const lastButton = buttons.item(buttons.length - 1)!
+          rail.scrollLeft = rail.scrollWidth
+          const railBounds = rail.getBoundingClientRect()
+          const buttonBounds = lastButton.getBoundingClientRect()
+          const left = railBounds.left + rail.clientLeft
+          return buttonBounds.left >= left - 0.5
+            && buttonBounds.right <= left + rail.clientWidth + 0.5
+        })
+        expect(finalToolVisible).toBe(true)
+      } else {
+        expect(layout.railContained).toBe(true)
+        expect(layout.toolbarTargetsInsidePanel).toBe(true)
+      }
+    }
+
+    for (const [width, height] of [[116, 170], [128, 180]] as const) {
+      await page.setContent(`<style>${styles}</style>${slotMarkup(frame, height, width)}`)
+      const first = page.locator('[role="treeitem"][data-path="/repo/file-01.txt"]')
+      const railMetrics = await page.locator('.ui-tool-panel-frame__rail').evaluate((element) => {
+        const rail = element as HTMLElement
+        return {
+          height: rail.getBoundingClientRect().height,
+          scrollable: rail.scrollWidth > rail.clientWidth + 1,
+        }
+      })
+      expect(await rowFitsInTree(first)).toBe(true)
+      expect(railMetrics.height).toBeLessThanOrEqual(34)
+      expect(railMetrics.scrollable).toBe(true)
+      const finalToolVisible = await page.locator('.ui-tool-panel-frame__rail').evaluate((element) => {
+        const rail = element as HTMLElement
+        const buttons = rail.querySelectorAll<HTMLElement>(':scope > .ui-icon-button')
+        const lastButton = buttons.item(buttons.length - 1)!
+        rail.scrollLeft = rail.scrollWidth
+        const railBounds = rail.getBoundingClientRect()
+        const buttonBounds = lastButton.getBoundingClientRect()
+        const left = railBounds.left + rail.clientLeft
+        return buttonBounds.left >= left - 0.5
+          && buttonBounds.right <= left + rail.clientWidth + 0.5
+      })
+      expect(finalToolVisible).toBe(true)
+    }
+  } finally {
+    await browser.close()
+  }
+}, 60_000)
+
 test.skipIf(!existsSync(executable))('search mode keeps its named input and a selector stays available without a layout worktree', async () => {
   await mountExplorer('w1')
   const modeGroup = container.querySelector<HTMLElement>('[aria-label="Explorer search mode"]')!
