@@ -398,6 +398,9 @@ describe('choosing the agent', () => {
 
     const refusal = await failure(t.call(A('prepareLaunch'), { agent: 'claude', cwd: t.userHome, hookArgs: [], hookEnv: {} }))
     expect(refusal).toMatchObject({ code: RpcErrorCode.InvalidParams })
+    expect(refusal.message).toMatch(/Claude/)
+    expect(refusal.message).toMatch(/Agent settings/)
+    expect(refusal.message).not.toMatch(/agent claude/)
 
     await t.call(A('setEnabled'), { agent: 'claude', enabled: true })
     const restored = await t.call(A('list'))
@@ -1495,9 +1498,11 @@ describe('launch settings', () => {
     await settle()
     expect(t.changes()).toBe(before)
     expect(existsSync(join(t.userHome, '.claude.json'))).toBe(false)
-    expect(await failure(t.call(A('prepareLaunch'), { agent: 'claude', cwd: t.userHome, model: 'opus', hookArgs: [], hookEnv: {} }))).toMatchObject({
-      code: RpcErrorCode.InvalidParams
-    })
+    const refusal = await failure(t.call(A('prepareLaunch'), { agent: 'claude', cwd: t.userHome, model: 'opus', hookArgs: [], hookEnv: {} }))
+    expect(refusal).toMatchObject({ code: RpcErrorCode.InvalidParams })
+    expect(refusal.message).toMatch(/Claude/)
+    expect(refusal.message).toMatch(/Agent settings/)
+    expect(refusal.message).not.toMatch(/agent claude/)
   })
 
   test('prepareLaunch and plan carry a pick into the command, the record and launchSettings', async () => {
