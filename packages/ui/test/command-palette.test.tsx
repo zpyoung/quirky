@@ -8,6 +8,8 @@ import { AppContext, type AppContextValue } from '../src/context'
 import type { HostState, WindowPluginHost } from '../src/plugins/host'
 import { CommandPalette } from '../src/plugins/CommandPalette'
 import { encodeFileId } from '../src/plugins/palette'
+import editorPlugin from '../../../plugins/quirky.editor/quirky-plugin.json'
+import gitPlugin from '../../../plugins/quirky.git/quirky-plugin.json'
 
 type Call = { method: string; params: unknown }
 type Handler = (params: unknown) => unknown
@@ -40,6 +42,18 @@ afterEach(async () => {
 const worktree = (id: string, name: string): Worktree => ({ id, repoId: 'repo', name, branch: name, path: `/wt/${id}` }) as Worktree
 
 const WORKTREES = [worktree('wt_a', 'alpha-tree'), worktree('wt_b', 'beta-tree')]
+const SAVE_COMMANDS = [editorPlugin, gitPlugin].map((plugin) => {
+  const declaration = plugin.contributes.command.find((command) => command.id === 'save')
+  if (!declaration) throw new Error(`Missing save command declaration for ${plugin.id}`)
+  return {
+    id: `command:${plugin.id}/${declaration.id}`,
+    plugin: plugin.id,
+    title: declaration.title,
+    description: declaration.description,
+    module: null
+  }
+})
+
 const MODEL = {
   commands: [
     { id: 'command:acme/build', plugin: 'acme', title: 'Build project', module: null },
@@ -351,6 +365,20 @@ test('the search field says what is searched', async () => {
   const palette = await mount()
   const label = palette.input().getAttribute('aria-label') ?? ''
   for (const word of ['commands', 'tools', 'views', 'worktrees', 'files']) expect(label).toContain(word)
+})
+
+test('searching save commands keeps both declared targets separately selectable', async () => {
+  const palette = await mount({ model: { ...MODEL, commands: SAVE_COMMANDS } })
+  await palette.chooseScope('Commands')
+  await palette.search('sav')
+
+  const titles = palette.titles()
+  expect(titles).toHaveLength(2)
+  expect(new Set(titles).size).toBe(2)
+
+  await palette.click(titles[0]!)
+  await palette.click(titles[1]!)
+  expect(palette.ran.commands).toEqual(SAVE_COMMANDS.map(({ id }) => id))
 })
 
 test('running any kind records it as a recent', async () => {
