@@ -48,6 +48,7 @@ function browserEntry(): string {
     const bufferId = 'buffer-document-header-layout'
     const tabId = 'tab-document-header-layout'
     const worktreeId = 'wt-document-header-layout'
+    const mode = location.hash === '#preview' ? 'preview' : 'rich'
     const content = '# Notes\\n\\nCurrent notes for the layout fixture.\\n'
     const baseline = '# Notes\\n\\nOriginal notes for the layout fixture.\\n'
     const buffer = {
@@ -67,7 +68,7 @@ function browserEntry(): string {
       dirty: false,
       external: null,
       diskContent: null,
-      mode: 'rich',
+      mode,
       tabId,
       preview: false,
       pinned: false,
@@ -115,7 +116,7 @@ function browserEntry(): string {
         }
         if (method === 'quirky.editor/markdown') {
           if (params.action === 'capabilities') {
-            return Promise.resolve({ richEligible: true, previewAvailable: true, imageUrls: {} })
+            return Promise.resolve({ richEligible: true, previewAvailable: true, previewHtml: '<h1>Notes</h1>', imageUrls: {} })
           }
           if (params.action === 'notes') return Promise.resolve({ notes: [] })
           if (params.action === 'toc') return Promise.resolve({ headings: [] })
@@ -143,7 +144,7 @@ function browserEntry(): string {
     } as unknown as UiPluginContext
 
     createRoot(document.getElementById('document-root')!).render(
-      createElement(DocumentSurface, { context, input: { bufferId, tabId, mode: 'rich' } })
+      createElement(DocumentSurface, { context, input: { bufferId, tabId, mode } })
     )
   `
 }
@@ -206,6 +207,33 @@ async function measureHeader(page: Page) {
       changes: rect(changes),
       controls: visibleControls,
       actionControls
+    }
+  })
+}
+async function measurePreviewToolbar(page: Page) {
+  return page.evaluate(() => {
+    const contentPane = document.querySelector<HTMLElement>('.qe-document-content')
+    const surface = document.querySelector<HTMLElement>('.markdown-surface--preview')
+    const toolbar = surface?.querySelector<HTMLElement>('.markdown-toolbar')
+    if (!contentPane || !surface || !toolbar) throw new Error('The Markdown preview or content pane did not render.')
+    const rect = (element: Element) => {
+      const bounds = element.getBoundingClientRect()
+      return { left: bounds.left, right: bounds.right, top: bounds.top, bottom: bounds.bottom, width: bounds.width, height: bounds.height }
+    }
+    const buttons = [...toolbar.querySelectorAll<HTMLButtonElement>('button')].map((button) => ({
+      label: button.textContent?.trim() ?? '',
+      ...rect(button)
+    }))
+    const exportButton = buttons.find((button) => button.label === 'Export as PDF')
+    const label = [...toolbar.querySelectorAll<HTMLElement>('span')]
+      .find((element) => element.textContent?.trim() === 'Markdown Preview')
+    if (!exportButton || !label || buttons.length < 3) throw new Error('The preview toolbar controls did not render.')
+    return {
+      contentPane: rect(contentPane),
+      toolbar: rect(toolbar),
+      buttons,
+      exportButton,
+      label: rect(label)
     }
   })
 }
@@ -348,6 +376,49 @@ test.skipIf(!existsSync(executable))('keeps every rich Markdown toolbar command 
     expect(richViewport.height).toBeGreaterThanOrEqual(richViewport.lineHeight * 2)
     await page.locator('.tiptap p').click()
     expect(await page.locator('.tiptap').evaluate((element) => element.contains(document.activeElement))).toBe(true)
+  } finally {
+    await context.close()
+  }
+}, 60_000)
+
+test.skipIf(!existsSync(executable))('spans the Markdown preview toolbar across the content pane at 620px and 400px', async () => {
+  const context = await browser!.newContext({ viewport: { width: 800, height: 600 } })
+  const page = await context.newPage()
+  try {
+    await page.setContent(pageMarkup())
+    for (const stylesheet of STYLESHEETS) {
+      await page.addStyleTag({ content: readFileSync(join(ROOT, stylesheet), 'utf8') })
+    }
+    await page.evaluate(() => { location.hash = '#preview' })
+    await page.addScriptTag({ type: 'module', content: browserBundle })
+    await page.getByRole('button', { name: 'Export as PDF', exact: true }).waitFor()
+
+    for (const width of [620, 400]) {
+      await page.locator('#document-pane').evaluate((pane, paneWidth) => {
+        ;(pane as HTMLElement).style.width = `${paneWidth}px`
+      }, width)
+      const preview = await measurePreviewToolbar(page)
+      expect(preview.contentPane.width).toBe(width)
+      expect(Math.abs(preview.toolbar.left - preview.contentPane.left)).toBeLessThanOrEqual(1)
+      expect(Math.abs(preview.toolbar.right - preview.contentPane.right)).toBeLessThanOrEqual(1)
+      for (const control of [...preview.buttons, preview.label]) {
+        expect(control.left).toBeGreaterThanOrEqual(preview.contentPane.left)
+        expect(control.right).toBeLessThanOrEqual(preview.contentPane.right)
+      }
+
+      const firstButton = preview.buttons[0]!
+      const secondButton = preview.buttons[1]!
+      const interButtonGap = secondButton.left - firstButton.right
+      expect(Math.abs(firstButton.top - secondButton.top)).toBeLessThanOrEqual(1)
+      const exportCenter = (preview.exportButton.top + preview.exportButton.bottom) / 2
+      const labelCenter = (preview.label.top + preview.label.bottom) / 2
+      if (width === 620) expect(Math.abs(exportCenter - labelCenter)).toBeLessThanOrEqual(1)
+      if (Math.abs(exportCenter - labelCenter) <= 1) {
+        const exportToLabelGap = preview.label.left - preview.exportButton.right
+        expect(exportToLabelGap).toBeGreaterThanOrEqual(8)
+        expect(exportToLabelGap).toBeGreaterThanOrEqual(interButtonGap)
+      }
+    }
   } finally {
     await context.close()
   }
