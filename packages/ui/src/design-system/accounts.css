@@ -10,7 +10,7 @@
   flex: 0 1 auto;
   max-width: 100%;
   position: relative;
-  width: calc(var(--ui-space-24) * 8);
+  width: max-content;
 }
 
 .accounts-mount-root--bar:has(.usage-status-bar--hidden) {
@@ -393,10 +393,11 @@
 .accounts-ui .usage-chips {
   align-items: center;
   display: flex;
-  flex: 1 1 0;
+  flex: 1 1 auto;
   gap: var(--ui-space-4);
   min-width: var(--usage-more-min-width, 0px);
   overflow: hidden;
+  width: var(--usage-chips-width, max-content);
 }
 
 .accounts-ui .usage-chip {
