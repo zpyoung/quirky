@@ -24,6 +24,8 @@ Account selection, inactive-account usage, and usage refresh operate on the sele
 
 The Usage status bar measures the rendered chip container, gaps and overflow-button widths. It keeps an exact visible prefix and a `+N` button for the omitted providers; the button's tooltip names that suffix. Compact, Detailed, Remaining and badge-only changes remeasure, and hidden measurement elements do not enlarge the status bar.
 
+Refreshing usage does not add chips for unconfigured providers. Providers with account, credential or cached-usage evidence remain visible while fetching.
+
 Each provider chip opens that provider's usage details; Claude and Codex details include the account switcher. Chips support click, Enter and Space, and their accessible names include the provider and current usage or status, plus reset timing when available.
 
 Codex's **Open** sign-in action invokes the existing public `quirky.terminal/openExternal` method with the validated displayed authorize URL. It does not rely on a webview pop-up or complete/select the account; invocation failures leave Copy and Cancel available. Actual system-browser and OAuth completion are separate from an accepted opener call.
