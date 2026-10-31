@@ -56,10 +56,12 @@ states, each with Orca's glyph and label ([D4](../../../loop/decisions/m1-agent-
 | blocked | state blocked | Blocked | red dot |
 | failed | done with outcome failure | Failed | red dot |
 | interrupted | done, interrupted or outcome cancellation | Interrupted | muted dot |
-| done | done otherwise | Done | green dot |
+| done | done otherwise, not a session boundary | Done | green dot |
 | unverifiable | live state, no evidence for 30 minutes, session running | No recent update | dashed amber circle |
-| idle | live state, no evidence for 30 minutes, session not running | Idle | faint grey dot |
+| idle | live state, no evidence for 30 minutes, session not running; or done with a session boundary | Idle | faint grey dot |
 | unconfirmed | a live row restored after a daemon restart, no event since | Couldn't confirm | dashed amber circle |
+
+Done session-boundary rows display as `idle` and are not unread in Activity unless failure or interruption takes precedence. Their coarse status remains `done`, derived from the underlying state. Boundaries with live child work keep the folded working or waiting display and their unread receipt.
 
 A progress percentage the program reports replaces the spinner or question icon with a ring.
 

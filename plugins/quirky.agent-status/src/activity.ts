@@ -21,15 +21,10 @@ const ATTENTION_ORDER: Record<AgentDisplayState, number> = {
 
 const COMPLETED: Partial<Record<AgentDisplayState, true>> = { done: true, failed: true, interrupted: true }
 
-/** A boundary snapshot is idle, while completed turns remain Done regardless of acknowledgment. */
+/** Derives Activity display from the retained row, marking a vanished live row interrupted. */
 function displayOfSnapshot(snapshot: StoredActivity, now: number) {
   const row: AgentRow = !snapshot.live && snapshot.row.state !== 'done' ? { ...snapshot.row, state: 'done', interrupted: true } : snapshot.row
-  const result = displayOf(row, now, snapshot.live)
-  if (row.sessionBoundary === true && result.display === 'done') {
-    const display: AgentDisplayState = 'idle'
-    return { ...result, display, label: 'Idle' }
-  }
-  return result
+  return displayOf(row, now, snapshot.live)
 }
 
 /** Retains the latest status snapshot per terminal session, independently of its live status row. */
@@ -124,9 +119,10 @@ export class ActivityFeed {
       const session = byId.get(snapshot.sessionId)
       const current = this.refreshMetadata(snapshot, session, worktreeNames)
       if (current.cleared || (query.worktree !== undefined && current.worktreeId !== query.worktree)) continue
-      if (query.unreadOnly && current.acknowledged) continue
-
       const { display, label, detail } = displayOfSnapshot(current, this.now())
+      const unread = !current.acknowledged && !(current.row.sessionBoundary === true && display === 'idle')
+      if (query.unreadOnly && !unread) continue
+
       const thread: ActivityThread = {
         sessionId: current.sessionId,
         worktreeId: current.worktreeId,
@@ -141,7 +137,7 @@ export class ActivityFeed {
         prompt: current.row.prompt,
         detail,
         children: current.row.children,
-        unread: !current.acknowledged,
+        unread,
         live: current.live
       }
       if (

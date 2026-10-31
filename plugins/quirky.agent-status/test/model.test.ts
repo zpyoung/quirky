@@ -68,7 +68,6 @@ describe('displayOf', () => {
     ['interrupted flag', { state: 'done', interrupted: true, outcome: 'cancellation' }, true, 'interrupted'],
     ['cancellation outcome alone', { state: 'done', outcome: 'cancellation' }, true, 'interrupted'],
     ['interrupted flag alone', { state: 'done', interrupted: true }, true, 'interrupted'],
-    ['session boundary reads done', { state: 'done', sessionBoundary: true }, true, 'done'],
     ['unconfirmed', { state: 'working', restoredUnconfirmed: true }, true, 'unconfirmed'],
     ['unconfirmed waiting', { state: 'waiting', restoredUnconfirmed: true }, false, 'unconfirmed'],
     ['restored done row is just done', { state: 'done', restoredUnconfirmed: true }, true, 'done'],
