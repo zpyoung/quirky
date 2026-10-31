@@ -20,6 +20,8 @@ Plugin React surfaces compose shared buttons, icon buttons, fields, lists, tabs,
 
 SC1 Files: opening Files shows the actual worktree tree in the existing right-top tool. Search names/contents, selected/expanded/ignored rows, create/rename/cancel, row/path/terminal actions, drag/import, undo/redo, preferences, refresh, empty/loading/error states retain behavior. Example: expand src, select app.ts, open it; the actual document opens without moving Files or changing worktree.
 
+Files row-action menus use the shared portaled popup so the scrolling tree and footer cannot clip them. The popup stays within the viewport, opens above the row when needed, and preserves Escape dismissal and inline Rename focus.
+
 SC2 Source: opening app.ts renders real CodeMirror content in the center view with themed gutter, selection, minimap and accessible document actions. Edit/save, selection context, find/replace, rename, wrap and zoom still use existing state/commands. Example: change text and save; the acknowledged draft and file bytes change through the existing save path, not component-local persistence.
 
 SC3 Documents: Markdown rich/source/preview formatting, search, links, front matter, templates, table of contents, review notes, detached preview and export remain usable. Both themes have readable content, toolbar, selected mode and errors. Example: switch rich to source to preview; content is preserved. Exported PDF HTML is not app chrome; preserve its self-contained printable rendering without local plugin CSS construction.
