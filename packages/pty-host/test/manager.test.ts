@@ -202,7 +202,8 @@ describe('shell-ready barrier', () => {
 
   test('SC-2: input sent before the marker waits for it and arrives in order', async () => {
     const { manager, home } = newManager()
-    await manager.create(params('b', sh(`sleep 0.7; ${MARKER}; echo READY; cat`), { shellReady: true }))
+    // READY goes before the marker: printed after it, the released input's echo can beat it on a busy host
+    await manager.create(params('b', sh(`sleep 0.7; echo READY; ${MARKER}; cat`), { shellReady: true }))
     const out = await tap(manager, 'b')
     expect(manager.list()[0]!.shellState).toBe('pending')
     manager.write('b', enc('one\n'))
