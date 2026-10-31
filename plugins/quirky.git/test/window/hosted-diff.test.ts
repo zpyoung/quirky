@@ -88,6 +88,37 @@ test('Source Control file diffs are distinguishable from an open editor tab', as
   expect(titles.some((title) => title?.includes('README.md') && /\bdiff\b/i.test(title))).toBe(true)
 }, SLOW)
 
+test('branch and commit file diffs of the same path have distinct terminal tab titles', async () => {
+  const world = await boot(scratch, { published: false })
+  const path = 'math.ts'
+  world.commit({ [path]: 'A\nb\nc\nd\ne\n' }, 'Touch math')
+  const commit = world.git('rev-parse', 'HEAD')
+
+  await world.run('open-diff', { path, source: 'branch', preview: false })
+  const branch = await world.win.waitFor(async () => diffTabs(await terminalWorkspace(world)).find(({ tab }) =>
+    record(tab.input).path === path && record(tab.input).source === 'branch'
+  ) ?? null)
+
+  await world.run('open-diff', { path, source: 'commit', commit, preview: false })
+  const tabs = await world.win.waitFor(async () => {
+    const opened = diffTabs(await terminalWorkspace(world))
+    const branchTab = opened.find(({ tab }) => record(tab.input).path === path && record(tab.input).source === 'branch')
+    const commitTab = opened.find(({ tab }) => record(tab.input).path === path && record(tab.input).source === 'commit')
+    return branchTab && commitTab ? { branch: branchTab, commit: commitTab } : null
+  })
+
+  expect(tabs.branch.tab.id).toBe(branch.tab.id)
+  expect(tabs.branch.tab.preview).toBe(false)
+  expect(tabs.commit.tab.preview).toBe(false)
+  expect(tabs.branch.group.activeTab).toBe(tabs.commit.tab.id)
+  expect(tabs.branch.group.activeTab).not.toBe(tabs.branch.tab.id)
+
+  const branchTitle = await world.win.waitFor(() => q(`[data-tab="${String(tabs.branch.tab.id)}"] .qt-tab-title`))
+  const commitTitle = await world.win.waitFor(() => q(`[data-tab="${String(tabs.commit.tab.id)}"] .qt-tab-title`))
+  expect(text(branchTitle)).toBe(`${path} (Branch Diff)`)
+  expect(text(commitTitle)).toBe(`${path} (Commit Diff)`)
+}, SLOW)
+
 test('Source Control preview replaces only a clean hosted tab, promotes on double click or pin, and splits with Option-click', async () => {
   const world = await boot(scratch, { published: false })
   world.write('math.ts', 'changed math\n')
