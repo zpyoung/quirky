@@ -424,7 +424,7 @@ async function main(argv: string[]): Promise<boolean> {
     const log = join(homedir(), 'test-slots', 'durations.log')
     const files = slowestFirst((await new Response(Bun.stdin.stream()).text()).split('\n').filter(Boolean), log)
     const result = await runFiles(cwd, files, flags, value('--jobs'), 5, slotted(value('--slots'), value('--land') === 1, log))
-    console.log(`${RESULT_PREFIX}${JSON.stringify(result)}`)
+    process.stdout.write(`${RESULT_PREFIX}${JSON.stringify(result)}\n`)
     return result.ok
   }
   const remote = remoteConfig(cwd)
@@ -466,4 +466,4 @@ async function main(argv: string[]): Promise<boolean> {
   return away.ok && local.ok
 }
 
-if (import.meta.main) process.exit((await main(Bun.argv.slice(2))) ? 0 : 1)
+if (import.meta.main) process.exitCode = (await main(Bun.argv.slice(2))) ? 0 : 1

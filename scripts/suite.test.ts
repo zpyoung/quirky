@@ -232,6 +232,94 @@ test('the suite CLI profiles each selected file in local mode', async () => {
   ])
 }, 20_000)
 
+test('the worker CLI preserves its suite result after backpressured stdout', async () => {
+  const home = join(dir, 'worker-home')
+  const quirkyHome = join(dir, 'worker-quirky-home')
+  mkdirSync(home)
+  mkdirSync(quirkyHome)
+  const filler = 'x'.repeat(300_000) + '\n'
+  const resultQueued = join(dir, 'result-queued')
+  const preload = join(dir, 'stdout-preload.ts')
+  writeFileSync(preload, `import { writeFileSync } from 'node:fs'
+process.stdout.write('x'.repeat(${filler.length - 1}) + '\\n')
+const resultQueued = process.env.RESULT_QUEUED!
+const stdoutWrite = process.stdout.write
+process.stdout.write = function (this: typeof process.stdout, ...args: unknown[]) {
+  const result: boolean = Reflect.apply(stdoutWrite, this, args)
+  if (typeof args[0] === 'string' && args[0].startsWith('suite-result ')) writeFileSync(resultQueued, '')
+  return result
+} as typeof process.stdout.write
+const consoleLog = console.log
+console.log = function (this: typeof console, ...args: unknown[]) {
+  const result: void = Reflect.apply(consoleLog, this, args)
+  if (typeof args[0] === 'string' && args[0].startsWith('suite-result ')) writeFileSync(resultQueued, '')
+  return result
+} as typeof console.log
+`)
+  const scope = createProcessScope(quirkyHome)
+  try {
+    const child = scope.spawn([
+      '/bin/bash',
+      '-o',
+      'pipefail',
+      '-c',
+      '"$@" | { while [ ! -e "$RESULT_QUEUED" ]; do sleep 0.1; done; sleep 0.1; cat; }',
+      '--',
+      process.execPath,
+      '--preload',
+      preload,
+      join(import.meta.dir, 'suite.ts'),
+      '--worker',
+      '--jobs',
+      '4',
+      '--slots',
+      '4',
+      '--land',
+      '0',
+    ], {
+      cwd: dir,
+      env: { ...process.env, HOME: home, RESULT_QUEUED: resultQueued },
+      stdin: 'pipe',
+      stdout: 'pipe',
+      stderr: 'pipe',
+    })
+    let timedOut = false
+    let stdout: Promise<string> | undefined
+    let stderr: Promise<string> | undefined
+    const watchdog = setTimeout(() => {
+      timedOut = true
+      scope.killNow()
+      child.kill('SIGKILL')
+    }, 10_000)
+    try {
+      child.stdin.end()
+      const stdoutRead = new Response(child.stdout).text()
+      const stderrRead = new Response(child.stderr).text()
+      stdout = stdoutRead
+      stderr = stderrRead
+      const [exitCode, output, error] = await Promise.all([child.exited, stdoutRead, stderrRead])
+      expect(timedOut).toBe(false)
+      expect(exitCode, error).toBe(0)
+      expect(error).toBe('')
+      expect(output.slice(0, filler.length)).toBe(filler)
+      const resultLine = output.slice(filler.length).split(/\r?\n/).find((line) => line.startsWith('suite-result '))
+      expect(resultLine, 'suite result missing after queued stdout').toBeDefined()
+      expect(JSON.parse(resultLine!.slice('suite-result '.length))).toEqual({ ok: true, flaky: [] })
+    } finally {
+      clearTimeout(watchdog)
+      if (child.exitCode === null) {
+        scope.killNow()
+        child.kill('SIGKILL')
+      }
+      stdout ??= new Response(child.stdout).text()
+      stderr ??= new Response(child.stderr).text()
+      await Promise.allSettled([child.exited, stdout, stderr])
+    }
+  } finally {
+    await scope.cleanup()
+  }
+}, 30_000)
+
 test('discover lists the tracked and untracked test files under the given paths, as bun would', () => {
   Bun.spawnSync(['git', 'init', '-q'], { cwd: dir })
   passing('a.test.ts')

@@ -1,7 +1,9 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
+import { spawn } from 'node:child_process'
 import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { dirname, join } from 'node:path'
+import { delimiter, dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import type { bunTestFile } from '../suite'
 import { type Context, runCli } from './cli'
 import type { Attempt, Baseline, FileError, FileResult, GhRunner, Plan, TestStatus, Verdict } from './types'
@@ -1218,4 +1220,127 @@ describe('affected', () => {
     expect(await runCli(['affected'], ctx)).toBe(0)
     expect(calls[0].join(' ')).toContain('repos/acme/quirky/actions/artifacts')
   })
+})
+
+describe('run-files process output', () => {
+  test('flushes more than 64 KiB of JSON before exiting', async () => {
+    const worker = join(root, 'worker')
+    const home = join(root, 'home')
+    const quirkyHome = join(root, 'quirky-home')
+    const bin = join(worker, 'bin')
+    mkdirSync(worker, { recursive: true })
+    mkdirSync(home)
+    mkdirSync(quirkyHome)
+    mkdirSync(bin)
+    writeFileSync(join(bin, 'flock'), '#!/bin/sh\nshift 4\nexec "$@"\n', { mode: 0o755 })
+
+    const testFile = 'large-results.test.ts'
+    const testNames = Array.from(
+      { length: 1000 },
+      (_, index) => `case-${index.toString().padStart(4, '0')}-${'x'.repeat(340)}`
+    )
+    writeFileSync(
+      join(worker, testFile),
+      `import { expect, test } from 'bun:test'\n\n${testNames.map((name) => `test(${JSON.stringify(name)}, () => expect(true).toBe(true))`).join('\n')}\n`
+    )
+    const resultQueued = join(worker, 'result-queued')
+    writeFileSync(
+      join(worker, 'stdout-marker.cjs'),
+      `const realWrite = process.stdout.write.bind(process.stdout)
+let marked = false
+process.stdout.write = function (chunk, ...args) {
+  const result = realWrite(chunk, ...args)
+  const startsResult = typeof chunk === 'string'
+    ? chunk.startsWith('file-results ')
+    : Buffer.isBuffer(chunk) && chunk.subarray(0, 13).toString() === 'file-results '
+  if (!marked && startsResult) {
+    marked = true
+    require('node:fs').writeFileSync(process.env.RESULT_QUEUED, '')
+  }
+  return result
+}
+`
+    )
+
+    const child = spawn(
+      '/bin/bash',
+      [
+        '-o', 'pipefail',
+        '-c', '"$@" | { while [ ! -e "$RESULT_QUEUED" ]; do sleep 0.1; done; sleep 0.1; cat; }',
+        '--',
+        process.execPath,
+        '--preload',
+        join(worker, 'stdout-marker.cjs'),
+        fileURLToPath(new URL('./cli.ts', import.meta.url)),
+        'run-files',
+        '--jobs', '1',
+        '--slots', '1'
+      ],
+      {
+        cwd: worker,
+        detached: true,
+        env: {
+          ...process.env,
+          RESULT_QUEUED: resultQueued,
+          HOME: home,
+          QUIRKY_HOME: quirkyHome,
+          PATH: `${bin}${delimiter}${process.env.PATH ?? ''}`
+        },
+        stdio: 'pipe'
+      }
+    )
+    const stdout: Buffer[] = []
+    let stderr = ''
+    child.stdout.on('data', (chunk: Buffer) => stdout.push(chunk))
+    child.stdout.resume()
+    child.stderr.on('data', (chunk: Buffer) => {
+      stderr += chunk.toString('utf8')
+    })
+
+    const closed = Promise.withResolvers<{ code: number | null; signal: NodeJS.Signals | null; error?: Error }>()
+    child.once('error', (error) => closed.resolve({ code: null, signal: null, error }))
+    child.once('close', (code, signal) => closed.resolve({ code, signal }))
+    const killWorker = (force = false) => {
+      if (child.pid === undefined || (!force && (child.exitCode !== null || child.signalCode !== null))) return
+      try {
+        process.kill(-child.pid, 'SIGKILL')
+      } catch (error) {
+        if (!(error instanceof Error && 'code' in error && error.code === 'ESRCH')) throw error
+      }
+    }
+
+    let timedOut = false
+    // Keep the real subprocess pipeline bounded and reap its process group.
+    const timeout = setTimeout(() => {
+      timedOut = true
+      killWorker(true)
+    }, 45_000)
+    child.stdin.end(`${testFile}\n`)
+    try {
+      const exit = await closed.promise
+      const output = Buffer.concat(stdout).toString('utf8')
+
+      expect(timedOut).toBe(false)
+      expect(exit.error).toBeUndefined()
+      expect(exit.code).toBe(0)
+      expect(exit.signal).toBeNull()
+      expect(stderr).toBe('')
+      expect(output.length).toBeGreaterThan(64 * 1024)
+      expect(output.startsWith('file-results ')).toBe(true)
+
+      const payload = JSON.parse(output.slice('file-results '.length)) as { results: FileResult[]; skipped: boolean }
+      expect(payload.skipped).toBe(false)
+      expect(payload.results).toHaveLength(1)
+      expect(payload.results[0].file).toBe(testFile)
+      expect(payload.results[0].first.exitCode).toBe(0)
+      expect(payload.results[0].first.fileError).toBeNull()
+      expect(payload.results[0].first.tests).toEqual(
+        testNames.map((name) => ({ key: `${testFile}\0\0${name}`, status: 'passed' }))
+      )
+    } finally {
+      clearTimeout(timeout)
+      killWorker()
+      await closed.promise
+    }
+  }, 60_000)
 })

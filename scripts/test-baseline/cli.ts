@@ -585,4 +585,4 @@ export async function runCli(argv: string[], ctx: Context = defaultContext()): P
   }
 }
 
-if (import.meta.main) process.exit(await runCli(process.argv.slice(2)))
+if (import.meta.main) process.exitCode = await runCli(process.argv.slice(2))
