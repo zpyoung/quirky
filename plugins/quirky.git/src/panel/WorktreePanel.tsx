@@ -1214,7 +1214,7 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
                 viewMode={viewMode}
                 collapsedDirs={collapsed}
                 onToggleDir={sectionToggle}
-                selected={openedPath === null || selected.includes(openedPath) ? selected : [...selected, openedPath]}
+                selected={selected.length === 0 && openedPath !== null ? [openedPath] : selected}
                 handlers={handlers}
               />
             </SectionFrame>

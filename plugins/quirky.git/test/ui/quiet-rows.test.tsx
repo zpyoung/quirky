@@ -55,6 +55,22 @@ describe('Changes rows are quiet', () => {
     unmount()
   })
 
+  test('a bulk selection replaces the opened row highlight, so what looks selected is what bulk actions change', async () => {
+    const { element, unmount } = await open()
+    const selectedPaths = () => qa(element, '[data-row-path]')
+      .filter((row) => q(row, '.ui-list-row--selected') !== null)
+      .map((row) => row.getAttribute('data-row-path'))
+    const main = (path: string) => q(rowItem(element, path), '.ui-list-row__main') as HTMLElement
+    await act(async () => { main('src/math.ts').click() })
+    await settle()
+    expect(selectedPaths()).toEqual(['src/math.ts'])
+    await act(async () => { main('notes.txt').dispatchEvent(new MouseEvent('click', { bubbles: true, metaKey: true })) })
+    await settle()
+    expect(selectedPaths()).not.toContain('src/math.ts')
+    expect(selectedPaths()).toContain('notes.txt')
+    unmount()
+  })
+
   test('line counts and actions stay in the DOM with their labels, inside the hover reveal', async () => {
     const { element, unmount } = await open()
     const row = rowItem(element, 'src/math.ts')
