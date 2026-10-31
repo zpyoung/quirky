@@ -83,6 +83,7 @@ Every scenario below must be driven through the real CLI or daemon API in an iso
    - **Data after:** Before consent no search DB exists; after consent the enabled policy survives restart and the private term becomes searchable once indexed. A rejected enable never reports success.
 8. **SC-08: Settings status and navigation.** Agent Session Search shows local status, indexed/total session and searchable-message counts, failed files and unchecked roots. It polls faster while indexing, offers Open in sidebar with focused search, and supports the same API-driven actions.
    - **Screen states:** Indexing: indexed-of-total and message counts. Current: total searchable sessions/messages. Degraded: read/scan issue counts. Open: Agents panel and search focus visible in daemon UI state.
+   - **Advanced:** Searchable-session/message counts, files owed, files needing retry and unchecked roots stay inside the Advanced card and expand or collapse with it.
 9. **SC-09: Disable preserves, clear destroys only derived search data.** Disable closes the index without deleting it. Confirmed clear switches off before deleting DB/WAL/SHM; no immediate rebuild. Cancelling clear changes nothing. A later explicit enable rebuilds from original transcripts.
    - **Data before:** **Search** is enabled with indexed term "login" and intact source transcripts.
    - **Walkthrough:** Disable, enable, cancel clear, then confirm clear through the irreversible-action API with explicit consent.

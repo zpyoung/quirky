@@ -350,14 +350,14 @@ function SearchSettings({ context, report, embedded = false }: SearchSettingsPro
       <details className="qvh-settings-card qvh-settings-advanced">
         <summary><SectionHeader title="Advanced" /></summary>
         <ListRow title="Clear search data" description="Turns off search first, then removes only the searchable copy from this computer. Agent transcripts are not affected." trailing={<Button variant="destructive" data-vault-clear-search disabled={state.busy || !status} onClick={() => void clear()}>Clear</Button>} />
+        {status ? <div className="qvh-status-grid" aria-label="Search index counts">
+          <div className="qvh-status-cell" data-vault-status-sessions><strong>{sessions.toLocaleString()}</strong><span>searchable sessions</span></div>
+          <div className="qvh-status-cell" data-vault-status-messages><strong>{status.messagesIndexed.toLocaleString()}</strong><span>searchable messages</span></div>
+          <div className="qvh-status-cell" data-vault-status-owed><strong>{status.filesDue.toLocaleString()}</strong><span>files still owed</span></div>
+          <div className="qvh-status-cell" data-vault-status-failed><strong>{status.filesFailed.toLocaleString()}</strong><span>files needing retry</span></div>
+          <div className="qvh-status-cell" data-vault-status-roots><strong>{status.degradedRoots.length.toLocaleString()}</strong><span>unchecked roots</span></div>
+        </div> : null}
       </details>
-      {status ? <div className="qvh-status-grid" aria-label="Search index counts">
-        <div className="qvh-status-cell" data-vault-status-sessions><strong>{sessions.toLocaleString()}</strong><span>searchable sessions</span></div>
-        <div className="qvh-status-cell" data-vault-status-messages><strong>{status.messagesIndexed.toLocaleString()}</strong><span>searchable messages</span></div>
-        <div className="qvh-status-cell" data-vault-status-owed><strong>{status.filesDue.toLocaleString()}</strong><span>files still owed</span></div>
-        <div className="qvh-status-cell" data-vault-status-failed><strong>{status.filesFailed.toLocaleString()}</strong><span>files needing retry</span></div>
-        <div className="qvh-status-cell" data-vault-status-roots><strong>{status.degradedRoots.length.toLocaleString()}</strong><span>unchecked roots</span></div>
-      </div> : null}
     </section>
   )
 }
