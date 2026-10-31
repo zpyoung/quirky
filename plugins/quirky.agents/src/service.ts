@@ -540,7 +540,7 @@ export class AgentsService {
   prepareLaunch = (params: Params): LaunchPlan => {
     const entry = this.launchEntry(this.entryOf(params.agent as string))
     const config = this.configs.get(entry.id)
-    if (config.disabled) throw this.context.error('invalid-params', `agent ${entry.id} is disabled`)
+    if (config.disabled) throw this.context.error('invalid-params', `${entry.label} is disabled. Enable it in Agent settings.`)
     const plan = this.guard(() =>
       buildLaunchPlan({
         entry,

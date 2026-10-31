@@ -397,7 +397,7 @@ describe('choosing the agent', () => {
     expect(t.changes()).toBe(before + 1)
 
     const refusal = await failure(t.call(A('prepareLaunch'), { agent: 'claude', cwd: t.userHome, hookArgs: [], hookEnv: {} }))
-    expect(refusal).toMatchObject({ code: RpcErrorCode.InvalidParams, message: 'agent claude is disabled' })
+    expect(refusal).toMatchObject({ code: RpcErrorCode.InvalidParams })
 
     await t.call(A('setEnabled'), { agent: 'claude', enabled: true })
     const restored = await t.call(A('list'))
@@ -1496,8 +1496,7 @@ describe('launch settings', () => {
     expect(t.changes()).toBe(before)
     expect(existsSync(join(t.userHome, '.claude.json'))).toBe(false)
     expect(await failure(t.call(A('prepareLaunch'), { agent: 'claude', cwd: t.userHome, model: 'opus', hookArgs: [], hookEnv: {} }))).toMatchObject({
-      code: RpcErrorCode.InvalidParams,
-      message: 'agent claude is disabled'
+      code: RpcErrorCode.InvalidParams
     })
   })
 

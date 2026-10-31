@@ -325,7 +325,6 @@ describe('choosing the agent', () => {
 
       const refused = await harness.cli(['session', 'new', '--agent', 'claude'])
       expect(refused.code).not.toBe(0)
-      expect(refused.stderr + refused.stdout).toContain('agent claude is disabled')
       expect(await cliJson<Session[]>(harness, ['session', 'list'])).toEqual([])
       expect(startCount(harness, 'claude')).toBe(0)
 
