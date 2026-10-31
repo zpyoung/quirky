@@ -153,7 +153,7 @@ setPermissions({ mode: "manual"|"auto"|"yolo", agent?: string, replaceCustom?: b
 plan({ agent, prompt?, submitPrompt?: boolean, cwd?: string }) -> LaunchPlan     readOnly, no trust write, no hooks
 pick({ preferred?: string, forAgentTab?: boolean }) -> { agent: string }          "shell" when nothing fits (not for forAgentTab: conflict "No installed agent is enabled.")
 prepareLaunch({ agent, cwd, prompt?, submitPrompt?, hookArgs: string[], hookEnv: Record<string,string|null> }) -> LaunchPlan
-            writes trust when the setting is on; refuses disabled ("agent <id> is disabled") and unknown agents
+            writes trust when the setting is on; refuses disabled agents by display name with Agent settings guidance, and unknown agents
 prepareResume({ agent, cwd, record: LaunchRecord|null, providerSession: ProviderSession, fork: boolean,
                 hookArgs, hookEnv }) -> { command: string, env: Record<string,string|null>, record: LaunchRecord }
 deliver({ sessionId, agent, text, submit: boolean }) -> { delivery: "pasted"|"unconfirmed"|"not-delivered" }

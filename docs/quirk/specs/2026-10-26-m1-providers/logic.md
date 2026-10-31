@@ -254,8 +254,9 @@ Fake agents used below:
     - **When** the agent runs `quirky agents disable claude`, then `quirky session new --agent claude`
     - **Then** `disable` succeeds and the default becomes `auto`. `claude` is listed with enabled
       false, is no longer auto-picked, and is missing from the new-session menu and the "New agent
-      tab" choice. `session new --agent claude` fails with "agent claude is disabled" and starts
-      nothing. `quirky agents enable claude` restores it, and the default stays `auto`.
+      tab" choice. `session new --agent claude` fails with "Claude is disabled. Enable it in Agent
+      settings." and starts nothing. A session dialog opened before Claude was disabled stays open
+      and shows the same refusal. `quirky agents enable claude` restores it, and the default stays `auto`.
     - **Data before:** **Default agent**: claude; **claude**: enabled
     - **Walkthrough:**
       1. The agent disables `claude`
