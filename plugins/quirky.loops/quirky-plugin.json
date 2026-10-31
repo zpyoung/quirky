@@ -404,7 +404,8 @@
       {
         "id": "setup-action",
         "title": "Change Loop Setup",
-        "description": "Dispatch a setup form action.",
+        "description": "Update the open loop setup form.",
+        "palette": false,
         "args": {
           "type": "object",
           "additionalProperties": false,

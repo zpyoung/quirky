@@ -12,6 +12,8 @@ import { CommandPalette } from '../src/plugins/CommandPalette'
 import { activate as activatePalette } from '../../../plugins/quirky.palette/src/ui'
 import { makeTempHome, startHarness, waitFor, waitForAsync, type Harness } from '../../daemon/test/helpers'
 import { makeTempDir, removeTempDirs, writePlugin } from '../../daemon/test/plugins/fixtures'
+import loopsManifest from '../../../plugins/quirky.loops/quirky-plugin.json'
+import browserManifest from '../../../plugins/quirky.browser/quirky-plugin.json'
 
 
 const PALETTE_COMMAND = 'command:quirky.palette/toggle'
@@ -363,6 +365,29 @@ function deferred<T>() {
   const { promise, resolve } = Promise.withResolvers<T>()
   return { promise, resolve }
 }
+
+test('Search offers loop and browser entry points without their internal form and confirmation actions', async () => {
+  const commands: UiCommandEntry[] = [loopsManifest, browserManifest].flatMap((manifest) =>
+    manifest.contributes.command.map((command) => ({
+      ...command,
+      id: `command:${manifest.id}/${command.id}`,
+      plugin: manifest.id,
+      module: null
+    }))
+  )
+  const palette = await mountCommandPalette(async () => agentListing([]), commands)
+
+  expect(palette.has('New Loop')).toBe(true)
+  expect(palette.has('Browser Settings')).toBe(true)
+  expect(palette.has('Change Loop Setup')).toBe(false)
+  expect(palette.has('Complete confirmed Browser profile clear')).toBe(false)
+
+  await palette.search('set')
+  expect(palette.has('Browser Settings')).toBe(true)
+  expect(palette.has('Change Loop Setup')).toBe(false)
+  await palette.search('fil')
+  expect(palette.has('Complete confirmed Browser profile clear')).toBe(false)
+})
 
 test('mounted command palette tracks installed and enabled agent launches while staying open', async () => {
   let agents: ListedAgent[] = [
