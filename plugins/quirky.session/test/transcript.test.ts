@@ -17,11 +17,16 @@ const all = [
   m(4, 'assistant', ''),
   m(5, 'assistant', '   \n'),
   m(6, 'assistant', 'hello'),
-  m(7, 'system', 'hook_response: ok')
+  m(7, 'system', 'hook_response: ok'),
+  m(8, 'system', 'system: hook_started'),
+  m(9, 'system', 'system: hook_response'),
+  m(10, 'user', 'system: hook_started'),
+  m(11, 'assistant', 'hook_response: explained'),
+  m(12, 'system', 'system: informational')
 ]
 
 test('hides hook system messages and empty assistant messages by default', () => {
-  expect(visibleMessages(all, false).map((x) => x.seq)).toEqual([1, 3, 6])
+  expect(visibleMessages(all, false).map((x) => x.seq)).toEqual([1, 3, 6, 10, 11, 12])
 })
 
 test('show all returns every message', () => {
