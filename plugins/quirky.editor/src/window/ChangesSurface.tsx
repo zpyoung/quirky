@@ -48,22 +48,60 @@ function lineDiff(original: string, modified: string): LineDiff {
   const changes = makeDiff(original, modified, { checkLines: true, timeout: 0.01 })
   const rows: InlineDiffRow[] = []
   const changed = new Set<number>()
+  const originalLines: { text: string; terminated: boolean }[] = []
+  const modifiedLines: { text: string; terminated: boolean }[] = []
+  let originalLine = ''
+  let modifiedLine = ''
+  let changedGroup = false
   let line = 1
-  for (const [operation, text] of changes) {
-    const parts = text.split('\n')
-    const trailingNewline = parts.at(-1) === ''
-    if (trailingNewline) parts.pop()
-    for (let index = 0; index < parts.length; index += 1) {
-      const kind = operation === 0 ? 'context' : operation === 1 ? 'added' : 'removed'
-      rows.push({ kind, text: parts[index]! })
-      if (operation !== 0) changed.add(line)
-      const hasNewline = index < parts.length - 1 || trailingNewline
-      if (hasNewline && operation !== -1) {
-        line += 1
-        if (operation === 1 && index < parts.length - 1) changed.add(line)
+
+  const flush = () => {
+    if (changedGroup) {
+      for (const entry of originalLines) rows.push({ kind: 'removed', text: entry.text })
+      if (modifiedLines.length === 0) changed.add(line)
+      for (const entry of modifiedLines) {
+        rows.push({ kind: 'added', text: entry.text })
+        changed.add(line)
+        if (entry.terminated) line += 1
+      }
+    } else {
+      for (const entry of originalLines) {
+        rows.push({ kind: 'context', text: entry.text })
+        if (entry.terminated) line += 1
       }
     }
+    originalLines.length = 0
+    modifiedLines.length = 0
+    changedGroup = false
   }
+
+  for (const [operation, text] of changes) {
+    if (text.length === 0) continue
+    let start = 0
+    while (start < text.length) {
+      if (operation !== 0) changedGroup = true
+      const newline = text.indexOf('\n', start)
+      const end = newline < 0 ? text.length : newline
+      const fragment = text.slice(start, end)
+      if (operation !== 1) originalLine += fragment
+      if (operation !== -1) modifiedLine += fragment
+      if (newline < 0) break
+      if (operation !== 1) {
+        originalLines.push({ text: originalLine, terminated: true })
+        originalLine = ''
+      }
+      if (operation !== -1) {
+        modifiedLines.push({ text: modifiedLine, terminated: true })
+        modifiedLine = ''
+      }
+      start = newline + 1
+      if (originalLine.length === 0 && modifiedLine.length === 0) flush()
+    }
+  }
+
+  if (originalLine.length > 0) originalLines.push({ text: originalLine, terminated: false })
+  if (modifiedLine.length > 0) modifiedLines.push({ text: modifiedLine, terminated: false })
+  flush()
   return { rows, changedLines: [...changed].sort((left, right) => left - right) }
 }
 
