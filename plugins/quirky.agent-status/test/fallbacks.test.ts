@@ -181,7 +181,7 @@ describe('SC-23: hooks outrank OSC 7501 until they fall silent', () => {
     expect(await rig.state()).toBe('working')
 
     await waitForAsync(async () => (await rig.state()) === 'done', 2000)
-    expect(await rig.row()).toMatchObject({ state: 'done', source: 'program-status' })
+    expect(await rig.row()).toMatchObject({ state: 'done', display: 'done', source: 'program-status' })
     expect(rig.notifies()).toEqual([])
     expect(rig.settles()).toEqual([])
 
@@ -213,7 +213,7 @@ describe('SC-23: hooks outrank OSC 7501 until they fall silent', () => {
     rig = await Rig.start()
     await rig.osc('state=working')
     await rig.osc('state=idle')
-    expect(await rig.row()).toMatchObject({ state: 'done', sessionBoundary: true })
+    expect(await rig.row()).toMatchObject({ state: 'done', sessionBoundary: true, display: 'idle' })
     expect(rig.settles()).toEqual([])
   })
 

@@ -171,7 +171,7 @@ export function displayOf(row: AgentRow, now: number, sessionRunning: boolean): 
     case 'done':
       if (row.outcome === 'failure') return result('failed', detail)
       if (row.interrupted || row.outcome === 'cancellation') return result('interrupted', detail)
-      if (row.sessionBoundary === true) return result('idle', detail)
+      if (row.sessionBoundary === true && row.prompt === '') return result('idle', detail)
       return result('done', detail)
   }
 }

@@ -64,6 +64,8 @@ describe('displayOf', () => {
     ['blocked from a title is blocked', { state: 'blocked', source: 'title' }, true, 'blocked'],
     ['done', { state: 'done', outcome: 'success' }, true, 'done'],
     ['done with no outcome', { state: 'done' }, true, 'done'],
+    ['session boundary without a prompt reads idle', { state: 'done', sessionBoundary: true, prompt: '' }, true, 'idle'],
+    ['session boundary retaining a prompt reads done', { state: 'done', sessionBoundary: true, prompt: 'fix the tests' }, true, 'done'],
     ['failed', { state: 'done', outcome: 'failure' }, true, 'failed'],
     ['interrupted flag', { state: 'done', interrupted: true, outcome: 'cancellation' }, true, 'interrupted'],
     ['cancellation outcome alone', { state: 'done', outcome: 'cancellation' }, true, 'interrupted'],
