@@ -1,5 +1,4 @@
 .window-bar {
-  --window-bar-height: calc(var(--ui-row-single) + var(--ui-space-12) + var(--ui-space-2));
   --window-bar-traffic-lights: calc(var(--ui-space-24) * 3 + var(--ui-space-8));
   align-items: center;
   background: var(--ui-rail);
@@ -9,7 +8,7 @@
   flex: 0 0 auto;
   gap: var(--ui-space-8);
   grid-template-columns: minmax(0, 1fr) auto minmax(max-content, 1fr);
-  height: var(--window-bar-height);
+  height: var(--ui-window-bar-height);
   padding: 0 var(--ui-space-12) 0 var(--window-bar-traffic-lights);
   user-select: none;
   user-select: none;

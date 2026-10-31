@@ -3,6 +3,8 @@ import { existsSync, symlinkSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { type Ask, type Repo, type Session, type Worktree } from '@quirky/protocol'
 import { chromium } from 'playwright'
+import { renderToStaticMarkup } from 'react-dom/server'
+import { Banner } from '../../../plugins/quirky.feedback/src/mode/Banner'
 import { makeTempDir } from '../../daemon/test/plugins/fixtures'
 import { launchableAgents, projectCounts, scopeLabel, worktreeRowState } from '../src/shell/WindowBar'
 import { attentionStoreFor } from '../src/shell/attention'
@@ -27,7 +29,7 @@ function builtinPlugins(): string {
   return builtins
 }
 
-async function bootBar() {
+async function bootBar(captureUnselectedMarkup = false) {
   const env = await bootWindow(() => {}, { builtinPluginsDir: builtinPlugins() })
   const repos = await Promise.all(['alpha', 'beta'].map(async (name) => {
     const path = makeTempDir(`ui-window-bar-${name}-`)
@@ -37,9 +39,14 @@ async function bootBar() {
   await env.win.waitFor(() => (attention.getSnapshot().worktrees?.length ?? 0) >= 2)
   const worktrees = attention.getSnapshot().worktrees!
   const [first, second] = repos.map((repo) => worktrees.find((worktree) => worktree.repoId === repo.id)!)
+  let unselectedMarkup: string | undefined
+  if (captureUnselectedMarkup) {
+    await env.win.waitFor(() => env.win.document.querySelector(BAR)?.textContent?.includes('No worktree selected'))
+    unselectedMarkup = bar(env).outerHTML
+  }
   await env.agent.callAny('quirky.worktree/navigate', { worktree: first!.id })
   await env.win.waitFor(() => attention.getSnapshot().selectedWorktreeId === first!.id)
-  return { env, attention, repos: repos as [Repo, Repo], first: first!, second: second! }
+  return { env, attention, repos: repos as [Repo, Repo], first: first!, second: second!, unselectedMarkup }
 }
 
 const bar = (env: WindowEnv) => env.win.document.querySelector<HTMLElement>(BAR)!
@@ -150,6 +157,62 @@ describe('window bar', () => {
       await browser.close()
     }
   }, 60_000)
+  test.skipIf(!existsSync(chromium.executablePath()))('feedback banner clears toolbar controls and leaves Exit reachable', async () => {
+    const { env, unselectedMarkup } = await bootBar(true)
+    const toolbarMarkups = [unselectedMarkup!, bar(env).outerHTML]
+    const bannerMarkup = renderToStaticMarkup(<Banner onExit={() => {}} />)
+    const browser = await chromium.launch({ headless: true, args: process.platform === 'linux' ? ['--no-sandbox'] : [] })
+    try {
+      const page = await browser.newPage({ viewport: { width: 1054, height: 100 } })
+      const styles = await Promise.all([
+        '../src/design-system/tokens.css',
+        '../src/design-system/components.css',
+        '../src/shell/chrome.css'
+      ].map((path) => Bun.file(new URL(path, import.meta.url)).text()))
+      const css = `${styles.join('\n')}\nbody { margin: 0; font: 13px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; }`
+
+      for (const toolbarMarkup of toolbarMarkups) {
+        for (const width of [646, 768, 1054, 1568]) {
+          await page.setViewportSize({ width, height: 100 })
+          await page.setContent(`<!doctype html><html><head><style>${css}</style></head><body><div class="app" data-theme="dark">${toolbarMarkup}${bannerMarkup}</div></body></html>`)
+
+          const layout = await page.evaluate(() => {
+            const toolbar = document.querySelector<HTMLElement>('[aria-label="Window bar"]')!
+            const banner = document.querySelector<HTMLElement>('[data-feedback-banner]')!
+            const toolbarRect = toolbar.getBoundingClientRect()
+            const bannerRect = banner.getBoundingClientRect()
+            const buttons = [...toolbar.querySelectorAll<HTMLButtonElement>('button')].map((button) => {
+              const rect = button.getBoundingClientRect()
+              const hit = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2)
+              return {
+                name: button.getAttribute('aria-label') ?? button.textContent?.trim() ?? '',
+                intersectsBanner: rect.left < bannerRect.right && rect.right > bannerRect.left &&
+                  rect.top < bannerRect.bottom && rect.bottom > bannerRect.top,
+                centerReceivesPointer: hit === button || button.contains(hit)
+              }
+            })
+            return {
+              bannerGap: bannerRect.top - toolbarRect.bottom,
+              overlappingButtons: buttons.filter((button) => button.intersectsBanner).map((button) => button.name),
+              blockedButtons: buttons.filter((button) => !button.centerReceivesPointer).map((button) => button.name)
+            }
+          })
+
+          expect(layout.overlappingButtons).toEqual([])
+          expect(layout.bannerGap).toBeGreaterThanOrEqual(12)
+          expect(layout.blockedButtons).toEqual([])
+
+          const exit = page.getByRole('button', { name: 'Exit', exact: true })
+          await exit.evaluate((button) => button.addEventListener('click', () => button.setAttribute('data-exit-clicked', ''), { once: true }))
+          await exit.click()
+          expect(await exit.getAttribute('data-exit-clicked')).not.toBeNull()
+        }
+      }
+    } finally {
+      await browser.close()
+    }
+  }, 60_000)
+
 
   test('the bar drags, every control opts out, and the controls keep their order', async () => {
     const { env, attention, first } = await bootBar()
