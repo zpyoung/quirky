@@ -762,6 +762,7 @@ test('session subtitle shows one identity for shell and Claude sessions', async 
   expect(subtitleOf(rowOf('fix-login', 'api'))).toBe('Shell · Running · fix-login')
   expect(rowOf('fix-login', 'api').querySelector('[role="img"]')?.getAttribute('aria-label')).toMatch(/Shell.*Running/i)
   expect(rowOf('fix-login', 'api').querySelector('[role="img"]')?.getAttribute('aria-label')).not.toMatch(/queued/i)
+  expect(rowOf('fix-login', 'api').querySelector('[role="img"]')?.classList.contains('ui-status-dot--queued')).toBe(true)
   expect(subtitleOf(rowOf('main', 'api'))).toBe('Claude · Done · main')
 })
 
@@ -1499,6 +1500,19 @@ describe('agent status presentation', () => {
     ['idle', 'Idle'],
     ['unconfirmed', "Couldn't confirm"]
   ]
+  const statusForDisplay: Record<AgentDisplayState, string> = {
+    working: 'working',
+    monitoring: 'working',
+    waiting: 'needs-you',
+    permission: 'needs-you',
+    blocked: 'needs-you',
+    failed: 'failing',
+    interrupted: 'idle',
+    done: 'done',
+    unverifiable: 'idle',
+    idle: 'idle',
+    unconfirmed: 'idle'
+  }
   for (const [display, label] of states) {
     test(`${display} is readable with a semantic status`, async () => {
       const h = setup()
@@ -1506,6 +1520,7 @@ describe('agent status presentation', () => {
       await h.mountInto(host)
       expect(rowOf('fix-login', 'api').textContent).toContain(label)
       expect(statusDot()?.getAttribute('aria-label')).toContain(label)
+      expect(statusDot()?.classList.contains(`ui-status-dot--${statusForDisplay[display]}`)).toBe(true)
       expect(lastReport(h).projects[0].worktrees[1]).toMatchObject({ status: 'working', display, label })
     })
   }
@@ -1535,8 +1550,10 @@ describe('agent status presentation', () => {
     await h.mountInto(host)
     expect(rowOf('fix-login', 'api').textContent).toContain('No recent update')
     expect(statusDot()?.getAttribute('aria-label')).toContain('No recent update')
+    expect(statusDot()?.classList.contains('ui-status-dot--idle')).toBe(true)
     await h.emit({ type: 'quirky.session/changed', data: { session: withSummary('s1', 'done', 'Done', { evidenceAt: Date.now() - 90 * MIN }) } })
     expect(statusDot()?.getAttribute('aria-label')).toContain('Done')
+    expect(statusDot()?.classList.contains('ui-status-dot--done')).toBe(true)
   })
 
   test('a one-minute tick shows decay and updates the report with no event', async () => {
@@ -1560,6 +1577,7 @@ describe('agent status presentation', () => {
       await act(async () => ticks.forEach((tick) => tick()))
       expect(rowOf('fix-login', 'api').textContent).toContain('No recent update')
       expect(statusDot()?.getAttribute('aria-label')).toContain('No recent update')
+      expect(statusDot()?.classList.contains('ui-status-dot--idle')).toBe(true)
       expect(lastReport(h).projects[0].worktrees[1].display).toBe('unverifiable')
     } finally {
       Date.now = realNow
@@ -1583,7 +1601,10 @@ test.each([true, false])('sleep overrides live session activity and wake restore
   expect(openButton(row())?.getAttribute('aria-label')).toBe('Wake and open fix-login')
   expect(row().textContent).toContain('Sleeping')
   expect(row().textContent).not.toContain('Running')
-  if (showActivity) expect(row().querySelector('[aria-label^="Status: "]')?.getAttribute('aria-label')).toContain('Sleeping')
+  if (showActivity) {
+    expect(row().querySelector('[aria-label^="Status: "]')?.getAttribute('aria-label')).toContain('Sleeping')
+    expect(row().querySelector('[aria-label^="Status: "]')?.classList.contains('ui-status-dot--idle')).toBe(true)
+  }
 
   await contextMenu(openButton(row())!)
   await click(itemNamed('Wake'))
