@@ -201,6 +201,7 @@ test(
       const settings = await until(f, () => f!.win.document.querySelector<HTMLElement>('[data-vault-settings]'))
       const advanced = await until(f, () => settings.querySelector<HTMLDetailsElement>('.qvh-settings-advanced'))
       if (!advanced.open) advanced.querySelector('summary')?.click()
+      expect(settings.querySelector('[aria-label="Search index counts"]')?.closest('details')).toBe(advanced)
       const clear = await until(f, () => settings.querySelector<HTMLButtonElement>('[data-vault-clear-search]'))
       clear.click()
       const dialog = await until(f, () => dialogByTitle(f!.win.document, 'Clear search data on this computer?'))
