@@ -110,8 +110,8 @@ function Buttons({ buttons, subject }: { buttons: RowButton[]; subject: string }
 function Counts({ item }: { item: RowItem }) {
   return (
     <>
-      {(item.added ?? 0) > 0 && <Badge tone="working" label={`${item.added} additions`}>{`+${item.added}`}</Badge>}
-      {(item.removed ?? 0) > 0 && <Badge tone="failing" label={`${item.removed} deletions`}>{`−${item.removed}`}</Badge>}
+      {(item.added ?? 0) > 0 && <Badge tone="working" label={`${item.added} ${item.added === 1 ? 'addition' : 'additions'}`}>{`+${item.added}`}</Badge>}
+      {(item.removed ?? 0) > 0 && <Badge tone="failing" label={`${item.removed} ${item.removed === 1 ? 'deletion' : 'deletions'}`}>{`−${item.removed}`}</Badge>}
     </>
   )
 }
