@@ -40,7 +40,6 @@
 }
 
 .qe-document-path-group,
-.qe-document-actions,
 .qe-document-action-strip,
 .qe-mode-switch,
 .qe-zoom-controls {
@@ -52,7 +51,6 @@
 
 .qe-document-path-group {
   flex: 0 0 auto;
-  overflow: hidden;
   width: 100%;
 }
 
@@ -68,26 +66,21 @@
   white-space: nowrap;
 }
 
-.qe-document-actions {
-  flex: 0 0 auto;
-  flex-wrap: wrap;
-  justify-content: flex-start;
-  width: 100%;
-}
 
 .qe-document-action-strip {
-  flex: 1 1 auto;
+  flex: 0 0 auto;
   flex-wrap: wrap;
   max-width: 100%;
   min-width: 0;
+  width: 100%;
 }
 
-.qe-document-action-strip > *,
-.qe-document-actions > .qe-file-actions {
+.qe-document-action-strip > * {
   flex: 0 0 auto;
 }
 
-.qe-document-actions > .qe-file-actions {
+.qe-document-path-group > .qe-file-actions {
+  flex: 0 0 auto;
   margin-inline-start: auto;
 }
 
@@ -161,7 +154,7 @@
   z-index: 8;
 }
 
-.qe-file-actions-menu .ui-button,
+.qe-file-actions-menu > .ui-button,
 .qe-source-context-menu .ui-button {
   justify-content: flex-start;
   text-align: left;
