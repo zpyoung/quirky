@@ -773,11 +773,12 @@ describe('settings', () => {
       ],
       [plugin('a.p')]
     )
-    expect(model.settings).toMatchObject([
-      { id: 'setting:a.p/mode', plugin: 'a.p', type: 'enum', title: 'Mode', default: 'x', values: ['x', 'y'] },
+    expect(model.settings).toEqual([
+      { id: 'setting:a.p/mode', plugin: 'a.p', pluginName: 'a.p', type: 'enum', title: 'Mode', default: 'x', values: ['x', 'y'] },
       {
         id: 'setting:a.p/size',
         plugin: 'a.p',
+        pluginName: 'a.p',
         type: 'number',
         title: 'Size',
         description: 'How big',
@@ -800,8 +801,8 @@ describe('settings', () => {
       [withStatus(decl('setting', 'a.p', 'size', { type: 'number', title: 'Size', default: 1 }), 'overridden'), override],
       [plugin('a.p'), plugin('b.q')]
     )
-    expect(model.settings).toMatchObject([
-      { id: 'setting:a.p/size', plugin: 'b.q', type: 'number', title: 'Size', default: 7 },
+    expect(model.settings).toEqual([
+      { id: 'setting:a.p/size', plugin: 'b.q', pluginName: 'b.q', type: 'number', title: 'Size', default: 7 },
     ])
   })
 })

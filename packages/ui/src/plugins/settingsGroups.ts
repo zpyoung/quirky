@@ -21,6 +21,7 @@ export type SettingSection = { section?: string; fields: SettingField[] }
 export type SettingGroup =
   | { kind: 'plugin'; plugin: string; title: string; category?: never; sections?: never; fields: SettingField[] }
   | { kind: 'category'; plugin?: never; category?: string; sections: SettingSection[]; fields: SettingField[] }
+
 export type ThemeOption = { id: string; title: string; appearance: ThemeInfo['appearance'] }
 
 function controlFor(setting: SettingInfo): SettingControl {
