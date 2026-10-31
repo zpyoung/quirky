@@ -34,17 +34,16 @@ tests leaves `build/roadmap` unchanged.
 
 ## Where the tests run
 
-`bun run test` runs the suite on a Linux host instead of this Mac, so the lanes' test runs don't
-compete for its CPU. `<git common dir>/build-loop/remote-tests.json` names the host and how many
+Agents get full runs through a PR, as `AGENTS.md` describes. The exception is this loop's
+`queue.ts check`, where `bun run test` runs the suite on a Linux host instead of this Mac, so the
+lanes' test runs don't compete for its CPU. `<git common dir>/build-loop/remote-tests.json` names the host and how many
 test files run there at once, with an optional `overflow` host in the same shape; it's local to
 this machine and never committed. Without that file, or with `QUIRKY_TEST_LOCAL=1`, everything runs
 here.
 
-- **Which host:** a run picks one host when it starts and says so in its log. It uses the OVH box,
-  or the gcloud box when OVH is down or another run already takes all of OVH's slots. A land stays
-  on OVH unless OVH is down. When OVH is full and gcloud is down, the run queues on OVH; nothing
-  starts the gcloud VM for you. When neither host answers, the run stops within about 30 seconds
-  before any test starts. A host lost during a run stops that run.
+- **Which host:** the file names only the OVH box, with no overflow. When OVH is full the run
+  queues there, and when it's down the run stops before any test starts. A host lost during a run
+  stops that run.
 - **The hosts** are used as the unprivileged user `quirkyci`. Every run copies the working
   tree to a fresh folder there and deletes it afterwards. Only files git doesn't ignore are copied,
   so `research/` never leaves this machine.

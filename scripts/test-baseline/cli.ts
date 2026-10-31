@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { parseArgs } from 'node:util'
-import type { bunTestFile } from '../suite'
+import type { bunTestFile, Host, hostFor, runInHostCopy } from '../suite'
 import { BaselineUnavailable, buildBaseline, defaultGh, fetchBaseline, findBaseline } from './baseline'
 import { compareResults } from './compare'
 import { applyIssueActions, planIssues, readOpenIssues } from './issues'
@@ -12,18 +12,20 @@ import type { Attempt, Baseline, ChangedPath, FileResult, GhRunner, Plan, Select
 
 const USAGE = `usage: bun scripts/test-baseline/cli.ts <command> [options]
 
-  plan       --event <pull_request|push|workflow_dispatch> --out <dir>
+  plan       --event <pull_request|push|workflow_dispatch> [--full <true|false>] --out <dir>
   run-shard  --plan <dir> (--shard <index> | --macos) --out <file>
   rerun      --plan <dir> --in <dir> --out <file>
   verdict    --plan <dir> --in <dir> --out <dir> --jobs-ok <true|false>
   issues     --plan <dir> --baseline <file> --only <open|close>
   affected   [--json] [--jobs <n>] [--list]
+  run-files  --jobs <n> --slots <n>
 `
 
 const EVENTS = ['pull_request', 'push', 'workflow_dispatch']
 const NOT_ON_CI_LIST = 'scripts/test-not-on-ci.txt'
 const MACOS_LIST = 'scripts/test-on-macos.txt'
 const RERUN_FILE = 'rerun.json'
+const FILE_RESULTS_PREFIX = 'file-results '
 
 /**
  * What the commands touch outside their arguments. Tests replace `gh`, the clock, the process
@@ -38,6 +40,9 @@ export type Context = {
   err: (text: string) => void
   run?: typeof bunTestFile
   download?: (args: string[], dest: string) => Promise<void>
+  chooseHost?: typeof hostFor
+  runInHost?: typeof runInHostCopy
+  stdin?: () => Promise<string>
 }
 
 /** A bad command line. `runCli` answers it with the usage text and exit code 2. */
@@ -242,9 +247,11 @@ function loadResults(dir: string): Loaded {
 }
 
 async function planCommand(args: string[], ctx: Context): Promise<number> {
-  const values = parse(args, { event: { type: 'string' }, out: { type: 'string' } })
+  const values = parse(args, { event: { type: 'string' }, full: { type: 'string' }, out: { type: 'string' } })
   const event = need(values.event, 'event')
   if (!EVENTS.includes(event)) throw new UsageError(`--event must be one of ${EVENTS.join(', ')}`)
+  if (values.full !== undefined && values.full !== 'true' && values.full !== 'false') throw new UsageError('--full must be true or false')
+  const affectedOnly = event === 'pull_request' && values.full !== 'true'
   const outDir = need(values.out, 'out')
 
   const { macosOnly } = await import('../suite')
@@ -262,8 +269,8 @@ async function planCommand(args: string[], ctx: Context): Promise<number> {
   }
 
   let selection: Selection
-  if (event === 'pull_request') selection = range?.selection ?? (await allTests(ctx, 'no baseline found, so every test runs'))
-  else selection = await allTests(ctx, `${event}: every test runs`)
+  if (affectedOnly) selection = range?.selection ?? (await allTests(ctx, 'no baseline found, so every test runs'))
+  else selection = await allTests(ctx, event === 'pull_request' ? 'full-suite label: every test runs' : `${event}: every test runs`)
 
   const notOnCiList = macosOnly(join(ctx.cwd, NOT_ON_CI_LIST))
   const macosList = macosOnly(join(ctx.cwd, MACOS_LIST))
@@ -271,7 +278,7 @@ async function planCommand(args: string[], ctx: Context): Promise<number> {
   const macos = selection.files.filter((file) => macosList.has(file) && !notOnCiList.has(file))
   const linux = selection.files.filter((file) => !macosList.has(file) && !notOnCiList.has(file))
   const durations = Object.fromEntries(Object.entries(baseline?.files ?? {}).map(([file, info]) => [file, info.durationMs]))
-  const linuxShards = splitShards(linux, durations, { targetMs: SHARD_TARGET_MS, maxShards: event === 'pull_request' ? MAX_SHARDS_PR : MAX_SHARDS_MAIN })
+  const linuxShards = splitShards(linux, durations, { targetMs: SHARD_TARGET_MS, maxShards: affectedOnly ? MAX_SHARDS_PR : MAX_SHARDS_MAIN })
 
   const plan: Plan = {
     event,
@@ -436,6 +443,37 @@ async function issuesCommand(args: string[], ctx: Context): Promise<number> {
   return 0
 }
 
+/** The worker `affected` starts on a test host: runs the files named on stdin and prints their results on one line. */
+async function runFilesCommand(args: string[], ctx: Context): Promise<number> {
+  const values = parse(args, { jobs: { type: 'string' }, slots: { type: 'string' } })
+  for (const name of ['jobs', 'slots'] as const) {
+    if (!/^[1-9]\d*$/.test(need(values[name], name))) throw new UsageError(`--${name} must be a positive integer`)
+  }
+  const input = await (ctx.stdin ?? (() => Bun.stdin.text()))()
+  const { slottedTestFile } = await import('../suite')
+  const { FILE_LIMIT_MS, RERUN_LIMIT, rerunFailed, runTestFiles } = await import('./runner')
+  const options = {
+    cwd: ctx.cwd,
+    files: input.split('\n').filter(Boolean),
+    platform: 'linux' as const,
+    jobs: Number(values.jobs),
+    limitMs: FILE_LIMIT_MS,
+    run: ctx.run ?? slottedTestFile(Number(values.slots)),
+  }
+  const rerun = await rerunFailed(options, await runTestFiles(options), RERUN_LIMIT)
+  ctx.out(`${FILE_RESULTS_PREFIX}${JSON.stringify(rerun)}\n`)
+  return 0
+}
+
+async function runFilesOnHost(ctx: Context, host: Host, files: string[]): Promise<{ results: FileResult[]; skipped: boolean }> {
+  const { runInHostCopy } = await import('../suite')
+  const command = `bun scripts/test-baseline/cli.ts run-files --jobs ${host.jobs ?? 4} --slots ${host.slots ?? 8}`
+  const run = await (ctx.runInHost ?? runInHostCopy)(ctx.cwd, host.host, command, files.join('\n'), false)
+  const line = run?.output.split('\n').find((text) => text.startsWith(FILE_RESULTS_PREFIX))
+  if (!line) throw new Error(`${host.host} couldn't finish the tests, so this run stops${run ? `\n${run.output}` : ''}`)
+  return JSON.parse(line.slice(FILE_RESULTS_PREFIX.length)) as { results: FileResult[]; skipped: boolean }
+}
+
 async function affectedCommand(args: string[], ctx: Context): Promise<number> {
   const values = parse(args, { json: { type: 'boolean' }, jobs: { type: 'string' }, list: { type: 'boolean' } })
   if (values.jobs !== undefined && !/^[1-9]\d*$/.test(values.jobs)) throw new UsageError('--jobs must be a positive integer')
@@ -472,17 +510,34 @@ async function affectedCommand(args: string[], ctx: Context): Promise<number> {
     return 0
   }
 
+  const { macosOnly, hostFor } = await import('../suite')
+  const macosList = macosOnly(join(ctx.cwd, MACOS_LIST))
+  const hostable = selection.files.filter((file) => !macosList.has(file))
+  const choice = hostable.length > 0 ? await (ctx.chooseHost ?? hostFor)(ctx.cwd) : undefined
+  if (choice && 'error' in choice) throw new Error(choice.error)
+  if (choice?.note) ctx.err(`${choice.note}\n`)
+  // full runs belong on GitHub, and a shared host shouldn't take one just because a change touched the test tooling
+  if (choice && selection.mode === 'all') {
+    ctx.err(`this change selects every test, so nothing ran on ${choice.host.host}: ${selection.reasons.join('; ')}\nGet a full run through a PR: gh pr edit <number> --add-label full-suite\n`)
+    if (values.json) ctx.out(`${JSON.stringify({ skipped: 'every test selected', reasons: selection.reasons })}\n`)
+    return 0
+  }
+  const there = choice ? hostable : []
+  const here = choice ? selection.files.filter((file) => macosList.has(file)) : selection.files
+  if (choice) ctx.err(`running ${there.length} test files on ${choice.host.host} and ${here.length} macOS-only files here\n`)
+
   const { FILE_LIMIT_MS, FILES_AT_ONCE_LOCAL, RERUN_LIMIT, rerunFailed, runTestFiles } = await import('./runner')
   const options = {
     cwd: ctx.cwd,
-    files: selection.files,
+    files: here,
     platform: process.platform === 'darwin' ? ('macos' as const) : ('linux' as const),
     jobs: values.jobs ? Number(values.jobs) : FILES_AT_ONCE_LOCAL,
     limitMs: FILE_LIMIT_MS,
     run: ctx.run,
   }
-  const first = await runTestFiles(options)
-  const rerun = await rerunFailed(options, first, RERUN_LIMIT)
+  const runHere = async () => rerunFailed(options, await runTestFiles(options), RERUN_LIMIT)
+  const [away, local] = await Promise.all([choice ? runFilesOnHost(ctx, choice.host, there) : { results: [], skipped: false }, runHere()])
+  const rerun = { results: [...away.results, ...local.results], skipped: away.skipped || local.skipped }
   if (rerun.skipped) ctx.err(`more than ${RERUN_LIMIT} files failed, so none were rerun\n`)
 
   const verdict: Verdict = compareResults({
@@ -505,6 +560,7 @@ const COMMANDS: Record<string, (args: string[], ctx: Context) => Promise<number>
   verdict: verdictCommand,
   issues: issuesCommand,
   affected: affectedCommand,
+  'run-files': runFilesCommand,
 }
 
 /**

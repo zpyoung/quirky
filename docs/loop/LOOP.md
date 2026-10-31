@@ -179,9 +179,9 @@ lands.
      `bun scripts/suite.ts <dir> <dir> ...`, which runs them on the remote test host so lanes don't
      compete for this Mac. A single file runs here with `bun test <file>`. For a quick check against the
      stored baseline, `bun run test:affected` runs only the tests your change affects. Leave the
-     whole suite to `queue.ts land`, which runs `bun run test` on the merge result. Run it yourself
-     only when the item changes code most of the repo imports, such as `packages/protocol` or
-     `scripts/test-support`.
+     whole suite to `queue.ts check`, which runs `bun run test` once every item is done. When the
+     item changes code most of the repo imports, such as `packages/protocol` or
+     `scripts/test-support`, get a full run through a PR as `AGENTS.md` describes.
    - **The UI scenarios pass when used like a user.** If the logic spec has scenarios a person sees
      in the UI, run `bun run build`, start `quirkyd` on a fresh temporary `QUIRKY_HOME`, and run
      `quirk:using-apps-like-a-user` with `--surface web --owner yours --unattended` against the
