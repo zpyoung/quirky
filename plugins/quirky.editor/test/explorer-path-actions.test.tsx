@@ -1318,7 +1318,7 @@ test('Explorer contents results open after normal tabs without changing their pi
     return { state, buffer, tabId: buffer.tabId }
   })
   expect(after.buffer.view).toMatchObject({
-    byTabId: { [after.tabId]: { line: 1, column: 1 } }
+    byTabId: { [after.tabId]: { line: 1, column: 1, matchLength: 6, focused: true } }
   })
   expect(after.buffer).toMatchObject({ pinned: false, preview: false })
   expect(after.state.tabs.map(({ tabId, bufferId, mode }) => ({ tabId, bufferId, mode }))).toEqual([

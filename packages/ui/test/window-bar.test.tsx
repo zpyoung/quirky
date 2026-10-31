@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, test } from 'bun:test'
-import { symlinkSync } from 'node:fs'
+import { existsSync, symlinkSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { type Ask, type Repo, type Session, type Worktree } from '@quirky/protocol'
+import { chromium } from 'playwright'
 import { makeTempDir } from '../../daemon/test/plugins/fixtures'
 import { launchableAgents, projectCounts, scopeLabel, worktreeRowState } from '../src/shell/WindowBar'
 import { attentionStoreFor } from '../src/shell/attention'
@@ -71,6 +72,85 @@ function recordCommands(env: WindowEnv): string[] {
 }
 
 describe('window bar', () => {
+  test.skipIf(!existsSync(chromium.executablePath()))('header controls stay separated and reachable at native widths', async () => {
+    const { env } = await bootBar()
+    await env.win.waitFor(() => barButton(env, '0 pending questions'))
+    const markup = bar(env).outerHTML
+    const browser = await chromium.launch({ headless: true, args: process.platform === 'linux' ? ['--no-sandbox'] : [] })
+    try {
+      const page = await browser.newPage({ viewport: { width: 1054, height: 80 } })
+      const styles = await Promise.all([
+        '../src/design-system/tokens.css',
+        '../src/design-system/components.css',
+        '../src/shell/chrome.css'
+      ].map((path) => Bun.file(new URL(path, import.meta.url)).text()))
+      const css = `${styles.join('\n')}\nbody { margin: 0; font: 13px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; }`
+      const labelSets = [
+        { project: 'alpha', worktree: 'main' },
+        {
+          project: 'extraordinarily-long-project-label-for-window-bar-layout',
+          worktree: 'extraordinarily-long-worktree-label-for-window-bar-layout'
+        }
+      ]
+
+      for (const theme of ['dark', 'light']) {
+        for (const width of [646, 768, 769, 1054]) {
+          for (const labels of labelSets) {
+            await page.setViewportSize({ width, height: 80 })
+            await page.setContent(`<!doctype html><html><head><style>${css}</style></head><body><div class="app" data-theme="${theme}">${markup}</div></body></html>`)
+            await page.locator(BAR).evaluate((header, labels) => {
+              const [project, worktree] = header.querySelectorAll<HTMLElement>('.window-bar__label')
+              project!.textContent = labels.project
+              worktree!.textContent = labels.worktree
+            }, labels)
+
+            const geometry = await page.locator(BAR).evaluate((header) => {
+              const headerRect = header.getBoundingClientRect()
+              const buttons = [...header.querySelectorAll<HTMLButtonElement>('button')].map((button) => {
+                const rect = button.getBoundingClientRect()
+                return { left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom, width: rect.width, height: rect.height }
+              })
+              return {
+                header: { left: headerRect.left, right: headerRect.right, top: headerRect.top, bottom: headerRect.bottom },
+                buttons
+              }
+            })
+            expect(geometry.buttons.length).toBeGreaterThan(1)
+            for (let index = 0; index < geometry.buttons.length; index++) {
+              const button = geometry.buttons[index]!
+              expect(button.left).toBeGreaterThanOrEqual(geometry.header.left)
+              expect(button.right).toBeLessThanOrEqual(geometry.header.right)
+              expect(button.top).toBeGreaterThanOrEqual(geometry.header.top)
+              expect(button.bottom).toBeLessThanOrEqual(geometry.header.bottom)
+              expect(button.width).toBeGreaterThan(0)
+              expect(button.height).toBeGreaterThan(0)
+              for (let previous = 0; previous < index; previous++) {
+                expect(button.left).toBeGreaterThanOrEqual(geometry.buttons[previous]!.right)
+              }
+            }
+
+            const search = page.getByRole('button', { name: SEARCH, exact: true })
+            expect(await search.isVisible()).toBe(true)
+            expect(await search.locator('svg').isVisible()).toBe(true)
+            for (const control of [
+              page.locator(`${BAR} .window-bar__switcher`).nth(0),
+              page.locator(`${BAR} .window-bar__switcher`).nth(1),
+              page.getByRole('button', { name: 'New worktree', exact: true }),
+              page.getByRole('button', { name: 'Back', exact: true }),
+              page.getByRole('button', { name: 'Forward', exact: true }),
+              page.getByRole('button', { name: 'New agent', exact: true }),
+              page.getByRole('button', { name: 'Choose agent', exact: true })
+            ]) {
+              expect(await control.isVisible()).toBe(true)
+            }
+          }
+        }
+      }
+    } finally {
+      await browser.close()
+    }
+  }, 60_000)
+
   test('the bar drags, every control opts out, and the controls keep their order', async () => {
     const { env, attention, first } = await bootBar()
     await env.win.waitFor(() => barButton(env, '0 pending questions'))

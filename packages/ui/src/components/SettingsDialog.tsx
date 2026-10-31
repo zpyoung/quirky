@@ -173,8 +173,8 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
         )}
         {groups.map((group) =>
           group.kind === 'plugin' ? (
-            <section key={`plugin:${group.plugin}`} className="ui-stack" role="group" aria-label={group.plugin}>
-              <SectionHeader title={group.plugin} className="ui-settings-group-heading" />
+            <section key={`plugin:${group.plugin}`} className="ui-stack" role="group" aria-label={group.title}>
+              <SectionHeader title={group.title} className="ui-settings-group-heading" />
               {renderFields(group.fields)}
             </section>
           ) : group.category !== undefined ? (

@@ -348,6 +348,7 @@ export class FakeDaemon {
     const setting: SettingInfo = {
       id: `setting:${plugin}/${name}`,
       plugin,
+      pluginName: plugin,
       type: 'number',
       title: name,
       default: 13,
@@ -357,7 +358,8 @@ export class FakeDaemon {
     this.settings.push(setting)
     this.ui.settings.push({
       id: setting.id,
-      plugin,
+      plugin: setting.plugin,
+      pluginName: setting.pluginName,
       type: setting.type,
       title: setting.title,
       default: setting.default,

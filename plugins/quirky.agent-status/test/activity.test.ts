@@ -27,6 +27,55 @@ const acknowledge = (params: { session?: string; turn?: string; all?: boolean })
 const threadFor = (threads: ActivityThread[], sessionId: string) => threads.find((thread) => thread.sessionId === sessionId)
 
 describe('Activity public API', () => {
+  test.each(['opencode', 'opencode2'])('%s without a prompt publishes an idle session summary', async (agent) => {
+    rig = await Rig.start({ sessions: [{ agent }] })
+    await rig.hook(agent, { hook_event_name: 'SessionStart' })
+
+    expect((await rig.session()).agentStatus).toMatchObject({ display: 'idle', label: 'Idle' })
+    expect(await rig.row()).toMatchObject({ state: 'done', sessionBoundary: true, display: 'idle' })
+  })
+
+  test.each(['opencode', 'opencode2'])('%s boundaries are read, but actual work and completion are unread', async (agent) => {
+    rig = await Rig.start({ sessions: [{ agent }] })
+    await rig.hook(agent, { hook_event_name: 'SessionStart' })
+
+    expect(threadFor((await activity()).threads, 's1')).toMatchObject({ display: 'idle', unread: false })
+    expect((await activity({ unreadOnly: true })).threads).toEqual([])
+
+    rig = await rig.restart()
+    expect(threadFor((await activity()).threads, 's1')).toMatchObject({ display: 'idle', unread: false })
+
+    await rig.hook(agent, { hook_event_name: 'MessagePart', role: 'user', text: 'Review this change' })
+    expect(threadFor((await activity()).threads, 's1')).toMatchObject({ display: 'working', unread: true, prompt: 'Review this change' })
+    await rig.hook(agent, { hook_event_name: 'SessionIdle' })
+    expect((await rig.session()).agentStatus).toMatchObject({ display: 'done' })
+    expect(threadFor((await activity({ unreadOnly: true })).threads, 's1')).toMatchObject({ display: 'done', unread: true })
+
+    await rig.hook(agent, { hook_event_name: 'SessionStart' })
+    expect(threadFor((await activity()).threads, 's1')).toMatchObject({ display: 'idle', unread: false, prompt: '' })
+    expect((await activity({ unreadOnly: true })).threads).toEqual([])
+    await rig.hook(agent, { hook_event_name: 'SessionBusy' })
+    expect(threadFor((await activity({ unreadOnly: true })).threads, 's1')).toMatchObject({ display: 'working', unread: true })
+  })
+
+  test('manual compaction keeps live child work and permission requests unread', async () => {
+    rig = await Rig.start()
+    await rig.hook('claude', claude('UserPromptSubmit', { prompt: 'Review this change' }))
+    await rig.hook('claude', claude('SubagentStart', { agent_id: 'reviewer' }))
+    await rig.hook('claude', claude('PostCompact', { trigger: 'manual' }))
+
+    expect(await rig.row()).toMatchObject({ state: 'working', sessionBoundary: true })
+    expect(threadFor((await activity({ unreadOnly: true })).threads, 's1')).toMatchObject({ display: 'working', unread: true })
+
+    await rig.hook('claude', claude('PermissionRequest', {
+      agent_id: 'reviewer',
+      tool_name: 'Bash',
+      tool_input: { command: 'git push' },
+      tool_use_id: 'push'
+    }))
+    expect(threadFor((await activity({ unreadOnly: true })).threads, 's1')).toMatchObject({ display: 'waiting', unread: true })
+  })
+
   test('filters injected task notifications without losing replies or later message prompts', async () => {
     rig = await Rig.start()
     await rig.hook('claude', claude('UserPromptSubmit', { prompt: 'first human request' }))
