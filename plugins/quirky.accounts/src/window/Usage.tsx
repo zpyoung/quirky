@@ -495,6 +495,7 @@ export function StatusBarUsage({ store, report }: { store: AccountsUiStore; repo
       if (!chipsContainer) { setVisibleCount(null); return }
       const clearMeasurement = () => {
         chipsContainer.style.setProperty('--usage-more-min-width', '0px')
+        chipsContainer.style.removeProperty('--usage-chips-width')
         setVisibleCount(null)
       }
       if (!measuredChips.length) { clearMeasurement(); return }
@@ -516,10 +517,12 @@ export function StatusBarUsage({ store, report }: { store: AccountsUiStore; repo
         if (!Number.isFinite(suffixWidths[collapsedCount])) { clearMeasurement(); return }
       }
 
+      const gap = cssPixels(getComputedStyle(chipsContainer).columnGap)
+      const desiredWidth = widths.reduce((total, width) => total + width, 0) + gap * (widths.length - 1)
+      chipsContainer.style.setProperty('--usage-chips-width', `${desiredWidth}px`)
       chipsContainer.style.setProperty('--usage-more-min-width', `${widestSuffixWidth}px`)
       const availableWidth = contentBoxWidth(chipsContainer)
       if (availableWidth <= 0) { clearMeasurement(); return }
-      const gap = cssPixels(getComputedStyle(chipsContainer).columnGap)
       const nextCount = fitUsagePrefix(widths, suffixWidths, availableWidth, gap)
       setVisibleCount((current) => current === nextCount ? current : nextCount)
     }
