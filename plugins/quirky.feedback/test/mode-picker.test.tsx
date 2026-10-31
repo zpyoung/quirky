@@ -348,6 +348,18 @@ describe('picker events', () => {
     expect(reactRoot().querySelector('[data-feedback-card] h2')!.textContent).toContain('Worktrees')
   })
 
+  test('a long unbroken accessible name wraps within the comment card title', async () => {
+    const name = 'name_with_underscores_'.repeat(9)
+    const target = document.getElementById('menu')!
+    target.setAttribute('aria-label', name)
+    await start()
+    stack(target)
+    await act(async () => { mouse(host(), 'click') })
+    const title = reactRoot().querySelector<HTMLElement>('[data-feedback-card] h2')!
+    expect(title.textContent).toContain(name)
+    expect(title.style.overflowWrap).toBe('anywhere')
+  })
+
   test('a sensitive accessible name stays redacted in the card and saved capture', async () => {
     const fake = await start()
     stack(document.getElementById('secret')!)

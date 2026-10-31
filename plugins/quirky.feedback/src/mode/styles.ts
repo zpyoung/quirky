@@ -80,7 +80,7 @@ export const card: CSSProperties = {
   padding: 'var(--ui-space-12)'
 }
 export const cardBody: CSSProperties = { display: 'grid', gap: 'var(--ui-space-8)', minHeight: 0, overflow: 'auto' }
-export const cardTitle: CSSProperties = { margin: 0, fontSize: 'var(--ui-font-body)', fontWeight: 600 }
+export const cardTitle: CSSProperties = { margin: 0, fontSize: 'var(--ui-font-body)', fontWeight: 600, overflowWrap: 'anywhere' }
 export const cardActions: CSSProperties = { display: 'flex', justifyContent: 'flex-end', gap: 'var(--ui-space-6)' }
 export const intentGroup: CSSProperties = { display: 'flex', gap: 'var(--ui-space-6)' }
 export const warning: CSSProperties = { margin: 0, color: 'var(--ui-needs-you)', fontSize: 'var(--ui-font-label)' }
