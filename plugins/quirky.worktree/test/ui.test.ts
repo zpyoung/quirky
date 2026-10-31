@@ -338,6 +338,7 @@ function setup(layout: UiLayout = { worktree: null, view: null, panel: null, sid
         case 'quirky.worktree/set': {
           if (world.failSet) throw world.failSet
           const target = world.worktrees.find((w) => w.id === params.worktree)!
+          if (typeof params.pinned === 'boolean') target.pinned = params.pinned
           if (typeof params.displayName === 'string') {
             target.displayName = params.displayName
             target.name = params.displayName || (target.isMain ? target.branch ?? basename(target.path) : basename(target.path))
@@ -1511,6 +1512,45 @@ test('Canceling Delete restores focus to the row Actions button after autofocus 
   expect(h.callsTo('quirky.worktree/remove')).toEqual([])
 })
 
+test.each([
+  ['Pin', false, false, true, false],
+  ['Unpin', true, false, false, false],
+  ['Sleep', false, false, false, true],
+  ['Wake', false, true, false, false]
+] as const)('%s restores focus to a visible Actions button after worktree refresh', async (
+  action,
+  initiallyPinned,
+  initiallySleeping,
+  pinned,
+  sleeping
+) => {
+  const h = setup()
+  h.world.worktrees[1] = wt('w2', 'r1', 'fix-login', { pinned: initiallyPinned, sleeping: initiallySleeping })
+  await h.mountInto(host)
+
+  const pinnedSection = () => [...host.querySelectorAll<HTMLElement>('section')].find((section) => sectionHeading(section) === 'Pinned')
+  const sourceRow = action === 'Unpin' ? rowIn(pinnedSection()!, 'fix-login')! : rowOf('fix-login', 'api')
+  await click(actionButton(sourceRow)!)
+  await click(itemNamed(action))
+
+  expect(menu()).toBeNull()
+  expect(h.world.worktrees.find((worktree) => worktree.id === 'w2')).toMatchObject({ pinned, sleeping })
+  const listCallsBeforeRefresh = h.callsTo('quirky.worktree/list').length
+  await h.emit({ type: 'quirky.worktree/changed', data: { repoId: 'r1' } })
+  expect(h.callsTo('quirky.worktree/list').length).toBeGreaterThan(listCallsBeforeRefresh)
+  expect(openButton(rowOf('fix-login', 'api'))?.getAttribute('aria-label')).toBe(
+    sleeping ? 'Wake and open fix-login' : 'Open fix-login'
+  )
+  expect(pinnedSection() ? rowIn(pinnedSection()!, 'fix-login') !== undefined : false).toBe(pinned)
+
+  const active = document.activeElement
+  expect(active instanceof HTMLButtonElement).toBe(true)
+  expect(active?.isConnected).toBe(true)
+  expect(active?.getAttribute('aria-label')).toBe('Actions for fix-login')
+  expect(active?.closest<HTMLElement>('[data-worktree-id]')?.dataset.worktreeId).toBe('w2')
+})
+
+
 test('SC-41: Set Parent offers the other workspaces, not the workspace or its descendants', async () => {
   const h = setup()
   h.world.worktrees.push(wt('w4', 'r1', 'child', { parentId: 'w2' }), wt('w5', 'r1', 'docs'))
@@ -1697,6 +1737,45 @@ test.each([true, false])('sleep overrides live session activity and wake restore
     expect(row().textContent).toContain('Running')
     expect(row().querySelector('[aria-label^="Status: "]')?.getAttribute('aria-label')).toBe(activeStatus)
   }
+})
+
+test('sleeping the retained primary row restores Actions focus when sleeping rows are hidden', async () => {
+  const h = setup()
+  h.world.options.showSleeping = false
+  await h.mountInto(host)
+
+  const row = rowOf('main', 'api')
+  expect(row).toBeDefined()
+  const actions = actionButton(row)!
+  await click(actions)
+  await click(itemNamed('Sleep'))
+  expect(h.world.worktrees.find((worktree) => worktree.id === 'w1')?.sleeping).toBe(true)
+  await h.emit({ type: 'quirky.worktree/changed', data: { repoId: 'r1' } })
+
+  const refreshedRow = rowOf('main', 'api')
+  expect(openButton(refreshedRow)?.getAttribute('aria-label')).toBe('Wake and open main')
+  expect(document.activeElement === actionButton(refreshedRow)).toBe(true)
+})
+
+test('sleeping a temporarily revealed row restores Actions focus when sleeping rows are hidden', async () => {
+  const h = setup()
+  h.world.options.showSleeping = false
+  h.world.worktrees.push(wt('w4', 'r1', 'sleeping-other', { sleeping: true }))
+  await h.mountInto(host)
+
+  await openDisclosure('Workspace options')
+  await click(buttonNamed(optionsContent(), 'Show 1 hidden sleeping worktree')!)
+  expect(lastReport(h).revealSleeping).toBe(true)
+
+  const row = rowOf('fix-login', 'api')
+  await click(actionButton(row)!)
+  await click(itemNamed('Sleep'))
+  expect(h.world.worktrees.find((worktree) => worktree.id === 'w2')?.sleeping).toBe(true)
+  await h.emit({ type: 'quirky.worktree/changed', data: { repoId: 'r1' } })
+
+  const refreshedRow = rowOf('fix-login', 'api')
+  expect(openButton(refreshedRow)?.getAttribute('aria-label')).toBe('Wake and open fix-login')
+  expect(document.activeElement === actionButton(refreshedRow)).toBe(true)
 })
 
 test('stock worktree controls persist options, reveal sleeping rows and wake without replacing the session', async () => {
