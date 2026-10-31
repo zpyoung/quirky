@@ -790,7 +790,8 @@
   border: var(--ui-border-width) solid var(--ui-border);
   border-radius: var(--ui-radius-window);
   color: var(--ui-text);
-  container: ui-tool-panel / inline-size;
+  container-name: ui-tool-panel;
+  container-type: inline-size;
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
   grid-template-rows: auto auto minmax(0, 1fr);

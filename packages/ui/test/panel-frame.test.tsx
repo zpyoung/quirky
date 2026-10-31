@@ -144,6 +144,8 @@ describe('panel frame slots', () => {
 })
 
 describe('panel focus styles', () => {
+  const bodyOf = (fragment: string) => rulesFor(fragment).map((rule) => rule.body).join('\n')
+
   test('hidden header buttons use opacity, never display or visibility, so they stay in the tab order', () => {
     const hidden = rulesFor('.ui-tool-panel-frame__actions').filter((rule) => rule.selector.includes('[data-tool-panel]') && !rule.selector.includes(':hover') && !rule.selector.includes('data-panel-focused') && !rule.selector.includes(':focus-within'))
     expect(hidden.length).toBeGreaterThan(0)
@@ -177,6 +179,12 @@ describe('panel focus styles', () => {
     const ring = rulesFor('.ui-status-dot').filter((rule) => rule.selector.includes('[data-panel-focused]') && rule.selector.includes('.ui-list-row--selected'))
     expect(ring.length).toBeGreaterThan(0)
     expect(ring.map((rule) => rule.body).join('\n')).toMatch(/outline|box-shadow/)
+  })
+
+  test('the rail becomes a row when the frame is under 320 wide, by container query', () => {
+    expect(cssSource).toMatch(/\.ui-tool-panel-frame\s*\{[^}]*container-type:\s*inline-size/)
+    expect(cssSource).toMatch(/@container\s*\([^)]*320px\)/)
+    expect(bodyOf('.ui-tool-panel-frame__rail')).toContain('flex-direction')
   })
 
   test('the inactive window dims by opacity, not filter', () => {
