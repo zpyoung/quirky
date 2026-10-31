@@ -8,8 +8,9 @@ Worktrees is the host-managed tool in the left-top slot by default. Add project 
 button in its panel header. Workspace options, Activity filters and More workspace tools stay inside
 the header's options popover; the latter includes the board and status editor. Project management uses the existing `quirky.repo` API, not a second tool.
 Rows show name plus activity, with selected branch/note/status metadata on the secondary line
-and full text available on hover. Attention counts and contextual actions remain independently
-clickable. Controls, menus, dialogs and both appearances use the shared graphite system.
+and full text available on hover. The activity indicator's accessible name follows its displayed
+activity; pending questions retain attention priority. Attention counts and contextual actions remain
+independently clickable. Controls, menus, dialogs and both appearances use the shared graphite system.
 Project Actions menus take keyboard focus when opened and close on Escape, including when the click
 also activates the Worktrees panel.
 

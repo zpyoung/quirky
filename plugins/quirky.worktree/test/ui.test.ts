@@ -1,6 +1,6 @@
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from 'bun:test'
-import type { AgentDisplayState, AgentStatusSummary, ProjectGroup, QuirkyEvent, Repo, Session, UiLayout, UiPluginContext, Worktree, WorkspaceOriginView } from '@quirky/protocol'
+import type { AgentDisplayState, AgentStatusSummary, Ask, ProjectGroup, QuirkyEvent, Repo, Session, UiLayout, UiPluginContext, Worktree, WorkspaceOriginView } from '@quirky/protocol'
 import { RpcErrorCode } from '@quirky/protocol'
 import { DEFAULT_STOCK_OPTIONS, type CleanupCandidate, type CleanupRemovalResult, type StockWorktreeOptions, type WorktreeControl } from '../src/control-types'
 import type * as React from 'react'
@@ -130,6 +130,7 @@ type World = {
   groups: ProjectGroup[]
   worktrees: WorktreeControl[]
   sessions: Session[] | null
+  asks: Ask[]
   confirms: boolean[]
   failRemove: (Error | null)[]
   failSet: Error | null
@@ -161,6 +162,7 @@ function setup(layout: UiLayout = { worktree: null, view: null, panel: null, sid
     groups: [],
     worktrees: [wt('w1', 'r1', 'main', { isMain: true }), wt('w2', 'r1', 'fix-login'), wt('w3', 'r2', 'main', { isMain: true })],
     sessions: [session('s1', 'w2', 'working')],
+    asks: [],
     confirms: [],
     failRemove: [],
     failSet: null,
@@ -325,6 +327,8 @@ function setup(layout: UiLayout = { worktree: null, view: null, panel: null, sid
         }
         case 'quirky.worktree/cleanupRemove':
           return { results: world.cleanupResults }
+        case 'quirky.ask/list':
+          return [...world.asks]
         case 'quirky.session/list':
           if (world.sessions === null) throw new RpcLike('method not found', RpcErrorCode.MethodNotFound)
           return world.sessions
@@ -647,7 +651,7 @@ test('SC-35: renders repos and worktrees and reports them with status and select
       }
     ]
   })
-  expect(rowOf('fix-login', 'api').querySelector('[aria-label="Status: working"]')).not.toBeNull()
+  expect(rowOf('fix-login', 'api').querySelector('[aria-label^="Status: "]')?.getAttribute('aria-label')).toContain('Working')
 })
 
 test('the header offers Add project left of the options funnel', async () => {
@@ -719,11 +723,33 @@ test('status follows the session events', async () => {
   const h = setup()
   await h.mountInto(host)
   await h.emit({ type: 'quirky.session/changed', data: { session: session('s1', 'w2', 'waiting') } })
-  expect(rowOf('fix-login', 'api').querySelector('[aria-label="Status: needs-you"]')).not.toBeNull()
+  expect(rowOf('fix-login', 'api').querySelector('[aria-label^="Status: "]')?.getAttribute('aria-label')).toContain('Needs you')
   await h.emit({ type: 'quirky.session/changed', data: { session: session('s2', 'w1', 'done') } })
   expect(lastReport(h).projects[0].worktrees[0].status).toBe('done')
   await h.emit({ type: 'quirky.session/removed', data: { sessionId: 's1' } })
   expect(lastReport(h).projects[0].worktrees[1].status).toBeNull()
+})
+
+test('pending questions keep attention priority in the status accessible name', async () => {
+  const h = setup()
+  h.world.sessions = [session('s1', 'w2', 'running')]
+  h.world.asks = [{
+    id: 'ask-1',
+    spec: { questions: [{ id: 'continue', type: 'confirm', question: 'Continue?' }] },
+    sessionId: 's1',
+    worktreeId: 'w2',
+    createdAt: Date.now(),
+    envelope: { askId: 'ask-1', answers: {}, skipped: [], summary: '', status: 'pending' },
+    seq: 1,
+    queued: false,
+    partial: {},
+    expiresAt: null
+  }]
+  await h.mountInto(host)
+
+  const row = rowOf('fix-login', 'api')
+  expect(row.textContent).toContain('Running')
+  expect(row.querySelector('[aria-label^="Status: "]')?.getAttribute('aria-label')).toBe('Status: needs-you')
 })
 
 test('session subtitle shows one identity for shell and Claude sessions', async () => {
@@ -734,6 +760,8 @@ test('session subtitle shows one identity for shell and Claude sessions', async 
   ]
   await h.mountInto(host)
   expect(subtitleOf(rowOf('fix-login', 'api'))).toBe('Shell · Running · fix-login')
+  expect(rowOf('fix-login', 'api').querySelector('[role="img"]')?.getAttribute('aria-label')).toMatch(/Shell.*Running/i)
+  expect(rowOf('fix-login', 'api').querySelector('[role="img"]')?.getAttribute('aria-label')).not.toMatch(/queued/i)
   expect(subtitleOf(rowOf('main', 'api'))).toBe('Claude · Done · main')
 })
 
@@ -775,7 +803,7 @@ test('a plugin.changed event reloads the tree and the sessions', async () => {
   h.world.sessions = [session('s1', 'w2', 'done')]
   await h.emit({ type: 'plugin.changed' })
   expect(h.callsTo('quirky.session/list').length).toBe(before + 1)
-  expect(rowOf('fix-login', 'api').querySelector('[aria-label="Status: done"]')).not.toBeNull()
+  expect(rowOf('fix-login', 'api').querySelector('[aria-label^="Status: "]')?.getAttribute('aria-label')).toContain('Done')
 })
 
 test('does not report again when nothing changed', async () => {
@@ -1457,19 +1485,6 @@ describe('agent status presentation', () => {
     agentStatus: summary(display, label, over)
   })
   const statusDot = () => rowOf('fix-login', 'api').querySelector<HTMLElement>('[aria-label^="Status: "]')
-  const statusForDisplay: Record<string, string> = {
-    working: 'working',
-    monitoring: 'working',
-    waiting: 'needs-you',
-    permission: 'needs-you',
-    blocked: 'needs-you',
-    failed: 'failing',
-    interrupted: 'idle',
-    done: 'done',
-    unverifiable: 'idle',
-    idle: 'idle',
-    unconfirmed: 'idle'
-  }
 
   const states: [AgentDisplayState, string][] = [
     ['working', 'Working'],
@@ -1490,7 +1505,7 @@ describe('agent status presentation', () => {
       h.world.sessions = [withSummary('s1', display, label)]
       await h.mountInto(host)
       expect(rowOf('fix-login', 'api').textContent).toContain(label)
-      expect(statusDot()?.getAttribute('aria-label')).toBe(`Status: ${statusForDisplay[display]}`)
+      expect(statusDot()?.getAttribute('aria-label')).toContain(label)
       expect(lastReport(h).projects[0].worktrees[1]).toMatchObject({ status: 'working', display, label })
     })
   }
@@ -1499,18 +1514,18 @@ describe('agent status presentation', () => {
     const h = setup()
     h.world.sessions = [withSummary('s1', 'waiting', 'Waiting for input'), withSummary('s2', 'working', 'Working')]
     await h.mountInto(host)
-    expect(statusDot()?.getAttribute('aria-label')).toBe('Status: needs-you')
+    expect(statusDot()?.getAttribute('aria-label')).toContain('Waiting for input')
     await h.emit({ type: 'quirky.session/changed', data: { session: withSummary('s1', 'done', 'Done') } })
-    expect(statusDot()?.getAttribute('aria-label')).toBe('Status: working')
+    expect(statusDot()?.getAttribute('aria-label')).toContain('Working')
     await h.emit({ type: 'quirky.session/changed', data: { session: withSummary('s2', 'done', 'Done') } })
-    expect(statusDot()?.getAttribute('aria-label')).toBe('Status: done')
+    expect(statusDot()?.getAttribute('aria-label')).toContain('Done')
     expect(lastReport(h).projects[0].worktrees[1].display).toBe('done')
   })
 
   test('a session with no summary keeps the coarse status', async () => {
     const h = setup()
     await h.mountInto(host)
-    expect(statusDot()?.getAttribute('aria-label')).toBe('Status: working')
+    expect(statusDot()?.getAttribute('aria-label')).toContain('Working')
     expect(lastReport(h).projects[0].worktrees[1]).not.toHaveProperty('display')
   })
 
@@ -1519,9 +1534,9 @@ describe('agent status presentation', () => {
     h.world.sessions = [withSummary('s1', 'working', 'Working', { evidenceAt: Date.now() - 31 * MIN })]
     await h.mountInto(host)
     expect(rowOf('fix-login', 'api').textContent).toContain('No recent update')
-    expect(statusDot()?.getAttribute('aria-label')).toBe('Status: idle')
+    expect(statusDot()?.getAttribute('aria-label')).toContain('No recent update')
     await h.emit({ type: 'quirky.session/changed', data: { session: withSummary('s1', 'done', 'Done', { evidenceAt: Date.now() - 90 * MIN }) } })
-    expect(statusDot()?.getAttribute('aria-label')).toBe('Status: done')
+    expect(statusDot()?.getAttribute('aria-label')).toContain('Done')
   })
 
   test('a one-minute tick shows decay and updates the report with no event', async () => {
@@ -1540,11 +1555,11 @@ describe('agent status presentation', () => {
       const h = setup()
       h.world.sessions = [withSummary('s1', 'working', 'Working', { evidenceAt: t0 - 29 * MIN })]
       await h.mountInto(host)
-      expect(statusDot()?.getAttribute('aria-label')).toBe('Status: working')
+      expect(statusDot()?.getAttribute('aria-label')).toContain('Working')
       Date.now = () => t0 + 2 * MIN
       await act(async () => ticks.forEach((tick) => tick()))
       expect(rowOf('fix-login', 'api').textContent).toContain('No recent update')
-      expect(statusDot()?.getAttribute('aria-label')).toBe('Status: idle')
+      expect(statusDot()?.getAttribute('aria-label')).toContain('No recent update')
       expect(lastReport(h).projects[0].worktrees[1].display).toBe('unverifiable')
     } finally {
       Date.now = realNow
@@ -1568,7 +1583,7 @@ test.each([true, false])('sleep overrides live session activity and wake restore
   expect(openButton(row())?.getAttribute('aria-label')).toBe('Wake and open fix-login')
   expect(row().textContent).toContain('Sleeping')
   expect(row().textContent).not.toContain('Running')
-  if (showActivity) expect(row().querySelector('[aria-label^="Status: "]')?.getAttribute('aria-label')).toBe('Status: idle')
+  if (showActivity) expect(row().querySelector('[aria-label^="Status: "]')?.getAttribute('aria-label')).toContain('Sleeping')
 
   await contextMenu(openButton(row())!)
   await click(itemNamed('Wake'))
