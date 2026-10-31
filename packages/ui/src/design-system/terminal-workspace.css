@@ -44,7 +44,8 @@
 }
 .qt-strip.qt-drop-end { box-shadow: inset calc(var(--ui-border-width) * -2) 0 0 var(--ui-accent); }
 .qt-tab-navigation { display: flex; flex: 0 1 auto; min-width: 0; }
-.qt-tabs { display: flex; flex: 1 1 auto; min-width: 0; overflow-x: auto; scrollbar-width: none; }
+.qt-tabs { display: flex; flex: 1 1 auto; min-width: 0; overflow-x: auto; scrollbar-width: none; scroll-snap-type: x mandatory; }
+.qt-tabs::after { content: ''; flex: none; width: var(--qt-tab-scroll-slack, 0px); }
 .qt-tabs::-webkit-scrollbar { display: none; }
 .qt-tab-more {
   display: inline-flex;
@@ -62,6 +63,7 @@
   white-space: nowrap;
   cursor: pointer;
 }
+.qt-tab-more-count { display: inline-block; font-variant-numeric: tabular-nums; text-align: end; }
 .qt-tab-more:hover,
 .qt-tab-more[aria-expanded="true"] { background: var(--ui-selected); color: var(--ui-text); }
 @container qt-group (max-width: 480px) {
@@ -78,6 +80,7 @@
   position: relative;
   display: flex;
   flex: none;
+  scroll-snap-align: start;
   align-items: center;
   gap: var(--ui-space-6);
   max-width: calc(var(--ui-space-24) * 9);

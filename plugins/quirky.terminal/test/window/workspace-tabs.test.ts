@@ -91,7 +91,7 @@ function installTabLayout(view: MountedWorkspace, width: number, initialWidths: 
   Object.defineProperty(navigation, 'clientWidth', { configurable: true, get: () => available })
   Object.defineProperty(navigation, 'getBoundingClientRect', { configurable: true, value: () => tabRect(0, available) })
   Object.defineProperty(viewport, 'clientWidth', { configurable: true, get: () => Math.max(0, available - moreWidth()) })
-  Object.defineProperty(viewport, 'scrollWidth', { configurable: true, get: () => tabItems().reduce((total, item) => total + tabWidth(item), 0) })
+  Object.defineProperty(viewport, 'scrollWidth', { configurable: true, get: () => tabItems().reduce((total, item) => total + tabWidth(item), 0) + (Number.parseFloat(viewport.style.getPropertyValue('--qt-tab-scroll-slack')) || 0) })
   Object.defineProperty(viewport, 'getBoundingClientRect', { configurable: true, value: () => tabRect(0, viewport.clientWidth) })
   const refresh = () => {
     for (const item of tabItems()) {
@@ -200,6 +200,98 @@ describe('SC-11: clicking a tab activates it', () => {
       await click(view.q('[data-tab="tab-3"]'))
       expect(layout.visible('tab-3')).toBe(true)
       expect(callsTo(view.fake, 'activateTab')).toEqual([{ tab: 'tab-1' }, { tab: 'tab-3' }])
+    } finally {
+      scroll.mockRestore()
+      resize.restore()
+    }
+  })
+
+  test('clicking a fully visible tab leaves the viewport scroll position unchanged', async () => {
+    const resize = observeResize()
+    const scroll = spyOn(Element.prototype, 'scrollIntoView').mockImplementation(function (this: Element) {
+      const tab = this as HTMLElement
+      const viewport = tab.closest<HTMLElement>('.qt-tabs')
+      if (!viewport) return
+      const left = tab.getBoundingClientRect().left - viewport.getBoundingClientRect().left + viewport.scrollLeft
+      const maxScroll = Math.max(0, viewport.scrollWidth - viewport.clientWidth)
+      viewport.scrollLeft = Math.min(Math.max(0, left), maxScroll)
+    })
+    try {
+      const view = await mount(fakeDaemon(makeWorkspace(group('grp-1', terminalTabs(4)))))
+      const layout = installTabLayout(view, 350, {})
+      await flushResize(resize)
+      layout.viewport.scrollLeft = 50
+      await fire(layout.viewport, new Event('scroll'))
+      const middle = view.q<HTMLElement>('[data-tab="tab-2"]')!
+      const middleRect = middle.getBoundingClientRect()
+      const viewportRect = layout.viewport.getBoundingClientRect()
+      expect(middleRect.left).toBeGreaterThanOrEqual(viewportRect.left)
+      expect(middleRect.right).toBeLessThanOrEqual(viewportRect.right)
+
+      await click(middle)
+
+      expect(middle.querySelector('[role="tab"]')!.getAttribute('aria-selected')).toBe('true')
+      expect(layout.viewport.scrollLeft).toBe(50)
+    } finally {
+      scroll.mockRestore()
+      resize.restore()
+    }
+  })
+
+  test('selecting the last tab can snap its leading edge to the viewport', async () => {
+    const resize = observeResize()
+    const scroll = spyOn(Element.prototype, 'scrollIntoView').mockImplementation(function (this: Element) {
+      const tab = this as HTMLElement
+      const viewport = tab.closest<HTMLElement>('.qt-tabs')
+      if (!viewport) return
+      const left = tab.getBoundingClientRect().left - viewport.getBoundingClientRect().left + viewport.scrollLeft
+      const maxScroll = Math.max(0, viewport.scrollWidth - viewport.clientWidth)
+      viewport.scrollLeft = Math.min(Math.max(0, left), maxScroll)
+    })
+    try {
+      const view = await mount(fakeDaemon(makeWorkspace(group('grp-1', terminalTabs(3)))))
+      const layout = installTabLayout(view, 220, { 'tab-1': 100, 'tab-2': 100, 'tab-3': 100 })
+      await flushResize(resize)
+      const last = view.q<HTMLElement>('[data-tab="tab-3"]')!
+
+      await click(last)
+      await fire(layout.viewport, new Event('scroll'))
+
+      expect(last.getBoundingClientRect().left).toBe(layout.viewport.getBoundingClientRect().left)
+      expect(getComputedStyle(last).visibility).not.toBe('hidden')
+      expect(getComputedStyle(view.q('[data-tab="tab-1"]')!).visibility).toBe('hidden')
+    } finally {
+      scroll.mockRestore()
+      resize.restore()
+    }
+  })
+
+  test('selecting the last tab keeps its preceding tab visible when both fit', async () => {
+    const resize = observeResize()
+    const scroll = spyOn(Element.prototype, 'scrollIntoView').mockImplementation(function (this: Element) {
+      const tab = this as HTMLElement
+      const viewport = tab.closest<HTMLElement>('.qt-tabs')
+      if (!viewport) return
+      const left = tab.getBoundingClientRect().left - viewport.getBoundingClientRect().left + viewport.scrollLeft
+      const maxScroll = Math.max(0, viewport.scrollWidth - viewport.clientWidth)
+      viewport.scrollLeft = Math.min(Math.max(0, left), maxScroll)
+    })
+    try {
+      const view = await mount(fakeDaemon(makeWorkspace(group('grp-1', terminalTabs(3)))))
+      const layout = installTabLayout(view, 280, { 'tab-1': 100, 'tab-2': 100, 'tab-3': 100 })
+      await flushResize(resize)
+      const previous = view.q<HTMLElement>('[data-tab="tab-2"]')!
+      const last = view.q<HTMLElement>('[data-tab="tab-3"]')!
+
+      await click(last)
+      await fire(layout.viewport, new Event('scroll'))
+
+      const viewportRect = layout.viewport.getBoundingClientRect()
+      expect(previous.getBoundingClientRect().left).toBe(viewportRect.left)
+      expect(last.getBoundingClientRect().right).toBeLessThanOrEqual(viewportRect.right)
+      expect(getComputedStyle(previous).visibility).not.toBe('hidden')
+      expect(getComputedStyle(last).visibility).not.toBe('hidden')
+      expect(getComputedStyle(view.q('[data-tab="tab-1"]')!).visibility).toBe('hidden')
     } finally {
       scroll.mockRestore()
       resize.restore()

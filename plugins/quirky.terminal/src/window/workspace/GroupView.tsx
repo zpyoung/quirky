@@ -19,6 +19,25 @@ import { useBoxSize } from './useBoxSize'
 
 type Common = { controller: WorkspaceController; state: ControllerState }
 
+/** Reveals a tab at the leading edge while retaining preceding tabs that fit beside it. */
+function revealTab(tab: HTMLElement | null) {
+  const viewport = tab?.parentElement
+  if (!tab || !viewport) return
+  const target = tab.getBoundingClientRect()
+  const bounds = viewport.getBoundingClientRect()
+  if (target.left >= bounds.left && target.right <= bounds.right) return
+  const targetRight = target.right
+  const viewportWidth = viewport.clientWidth
+  let first = tab
+  let previous = tab.previousElementSibling as HTMLElement | null
+  while (previous) {
+    if (targetRight - previous.getBoundingClientRect().left > viewportWidth) break
+    first = previous
+    previous = previous.previousElementSibling as HTMLElement | null
+  }
+  first.scrollIntoView?.({ block: 'nearest', inline: 'start' })
+}
+
 function TabItem({ controller, state, group, tab, index, others, now, overflow, viewportWidth, hiddenByOverflow }: Common & { group: Group; tab: Tab; index: number; others: Tab[]; now: number; overflow: boolean; viewportWidth: number; hiddenByOverflow: boolean }) {
   const selected = group.activeTab === tab.id
   const terminal = isViewTab(tab) ? null : tab
@@ -30,7 +49,7 @@ function TabItem({ controller, state, group, tab, index, others, now, overflow, 
   const element = useRef<HTMLDivElement>(null)
   // macOS hides the strip's scrollbar, so a selected tab past the edge would otherwise stay out of sight
   useEffect(() => {
-    if (selected) element.current?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' })
+    if (selected) revealTab(element.current)
   }, [selected, title, overflow, viewportWidth])
   const renaming = state.rename?.kind === 'tab' && state.rename.id === tab.id
   const drag = state.tabDrag
@@ -198,9 +217,15 @@ function GroupView({ controller, state, group }: Common & { group: Group }) {
     const viewport = tabViewport.current
     if (!navigation || !viewport) return
     const items = [...viewport.children] as HTMLElement[]
-    const hidden = tabsFit(navigation.clientWidth, viewport.scrollWidth)
+    const rects = items.map((item) => item.getBoundingClientRect())
+    const contentWidth = rects.reduce((total, rect) => total + rect.width, 0)
+    const fits = tabsFit(navigation.clientWidth, contentWidth)
+    const lastTabRect = rects[rects.length - 1]
+    const slack = fits || !lastTabRect ? 0 : Math.max(0, viewport.clientWidth - lastTabRect.width)
+    viewport.style.setProperty('--qt-tab-scroll-slack', `${slack}px`)
+    const hidden = fits
       ? []
-      : hiddenTabIndexes(viewport.getBoundingClientRect(), items.map((item) => item.getBoundingClientRect())).map((index) => items[index]!.dataset.tab!)
+      : hiddenTabIndexes(viewport.getBoundingClientRect(), rects).map((index) => items[index]!.dataset.tab!)
     setHiddenTabs((current) => (current.length === hidden.length && current.every((id, index) => id === hidden[index]) ? current : hidden))
     setViewportWidth(viewport.clientWidth)
   }, [])
@@ -224,7 +249,7 @@ function GroupView({ controller, state, group }: Common & { group: Group }) {
     if (!hasHidden) setMoreOpen(false)
   }, [hasHidden])
   const pickHidden = (id: string) => {
-    tabViewport.current?.querySelector<HTMLElement>(`[data-tab="${id}"]`)?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' })
+    revealTab(tabViewport.current?.querySelector<HTMLElement>(`[data-tab="${id}"]`) ?? null)
     void controller.activateTab(id)
   }
   const tab = activeTabOf(group)
@@ -303,7 +328,7 @@ function GroupView({ controller, state, group }: Common & { group: Group }) {
               onClick={() => setMoreOpen((open) => !open)}
             >
               <ControlIcon name="caret-down" size={12} />
-              <span>{hiddenTabs.length} more</span>
+              <span><span className="qt-tab-more-count" style={{ width: `${String(group.tabs.length).length}ch` }}>{hiddenTabs.length}</span> more</span>
             </button>
           ) : null}
         </div>
