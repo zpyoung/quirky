@@ -189,15 +189,18 @@ async function flushViewTimer(): Promise<void> {
   await act(async () => { await promise })
 }
 
-test('initial pending tab navigation overrides saved selection and focuses the active source editor', async () => {
+test.each(['source', 'changes'] as const)('initial pending tab navigation overrides saved selection and focuses the active %s editor', async (mode) => {
   const tabId = 'tab-1'
   const saved = { selection: { anchor: 0, head: 0 }, cursor: { line: 1, column: 1 }, scrollTop: 0 }
   const navigationId = 'nav-initial'
   const buffer = makeBuffer({ byTabId: { [tabId]: { ...saved, line: 3, column: 2, matchLength: 3, focused: true, navigationId } } }, tabId)
   const patches: Record<string, unknown>[] = []
   const focusEvents: number[] = []
-  const surface = await mountEditor(editorProps(buffer, (patch) => patches.push(patch), () => focusEvents.push(1)))
-  const view = viewFor(surface.container)
+  const props = editorProps(buffer, (patch) => patches.push(patch), () => focusEvents.push(1))
+  if (mode === 'changes') props.comparisonOriginal = 'original\nfile\ncontents'
+  const surface = await mountEditor(props)
+  const modified = surface.container.querySelector<HTMLElement>('[role="group"][aria-label="Modified editor"]')
+  const view = viewFor(modified ?? surface.container)
 
   const matchStart = position(3, 2)
   expect(view.state.selection.main.from).toBe(matchStart)
@@ -214,6 +217,12 @@ test('initial pending tab navigation overrides saved selection and focuses the a
     selection: { anchor: matchStart, head: matchStart + 3 },
     cursor: { line: 3, column: 5 }
   }))
+  if (mode === 'changes') {
+    const head = surface.container.querySelector<HTMLElement>('[role="group"][aria-label="HEAD version"]')
+    expect(head).not.toBeNull()
+    expect(viewFor(head!).state.selection.main.empty).toBe(true)
+    expect(viewFor(head!).state.selection.main.head).toBe(0)
+  }
 })
 
 test('mounted navigation updates repeat after cursor movement and remount restores the newer cursor', async () => {
