@@ -66,7 +66,7 @@ function installFakeAgents(reply = REPLY, delaySeconds = 1): Fakes {
 const readySparkle = (w: World) =>
   w.win.waitFor(() => {
     const button = byLabel(SPARKLE)
-    return button && !button.disabled && button.title === 'ai commit msg' ? button : undefined
+    return button && !button.disabled && button.title === button.getAttribute('aria-label') ? button : undefined
   })
 
 const stage = (w: World) => {

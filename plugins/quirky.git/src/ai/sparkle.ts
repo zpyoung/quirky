@@ -18,5 +18,5 @@ export function sparkleState({ staged, message, generating, committing, agentAva
   if (staged === 0) return { kind: 'nothing-staged', title: 'Stage at least one file to generate a message.', disabled: true }
   if (message.trim() !== '') return { kind: 'has-message', title: 'Clear the message to regenerate.', disabled: true }
   if (!agentAvailable) return { kind: 'no-agent', title: 'Pick an agent in Source Control AI settings.', disabled: false }
-  return { kind: 'ready', title: 'ai commit msg', disabled: false }
+  return { kind: 'ready', title: 'Generate commit message with AI', disabled: false }
 }
