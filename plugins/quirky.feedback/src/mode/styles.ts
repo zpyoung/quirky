@@ -17,7 +17,7 @@ const panel: CSSProperties = {
 
 export const banner: CSSProperties = {
   ...panel,
-  top: 'var(--ui-space-12)',
+  top: 'calc(var(--ui-window-bar-height) + var(--ui-space-12))',
   left: '50%',
   transform: 'translateX(-50%)',
   display: 'flex',

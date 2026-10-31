@@ -52,6 +52,7 @@
   --ui-radius-window: 10px;
   --ui-card-gap: 5px;
   --ui-row-single: 26px;
+  --ui-window-bar-height: calc(var(--ui-row-single) + var(--ui-space-12) + var(--ui-space-2));
   --ui-row-double: 34px;
   --ui-row-compact: 32px;
   --ui-border-width: 1px;
