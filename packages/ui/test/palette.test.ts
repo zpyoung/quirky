@@ -5,7 +5,7 @@ import {
   decodeFileId,
   encodeFileId,
   entryKey,
-  exactTitleFirst,
+  rankPaletteEntries,
   fileEntry,
   filterScope,
   paletteKey,
@@ -128,24 +128,41 @@ describe('paletteKey', () => {
   })
 })
 
-describe('exactTitleFirst', () => {
-  const entry = (kind: PaletteEntry['kind'], title: string): PaletteEntry => ({ id: title, title, kind })
+describe('palette entry ranking', () => {
+  const entry = (kind: PaletteEntry['kind'], title: string, description?: string): PaletteEntry => ({
+    id: `${kind}:${title}`,
+    title,
+    kind,
+    ...(description ? { description } : {})
+  })
 
-  test('puts an exact file name ahead of partial matches of other kinds, keeping the rest in order', () => {
-    const ordered = exactTitleFirst(
-      [entry('command', 'Open app.ts'), entry('tool', 'app.ts tools'), entry('file', 'app.ts'), entry('file', 'app.tsx')],
-      'app.ts'
+  test('ranks exact, prefix, title substring and metadata matches stably', () => {
+    const ordered = rankPaletteEntries(
+      [
+        entry('command', 'Terminal Dock'),
+        entry('worktree', 'DocsPass'),
+        entry('command', 'Copy Context', 'Document path'),
+        entry('view', 'Editor Document'),
+        entry('file', '  dOc  '),
+        entry('tool', 'Document Viewer'),
+        entry('view', 'Details', 'Documentation')
+      ],
+      'doc'
     )
+
     expect(ordered.map(({ kind, title }) => `${kind}:${title}`)).toEqual([
-      'file:app.ts',
-      'command:Open app.ts',
-      'tool:app.ts tools',
-      'file:app.tsx'
+      'file:  dOc  ',
+      'worktree:DocsPass',
+      'tool:Document Viewer',
+      'command:Terminal Dock',
+      'view:Editor Document',
+      'command:Copy Context',
+      'view:Details'
     ])
   })
 
   test('leaves the order alone with no query', () => {
     const entries = [entry('command', 'b'), entry('file', 'a')]
-    expect(exactTitleFirst(entries, '')).toEqual(entries)
+    expect(rankPaletteEntries(entries, '')).toEqual(entries)
   })
 })

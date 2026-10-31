@@ -93,6 +93,7 @@ async function mount(options: {
   recents?: string[]
   selected?: string | null
   worktrees?: Worktree[]
+  model?: UiModel
   handlers?: Record<string, Handler>
 } = {}) {
   const calls: Call[] = []
@@ -101,7 +102,7 @@ async function mount(options: {
   const ran = { commands: [] as string[], tools: [] as string[], views: [] as string[] }
   const listeners = new Set<() => void>()
   let state = {
-    model: MODEL,
+    model: options.model ?? MODEL,
     layout: {
       view: null,
       worktree: options.selected === undefined ? 'wt_a' : options.selected,
@@ -221,6 +222,37 @@ test('each scope shows only its kinds', async () => {
   expect(palette.titles()).toEqual(['main.ts'])
   await palette.chooseScope('Worktrees')
   expect(palette.titles()).toEqual([])
+})
+
+test('ranks title prefixes first and selects and opens the matching worktree', async () => {
+  const model = {
+    commands: [
+      { id: 'command:acme/cancel', plugin: 'acme', title: 'Cancel', module: null },
+      { id: 'command:acme/terminal-dock', plugin: 'acme', title: 'Terminal Dock', module: null },
+      { id: 'command:acme/send', plugin: 'acme', title: 'Send', module: null },
+      { id: 'command:acme/copy-context', plugin: 'acme', title: 'Copy Context', description: 'Document path', module: null }
+    ],
+    tools: [],
+    views: [{ id: 'view:acme/editor-document', kind: 'view', plugin: 'acme', title: 'Editor Document', order: 0, module: null }]
+  } as unknown as UiModel
+  const palette = await mount({
+    model,
+    worktrees: [worktree('wt_docs', 'DocsPass')],
+    handlers: {
+      'ui.window.self': () => ({ connId: 4 }),
+      'quirky.worktree/navigate': () => ({})
+    }
+  })
+
+  await palette.search('Doc')
+  expect(palette.titles()).toEqual(['DocsPass', 'Terminal Dock', 'Editor Document', 'Copy Context'])
+  expect(palette.selectedTitle()).toBe('DocsPass')
+  await palette.key('Enter')
+  await flush()
+  expect(palette.calls.filter((call) => call.method === 'ui.window.self' || call.method === 'quirky.worktree/navigate')).toEqual([
+    { method: 'ui.window.self', params: {} },
+    { method: 'quirky.worktree/navigate', params: { worktree: 'wt_docs', window: 4 } }
+  ])
 })
 
 test('Recent shows before typing, follows the scope, skips missing targets and is not repeated below', async () => {
