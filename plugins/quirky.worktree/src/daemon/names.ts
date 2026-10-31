@@ -1,7 +1,7 @@
 /** Marine creature names handed out for worktrees created without a name. */
 export const MARINE_NAMES: readonly string[] = [
   'narwhal', 'octopus', 'manta', 'nautilus', 'dolphin', 'porpoise', 'orca', 'beluga', 'walrus',
-  'seal', 'otter', 'manatee', 'dugong', 'whale', 'humpback', 'minke', 'sperm', 'shark',
+  'seal', 'otter', 'manatee', 'dugong', 'whale', 'humpback', 'minke', 'shark',
   'hammerhead', 'mako', 'thresher', 'bullshark', 'tigershark', 'whaleshark',
   'blacktip', 'angelshark', 'dogfish', 'skate', 'stingray', 'eagleray', 'devilray',
   'sawfish', 'guitarfish', 'torpedo', 'electricray', 'lamprey', 'hagfish', 'sturgeon', 'tuna',
