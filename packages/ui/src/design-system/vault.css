@@ -126,7 +126,7 @@
   background: var(--ui-selected);
   font-size: var(--ui-font-body);
   line-height: 1.45;
-  overflow-wrap: anywhere;
+  overflow-wrap: normal;
 }
 
 .qvh-consent p {

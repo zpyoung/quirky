@@ -26,7 +26,7 @@
 .tasks-row { display: flex; align-items: center; flex-wrap: wrap; gap: var(--ui-space-8); }
 .tasks-settings { display: flex; flex-direction: column; gap: var(--ui-space-12); min-width: 0; }
 .tasks-settings p { color: var(--ui-muted); margin: 0; }
-.quirky-tasks p { overflow-wrap: anywhere; }
+.quirky-tasks p:not(.ui-empty-state__message) { overflow-wrap: anywhere; }
 .quirky-tasks [role='alert'] { color: var(--ui-failing); }
 .quirky-tasks a { color: var(--ui-accent); }
 .quirky-tasks h2:not(.ui-tool-panel-frame__title):not(.ui-dialog__title), .quirky-tasks h3 { margin: 0; font-size: var(--ui-font-title); }
