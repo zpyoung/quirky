@@ -328,7 +328,7 @@ describe('panes keep their terminal across a reshape', () => {
     expect(element.style.left).toBe('0px')
   })
 
-  test('closing a sibling leaves the others mounted', async () => {
+  test('closing an inactive sibling preserves focus and leaves the others mounted', async () => {
     const view = await mount()
     const element = view.q('[data-pane="pane-3"]')!
     const opened = terminals.length
@@ -338,6 +338,19 @@ describe('panes keep their terminal across a reshape', () => {
     expect(view.q('[data-pane="pane-4"]')).toBeNull()
     expect(view.q('[data-pane="pane-3"]')).toBe(element)
     expect(element.style.height).toBe('600px')
+    expect(view.last().focusedPane).toBe('pane-3')
+  })
+
+  test('closing the active bottom-right pane focuses its sibling', async () => {
+    const focused = ops.focusPaneOp(conceptualWorkspace(), 'pane-4')
+    if (!focused.ok) throw new Error(focused.error.message)
+    const view = await mount(fakeDaemon(focused.value))
+    expect(view.last().focusedPane).toBe('pane-4')
+    await act(async () => void view.controller().closePane('pane-4'))
+    await settle()
+    expect(view.q('[data-pane="pane-4"]')).toBeNull()
+    expect(view.last().focusedPane).toBe('pane-3')
+    expect(view.q('[data-pane="pane-3"]')!.dataset.active).toBe('true')
   })
 
   test('a reconnect attaches the panes to their streams again', async () => {

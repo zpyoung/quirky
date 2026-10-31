@@ -22,7 +22,11 @@ Click a Source Control row to preview its diff in the selected terminal workspac
 
 File diff tabs include `(Diff)` after the path so they remain distinguishable from editor tabs for the same file.
 
+In the command palette, **Save Source Control File** saves edits in the focused Source Control diff. **Save File** saves the focused editor draft.
+
 Screen readers announce file rows with their Git state (such as modified or untracked) and history rows as commits. Row colors do not change those names to agent activity states.
+
+Right-click a file row for its Source Control actions. Blank Changes areas follow the [shell's context-menu behavior](../../README.md#shared-desktop-ui-components), including native editing and selected-text menus.
 
 For Markdown files, **Preview** shows only the rendered modified content and hides both source diff sides. **Source** restores the diff.
 

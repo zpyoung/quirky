@@ -46,6 +46,6 @@ The terminal pane Fork command is `command:quirky.terminal/fork-agent-session({ 
 
 Session views use shared tabs, menus, prompt dialogs, status dots and controls in both host themes. Detailed status, progress, unread reasons, close actions and shortcuts remain available. The terminal plugin's effective worktree view normally takes precedence; disabling it exposes the session plugin's fallback view without a second registration path. Session Info remains a separate right-bottom tool, with History and Transcript as center views; its accordion state and inspection/actions remain daemon-owned. The structured-session composer reserves the floating workspace toggle's 40px anchor and 16px clearance so Send remains visible and clickable.
 
-Background session transcripts hide hook system events and empty assistant turns by default. Check **Show all events** to include them; conversation messages and other system events remain visible either way.
+Background session transcripts hide hook system events and empty assistant turns by default. Check **Show all events** to include them; conversation messages and other system events remain visible either way. The filter stays inline with the Transcript heading, with both inset from the panel edges.
 
 The new-session prompt dialog stays open with its draft until creation succeeds. A refused start shows a toast and lets you retry without retyping; Start and the submit shortcut are disabled while creation is pending.

@@ -253,7 +253,7 @@
     ],
     "command": [
       {"id":"browserSettings","title":"Browser Settings","args":{"type":"object","properties":{},"additionalProperties":false}},
-      {"id":"profileClearNative","title":"Complete confirmed Browser profile clear","args":{"type":"object","properties":{"request":{"type":"string"}},"required":["request"],"additionalProperties":false}},
+      {"id":"profileClearNative","title":"Complete confirmed Browser profile clear","palette":false,"args":{"type":"object","properties":{"request":{"type":"string"}},"required":["request"],"additionalProperties":false}},
       {"id":"new-tab","title":"New Browser Tab","description":"Open a browser pane in the exact worktree or floating tab group.","args":{"type":"object","properties":{"worktree":{"type":"string"},"workspace":{"type":"string"},"group":{"type":"string"},"url":{"type":"string"},"page":{"type":"string"},"mode":{"type":"string","enum":["native","watch"]},"profile":{"type":"string"}},"additionalProperties":false}},
       {"id":"focus-address","title":"Focus Browser Address Bar","description":"Focus the address and search field in the active browser pane."},
       {"id":"find","title":"Find in Browser","description":"Find text in the active browser page."},

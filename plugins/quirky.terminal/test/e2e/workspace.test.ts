@@ -102,7 +102,7 @@ test(
     const ws = await waitForLayout(h, 'pane-4 gone', (candidate) => !panesOf(candidate).some((pane) => pane.id === down.pane.id))
     const tab = findTab(ws, build.tab.id)
     expect(paneShape(tab.root)).toEqual(['right', 0.5, build.pane.id, right.pane.id])
-    expect(tab.activePane).toBe(build.pane.id)
+    expect(tab.activePane).toBe(right.pane.id)
 
     expect((await h.cli(['session', 'close', one.session])).code).toBe(0)
     const after = await waitForLayout(h, 'the lone tab gone', (candidate) => tabsOf(candidate).length === 1)

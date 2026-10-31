@@ -320,5 +320,8 @@ Decided with the user on 2026-10-26:
     schemas that the CLI is generated from.
   - UI commands are API commands routed to the window. Layout and focus live in the daemon and are
     readable as JSON.
+  - UI commands used only by an open form or a confirmed transaction set `palette: false` so Search
+    does not offer them as standalone actions. Loop setup actions and the Browser profile-clear
+    completion bridge remain available through the API without appearing in the palette.
   - Agents in sessions have the user's full access. Irreversible actions confirm through
     `quirky ask` unless the call passes `--yes`.

@@ -9,6 +9,7 @@ import {
   movePane as movePaneInTree,
   neighborPane,
   paneLeaves,
+  paneParent,
   removeGroup,
   removePane,
   setGroupRatio,
@@ -300,19 +301,28 @@ export function splitPaneOp(
   )
 }
 
-/** Removes a pane; closing a tab's only pane closes the tab (and remembers it when `record` is given). */
+/**
+ * Removes a pane; an active close focuses its promoted sibling, and a last-pane close closes
+ * and optionally remembers its tab.
+ */
 export function closePaneOp(ws: Workspace, paneId: string, record: ClosedTab | null): OpResult {
   const loc = locatePane(ws, paneId)
   if (!loc) return fail('not-found', `no pane ${paneId}`)
   const root = removePane(loc.tab.root, paneId)
   if (!root) return removeTab(ws, loc.tab.id, record)
-  const leaves = paneLeaves(root)
+  let activePane = loc.tab.activePane
+  if (activePane === paneId) {
+    const parent = paneParent(loc.tab.root, paneId)!
+    let sibling = parent.first.kind === 'pane' && parent.first.id === paneId ? parent.second : parent.first
+    while (sibling.kind === 'split') sibling = sibling.first
+    activePane = sibling.id
+  }
   return ok(
     updateTab(ws, loc.tab.id, (tab) => isTerminalTab(tab) ? {
       ...tab,
       root,
-      activePane: tab.activePane === paneId ? leaves[0]!.id : tab.activePane,
-      expandedPane: tab.expandedPane === paneId || leaves.length < 2 ? null : tab.expandedPane
+      activePane,
+      expandedPane: tab.expandedPane === paneId || root.kind === 'pane' ? null : tab.expandedPane
     } : tab)
   )
 }

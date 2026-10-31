@@ -300,6 +300,10 @@ dots, attention counts and a second activity line; project/worktree dialogs and 
 use the same graphite controls in both themes. Shared ContextMenu supports pointer-positioned
 menus with nested actions; shared Dialog supports wide content and stacked focus ownership.
 
+Release builds suppress the native browser context menu across the shell. Text fields,
+editable content and selected text keep their native menus; app context menus still work.
+Development builds retain the native browser menu for Inspect Element.
+
 Narrow panels reflow header actions and row controls before they can crowd out names.
 Section headings stay on one line with ellipsis; full project names remain available on hover.
 The status bar reserves room for complete activity and needs-you metrics while usage adapts
