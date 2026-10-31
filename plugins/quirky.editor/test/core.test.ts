@@ -1,13 +1,13 @@
 import { afterEach, describe, expect, setSystemTime, test } from 'bun:test'
 import { spawnSync } from 'node:child_process'
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createHash } from 'node:crypto'
 import type { QuirkyClient } from '@quirky/protocol'
 import { connectDaemon } from '@quirky/protocol/node'
-import { builtinsDir, makeHomeWithoutAutoHooks, startHarness, type Harness } from '../../../packages/daemon/test/helpers'
-import type { EditorBufferInfo, EditorOpenResult } from '../src/types'
+import { builtinsDir, makeHomeWithoutAutoHooks, startHarness, type Harness, waitForAsync } from '../../../packages/daemon/test/helpers'
+import type { EditorBufferInfo, EditorOpenResult, EditorSearchState } from '../src/types'
 type EditorBuffer = EditorBufferInfo
 
 type CoreTestHarness = {
@@ -110,6 +110,86 @@ async function write(t: CoreTestHarness, path: string, text: string): Promise<vo
   const absolute = join(t.root, path)
   mkdirSync(join(absolute, '..'), { recursive: true })
   writeFileSync(absolute, text)
+}
+
+function controlledRg(queries: string[], ignoreTermQueries: string[] = []) {
+  const realRg = spawnSync('which', ['rg'], { encoding: 'utf8' })
+  if (realRg.status !== 0) throw new Error(`could not locate rg: ${realRg.stderr}`)
+  const directory = mkdtempSync(join(tmpdir(), 'quirky-editor-search-rg-'))
+  const control = join(directory, 'control')
+  mkdirSync(control)
+  const wrapper = join(directory, 'rg')
+  const branches = queries.map((query) => {
+    const ignoreTerm = ignoreTermQueries.includes(query) ? "trap '' TERM; " : ''
+    return `  ${query}) ${ignoreTerm}marker="${query}.started"; gate="${query}.release" ;;`
+  }).join('\n')
+  writeFileSync(wrapper, `#!/bin/sh
+set -eu
+previous=''
+last=''
+for arg do
+  previous=$last
+  last=$arg
+done
+query=$previous
+case "$query" in
+${branches}
+  *) exec "$QUIRKY_EDITOR_SEARCH_REAL_RG" "$@" ;;
+esac
+: > "$QUIRKY_EDITOR_SEARCH_CONTROL/$marker"
+while [ ! -f "$QUIRKY_EDITOR_SEARCH_CONTROL/$gate" ]; do sleep 0.01; done
+exec "$QUIRKY_EDITOR_SEARCH_REAL_RG" "$@"
+`)
+  chmodSync(wrapper, 0o755)
+  const requests: Promise<EditorSearchState>[] = []
+  const restore = (name: string, value: string | undefined) => {
+    if (value === undefined) delete process.env[name]
+    else process.env[name] = value
+  }
+  return {
+    async start(t: CoreTestHarness, query: string, requestId: string): Promise<{ result: Promise<EditorSearchState> }> {
+      const previousEnvironment = {
+        PATH: process.env.PATH,
+        control: process.env.QUIRKY_EDITOR_SEARCH_CONTROL,
+        realRg: process.env.QUIRKY_EDITOR_SEARCH_REAL_RG
+      }
+      try {
+        process.env.PATH = `${directory}:${process.env.PATH ?? ''}`
+        process.env.QUIRKY_EDITOR_SEARCH_CONTROL = control
+        process.env.QUIRKY_EDITOR_SEARCH_REAL_RG = realRg.stdout.trim()
+        const result = t.call<EditorSearchState>('quirky.editor/search', {
+          worktree: t.worktreeId,
+          action: 'run',
+          query,
+          requestId
+        })
+        requests.push(result)
+        void result.catch(() => {})
+        await waitForAsync(() => existsSync(join(control, `${query}.started`)), 10_000)
+        return { result }
+      } finally {
+        restore('PATH', previousEnvironment.PATH)
+        restore('QUIRKY_EDITOR_SEARCH_CONTROL', previousEnvironment.control)
+        restore('QUIRKY_EDITOR_SEARCH_REAL_RG', previousEnvironment.realRg)
+      }
+    },
+    release(query: string) {
+      writeFileSync(join(control, `${query}.release`), 'release')
+    },
+    async cleanup() {
+      for (const query of queries) this.release(query)
+      await Promise.allSettled(requests)
+      rmSync(directory, { recursive: true, force: true })
+    }
+  }
+}
+
+async function cancelSearch(t: CoreTestHarness, requestId?: string): Promise<EditorSearchState> {
+  return await t.call<EditorSearchState>('quirky.editor/search', {
+    worktree: t.worktreeId,
+    action: 'cancel',
+    ...(requestId === undefined ? {} : { requestId })
+  })
 }
 
 describe('editor core through the daemon API', () => {
@@ -771,6 +851,59 @@ describe('editor core through the daemon API', () => {
     await t.call('quirky.editor/search', { worktree: t.worktreeId, action: 'cancel' })
     expect((await t.call<{ loading: boolean }>('quirky.editor/search', { worktree: t.worktreeId, action: 'state' })).loading).toBe(false)
   })
+
+  test('SC-37: late cancellation is scoped to its request and old output cannot replace newer state', async () => {
+    const t = await boot()
+    await write(t, 'src/old.ts', 'oldneedle\n')
+    await write(t, 'src/new.ts', 'newneedle\n')
+    const rg = controlledRg(['oldneedle', 'newneedle'], ['oldneedle'])
+    try {
+      const { result: oldRun } = await rg.start(t, 'oldneedle', 'old-request')
+      const { result: newRun } = await rg.start(t, 'newneedle', 'new-request')
+      const staleCancel = await cancelSearch(t, 'old-request')
+      expect(staleCancel).toMatchObject({ query: 'newneedle', requestId: 'new-request', loading: true, error: null })
+
+      rg.release('newneedle')
+      const replacement = await newRun
+      expect(replacement).toMatchObject({
+        query: 'newneedle',
+        requestId: 'new-request',
+        loading: false,
+        error: null,
+        totalMatches: 1,
+        files: [{ relativePath: 'src/new.ts', matches: [{ lineContent: 'newneedle' }] }]
+      })
+      rg.release('oldneedle')
+      await oldRun
+      expect(await t.call<EditorSearchState>('quirky.editor/search', { worktree: t.worktreeId, action: 'state' })).toMatchObject({
+        query: 'newneedle',
+        requestId: 'new-request',
+        loading: false,
+        error: null,
+        totalMatches: 1,
+        files: [{ relativePath: 'src/new.ts', matches: [{ lineContent: 'newneedle' }] }]
+      })
+    } finally {
+      await rg.cleanup()
+    }
+  }, 30_000)
+
+  test('SC-37: matching and ID-less cancellation finish without reporting an error', async () => {
+    const t = await boot()
+    await write(t, 'src/cancel.ts', 'cancelneedle\n')
+    const rg = controlledRg(['matching-cancel', 'idless-cancel'])
+    try {
+      const { result: matchingRun } = await rg.start(t, 'matching-cancel', 'matching-request')
+      await cancelSearch(t, 'matching-request')
+      expect(await matchingRun).toMatchObject({ requestId: 'matching-request', loading: false, error: null })
+
+      const { result: idlessRun } = await rg.start(t, 'idless-cancel', 'idless-request')
+      await cancelSearch(t)
+      expect(await idlessRun).toMatchObject({ requestId: 'idless-request', loading: false, error: null })
+    } finally {
+      await rg.cleanup()
+    }
+  }, 30_000)
 
   test('SC-1/21: explicit terminal groups share a buffer, retain per-tab state and keep preview identity separate', async () => {
     const t = await boot()
