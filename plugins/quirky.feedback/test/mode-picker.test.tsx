@@ -92,15 +92,60 @@ const pressEsc = () => act(async () => { window.dispatchEvent(new KeyboardEvent(
 function rect(element: Element, box: { x: number; y: number; width: number; height: number }) {
   element.getBoundingClientRect = () => ({ ...box, left: box.x, top: box.y, right: box.x + box.width, bottom: box.y + box.height, toJSON: () => box }) as DOMRect
 }
+function measureCard(width: number, height: number) {
+  const original = Element.prototype.getBoundingClientRect
+  Element.prototype.getBoundingClientRect = function (this: Element) {
+    if (this.matches('[data-feedback-card]')) {
+      return { x: 0, y: 0, width, height, left: 0, top: 0, right: width, bottom: height, toJSON: () => ({}) } as DOMRect
+    }
+    return original.call(this)
+  }
+  return () => { Element.prototype.getBoundingClientRect = original }
+}
+function measureCardBy(size: (element: HTMLElement) => { width: number; height: number }) {
+  const original = Element.prototype.getBoundingClientRect
+  Element.prototype.getBoundingClientRect = function (this: Element) {
+    if (this.matches('[data-feedback-card]')) {
+      const { width, height } = size(this as HTMLElement)
+      return { x: 0, y: 0, width, height, left: 0, top: 0, right: width, bottom: height, toJSON: () => ({}) } as DOMRect
+    }
+    return original.call(this)
+  }
+  return () => { Element.prototype.getBoundingClientRect = original }
+}
+
+function mockViewport(width: number, height: number) {
+  const originalWidth = Object.getOwnPropertyDescriptor(window, 'innerWidth')
+  const originalHeight = Object.getOwnPropertyDescriptor(window, 'innerHeight')
+  const set = (nextWidth: number, nextHeight: number) => {
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: nextWidth })
+    Object.defineProperty(window, 'innerHeight', { configurable: true, value: nextHeight })
+  }
+  set(width, height)
+  return {
+    set,
+    restore() {
+      if (originalWidth === undefined) Reflect.deleteProperty(window, 'innerWidth')
+      else Object.defineProperty(window, 'innerWidth', originalWidth)
+      if (originalHeight === undefined) Reflect.deleteProperty(window, 'innerHeight')
+      else Object.defineProperty(window, 'innerHeight', originalHeight)
+    }
+  }
+}
+
+let restoreViewport: (() => void) | null = null
+
 
 function stack(...elements: Element[]) {
   document.elementsFromPoint = () => [host(), container()!, ...elements, document.body, document.documentElement]
 }
 
 let app: HTMLElement
+let restoreCardMeasurement: (() => void) | null = null
 let shadowRoot: ShadowRoot | null = null
 let attachShadow: Element['attachShadow']
 const label = () => shadowRoot!.querySelector<HTMLElement>('.label')!
+const highlight = () => shadowRoot!.querySelector<HTMLElement>('.highlight')!
 
 beforeEach(() => {
   annotated = []
@@ -113,12 +158,15 @@ beforeEach(() => {
     return shadowRoot
   }
   document.body.innerHTML = `<div id="app">
-    <button id="menu" class="menu-trigger">Menu<span id="gear">icon</span></button>
+    <h2 id="worktrees">Worktrees</h2>
+    <button id="menu" class="menu-trigger" aria-label="Open Worktrees">Menu<span id="gear">icon</span></button>
     <div role="menu" id="popup"><div id="item" role="menuitem"><span id="itemtext">Item one</span></div></div>
     <div id="plain"><span id="plainspan">plain</span></div>
+    <button id="secret" aria-label="client_secret=never-share-this"></button>
 
     <section data-terminal-pane="t1" id="term"><div class="terminal-pane-screen"><button id="termbutton"><span id="termtext">SECRET OUTPUT secret-token</span></button></div></section>
     <div class="qbp" data-browser-pane="p1" id="watch"><span class="qbp-mode" data-mode="watch"></span><div id="watched">page text</div></div>
+    <div class="qbp" data-browser-pane="native-pane" id="native"><div class="qbp-native-host" id="native-host"></div></div>
   </div>`
   app = document.getElementById('app')!
   app.querySelectorAll('*').forEach((element) => rect(element, { x: 10, y: 10, width: 100, height: 20 }))
@@ -128,6 +176,10 @@ afterEach(async () => {
   Element.prototype.attachShadow = attachShadow
   await act(async () => { teardown?.() })
   teardown = null
+  restoreCardMeasurement?.()
+  restoreCardMeasurement = null
+  restoreViewport?.()
+  restoreViewport = null
   document.body.innerHTML = ''
   delete (document as { elementsFromPoint?: unknown }).elementsFromPoint
 })
@@ -235,7 +287,7 @@ describe('picker events', () => {
     await start()
     stack(document.getElementById('item')!, document.getElementById('menu')!)
     await act(async () => { mouse(host(), 'click') })
-    expect(reactRoot().querySelector('[data-feedback-card]')!.textContent).toContain('div')
+    expect(reactRoot().querySelector('[data-feedback-card] h2')!.textContent).toContain('Item one')
   })
 
   test('only the primary button selects', async () => {
@@ -256,12 +308,13 @@ describe('picker events', () => {
     const fake = await start()
     stack(document.getElementById('termtext')!)
     await act(async () => { mouse(host(), 'click') })
-    expect(reactRoot().querySelector('[data-feedback-card]')!.textContent).toContain('Terminal pane')
+    expect(reactRoot().querySelector('[data-feedback-card] h2')!.textContent).toContain('Terminal pane')
     await type('too slow')
     await submit()
     const add = fake.calls.find((call) => call.method === 'quirky.feedback/add')!
     const capture = add.params!.capture as Capture
     expect(capture.kind).toBe('terminal-pane')
+    expect(capture.accessibleName).toBeNull()
     expect(capture.visibleText).toBeNull()
     expect(capture.nearbyText).toBeNull()
     expect(capture.attributes).toBeNull()
@@ -272,26 +325,60 @@ describe('picker events', () => {
     const fake = await start()
     stack(document.getElementById('watched')!)
     await act(async () => { mouse(host(), 'click') })
-    expect(reactRoot().querySelector('[data-feedback-card]')!.textContent).toContain('Browser pane')
+    expect(reactRoot().querySelector('[data-feedback-card] h2')!.textContent).toContain('Browser pane')
     await type('hm')
     await submit()
     const capture = fake.calls.find((call) => call.method === 'quirky.feedback/add')!.params!.capture as Capture
     expect(capture.kind).toBe('browser-pane')
     expect(capture.selector).toBe('.qbp[data-browser-pane="p1"]')
+    expect(capture.accessibleName).toBeNull()
   })
 
   test('a span inside a button resolves to the button', async () => {
     await start()
     stack(document.getElementById('gear')!)
     await act(async () => { mouse(host(), 'click') })
-    expect(reactRoot().querySelector('[data-feedback-card]')!.textContent).toContain('Comment on button')
+    expect(reactRoot().querySelector('[data-feedback-card] h2')!.textContent).toContain('Open Worktrees')
+  })
+
+  test('a heading names a new comment by its visible name', async () => {
+    await start()
+    stack(document.getElementById('worktrees')!)
+    await act(async () => { mouse(host(), 'click') })
+    expect(reactRoot().querySelector('[data-feedback-card] h2')!.textContent).toContain('Worktrees')
+  })
+
+  test('a long unbroken accessible name wraps within the comment card title', async () => {
+    const name = 'name_with_underscores_'.repeat(9)
+    const target = document.getElementById('menu')!
+    target.setAttribute('aria-label', name)
+    await start()
+    stack(target)
+    await act(async () => { mouse(host(), 'click') })
+    const title = reactRoot().querySelector<HTMLElement>('[data-feedback-card] h2')!
+    expect(title.textContent).toContain(name)
+    expect(title.style.overflowWrap).toBe('anywhere')
+  })
+
+  test('a sensitive accessible name stays redacted in the card and saved capture', async () => {
+    const fake = await start()
+    stack(document.getElementById('secret')!)
+    await act(async () => { mouse(host(), 'click') })
+    const title = reactRoot().querySelector('[data-feedback-card] h2')!.textContent!
+    expect(title).toContain('[redacted]')
+    expect(title).not.toContain('never-share-this')
+    await type('sensitive target')
+    await submit()
+    const capture = fake.calls.find((call) => call.method === 'quirky.feedback/add')!.params!.capture as Capture
+    expect(capture.accessibleName).toBe('[redacted]')
+    expect(JSON.stringify(capture)).not.toContain('never-share-this')
   })
 
   test('a span inside a menu item resolves to the menu item', async () => {
     const fake = await start()
     stack(document.getElementById('itemtext')!)
     await act(async () => { mouse(host(), 'click') })
-    expect(reactRoot().querySelector('[data-feedback-card]')!.textContent).toContain('Comment on div')
+    expect(reactRoot().querySelector('[data-feedback-card] h2')!.textContent).toContain('Item one')
     await type('x')
     await submit()
     const capture = fake.calls.find((call) => call.method === 'quirky.feedback/add')!.params!.capture as Capture
@@ -302,14 +389,14 @@ describe('picker events', () => {
     await start()
     stack(document.getElementById('plainspan')!)
     await act(async () => { mouse(host(), 'click') })
-    expect(reactRoot().querySelector('[data-feedback-card]')!.textContent).toContain('Comment on span')
+    expect(reactRoot().querySelector('[data-feedback-card] h2')!.textContent).toContain('plain')
   })
 
   test('a terminal pane wins over a button inside it', async () => {
     await start()
     stack(document.getElementById('termtext')!)
     await act(async () => { mouse(host(), 'click') })
-    expect(reactRoot().querySelector('[data-feedback-card]')!.textContent).toContain('Terminal pane')
+    expect(reactRoot().querySelector('[data-feedback-card] h2')!.textContent).toContain('Terminal pane')
   })
 
   test('the hover highlight outlines the control, not the inner span', async () => {
@@ -364,6 +451,207 @@ async function submit() {
   await act(async () => { reactRoot().querySelector<HTMLButtonElement>('[data-feedback-submit]')!.click() })
   await flush()
 }
+
+describe('selected outline', () => {
+  test('keeps the accepted target outlined while typing and rejecting a dirty replacement, then resumes hover on cancel', async () => {
+    await start()
+    const selected = document.getElementById('menu')!
+    const other = document.getElementById('item')!
+    rect(selected, { x: 70, y: 80, width: 120, height: 30 })
+    rect(other, { x: 340, y: 280, width: 120, height: 30 })
+    stack(selected)
+    await act(async () => { mouse(host(), 'click') })
+    expect(highlight().hidden).toBe(false)
+    expect(highlight().style.left).toBe('70px')
+    await type('draft')
+    stack(other)
+    await act(async () => { mouse(host(), 'pointermove') })
+    expect(highlight().hidden).toBe(false)
+    expect(highlight().style.left).toBe('70px')
+    await act(async () => { mouse(host(), 'click') })
+    const card = reactRoot().querySelector<HTMLElement>('[data-feedback-card]')!
+    expect(card.querySelector('h2')!.textContent).toContain('Open Worktrees')
+    expect(card.textContent).toContain('Esc again discards this comment.')
+    expect(card.querySelector('textarea')!.value).toBe('draft')
+    expect(highlight().style.left).toBe('70px')
+    expect(highlight().hidden).toBe(false)
+    const cancel = [...card.querySelectorAll('button')].find((button) => button.textContent?.trim() === 'Cancel')!
+    await act(async () => { cancel.click() })
+    expect(highlight().hidden).toBe(false)
+    expect(highlight().style.left).toBe('340px')
+    expect(reactRoot().querySelector('[data-feedback-card]')).toBeNull()
+    await act(async () => { mouse(host(), 'pointermove') })
+    expect(highlight().style.left).toBe('340px')
+  })
+
+  test('resumes hover immediately after a selected comment is saved', async () => {
+    await start()
+    const selected = document.getElementById('menu')!
+    const other = document.getElementById('item')!
+    rect(selected, { x: 70, y: 80, width: 120, height: 30 })
+    rect(other, { x: 340, y: 280, width: 120, height: 30 })
+    stack(selected)
+    await act(async () => { mouse(host(), 'click') })
+    await type('saved')
+    stack(other)
+    await act(async () => { mouse(host(), 'pointermove') })
+    expect(highlight().hidden).toBe(false)
+    expect(highlight().style.left).toBe('70px')
+    await submit()
+    expect(reactRoot().querySelector('[data-feedback-card]')).toBeNull()
+    expect(highlight().hidden).toBe(false)
+    expect(highlight().style.left).toBe('340px')
+  })
+
+  test('clears the selected target when switching to a saved comment', async () => {
+    await start([sample('c1')])
+    const selected = document.getElementById('menu')!
+    const other = document.getElementById('item')!
+    rect(selected, { x: 70, y: 80, width: 120, height: 30 })
+    rect(other, { x: 340, y: 280, width: 120, height: 30 })
+    stack(selected)
+    await act(async () => { mouse(host(), 'click') })
+    stack(other)
+    await act(async () => { mouse(host(), 'pointermove') })
+    expect(highlight().style.left).toBe('70px')
+    const edit = reactRoot().querySelector<HTMLButtonElement>('[data-feedback-row="c1"] button[aria-label="Edit comment 1"]')!
+    await act(async () => { edit.click() })
+    expect(reactRoot().querySelector('[data-feedback-card]')!.getAttribute('aria-label')).toBe('Edit comment')
+    expect(highlight().hidden).toBe(false)
+    expect(highlight().style.left).toBe('340px')
+  })
+  test('uses an accepted pane-chip selection for the selected outline', async () => {
+    await start()
+    const selected = document.getElementById('menu')!
+    const pane = document.getElementById('native')!
+    rect(selected, { x: 70, y: 80, width: 120, height: 30 })
+    rect(pane, { x: 210, y: 120, width: 180, height: 120 })
+    stack(selected)
+    await act(async () => { mouse(host(), 'click') })
+    expect(highlight().style.left).toBe('70px')
+    const chip = reactRoot().querySelector<HTMLButtonElement>('[data-feedback-chip="native-pane"] button')!
+    await act(async () => { chip.click() })
+    expect(reactRoot().querySelector('[data-feedback-card] h2')!.textContent).toContain('Browser pane')
+    expect(highlight().style.left).toBe('210px')
+    expect(highlight().hidden).toBe(false)
+  })
+
+  test('retains the current outline when a dirty selection through a pane chip is rejected', async () => {
+    await start()
+    const selected = document.getElementById('menu')!
+    const pane = document.getElementById('native')!
+    rect(selected, { x: 70, y: 80, width: 120, height: 30 })
+    rect(pane, { x: 210, y: 120, width: 180, height: 120 })
+    stack(selected)
+    await act(async () => { mouse(host(), 'click') })
+    await type('draft')
+    const chip = reactRoot().querySelector<HTMLButtonElement>('[data-feedback-chip="native-pane"] button')!
+    await act(async () => { chip.click() })
+    const card = reactRoot().querySelector<HTMLElement>('[data-feedback-card]')!
+    expect(card.querySelector('h2')!.textContent).toContain('Open Worktrees')
+    expect(card.textContent).toContain('Esc again discards this comment.')
+    expect(highlight().style.left).toBe('70px')
+    expect(highlight().hidden).toBe(false)
+  })
+
+})
+
+describe('new card placement', () => {
+  test('anchors beside the selected target without crossing viewport edges', async () => {
+    restoreCardMeasurement = measureCard(240, 180)
+    await start()
+    const target = document.getElementById('menu')!
+    const targetBox = { x: window.innerWidth - 20, y: window.innerHeight - 20, width: 10, height: 10 }
+    rect(target, targetBox)
+    stack(target)
+    await act(async () => { mouse(host(), 'click') })
+    const card = reactRoot().querySelector<HTMLElement>('[data-feedback-card]')!
+    const left = parseFloat(card.style.left)
+    const top = parseFloat(card.style.top)
+    expect(Number.isFinite(left)).toBe(true)
+    expect(Number.isFinite(top)).toBe(true)
+    expect(left).toBeGreaterThanOrEqual(0)
+    expect(top).toBeGreaterThanOrEqual(0)
+    expect(left + 240).toBeLessThanOrEqual(window.innerWidth)
+    expect(top + 180).toBeLessThanOrEqual(window.innerHeight)
+    expect(left + 240).toBeGreaterThan(targetBox.x - 240)
+    expect(top + 180).toBeGreaterThan(targetBox.y - 180)
+  })
+  test('repositions a new card when the viewport shrinks', async () => {
+    const viewport = mockViewport(800, 500)
+    restoreViewport = viewport.restore
+    restoreCardMeasurement = measureCard(240, 180)
+    await start()
+    const target = document.getElementById('menu')!
+    rect(target, { x: 400, y: 250, width: 10, height: 10 })
+    stack(target)
+    await act(async () => { mouse(host(), 'click') })
+    const card = reactRoot().querySelector<HTMLElement>('[data-feedback-card]')!
+    expect(parseFloat(card.style.top)).toBe(272)
+    await act(async () => {
+      viewport.set(500, 300)
+      window.dispatchEvent(new Event('resize'))
+    })
+    await flush()
+    expect(parseFloat(card.style.left) + 240).toBeLessThanOrEqual(500)
+    expect(parseFloat(card.style.top) + 180).toBeLessThanOrEqual(300)
+    expect(parseFloat(card.style.left)).toBe(248)
+    expect(parseFloat(card.style.top)).toBe(58)
+  })
+
+  test('repositions when a warning makes the card content grow', async () => {
+    const viewport = mockViewport(800, 600)
+    restoreViewport = viewport.restore
+    restoreCardMeasurement = measureCardBy((card) => ({ width: 240, height: card.querySelector('[role="alert"]') === null ? 180 : 380 }))
+    await start()
+    const target = document.getElementById('menu')!
+    rect(target, { x: 100, y: 450, width: 10, height: 10 })
+    stack(target)
+    await act(async () => { mouse(host(), 'click') })
+    await type('draft')
+    stack(document.getElementById('item')!)
+    await act(async () => { mouse(host(), 'click') })
+    const card = reactRoot().querySelector<HTMLElement>('[data-feedback-card]')!
+    expect(card.textContent).toContain('Esc again discards this comment.')
+    expect(parseFloat(card.style.top) + 380).toBeLessThanOrEqual(600)
+    expect(parseFloat(card.style.top)).toBe(58)
+  })
+
+  test('keeps actions in the viewport when the textarea is resized without editing text', async () => {
+    const viewport = mockViewport(800, 600)
+    restoreViewport = viewport.restore
+    let height = 180
+    restoreCardMeasurement = measureCardBy(() => ({ width: 240, height }))
+    const callbacks = new Set<ResizeObserverCallback>()
+    const original = Object.getOwnPropertyDescriptor(window, 'ResizeObserver')
+    Object.defineProperty(window, 'ResizeObserver', {
+      configurable: true,
+      value: class implements ResizeObserver {
+        constructor(callback: ResizeObserverCallback) { callbacks.add(callback) }
+        observe() {}
+        unobserve() {}
+        disconnect() {}
+      }
+    })
+    try {
+      await start()
+      const target = document.getElementById('menu')!
+      rect(target, { x: 100, y: 450, width: 10, height: 10 })
+      stack(target)
+      await act(async () => { mouse(host(), 'click') })
+      const card = reactRoot().querySelector<HTMLElement>('[data-feedback-card]')!
+      height = 380
+      await act(async () => {
+        for (const callback of callbacks) callback([], {} as ResizeObserver)
+      })
+      expect(parseFloat(card.style.top) + height).toBeLessThanOrEqual(600)
+    } finally {
+      if (original === undefined) Reflect.deleteProperty(window, 'ResizeObserver')
+      else Object.defineProperty(window, 'ResizeObserver', original)
+    }
+  })
+
+})
 
 describe('option key', () => {
   const passThrough = () => host().style.getPropertyValue('pointer-events') === 'none' && host().style.getPropertyPriority('pointer-events') === 'important'
@@ -541,7 +829,7 @@ describe('escape', () => {
     await act(async () => { mouse(host(), 'click') })
     const card = reactRoot().querySelector('[data-feedback-card]')!
     expect(card.textContent).toContain('Esc again discards this comment.')
-    expect(card.textContent).toContain('div')
+    expect(card.querySelector('h2')!.textContent).toContain('Item one')
   })
 
   test('a selection click while the card is empty replaces the selection', async () => {
@@ -550,7 +838,7 @@ describe('escape', () => {
     await act(async () => { mouse(host(), 'click') })
     stack(document.getElementById('menu')!)
     await act(async () => { mouse(host(), 'click') })
-    expect(reactRoot().querySelector('[data-feedback-card]')!.textContent).toContain('button')
+    expect(reactRoot().querySelector('[data-feedback-card] h2')!.textContent).toContain('Open Worktrees')
   })
 
   test('other keys are not consumed', async () => {

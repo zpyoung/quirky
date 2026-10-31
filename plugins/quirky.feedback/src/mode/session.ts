@@ -30,6 +30,7 @@ export type SessionState = {
   recovered: boolean
   owners: Record<string, string>
   card: Card | null
+  target: Target | null
   collapsed: boolean
   notice: string | null
 }
@@ -58,7 +59,7 @@ function pluginsOf(value: unknown): PluginInfo[] {
  * and shows a toast; nothing leaves the window except through an explicit copy or issue draft.
  */
 export function createSession(context: UiPluginContext, hooks: { suspend(suspended: boolean): void }) {
-  let state: SessionState = { comments: [], recovered: false, owners: {}, card: null, collapsed: false, notice: null }
+  let state: SessionState = { comments: [], recovered: false, owners: {}, card: null, target: null, collapsed: false, notice: null }
   let disposed = false
   let serial = 0
   let confirming = false
@@ -67,7 +68,9 @@ export function createSession(context: UiPluginContext, hooks: { suspend(suspend
 
   const commit = (patch: Partial<SessionState>) => {
     if (disposed) return
-    state = { ...state, ...patch }
+    const next: SessionState = { ...state, ...patch }
+    if (patch.card === null || (patch.card !== undefined && patch.card.id !== null)) next.target = null
+    state = next
     for (const listener of [...listeners]) listener()
   }
   const patchCard = (patch: Partial<Card>) => {
@@ -119,7 +122,8 @@ export function createSession(context: UiPluginContext, hooks: { suspend(suspend
       const capture = captureElement(target.element, { includeReact: process.env.QUIRKY_BUILD_CHANNEL === 'dev' })
       commit({
         notice: null,
-        card: { serial: ++serial, id: null, capture, label: target.label, intent: 'change', text: '', initialText: '', initialIntent: 'change', warned: false, saving: false }
+        target,
+        card: { serial: ++serial, id: null, capture, label: capture.accessibleName ?? target.label, intent: 'change', text: '', initialText: '', initialIntent: 'change', warned: false, saving: false }
       })
     },
 
