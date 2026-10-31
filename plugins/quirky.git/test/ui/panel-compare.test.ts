@@ -29,6 +29,8 @@ const dialogTitle = () => {
   return titleId ? document.getElementById(titleId)?.textContent ?? null : null
 }
 
+
+
 describe('SC-48: compare explains when it cannot run', () => {
   const unavailable = compareOf({ status: 'invalid-base', base: 'origin/gone', message: 'Base ref origin/gone could not be resolved in this repository.' })
 
@@ -119,30 +121,127 @@ describe('SC-50: Change Base Ref', () => {
     }))
   }
 
-  test('searching narrows the list, marks the current base and picking writes it', async () => {
+  test('searching narrows the list, marks the current base and picking waits for compare refresh', async () => {
     const { fake, element, unmount } = await open(setup)
-    await click(byLabel(element, 'More source control actions'))
-    await click(buttonText(document.body, 'Change Base Ref…'))
-    expect(dialogTitle()).toBe('Change Base Ref')
-    expect(dialog()?.textContent).toContain('Pick the branch compare target for this repository.')
-    expect(qa(dialog()!, '[aria-label="Branches"] .ui-list-row__main')).toHaveLength(4)
-    expect(q(dialog()!, '[aria-label="Branches"] [aria-pressed="true"]')?.textContent).toContain('origin/main')
-    await type(byLabel(dialog()!, 'Search branches') as HTMLInputElement, 'rel')
-    expect(fake.called('quirky.git/branches').at(-1)?.params).toEqual({ worktree: 'feat', query: 'rel' })
-    expect(qa(dialog()!, '[aria-label="Branches"] .ui-list-row__main').map((row) => row.textContent)).toEqual(['releaselocal', 'origin/releaseremote'])
-    await click(q(dialog()!, '[aria-label="Branches"] .ui-list-row__main'))
-    expect(fake.called('quirky.git/setBase').at(-1)?.params).toEqual({ worktree: 'feat', base: 'release' })
+    const pendingCompare = Promise.withResolvers<typeof fake.compare>()
+    let deferCompare = false
+    fake.on('quirky.git/compare', () => deferCompare ? pendingCompare.promise : fake.compare)
+    try {
+      await click(byLabel(element, 'More source control actions'))
+      await click(buttonText(document.body, 'Change Base Ref…'))
+      expect(dialogTitle()).toBe('Change Base Ref')
+      expect(dialog()?.textContent).toContain('Pick the branch compare target for this repository.')
+      expect(qa(dialog()!, '[aria-label="Branches"] .ui-list-row__main')).toHaveLength(4)
+      expect(q(dialog()!, '[aria-label="Branches"] [aria-pressed="true"]')?.textContent).toContain('origin/main')
+      await type(byLabel(dialog()!, 'Search branches') as HTMLInputElement, 'rel')
+      expect(fake.called('quirky.git/branches').at(-1)?.params).toEqual({ worktree: 'feat', query: 'rel' })
+      expect(qa(dialog()!, '[aria-label="Branches"] .ui-list-row__main').map((row) => row.textContent)).toEqual(['releaselocal', 'origin/releaseremote'])
+      const beforeCompare = fake.called('quirky.git/compare').length
+      deferCompare = true
+      await click(q(dialog()!, '[aria-label="Branches"] .ui-list-row__main'))
+      expect(fake.called('quirky.git/setBase').at(-1)?.params).toEqual({ worktree: 'feat', base: 'release' })
+      expect(fake.called('quirky.git/compare')).toHaveLength(beforeCompare + 1)
+      expect(dialog()).not.toBeNull()
+      deferCompare = false
+      const refreshed = compareOf({ base: 'release' })
+      fake.compare = refreshed
+      await act(async () => pendingCompare.resolve(refreshed))
+      await settle()
+      expect(dialog()).toBeNull()
+      expect(document.activeElement === q(element, '[data-base-ref]')).toBe(true)
+    } finally {
+      deferCompare = false
+      pendingCompare.resolve(fake.compare)
+      await settle()
+      unmount()
+    }
+  })
+
+  test('Use Primary waits for a base-clearing refresh and falls back when the base button disappears', async () => {
+    const { fake, element, unmount } = await open(setup)
+    const pendingCompare = Promise.withResolvers<typeof fake.compare>()
+    let deferCompare = false
+    fake.on('quirky.git/compare', () => deferCompare ? pendingCompare.promise : fake.compare)
+    try {
+      const opener = q(element, '[data-base-ref]')!
+      opener.focus()
+      await click(opener)
+      const beforeCompare = fake.called('quirky.git/compare').length
+      deferCompare = true
+      await click(buttonText(dialog()!, 'Use Primary'))
+      expect(fake.called('quirky.git/setBase').at(-1)?.params).toEqual({ worktree: 'feat', clear: true })
+      expect(fake.called('quirky.git/compare')).toHaveLength(beforeCompare + 1)
+      expect(dialog()).not.toBeNull()
+      expect(q(element, '[data-base-ref]')).toBe(opener)
+      deferCompare = false
+      const cleared = compareOf({ base: null })
+      fake.compare = cleared
+      await act(async () => pendingCompare.resolve(cleared))
+      await settle()
+      expect(dialog()).toBeNull()
+      expect(q(element, '[data-base-ref]')).toBeNull()
+      const target = q(element, '[data-base-ref]') ?? byLabel(element, 'More commit and remote actions')
+      expect(target?.getAttribute('aria-label')).toBe('More commit and remote actions')
+      expect((target as HTMLButtonElement).disabled).toBe(false)
+      expect(document.activeElement === target).toBe(true)
+    } finally {
+      deferCompare = false
+      const cleared = compareOf({ base: null })
+      fake.compare = cleared
+      pendingCompare.resolve(cleared)
+      await settle()
+      unmount()
+    }
+  })
+
+  test('closing the base picker preserves focus on its connected opener', async () => {
+    const { element, unmount } = await open(setup)
+    const opener = q(element, '[data-base-ref]')!
+    opener.focus()
+    await click(opener)
+    await click(buttonText(dialog()!, 'Close'))
     expect(dialog()).toBeNull()
+    expect(document.activeElement === opener).toBe(true)
     unmount()
   })
 
-  test('Use Primary clears the base; the base button in the branch row opens the dialog too', async () => {
-    const { fake, element, unmount } = await open(setup)
-    await click(q(element, '[data-base-ref]'))
-    await click(buttonText(dialog()!, 'Use Primary'))
-    expect(fake.called('quirky.git/setBase').at(-1)?.params).toEqual({ worktree: 'feat', clear: true })
-    unmount()
+  test('a completed base save does not close a newer confirmation dialog', async () => {
+    const { fake, element, unmount } = await open((f) => {
+      f.status = statusOf([entry('notes.txt', 'untracked')])
+    })
+    const pendingCompare = Promise.withResolvers<typeof fake.compare>()
+    let deferCompare = false
+    fake.on('quirky.git/compare', () => deferCompare ? pendingCompare.promise : fake.compare)
+    try {
+      const opener = q(element, '[data-base-ref]')!
+      opener.focus()
+      await click(opener)
+      const beforeCompare = fake.called('quirky.git/compare').length
+      deferCompare = true
+      await click(buttonText(dialog()!, 'Use Primary'))
+      expect(fake.called('quirky.git/compare')).toHaveLength(beforeCompare + 1)
+      expect(dialogTitle()).toBe('Change Base Ref')
+      await click(buttonText(dialog()!, 'Close'))
+      expect(dialog()).toBeNull()
+      await click(byLabel(element, 'Delete untracked file notes.txt'))
+      expect(dialogTitle()).toBe('Delete "notes.txt"?')
+      deferCompare = false
+      const cleared = compareOf({ base: null })
+      fake.compare = cleared
+      await act(async () => pendingCompare.resolve(cleared))
+      await settle()
+      expect(dialogTitle()).toBe('Delete "notes.txt"?')
+      expect(fake.called('quirky.git/discard')).toHaveLength(0)
+      await click(buttonText(dialog()!, 'Cancel'))
+      expect(dialog()).toBeNull()
+    } finally {
+      deferCompare = false
+      pendingCompare.resolve(fake.compare)
+      await settle()
+      unmount()
+    }
   })
+
 
   test('a refused base shows the message and keeps the dialog open', async () => {
     const { element, unmount } = await open((f) => {

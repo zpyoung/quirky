@@ -40,6 +40,17 @@ const dialogTitle = () => {
 }
 const menuLabels = () => qa(document.body, '[role="menu"] [role="menuitem"]').map((b) => b.textContent)
 const message = (element: HTMLElement) => byLabel(element, 'Commit message') as HTMLTextAreaElement
+const recoveryTarget = (element: HTMLElement) => q(element, '[data-base-ref]') ?? chevron(element)
+
+describe('Source Control focus recovery', () => {
+  test('does not move focus on initial panel mount', async () => {
+    const before = document.activeElement
+    const { unmount } = await open()
+    expect(document.activeElement === before).toBe(true)
+    unmount()
+  })
+})
+
 
 describe('SC-23: the discard dialogs', () => {
   const rows = (fake: Fake) => {
@@ -73,6 +84,40 @@ describe('SC-23: the discard dialogs', () => {
       unmount()
     })
   }
+
+  test('recovers focus before a delete completes and keeps it through a later row-removing status read', async () => {
+    const pendingDiscard = Promise.withResolvers<{ ok: boolean }>()
+    const { fake, element, unmount } = await open((f) => {
+      f.status = statusOf([entry('notes.txt', 'untracked')])
+      f.on('quirky.git/discard', () => pendingDiscard.promise)
+    })
+    const opener = byLabel(element, 'Delete untracked file notes.txt')!
+    const statusReads = fake.called('quirky.git/status').length
+    try {
+      opener.focus()
+      await click(opener)
+      await click(buttonText(dialog()!, 'Delete'))
+      const target = recoveryTarget(element)
+      expect(fake.called('quirky.git/discard')).toHaveLength(1)
+      expect(q(element, '[data-row-path="notes.txt"]')).not.toBeNull()
+      expect(target?.isConnected).toBe(true)
+      expect((target as HTMLButtonElement).disabled).toBe(false)
+      expect(document.activeElement === target).toBe(true)
+      await act(async () => pendingDiscard.resolve({ ok: true }))
+      await settle()
+      expect(fake.called('quirky.git/status').length).toBeGreaterThan(statusReads)
+      expect(q(element, '[data-row-path="notes.txt"]')).not.toBeNull()
+      expect(document.activeElement === target).toBe(true)
+      fake.status = statusOf([])
+      await act(async () => fake.emit({ type: 'quirky.git/changed', data: { worktreeId: 'feat' } }))
+      await waitForState(element, () => q(element, '[data-row-path="notes.txt"]') === null)
+      expect(document.activeElement === target).toBe(true)
+    } finally {
+      await act(async () => pendingDiscard.resolve({ ok: true }))
+      await settle()
+      unmount()
+    }
+  })
 
   test('Discard all on each section asks with Orca\'s text and sends the area', async () => {
     const { fake, element, unmount } = await open(rows)
@@ -258,6 +303,79 @@ describe('SC-25: the commit box', () => {
     unmount()
   })
 
+
+  test('recovers focus while a commit is pending and retains it after completion', async () => {
+    const pendingCommit = Promise.withResolvers<{ sha: string }>()
+    const { element, unmount } = await open((f) => {
+      f.status = statusOf([entry('math.ts', 'staged')])
+      f.on('quirky.git/commit', () => pendingCommit.promise)
+    })
+    try {
+      await type(message(element), 'Add math')
+      primary(element).focus()
+      await click(primary(element))
+      const target = recoveryTarget(element)
+      expect(primary(element).disabled).toBe(true)
+      expect(target?.isConnected).toBe(true)
+      expect((target as HTMLButtonElement).disabled).toBe(false)
+      expect(document.activeElement === target).toBe(true)
+      await act(async () => pendingCommit.resolve({ sha: 'd'.repeat(40) }))
+      await settle()
+      expect(document.activeElement === target).toBe(true)
+    } finally {
+      await act(async () => pendingCommit.resolve({ sha: 'd'.repeat(40) }))
+      await settle()
+      unmount()
+    }
+  })
+
+  test('does not steal focus from another enabled control when a commit fails', async () => {
+    const pendingCommit = Promise.withResolvers<{ sha: string }>()
+    const { fake, element, unmount } = await open((f) => {
+      f.status = statusOf([entry('math.ts', 'staged')])
+      f.on('quirky.git/commit', () => pendingCommit.promise)
+    })
+    try {
+      await type(message(element), 'Add math')
+      primary(element).focus()
+      await click(primary(element))
+      const chosen = chevron(element)
+      chosen.focus()
+      await act(async () => pendingCommit.reject(new Error('fatal: nope')))
+      await settle()
+      expect(fake.toasts).toEqual([['Commit failed', 'fatal: nope']])
+      expect(document.activeElement === chosen).toBe(true)
+    } finally {
+      await act(async () => pendingCommit.resolve({ sha: 'd'.repeat(40) }))
+      await settle()
+      unmount()
+    }
+  })
+
+  test('does not steal focus if a user moves outside the panel during a pending commit', async () => {
+    const pendingCommit = Promise.withResolvers<{ sha: string }>()
+    const { element, unmount } = await open((f) => {
+      f.status = statusOf([entry('math.ts', 'staged')])
+      f.on('quirky.git/commit', () => pendingCommit.promise)
+    })
+    const outside = document.createElement('button')
+    try {
+      outside.textContent = 'Other control'
+      document.body.appendChild(outside)
+      await type(message(element), 'Add math')
+      primary(element).focus()
+      await click(primary(element))
+      outside.focus()
+      await act(async () => pendingCommit.resolve({ sha: 'd'.repeat(40) }))
+      await settle()
+      expect(document.activeElement === outside).toBe(true)
+    } finally {
+      await act(async () => pendingCommit.resolve({ sha: 'd'.repeat(40) }))
+      await settle()
+      outside.remove()
+      unmount()
+    }
+  })
   test('Cmd+Enter does nothing when the primary is not an enabled Commit', async () => {
     const { fake, element, unmount } = await open((f) => {
       f.status = statusOf([entry('math.ts', 'unstaged')])
@@ -333,6 +451,24 @@ describe('SC-27: a failing hook blocks the commit', () => {
     expect(q(dialog()!, 'pre')?.textContent).toBe('eslint found 2 problems')
     await click(buttonText(dialog()!, 'Close'))
     expect(dialog()).toBeNull()
+    unmount()
+  })
+
+  test('a successful commit clears an earlier hook blocker', async () => {
+    let fail = true
+    const { element, unmount } = await open((f) => {
+      f.status = statusOf([entry('math.ts', 'staged')])
+      f.on('quirky.git/commit', () => {
+        if (fail) throw failure('Pre-commit hook failed.', { reason: 'hook', summary: 'Pre-commit hook failed.', output: 'hook output' })
+        return { sha: 'd'.repeat(40) }
+      })
+    })
+    await type(message(element), 'Add math')
+    await click(primary(element))
+    expect(q(element, '[role="alert"] .ui-inline-agent-card') !== null).toBe(true)
+    fail = false
+    await click(primary(element))
+    expect(q(element, '[role="alert"] .ui-inline-agent-card') !== null).toBe(false)
     unmount()
   })
 

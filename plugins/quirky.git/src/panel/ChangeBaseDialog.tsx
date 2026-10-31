@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Badge, Button, Dialog, EmptyState, ListRow, TextField } from '@quirky/ui'
 import type { UiPluginContext } from '@quirky/protocol'
 import { messageOf } from './format'
@@ -12,7 +12,7 @@ type Props = {
   current: string | null
   onClose(): void
   /** Runs after the base was written, so the panel can reload its compare. */
-  onChanged(): void
+  onChanged(): Promise<void>
 }
 
 const stripRemote = (ref: string): string => ref.replace(/^(?:refs\/)?remotes\//, '')
@@ -23,6 +23,19 @@ export function ChangeBaseDialog({ context, worktree, current, onClose, onChange
   const [refs, setRefs] = useState<Ref[]>([])
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+
+  const alive = useRef(true)
+  useEffect(() => {
+    alive.current = true
+    return () => {
+      alive.current = false
+    }
+  }, [])
+
+  const close = () => {
+    alive.current = false
+    onClose()
+  }
 
   useEffect(() => {
     let cancelled = false
@@ -45,9 +58,11 @@ export function ChangeBaseDialog({ context, worktree, current, onClose, onChange
     setSaving(true)
     try {
       await context.call('quirky.git/setBase', { worktree, ...params })
-      onChanged()
-      onClose()
+      await onChanged()
+      if (!alive.current) return
+      close()
     } catch (e) {
+      if (!alive.current) return
       setError(messageOf(e))
       setSaving(false)
     }
@@ -58,8 +73,8 @@ export function ChangeBaseDialog({ context, worktree, current, onClose, onChange
     <Dialog
       open
       title="Change Base Ref"
-      onClose={onClose}
-      actions={<Button onClick={onClose}>Close</Button>}
+      onClose={close}
+      actions={<Button onClick={close}>Close</Button>}
     >
       <div className="ui-stack">
         <p className="ui-text-muted">Pick the branch compare target for this repository.</p>

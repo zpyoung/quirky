@@ -6,6 +6,10 @@ The Git plugin stores independent recipes for commit messages, fix/review action
 
 With staged changes and an empty commit message, the sparkle button's tooltip and accessible name both read “Generate commit message with AI” when an agent is available. Other states explain why generation is unavailable or direct you to the AI settings.
 
+## Keyboard focus
+
+Committing, deleting an untracked file, and closing the base-ref picker keep keyboard focus in Source Control. If the active control is disabled or removed, focus returns to the base-ref button or, when no base is available, More commit and remote actions. A valid control focused during a pending operation keeps focus.
+
 ## Name candidates
 
 `aiName({ action: 'branchName' })` returns a branch-name candidate from the exact worktree's checked-out branch, resolved base comparison, committed changed paths, and staged/unstaged paths. An optional `session` adds user/assistant messages from that exact structured session as captured work-prompt context. The returned branch name must pass Git's `check-ref-format --branch` validation.
