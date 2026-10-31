@@ -1,11 +1,14 @@
 import { afterEach, expect, test } from 'bun:test'
-import { symlinkSync } from 'node:fs'
+import { existsSync, symlinkSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { QuirkyClient, type Ask, type AskSpec, type Repo, type Worktree } from '@quirky/protocol'
 import { rpcUrl } from '@quirky/protocol/node'
+import { chromium } from 'playwright'
 import { makeTempDir } from '../../daemon/test/plugins/fixtures'
 import { attentionStoreFor, createAttentionStore } from '../src/shell/attention'
 import { bootWindow, closeWindows, installUiPlugin, provide, type WindowEnv } from './fixtures/window-env'
+
+const browserExecutable = chromium.executablePath()
 
 const CURRENT_VIEW = 'view:acme.attention/current'
 const INBOX = 'host:inbox'
@@ -193,6 +196,73 @@ test('a failed Inbox answer remains pending and actionable until a valid answer 
   expect(answered?.envelope.answers.action).toMatchObject({ value: 'approve', label: 'Approve', source: 'option' })
   expect(attention.getSnapshot().asks?.some((ask) => ask.id === askId)).toBe(false)
 })
+test.skipIf(!existsSync(browserExecutable))('the Inbox count stays beside the title and the title truncates only at minimum width', async () => {
+  const { env } = await bootAttention()
+  await env.agent.callAny('ui.tool.open', { id: INBOX })
+  await env.win.waitFor(() => {
+    const badge = env.win.document.querySelector<HTMLElement>('.shell-inbox .ui-section-header__actions .ui-badge')
+    return badge?.textContent?.trim() === '0'
+  }, 10_000)
+  const inboxMarkup = env.win.document.querySelector<HTMLElement>('.shell-inbox')!.outerHTML
+
+  const [compatibilityTokens, tokens, components, globalStyles, chromeStyles, toolShellStyles] = await Promise.all([
+    Bun.file(new URL('../src/design-system/compatibility-tokens.css', import.meta.url)).text(),
+    Bun.file(new URL('../src/design-system/tokens.css', import.meta.url)).text(),
+    Bun.file(new URL('../src/design-system/components.css', import.meta.url)).text(),
+    Bun.file(new URL('../src/styles.css', import.meta.url)).text(),
+    Bun.file(new URL('../src/shell/chrome.css', import.meta.url)).text(),
+    Bun.file(new URL('../src/shell/tool-shell.css', import.meta.url)).text()
+  ])
+  const globalRules = globalStyles.replace(/^@import ['"][^'"]+['"];\s*/gm, '')
+  const styles = `${chromeStyles}\n${toolShellStyles}\n${compatibilityTokens}\n${tokens}\n${components}\n${globalRules}`
+  const browser = await chromium.launch({ headless: true, args: process.platform === 'linux' ? ['--no-sandbox'] : [] })
+  try {
+    const page = await browser.newPage({ viewport: { width: 800, height: 600 } })
+    for (const width of [160, 320]) {
+      await page.setContent(`
+        <style>${styles}</style>
+        <main data-theme="dark" style="position:relative;overflow:hidden;width:${width}px;height:180px">
+          <div class="tool-shell__panel tool-shell__panel--left-bottom" style="left:0;top:0;width:${width}px;height:180px">${inboxMarkup}</div>
+        </main>
+      `)
+      const bounds = await page.locator('.shell-inbox').evaluate((inbox) => {
+        const header = inbox.querySelector<HTMLElement>('.ui-section-header')!
+        const title = header.querySelector<HTMLElement>('.ui-section-header__title')!
+        const count = header.querySelector<HTMLElement>('.ui-section-header__actions .ui-badge')!
+        const rect = (element: Element) => {
+          const { left, right, top, bottom, width, height } = element.getBoundingClientRect()
+          return { left, right, top, bottom, width, height }
+        }
+        return {
+          panel: rect(inbox.closest('.tool-shell__panel')!),
+          inbox: rect(inbox),
+          header: rect(header),
+          title: { ...rect(title), scrollWidth: title.scrollWidth, clientWidth: title.clientWidth },
+          count: rect(count)
+        }
+      })
+
+      expect(bounds.panel.width).toBe(width)
+      expect(Math.abs((bounds.title.top + bounds.title.height / 2) - (bounds.count.top + bounds.count.height / 2))).toBeLessThanOrEqual(1)
+      expect(bounds.count.left).toBeGreaterThanOrEqual(bounds.header.left - 1)
+      expect(bounds.count.right).toBeLessThanOrEqual(bounds.header.right + 1)
+      expect(bounds.count.top).toBeGreaterThanOrEqual(bounds.header.top - 1)
+      expect(bounds.count.bottom).toBeLessThanOrEqual(bounds.header.bottom + 1)
+      expect(bounds.count.left).toBeGreaterThanOrEqual(bounds.inbox.left - 1)
+      expect(bounds.count.right).toBeLessThanOrEqual(bounds.inbox.right + 1)
+      expect(bounds.count.top).toBeGreaterThanOrEqual(bounds.inbox.top - 1)
+      expect(bounds.count.bottom).toBeLessThanOrEqual(bounds.inbox.bottom + 1)
+      if (width === 160) {
+        expect(bounds.title.scrollWidth).toBeGreaterThan(bounds.title.clientWidth)
+      } else {
+        expect(bounds.title.scrollWidth).toBeLessThanOrEqual(bounds.title.clientWidth)
+      }
+    }
+  } finally {
+    await browser.close()
+  }
+}, 60_000)
+
 test('the Inbox More below cue tracks overflow, scrolling, resize, and content changes', async () => {
   const { env, current } = await bootAttention()
   const originalResizeObserver = globalThis.ResizeObserver

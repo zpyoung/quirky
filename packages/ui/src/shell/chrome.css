@@ -239,6 +239,19 @@ button.ui-status-bar-item:focus-visible {
   min-width: 0;
 }
 
+.shell-inbox__header.ui-section-header {
+  flex-wrap: nowrap;
+}
+
+.shell-inbox__header > .ui-section-header__title {
+  flex: 1 1 auto;
+}
+
+.shell-inbox__header > .ui-section-header__actions {
+  flex: 0 0 auto;
+  flex-wrap: nowrap;
+}
+
 .shell-inbox__footer {
   background: var(--ui-surface);
   display: flex;

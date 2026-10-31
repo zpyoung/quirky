@@ -39,6 +39,8 @@ SC8. A question from another worktree increases Inbox and existing worktree atte
 
 When Inbox content extends below its viewport, a visible “More below” control scrolls to the remaining questions and actions. The cue disappears at the end or when all content fits, and updates when the panel or question content resizes. The heading and questions share one scrollport so the cue and answer controls remain reachable even in the minimum-height bottom dock.
 
+The pending-question heading and count stay on one row when Inbox narrows. The heading truncates before the count loses space, including at the 160-point panel minimum.
+
 SC9. Status bar combines existing registered status content with canonical branch/working/needs-you summaries where available. Summary labels stay on one line; the branch ellipsizes before activity counts lose space, and constrained summaries clip rather than overlap plugin content. Unknown/offline values are not invented. Theme switch changes chrome through the existing token resolver.
 
 ## Defect coverage
