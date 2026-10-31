@@ -100,7 +100,7 @@ function setModuleApiVersion(model: UiModel, plugin: string, apiVersion: unknown
 
 
 function setting(id: string, value: SettingInfo['value'], plugin = 'acme.notes'): SettingInfo {
-  return { id, plugin, type: 'number', title: id, default: 13, value }
+  return { id, plugin, pluginName: plugin, type: 'number', title: id, default: 13, value }
 }
 
 type WindowFocus = NonNullable<ConstructorParameters<typeof WindowPluginHost>[0]['windowFocus']>

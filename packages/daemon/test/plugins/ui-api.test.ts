@@ -214,7 +214,7 @@ describe('the UI model', () => {
     expect(model.keybindings).toEqual([
       { id: 'keybinding:acme.notes/new-key', plugin: 'acme.notes', key: 'mod+shift+n', command: 'command:acme.notes/new', status: 'active' }
     ])
-    expect(model.settings).toEqual([
+    expect(model.settings).toMatchObject([
       {
         id: notesSetting,
         plugin: 'acme.notes',

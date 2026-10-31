@@ -19,9 +19,8 @@ export type SettingField = {
 export type SettingSection = { section?: string; fields: SettingField[] }
 
 export type SettingGroup =
-  | { kind: 'plugin'; plugin: string; category?: never; sections?: never; fields: SettingField[] }
+  | { kind: 'plugin'; plugin: string; title: string; category?: never; sections?: never; fields: SettingField[] }
   | { kind: 'category'; plugin?: never; category?: string; sections: SettingSection[]; fields: SettingField[] }
-
 export type ThemeOption = { id: string; title: string; appearance: ThemeInfo['appearance'] }
 
 function controlFor(setting: SettingInfo): SettingControl {
@@ -58,8 +57,9 @@ function settingFields(settings: SettingInfo[]): SettingField[] {
 }
 
 /**
- * Groups categorized settings by their declared category and section. Settings without either
- * field remain grouped by plugin ID; every group's fields are sorted by setting ID.
+ * Groups categorized settings by their declared category and section.
+ * Settings without either field remain grouped by plugin ID, use that plugin's manifest name,
+ * and keep every group's fields sorted by setting ID.
  */
 export function settingsGroups(settings: SettingInfo[]): SettingGroup[] {
   const plugins = new Map<string, SettingInfo[]>()
@@ -101,7 +101,7 @@ export function settingsGroups(settings: SettingInfo[]): SettingGroup[] {
     })
   const uncategorized = [...plugins.entries()]
     .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
-    .map(([plugin, members]): SettingGroup => ({ kind: 'plugin', plugin, fields: settingFields(members) }))
+    .map(([plugin, members]): SettingGroup => ({ kind: 'plugin', plugin, title: members[0].pluginName, fields: settingFields(members) }))
 
   return [...categorized, ...uncategorized]
 }
