@@ -2,6 +2,7 @@ name: Tests
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, labeled]
   push:
     branches: [main]
   workflow_dispatch:
@@ -42,7 +43,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           EVENT_NAME: ${{ github.event_name }}
-        run: bun scripts/test-baseline/cli.ts plan --event "$EVENT_NAME" --out plan
+          FULL_SUITE: ${{ contains(github.event.pull_request.labels.*.name, 'full-suite') }}
+        run: bun scripts/test-baseline/cli.ts plan --event "$EVENT_NAME" --full "$FULL_SUITE" --out plan
 
       - name: Publish shard indices
         id: shards

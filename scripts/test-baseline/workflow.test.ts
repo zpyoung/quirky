@@ -36,6 +36,13 @@ describe('tests.yml triggers and defaults', () => {
     expect((workflow.on.push as { branches: string[] }).branches).toEqual(['main'])
   })
 
+  test('a pull request reruns when labelled, and full-suite asks the plan for every test', () => {
+    expect((workflow.on.pull_request as { types: string[] }).types).toEqual(['opened', 'synchronize', 'reopened', 'labeled'])
+    const plan = steps('plan').find(step => step.name === 'Plan the run')!
+    expect(plan.env?.FULL_SUITE).toBe("${{ contains(github.event.pull_request.labels.*.name, 'full-suite') }}")
+    expect(plan.run).toContain('--full "$FULL_SUITE"')
+  })
+
   test('cancels superseded runs on pull requests only', () => {
     expect(workflow.concurrency.group).toBe('tests-${{ github.ref }}')
     expect(norm(workflow.concurrency['cancel-in-progress'])).toBe("github.event_name == 'pull_request'")

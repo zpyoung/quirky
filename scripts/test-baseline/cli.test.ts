@@ -212,6 +212,10 @@ describe('argument handling', () => {
     ['issues with an invalid --only', ['issues', '--plan', 'p', '--baseline', 'b', '--only', 'both']],
     ['affected with a zero --jobs', ['affected', '--jobs', '0']],
     ['affected with a non-numeric --jobs', ['affected', '--jobs', 'many']],
+    ['plan with a bad --full', ['plan', '--event', 'push', '--full', 'maybe', '--out', 'x']],
+    ['run-files without --jobs', ['run-files', '--slots', '4']],
+    ['run-files without --slots', ['run-files', '--jobs', '4']],
+    ['run-files with a zero --slots', ['run-files', '--jobs', '4', '--slots', '0']],
   ])('%s exits 2', async (_name, argv) => {
     const { ctx, err } = harness(root)
     expect(await runCli(argv, ctx)).toBe(2)
@@ -318,6 +322,34 @@ describe('plan', () => {
     expect(plan.deleted).toEqual(['plugins/y/test/b.test.ts'])
     expect(plan.rangeSelection).toBeNull()
     expect(readJson<Baseline>(join(outDir, 'baseline.json')).commit).toBe(base)
+  })
+
+  test('pull_request with --full true selects everything and shards like main, compared against the baseline', async () => {
+    const { dir, base } = makeRepo()
+    seedBaseline(dir, baselineOf(base, {}, Object.fromEntries(ALL_TESTS.map((file) => [file, { platform: 'linux' as const, durationMs: 400_000, fileError: null, flaky: false }]))))
+    put(dir, 'plugins/x/src/a.ts', 'export const a = 2\n')
+    commitAll(dir, 'change a')
+    const { ctx, out } = harness(dir, { gh: artifactsGh([base]) })
+    const outDir = join(dirOf('out'), 'plan')
+
+    expect(await runCli(['plan', '--event', 'pull_request', '--full', 'true', '--out', outDir], ctx)).toBe(0)
+
+    const plan = readJson<Plan>(join(outDir, 'plan.json'))
+    expect(plan.selection).toMatchObject({ mode: 'all', files: ALL_TESTS })
+    expect(plan.baseline?.commit).toBe(base)
+    expect(plan.rangeSelection).toBeNull()
+    expect(out.join('')).toContain('full-suite label')
+  })
+
+  test('pull_request with --full false still selects from the diff', async () => {
+    const { dir, base } = makeRepo()
+    seedBaseline(dir, baselineOf(base))
+    put(dir, 'plugins/x/src/a.ts', 'export const a = 2\n')
+    commitAll(dir, 'change a')
+    const { ctx } = harness(dir, { gh: artifactsGh([base]) })
+    const outDir = join(dirOf('out'), 'plan')
+    expect(await runCli(['plan', '--event', 'pull_request', '--full', 'false', '--out', outDir], ctx)).toBe(0)
+    expect(readJson<Plan>(join(outDir, 'plan.json')).selection.mode).toBe('some')
   })
 
   test('pull_request files in the not-on-CI list are in no job', async () => {
@@ -924,8 +956,8 @@ describe('affected', () => {
   const A = 'plugins/x/test/a.test.ts'
   const IMPORTS = 'plugins/test/imports.test.ts'
 
-  function setup(withBaseline: Baseline | 'none' | 'down' = 'none') {
-    const { dir, base } = makeRepo()
+  function setup(withBaseline: Baseline | 'none' | 'down' = 'none', files: Record<string, string> = {}) {
+    const { dir, base } = makeRepo(files)
     let gh: GhRunner = artifactsGh([])
     if (withBaseline === 'down') gh = brokenGh
     else if (withBaseline !== 'none') {
@@ -989,6 +1021,92 @@ describe('affected', () => {
     const { ctx, out } = harness(dir, { gh, run: fakeRun({}) })
     expect(await runCli(['affected', '--list'], ctx)).toBe(0)
     expect(out.join('')).toContain('packages/p/test/p.test.ts')
+  })
+
+  describe('with a test host', () => {
+    const HOST = { host: 'quirkyci@ovh', jobs: 3, slots: 5 }
+    const MAC = 'plugins/y/test/b.test.ts'
+
+    /** A `runInHost` that runs the real worker command in this process, so the results make the real round trip. */
+    function fakeHost(dir: string, script: Parameters<typeof fakeRun>[0]) {
+      const seen: { host: string; command: string; stdin: string }[] = []
+      const runInHost: NonNullable<Context['runInHost']> = async (_cwd, host, command, stdin) => {
+        seen.push({ host, command, stdin })
+        const worker = harness(dir, { run: fakeRun(script), stdin: async () => stdin })
+        const code = await runCli(command.split(' ').slice(2), worker.ctx)
+        return { code, output: `noise\n${worker.out.join('')}` }
+      }
+      return { seen, runInHost }
+    }
+
+    test('sends everything but macOS-only files to the host and judges both sets together', async () => {
+      // the list is committed, because changing it makes the selection run every test
+      const { dir, gh } = setup(baselineOf(sha(0)), { 'scripts/test-on-macos.txt': `${MAC}  needs chrome\n` })
+      put(dir, MAC, 'export const changed = 1\n')
+      const { seen, runInHost } = fakeHost(dir, { [A]: [{ fresh: 'fail' }, { fresh: 'fail' }], [IMPORTS]: [{ ok: 'pass' }] })
+      const local: Calls = { files: [], active: 0, maxActive: 0 }
+      const { ctx, out, err } = harness(dir, { gh, run: fakeRun({ [MAC]: [{ mac: 'fail' }, { mac: 'fail' }] }, local), chooseHost: async () => ({ host: HOST }), runInHost })
+
+      expect(await runCli(['affected'], ctx)).toBe(1)
+
+      expect(seen).toHaveLength(1)
+      expect(seen[0].host).toBe(HOST.host)
+      expect(seen[0].command).toBe('bun scripts/test-baseline/cli.ts run-files --jobs 3 --slots 5')
+      expect(seen[0].stdin.split('\n').sort()).toEqual([IMPORTS, A].sort())
+      expect(new Set(local.files)).toEqual(new Set([MAC]))
+      expect(out.join('')).toContain(`new: ${A} > fresh`)
+      expect(out.join('')).toContain(`new: ${MAC} > mac`)
+      expect(err.join('')).toContain('running 2 test files on quirkyci@ovh and 1 macOS-only files here')
+    })
+
+    test('stops before any test when no host can be reached', async () => {
+      const { dir, gh } = setup(baselineOf(sha(0)))
+      const calls: Calls = { files: [], active: 0, maxActive: 0 }
+      const { ctx, err } = harness(dir, { gh, run: fakeRun({}, calls), chooseHost: async () => ({ error: 'quirkyci@ovh is unreachable, so no tests ran.' }) })
+      expect(await runCli(['affected'], ctx)).toBe(1)
+      expect(err.join('')).toContain('quirkyci@ovh is unreachable')
+      expect(calls.files).toEqual([])
+    })
+
+    test.each([
+      ['the copy failed', undefined],
+      ['the worker printed no results', { code: 1, output: 'bun: command not found' }],
+    ])('fails rather than reporting a pass when %s', async (_name, result) => {
+      const { dir, gh } = setup(baselineOf(sha(0)))
+      const { ctx, err } = harness(dir, { gh, run: fakeRun({}), chooseHost: async () => ({ host: HOST }), runInHost: async () => result })
+      expect(await runCli(['affected'], ctx)).toBe(1)
+      expect(err.join('')).toContain("couldn't finish the tests")
+    })
+
+    test('runs nothing and points at the PR label when the change selects every test', async () => {
+      const { dir, gh } = setup(baselineOf(sha(0)), { 'scripts/test-on-macos.txt': '' })
+      put(dir, 'scripts/test-on-macos.txt', `${A}  needs chrome\n`)
+      const calls: Calls = { files: [], active: 0, maxActive: 0 }
+      const { ctx, out, err } = harness(dir, {
+        gh,
+        run: fakeRun({}, calls),
+        chooseHost: async () => ({ host: HOST }),
+        runInHost: async () => {
+          throw new Error('should not reach the host')
+        },
+      })
+      expect(await runCli(['affected', '--json'], ctx)).toBe(0)
+      expect(calls.files).toEqual([])
+      expect(err.join('')).toContain('--add-label full-suite')
+      expect(JSON.parse(out.join(''))).toMatchObject({ skipped: 'every test selected' })
+    })
+
+    test('never contacts a host when only macOS-only files are selected', async () => {
+      const { dir, gh } = setup(baselineOf(sha(0)), { 'scripts/test-on-macos.txt': `${A}  needs chrome\n${IMPORTS}  needs chrome\n` })
+      const { ctx } = harness(dir, {
+        gh,
+        run: fakeRun({ [A]: [{ ok: 'pass' }], [IMPORTS]: [{ ok: 'pass' }] }),
+        chooseHost: async () => {
+          throw new Error('should not be asked')
+        },
+      })
+      expect(await runCli(['affected'], ctx)).toBe(0)
+    })
   })
 
   test('labels results against the baseline, prints advisory, and exits 1 on a new failure', async () => {
