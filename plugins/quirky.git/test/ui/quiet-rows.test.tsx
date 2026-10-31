@@ -127,4 +127,11 @@ describe('git-rows.css', () => {
     expect(filled.length).toBeGreaterThan(0)
     for (const selector of filled) expect(selector).toMatch(/:(hover|focus-visible)/)
   })
+
+  // absolute positioning leaves the reveal no width, so a wrapping cluster stacks over the next row
+  test('the row reveal keeps its controls on one line', () => {
+    const reveal = rules.find((rule) => rule.selectors.includes('.git-rows .git-row__end .git-row__reveal'))
+    expect(reveal?.body).toContain('position: absolute')
+    expect(reveal?.body).toContain('flex-wrap: nowrap')
+  })
 })

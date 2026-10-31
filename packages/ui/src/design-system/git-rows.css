@@ -80,6 +80,7 @@
 .git-rows .git-row__end .git-row__reveal {
   background: var(--ui-selected);
   border-radius: var(--ui-radius-mark);
+  flex-wrap: nowrap;
   inset-block-start: 50%;
   inset-inline-end: 100%;
   padding-inline: var(--ui-space-4);
