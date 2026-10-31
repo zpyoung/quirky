@@ -49,10 +49,10 @@ const focusableSelector = [
   '[tabindex]:not([tabindex="-1"])',
 ].join(',')
 
-/** Only the top open dialog owns focus; project/trust dialogs may be siblings. */
 // host and plugin bundles need the same per-document isolation state
 const DIALOG_STATE = Symbol.for('quirky.ui.dialogState')
 type DialogState = {
+  /** Only the top open dialog owns focus; project/trust dialogs may be siblings. */
   stack: HTMLElement[]
   inertStates: Map<HTMLElement, boolean>
 }

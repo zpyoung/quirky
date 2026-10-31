@@ -170,6 +170,7 @@ describe('SC-59: the floating button', () => {
     const dialog = createRoot(workspace)
     try {
       await act(async () => dialog.render(createElement(Dialog, { open: true, title: 'New Claude session', children: createElement('button', null, 'Cancel') })))
+      expect(button(view).closest('.app')).toBe(app)
       expect(button(view).closest('[inert]')).not.toBeNull()
       expect(document.querySelector('[aria-modal="true"]')?.closest('[inert]')).toBeNull()
       await act(async () => dialog.render(null))
