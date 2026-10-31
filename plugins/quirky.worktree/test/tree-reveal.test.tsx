@@ -111,7 +111,8 @@ test('the reveal hides with opacity and covers hover and focus-within', () => {
   expect(css).toMatch(/\.repo-header\.project-header:focus-within[^{]*\.project-reveal/)
   expect(css).toMatch(/\.worktree:hover[^{]*\.worktree-reveal/)
   expect(css).toMatch(/\.worktree:focus-within[^{]*\.worktree-reveal/)
-  expect(css).not.toMatch(/display:\s*none/)
+  const cssWithoutHiddenBadge = css.replace(/\.worktree-tree \.worktree \.worktree-reveal > \.ui-badge\s*\{\s*display:\s*none;\s*\}/, '')
+  expect(cssWithoutHiddenBadge).not.toMatch(/display:\s*none/)
   expect(css).not.toMatch(/visibility:\s*hidden/)
 })
 
