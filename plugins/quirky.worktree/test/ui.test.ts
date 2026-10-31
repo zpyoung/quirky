@@ -995,6 +995,7 @@ test('SC-47: Delete asks in the window and passes force and yes with no ask card
   expect(dialog.textContent).toContain('/w/fix-login')
   expect(dialog.textContent).toContain('2 uncommitted or untracked changes')
   expect(dialog.textContent).not.toContain('Child workspaces')
+  expect(document.activeElement).toBe(dialogButton('Cancel'))
   expect(h.confirmed).toEqual([])
   expect(h.callsTo('quirky.worktree/remove')).toEqual([])
   await click(dialogButton('Delete Workspace'))
