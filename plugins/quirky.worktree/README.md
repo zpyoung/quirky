@@ -47,7 +47,11 @@ Keyboard controls are Mod+Alt+Left/Right for history, Mod+Shift+Up/Down for prev
 
 ## Reversible sleep and wake
 
-`quirky.worktree/sleepPreview({worktree,withDescendants?,window?})` checks the exact selected subtree and window. For known session/worktree and Git diff views, the owner resolves `input.worktree` selectors and absolute `input.path` values through canonical worktree matching. Sleep closes a uniquely resolved view in the selected subtree with `ui.window.view.close({connId,expectedView})`, passing the inspected view unchanged; a concurrently selected replacement is never closed. Unknown, ambiguous, or malformed workspace owners block sleep before visibility state changes, while unrelated views remain open. Sleep never closes a session, kills a terminal or agent, deletes history, or starts a replacement process; live work continues in the background. Omitted `window` is compatible only with a singleton window; CLI `sleep-preview` and `sleep` accept `--window <connId>`. `wake` restores visibility without starting a process.
+`quirky.worktree/sleepPreview({worktree,withDescendants?,window?})` checks the target subtree and selected window. For session/worktree and Git diff views, it resolves `input.worktree` selectors and absolute `input.path` values through canonical worktree matching. Unknown, ambiguous, or malformed workspace owners block sleep before sleep state changes; unrelated views do not.
+
+Sleep keeps the window layout unchanged, including the active view, exact input, selected worktree, and open-view tabs. For `view:quirky.session/worktree` and `view:quirky.git/diff` with a canonical worktree ID in `input.worktree`, the center shows a sleeping placeholder while its contribution stays mounted but hidden. Selector aliases and path-only inputs do not show the placeholder, so their view content remains visible. Menus owned by the sleeping view close while it is hidden; unrelated views and the row menu for Wake remain available.
+
+Sleep does not close sessions, stop terminals or agents, delete history, or start replacement processes; live work continues in the background. Wake reveals the existing contribution without replaying its input or starting a process. CLI `sleep-preview` and `sleep` accept `--window <connId>`.
 
 Sleeping rows lead with “Sleeping” instead of live session activity, even when activity is hidden. Their activity indicator stays idle and shows no progress; pending questions still keep their attention indicator. Wake restores the live session activity.
 
@@ -57,7 +61,7 @@ quirky worktree sleep id:wt_parent --with-descendants
 quirky worktree wake id:wt_parent --with-descendants
 ```
 
-Sleep state and change timestamps survive daemon restart. Exact `ui.window.state`, `ui.window.view.open`, and compare-and-close routes isolate each live `connId`; stale, missing, or ambiguous identities refuse rather than redirecting another window.
+Sleep state and change timestamps survive daemon restart. An explicit `window` targets that live `connId`; omitting `window` refuses an ambiguous multiwindow selection, and stale or missing identities refuse rather than redirecting another window.
 
 Navigation history and cleanup use the same canonical owner resolution. Each live `connId` keeps history of canonical worktree IDs; unresolved, ambiguous, or malformed workspace views block sleep and cleanup, and only the exact resolved owner receives an active-workspace cleanup blocker. Sleep preserves sessions, PTYs, history, drafts, and buffers.
 

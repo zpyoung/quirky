@@ -362,6 +362,43 @@ describe('shared graphite components', () => {
     expect(document.querySelector('[role="menu"]')).toBeNull()
   })
 
+  test('a hidden ContextMenu owner closes only its own portal', async () => {
+    const closed: string[] = []
+    function Example({ ownerHidden }: { ownerHidden: boolean }) {
+      const [ownerOpen, setOwnerOpen] = useState(true)
+      const [otherOpen, setOtherOpen] = useState(true)
+      return (
+        <>
+          <div className="main-view" hidden={ownerHidden}>
+            {ownerOpen && <ContextMenu x={0} y={0} label="Sleeping view" items={[{ label: 'Close' }]} onClose={() => {
+              closed.push('sleeping view')
+              setOwnerOpen(false)
+            }} />}
+          </div>
+          <div className="unrelated-view">
+            {otherOpen && <ContextMenu x={20} y={20} label="Unrelated view" items={[{ label: 'Close' }]} onClose={() => {
+              closed.push('unrelated view')
+              setOtherOpen(false)
+            }} />}
+          </div>
+        </>
+      )
+    }
+
+    await render(<Example ownerHidden={false} />)
+    expect(document.querySelector('[role="menu"][aria-label="Sleeping view"]')).not.toBeNull()
+    expect(document.querySelector('[role="menu"][aria-label="Unrelated view"]')).not.toBeNull()
+
+    await render(<Example ownerHidden />)
+    await act(async () => {
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+    expect(document.querySelector('[role="menu"][aria-label="Sleeping view"]')).toBeNull()
+    expect(document.querySelector('[role="menu"][aria-label="Unrelated view"]')).not.toBeNull()
+    expect(closed).toEqual(['sleeping view'])
+  })
+
   test('menu checkbox actions expose current state and restore trigger focus', async () => {
     function Example() {
       const [checked, setChecked] = useState(false)

@@ -89,7 +89,7 @@ export function PopupMenu({ anchor, items, title, searchPlaceholder, onClose }: 
   }, [dismiss])
 
   useEffect(() => {
-    if (!anchor.isConnected) {
+    if (!anchor.isConnected || anchor.closest('[hidden]')) {
       dismiss(false)
       return
     }
@@ -101,9 +101,14 @@ export function PopupMenu({ anchor, items, title, searchPlaceholder, onClose }: 
       if (event.key === 'Escape' && !event.defaultPrevented) dismiss(true)
     }
     const watcher = new MutationObserver(() => {
-      if (!anchor.isConnected) dismiss(false)
+      if (!anchor.isConnected || anchor.closest('[hidden]')) dismiss(false)
     })
-    watcher.observe(document.documentElement, { childList: true, subtree: true })
+    watcher.observe(document.documentElement, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ['hidden']
+    })
     document.addEventListener('pointerdown', outside, true)
     document.addEventListener('mousedown', outside, true)
     document.addEventListener('keydown', escape)

@@ -11,6 +11,10 @@ export function emptyMainMessage({ views, repos }: { views: number; repos: numbe
 }
 
 const WORKTREE_VIEW = 'view:quirky.session/worktree'
+const WORKSPACE_VIEW_IDS: Record<string, true> = {
+  [WORKTREE_VIEW]: true,
+  'view:quirky.git/diff': true
+}
 
 /** Whether the row of open views shows: the worktree view alone draws its own tab strip, so a second row would only repeat it. */
 export function showsViewTabs(tabs: readonly { id: string }[]): boolean {
@@ -35,6 +39,15 @@ export function MainArea() {
     return true
   })
   const input = windowRoute ? windowRoute.input : layout.view?.input
+  const worktreeInput = typeof input === 'object' && input !== null && !Array.isArray(input)
+    ? (input as Record<string, unknown>).worktree
+    : undefined
+  const sleepingWorkspace = !windowRoute && view !== undefined && viewId !== undefined &&
+    WORKSPACE_VIEW_IDS[viewId] === true &&
+    typeof worktreeInput === 'string' &&
+    snapshot.worktrees?.some((worktree) =>
+      worktree.id === worktreeInput && 'sleeping' in worktree && worktree.sleeping === true
+    ) === true
   const tabItems = tabs.map((tab) => ({
     id: tab.id,
     label: model?.views.find((candidate) => candidate.id === tab.id)?.title ?? tab.id
@@ -60,7 +73,12 @@ export function MainArea() {
         )}
       </div>}
       <div className="main-body">
-        {view && <PluginSlot key={windowRoute ? `${windowRoute.windowId}:${view.id}` : view.id} id={view.id} input={input} />}
+        {view && (
+          <div className="main-view" hidden={sleepingWorkspace} aria-hidden={sleepingWorkspace || undefined}>
+            <PluginSlot key={windowRoute ? `${windowRoute.windowId}:${view.id}` : view.id} id={view.id} input={input} />
+          </div>
+        )}
+        {sleepingWorkspace && <p className="empty">This worktree is sleeping.</p>}
         {windowRoute && model && !view && (
           <p className="empty" role="alert">
             {windowRoute.view === null ? 'No view is open in this auxiliary window.' : `The requested view ${windowRoute.view} is unavailable.`}

@@ -17,7 +17,7 @@ import type { CallerIdentity } from '../../selector'
 import { listGroup, listProject, type ListEnv } from './list'
 import { removeWorktree, type RemoveEnv } from './remove'
 import { rowOf } from './store'
-import { closeWindowView, selectWindow, type SelectedWindow } from './window'
+import { selectWindow, type SelectedWindow } from './window'
 import { resolveWorkspaceViewOwner } from './view-owner'
 
 const DAY_MS = 24 * 60 * 60 * 1_000
@@ -226,12 +226,11 @@ async function sleepTargets(env: ControlEnv, params: SleepParams, identity: Call
   return { targets, all }
 }
 
-type SleepInspection = { preview: WorktreeSleepPreview; closeView: boolean; selected: SelectedWindow | null }
+type SleepInspection = { preview: WorktreeSleepPreview }
 
 async function inspectSleep(env: ControlEnv, targets: WorktreeControl[], all: WorktreeControl[], window?: unknown): Promise<SleepInspection> {
   const blockersById = new Map(targets.map((worktree) => [worktree.id, [] as CleanupBlocker[]]))
   let selected: SelectedWindow | null = null
-  let closeView = false
   let noConnectedWindow = false
   if (window === undefined) {
     const stateEvidence = await readPublic(env.call, 'ui.state')
@@ -255,10 +254,6 @@ async function inspectSleep(env: ControlEnv, targets: WorktreeControl[], all: Wo
       for (const blockers of blockersById.values()) {
         addBlocker(blockers, 'ui-view-unknown', 'The open workspace view does not have a unique canonical worktree owner.')
       }
-    } else if (resolution.kind === 'owned') {
-      closeView = targets.some((worktree) =>
-        worktree.id === resolution.owner.worktreeId && worktree.instanceId === resolution.owner.instanceId
-      )
     }
   }
   return {
@@ -273,9 +268,7 @@ async function inspectSleep(env: ControlEnv, targets: WorktreeControl[], all: Wo
           blockers
         }
       })
-    },
-    closeView,
-    selected
+    }
   }
 }
 
@@ -296,9 +289,6 @@ async function setSleepState(env: ControlEnv, params: SleepParams, identity: Cal
     if (blocked.length > 0) {
       const detail = blocked.map((row) => `${row.name}: ${row.blockers.map((blocker) => blocker.detail).join(' ')}`).join(' ')
       throw env.fail('conflict', `Could not sleep the selected workspace subtree. ${detail}`, { reason: 'sleep-view-unsafe', worktrees: blocked })
-    }
-    if (inspection.closeView && inspection.selected?.view) {
-      await closeWindowView(env, { ...inspection.selected, view: inspection.selected.view })
     }
   }
   const changedAt = Date.now()

@@ -84,7 +84,4 @@ export function openWindowView(env: WindowEnv, connId: number, id: string, input
   return env.call('ui.window.view.open', { connId, id, ...(input === undefined ? {} : { input }) })
 }
 
-export function closeWindowView(env: WindowEnv, selected: SelectedWindow & { view: NonNullable<UiLayout['view']> }): Promise<unknown> {
-  return env.call('ui.window.view.close', { connId: selected.connId, expectedView: selected.view })
-}
 

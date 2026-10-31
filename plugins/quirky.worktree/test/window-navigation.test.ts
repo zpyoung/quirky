@@ -111,7 +111,7 @@ test('create activation refuses an untargeted multiwindow before worktree mutati
   expect(afterStale.some((row) => row.name === 'stale-activation')).toBe(false)
 })
 
-test('sleep parks only the selected window view and leaves sessions and other layouts alive', async () => {
+test('sleep and wake retain the selected window view and leave sessions and other layouts alive', async () => {
   const w = await start()
   world = w
   const [first, second] = await Promise.all([w.harness.connectAs({}, 'ui'), w.harness.connectAs({}, 'ui')])
@@ -121,18 +121,42 @@ test('sleep parks only the selected window view and leaves sessions and other la
   const session = await call(w.harness.client, 'quirky.session/create', { worktree: worktree.id, agent: 'shell' }) as { id: string }
 
   await call(w.harness.client, 'quirky.worktree/navigate', { worktree: worktree.id, window: firstId })
+  await call(first, 'ui.window.view.open', {
+    connId: firstId,
+    id: 'view:quirky.git/diff',
+    input: { worktree: worktree.id, path: 'src/index.ts' }
+  })
+  await call(first, 'ui.window.view.open', { connId: firstId, id: 'view:quirky.cli/settings' })
+  await call(first, 'ui.window.view.open', {
+    connId: firstId,
+    id: 'view:quirky.session/worktree',
+    input: { worktree: worktree.id }
+  })
   await call(second, 'ui.window.view.open', { connId: secondId, id: 'view:quirky.session/worktree', input: { worktree: other.id } })
+  const firstBefore = await layoutFor(first, firstId!)
+  const secondBefore = await layoutFor(second, secondId!)
+  expect(firstBefore.viewTabs?.map((tab) => tab.id)).toEqual([
+    'view:quirky.session/worktree',
+    'view:quirky.git/diff',
+    'view:quirky.cli/settings'
+  ])
+  expect(firstBefore.view).toEqual({ id: 'view:quirky.session/worktree', input: { worktree: worktree.id } })
+
   await expect(call(w.harness.client, 'quirky.worktree/sleep', { worktree: worktree.id })).rejects.toThrow(/multiple windows/i)
   await call(w.harness.client, 'quirky.worktree/sleep', { worktree: worktree.id, window: firstId })
 
-  expect((await layoutFor(first, firstId!)).view).toBeNull()
-  expect(viewWorktree(await layoutFor(second, secondId!))).toBe(other.id)
+  expect(await layoutFor(first, firstId!)).toEqual(firstBefore)
+  expect(await layoutFor(second, secondId!)).toEqual(secondBefore)
   const sessions = await call(w.harness.client, 'quirky.session/list', { worktree: worktree.id }) as Array<{ id: string }>
   expect(sessions.some((row) => row.id === session.id)).toBe(true)
   expect(await call(w.harness.client, 'quirky.worktree/navigationState', { window: firstId })).toMatchObject({ worktrees: [worktree.id], index: 0 })
+
+  await call(w.harness.client, 'quirky.worktree/wake', { worktree: worktree.id })
+  expect(await layoutFor(first, firstId!)).toEqual(firstBefore)
+  expect(await layoutFor(second, secondId!)).toEqual(secondBefore)
 })
 
-test('sleep resolves explicit view selectors before parking and refuses unknown view owners', async () => {
+test('sleep resolves explicit view selectors without changing layout and refuses unknown view owners', async () => {
   const w = await start()
   world = w
   const ui = await w.harness.connectAs({}, 'ui')
@@ -144,11 +168,14 @@ test('sleep resolves explicit view selectors before parking and refuses unknown 
     id: 'view:quirky.session/worktree',
     input: { worktree: `id:${worktree.id}` }
   })
+  const selected = await layoutFor(ui, connId!)
 
   await call(w.harness.client, 'quirky.worktree/sleep', { worktree: worktree.id, window: connId })
-  expect((await layoutFor(ui, connId!)).view).toBeNull()
+  expect(await layoutFor(ui, connId!)).toEqual(selected)
   const sessions = await call(w.harness.client, 'quirky.session/list', { worktree: worktree.id }) as Array<{ id: string }>
   expect(sessions.some((row) => row.id === session.id)).toBe(true)
+  await call(w.harness.client, 'quirky.worktree/wake', { worktree: worktree.id })
+  expect(await layoutFor(ui, connId!)).toEqual(selected)
 
   const unknown = await create(w.harness.client, w.repo.id, 'unknown-selector-view')
   await call(ui, 'ui.window.view.open', {
@@ -162,7 +189,7 @@ test('sleep resolves explicit view selectors before parking and refuses unknown 
   expect((await layoutFor(ui, connId!)).view).not.toBeNull()
 })
 
-test('sleep resolves name, branch, and absolute path owners through canonical worktree matching', async () => {
+test('sleep resolves name, branch, and absolute path owners without changing their views', async () => {
   const w = await start()
   world = w
   const ui = await w.harness.connectAs({}, 'ui')
@@ -180,11 +207,13 @@ test('sleep resolves name, branch, and absolute path owners through canonical wo
 
   for (const item of cases) {
     await call(ui, 'ui.window.view.open', { connId, id: item.id, input: item.input })
+    const selected = await layoutFor(ui, connId!)
     await call(w.harness.client, 'quirky.worktree/sleep', { worktree: item.worktree.id, window: connId })
-    expect((await layoutFor(ui, connId!)).view).toBeNull()
+    expect(await layoutFor(ui, connId!)).toEqual(selected)
     const listed = await call(w.harness.client, 'quirky.worktree/list') as Array<{ id: string; sleeping: boolean }>
     expect(listed.find((row) => row.id === item.worktree.id)?.sleeping).toBe(true)
     await call(w.harness.client, 'quirky.worktree/wake', { worktree: item.worktree.id })
+    expect(await layoutFor(ui, connId!)).toEqual(selected)
   }
 })
 
