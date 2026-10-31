@@ -472,6 +472,10 @@
   color: var(--ui-text);
 }
 
+.ui-tabs__tab:focus-visible {
+  outline-offset: calc(-1 * var(--ui-focus-width));
+}
+
 .ui-tabs__tab:disabled {
   cursor: not-allowed;
 }
