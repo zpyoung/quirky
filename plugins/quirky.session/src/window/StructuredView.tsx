@@ -35,6 +35,7 @@ const form = {
   gap: 'var(--ui-space-8)',
   minWidth: 0,
   padding: 'var(--ui-space-8)',
+  paddingInlineEnd: 'calc(var(--compat-px-40) + var(--ui-space-16))',
   borderTop: 'var(--ui-border-width) solid var(--ui-border)'
 } satisfies CSSProperties
 
