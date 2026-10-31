@@ -1,7 +1,20 @@
 {
   "agent": "claude",
-  "description": "Claude Code detection rules. Its hooks report approvals and questions, so these rules read only the title.",
+  "description": "Claude Code's hooks report approvals and questions. A screen rule recognizes its pre-hook folder trust prompt; the other rules read the title.",
   "rules": [
+    {
+      "id": "folder-trust-menu",
+      "why": "Claude Code's folder trust menu asks for confirmation before hooks can report the approval.",
+      "state": "blocked",
+      "kind": "approval",
+      "region": "screen",
+      "lastLines": 200,
+      "all": [
+        {
+          "regex": "^.{0,32}Quick safety check[^\\n]*\\n[\\s\\S]*^.{0,32}Yes, I trust this folder[ \\t]*\\n[\\s\\S]*^.{0,64}Enter to confirm · Esc to cancel.{0,32}(?![\\s\\S])"
+        }
+      ]
+    },
     {
       "id": "rest-title",
       "why": "Claude Code prefixes its title with ✳ at rest, but the glyph can stay up while a turn still paints, so the screen must also be quiet.",

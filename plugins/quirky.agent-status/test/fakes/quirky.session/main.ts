@@ -16,6 +16,10 @@ export function activate(context: PluginContext): void {
   )
   const statusCalls: StatusCall[] = []
   const providerCalls: { session: string; id: string; transcriptPath?: string }[] = []
+  let failNextList = false
+
+  context.provide('method:quirky.session/failNextList', () => { failNextList = true })
+
 
   const byName = (name: string): Session | undefined => {
     const holders = [...sessions.values()].filter((s) => s.name === name.toLowerCase())
@@ -34,9 +38,13 @@ export function activate(context: PluginContext): void {
     save()
     return session
   })
-  context.provide('method:quirky.session/list', (params: Record<string, unknown>) =>
-    [...sessions.values()].filter((s) => params.worktree === undefined || s.worktreeId === params.worktree)
-  )
+  context.provide('method:quirky.session/list', (params: Record<string, unknown>) => {
+    if (failNextList) {
+      failNextList = false
+      throw new Error('injected session list failure')
+    }
+    return [...sessions.values()].filter((s) => params.worktree === undefined || s.worktreeId === params.worktree)
+  })
   context.provide('method:quirky.session/get', (params: Record<string, unknown>) => require(params.session))
   context.provide('method:quirky.session/setStatus', (params: Record<string, unknown>) => {
     const session = require(params.session)

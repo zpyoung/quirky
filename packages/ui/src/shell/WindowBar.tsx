@@ -4,14 +4,13 @@ import { Badge, CONTEXT_MENU_SEPARATOR, ControlIcon, PopupMenu, ProjectTile, Sta
 import { useConnection, usePluginHost, usePluginState } from '../context'
 import type { Connection } from '../connection'
 import { useAttention, type ProjectIdentity } from './attention'
+import { isAgentStatusStale, useNow } from './freshness'
 
 const NEW_WORKTREE = 'command:quirky.worktree/new-worktree'
 const ADD_PROJECT = 'command:quirky.worktree/add-project'
 const NEW_AGENT_TAB = 'command:quirky.agents/new-agent-tab'
 const AGENT_SETTINGS_VIEW = 'view:quirky.agents/settings'
 const NO_DRAG = 'electrobun-webkit-app-region-no-drag'
-const STALE_AFTER_MS = 30 * 60 * 1000
-const CLOCK_TICK_MS = 60_000
 
 type WorktreeExtras = { sleeping?: boolean; archivedAt?: number | null }
 type DisplayStatus = Exclude<SessionStatus, 'starting'>
@@ -66,7 +65,7 @@ function glyphOf(session: Session, now: number): Glyph {
   const summary = session.agentStatus
   if (!summary) return { kind: 'coarse', status: session.status === 'starting' ? 'running' : session.status }
   const sessionRunning = session.status !== 'exited'
-  const stale = summary.state !== 'done' && !summary.restoredUnconfirmed && now - summary.evidenceAt > STALE_AFTER_MS
+  const stale = isAgentStatusStale(summary, now)
   const shown = stale
     ? sessionRunning ? { display: 'unverifiable' as const, label: 'No recent update' } : { display: 'idle' as const, label: 'Idle' }
     : { display: summary.display, label: summary.label }
@@ -190,15 +189,6 @@ const plural = (count: number, noun: string) => `${count} ${noun}${count === 1 ?
 
 function countsLine(counts: ProjectCounts): string {
   return [plural(counts.worktrees, 'worktree'), counts.working > 0 ? `${counts.working} working` : null].filter(Boolean).join(' · ')
-}
-
-function useNow(): number {
-  const [now, setNow] = useState(() => Date.now())
-  useEffect(() => {
-    const timer = setInterval(() => setNow(Date.now()), CLOCK_TICK_MS)
-    return () => clearInterval(timer)
-  }, [])
-  return now
 }
 
 function showError(connection: Connection, title: string, error: unknown): void {

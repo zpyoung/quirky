@@ -535,12 +535,12 @@ describe('SC-11 and SC-12: plugin rules, rules list and rules show', () => {
       expect(cursorLine).toMatch(/^cursor {2}built-in {2}.*[/\\]cursor\.json {2}3 rules$/)
       expect(lines.find((line) => line.startsWith('codex  '))).toMatch(/^codex {2}built-in {2}.*[/\\]codex\.json {2}2 rules$/)
       const claudeAt = lines.findIndex((line) => line.startsWith('claude  '))
-      expect(lines[claudeAt]).toMatch(/^claude {2}built-in {2}.*[/\\]claude\.json {2}2 rules$/)
+      expect(lines[claudeAt]).toMatch(/^claude {2}built-in {2}.*[/\\]claude\.json {2}3 rules$/)
       expect(lines[claudeAt + 1]).toMatch(new RegExp(`^ {2}ignored user ${claudePath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}: not valid JSON`))
 
       const json = await cliJson<RuleListing[]>(e2e, ['agent-status', 'rules', 'list'])
       expect(json.find((entry) => entry.agent === 'cursor')).toMatchObject({ origin: { kind: 'built-in' }, rules: 3, ignored: [] })
-      expect(json.find((entry) => entry.agent === 'claude')).toMatchObject({ origin: { kind: 'built-in' }, rules: 2, ignored: [{ origin: { kind: 'user', path: claudePath } }] })
+      expect(json.find((entry) => entry.agent === 'claude')).toMatchObject({ origin: { kind: 'built-in' }, rules: 3, ignored: [{ origin: { kind: 'user', path: claudePath } }] })
       expect(json.map((entry) => entry.agent)).toEqual([...json.map((entry) => entry.agent)].sort())
 
       const shown = await e2e.cli(['agent-status', 'rules', 'show', 'cursor'])

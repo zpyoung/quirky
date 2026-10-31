@@ -27,6 +27,12 @@
         }
       },
       {
+        "id": "failNextList",
+        "params": {
+          "type": "object"
+        }
+      },
+      {
         "id": "get",
         "readOnly": true,
         "params": {

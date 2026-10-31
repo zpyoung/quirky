@@ -22,10 +22,11 @@ function load(agent: string): RuleFile {
   return parsed.file
 }
 
-function fixture(agent: string, rule: string, kind: 'match' | 'miss'): Screen {
-  const [first, ...rest] = readFileSync(join(screensDir, agent, `${rule}.${kind}.txt`), 'utf8').split('\n')
+function fixture(agent: string, rule: string, kind: 'match' | 'miss', variant?: string): Screen {
+  const suffix = variant === undefined ? '' : `.${variant}`
+  const [first, ...rest] = readFileSync(join(screensDir, agent, `${rule}${suffix}.${kind}.txt`), 'utf8').split('\n')
   if (rest[rest.length - 1] === '') rest.pop()
-  if (!first?.startsWith('title: ')) throw new Error(`${agent}/${rule}.${kind}.txt: first line must be "title: <title>"`)
+  if (!first?.startsWith('title: ')) throw new Error(`${agent}/${rule}${suffix}.${kind}.txt: first line must be "title: <title>"`)
   return { title: first.slice('title: '.length), lines: rest }
 }
 
@@ -50,7 +51,8 @@ describe('built-in rule files', () => {
 
       test('has a fixture for every rule and a rule for every fixture', () => {
         const ids = load(agent).rules.map((rule) => rule.id)
-        const wanted = ids.flatMap((id) => [`${id}.match.txt`, `${id}.miss.txt`]).sort()
+        const narrowClaudeMatch = agent === 'claude' ? ['folder-trust-menu.narrow.match.txt'] : []
+        const wanted = [...ids.flatMap((id) => [`${id}.match.txt`, `${id}.miss.txt`]), ...narrowClaudeMatch].sort()
         expect(readdirSync(join(screensDir, agent)).sort()).toEqual(wanted)
       })
 
@@ -103,6 +105,18 @@ describe('built-in rules: SC-8', () => {
 
   test('SC-8: codex menu that scrolled up under later output is not blocked', () => {
     expect(run('codex', fixture('codex', 'plan-implement-menu', 'miss')).verdict?.state).not.toBe('blocked')
+  })
+
+  test('SC-8: Claude folder-trust menu is blocked only while it remains at the bottom', () => {
+    const screen = fixture('claude', 'folder-trust-menu', 'match')
+    const verdict = run('claude', screen).verdict
+    expect(verdict).toMatchObject({ rule: 'folder-trust-menu', state: 'blocked', kind: 'approval' })
+    const scrolled = { title: screen.title, lines: [...screen.lines, ...Array.from({ length: 9 }, (_, index) => `output ${index}`)] }
+    expect(run('claude', scrolled).verdict?.rule).not.toBe('folder-trust-menu')
+  })
+  test('SC-8: Claude folder-trust menu is blocked when wrapped in a narrow pane', () => {
+    const screen = fixture('claude', 'folder-trust-menu', 'match', 'narrow')
+    expect(run('claude', screen).verdict).toMatchObject({ rule: 'folder-trust-menu', state: 'blocked', kind: 'approval' })
   })
 
   test('SC-8: claude title ✳ Claude Code with a quiet screen is idle', () => {
