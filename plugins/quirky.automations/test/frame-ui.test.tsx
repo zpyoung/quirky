@@ -58,6 +58,7 @@ test('Automations root leaves panel dismissal to the host Minimize control', asy
     cleanup = (provided.get('view:quirky.automations/automations') as Mount)(element, {})
   })
 
+  expect([...container.querySelectorAll('h2')].filter((heading) => heading.textContent === 'Automations')).toHaveLength(1)
   const header = container.querySelector('.ui-tool-panel-frame__header')!
   expect(header.querySelector('button[aria-label="Close Automations"]')).toBeNull()
   expect(header.querySelector('button[aria-label="Minimize Automations"]')).not.toBeNull()
