@@ -70,8 +70,35 @@ function relativeExplorerPath(root: string, absolutePath: string): string | null
   return absolutePath.startsWith(prefix) ? absolutePath.slice(prefix.length).replaceAll('\\', '/') : null
 }
 
+function isPathWithin(path: string, parent: string): boolean {
+  return path === parent || path.startsWith(`${parent}${explorerSeparator(parent)}`)
+}
+
 function topLevelPaths(paths: string[]): string[] {
-  return paths.filter((path) => !paths.some((parent) => parent !== path && path.startsWith(`${parent}/`)))
+  return paths.filter((path) => !paths.some((parent) => parent !== path && isPathWithin(path, parent)))
+}
+
+function renameNeighborPaths(paths: string[], source: string, destination: string): string[] {
+  const index = paths.indexOf(source)
+  if (index < 0) return []
+  const remap = (path: string) => isPathWithin(path, source)
+    ? `${destination}${path.slice(source.length)}`
+    : path
+  return [
+    ...paths.slice(index + 1).filter((path) => path !== source).map(remap),
+    ...paths.slice(0, index).reverse().filter((path) => path !== source).map(remap)
+  ]
+}
+
+function deletionNeighborPaths(paths: string[], deletedPaths: string[], pivotPath?: string): string[] {
+  const deleted = (path: string) => deletedPaths.some((deletedPath) => isPathWithin(path, deletedPath))
+  const pivotIndex = pivotPath === undefined ? -1 : paths.indexOf(pivotPath)
+  const index = pivotIndex >= 0 ? pivotIndex : paths.findIndex(deleted)
+  if (index < 0) return []
+  return [
+    ...paths.slice(index + 1).filter((path) => !deleted(path)),
+    ...paths.slice(0, index).reverse().filter((path) => !deleted(path))
+  ]
 }
 
 function fileUrl(path: string): string {
@@ -121,7 +148,7 @@ export function ExplorerPanel({ context, report }: { context: UiPluginContext; r
   const [gitError, setGitError] = useState<string | null>(null)
   const [children, setChildren] = useState<Map<string, ExplorerEntry[]>>(new Map())
   const childrenRef = useRef<Map<string, ExplorerEntry[]>>(new Map())
-  const directoryLoads = useRef(new Map<string, Promise<void>>())
+  const directoryLoads = useRef(new Map<string, Promise<ExplorerListing | undefined>>())
   const treeLoadGeneration = useRef(0)
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const expandedRef = useRef<Set<string>>(new Set())
@@ -137,10 +164,17 @@ export function ExplorerPanel({ context, report }: { context: UiPluginContext; r
   const interactionQueue = useRef(Promise.resolve())
   const treeRef = useRef<HTMLDivElement>(null)
   const renameInputRef = useRef<HTMLInputElement>(null)
+  const renamePathRef = useRef<string | null>(null)
+  const mountedRef = useRef(false)
+  const userIntentRef = useRef(0)
   const searchInputRef = useRef<HTMLInputElement>(null)
   const [filterResult, setFilterResult] = useState<ExplorerListing | null>(null)
   const [searchMode, setSearchMode] = useState<'names' | 'contents'>('names')
   const [query, setQuery] = useState('')
+  const searchModeRef = useRef(searchMode)
+  const queryRef = useRef(query)
+  searchModeRef.current = searchMode
+  queryRef.current = query
   const [includePattern, setIncludePattern] = useState('')
   const [excludePattern, setExcludePattern] = useState('')
   const [caseSensitive, setCaseSensitive] = useState(false)
@@ -173,9 +207,20 @@ export function ExplorerPanel({ context, report }: { context: UiPluginContext; r
     focusAfterCreate.request()
     setFocusAfterCreate(null)
   }, [focusAfterCreate])
-  useEffect(() => () => {
-    focusHandoffRef.current?.cancel()
-    focusHandoffRef.current = null
+  useEffect(() => {
+    mountedRef.current = true
+    const recordUserIntent = () => { userIntentRef.current++ }
+    document.addEventListener('pointerdown', recordUserIntent, true)
+    document.addEventListener('keydown', recordUserIntent, true)
+    document.addEventListener('input', recordUserIntent, true)
+    return () => {
+      mountedRef.current = false
+      document.removeEventListener('pointerdown', recordUserIntent, true)
+      document.removeEventListener('keydown', recordUserIntent, true)
+      document.removeEventListener('input', recordUserIntent, true)
+      focusHandoffRef.current?.cancel()
+      focusHandoffRef.current = null
+    }
   }, [])
   useEffect(() => context.onLayout(() => setLayoutWorktree(worktreeFromLayout(context))), [context])
 
@@ -280,6 +325,7 @@ export function ExplorerPanel({ context, report }: { context: UiPluginContext; r
           setRootListing(listing)
         }
         if (!path) setError(null)
+        return listing
       } catch (reason) {
         if (generation === treeLoadGeneration.current && currentWorktree.current === requestedWorktree) setError(messageOf(reason))
       } finally {
@@ -288,7 +334,7 @@ export function ExplorerPanel({ context, report }: { context: UiPluginContext; r
     })()
     directoryLoads.current.set(key, request)
     try {
-      await request
+      return await request
     } finally {
       if (directoryLoads.current.get(key) === request) directoryLoads.current.delete(key)
     }
@@ -505,12 +551,91 @@ export function ExplorerPanel({ context, report }: { context: UiPluginContext; r
     return resolved.path
   }, [context])
 
+  const isRestoreCurrent = (
+    requestedWorktree: string,
+    intent: number,
+    requestedMode: 'names' | 'contents',
+    requestedQuery: string
+  ) => mountedRef.current &&
+    currentWorktree.current === requestedWorktree &&
+    userIntentRef.current === intent &&
+    searchModeRef.current === requestedMode &&
+    queryRef.current === requestedQuery
+
+  const updateExpandedPathsAfterMutation = async (
+    requestedWorktree: string,
+    removedPaths: string[],
+    rename?: { from: string; to: string }
+  ) => {
+    const root = await resolveWorktreeRoot(requestedWorktree)
+    if (root === null || currentWorktree.current !== requestedWorktree || !mountedRef.current) return
+    const removedRelative = removedPaths
+      .map((path) => relativeExplorerPath(root, path))
+      .filter((path): path is string => path !== null)
+    const fromRelative = rename ? relativeExplorerPath(root, rename.from) : null
+    const toRelative = rename ? relativeExplorerPath(root, rename.to) : null
+    const next = new Set<string>()
+    for (const path of expandedRef.current) {
+      const relative = relativeExplorerPath(root, path)
+      if (relative !== null && removedRelative.some((removed) => isPathWithin(relative, removed))) continue
+      if (relative !== null && fromRelative !== null && toRelative !== null && isPathWithin(relative, fromRelative)) {
+        next.add(absoluteExplorerPath(root, `${toRelative}${relative.slice(fromRelative.length)}`))
+      } else {
+        next.add(path)
+      }
+    }
+    const previous = expandedRef.current
+    if (next.size === previous.size && Array.from(next).every((path) => previous.has(path))) return
+    expandedRef.current = next
+    setExpanded(next)
+    try {
+      await context.call('quirky.editor/explorer', {
+        worktree: requestedWorktree,
+        action: 'preferences',
+        expanded: Array.from(next, (path) => relativeExplorerPath(root, path)).filter((path): path is string => path !== null)
+      })
+      if (currentWorktree.current === requestedWorktree && mountedRef.current) refreshEditorState()
+    } catch (reason) {
+      if (currentWorktree.current === requestedWorktree && mountedRef.current) setError(messageOf(reason))
+    }
+  }
+
+  const reloadAfterMutation = async (
+    requestedWorktree: string,
+    requestedMode: 'names' | 'contents',
+    requestedQuery: string
+  ): Promise<ExplorerListing | null> => {
+    if (currentWorktree.current !== requestedWorktree || !mountedRef.current) return null
+    treeLoadGeneration.current++
+    directoryLoads.current.clear()
+    const listing = await loadDirectory()
+    await reloadExpandedDirectories()
+    if (currentWorktree.current !== requestedWorktree || !mountedRef.current) return null
+    if (requestedMode !== 'names' || requestedQuery.trim() === '') {
+      return listing ? { ...listing, entries: flattenEntries(listing.entries, expandedRef.current, childrenRef.current).map(({ entry }) => entry) } : null
+    }
+    try {
+      const listing = await context.call('quirky.editor/explorer', {
+        worktree: requestedWorktree,
+        action: 'filter',
+        query: requestedQuery
+      }) as ExplorerListing
+      if (currentWorktree.current !== requestedWorktree || !mountedRef.current) return null
+      if (searchModeRef.current === requestedMode && queryRef.current === requestedQuery) setFilterResult(listing)
+      return listing
+    } catch (reason) {
+      if (currentWorktree.current === requestedWorktree && mountedRef.current) setError(messageOf(reason))
+      return null
+    }
+  }
+
   const applyExplorerInteraction = useCallback(async (
     requestedWorktree: string,
-    params: Record<string, unknown>
+    params: Record<string, unknown>,
+    isCurrent?: () => boolean
   ): Promise<ExplorerInteractionResult> => {
     const result = await context.call('quirky.editor/explorer', { worktree: requestedWorktree, ...params }) as ExplorerInteractionResult
-    if (currentWorktree.current !== requestedWorktree) return result
+    if (currentWorktree.current !== requestedWorktree || (isCurrent !== undefined && !isCurrent())) return result
     setError(null)
     if (result.interaction !== undefined) {
       selectedPathsRef.current = result.interaction.selectedPaths
@@ -520,7 +645,7 @@ export function ExplorerPanel({ context, report }: { context: UiPluginContext; r
     }
     if (result.expanded !== undefined) {
       const root = await resolveWorktreeRoot(requestedWorktree)
-      if (root !== null) {
+      if (root !== null && (isCurrent === undefined || isCurrent())) {
         const previous = expandedRef.current
         const next = new Set(result.expanded.map((path) => absoluteExplorerPath(root, path)))
         expandedRef.current = next
@@ -537,11 +662,11 @@ export function ExplorerPanel({ context, report }: { context: UiPluginContext; r
     return result
   }, [context, loadDirectory, resolveWorktreeRoot])
 
-  const enqueueInteraction = useCallback((params: Record<string, unknown>) => {
+  const enqueueInteraction = useCallback((params: Record<string, unknown>, isCurrent?: () => boolean) => {
     const requestedWorktree = worktree
     const request = interactionQueue.current.then(async () => {
-      if (!requestedWorktree || currentWorktree.current !== requestedWorktree) return null
-      return await applyExplorerInteraction(requestedWorktree, params)
+      if (!requestedWorktree || currentWorktree.current !== requestedWorktree || (isCurrent !== undefined && !isCurrent())) return null
+      return await applyExplorerInteraction(requestedWorktree, params, isCurrent)
     })
     interactionQueue.current = request.then(() => undefined, () => undefined)
     return request.catch((reason: unknown) => {
@@ -585,8 +710,13 @@ export function ExplorerPanel({ context, report }: { context: UiPluginContext; r
       if (currentWorktree.current === requestedWorktree) setError(messageOf(reason))
     })
   }, [context, refreshEditorState, worktree])
-  const startRename = (path: string) => {
+  const changeRenamePath = (path: string | null) => {
+    renamePathRef.current = path
     setRenamePath(path)
+  }
+
+  const startRename = (path: string) => {
+    changeRenamePath(path)
     setRenameValue(basename(path))
   }
 
@@ -647,20 +777,50 @@ export function ExplorerPanel({ context, report }: { context: UiPluginContext; r
   }
 
   const renameSelected = async () => {
-    if (!worktree || !renamePath || !renameValue.trim()) return
+    const requestedWorktree = worktree
+    const sourcePath = renamePath
+    if (!requestedWorktree || !sourcePath || !renameValue.trim()) return
+    const destinationPath = joinPath(dirname(sourcePath), renameValue)
+    const sourceIsDirectory = entryForPath(sourcePath)?.isDirectory === true
+    const visiblePaths = rows.map(({ entry }) => entry.path)
+    const requestedMode = searchMode
+    const requestedQuery = query
+    const intent = userIntentRef.current
     try {
       await context.call('quirky.editor/mutate', {
-        worktree,
+        worktree: requestedWorktree,
         action: 'rename',
-        path: renamePath,
-        newPath: joinPath(dirname(renamePath), renameValue)
+        path: sourcePath,
+        newPath: destinationPath
       })
-      setRenamePath(null)
-      setRenameValue('')
-      await loadDirectory()
+      const preserveEditedInput = userIntentRef.current !== intent && document.activeElement === renameInputRef.current
+      if (renamePathRef.current === sourcePath && !preserveEditedInput) {
+        changeRenamePath(null)
+        setRenameValue('')
+      }
+      if (currentWorktree.current !== requestedWorktree || !mountedRef.current) return
+      await updateExpandedPathsAfterMutation(
+        requestedWorktree,
+        [],
+        sourceIsDirectory ? { from: sourcePath, to: destinationPath } : undefined
+      )
+      const filterListing = await reloadAfterMutation(requestedWorktree, requestedMode, requestedQuery)
+      if (!isRestoreCurrent(requestedWorktree, intent, requestedMode, requestedQuery)) return
+      if (filterListing === null) return
+      const visible = new Set(filterListing.entries.map((entry) => entry.path))
+      const targetPath = visible.has(destinationPath)
+        ? destinationPath
+        : renameNeighborPaths(visiblePaths, sourcePath, destinationPath).find((path) => visible.has(path)) ?? null
+      const queryParams = requestedMode === 'names' && requestedQuery.trim() !== '' ? { query: requestedQuery } : {}
+      const result = await enqueueInteraction(targetPath === null
+        ? { action: 'navigate', key: 'Home', ...queryParams }
+        : { action: 'select', path: targetPath, ...queryParams },
+      () => isRestoreCurrent(requestedWorktree, intent, requestedMode, requestedQuery))
+      if (result === null || !isRestoreCurrent(requestedWorktree, intent, requestedMode, requestedQuery)) return
+      treeRef.current?.focus()
       refreshEditorState()
     } catch (reason) {
-      setError(messageOf(reason))
+      if (currentWorktree.current === requestedWorktree && mountedRef.current) setError(messageOf(reason))
     }
   }
 
@@ -711,18 +871,48 @@ export function ExplorerPanel({ context, report }: { context: UiPluginContext; r
   }
 
   const deleteSelected = async (paths = selectedPaths) => {
-    if (!worktree || paths.length === 0) return
+    const requestedWorktree = worktree
+    if (!requestedWorktree || paths.length === 0) return
+    const requestedPaths = [...paths]
+    const deletionRoots = topLevelPaths(requestedPaths)
+    const visiblePaths = rows.map(({ entry }) => entry.path)
+    const focusedAtStart = focusedPathRef.current
+    const pivotPath = requestedPaths.length === 1
+      ? requestedPaths[0]!
+      : focusedAtStart !== null && requestedPaths.includes(focusedAtStart)
+        ? focusedAtStart
+        : requestedPaths[0]!
+    const requestedMode = searchMode
+    const requestedQuery = query
     const confirmed = await context.confirm({
-      title: paths.length === 1 ? `Delete ${basename(paths[0]!)}?` : `Delete ${paths.length} items?`,
+      title: requestedPaths.length === 1 ? `Delete ${basename(requestedPaths[0]!)}?` : `Delete ${requestedPaths.length} items?`,
       body: 'Dirty files are saved before deletion. Undo is available for supported file operations.'
     })
     if (!confirmed) return
+    const intent = userIntentRef.current
     setItemBusy(true)
     try {
-      for (const path of paths) await context.call('quirky.editor/mutate', { worktree, action: 'delete', path, yes: true })
-      await loadDirectory()
+      for (const path of deletionRoots) {
+        await context.call('quirky.editor/mutate', { worktree: requestedWorktree, action: 'delete', path, yes: true })
+      }
+      if (currentWorktree.current !== requestedWorktree || !mountedRef.current) return
+      await updateExpandedPathsAfterMutation(requestedWorktree, deletionRoots)
+      const filterListing = await reloadAfterMutation(requestedWorktree, requestedMode, requestedQuery)
+      if (!isRestoreCurrent(requestedWorktree, intent, requestedMode, requestedQuery)) return
+      const neighbors = deletionNeighborPaths(visiblePaths, deletionRoots, pivotPath)
+      if (filterListing === null) return
+      const visible = new Set(filterListing.entries.map((entry) => entry.path))
+      const targetPath = neighbors.find((path) => visible.has(path)) ?? null
+      const queryParams = requestedMode === 'names' && requestedQuery.trim() !== '' ? { query: requestedQuery } : {}
+      const result = await enqueueInteraction(targetPath === null
+        ? { action: 'navigate', key: 'Home', ...queryParams }
+        : { action: 'select', path: targetPath, ...queryParams },
+      () => isRestoreCurrent(requestedWorktree, intent, requestedMode, requestedQuery))
+      if (result === null || !isRestoreCurrent(requestedWorktree, intent, requestedMode, requestedQuery)) return
+      treeRef.current?.focus()
+      refreshEditorState()
     } catch (reason) {
-      setError(messageOf(reason))
+      if (currentWorktree.current === requestedWorktree && mountedRef.current) setError(messageOf(reason))
     } finally {
       setItemBusy(false)
     }
@@ -765,6 +955,7 @@ export function ExplorerPanel({ context, report }: { context: UiPluginContext; r
   }
 
   const onRowClick = (event: ReactMouseEvent, path: string, isDirectory: boolean) => {
+    userIntentRef.current++
     const queryParams = searchMode === 'names' && query.trim() !== '' ? { query } : {}
     const params = {
       action: 'select',
@@ -997,6 +1188,7 @@ export function ExplorerPanel({ context, report }: { context: UiPluginContext; r
               draggable
               onClick={(event) => onRowClick(event, entry.path, entry.isDirectory)}
               onContextMenu={() => {
+                userIntentRef.current++
                 treeRef.current?.focus()
                 if (!selectedPathsRef.current.includes(entry.path)) {
                   void enqueueInteraction({
@@ -1108,11 +1300,11 @@ export function ExplorerPanel({ context, report }: { context: UiPluginContext; r
                 onChange={(event) => setRenameValue(event.currentTarget.value)}
                 onKeyDown={(event) => {
                   if (event.key === 'Enter') { event.preventDefault(); void renameSelected() }
-                  if (event.key === 'Escape') setRenamePath(null)
+                  if (event.key === 'Escape') changeRenamePath(null)
                 }}
               />
               <Button variant="primary" onClick={() => void renameSelected()}>Rename</Button>
-              <Button onClick={() => setRenamePath(null)}>Cancel</Button>
+              <Button onClick={() => changeRenamePath(null)}>Cancel</Button>
             </div>
           )}
           {filterResult?.truncated && <p className="muted">More matches may be available.</p>}

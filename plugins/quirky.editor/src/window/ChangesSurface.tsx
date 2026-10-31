@@ -263,13 +263,16 @@ export function ChangesSurface(props: ChangesSurfaceProps): ReactElement {
   return (
     <section className="qe-changes-surface" aria-label="Changes">
       <div className="qe-changes-toolbar" role="toolbar" aria-label="Changes view">
-        {display === 'source' ? <>
+        {display === 'source' && <>
           <Button aria-label="Side by side" aria-pressed={layout === 'side-by-side'} onClick={() => setLayout('side-by-side')}>Side by side</Button>
           <Button aria-label="Inline" aria-pressed={layout === 'inline'} onClick={() => setLayout('inline')}>Inline</Button>
           <Button aria-label="Previous change" disabled={noChanges} onClick={() => navigateChange(-1)}>Previous change</Button>
           <Button aria-label="Next change" disabled={noChanges} onClick={() => navigateChange(1)}>Next change</Button>
-          {buffer.kind === 'markdown' && <Button aria-label="Markdown preview" onClick={() => setDisplay('markdown-preview')}>Markdown preview</Button>}
-        </> : <Button aria-label="Source editor" onClick={() => setDisplay('source')}>Source editor</Button>}
+        </>}
+        {buffer.kind === 'markdown' && <Button
+          aria-label={display === 'source' ? 'Markdown preview' : 'Source editor'}
+          onClick={() => setDisplay(display === 'source' ? 'markdown-preview' : 'source')}
+        >{display === 'source' ? 'Markdown preview' : 'Source editor'}</Button>}
       </div>
       {noChanges && <div className="qe-changes-clean" role="status">No uncommitted changes.</div>}
       {display === 'markdown-preview' && buffer.kind === 'markdown' ? <>

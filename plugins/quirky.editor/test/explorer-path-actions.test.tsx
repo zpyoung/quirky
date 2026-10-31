@@ -336,6 +336,34 @@ async function selectRow(element: HTMLElement, path: string): Promise<void> {
   await waitForUi(() => findRow(element, path)?.getAttribute('aria-selected') === 'true' || false)
 }
 
+function expectTreeFocus(element: HTMLElement, path: string | null): void {
+  const tree = element.querySelector<HTMLElement>('[role="tree"]')
+  if (!tree) throw new Error('Missing Explorer tree')
+  expect(document.activeElement === tree).toBe(true)
+  if (path === null) {
+    expect(tree.getAttribute('aria-activedescendant')).toBeNull()
+    return
+  }
+  const row = findRow(element, path)
+  if (!row) throw new Error(`Missing focused Explorer row ${path}`)
+  expect(tree.getAttribute('aria-activedescendant')).toBe(row.id)
+}
+
+async function waitForTreeFocus(element: HTMLElement, path: string | null): Promise<void> {
+  await waitForUi(() => {
+    const tree = element.querySelector<HTMLElement>('[role="tree"]')
+    if (tree === null || document.activeElement !== tree) return false
+    if (path === null) {
+      return tree.getAttribute('aria-activedescendant') === null &&
+        element.querySelectorAll<HTMLElement>('[data-path][aria-selected="true"]').length === 0
+    }
+    const row = findRow(element, path)
+    return row !== null && tree.getAttribute('aria-activedescendant') === row.id &&
+      row.getAttribute('aria-selected') === 'true'
+  })
+  expectTreeFocus(element, path)
+}
+
 function makeTransfer(): Transfer {
   const values = new Map<string, string>()
   const transfer = {
@@ -548,7 +576,7 @@ test.each([
   expect(existsSync(parent)).toBe(true)
 })
 
-test('Explorer Rename closes row actions, focuses the inline field, and renames the file', async () => {
+test('Explorer Rename closes row actions, then focuses the renamed tree row after Enter', async () => {
   const fixture = await makeFixture({ displayRoot: 'nested' })
   const panel = await renderExplorer(fixture)
   const originalPath = join(fixture.root, FILE_A)
@@ -573,7 +601,64 @@ test('Explorer Rename closes row actions, focuses the inline field, and renames 
   await waitForUi(() => findRow(panel.element, renamedPath) || false)
   expect(readFileSync(renamedPath, 'utf8')).toBe('alpha\n')
   expect(findRow(panel.element, originalPath)).toBeNull()
+  await waitForTreeFocus(panel.element, renamedPath)
 })
+
+test('Explorer renaming to a hidden file selects the next visible neighbor when dotfiles are hidden', async () => {
+  const fixture = await makeFixture({ displayRoot: 'nested' })
+  await call(fixture.client, 'quirky.editor/explorer', {
+    worktree: fixture.worktree.id,
+    action: 'preferences',
+    showDotfiles: false
+  })
+  const panel = await renderExplorer(fixture)
+  const source = join(fixture.root, FILE_A)
+  const hiddenTarget = join(fixture.root, 'nested/.hidden.txt')
+  const visibleRowsBefore = Array.from(panel.element.querySelectorAll<HTMLElement>('[role="treeitem"]'))
+    .map((item) => item.dataset.path)
+    .filter((path): path is string => path !== undefined)
+  const sourceIndex = visibleRowsBefore.indexOf(source)
+  expect(sourceIndex).toBeGreaterThanOrEqual(0)
+  const neighbor = visibleRowsBefore.slice(sourceIndex + 1)[0] ??
+    visibleRowsBefore.slice(0, sourceIndex).reverse()[0]
+  if (!neighbor) throw new Error('Expected a visible neighbor for the renamed row')
+
+  const row = findRow(panel.element, source)
+  if (!row) throw new Error('Missing source row for hidden rename')
+  const rename = await actionButton(row, 'Rename')
+  await act(async () => rename.click())
+  const input = await waitForUi(() => panel.element.querySelector<HTMLInputElement>('input[aria-label="Rename file"]') ?? false)
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, basename(hiddenTarget))
+    input.dispatchEvent(new Event('input', { bubbles: true }))
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }))
+  })
+
+  await waitForUi(() => existsSync(hiddenTarget) && !existsSync(source) || false)
+  await waitForUi(() => findRow(panel.element, source) === null && findRow(panel.element, neighbor) !== null || false)
+  const tree = panel.element.querySelector<HTMLElement>('[role="tree"]')
+  if (!tree) throw new Error('Missing Explorer tree')
+  await waitForUi(() => {
+    const alert = panel.element.querySelector('[role="alert"]')
+    const focusedNeighbor = findRow(panel.element, neighbor)
+    return alert !== null || (
+      document.activeElement === tree &&
+      tree.getAttribute('aria-activedescendant') === focusedNeighbor?.id &&
+      focusedNeighbor?.getAttribute('aria-selected') === 'true'
+    ) || false
+  })
+  expect(panel.element.querySelector('[role="alert"]') === null).toBe(true)
+  await waitForTreeFocus(panel.element, neighbor)
+  expect(findRow(panel.element, hiddenTarget)).toBeNull()
+  const state = await call<{
+    explorer: { selectedPaths: string[]; focusedPath: string | null; selectionAnchor: string | null }
+  }>(fixture.client, 'quirky.editor/state', { worktree: fixture.worktree.id })
+  expect(state.explorer).toMatchObject({
+    selectedPaths: [neighbor],
+    focusedPath: neighbor,
+    selectionAnchor: neighbor
+  })
+}, 60_000)
 
 test('Explorer identifies row and footer deletion targets without mutating after cancellation', async () => {
   const root = '/test'
@@ -681,22 +766,33 @@ test('Explorer identifies row and footer deletion targets without mutating after
       expect(confirmation.title).toContain(basename(targetPath))
       expect(deleteOperations).toEqual([])
     }
+
+    const tree = panel.element.querySelector<HTMLElement>('[role="tree"]')
+    if (!tree) throw new Error('Missing Explorer tree')
+    await act(async () => {
+      tree.focus()
+      tree.dispatchEvent(new KeyboardEvent('keydown', { key: 'Delete', bubbles: true, cancelable: true }))
+    })
+    await waitForUi(() => confirmations.length === actions.length + 1 || false)
+    await waitForTreeFocus(panel.element, folderPath)
+    expect(deleteOperations).toEqual([])
   } finally {
     await panel.unmount()
   }
 }, 60_000)
 
-test('Explorer rename clears stale selection before row Delete and keeps footer state authoritative', async () => {
+test('Explorer selects the renamed row and previous neighbor after successful mutations', async () => {
   const fixture = await makeFixture({ displayRoot: 'nested' })
   const context = makeContext(fixture)
   context.confirm = async () => true
   const panel = await renderExplorer(fixture, context)
   const originalPath = join(fixture.root, FILE_A)
-  const renamedPath = join(fixture.root, 'nested/renamed-selected.txt')
+  const renamedPath = join(fixture.root, 'nested/zz-renamed-selected.txt')
   const footerActions = ['Copy Path', 'Copy Relative Path', 'Delete'] as const
-  const uiHasNoSelection = () =>
-    panel.element.querySelectorAll<HTMLElement>('[data-path][aria-selected="true"]').length === 0 &&
-    footerActions.every((label) => footerButton(panel.element, label).disabled)
+  const uiHasSelection = (path: string) =>
+    findRow(panel.element, path)?.getAttribute('aria-selected') === 'true' &&
+    panel.element.querySelectorAll<HTMLElement>('[data-path][aria-selected="true"]').length === 1 &&
+    footerActions.every((label) => !footerButton(panel.element, label).disabled)
 
   await selectRow(panel.element, originalPath)
   const row = findRow(panel.element, originalPath)
@@ -710,23 +806,272 @@ test('Explorer rename clears stale selection before row Delete and keeps footer 
   })
   await act(async () => input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })))
   await waitForUi(() => existsSync(renamedPath) && !existsSync(originalPath) && findRow(panel.element, renamedPath) || false)
-  await waitForUi(() => uiHasNoSelection() || false)
+  await waitForUi(() => uiHasSelection(renamedPath) || false)
+  await waitForTreeFocus(panel.element, renamedPath)
   const stateAfterRename = await call<{
     explorer: { selectedPaths: string[]; focusedPath: string | null; selectionAnchor: string | null }
   }>(fixture.client, 'quirky.editor/state', { worktree: fixture.worktree.id })
-  expect(stateAfterRename.explorer).toMatchObject({ selectedPaths: [], focusedPath: null, selectionAnchor: null })
+  expect(stateAfterRename.explorer).toMatchObject({
+    selectedPaths: [renamedPath],
+    focusedPath: renamedPath,
+    selectionAnchor: renamedPath
+  })
 
   const renamedRow = findRow(panel.element, renamedPath)
   if (!renamedRow) throw new Error('Missing renamed row for Delete')
+
+  const rowsBeforeDelete = Array.from(panel.element.querySelectorAll<HTMLElement>('[role="treeitem"]'))
+    .map((item) => item.dataset.path)
+    .filter((path): path is string => path !== undefined)
+  const lastRowPath = rowsBeforeDelete[rowsBeforeDelete.length - 1]
+  expect(lastRowPath).toBe(renamedPath)
+  const previousPath = rowsBeforeDelete[rowsBeforeDelete.length - 2] ?? null
+  if (previousPath === null) throw new Error('Expected a previous row for the last-item deletion')
   const deleteAction = await actionButton(renamedRow, 'Delete')
   await act(async () => deleteAction.click())
   await waitForUi(() => !existsSync(renamedPath) && findRow(panel.element, renamedPath) === null || false)
-  await waitForUi(() => uiHasNoSelection() || false)
+  await waitForUi(() => uiHasSelection(previousPath) || false)
+  await waitForTreeFocus(panel.element, previousPath)
   const stateAfterDelete = await call<{
     explorer: { selectedPaths: string[]; focusedPath: string | null; selectionAnchor: string | null }
   }>(fixture.client, 'quirky.editor/state', { worktree: fixture.worktree.id })
-  expect(stateAfterDelete.explorer).toMatchObject({ selectedPaths: [], focusedPath: null, selectionAnchor: null })
+  expect(stateAfterDelete.explorer).toMatchObject({
+    selectedPaths: [previousPath],
+    focusedPath: previousPath,
+    selectionAnchor: previousPath
+  })
 })
+
+test('Explorer confirmed deletion focuses the next survivor, skips descendants, then falls back to previous or empty tree', async () => {
+  const fixture = await makeFixture({
+    displayRoot: 'nested',
+    extraFiles: { 'nested/archive/second.txt': 'second archive entry\n' }
+  })
+  const fileA = join(fixture.root, FILE_A)
+  const context = makeContext(fixture)
+  context.confirm = async () => true
+  const terminalControl = document.createElement('textarea')
+  terminalControl.setAttribute('aria-label', 'Terminal input')
+  document.body.append(terminalControl)
+  let terminalFocusedDuringDelete = false
+  const originalCall = context.call
+  context.call = (async (method: string, params: Record<string, unknown> = {}) => {
+    const result = await originalCall(method, params)
+    if (
+      !terminalFocusedDuringDelete &&
+      method === 'quirky.editor/mutate' &&
+      params.action === 'delete' &&
+      params.path === fileA
+    ) {
+      terminalControl.focus()
+      terminalFocusedDuringDelete = document.activeElement === terminalControl
+    }
+    return result
+  }) as typeof context.call
+  const panel = await renderExplorer(fixture, context)
+  const fileB = join(fixture.root, FILE_B)
+  const archive = join(fixture.root, 'nested/archive')
+  const archiveFile = join(fixture.root, ARCHIVE_FILE)
+  const lastFile = join(fixture.root, MARKDOWN_FILE)
+  const treePaths = () => Array.from(panel.element.querySelectorAll<HTMLElement>('[role="treeitem"]'))
+    .map((row) => row.dataset.path)
+    .filter((path): path is string => path !== undefined)
+
+  const focusTransitions: { focused: boolean; path: string | null }[] = []
+  const removeAndCaptureFocus = async (path: string) => {
+    const before = treePaths()
+    const index = before.indexOf(path)
+    expect(index).toBeGreaterThanOrEqual(0)
+    const next = before.slice(index + 1).find((candidate) => !candidate.startsWith(`${path}/`))
+    const previous = before.slice(0, index).reverse().find((candidate) => !candidate.startsWith(`${path}/`))
+    const expected = next ?? previous ?? null
+    const row = findRow(panel.element, path)
+    if (!row) throw new Error(`Missing Explorer row ${path}`)
+    const button = await actionButton(row, 'Delete')
+    await act(async () => button.click())
+    await waitForUi(() => !existsSync(path) && findRow(panel.element, path) === null || false)
+    await waitForTreeFocus(panel.element, expected)
+    const tree = panel.element.querySelector<HTMLElement>('[role="tree"]')
+    const activeId = tree?.getAttribute('aria-activedescendant')
+    const activeRow = activeId === null || activeId === undefined
+      ? null
+      : Array.from(panel.element.querySelectorAll<HTMLElement>('[role="treeitem"]'))
+        .find((candidate) => candidate.id === activeId)
+    focusTransitions.push({
+      focused: tree !== null && document.activeElement === tree,
+      path: activeRow?.dataset.path ?? null
+    })
+    return { before, expected }
+  }
+
+  const archiveRow = findRow(panel.element, archive)
+  if (!archiveRow) throw new Error('Missing archive folder row')
+  await selectRow(panel.element, archive)
+  const tree = panel.element.querySelector<HTMLElement>('[role="tree"]')
+  if (!tree) throw new Error('Missing Explorer tree')
+  await act(async () => {
+    tree.focus()
+    tree.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true, cancelable: true }))
+  })
+  await waitForUi(() => findRow(panel.element, archiveFile) || false)
+  expect(treePaths().filter((path) => path.startsWith(`${archive}/`))).toHaveLength(2)
+
+  const fileDeletion = await removeAndCaptureFocus(fileA)
+  expect(fileDeletion.expected).toBe(fileB)
+  expect(terminalFocusedDuringDelete).toBe(true)
+
+  const folderDeletion = await removeAndCaptureFocus(archive)
+  expect(folderDeletion.expected).toBe(fileB)
+
+  expect(treePaths()[treePaths().length - 1]).toBe(lastFile)
+  const lastDeletion = await removeAndCaptureFocus(lastFile)
+  expect(lastDeletion.expected).toBe(fileB)
+  expect(treePaths()).toEqual([fileB])
+
+  const emptyDeletion = await removeAndCaptureFocus(fileB)
+  expect(emptyDeletion.expected).toBeNull()
+  expect(treePaths()).toEqual([])
+  expect(focusTransitions).toEqual([
+    { focused: true, path: fileB },
+    { focused: true, path: fileB },
+    { focused: true, path: fileB },
+    { focused: true, path: null }
+  ])
+}, 60_000)
+
+test('Explorer failed rename keeps focus in the inline editor', async () => {
+  const fixture = await makeFixture({ displayRoot: 'nested' })
+  const context = makeContext(fixture)
+  const originalCall = context.call
+  context.call = (async (method: string, params: Record<string, unknown> = {}) => {
+    if (method === 'quirky.editor/mutate' && params.action === 'rename') throw new Error('injected rename failure')
+    return await originalCall(method, params)
+  }) as typeof context.call
+  const panel = await renderExplorer(fixture, context)
+  const source = join(fixture.root, FILE_A)
+  const row = findRow(panel.element, source)
+  if (!row) throw new Error('Missing rename source row')
+  const rename = await actionButton(row, 'Rename')
+  await act(async () => rename.click())
+  const input = await waitForUi(() => panel.element.querySelector<HTMLInputElement>('input[aria-label="Rename file"]') ?? false)
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, 'failed-rename.txt')
+    input.dispatchEvent(new Event('input', { bubbles: true }))
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }))
+  })
+  await waitForUi(() => panel.element.querySelector('[role="alert"]')?.textContent?.includes('injected rename failure') || false)
+  expect(input.isConnected).toBe(true)
+  expect(document.activeElement).toBe(input)
+  expect(findRow(panel.element, source)).not.toBeNull()
+  const tree = panel.element.querySelector<HTMLElement>('[role="tree"]')
+  expect(tree?.getAttribute('aria-activedescendant')).toBe(row.id)
+  expect(existsSync(join(dirname(source), 'failed-rename.txt'))).toBe(false)
+}, 60_000)
+
+test('Explorer failed confirmed deletion preserves tree focus', async () => {
+  const fixture = await makeFixture({ displayRoot: 'nested' })
+  const context = makeContext(fixture)
+  const originalCall = context.call
+  context.confirm = async () => true
+  context.call = (async (method: string, params: Record<string, unknown> = {}) => {
+    if (method === 'quirky.editor/mutate' && params.action === 'delete') throw new Error('injected delete failure')
+    return await originalCall(method, params)
+  }) as typeof context.call
+  const panel = await renderExplorer(fixture, context)
+  const source = join(fixture.root, FILE_A)
+  await selectRow(panel.element, source)
+  const tree = panel.element.querySelector<HTMLElement>('[role="tree"]')
+  if (!tree) throw new Error('Missing Explorer tree')
+  await act(async () => {
+    tree.focus()
+    tree.dispatchEvent(new KeyboardEvent('keydown', { key: 'Delete', bubbles: true, cancelable: true }))
+  })
+  await waitForUi(() => panel.element.querySelector('[role="alert"]')?.textContent?.includes('injected delete failure') || false)
+  await waitForTreeFocus(panel.element, source)
+  expect(existsSync(source)).toBe(true)
+}, 60_000)
+
+test('Explorer rename and deletion preserve tree navigation made during refresh', async () => {
+  const fixture = await makeFixture({ displayRoot: 'nested' })
+  const context = makeContext(fixture)
+  context.confirm = async () => true
+  const originalCall = context.call
+  const makeRefreshGate = () => ({
+    started: Promise.withResolvers<void>(),
+    released: Promise.withResolvers<void>()
+  })
+  let activeGate = makeRefreshGate()
+  let holdNextRootList = false
+  context.call = (async (method: string, params: Record<string, unknown> = {}) => {
+    if (method === 'quirky.editor/mutate' && (params.action === 'rename' || params.action === 'delete')) {
+      const result = await originalCall(method, params)
+      holdNextRootList = true
+      return result
+    }
+    if (holdNextRootList && method === 'quirky.editor/explorer' && params.action === 'list' && params.path === undefined) {
+      holdNextRootList = false
+      activeGate.started.resolve()
+      await activeGate.released.promise
+    }
+    return await originalCall(method, params)
+  }) as typeof context.call
+  const panel = await renderExplorer(fixture, context)
+  const source = join(fixture.root, FILE_A)
+  const other = join(fixture.root, FILE_B)
+  const renamed = join(fixture.root, 'nested/renamed-during-refresh.txt')
+
+  try {
+    const sourceRow = findRow(panel.element, source)
+    if (!sourceRow) throw new Error('Missing rename source row')
+    const rename = await actionButton(sourceRow, 'Rename')
+    await act(async () => rename.click())
+    const input = await waitForUi(() => panel.element.querySelector<HTMLInputElement>('input[aria-label="Rename file"]') ?? false)
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, basename(renamed))
+      input.dispatchEvent(new Event('input', { bubbles: true }))
+      input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }))
+    })
+
+    const renameGate = activeGate
+    await renameGate.started.promise
+    await waitForUi(() => panel.element.querySelector('input[aria-label="Rename file"]') === null || false)
+    await selectRow(panel.element, other)
+    renameGate.released.resolve()
+    await waitForUi(() => findRow(panel.element, renamed) || false)
+    await waitForTreeFocus(panel.element, other)
+    const stateAfterRenameNavigation = await call<{
+      explorer: { selectedPaths: string[]; focusedPath: string | null; selectionAnchor: string | null }
+    }>(fixture.client, 'quirky.editor/state', { worktree: fixture.worktree.id })
+    expect(stateAfterRenameNavigation.explorer).toMatchObject({
+      selectedPaths: [other],
+      focusedPath: other,
+      selectionAnchor: other
+    })
+
+    activeGate = makeRefreshGate()
+    const deleteGate = activeGate
+    const renamedRow = findRow(panel.element, renamed)
+    if (!renamedRow) throw new Error('Missing renamed row for Delete')
+    const deleteAction = await actionButton(renamedRow, 'Delete')
+    await act(async () => deleteAction.click())
+    await deleteGate.started.promise
+    await selectRow(panel.element, other)
+    deleteGate.released.resolve()
+    await waitForUi(() => findRow(panel.element, renamed) === null || false)
+    await waitForTreeFocus(panel.element, other)
+    const stateAfterDeleteNavigation = await call<{
+      explorer: { selectedPaths: string[]; focusedPath: string | null; selectionAnchor: string | null }
+    }>(fixture.client, 'quirky.editor/state', { worktree: fixture.worktree.id })
+    expect(stateAfterDeleteNavigation.explorer).toMatchObject({
+      selectedPaths: [other],
+      focusedPath: other,
+      selectionAnchor: other
+    })
+  } finally {
+    activeGate.released.resolve()
+  }
+}, 60_000)
+
 
 test('Explorer Markdown Preview closes row actions and opens a real preview tab', async () => {
   const fixture = await makeFixture({ displayRoot: 'nested' })

@@ -437,6 +437,21 @@ test('Changes side-by-side compares aligned read-only HEAD and editable draft ed
   expect(head?.querySelector('.cm-content')?.textContent).toContain('old value')
 })
 
+test('Changes keeps keyboard focus on the Markdown display toggle in both directions', async () => {
+  const surface = await renderChanges(makeBuffer('markdown', '# Working file\n', '# Shared draft\n'))
+  await flush()
+  const previewButton = surface.element.querySelector<HTMLButtonElement>('[aria-label="Markdown preview"]')!
+  previewButton.focus()
+  await act(async () => previewButton.click())
+  await flush()
+  const sourceButton = surface.element.querySelector<HTMLButtonElement>('[aria-label="Source editor"]')!
+  expect(document.activeElement).toBe(sourceButton)
+
+  await act(async () => sourceButton.click())
+  await flush()
+  expect(document.activeElement).toBe(surface.element.querySelector('[aria-label="Markdown preview"]'))
+})
+
 test('Changes Markdown preview renders the shared draft image and releases it when Source returns', async () => {
   const draft = '# Shared draft\n\n![Chart](images/chart.png)\n'
   const surface = await renderChanges(makeBuffer('markdown', '# Working file\n', draft), {
