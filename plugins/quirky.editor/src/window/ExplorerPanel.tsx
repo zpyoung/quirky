@@ -902,10 +902,19 @@ export function ExplorerPanel({ context, report }: { context: UiPluginContext; r
       <IconButton label="Source Control" title="Source Control" onClick={() => void openSourceControl()}>⑂</IconButton>
     </>
   )
+  const selectionActions = (
+    <>
+      <Button disabled={searchMode !== 'names' || selectedPaths.length === 0} onClick={() => void copyPaths(false)}>Copy Path</Button>
+      <Button disabled={searchMode !== 'names' || selectedPaths.length === 0 || !worktree} onClick={() => void copyPaths(true)}>Copy Relative Path</Button>
+      <Button variant="destructive" disabled={searchMode !== 'names' || selectedPaths.length === 0 || !worktree} onClick={() => void deleteSelected()}>Delete</Button>
+      <Button onClick={() => { setSearchMode('contents'); setQuery(''); setIncludePattern(''); searchInputRef.current?.focus() }}>Search in Files</Button>
+    </>
+  )
   const actions = (
     <details className="qe-explorer-more-actions">
       <summary className="qe-disclosure-trigger" aria-label="More Explorer Actions"><ControlIcon name="dots-three" /></summary>
       <div className="qe-file-actions-menu">
+        {selectionActions}
         <label><input type="checkbox" checked={state?.explorer.showDotfiles ?? true} onChange={() => void toggleDotfiles()} />Show Dotfiles</label>
         <label><input type="checkbox" checked={settings.showGitIgnored} onChange={(event) => void setEditorSetting(context, 'showGitIgnoredFiles', event.currentTarget.checked).then(refreshExplorer).catch((reason: unknown) => setError(messageOf(reason)))} />Show Git Ignored Files</label>
         <label><input type="checkbox" checked={settings.followSymlinkedDirectories} onChange={(event) => void setEditorSetting(context, 'followSymlinkedDirectories', event.currentTarget.checked).then(refreshExplorer).catch((reason: unknown) => setError(messageOf(reason)))} />Follow symlinked directories</label>
@@ -1133,10 +1142,7 @@ export function ExplorerPanel({ context, report }: { context: UiPluginContext; r
         </div>
       )}
       <footer className="qe-explorer-footer">
-        <Button disabled={searchMode !== 'names' || selectedPaths.length === 0} onClick={() => void copyPaths(false)}>Copy Path</Button>
-        <Button disabled={searchMode !== 'names' || selectedPaths.length === 0 || !worktree} onClick={() => void copyPaths(true)}>Copy Relative Path</Button>
-        <Button variant="destructive" disabled={searchMode !== 'names' || selectedPaths.length === 0 || !worktree} onClick={() => void deleteSelected()}>Delete</Button>
-        <Button onClick={() => { setSearchMode('contents'); setQuery(''); setIncludePattern(''); searchInputRef.current?.focus() }}>Search in Files</Button>
+        {selectionActions}
       </footer>
       {rootListing?.truncated && <p className="muted">More files may be available.</p>}
       {state?.explorer.expanded.length === 0 && expanded.size > 0 && <span className="sr-only">Expanded folders are open.</span>}
