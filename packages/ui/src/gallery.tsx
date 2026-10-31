@@ -6,6 +6,7 @@ import {
   Dialog,
   EmptyState,
   FormRow,
+  ExpandingIconButton,
   IconButton,
   InlineAgentCard,
   ListRow,
@@ -77,6 +78,12 @@ function IconButtonDemo({ theme }: { theme: Theme }) {
           <span aria-hidden="true">↻</span>
         </IconButton>
         <span>Refresh activity without leaving the gallery.</span>
+      </div>
+      <div className="ui-cluster">
+        <span>Grows leftward on hover or keyboard focus.</span>
+        <ExpandingIconButton label="Refresh gallery activity now" onClick={() => setRefreshes((count) => count + 1)}>
+          <span aria-hidden="true">↻</span>
+        </ExpandingIconButton>
       </div>
       <Status name="icon-button">Refreshes: {refreshes}</Status>
     </Category>

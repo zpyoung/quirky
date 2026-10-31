@@ -12,9 +12,9 @@
       "commit": "89321c1eebecd5ebed5888d9bfd0378a22573fd2",
       "state": "All twelve area restyles integrated; immutable capture revision before the final documentation landing."
     },
-    "shellPolish": {
-      "commit": "7070a851f0754707809c79c1f04764024d79542b",
-      "state": "Shell after pair recaptured after header options, quiet stripes and neutral Primary; all other area captures retain their original source commits."
+    "addProjectButton": {
+      "commit": "e39e47881d3139ed7a3475e4e594f1829c7b82b8",
+      "state": "Shell and Worktrees after pairs recaptured with the Add project header button, which also carries the earlier shell polish; all other area captures retain their original source commits."
     }
   },
   "viewport": {
@@ -197,13 +197,13 @@
     },
     {
       "path": "images/after/shell/host-shell-dark.png",
-      "sha256": "81b919122a59be4e9a8eefc81c9c9d367722d85858fa59eaf3e89be9d04ac2b4",
+      "sha256": "0f7cb3d1c5fa95dc487beec36a13c3c2220ef380b63fc164e0c27ebb4497156a",
       "area": "shell",
       "surface": "host:shell",
       "title": "Window shell",
       "theme": "dark",
       "phase": "after",
-      "sourceCommit": "7070a851f0754707809c79c1f04764024d79542b",
+      "sourceCommit": "e39e47881d3139ed7a3475e4e594f1829c7b82b8",
       "width": 1340,
       "height": 600,
       "fixture": "Actual host window before and after the six-slot layout; synthetic repository and worktrees."
@@ -223,13 +223,13 @@
     },
     {
       "path": "images/after/shell/host-shell-light.png",
-      "sha256": "cd18bf4cbace02cfb0646b44f5b3ec4d28c353470acad2a6f96d3ee722783758",
+      "sha256": "5c8edfe40cfe11cf928a82009fe1a56fdac19feccdf78f671cd4120fb41654d5",
       "area": "shell",
       "surface": "host:shell",
       "title": "Window shell",
       "theme": "light",
       "phase": "after",
-      "sourceCommit": "7070a851f0754707809c79c1f04764024d79542b",
+      "sourceCommit": "e39e47881d3139ed7a3475e4e594f1829c7b82b8",
       "width": 1340,
       "height": 600,
       "fixture": "Actual host window before and after the six-slot layout; synthetic repository and worktrees."
@@ -821,13 +821,13 @@
     },
     {
       "path": "images/after/worktrees/sidebar-section-quirky-worktree-worktrees-dark.png",
-      "sha256": "2703a99005441fa44650c2d39d92b1a6ba4e26fc8123617bbda6037e1ec4a5c6",
+      "sha256": "d4fc89ed7082df1134533d3bd3700576529d19dffadb7d5d9dff31ef00d9ead4",
       "area": "worktrees",
       "surface": "sidebar-section:quirky.worktree/worktrees",
       "title": "Repository and worktree rows",
       "theme": "dark",
       "phase": "after",
-      "sourceCommit": "89321c1eebecd5ebed5888d9bfd0378a22573fd2",
+      "sourceCommit": "e39e47881d3139ed7a3475e4e594f1829c7b82b8",
       "width": 1340,
       "height": 600,
       "fixture": "Repository and three real Git worktrees registered through public APIs. Repository presentation is in Worktrees, not a separate invented repo panel."
@@ -847,13 +847,13 @@
     },
     {
       "path": "images/after/worktrees/sidebar-section-quirky-worktree-worktrees-light.png",
-      "sha256": "74dd5a06a29cebcb39758c560420fd073e0208febafed76d2e50819a572522e6",
+      "sha256": "47f8b79cea8f1fcdb8ce767f234c75dd1beb5449e6c96f2c67fcc1afce1f8a9a",
       "area": "worktrees",
       "surface": "sidebar-section:quirky.worktree/worktrees",
       "title": "Repository and worktree rows",
       "theme": "light",
       "phase": "after",
-      "sourceCommit": "89321c1eebecd5ebed5888d9bfd0378a22573fd2",
+      "sourceCommit": "e39e47881d3139ed7a3475e4e594f1829c7b82b8",
       "width": 1340,
       "height": 600,
       "fixture": "Repository and three real Git worktrees registered through public APIs. Repository presentation is in Worktrees, not a separate invented repo panel."
