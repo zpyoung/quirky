@@ -1234,6 +1234,9 @@ export function TasksList({ context, state, refresh }: TasksSurfaceProps) {
 
   return (
     <section className="tasks-list" data-kind={kind} aria-label="GitHub tasks">
+      {noGitHubRemote ? (
+        <div role="status" className="tasks-list__empty"><EmptyState message={noGitHubRemoteMessage} /></div>
+      ) : null}
       <div className="tasks-list__context">
         <span aria-label="Task source context">{hostContext} · {userLabel()} · {sourceContext}</span>
         {selectedSourceValues.length > 1 ? <span>{selectedSourceValues.length} selected sources</span> : null}
@@ -1258,7 +1261,7 @@ export function TasksList({ context, state, refresh }: TasksSurfaceProps) {
             </div>
           ) : null}
         </div>
-        <Button type="button" disabled={!repoOpenUrl || selectedRepos.length !== 1} title={selectedRepos.length === 1 ? 'Open repository in GitHub' : 'Select one project to open in GitHub'} onClick={() => repoOpenUrl && openLink(repoOpenUrl)}>Open repository in GitHub</Button>
+        {!noGitHubRemote ? <Button type="button" disabled={!repoOpenUrl || selectedRepos.length !== 1} title={selectedRepos.length === 1 ? 'Open repository in GitHub' : 'Select one project to open in GitHub'} onClick={() => repoOpenUrl && openLink(repoOpenUrl)}>Open repository in GitHub</Button> : null}
         {showIssueSource ? (
           <Tabs
             label="Issue source"
@@ -1287,73 +1290,81 @@ export function TasksList({ context, state, refresh }: TasksSurfaceProps) {
       )) : null}
 
       <div className="tasks-list__toolbar">
-        <div role="group" aria-label="Task presets" className="tasks-list__presets">
-          {presets.map((item) => (
-            <Button key={item.id} type="button" onClick={() => presetClick(item)} onContextMenu={(event) => void makeDefaultPreset(item, event)} title="Right-click to make this the default">{item.label}</Button>
-          ))}
-        </div>
-        <Button type="button" aria-haspopup="dialog" aria-expanded={filtersOpen} onClick={() => setFiltersOpen((open) => !open)}>
-          Filters{filterCount > 0 ? ` (${filterCount})` : ''}</Button>
-        <TextField
-          label={`Search GitHub ${kind === 'issue' ? 'issues' : 'pull requests'}`}
-          data-tasks-search="true"
-          aria-label={`Search GitHub ${kind === 'issue' ? 'issues' : 'pull requests'}`}
-          placeholder={`Search GitHub ${kind === 'issue' ? 'issues' : 'PRs'}…`}
-          value={searchDraft}
-          onChange={(event) => onSearchChange(event.currentTarget.value)}
-          onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); commitSearch(event.currentTarget.value) } }}
-          className="tasks-list__search-input"
-        />
-        <IconButton type="button" label="Clear search" title="Clear search" onClick={() => commitSearch(presetQuery(normalizedPreset(state.preferences.defaultTaskViewPreset, kind), kind))}>×</IconButton>
-        {kind === 'issue' ? <Button variant="primary" type="button" aria-label="New GitHub issue" disabled={selectedRepoIds.length === 0 || noGitHubRemote} onClick={() => void navigate({ newIssue: true })}>＋ New GitHub issue</Button> : null}
+        {!noGitHubRemote ? (
+          <>
+            <div role="group" aria-label="Task presets" className="tasks-list__presets">
+              {presets.map((item) => (
+                <Button key={item.id} type="button" onClick={() => presetClick(item)} onContextMenu={(event) => void makeDefaultPreset(item, event)} title="Right-click to make this the default">{item.label}</Button>
+              ))}
+            </div>
+            <Button type="button" aria-haspopup="dialog" aria-expanded={filtersOpen} onClick={() => setFiltersOpen((open) => !open)}>
+              Filters{filterCount > 0 ? ` (${filterCount})` : ''}</Button>
+            <TextField
+              label={`Search GitHub ${kind === 'issue' ? 'issues' : 'pull requests'}`}
+              data-tasks-search="true"
+              aria-label={`Search GitHub ${kind === 'issue' ? 'issues' : 'pull requests'}`}
+              placeholder={`Search GitHub ${kind === 'issue' ? 'issues' : 'PRs'}…`}
+              value={searchDraft}
+              onChange={(event) => onSearchChange(event.currentTarget.value)}
+              onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); commitSearch(event.currentTarget.value) } }}
+              className="tasks-list__search-input"
+            />
+            <IconButton type="button" label="Clear search" title="Clear search" onClick={() => commitSearch(presetQuery(normalizedPreset(state.preferences.defaultTaskViewPreset, kind), kind))}>×</IconButton>
+            {kind === 'issue' ? <Button variant="primary" type="button" aria-label="New GitHub issue" disabled={selectedRepoIds.length === 0} onClick={() => void navigate({ newIssue: true })}>＋ New GitHub issue</Button> : null}
+          </>
+        ) : null}
         <Button type="button" aria-label={refreshing ? 'Refreshing GitHub work' : 'Refresh GitHub work'} disabled={refreshing || selectedRepoIds.length === 0} onClick={() => void loadList(true, true)}>{refreshing ? 'Refreshing…' : 'Refresh'}</Button>
       </div>
 
-      {pills.length > 0 ? (
-        <div aria-label="Active task filters" className="tasks-list__filter-pills">
-          {pills.map((pill, index) => <Button key={`${pill.category}:${pill.value ?? index}`} type="button" aria-label={`Remove ${pill.label} filter`} onClick={() => removeFilter(pill.category, pill.value)}>{pill.label} ×</Button>)}
-        </div>
-      ) : null}
-
-      {filtersOpen ? (
-        <div role="dialog" aria-label="GitHub task filters" className="tasks-list__filters">
-          <FormRow label="Status" htmlFor="tasks-list-status-filter">
-            <select id="tasks-list-status-filter" className="ui-text-field__input" value={filters.status || 'any'} onChange={(event) => setFilter('status', event.currentTarget.value === 'any' ? [] : [`is:${event.currentTarget.value}`, ...(filters.draftOnly ? ['is:draft'] : [])])}>
-              {statusOptions.map((value) => <option key={value} value={value}>{value === 'any' ? 'Any state' : value[0]!.toUpperCase() + value.slice(1)}</option>)}
-            </select>
-          </FormRow>
-          {kind === 'pullRequest' ? <label className="tasks-list__check-option"><input type="checkbox" checked={filters.draftOnly} onChange={(event) => setFilter('status', [...(filters.status ? [`is:${filters.status}`] : []), ...(event.currentTarget.checked ? ['is:open', 'is:draft'] : [])])} />Draft only</label> : null}
-          <FormRow label="Author" htmlFor="tasks-list-author-filter">
-            <>
-              <input id="tasks-list-author-filter" className="ui-text-field__input" list="tasks-authors" value={filterAuthorText || filters.author} onChange={(event) => setFilterAuthorText(event.currentTarget.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); setFilter('author', filterAuthorText ? [`author:${filterAuthorText}`] : []) } }} onBlur={() => { if (filterAuthorText) setFilter('author', [`author:${filterAuthorText}`]) }} placeholder="Filter or type a login…" />
-              <datalist id="tasks-authors"><option value="@me" />{[...new Set(tableRows.flatMap((item) => item.author ? [item.author] : []))].map((value) => <option key={value} value={value} />)}</datalist>
-            </>
-          </FormRow>
-          <fieldset className="tasks-list__labels-filter">
-            <legend>Labels</legend>
-            <div className="tasks-list__label-options">
-              {[...new Set([...repoLabels, ...tableRows.flatMap((item) => item.labels)])].sort().map((label) => <label key={label} className="tasks-list__check-option"><input type="checkbox" checked={filters.labels.includes(label)} onChange={(event) => toggleLabel(label, event.currentTarget.checked)} />{label}</label>)}
-              {repoLabels.length === 0 && tableRows.every((item) => item.labels.length === 0) ? <span>No labels loaded.</span> : null}
+      {!noGitHubRemote ? (
+        <>
+          {pills.length > 0 ? (
+            <div aria-label="Active task filters" className="tasks-list__filter-pills">
+              {pills.map((pill, index) => <Button key={`${pill.category}:${pill.value ?? index}`} type="button" aria-label={`Remove ${pill.label} filter`} onClick={() => removeFilter(pill.category, pill.value)}>{pill.label} ×</Button>)}
             </div>
-          </fieldset>
-          <FormRow label="Assignee" htmlFor="tasks-list-assignee-filter">
-            <select id="tasks-list-assignee-filter" className="ui-text-field__input" value={filters.assignee} onChange={(event) => setFilter('assignee', event.currentTarget.value ? [`assignee:${event.currentTarget.value}`] : [])}>
-              <option value="">Any assignee</option><option value="@me">Current user</option>
-              {[...new Set([...repoAssignees, ...tableRows.flatMap((item) => item.assignees)])].sort().map((value) => <option key={value} value={value}>{value}</option>)}
-            </select>
-          </FormRow>
-          {kind === 'pullRequest' ? (
-            <>
-              <FormRow label="Review from" htmlFor="tasks-list-review-requested-filter">
-                <input id="tasks-list-review-requested-filter" className="ui-text-field__input" value={filterReviewRequestedText || filters.reviewRequested} onChange={(event) => setFilterReviewRequestedText(event.currentTarget.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); setFilter('reviewRequested', filterReviewRequestedText ? [`review-requested:${filterReviewRequestedText}`] : []) } }} onBlur={() => { if (filterReviewRequestedText) setFilter('reviewRequested', [`review-requested:${filterReviewRequestedText}`]) }} placeholder="@me or login" />
-              </FormRow>
-              <FormRow label="Reviewed by" htmlFor="tasks-list-reviewed-by-filter">
-                <input id="tasks-list-reviewed-by-filter" className="ui-text-field__input" value={filterReviewedByText || filters.reviewedBy} onChange={(event) => setFilterReviewedByText(event.currentTarget.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); setFilter('reviewedBy', filterReviewedByText ? [`reviewed-by:${filterReviewedByText}`] : []) } }} onBlur={() => { if (filterReviewedByText) setFilter('reviewedBy', [`reviewed-by:${filterReviewedByText}`]) }} placeholder="@me or login" />
-              </FormRow>
-            </>
           ) : null}
-          <Button type="button" onClick={() => { setFilter('all', []); setFiltersOpen(false) }}>Clear all filters</Button>
-        </div>
+
+          {filtersOpen ? (
+            <div role="dialog" aria-label="GitHub task filters" className="tasks-list__filters">
+              <FormRow label="Status" htmlFor="tasks-list-status-filter">
+                <select id="tasks-list-status-filter" className="ui-text-field__input" value={filters.status || 'any'} onChange={(event) => setFilter('status', event.currentTarget.value === 'any' ? [] : [`is:${event.currentTarget.value}`, ...(filters.draftOnly ? ['is:draft'] : [])])}>
+                  {statusOptions.map((value) => <option key={value} value={value}>{value === 'any' ? 'Any state' : value[0]!.toUpperCase() + value.slice(1)}</option>)}
+                </select>
+              </FormRow>
+              {kind === 'pullRequest' ? <label className="tasks-list__check-option"><input type="checkbox" checked={filters.draftOnly} onChange={(event) => setFilter('status', [...(filters.status ? [`is:${filters.status}`] : []), ...(event.currentTarget.checked ? ['is:open', 'is:draft'] : [])])} />Draft only</label> : null}
+              <FormRow label="Author" htmlFor="tasks-list-author-filter">
+                <>
+                  <input id="tasks-list-author-filter" className="ui-text-field__input" list="tasks-authors" value={filterAuthorText || filters.author} onChange={(event) => setFilterAuthorText(event.currentTarget.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); setFilter('author', filterAuthorText ? [`author:${filterAuthorText}`] : []) } }} onBlur={() => { if (filterAuthorText) setFilter('author', [`author:${filterAuthorText}`]) }} placeholder="Filter or type a login…" />
+                  <datalist id="tasks-authors"><option value="@me" />{[...new Set(tableRows.flatMap((item) => item.author ? [item.author] : []))].map((value) => <option key={value} value={value} />)}</datalist>
+                </>
+              </FormRow>
+              <fieldset className="tasks-list__labels-filter">
+                <legend>Labels</legend>
+                <div className="tasks-list__label-options">
+                  {[...new Set([...repoLabels, ...tableRows.flatMap((item) => item.labels)])].sort().map((label) => <label key={label} className="tasks-list__check-option"><input type="checkbox" checked={filters.labels.includes(label)} onChange={(event) => toggleLabel(label, event.currentTarget.checked)} />{label}</label>)}
+                  {repoLabels.length === 0 && tableRows.every((item) => item.labels.length === 0) ? <span>No labels loaded.</span> : null}
+                </div>
+              </fieldset>
+              <FormRow label="Assignee" htmlFor="tasks-list-assignee-filter">
+                <select id="tasks-list-assignee-filter" className="ui-text-field__input" value={filters.assignee} onChange={(event) => setFilter('assignee', event.currentTarget.value ? [`assignee:${event.currentTarget.value}`] : [])}>
+                  <option value="">Any assignee</option><option value="@me">Current user</option>
+                  {[...new Set([...repoAssignees, ...tableRows.flatMap((item) => item.assignees)])].sort().map((value) => <option key={value} value={value}>{value}</option>)}
+                </select>
+              </FormRow>
+              {kind === 'pullRequest' ? (
+                <>
+                  <FormRow label="Review from" htmlFor="tasks-list-review-requested-filter">
+                    <input id="tasks-list-review-requested-filter" className="ui-text-field__input" value={filterReviewRequestedText || filters.reviewRequested} onChange={(event) => setFilterReviewRequestedText(event.currentTarget.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); setFilter('reviewRequested', filterReviewRequestedText ? [`review-requested:${filterReviewRequestedText}`] : []) } }} onBlur={() => { if (filterReviewRequestedText) setFilter('reviewRequested', [`review-requested:${filterReviewRequestedText}`]) }} placeholder="@me or login" />
+                  </FormRow>
+                  <FormRow label="Reviewed by" htmlFor="tasks-list-reviewed-by-filter">
+                    <input id="tasks-list-reviewed-by-filter" className="ui-text-field__input" value={filterReviewedByText || filters.reviewedBy} onChange={(event) => setFilterReviewedByText(event.currentTarget.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); setFilter('reviewedBy', filterReviewedByText ? [`reviewed-by:${filterReviewedByText}`] : []) } }} onBlur={() => { if (filterReviewedByText) setFilter('reviewedBy', [`reviewed-by:${filterReviewedByText}`]) }} placeholder="@me or login" />
+                  </FormRow>
+                </>
+              ) : null}
+              <Button type="button" onClick={() => { setFilter('all', []); setFiltersOpen(false) }}>Clear all filters</Button>
+            </div>
+          ) : null}
+        </>
       ) : null}
 
       {loading && !visibleResult ? (
@@ -1362,9 +1373,7 @@ export function TasksList({ context, state, refresh }: TasksSurfaceProps) {
         <div role="status" className="tasks-list__empty"><EmptyState message="No eligible Git repositories. Add or select a registered Git repository with a local path to load GitHub tasks." /></div>
       ) : selectedRepoIds.length === 0 ? (
         <div role="status" className="tasks-list__empty"><EmptyState message="No project sources selected. Select at least one project source so Quirky knows where to fetch GitHub tasks." action={{ label: 'Select projects', onAction: () => setRepoOpen(true) }} /></div>
-      ) : noGitHubRemote ? (
-        <div role="status" className="tasks-list__empty"><EmptyState message={noGitHubRemoteMessage} /></div>
-      ) : visibleResult && tableRows.length === 0 && visibleResult.failures.every((failure) => failure.stage === 'count') ? (
+      ) : noGitHubRemote ? null : visibleResult && tableRows.length === 0 && visibleResult.failures.every((failure) => failure.stage === 'count') ? (
         <div role="status" className="tasks-list__empty"><EmptyState message="No matching GitHub work. Change the query or clear it." action={{ label: 'Reset query', onAction: () => commitSearch(presetQuery(normalizedPreset(state.preferences.defaultTaskViewPreset, kind), kind)) }} /></div>
       ) : tableRows.length === 0 && visibleResult?.failures.length ? (
         <div role="alert" className="tasks-list__notice tasks-list__notice--error">GitHub data is temporarily unavailable. Its API may be down, rate-limited, or unreachable. Retry shortly.</div>
