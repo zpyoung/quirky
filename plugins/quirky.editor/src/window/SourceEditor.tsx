@@ -1,5 +1,6 @@
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react'
 import { Button, TextField } from '@quirky/ui'
+import { editorTheme } from '@quirky/ui/editor-theme'
 import { defaultKeymap, history, historyKeymap, indentWithTab, isolateHistory, redo, undo } from '@codemirror/commands'
 import { css } from '@codemirror/lang-css'
 import { html } from '@codemirror/lang-html'
@@ -11,7 +12,8 @@ import { sql } from '@codemirror/lang-sql'
 import { yaml } from '@codemirror/lang-yaml'
 import { bracketMatching, foldGutter, HighlightStyle, indentOnInput, syntaxHighlighting } from '@codemirror/language'
 import { findNext, replaceAll, replaceNext, search, SearchQuery, searchKeymap, setSearchQuery } from '@codemirror/search'
-import { Compartment, EditorSelection, EditorState, Transaction, type Extension } from '@codemirror/state'
+import { MergeView } from '@codemirror/merge'
+import { Compartment, EditorSelection, EditorState, Transaction, type EditorStateConfig, type Extension } from '@codemirror/state'
 import { EditorView, drawSelection, highlightActiveLine, highlightActiveLineGutter, keymap, lineNumbers } from '@codemirror/view'
 import { tags } from '@lezer/highlight'
 import type { EditorSurfaceBuffer } from '../types'
@@ -74,6 +76,7 @@ type Props = {
   onView(patch: Record<string, unknown>): void
   onEditorFocus(): void
   onSearchInFiles(query: string): void
+  comparisonOriginal?: string
   reveal?: { line: number; column?: number }
   error?: string | null
   onError(message: string | null): void
@@ -240,8 +243,11 @@ export const SourceEditor = forwardRef<SourceEditorHandle, Props>(function Sourc
   const canvas = useRef<HTMLCanvasElement>(null)
   const viewRef = useRef<EditorView | null>(null)
   const appliedNavigation = useRef<string | null>(null)
+  const mergeRef = useRef<MergeView | null>(null)
+  const mergeOriginal = useRef<string | null>(null)
   const pendingView = useRef<number | undefined>(undefined)
   const acceptedText = useRef(props.buffer.draft ?? props.buffer.content)
+  const preservedDocument = useRef<{ bufferId: string; tabId: string | null; text: string } | null>(null)
   const suppressDraft = useRef(false)
   const scheduleView = useRef<() => void>(() => {})
   const drawMinimapRef = useRef<() => void>(() => {})
@@ -258,6 +264,8 @@ export const SourceEditor = forwardRef<SourceEditorHandle, Props>(function Sourc
   const searchInput = useRef<HTMLInputElement>(null)
   const content = props.buffer.draft ?? props.buffer.content
   const pendingNavigation = pendingNavigationForTab(props.buffer, props.tabId)
+  const comparisonOriginalRef = useRef(props.comparisonOriginal)
+  comparisonOriginalRef.current = props.comparisonOriginal
   const applySearchQuery = (view: EditorView, query: string, replacement: string) => {
     view.dispatch({ effects: setSearchQuery.of(new SearchQuery({ search: query, replace: replacement })) })
   }
@@ -354,8 +362,15 @@ export const SourceEditor = forwardRef<SourceEditorHandle, Props>(function Sourc
     if (!parent) return
     let changedSelection = false
     const savedSelection = pendingNavigation ? undefined : initialSelection(props.buffer, props.tabId)
-    const state = EditorState.create({
-      doc: content,
+    const preserved = preservedDocument.current
+    const initialContent = preserved?.bufferId === props.buffer.id && preserved.tabId === props.tabId
+      ? preserved.text
+      : content
+    preservedDocument.current = null
+    const zoomTheme = EditorView.theme({ '&': { fontSize: `${props.fontSize}px`, fontFamily: props.fontFamily || 'var(--terminal-font-family, ui-monospace, monospace)' } })
+    const comparisonEnabled = comparisonOriginalRef.current !== undefined
+    const stateConfig: EditorStateConfig = {
+      doc: initialContent,
       ...(savedSelection ? { selection: savedSelection } : {}),
       extensions: [
         lineNumbers(),
@@ -366,11 +381,15 @@ export const SourceEditor = forwardRef<SourceEditorHandle, Props>(function Sourc
         foldGutter(),
         indentOnInput(),
         syntaxHighlighting(editorHighlightStyle, { fallback: true }),
+        ...(comparisonEnabled ? [
+          editorTheme,
+          EditorView.editorAttributes.of({ 'aria-label': 'Modified editor' })
+        ] : []),
         history(),
         search(),
         compartments.language.of(languageFor(props.buffer.relativePath)),
         compartments.wrap.of(props.wrap ? EditorView.lineWrapping : []),
-        compartments.zoom.of(EditorView.theme({ '&': { fontSize: `${props.fontSize}px`, fontFamily: props.fontFamily || 'var(--terminal-font-family, ui-monospace, monospace)' } })),
+        compartments.zoom.of(zoomTheme),
         keymap.of([
           { key: 'Mod-g', run: findNext },
           ...editorSearchKeymap,
@@ -434,8 +453,49 @@ export const SourceEditor = forwardRef<SourceEditorHandle, Props>(function Sourc
           }
         })
       ]
-    })
-    const editor = new EditorView({ state, parent })
+    }
+    let editor: EditorView
+    let destroyEditor: () => void
+    const comparisonOriginal = comparisonOriginalRef.current
+    if (comparisonOriginal !== undefined) {
+      const merge = new MergeView({
+        a: {
+          doc: comparisonOriginal,
+          extensions: [
+            lineNumbers(),
+            highlightActiveLineGutter(),
+            foldGutter(),
+            syntaxHighlighting(editorHighlightStyle, { fallback: true }),
+            editorTheme,
+            EditorView.editorAttributes.of({ 'aria-label': 'HEAD version' }),
+            compartments.language.of(languageFor(props.buffer.relativePath)),
+            compartments.wrap.of(props.wrap ? EditorView.lineWrapping : []),
+            compartments.zoom.of(zoomTheme),
+            EditorState.readOnly.of(true),
+            EditorView.editable.of(false)
+          ]
+        },
+        b: stateConfig,
+        parent,
+        gutter: true,
+        highlightChanges: true
+      })
+      const headPane = merge.a.dom.parentElement
+      headPane?.setAttribute('role', 'group')
+      headPane?.setAttribute('aria-label', 'HEAD version')
+      const modifiedPane = merge.b.dom.parentElement
+      modifiedPane?.setAttribute('role', 'group')
+      modifiedPane?.setAttribute('aria-label', 'Modified editor')
+      mergeRef.current = merge
+      mergeOriginal.current = comparisonOriginal
+      editor = merge.b
+      destroyEditor = () => merge.destroy()
+    } else {
+      mergeRef.current = null
+      mergeOriginal.current = null
+      editor = new EditorView({ state: EditorState.create(stateConfig), parent })
+      destroyEditor = () => editor.destroy()
+    }
     viewRef.current = editor
     const tabId = props.tabId
     const unregisterFocus = tabId === null ? undefined : registerEditorFocus(tabId, () => {
@@ -443,6 +503,7 @@ export const SourceEditor = forwardRef<SourceEditorHandle, Props>(function Sourc
       const hostedView = parent.closest<HTMLElement>('.qt-hosted-view')
       if (group?.classList.contains('qt-active') && hostedView?.dataset.hostedView === tabId) editor.focus()
     })
+    applySearchQuery(editor, searchQuery, replaceText)
     let drawFrame = 0
     const paintMinimap = () => {
       drawFrame = 0
@@ -502,10 +563,21 @@ export const SourceEditor = forwardRef<SourceEditorHandle, Props>(function Sourc
       scheduleView.current = () => {}
       drawMinimapRef.current = () => {}
       saveView()
-      editor.destroy()
+      preservedDocument.current = { bufferId: props.buffer.id, tabId: props.tabId, text: editor.state.doc.toString() }
+      destroyEditor()
       viewRef.current = null
+      mergeRef.current = null
+      mergeOriginal.current = null
     }
-  }, [props.buffer.id, props.tabId])
+  }, [props.buffer.id, props.tabId, props.comparisonOriginal !== undefined])
+
+  useEffect(() => {
+    const merge = mergeRef.current
+    const original = props.comparisonOriginal
+    if (!merge || original === undefined || mergeOriginal.current === original) return
+    merge.a.dispatch({ changes: { from: 0, to: merge.a.state.doc.length, insert: original } })
+    mergeOriginal.current = original
+  }, [props.comparisonOriginal])
 
   useEffect(() => {
     const editor = viewRef.current
@@ -531,13 +603,25 @@ export const SourceEditor = forwardRef<SourceEditorHandle, Props>(function Sourc
   useEffect(() => {
     const editor = viewRef.current
     if (!editor) return
-    editor.dispatch({ effects: compartments.wrap.reconfigure(props.wrap ? EditorView.lineWrapping : []) })
-    editor.dispatch({ effects: compartments.zoom.reconfigure(EditorView.theme({ '&': { fontSize: `${props.fontSize}px`, fontFamily: props.fontFamily || 'var(--terminal-font-family, ui-monospace, monospace)' } })) })
-  }, [compartments, props.wrap, props.fontSize])
+    const merge = mergeRef.current
+    const views = merge ? [merge.a, merge.b] : [editor]
+    const zoomTheme = EditorView.theme({ '&': { fontSize: `${props.fontSize}px`, fontFamily: props.fontFamily || 'var(--terminal-font-family, ui-monospace, monospace)' } })
+    for (const view of views) {
+      view.dispatch({
+        effects: [
+          compartments.wrap.reconfigure(props.wrap ? EditorView.lineWrapping : []),
+          compartments.zoom.reconfigure(zoomTheme)
+        ]
+      })
+    }
+  }, [compartments, props.wrap, props.fontSize, props.fontFamily])
   useEffect(() => {
     const editor = viewRef.current
     if (!editor) return
-    editor.dispatch({ effects: compartments.language.reconfigure(languageFor(props.buffer.relativePath)) })
+    const merge = mergeRef.current
+    const views = merge ? [merge.a, merge.b] : [editor]
+    const language = languageFor(props.buffer.relativePath)
+    for (const view of views) view.dispatch({ effects: compartments.language.reconfigure(language) })
   }, [compartments, props.buffer.relativePath])
 
   useEffect(() => {

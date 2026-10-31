@@ -17,7 +17,7 @@ type Mounted = {
   update(buffer: EditorSurfaceBuffer): Promise<void>
   unmount(): Promise<void>
 }
-type FixtureOptions = { deferFirstRender?: boolean; malformedResponse?: boolean }
+type FixtureOptions = { deferFirstRender?: boolean; malformedResponse?: boolean; onDraft?: (content: string) => void }
 
 let createRoot: (container: HTMLElement) => Root
 let ChangesSurface: ComponentType<ChangesSurfaceProps>
@@ -147,7 +147,7 @@ async function renderChanges(
     fontFamily: 'monospace',
     wrap: true,
     minimap: false,
-    onDraft() {},
+    onDraft(content) { options.onDraft?.(content) },
     flushDraft: async () => {},
     onView() {},
     onEditorFocus() {},
@@ -386,6 +386,55 @@ test('Changes navigation reveals the changed modified line', async () => {
   await act(async () => surface.element.querySelector<HTMLButtonElement>('[aria-label="Next change"]')?.click())
 
   expect(surface.element.querySelector<HTMLElement>('[aria-label="Modified editor"] .cm-activeLine')?.textContent).toBe('added')
+})
+
+test('Changes side-by-side compares aligned read-only HEAD and editable draft editors', async () => {
+  const original = 'before\nold value that wraps to multiple visual lines\nunchanged after\n'
+  const initialDraft = 'before\nnew value that wraps to multiple visual lines\nunchanged after\n'
+  const draftUpdates: string[] = []
+  const surface = await renderChanges(makeBuffer('text', 'Working file\n', initialDraft), {
+    original,
+    modified: 'Staged index\n'
+  }, {
+    onDraft: (content) => draftUpdates.push(content)
+  })
+  await flush()
+
+  const head = surface.element.querySelector<HTMLElement>('.cm-editor[aria-label="HEAD version"]')
+  const modified = surface.element.querySelector<HTMLElement>('.cm-editor[aria-label="Modified editor"]')
+  expect(head).not.toBeNull()
+  expect(modified).not.toBeNull()
+  expect(head?.querySelector('.cm-content')?.textContent).toContain('old value')
+  expect(modified?.querySelector('.cm-content')?.textContent).toContain('new value')
+  expect(modified?.querySelector('.cm-content')?.textContent).not.toContain('Staged index')
+  expect(head?.querySelector('.cm-content')?.getAttribute('contenteditable')).toBe('false')
+  expect(modified?.querySelector('.cm-content')?.getAttribute('contenteditable')).toBe('true')
+
+  for (const editor of [head, modified]) {
+    expect(editor?.querySelector('.cm-lineNumbers')).not.toBeNull()
+    expect(editor?.querySelector('.cm-content.cm-lineWrapping')).not.toBeNull()
+    expect(editor?.querySelector('.cm-changedLine')).not.toBeNull()
+    const unchanged = [...(editor?.querySelectorAll<HTMLElement>('.cm-line') ?? [])]
+      .find((line) => line.textContent?.includes('unchanged after'))
+    expect(unchanged?.classList.contains('cm-changedLine')).toBe(false)
+  }
+
+  const paste = new Event('paste', { bubbles: true, cancelable: true })
+  Object.defineProperty(paste, 'clipboardData', {
+    value: { getData: (type: string) => type === 'text/plain' ? 'Local edit\n' : '' }
+  })
+  modified?.querySelector('.cm-content')?.dispatchEvent(paste)
+  await flush()
+  const pastedDraft = `Local edit\n${initialDraft}`
+  expect(draftUpdates.at(-1)).toBe(pastedDraft)
+  await surface.update(makeBuffer('text', 'Working file\n', pastedDraft))
+  await flush()
+
+  const updatedDraft = 'before\na newer shared draft line that also wraps\nunchanged after\n'
+  await surface.update(makeBuffer('text', 'Working file\n', updatedDraft))
+  await flush()
+  expect(modified?.querySelector('.cm-content')?.textContent).toContain('newer shared draft')
+  expect(head?.querySelector('.cm-content')?.textContent).toContain('old value')
 })
 
 test('Changes Markdown preview renders the shared draft image and releases it when Source returns', async () => {
