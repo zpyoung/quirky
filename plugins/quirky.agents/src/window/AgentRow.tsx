@@ -113,7 +113,7 @@ export function AgentRow({ info, listing, store }: { info: AgentInfo; listing: A
         description={<code style={s.command}>{subtitle}</code>}
         trailing={
           <div style={s.rowActions}>
-            <Switch checked={info.enabled} label={`Enabled: ${info.label}`} onChange={(enabled) => void store.setEnabled(info.id, enabled)} />
+            <Switch checked={info.enabled} label="Enabled" ariaLabel={`Enabled: ${info.label}`} onChange={(enabled) => void store.setEnabled(info.id, enabled)} />
             {canDefault && (
               <Button
                 type="button"

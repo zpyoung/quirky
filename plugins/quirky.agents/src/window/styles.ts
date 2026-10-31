@@ -12,7 +12,7 @@ export const s = {
   list: { display: 'flex', flexDirection: 'column', gap: 'var(--ui-space-4)', listStyle: 'none', margin: 0, padding: 0, minWidth: 0 },
   rowTitle: { display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 'var(--ui-space-8)', minWidth: 0, overflowWrap: 'anywhere' },
   command: { display: 'block', fontFamily: 'var(--ui-font-mono)', overflowWrap: 'anywhere', whiteSpace: 'pre-wrap' },
-  rowActions: { display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 'var(--ui-space-8)', minWidth: 0, maxWidth: '100%' },
+  rowActions: { display: 'flex', alignItems: 'center', flexWrap: 'nowrap', gap: 'var(--ui-space-8)', minWidth: 0, maxWidth: '100%' },
   detail: { display: 'flex', flexDirection: 'column', gap: 'var(--ui-space-12)', padding: 'var(--ui-space-8)' },
   inline: { display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 'var(--ui-space-8)' },
   fieldRow: { display: 'flex', alignItems: 'flex-end', gap: 'var(--ui-space-8)', minWidth: 0 },
