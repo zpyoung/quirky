@@ -147,6 +147,7 @@ describe('NA-24: the sparkle button', () => {
   test('(f) staged and empty: enabled with no stop control', async () => {
     const { element, unmount } = await open()
     expect(sparkle(element)?.disabled).toBe(false)
+    expect(sparkle(element)?.getAttribute('title')).toBe(sparkle(element)?.getAttribute('aria-label'))
     expect(stop(element)).toBeNull()
     unmount()
   })
