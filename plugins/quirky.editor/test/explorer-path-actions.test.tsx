@@ -661,6 +661,43 @@ test('Explorer footer path actions are disabled until something is selected', as
   for (const label of ['Copy Path', 'Copy Relative Path', 'Delete']) expect(footerButton(panel.element, label).disabled).toBe(false)
 })
 
+for (const entryPoint of ['Contents', 'Search in Files']) {
+  test(`Explorer footer cannot act on a hidden tree selection after ${entryPoint}`, async () => {
+    const fixture = await makeFixture({ displayRoot: 'nested' })
+    const context = makeContext(fixture)
+    let confirmations = 0
+    context.confirm = async () => { confirmations++; return true }
+    const panel = await renderExplorer(fixture, context)
+    const path = join(fixture.root, FILE_A)
+    await selectRow(panel.element, path)
+
+    const contentsButton = Array.from(panel.element.querySelectorAll<HTMLButtonElement>('.qe-explorer-search-mode button'))
+      .find((button) => button.textContent === 'Contents')!
+    await act(async () => {
+      if (entryPoint === 'Contents') contentsButton.click()
+      else footerButton(panel.element, 'Search in Files').click()
+    })
+
+    expect(panel.element.querySelector('[role="tree"]')).toBeNull()
+    for (const label of ['Copy Path', 'Copy Relative Path', 'Delete']) {
+      const button = footerButton(panel.element, label)
+      expect(button.disabled).toBe(true)
+      await act(async () => button.click())
+    }
+    expect(confirmations).toBe(0)
+    expect(clipboardWrites).toEqual([])
+    expect(existsSync(path)).toBe(true)
+
+    const namesButton = Array.from(panel.element.querySelectorAll<HTMLButtonElement>('.qe-explorer-search-mode button'))
+      .find((button) => button.textContent === 'Names')!
+    await act(async () => namesButton.click())
+    expect(findRow(panel.element, path)?.getAttribute('aria-selected')).toBe('true')
+    for (const label of ['Copy Path', 'Copy Relative Path', 'Delete']) {
+      expect(footerButton(panel.element, label).disabled).toBe(false)
+    }
+  })
+}
+
 test('Explorer footer Search in Files focuses the contents query', async () => {
   const fixture = await makeFixture({ displayRoot: 'nested' })
   const panel = await renderExplorer(fixture)
