@@ -292,8 +292,8 @@ describe('quirky.git combined diff', () => {
     fake.handlers['quirky.git/diff'] = async (params) =>
       params.path === 'f1.ts' || params.path === 'f2.ts' ? twoChanges(params.path) : handler(params)
     const { report } = await open()
-    const seen: unknown[] = [report().currentChange]
-    for (const id of ['next-change', 'next-change', 'next-change', 'previous-change', 'previous-change']) {
+    const seen: unknown[] = []
+    for (const id of ['next-change', 'next-change', 'next-change', 'next-change', 'previous-change', 'previous-change']) {
       await act(async () => void (await fake.run(id)))
       await settle()
       seen.push(report().currentChange)
