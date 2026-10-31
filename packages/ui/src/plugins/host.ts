@@ -437,9 +437,16 @@ export class WindowPluginHost {
     this.layoutCall('ui.palette.set', open === undefined ? {} : { open })
   }
 
-  /** Tells the daemon that the person put focus in `target`, unless it is already there. */
-  focus(target: 'sidebar' | 'view' | 'panel'): void {
-    if (this.state.layout.focus !== target) this.layoutCall('ui.focus', { target })
+  /** Reports region focus and returns whether the daemon accepted the request. */
+  async focus(target: 'sidebar' | 'view' | 'panel'): Promise<boolean> {
+    if (this.state.layout.focus === target) return true
+    try {
+      await this.deps.call('ui.focus', { target })
+      return true
+    } catch (error) {
+      this.deps.log(`ui.focus failed: ${messageOf(error)}`)
+      return false
+    }
   }
 
   /**

@@ -241,6 +241,7 @@ function setup(
         case 'ui.tool.close':
           return closeTool(params.slot as UiToolSlot)
         case 'ui.focus':
+          if (refused.has('ui.focus')) throw new Error(refused.get('ui.focus'))
           return changeLayout({ focus: params.target as UiLayout['focus'] })
         case 'ui.report':
           if (refused.has('ui.report')) throw new Error(refused.get('ui.report'))
@@ -2058,6 +2059,19 @@ test('D21: refresh reads canonical daemon tool state, and local requests wait fo
   t.releaseBroadcasts()
   expect(state(t).openView).toEqual({ id: OTHER, input: { b: 2 } })
   expect(Object.values(state(t).layout.tools!.open)).not.toContain(SIDE)
+})
+
+test('region focus reports a refused request without changing canonical focus and can recover', async () => {
+  const t = setup(makeModel({}))
+  await t.host.refresh()
+  t.refused.set('ui.focus', 'connection closed')
+
+  expect(await t.host.focus('panel')).toBe(false)
+  expect(state(t).layout.focus).toBeNull()
+
+  t.refused.delete('ui.focus')
+  expect(await t.host.focus('panel')).toBe(true)
+  expect(state(t).layout.focus).toBe('panel')
 })
 
 
