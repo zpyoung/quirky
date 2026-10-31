@@ -571,20 +571,23 @@ describe('editor core through the daemon API', () => {
         await t.call('quirky.editor/history', { worktree: t.worktreeId, action: 'redo' })
         expect(mode(createdPath)).toBe(expected)
 
-        process.umask(0o022)
-        const duplicateSource = `duplicate-${label}.txt`
-        writeFileSync(join(t.root, duplicateSource), 'duplicate source\n')
-        process.umask(mask)
-        const duplicate = await t.call<{ path: string }>('quirky.editor/mutate', {
-          worktree: t.worktreeId,
-          action: 'duplicate',
-          path: duplicateSource
-        })
-        expect(mode(duplicate.path)).toBe(0o644)
-        await t.call('quirky.editor/history', { worktree: t.worktreeId, action: 'undo' })
-        expect(existsSync(join(t.root, duplicate.path))).toBe(false)
-        await t.call('quirky.editor/history', { worktree: t.worktreeId, action: 'redo' })
-        expect(mode(duplicate.path)).toBe(expected)
+        for (const sourceMode of [0o644, 0o600]) {
+          process.umask(0o022)
+          const duplicateSource = `duplicate-${label}-${sourceMode.toString(8)}.txt`
+          writeFileSync(join(t.root, duplicateSource), 'duplicate source\n', { mode: sourceMode })
+          process.umask(mask)
+          const duplicate = await t.call<{ path: string }>('quirky.editor/mutate', {
+            worktree: t.worktreeId,
+            action: 'duplicate',
+            path: duplicateSource
+          })
+          const duplicatedMode = mode(duplicate.path)
+          expect(duplicatedMode).toBe(sourceMode)
+          await t.call('quirky.editor/history', { worktree: t.worktreeId, action: 'undo' })
+          expect(existsSync(join(t.root, duplicate.path))).toBe(false)
+          await t.call('quirky.editor/history', { worktree: t.worktreeId, action: 'redo' })
+          expect(mode(duplicate.path)).toBe(sourceMode & ~mask)
+        }
 
         const browserPath = `browser-${label}.txt`
         const browser = await t.call<{ paths: string[] }>('quirky.editor/mutate', {
@@ -596,16 +599,20 @@ describe('editor core through the daemon API', () => {
         expect(browser.paths).toEqual([browserPath])
         expect(mode(browserPath)).toBe(expected)
 
-        const externalPath = `external-${label}.txt`
-        writeFileSync(join(sourceDir, externalPath), 'external import\n')
-        const external = await t.call<{ paths: string[] }>('quirky.editor/mutate', {
-          worktree: t.worktreeId,
-          action: 'import',
-          path: '.',
-          sourcePaths: [join(sourceDir, externalPath)]
-        })
-        expect(external.paths).toEqual([externalPath])
-        expect(mode(externalPath)).toBe(expected)
+        for (const sourceMode of [0o644, 0o600]) {
+          process.umask(0o022)
+          const externalPath = `external-${label}-${sourceMode.toString(8)}.txt`
+          writeFileSync(join(sourceDir, externalPath), 'external import\n', { mode: sourceMode })
+          process.umask(mask)
+          const external = await t.call<{ paths: string[] }>('quirky.editor/mutate', {
+            worktree: t.worktreeId,
+            action: 'import',
+            path: '.',
+            sourcePaths: [join(sourceDir, externalPath)]
+          })
+          expect(external.paths).toEqual([externalPath])
+          expect(mode(externalPath)).toBe(sourceMode & ~mask)
+        }
 
         const chunkedPath = `chunked-${label}.txt`
         const bytes = Buffer.alloc(65_537, 0x61)

@@ -111,7 +111,7 @@ type TerminalWorkspace = { id?: string; revision?: number; root?: unknown }
 type OpenTabResult = { workspace: TerminalWorkspace; tab: string }
 
 type HistoryOperation =
-  | { kind: 'create'; worktreeId: string; root: string; path: string; directory: boolean; content: string | null; hash: string | null }
+  | { kind: 'create'; worktreeId: string; root: string; path: string; directory: boolean; content: string | null; hash: string | null; mode?: number }
   | { kind: 'rename'; worktreeId: string; root: string; from: string; to: string; dev: number; ino: number; directory: boolean }
   | { kind: 'delete'; worktreeId: string; root: string; path: string; trashedPath: string; content: string; hash: string }
 type ActiveTransfer = {
@@ -2064,13 +2064,14 @@ export class EditorDaemon {
     const canRecord = snapshot?.text !== null && snapshot !== null && snapshot.size <= 5 * 1024 * 1024
     const target = await this.copyNameTarget(worktree.id, dirname(source.path), basename(source.path))
     const keys = [...await this.fileKeys(source.path), ...await this.fileKeys(target.path)]
-    await this.fileQueue.run(keys, async () => {
+    const mode = await this.fileQueue.run(keys, async () => {
       await copyFile(source.path, target.path, constants.COPYFILE_EXCL)
+      return (await lstat(target.path)).mode & 0o777
     })
     if (canRecord && snapshot !== null && snapshot.text !== null) {
       await this.pushHistory(worktree.id, {
         kind: 'create', worktreeId: worktree.id, root: worktree.path,
-        path: target.relativePath, directory: false, content: snapshot.text, hash: snapshot.hash
+        path: target.relativePath, directory: false, content: snapshot.text, hash: snapshot.hash, mode
       })
     }
     this.inventory.invalidate(worktree.path)
@@ -2207,7 +2208,7 @@ export class EditorDaemon {
       await handle.close()
     }
     if (budget.bytes + data.byteLength > MAX_UPLOAD_TOTAL_BYTES) throw this.context.error('invalid-params', `Import exceeds the ${MAX_UPLOAD_TOTAL_BYTES}-byte request limit.`)
-    await writeFile(destination, data, { flag: 'wx' })
+    await writeFile(destination, data, { flag: 'wx', mode: info.mode & 0o777 })
     budget.created.push(destination)
     budget.files++
     budget.bytes += data.byteLength
@@ -2378,7 +2379,7 @@ export class EditorDaemon {
     if (await this.exists(target.path)) throw this.context.error('conflict', `Cannot redo create because ${relativePath} already exists.`)
     await mkdir(dirname(target.path), { recursive: true })
     if (operation.directory) await mkdir(target.path)
-    else if (operation.content !== null) await writeFile(target.path, operation.content, { flag: 'wx' })
+    else if (operation.content !== null) await writeFile(target.path, operation.content, { flag: 'wx', mode: operation.mode })
     else throw this.context.error('conflict', `Cannot redo large create ${relativePath}; its original bytes were not retained.`)
     return operation
   }
