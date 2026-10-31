@@ -285,9 +285,20 @@ function installStubs(clipboard: Clipboard): () => void {
 
   const rect = Element.prototype.getBoundingClientRect
   Element.prototype.getBoundingClientRect = function (this: Element) {
+    const domRect = (box: { left: number; top: number; width: number; height: number }) =>
+      ({ ...box, x: box.left, y: box.top, right: box.left + box.width, bottom: box.top + box.height, toJSON: () => ({}) }) as DOMRect
+    if (this.classList.contains('qt-pane-header-band')) return domRect({ left: 0, top: 0, width: 0, height: 34 })
+    const pane = this.classList.contains('qtd-host') ? this.closest<HTMLElement>('.qt-pane') : null
+    if (pane) {
+      return domRect({
+        left: Number.parseFloat(pane.style.left) || 0,
+        top: Number.parseFloat(pane.style.top) || 0,
+        width: Number.parseFloat(pane.style.width) || 0,
+        height: Number.parseFloat(pane.style.height) || 0
+      })
+    }
     if (!/\bqt-(panes|groups|body)\b/.test(this.getAttribute('class') ?? '')) return rect.call(this)
-    const box = { left: 0, top: 0, ...STAGE }
-    return { ...box, x: 0, y: 0, right: box.width, bottom: box.height, toJSON: () => ({}) } as DOMRect
+    return domRect({ left: 0, top: 0, ...STAGE })
   }
 
   Object.defineProperty(navigator, 'clipboard', {

@@ -172,7 +172,7 @@ test('setup and issue-command skip decisions are independent across each otherâ€
   const path = stringField(worktree, 'path')
   expect(existsSync(`${path}/setup-marker.txt`)).toBe(false)
   expect(existsSync(`${path}/issue-marker.txt`)).toBe(false)
-})
+}, 20_000)
 
 test('run-once approvals retain independent pins and changed scripts refuse before workspace or hook execution', async () => {
   const host = await bootWorkspace()

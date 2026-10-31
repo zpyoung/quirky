@@ -177,9 +177,10 @@ lands.
    - `bun test scripts` and `bun run typecheck` pass, and so do the tests of every package, app and
      plugin the item changed or that imports one it changed. Run those with
      `bun scripts/suite.ts <dir> <dir> ...`, which runs them on the remote test host so lanes don't
-     compete for this Mac. A single file runs here with `bun test <file>`. Leave the whole suite to
-     `queue.ts land`, which runs `bun run test` on the merge result. Run it yourself only when the
-     item changes code most of the repo imports, such as `packages/protocol` or
+     compete for this Mac. A single file runs here with `bun test <file>`. For a quick check against the
+     stored baseline, `bun run test:affected` runs only the tests your change affects. Leave the
+     whole suite to `queue.ts land`, which runs `bun run test` on the merge result. Run it yourself
+     only when the item changes code most of the repo imports, such as `packages/protocol` or
      `scripts/test-support`.
    - **The UI scenarios pass when used like a user.** If the logic spec has scenarios a person sees
      in the UI, run `bun run build`, start `quirkyd` on a fresh temporary `QUIRKY_HOME`, and run
