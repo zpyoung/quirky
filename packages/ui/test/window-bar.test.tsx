@@ -134,6 +134,14 @@ describe('window bar', () => {
     await env.win.waitFor(() => env.win.document.querySelector('.ui-dialog input'))
   })
 
+  test('Search qualifies its shortcut as available outside the terminal', async () => {
+    const { env } = await bootBar()
+    const search = await env.win.waitFor(() => barButton(env, SEARCH))
+
+    expect(search.querySelector('kbd')?.textContent).toBe('⌘K')
+    expect(search.textContent).toContain('(outside terminal)')
+  })
+
   test('New worktree and Add project run their commands', async () => {
     const { env } = await bootBar()
     const ran = recordCommands(env)

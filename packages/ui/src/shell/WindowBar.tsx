@@ -553,6 +553,7 @@ export function WindowBar({ onSettings }: WindowBarProps) {
           <ControlIcon name="magnifying-glass" />
           <span>Search</span>
           <kbd>⌘K</kbd>
+          <span>(outside terminal)</span>
         </BarButton>
         <Overflow onSettings={onSettings} />
       </div>
