@@ -427,6 +427,39 @@ describe('SC-18: the row menu and dragging', () => {
     await settle()
   }
 
+  test('suppresses the native menu on blank clean-panel content without opening an app menu', async () => {
+    const { element, unmount } = await open((f) => {
+      f.status = statusOf()
+      f.compare = compareOf()
+    })
+    try {
+      expect(buttonText(element, 'Open terminal')).toBeDefined()
+      const event = new MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2 })
+      await act(async () => {
+        q(element, '[data-git-content]')!.dispatchEvent(event)
+      })
+      expect(event.defaultPrevented).toBe(true)
+      expect(q(document.body, '[role="menu"]')).toBeNull()
+    } finally {
+      unmount()
+    }
+  })
+
+  test('preserves the native editing menu in the commit message field', async () => {
+    const { element, unmount } = await open()
+    try {
+      const field = byLabel(element, 'Commit message') as HTMLTextAreaElement
+      expect(field.disabled).toBe(false)
+      const event = new MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2 })
+      await act(async () => {
+        field.dispatchEvent(event)
+      })
+      expect(event.defaultPrevented).toBe(false)
+    } finally {
+      unmount()
+    }
+  })
+
   test('offers View, Copy Path, Copy Relative Path and Reveal in Finder', async () => {
     const copied: string[] = []
     Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: async (t: string) => void copied.push(t) } })

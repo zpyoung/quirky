@@ -24,6 +24,8 @@ File diff tabs include `(Diff)` after the path so they remain distinguishable fr
 
 Screen readers announce file rows with their Git state (such as modified or untracked) and history rows as commits. Row colors do not change those names to agent activity states.
 
+Right-click a file row for its Source Control actions. Blank Changes content does not open a native browser menu; text fields keep their native editing menus.
+
 For Markdown files, **Preview** shows only the rendered modified content and hides both source diff sides. **Source** restores the diff.
 
 Combined-diff navigation and Git open commands use the same hosted-tab route. Opening a diff selects its workspace view if another top-level view was showing. The `open-changes` and `open-commit` commands await the hosted-tab operation before replying.

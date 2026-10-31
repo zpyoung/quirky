@@ -1093,7 +1093,15 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
           <Button onClick={() => void data.refresh()}>Retry</Button>
         </div>
       )}
-      <div className="ui-stack" data-git-content style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
+      <div
+        className="ui-stack"
+        data-git-content
+        onContextMenu={(event) => {
+          if (event.target instanceof HTMLElement && event.target.closest('input, textarea, select, [contenteditable="true"]')) return
+          event.preventDefault()
+        }}
+        style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}
+      >
         {status === null && data.error === null && <EmptyState message="Loading…" />}
         {status && operation !== 'none' && (
           <OperationCard
