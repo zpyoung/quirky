@@ -291,7 +291,8 @@
 }
 
 .qe-changes-side-by-side {
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
 }
 
 .qe-changes-inline {
@@ -299,8 +300,8 @@
   grid-template-rows: minmax(0, 0.45fr) minmax(0, 1fr);
 }
 
-.qe-changes-head,
-.qe-changes-modified {
+.qe-changes-modified,
+.qe-changes-merge-editor {
   border-inline-end: var(--ui-border-width) solid var(--ui-border);
   display: flex;
   flex-direction: column;
@@ -309,7 +310,13 @@
   overflow: hidden;
 }
 
-.qe-changes-head h3,
+.qe-changes-merge-headings {
+  display: grid;
+  flex: 0 0 auto;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.qe-changes-merge-headings h3,
 .qe-changes-modified h3,
 .qe-changes-inline-diff h3 {
   border-bottom: var(--ui-border-width) solid var(--ui-border);
@@ -321,20 +328,43 @@
   padding: var(--ui-space-6) var(--ui-space-12);
 }
 
-.qe-changes-head pre {
-  color: var(--ui-text);
-  flex: 1 1 auto;
-  font: var(--ui-font-body)/1.45 var(--terminal-font-family, ui-monospace, monospace);
-  margin: 0;
-  min-height: 0;
-  min-width: 0;
-  overflow: auto;
-  padding: var(--ui-space-8) var(--ui-space-12);
-  white-space: pre;
+.qe-changes-merge-headings h3:first-child {
+  border-inline-end: var(--ui-border-width) solid var(--ui-border);
 }
 
-.qe-changes-modified .qe-source-editor {
+.qe-changes-modified .qe-source-editor,
+.qe-changes-merge-editor .qe-source-editor {
   flex: 1 1 auto;
+}
+
+.qe-changes-merge-editor .cm-mergeView,
+.qe-changes-merge-editor .cm-mergeViewEditors,
+.qe-changes-merge-editor .cm-mergeViewEditor {
+  height: 100%;
+  min-height: 0;
+  min-width: 0;
+}
+
+.qe-changes-merge-editor .cm-mergeView {
+  overflow: hidden;
+}
+
+.qe-changes-merge-editor .cm-mergeViewEditors {
+  overflow: hidden;
+}
+
+.qe-changes-merge-editor .cm-mergeViewEditor {
+  flex: 1 1 50%;
+  overflow: hidden;
+}
+
+.qe-changes-merge-editor .cm-mergeView .cm-editor {
+  height: 100% !important;
+}
+
+.qe-changes-merge-editor .cm-mergeView .cm-editor .cm-scroller {
+  height: 100% !important;
+  overflow: auto !important;
 }
 
 .qe-changes-clean,
@@ -469,6 +499,17 @@
 .qe-codemirror-host .cm-activeLineGutter,
 .qe-codemirror-host .cm-activeLine {
   background: color-mix(in srgb, var(--ui-selected) 55%, var(--ui-transparent));
+}
+
+.qe-codemirror-host .cm-editor.cm-merge-a .cm-activeLine.cm-changedLine,
+.qe-codemirror-host .cm-editor.cm-merge-b .cm-activeLine.cm-changedLine,
+.qe-codemirror-host .cm-editor.cm-merge-a .cm-activeLine.cm-insertedLine,
+.qe-codemirror-host .cm-editor.cm-merge-b .cm-activeLine.cm-insertedLine {
+  background: color-mix(in srgb, var(--ui-working) 18%, var(--ui-selected) 82%);
+}
+
+.qe-codemirror-host .cm-editor.cm-merge-a .cm-activeLine.cm-deletedLine {
+  background: color-mix(in srgb, var(--ui-failing) 18%, var(--ui-selected) 82%);
 }
 
 .qe-codemirror-host .cm-focused .cm-selectionBackground,
@@ -906,11 +947,6 @@
 @media (max-width: 48rem) {
   .qe-compare-columns {
     grid-template-columns: minmax(0, 1fr);
-  }
-
-  .qe-changes-side-by-side {
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
   }
 
   .qe-editor-minimap {

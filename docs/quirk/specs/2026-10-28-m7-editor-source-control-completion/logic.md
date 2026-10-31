@@ -40,6 +40,8 @@ Before: tracked code/Markdown has staged changes plus a newer shared draft. Chan
 
 Inline Changes preserves source line boundaries. A mid-line edit appears as a complete removed HEAD line and a complete added draft line, not separate rows for unchanged prefixes, changed fragments and unchanged suffixes. Unchanged surrounding lines remain context.
 
+Side by side marks changed lines on both sides, shows line numbers, and applies the same wrapping and font settings to HEAD and Modified. Unchanged lines stay aligned after wrapped or inserted content; HEAD remains read-only while Modified edits the shared draft.
+
 ### C5: Diff tab lifetime and placement
 Before: Source Control lists multiple changed files. Single click opens a replaceable italic preview tab; another row replaces only a clean preview. Double click or pin makes it permanent. Alt/Option-click creates a right-hand split, with exact worktree/group ownership and existing tab reuse rules; Shift-click range and Cmd-click toggle selection remain reachable under core D33. Staged, branch and commit diffs remain read-only; unstaged modified text may save through its existing guarded Git save. Combined diffs, notes and source preview retain their current boundaries; no private terminal-state edits. Public UI report exposes the selected diff identity, mode and placement.
 

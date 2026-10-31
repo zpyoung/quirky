@@ -244,6 +244,7 @@ export function ChangesSurface(props: ChangesSurfaceProps): ReactElement {
     <SourceEditor
       ref={sourceRef}
       buffer={buffer}
+      comparisonOriginal={layout === 'side-by-side' ? diff.sides.original : undefined}
       tabId={props.tabId}
       wrap={props.wrap}
       minimap={props.minimap}
@@ -298,12 +299,11 @@ export function ChangesSurface(props: ChangesSurfaceProps): ReactElement {
         </div>
       ) : (
         <div className="qe-changes-panes qe-changes-side-by-side">
-          <section className="qe-changes-head" aria-label="HEAD version">
+          <div className="qe-changes-merge-headings">
             <h3>HEAD</h3>
-            <pre>{diff.sides.original}</pre>
-          </section>
-          <section className="qe-changes-modified" aria-label="Modified editor">
             <h3>Modified</h3>
+          </div>
+          <section className="qe-changes-merge-editor" aria-label="Side-by-side diff">
             {sourceEditor}
           </section>
         </div>
