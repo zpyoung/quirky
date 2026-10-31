@@ -151,6 +151,8 @@ One shared popup shape serves the project switcher, the worktree switcher and st
 
 The left side is a breadcrumb of the selected project, worktree and open file, which always names the project even under All projects. The right side holds, in order: working count, needs-you count, ahead and behind, checks, usage, and file type. Each right-side value opens a popup, except file type. Plugins still add items by registering them.
 
+The working and needs-you counts have accessible names that identify agents and pending questions. They use singular nouns at one ("1 agent working", "1 pending question") and plural nouns at zero and above one.
+
 ### Center tabs and ⌘K
 
 Center tabs show a tool or file icon and an accent underline on the active tab, with a close button on the active or hovered tab. When tabs don't fit, a "3 more" button at the end of the row lists the hidden ones, and the visible tabs don't shrink to fit.

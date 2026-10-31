@@ -204,13 +204,13 @@ export function ShellStatusBar() {
         {snapshot.errors.sessions && <span className="shell-statusbar__unknown" role="status">Agent status unavailable</span>}
         {snapshot.errors.asks && <span className="shell-statusbar__unknown" role="status">Inbox status unavailable</span>}
         {working !== undefined && (
-          <StatusBarItem label={`${working.length} agents working`} popupTitle="Working" items={workingItems}>
+          <StatusBarItem label={`${working.length} ${working.length === 1 ? 'agent' : 'agents'} working`} popupTitle="Working" items={workingItems}>
             <StatusDot status={working.length > 0 ? 'working' : 'idle'} />
             <span>{working.length} working</span>
           </StatusBarItem>
         )}
         {asks !== undefined && (
-          <StatusBarItem label={`${asks.length} pending questions`} popupTitle="Needs you" items={askItems}>
+          <StatusBarItem label={`${asks.length} pending ${asks.length === 1 ? 'question' : 'questions'}`} popupTitle="Needs you" items={askItems}>
             <StatusDot status={asks.length > 0 ? 'needs-you' : 'idle'} />
             <span className={asks.length > 0 ? 'shell-statusbar__needs-you' : undefined}>{asks.length} needs you</span>
           </StatusBarItem>
