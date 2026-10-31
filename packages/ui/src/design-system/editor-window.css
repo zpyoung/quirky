@@ -837,7 +837,7 @@
   border-color: var(--ui-transparent);
   border-radius: var(--ui-radius-mark);
   min-height: var(--ui-row-single);
-  padding: 0 var(--ui-space-4);
+  padding: var(--ui-space-2) var(--ui-space-4);
   flex-wrap: nowrap;
 }
 
@@ -1020,6 +1020,10 @@
   }
 
   .qe-explorer-tree {
+    padding-block: 0;
+  }
+
+  .qe-explorer-row > .ui-list-row {
     padding-block: 0;
   }
 

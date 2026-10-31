@@ -308,6 +308,7 @@ test.skipIf(!existsSync(executable))('Explorer rows and controls stay usable at 
 
       expect(layout.panelOverflow).toBe(false)
       expect(layout.rowHeight).toBeLessThanOrEqual(32)
+      if (width === 320) expect(layout.rowHeight).toBe(32)
       expect(layout.rowActionNameCenterDelta).toBeLessThan(1)
       expect(layout.nameWidth).toBeGreaterThan(0)
       expect(layout.nameContained).toBe(true)
