@@ -27,6 +27,19 @@
   font-variant-numeric: tabular-nums;
 }
 
+@container ui-tool-panel (max-width: 220px) {
+  .repo-header.project-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .repo-header.project-header > .ui-section-header__actions {
+    align-self: stretch;
+    justify-content: flex-end;
+    margin-inline-start: 0;
+  }
+}
+
 .repo-header.project-header .project-reveal {
   opacity: 0;
 }

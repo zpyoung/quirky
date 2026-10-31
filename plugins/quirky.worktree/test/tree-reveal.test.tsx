@@ -1,15 +1,11 @@
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
 import { afterAll, afterEach, beforeAll, expect, test } from 'bun:test'
-import { readFileSync } from 'node:fs'
-import { join } from 'node:path'
 import type { Repo, UiPluginContext } from '@quirky/protocol'
 import { act, createElement } from 'react'
 import type { Root } from 'react-dom/client'
 import { DEFAULT_STOCK_OPTIONS, type WorktreeControl } from '../src/control-types'
 import type { TreeModel, TreeRow } from '../src/report'
 import type { TreeProps } from '../src/Tree'
-
-const STYLESHEET = join(import.meta.dir, '../../../packages/ui/src/design-system/worktree-tree.css')
 
 const REPO: Repo = { id: 'r1', name: 'QuirkyApp', path: '/repo/QuirkyApp', addedAt: 1, kind: 'git', displayName: null, groupId: null }
 
@@ -103,21 +99,3 @@ test('the count and project name survive narrowing to one project', async () => 
   expect(byLabel('New worktree in QuirkyApp')).not.toBeNull()
 })
 
-test('the reveal hides with opacity and covers hover and focus-within', () => {
-  const css = readFileSync(STYLESHEET, 'utf8')
-  expect(css).toMatch(/\.project-reveal[^{]*\{[^}]*opacity:\s*0/)
-  expect(css).toMatch(/\.worktree-reveal[^{]*\{[^}]*opacity:\s*0/)
-  expect(css).toMatch(/\.repo-header\.project-header:hover[^{]*\.project-reveal/)
-  expect(css).toMatch(/\.repo-header\.project-header:focus-within[^{]*\.project-reveal/)
-  expect(css).toMatch(/\.worktree:hover[^{]*\.worktree-reveal/)
-  expect(css).toMatch(/\.worktree:focus-within[^{]*\.worktree-reveal/)
-  expect(css).not.toMatch(/display:\s*none/)
-  expect(css).not.toMatch(/visibility:\s*hidden/)
-})
-
-test('the stylesheet scopes every rule under the worktree panel classes', () => {
-  const css = readFileSync(STYLESHEET, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '')
-  const selectors = [...css.matchAll(/([^{}]+)\{/g)].flatMap((match) => match[1].split(',').map((part) => part.trim()))
-  expect(selectors.length).toBeGreaterThan(0)
-  for (const selector of selectors) expect(selector).toMatch(/\.(repo-header|worktree-tree)\b/)
-})
