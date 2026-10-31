@@ -416,6 +416,10 @@
   padding: var(--ui-space-4) var(--ui-space-6);
 }
 
+.accounts-ui .usage-chip:focus-visible {
+  outline-offset: calc(var(--ui-focus-offset) * -1);
+}
+
 .accounts-ui .usage-detailed-chip,
 .accounts-ui .usage-detailed-chip > span {
   align-items: center;
