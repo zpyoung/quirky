@@ -30,6 +30,8 @@ The group menu offers New Markdown, Open Markdown and Open File in Editor throug
 
 In a horizontally scrollable group, resizing the tab strip or changing the selected tab's title scrolls it back into view. Narrowing the window or renaming an open file does not require selecting another tab to reveal its Close control. Manual scrolling still lets you browse other tabs without changing the selection.
 
+Tabs clipped at either edge move into the N more menu instead of showing a cut-off icon or Close control. Selecting one reveals it in the strip. A tab wider than the viewport remains visible while it fills the available width.
+
 Floating documents use the editor-owned profile notes directory, resolved explicitly by `quirky.editor/documentRoot({worktree:"floating"})`. This does not grant access to HOME or arbitrary files. Markdown, editor and Browser tabs preserve the captured floating group and use their existing public owners and close/resource leases.
 
 The floating panel and toggle stay below Usage popovers and public modal overlays, so those surfaces remain readable and clickable.

@@ -21,22 +21,23 @@ describe('hiddenTabIndexes', () => {
   })
 
   test('reports the tabs past the right edge', () => {
-    expect(hiddenTabIndexes(viewport, row(viewport, [100, 100, 100, 100]))).toEqual([3])
+    expect(hiddenTabIndexes(viewport, row(viewport, [100, 100, 100, 100]))).toEqual([2, 3])
   })
 
-  test('reports tabs on both sides of a scrolled strip', () => {
-    expect(hiddenTabIndexes(viewport, row(viewport, [100, 100, 100, 100, 100, 100], 200))).toEqual([0, 1, 5])
+  test('reports tabs with less than a full viewport of room on either side of a scrolled strip', () => {
+    expect(hiddenTabIndexes(viewport, row(viewport, [100, 100, 100, 100, 100, 100], 200))).toEqual([0, 1, 4, 5])
   })
 
-  test('a tab is hidden when less than half of it shows, whichever edge clips it', () => {
-    expect(hiddenTabIndexes(viewport, [span(200, 100)])).toEqual([])
-    expect(hiddenTabIndexes(viewport, [span(201, 100)])).toEqual([0])
-    expect(hiddenTabIndexes(viewport, [span(-50, 100)])).toEqual([])
-    expect(hiddenTabIndexes(viewport, [span(-51, 100)])).toEqual([0])
+  test('hides normal-sized tabs when more than one pixel is clipped at either edge', () => {
+    expect(hiddenTabIndexes(viewport, [span(0, 140)])).toEqual([])
+    expect(hiddenTabIndexes(viewport, [span(-1, 140)])).toEqual([])
+    expect(hiddenTabIndexes(viewport, [span(-1.1, 140)])).toEqual([0])
+    expect(hiddenTabIndexes(viewport, [span(111, 140)])).toEqual([])
+    expect(hiddenTabIndexes(viewport, [span(111.1, 140)])).toEqual([0])
   })
 
-  test('the active tab with only its edge clipped is not listed', () => {
-    expect(hiddenTabIndexes(viewport, [span(0, 252), span(252, 100), span(352, 100)])).toEqual([1, 2])
+  test('keeps an oversized tab usable when it fills the viewport', () => {
+    expect(hiddenTabIndexes(viewport, [span(-25, 300)])).toEqual([])
   })
 
   test('ignores sub-pixel overhang from rounding', () => {
@@ -46,7 +47,7 @@ describe('hiddenTabIndexes', () => {
 
   test('works from a viewport that does not start at zero', () => {
     const offset = span(32, 150)
-    expect(hiddenTabIndexes(offset, row(offset, [100, 100, 100]))).toEqual([2])
+    expect(hiddenTabIndexes(offset, row(offset, [100, 100, 100]))).toEqual([1, 2])
   })
 })
 

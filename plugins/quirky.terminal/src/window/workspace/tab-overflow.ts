@@ -5,14 +5,15 @@ export type Span = { left: number; right: number }
 const ROUNDING = 1
 
 /**
- * The indexes of the tabs too clipped to use: less than half of the tab shows in the strip, on
- * either side. A tab with most of itself showing stays clickable, so listing it would only mislead.
+ * Indexes of tabs clipped too much to use. Allow one pixel for layout rounding: normal tabs must be
+ * fully visible within that tolerance, while oversized tabs remain usable when they fill the viewport.
  */
 export function hiddenTabIndexes(viewport: Span, tabs: readonly Span[]): number[] {
   const hidden: number[] = []
+  const viewportWidth = viewport.right - viewport.left
   tabs.forEach((tab, index) => {
     const showing = Math.min(tab.right, viewport.right) - Math.max(tab.left, viewport.left)
-    if (showing < (tab.right - tab.left) / 2) hidden.push(index)
+    if (showing < Math.min(tab.right - tab.left, viewportWidth) - ROUNDING) hidden.push(index)
   })
   return hidden
 }
