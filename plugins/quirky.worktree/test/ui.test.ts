@@ -1028,6 +1028,10 @@ test('Rename and Set Parent open their dialogs and the report names them', async
   await click(itemNamed('Rename…'))
   expect(dialogName(document.querySelector<HTMLElement>('[role="dialog"]')!)).toBe('Workspace details')
   expect(lastReport(h).dialog).toEqual({ kind: 'update', worktreeId: 'w2' })
+  const references = document.querySelector('[role="dialog"] [aria-label="Linked references"]')!
+  expect(references.textContent).not.toMatch(/plugin/i)
+  expect(references.textContent).toMatch(/links.*text/i)
+  expect(references.textContent).toMatch(/not opened/i)
   await press('Escape')
   expect(document.querySelector('[role="dialog"]')).toBeNull()
   expect(lastReport(h).dialog).toBeNull()
