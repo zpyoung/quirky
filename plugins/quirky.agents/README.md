@@ -38,3 +38,5 @@ Provider process creation remains owned by `quirky.session`. To launch remotely,
 ## Desktop configuration
 
 The Agents center view uses the shared graphite controls and theme tokens. Default agent, permissions, detection/refresh, enable switches, command/argument/environment overrides and workspace trust keep their existing public APIs. Fields save on Enter or blur (Cmd/Ctrl+Enter for multiline environment values); Reset removes that override. Appearance follows the host's dark/light choice.
+
+The settings frame fills the center panel's width. Default-agent choices wrap as the panel narrows; installed-agent names and commands stay readable, with Enabled, Set default, Docs, and the expansion control together on a separate row when needed.
