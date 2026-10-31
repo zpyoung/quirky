@@ -25,6 +25,7 @@ File diff tabs include `(Diff)` after the path so they remain distinguishable fr
 In the command palette, **Save Source Control File** saves edits in the focused Source Control diff. **Save File** saves the focused editor draft.
 
 Screen readers announce file rows with their Git state (such as modified or untracked) and history rows as commits. Row colors do not change those names to agent activity states.
+The Commits dock gives the subject its own full-width line and wraps refs beneath it. Long ref labels are ellipsized visually; the full value remains available in the tooltip and screen-reader label.
 
 Right-click a file row for its Source Control actions. Blank Changes areas follow the [shell's context-menu behavior](../../README.md#shared-desktop-ui-components), including native editing and selected-text menus.
 
