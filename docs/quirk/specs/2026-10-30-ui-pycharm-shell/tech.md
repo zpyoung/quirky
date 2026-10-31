@@ -118,8 +118,9 @@ New rule `ui/tool-icon-hue`. It checks every plugin `quirky-plugin.json` and `to
 - `:focus-within` isn't enough, because WebKit doesn't focus buttons on click. `ToolShell` tracks the focused panel in renderer state, from capture-phase `pointerdown` and `focusin` on `[data-tool-panel]` and on the center card, and sets `data-panel-focused` on that element only.
 - Header buttons are visible when the panel has `data-panel-focused`, `:hover` or `:focus-within`. Hidden buttons use `opacity: 0`, never `display: none` or `visibility: hidden`, so they stay in the tab order and appear when focused.
 - `.ui-list-row--selected` is `--ui-accent` under `[data-panel-focused]` and `--ui-selected` otherwise. `StatusDot` inside an accent row gets the ring.
-- Window inactive: `browserWindowFocus()` also sets `data-window-inactive` on `.app`, and CSS dims the whole window. Whether Electrobun fires `blur` is unverified, so the native scenario checks it. Native browser panes aren't dimmed, which is accepted.
+- Window inactive: `browserWindowFocus()` also sets `data-window-inactive` on `.app`, and CSS dims the whole window. Electrobun fires `blur`, confirmed in the native scenario. Native browser panes aren't dimmed, which is accepted.
 - `useRegion('panel')` stays for keyboard region routing and does not drive this.
+- Row-level buttons in Changes, Ledger and Worktrees follow the same reveal, using `git-rows.css`, `ledger-rows.css` and `worktree-tree.css`.
 
 ### Panel frame ([Panels](logic.md#panels))
 
@@ -192,7 +193,7 @@ ViewTab.icon?: { kind: 'tool'; name: ToolIconName; hue: UiToolHue } | { kind: 'f
 
 - `openViewTab` and `rekeyViewTabs` accept `icon`, and `quirky.terminal/activeTabIcon` returns the active tab's. The editor passes `{kind:'file', path}`, git passes `{kind:'tool', name:'git-diff', hue:'azure'}`, and the browser passes `{kind:'control', name:'globe'}`.
 - Terminal and agent tabs draw `terminal-window` or `robot`. The existing status glyph stays, because tabs are where agent status lives.
-- Close shows only on the active or hovered tab. Tabs don't shrink.
+- Close shows only on the active or hovered tab. Tabs don't shrink. A tab counts as hidden when less than half of it shows.
 - `viewport` geometry at `GroupView.tsx:196-228` counts hidden tabs, and the scroll buttons are replaced by a "N more" button opening `PopupMenu`.
 - The accent underline shows on the selected tab of every group, not only the active group.
 
