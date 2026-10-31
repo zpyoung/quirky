@@ -22,13 +22,18 @@ const all = [
   m(9, 'system', 'system: hook_response'),
   m(10, 'user', 'system: hook_started'),
   m(11, 'assistant', 'hook_response: explained'),
-  m(12, 'system', 'system: informational')
+  m(12, 'system', 'system: informational'),
+  m(13, 'system', 'Claude rate limit event'),
+  m(14, 'user', 'system: informational'),
+  m(15, 'assistant', 'Claude rate limit event'),
+  m(16, 'system', 'system: error'),
+  m(17, 'result', 'OK')
 ]
 
-test('hides hook system messages and empty assistant messages by default', () => {
-  expect(visibleMessages(all, false).map((x) => x.seq)).toEqual([1, 3, 6, 10, 11, 12])
+test('hides internal system events and empty assistant turns without hiding conversation or errors', () => {
+  expect(visibleMessages(all, false).map((x) => x.seq)).toEqual([1, 3, 6, 10, 11, 14, 15, 16, 17])
 })
 
-test('show all returns every message', () => {
-  expect(visibleMessages(all, true)).toBe(all)
+test('show all includes internal events and empty assistant turns', () => {
+  expect(visibleMessages(all, true).map((x) => x.seq)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17])
 })
