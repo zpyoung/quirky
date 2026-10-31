@@ -918,7 +918,7 @@ test('project menu opens its ledger and moves projects through the shared action
   expect(h.callsTo('quirky.repo/groupAdd')).toEqual([{ group: 'g1', repo: 'r1' }])
 })
 
-test('project Actions menu takes focus and closes on Escape from button and heading', async () => {
+test('project Actions menu takes focus and Escape returns it to the button', async () => {
   const h = setup()
   await h.mountInto(host)
 
@@ -930,6 +930,7 @@ test('project Actions menu takes focus and closes on Escape from button and head
   expect(document.activeElement).toBe(menu())
   await press('Escape')
   expect(menu()).toBeNull()
+  expect(document.activeElement).toBe(actions)
 
   await contextMenu(projectSection('api').querySelector('.project-header')!)
   expect(menu()).not.toBeNull()

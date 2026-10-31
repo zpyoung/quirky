@@ -199,7 +199,7 @@ export function ContextMenuList({ items, label, onChoose, onClose, onBack, heade
 }
 
 /** A menu positioned at its caller-provided screen coordinate. */
-export function ContextMenu({ items, label, x, y, onClose, header, highlightFirst, align = 'start' }: ContextMenuProps) {
+export function ContextMenu({ items, label, x, y, onClose, returnFocusTo, header, highlightFirst, align = 'start' }: ContextMenuProps) {
   const anchor = useRef<HTMLDivElement>(null)
   const ownerMarker = useRef<HTMLSpanElement>(null)
   const [position, setPosition] = useState({ x, y })
@@ -264,7 +264,10 @@ export function ContextMenu({ items, label, x, y, onClose, header, highlightFirs
             label={label}
             header={header}
             highlightFirst={highlightFirst}
-            onClose={onClose}
+            onClose={() => {
+              returnFocusTo?.focus()
+              onClose()
+            }}
             onChoose={onChoose}
           />
         </div>,

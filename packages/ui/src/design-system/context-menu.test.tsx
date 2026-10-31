@@ -113,6 +113,45 @@ describe('shared context menu', () => {
     expect(closes).toEqual(['close'])
   })
 
+  test('returnFocusTo does not steal focus on outside click or action selection', async () => {
+    const opener = document.createElement('button')
+    const outside = document.createElement('button')
+    document.body.append(opener, outside)
+    const focusAtClose: (Element | null)[] = []
+    const onClose = () => focusAtClose.push(document.activeElement)
+
+    await render(<ContextMenu
+      label="Actions"
+      x={10}
+      y={20}
+      returnFocusTo={opener}
+      items={[]}
+      onClose={onClose}
+    />)
+    outside.focus()
+    await act(async () => {
+      outside.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+    })
+    expect(focusAtClose).toHaveLength(1)
+    expect(focusAtClose[0]).toBe(outside)
+    expect(document.activeElement).toBe(outside)
+
+    await render(<ContextMenu
+      label="Actions"
+      x={10}
+      y={20}
+      returnFocusTo={opener}
+      items={[{ label: 'Run', onSelect: () => outside.focus() }]}
+      onClose={onClose}
+    />)
+    const action = document.querySelector<HTMLButtonElement>('[role="menuitem"]')!
+    action.focus()
+    await act(async () => action.click())
+    expect(focusAtClose).toHaveLength(2)
+    expect(focusAtClose[1]).toBe(action)
+    expect(document.activeElement).toBe(outside)
+  })
+
   test('composing Enter in the menu search field does not choose its highlighted row', async () => {
     const actions: string[] = []
     const closes: string[] = []
