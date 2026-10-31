@@ -186,6 +186,37 @@ describe('SC-54: the Commits dock', () => {
     }))
   }
 
+  test.each(['unstaged', 'branch', 'history'])('%s file badges distinguish one changed line from multiple lines', async (section) => {
+    const changes = [
+      { path: 'one-addition.ts', status: 'modified' as const, added: 1, removed: 2, binary: false },
+      { path: 'one-deletion.ts', status: 'modified' as const, added: 2, removed: 1, binary: false }
+    ]
+    const { element, unmount } = await open((f) => {
+      history(f)
+      f.status = statusOf(changes.map((change) => entry(change.path, 'unstaged', change.status, change)))
+      f.compare = compareOf({ entries: changes, added: 3, removed: 3 })
+      f.on('quirky.git/commitFiles', () => ({
+        commit: '1'.repeat(40),
+        parent: '0'.repeat(40),
+        entries: changes
+      }))
+    })
+    try {
+      if (section === 'history') {
+        await click(byLabel(element, 'Expand Commits'))
+        await click(byLabel(element, 'Expand commit 1111111'))
+      }
+      const additionRow = q(element, `[data-section="${section}"] [data-row-path="one-addition.ts"]`)!
+      const deletionRow = q(element, `[data-section="${section}"] [data-row-path="one-deletion.ts"]`)!
+      expect(q(additionRow, '[aria-label="1 addition"]')?.textContent).toBe('+1')
+      expect(q(additionRow, '[aria-label="2 deletions"]')?.textContent).toBe('−2')
+      expect(q(deletionRow, '[aria-label="2 additions"]')?.textContent).toBe('+2')
+      expect(q(deletionRow, '[aria-label="1 deletion"]')?.textContent).toBe('−1')
+    } finally {
+      unmount()
+    }
+  })
+
   test('is collapsed by default and loads nothing until opened', async () => {
     const { fake, element, unmount } = await open(history)
     expect(q(element, '[data-history-content]')).toBeNull()
