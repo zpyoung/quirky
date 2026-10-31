@@ -248,6 +248,8 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
   const [commitBlocked, setCommitBlocked] = useState<Blocked | null>(null)
   const [pushBlocked, setPushBlocked] = useState<Blocked | null>(null)
   const [dialog, setDialog] = useState<DialogState | null>(null)
+  const [focusRecovery, setFocusRecovery] = useState<{ revision: number; opener: Element | null }>({ revision: 0, opener: null })
+  const baseDialogWasOpen = useRef(false)
   const [launch, setLaunch] = useState<FixAction | null>(null)
   const [menu, setMenu] = useState<{ x: number; y: number; item: RowItem } | null>(null)
   const [submodules, setSubmodules] = useState<Record<string, SubmoduleState>>({})
@@ -298,6 +300,27 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
   const refreshAll = useCallback(async () => {
     await Promise.all([data.refresh(), compareData.refresh()])
   }, [data.refresh, compareData.refresh])
+
+  const recoverPanelFocus = useCallback((opener: Element | null) => {
+    const active = document.activeElement
+    const activeIsValid = active !== null && active !== document.body && active.isConnected && !active.hasAttribute('disabled')
+    if (activeIsValid && active !== opener) return
+    const panel = root.current
+    const target = panel?.querySelector<HTMLButtonElement>('[data-base-ref]:not(:disabled)')
+      ?? panel?.querySelector<HTMLButtonElement>('[aria-label="More commit and remote actions"]:not(:disabled)')
+    target?.focus()
+  }, [])
+  const requestFocusRecovery = useCallback((opener: Element | null = null) => {
+    setFocusRecovery((request) => ({ revision: request.revision + 1, opener }))
+  }, [])
+  useEffect(() => {
+    if (focusRecovery.revision > 0) recoverPanelFocus(focusRecovery.opener)
+  }, [focusRecovery, recoverPanelFocus])
+  useEffect(() => {
+    const baseDialogOpen = dialog?.kind === 'base'
+    if (baseDialogWasOpen.current && !baseDialogOpen) recoverPanelFocus(null)
+    baseDialogWasOpen.current = baseDialogOpen
+  }, [dialog?.kind, recoverPanelFocus])
 
   const sections = useMemo(() => groupSections(entries, settings.groupOrder), [entries, settings.groupOrder])
   const visibleEntries = useCallback(
@@ -449,6 +472,7 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
       return false
     } finally {
       await refreshAll()
+      if (mutation.verb === 'delete') requestFocusRecovery()
     }
   }
 
@@ -489,7 +513,14 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
   }
 
   const discard = async (text: { title: string; body: string; confirm: string }, mutation: Mutation) => {
+    const active = document.activeElement
+    const opener = mutation.verb === 'delete'
+      && active instanceof HTMLElement
+      && active.getAttribute('aria-label')?.startsWith('Delete untracked file ') === true
+      ? active
+      : null
     if (!(await ask({ ...text, danger: true }))) return
+    if (mutation.verb === 'delete') requestFocusRecovery(opener)
     if (await runMutation(mutation)) dispatchSelection({ type: 'reset' })
   }
 
@@ -708,6 +739,7 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
   const doCommit = async (): Promise<boolean> => {
     setCommitting(true)
     setCommitBlocked(null)
+    requestFocusRecovery()
     try {
       await context.call('quirky.git/commit', { worktree, message: message.trim() })
       setMessage('')
@@ -1316,7 +1348,7 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
         <LaunchDialog context={context} worktree={worktree} action={launch} onClose={() => setLaunch(null)} start={(params) => aiFix.start(launch, params)} />
       )}
       {dialog?.kind === 'base' && (
-        <ChangeBaseDialog context={context} worktree={worktree} current={base} onClose={() => setDialog(null)} onChanged={() => void refreshAll()} />
+        <ChangeBaseDialog context={context} worktree={worktree} current={base} onClose={() => setDialog(null)} onChanged={refreshAll} />
       )}
     </div>
   )
