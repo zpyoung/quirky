@@ -400,6 +400,7 @@ export function InboxPanel() {
       <div className="shell-inbox__scrollport" role="region" aria-label="Pending question content" ref={scrollportRef}>
         <div className="shell-inbox__content" ref={contentRef}>
           <SectionHeader
+            className="shell-inbox__header"
             title="Pending questions"
             actions={pending !== null ? <Badge tone={pending.length > 0 ? 'needs-you' : 'neutral'}>{pending.length}</Badge> : undefined}
           />
