@@ -155,3 +155,22 @@ test.skipIf(!existsSync(executable))('Oversized tokens wrap inside empty-state a
     await browser.close()
   }
 }, 60_000)
+
+test.skipIf(!existsSync(executable))('Vault consent prose aligns with actions in wide panels', async () => {
+  const browser = await chromium.launch({ headless: true, args: process.platform === 'linux' ? ['--no-sandbox'] : [] })
+  try {
+    const page = await browser.newPage({ viewport: { width: 1000, height: 480 } })
+    const css = (await Promise.all(['tokens', 'components', 'vault'].map((name) =>
+      Bun.file(new URL(`../src/design-system/${name}.css`, import.meta.url)).text()
+    ))).join('\n')
+    const markup = '<div class="qvh-root" style="width:800px;height:auto"><div class="qvh-controls"><div class="qvh-consent"><p><strong>Search every agent session</strong> Find any past conversation by what was said in it, then pick up where the agent left off.</p><div class="qvh-consent-actions"><button>Enable Vault</button></div></div></div></div>'
+    await page.setContent(`<!doctype html><style>${css}</style><main class="ui-gallery-theme" data-theme="dark" style="width:800px;font-family:system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">${markup}</main>`)
+    const alignment = await page.locator('.qvh-consent').evaluate((card) => ({
+      paragraphLeft: card.querySelector('p')!.getBoundingClientRect().left,
+      actionsLeft: card.querySelector('.qvh-consent-actions')!.getBoundingClientRect().left,
+    }))
+    expect(alignment.paragraphLeft).toBeCloseTo(alignment.actionsLeft, 1)
+  } finally {
+    await browser.close()
+  }
+}, 60_000)

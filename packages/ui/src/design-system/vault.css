@@ -133,6 +133,7 @@
 
 .qvh-consent p {
   align-self: center;
+  min-width: 100%;
   max-width: calc(100% + var(--ui-space-12) * 2);
   margin: 0 0 var(--ui-space-8);
 }
