@@ -246,7 +246,8 @@ host instead, which agents don't use ([AGENTS.md](AGENTS.md)). Use `bun scripts/
 affected packages and `bun test <file>` for a single file. Run `bun run test:affected` before you
 push to check only the tests your change affects against the baseline from main. It also goes
 through the test host, and it runs nothing when the change selects every test. It's advisory, and
-the PR check decides whether a change can merge.
+the PR check decides whether a change can merge. Test workers drain their result output before
+exiting so large runs survive slow pipes.
 
 Verify shell integration with the explicit Bash 5.2/5.3 matrix. Supply two installed GNU Bash
 executables (temporary source builds are sufficient):
