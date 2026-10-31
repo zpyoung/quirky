@@ -775,6 +775,7 @@
   font-size: var(--ui-font-body);
   line-height: 1.4;
   margin: 0;
+  max-width: calc(100% + var(--ui-space-16) * 2);
   overflow-wrap: break-word;
 }
 

@@ -28,7 +28,12 @@ test.skipIf(!existsSync(executable))('EmptyState and Vault prose stay intact wit
       {
         sectionWidth: 68,
         message: 'GitHub authentication is required to access this conversation.',
-        words: ['GitHub', 'required', 'conversation'],
+        words: ['GitHub', 'required'],
+      },
+      {
+        sectionWidth: 84,
+        message: 'GitHub authentication is required to access this conversation.',
+        words: ['conversation'],
       },
     ]
 
@@ -93,6 +98,58 @@ test.skipIf(!existsSync(executable))('EmptyState and Vault prose stay intact wit
       expect(rect.right).toBeLessThanOrEqual(vaultWord.card.right + 0.5)
       expect(rect.left).toBeGreaterThanOrEqual(vaultWord.panel.left - 0.5)
       expect(rect.right).toBeLessThanOrEqual(vaultWord.panel.right + 0.5)
+    }
+  } finally {
+    await browser.close()
+  }
+}, 60_000)
+
+test.skipIf(!existsSync(executable))('Oversized tokens wrap inside empty-state and Vault panels', async () => {
+  const browser = await chromium.launch({ headless: true, args: process.platform === 'linux' ? ['--no-sandbox'] : [] })
+  try {
+    const page = await browser.newPage({ viewport: { width: 646, height: 480 } })
+    const css = (await Promise.all(['tokens', 'components', 'vault', 'tasks-shell'].map((name) =>
+      Bun.file(new URL(`../src/design-system/${name}.css`, import.meta.url)).text()
+    ))).join('\n')
+    const token = 'a_really_long_repository_name_here'
+    const message = `No GitHub remote is configured for ${token}.`
+    const cases = [
+      {
+        markup: renderToStaticMarkup(<div className="quirky-tasks" style={{ width: 90 }}><EmptyState message={message} /></div>),
+        selector: '.ui-empty-state__message',
+        padding: 12,
+      },
+      {
+        markup: `<div class="qvh-root" style="width:116px;height:auto"><div class="qvh-controls"><div class="qvh-consent"><p>${message}</p></div></div></div>`,
+        selector: '.qvh-consent p',
+        padding: 0,
+      },
+    ]
+    for (const { markup, selector, padding } of cases) {
+      await page.setContent(`<!doctype html><style>${css}</style><main class="ui-gallery-theme" data-theme="dark" style="width:646px"><aside data-side-panel style="box-sizing:border-box;width:116px;padding:${padding}px;font-family:system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">${markup}</aside></main>`)
+      const bounds = await page.locator(selector).evaluate((element, token) => {
+        const text = element.firstChild
+        if (!(text instanceof Text)) throw new Error('Expected a message text node')
+        const start = text.data.indexOf(token)
+        if (start === -1) throw new Error('Missing oversized token')
+        const range = document.createRange()
+        range.setStart(text, start)
+        range.setEnd(text, start + token.length)
+        const panel = element.closest('[data-side-panel]')!.getBoundingClientRect()
+        const message = element.getBoundingClientRect()
+        return {
+          panel: { left: panel.left, right: panel.right },
+          message: { left: message.left, right: message.right },
+          token: Array.from(range.getClientRects(), ({ left, right }) => ({ left, right })),
+        }
+      }, token)
+      expect(bounds.message.left, `${selector} stays inside the panel`).toBeGreaterThanOrEqual(bounds.panel.left - 0.5)
+      expect(bounds.message.right, `${selector} stays inside the panel`).toBeLessThanOrEqual(bounds.panel.right + 0.5)
+      expect(bounds.token.length, `${selector} wraps an oversized token`).toBeGreaterThan(1)
+      for (const rect of bounds.token) {
+        expect(rect.left).toBeGreaterThanOrEqual(bounds.message.left - 0.5)
+        expect(rect.right).toBeLessThanOrEqual(bounds.message.right + 0.5)
+      }
     }
   } finally {
     await browser.close()

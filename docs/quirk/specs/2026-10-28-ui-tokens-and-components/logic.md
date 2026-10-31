@@ -35,7 +35,7 @@ Tabs keep a complete focus-visible ring inside their horizontal scrollport, incl
 
 Scrollable dialog bodies leave inline clearance for outward focus rings, including Settings checkboxes at the content edge. Content stays aligned with the dialog header and actions, and the body keeps vertical scrolling.
 
-At narrow panel widths, EmptyState keeps ordinary words intact and within the panel; Vault search-consent prose keeps words intact and within its card.
+At narrow panel widths, EmptyState and Vault search-consent prose keep words intact when they fit the section or card. Tokens wider than that boundary wrap within it; neither the message box nor its text may overflow the panel.
 
 ### SC3 — Gallery is a working page
 After the ordinary UI build, `/gallery.html` loads actual shared components with no daemon connection or token required. Both theme columns show every category; toggling tabs, typing, selecting menu items, showing/closing dialogs, dismissing a toast, and invoking the card action updates visible local demonstration state. The gallery has no private duplicated controls or local CSS; its layout classes are defined with the shared system.
@@ -79,3 +79,5 @@ Enforced plugin: an explicit plugin ID whose UI source must obey all three rules
 2026-10-28: Self-reviewed against the upstream item row and operator's staged-lint update. SC1–SC6 cover this item's flows; upstream full-window scenarios remain with existing queue owners. Separate tech/spec review omitted under build-first mode.
 
 2026-10-28: Clarified canonical shared CSS import admission; private plugin CSS stays prohibited. Lane4's landed public terminal-theme export composes with the shared root/CSS exports; no new preference or terminal owner introduced.
+
+2026-10-31: Clarified SC2's oversized-token boundary for narrow empty states and Vault consent.

@@ -119,6 +119,8 @@
 }
 
 .qvh-consent {
+  display: flex;
+  flex-direction: column;
   margin-block: var(--ui-space-2);
   padding: var(--ui-space-8) var(--ui-space-12);
   border: var(--ui-border-width) solid var(--ui-border);
@@ -126,10 +128,12 @@
   background: var(--ui-selected);
   font-size: var(--ui-font-body);
   line-height: 1.45;
-  overflow-wrap: normal;
+  overflow-wrap: break-word;
 }
 
 .qvh-consent p {
+  align-self: center;
+  max-width: calc(100% + var(--ui-space-12) * 2);
   margin: 0 0 var(--ui-space-8);
 }
 
