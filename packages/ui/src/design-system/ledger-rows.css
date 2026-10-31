@@ -1,5 +1,8 @@
 .ledger-entry-row {
+  align-items: center;
   border-radius: var(--ui-radius-mark);
+  font-size: var(--ui-font-body);
+  min-height: var(--ui-row-single);
   position: relative;
 }
 

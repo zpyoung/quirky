@@ -32,9 +32,9 @@ const MOBILE_VIEW = 'view:quirky.mobile/page'
 const FALLBACK_SLOT: UiToolSlot = 'right-bottom'
 const DEFAULT_SIZES: UiToolLayout['sizes'] = {
   left: 280,
-  right: 320,
-  bottom: 240,
-  leftSplit: 0.5,
+  right: 280,
+  bottom: 176,
+  leftSplit: 0.75,
   rightSplit: 0.5,
   bottomSplit: 0.5
 }

@@ -174,7 +174,7 @@ describe('effective tool projection', () => {
       'bottom-left': null,
       'bottom-right': null
     })
-    expect(layout.sizes).toEqual({ left: 280, right: 320, bottom: 240, leftSplit: 0.5, rightSplit: 0.5, bottomSplit: 0.5 })
+    expect(layout.sizes).toEqual({ left: 280, right: 280, bottom: 176, leftSplit: 0.75, rightSplit: 0.5, bottomSplit: 0.5 })
   })
 
   test('keeps third-party contributions reachable and carries validated placement and icon metadata', async () => {
@@ -373,7 +373,7 @@ describe('tool layout mutations', () => {
     const { caller } = await start(seed)
     let layout = (await caller.call('ui.state', {})).layout.tools!
     expect(layout.open).toMatchObject({ 'left-top': null, 'left-bottom': null, 'right-top': null })
-    expect(layout.sizes).toMatchObject({ left: 280, right: 450, bottom: 240, leftSplit: 0.5, rightSplit: 0.4 })
+    expect(layout.sizes).toMatchObject({ left: 280, right: 450, bottom: 240, leftSplit: 0.75, rightSplit: 0.4 })
     expect(layout.placements).not.toHaveProperty('stale')
     expect(layout.placements[CUSTOM]).toBe('bottom-right')
 
