@@ -330,6 +330,8 @@ const BASH_INTEGRATION = `if [ -z "\${__quirky_integrated-}" ]; then
     case "\${FUNCNAME[1]-}" in
       __quirky_prompt|__quirky_arm|__quirky_histnum) return 0 ;;
     esac
+    # under functrace a PS0 or PS1 command substitution inherits DEBUG, and its output lands in the prompt
+    [ "\${BASH_SUBSHELL:-0}" = 0 ] || return 0
     [ "$BASH_COMMAND" = __quirky_prompt ] && return 0
     if [ "$__quirky_armed" = 1 ]; then
       __quirky_armed=0
@@ -370,9 +372,16 @@ const BASH_INTEGRATION = `if [ -z "\${__quirky_integrated-}" ]; then
     fi
   }
   [ "$__quirky_owns_trap" = 1 ] && trap '__quirky_debug' DEBUG
+  # bash 5.1 also runs later array elements, and one left after __quirky_arm would read as a user command
+  __quirky_user_prompt=
+  for __quirky_element in \${PROMPT_COMMAND[@]+"\${PROMPT_COMMAND[@]}"}; do
+    [ -n "$__quirky_element" ] && __quirky_user_prompt="$__quirky_user_prompt$__quirky_element
+"
+  done
+  unset PROMPT_COMMAND
   PROMPT_COMMAND="__quirky_prompt
-\${PROMPT_COMMAND:+\$PROMPT_COMMAND
-}__quirky_arm"
+\${__quirky_user_prompt}__quirky_arm"
+  unset __quirky_user_prompt __quirky_element
 fi`
 
 function zshWrapperFiles(binDir: string): Record<string, string> {
