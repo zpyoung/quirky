@@ -23,7 +23,10 @@ type Common = { controller: WorkspaceController; state: ControllerState }
 function revealTab(tab: HTMLElement | null) {
   const viewport = tab?.parentElement
   if (!tab || !viewport) return
-  const targetRight = tab.getBoundingClientRect().right
+  const target = tab.getBoundingClientRect()
+  const bounds = viewport.getBoundingClientRect()
+  if (target.left >= bounds.left && target.right <= bounds.right) return
+  const targetRight = target.right
   const viewportWidth = viewport.clientWidth
   let first = tab
   let previous = tab.previousElementSibling as HTMLElement | null

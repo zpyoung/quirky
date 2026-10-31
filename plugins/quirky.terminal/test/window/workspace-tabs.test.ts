@@ -206,6 +206,38 @@ describe('SC-11: clicking a tab activates it', () => {
     }
   })
 
+  test('clicking a fully visible tab leaves the viewport scroll position unchanged', async () => {
+    const resize = observeResize()
+    const scroll = spyOn(Element.prototype, 'scrollIntoView').mockImplementation(function (this: Element) {
+      const tab = this as HTMLElement
+      const viewport = tab.closest<HTMLElement>('.qt-tabs')
+      if (!viewport) return
+      const left = tab.getBoundingClientRect().left - viewport.getBoundingClientRect().left + viewport.scrollLeft
+      const maxScroll = Math.max(0, viewport.scrollWidth - viewport.clientWidth)
+      viewport.scrollLeft = Math.min(Math.max(0, left), maxScroll)
+    })
+    try {
+      const view = await mount(fakeDaemon(makeWorkspace(group('grp-1', terminalTabs(4)))))
+      const layout = installTabLayout(view, 350, {})
+      await flushResize(resize)
+      layout.viewport.scrollLeft = 50
+      await fire(layout.viewport, new Event('scroll'))
+      const middle = view.q<HTMLElement>('[data-tab="tab-2"]')!
+      const middleRect = middle.getBoundingClientRect()
+      const viewportRect = layout.viewport.getBoundingClientRect()
+      expect(middleRect.left).toBeGreaterThanOrEqual(viewportRect.left)
+      expect(middleRect.right).toBeLessThanOrEqual(viewportRect.right)
+
+      await click(middle)
+
+      expect(middle.querySelector('[role="tab"]')!.getAttribute('aria-selected')).toBe('true')
+      expect(layout.viewport.scrollLeft).toBe(50)
+    } finally {
+      scroll.mockRestore()
+      resize.restore()
+    }
+  })
+
   test('selecting the last tab can snap its leading edge to the viewport', async () => {
     const resize = observeResize()
     const scroll = spyOn(Element.prototype, 'scrollIntoView').mockImplementation(function (this: Element) {
@@ -734,6 +766,9 @@ describe('tab strip stylesheet', () => {
     return found.map((match) => match[2]).join(' ')
   }
 
+  test('tabs do not shrink', () => {
+    expect(rule('.qt-tab')).toMatch(/flex:\s*none/)
+  })
 
   test('the selected tab draws its accent underline in every group', () => {
     expect(rule('.qt-tab.qt-selected')).toMatch(/box-shadow:[^;]*var\(--ui-accent\)/)

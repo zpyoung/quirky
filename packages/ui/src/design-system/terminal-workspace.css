@@ -46,6 +46,7 @@
 .qt-tab-navigation { display: flex; flex: 0 1 auto; min-width: 0; }
 .qt-tabs { display: flex; flex: 1 1 auto; min-width: 0; overflow-x: auto; scrollbar-width: none; scroll-snap-type: x mandatory; }
 .qt-tabs::after { content: ''; flex: none; width: var(--qt-tab-scroll-slack, 0px); }
+.qt-tabs::-webkit-scrollbar { display: none; }
 .qt-tab-more {
   display: inline-flex;
   flex: none;
