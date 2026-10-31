@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto'
 import { afterEach, expect, test } from 'bun:test'
-import type { CheckResult } from '../src/contracts'
+import type { CheckResult, MessageRow } from '../src/contracts'
 import type { WorkerListResult, WorkerShowResult } from '../src/worker-contracts'
 import { installFederationMailOwnerFixture, type FederationMailOwnerFixture } from './federation-mail-support'
 import { eventually, startWorkerAcceptance, type WorkerAcceptance } from './workers/acceptance-support'
@@ -68,10 +68,19 @@ test('paired daemons preserve FIFO mail and ask identity; a rejected home comple
   for (const body of ['first', 'second']) {
     await owner.sendGuidance({ runId: started.runId, dispatchId: started.receipt.dispatchId, body })
   }
-  const consumed = await host.callAs<Extract<CheckResult, { mode: 'consume' }>>(hostSession!, 'check', [
-    '--unread', '--wait', '--timeout-ms', '5000',
-  ])
-  expect(consumed.messages.map((message) => message.body)).toEqual(['first', 'second'])
+  const messages: MessageRow[] = []
+  let deliveryId: string | null = null
+  const deadline = Date.now() + 5000
+  while (messages.length < 2 && Date.now() < deadline) {
+    const consumed: Extract<CheckResult, { mode: 'consume' }> = await host.callAs(hostSession, 'check', [
+      '--unread', '--wait', '--timeout-ms', String(Math.max(0, deadline - Date.now())),
+      ...(deliveryId === null ? [] : ['--ack', deliveryId]),
+    ])
+    messages.push(...consumed.messages)
+    deliveryId = consumed.deliveryId
+    if (consumed.timedOut || consumed.cancelled || consumed.connectionLost) break
+  }
+  expect(messages.map((message) => message.body)).toEqual(['first', 'second'])
 
   const timedOut = await host.cli(hostSession!, [
     'orchestration', 'ask', '--question', 'Should the worker continue?', '--options', 'yes,no',
