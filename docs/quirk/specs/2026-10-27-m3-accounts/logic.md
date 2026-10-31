@@ -58,7 +58,7 @@ Before: Claude 5h 39%, weekly 26%, model-specific weekly 0%; Codex weekly 1%. Co
 
 ### AC3: Popover, drill-in and layout
 
-Before: multiple providers at different pressure. Open Usage: worst consumed first, refresh, Compact/Detailed, provider drill-ins and Manage Accounts work. Inactive account bars load on expansion (60-second debounce, sequential Codex probes). Narrow width collapses trailing chips into +N with meaningful tooltip; icon-only density has distinct provider badges. Toggle a provider's visibility through status-bar context menu/Appearance settings and verify durable state.
+Before: multiple providers at different pressure. Open Usage: worst consumed first, refresh, Compact/Detailed, provider drill-ins and Manage Accounts work. Escape dismisses Usage unless the key event has already been handled. Inactive account bars load on expansion (60-second debounce, sequential Codex probes). Narrow width collapses trailing chips into +N with meaningful tooltip; icon-only density has distinct provider badges. Toggle a provider's visibility through status-bar context menu/Appearance settings and verify durable state.
 
 ### AC4: Snapshot failures and retry boundaries
 

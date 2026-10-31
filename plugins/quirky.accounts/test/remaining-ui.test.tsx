@@ -396,6 +396,47 @@ function makeAllProviderUsage(state: AccountState): UsageFixture {
     updatedAt: 10
   }
 }
+test('Escape dismisses Usage from its focused status-bar trigger and dialog unless handled', async () => {
+  await mount('status-bar:quirky.accounts/usage')
+  const trigger = buttonByLabel('Open Usage')
+  trigger.focus()
+  await act(async () => { trigger.click() })
+  await settle()
+
+  const getUsageDialog = () => container.querySelector<HTMLElement>('[role="dialog"][aria-label="Usage"]')
+  expect(getUsageDialog()).not.toBeNull()
+  expect(trigger.getAttribute('aria-expanded')).toBe('true')
+  trigger.focus()
+  expect(document.activeElement).toBe(trigger)
+  await act(async () => {
+    trigger.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }))
+  })
+  await settle()
+  expect(getUsageDialog()).toBeNull()
+  expect(trigger.getAttribute('aria-expanded')).toBe('false')
+
+  await act(async () => { trigger.click() })
+  await settle()
+  const dialog = getUsageDialog()
+  if (!dialog) throw new Error('Missing Usage dialog after reopening')
+  await act(async () => {
+    dialog.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }))
+  })
+  await settle()
+  expect(getUsageDialog()).toBeNull()
+
+  await act(async () => { trigger.click() })
+  await settle()
+  const reopenedDialog = getUsageDialog()
+  if (!reopenedDialog) throw new Error('Missing Usage dialog after reopening')
+  const handledEscape = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })
+  handledEscape.preventDefault()
+  await act(async () => { reopenedDialog.dispatchEvent(handledEscape) })
+  await settle()
+  expect(getUsageDialog()).not.toBeNull()
+  expect(trigger.getAttribute('aria-expanded')).toBe('true')
+})
+
 test('all ten provider details show their supplied quota, reset, plan, state, source and managed inactive usage', async () => {
   const state = makeState('codex', 80, 'Account B')
   const codexActive = state.accounts[0]!
