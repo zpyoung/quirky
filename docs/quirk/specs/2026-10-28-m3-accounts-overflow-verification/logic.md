@@ -14,6 +14,7 @@ Own constrained-width collapse, tooltip accuracy, badge-only presentation, recov
 ## Behavior & scenarios
 ### AC1: Normal-density overflow and recovery
 Data before: an isolated daemon has several configured fixture providers with distinct known quota percentages, normal density, and a full-width footer showing all providers. Walkthrough: narrow the real browser until the footer cannot fit its chips, then widen it. Data after: narrow layout shows a visible prefix and `+N` for exactly the omitted suffix; Usage and refresh remain reachable and no visible chip is clipped. Widening restores all chips and removes `+N`. Actual DOM geometry, visible screenshot and the public UI projection agree.
+Provider chips and the `+N` control keep their complete keyboard-focus ring inside the overflow-clipped row in both light and dark themes.
 
 ### AC2: Overflow tooltip and access
 Data before: AC1's collapsed suffix. Walkthrough: hover the visible `+N` control and inspect its native title, then click it. Data after: title starts `Also:` and includes exactly the hidden providers and their displayed percentages in order; click opens the real Usage roster with the fixture providers available. Remaining direction must use remaining percentages, not consumed values. Browser-native tooltip painting may be driver-limited; title inspection plus positive hover and click is required, and that limit is recorded rather than claiming a screenshot of an unpainted native tooltip.
