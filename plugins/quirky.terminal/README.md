@@ -8,6 +8,10 @@ Foreground agent sessions follow the permission mode in Agent settings. Backgrou
 
 If the session starts but its tab cannot be opened, the dialog keeps the submitted prompt read-only and offers **Open session** for that same session; it does not launch another agent.
 
+## Terminal sessions
+
+The Terminal sessions dock keeps its scrollable session rows inset from both panel edges, including in narrow docks.
+
 ## Closing running terminals
 
 Closing a terminal with a running command or agent asks for confirmation unless **Don't ask again for running terminals** is enabled. The confirmation starts with **Cancel** focused, so Return or Space keeps the terminal running; select **Stop and Close** or **Stop Agent** to stop it.
