@@ -211,3 +211,40 @@ describe('the structured composer beside the floating workspace toggle', () => {
   }, 60_000)
 
 })
+
+describe('the structured transcript header', () => {
+  test.skipIf(!executable)('keeps the event filter inline, inset, and clear of the transcript', async () => {
+    const { context, page } = await openComposer()
+    try {
+      const checkbox = page.getByRole('checkbox', { name: 'Show all events' })
+      const label = page.getByText('Show all events', { exact: true })
+      const title = page.getByRole('heading', { name: 'Transcript', exact: true })
+      const checkboxBox = await checkbox.boundingBox()
+      const labelBox = await label.boundingBox()
+      const titleBox = await title.boundingBox()
+      const headerBox = await page.locator('#structured-view header').boundingBox()
+      const logBox = await page.getByRole('log').boundingBox()
+      if (!checkboxBox || !labelBox || !titleBox || !headerBox || !logBox) {
+        throw new Error('The transcript header, filter, or log is not visible')
+      }
+
+      const checkboxCenter = checkboxBox.y + checkboxBox.height / 2
+      expect(Math.abs(checkboxCenter - (labelBox.y + labelBox.height / 2))).toBeLessThanOrEqual(1)
+      expect(Math.abs(checkboxCenter - (titleBox.y + titleBox.height / 2))).toBeLessThanOrEqual(1)
+      const inset = await page.getByRole('log').evaluate((element) => parseFloat(getComputedStyle(element).paddingInlineEnd))
+      expect(Math.min(checkboxBox.x, labelBox.x) - headerBox.x).toBeGreaterThanOrEqual(inset)
+      expect(headerBox.x + headerBox.width - Math.max(checkboxBox.x + checkboxBox.width, labelBox.x + labelBox.width)).toBeGreaterThanOrEqual(inset)
+      expect(titleBox.x - headerBox.x).toBeGreaterThanOrEqual(inset)
+      expect(checkboxBox.y + checkboxBox.height).toBeLessThanOrEqual(logBox.y)
+      expect(labelBox.y + labelBox.height).toBeLessThanOrEqual(logBox.y)
+
+      await label.click()
+      expect(await checkbox.isChecked()).toBe(true)
+      await checkbox.focus()
+      await checkbox.press('Space')
+      expect(await checkbox.isChecked()).toBe(false)
+    } finally {
+      await context.close()
+    }
+  }, 60_000)
+})

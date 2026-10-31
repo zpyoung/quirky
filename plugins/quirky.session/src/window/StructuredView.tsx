@@ -117,16 +117,17 @@ export function StructuredView({ context, session }: { context: UiPluginContext;
     <div style={layout}>
       <SectionHeader
         title="Transcript"
+        style={{ paddingInline: 'var(--ui-space-8)' }}
         actions={
-          <FormRow label="Show all events" htmlFor={showAllId}>
+          <label className="ui-checkbox-label" htmlFor={showAllId}>
             <input
               id={showAllId}
               type="checkbox"
               checked={showAll}
-              style={{ accentColor: 'var(--ui-accent)' }}
               onChange={(event) => setShowAll(event.target.checked)}
             />
-          </FormRow>
+            <span>Show all events</span>
+          </label>
         }
       />
       <div style={transcript} ref={scroller} role="log" aria-live="polite">
