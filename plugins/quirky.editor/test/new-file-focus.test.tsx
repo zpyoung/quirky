@@ -17,8 +17,15 @@ type Runtime = {
   opened: OpenedDocument | null
   openCompleted: boolean
   mountDuringOpen: boolean
-  deferPostOpen: boolean
   publishOpened?: () => void
+  deferPostOpen: boolean
+  deferOpen: boolean
+  createFileCalls: number
+  createdFileCount: number
+  openStarted: Promise<void>
+  signalOpen(): void
+  openGate: Promise<void>
+  releaseOpen(): void
   resolveEditorReady(): void
   editorReady: Promise<void>
   stateReads: number
@@ -115,10 +122,12 @@ function bufferInfo(
   }
 }
 
-function makeRuntime(mountDuringOpen: boolean, deferPostOpen = false): Runtime {
+function makeRuntime(mountDuringOpen: boolean, deferPostOpen = false, deferOpen = false): Runtime {
   const ready = Promise.withResolvers<void>()
   const postOpenStarted = Promise.withResolvers<void>()
   const postOpenGate = Promise.withResolvers<void>()
+  const openStarted = Promise.withResolvers<void>()
+  const openGate = Promise.withResolvers<void>()
   return {
     buffers: [bufferInfo(BACKGROUND_BUFFER_ID, BACKGROUND_TAB_ID, 'background.txt', 'text', 'source', 'background\n')],
     tabs: [{ tabId: BACKGROUND_TAB_ID, bufferId: BACKGROUND_BUFFER_ID, mode: 'edit' }],
@@ -128,12 +137,19 @@ function makeRuntime(mountDuringOpen: boolean, deferPostOpen = false): Runtime {
     openCompleted: false,
     mountDuringOpen,
     deferPostOpen,
+    deferOpen,
+    createFileCalls: 0,
+    createdFileCount: 0,
     resolveEditorReady: ready.resolve,
     editorReady: ready.promise,
     postOpenStarted: postOpenStarted.promise,
     signalPostOpen: postOpenStarted.resolve,
     postOpenGate: postOpenGate.promise,
     releasePostOpen: postOpenGate.resolve,
+    openStarted: openStarted.promise,
+    signalOpen: openStarted.resolve,
+    openGate: openGate.promise,
+    releaseOpen: openGate.resolve,
     stateReads: 0,
     listeners: new Set()
   }
@@ -188,9 +204,15 @@ function makeContext(runtime: Runtime): UiPluginContext {
       }
       if (method === 'quirky.editor/mutate') {
         if (params.action === 'createFile' && typeof params.path === 'string') {
+          runtime.createFileCalls++
+          const absolutePath = `${ROOT}/${params.path}`
+          if (runtime.entries.some((entry) => entry.path === absolutePath)) {
+            throw new Error(`File already exists: ${params.path}`)
+          }
           runtime.createdPath = params.path
+          runtime.createdFileCount++
           runtime.entries = [{
-            path: `${ROOT}/${params.path}`,
+            path: absolutePath,
             name: params.path.split('/').at(-1)!,
             isDirectory: false,
             isSymlink: false
@@ -199,6 +221,10 @@ function makeContext(runtime: Runtime): UiPluginContext {
         return {}
       }
       if (method === 'quirky.editor/open') {
+        if (runtime.deferOpen) {
+          runtime.signalOpen()
+          await runtime.openGate
+        }
         const relativePath = String(params.path)
         const kind: EditorKind = relativePath.endsWith('.md') ? 'markdown' : 'text'
         const mode: EditorMode = kind === 'markdown' ? 'rich' : 'source'
@@ -410,6 +436,50 @@ test.each(cases)('New File focuses the $kind editor when mountDuringOpen=$mountD
   expect(document.activeElement === editable).toBe(true)
   expect(document.activeElement !== backgroundEditable).toBe(true)
 })
+test.each([
+  { path: 'created-after-blur.txt', kind: 'text' as const },
+  { path: 'created-after-blur.md', kind: 'markdown' as const }
+])('blurring New File before Create preserves focus on the $kind editor', async ({ path, kind }) => {
+  const runtime = makeRuntime(true, false, true)
+  const context = makeContext(runtime)
+  const panel = await renderApp(runtime, context)
+  const newFile = panel.element.querySelector<HTMLButtonElement>('button[title="New File"]')
+  if (!newFile) throw new Error('Missing New File action')
+  await act(async () => newFile.click())
+  const input = await waitForUi(() => panel.element.querySelector<HTMLInputElement>('.qe-explorer-inline-row input'))
+  await focusWithPointer(input)
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, path)
+    input.dispatchEvent(new Event('input', { bubbles: true }))
+  })
+  const blurDelay = Promise.withResolvers<void>()
+  window.setTimeout(blurDelay.resolve, 210)
+  await blurDelay.promise
+
+  const create = Array.from(panel.element.querySelectorAll<HTMLButtonElement>('.qe-explorer-inline-row button'))
+    .find((button) => button.textContent?.trim() === 'Create')
+  if (!create) throw new Error('Missing Create action for New File')
+  await act(async () => {
+    input.blur()
+    create.click()
+  })
+  await runtime.openStarted
+  await act(async () => {
+    const createDelay = Promise.withResolvers<void>()
+    window.setTimeout(createDelay.resolve, 175)
+    await createDelay.promise
+    runtime.releaseOpen()
+  })
+
+  await waitForUi(() => panel.element.querySelector('.qe-explorer-inline-row') === null || false)
+  const targetDocument = await waitForUi(() => panel.element.querySelector<HTMLElement>('[data-testid="opened-document"]'))
+  const editable = await waitForUi(() => targetDocument.querySelector<HTMLElement>(editableSelector(kind)))
+  expect(document.activeElement === editable).toBe(true)
+  expect(runtime.createFileCalls).toBe(1)
+  expect(runtime.createdFileCount).toBe(1)
+  expect(runtime.createdPath).toBe(path)
+})
+
 test('focusing Explorer Find files cancels a pending new-file editor focus', async () => {
   const runtime = makeRuntime(false)
   const context = makeContext(runtime)
