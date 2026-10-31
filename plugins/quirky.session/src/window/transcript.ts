@@ -1,7 +1,7 @@
 import type { StructuredMessage } from '@quirky/protocol'
 
 function isNoise(message: StructuredMessage): boolean {
-  if (message.role === 'system') return message.text.startsWith('hook_')
+  if (message.role === 'system') return message.text.startsWith('hook_') || message.text.startsWith('system: hook_')
   if (message.role === 'assistant') return message.text.trim() === ''
   return false
 }
