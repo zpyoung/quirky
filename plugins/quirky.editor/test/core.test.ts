@@ -1031,6 +1031,10 @@ describe('editor core through the daemon API', () => {
     const openSchema = methods.get('quirky.editor/open')
     expect(openSchema?.params.properties?.matchLength?.type).toBe('integer')
     expect(openSchema?.result.properties?.openedTabId?.type).toBe('string')
+    const viewPatchSchema = methods.get('quirky.editor/view')?.params.properties?.patch
+    expect(viewPatchSchema?.properties?.markdownAnchor?.type).toBeUndefined()
+    expect(viewPatchSchema?.properties?.markdownAnchor?.description).toContain('512 UTF-8 bytes')
+    expect(viewPatchSchema?.properties?.matchLength?.description).toContain('null')
     const notebookSchema = methods.get('quirky.editor/notebook')?.params
     expect(notebookSchema?.properties?.browse?.type).toBe('boolean')
     const transferSchema = methods.get('quirky.editor/transfer')?.params
