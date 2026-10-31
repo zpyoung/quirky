@@ -26,6 +26,8 @@ SC2 Source: opening app.ts renders real CodeMirror content in the center view wi
 
 SC3 Documents: Markdown rich/source/preview formatting, search, links, front matter, templates, table of contents, review notes, detached preview and export remain usable. Both themes have readable content, toolbar, selected mode and errors. Example: switch rich to source to preview; content is preserved. Exported PDF HTML is not app chrome; preserve its self-contained printable rendering without local plugin CSS construction.
 
+The rich Markdown formatting toolbar wraps whole controls onto additional rows when the document pane narrows. Every command stays visible without horizontal scrolling, including Find, TOC, export and new-document actions. Short panes retain a usable editor viewport below the toolbar, reachable through the document's vertical scrollbar.
+
 SC4 Notebook and viewers: notebook cells/trust/kernel/output/error controls, CSV table/edit/search/selection/paging and image/PDF/audio/video/SVG viewers retain behavior and use shared chrome. Example: a CSV edit remains an existing guarded draft; a read-only paged preview cannot become editable. Preserve sanitized output and rendering isolation.
 
 SC5 Overlays: Quick Open, Markdown new/open, unsaved-close, Save As and external-change comparison use shared dialogs and controls; keyboard navigation, focus, busy states, cancellation, error retry and save/discard choices still work. Example: cancel closing a dirty document leaves its draft intact; saving acknowledges the existing daemon write before closing.

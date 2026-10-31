@@ -21,13 +21,6 @@
   padding: var(--ui-space-6) var(--ui-space-8);
 }
 
-.markdown-toolbar[aria-label='Markdown formatting'] {
-  flex-wrap: nowrap;
-  min-width: 0;
-  overflow-x: auto;
-  overflow-y: hidden;
-}
-
 .markdown-toolbar[aria-label='Markdown formatting'] > * {
   flex: 0 0 auto;
 }
@@ -244,7 +237,7 @@
 .markdown-rich-layout {
   display: flex;
   flex: 1 1 auto;
-  min-height: 0;
+  min-height: 8rem;
 }
 
 .markdown-rich-content {

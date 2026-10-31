@@ -13,13 +13,14 @@ const BROWSER_IMPORTS: Record<string, string> = {
   'react-dom': join(EDITOR_MODULES, 'react-dom/index.js'),
   'react-dom/client': join(EDITOR_MODULES, 'react-dom/client.js'),
   '@quirky/ui': join(ROOT, 'packages/ui/src/design-system/index.ts'),
+  '@codemirror/view': Bun.resolveSync('@codemirror/view', EDITOR_MODULES),
   '@quirky/protocol': join(ROOT, 'packages/protocol/src/index.ts')
 }
 const browserDependencyResolver: Bun.BunPlugin = {
   name: 'document-header-layout-browser-dependencies',
   setup(builder) {
     builder.onResolve(
-      { filter: /^(?:react|react\/jsx-runtime|react\/jsx-dev-runtime|react-dom|react-dom\/client|@quirky\/ui|@quirky\/protocol)$/ },
+      { filter: /^(?:react|react\/jsx-runtime|react\/jsx-dev-runtime|react-dom|react-dom\/client|@quirky\/ui|@quirky\/protocol|@codemirror\/view)$/ },
       ({ path }) => ({ path: BROWSER_IMPORTS[path] })
     )
   }
@@ -28,7 +29,8 @@ const STYLESHEETS = [
   'packages/ui/src/design-system/compatibility-tokens.css',
   'packages/ui/src/design-system/tokens.css',
   'packages/ui/src/design-system/components.css',
-  'packages/ui/src/design-system/editor-window.css'
+  'packages/ui/src/design-system/editor-window.css',
+  'packages/ui/src/design-system/editor-markdown.css'
 ]
 
 const executable = chromium.executablePath()
@@ -287,6 +289,65 @@ test.skipIf(!existsSync(executable))('keeps the Markdown document header in two 
       expect(control.left).toBeGreaterThanOrEqual(changesClosed.pane.left)
       expect(control.right).toBeLessThanOrEqual(changesClosed.pane.right)
     }
+  } finally {
+    await context.close()
+  }
+}, 60_000)
+
+test.skipIf(!existsSync(executable))('keeps every rich Markdown toolbar command visible without horizontal scrolling', async () => {
+  const context = await browser!.newContext({ viewport: { width: 1280, height: 720 } })
+  const page = await context.newPage()
+  try {
+    await page.setContent(pageMarkup())
+    for (const stylesheet of STYLESHEETS) {
+      await page.addStyleTag({ content: readFileSync(join(ROOT, stylesheet), 'utf8') })
+    }
+    await page.addScriptTag({ type: 'module', content: browserBundle })
+    const toolbar = page.getByRole('toolbar', { name: 'Markdown formatting' })
+    await toolbar.waitFor()
+
+    for (const width of [400, 624, 1000]) {
+      await page.locator('#document-pane').evaluate((pane, width) => {
+        pane.style.width = `${width}px`
+      }, width)
+      const layout = await toolbar.evaluate((element) => {
+        const bounds = element.getBoundingClientRect()
+        return {
+          left: bounds.left,
+          right: bounds.right,
+          top: bounds.top,
+          bottom: bounds.bottom,
+          clientWidth: element.clientWidth,
+          scrollWidth: element.scrollWidth,
+          controls: [...element.querySelectorAll('button')].map((button) => {
+            const rect = button.getBoundingClientRect()
+            return { left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom }
+          })
+        }
+      })
+      expect(layout.scrollWidth).toBeLessThanOrEqual(layout.clientWidth)
+      for (const control of layout.controls) {
+        expect(control.left).toBeGreaterThanOrEqual(layout.left)
+        expect(control.right).toBeLessThanOrEqual(layout.right)
+        expect(control.top).toBeGreaterThanOrEqual(layout.top)
+        expect(control.bottom).toBeLessThanOrEqual(layout.bottom)
+      }
+    }
+
+    await toolbar.getByRole('button', { name: 'Find', exact: true }).click()
+    await page.getByRole('textbox', { name: 'Find in rich editor', exact: true }).waitFor()
+
+    await page.locator('#document-pane').evaluate((pane) => {
+      pane.style.width = '400px'
+      pane.style.height = '200px'
+    })
+    const richViewport = await page.locator('.markdown-rich-content').evaluate((element) => ({
+      height: element.clientHeight,
+      lineHeight: parseFloat(getComputedStyle(element).lineHeight)
+    }))
+    expect(richViewport.height).toBeGreaterThanOrEqual(richViewport.lineHeight * 2)
+    await page.locator('.tiptap p').click()
+    expect(await page.locator('.tiptap').evaluate((element) => element.contains(document.activeElement))).toBe(true)
   } finally {
     await context.close()
   }
