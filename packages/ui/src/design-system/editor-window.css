@@ -40,7 +40,6 @@
 }
 
 .qe-document-path-group,
-.qe-document-actions,
 .qe-document-action-strip,
 .qe-mode-switch,
 .qe-zoom-controls {
@@ -52,7 +51,6 @@
 
 .qe-document-path-group {
   flex: 0 0 auto;
-  overflow: hidden;
   width: 100%;
 }
 
@@ -68,26 +66,20 @@
   white-space: nowrap;
 }
 
-.qe-document-actions {
-  flex: 0 0 auto;
-  flex-wrap: wrap;
-  justify-content: flex-start;
-  width: 100%;
-}
-
 .qe-document-action-strip {
-  flex: 1 1 auto;
+  flex: 0 0 auto;
   flex-wrap: wrap;
   max-width: 100%;
   min-width: 0;
+  width: 100%;
 }
 
-.qe-document-action-strip > *,
-.qe-document-actions > .qe-file-actions {
+.qe-document-action-strip > * {
   flex: 0 0 auto;
 }
 
-.qe-document-actions > .qe-file-actions {
+.qe-document-path-group > .qe-file-actions {
+  flex: 0 0 auto;
   margin-inline-start: auto;
 }
 
@@ -161,7 +153,7 @@
   z-index: 8;
 }
 
-.qe-file-actions-menu .ui-button,
+.qe-file-actions-menu > .ui-button,
 .qe-source-context-menu .ui-button {
   justify-content: flex-start;
   text-align: left;
@@ -705,6 +697,8 @@
   min-width: 0;
   overflow: hidden;
   width: 100%;
+  container-name: qe-explorer-panel;
+  container-type: size;
 }
 
 .qe-explorer-location {
@@ -952,5 +946,70 @@
   .qe-editor-minimap {
     flex-basis: 4rem;
     width: 4rem;
+  }
+}
+
+@container qe-explorer-panel (max-height: 150px) {
+  .qe-explorer-location:not(:has(.qe-explorer-worktree)) {
+    display: none;
+  }
+
+  .qe-explorer-location:has(.qe-explorer-worktree) {
+    padding: 0 var(--ui-space-4);
+  }
+
+  .qe-explorer-root {
+    display: none;
+  }
+
+  .qe-explorer select.qe-explorer-worktree,
+  .qe-explorer-query .ui-text-field__input {
+    padding: var(--ui-space-2) var(--ui-space-4);
+  }
+
+  .qe-explorer-search-mode {
+    gap: var(--ui-space-4);
+    padding: 0 var(--ui-space-4);
+  }
+
+  .qe-explorer-query {
+    gap: var(--ui-space-4);
+    padding: var(--ui-space-2) var(--ui-space-4);
+  }
+
+  .qe-explorer-query .ui-text-field__label {
+    clip: rect(0, 0, 0, 0);
+    clip-path: inset(50%);
+    height: var(--ui-border-width);
+    overflow: hidden;
+    padding: 0;
+    position: absolute;
+    white-space: nowrap;
+    width: var(--ui-border-width);
+  }
+
+  .qe-explorer-tree {
+    padding-block: 0;
+  }
+
+  .qe-explorer-footer {
+    display: none;
+  }
+}
+
+.tool-shell__panel .qe-explorer-more-actions {
+  position: static;
+}
+
+.tool-shell__panel .qe-explorer-more-actions .qe-file-actions-menu {
+  inset-block-start: var(--ui-row-double);
+  max-height: calc(100% - var(--ui-row-double) - var(--ui-space-4));
+}
+
+@container (max-width: 240px) {
+  .qe-explorer-more-actions .qe-file-actions-menu {
+    inset-inline-end: var(--ui-space-4);
+    inset-inline-start: var(--ui-space-4);
+    min-width: 0;
   }
 }

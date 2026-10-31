@@ -790,6 +790,7 @@
   border: var(--ui-border-width) solid var(--ui-border);
   border-radius: var(--ui-radius-window);
   color: var(--ui-text);
+  container-name: ui-tool-panel;
   container-type: inline-size;
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
@@ -808,7 +809,7 @@
   padding: var(--ui-space-4) var(--ui-space-8);
 }
 
-/* growth must eat the title and overflow into the left padding, because wrapping would move the button off the cursor */
+/* the title yields space as the expanding button grows, keeping the right-side controls under the cursor */
 .ui-tool-panel-frame__header:has(.ui-expanding-icon-button) {
   container: ui-tool-panel-header / inline-size;
   flex-shrink: 0;
@@ -824,7 +825,7 @@
 }
 
 .ui-tool-panel-frame__title {
-  flex: 0 0 auto;
+  flex: 0 1 auto;
   font-size: var(--ui-font-body);
   font-weight: 650;
   line-height: 1.3;
@@ -877,6 +878,19 @@
   gap: var(--ui-space-4);
   margin-inline-start: auto;
   min-width: 0;
+}
+
+@container ui-tool-panel (max-width: 220px) {
+  .ui-tool-panel-frame__header,
+  .ui-tool-panel-frame__header:has(.ui-expanding-icon-button) {
+    flex-wrap: wrap;
+    justify-content: flex-start;
+  }
+
+  .ui-tool-panel-frame__header > .ui-tool-panel-frame__title,
+  .ui-tool-panel-frame__header > .ui-tool-panel-frame__tabs {
+    flex: 1 1 100%;
+  }
 }
 
 @container ui-tool-panel-header (max-width: 72px) {

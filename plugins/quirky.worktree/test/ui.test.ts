@@ -1,5 +1,6 @@
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from 'bun:test'
+import { basename } from 'node:path'
 import type { AgentDisplayState, AgentStatusSummary, Ask, ProjectGroup, QuirkyEvent, Repo, Session, UiLayout, UiPluginContext, Worktree, WorkspaceOriginView } from '@quirky/protocol'
 import { RpcErrorCode } from '@quirky/protocol'
 import { DEFAULT_STOCK_OPTIONS, type CleanupCandidate, type CleanupRemovalResult, type StockWorktreeOptions, type WorktreeControl } from '../src/control-types'
@@ -337,6 +338,10 @@ function setup(layout: UiLayout = { worktree: null, view: null, panel: null, sid
         case 'quirky.worktree/set': {
           if (world.failSet) throw world.failSet
           const target = world.worktrees.find((w) => w.id === params.worktree)!
+          if (typeof params.displayName === 'string') {
+            target.displayName = params.displayName
+            target.name = params.displayName || (target.isMain ? target.branch ?? basename(target.path) : basename(target.path))
+          }
           return target
         }
         case 'quirky.repo/groupCollapse':
@@ -1427,6 +1432,79 @@ test('SC-42: Rename saves the display name and notes through set', async () => {
   await click(dialogButton('Save'))
   expect(h.callsTo('quirky.worktree/set')).toEqual([{ worktree: 'w2', displayName: 'Login fix', comment: 'some notes' }])
   expect(dialogTitles()).toEqual([])
+})
+
+test('Rename from a worktree Actions button restores focus to its renamed row after repeated saves', async () => {
+  const h = setup()
+  await h.mountInto(host)
+
+  const renameFromActions = async (currentName: string, nextName: string) => {
+    await click(actionButton(rowOf(currentName, 'api'))!)
+    await click(itemNamed('Rename…'))
+    await typeInto(dialogField('Display Name')!, nextName)
+    await click(dialogButton('Save'))
+
+    expect(document.activeElement instanceof HTMLButtonElement).toBe(true)
+    expect(document.activeElement?.getAttribute('aria-label')).toMatch(/^Actions for /)
+    await h.emit({ type: 'quirky.worktree/changed', data: { repoId: 'r1' } })
+    const renamedActions = actionButton(rowOf(nextName, 'api'))!
+    expect(renamedActions.isConnected).toBe(true)
+    expect(document.activeElement).toBe(renamedActions)
+  }
+
+  await renameFromActions('fix-login', 'Login fix')
+  await renameFromActions('Login fix', 'Polished login')
+  expect(h.callsTo('quirky.worktree/set')).toEqual([
+    { worktree: 'w2', displayName: 'Login fix', comment: '' },
+    { worktree: 'w2', displayName: 'Polished login', comment: '' }
+  ])
+})
+
+test.each(['Cancel', 'Escape'])('Rename dismissed with %s restores focus to the row Actions button', async (dismissal) => {
+  const h = setup()
+  await h.mountInto(host)
+  const row = rowOf('fix-login', 'api')
+  const actions = actionButton(row)!
+  await click(actions)
+  await click(itemNamed('Rename…'))
+
+  if (dismissal === 'Cancel') await click(dialogButton('Cancel'))
+  else await press('Escape')
+
+  expect(document.querySelector('[role="dialog"]')).toBeNull()
+  expect(actions.isConnected).toBe(true)
+  expect(document.activeElement).toBe(actions)
+})
+
+test('Rename opened from the row context menu restores focus to its Actions button on dismissal', async () => {
+  const h = setup()
+  await h.mountInto(host)
+  const row = rowOf('fix-login', 'api')
+  await contextMenu(openButton(row)!)
+  await click(itemNamed('Rename…'))
+  await press('Escape')
+
+  const actions = actionButton(row)!
+  expect(actions.isConnected).toBe(true)
+  expect(document.activeElement).toBe(actions)
+})
+
+test('Canceling Delete restores focus to the row Actions button after autofocus starts on Cancel', async () => {
+  const h = setup()
+  await h.mountInto(host)
+  const row = rowOf('fix-login', 'api')
+  const actions = actionButton(row)!
+  await click(actions)
+  await click(itemNamed('Delete'))
+
+  const cancel = dialogButton('Cancel')
+  expect(document.activeElement).toBe(cancel)
+  await click(cancel)
+
+  expect(document.querySelector('[role="dialog"]')).toBeNull()
+  expect(actions.isConnected).toBe(true)
+  expect(document.activeElement).toBe(actions)
+  expect(h.callsTo('quirky.worktree/remove')).toEqual([])
 })
 
 test('SC-41: Set Parent offers the other workspaces, not the workspace or its descendants', async () => {
