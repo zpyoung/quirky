@@ -676,7 +676,10 @@ export function ExplorerPanel({ context, report }: { context: UiPluginContext; r
 
   const deleteSelected = async (paths = selectedPaths) => {
     if (!worktree || paths.length === 0) return
-    const confirmed = await context.confirm({ title: `Delete ${paths.length} item(s)?`, body: 'Dirty files are saved before deletion. Undo is available for supported file operations.' })
+    const confirmed = await context.confirm({
+      title: paths.length === 1 ? `Delete ${basename(paths[0]!)}?` : `Delete ${paths.length} items?`,
+      body: 'Dirty files are saved before deletion. Undo is available for supported file operations.'
+    })
     if (!confirmed) return
     setItemBusy(true)
     try {
