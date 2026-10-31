@@ -2,6 +2,8 @@
 
 Each runtime owns its hook installation, provider event normalization, status rows, and activity feed. Remote hooks are not replayed into a second local status store.
 
+An idle terminal title displays Idle until the session has shown work or attention. Once work has been observed, a return to an idle title displays Done. Hooks and program-status reports retain their existing precedence over titles.
+
 `getOnHost` and `hooksStatusOnHost` read from local, an exact saved paired-peer ID, or `runtime:<saved owner selector>`. Paired-peer reads retain the existing authenticated, fingerprint- and incarnation-fenced federation path. Owner-runtime reads and hook setup/removal use `quirky.cli/runtimeCall` with the exact saved owner target; returned results keep the target's exact runtime identity. A failed or phone-scoped owner call never falls back to local state or writes.
 
 CLI examples:

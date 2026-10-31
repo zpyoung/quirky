@@ -34,7 +34,7 @@ const isFallbackRow = (row: AgentRow) => row.lastHookAt === null
 /**
  * What a terminal title adds for a session: a title-sourced row, or `prev` itself when the title
  * changes nothing. Hooks win while they are fresh, and so does a program's own OSC 7501 row. Title
- * evidence never counts as a hook and never notifies.
+ * evidence never counts as a hook and never notifies. An idle title alone is not a completed turn.
  */
 export function titleEvidence(prev: AgentRow | null, status: TitleStatus, ev: TitleEv): AgentRow {
   if (prev && (hasFreshHooks(prev, ev.at) || (isFallbackRow(prev) && prev.source === 'program-status'))) return prev
@@ -47,6 +47,7 @@ export function titleEvidence(prev: AgentRow | null, status: TitleStatus, ev: Ti
   const sameState = prev?.source === 'title' && prev.state === state
   const since = sameState ? prev.stateStartedAt : ev.at
   const because = sameState && prev.because ? prev.because : becauseOf('title', `title "${title}" → ${status}`, ev.at)
+  if (state === 'done' && (!prev || (prev.sessionBoundary === true && prev.prompt === ''))) row.sessionBoundary = true
   return { ...row, state, lead: { ...row.lead, state, stateStartedAt: since }, stateStartedAt: since, source: 'title', because }
 }
 
