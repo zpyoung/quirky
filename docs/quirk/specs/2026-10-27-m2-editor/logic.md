@@ -82,6 +82,7 @@ Before: file inventory with recent paths and similar names. Cmd+P shows Go to fi
 ### SC-11: Contents search
 Before: files contain literal/regex/whole-word matches. Names filters paths; Contents exposes case, whole-word, regex and include/exclude globs (including commas inside braces). Search produces grouped counts and one-line previews; clicking a result opens a durable, unpinned normal tab, preserves existing explicit pins, and reveals/selects the exact match. New query cancels older work and ignores stale results/owner changes. Cap 2,000 matches/15 seconds with visible truncation; bound 8 KiB inputs and 5 MiB files; invalid regex is a visible error. Find in Folder seeds an escaped include glob. Copy line path is scriptable.
 The Explorer footer's Search in Files action focuses the Contents query field so typing can start immediately.
+Switching between Contents and Names preserves the query. If the Names filter matches no paths, show a status naming the query and a Clear filter action. Clearing restores the tree, including files created while filtered, and focuses Find files.
 Result navigation focuses Source at the hit's line/column and scrolls offscreen matches into view, including in an already-open tab. Repeating a hit navigates again; returning without a new hit restores the later cursor. A delayed acknowledgment of an earlier hit cannot discard the newest requested location.
 
 ### SC-12: Markdown modes and byte preservation

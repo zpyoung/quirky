@@ -1060,6 +1060,12 @@ export function ExplorerPanel({ context, report }: { context: UiPluginContext; r
             </div>
           ))}
           </div>
+          {query.trim() && filterResult?.entries.length === 0 && (
+            <div className="qe-explorer-filter-empty">
+              <p className="muted" role="status">No files match “{query}”. Clear the filter to show all files.</p>
+              <Button onClick={() => { setQuery(''); setFilterResult(null); searchInputRef.current?.focus() }}>Clear filter</Button>
+            </div>
+          )}
           {newItemKind && (
             <div className="qe-explorer-inline-row">
               <TextField
