@@ -14,6 +14,9 @@ independently clickable. Controls, menus, dialogs and both appearances use the s
 Project Actions menus take keyboard focus when opened and close on Escape, including when the click
 also activates the Worktrees panel.
 
+Closing Rename or the Delete Workspace confirmation returns keyboard focus to that worktree's
+Actions button while its row remains visible, including after a display-name change.
+
 Options persist in the worktree plugin's SQLite store; no new global setting IDs are used. Defaults are project grouping, recent sorting, manual project order, detailed cards, all available card properties, sleeping worktrees shown, external worktrees hidden globally, and archived worktrees hidden.
 
 - `groupBy`: `project`, `status`, `pr`, or `none`. PR grouping uses the worktree's recorded linked PR; rows without one use a “No pull request” lane. Parent and descendants stay together.

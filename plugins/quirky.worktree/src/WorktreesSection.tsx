@@ -128,7 +128,9 @@ export function WorktreesSection({ context, report, requests, addProjectRequests
   const [layout, setLayout] = useState(() => context.getLayout())
   const [optionsOpen, setOptionsOpen] = useState(false)
   const optionsButton = useRef<HTMLButtonElement>(null)
+  const sectionRoot = useRef<HTMLDivElement>(null)
   const [dialog, setDialog] = useState<DialogState | null>(null)
+  const previousDialog = useRef<DialogState | null>(null)
   const [pending, setPending] = useState<PendingCreate[]>([])
   const [trust, setTrust] = useState<TrustPrompt | null>(null)
   const [fallbacks, setFallbacks] = useState<Fallback[]>([])
@@ -151,6 +153,24 @@ export function WorktreesSection({ context, report, requests, addProjectRequests
   const [boardOpen, setBoardOpen] = useState(false)
   const [statusEditorOpen, setStatusEditorOpen] = useState(false)
 
+  useEffect(() => {
+    const previous = previousDialog.current
+    previousDialog.current = dialog
+    if (
+      dialog !== null ||
+      (previous?.kind !== 'update' && previous?.kind !== 'delete')
+    ) return
+
+    let row: HTMLElement | null = null
+    for (const item of sectionRoot.current?.querySelectorAll<HTMLElement>('[data-worktree-id]') ?? []) {
+      if (item.dataset.worktreeId === previous.worktreeId) {
+        row = item
+        break
+      }
+    }
+    const actions = row?.querySelector<HTMLButtonElement>('.worktree-menu')
+    if (actions?.isConnected) actions.focus()
+  }, [dialog])
   useEffect(() => {
     setLayout(context.getLayout())
     return context.onLayout(setLayout)
@@ -527,7 +547,7 @@ export function WorktreesSection({ context, report, requests, addProjectRequests
   }
 
   return (
-    <div className="ui-stack ui-panel-content">
+    <div ref={sectionRoot} className="ui-stack ui-panel-content">
       <ToolPanelActions>
         <>
           {!(loaded && repos.length === 0) && (
