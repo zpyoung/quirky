@@ -10,6 +10,8 @@ the header's options popover; the latter includes the board and status editor. P
 Rows show name plus activity, with selected branch/note/status metadata on the secondary line
 and full text available on hover. Attention counts and contextual actions remain independently
 clickable. Controls, menus, dialogs and both appearances use the shared graphite system.
+Project Actions menus take keyboard focus when opened and close on Escape, including when the click
+also activates the Worktrees panel.
 
 Options persist in the worktree plugin's SQLite store; no new global setting IDs are used. Defaults are project grouping, recent sorting, manual project order, detailed cards, all available card properties, sleeping worktrees shown, external worktrees hidden globally, and archived worktrees hidden.
 

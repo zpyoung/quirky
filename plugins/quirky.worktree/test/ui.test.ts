@@ -884,6 +884,26 @@ test('project menu opens its ledger and moves projects through the shared action
   expect(h.callsTo('quirky.repo/groupAdd')).toEqual([{ group: 'g1', repo: 'r1' }])
 })
 
+test('project Actions menu takes focus and closes on Escape from button and heading', async () => {
+  const h = setup()
+  await h.mountInto(host)
+
+  const actions = buttonNamed(projectSection('api'), 'Actions for api')!
+  actions.focus()
+  expect(document.activeElement).toBe(actions)
+  await click(actions)
+  expect(menu()).not.toBeNull()
+  expect(document.activeElement).toBe(menu())
+  await press('Escape')
+  expect(menu()).toBeNull()
+
+  await contextMenu(projectSection('api').querySelector('.project-header')!)
+  expect(menu()).not.toBeNull()
+  expect(document.activeElement).toBe(menu())
+  await press('Escape')
+  expect(menu()).toBeNull()
+})
+
 test('SC-43: the card menu opens and closes on Escape and outside click', async () => {
   const h = setup()
   await h.mountInto(host)
