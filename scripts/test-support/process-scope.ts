@@ -55,6 +55,8 @@ type ScopeConfig = {
   owner: ProcessIdentity
   protectedPids: number[]
   createdAt: number
+  /** How far ps start times run ahead of this clock. */
+  processClockSkewMs: number
   initialFiles: Record<(typeof CLAIM_FILES)[number], FileFingerprint | null>
   removeHomeOnOwnerDeath: boolean
 }
@@ -103,12 +105,28 @@ function parseProcessTable(text: string): ProcessSnapshot {
   return rows
 }
 
+function processTableResult() {
+  return Bun.spawnSync(['ps', '-A', '-o', 'pid=,ppid=,pgid=,lstart=,command='])
+}
+
 function processSnapshot(): ProcessSnapshot {
   try {
-    const result = Bun.spawnSync(['ps', '-A', '-o', 'pid=,ppid=,pgid=,lstart=,command='])
+    const result = processTableResult()
     return result.exitCode === 0 ? parseProcessTable(result.stdout.toString()) : new Map()
   } catch {
     return new Map()
+  }
+}
+
+// lstart comes from the kernel's boot time, which can sit seconds off the wall clock on a VM; ps's own row calibrates it
+function measureProcessClockSkew(before: number): number {
+  try {
+    const result = processTableResult()
+    const started = parseProcessTable(result.stdout.toString()).get(result.pid)?.started
+    const time = started === undefined ? NaN : Date.parse(started)
+    return Number.isFinite(time) ? time - before : 0
+  } catch {
+    return 0
   }
 }
 
@@ -117,9 +135,9 @@ function sameProcess(left: ProcessIdentity | undefined, right: ProcessIdentity |
     (left.command === right.command || (left.ppid === right.ppid && left.pgid === right.pgid))
 }
 
-function processStartTime(identity: ProcessIdentity): number | undefined {
+function processStartTime(identity: ProcessIdentity, config: ScopeConfig): number | undefined {
   const time = Date.parse(identity.started)
-  return Number.isFinite(time) ? time : undefined
+  return Number.isFinite(time) ? time - config.processClockSkewMs : undefined
 }
 
 function readJson(path: string): unknown {
@@ -247,7 +265,7 @@ function registerFreshClaims(config: ScopeConfig, snapshot: ProcessSnapshot): vo
     if (!pid || config.protectedPids.includes(pid)) continue
     const identity = snapshot.get(pid)
     if (!identity) continue
-    const started = processStartTime(identity)
+    const started = processStartTime(identity, config)
     // The pidfile must have been written after registration, and the process must already have
     // existed when its own PID was written. The small tolerance accounts for `ps lstart` seconds.
     if (started === undefined || started < config.createdAt - 1_000 || started > changed.mtimeMs + 1_000) continue
@@ -289,7 +307,7 @@ function scopeEnvironmentDescendants(config: ScopeConfig, snapshot: ProcessSnaps
   for (const pid of descendants) {
     if (config.protectedPids.includes(pid)) continue
     const identity = snapshot.get(pid)
-    if (!identity || (processStartTime(identity) ?? 0) < config.createdAt - 1_000) continue
+    if (!identity || (processStartTime(identity, config) ?? 0) < config.createdAt - 1_000) continue
     if (hasScopeEnvironment(identity, config, token)) writeProcessRecord(config, identity, true, identity.pgid === identity.pid)
   }
 }
@@ -446,6 +464,7 @@ export function createProcessScope(home?: string): ProcessScope {
   mkdirSync(scopeHome, { recursive: true, mode: 0o700 })
 
   const createdAt = Date.now()
+  const processClockSkewMs = measureProcessClockSkew(createdAt)
   const ownerSnapshot = processSnapshot()
   const owner = identityFor(process.pid, ownerSnapshot)
   if (!owner) throw new Error(`could not identify process scope owner ${process.pid}`)
@@ -464,6 +483,7 @@ export function createProcessScope(home?: string): ProcessScope {
     owner,
     protectedPids,
     createdAt,
+    processClockSkewMs,
     initialFiles: initialFingerprints(scopeHome),
     removeHomeOnOwnerDeath: allocatedHome
   }
