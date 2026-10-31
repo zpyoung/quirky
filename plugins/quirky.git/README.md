@@ -41,6 +41,8 @@ For Markdown files, **Preview** shows only the rendered modified content and hid
 
 Combined-diff navigation and Git open commands use the same hosted-tab route. Opening a diff selects its workspace view if another top-level view was showing. The `open-changes` and `open-commit` commands await the hosted-tab operation before replying.
 
+Combined diffs open at the first file and keep their scroll position as sections load. Single-file diffs still jump to the first change; change-navigation commands remain available in both views.
+
 Plugin integrations split a tab through `quirky.terminal/moveTab` with `tab`, `split`, `of`, and the acknowledged `revision`; the tab determines its workspace, so this method does not accept a `workspace` field.
 
 Explicit standalone diffs opened through `ui.view.open` publish a top-level slot report. Embedded hosted views intentionally have no separate slot report; their tab identity and placement are available through `quirky.terminal/workspace`.

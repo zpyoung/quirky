@@ -181,6 +181,7 @@ function TextPane({ context, worktree, path, diff, editable, settings, variant, 
       showWhitespace: settings.showWhitespace,
       collapseUnchanged: settings.collapseUnchanged,
       editable,
+      scrollToFirst: variant === 'file',
       onSave: () => void actions.current.save(),
       onDocChange: () => {
         dirtyRef.current = true
@@ -224,7 +225,7 @@ function TextPane({ context, worktree, path, diff, editable, settings, variant, 
       mergeRef.current = null
       handle.destroy()
     }
-  }, [showEditor, editable, withNotes, path, settings.sideBySide, settings.wrap, settings.showWhitespace, settings.collapseUnchanged])
+  }, [showEditor, editable, variant, withNotes, path, settings.sideBySide, settings.wrap, settings.showWhitespace, settings.collapseUnchanged])
 
   useEffect(() => {
     mergeRef.current?.setNotes(model)
