@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, setSystemTime, test } from 'bun:test'
 import { spawnSync } from 'node:child_process'
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createHash } from 'node:crypto'
@@ -542,6 +542,103 @@ describe('editor core through the daemon API', () => {
       rmSync(sourceDir, { recursive: true, force: true })
     }
   })
+
+  test('file creation and imports use umask-derived permissions across create, duplicate, and redo', async () => {
+    const t = await boot()
+    const originalUmask = process.umask()
+    let client: QuirkyClient | undefined
+    let sourceDir: string | undefined
+    try {
+      client = await connectUnix(t)
+      sourceDir = mkdtempSync(join(tmpdir(), 'quirky-editor-permissions-'))
+      const mode = (path: string) => statSync(join(t.root, path)).mode & 0o777
+      for (const { mask, expected } of [
+        { mask: 0o022, expected: 0o644 },
+        { mask: 0o077, expected: 0o600 }
+      ]) {
+        const label = mask.toString(8)
+        process.umask(mask)
+        const createdPath = `created-${label}.txt`
+        await t.call('quirky.editor/mutate', {
+          worktree: t.worktreeId,
+          action: 'createFile',
+          path: createdPath,
+          content: 'created\n'
+        })
+        expect(mode(createdPath)).toBe(expected)
+        await t.call('quirky.editor/history', { worktree: t.worktreeId, action: 'undo' })
+        expect(existsSync(join(t.root, createdPath))).toBe(false)
+        await t.call('quirky.editor/history', { worktree: t.worktreeId, action: 'redo' })
+        expect(mode(createdPath)).toBe(expected)
+
+        process.umask(0o022)
+        const duplicateSource = `duplicate-${label}.txt`
+        writeFileSync(join(t.root, duplicateSource), 'duplicate source\n')
+        process.umask(mask)
+        const duplicate = await t.call<{ path: string }>('quirky.editor/mutate', {
+          worktree: t.worktreeId,
+          action: 'duplicate',
+          path: duplicateSource
+        })
+        expect(mode(duplicate.path)).toBe(0o644)
+        await t.call('quirky.editor/history', { worktree: t.worktreeId, action: 'undo' })
+        expect(existsSync(join(t.root, duplicate.path))).toBe(false)
+        await t.call('quirky.editor/history', { worktree: t.worktreeId, action: 'redo' })
+        expect(mode(duplicate.path)).toBe(expected)
+
+        const browserPath = `browser-${label}.txt`
+        const browser = await t.call<{ paths: string[] }>('quirky.editor/mutate', {
+          worktree: t.worktreeId,
+          action: 'import',
+          path: '.',
+          files: [{ name: browserPath, data: Buffer.from('browser import\n').toString('base64') }]
+        })
+        expect(browser.paths).toEqual([browserPath])
+        expect(mode(browserPath)).toBe(expected)
+
+        const externalPath = `external-${label}.txt`
+        writeFileSync(join(sourceDir, externalPath), 'external import\n')
+        const external = await t.call<{ paths: string[] }>('quirky.editor/mutate', {
+          worktree: t.worktreeId,
+          action: 'import',
+          path: '.',
+          sourcePaths: [join(sourceDir, externalPath)]
+        })
+        expect(external.paths).toEqual([externalPath])
+        expect(mode(externalPath)).toBe(expected)
+
+        const chunkedPath = `chunked-${label}.txt`
+        const bytes = Buffer.alloc(65_537, 0x61)
+        const transfer = await client.callAny('quirky.editor/transfer', {
+          action: 'begin',
+          kind: 'import',
+          worktree: t.worktreeId,
+          path: '.',
+          name: chunkedPath,
+          totalBytes: bytes.byteLength
+        }) as { transferId: string; maxChunkBytes: number }
+        for (let offset = 0; offset < bytes.byteLength; offset += transfer.maxChunkBytes) {
+          const chunk = bytes.subarray(offset, Math.min(bytes.byteLength, offset + transfer.maxChunkBytes))
+          await client.callAny('quirky.editor/transfer', {
+            action: 'chunk',
+            transferId: transfer.transferId,
+            offset,
+            data: chunk.toString('base64')
+          })
+        }
+        const imported = await client.callAny('quirky.editor/transfer', {
+          action: 'commit',
+          transferId: transfer.transferId
+        }) as { paths: string[] }
+        expect(imported.paths).toEqual([chunkedPath])
+        expect(mode(chunkedPath)).toBe(expected)
+      }
+    } finally {
+      process.umask(originalUmask)
+      client?.close()
+      if (sourceDir !== undefined) rmSync(sourceDir, { recursive: true, force: true })
+    }
+  }, 30_000)
 
   test('SC-10: quick-open ranks recent paths, parses line targets, authorizes absolute paths and bounds queries/results', async () => {
     const t = await boot()

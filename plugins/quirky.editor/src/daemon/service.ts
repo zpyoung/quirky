@@ -1325,7 +1325,7 @@ export class EditorDaemon {
     const keys = await this.fileKeys(destinationPath)
     const target = await this.fileQueue.run(keys, async () => {
       const target = await this.importNameTarget(worktree.id, destinationPath, name)
-      await writeFile(target.path, bytes, { flag: 'wx', mode: 0o600 })
+      await writeFile(target.path, bytes, { flag: 'wx' })
       return target
     })
     this.inventory.invalidate(worktree.path)
@@ -1991,7 +1991,7 @@ export class EditorDaemon {
     const keys = await this.fileKeys(target.path)
     await this.fileQueue.run(keys, async () => {
       await mkdir(dirname(target.path), { recursive: true })
-      await writeFile(target.path, content, { flag: 'wx', mode: 0o600 })
+      await writeFile(target.path, content, { flag: 'wx' })
     })
     if (contentBytes <= 5 * 1024 * 1024) {
       await this.pushHistory(worktree.id, {
@@ -2157,7 +2157,7 @@ export class EditorDaemon {
         }
         const target = await this.fileQueue.run(keys, async () => {
           const target = await this.importNameTarget(worktree.id, destination.path, file.name)
-          await writeFile(target.path, bytes, { flag: 'wx', mode: 0o600 })
+          await writeFile(target.path, bytes, { flag: 'wx' })
           budget.created.push(target.path)
           return target
         })
@@ -2207,7 +2207,7 @@ export class EditorDaemon {
       await handle.close()
     }
     if (budget.bytes + data.byteLength > MAX_UPLOAD_TOTAL_BYTES) throw this.context.error('invalid-params', `Import exceeds the ${MAX_UPLOAD_TOTAL_BYTES}-byte request limit.`)
-    await writeFile(destination, data, { flag: 'wx', mode: 0o600 })
+    await writeFile(destination, data, { flag: 'wx' })
     budget.created.push(destination)
     budget.files++
     budget.bytes += data.byteLength
@@ -2378,7 +2378,7 @@ export class EditorDaemon {
     if (await this.exists(target.path)) throw this.context.error('conflict', `Cannot redo create because ${relativePath} already exists.`)
     await mkdir(dirname(target.path), { recursive: true })
     if (operation.directory) await mkdir(target.path)
-    else if (operation.content !== null) await writeFile(target.path, operation.content, { flag: 'wx', mode: 0o600 })
+    else if (operation.content !== null) await writeFile(target.path, operation.content, { flag: 'wx' })
     else throw this.context.error('conflict', `Cannot redo large create ${relativePath}; its original bytes were not retained.`)
     return operation
   }
