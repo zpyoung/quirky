@@ -28,6 +28,8 @@ SC3 Documents: Markdown rich/source/preview formatting, search, links, front mat
 
 The rich Markdown formatting toolbar wraps whole controls onto additional rows when the document pane narrows. Every command stays visible without horizontal scrolling, including Find, TOC, export and new-document actions. Short panes retain a usable editor viewport below the toolbar, reachable through the document's vertical scrollbar.
 
+The Markdown preview toolbar divider spans the content pane. Its label and buttons share the same comfortable spacing; narrow panes wrap controls without clipping them.
+
 SC4 Notebook and viewers: notebook cells/trust/kernel/output/error controls, CSV table/edit/search/selection/paging and image/PDF/audio/video/SVG viewers retain behavior and use shared chrome. Example: a CSV edit remains an existing guarded draft; a read-only paged preview cannot become editable. Preserve sanitized output and rendering isolation.
 
 SC5 Overlays: Quick Open, Markdown new/open, unsaved-close, Save As and external-change comparison use shared dialogs and controls; keyboard navigation, focus, busy states, cancellation, error retry and save/discard choices still work. Example: cancel closing a dirty document leaves its draft intact; saving acknowledges the existing daemon write before closing.

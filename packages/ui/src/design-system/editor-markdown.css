@@ -11,6 +11,10 @@
   min-width: 0;
 }
 
+.markdown-surface--preview {
+  flex: 1 1 auto;
+}
+
 .markdown-toolbar {
   align-items: center;
   border-bottom: var(--ui-border-width) solid var(--ui-border);
@@ -19,6 +23,10 @@
   flex-wrap: wrap;
   gap: var(--ui-space-4);
   padding: var(--ui-space-6) var(--ui-space-8);
+}
+
+.markdown-surface--preview > .markdown-toolbar:first-child {
+  gap: var(--ui-space-8);
 }
 
 .markdown-toolbar[aria-label='Markdown formatting'] > * {
