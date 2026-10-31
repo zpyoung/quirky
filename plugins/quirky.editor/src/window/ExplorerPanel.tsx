@@ -449,22 +449,16 @@ export function ExplorerPanel({ context, report }: { context: UiPluginContext; r
   const openFile = async (path: string, options: { preview?: boolean; pinned?: boolean; line?: number; column?: number; matchLength?: number } = {}) => {
     if (!worktree) return
     try {
-      const opened = await context.call('quirky.editor/open', {
+      await context.call('quirky.editor/open', {
         worktree,
         path,
         focus: true,
         preview: options.preview ?? settings.previewTabs,
         ...(options.pinned === undefined ? {} : { pinned: options.pinned }),
         ...(options.line === undefined ? {} : { line: options.line }),
-        ...(options.column === undefined ? {} : { column: options.column })
-      }) as { id: string }
-      if (options.line !== undefined) {
-        await context.call('quirky.editor/view', {
-          bufferId: opened.id,
-          action: 'reveal',
-          patch: { line: options.line, column: options.column ?? 1, matchLength: options.matchLength ?? 0 }
-        })
-      }
+        ...(options.column === undefined ? {} : { column: options.column }),
+        ...(options.matchLength === undefined ? {} : { matchLength: options.matchLength })
+      })
       setError(null)
     } catch (reason) {
       setError(messageOf(reason))
