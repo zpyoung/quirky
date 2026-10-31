@@ -1,11 +1,16 @@
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
 import { afterAll, afterEach, beforeAll, expect, test } from 'bun:test'
 import type { UiPluginContext } from '@quirky/protocol'
+import { createElement } from 'react'
+import { createRoot } from 'react-dom/client'
+import { ToolPanelFrame } from '@quirky/ui'
+import { initialUiState } from '../src/state'
 
 type Mount = (element: HTMLElement, props: { report?: (state: unknown) => void }) => () => void
 let act: (callback: () => unknown) => Promise<void>
 let activate: (context: UiPluginContext) => void
 let cleanup: (() => void) | null = null
+let cleanupHost: (() => void) | null = null
 
 beforeAll(async () => {
   GlobalRegistrator.register()
@@ -16,6 +21,8 @@ beforeAll(async () => {
 
 afterEach(async () => {
   await act(async () => cleanup?.())
+  await act(async () => cleanupHost?.())
+  cleanupHost = null
   cleanup = null
   document.body.innerHTML = ''
 })
@@ -24,13 +31,12 @@ afterAll(async () => {
   await GlobalRegistrator.unregister()
 })
 
-test('Automations keeps Close Automations in the frame header and draws one title', async () => {
+test('Automations root leaves panel dismissal to the host Minimize control', async () => {
   const provided = new Map<string, unknown>()
-  const calls: string[] = []
   const context = {
     provide: (id: string, implementation: unknown) => void provided.set(id, implementation),
     async call(method: string) {
-      calls.push(method)
+      if (method === 'quirky.automations/uiState') return initialUiState()
       throw new Error('offline')
     },
     subscribe: () => () => {},
@@ -38,16 +44,23 @@ test('Automations keeps Close Automations in the frame header and draws one titl
     toast() {}
   } as unknown as UiPluginContext
   activate(context)
-  const element = document.createElement('div')
-  document.body.append(element)
+  const container = document.createElement('div')
+  document.body.append(container)
+  const host = createRoot(container)
+  cleanupHost = () => host.unmount()
+  await act(async () => host.render(createElement(ToolPanelFrame, {
+    title: 'Automations',
+    onMinimize() {},
+    children: createElement('div', { id: 'automations-mount' })
+  })))
+  const element = container.querySelector<HTMLElement>('#automations-mount')!
   await act(async () => {
     cleanup = (provided.get('view:quirky.automations/automations') as Mount)(element, {})
   })
-  await act(async () => new Promise((resolve) => setTimeout(resolve, 20)))
 
-  expect([...element.querySelectorAll('h2')].filter((heading) => heading.textContent === 'Automations')).toHaveLength(1)
-  const close = element.querySelector<HTMLButtonElement>('button[aria-label="Close Automations"]')
-  expect(close?.closest('.ui-tool-panel-frame__header .ui-tool-panel-frame__actions')).not.toBeNull()
-  await act(async () => close!.click())
-  expect(calls).toContain('quirky.automations/close')
+  expect([...container.querySelectorAll('h2')].filter((heading) => heading.textContent === 'Automations')).toHaveLength(1)
+  const header = container.querySelector('.ui-tool-panel-frame__header')!
+  expect(header.querySelector('button[aria-label="Close Automations"]')).toBeNull()
+  expect(header.querySelector('button[aria-label="Minimize Automations"]')).not.toBeNull()
+  expect(header.querySelector('button[title="Return to previous view"]')).toBeNull()
 })

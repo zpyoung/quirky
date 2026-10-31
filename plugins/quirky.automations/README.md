@@ -41,9 +41,9 @@ Run history retains the 100 newest final rows per automation and preserves every
 
 ## UI and retained editor
 
-Open **Automations** from its tool stripe, Settings, or `quirky automations open`. Its default slot is left-bottom and follows the host's saved placement. When the tool is already visible, navigation and opening the editor reuse it without replacing the center view or mounting a second editor. Closing that tool closes its actual slot; standalone center-view use still returns to the preceding view. The page retains search, host/status/agent filters, sort, selection, and editor draft in the daemon session. Hiding the sidebar shortcut does not remove the Settings entry.
+Open **Automations** from its tool stripe, Settings, or `quirky automations open`. Its default slot is left-bottom and follows the host's saved placement. When the tool is already visible, navigation and opening the editor reuse it without replacing the center view or mounting a second editor. The host's **Minimize Automations** control dismisses the tool panel; the Automations header has no separate Close action. Standalone center views use the host's **Close active view** control. The `automations close` command closes the tool's actual slot or, in standalone use, returns to the preceding view. The page retains search, host/status/agent filters, sort, selection, and editor draft in the daemon session. Hiding the sidebar shortcut does not remove the Settings entry.
 
-Reopening standalone Automations from its settings reuses the existing Automations tab. A subsequent Close returns to the original preceding view, not the settings detour.
+Reopening standalone Automations from its settings reuses the existing Automations tab. A subsequent `automations close` returns to the original preceding view, not the settings detour.
 
 **New Automation** opens a two-pane editor with four templates, project/workspace selection, structured agent model/options, preset or custom-cron schedule, timezone, grace, precheck, and setup choice. Reuse selects an existing worktree; New run selects a fresh session. Raw agent arguments are disabled because structured sessions reject them. Setup remains skipped unless explicitly selected and trusted; an uninspectable branch or hook fails closed to skip.
 
