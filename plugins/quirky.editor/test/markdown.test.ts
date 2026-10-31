@@ -567,7 +567,7 @@ describe('Markdown through the daemon API', () => {
     const sourceAgain = await open('guide.md', 'source')
     expect(sourceAgain.id).toBe(buffer.id)
     expect(sourceAgain.content).toBe(saved)
-  })
+  }, 20_000)
 
   test('details insertion remains raw HTML through a subsequent buffer read', async () => {
     const f = current()

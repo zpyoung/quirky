@@ -27,7 +27,7 @@ test('SC-47: Committed on Branch lists what the branch changed since its base, w
   expect(qa('[data-row-name]', section).map(text)).toEqual(['math.ts', 'util.ts'])
   expect(text(q('[aria-label="Lines changed on this branch"]'))).toBe('+52 −3')
   expect(text(q('[data-base-ref]'))).toBe('origin/main')
-  expect(text(q('[aria-label="Git status added"]', rowContainerOf('util.ts', 'branch')!))).toBe('A')
+  expect(text(q('.ui-badge[aria-label="Git status added"]', rowContainerOf('util.ts', 'branch')!))).toBe('A')
 
   await click(rowOf('math.ts', 'branch'))
   await w.win.waitFor(async () => (await openView(w))?.id === DIFF_VIEW)

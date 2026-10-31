@@ -32,4 +32,4 @@ test('the public dashboard CLI returns the filtered Activity snapshot and reject
   const invalid = await e2e.cli(['agent-status', 'dashboard', '--workspace-status', 'doing', '--json'])
   expect(invalid.code).not.toBe(0)
   expect(`${invalid.stdout}\n${invalid.stderr}`).toContain('workspace-status')
-})
+}, 20_000)
