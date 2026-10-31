@@ -1,5 +1,7 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from 'bun:test'
-import { act } from 'react'
+import { act, createElement } from 'react'
+import { createRoot } from 'react-dom/client'
+import { Dialog } from '@quirky/ui'
 import type { QuirkyEvent } from '@quirky/protocol'
 import type { FloatingState, Workspace } from '../../src/layout/types'
 import {
@@ -158,6 +160,28 @@ const moveTo = (x: number, y: number) => fire(window, mouse('mousemove', { clien
 const release = (x: number, y: number) => fire(window, mouse('mouseup', { clientX: x, clientY: y }))
 
 describe('SC-59: the floating button', () => {
+  test('session dialogs isolate the floating toggle until they close', async () => {
+    const app = document.createElement('div')
+    app.className = 'app'
+    const workspace = document.createElement('div')
+    app.append(workspace)
+    document.body.append(app)
+    const view = await mountOverlay()
+    const dialog = createRoot(workspace)
+    try {
+      await act(async () => dialog.render(createElement(Dialog, { open: true, title: 'New Claude session', children: createElement('button', null, 'Cancel') })))
+      expect(button(view).closest('.app')).toBe(app)
+      expect(button(view).closest('[inert]')).not.toBeNull()
+      expect(document.querySelector('[aria-modal="true"]')?.closest('[inert]')).toBeNull()
+      await act(async () => dialog.render(null))
+      expect(button(view).closest('[inert]')).toBeNull()
+      await click(button(view))
+      expect(view.state().open).toBe(true)
+    } finally {
+      await act(async () => dialog.unmount())
+    }
+  })
+
   test('centers in the shell anchor and follows it when it moves', async () => {
     let rect = { left: 600, top: 700, width: 40, height: 40 }
     const anchor = document.createElement('div')

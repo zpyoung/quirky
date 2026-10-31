@@ -368,6 +368,6 @@ export function FloatingOverlay({ context, report, workspaceOptions }: Props) {
         </div>
       ) : null}
     </>,
-    document.body
+    document.querySelector('.app') ?? document.body
   )
 }
