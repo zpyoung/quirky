@@ -1,9 +1,23 @@
 # QA areas
 
-The QA lane takes one area per round, in this order: sessions, worktrees, git, files, terminals,
-panels. Each list is the set of goals for that round. Start every round from a fresh `QUIRKY_HOME`
-with the scratch repo added, as [QA.md](QA.md) describes. Keep agent prompts tiny (for example
-"Reply with the single word OK") so a round costs little.
+A QA agent takes one area per round from its own rotation, and each list is that round's goals. Foreground ([QA.md](QA.md)) rotates through workflows, new-features, sessions, terminals and panels. Background rotates through worktrees, git and files, and skips any goal that needs a real agent login, because its daemon has none. Foreground starts every round from a fresh `QUIRKY_HOME` with the scratch repo added. Keep agent prompts tiny (for example "Reply with the single word OK") so a round costs little.
+
+## workflows
+
+Do each of these from start to finish, the way someone would on a normal day, and judge the whole experience as well as each step.
+
+- Add a project from the header, create a worktree in it, start a Claude session there with a small task such as adding one line to a file, and wait for it to finish. Review its change in Changes, commit it, and see the commit in the commit list.
+- Run two sessions in two worktrees at once. Tell from the sidebar which one is working, which is done and which needs you, then switch between them without losing either's tabs.
+- Have a session ask a question with `quirky ask`, notice it from the Inbox, answer it and see the session carry on.
+- Open a file from a session's output, edit it, save it, review the diff, and discard the change.
+- Quit the app with a session running, reopen it, and see the session and layout come back.
+
+## new-features
+
+- Feedback mode: turn it on, comment on part of the UI, and see the comment captured with enough context to act on. Turn it off and see that the UI is back to normal.
+- Add project header button: it grows from an icon to a label on hover and on keyboard focus without moving the controls beside it, and its label truncates rather than clipping in a narrow panel. It's absent in the empty state, which has its own way to add a project. It opens the Add project flow.
+- Redesigned layout: tool slots, rails and panels open, move, resize and minimize, and the layout survives a restart.
+- Redesigned layout: panels are readable at the default window size and at a narrow one, with nothing clipped or overlapping.
 
 ## sessions
 

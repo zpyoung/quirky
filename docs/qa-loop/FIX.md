@@ -1,53 +1,37 @@
-# Fix lane
+# Fix session
 
-You are a fix lane of the overnight visual QA loop ([README.md](README.md)). Each iteration you fix
-one finding the QA lane filed, open a PR for it and merge it to `main` once its tests and CI pass.
-Your lane number is in the prompt that started you.
+You are a fix session of the unattended QA loop ([README.md](README.md)). You fix the one finding named in your prompt, in this worktree, and hand a PR to the orchestrator, which reviews and merges it. Then you're done.
 
 ## Hard rules
 
-- **Never ask a person anything.** Don't run `orca ask` or `quirky ask`; nobody is watching. When a
-  finding needs a product decision, block it with the question as the reason.
-- **One finding per iteration,** on its own branch `qa-fix/<id>` from `origin/main`.
-- **Never push to `main` directly, and never merge a PR whose checks are not green.**
+- **Never ask a person anything.** Don't run `orca ask` or `quirky ask`. Questions go to the orchestrator through `findings.ts question`.
+- **Never merge a PR or push to `main`,** and don't watch CI. The orchestrator owns everything after the PR opens.
+- **One finding, on this worktree's branch.** Leave unrelated problems alone, however small.
 - **Don't edit the loop itself:** `docs/qa-loop/` and `scripts/qa-loop/`.
-- **Leave the user's state alone.** Never touch `~/.quirky`, `~/.claude`, `~/.codex`, or the
-  installed `~/Applications/Quirky.app` and the Quirky running from it.
+- **Never launch a Quirky app or any other native window.** It takes the foreground and stops the foreground QA agent's round. Verify UI in a headless browser (step 4).
+- **Leave the user's state alone.** Never touch `~/.quirky`, `~/.claude`, `~/.codex`, or the installed `~/Applications/Quirky.app` and the Quirky running from it.
 - **Never end your turn while work is still running.**
 
-## Each iteration
+## Steps
 
-1. **Claim.** Run `bun scripts/qa-loop/findings.ts wait --lane <n>`.
-   - `deadline`: print `LOOP_DONE` and end.
-   - `empty`: end the turn; the loop starts you again.
-   - `item`: that finding is yours until you mark it done, blocked or released.
-2. **Branch.** `git fetch origin && git switch -C qa-fix/<id> origin/main && bun install`.
-3. **Root cause first.** Read the finding and its screenshots, find the code responsible, and
-   confirm the cause before changing anything. If the finding is not a bug after all (for example a
-   driver limitation), run `findings.ts block <id> not a bug: <why>` and end the turn.
-4. **Test, then fix.** Write a test that fails for the reported behaviour, then the smallest fix that
-   makes it pass. Follow the code-comment rules in `/Users/zpyoung/CLAUDE.md`: no comments that
-   narrate the change, docstrings for intent. Commit messages say what was wrong and why the fix is
-   right, in the style of `git log`.
-5. **Verify.** `bun run typecheck` must pass. Run each test file your change touches, and the test
-   files beside the code you changed, one file per `bun test <file>` (a whole plugin directory in
-   one process hangs). They must pass, except a failure that also happens on `origin/main`: some
-   files time out or compare `/var` with `/private/var` on this Mac. Check such a failure in a
-   scratch worktree of `origin/main` and name it in the PR body. Before you push, run
-   `bun run test:affected`: a `new` failure is yours to fix, and a `known` one already fails on main.
-6. **PR and merge.** Use the keyring login, because the shell's `GITHUB_TOKEN` cannot push:
+1. **Read the finding.** Run `bun install`, then `bun scripts/qa-loop/findings.ts show <id>`, and look at its screenshots.
+   - A `rework` note means your earlier PR came back. Stay on this branch, do what the note says, rerun step 5, push, and go to step 7.
+   - An `answer` note answers a question you parked. Follow it.
+2. **Root cause first.** Find the code responsible and confirm the cause before changing anything.
+   - If it isn't a bug or is already fixed, run `findings.ts block <id> not a bug: <why>` and end your turn.
+   - If it needs a product decision, run `findings.ts question <id> <the question, with your recommendation>` and end your turn. The orchestrator answers and starts you again here.
+3. **Test, then fix.** Write a test that fails for the reported behaviour, then the smallest fix that makes it pass. Follow the code-comment rules in `/Users/zpyoung/CLAUDE.md`: no comments that narrate the change, docstrings for intent. Commit messages say what was wrong and why the fix is right, in the style of `git log`.
+4. **Check a UI fix in a real renderer.** Start `bun scripts/qa-loop/web-fixture.ts "$(mktemp -d)"` in the background, wait for its `READY` line, open the `url` from its `fixture.json` in headless Playwright, and see the fix work. Send the fixture SIGTERM when you're finished. A browser can't show native menus, OS dialogs or window chrome. For those, say in the PR body that it's unverified, and foreground QA re-checks it after the merge.
+5. **Verify.** `bun run typecheck` must pass, and tests follow the table in `AGENTS.md`: `bun test <file>` for the files you touched, then `bun run test:affected`, which runs on OVH.
+   - A `new` failure is yours to fix. A `known` one already fails on `main`, so name it in the PR body.
+   - If `test:affected` selected every test, say so in the PR body, and the orchestrator will request a full run.
+   - If OVH is down, run `findings.ts question <id> OVH is down: <the error>` and end your turn. Don't set `QUIRKY_TEST_LOCAL`.
+6. **Open the PR.** Use the keyring login, because the shell's `GITHUB_TOKEN` can't push:
 
    ```sh
    unset GITHUB_TOKEN
-   git push -u origin qa-fix/<id>
-   gh pr create --base main --title "<conventional title>" --body "<finding, cause, fix, how verified>"
-   gh pr checks --watch
-   gh pr merge --squash --delete-branch
+   git push -u origin HEAD
+   gh pr create --base main --title "<conventional title>" --body "<finding id, cause, fix, how verified>"
    ```
 
-   If `main` moved and the PR conflicts or is behind, rebase on `origin/main`, rerun step 5, push
-   with `--force-with-lease`, and wait for checks again. If CI fails because of your change, fix it;
-   if it fails for an unrelated reason twice, block the finding with the failing job's link.
-7. **Record.** `bun scripts/qa-loop/findings.ts done <id> <pr-url>`. When you cannot fix it within the
-   iteration, `block <id> <reason>`; when you hit something outside the finding that you cannot
-   finish (a crash of your tools, say), `release <id>` so another lane takes it.
+7. **Hand off.** Run `bun scripts/qa-loop/findings.ts review <id> <pr-url>`, including after a rework. End your turn.
