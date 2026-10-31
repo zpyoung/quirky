@@ -1,4 +1,7 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from 'bun:test'
+import { mkdtempSync, rmSync } from 'node:fs'
+import { join } from 'node:path'
+import { pathToFileURL } from 'node:url'
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
 import { act, createElement as h, createRef, useState, type ReactNode } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
@@ -490,6 +493,196 @@ describe('shared graphite components', () => {
     await render(dialogTree(false))
     expect(document.activeElement).toBe(opener)
   })
+
+  test('dialogs inert external app controls and restore prior inert states when closed', async () => {
+    const floatingRootContainer = document.createElement('div')
+    document.body.append(floatingRootContainer)
+    const floatingRoot = mountIndependentRoot(floatingRootContainer)
+    await act(async () => floatingRoot.render(<button aria-label="Floating toggle">Toggle</button>))
+    const floatingToggle = floatingRootContainer.querySelector<HTMLButtonElement>('button')!
+
+    const previouslyInert = document.createElement('div')
+    previouslyInert.setAttribute('inert', '')
+    document.body.append(previouslyInert)
+
+    const dialogTree = (open: boolean) => <>
+      <button id="dialog-opener">Open</button>
+      <Dialog open={open} title="Confirm change">
+        <button>Continue</button>
+      </Dialog>
+    </>
+    await render(dialogTree(false))
+    const opener = container.querySelector<HTMLButtonElement>('#dialog-opener')!
+    opener.focus()
+
+    await render(dialogTree(true))
+    const panel = container.querySelector<HTMLElement>('[role="dialog"]')!
+    expect(floatingToggle.closest('[inert]')).not.toBeNull()
+    expect(previouslyInert.hasAttribute('inert')).toBe(true)
+    expect(panel.closest('[inert]')).toBeNull()
+
+    await render(dialogTree(false))
+    expect(floatingToggle.closest('[inert]')).toBeNull()
+    expect(previouslyInert.hasAttribute('inert')).toBe(true)
+    expect(document.activeElement).toBe(opener)
+  })
+
+  test('nested dialogs isolate the lower dialog and restore focus and isolation on close', async () => {
+    const floatingRootContainer = document.createElement('div')
+    document.body.append(floatingRootContainer)
+    const floatingRoot = mountIndependentRoot(floatingRootContainer)
+    await act(async () => floatingRoot.render(<button>Floating toggle</button>))
+
+    const NestedDialogs = () => {
+      const [outerOpen, setOuterOpen] = useState(false)
+      const [innerOpen, setInnerOpen] = useState(false)
+      return <>
+        <button id="outer-opener" onClick={() => setOuterOpen(true)}>Open outer</button>
+        <Dialog open={outerOpen} title="Outer" onClose={() => setOuterOpen(false)}>
+          <button id="inner-opener" onClick={() => setInnerOpen(true)}>Open inner</button>
+          <Dialog open={innerOpen} title="Inner" onClose={() => setInnerOpen(false)}>
+            <button>Inner action</button>
+          </Dialog>
+        </Dialog>
+      </>
+    }
+    await render(<NestedDialogs />)
+
+    const outerOpener = container.querySelector<HTMLButtonElement>('#outer-opener')!
+    outerOpener.focus()
+    await click(outerOpener)
+    const outerPanel = container.querySelector<HTMLElement>('[role="dialog"]')!
+    const innerOpener = container.querySelector<HTMLButtonElement>('#inner-opener')!
+    innerOpener.focus()
+    await click(innerOpener)
+
+    const panels = container.querySelectorAll<HTMLElement>('[role="dialog"]')
+    const innerPanel = panels[1]!
+    expect(floatingRootContainer.hasAttribute('inert')).toBe(true)
+    expect(innerOpener.closest('[inert]')).not.toBeNull()
+    expect(innerPanel.querySelector('button[aria-label="Close dialog"]')?.closest('[inert]')).toBeNull()
+    expect(document.activeElement).toBe(innerPanel.querySelector('button[aria-label="Close dialog"]'))
+
+    await click(innerPanel.querySelector('button[aria-label="Close dialog"]')!)
+    expect(container.querySelectorAll('[role="dialog"]')).toHaveLength(1)
+    expect(floatingRootContainer.hasAttribute('inert')).toBe(true)
+    expect(innerOpener.closest('[inert]')).toBeNull()
+    expect(document.activeElement).toBe(innerOpener)
+
+    await click(outerPanel.querySelector('button[aria-label="Close dialog"]')!)
+    expect(floatingRootContainer.hasAttribute('inert')).toBe(false)
+    expect(document.activeElement).toBe(outerOpener)
+  })
+
+  test('sibling dialogs isolate only the top dialog and restore the prior modal focus', async () => {
+    const floatingRootContainer = document.createElement('div')
+    document.body.append(floatingRootContainer)
+    const floatingRoot = mountIndependentRoot(floatingRootContainer)
+    await act(async () => floatingRoot.render(<button>Floating toggle</button>))
+    const floatingToggle = floatingRootContainer.querySelector('button')!
+    floatingToggle.focus()
+
+    await render(<>
+      <button>First opener</button>
+      <Dialog open title="First">
+        <button>First action</button>
+      </Dialog>
+    </>)
+    const firstPanel = container.querySelector<HTMLElement>('[role="dialog"]')!
+    const firstAction = firstPanel.querySelector<HTMLButtonElement>('button:not([aria-label="Close dialog"])')!
+    firstAction.focus()
+
+    const secondContainer = document.createElement('div')
+    document.body.append(secondContainer)
+    const secondRoot = mountIndependentRoot(secondContainer)
+    await act(async () => secondRoot.render(
+      <Dialog open title="Second">
+        <button>Second action</button>
+      </Dialog>,
+    ))
+    const secondPanel = secondContainer.querySelector<HTMLElement>('[role="dialog"]')!
+    expect(container.hasAttribute('inert')).toBe(true)
+    expect(floatingRootContainer.hasAttribute('inert')).toBe(true)
+    expect(secondPanel.closest('[inert]')).toBeNull()
+    expect(document.activeElement).toBe(secondPanel.querySelector('button'))
+
+    await unmountIndependentRoot(secondRoot)
+    expect(container.hasAttribute('inert')).toBe(false)
+    expect(floatingRootContainer.hasAttribute('inert')).toBe(true)
+    expect(document.activeElement).toBe(firstAction)
+
+    await render(<>
+      <button>First opener</button>
+      <Dialog open={false} title="First">
+        <button>First action</button>
+      </Dialog>
+    </>)
+    expect(floatingRootContainer.hasAttribute('inert')).toBe(false)
+    expect(document.activeElement).toBe(floatingToggle)
+  })
+
+  // A temporary bundle mirrors host/plugin module copies while React resolves from the workspace.
+  test('dialogs from independent module copies share document isolation state', async () => {
+    const copyDirectory = mkdtempSync(join(import.meta.dir, '.dialog-copy-'))
+    try {
+      const copyBuild = await Bun.build({
+        entrypoints: [new URL('../src/design-system/overlays.tsx', import.meta.url).pathname],
+        target: 'bun',
+        outdir: copyDirectory,
+        plugins: [{
+          name: 'shared-react',
+          setup(build) {
+            build.onResolve({ filter: /^react(?:\/|$)/ }, ({ path }) => ({
+              path: Bun.resolveSync(path, import.meta.dir),
+              external: true,
+            }))
+          },
+        }],
+      })
+      if (!copyBuild.success) throw new Error(copyBuild.logs.map((log) => log.message).join('\n'))
+      const copyOutput = copyBuild.outputs[0]
+      if (!copyOutput) throw new Error('Dialog bundle produced no output')
+      const { Dialog: CopiedDialog } = await import(pathToFileURL(copyOutput.path).href)
+      expect(CopiedDialog).not.toBe(Dialog)
+
+      const pluginContainer = document.createElement('div')
+      document.body.append(pluginContainer)
+      const pluginRoot = mountIndependentRoot(pluginContainer)
+      await act(async () => pluginRoot.render(
+        <Dialog open title="Plugin dialog">
+          <button>Plugin action</button>
+        </Dialog>,
+      ))
+      const pluginPanel = pluginContainer.querySelector<HTMLElement>('[role="dialog"]')!
+      expect(container.hasAttribute('inert')).toBe(true)
+
+      await render(
+        <CopiedDialog open title="Host dialog">
+          <button>Host action</button>
+        </CopiedDialog>,
+      )
+      const hostPanel = container.querySelector<HTMLElement>('[role="dialog"]')!
+      expect(container.hasAttribute('inert')).toBe(false)
+      expect(hostPanel.closest('[inert]')).toBeNull()
+      expect(pluginContainer.hasAttribute('inert')).toBe(true)
+      expect(document.activeElement).toBe(hostPanel.querySelector('button'))
+
+      await render(
+        <CopiedDialog open={false} title="Host dialog">
+          <button>Host action</button>
+        </CopiedDialog>,
+      )
+      expect(container.hasAttribute('inert')).toBe(true)
+      expect(pluginContainer.hasAttribute('inert')).toBe(false)
+      expect(document.activeElement).toBe(pluginPanel.querySelector('button'))
+
+      await unmountIndependentRoot(pluginRoot)
+      expect(container.hasAttribute('inert')).toBe(false)
+    } finally {
+      rmSync(copyDirectory, { recursive: true, force: true })
+    }
+  })
+
 
   test('required-choice dialogs stay open until an explicit enabled action is selected', async () => {
     const choices: string[] = []

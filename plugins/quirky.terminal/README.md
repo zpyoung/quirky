@@ -32,7 +32,7 @@ In a horizontally scrollable group, resizing the tab strip or changing the selec
 
 Floating documents use the editor-owned profile notes directory, resolved explicitly by `quirky.editor/documentRoot({worktree:"floating"})`. This does not grant access to HOME or arbitrary files. Markdown, editor and Browser tabs preserve the captured floating group and use their existing public owners and close/resource leases.
 
-The floating panel and toggle stay below Usage popovers and public modal overlays, so those surfaces remain readable and clickable.
+The floating panel and toggle stay below Usage popovers and public modal overlays, including while the window is inactive. Open dialogs make background controls inert, so the floating toggle is unavailable to pointer input and assistive technology until the dialog closes.
 
 ## Terminal appearance and command tabs
 

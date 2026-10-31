@@ -50,7 +50,44 @@ const focusableSelector = [
 ].join(',')
 
 /** Only the top open dialog owns focus; project/trust dialogs may be siblings. */
-const dialogStack: HTMLElement[] = []
+// host and plugin bundles need the same per-document isolation state
+const DIALOG_STATE = Symbol.for('quirky.ui.dialogState')
+type DialogState = {
+  stack: HTMLElement[]
+  inertStates: Map<HTMLElement, boolean>
+}
+
+function getDialogState(ownerDocument: Document): DialogState {
+  const slot = ownerDocument as unknown as { [DIALOG_STATE]?: DialogState }
+  return slot[DIALOG_STATE] ??= { stack: [], inertStates: new Map() }
+}
+
+function syncDialogIsolation(ownerDocument: Document, state: DialogState) {
+  const activeDialog = state.stack[state.stack.length - 1]
+  let branch = activeDialog?.parentElement ?? null
+  const inertSiblings = new Set<HTMLElement>()
+
+  while (branch) {
+    const parent = branch.parentElement
+    if (!parent) break
+    for (const sibling of parent.children) {
+      if (sibling !== branch && sibling instanceof HTMLElement) inertSiblings.add(sibling)
+    }
+    if (parent === ownerDocument.body) break
+    branch = parent
+  }
+
+  for (const [element, wasInert] of state.inertStates) {
+    if (inertSiblings.has(element)) continue
+    if (wasInert) element.setAttribute('inert', '')
+    else element.removeAttribute('inert')
+    state.inertStates.delete(element)
+  }
+  for (const element of inertSiblings) {
+    if (!state.inertStates.has(element)) state.inertStates.set(element, element.hasAttribute('inert'))
+    element.setAttribute('inert', '')
+  }
+}
 
 export function Dialog({ open, title, children, actions, onClose, variant = 'dialog', placement = 'center', size = 'default', closeOnBackdrop = true, scrollBody = false }: DialogProps) {
   const dialogRef = useRef<HTMLElement | null>(null)
@@ -60,27 +97,32 @@ export function Dialog({ open, title, children, actions, onClose, variant = 'dia
     if (!open) return
     const element = dialogRef.current
     if (!element) return
-    dialogStack.push(element)
-    const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null
-    if (!element.contains(document.activeElement)) {
+    const ownerDocument = element.ownerDocument
+    const state = getDialogState(ownerDocument)
+    state.stack.push(element)
+    const opener = ownerDocument.activeElement instanceof HTMLElement ? ownerDocument.activeElement : null
+    syncDialogIsolation(ownerDocument, state)
+    if (!element.contains(ownerDocument.activeElement)) {
       const firstFocusable = element.querySelector<HTMLElement>(focusableSelector)
       ;(firstFocusable ?? element).focus()
     }
     const keepFocusInside = (event: FocusEvent) => {
-      if (dialogStack[dialogStack.length - 1] !== element) return
+      if (state.stack[state.stack.length - 1] !== element) return
       if (!(event.target instanceof Node)) return
       const dialog = dialogRef.current
       if (dialog?.contains(event.target)) return
       ;(dialog?.querySelector<HTMLElement>(focusableSelector) ?? dialog)?.focus()
     }
-    document.addEventListener('focusin', keepFocusInside)
+    ownerDocument.addEventListener('focusin', keepFocusInside)
     return () => {
-      document.removeEventListener('focusin', keepFocusInside)
-      const index = dialogStack.indexOf(element)
-      if (index >= 0) dialogStack.splice(index, 1)
-      if (opener?.isConnected) opener.focus()
-      const parent = dialogStack[dialogStack.length - 1]
-      if (parent && !parent.contains(document.activeElement)) {
+      ownerDocument.removeEventListener('focusin', keepFocusInside)
+      const wasTop = state.stack[state.stack.length - 1] === element
+      const index = state.stack.indexOf(element)
+      if (index >= 0) state.stack.splice(index, 1)
+      syncDialogIsolation(ownerDocument, state)
+      if (wasTop && opener?.isConnected) opener.focus()
+      const parent = state.stack[state.stack.length - 1]
+      if (parent && !parent.contains(ownerDocument.activeElement)) {
         ;(parent.querySelector<HTMLElement>(focusableSelector) ?? parent).focus()
       }
     }
@@ -89,14 +131,15 @@ export function Dialog({ open, title, children, actions, onClose, variant = 'dia
   if (!open) return null
 
   const onDialogKeyDown = (event: ReactKeyboardEvent<HTMLElement>) => {
-    if (dialogStack[dialogStack.length - 1] !== dialogRef.current) return
+    const dialog = event.currentTarget
+    const state = getDialogState(dialog.ownerDocument)
+    if (state.stack[state.stack.length - 1] !== dialog) return
     if (event.key === 'Escape' && !event.defaultPrevented) {
       event.preventDefault()
       onClose?.()
       return
     }
     if (event.key !== 'Tab') return
-    const dialog = event.currentTarget
     const focusable = [...dialog.querySelectorAll<HTMLElement>(focusableSelector)].filter((element) => element.tabIndex >= 0 && element.getAttribute('aria-hidden') !== 'true')
     if (focusable.length === 0) {
       event.preventDefault()
@@ -105,10 +148,10 @@ export function Dialog({ open, title, children, actions, onClose, variant = 'dia
     }
     const first = focusable[0]
     const last = focusable[focusable.length - 1]
-    if (event.shiftKey && (document.activeElement === first || !dialog.contains(document.activeElement))) {
+    if (event.shiftKey && (dialog.ownerDocument.activeElement === first || !dialog.contains(dialog.ownerDocument.activeElement))) {
       event.preventDefault()
       last.focus()
-    } else if (!event.shiftKey && (document.activeElement === last || !dialog.contains(document.activeElement))) {
+    } else if (!event.shiftKey && (dialog.ownerDocument.activeElement === last || !dialog.contains(dialog.ownerDocument.activeElement))) {
       event.preventDefault()
       first.focus()
     }
@@ -118,7 +161,10 @@ export function Dialog({ open, title, children, actions, onClose, variant = 'dia
     <div
       className={classNames('ui-dialog-backdrop', variant === 'sheet' && 'ui-dialog-backdrop--sheet', variant === 'dialog' && placement === 'top' && 'ui-dialog-backdrop--top')}
       onClick={(event) => {
-        if (closeOnBackdrop && event.target === event.currentTarget && dialogStack[dialogStack.length - 1] === dialogRef.current) onClose?.()
+        const dialog = dialogRef.current
+        if (!closeOnBackdrop || event.target !== event.currentTarget || !dialog) return
+        const state = getDialogState(dialog.ownerDocument)
+        if (state.stack[state.stack.length - 1] === dialog) onClose?.()
       }}
     >
       <section
