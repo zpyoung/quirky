@@ -263,7 +263,7 @@
       {"id":"hard-reload","title":"Hard Reload Browser Page","description":"Reload the active browser page without its cached resources."},
       {"id":"zoom-in","title":"Browser Zoom In","description":"Increase zoom in the active browser pane."},
       {"id":"zoom-out","title":"Browser Zoom Out","description":"Decrease zoom in the active browser pane."},
-      {"id":"design","title":"Browser Design Operation","description":"Run Grab, Annotate, Draw, or Cancel in the focused Native browser pane.","args":{"type":"object","properties":{"action":{"type":"string","enum":["grab","annotate","draw","cancel"]}},"required":["action"],"additionalProperties":false}},
+      {"id":"design","title":"Browser Design Operation","description":"Run Grab, Annotate, Draw, or Cancel in the focused Native browser pane, or in the Native pane named by pane.","args":{"type":"object","properties":{"action":{"type":"string","enum":["grab","annotate","draw","cancel"]},"pane":{"type":"string"}},"required":["action"],"additionalProperties":false}},
       {"id":"zoom-reset","title":"Reset Browser Zoom","description":"Reset zoom in the active browser pane."}
     ],
     "keybinding": [

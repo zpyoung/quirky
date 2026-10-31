@@ -159,6 +159,8 @@ export type SettingDeclaration = {
   values?: string[]
   /** Exposes a boolean setting as a checked item in the native View menu. */
   menu?: 'view'
+  /** The name of a boolean setting in the same plugin that must be true for this setting's View menu row. */
+  whenSetting?: string
 }
 
 export type UiSettingEntry = { id: string; plugin: string } & SettingDeclaration

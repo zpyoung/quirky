@@ -4,7 +4,7 @@ import tokenStyles from './tokens.css' with { type: 'text' }
  * The closed shadow host carries its own canonical token scope; page CSS cannot
  * recolor the picker. Its caller still owns geometry, events and lifecycle.
  */
-const selectionOverlayStyles = `${tokenStyles.replaceAll(':root', ':host').replaceAll("[data-theme='dark']", ":host([data-theme='dark'])").replaceAll("[data-theme='light']", ":host([data-theme='light'])")}
+export const selectionOverlayStyles = `${tokenStyles.replaceAll(':root', ':host').replaceAll("[data-theme='dark']", ":host([data-theme='dark'])").replaceAll("[data-theme='light']", ":host([data-theme='light'])")}
 :host { all: initial; contain: strict; }
 * { box-sizing: border-box; }
 .surface { position: fixed; inset: 0; outline: none; cursor: crosshair; background: var(--ui-transparent); pointer-events: auto; }
@@ -12,7 +12,7 @@ const selectionOverlayStyles = `${tokenStyles.replaceAll(':root', ':host').repla
 .label { position: fixed; max-width: 90vw; padding: var(--ui-space-4) var(--ui-space-8); border-radius: var(--ui-radius-mark); background: var(--ui-selected); color: var(--ui-text); font: var(--ui-font-body)/1.4 system-ui, sans-serif; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; pointer-events: none; }
 `
 
-function createSelectionOverlay(document: Document, styles: string) {
+export function createSelectionOverlay(document: Document, styles: string) {
   const host = document.createElement('div')
   const appearance = document.documentElement.getAttribute('data-theme')
   host.setAttribute('data-theme', appearance === 'dark' || appearance === 'light'

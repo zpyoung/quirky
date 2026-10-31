@@ -27,6 +27,15 @@ API 1.1 adds `whenSetting` to `panel`, `sidebar-section` and `activity-item`: th
 the plugin's own boolean settings. The contribution, and the tool it projects, exist only while that
 setting is `true`. A plugin that uses it declares `"apiVersion": "1.1.0"`.
 
+API 1.2 adds `whenSetting` to `setting`, `command` and `keybinding`, and an optional manifest
+`repository`. A `command` or `keybinding` with `whenSetting` leaves the UI model while that setting
+is not `true`; a keybinding bound to a hidden command is unbound. A `setting` with `whenSetting`
+stays in the model and in `setting.list`, which reports the field, so its value stays readable. For
+a `setting` with `"menu": "view"`, the native View menu row appears, and can be toggled, only while
+the named setting is `true`. `repository` is an `https://github.com/<owner>/<repo>` URL with exactly
+those two path segments; the manifest loader rejects any other shape, and `plugin.list` returns it.
+A plugin that uses either declares `"apiVersion": "1.2.0"`.
+
 ## Manifest declaration
 
 Every plugin manifest must include `apiVersion`. It is independent of the plugin's own package `version`:

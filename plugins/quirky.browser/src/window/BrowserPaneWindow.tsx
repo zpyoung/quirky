@@ -237,12 +237,32 @@ export function focusBrowserAddress(): void {
 export function focusBrowserFind(): void {
   focusFind?.()
 }
-const focusedDesignActions = new Map<string, (action: DesignAction) => Promise<boolean>>()
+const focusedDesignActions = new Map<string, { mode: () => PaneTab['mode'] | undefined; run: (action: DesignAction) => Promise<boolean> }>()
 
-export async function runFocusedBrowserDesign(action: DesignAction): Promise<{ started: boolean; reason?: string }> {
+async function focusBrowserPane(id: string): Promise<boolean> {
+  if (focusedPaneId === id) return true
+  const root = [...document.querySelectorAll<HTMLElement>('[data-browser-pane]')].find((entry) => entry.dataset.browserPane === id)
+  if (!root) return false
+  root.focus()
+  for (let attempt = 0; focusedPaneId !== id && attempt < 20; attempt++) await new Promise((resolve) => setTimeout(resolve, 10))
+  return focusedPaneId === id
+}
+
+/**
+ * Starts a design action in the focused Native pane, or in `targetPane` after focusing it through the
+ * pane's own focus handler. Returns a reason instead of acting when the target is not a mounted Native pane.
+ */
+export async function runFocusedBrowserDesign(action: DesignAction, targetPane?: string): Promise<{ started: boolean; reason?: string }> {
+  if (targetPane !== undefined) {
+    const target = focusedDesignActions.get(targetPane)
+    if (!target) return { started: false, reason: `Browser pane ${targetPane} is not open.` }
+    if (target.mode() !== 'native') return { started: false, reason: `Browser pane ${targetPane} is a Watch pane; design operations need a Native pane.` }
+    if (!await focusBrowserPane(targetPane)) return { started: false, reason: `Browser pane ${targetPane} did not take focus.` }
+    if (focusedPaneId !== targetPane) return { started: false, reason: `Focus moved away from browser pane ${targetPane} before the design operation started.` }
+  }
   const pane = focusedPaneId
   if (!pane) return { started: false, reason: 'No browser pane is focused.' }
-  const run = focusedDesignActions.get(pane)
+  const run = focusedDesignActions.get(pane)?.run
   if (!run) return { started: false, reason: 'The focused browser pane has no active design controls.' }
   const started = await run(action)
   return started ? { started: true } : { started: false, reason: 'The requested design operation could not start on the focused Native page.' }
@@ -529,9 +549,10 @@ export function BrowserPaneWindow({ context, input }: { context: UiPluginContext
       const handler = designActionRef.current
       return handler ? await handler(action) : false
     }
-    focusedDesignActions.set(id, run)
+    const entry = { mode: () => paneRef.current?.mode, run }
+    focusedDesignActions.set(id, entry)
     return () => {
-      if (focusedDesignActions.get(id) === run) focusedDesignActions.delete(id)
+      if (focusedDesignActions.get(id) === entry) focusedDesignActions.delete(id)
     }
   }, [pane?.id, requestedPaneId])
 

@@ -1,4 +1,5 @@
 import type { DesignAnnotation, DesignPayload } from '../design-contract'
+import { codeSpan, collapse, feedbackBlock, htmlFence, markdownText } from '@quirky/ui/annotation-markdown'
 import { clampAnnotations, clampPayload } from './payload'
 
 const STYLE_ORDER: readonly [keyof DesignPayload['target']['computedStyles'], string][] = [
@@ -7,33 +8,6 @@ const STYLE_ORDER: readonly [keyof DesignPayload['target']['computedStyles'], st
   ['fontFamily', 'font-family'], ['fontSize', 'font-size'], ['fontWeight', 'font-weight'], ['lineHeight', 'line-height'],
   ['textAlign', 'text-align'], ['zIndex', 'z-index']
 ]
-
-function collapse(value: unknown): string {
-  return typeof value === 'string' ? value.replace(/\s+/g, ' ').trim().slice(0, 2048) : ''
-}
-
-function longestBacktickRun(value: string): number {
-  let longest = 0
-  for (const match of value.matchAll(/`+/g)) longest = Math.max(longest, match[0].length)
-  return longest
-}
-
-function codeSpan(value: unknown): string {
-  const text = collapse(value)
-  const fence = '`'.repeat(Math.max(1, longestBacktickRun(text) + 1))
-  const padding = text.startsWith('`') || text.endsWith('`') || text.startsWith(' ') || text.endsWith(' ') ? ' ' : ''
-  return `${fence}${padding}${text}${padding}${fence}`
-}
-
-function markdownText(value: unknown): string {
-  const source = typeof value === 'string' ? value : ''
-  let result = ''
-  for (const char of source) {
-    if (char === '\\' || '`*_{}[]<>#+.!|-'.includes(char)) result += '\\'
-    result += char
-  }
-  return result
-}
 
 function isDefaultStyle(name: string, value: string): boolean {
   const normalized = value.trim().toLowerCase()
@@ -94,15 +68,6 @@ function labelFor(annotation: DesignAnnotation): string {
   const target = annotation.payload.target
   const name = collapse(target.accessibility.accessibleName || target.textSnippet).slice(0, 60)
   return markdownText(`${target.reactComponents ? `${collapse(target.reactComponents)} ` : ''}${target.tagName}${name ? ` "${name}"` : ''}`)
-}
-
-function htmlFence(value: string): string {
-  return '`'.repeat(Math.max(3, longestBacktickRun(value) + 1))
-}
-
-function feedbackBlock(comment: string): string[] {
-  const lines = comment.replace(/\r\n|\r/g, '\n').split('\n')
-  return [`**Feedback:** ${markdownText(lines[0] ?? '')}`, ...lines.slice(1).map((line) => markdownText(line))]
 }
 
 function annotationLines(annotation: DesignAnnotation, index: number, multiPage: boolean): string[] {

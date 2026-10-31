@@ -371,7 +371,15 @@ export function buildUiModel(input: {
     })
   const byOrder = (a: UiSlotEntry, b: UiSlotEntry) => a.order - b.order || compare(a.id, b.id)
 
-  const commands: UiCommandEntry[] = ofKind('command').map((declaration) => {
+  const settings: UiSettingEntry[] = ofKind('setting').map((declaration) => ({
+    id: declaration.id,
+    plugin: declaration.plugin,
+    ...(declaration.data as SettingDeclaration),
+  }))
+  settings.sort((a, b) => compare(a.id, b.id))
+
+  const shownCommands = ofKind('command').filter(shown)
+  const commands: UiCommandEntry[] = shownCommands.map((declaration) => {
     const description = stringField(declaration.data, 'description')
     return {
       id: declaration.id,
@@ -384,15 +392,8 @@ export function buildUiModel(input: {
   })
   commands.sort((a, b) => a.title.localeCompare(b.title) || compare(a.id, b.id))
 
-  const settings: UiSettingEntry[] = ofKind('setting').map((declaration) => ({
-    id: declaration.id,
-    plugin: declaration.plugin,
-    ...(declaration.data as SettingDeclaration),
-  }))
-  settings.sort((a, b) => compare(a.id, b.id))
-
-  const effectiveCommands = new Set(ofKind('command').map((declaration) => declaration.id))
-  const keybindings = resolveKeybindings(ofKind('keybinding'), effectiveCommands, byId, warnings, {
+  const effectiveCommands = new Set(shownCommands.map((declaration) => declaration.id))
+  const keybindings = resolveKeybindings(ofKind('keybinding').filter(shown), effectiveCommands, byId, warnings, {
     id: input.distroId ?? '',
     bindings: input.distroId ? distroBindings(input.distroKeybindings ?? [], input.distroId) : []
   }, input.keybindingOverrides)

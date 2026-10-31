@@ -13,12 +13,15 @@ import { CLI_WORD_RE, checkKindEntry, cliGroupWord, effectiveCliWords, isMethodR
 
 export const MANIFEST_FILE = 'quirky-plugin.json'
 
+const REPOSITORY_RE = /^https:\/\/github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/
+
 const FIELDS = new Set([
   'id',
   'name',
   'apiVersion',
   'version',
   'description',
+  'repository',
   'main',
   'ui',
   'cli',
@@ -263,6 +266,9 @@ export function parseManifest(
     if (compatibilityError !== null) errors.push(compatibilityError)
   }
   if (raw.description !== undefined && typeof raw.description !== 'string') errors.push("field 'description' must be a string")
+  if (raw.repository !== undefined && (typeof raw.repository !== 'string' || !REPOSITORY_RE.test(raw.repository))) {
+    errors.push("field 'repository' must be an https://github.com/<owner>/<repo> URL")
+  }
   if (raw.activation !== undefined && raw.activation !== 'lazy' && raw.activation !== 'startup') {
     errors.push("field 'activation' must be 'lazy' or 'startup'")
   }

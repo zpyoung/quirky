@@ -70,6 +70,7 @@ const pluginInfo = object(
     state: { type: 'string', enum: ['inactive', 'activating', 'active', 'failed', 'disabled', 'invalid'] },
     ui: string('Relative path of the webview module.'),
     apiVersion: string('The declaring plugin minimum API release.'),
+    repository: string('The GitHub repository URL the manifest declares.'),
     diagnostics: listOf(object({ level: { type: 'string', enum: ['error', 'warning'] }, message: string() }))
   },
   ['id', 'name', 'version', 'source', 'dir', 'activation', 'dependencies', 'state', 'diagnostics']
@@ -125,6 +126,7 @@ const settingInfo = object(
     maximum: { type: 'number' },
     values: strings,
     menu: { type: 'string', enum: ['view'], description: 'A boolean setting exposed in the native View menu.' },
+    whenSetting: string("The plugin's own boolean setting that must be true for this setting's View menu row."),
     value: { description: 'The current value.' },
     stored: object({ value: {}, valid: boolean() }, ['value', 'valid'])
   },
