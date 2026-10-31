@@ -67,7 +67,7 @@ Before: files/folders, dotfiles, ignored files, symlinks. Explorer sorts directo
 
 ### SC-8: Explorer create, rename, duplicate, delete and history
 Before: `file.txt` and directory. Inline New File/New Folder: Enter/blur commits, Escape cancels, initial menu blur does not accidentally commit. Row-menu and Enter-key Rename prefill only the basename and select a file's stem before its final extension (the whole name if extensionless) or a directory's full name including dots; submitting a filename retains its original parent. Rename and drag-move update all open descendants atomically; reject collisions, into-self and escapes. Duplicate chooses `file copy.txt`, then numbered copies without overwriting. Local delete uses Trash, saves dirty buffers first and aborts on save failure. Undo/redo (50 steps) restores text deletion/create/rename/move, refuses stale owner or changed destinations and clears redo on new mutation. Multiselection drops descendants of selected parents.
-Delete confirmation names a single file or folder by basename; multiple targets show a plural item count. Row-menu and footer actions use the same confirmation, including when the selection is hidden by Contents search.
+Delete confirmation names a single file or folder by basename; multiple targets show a plural item count. Row-menu and footer actions use the same confirmation.
 New File/New Folder name inputs remain single-line and match the Find files input height.
 Inline New File/New Folder and Rename controls remain outside the role=tree ownership while sharing the explorer scroll container; the tree contains treeitems only and retains keyboard navigation.
 
