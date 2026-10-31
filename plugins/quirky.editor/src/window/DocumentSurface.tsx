@@ -992,7 +992,14 @@ function DocumentBody({ context, input }: { context: UiPluginContext; input: Doc
   const showChanges = changesOpen && canOfferChanges
   const surfaceProps = featureProps
   const saveButton = () => void save('user').catch(handleError)
-  const closeButton = () => void requestSingleClose(context, buffer.id, actualTabId ?? undefined)
+  const closeButton = () => {
+    const details = fileActionsRef.current
+    if (details) {
+      details.open = false
+      details.querySelector('summary')?.focus()
+    }
+    void requestSingleClose(context, buffer.id, actualTabId ?? undefined)
+  }
   const changeWrap = (value: boolean) => void saveSetting('editorWordWrap', value)
   const pathTitle = buffer.relativePath || buffer.name
   const changesBuffer = localText === null
@@ -1018,54 +1025,19 @@ function DocumentBody({ context, input }: { context: UiPluginContext; input: Doc
           <Button className="qe-document-path" title={buffer.path} onClick={() => void copyPath(false)}>{pathTitle}</Button>
           {buffer.dirty && <Badge tone="needs-you" label="Unsaved changes">●</Badge>}
           {buffer.external && <Badge tone="needs-you">{buffer.external === 'deleted' ? 'Deleted on disk' : 'Changed on disk'}</Badge>}
-        </div>
-        <div className="qe-document-actions">
-          <div className="qe-document-action-strip">
-            {buffer.kind === 'markdown' && (
-              <div className="qe-mode-switch" aria-label="Markdown view mode">
-                <Button className="qe-mode-switch__option" aria-pressed={actualMode === 'source'} onClick={() => void openMode('source')}>Source</Button>
-                <Button className="qe-mode-switch__option" aria-pressed={actualMode === 'rich'} onClick={() => void openMode('rich')}>Rich Editor</Button>
-                <Button className="qe-mode-switch__option" aria-pressed={actualMode === 'preview'} onClick={() => void openMode('preview')}>Preview</Button>
-              </div>
-            )}
-            {isNotebook && (
-              <div className="qe-mode-switch" aria-label="Notebook view mode">
-                <Button className="qe-mode-switch__option" aria-pressed={actualMode === 'source'} onClick={() => void openMode('source')}>Source</Button>
-                <Button className="qe-mode-switch__option" aria-pressed={actualMode !== 'source'} onClick={() => void openMode('rich')}>Notebook</Button>
-              </div>
-            )}
-            {buffer.kind === 'csv' && (
-              <div className="qe-mode-switch" aria-label="Table view mode">
-                <Button className="qe-mode-switch__option" aria-pressed={actualMode === 'source'} onClick={() => void openMode('source')}>Source</Button>
-                <Button className="qe-mode-switch__option" aria-pressed={actualMode !== 'source'} onClick={() => void openMode('rich')}>Table</Button>
-              </div>
-            )}
-            {buffer.kind === 'mermaid' && (
-              <div className="qe-mode-switch" aria-label="Diagram view mode">
-                <Button className="qe-mode-switch__option" aria-pressed={actualMode === 'source'} onClick={() => void openMode('source')}>Source</Button>
-                <Button className="qe-mode-switch__option" aria-pressed={actualMode !== 'source'} onClick={() => void openMode('rich')}>Preview</Button>
-              </div>
-            )}
-            {canOfferChanges && <Button
-              aria-label={changesOpen ? 'Close Changes' : 'Changes'}
-              aria-pressed={changesOpen}
-              onClick={() => changesOpen ? setChangesOpen(false) : void openChanges()}
-            >{changesOpen ? 'Close Changes' : 'Changes'}</Button>}
-            {!buffer.readOnly && <Button variant="primary" onClick={saveButton} disabled={!buffer.untitled && !buffer.dirty && !buffer.external}>{buffer.untitled ? 'Save As…' : 'Save'}</Button>}
-            <Button aria-pressed={buffer.pinned} title={buffer.pinned ? 'Unpin tab' : 'Pin tab'} onClick={() => void pin()}>{buffer.pinned ? 'Unpin' : 'Pin'}</Button>
-            <Button onClick={() => context.togglePanel(EXPLORER_PANEL, true)}>Explorer</Button>
-            <Button onClick={() => void sourceControl()}>Source Control</Button>
-            <IconButton label="Close tab" variant="destructive" onClick={closeButton}>×</IconButton>
-            <div className="qe-zoom-controls" aria-label="Editor font size">
-              <IconButton label="Zoom out" onClick={() => void saveSetting('editorFontZoomLevel', Math.max(-6, settings.fontZoomLevel - 1))}>−</IconButton>
-              <span>{fontSize} px</span>
-              <IconButton label="Zoom in" onClick={() => void saveSetting('editorFontZoomLevel', Math.min(18, settings.fontZoomLevel + 1))}>+</IconButton>
-              <Button aria-label="Reset zoom" onClick={() => void saveSetting('editorFontZoomLevel', 0)}>Reset</Button>
-            </div>
-          </div>
           <details ref={fileActionsRef} className="qe-file-actions">
             <summary className="qe-disclosure-trigger">File actions</summary>
             <div className="qe-file-actions-menu">
+              <Button aria-pressed={buffer.pinned} title={buffer.pinned ? 'Unpin tab' : 'Pin tab'} onClick={() => void pin()}>{buffer.pinned ? 'Unpin' : 'Pin'}</Button>
+              <Button onClick={() => context.togglePanel(EXPLORER_PANEL, true)}>Explorer</Button>
+              <Button onClick={() => void sourceControl()}>Source Control</Button>
+              <Button variant="destructive" onClick={closeButton}>Close tab</Button>
+              <div className="qe-zoom-controls" aria-label="Editor font size">
+                <IconButton label="Zoom out" onClick={() => void saveSetting('editorFontZoomLevel', Math.max(-6, settings.fontZoomLevel - 1))}>−</IconButton>
+                <span>{fontSize} px</span>
+                <IconButton label="Zoom in" onClick={() => void saveSetting('editorFontZoomLevel', Math.min(18, settings.fontZoomLevel + 1))}>+</IconButton>
+                <Button aria-label="Reset zoom" onClick={() => void saveSetting('editorFontZoomLevel', 0)}>Reset</Button>
+              </div>
               <Button onClick={() => void copyPath(false)}>Copy Path</Button>
               <Button onClick={() => void copyPath(true)}>Copy Relative Path</Button>
               <Button onClick={() => void revealInExplorer()}>Reveal in Explorer</Button>
@@ -1083,6 +1055,39 @@ function DocumentBody({ context, input }: { context: UiPluginContext; input: Doc
               <label><input type="checkbox" checked={settings.previewTabs} onChange={(event) => void saveSetting('editorPreviewTabsEnabled', event.currentTarget.checked)} />Reuse preview tab</label>
             </div>
           </details>
+        </div>
+        <div className="qe-document-action-strip">
+          {buffer.kind === 'markdown' && (
+            <div className="qe-mode-switch" aria-label="Markdown view mode">
+              <Button className="qe-mode-switch__option" aria-pressed={actualMode === 'source'} onClick={() => void openMode('source')}>Source</Button>
+              <Button className="qe-mode-switch__option" aria-pressed={actualMode === 'rich'} onClick={() => void openMode('rich')}>Rich Editor</Button>
+              <Button className="qe-mode-switch__option" aria-pressed={actualMode === 'preview'} onClick={() => void openMode('preview')}>Preview</Button>
+            </div>
+          )}
+          {isNotebook && (
+            <div className="qe-mode-switch" aria-label="Notebook view mode">
+              <Button className="qe-mode-switch__option" aria-pressed={actualMode === 'source'} onClick={() => void openMode('source')}>Source</Button>
+              <Button className="qe-mode-switch__option" aria-pressed={actualMode !== 'source'} onClick={() => void openMode('rich')}>Notebook</Button>
+            </div>
+          )}
+          {buffer.kind === 'csv' && (
+            <div className="qe-mode-switch" aria-label="Table view mode">
+              <Button className="qe-mode-switch__option" aria-pressed={actualMode === 'source'} onClick={() => void openMode('source')}>Source</Button>
+              <Button className="qe-mode-switch__option" aria-pressed={actualMode !== 'source'} onClick={() => void openMode('rich')}>Table</Button>
+            </div>
+          )}
+          {buffer.kind === 'mermaid' && (
+            <div className="qe-mode-switch" aria-label="Diagram view mode">
+              <Button className="qe-mode-switch__option" aria-pressed={actualMode === 'source'} onClick={() => void openMode('source')}>Source</Button>
+              <Button className="qe-mode-switch__option" aria-pressed={actualMode !== 'source'} onClick={() => void openMode('rich')}>Preview</Button>
+            </div>
+          )}
+          {canOfferChanges && <Button
+            aria-label={changesOpen ? 'Close Changes' : 'Changes'}
+            aria-pressed={changesOpen}
+            onClick={() => changesOpen ? setChangesOpen(false) : void openChanges()}
+          >{changesOpen ? 'Close Changes' : 'Changes'}</Button>}
+          {!buffer.readOnly && <Button variant="primary" onClick={saveButton} disabled={!buffer.untitled && !buffer.dirty && !buffer.external}>{buffer.untitled ? 'Save As…' : 'Save'}</Button>}
         </div>
       </header>
       {!buffer.readOnly && buffer.diskWritable === false && (

@@ -4,12 +4,17 @@ import type { Root } from 'react-dom/client'
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
 import type { UiPluginContext } from '@quirky/protocol'
 import type { DocumentSurface as DocumentSurfaceComponent } from '../src/window/DocumentSurface'
+import { CloseOverlay } from '../src/window/CloseOverlay'
 import type { EditorBufferInfo } from '../src/types'
 
 type SettingWrite = { id: string; value: unknown }
+type SettingChange = { type: 'setting.changed'; id: string; value: unknown }
+type PanelToggle = { panel: string; open: boolean }
 type Mounted = {
   element: HTMLElement
   settingWrites: SettingWrite[]
+  panelToggles: PanelToggle[]
+  buffer: EditorBufferInfo
   unmount(): Promise<void>
 }
 
@@ -53,7 +58,7 @@ afterEach(async () => {
   document.body.replaceChildren()
 })
 
-function makeBufferInfo(): EditorBufferInfo {
+function makeBufferInfo(dirty = false): EditorBufferInfo {
   return {
     id: BUFFER_ID,
     worktreeId: WORKTREE_ID,
@@ -68,7 +73,7 @@ function makeBufferInfo(): EditorBufferInfo {
     size: CONTENT.length,
     readOnly: false,
     diskWritable: true,
-    dirty: false,
+    dirty,
     external: null,
     mode: 'source',
     tabId: TAB_ID,
@@ -89,8 +94,8 @@ function makeBufferInfo(): EditorBufferInfo {
   }
 }
 
-async function renderDocument(): Promise<Mounted> {
-  const info = makeBufferInfo()
+async function renderDocument(options: { dirty?: boolean; withCloseOverlay?: boolean } = {}): Promise<Mounted> {
+  const info = makeBufferInfo(options.dirty ?? false)
   const state = {
     buffers: [info],
     tabs: [{ tabId: TAB_ID, bufferId: BUFFER_ID, mode: 'edit' as const }],
@@ -99,26 +104,38 @@ async function renderDocument(): Promise<Mounted> {
     quickOpenHistory: [],
     closeRequests: []
   }
+  const settingListeners = new Set<(event: SettingChange) => void>()
+  const panelToggles: PanelToggle[] = []
   const settingWrites: SettingWrite[] = []
   const settings = new Map(SETTINGS)
   const context = {
     pluginId: 'quirky.editor',
     async call(method: string, params: Record<string, unknown> = {}) {
       if (method === 'quirky.editor/state') return state
+      if (method === 'quirky.editor/close') {
+        if (info.dirty && params.choice === undefined) return { closed: false, needsDecision: true }
+        return { closed: true }
+      }
       if (method === 'setting.set') {
         const id = typeof params.id === 'string' ? params.id : ''
         settingWrites.push({ id, value: params.value })
         settings.set(id.replace(/^setting:quirky\.editor\//, ''), params.value)
+        const event: SettingChange = { type: 'setting.changed', id, value: params.value }
+        settingListeners.forEach((listener) => listener(event))
       }
+      if (method === 'quirky.editor/view') return params.action === 'pin' ? { ...info, pinned: true } : info
       return {}
     },
-    subscribe: () => () => {},
+    subscribe: (listener: (event: SettingChange) => void) => {
+      settingListeners.add(listener)
+      return () => settingListeners.delete(listener)
+    },
     onConnection: () => () => {},
     getSetting: (name: string) => settings.get(name),
     getLayout: () => ({ worktree: WORKTREE_ID, view: null, panel: null, sidebar: true, focus: 'view' }),
     setContext() {},
     toast() {},
-    togglePanel() {},
+    togglePanel: (panel: string, open: boolean) => { panelToggles.push({ panel, open }) },
   } as unknown as UiPluginContext
   const element = document.createElement('div')
   document.body.append(element)
@@ -127,6 +144,8 @@ async function renderDocument(): Promise<Mounted> {
   const surface: Mounted = {
     element,
     settingWrites,
+    panelToggles,
+    buffer: info,
     async unmount() {
       if (unmounted) return
       unmounted = true
@@ -135,7 +154,12 @@ async function renderDocument(): Promise<Mounted> {
   }
   mounted.push(surface)
   await act(async () => {
-    root.render(<DocumentSurface context={context} input={{ bufferId: BUFFER_ID, tabId: TAB_ID }} />)
+    root.render(
+      <>
+        <DocumentSurface context={context} input={{ bufferId: BUFFER_ID, tabId: TAB_ID }} />
+        {options.withCloseOverlay && <CloseOverlay />}
+      </>
+    )
   })
   await flushReact()
   return surface
@@ -171,7 +195,6 @@ function outsideSourceControl(): HTMLButtonElement {
   document.body.append(button)
   return button
 }
-
 
 async function openFileActions(surface: Mounted): Promise<void> {
   const details = fileActions(surface.element)
@@ -294,3 +317,102 @@ test('File actions stay open while interacting with native settings controls', a
   expect(document.activeElement).toBe(delay)
 })
 
+test('File actions keep secondary controls usable and their settings persistent', async () => {
+  const surface = await renderDocument()
+  const details = fileActions(surface.element)
+  await openFileActions(surface)
+  const menu = details.querySelector('.qe-file-actions-menu')
+  const pin = buttonByText(details, 'Pin')
+  const explorer = buttonByText(details, 'Explorer')
+  const sourceControl = buttonByText(details, 'Source Control')
+  const closeTab = buttonByText(details, 'Close tab')
+  const zoomIn = details.querySelector<HTMLButtonElement>('[aria-label="Zoom in"]')
+  const zoomLabel = details.querySelector('.qe-zoom-controls > span')
+
+  expect(menu?.contains(pin)).toBe(true)
+  expect(menu?.contains(explorer)).toBe(true)
+  expect(menu?.contains(sourceControl)).toBe(true)
+  expect(menu?.contains(closeTab)).toBe(true)
+  expect(menu?.contains(zoomIn)).toBe(true)
+
+  await act(async () => pin.click())
+  await flushReact()
+  expect(buttonByText(details, 'Unpin').textContent?.trim()).toBe('Unpin')
+
+  await act(async () => explorer.click())
+  await flushReact()
+  expect(surface.panelToggles).toContainEqual({
+    panel: 'panel:quirky.editor/explorer',
+    open: true
+  })
+
+  const trigger = fileActionsTrigger(surface.element)
+  await act(async () => {
+    zoomIn!.focus()
+    zoomIn!.click()
+  })
+  await flushReact()
+  expect(zoomLabel?.textContent).toBe('14 px')
+  expect(surface.settingWrites).toContainEqual({
+    id: 'setting:quirky.editor/editorFontZoomLevel',
+    value: 1
+  })
+
+  const { event, reachedWindow } = await pressEscape(zoomIn!)
+  expect(details.open).toBe(false)
+  expect(document.activeElement).toBe(trigger)
+  expect(event.defaultPrevented).toBe(true)
+  expect(reachedWindow).toBe(false)
+
+  await openFileActions(surface)
+  const reset = details.querySelector<HTMLButtonElement>('[aria-label="Reset zoom"]')
+  expect(reset).not.toBeNull()
+  await act(async () => reset!.click())
+  await flushReact()
+  expect(zoomLabel?.textContent).toBe('13 px')
+  expect(surface.settingWrites).toContainEqual({
+    id: 'setting:quirky.editor/editorFontZoomLevel',
+    value: 0
+  })
+})
+
+test('cancelling a keyboard-activated dirty Close tab returns focus to the visible File actions trigger', async () => {
+  const surface = await renderDocument({ dirty: true, withCloseOverlay: true })
+  const details = fileActions(surface.element)
+  const trigger = fileActionsTrigger(surface.element)
+  const closeTab = buttonByText(details, 'Close tab')
+
+  const activateCloseTabWithEnter = async () => {
+    await act(async () => {
+      closeTab.focus()
+      closeTab.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }))
+      closeTab.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, detail: 0 }))
+    })
+    await flushReact()
+  }
+
+  await openFileActions(surface)
+  await activateCloseTabWithEnter()
+
+  expect(surface.element.querySelector('[role="dialog"] h2')?.textContent).toBe('Unsaved Changes')
+  const cancel = buttonByText(surface.element, 'Cancel')
+  await act(async () => cancel.click())
+  await flushReact()
+
+  expect(surface.element.querySelector('[role="dialog"]')).toBeNull()
+  expect(details.open).toBe(false)
+  expect(document.activeElement).toBe(trigger)
+  expect(surface.buffer.dirty).toBe(true)
+
+  await openFileActions(surface)
+  await activateCloseTabWithEnter()
+  const dialog = surface.element.querySelector<HTMLElement>('[role="dialog"]')
+  if (!dialog) throw new Error('The dirty-close dialog did not open.')
+  await pressEscape(dialog)
+  await flushReact()
+
+  expect(surface.element.querySelector('[role="dialog"]')).toBeNull()
+  expect(details.open).toBe(false)
+  expect(document.activeElement).toBe(trigger)
+  expect(surface.buffer.dirty).toBe(true)
+})
