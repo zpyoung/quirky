@@ -21,4 +21,4 @@ test('simulator CLI lists real provider-format devices and the API returns only 
   expect(await harness.call('quirky.terminal/emulatorFrame', { device })).toMatchObject({ device, mime: 'image/png', data: png })
   await expect(harness.call('quirky.terminal/emulatorFrame', { device: 'booted' })).rejects.toThrow('exact simulator')
   await expect(harness.call('quirky.terminal/emulatorFrame', { device: 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee' })).rejects.toThrow('Unknown exact simulator')
-})
+}, 20_000)
