@@ -60,10 +60,10 @@ export function DeleteDialog({ context, worktree, descendants, onConfirm, onClos
           <input type="checkbox" checked={dontAskAgain} onChange={(event) => setDontAskAgain(event.target.checked)} />
           <span>Don't ask again</span>
         </label>
-        <Button type="button" onClick={onClose}>
+        <Button type="button" autoFocus onClick={onClose}>
           Cancel
         </Button>
-        <Button type="button" variant="destructive" autoFocus onClick={() => onConfirm({ dontAskAgain })}>
+        <Button type="button" variant="destructive" onClick={() => onConfirm({ dontAskAgain })}>
           Delete Workspace
         </Button>
       </div>
