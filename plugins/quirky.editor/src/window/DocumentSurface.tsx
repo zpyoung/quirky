@@ -7,6 +7,7 @@ import { useEditorState, type EditorState } from './editorState'
 import { openExplorerSearch } from './explorerIntent'
 import { requestSingleClose } from './overlayState'
 import { setEditorSetting, useEditorSettings } from './settings'
+import { cancelEditorFocus } from './editorFocus'
 import { SourceEditor, type SourceEditorHandle } from './SourceEditor'
 import { ChangesSurface } from './ChangesSurface'
 import { hydrateBuffer, hydrateDiskContent, importFileTransfer, writeDraft } from './transfers'
@@ -362,6 +363,9 @@ function DocumentBody({ context, input }: { context: UiPluginContext; input: Doc
   }, [buffer?.content, buffer?.contentRevision, buffer?.draft])
 
   useEffect(() => () => {
+    if (input.tabId !== null) cancelEditorFocus(input.tabId)
+  }, [input.tabId])
+  useEffect(() => () => {
     if (undoReloadTimer.current !== undefined) window.clearTimeout(undoReloadTimer.current)
   }, [])
 
@@ -644,9 +648,9 @@ function DocumentBody({ context, input }: { context: UiPluginContext; input: Doc
     const view = tabView && typeof tabView === 'object' && !Array.isArray(tabView)
       ? { ...buffer.view, ...tabView as Record<string, unknown> }
       : buffer.view
-    const surfaceBuffer = buffer.mode === actualMode && view === buffer.view
+    const surfaceBuffer = buffer.mode === actualMode && buffer.tabId === actualTabId && view === buffer.view
       ? buffer
-      : { ...buffer, mode: actualMode, view }
+      : { ...buffer, mode: actualMode, tabId: actualTabId, view }
     return {
       context,
       buffer: surfaceBuffer,
@@ -755,6 +759,7 @@ function DocumentBody({ context, input }: { context: UiPluginContext; input: Doc
         registration.focus()
       } else {
         registration.blur()
+        if (actualTabId !== null) cancelEditorFocus(actualTabId)
         clearEditorFocus()
       }
     }
@@ -762,6 +767,7 @@ function DocumentBody({ context, input }: { context: UiPluginContext; input: Doc
     const observer = group ? new MutationObserver(updateGroupFocus) : undefined
     if (group) observer?.observe(group, { attributes: true, attributeFilter: ['class'] })
     return () => {
+      if (actualTabId !== null) cancelEditorFocus(actualTabId)
       observer?.disconnect()
       registration.unregister()
       if (activeRegistration.current === registration) activeRegistration.current = null

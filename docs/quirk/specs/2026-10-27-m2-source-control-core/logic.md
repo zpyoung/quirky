@@ -168,6 +168,7 @@ a scenario says otherwise, so `--worktree` defaults to it.
    - **Given** **feat** one commit ahead of `origin/zoe/feat`, with the changes of SC-1, and the panel open
    - **When** the person looks at the panel
    - **Then** top to bottom: the header with the filter toggle and the "More source control actions" menu; the branch row `zoe/feat → origin/main` with `↑1` and the line-total chip; the commit box; the sections Changes, Staged Changes and Untracked Files (the default "Changes first" order), each heading uppercase with its count; then Committed on Branch and the collapsed Commits dock. Rows show the file name in bold, the folder muted, `+N` and `−N` only when above zero, and the status letter in its colour (M, A, D, R, U, C). Empty sections are not shown.
+   - File-row count badges use singular accessible labels for one changed line (`1 addition`, `1 deletion`) and plural labels for larger counts, including Committed on Branch and expanded commit files.
    - The "More source control actions" menu aligns its right edge with its trigger and stays within the viewport, leaving the right activity rail uncovered.
    - **Data before:** **feat**: 1 commit ahead; SC-1's four changes
    - **Walkthrough:**

@@ -191,6 +191,17 @@ describe('status bar', () => {
     expect(texts(env)).toEqual(['2 working', '1 needs you', 'ten', 'twenty', 'TypeScript'])
   })
 
+  test('accessible counts use singular nouns for one working agent and one pending question', async () => {
+    const { env, first } = await boot()
+    await seedSessions(env, [first])
+    await askIn(env, first, 'Approve the change?')
+    await env.win.waitFor(() => texts(env).includes('1 working') && texts(env).includes('1 needs you'))
+
+    const labels = values(env).map((element) => element.getAttribute('aria-label'))
+    expect(labels).toContainEqual(expect.stringMatching(/\b1 agent\b/))
+    expect(labels).toContainEqual(expect.stringMatching(/\b1 pending question\b/))
+  })
+
   test('the breadcrumb leads with the project tile, then project, worktree and file, and names the project under All projects', async () => {
     const { env, attention, repos, first } = await boot()
     expect(attention.getSnapshot().filterRepoIds).toEqual([])
@@ -283,7 +294,7 @@ describe('status bar', () => {
     await seedSessions(env, [first, second])
     await askIn(env, first, 'Question')
     const working = await env.win.waitFor(() => itemLabelled(env, '2 agents working'))
-    const needsYou = await env.win.waitFor(() => itemLabelled(env, '1 pending questions'))
+    const needsYou = await env.win.waitFor(() => itemLabelled(env, '1 pending question'))
 
     await click(working)
     await env.win.waitFor(() => popups(env).length === 1)

@@ -70,6 +70,8 @@ The Mac window bar and Quirky's own title bar merge into one 40-high bar. Readin
 
 Empty space in the bar still drags the window, and a control is never also a drag handle.
 
+At the minimum 646-point window width, every control keeps a separate click target. Project and worktree labels ellipsize as needed. At 48rem and below, Search becomes icon-only and navigation may shift off-center to keep all actions visible.
+
 New agent starts an agent tab in the selected worktree using the default agent, and its caret picks another agent. The bar shows no agent status, because a worktree can run several agents. Status stays in the tabs and worktree rows.
 
 ### Project narrowing
@@ -150,6 +152,8 @@ One shared popup shape serves the project switcher, the worktree switcher and st
 ### Status bar
 
 The left side is a breadcrumb of the selected project, worktree and open file, which always names the project even under All projects. The right side holds, in order: working count, needs-you count, ahead and behind, checks, usage, and file type. Each right-side value opens a popup, except file type. Plugins still add items by registering them.
+
+The working and needs-you counts have accessible names that identify agents and pending questions. They use singular nouns at one ("1 agent working", "1 pending question") and plural nouns at zero and above one.
 
 ### Center tabs and ⌘K
 
@@ -337,3 +341,4 @@ Approved 2026-10-30, including the decisions marked assumed. Tech spec: expected
 **Amendments:**
 
 - 2026-10-30: the icon table's Agents row is the tool registered as Heimdall. Problems and Checks output aren't registered today, so the right stripe's foot group is empty until one exists. That's the only way the running app differs from the golden screens' stripe. Remote workspaces, Activity and Dashboard weren't in the table and use `slate`, `coral` and `mint` with the icons `hard-drives`, `pulse` and `gauge`.
+- 2026-10-31: clarified the Window bar's minimum-width behavior after QA found overlapping picker and navigation controls.

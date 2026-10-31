@@ -287,9 +287,10 @@
                 "filter": { "description": "Filter state as a string or viewer-specific object." },
                 "mode": { "type": "string", "enum": ["source", "rich"], "description": "Preview is a separate tab and cannot be set through a buffer mode patch." },
                 "delimiter": { "type": "string" }, "viewer": { "type": "object", "additionalProperties": true },
-                "focused": { "type": "boolean" }, "line": { "type": "integer", "minimum": 1 }, "column": { "type": "integer", "minimum": 1 },
+                "focused": { "type": "boolean" }, "line": { "description": "Positive integer source-navigation line, or null to acknowledge navigation." }, "column": { "description": "Positive integer source-navigation column, or null to acknowledge navigation." },
                 "markdownAnchor": { "description": "Either a safe Markdown heading fragment of at most 512 UTF-8 bytes or null; empty string and null clear it." },
-                "matchLength": { "type": "integer", "minimum": 0, "maximum": 52428800, "description": "UTF-16 search-match selection length." }
+                "matchLength": { "description": "UTF-16 search-match selection length from 0 to 52,428,800, or null to acknowledge navigation." },
+                "navigationId": { "type": "string", "description": "Echo the pending navigation identity (1–128 characters) when acknowledging it; a stale acknowledgment cannot clear a newer navigation." }
               },
               "additionalProperties": false
             },

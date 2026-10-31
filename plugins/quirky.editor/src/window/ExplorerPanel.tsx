@@ -7,6 +7,7 @@ import { useEditorState, worktreeFromLayout } from './editorState'
 import { clearExplorerSearch, useExplorerSearchIntent } from './explorerIntent'
 import { setEditorSetting, useEditorSettings } from './settings'
 import { importFiles } from './transfers'
+import { beginEditorFocusHandoff, type EditorFocusHandoff } from './editorFocus'
 
 const MAX_EXPLORER_CHILD_LISTINGS = 20_001
 const WORKTREE_PATHS_MIME = 'application/x-quirky-worktree-paths'
@@ -153,6 +154,8 @@ export function ExplorerPanel({ context, report }: { context: UiPluginContext; r
   const [renamePath, setRenamePath] = useState<string | null>(null)
   const [renameValue, setRenameValue] = useState('')
   const [itemBusy, setItemBusy] = useState(false)
+  const [focusAfterCreate, setFocusAfterCreate] = useState<EditorFocusHandoff | null>(null)
+  const focusHandoffRef = useRef<EditorFocusHandoff | null>(null)
   const searchRequest = useRef<string | undefined>(undefined)
   const searchSequence = useRef(0)
   const inlineOpenedAt = useRef(0)
@@ -165,6 +168,15 @@ export function ExplorerPanel({ context, report }: { context: UiPluginContext; r
     const selectionEnd = !isDirectory && extension > 0 ? extension : name.length
     renameInputRef.current.setSelectionRange(0, selectionEnd)
   }, [renamePath])
+  useEffect(() => {
+    if (focusAfterCreate === null) return
+    focusAfterCreate.request()
+    setFocusAfterCreate(null)
+  }, [focusAfterCreate])
+  useEffect(() => () => {
+    focusHandoffRef.current?.cancel()
+    focusHandoffRef.current = null
+  }, [])
   useEffect(() => context.onLayout(() => setLayoutWorktree(worktreeFromLayout(context))), [context])
 
   useEffect(() => {
@@ -464,22 +476,16 @@ export function ExplorerPanel({ context, report }: { context: UiPluginContext; r
   const openFile = async (path: string, options: { preview?: boolean; pinned?: boolean; line?: number; column?: number; matchLength?: number } = {}) => {
     if (!worktree) return
     try {
-      const opened = await context.call('quirky.editor/open', {
+      await context.call('quirky.editor/open', {
         worktree,
         path,
         focus: true,
         preview: options.preview ?? settings.previewTabs,
         ...(options.pinned === undefined ? {} : { pinned: options.pinned }),
         ...(options.line === undefined ? {} : { line: options.line }),
-        ...(options.column === undefined ? {} : { column: options.column })
-      }) as { id: string }
-      if (options.line !== undefined) {
-        await context.call('quirky.editor/view', {
-          bufferId: opened.id,
-          action: 'reveal',
-          patch: { line: options.line, column: options.column ?? 1, matchLength: options.matchLength ?? 0 }
-        })
-      }
+        ...(options.column === undefined ? {} : { column: options.column }),
+        ...(options.matchLength === undefined ? {} : { matchLength: options.matchLength })
+      })
       setError(null)
     } catch (reason) {
       setError(messageOf(reason))
@@ -667,11 +673,18 @@ export function ExplorerPanel({ context, report }: { context: UiPluginContext; r
   const commitNewItem = async () => {
     if (!worktree || !newItemKind || !newItemName.trim()) return
     const path = newItemName.trim()
+    const focusHandoff = newItemKind === 'file' ? beginEditorFocusHandoff() : null
+    if (focusHandoff !== null) focusHandoffRef.current = focusHandoff
     setItemBusy(true)
+    let openedTabId: string | undefined
     try {
       if (newItemKind === 'file') {
         await context.call('quirky.editor/mutate', { worktree, action: 'createFile', path, content: '' })
-        await context.call('quirky.editor/open', { worktree, path, preview: false, focus: true })
+        const opened = await context.call('quirky.editor/open', { worktree, path, preview: false, focus: true }) as { openedTabId?: unknown }
+        if (typeof opened.openedTabId === 'string' && opened.openedTabId !== '') {
+          openedTabId = opened.openedTabId
+          focusHandoff?.setTarget(openedTabId)
+        }
       } else {
         await context.call('quirky.editor/mutate', { worktree, action: 'createFolder', path })
       }
@@ -681,8 +694,16 @@ export function ExplorerPanel({ context, report }: { context: UiPluginContext; r
       await reloadExpandedDirectories()
       setNewItemKind(null)
       setNewItemName('')
+      if (openedTabId !== undefined && focusHandoff !== null && focusHandoffRef.current === focusHandoff) {
+        setFocusAfterCreate(focusHandoff)
+      } else {
+        focusHandoff?.cancel()
+        if (focusHandoffRef.current === focusHandoff) focusHandoffRef.current = null
+      }
       refreshEditorState()
     } catch (reason) {
+      focusHandoff?.cancel()
+      if (focusHandoffRef.current === focusHandoff) focusHandoffRef.current = null
       setError(messageOf(reason))
     } finally {
       setItemBusy(false)
