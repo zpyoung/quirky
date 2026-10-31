@@ -96,6 +96,7 @@ Before: Markdown with repeated headings/front matter and `.orca/templates` docum
 
 ### SC-15: Markdown review notes
 Before: Markdown selection. Add/edit/delete note with selected excerpt and front-matter-correct line span; rail count and copy use documented sorted prompt formatting and escaping. Send existing/new-agent targets through public agent send/launch readiness gates; keep notes on failure, delete only delivered notes. Read-only/oversized input errors are visible. Source-control note shelf remains owned by source-control plugin, not duplicated.
+The rich editor starts with the review-notes rail hidden. Its visible Review notes count toggle opens or hides the rail without losing saved notes or an unsent composer draft. Adding a note from the selected text opens the rail. At narrow editor widths, the rail's heading and action labels wrap inside it.
 
 ### SC-16: Notebook parsing and cell editing
 Before: `.ipynb` with metadata, Markdown, code/raw cells and outputs. Opens Notebook with Source toggle, count and language. Edit cell, insert above/below, move, change type, delete (last cell becomes empty code), clear outputs and save valid JSON with one-space indent and preserved root metadata. Source arrays retain newlines; id-less executed cells acquire ids and nbformat_minor >=5. Malformed notebooks show a useful error and raw source remains accessible.

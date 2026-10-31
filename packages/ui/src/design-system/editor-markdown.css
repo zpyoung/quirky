@@ -53,6 +53,12 @@
   padding: 0;
 }
 
+.markdown-toolbar--notes .ui-button {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
 .markdown-source,
 .markdown-input,
 .markdown-select,
@@ -278,6 +284,8 @@
 .markdown-notes-heading {
   align-items: center;
   display: flex;
+  flex-wrap: wrap;
+  gap: var(--ui-space-4);
   justify-content: space-between;
 }
 
