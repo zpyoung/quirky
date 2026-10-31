@@ -225,7 +225,7 @@ function zipOf(scratch: string, content: string, entry = 'baseline.json'): strin
   mkdirSync(src, { recursive: true })
   writeFileSync(join(src, entry), content)
   const out = join(scratch, `${Math.random().toString(36).slice(2)}.zip`)
-  const result = Bun.spawnSync(['zip', '-q', out, entry], { cwd: src })
+  const result = Bun.spawnSync(['python3', '-m', 'zipfile', '-c', out, entry], { cwd: src })
   if (result.exitCode !== 0) throw new Error(result.stderr.toString())
   return out
 }

@@ -1,6 +1,7 @@
 import { beforeAll, describe, expect, test } from 'bun:test'
-import { readdirSync, readFileSync } from 'node:fs'
+import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { repoFiles } from '../test-support/repo-files'
 import { buildImportGraph } from './graph'
 import { findSpawners, SPAWN_HELPERS, SPAWN_MARKER, selectTests } from './select'
 import type { ChangedPath, ImportGraph } from './types'
@@ -325,20 +326,13 @@ describe('findSpawners', () => {
   })
 })
 
-/** Tracked files, or every file outside node_modules where the suite's copy of the tree has no .git. */
-function repoFiles(): string[] {
-  const listed = Bun.spawnSync(['git', 'ls-files'], { cwd: REPO })
-  if (listed.success) return listed.stdout.toString().split('\n').filter(Boolean)
-  return readdirSync(REPO, { recursive: true, encoding: 'utf8' }).filter((path) => !path.split('/').includes('node_modules'))
-}
-
 describe('selectTests on the real repo', () => {
   let testFiles: string[]
   let graph: ReturnType<typeof buildImportGraph>
   let spawners: Set<string>
 
   beforeAll(() => {
-    const tracked = repoFiles()
+    const tracked = repoFiles(REPO)
     testFiles = tracked.filter((path) => TEST_FILE.test(path))
     graph = buildImportGraph(REPO, tracked.filter((path) => CODE_FILE.test(path)))
     spawners = findSpawners(graph, testFiles, (path) => readFileSync(join(REPO, path), 'utf8'))

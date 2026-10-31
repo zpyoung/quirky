@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
+import { repoFiles } from '../test-support/repo-files'
 import { buildImportGraph } from './graph'
 
 const REPO = join(import.meta.dir, '..', '..')
@@ -153,8 +154,7 @@ describe('buildImportGraph on the real repo', () => {
   let files: string[]
 
   beforeAll(() => {
-    const listed = Bun.spawnSync(['git', 'ls-files'], { cwd: REPO }).stdout.toString().split('\n')
-    files = listed.filter((path) => CODE_FILE.test(path))
+    files = repoFiles(REPO).filter((path) => CODE_FILE.test(path))
     graph = buildImportGraph(REPO, files)
   })
 
