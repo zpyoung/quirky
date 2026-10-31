@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type KeyboardEvent, type MouseEvent as ReactMouseEvent } from 'react'
 import type { UiPluginContext } from '@quirky/protocol'
-import { Button, ControlIcon, IconButton, ListRow, Menu, TextField, ToolPanelFrame } from '@quirky/ui'
+import { Button, ControlIcon, IconButton, ListRow, PopupMenu, TextField, ToolPanelFrame } from '@quirky/ui'
 import type { ExplorerInteraction } from '../types'
 import { activeDocument } from './activeDocument'
 import { useEditorState, worktreeFromLayout } from './editorState'
 import { clearExplorerSearch, useExplorerSearchIntent } from './explorerIntent'
 import { setEditorSetting, useEditorSettings } from './settings'
 import { importFiles } from './transfers'
+import { beginEditorFocusHandoff, type EditorFocusHandoff } from './editorFocus'
 
 const MAX_EXPLORER_CHILD_LISTINGS = 20_001
 const WORKTREE_PATHS_MIME = 'application/x-quirky-worktree-paths'
@@ -125,6 +126,7 @@ export function ExplorerPanel({ context, report }: { context: UiPluginContext; r
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const expandedRef = useRef<Set<string>>(new Set())
   const [selectedPaths, setSelectedPaths] = useState<string[]>([])
+  const [rowAction, setRowAction] = useState<{ anchor: HTMLButtonElement; entry: ExplorerEntry } | null>(null)
   const selectedPathsRef = useRef<string[]>([])
   const [focusedPath, setFocusedPath] = useState<string | null>(null)
   const focusedPathRef = useRef<string | null>(null)
@@ -152,6 +154,8 @@ export function ExplorerPanel({ context, report }: { context: UiPluginContext; r
   const [renamePath, setRenamePath] = useState<string | null>(null)
   const [renameValue, setRenameValue] = useState('')
   const [itemBusy, setItemBusy] = useState(false)
+  const [focusAfterCreate, setFocusAfterCreate] = useState<EditorFocusHandoff | null>(null)
+  const focusHandoffRef = useRef<EditorFocusHandoff | null>(null)
   const searchRequest = useRef<string | undefined>(undefined)
   const searchSequence = useRef(0)
   const inlineOpenedAt = useRef(0)
@@ -164,7 +168,30 @@ export function ExplorerPanel({ context, report }: { context: UiPluginContext; r
     const selectionEnd = !isDirectory && extension > 0 ? extension : name.length
     renameInputRef.current.setSelectionRange(0, selectionEnd)
   }, [renamePath])
+  useEffect(() => {
+    if (focusAfterCreate === null) return
+    focusAfterCreate.request()
+    setFocusAfterCreate(null)
+  }, [focusAfterCreate])
+  useEffect(() => () => {
+    focusHandoffRef.current?.cancel()
+    focusHandoffRef.current = null
+  }, [])
   useEffect(() => context.onLayout(() => setLayoutWorktree(worktreeFromLayout(context))), [context])
+
+  useEffect(() => {
+    if (rowAction === null) return
+    const closeOnFocusOutside = (event: FocusEvent) => {
+      const target = event.target
+      if (!(target instanceof Node) || rowAction.anchor.contains(target)) return
+      const menuLabel = `Actions for ${rowAction.entry.name}`
+      const isInsideMenu = Array.from(document.querySelectorAll<HTMLElement>('[role="menu"][aria-label]'))
+        .some((menu) => menu.getAttribute('aria-label') === menuLabel && menu.contains(target))
+      if (!isInsideMenu) setRowAction(null)
+    }
+    document.addEventListener('focusin', closeOnFocusOutside)
+    return () => document.removeEventListener('focusin', closeOnFocusOutside)
+  }, [rowAction])
 
   useEffect(() => {
     if (worktree) return
@@ -449,22 +476,16 @@ export function ExplorerPanel({ context, report }: { context: UiPluginContext; r
   const openFile = async (path: string, options: { preview?: boolean; pinned?: boolean; line?: number; column?: number; matchLength?: number } = {}) => {
     if (!worktree) return
     try {
-      const opened = await context.call('quirky.editor/open', {
+      await context.call('quirky.editor/open', {
         worktree,
         path,
         focus: true,
         preview: options.preview ?? settings.previewTabs,
         ...(options.pinned === undefined ? {} : { pinned: options.pinned }),
         ...(options.line === undefined ? {} : { line: options.line }),
-        ...(options.column === undefined ? {} : { column: options.column })
-      }) as { id: string }
-      if (options.line !== undefined) {
-        await context.call('quirky.editor/view', {
-          bufferId: opened.id,
-          action: 'reveal',
-          patch: { line: options.line, column: options.column ?? 1, matchLength: options.matchLength ?? 0 }
-        })
-      }
+        ...(options.column === undefined ? {} : { column: options.column }),
+        ...(options.matchLength === undefined ? {} : { matchLength: options.matchLength })
+      })
       setError(null)
     } catch (reason) {
       setError(messageOf(reason))
@@ -652,11 +673,18 @@ export function ExplorerPanel({ context, report }: { context: UiPluginContext; r
   const commitNewItem = async () => {
     if (!worktree || !newItemKind || !newItemName.trim()) return
     const path = newItemName.trim()
+    const focusHandoff = newItemKind === 'file' ? beginEditorFocusHandoff() : null
+    if (focusHandoff !== null) focusHandoffRef.current = focusHandoff
     setItemBusy(true)
+    let openedTabId: string | undefined
     try {
       if (newItemKind === 'file') {
         await context.call('quirky.editor/mutate', { worktree, action: 'createFile', path, content: '' })
-        await context.call('quirky.editor/open', { worktree, path, preview: false, focus: true })
+        const opened = await context.call('quirky.editor/open', { worktree, path, preview: false, focus: true }) as { openedTabId?: unknown }
+        if (typeof opened.openedTabId === 'string' && opened.openedTabId !== '') {
+          openedTabId = opened.openedTabId
+          focusHandoff?.setTarget(openedTabId)
+        }
       } else {
         await context.call('quirky.editor/mutate', { worktree, action: 'createFolder', path })
       }
@@ -666,8 +694,16 @@ export function ExplorerPanel({ context, report }: { context: UiPluginContext; r
       await reloadExpandedDirectories()
       setNewItemKind(null)
       setNewItemName('')
+      if (openedTabId !== undefined && focusHandoff !== null && focusHandoffRef.current === focusHandoff) {
+        setFocusAfterCreate(focusHandoff)
+      } else {
+        focusHandoff?.cancel()
+        if (focusHandoffRef.current === focusHandoff) focusHandoffRef.current = null
+      }
       refreshEditorState()
     } catch (reason) {
+      focusHandoff?.cancel()
+      if (focusHandoffRef.current === focusHandoff) focusHandoffRef.current = null
       setError(messageOf(reason))
     } finally {
       setItemBusy(false)
@@ -995,41 +1031,28 @@ export function ExplorerPanel({ context, report }: { context: UiPluginContext; r
                     {entry.isSymlink && <span title="Symbolic link">↗</span>}
                     {entry.ignored && <span aria-label="Ignored by .gitignore">⊘</span>}
                     {entry.error && <span className="qe-explorer-row-error" title={entry.error}>!</span>}
-                    <div
-                      className="qe-explorer-row-actions"
-                      onClick={(event) => {
-                        event.stopPropagation()
-                        if (!(event.target instanceof Element) || event.target.closest('.ui-menu__trigger') === null) return
-                        if (!selectedPathsRef.current.includes(entry.path)) {
-                          void enqueueInteraction({
-                            action: 'select',
-                            path: entry.path,
-                            ...(searchMode === 'names' && query.trim() !== '' ? { query } : {})
-                          })
-                        }
-                      }}
-                      onKeyDown={(event) => event.stopPropagation()}
-                    >
-                      <Menu
+                    <div className={`qe-explorer-row-actions${rowAction?.entry.path === entry.path ? ' open' : ''}`}>
+                      <IconButton
+                        className="qe-explorer-row-action-trigger"
                         label={`Actions for ${entry.name}`}
-                        trigger={<span aria-hidden="true">⋯</span>}
-                        items={[
-                          { id: 'new-file', label: 'New File', onAction: () => startNewItem('file', entry.isDirectory ? entry.path : '.') },
-                          { id: 'new-folder', label: 'New Folder', onAction: () => startNewItem('folder', entry.isDirectory ? entry.path : '.') },
-                          { id: 'copy-path', label: 'Copy Path', onAction: () => { void copyPaths(false, [entry.path]) } },
-                          { id: 'copy-relative-path', label: 'Copy Relative Path', onAction: () => { void copyPaths(true, [entry.path]) } },
-                          ...(!entry.isDirectory ? [{ id: 'duplicate', label: 'Duplicate', onAction: () => { void duplicatePath(entry.path) } }] : []),
-                          { id: 'rename', label: 'Rename', onAction: () => startRename(entry.path) },
-                          { id: 'delete', label: 'Delete', destructive: true, onAction: () => { void deleteSelected([entry.path]) } },
-                          ...(entry.isDirectory ? [
-                            { id: 'open-in-terminal', label: 'Open in Terminal', onAction: () => { void openInTerminal(entry.path) } },
-                            { id: 'find-in-folder', label: 'Find in Folder', onAction: () => { setSearchMode('contents'); setIncludePattern(`${escapedGlob(entry.path)}/**`) } }
-                          ] : []),
-                          ...(!entry.isDirectory && entry.name.toLowerCase().endsWith('.md') ? [
-                            { id: 'open-markdown-preview', label: 'Open Markdown Preview', onAction: () => { void openMarkdownPreview(entry.path) } }
-                          ] : [])
-                        ]}
-                      />
+                        aria-haspopup="menu"
+                        aria-expanded={rowAction?.entry.path === entry.path}
+                        onClick={(event) => {
+                          event.stopPropagation()
+                          if (!selectedPathsRef.current.includes(entry.path)) {
+                            void enqueueInteraction({
+                              action: 'select',
+                              path: entry.path,
+                              ...(searchMode === 'names' && query.trim() !== '' ? { query } : {})
+                            })
+                          }
+                          if (rowAction?.entry.path === entry.path) setRowAction(null)
+                          else setRowAction({ entry, anchor: event.currentTarget })
+                        }}
+                        onKeyDown={(event) => event.stopPropagation()}
+                      >
+                        <ControlIcon name="dots-three" />
+                      </IconButton>
                     </div>
                   </>
                 }
@@ -1112,6 +1135,30 @@ export function ExplorerPanel({ context, report }: { context: UiPluginContext; r
       {rootListing?.truncated && <p className="muted">More files may be available.</p>}
       {state?.explorer.expanded.length === 0 && expanded.size > 0 && <span className="sr-only">Expanded folders are open.</span>}
     </section>
+      {rowAction && (
+        <PopupMenu
+          key={rowAction.entry.path}
+          anchor={rowAction.anchor}
+          title={`Actions for ${rowAction.entry.name}`}
+          items={[
+            { id: 'new-file', label: 'New File', onSelect: () => startNewItem('file', rowAction.entry.isDirectory ? rowAction.entry.path : '.') },
+            { id: 'new-folder', label: 'New Folder', onSelect: () => startNewItem('folder', rowAction.entry.isDirectory ? rowAction.entry.path : '.') },
+            { id: 'copy-path', label: 'Copy Path', onSelect: () => { void copyPaths(false, [rowAction.entry.path]) } },
+            { id: 'copy-relative-path', label: 'Copy Relative Path', onSelect: () => { void copyPaths(true, [rowAction.entry.path]) } },
+            ...(!rowAction.entry.isDirectory ? [{ id: 'duplicate', label: 'Duplicate', onSelect: () => { void duplicatePath(rowAction.entry.path) } }] : []),
+            { id: 'rename', label: 'Rename', onSelect: () => startRename(rowAction.entry.path) },
+            { id: 'delete', label: 'Delete', danger: true, onSelect: () => { void deleteSelected([rowAction.entry.path]) } },
+            ...(rowAction.entry.isDirectory ? [
+              { id: 'open-in-terminal', label: 'Open in Terminal', onSelect: () => { void openInTerminal(rowAction.entry.path) } },
+              { id: 'find-in-folder', label: 'Find in Folder', onSelect: () => { setSearchMode('contents'); setIncludePattern(`${escapedGlob(rowAction.entry.path)}/**`) } }
+            ] : []),
+            ...(!rowAction.entry.isDirectory && rowAction.entry.name.toLowerCase().endsWith('.md') ? [
+              { id: 'open-markdown-preview', label: 'Open Markdown Preview', onSelect: () => { void openMarkdownPreview(rowAction.entry.path) } }
+            ] : [])
+          ]}
+          onClose={() => setRowAction(null)}
+        />
+      )}
     </ToolPanelFrame>
   )
 }

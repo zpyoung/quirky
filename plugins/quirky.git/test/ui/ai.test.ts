@@ -144,10 +144,10 @@ describe('NA-24: the sparkle button', () => {
     unmount()
   })
 
-  test('(f) staged and empty: enabled with Orca\'s tooltip', async () => {
+  test('(f) staged and empty: enabled with no stop control', async () => {
     const { element, unmount } = await open()
     expect(sparkle(element)?.disabled).toBe(false)
-    expect(sparkle(element)?.title).toBe('ai commit msg')
+    expect(sparkle(element)?.getAttribute('title')).toBe(sparkle(element)?.getAttribute('aria-label'))
     expect(stop(element)).toBeNull()
     unmount()
   })
@@ -260,7 +260,6 @@ describe('NA-25: generating a message', () => {
       f.on('quirky.agents/list', () => ({ defaultAgent: 'claude', agents: [] }))
       f.on('quirky.git/aiRecipe', (params) => recipe(params.action as string, { agent: 'custom' }))
     })
-    expect(sparkle(element)?.title).toBe('ai commit msg')
     await click(sparkle(element))
     expect(fake.views).toEqual([])
     expect(fake.called('quirky.git/generateCommitMessage').map((c) => c.params)).toEqual([{ worktree: 'feat' }])

@@ -351,7 +351,8 @@ checks. Ledger is included in the canonical UI lint plugin list.
 
 Setting declarations can provide optional `category` and `section` strings. The generic Settings
 dialog groups these declarations by category and section; uncategorized settings retain their
-plugin grouping.
+plugin grouping, with the plugin's manifest `name` as the heading. Plugin and setting IDs remain
+unchanged.
 
 Git worktrees expose separate display membership (`projectGroupId`), monotonic activity
 (`lastActivityAt`) and filesystem-instance identity (`instanceId`). `quirky wt create-group

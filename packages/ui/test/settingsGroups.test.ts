@@ -5,6 +5,7 @@ import { settingsGroups, themePicker } from '../src/plugins/settingsGroups'
 const fontSize: SettingInfo = {
   id: 'setting:acme.notes/fontSize',
   plugin: 'acme.notes',
+  pluginName: 'Notes',
   type: 'number',
   title: 'Font size',
   default: 13,
@@ -15,6 +16,7 @@ const fontSize: SettingInfo = {
 const mode: SettingInfo = {
   id: 'setting:acme.notes/mode',
   plugin: 'acme.notes',
+  pluginName: 'Notes',
   type: 'enum',
   title: 'Mode',
   description: 'How notes are listed',
@@ -25,6 +27,7 @@ const mode: SettingInfo = {
 const hidden: SettingInfo = {
   id: 'setting:acme.files/hidden',
   plugin: 'acme.files',
+  pluginName: 'Files',
   type: 'boolean',
   title: 'Show hidden',
   default: false,
@@ -33,6 +36,7 @@ const hidden: SettingInfo = {
 const label: SettingInfo = {
   id: 'setting:acme.files/label',
   plugin: 'acme.files',
+  pluginName: 'Files',
   type: 'string',
   title: 'Label',
   default: 'files',
@@ -75,6 +79,7 @@ test('categorical settings render under their declared category and section', ()
     ...hidden,
     id: 'setting:quirky.sidebar-extras/sidebarSectionSeparators',
     plugin: 'quirky.sidebar-extras',
+    pluginName: 'Sidebar Extras',
     title: 'Show dividers',
     category: 'Appearance',
     section: 'Window & Sidebar'

@@ -57,7 +57,7 @@ const editorTabTitle = (name: string, mode: EditorMode): string => mode === 'pre
 const VIEW_KEYS = new Set([
 'selection', 'cursor', 'cursorLine', 'cursorColumn', 'scrollTop', 'scrollLeft', 'scroll', 'zoom', 'scale', 'page', 'position',
 'wordWrap', 'showWhitespace', 'tocVisible', 'markdownTocVisible', 'frontmatterVisible', 'collapsedFiles', 'search', 'find', 'sort', 'filter', 'mode',
-'delimiter', 'viewer', 'focused', 'line', 'column', 'markdownAnchor', 'markdownFrontmatterVisible', 'matchLength'
+'delimiter', 'viewer', 'focused', 'line', 'column', 'markdownAnchor', 'markdownFrontmatterVisible', 'matchLength', 'navigationId'
 ])
 
 type PrivateBuffer = BufferMetrics & {
@@ -403,7 +403,10 @@ export class EditorDaemon {
     }
     await this.updateTabModes(buffer.id, mode)
     const presentation: Record<string, unknown> = {}
-    if (params.line !== undefined) presentation.line = params.line
+    if (params.line !== undefined) {
+      presentation.line = params.line
+      presentation.focused = focus
+    }
     if (params.column !== undefined) presentation.column = params.column
     if (params.matchLength !== undefined) presentation.matchLength = params.matchLength
     if (Object.keys(presentation).length > 0) await this.applyViewPatch(buffer.id, presentation, tabId)
@@ -1502,6 +1505,9 @@ export class EditorDaemon {
     const invalid = keys.find((key) => !VIEW_KEYS.has(key))
     if (invalid !== undefined) throw this.context.error('invalid-params', `view patch cannot change protected or unknown field: ${invalid}`)
     if (keys.length > 32) throw this.context.error('invalid-params', 'view patch contains too many fields')
+    if (patch.navigationId !== undefined && (typeof patch.navigationId !== 'string' || patch.navigationId.length === 0 || patch.navigationId.length > 128)) {
+      throw this.context.error('invalid-params', 'navigationId must be a non-empty string of at most 128 characters')
+    }
     const requestedMode = patch.mode
     if (requestedMode === 'preview') throw this.context.error('invalid-params', 'Preview is a separate editor tab; open it with mode preview.')
     if (requestedMode !== undefined && requestedMode !== 'source' && requestedMode !== 'rich') {
@@ -1510,7 +1516,8 @@ export class EditorDaemon {
     const mode: EditorMode | undefined = requestedMode === 'source' || requestedMode === 'rich' ? requestedMode : undefined
     for (const field of ['line', 'column', 'cursorLine', 'cursorColumn'] as const) {
       const position = patch[field]
-      if (position !== undefined && (typeof position !== 'number' || !Number.isSafeInteger(position) || position < 1)) {
+      const clearedNavigation = position === null && (field === 'line' || field === 'column')
+      if (position !== undefined && !clearedNavigation && (typeof position !== 'number' || !Number.isSafeInteger(position) || position < 1)) {
         throw this.context.error('invalid-params', `${field} must be a positive integer`)
       }
     }
@@ -1533,7 +1540,7 @@ export class EditorDaemon {
       }
     }
     const matchLength = patch.matchLength
-    if (matchLength !== undefined && (typeof matchLength !== 'number' || !Number.isSafeInteger(matchLength) || matchLength < 0 || matchLength > MAX_TEXT_FILE_BYTES)) {
+    if (matchLength !== undefined && matchLength !== null && (typeof matchLength !== 'number' || !Number.isSafeInteger(matchLength) || matchLength < 0 || matchLength > MAX_TEXT_FILE_BYTES)) {
       throw this.context.error('invalid-params', `matchLength must be a bounded non-negative integer no greater than ${MAX_TEXT_FILE_BYTES}`)
     }
     const markdownFrontmatterVisible = patch.markdownFrontmatterVisible
@@ -1547,6 +1554,12 @@ export class EditorDaemon {
     }
     const presentation: Record<string, unknown> = { ...patch }
     delete presentation.mode
+    if (typeof patch.line === 'number') {
+      presentation.navigationId = randomUUID()
+      presentation.column = patch.column ?? 1
+      presentation.matchLength = patch.matchLength ?? 0
+      presentation.focused = patch.focused ?? false
+    }
     const result = await this.bufferQueue.run([`buffer:${bufferId}`], async () => {
       const state = this.requireState(bufferId)
       const markdownAnchor = presentation.markdownAnchor
@@ -1558,6 +1571,12 @@ export class EditorDaemon {
       }
       if (tabId !== undefined && this.tabs.get(tabId)?.bufferId !== bufferId) {
         throw this.context.error('not-found', `editor tab ${tabId} does not belong to buffer ${bufferId}`)
+      }
+      const currentView = tabId === undefined
+        ? state.buffer.view
+        : (state.buffer.view.byTabId as Record<string, Record<string, unknown>> | undefined)?.[tabId]
+      if (patch.line === null && patch.navigationId !== undefined && currentView?.navigationId !== patch.navigationId) {
+        return { buffer: state.buffer, modeChanged: false }
       }
       const view = { ...state.buffer.view }
       if (tabId === undefined) Object.assign(view, presentation)

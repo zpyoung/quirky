@@ -117,6 +117,7 @@ const settingInfo = object(
   {
     id: string(),
     plugin: string(),
+    pluginName: string("The declaring plugin's display name."),
     type: { type: 'string', enum: ['boolean', 'number', 'string', 'enum'] },
     title: string(),
     category: string(),
@@ -131,7 +132,7 @@ const settingInfo = object(
     value: { description: 'The current value.' },
     stored: object({ value: {}, valid: boolean() }, ['value', 'valid'])
   },
-  ['id', 'plugin', 'type', 'title', 'default', 'value']
+  ['id', 'plugin', 'pluginName', 'type', 'title', 'default', 'value']
 )
 const themeList = object(
   {

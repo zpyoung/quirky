@@ -15,6 +15,7 @@ import { Compartment, EditorSelection, EditorState, Transaction, type Extension 
 import { EditorView, drawSelection, highlightActiveLine, highlightActiveLineGutter, keymap, lineNumbers } from '@codemirror/view'
 import { tags } from '@lezer/highlight'
 import type { EditorSurfaceBuffer } from '../types'
+import { registerEditorFocus } from './editorFocus'
 
 const PASTE_LIMIT = 16 * 1024 * 1024
 // The host routes these managed chords; CodeMirror must not also run a search action.
@@ -164,6 +165,60 @@ function viewStateForTab(buffer: EditorSurfaceBuffer, tabId: string | null): Rec
   return buffer.view
 }
 
+function positionAtLineColumn(text: string, requestedLine: number, requestedColumn: number): number {
+  let lineStart = 0
+  const line = Math.max(1, requestedLine)
+  for (let current = 1; current < line; current++) {
+    const newline = text.indexOf('\n', lineStart)
+    if (newline < 0) {
+      lineStart = text.length
+      break
+    }
+    lineStart = newline + 1
+  }
+  const newline = text.indexOf('\n', lineStart)
+  const lineEnd = newline < 0 ? text.length : newline
+  return Math.min(lineEnd, lineStart + Math.max(1, requestedColumn) - 1)
+}
+
+function pendingNavigationForTab(buffer: EditorSurfaceBuffer, tabId: string | null): { line: number; column: number; matchLength: number; focused: boolean; navigationId: string } | undefined {
+  let view: Record<string, unknown> | undefined
+  const byTabId = buffer.view.byTabId
+  // the global seed can precede its tab-scoped patch, so only read navigation from the tab entry.
+  if (tabId && typeof byTabId === 'object' && byTabId !== null && !Array.isArray(byTabId)) {
+    const saved = (byTabId as Record<string, unknown>)[tabId]
+    if (typeof saved === 'object' && saved !== null && !Array.isArray(saved)) view = saved as Record<string, unknown>
+  } else if (!tabId) {
+    view = buffer.view
+  }
+  const line = view?.line
+  const column = view?.column
+  const navigationId = view?.navigationId
+  if (typeof line !== 'number' || !Number.isSafeInteger(line) || line < 1 ||
+      typeof column !== 'number' || !Number.isSafeInteger(column) || column < 1 ||
+      typeof navigationId !== 'string' || navigationId.length === 0) return undefined
+  const matchLength = view?.matchLength
+  return {
+    line,
+    column,
+    matchLength: typeof matchLength === 'number' && Number.isSafeInteger(matchLength) && matchLength > 0 ? matchLength : 0,
+    focused: view?.focused === true,
+    navigationId
+  }
+}
+
+function revealPosition(view: EditorView, line: number, column = 1, matchLength = 0): number {
+  const targetLine = view.state.doc.line(Math.max(1, Math.min(line, view.state.doc.lines)))
+  const position = Math.min(targetLine.to, targetLine.from + Math.max(0, column - 1))
+  const end = Math.min(targetLine.to, position + Math.max(0, matchLength))
+  view.dispatch({
+    selection: { anchor: position, head: end },
+    effects: EditorView.scrollIntoView(position, { y: 'center' })
+  })
+  return position
+}
+
+
 function initialSelection(buffer: EditorSurfaceBuffer, tabId: string | null): EditorSelection | undefined {
   const text = buffer.draft ?? buffer.content
   const view = viewStateForTab(buffer, tabId) as { selection?: { anchor?: unknown; head?: unknown }; cursor?: { line?: unknown; column?: unknown } } | undefined
@@ -173,20 +228,8 @@ function initialSelection(buffer: EditorSurfaceBuffer, tabId: string | null): Ed
   }
   const cursor = view?.cursor
   if (typeof cursor?.line === 'number') {
-    const line = Math.max(1, cursor.line)
-    const column = typeof cursor.column === 'number' ? Math.max(1, cursor.column) : 1
-    let lineStart = 0
-    for (let current = 1; current < line; current++) {
-      const newline = text.indexOf('\n', lineStart)
-      if (newline < 0) {
-        lineStart = text.length
-        break
-      }
-      lineStart = newline + 1
-    }
-    const newline = text.indexOf('\n', lineStart)
-    const lineEnd = newline < 0 ? text.length : newline
-    return EditorSelection.single(Math.min(lineEnd, lineStart + column - 1))
+    const column = typeof cursor.column === 'number' ? cursor.column : 1
+    return EditorSelection.single(positionAtLineColumn(text, cursor.line, column))
   }
   return undefined
 }
@@ -196,6 +239,7 @@ export const SourceEditor = forwardRef<SourceEditorHandle, Props>(function Sourc
   const host = useRef<HTMLDivElement>(null)
   const canvas = useRef<HTMLCanvasElement>(null)
   const viewRef = useRef<EditorView | null>(null)
+  const appliedNavigation = useRef<string | null>(null)
   const pendingView = useRef<number | undefined>(undefined)
   const acceptedText = useRef(props.buffer.draft ?? props.buffer.content)
   const suppressDraft = useRef(false)
@@ -213,6 +257,7 @@ export const SourceEditor = forwardRef<SourceEditorHandle, Props>(function Sourc
   const [replaceText, setReplaceText] = useState('')
   const searchInput = useRef<HTMLInputElement>(null)
   const content = props.buffer.draft ?? props.buffer.content
+  const pendingNavigation = pendingNavigationForTab(props.buffer, props.tabId)
   const applySearchQuery = (view: EditorView, query: string, replacement: string) => {
     view.dispatch({ effects: setSearchQuery.of(new SearchQuery({ search: query, replace: replacement })) })
   }
@@ -289,9 +334,7 @@ export const SourceEditor = forwardRef<SourceEditorHandle, Props>(function Sourc
     reveal: (line, column = 1) => {
       const view = viewRef.current
       if (!view) throw new Error('The source editor is not mounted.')
-      const targetLine = view.state.doc.line(Math.max(1, Math.min(line, view.state.doc.lines)))
-      const position = Math.min(targetLine.to, targetLine.from + Math.max(0, column - 1))
-      view.dispatch({ selection: { anchor: position }, effects: EditorView.scrollIntoView(position, { y: 'center' }) })
+      revealPosition(view, line, column)
       view.focus()
     },
     undo: () => { const view = viewRef.current; if (!view) throw new Error('The source editor is not mounted.'); undo(view) },
@@ -310,7 +353,7 @@ export const SourceEditor = forwardRef<SourceEditorHandle, Props>(function Sourc
     const parent = host.current
     if (!parent) return
     let changedSelection = false
-    const savedSelection = initialSelection(props.buffer, props.tabId)
+    const savedSelection = pendingNavigation ? undefined : initialSelection(props.buffer, props.tabId)
     const state = EditorState.create({
       doc: content,
       ...(savedSelection ? { selection: savedSelection } : {}),
@@ -394,6 +437,12 @@ export const SourceEditor = forwardRef<SourceEditorHandle, Props>(function Sourc
     })
     const editor = new EditorView({ state, parent })
     viewRef.current = editor
+    const tabId = props.tabId
+    const unregisterFocus = tabId === null ? undefined : registerEditorFocus(tabId, () => {
+      const group = parent.closest<HTMLElement>('.qt-group')
+      const hostedView = parent.closest<HTMLElement>('.qt-hosted-view')
+      if (group?.classList.contains('qt-active') && hostedView?.dataset.hostedView === tabId) editor.focus()
+    })
     let drawFrame = 0
     const paintMinimap = () => {
       drawFrame = 0
@@ -417,13 +466,9 @@ export const SourceEditor = forwardRef<SourceEditorHandle, Props>(function Sourc
       themeObserver.observe(parent.ownerDocument.documentElement, { attributes: true, attributeFilter: ['data-theme'], subtree: true })
     }
     requestMinimap()
-    if (props.reveal) {
-      const line = editor.state.doc.line(Math.max(1, Math.min(props.reveal.line, editor.state.doc.lines)))
-      const position = Math.min(line.to, line.from + Math.max(0, (props.reveal.column ?? 1) - 1))
-      editor.dispatch({ selection: { anchor: position }, effects: EditorView.scrollIntoView(position, { y: 'center' }) })
-    }
-    if (savedSelection) editor.dispatch({ effects: EditorView.scrollIntoView(savedSelection.main.head, { y: 'center' }) })
-    const savedScroll = viewStateForTab(props.buffer, props.tabId).scrollTop
+    if (props.reveal) revealPosition(editor, props.reveal.line, props.reveal.column ?? 1)
+    if (!pendingNavigation && savedSelection) editor.dispatch({ effects: EditorView.scrollIntoView(savedSelection.main.head, { y: 'center' }) })
+    const savedScroll = pendingNavigation ? undefined : viewStateForTab(props.buffer, props.tabId).scrollTop
     if (typeof savedScroll === 'number' && Number.isFinite(savedScroll)) editor.scrollDOM.scrollTop = Math.max(0, savedScroll)
     const saveView = () => {
       if (!changedSelection) return
@@ -448,6 +493,7 @@ export const SourceEditor = forwardRef<SourceEditorHandle, Props>(function Sourc
     scheduleView.current = schedule
     editor.scrollDOM.addEventListener('scroll', schedule, { passive: true })
     return () => {
+      unregisterFocus?.()
       if (pendingView.current !== undefined) window.clearTimeout(pendingView.current)
       pendingView.current = undefined
       if (drawFrame !== 0) window.cancelAnimationFrame(drawFrame)
@@ -500,12 +546,45 @@ export const SourceEditor = forwardRef<SourceEditorHandle, Props>(function Sourc
 
 
   useEffect(() => {
-    if (props.reveal && viewRef.current) {
-      const targetLine = viewRef.current.state.doc.line(Math.max(1, Math.min(props.reveal.line, viewRef.current.state.doc.lines)))
-      const position = Math.min(targetLine.to, targetLine.from + Math.max(0, (props.reveal.column ?? 1) - 1))
-      viewRef.current.dispatch({ selection: { anchor: position }, effects: EditorView.scrollIntoView(position, { y: 'center' }) })
-    }
+    if (props.reveal && viewRef.current) revealPosition(viewRef.current, props.reveal.line, props.reveal.column ?? 1)
   }, [props.reveal?.line, props.reveal?.column])
+
+  useEffect(() => {
+    const editor = viewRef.current
+    if (!pendingNavigation) {
+      appliedNavigation.current = null
+      return
+    }
+    if (!editor || props.reveal) return
+    const key = `${props.buffer.id}:${props.tabId}:${pendingNavigation.navigationId}`
+    if (appliedNavigation.current === key) return
+    appliedNavigation.current = key
+    revealPosition(editor, pendingNavigation.line, pendingNavigation.column, pendingNavigation.matchLength)
+    if (pendingNavigation.focused) editor.focus()
+    const selection = editor.state.selection.main
+    const cursor = editor.state.doc.lineAt(selection.head)
+    callbacks.current.onView({
+      navigationId: pendingNavigation.navigationId,
+      line: null,
+      column: null,
+      matchLength: null,
+      focused: false,
+      selection: { anchor: selection.anchor, head: selection.head },
+      cursor: { line: cursor.number, column: selection.head - cursor.from + 1 },
+      scrollTop: editor.scrollDOM.scrollTop
+    })
+  }, [
+    content,
+    props.buffer.id,
+    props.tabId,
+    pendingNavigation?.navigationId,
+    pendingNavigation?.line,
+    pendingNavigation?.column,
+    pendingNavigation?.matchLength,
+    pendingNavigation?.focused,
+    props.reveal?.line,
+    props.reveal?.column
+  ])
 
   const copyGutterLine = async (relative: boolean) => {
     if (!contextMenu || contextMenu.kind !== 'gutter' || contextMenu.line === undefined) return

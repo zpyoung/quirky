@@ -294,6 +294,14 @@ function rowActionTrigger(row: HTMLElement): HTMLButtonElement {
   return trigger
 }
 
+function rowActionMenu(row: HTMLElement): HTMLElement | null {
+  const name = rowActionTrigger(row).getAttribute('aria-label')
+  return name === null
+    ? null
+    : Array.from(document.querySelectorAll<HTMLElement>('[role="menu"][aria-label]'))
+      .find((menu) => menu.getAttribute('aria-label') === name) ?? null
+}
+
 function rowActionMenuOpen(row: HTMLElement): boolean {
   return rowActionTrigger(row).getAttribute('aria-expanded') === 'true'
 }
@@ -304,7 +312,7 @@ async function actionButton(row: HTMLElement, label: string): Promise<HTMLButton
     await act(async () => trigger.click())
     await waitForUi(() => rowActionMenuOpen(row) && row.getAttribute('aria-selected') === 'true' || false)
   }
-  const menu = row.querySelector<HTMLElement>('[role="menu"]')
+  const menu = rowActionMenu(row)
   const button = menu && Array.from(menu.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')).find((entry) => entry.textContent?.trim() === label)
   if (!button) throw new Error(`Missing ${label} action for ${row.dataset.path}`)
   return button
@@ -760,6 +768,135 @@ test('Explorer row action menus close on Escape and restore focus to the trigger
   expect(document.activeElement).toBe(trigger)
 })
 
+test('Explorer lower row actions escape the scroll tree, fit the viewport, and still rename', async () => {
+  const root = '/test'
+  const worktree = 'popup-position-test'
+  const filePath = join(root, 'README.md')
+  const listing = {
+    root,
+    entries: [{ path: filePath, name: basename(filePath), isDirectory: false, isSymlink: false }],
+    showDotfiles: true,
+    showIgnored: false,
+    followSymlinkedDirectories: false
+  }
+  let selectedPaths: string[] = []
+  let focusedPath: string | null = null
+  const context = {
+    pluginId: 'quirky.editor',
+    log() {},
+    call: async (method: string, params: Record<string, unknown> = {}) => {
+      if (method === 'quirky.editor/state') {
+        return {
+          buffers: [],
+          tabs: [],
+          explorer: { worktreeId: worktree, showDotfiles: true, expanded: [], selectedPaths: [...selectedPaths], focusedPath, selectionAnchor: focusedPath },
+          search: null,
+          quickOpenHistory: [],
+          closeRequests: []
+        }
+      }
+      if (method === 'quirky.editor/documentRoot') return { id: worktree, path: root }
+      if (method === 'quirky.git/status') return { files: [] }
+      if (method === 'quirky.editor/explorer') {
+        if (params.action === 'select' && typeof params.path === 'string') {
+          selectedPaths = [params.path]
+          focusedPath = params.path
+          return {
+            ...listing,
+            interaction: { selectedPaths: [...selectedPaths], focusedPath, selectionAnchor: focusedPath }
+          }
+        }
+        return listing
+      }
+      return {}
+    },
+    subscribe: () => () => {},
+    getSetting: (name: string) => {
+      if (name === 'editorFontFamily') return 'monospace'
+      if (name === 'editorAutoSaveDelayMs') return 1000
+      if (name === 'editorSidebarWidth') return 320
+      if (name === 'editorFontZoomLevel') return 0
+      return false
+    },
+    getLayout: () => ({ worktree, view: null, panel: null, sidebar: true, focus: 'view' }),
+    onLayout: () => () => {},
+    onConnection: () => () => {},
+    confirm: async () => false,
+    toast() {}
+  } as unknown as UiPluginContext
+  const panel = await renderStandaloneExplorer(context)
+
+  try {
+    const row = await waitForUi(() => findRow(panel.element, filePath) ?? false)
+    const trigger = rowActionTrigger(row)
+    const tree = panel.element.querySelector<HTMLElement>('.qe-explorer-tree')
+    const footer = panel.element.querySelector<HTMLElement>('.qe-explorer-footer')
+    expect(tree).not.toBeNull()
+    expect(footer).not.toBeNull()
+
+    const originalWidth = Object.getOwnPropertyDescriptor(window, 'innerWidth')
+    const originalHeight = Object.getOwnPropertyDescriptor(window, 'innerHeight')
+    const ownGetBoundingClientRect = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'getBoundingClientRect')
+    const originalGetBoundingClientRect = HTMLElement.prototype.getBoundingClientRect
+    const rectangle = (left: number, top: number, width: number, height: number): DOMRect =>
+      ({ x: left, y: top, left, top, right: left + width, bottom: top + height, width, height, toJSON: () => ({}) }) as DOMRect
+    const triggerBounds = rectangle(1244, 646, 28, 28)
+    const treeBounds = rectangle(0, 120, 1280, 560)
+    const footerBounds = rectangle(0, 680, 1280, 40)
+
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1280 })
+    Object.defineProperty(window, 'innerHeight', { configurable: true, value: 720 })
+    Object.defineProperty(HTMLElement.prototype, 'getBoundingClientRect', {
+      configurable: true,
+      value: function (this: HTMLElement): DOMRect {
+        if (this === trigger) return triggerBounds
+        if (this === tree) return treeBounds
+        if (this === footer) return footerBounds
+        if (this.classList.contains('ui-popup')) {
+          const left = Number.parseFloat(this.style.left)
+          const top = Number.parseFloat(this.style.top)
+          return rectangle(Number.isNaN(left) ? 0 : left, Number.isNaN(top) ? 0 : top, 240, 190)
+        }
+        if (this.getAttribute('role') === 'menu') {
+          const popup = this.parentElement
+          if (popup?.classList.contains('ui-popup')) return popup.getBoundingClientRect()
+          return rectangle(triggerBounds.left, triggerBounds.bottom, 240, 190)
+        }
+        return originalGetBoundingClientRect.call(this)
+      }
+    })
+
+    try {
+      expect(treeBounds.bottom).toBe(footerBounds.top)
+      const rename = await actionButton(row, 'Rename')
+      const menu = rowActionMenu(row)
+      expect(menu).not.toBeNull()
+      expect(tree!.contains(menu)).toBe(false)
+      const bounds = menu!.getBoundingClientRect()
+      expect(bounds.left).toBeGreaterThanOrEqual(0)
+      expect(bounds.right).toBeLessThanOrEqual(window.innerWidth)
+      expect(bounds.top).toBeGreaterThanOrEqual(0)
+      expect(bounds.bottom).toBeLessThanOrEqual(window.innerHeight)
+      expect(bounds.bottom).toBeLessThanOrEqual(triggerBounds.top)
+
+      await act(async () => rename.click())
+      const input = await waitForUi(() => panel.element.querySelector<HTMLInputElement>('input[aria-label="Rename file"]') ?? false)
+      expect(document.activeElement).toBe(input)
+      expect(rowActionMenuOpen(row)).toBe(false)
+      expect(row.getAttribute('aria-selected')).toBe('true')
+    } finally {
+      if (ownGetBoundingClientRect) Object.defineProperty(HTMLElement.prototype, 'getBoundingClientRect', ownGetBoundingClientRect)
+      else Reflect.deleteProperty(HTMLElement.prototype, 'getBoundingClientRect')
+      if (originalWidth) Object.defineProperty(window, 'innerWidth', originalWidth)
+      else Reflect.deleteProperty(window, 'innerWidth')
+      if (originalHeight) Object.defineProperty(window, 'innerHeight', originalHeight)
+      else Reflect.deleteProperty(window, 'innerHeight')
+    }
+  } finally {
+    await panel.unmount()
+  }
+}, 30_000)
+
 test('Explorer row action menus dismiss on outside pointer interaction without running a menu action', async () => {
   const fixture = await makeFixture({ displayRoot: 'nested' })
   const panel = await renderExplorer(fixture)
@@ -1075,7 +1212,7 @@ test('Explorer rename preserves backslashes that are POSIX filename characters',
   expect(row).not.toBeNull()
   await act(async () => rowActionTrigger(row!).click())
   await waitForUi(() => rowActionMenuOpen(row!) || false)
-  const menu = row!.querySelector<HTMLElement>('[role="menu"]')
+  const menu = rowActionMenu(row!)
   const renameButton = menu && Array.from(menu.querySelectorAll<HTMLButtonElement>('[role="menuitem"]'))
     .find((button) => button.textContent?.trim() === 'Rename')
   if (!renameButton) throw new Error('Missing Rename action for the backslash filename')
@@ -1181,7 +1318,7 @@ test('Explorer contents results open after normal tabs without changing their pi
     return { state, buffer, tabId: buffer.tabId }
   })
   expect(after.buffer.view).toMatchObject({
-    byTabId: { [after.tabId]: { line: 1, column: 1 } }
+    byTabId: { [after.tabId]: { line: 1, column: 1, matchLength: 6, focused: true } }
   })
   expect(after.buffer).toMatchObject({ pinned: false, preview: false })
   expect(after.state.tabs.map(({ tabId, bufferId, mode }) => ({ tabId, bufferId, mode }))).toEqual([

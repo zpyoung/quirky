@@ -334,13 +334,14 @@ export class DistroService {
 
   private settingDeclarations(inspections: PluginInspection[]): Map<string, UiSettingEntry> {
     const declarations = new Map<string, UiSettingEntry>()
+    const names = new Map(this.options.plugins.list().map((plugin) => [plugin.id, plugin.name]))
     for (const item of this.builtinContributions('setting')) {
-      declarations.set(item.id, { id: item.id, plugin: item.plugin, ...(item.data as SettingDeclaration) })
+      declarations.set(item.id, { id: item.id, plugin: item.plugin, pluginName: names.get(item.plugin) ?? item.plugin, ...(item.data as SettingDeclaration) })
     }
     for (const inspection of inspections) {
       for (const item of inspection.contributions.filter((contribution) => contribution.kind === 'setting')) {
         if (!declarations.has(item.id)) {
-          declarations.set(item.id, { id: item.id, plugin: inspection.id, ...(item.data as SettingDeclaration) })
+          declarations.set(item.id, { id: item.id, plugin: inspection.id, pluginName: inspection.name, ...(item.data as SettingDeclaration) })
         }
       }
     }

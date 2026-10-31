@@ -16,6 +16,7 @@ import { filterSlashCatalog, SLASH_CATALOG, type SlashItem } from './slashCatalo
 import { MermaidDiagram } from './MermaidDiagram'
 import { destinationDirectory } from './files'
 import { MARKDOWN_PREVIEW_REHYPE_PLUGINS, previewHeadingId } from './previewPipeline'
+import { registerEditorFocus } from '../window/editorFocus'
 
 const MARKDOWN_METHOD = 'quirky.editor/markdown'
 const NOTES_METHOD = 'quirky.editor/notes'
@@ -519,6 +520,7 @@ function RichSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
   const [toc, setToc] = useState<MarkdownHeading[]>([])
   const [frontMatterVisible, setFrontMatterVisible] = useState(buffer.view.markdownFrontmatterVisible === true)
   const [notes, setNotes] = useState<MarkdownReviewNote[]>([])
+  const [notesOpen, setNotesOpen] = useState(false)
   const [noteComposer, setNoteComposer] = useState(false)
   const noteInput = useRef<HTMLTextAreaElement>(null)
   const [noteBody, setNoteBody] = useState('')
@@ -685,6 +687,16 @@ function RichSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
     onBlur: () => { void flushRef.current().catch(() => {}) }
   }, [buffer.id])
   editorRef.current = editor
+  useEffect(() => {
+    if (!editor || buffer.tabId === null) return
+    const tabId = buffer.tabId
+    const editorDom = editor.view.dom
+    return registerEditorFocus(tabId, () => {
+      const group = editorDom.closest<HTMLElement>('.qt-group')
+      const hostedView = editorDom.closest<HTMLElement>('.qt-hosted-view')
+      if (group?.classList.contains('qt-active') && hostedView?.dataset.hostedView === tabId) editor.view.focus()
+    })
+  }, [buffer.tabId, editor])
 
   const updateCompletions = useCallback((current: Editor) => {
     const dismissDocuments = () => {
@@ -1248,6 +1260,7 @@ function RichSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
     setNoteEdit(null)
     setNoteBody('')
     setNoteComposer(true)
+    setNotesOpen(true)
     window.requestAnimationFrame(() => noteInput.current?.focus())
     return { opened: true, startLine: selection.startLine, endLine: selection.endLine }
   }, [selection])
@@ -1333,6 +1346,7 @@ function RichSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
   return (
     <div className="markdown-surface markdown-surface--rich" style={{ fontSize: props.fontSize }}>
       <div className="markdown-toolbar" role="toolbar" aria-label="Markdown formatting">
+        <Button type="button" aria-expanded={notesOpen} onClick={() => setNotesOpen((open) => !open)}>Review notes ({notes.length})</Button>
         <Button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => insertToolbarFormat('body')}>Body text</Button>
         {[1, 2, 3].map((level) => <Button key={level} type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => insertToolbarFormat(`heading${level}` as MarkdownFormat)}>H{level}</Button>)}
         <Button type="button" aria-label="Bold" onMouseDown={(event) => event.preventDefault()} onClick={() => insertToolbarFormat('bold')}><strong>B</strong></Button>
@@ -1494,7 +1508,7 @@ function RichSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
             <Button type="button" onClick={async () => { try { await navigator.clipboard.writeText(codeText); setFeedback('Copied code') } catch { setFeedback('Could not copy code') } }}>Copy code</Button>
           </div>}
         </div>
-        <aside aria-label={`Review notes, ${notes.length} notes`} className="markdown-review-notes">
+        {notesOpen && <aside aria-label={`Review notes, ${notes.length} notes`} className="markdown-review-notes">
           <div className="markdown-notes-heading"><strong>Review notes ({notes.length})</strong><Button type="button" onClick={() => void loadNotes()}>Refresh</Button></div>
           <div className="markdown-toolbar markdown-toolbar--notes">
             <Button type="button" onClick={() => { if (currentSelection) { setSelection({ from: editor?.state.selection.from ?? 0, to: editor?.state.selection.to ?? 0, ...currentSelection }); setNoteEdit(null); setNoteBody(''); setNoteComposer(true) } }}>+ Add note</Button>
@@ -1521,7 +1535,7 @@ function RichSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
             <Button type="button" onClick={() => { setNoteEdit(note.id); setNoteBody(note.body); setNoteComposer(true) }}>Edit</Button>
             <Button type="button" onClick={async () => { await call(NOTES_METHOD, { action: 'delete', noteId: note.id }); await loadNotes() }}>Delete</Button>
           </article>)}
-        </aside>
+        </aside>}
       </div>
     </div>
   )
