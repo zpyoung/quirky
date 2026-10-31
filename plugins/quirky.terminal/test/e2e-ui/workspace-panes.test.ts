@@ -343,7 +343,7 @@ test(
     await ui.chord('mod+w')
     const closed = await ui.waitLayout('pane 3 closed', (ws) => !panesOf(ws).some((pane) => pane.id === p3.id))
     expect(paneShape(findTab(closed, build.tab.id).root)).toEqual(['right', 0.5, p2.id, p4.id])
-    expect(findTab(closed, build.tab.id).activePane).toBe(p2.id)
+    expect(findTab(closed, build.tab.id).activePane).toBe(p4.id)
     await waitFor('its session gone', async () => ((await h.sessionRecords()).every((session) => session.id !== p3.session) ? true : undefined))
     await waitFor('pane 4 in the right column', () => (ui.q(`[data-pane="${p3.id}"]`) === null && px(style(ui, p4.id).height) >= 599 ? true : undefined))
     near(style(ui, p4.id).left, 501)

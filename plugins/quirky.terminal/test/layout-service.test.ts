@@ -196,7 +196,7 @@ describe('SC-4, SC-5: sessions started and closed elsewhere', () => {
     expect(tabsOf(await layoutOf())).toHaveLength(0)
   })
 
-  test('SC-5: a closed session leaves its pane, the sibling takes the space, and the first pane becomes active', async () => {
+  test('SC-5: a closed session leaves its pane and activates the promoted sibling', async () => {
     let ws = await newTab()
     const pane = panesOf(lastTab(ws))[0]!
     ws = (await api('splitPane', { pane: pane.id, direction: 'right' })).workspace
@@ -212,7 +212,7 @@ describe('SC-4, SC-5: sessions started and closed elsewhere', () => {
     })
     expect(panesOf(lastTab(ws)).map((p) => p.id)).toEqual([first!.id, second!.id])
     expect(lastTab(ws).root).toMatchObject({ kind: 'split', first: { id: first!.id }, second: { id: second!.id } })
-    expect(lastTab(ws).activePane).toBe(first!.id)
+    expect(lastTab(ws).activePane).toBe(second!.id)
   })
 
   test('closing the session of a tab\'s only pane removes the tab without offering it for reopen', async () => {
@@ -690,12 +690,67 @@ describe('panes', () => {
     expect(lastTab(ws).activePane).toBe(p1!.id)
   })
 
-  test('SC-29: closing a pane ends its session, promotes the sibling and activates the first pane; a lone pane closes the tab', async () => {
+  test('SC-29: closing the active bottom-right pane focuses its top-right sibling', async () => {
+    let ws = await newTab()
+    ws = (await api('splitPane', { pane: panesOf(lastTab(ws))[0]!.id, direction: 'right' })).workspace
+    const [left, topRight] = panesOf(lastTab(ws))
+    ws = (await api('splitPane', { pane: topRight!.id, direction: 'down' })).workspace
+    const bottom = panesOf(lastTab(ws))[2]!
+    expect(lastTab(ws).root).toMatchObject({
+      kind: 'split',
+      direction: 'right',
+      first: { kind: 'pane', id: left!.id },
+      second: { kind: 'split', direction: 'down', first: { kind: 'pane', id: topRight!.id }, second: { kind: 'pane', id: bottom.id } }
+    })
+    expect(lastTab(ws).activePane).toBe(bottom.id)
+
+    ws = (await api('closePane', { pane: bottom!.id })).workspace
+    expect(lastTab(ws).activePane).toBe(topRight!.id)
+  })
+
+  test('SC-29: closing the active top-right pane focuses its bottom-right sibling', async () => {
+    let ws = await newTab()
+    ws = (await api('splitPane', { pane: panesOf(lastTab(ws))[0]!.id, direction: 'right' })).workspace
+    const top = panesOf(lastTab(ws))[1]!
+    ws = (await api('splitPane', { pane: top.id, direction: 'down' })).workspace
+    const bottom = panesOf(lastTab(ws))[2]!
+
+    ws = (await api('focusPane', { pane: top.id })).workspace
+    ws = (await api('closePane', { pane: top.id })).workspace
+    expect(lastTab(ws).activePane).toBe(bottom.id)
+  })
+
+  test('SC-29: closing a pane before a nested sibling focuses its first leaf', async () => {
+    const { tab } = await tabWithPanes(4)
+    const [left, target, siblingFirst] = panesOf(tab)
+    let ws = (await api('focusPane', { pane: target!.id })).workspace
+    ws = (await api('closePane', { pane: target!.id })).workspace
+    expect(lastTab(ws).root).toMatchObject({
+      kind: 'split',
+      first: { id: left!.id },
+      second: { kind: 'split', first: { id: siblingFirst!.id } }
+    })
+    expect(lastTab(ws).activePane).toBe(siblingFirst!.id)
+  })
+
+  test('closing an inactive pane preserves the active pane', async () => {
+    let ws = await newTab()
+    ws = (await api('splitPane', { pane: panesOf(lastTab(ws))[0]!.id, direction: 'right' })).workspace
+    const topRight = panesOf(lastTab(ws))[1]!
+    ws = (await api('splitPane', { pane: topRight.id, direction: 'down' })).workspace
+    const [left, , bottom] = panesOf(lastTab(ws))
+    ws = (await api('focusPane', { pane: left!.id })).workspace
+
+    ws = (await api('closePane', { pane: bottom!.id })).workspace
+    expect(lastTab(ws).activePane).toBe(left!.id)
+  })
+
+  test('SC-29: closing a pane ends its session, focuses its promoted sibling and closes a lone tab', async () => {
     const { tab } = await tabWithPanes(3)
     const [p1, p2, p3] = panesOf(tab)
     let ws = (await api('closePane', { pane: p3!.id })).workspace
     expect(lastTab(ws).root).toMatchObject({ kind: 'split', first: { id: p1!.id }, second: { id: p2!.id } })
-    expect(lastTab(ws).activePane).toBe(p1!.id)
+    expect(lastTab(ws).activePane).toBe(p2!.id)
     expect((await sessionList()).map((s) => s.id)).not.toContain(p3!.session)
 
     ws = (await api('closePane', { session: p2!.session })).workspace
