@@ -17,6 +17,10 @@ also activates the Worktrees panel.
 Closing Rename or the Delete Workspace confirmation returns keyboard focus to that worktree's
 Actions button while its row remains visible, including after a display-name change.
 
+In narrow panels, the panel heading and project names sit above their controls so they remain readable.
+Project names truncate with an ellipsis; project avatars stay whole, and hover or keyboard focus reveals
+the project controls without moving the name or count.
+
 Options persist in the worktree plugin's SQLite store; no new global setting IDs are used. Defaults are project grouping, recent sorting, manual project order, detailed cards, all available card properties, sleeping worktrees shown, external worktrees hidden globally, and archived worktrees hidden.
 
 - `groupBy`: `project`, `status`, `pr`, or `none`. PR grouping uses the worktree's recorded linked PR; rows without one use a “No pull request” lane. Parent and descendants stay together.
