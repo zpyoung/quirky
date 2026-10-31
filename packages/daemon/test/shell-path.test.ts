@@ -357,6 +357,32 @@ claude() {
   }, 30000)
 
   if (_name === 'bash') {
+    // bash 5.1 runs every element of an array PROMPT_COMMAND, so one left after the arm step looks like a user command
+    test('does not report a command for PROMPT_COMMAND array elements a profile added', async () => {
+      const session = startInteractive(undefined, {}, `__qk_ran_element() { QK_ELEMENT=1; }\nPROMPT_COMMAND=('' __qk_ran_element)`)
+      await session.awaitShellReady()
+      const starts = () => session.output().split(`${ESC}]133;C${BEL}`).length - 1
+      expect(starts()).toBe(0)
+      await session.run('')
+      expect(starts()).toBe(0)
+      expect(session.finishedCodes()).toEqual([])
+      await session.run('printf "element=%s\\n" "$QK_ELEMENT"')
+      expect(session.output()).toContain('element=1')
+      expect(session.finishedCodes()).toEqual([0])
+    }, 30000)
+
+    // systemd's shell profile sets PS0 to a command substitution, which inherits DEBUG under functrace
+    test('does not report a command for a PS0 command substitution with functrace enabled', async () => {
+      const session = startInteractive(undefined, {}, `set -T\nPS0='$(true)'`)
+      await session.awaitShellReady()
+      const starts = () => session.output().split(`${ESC}]133;C${BEL}`).length - 1
+      await session.run('')
+      expect(starts()).toBe(0)
+      await session.run('false')
+      expect(starts()).toBe(1)
+      expect(session.finishedCodes()).toEqual([1])
+    }, 30000)
+
     test('does not treat inherited prompt DEBUG hooks as commands with functrace enabled', async () => {
       const session = startInteractive(undefined, {}, 'set -T')
       await session.awaitShellReady()
