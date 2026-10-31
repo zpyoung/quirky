@@ -1,22 +1,36 @@
 import { useId, type KeyboardEvent } from 'react'
-import { Button, FormRow } from '@quirky/ui'
+import { Button } from '@quirky/ui'
 
-/** Native switch semantics inside the shared form hierarchy; the browser draws the checkbox. */
-export function Switch({ checked, label, onChange }: { checked: boolean; label: string; onChange: (checked: boolean) => void }) {
+/** A compact native switch with its visible label kept beside the checkbox. */
+export function Switch({
+  checked,
+  label,
+  ariaLabel = label,
+  onChange
+}: {
+  checked: boolean
+  label: string
+  ariaLabel?: string
+  onChange: (checked: boolean) => void
+}) {
   const id = useId()
   return (
-    <FormRow label={label} htmlFor={id}>
+    <label
+      htmlFor={id}
+      style={{ display: 'inline-flex', alignItems: 'center', gap: 'var(--ui-space-6)', minWidth: 0 }}
+    >
       <input
         id={id}
         type="checkbox"
         role="switch"
-        aria-label={label}
+        aria-label={ariaLabel}
         aria-checked={checked}
         checked={checked}
         onChange={(event) => onChange(event.currentTarget.checked)}
-        style={{ accentColor: 'var(--ui-accent)' }}
+        style={{ accentColor: 'var(--ui-accent)', flexShrink: 0 }}
       />
-    </FormRow>
+      <span className="ui-form-row__label">{label}</span>
+    </label>
   )
 }
 

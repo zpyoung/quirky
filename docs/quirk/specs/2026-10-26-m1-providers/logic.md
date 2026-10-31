@@ -542,6 +542,9 @@ These run in the web UI against a daemon with fakes `claude`, `codex` and `goose
       "4 detected" badge; "Available to install" with a "41 agents" badge, each row with an
       Install link; and a
       "This Mac" heading with the workspace-trust switch on
+    - Installed cards keep the Enabled checkbox and label, Set default, Docs, and expand control
+      together on one line at the default panel width. Enabled switches retain agent-specific
+      accessible names without repeating the agent name in the visible label.
     - **Screen states:**
 
       | Area | Shows |
