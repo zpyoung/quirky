@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState, type CSSProperties, type FormEvent } from 'react'
+import { useEffect, useId, useRef, useState, type CSSProperties } from 'react'
 import type { AgentKind } from '@quirky/protocol'
 import { Button, Dialog, FormRow } from '@quirky/ui'
 
@@ -6,7 +6,7 @@ export type NewSessionRequest = { agent: AgentKind; background: boolean; label: 
 
 type Props = {
   request: NewSessionRequest
-  onSubmit: (prompt: string) => void
+  onSubmit: (prompt: string) => Promise<void>
   onClose: () => void
 }
 
@@ -15,19 +15,25 @@ const textareaStyle = { fontFamily: 'var(--ui-font-body)', resize: 'vertical' } 
 
 export function PromptDialog({ request, onSubmit, onClose }: Props) {
   const [prompt, setPrompt] = useState('')
+  const [submitting, setSubmitting] = useState(false)
   const id = useId()
   const formId = `${id}-form`
   const textarea = useRef<HTMLTextAreaElement>(null)
   const required = request.background
-  const canSubmit = !required || prompt.trim().length > 0
+  const canSubmit = !submitting && (!required || prompt.trim().length > 0)
 
   useEffect(() => {
     queueMicrotask(() => textarea.current?.focus())
   }, [])
 
-  const submit = (event: FormEvent) => {
-    event.preventDefault()
-    if (canSubmit) onSubmit(prompt)
+  const submit = async () => {
+    if (!canSubmit) return
+    setSubmitting(true)
+    try {
+      await onSubmit(prompt)
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   return (
@@ -42,7 +48,7 @@ export function PromptDialog({ request, onSubmit, onClose }: Props) {
         </>
       }
     >
-      <form id={formId} onSubmit={submit} style={formStyle}>
+      <form id={formId} onSubmit={(event) => { event.preventDefault(); void submit() }} style={formStyle}>
         <FormRow label={required ? 'Prompt' : 'Initial prompt (optional)'} htmlFor={id}>
           <textarea
             ref={textarea}
@@ -58,7 +64,10 @@ export function PromptDialog({ request, onSubmit, onClose }: Props) {
             style={textareaStyle}
             onChange={(event) => setPrompt(event.target.value)}
             onKeyDown={(event) => {
-              if (event.key === 'Enter' && (event.metaKey || event.ctrlKey) && canSubmit) onSubmit(prompt)
+              if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
+                event.preventDefault()
+                void submit()
+              }
             }}
           />
         </FormRow>
