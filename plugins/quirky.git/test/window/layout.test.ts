@@ -39,9 +39,9 @@ test('SC-8: the panel shows Orca\'s layout against a real daemon', async () => {
   const math = rowOf('math.ts')!
   expect(text(q('[data-row-name]', math))).toBe('math.ts')
   expect(text(q('[aria-label*="additions"]', rowContainerOf('math.ts')!))).toMatch(/^\+\d+$/)
-  expect(text(q('.ui-badge[aria-label="Git status modified"]', rowContainerOf('math.ts')!))).toBe('M')
-  expect(text(q('.ui-badge[aria-label="Git status renamed"]', rowContainerOf('new.ts', 'staged')!))).toBe('R')
-  expect(text(q('.ui-badge[aria-label="Git status untracked"]', rowContainerOf('notes.txt')!))).toBe('U')
+  expect(text(q('.git-row__status[aria-label="Git status modified"]', rowContainerOf('math.ts')!))).toBe('M')
+  expect(text(q('.git-row__status[aria-label="Git status renamed"]', rowContainerOf('new.ts', 'staged')!))).toBe('R')
+  expect(text(q('.git-row__status[aria-label="Git status untracked"]', rowContainerOf('notes.txt')!))).toBe('U')
 
   const state = await w.win.waitFor(async () => {
     const r = await w.report()
