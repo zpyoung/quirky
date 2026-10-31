@@ -328,6 +328,46 @@ describe('new sessions', () => {
     expect(fake.callsTo('quirky.session/create')[0]!.params).toEqual({ worktree: WORKTREE.id, agent: 'claude', prompt: 'fix the bug' })
   })
 
+  for (const background of [false, true]) {
+    test(`a refused ${background ? 'background' : 'foreground'} start preserves the prompt for retry`, async () => {
+      const method = background ? 'quirky.structured/create' : 'quirky.session/create'
+      const { promise: firstStart, reject: refuse } = Promise.withResolvers<unknown>()
+      let attempts = 0
+      start([shell1], { [method]: () => ++attempts === 1 ? firstStart : session({ id: 'retried', agent: 'claude' }) })
+      const view = await open({ worktree: WORKTREE.id })
+      const openedBefore = [...fake.opened]
+      await pickFromMenu(view, background ? 'Claude (background)' : 'Claude')
+      const textarea = document.querySelector<HTMLTextAreaElement>('[role="dialog"] textarea')!
+      const prompt = '  keep this draft\nand retry it  '
+      await act(async () => {
+        Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value')!.set!.call(textarea, prompt)
+        textarea.dispatchEvent(new Event('input', { bubbles: true }))
+      })
+      const startButton = [...document.querySelectorAll('button')].find((button) => button.textContent === 'Start')!
+      await view.click(startButton)
+      expect(document.querySelector<HTMLTextAreaElement>('[role="dialog"] textarea')?.value).toBe(prompt)
+      expect(startButton.disabled).toBe(true)
+      await act(async () => {
+        textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', ctrlKey: true, bubbles: true }))
+      })
+      expect(fake.callsTo(method)).toHaveLength(1)
+
+      await act(async () => { refuse(new Error('agent is disabled')) })
+      expect(document.querySelector<HTMLTextAreaElement>('[role="dialog"] textarea')?.value).toBe(prompt)
+      expect(startButton.disabled).toBe(false)
+      expect(fake.toasts).toEqual([{ title: 'Could not start session', body: 'agent is disabled' }])
+      expect(fake.opened).toEqual(openedBefore)
+
+      await view.click(startButton)
+      expect(fake.callsTo(method).map((call) => call.params)).toEqual([
+        { worktree: WORKTREE.id, agent: 'claude', prompt: prompt.trim() },
+        { worktree: WORKTREE.id, agent: 'claude', prompt: prompt.trim() }
+      ])
+      expect(fake.opened.at(-1)).toEqual({ id: VIEW, input: { worktree: WORKTREE.id, session: 'retried' } })
+      expect(document.querySelector('[role="dialog"]')).toBeNull()
+    })
+  }
+
   test('Claude (background) starts a structured session', async () => {
     start([shell1], { 'quirky.structured/create': () => session({ id: 'bg', kind: 'structured', agent: 'claude' }) })
     const view = await open({ worktree: WORKTREE.id })

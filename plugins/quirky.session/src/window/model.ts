@@ -116,8 +116,8 @@ export class WorktreeSessions {
     this.context.openView(WORKTREE_VIEW_ID, session === undefined ? { worktree } : { worktree, session })
   }
 
-  /** Starts a session and opens it; a failure is shown as a toast. */
-  async create(agent: AgentKind, prompt: string, background: boolean): Promise<void> {
+  /** Starts and opens a session; returns whether it succeeded, showing failures as a toast. */
+  async create(agent: AgentKind, prompt: string, background: boolean): Promise<boolean> {
     const worktree = this.snapshot.worktree?.id ?? this.selector
     const text = prompt.trim()
     try {
@@ -127,8 +127,10 @@ export class WorktreeSessions {
           : await this.context.call('quirky.session/create', { worktree, agent, ...(text === '' ? {} : { prompt: text }) })
       ) as Session
       this.open(session.id)
+      return true
     } catch (error) {
       this.context.toast('Could not start session', messageOf(error))
+      return false
     }
   }
 

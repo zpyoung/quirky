@@ -124,10 +124,11 @@ export function SessionTabs({ context, store, sessions, active }: Props) {
         <PromptDialog
           request={pending}
           onClose={() => setPending(null)}
-          onSubmit={(prompt) => {
+          onSubmit={async (prompt) => {
             const request = pending
-            setPending(null)
-            void store.create(request.agent, prompt, request.background)
+            if (await store.create(request.agent, prompt, request.background)) {
+              setPending((current) => current === request ? null : current)
+            }
           }}
         />
       )}
