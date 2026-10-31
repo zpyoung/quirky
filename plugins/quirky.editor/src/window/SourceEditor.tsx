@@ -15,6 +15,7 @@ import { Compartment, EditorSelection, EditorState, Transaction, type Extension 
 import { EditorView, drawSelection, highlightActiveLine, highlightActiveLineGutter, keymap, lineNumbers } from '@codemirror/view'
 import { tags } from '@lezer/highlight'
 import type { EditorSurfaceBuffer } from '../types'
+import { registerEditorFocus } from './editorFocus'
 
 const PASTE_LIMIT = 16 * 1024 * 1024
 // The host routes these managed chords; CodeMirror must not also run a search action.
@@ -436,6 +437,12 @@ export const SourceEditor = forwardRef<SourceEditorHandle, Props>(function Sourc
     })
     const editor = new EditorView({ state, parent })
     viewRef.current = editor
+    const tabId = props.tabId
+    const unregisterFocus = tabId === null ? undefined : registerEditorFocus(tabId, () => {
+      const group = parent.closest<HTMLElement>('.qt-group')
+      const hostedView = parent.closest<HTMLElement>('.qt-hosted-view')
+      if (group?.classList.contains('qt-active') && hostedView?.dataset.hostedView === tabId) editor.focus()
+    })
     let drawFrame = 0
     const paintMinimap = () => {
       drawFrame = 0
@@ -486,6 +493,7 @@ export const SourceEditor = forwardRef<SourceEditorHandle, Props>(function Sourc
     scheduleView.current = schedule
     editor.scrollDOM.addEventListener('scroll', schedule, { passive: true })
     return () => {
+      unregisterFocus?.()
       if (pendingView.current !== undefined) window.clearTimeout(pendingView.current)
       pendingView.current = undefined
       if (drawFrame !== 0) window.cancelAnimationFrame(drawFrame)
