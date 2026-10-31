@@ -36,6 +36,7 @@ const CENTER_WIDTH = 330
 
 let browser: Browser | null = null
 let browserBundle = ''
+let panelHeaderRegressionBundle = ''
 
 function browserEntry(): string {
   const uiModule = join(ROOT, 'packages/ui/src/design-system/index.ts')
@@ -135,6 +136,54 @@ function browserEntry(): string {
   `
 }
 
+function panelHeaderRegressionBrowserEntry(): string {
+  const uiModule = join(ROOT, 'packages/ui/src/design-system/index.ts')
+  return `
+    import { createElement as h, useState } from 'react'
+    import { createRoot } from 'react-dom/client'
+    import { IconButton, Tabs, ToolPanelFrame } from ${JSON.stringify(uiModule)}
+
+    function PanelHeaderRegressionFixtures() {
+      const [selectedVaultTab, setSelectedVaultTab] = useState('workspace')
+      const vaultTabs = h(Tabs, {
+        label: 'Vault views',
+        items: [
+          { id: 'workspace', label: 'Workspace' },
+          { id: 'project', label: 'Project' },
+          { id: 'all', label: 'All' }
+        ],
+        value: selectedVaultTab,
+        onChange: setSelectedVaultTab
+      })
+      return h('div', { id: 'panel-header-regression-fixtures' },
+        h('div', { id: 'remote-frame-host', className: 'panel-header-regression-frame' },
+          h(ToolPanelFrame, {
+            title: 'Remote workspaces',
+            actions: h('div', { className: 'ui-cluster' },
+              h(IconButton, { label: 'Remote workspaces settings', title: 'Remote workspaces settings' }, '⚙'),
+              h(IconButton, { label: 'Refresh Remote workspaces', title: 'Refresh Remote workspaces' }, '↻')
+            ),
+            onMinimize() {}
+          }, h('div', null, 'Remote workspace list'))
+        ),
+        h('div', { id: 'vault-frame-host', className: 'panel-header-regression-frame' },
+          h(ToolPanelFrame, {
+            title: 'Vault',
+            tabs: vaultTabs,
+            tools: h('div', { className: 'ui-cluster' },
+              h(IconButton, { label: 'Vault settings', title: 'Vault settings' }, '⚙'),
+              h(IconButton, { label: 'Refresh Vault', title: 'Refresh Vault' }, '↻')
+            ),
+            onMinimize() {}
+          }, h('div', null, 'Vault files'))
+        )
+      )
+    }
+
+    createRoot(document.getElementById('root')).render(h(PanelHeaderRegressionFixtures))
+  `
+}
+
 function pageMarkup(): string {
   return `<!doctype html>
     <html data-theme="dark">
@@ -171,6 +220,20 @@ beforeAll(async () => {
     const output = result.outputs[0]
     if (!output) throw new Error('The worktree narrow-sidebar browser bundle was empty.')
     browserBundle = await output.text()
+
+    const panelRegressionEntrypoint = join(tempDir, 'panel-header-regression-entry.ts')
+    writeFileSync(panelRegressionEntrypoint, panelHeaderRegressionBrowserEntry())
+    const panelRegressionResult = await Bun.build({
+      entrypoints: [panelRegressionEntrypoint],
+      target: 'browser',
+      format: 'iife',
+      plugins: [browserDependencyResolver],
+      define: { 'process.env.NODE_ENV': '"production"' }
+    })
+    if (!panelRegressionResult.success) throw new Error(panelRegressionResult.logs.map((log) => log.message).join('\n'))
+    const panelRegressionOutput = panelRegressionResult.outputs[0]
+    if (!panelRegressionOutput) throw new Error('The panel-header regression browser bundle was empty.')
+    panelHeaderRegressionBundle = await panelRegressionOutput.text()
   } finally {
     rmSync(tempDir, { recursive: true, force: true })
   }
@@ -392,6 +455,7 @@ test.skipIf(!existsSync(chromium.executablePath()))('keeps tool and project head
     await context.close()
   }
 }, 60_000)
+
 test.skipIf(!existsSync(chromium.executablePath()))('keeps worktree rows compact and their menus usable in a narrow sidebar', async () => {
   const context = await browser!.newContext({ viewport: { width: 646, height: HEIGHT } })
   const page = await context.newPage()
@@ -559,6 +623,139 @@ test.skipIf(!existsSync(chromium.executablePath()))('keeps worktree rows compact
           expect(focusedRow.attention?.height).toBeGreaterThan(0)
           expectContained(focusedRow.attention!, focusedRow.row)
         }
+      }
+    }
+  } finally {
+    await context.close()
+  }
+}, 60_000)
+
+test.skipIf(!existsSync(chromium.executablePath()))('keeps remote and vault panel headers readable at narrow widths', async () => {
+  const context = await browser!.newContext({ viewport: { width: 646, height: HEIGHT } })
+  const page = await context.newPage()
+  try {
+    await page.setContent(pageMarkup())
+    for (const stylesheet of STYLESHEETS) {
+      await page.addStyleTag({ content: readFileSync(join(ROOT, stylesheet), 'utf8') })
+    }
+    await page.addStyleTag({
+      content: `
+        #panel-header-regression-fixtures { display: flex; gap: 16px; }
+        .panel-header-regression-frame { height: 360px; min-width: 0; width: 116px; }
+      `
+    })
+    await page.addScriptTag({ content: panelHeaderRegressionBundle })
+    await page.getByRole('heading', { name: 'Remote workspaces', exact: true }).waitFor()
+    await page.getByRole('heading', { name: 'Vault', exact: true }).waitFor()
+    await page.getByRole('tab', { name: 'Workspace', exact: true }).waitFor()
+    await page.getByRole('button', { name: 'Vault settings', exact: true }).waitFor()
+    await page.getByRole('button', { name: 'Refresh Vault', exact: true }).waitFor()
+
+    type Rect = { left: number; top: number; right: number; bottom: number; width: number; height: number }
+    const metrics = async () => page.evaluate(() => {
+      const bounds = (rect: DOMRect): Rect => ({
+        left: rect.left,
+        top: rect.top,
+        right: rect.right,
+        bottom: rect.bottom,
+        width: rect.width,
+        height: rect.height
+      })
+      const box = (element: Element) => bounds(element.getBoundingClientRect())
+      const remoteFrame = document.querySelector('#remote-frame-host .ui-tool-panel-frame')!
+      const remoteTitle = remoteFrame.querySelector('.ui-tool-panel-frame__title') as HTMLElement
+      const remoteActions = remoteFrame.querySelector('.ui-tool-panel-frame__actions')!
+      const vaultFrame = document.querySelector('#vault-frame-host .ui-tool-panel-frame')!
+      const vaultTabs = vaultFrame.querySelector('.ui-tool-panel-frame__tabs') as HTMLElement
+      const vaultTabList = vaultTabs.querySelector('[role="tablist"]') as HTMLElement
+      const vaultTools = vaultFrame.querySelector('.ui-tool-panel-frame__rail')!
+      const tabs = [...vaultTabList.querySelectorAll<HTMLElement>('[role="tab"]')].map((tab) => {
+        const range = document.createRange()
+        range.selectNodeContents(tab)
+        return {
+          label: tab.textContent?.trim() ?? '',
+          button: box(tab),
+          text: bounds(range.getBoundingClientRect())
+        }
+      })
+      return {
+        viewportWidth: window.innerWidth,
+        remoteFrame: box(remoteFrame),
+        remoteTitle: box(remoteTitle),
+        remoteTitleText: remoteTitle.textContent?.trim() ?? '',
+        remoteTitleClientWidth: remoteTitle.clientWidth,
+        remoteTitleScrollWidth: remoteTitle.scrollWidth,
+        remoteTitleTextOverflow: getComputedStyle(remoteTitle).textOverflow,
+        remoteActions: box(remoteActions),
+        remoteButtons: [...remoteActions.querySelectorAll<HTMLElement>('button')].map(box),
+        vaultFrame: box(vaultFrame),
+        vaultTabs: box(vaultTabs),
+        vaultTabsClientWidth: vaultTabs.clientWidth,
+        vaultTabsScrollWidth: vaultTabs.scrollWidth,
+        vaultTabsScrollLeft: vaultTabs.scrollLeft,
+        vaultTabList: box(vaultTabList),
+        vaultTabListClientWidth: vaultTabList.clientWidth,
+        vaultTabListScrollWidth: vaultTabList.scrollWidth,
+        vaultTabListScrollLeft: vaultTabList.scrollLeft,
+        vaultTools: box(vaultTools),
+        vaultButtons: [...vaultTools.querySelectorAll<HTMLElement>('button')].map(box),
+        tabs
+      }
+    })
+    const expectContained = (inner: Rect, outer: Rect) => {
+      expect(inner.left).toBeGreaterThanOrEqual(outer.left - 0.5)
+      expect(inner.top).toBeGreaterThanOrEqual(outer.top - 0.5)
+      expect(inner.right).toBeLessThanOrEqual(outer.right + 0.5)
+      expect(inner.bottom).toBeLessThanOrEqual(outer.bottom + 0.5)
+    }
+
+    for (const panelWidth of [116, 200, 240]) {
+      for (const frameHost of ['#remote-frame-host', '#vault-frame-host']) {
+        await page.locator(frameHost).evaluate((element, width) => {
+          ;(element as HTMLElement).style.width = `${width}px`
+        }, panelWidth)
+      }
+
+      const layout = await metrics()
+      expect(layout.viewportWidth).toBe(646)
+      expect(layout.remoteFrame.width).toBeCloseTo(panelWidth, 0)
+      expect(layout.vaultFrame.width).toBeCloseTo(panelWidth, 0)
+      expect(layout.remoteTitleText).toBe('Remote workspaces')
+      expectContained(layout.remoteTitle, layout.remoteFrame)
+      expectContained(layout.remoteActions, layout.remoteFrame)
+      for (const button of layout.remoteButtons) expectContained(button, layout.remoteFrame)
+      if (panelWidth === 116) {
+        expect(layout.remoteTitleScrollWidth).toBeGreaterThan(layout.remoteTitleClientWidth)
+      }
+      if (layout.remoteTitleScrollWidth > layout.remoteTitleClientWidth) {
+        expect(layout.remoteTitleTextOverflow).toBe('ellipsis')
+      }
+
+      expectContained(layout.vaultTabs, layout.vaultFrame)
+      expectContained(layout.vaultTabList, layout.vaultTabs)
+      expect(layout.vaultTabsScrollWidth).toBeLessThanOrEqual(layout.vaultTabsClientWidth)
+      expect(layout.vaultTabsScrollLeft).toBe(0)
+      expect(layout.vaultTabListScrollWidth).toBeLessThanOrEqual(layout.vaultTabListClientWidth)
+      expect(layout.vaultTabListScrollLeft).toBe(0)
+      expectContained(layout.vaultTools, layout.vaultFrame)
+      for (const button of layout.vaultButtons) expectContained(button, layout.vaultFrame)
+      expect(layout.tabs.map((tab) => tab.label)).toEqual(['Workspace', 'Project', 'All'])
+      for (const tab of layout.tabs) {
+        expectContained(tab.text, tab.button)
+        expectContained(tab.text, layout.vaultTabs)
+        expectContained(tab.text, layout.vaultFrame)
+      }
+      if (panelWidth === 116) {
+        expect(new Set(layout.tabs.map((tab) => Math.round(tab.button.top))).size).toBeGreaterThan(1)
+        const projectTab = page.getByRole('tab', { name: 'Project', exact: true })
+        await projectTab.click()
+        expect(await projectTab.evaluate((element) => document.activeElement === element)).toBe(true)
+        await page.keyboard.press('ArrowRight')
+        const allTab = page.getByRole('tab', { name: 'All', exact: true })
+        expect(await allTab.evaluate((element) => document.activeElement === element)).toBe(true)
+        await page.keyboard.press('Home')
+        const workspaceTab = page.getByRole('tab', { name: 'Workspace', exact: true })
+        expect(await workspaceTab.evaluate((element) => document.activeElement === element)).toBe(true)
       }
     }
   } finally {

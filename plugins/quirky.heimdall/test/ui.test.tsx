@@ -1,4 +1,7 @@
 import { afterAll, afterEach, beforeAll, describe, expect, test } from 'bun:test'
+import { existsSync, readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
+import { chromium } from 'playwright'
 import { act } from 'react'
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
 import type { QuirkyEvent, UiPluginContext } from '@quirky/protocol'
@@ -132,6 +135,39 @@ afterAll(async () => {
   else delete reactGlobal.IS_REACT_ACT_ENVIRONMENT
   await GlobalRegistrator.unregister()
 })
+
+test.skipIf(!existsSync(chromium.executablePath()))('keeps the complete fleet summary inside a narrow panel', async () => {
+  const root = await mountFleet(makeContext())
+  const browser = await chromium.launch({ headless: true, args: process.platform === 'linux' ? ['--no-sandbox'] : [] })
+  try {
+    const page = await browser.newPage({ viewport: { width: 646, height: 900 } })
+    await page.setContent(`<style>* { box-sizing: border-box } body { margin: 0 }</style><div id="panel" style="width:116px">${root.innerHTML}</div>`)
+    for (const name of ['compatibility-tokens', 'tokens', 'components']) {
+      await page.addStyleTag({ content: readFileSync(resolve(import.meta.dir, `../../../packages/ui/src/design-system/${name}.css`), 'utf8') })
+    }
+    for (const width of [116, 200, 320]) {
+      await page.locator('#panel').evaluate((element, width) => { (element as HTMLElement).style.width = `${width}px` }, width)
+      const summary = await page.locator('.ui-badge').evaluate((element) => {
+        const panel = document.querySelector('#panel')!.getBoundingClientRect()
+        const range = document.createRange()
+        range.selectNodeContents(element)
+        return {
+          panel: { left: panel.left, right: panel.right },
+          lines: [...range.getClientRects()].map((rect) => ({ left: rect.left, right: rect.right })),
+          text: element.textContent,
+        }
+      })
+      expect(summary.text).toContain('0 active')
+      expect(summary.text).toContain('0 need attention')
+      for (const line of summary.lines) {
+        expect(line.left).toBeGreaterThanOrEqual(summary.panel.left)
+        expect(line.right).toBeLessThanOrEqual(summary.panel.right)
+      }
+    }
+  } finally {
+    await browser.close()
+  }
+}, 60_000)
 
 describe('Heimdall fleet navigation', () => {
   test('keeps the fleet open without Back controls and retains its snapshot on refresh failure', async () => {
