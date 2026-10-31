@@ -7,7 +7,7 @@ import { useEditorState, type EditorState } from './editorState'
 import { openExplorerSearch } from './explorerIntent'
 import { requestSingleClose } from './overlayState'
 import { setEditorSetting, useEditorSettings } from './settings'
-import { cancelEditorFocus } from './editorFocus'
+import { beginEditorFocusHandoff, cancelEditorFocus } from './editorFocus'
 import { SourceEditor, type SourceEditorHandle } from './SourceEditor'
 import { ChangesSurface } from './ChangesSurface'
 import { hydrateBuffer, hydrateDiskContent, importFileTransfer, writeDraft } from './transfers'
@@ -991,7 +991,14 @@ function DocumentBody({ context, input }: { context: UiPluginContext; input: Doc
   const showViewer = !changesOpen && viewerKind
   const showChanges = changesOpen && canOfferChanges
   const surfaceProps = featureProps
-  const saveButton = () => void save('user').catch(handleError)
+  const saveButton = () => {
+    const handoff = actualTabId === null ? null : beginEditorFocusHandoff()
+    if (actualTabId !== null) handoff?.setTarget(actualTabId)
+    void save('user').then(() => handoff?.request()).catch((reason) => {
+      handoff?.cancel()
+      handleError(reason)
+    })
+  }
   const closeButton = () => {
     const details = fileActionsRef.current
     if (details) {

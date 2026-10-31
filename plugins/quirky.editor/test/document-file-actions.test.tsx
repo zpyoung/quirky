@@ -6,6 +6,7 @@ import type { UiPluginContext } from '@quirky/protocol'
 import type { DocumentSurface as DocumentSurfaceComponent } from '../src/window/DocumentSurface'
 import { CloseOverlay } from '../src/window/CloseOverlay'
 import type { EditorBufferInfo } from '../src/types'
+import { activeDocument } from '../src/window/activeDocument'
 
 type SettingWrite = { id: string; value: unknown }
 type SettingChange = { type: 'setting.changed'; id: string; value: unknown }
@@ -14,7 +15,10 @@ type Mounted = {
   element: HTMLElement
   settingWrites: SettingWrite[]
   panelToggles: PanelToggle[]
+  saveCalls: Record<string, unknown>[]
+  saveStarted: Promise<void>
   buffer: EditorBufferInfo
+  completeSave(): void
   unmount(): Promise<void>
 }
 
@@ -58,7 +62,8 @@ afterEach(async () => {
   document.body.replaceChildren()
 })
 
-function makeBufferInfo(dirty = false): EditorBufferInfo {
+function makeBufferInfo(dirty = false, mode: 'source' | 'rich' = 'source'): EditorBufferInfo {
+  const content = mode === 'rich' ? '# File actions regression fixture\n' : CONTENT
   return {
     id: BUFFER_ID,
     worktreeId: WORKTREE_ID,
@@ -66,16 +71,16 @@ function makeBufferInfo(dirty = false): EditorBufferInfo {
     path: '/tmp/file-actions-worktree/README.txt',
     relativePath: 'README.txt',
     name: 'README.txt',
-    kind: 'text',
-    content: CONTENT,
+    kind: mode === 'rich' ? 'markdown' : 'text',
+    content,
     draft: null,
     baseline: null,
-    size: CONTENT.length,
+    size: content.length,
     readOnly: false,
     diskWritable: true,
     dirty,
     external: null,
-    mode: 'source',
+    mode,
     tabId: TAB_ID,
     preview: false,
     pinned: false,
@@ -84,18 +89,23 @@ function makeBufferInfo(dirty = false): EditorBufferInfo {
     contentRevision: 1,
     view: {},
     error: null,
-    contentLength: CONTENT.length,
+    contentLength: content.length,
     draftLength: null,
     diskContentLength: null,
-    contentBytes: new TextEncoder().encode(CONTENT).byteLength,
+    contentBytes: new TextEncoder().encode(content).byteLength,
     draftBytes: null,
     diskContentBytes: null,
     diskSignature: null
   }
 }
 
-async function renderDocument(options: { dirty?: boolean; withCloseOverlay?: boolean } = {}): Promise<Mounted> {
-  const info = makeBufferInfo(options.dirty ?? false)
+async function renderDocument(options: {
+  dirty?: boolean
+  withCloseOverlay?: boolean
+  mode?: 'source' | 'rich'
+  deferSave?: boolean
+} = {}): Promise<Mounted> {
+  const info = makeBufferInfo(options.dirty ?? false, options.mode)
   const state = {
     buffers: [info],
     tabs: [{ tabId: TAB_ID, bufferId: BUFFER_ID, mode: 'edit' as const }],
@@ -107,7 +117,24 @@ async function renderDocument(options: { dirty?: boolean; withCloseOverlay?: boo
   const settingListeners = new Set<(event: SettingChange) => void>()
   const panelToggles: PanelToggle[] = []
   const settingWrites: SettingWrite[] = []
+  const saveCalls: Record<string, unknown>[] = []
+  const { promise: saveStarted, resolve: announceSaveStarted } = Promise.withResolvers<void>()
+  let releaseSave: (() => void) | undefined
   const settings = new Map(SETTINGS)
+  const savedInfo = (): EditorBufferInfo => {
+    const saved = {
+      ...info,
+      dirty: false,
+      external: null,
+      draft: null,
+      revision: info.revision + 1,
+      contentRevision: info.contentRevision + 1,
+      draftLength: null,
+      draftBytes: null
+    }
+    state.buffers[0] = saved
+    return saved
+  }
   const context = {
     pluginId: 'quirky.editor',
     async call(method: string, params: Record<string, unknown> = {}) {
@@ -115,6 +142,18 @@ async function renderDocument(options: { dirty?: boolean; withCloseOverlay?: boo
       if (method === 'quirky.editor/close') {
         if (info.dirty && params.choice === undefined) return { closed: false, needsDecision: true }
         return { closed: true }
+      }
+      if (method === 'quirky.editor/save') {
+        saveCalls.push(params)
+        if (options.deferSave) {
+          const pending = Promise.withResolvers<EditorBufferInfo>()
+          releaseSave = () => pending.resolve(savedInfo())
+          announceSaveStarted()
+          return pending.promise
+        }
+        const saved = savedInfo()
+        announceSaveStarted()
+        return saved
       }
       if (method === 'setting.set') {
         const id = typeof params.id === 'string' ? params.id : ''
@@ -124,6 +163,11 @@ async function renderDocument(options: { dirty?: boolean; withCloseOverlay?: boo
         settingListeners.forEach((listener) => listener(event))
       }
       if (method === 'quirky.editor/view') return params.action === 'pin' ? { ...info, pinned: true } : info
+      if (method === 'quirky.editor/markdown') {
+        if (params.action === 'capabilities') return { richEligible: true, openAnywayAvailable: false }
+        if (params.action === 'toc') return { headings: [] }
+      }
+      if (method === 'quirky.editor/notes') return { notes: [] }
       return {}
     },
     subscribe: (listener: (event: SettingChange) => void) => {
@@ -137,15 +181,29 @@ async function renderDocument(options: { dirty?: boolean; withCloseOverlay?: boo
     toast() {},
     togglePanel: (panel: string, open: boolean) => { panelToggles.push({ panel, open }) },
   } as unknown as UiPluginContext
+  const group = document.createElement('div')
+  group.className = 'qt-group qt-active'
+  const hostedView = document.createElement('div')
+  hostedView.className = 'qt-hosted-view'
+  hostedView.dataset.hostedView = TAB_ID
   const element = document.createElement('div')
-  document.body.append(element)
+  hostedView.append(element)
+  group.append(hostedView)
+  document.body.append(group)
   const root = createRoot(element)
   let unmounted = false
   const surface: Mounted = {
     element,
     settingWrites,
     panelToggles,
+    saveCalls,
+    saveStarted,
     buffer: info,
+    completeSave() {
+      if (!releaseSave) throw new Error('No deferred save is waiting to complete.')
+      releaseSave()
+      releaseSave = undefined
+    },
     async unmount() {
       if (unmounted) return
       unmounted = true
@@ -156,7 +214,7 @@ async function renderDocument(options: { dirty?: boolean; withCloseOverlay?: boo
   await act(async () => {
     root.render(
       <>
-        <DocumentSurface context={context} input={{ bufferId: BUFFER_ID, tabId: TAB_ID }} />
+        <DocumentSurface context={context} input={{ bufferId: BUFFER_ID, tabId: TAB_ID, mode: options.mode }} />
         {options.withCloseOverlay && <CloseOverlay />}
       </>
     )
@@ -164,6 +222,7 @@ async function renderDocument(options: { dirty?: boolean; withCloseOverlay?: boo
   await flushReact()
   return surface
 }
+
 
 async function flushReact(): Promise<void> {
   const { promise, resolve } = Promise.withResolvers<void>()
@@ -195,6 +254,95 @@ function outsideSourceControl(): HTMLButtonElement {
   document.body.append(button)
   return button
 }
+
+async function editorTarget(surface: Mounted, mode: 'source' | 'rich'): Promise<HTMLElement> {
+  const selector = mode === 'source'
+    ? '.cm-content[contenteditable="true"]'
+    : '[contenteditable="true"][aria-label="Rich Markdown editor"]'
+  const deadline = Date.now() + 5000
+  while (Date.now() < deadline) {
+    const editor = surface.element.querySelector<HTMLElement>(selector)
+    if (editor) return editor
+    await flushReact()
+  }
+  throw new Error(`The ${mode} editor did not mount.`)
+}
+
+async function clickSave(surface: Mounted): Promise<HTMLButtonElement> {
+  const save = buttonByText(surface.element, 'Save')
+  await act(async () => {
+    save.focus()
+    save.click()
+  })
+  await surface.saveStarted
+  return save
+}
+
+async function expectSaveRestoresFocus(mode: 'source' | 'rich'): Promise<void> {
+  const surface = await renderDocument({ dirty: true, mode })
+  const editor = await editorTarget(surface, mode)
+  const save = await clickSave(surface)
+  await flushReact()
+
+  expect(surface.saveCalls).toHaveLength(1)
+  expect(save.disabled).toBe(true)
+  expect(document.activeElement === editor).toBe(true)
+}
+
+test('button Save restores focus to the source editor after saving', async () => {
+  await expectSaveRestoresFocus('source')
+})
+
+test('button Save restores focus to the rich Markdown editor after saving', async () => {
+  await expectSaveRestoresFocus('rich')
+})
+
+test('later pointer focus wins over a pending button Save focus handoff', async () => {
+  const surface = await renderDocument({ dirty: true, deferSave: true })
+  const save = await clickSave(surface)
+  const sourceControl = outsideSourceControl()
+
+  await act(async () => {
+    sourceControl.dispatchEvent(new Event('pointerdown', { bubbles: true }))
+    sourceControl.focus()
+  })
+  surface.completeSave()
+  await flushReact()
+
+  expect(save.disabled).toBe(true)
+  expect(document.activeElement === sourceControl).toBe(true)
+})
+
+test('Tab navigation wins over a pending button Save focus handoff', async () => {
+  const surface = await renderDocument({ dirty: true, deferSave: true })
+  const save = await clickSave(surface)
+  const sourceControl = outsideSourceControl()
+
+  await act(async () => {
+    save.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }))
+    sourceControl.focus()
+  })
+  surface.completeSave()
+  await flushReact()
+
+  expect(save.disabled).toBe(true)
+  expect(document.activeElement === sourceControl).toBe(true)
+})
+
+test('active-document command saves do not steal focus from another control', async () => {
+  const surface = await renderDocument({ dirty: true })
+  const sourceControl = outsideSourceControl()
+  await act(async () => sourceControl.focus())
+  const active = activeDocument()
+  if (!active) throw new Error('The active document was not registered.')
+
+  await act(async () => active.save())
+  await flushReact()
+
+  expect(surface.saveCalls).toHaveLength(1)
+  expect(buttonByText(surface.element, 'Save').disabled).toBe(true)
+  expect(document.activeElement === sourceControl).toBe(true)
+})
 
 async function openFileActions(surface: Mounted): Promise<void> {
   const details = fileActions(surface.element)
