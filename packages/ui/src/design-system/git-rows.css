@@ -88,6 +88,10 @@
   transform: translateY(-50%);
 }
 
+.git-rows .git-row__end .git-row__reveal .git-row__buttons {
+  flex-wrap: nowrap;
+}
+
 [data-panel-focused] .git-rows .ui-list-row--selected .git-row__end .git-row__reveal {
   background: var(--ui-accent);
 }

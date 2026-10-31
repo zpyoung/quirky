@@ -133,5 +133,7 @@ describe('git-rows.css', () => {
     const reveal = rules.find((rule) => rule.selectors.includes('.git-rows .git-row__end .git-row__reveal'))
     expect(reveal?.body).toContain('position: absolute')
     expect(reveal?.body).toContain('flex-wrap: nowrap')
+    const buttons = rules.find((rule) => rule.selectors.includes('.git-rows .git-row__end .git-row__reveal .git-row__buttons'))
+    expect(buttons?.body).toContain('flex-wrap: nowrap')
   })
 })
