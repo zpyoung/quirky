@@ -995,6 +995,79 @@ test('Explorer footer Search in Files focuses the contents query', async () => {
 })
 
 
+
+test('Explorer header actions copy all selected paths', async () => {
+  const root = '/test'
+  const worktree = 'copy-selection-test'
+  const absoluteA = join(root, FILE_A)
+  const absoluteB = join(root, FILE_B)
+  const listing = {
+    root: join(root, 'nested'),
+    entries: [
+      { path: absoluteA, name: basename(absoluteA), isDirectory: false, isSymlink: false },
+      { path: absoluteB, name: basename(absoluteB), isDirectory: false, isSymlink: false }
+    ],
+    showDotfiles: true,
+    showIgnored: false,
+    followSymlinkedDirectories: false
+  }
+  const context = {
+    pluginId: 'quirky.editor',
+    log() {},
+    call: async (method: string) => {
+      if (method === 'quirky.editor/state') {
+        return {
+          buffers: [],
+          tabs: [],
+          explorer: { worktreeId: worktree, showDotfiles: true, expanded: [], selectedPaths: [absoluteA, absoluteB], focusedPath: absoluteA }
+        }
+      }
+      if (method === 'quirky.editor/documentRoot') return { id: worktree, path: root }
+      if (method === 'quirky.editor/explorer') return listing
+      if (method === 'quirky.git/status') return { files: [] }
+      return {}
+    },
+    subscribe: () => () => {},
+    getSetting: (name: string) => {
+      if (name === 'editorFontFamily') return 'monospace'
+      if (name === 'editorAutoSaveDelayMs') return 1000
+      if (name === 'editorSidebarWidth') return 320
+      if (name === 'editorFontZoomLevel') return 0
+      return false
+    },
+    getLayout: () => ({ worktree, view: null, panel: null, sidebar: true, focus: 'view' }),
+    onLayout: () => () => {},
+    onConnection: () => () => {},
+    confirm: async () => false,
+    toast() {}
+  } as unknown as UiPluginContext
+  const panel = await renderStandaloneExplorer(context)
+  try {
+    await waitForUi(() => {
+      const rowA = findRow(panel.element, absoluteA)
+      const rowB = findRow(panel.element, absoluteB)
+      return rowA?.getAttribute('aria-selected') === 'true' && rowB?.getAttribute('aria-selected') === 'true' || false
+    })
+
+    const details = panel.element.querySelector<HTMLDetailsElement>('.qe-explorer-more-actions')
+    const summary = details?.querySelector<HTMLElement>('summary[aria-label="More Explorer Actions"]')
+    expect(summary).not.toBeNull()
+    await act(async () => summary!.click())
+
+    const buttons = Array.from(details!.querySelectorAll<HTMLButtonElement>('button'))
+    const copyPath = buttons.find((button) => button.textContent?.trim() === 'Copy Path')
+    expect(copyPath).toBeDefined()
+    await act(async () => copyPath!.click())
+    expect(await navigator.clipboard.readText()).toBe(`${absoluteA}\n${absoluteB}`)
+
+    const copyRelativePath = buttons.find((button) => button.textContent?.trim() === 'Copy Relative Path')
+    expect(copyRelativePath).toBeDefined()
+    await act(async () => copyRelativePath!.click())
+    expect(await navigator.clipboard.readText()).toBe(`${FILE_A}\n${FILE_B}`)
+  } finally {
+    await panel.unmount()
+  }
+}, 60_000)
 test('Explorer footer copies multi-selection paths and row drags satisfy the Terminal worktree-path contract', async () => {
   const fixture = await makeFixture({ displayRoot: 'nested' })
   expect(fixture.listing.root).toBe(join(fixture.root, 'nested'))
