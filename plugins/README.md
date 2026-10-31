@@ -987,6 +987,9 @@ Explorer **Copy Path** copies the exact absolute path; **Copy Relative Path** is
 to the worktree even when Explorer displays a subfolder. Multi-selection copies one path
 per line without shell quoting. Row drags into a terminal retain worktree ownership and
 insert shell-escaped paths; **Open in Terminal** uses the selected directory directly.
+The footer's **Copy Path**, **Copy Relative Path**, and **Delete** actions are disabled
+in Contents mode because its search results don't expose the tree selection. Returning
+to Names restores access to the retained selection.
 
 The buffer's optional `diskWritable` is advisory effective OS access, separate from the
 format's `readOnly` capability. A readable non-writable Markdown file can keep drafts and

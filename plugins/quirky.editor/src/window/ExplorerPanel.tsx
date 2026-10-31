@@ -1101,9 +1101,9 @@ export function ExplorerPanel({ context, report }: { context: UiPluginContext; r
         </div>
       )}
       <footer className="qe-explorer-footer">
-        <Button disabled={selectedPaths.length === 0} onClick={() => void copyPaths(false)}>Copy Path</Button>
-        <Button disabled={selectedPaths.length === 0 || !worktree} onClick={() => void copyPaths(true)}>Copy Relative Path</Button>
-        <Button variant="destructive" disabled={selectedPaths.length === 0 || !worktree} onClick={() => void deleteSelected()}>Delete</Button>
+        <Button disabled={searchMode !== 'names' || selectedPaths.length === 0} onClick={() => void copyPaths(false)}>Copy Path</Button>
+        <Button disabled={searchMode !== 'names' || selectedPaths.length === 0 || !worktree} onClick={() => void copyPaths(true)}>Copy Relative Path</Button>
+        <Button variant="destructive" disabled={searchMode !== 'names' || selectedPaths.length === 0 || !worktree} onClick={() => void deleteSelected()}>Delete</Button>
         <Button onClick={() => { setSearchMode('contents'); setQuery(''); setIncludePattern(''); searchInputRef.current?.focus() }}>Search in Files</Button>
       </footer>
       {rootListing?.truncated && <p className="muted">More files may be available.</p>}
