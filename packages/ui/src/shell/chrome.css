@@ -68,6 +68,7 @@
 }
 
 .window-bar__switcher {
+  flex-shrink: 1;
   min-width: 0;
 }
 
@@ -96,6 +97,17 @@
 
 .window-bar__search kbd {
   font: inherit;
+}
+
+@media (max-width: 48rem) {
+  .window-bar {
+    grid-template-columns: minmax(0, 1fr) auto auto;
+  }
+
+  .window-bar__search > span,
+  .window-bar__search kbd {
+    display: none;
+  }
 }
 
 .shell-statusbar {
