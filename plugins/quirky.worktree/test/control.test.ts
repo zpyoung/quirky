@@ -2,7 +2,7 @@ import { Database } from 'bun:sqlite'
 import { afterEach, describe, expect, test } from 'bun:test'
 import { realpathSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import type { QuirkyClient, Repo, Worktree, WorktreeCreateResult } from '@quirky/protocol'
+import type { QuirkyClient, Repo, UiLayout, Worktree, WorktreeCreateResult } from '@quirky/protocol'
 import { makeHomeWithoutAutoHooks } from '../../../packages/daemon/test/helpers'
 import { makeTempDir } from '../../../packages/daemon/test/plugins/fixtures'
 import { spawnCli } from '../../../packages/cli/test/fixtures/fake-daemon'
@@ -210,28 +210,47 @@ describe('reversible sleep and wake', () => {
     expect(await call(w.t.client, 'quirky.session/list')).toEqual(before)
   })
 
-  test('sleep closes only the selected live view and leaves its running terminal untouched', async () => {
-    const w = await start()
+  test('sleep and wake preserve the selected workspace view, tabs, and live session', async () => {
+    const w = await start({
+      plugins: ['quirky.repo', 'quirky.worktree', 'quirky.agents', 'quirky.terminal', 'quirky.git', 'quirky.cli'],
+      fakeSession: true
+    })
     world = w
     const worktree = await create(w, 'running')
-    const sibling = await create(w, 'other-view')
     const session = await call(w.t.client, 'quirky.session/create', { worktree: worktree.id, agent: 'shell' }) as { id: string }
     const ui = await w.t.h.connect('ui')
-    await ui.callAny('ui.view.open', { id: 'view:quirky.session/worktree', input: { worktree: worktree.id } })
+    const worktreeView = { id: 'view:quirky.session/worktree', input: { worktree: worktree.id } }
+
+    await ui.callAny('ui.view.open', worktreeView)
+    await ui.callAny('ui.view.open', {
+      id: 'view:quirky.git/diff',
+      input: { worktree: worktree.id, path: 'src/control.test.ts' }
+    })
+    await ui.callAny('ui.view.open', { id: 'view:quirky.cli/settings' })
+    await ui.callAny('ui.view.open', worktreeView)
+
+    const layout = async () => (await ui.callAny('ui.state', {}) as { layout: UiLayout }).layout
+    const before = await layout()
+    expect(before.view).toEqual(worktreeView)
+    expect(before.viewTabs?.map((tab) => tab.id)).toEqual([
+      'view:quirky.session/worktree',
+      'view:quirky.git/diff',
+      'view:quirky.cli/settings'
+    ])
 
     const preview = await call(w.t.client, 'quirky.worktree/sleepPreview', { worktree: worktree.id }) as {
       worktrees: Array<{ allowed: boolean; blockers: Array<{ code: string }> }>
     }
     expect(preview.worktrees[0]).toMatchObject({ allowed: true, blockers: [] })
     await call(w.t.client, 'quirky.worktree/sleep', { worktree: worktree.id })
-    expect((await call(w.t.client, 'ui.state') as { layout: { view: unknown } }).layout.view).toBeNull()
-    const live = (await call(w.t.client, 'quirky.session/list', { worktree: worktree.id }) as Array<{ id: string; status: string }>).find((row) => row.id === session.id)
+    expect(await layout()).toEqual(before)
+
+    const live = (await call(w.t.client, 'quirky.session/list', { worktree: worktree.id }) as Array<{ id: string; status: string }>)
+      .find((row) => row.id === session.id)
     expect(live?.status).not.toBe('exited')
 
     await call(w.t.client, 'quirky.worktree/wake', { worktree: worktree.id })
-    await ui.callAny('ui.view.open', { id: 'view:quirky.session/worktree', input: { worktree: sibling.id } })
-    await call(w.t.client, 'quirky.worktree/sleep', { worktree: worktree.id })
-    expect((await call(w.t.client, 'ui.state') as { layout: { view: { input?: { worktree?: string } } } }).layout.view?.input?.worktree).toBe(sibling.id)
+    expect(await layout()).toEqual(before)
   })
 
   test('unknown per-window visibility refuses sleep rather than closing another window view', async () => {

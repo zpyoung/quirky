@@ -201,6 +201,7 @@ export function ContextMenuList({ items, label, onChoose, onClose, onBack, heade
 /** A menu positioned at its caller-provided screen coordinate. */
 export function ContextMenu({ items, label, x, y, onClose, header, highlightFirst, align = 'start' }: ContextMenuProps) {
   const anchor = useRef<HTMLDivElement>(null)
+  const ownerMarker = useRef<HTMLSpanElement>(null)
   const [position, setPosition] = useState({ x, y })
 
   useLayoutEffect(() => {
@@ -222,7 +223,23 @@ export function ContextMenu({ items, label, x, y, onClose, header, highlightFirs
       window.removeEventListener('resize', place)
     }
   }, [items, x, y, header, align])
-
+  useEffect(() => {
+    const marker = ownerMarker.current
+    if (!marker) return
+    const ancestors: Element[] = []
+    for (let ancestor = marker.parentElement; ancestor && ancestor !== document.body; ancestor = ancestor.parentElement) {
+      ancestors.push(ancestor)
+    }
+    const closeWhenHidden = () => {
+      if (ancestors.some((ancestor) => ancestor.hasAttribute('hidden'))) onClose()
+    }
+    closeWhenHidden()
+    const observer = new MutationObserver(closeWhenHidden)
+    for (const ancestor of ancestors) {
+      observer.observe(ancestor, { attributes: true, attributeFilter: ['hidden'] })
+    }
+    return () => observer.disconnect()
+  }, [onClose])
 
   useEffect(() => {
     const onDown = (event: MouseEvent) => {
@@ -237,17 +254,22 @@ export function ContextMenu({ items, label, x, y, onClose, header, highlightFirs
     item.onSelect?.()
   }
 
-  return createPortal(
-    <div ref={anchor} className="qt-menu-anchor" style={{ left: position.x, top: position.y }}>
-      <ContextMenuList
-        items={items}
-        label={label}
-        header={header}
-        highlightFirst={highlightFirst}
-        onClose={onClose}
-        onChoose={onChoose}
-      />
-    </div>,
-    document.body
+  return (
+    <>
+      <span ref={ownerMarker} hidden aria-hidden="true" />
+      {createPortal(
+        <div ref={anchor} className="qt-menu-anchor" style={{ left: position.x, top: position.y }}>
+          <ContextMenuList
+            items={items}
+            label={label}
+            header={header}
+            highlightFirst={highlightFirst}
+            onClose={onClose}
+            onChoose={onChoose}
+          />
+        </div>,
+        document.body
+      )}
+    </>
   )
 }

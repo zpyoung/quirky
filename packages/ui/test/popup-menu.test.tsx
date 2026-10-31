@@ -247,6 +247,26 @@ describe('PopupMenu', () => {
     expect(popups()).toHaveLength(0)
   })
 
+  test('closes when its connected anchor is inside a hidden owner', async () => {
+    let closes = 0
+    const owner = document.createElement('div')
+    owner.appendChild(anchor)
+    document.body.appendChild(owner)
+    await render(<PopupMenu anchor={anchor} items={[item('One')]} onClose={() => (closes += 1)} />)
+
+    expect(popups()).toHaveLength(1)
+    expect(anchor.isConnected).toBe(true)
+    await act(async () => {
+      owner.setAttribute('hidden', '')
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(anchor.isConnected).toBe(true)
+    expect(closes).toBe(1)
+    expect(popups()).toHaveLength(0)
+  })
+
   test('search filters labels and subtitles, keeps only the headings that still have rows, and Enter picks the first match', async () => {
     picked.length = 0
     await render(

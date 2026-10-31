@@ -708,11 +708,21 @@ textarea {
   min-width: 0;
 }
 
-.main-body > .plugin-slot {
+.main-view {
+  display: contents;
+}
+
+.main-view[hidden] {
+  display: none;
+}
+
+.main-body > .plugin-slot,
+.main-body > .main-view > .plugin-slot {
   overflow: auto;
 }
 
-.main-body > .plugin-slot {
+.main-body > .plugin-slot,
+.main-body > .main-view > .plugin-slot {
   flex: 1;
 }
 
