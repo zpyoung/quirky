@@ -250,7 +250,7 @@ describe('SC-11: clicking a tab activates it', () => {
     }
   })
 
-  test('"N more" also counts tabs hidden on the left after the strip scrolls', async () => {
+  test('"N more" counts tabs clipped on both sides after the strip scrolls', async () => {
     const resize = observeResize()
     try {
       const view = await mount(fakeDaemon(makeWorkspace(group('grp-1', terminalTabs(4)))))
@@ -259,11 +259,58 @@ describe('SC-11: clicking a tab activates it', () => {
       expect(view.q('.qt-tab-more')!.textContent).toBe('3 more')
       layout.viewport.scrollLeft = 244
       await fire(layout.viewport, new Event('scroll'))
-      expect(view.q('.qt-tab-more')!.textContent).toBe('2 more')
+      expect(view.q('.qt-tab-more')!.textContent).toBe('4 more')
       layout.viewport.scrollLeft = 100
       await fire(layout.viewport, new Event('scroll'))
       expect(view.q('.qt-tab-more')!.textContent).toBe('3 more')
     } finally {
+      resize.restore()
+    }
+  })
+
+  test('offers a clipped leading icon through the more menu when most of its tab remains visible', async () => {
+    const resize = observeResize()
+    const scroll = spyOn(Element.prototype, 'scrollIntoView').mockImplementation(function (this: Element) {
+      const tab = this as HTMLElement
+      const viewport = tab.closest<HTMLElement>('.qt-tabs')
+      if (!viewport) return
+      const tabRect = tab.getBoundingClientRect()
+      const viewportRect = viewport.getBoundingClientRect()
+      if (tabRect.left < viewportRect.left) viewport.scrollLeft += tabRect.left - viewportRect.left
+      else if (tabRect.right > viewportRect.right) viewport.scrollLeft += tabRect.right - viewportRect.right
+    })
+    try {
+      const view = await mount(fakeDaemon(makeWorkspace(group('grp-1', terminalTabs(2), { activeTab: 'tab-1' }))))
+      const layout = installTabLayout(view, 250, { 'tab-1': 140, 'tab-2': 140 })
+      await flushResize(resize)
+      const first = view.q<HTMLElement>('[data-tab="tab-1"]')!
+      const second = view.q<HTMLElement>('[data-tab="tab-2"]')!
+      const originalVisibility = getComputedStyle(first).visibility
+      layout.viewport.scrollLeft = 30
+      await fire(layout.viewport, new Event('scroll'))
+
+      const firstRect = first.getBoundingClientRect()
+      const viewportRect = layout.viewport.getBoundingClientRect()
+      expect(firstRect.left).toBeLessThan(viewportRect.left)
+      expect(firstRect.right - viewportRect.left).toBeGreaterThan(firstRect.width / 2)
+      expect(view.q('.qt-tab-more')).not.toBeNull()
+      expect(getComputedStyle(first).visibility).toBe('hidden')
+
+      await click(view.q('.qt-tab-more'))
+      const rows = [...document.querySelectorAll<HTMLElement>('.ui-popup [role="menuitem"]')]
+      expect(rows).toHaveLength(2)
+      expect(rows[0]!.textContent).toContain('Terminal 1')
+      expect(rows[1]!.textContent).toContain('Terminal 2')
+      await click(rows[1]!)
+      expect(callsTo(view.fake, 'activateTab')).toEqual([{ tab: 'tab-2' }])
+      expect(second.querySelector('[role="tab"]')!.getAttribute('aria-selected')).toBe('true')
+
+      await flushResize(resize)
+      expect(second.getBoundingClientRect().left).toBeGreaterThanOrEqual(layout.viewport.getBoundingClientRect().left)
+      expect(second.getBoundingClientRect().right).toBeLessThanOrEqual(layout.viewport.getBoundingClientRect().right)
+      expect(getComputedStyle(second).visibility).toBe(originalVisibility)
+    } finally {
+      scroll.mockRestore()
       resize.restore()
     }
   })
