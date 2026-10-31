@@ -1292,8 +1292,8 @@ export function isCurrentSnapshot(snapshot: ProviderSnapshot, state: AccountStat
 
 export function isConfigured(snapshot: ProviderSnapshot | undefined, state: AccountState | null, credentials: CredentialStatus[]): boolean {
   if (!snapshot || !isCurrentSnapshot(snapshot, state)) return false
-  if (snapshot.session || snapshot.weekly || snapshot.monthly || snapshot.fableWeekly || (snapshot.buckets?.length ?? 0) > 0 || snapshot.accountId) return true
-  if (snapshot.status === 'ok' || snapshot.status === 'fetching' || snapshot.status === 'error') return true
+  if (snapshot.session || snapshot.weekly || snapshot.monthly || snapshot.fableWeekly || snapshot.extraUsage || (snapshot.buckets?.length ?? 0) > 0 || snapshot.accountId) return true
+  if (snapshot.status === 'ok' || snapshot.status === 'error') return true
   if ((snapshot.provider === 'claude' || snapshot.provider === 'codex') && state) {
     const provider = snapshot.provider
     if (state.systemDefault[provider].hasAuth || state.accounts.some((account) => account.provider === provider && !account.needsSignIn)) return true

@@ -3,6 +3,7 @@ import { act } from 'react'
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
 import { activate, deactivate } from '../src/ui'
 import { AccountsUiStore } from '../src/window/model'
+import { mapGrokUsage } from '../src/usage/mappers'
 import type { QuirkyEvent, UiPluginContext } from '@quirky/protocol'
 import type { Preferences } from '../src/types'
 
@@ -413,6 +414,48 @@ test('an unavailable Claude status chip remains an accessible action for Claude 
 
   expect(container.querySelector('[aria-label="Claude usage details"]')).not.toBeNull()
   expect(container.querySelector('[aria-label="Claude account switcher"]')).not.toBeNull()
+})
+
+test('refreshing usage keeps configured providers without introducing unconfigured chips', async () => {
+  listResponse = () => ({
+    ...accountState(1, 'Current Claude account'),
+    systemDefault: { ...systemDefault, codex: { ...systemDefault.codex, hasAuth: true } }
+  })
+  usageValue = {
+    ...emptyUsage,
+    providers: emptyUsage.providers.map((snapshot) => ({ ...snapshot, status: 'fetching' }))
+  }
+  const context = makeContext()
+  await act(async () => {
+    activate(context)
+    const mount = provided.get('status-bar:quirky.accounts/usage') as (element: HTMLElement, props: { input?: unknown; report?(state: unknown): void }) => (() => void) | void
+    unregister = mount(container, {}) as (() => void) | undefined
+  })
+  await settle()
+
+  expect([...container.querySelectorAll('.usage-chips [data-provider]')].map((chip) => chip.getAttribute('data-provider'))).toEqual(['claude', 'codex'])
+  expect(container.querySelector('.usage-chips [data-provider="claude"]')?.getAttribute('aria-label')).toContain('Fetching')
+  expect(container.querySelector('.usage-chips [data-provider="codex"]')?.getAttribute('aria-label')).toContain('Fetching')
+})
+
+test('balance-only cached usage keeps its provider visible while refreshing', async () => {
+  listResponse = () => emptyAccountState(1, preferencesValue)
+  usageValue = {
+    ...emptyUsage,
+    providers: emptyUsage.providers.map((snapshot) => snapshot.provider === 'grok'
+      ? { ...mapGrokUsage({ config: { prepaidBalance: { val: 12 } } }, 1), status: 'fetching' }
+      : { ...snapshot, accountId: null })
+  }
+  const context = makeContext()
+  await act(async () => {
+    activate(context)
+    const mount = provided.get('status-bar:quirky.accounts/usage') as (element: HTMLElement, props: { input?: unknown; report?(state: unknown): void }) => (() => void) | void
+    unregister = mount(container, {}) as (() => void) | undefined
+  })
+  await settle()
+
+  expect([...container.querySelectorAll('.usage-chips [data-provider]')].map((chip) => chip.getAttribute('data-provider'))).toEqual(['grok'])
+  expect(container.querySelector('.usage-chips [data-provider="grok"]')?.getAttribute('aria-label')).toContain('Fetching')
 })
 
 test('the Codex status chip opens Codex details and its account switcher', async () => {
