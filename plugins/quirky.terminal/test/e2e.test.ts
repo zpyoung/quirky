@@ -258,13 +258,13 @@ scenario('SC-9: no output is lost or repeated between the replay and the live st
   await h.type(session.id, 'i=0; while :; do i=$((i+1)); echo "nn-$i"; sleep 0.005; done')
   await h.waitForLine(session.id, 'nn-40')
 
+  const numbersIn = (text: string) => [...text.matchAll(/nn-(\d+)/g)].map((match) => Number(match[1]))
   const pane = await h.attach(session.id)
-  await Bun.sleep(1000)
+  await waitFor('more than 30 lines in the live stream', () => (numbersIn(pane.streamText()).length > 30 ? true : undefined))
   await h.call('quirky.terminal/write', { session: session.id, data: '\x03' })
   await h.waitForLine(session.id, /\^C/)
   await Bun.sleep(300)
 
-  const numbersIn = (text: string) => [...text.matchAll(/nn-(\d+)/g)].map((match) => Number(match[1]))
   expect(numbersIn(pane.replayText).length).toBeGreaterThan(30)
   expect(numbersIn(pane.streamText()).length).toBeGreaterThan(30)
   const numbers = numbersIn(pane.replayText + pane.streamText())
