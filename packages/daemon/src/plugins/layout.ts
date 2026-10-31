@@ -29,6 +29,7 @@ import {
   type UiToastState,
   type UiToolEntry,
   type UiToolLayout,
+  type UiToolPlacement,
   type UiToolSlot,
   type UiWindowInfo,
   type WindowRoute,
@@ -41,6 +42,8 @@ import type { PluginHost } from './host'
 import { isRecord, resolveToolLayout, TOOL_SIZE_FIELDS, validToolSize } from './tool-layout'
 
 const LAYOUT_KEY = 'layout'
+const PALETTE_RECENTS_LIMIT = 10
+const PALETTE_RECENT_ID_LIMIT = 2048
 const MAX_JSON_LENGTH = 64 * 1024
 const COMMAND_TIMEOUT_MS = 30_000
 const TOAST_DISMISS = 'ui.toast.dismiss'
@@ -260,6 +263,9 @@ function readStored(value: unknown): UiLayout {
       : stored.worktree === null
         ? null
         : worktreeOf(view) ?? null
+  const paletteRecents = Array.isArray(stored.paletteRecents)
+    ? stored.paletteRecents.filter((id): id is string => typeof id === 'string' && id !== '').slice(0, PALETTE_RECENTS_LIMIT)
+    : []
   return {
     view,
     viewTabs: [...viewTabs.values()],
@@ -268,7 +274,8 @@ function readStored(value: unknown): UiLayout {
     sidebar: typeof stored.sidebar === 'boolean' ? stored.sidebar : true,
     focus: FOCUS_TARGETS.find((target) => target === stored.focus) ?? null,
     ...(hasPanelWidths ? { panelWidths } : {}),
-    ...(stored.palette === true ? { palette: true } : {})
+    ...(stored.palette === true ? { palette: true } : {}),
+    ...(paletteRecents.length > 0 ? { paletteRecents } : {})
   }
 }
 
@@ -578,8 +585,12 @@ export class LayoutService {
     const tool = this.toolForContribution(id)
     if (!tool) throw notFound(`no tool for panel ${id}`)
     return this.change((layout) => {
-      const slot = layout.tools!.placements[tool.id]!
-      const tools = { ...layout.tools!, open: { ...layout.tools!.open, [slot]: tool.id } }
+      const slot = this.slotOfTool(layout.tools!, tool)
+      const tools = {
+        ...layout.tools!,
+        placements: { ...layout.tools!.placements, [tool.id]: slot },
+        open: { ...layout.tools!.open, [slot]: tool.id }
+      }
       return { ...layout, tools, panel: id }
     })
   }
@@ -602,7 +613,7 @@ export class LayoutService {
   closePanel(): UiLayout {
     return this.change((layout) => {
       const panelTool = layout.panel === null ? undefined : this.toolForContribution(layout.panel)
-      const slot = panelTool ? layout.tools!.placements[panelTool.id] : undefined
+      const slot = panelTool ? this.slotOfTool(layout.tools!, panelTool) : undefined
       const open = { ...layout.tools!.open }
       if (slot && open[slot] === panelTool?.id) open[slot] = null
       const tools = { ...layout.tools!, open }
@@ -620,14 +631,17 @@ export class LayoutService {
     return this.change((layout) => {
       const worktrees = this.options.ui.contributions().tools?.find(({ id }) => id === 'sidebar-section:quirky.worktree/worktrees')
       const open = { ...layout.tools!.open }
+      const placements = { ...layout.tools!.placements }
       let actualVisible = false
       if (worktrees) {
-        const slot = layout.tools!.placements[worktrees.id]!
-        if (visible) open[slot] = worktrees.id
-        else if (open[slot] === worktrees.id) open[slot] = null
+        const slot = this.slotOfTool(layout.tools!, worktrees)
+        if (visible) {
+          open[slot] = worktrees.id
+          placements[worktrees.id] = slot
+        } else if (open[slot] === worktrees.id) open[slot] = null
         actualVisible = open[slot] === worktrees.id
       }
-      const tools = { ...layout.tools!, open }
+      const tools = { ...layout.tools!, placements, open }
       return {
         ...layout,
         tools,
@@ -641,9 +655,9 @@ export class LayoutService {
   openTool(id: string): UiLayout {
     const tool = this.requireTool(id)
     return this.change((layout) => {
-      const slot = layout.tools!.placements[id]!
+      const slot = this.slotOfTool(layout.tools!, tool)
       const open = { ...layout.tools!.open, [slot]: id }
-      const tools = { ...layout.tools!, open }
+      const tools = { ...layout.tools!, placements: { ...layout.tools!.placements, [id]: slot }, open }
       const panel = this.panelForOpen(
         tools,
         parseContributionId(tool.contributionId ?? '')?.kind === 'panel' ? tool.contributionId : layout.panel
@@ -680,16 +694,17 @@ export class LayoutService {
     })
   }
 
-  moveTool(id: string, slot: UiToolSlot): UiLayout {
+  /** Moves a tool to a slot, carrying it open when it was open, or to `overflow`, which closes it. */
+  moveTool(id: string, slot: UiToolPlacement): UiLayout {
     const tool = this.requireTool(id)
-    this.requireToolSlot(slot)
+    this.requireToolPlacement(slot)
     return this.change((layout) => {
-      const previousSlot = layout.tools!.placements[id]!
-      const wasOpen = layout.tools!.open[previousSlot] === id
+      const previous = layout.tools!.placements[id]!
+      const wasOpen = previous !== 'overflow' && layout.tools!.open[previous] === id
       const open = { ...layout.tools!.open }
       if (wasOpen) {
-        open[previousSlot] = null
-        open[slot] = id
+        open[previous] = null
+        if (slot !== 'overflow') open[slot] = id
       }
       const tools = {
         ...layout.tools!,
@@ -698,9 +713,21 @@ export class LayoutService {
       }
       const panel = this.panelForOpen(
         tools,
-        wasOpen && parseContributionId(tool.contributionId ?? '')?.kind === 'panel' ? tool.contributionId : layout.panel
+        wasOpen && slot !== 'overflow' && parseContributionId(tool.contributionId ?? '')?.kind === 'panel'
+          ? tool.contributionId
+          : layout.panel
       )
-      return { ...layout, tools, panel }
+      const closedToOverflow = wasOpen && slot === 'overflow'
+      const focusTarget = closedToOverflow ? focusTargetOfTool(tool) : undefined
+      return {
+        ...layout,
+        tools,
+        panel,
+        ...(closedToOverflow && id === 'sidebar-section:quirky.worktree/worktrees' ? { sidebar: false } : {}),
+        focus: focusTarget !== undefined && layout.focus === focusTarget && (focusTarget !== 'panel' || panel === null)
+          ? null
+          : layout.focus
+      }
     })
   }
 
@@ -734,6 +761,20 @@ export class LayoutService {
       delete closed.palette
       return closed
     })
+  }
+
+  /**
+   * Records a palette entry as the most recent one, removing its earlier copy and keeping at most
+   * 10. InvalidParams for an empty or non-string id, or one over 2,048 characters.
+   */
+  recordPaletteRecent(id: unknown): UiLayout {
+    if (typeof id !== 'string' || id === '' || id.length > PALETTE_RECENT_ID_LIMIT) {
+      throw invalidParams(`id must be a non-empty string of at most ${PALETTE_RECENT_ID_LIMIT} characters`)
+    }
+    return this.change((layout) => ({
+      ...layout,
+      paletteRecents: [id, ...(layout.paletteRecents ?? []).filter((earlier) => earlier !== id)].slice(0, PALETTE_RECENTS_LIMIT)
+    }))
   }
 
   /** Moves focus to the sidebar, the view or the panel. InvalidParams for any other target. */
@@ -1243,6 +1284,7 @@ export class LayoutService {
       delete auxiliaryLayout.tools
       delete auxiliaryLayout.panelWidths
       delete auxiliaryLayout.palette
+      delete auxiliaryLayout.paletteRecents
       return auxiliaryLayout
     }
     const override = this.windowViewFor(connId)
@@ -1398,6 +1440,16 @@ export class LayoutService {
     if (typeof slot !== 'string' || !(UI_TOOL_SLOTS as readonly string[]).includes(slot)) {
       throw invalidParams(`slot must be one of ${UI_TOOL_SLOTS.join(', ')}`)
     }
+  }
+
+  private requireToolPlacement(slot: unknown): asserts slot is UiToolPlacement {
+    if (slot !== 'overflow') this.requireToolSlot(slot)
+  }
+
+  /** The slot a tool opens into: its placement, or its default slot when it sits in overflow. */
+  private slotOfTool(tools: UiToolLayout, tool: UiToolEntry): UiToolSlot {
+    const placement = tools.placements[tool.id]
+    return placement === undefined || placement === 'overflow' ? tool.defaultSlot : placement
   }
 
   private panelForOpen(tools: UiToolLayout, preferred: string | null): string | null {

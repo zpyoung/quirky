@@ -272,6 +272,27 @@ export function buildTreeModel(
   }
 }
 
+/**
+ * The tree narrowed to `filterRepoIds`: other projects go, and so does any group left with nothing
+ * to show, so a narrowed panel carries no empty headers. An empty filter means All projects.
+ */
+export function narrowTreeModel(model: TreeModel, filterRepoIds: readonly string[]): TreeModel {
+  if (filterRepoIds.length === 0) return model
+  const inScope = (project: ProjectNode) => filterRepoIds.includes(project.repo.id)
+  const narrowGroup = (node: GroupNode): GroupNode | null => {
+    const projects = node.projects.filter(inScope)
+    const children = node.children.flatMap((child) => narrowGroup(child) ?? [])
+    return projects.length > 0 || node.rows.length > 0 || node.looseRows.length > 0 || children.length > 0
+      ? { ...node, projects, children }
+      : null
+  }
+  return {
+    pinned: model.pinned.filter((worktree) => filterRepoIds.includes(worktree.repoId)),
+    groups: model.groups.flatMap((node) => narrowGroup(node) ?? []),
+    projects: model.projects.filter(inScope)
+  }
+}
+
 export type WorkspaceReport = {
   id: string
   name: string

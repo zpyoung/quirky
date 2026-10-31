@@ -121,7 +121,7 @@
   min-width: 0;
 }
 
-.qc-header {
+.qc-filters {
   align-items: end;
   border-bottom: var(--ui-border-width) solid var(--ui-border);
   display: grid;
@@ -131,7 +131,7 @@
   padding-inline: var(--ui-space-8);
 }
 
-.qc-header > .ui-form-row {
+.qc-filters > .ui-form-row {
   min-width: 0;
 }
 

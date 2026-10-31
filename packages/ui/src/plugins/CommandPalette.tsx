@@ -1,24 +1,46 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import type { UiCommandEntry, UiSlotEntry, UiToolEntry, Worktree } from '@quirky/protocol'
 import type { Connection } from '../connection'
-import { Dialog, EmptyState, ListRow, TextField } from '../design-system'
+import { ControlIcon, Dialog, EmptyState, FileIcon, ListRow, SectionHeader, Tabs, TextField, ToolIcon } from '../design-system'
 import { useConnection, usePluginHost, usePluginState } from '../context'
 import { useAttention } from '../shell/attention'
 import { SLOT_LABELS } from '../shell/tool-slot-labels'
-import { paletteKey } from './palette'
+import {
+  FILE_SEARCH_DEBOUNCE_MS,
+  FILE_SEARCH_LIMIT,
+  PALETTE_SCOPES,
+  cycleScope,
+  decodeFileId,
+  entryKey,
+  exactTitleFirst,
+  fileEntry,
+  paletteKey,
+  paletteSections,
+  quickOpenPaths,
+  searchesFiles,
+  type PaletteEntry,
+  type PaletteScope
+} from './palette'
 
-type PaletteEntry = {
-  id: string
-  title: string
-  description?: string
-  kind: 'command' | 'tool' | 'view' | 'worktree'
-}
+type FileResults = { key: string; entries: PaletteEntry[] }
 
 function matches(entry: PaletteEntry, query: string): boolean {
   return query === '' || `${entry.title} ${entry.description ?? ''} ${entry.id} ${entry.kind}`.toLowerCase().includes(query)
 }
-function entryKey(entry: PaletteEntry): string {
-  return `${entry.kind}:${entry.id}`
+
+function EntryIcon({ entry }: { entry: PaletteEntry }) {
+  switch (entry.kind) {
+    case 'tool':
+      return <ToolIcon name={entry.icon ?? 'squares-four'} hue={entry.hue ?? 'slate'} />
+    case 'worktree':
+      return <ToolIcon name="git-branch" hue="blue" />
+    case 'file':
+      return <FileIcon path={entry.description ?? entry.title} />
+    case 'command':
+      return <ControlIcon name="caret-right" />
+    case 'view':
+      return <ControlIcon name="squares-four" />
+  }
 }
 
 function errorMessage(error: unknown): string {
@@ -81,7 +103,9 @@ function entriesOf(
       id: tool.id,
       title: tool.title,
       description: `Tool · ${SLOT_LABELS[tool.defaultSlot]}`,
-      kind: 'tool' as const
+      kind: 'tool' as const,
+      icon: tool.icon,
+      hue: tool.hue
     })),
     ...views.map((view) => ({
       id: view.id,
@@ -100,27 +124,26 @@ function entriesOf(
       kind: 'worktree' as const
     }))
   ]
-  const matching = entries.filter((entry) => matches(entry, query))
-  if (query === '') return matching
-
-  const exactTitleMatches: PaletteEntry[] = []
-  const otherMatches: PaletteEntry[] = []
-  for (const entry of matching) {
-    if (entry.title.trim().toLowerCase() === query) exactTitleMatches.push(entry)
-    else otherMatches.push(entry)
-  }
-  return exactTitleMatches.concat(otherMatches)
+  return entries.filter((entry) => matches(entry, query))
 }
 
-/** Search effective commands, tools, views and canonical worktree snapshots. */
+/** Search effective commands, tools, views, worktrees and, in the selected worktree, files. */
 export function CommandPalette({ onClose }: { onClose: () => void }) {
   const host = usePluginHost()
   const connection = useConnection()
-  const { model, windowRoute } = usePluginState()
+  const { model, windowRoute, layout } = usePluginState()
   const { snapshot } = useAttention()
   const [filter, setFilter] = useState('')
+  const [scope, setScope] = useState<PaletteScope>('all')
   const [selectedEntryKey, setSelectedEntryKey] = useState<string | null>(null)
   const [enabledAgentIds, setEnabledAgentIds] = useState<Set<string>>(() => new Set())
+  const [fileResults, setFileResults] = useState<FileResults | null>(null)
+  const fieldRef = useRef<HTMLInputElement>(null)
+  const sectionId = useId()
+  const selectedWorktree = layout.worktree ?? null
+  const fileQuery = filter.trim()
+  const fileSearchKey = `${selectedWorktree}\n${fileQuery}`
+  const fileSearchActive = searchesFiles(scope) && fileQuery !== '' && selectedWorktree !== null
   useEffect(() => {
     let mounted = true
     let requestVersion = 0
@@ -146,28 +169,67 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
       unsubscribeConnected()
     }
   }, [connection])
-  const entries = useMemo(() => {
+  useEffect(() => {
+    if (!fileSearchActive || selectedWorktree === null) return
+    let requestVersion = 0
+    const timer = setTimeout(async () => {
+      const version = ++requestVersion
+      let found: PaletteEntry[] = []
+      try {
+        const reply = await connection.callAny('quirky.editor/quickOpen', {
+          action: 'search',
+          worktree: selectedWorktree,
+          query: fileQuery,
+          limit: FILE_SEARCH_LIMIT
+        })
+        found = quickOpenPaths(reply).map((path) => fileEntry(selectedWorktree, path))
+      } catch {
+        found = []
+      }
+      if (version === requestVersion) setFileResults({ key: fileSearchKey, entries: found })
+    }, FILE_SEARCH_DEBOUNCE_MS)
+    return () => {
+      requestVersion++
+      clearTimeout(timer)
+    }
+  }, [connection, fileQuery, fileSearchActive, fileSearchKey, selectedWorktree])
+  const fileSearchPending = fileSearchActive && fileResults?.key !== fileSearchKey
+  const { entries, worktreeIds } = useMemo(() => {
     const projectNames = new Map<string, string>()
     if (!snapshot.errors.repos) {
       for (const repo of snapshot.repos ?? []) projectNames.set(repo.id, repo.displayName ?? repo.name)
     }
-    return entriesOf(
+    const worktrees = windowRoute || snapshot.errors.worktrees ? [] : snapshot.worktrees ?? []
+    const matching = entriesOf(
       model?.commands ?? [],
       model?.tools ?? [],
       model?.views ?? [],
-      windowRoute || snapshot.errors.worktrees ? [] : snapshot.worktrees ?? [],
+      worktrees,
       projectNames,
       filter.trim().toLowerCase(),
       enabledAgentIds
     )
-  }, [enabledAgentIds, filter, model?.commands, model?.tools, model?.views, snapshot.errors.repos, snapshot.errors.worktrees, snapshot.repos, snapshot.worktrees, windowRoute])
-  const selectedIndex = selectedEntryKey === null ? -1 : entries.findIndex((entry) => entryKey(entry) === selectedEntryKey)
+    const files = fileSearchActive && fileResults?.key === fileSearchKey ? fileResults.entries : []
+    return {
+      entries: exactTitleFirst([...matching, ...files], filter.trim().toLowerCase()),
+      worktreeIds: new Set(worktrees.map((worktree) => worktree.id))
+    }
+  }, [enabledAgentIds, fileResults, fileSearchActive, fileSearchKey, filter, model?.commands, model?.tools, model?.views, snapshot.errors.repos, snapshot.errors.worktrees, snapshot.repos, snapshot.worktrees, windowRoute])
+  const sections = useMemo(() => paletteSections({
+    entries,
+    scope,
+    query: filter.trim(),
+    recents: layout.paletteRecents ?? [],
+    worktreeIds
+  }), [entries, filter, layout.paletteRecents, scope, worktreeIds])
+  const visible = useMemo(() => sections.flatMap((section) => section.entries), [sections])
+  const selectedIndex = selectedEntryKey === null ? -1 : visible.findIndex((entry) => entryKey(entry) === selectedEntryKey)
   const current = selectedIndex < 0 ? 0 : selectedIndex
   useEffect(() => {
     if (selectedEntryKey !== null && selectedIndex < 0) setSelectedEntryKey(null)
   }, [selectedEntryKey, selectedIndex])
 
-  const openWorktree = async (worktreeId: string) => {
+  const openWorktree = async (worktreeId: string): Promise<boolean> => {
     try {
       const self = await connection.callAny('ui.window.self', {})
       if (typeof self !== 'object' || self === null || !('connId' in self) ||
@@ -175,13 +237,33 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
         throw new Error('The daemon did not identify this window.')
       }
       await connection.callAny('quirky.worktree/navigate', { worktree: worktreeId, window: self.connId })
+      return true
     } catch (error) {
       showCommandError(connection, 'Could not open worktree', error)
+      return false
+    }
+  }
+
+  const openFile = async (id: string) => {
+    const file = decodeFileId(id)
+    if (file === null) return
+    if (file.worktree !== selectedWorktree && !(await openWorktree(file.worktree))) return
+    try {
+      await connection.callAny('quirky.editor/open', { worktree: file.worktree, path: file.path, focus: true })
+    } catch (error) {
+      showCommandError(connection, 'Could not open file', error)
+      return
+    }
+    try {
+      await connection.callAny('quirky.editor/quickOpen', { worktree: file.worktree, action: 'record', path: file.path })
+    } catch {
+      // a file that opened but was not recorded only costs its place in quick-open history
     }
   }
 
   const run = (entry: PaletteEntry) => {
     onClose()
+    connection.callAny('ui.palette.recent', { id: entryKey(entry) }).catch(() => {})
     switch (entry.kind) {
       case 'command':
         void host.runCommand(entry.id).catch((error) => showCommandError(connection, 'Command failed', error))
@@ -195,16 +277,36 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
       case 'worktree':
         void openWorktree(entry.id)
         break
+      case 'file':
+        void openFile(entry.id)
+        break
     }
+  }
+
+  const chooseScope = (next: PaletteScope) => {
+    setScope(next)
+    setSelectedEntryKey(null)
   }
 
   if (windowRoute) return null
 
+  const emptyMessage = scope === 'files' && fileQuery === ''
+    ? 'Type to search files'
+    : scope === 'files' && selectedWorktree === null
+      ? 'Select a worktree to search files'
+      : fileSearchPending && scope === 'files'
+        ? 'Searching files…'
+        : 'No results'
+  const showEmpty = visible.length === 0 &&
+    (scope === 'files' || (snapshot.worktrees !== null && !snapshot.errors.worktrees))
+
+  let position = 0
   return (
     <Dialog open title="Command palette" placement="top" onClose={onClose}>
       <TextField
+        ref={fieldRef}
         label="Search"
-        aria-label="Search commands, tools, views, and worktrees"
+        aria-label="Search commands, tools, views, worktrees, and files"
         placeholder="Type to search"
         autoFocus
         value={filter}
@@ -213,35 +315,58 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
           setSelectedEntryKey(null)
         }}
         onKeyDown={(event) => {
-          const next = paletteKey(event.key, current, entries.length)
-          if (event.key === 'ArrowDown' || event.key === 'ArrowUp') event.preventDefault()
-          const selectedEntry = entries[next.selected]
-          setSelectedEntryKey(selectedEntry ? entryKey(selectedEntry) : null)
-          if (next.run && entries[next.selected]) {
+          if (event.key === 'Tab') {
             event.preventDefault()
-            run(entries[next.selected]!)
+            event.stopPropagation()
+            chooseScope(cycleScope(scope, event.shiftKey ? -1 : 1))
+            return
           }
+          const next = paletteKey(event.key, current, visible.length)
+          if (event.key === 'ArrowDown' || event.key === 'ArrowUp') event.preventDefault()
+          const selectedEntry = visible[next.selected]
+          setSelectedEntryKey(selectedEntry ? entryKey(selectedEntry) : null)
+          if (next.run && visible[next.selected]) {
+            event.preventDefault()
+            run(visible[next.selected]!)
+          }
+        }}
+      />
+      <Tabs
+        label="Search scope"
+        items={PALETTE_SCOPES}
+        value={scope}
+        onChange={(id) => {
+          chooseScope(id as PaletteScope)
+          fieldRef.current?.focus()
         }}
       />
       {snapshot.errors.worktrees && <p className="ui-error-text" role="status">Worktrees unavailable: {snapshot.errors.worktrees}</p>}
       {snapshot.worktrees === null && !snapshot.errors.worktrees && <p className="ui-text-muted" role="status">Loading worktrees…</p>}
-      {entries.length === 0 && snapshot.worktrees !== null && !snapshot.errors.worktrees ? (
-        <EmptyState message="No results" />
-      ) : entries.length > 0 ? (
+      {showEmpty ? (
+        <EmptyState message={emptyMessage} />
+      ) : visible.length > 0 ? (
         <div className="ui-option-list" role="listbox" aria-label="Search results">
-          {entries.map((entry, index) => (
-            <div
-              key={entryKey(entry)}
-              role="option"
-              aria-selected={index === current}
-              onMouseEnter={() => setSelectedEntryKey(entryKey(entry))}
-            >
-              <ListRow
-                title={entry.title}
-                description={entry.description}
-                selected={index === current}
-                onClick={() => run(entry)}
-              />
+          {sections.map((section, sectionIndex) => (
+            <div key={section.title ?? 'results'} role="group" aria-labelledby={section.title === null ? undefined : `${sectionId}-${sectionIndex}`}>
+              {section.title !== null && <SectionHeader id={`${sectionId}-${sectionIndex}`} title={section.title} />}
+              {section.entries.map((entry) => {
+                const index = position++
+                return (
+                  <div
+                    key={entryKey(entry)}
+                    role="option"
+                    aria-selected={index === current}
+                    onMouseEnter={() => setSelectedEntryKey(entryKey(entry))}
+                  >
+                    <ListRow
+                      title={<span className="ui-cluster"><EntryIcon entry={entry} /><span>{entry.title}</span></span>}
+                      description={entry.description}
+                      selected={index === current}
+                      onClick={() => run(entry)}
+                    />
+                  </div>
+                )
+              })}
             </div>
           ))}
         </div>

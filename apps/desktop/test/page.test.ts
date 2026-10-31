@@ -14,4 +14,8 @@ describe('errorPageHtml', () => {
     expect(html).toContain('/home/u/.quirky/logs/daemon.log')
     expect(html).not.toContain('<failed>')
   })
+
+  test('keeps a drag strip, because the main window has no system title bar', () => {
+    expect(errorPageHtml('failed', '/log')).toContain('electrobun-webkit-app-region-drag')
+  })
 })

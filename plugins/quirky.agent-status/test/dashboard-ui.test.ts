@@ -221,6 +221,17 @@ test('Dashboard renders three status columns, truthful hidden-idle total, readab
   expect(host.textContent).toContain('4 total')
   await cleanup()
 })
+test('Dashboard draws its title once, with Pop out in the frame header and the idle toggle on the rail', async () => {
+  const h = setup()
+  const cleanup = await h.mount(VIEW, { text: 'release' })
+  const titles = [...host.querySelectorAll('h2')].filter((heading) => heading.textContent === 'Agent Dashboard')
+  expect(titles).toHaveLength(1)
+  expect(titles[0].closest('.ui-tool-panel-frame__header')).not.toBeNull()
+  expect(host.querySelector('button[aria-label="Pop out"]')?.closest('.ui-tool-panel-frame__header .ui-tool-panel-frame__actions')).not.toBeNull()
+  expect(host.querySelector('button[aria-label="Show idle threads (1)"]')?.closest('.ui-tool-panel-frame__rail')).not.toBeNull()
+  expect(host.querySelector('[data-dashboard-column="attention"] .ui-section-header__title')?.textContent).toBe('Needs you')
+  await cleanup()
+})
 test('opening a Dashboard card acknowledges its exact Activity turn and navigates to its exact session', async () => {
   const h = setup()
   const cleanup = await h.mount(VIEW)

@@ -15,6 +15,7 @@ import {
   type NativeDesktopCapabilities,
   type DesktopShellReply,
   type UiLayout,
+  type UiToolPlacement,
   type UiToolSlot
 } from '@quirky/protocol'
 import { conflict, invalidParams } from './errors'
@@ -296,9 +297,10 @@ export function createHandlers(
       if (params.open !== undefined && open === undefined) throw invalidParams('open must be a boolean')
       return layout.setPalette(open)
     },
+    'ui.palette.recent': (params) => layout.recordPaletteRecent(str(params, 'id')),
     'ui.tool.open': (params) => layout.openTool(str(params, 'id')),
     'ui.tool.close': (params) => layout.closeTool(params.slot as UiToolSlot),
-    'ui.tool.move': (params) => layout.moveTool(str(params, 'id'), params.slot as UiToolSlot),
+    'ui.tool.move': (params) => layout.moveTool(str(params, 'id'), params.slot as UiToolPlacement),
     'ui.tool.resize': (params) => layout.resizeTools(params),
     'ui.view.open': (params) => layout.openView(str(params, 'id'), params.input),
     'ui.view.close': () => layout.closeView(),

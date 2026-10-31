@@ -67,16 +67,15 @@ const request = async (world: World, body: Record<string, unknown>): Promise<any
 const owner = (world: World) => ({ tier: 'project' as const, id: world.repo.id })
 const groupOwner = (group: ProjectGroup) => ({ tier: 'group' as const, id: group.id })
 
-const chooserSection = (): HTMLElement | undefined =>
-  [...document.querySelectorAll<HTMLElement>('section')].find((section) =>
-    section.querySelector(':scope > header h1')?.textContent?.trim() === 'Open ledger'
-  )
+const framed = (body: string): HTMLElement | undefined =>
+  [...document.querySelectorAll<HTMLElement>('[data-ui-tool-panel-frame]')].find((frame) => frame.querySelector(body) !== null)
 
-const ledgerPage = (): HTMLElement | undefined =>
-  [...document.querySelectorAll<HTMLElement>('section')].find((section) => {
-    const title = section.querySelector(':scope > header h1')?.textContent?.trim()
-    return title !== undefined && title !== 'Open ledger'
-  })
+const chooserSection = (): HTMLElement | undefined => framed('.ledger-chooser')
+
+const ledgerPage = (): HTMLElement | undefined => framed('.ledger-page')
+
+const frameTitle = (frame: HTMLElement | undefined): string | undefined =>
+  frame?.querySelector(':scope > header h2')?.textContent?.trim()
 
 function projectSection(name: string): HTMLElement | undefined {
   return [...document.querySelectorAll<HTMLElement>('section.repo')].find((section) => sectionHeadingMatches(section, name))
@@ -193,11 +192,14 @@ test('SC-13: the sidebar panel follows the active workspace, scopes and client s
     scope: 'worktree'
   })
 
-  await click(button(panel, 'Project')!)
+  const panelFrame = panel.closest<HTMLElement>('[data-ui-tool-panel-frame]')!
+  const projectTab = [...panelFrame.querySelectorAll<HTMLElement>('[role="tab"]')].find((tab) => tab.textContent?.startsWith('Project'))!
+  await click(projectTab)
   await world.win.waitFor(async () => {
     const report = (await uiState(world.agent)).slots.find((slot) => slot.id === LEDGER_PANEL)?.report
     return typeof report === 'object' && report !== null && 'scope' in report && report.scope === 'project'
   })
+  await click(panel.closest('[data-ui-tool-panel-frame]')!.querySelector<HTMLButtonElement>('button[aria-label="Filter ledger"]')!)
   const search = field(panel, 'Search title or ID')!
   await setText(search, 'not found')
   await world.win.waitFor(() => panel.querySelector('ul li') === null)
@@ -228,7 +230,7 @@ test('SC-14: Open Ledger and real owner menus route to the same attached and det
   await projectMenu(world)
   await chooseMenu(world, 'Open ledger')
   await world.win.waitFor(() => ledgerPage())
-  await world.win.waitFor(() => ledgerPage()?.querySelector(':scope > header h1')?.textContent === world.repo.name)
+  await world.win.waitFor(() => frameTitle(ledgerPage()) === world.repo.name)
 
   const group = (await world.agent.callAny('quirky.repo/groupCreate', { name: 'tools' })) as ProjectGroup
   await world.agent.callAny('quirky.repo/groupAdd', { group: group.id, repo: world.repo.id })
@@ -241,7 +243,7 @@ test('SC-14: Open Ledger and real owner menus route to the same attached and det
   await world.win.waitFor(() => groupSection(group.name))
   await groupMenu(world, group.name)
   await chooseMenu(world, 'Open ledger')
-  await world.win.waitFor(() => ledgerPage()?.querySelector(':scope > header h1')?.textContent === group.name)
+  await world.win.waitFor(() => frameTitle(ledgerPage()) === group.name)
   await world.agent.callAny('ui.command.run', { id: CONTROL, args: { action: 'detail', id: 'proposal-1' } })
   const commandedDetail = await world.win.waitFor(() => dialogNamed('Ledger entry proposal-1'))
   expect(commandedDetail.textContent).toContain('Group policy')
@@ -501,7 +503,7 @@ test('SC-17 and SC-11: project settings and owner-removal previews retain ledger
   const attachConfirm = await world.win.waitFor(() => dialogNamed('Confirm ledger attachment'))
   expect(attachConfirm.textContent).toContain('ledger revision')
   await click(button(attachConfirm, 'Confirm')!)
-  await world.win.waitFor(() => detachedPage.querySelector('h1')?.textContent === replacement.name)
+  await world.win.waitFor(() => frameTitle(detachedPage) === replacement.name)
   const attached = await request(world, { operation: 'catalog' })
   expect(attached.ledgers).toContainEqual(expect.objectContaining({ owner: { tier: 'project', id: replacement.id }, entryCount: 1 }))
 
@@ -524,7 +526,7 @@ test('SC-11 and SC-14: group menu opens its ledger and deleting a group reports 
   })
   await groupMenu(world, group.name)
   await chooseMenu(world, 'Open ledger')
-  await world.win.waitFor(() => ledgerPage()?.querySelector(':scope > header h1')?.textContent === group.name)
+  await world.win.waitFor(() => frameTitle(ledgerPage()) === group.name)
   await groupMenu(world, group.name)
   await chooseMenu(world, 'Delete Group…')
   const dialog = await world.win.waitFor(() => {

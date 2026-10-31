@@ -258,4 +258,6 @@ Scope and rollout
 
 Approved 2026-10-28.
 
-**Amendments:** none yet.
+**Amendments:**
+
+- 2026-10-30: [the PyCharm shell spec](../2026-10-30-ui-pycharm-shell/logic.md#what-this-replaces) replaces the golden screens, title bar, status bar, bottom stripe and `rail` values here. Everything else stands.

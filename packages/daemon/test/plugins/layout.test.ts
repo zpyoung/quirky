@@ -519,6 +519,94 @@ describe('layout changes', () => {
     expect((await afterRestart.call('ui.state', {})).layout.palette).toBe(true)
   })
 
+  test('ui.palette.recent moves an id to the front, drops its duplicate and keeps ten', async () => {
+    const { caller } = await start()
+    expect((await caller.call('ui.palette.recent', { id: 'a' })).paletteRecents).toEqual(['a'])
+    await caller.call('ui.palette.recent', { id: 'b' })
+    expect((await caller.call('ui.palette.recent', { id: 'a' })).paletteRecents).toEqual(['a', 'b'])
+    for (let index = 0; index < 12; index++) await caller.call('ui.palette.recent', { id: `entry-${index}` })
+    const layout = (await caller.call('ui.state', {})).layout
+    expect(layout.paletteRecents).toEqual(Array.from({ length: 10 }, (_, index) => `entry-${11 - index}`))
+  })
+
+  test('ui.palette.recent rejects a missing, empty, non-string or oversized id', async () => {
+    const { caller } = await start()
+    for (const id of [undefined, '', 7, null, ['a'], 'x'.repeat(2049)]) {
+      const error = await failure(caller.call('ui.palette.recent', { id } as never))
+      expect(error.code).toBe(RpcErrorCode.InvalidParams)
+    }
+    expect((await caller.call('ui.palette.recent', { id: 'x'.repeat(2048) })).paletteRecents).toEqual(['x'.repeat(2048)])
+    expect((await caller.call('ui.state', {})).layout.paletteRecents).toHaveLength(1)
+  })
+
+  test('ui.palette.recent broadcasts the new layout and survives a restart and a palette close', async () => {
+    const env = makeEnv()
+    const harness = await env.start()
+    const caller = await harness.connect('cli')
+    const window = await openWindow(harness, 'recents')
+    await caller.call('ui.palette.recent', { id: 'worktree:one' })
+    await waitFor(() => changes(window).length === 1)
+    expect(changes(window)[0]!.layout.paletteRecents).toEqual(['worktree:one'])
+
+    await caller.call('ui.palette.set', { open: true })
+    await caller.call('ui.palette.set', { open: false })
+    await caller.call('ui.palette.recent', { id: 'tool:two' })
+    const restarted = await env.restart()
+    const after = await restarted.connect('cli')
+    expect((await after.call('ui.state', {})).layout.paletteRecents).toEqual(['tool:two', 'worktree:one'])
+  })
+
+  test('stored paletteRecents are sanitized on load and dropped when nothing valid remains', async () => {
+    const env = makeEnv()
+    const store = new Store(join(env.home, 'quirky.db'))
+    const base = { view: null, panel: null, sidebar: true, focus: null }
+    store.setUiState('layout', {
+      ...base,
+      paletteRecents: ['a', '', 4, null, 'b', ...Array.from({ length: 12 }, (_, index) => `c${index}`)]
+    })
+    store.close()
+
+    const harness = await env.start()
+    const caller = await harness.connect('cli')
+    expect((await caller.call('ui.state', {})).layout.paletteRecents).toEqual(
+      ['a', 'b', ...Array.from({ length: 8 }, (_, index) => `c${index}`)]
+    )
+
+    const reopened = new Store(join(env.home, 'quirky.db'))
+    reopened.setUiState('layout', { ...base, paletteRecents: ['', 3, {}] })
+    reopened.close()
+    const second = await env.restart()
+    const layout = (await (await second.connect('cli')).call('ui.state', {})).layout
+    expect(layout).not.toHaveProperty('paletteRecents')
+  })
+
+  test('an auxiliary window layout omits paletteRecents', async () => {
+    const { harness, caller } = await start()
+    const shell = await openWindow(harness, 'owner')
+    const shellConnId = await windowConnId(shell.client)
+    await shell.client.call('desktop.shell.capabilities', {
+      directoryPicker: false,
+      auxiliaryWindows: true,
+      revealItem: false,
+      notifications: { permission: false, click: false, dismiss: false }
+    })
+    await caller.call('ui.palette.recent', { id: 'command:x' })
+    const shellRequest = waitFor(() => shell.events.find(
+      (event): event is Extract<QuirkyEvent, { type: 'desktop.shell.request' }> =>
+        event.type === 'desktop.shell.request' && event.action.kind === 'window-open'
+    ))
+    const opening = caller.call('desktop.window.open', { view: OTHER_PAGE })
+    const request = await shellRequest
+    await shell.client.call('desktop.shell.reply', { requestId: request.requestId, result: { windowId: 'recents-aux' } })
+    await opening
+    const auxiliary = await openWindow(harness, 'auxiliary')
+    await auxiliary.client.call('desktop.window.attach', { windowId: 'recents-aux', ownerShellConnId: shellConnId })
+    const auxiliaryConnId = await windowConnId(auxiliary.client)
+
+    expect((await caller.call('ui.window.state', { connId: auxiliaryConnId })).layout).not.toHaveProperty('paletteRecents')
+    expect((await caller.call('ui.window.state', { connId: shellConnId })).layout.paletteRecents).toEqual(['command:x'])
+  })
+
   test('targeted view changes reach only the selected window', async () => {
     const { harness } = await start()
     const clicker = await openWindow(harness, 'clicker')

@@ -49,7 +49,7 @@ export const DEFAULT_THEME: ThemeInfo = {
   title: 'Follow system',
   appearance: 'dark',
   colors: {
-    bg: '#101114',
+    bg: '#0c0d0f',
     'bg-raised': '#16171b',
     'bg-hover': '#22242b',
     'bg-active': '#22242b',
@@ -76,7 +76,7 @@ export const LIGHT_THEME: ThemeInfo = {
   title: 'Light',
   appearance: 'light',
   colors: {
-    bg: '#f4f5f7', 'bg-raised': '#ffffff', 'bg-hover': '#e7e9ef', 'bg-active': '#e7e9ef',
+    bg: '#eef0f3', 'bg-raised': '#ffffff', 'bg-hover': '#e7e9ef', 'bg-active': '#e7e9ef',
     border: '#e3e5ea', text: '#1b1d22', muted: '#80868f', accent: '#5b6cff',
     amber: '#c98a0b', green: '#1f9d63', grey: '#80868f', dim: '#a4a9b2', danger: '#d6455d',
     'terminal-background': '#ffffff', 'terminal-foreground': '#1b1d22', 'terminal-cursor': '#1b1d22'
@@ -226,6 +226,8 @@ export type UiLayout = {
   panelWidths?: Record<string, number>
   /** Whether the command palette is open; absent means closed. */
   palette?: boolean
+  /** The ids of the last palette entries run, newest first, at most 10; absent when none. */
+  paletteRecents?: string[]
   /** Host-owned six-slot placement, visibility and geometry, shared across projects. */
   tools?: UiToolLayout
   /** Open center view contributions, retaining each view's last input in this window. */

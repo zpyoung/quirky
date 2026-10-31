@@ -57,7 +57,7 @@ test(
     // the dialog preselects Project only when it opens after the panel has found the repo
     await waitFor('the panel to find the repo', () => (f.calls.slice(mark).some((call) => call.method === 'quirky.worktree/resolve' && call.settled) ? true : undefined))
     await Bun.sleep(100)
-    byText<HTMLButtonElement>('button', 'Add Command')!.click()
+    document.querySelector<HTMLButtonElement>('button[aria-label="Add Command"]')!.click()
     const open = await until(f, dialog)
     const save = byText<HTMLButtonElement>('.qc-dialog-foot button', 'Save')!
     expect(save.disabled).toBe(true)

@@ -128,6 +128,9 @@ Use SemVer for future Plugin API releases: increment the **major** for incompati
   drop the window just received, or null where the desktop shell can't report them (browser
   shells, Linux, Windows, runtimes without the capability). A plugin that calls it declares
   `apiVersion` 1.1.0.
+- **1.2.0** adds an optional `hue` to `panel`, `sidebar-section` and `activity-item`: one of the
+  names in [`UI_TOOL_HUES`](../packages/protocol/src/tool-hues.ts), used to color the tool's icon. A
+  plugin that sets it declares `apiVersion` 1.2.0.
 
 ## Example
 

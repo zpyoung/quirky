@@ -1,6 +1,6 @@
 .qtd-host {
   box-sizing: border-box;
-  background: var(--ui-rail);
+  background: var(--ui-surface);
   color: var(--ui-text);
 }
 

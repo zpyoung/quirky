@@ -10,7 +10,8 @@ import { useAppState, usePluginHost, usePluginState } from './context'
 import { CommandPalette } from './plugins/CommandPalette'
 import { OverlayLayer } from './plugins/OverlayLayer'
 import { useThemeVariables } from './plugins/useThemeVariables'
-import { ShellStatusBar, ShellTitleBar } from './shell/ShellChrome'
+import { syncWindowInactive, trackWindowFullscreen } from './shell'
+import { ShellStatusBar } from './shell/StatusBar'
 import {
   fitToolShellGeometry,
   getToolShellOpenSlots,
@@ -19,6 +20,7 @@ import {
   toolShellCssVariables,
   type ToolShellChrome
 } from './shell/ToolShell'
+import { WindowBar } from './shell/WindowBar'
 
 function NoToken() {
   return (
@@ -56,6 +58,13 @@ export function App() {
   const auxiliary = windowRoute !== null
   useShortcuts()
   useThemeVariables()
+
+  const noToken = state.connection === 'no-token'
+  useEffect(() => {
+    if (noToken) return
+    syncWindowInactive()
+    return trackWindowFullscreen()
+  }, [noToken])
 
   useEffect(() => {
     if (auxiliary || state.connection === 'no-token') return
@@ -115,7 +124,7 @@ export function App() {
         </div>
       ) : (
         <>
-          <ShellTitleBar onSettings={() => setSettingsOpen(true)} />
+          <WindowBar onSettings={() => setSettingsOpen(true)} />
           <div ref={workspace} className="shell-workspace" style={shellStyle}>
             <ToolShell
               geometry={geometry}

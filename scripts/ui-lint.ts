@@ -2,8 +2,10 @@ import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
 import { dirname, extname, join, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import * as ts from 'typescript'
+import { TOOL_ICON_NAMES } from '../packages/ui/src/design-system/icons/generated-tools'
+import { UI_TOOL_HUES } from '../packages/protocol/src/tool-hues'
 
-export type UiLintRule = 'ui/no-raw-color' | 'ui/no-raw-pixel' | 'ui/no-plugin-css'
+export type UiLintRule = 'ui/no-raw-color' | 'ui/no-raw-pixel' | 'ui/no-plugin-css' | 'ui/tool-icon-hue'
 
 export type UiLintDiagnostic = {
   file: string
@@ -14,6 +16,9 @@ export type UiLintDiagnostic = {
 }
 
 export type UiLintOptions = { plugin?: boolean }
+
+const TOOL_LAYOUT_RULES_FILE = 'packages/daemon/src/plugins/tool-layout.ts'
+const TOOL_CONTRIBUTION_KINDS = ['panel', 'sidebar-section', 'activity-item'] as const
 
 type LocatedDiagnostic = { diagnostic: UiLintDiagnostic; offset: number; order: number }
 type Emitter = {
@@ -27,7 +32,8 @@ type Emitter = {
 const messages: Record<UiLintRule, string> = {
   'ui/no-raw-color': 'Replace raw color literals with semantic UI tokens.',
   'ui/no-raw-pixel': 'Replace raw pixel dimensions with semantic UI tokens.',
-  'ui/no-plugin-css': 'Plugin source must use shared UI components and tokens instead of stylesheet CSS.'
+  'ui/no-plugin-css': 'Plugin source must use shared UI components and tokens instead of stylesheet CSS.',
+  'ui/tool-icon-hue': 'A tool icon must be a generated tool icon name and its hue one of the palette hues.'
 }
 
 const sourceExtensions = new Set(['.ts', '.tsx', '.js', '.jsx', '.mts', '.cts', '.mjs', '.cjs', '.html', '.htm', '.svg', '.css', '.scss', '.sass', '.less'])
@@ -99,9 +105,14 @@ function finish(emitter: Emitter): UiLintDiagnostic[] {
     .map(({ diagnostic }) => diagnostic)
 }
 
+/** Generated icon modules and the vendored Catppuccin SVGs carry third-party colors by design. */
+function isGeneratedIconFile(file: string): boolean {
+  return /(?:^|\/)packages\/ui\/src\/design-system\/icons\/(?:generated-[\w-]+\.ts|catppuccin\/.+\.svg)$/.test(file.replaceAll('\\', '/'))
+}
+
 function isPrimitiveFile(file: string): boolean {
   const normalized = file.replaceAll('\\', '/')
-  return /(?:^|\/)packages\/ui\/src\/design-system\/(?:tokens|compatibility-tokens)\.css$/.test(normalized)
+  return /(?:^|\/)packages\/ui\/src\/design-system\/(?:tokens|compatibility-tokens)\.css$/.test(normalized) || isGeneratedIconFile(normalized)
 }
 
 function isColorProperty(property: string): boolean {
@@ -956,6 +967,7 @@ function scanTypeScriptSource(file: string, source: string, plugin: boolean): Ui
 }
 
 function scanSource(file: string, source: string, options: UiLintOptions = {}): UiLintDiagnostic[] {
+  if (isGeneratedIconFile(file)) return []
   const extension = extname(file).toLowerCase()
   if (cssExtensions.has(extension)) return scanCssSource(file, source, options.plugin ?? false)
   if (extension === '.html' || extension === '.htm' || extension === '.svg') {
@@ -995,6 +1007,71 @@ export function parsePluginConfig(text: string, availablePluginIds: readonly str
     ids.push(value)
   }
   return ids
+}
+
+const TOOL_ICON_SET: ReadonlySet<string> = new Set(TOOL_ICON_NAMES)
+const TOOL_HUE_SET: ReadonlySet<string> = new Set(UI_TOOL_HUES)
+
+function toolIdentityDiagnostics(file: string, sourceFile: ts.SourceFile, fields: Iterable<ts.ObjectLiteralExpression>): UiLintDiagnostic[] {
+  const diagnostics: UiLintDiagnostic[] = []
+  const check = (node: ts.Expression, valid: ReadonlySet<string>, message: (value: string) => string) => {
+    const value = ts.isStringLiteralLike(node) ? node.text : node.getText(sourceFile)
+    if (ts.isStringLiteralLike(node) && valid.has(value)) return
+    const { line, character } = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile))
+    diagnostics.push({ file, line: line + 1, column: character + 1, rule: 'ui/tool-icon-hue', message: message(value) })
+  }
+  for (const entry of fields) {
+    for (const property of entry.properties) {
+      if (!ts.isPropertyAssignment(property)) continue
+      const name = ts.isIdentifier(property.name) || ts.isStringLiteralLike(property.name) ? property.name.text : ''
+      if (name === 'icon') check(property.initializer, TOOL_ICON_SET, (value) => `Tool icon "${value}" is not a generated tool icon; use a name from packages/ui/src/design-system/icons/generated-tools.ts.`)
+      if (name === 'hue') check(property.initializer, TOOL_HUE_SET, (value) => `Tool hue "${value}" is not in the palette: ${UI_TOOL_HUES.join(', ')}.`)
+    }
+  }
+  return diagnostics
+}
+
+function propertyValue(object: ts.ObjectLiteralExpression, name: string): ts.Expression | undefined {
+  for (const property of object.properties) {
+    if (ts.isPropertyAssignment(property) && (ts.isIdentifier(property.name) || ts.isStringLiteralLike(property.name)) && property.name.text === name) return property.initializer
+  }
+  return undefined
+}
+
+/**
+ * `ui/tool-icon-hue` for one plugin manifest: the `icon` and `hue` of every panel, sidebar section and
+ * activity item contribution. A contribution without either field passes.
+ */
+export function scanToolManifest(file: string, source: string): UiLintDiagnostic[] {
+  const sourceFile = ts.parseJsonText(file, source)
+  const root = sourceFile.statements[0]?.expression
+  if (!root || !ts.isObjectLiteralExpression(root)) return []
+  const contributes = propertyValue(root, 'contributes')
+  if (!contributes || !ts.isObjectLiteralExpression(contributes)) return []
+  const entries: ts.ObjectLiteralExpression[] = []
+  for (const kind of TOOL_CONTRIBUTION_KINDS) {
+    const list = propertyValue(contributes, kind)
+    if (!list || !ts.isArrayLiteralExpression(list)) continue
+    entries.push(...list.elements.filter(ts.isObjectLiteralExpression))
+  }
+  return toolIdentityDiagnostics(file, sourceFile, entries)
+}
+
+/**
+ * `ui/tool-icon-hue` for the `RULES` table in `tool-layout.ts`: only the `icon` and `hue` values that
+ * are present are checked.
+ */
+export function scanToolLayoutRules(file: string, source: string): UiLintDiagnostic[] {
+  const sourceFile = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS)
+  const entries: ts.ObjectLiteralExpression[] = []
+  const visit = (node: ts.Node) => {
+    if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.name.text === 'RULES' && node.initializer && ts.isArrayLiteralExpression(node.initializer)) {
+      entries.push(...node.initializer.elements.filter(ts.isObjectLiteralExpression))
+    }
+    ts.forEachChild(node, visit)
+  }
+  visit(sourceFile)
+  return toolIdentityDiagnostics(file, sourceFile, entries)
 }
 
 function immediatePluginDirectories(pluginRoot: string): string[] {
@@ -1070,10 +1147,19 @@ export function runUiLint(root = resolve(dirname(fileURLToPath(import.meta.url))
         return collectSourceFiles(pluginRoot, repositoryFiles).map((path) => ({ path, plugin: true }))
       })
     ]
-    const diagnostics = files.flatMap(({ path, plugin }) => {
+    const toolIdentity = [
+      ...immediatePluginDirectories(pluginsRoot).flatMap((id) => {
+        const manifest = resolve(pluginsRoot, id, 'quirky-plugin.json')
+        return existsSync(manifest) ? scanToolManifest(relative(root, manifest).split(sep).join('/'), readFileSync(manifest, 'utf8')) : []
+      }),
+      ...(existsSync(resolve(root, TOOL_LAYOUT_RULES_FILE))
+        ? scanToolLayoutRules(TOOL_LAYOUT_RULES_FILE, readFileSync(resolve(root, TOOL_LAYOUT_RULES_FILE), 'utf8'))
+        : [])
+    ]
+    const diagnostics = [...files.flatMap(({ path, plugin }) => {
       const file = relative(root, path).split(sep).join('/')
       return scanSource(file, readFileSync(path, 'utf8'), { plugin })
-    }).sort((left, right) => compareText(left.file, right.file) || left.line - right.line || left.column - right.column || compareText(left.rule, right.rule))
+    }), ...toolIdentity].sort((left, right) => compareText(left.file, right.file) || left.line - right.line || left.column - right.column || compareText(left.rule, right.rule))
     for (const diagnostic of diagnostics) console.error(formatDiagnostic(diagnostic))
     return diagnostics.length === 0 ? 0 : 1
   } catch (error) {

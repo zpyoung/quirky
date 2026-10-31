@@ -16,8 +16,10 @@ export function errorPageHtml(message: string, logPath: string): string {
   h1 { font-size: 20px; margin: 0 0 12px; }
   pre { white-space: pre-wrap; background: rgba(127,127,127,.15); padding: 12px; border-radius: 6px; }
   code { font-family: ui-monospace, Menlo, monospace; }
+  .drag { position: fixed; inset: 0 0 auto 0; height: 40px; }
 </style></head>
 <body>
+  <div class="drag electrobun-webkit-app-region-drag"></div>
   <h1>Quirky could not start its daemon</h1>
   <pre>${escapeHtml(message)}</pre>
   <p>Daemon log: <code>${escapeHtml(logPath)}</code></p>

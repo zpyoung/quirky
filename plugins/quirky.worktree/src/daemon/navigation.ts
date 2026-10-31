@@ -125,7 +125,18 @@ function targetOf(value: unknown, fail: NavigationEnv['fail']): NavigationTarget
   throw fail('invalid-params', 'target must be terminal or changes')
 }
 
+/**
+ * Returns the panel to All projects when `worktree` sits outside the project filter, so a worktree
+ * opened from anywhere (a toast, history, the palette) is never hidden by the narrowing.
+ */
+async function showProjectOf(env: NavigationEnv, worktree: Worktree): Promise<void> {
+  const { filterRepoIds } = env.options()
+  if (filterRepoIds.length === 0 || filterRepoIds.includes(worktree.repoId)) return
+  await env.call('quirky.worktree/setOptions', { filterRepoIds: [] })
+}
+
 async function openView(env: NavigationEnv, selected: SelectedWindow, worktree: Worktree, target: NavigationTarget): Promise<void> {
+  await showProjectOf(env, worktree)
   await openWindowView(env, selected.connId, target === 'terminal' ? SESSION_VIEW : DIFF_VIEW,
     target === 'terminal'
       ? { worktree: worktree.id }

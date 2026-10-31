@@ -56,6 +56,9 @@ function usePlacement(): Placement {
           observer.observe(anchor)
           const workspace = anchor.closest<HTMLElement>('.shell-workspace')
           if (workspace) observer.observe(workspace)
+          // the anchor follows the center card, which moves without resizing the anchor or the workspace
+          const center = workspace?.querySelector<HTMLElement>('.shell-main-region')
+          if (center) observer.observe(center)
         }
       }
       const next = { view: currentViewport(), anchor: anchor ? measureAnchor(anchor) : null }

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Badge, Button, ContextMenu, IconButton, SectionHeader, TextField } from '@quirky/ui'
+import { Badge, Button, ContextMenu, ControlIcon, IconButton, TextField, ToolPanelActions } from '@quirky/ui'
 import type { ContextMenuItem } from '@quirky/ui'
 import type { GitCompare, GitStatus } from '@quirky/protocol'
 import type { ViewMode } from './data'
@@ -20,7 +20,7 @@ type HeaderProps = {
   onNotes?(): void
 }
 
-/** The panel's title bar: the filter toggle and the "More source control actions" menu, with the filter box under it. */
+/** The panel's filter toggle (frame rail) and "More source control actions" menu (frame header), with the filter box in the body. */
 export function Header({ filter, filterOpen, onFilterOpen, onFilter, viewMode, onViewMode, onChangeBase, onRefreshCompare, notes = 0, onNotes }: HeaderProps) {
   const [menuAt, setMenuAt] = useState<{ x: number; y: number } | null>(null)
   const entries: ContextMenuItem[] = [
@@ -35,33 +35,28 @@ export function Header({ filter, filterOpen, onFilterOpen, onFilter, viewMode, o
   }
   return (
     <>
-      <SectionHeader
-        title="Source control"
-        actions={
-          <div className="ui-cluster">
-            <IconButton
-              label="Filter files by name"
-              variant={filter.trim() !== '' ? 'primary' : 'secondary'}
-              aria-pressed={filterOpen}
-              title={filter.trim() !== '' ? `Filter: ${filter.trim()}` : 'Filter files by name'}
-              onClick={() => (filterOpen ? close() : onFilterOpen(true))}
-            >
-              {'⌕'}
-            </IconButton>
-            <IconButton
-              label="More source control actions"
-              aria-haspopup="menu"
-              title="More source control actions"
-              onClick={(event) => {
-                const box = event.currentTarget.getBoundingClientRect()
-                setMenuAt({ x: box.right, y: box.bottom })
-              }}
-            >
-              {'⋯'}
-            </IconButton>
-          </div>
-        }
-      />
+      <ToolPanelActions>
+        <IconButton
+          label="Filter files by name"
+          variant={filter.trim() !== '' ? 'primary' : 'secondary'}
+          aria-pressed={filterOpen}
+          title={filter.trim() !== '' ? `Filter: ${filter.trim()}` : 'Filter files by name'}
+          onClick={() => (filterOpen ? close() : onFilterOpen(true))}
+        >
+          <ControlIcon name="magnifying-glass" />
+        </IconButton>
+        <IconButton
+          label="More source control actions"
+          aria-haspopup="menu"
+          title="More source control actions"
+          onClick={(event) => {
+            const box = event.currentTarget.getBoundingClientRect()
+            setMenuAt({ x: box.right, y: box.bottom })
+          }}
+        >
+          <ControlIcon name="dots-three" />
+        </IconButton>
+      </ToolPanelActions>
       {filterOpen && (
         <div className="ui-cluster">
           <TextField

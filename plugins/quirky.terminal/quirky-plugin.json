@@ -829,6 +829,29 @@
               "type": "boolean",
               "description": "Reuse the matching workspace, view ID and key identity; defaults to true."
             },
+            "icon": {
+              "type": "object",
+              "description": "The tab's mark: a tool glyph with a hue, a file whose type icon to draw, or a control glyph. Reusing a tab replaces its icon when given.",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "enum": ["tool", "file", "control"]
+                },
+                "name": {
+                  "type": "string",
+                  "description": "The glyph name, for `tool` and `control`."
+                },
+                "hue": {
+                  "type": "string",
+                  "description": "The tool hue, for `tool`."
+                },
+                "path": {
+                  "type": "string",
+                  "description": "The file path, for `file`."
+                }
+              },
+              "required": ["kind"]
+            },
             "replace": {
               "type": "string",
               "description": "Explicitly replace this existing unpinned preview view tab."
@@ -922,6 +945,11 @@
                   "title": {
                     "type": "string",
                     "description": "The new tab title; at most 200 characters."
+                  },
+                  "icon": {
+                    "type": "object",
+                    "additionalProperties": true,
+                    "description": "The new tab icon: `{kind:'tool',name,hue}`, `{kind:'file',path}` or `{kind:'control',name}`."
                   },
                   "preview": {
                     "type": "boolean",
@@ -1685,6 +1713,29 @@
           "required": [
             "workspace"
           ]
+        }
+      },
+      {
+        "id": "activeTabIcon",
+        "description": "The icon of a workspace's active tab; null when the tab has none or the workspace has no tabs.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": {
+            "workspace": {
+              "type": "string",
+              "description": "A worktree selector or `floating`; default the caller's workspace."
+            }
+          }
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "icon": {
+              "description": "The active tab's icon object (kind, plus name and hue, or path), or null."
+            }
+          },
+          "required": ["icon"]
         }
       },
       {

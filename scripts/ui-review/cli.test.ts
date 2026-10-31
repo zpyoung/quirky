@@ -27,13 +27,9 @@ function manifest(overrides: Partial<CaptureManifest> = {}): CaptureManifest {
     scope: 'full',
     selectors: [],
     targets: [{ id: 'host:shell', plugin: null, title: 'Shell', kind: 'host' }],
-    references: {
-      dark: { path: '/goldens/dark.png', sha256: 'a'.repeat(64) },
-      light: { path: '/goldens/light.png', sha256: 'b'.repeat(64) }
-    },
     captures: [
-      { targetId: 'host:shell', theme: 'dark', image: { path: '/captures/dark.png', sha256: 'c'.repeat(64) }, status: 'captured' },
-      { targetId: 'host:shell', theme: 'light', image: { path: '/captures/light.png', sha256: 'd'.repeat(64) }, status: 'captured' }
+      { targetId: 'host:shell', theme: 'dark', image: { path: '/captures/dark.png', sha256: 'c'.repeat(64) }, reference: { path: '/goldens/dark.png', sha256: 'a'.repeat(64) }, status: 'captured' },
+      { targetId: 'host:shell', theme: 'light', image: { path: '/captures/light.png', sha256: 'd'.repeat(64) }, reference: { path: '/goldens/light.png', sha256: 'b'.repeat(64) }, status: 'captured' }
     ],
     failures: [],
     ...overrides
@@ -55,7 +51,7 @@ function report(source: CaptureManifest = manifest(), overrides: Partial<ReviewR
         targetId: capture.targetId,
         theme: capture.theme,
         image: capture.image,
-        reference: source.references[capture.theme],
+        reference: capture.reference,
         reviewer: { alias: 'gemini', provider: 'google', model: 'test-vision', family: 'google' },
         assessment: {
           targetVisible: true,
@@ -137,8 +133,8 @@ describe('ui review CLI boundary', () => {
     let reviewCalled = false
     const failedManifest = manifest({
       captures: [
-        { targetId: 'host:shell', theme: 'dark', image: { path: '/captures/dark.png', sha256: 'c'.repeat(64) }, status: 'captured' },
-        { targetId: 'host:shell', theme: 'light', image: null, status: 'failed', error: 'mount failed' }
+        { targetId: 'host:shell', theme: 'dark', image: { path: '/captures/dark.png', sha256: 'c'.repeat(64) }, reference: { path: '/goldens/dark.png', sha256: 'a'.repeat(64) }, status: 'captured' },
+        { targetId: 'host:shell', theme: 'light', image: null, reference: { path: '/goldens/light.png', sha256: 'b'.repeat(64) }, status: 'failed', error: 'mount failed' }
       ],
       failures: ['host:shell failed to mount in light theme']
     })
@@ -164,8 +160,8 @@ describe('ui review CLI boundary', () => {
       selectors: ['quirky.tasks'],
       targets: [{ id: 'quirky.tasks/panel', plugin: 'quirky.tasks', title: 'Tasks', kind: 'panel' }],
       captures: [
-        { targetId: 'quirky.tasks/panel', theme: 'dark', image: { path: '/captures/tasks-dark.png', sha256: 'e'.repeat(64) }, status: 'captured' },
-        { targetId: 'quirky.tasks/panel', theme: 'light', image: { path: '/captures/tasks-light.png', sha256: 'f'.repeat(64) }, status: 'captured' }
+        { targetId: 'quirky.tasks/panel', theme: 'dark', image: { path: '/captures/tasks-dark.png', sha256: 'e'.repeat(64) }, reference: { path: '/goldens/dark.png', sha256: 'a'.repeat(64) }, status: 'captured' },
+        { targetId: 'quirky.tasks/panel', theme: 'light', image: { path: '/captures/tasks-light.png', sha256: 'f'.repeat(64) }, reference: { path: '/goldens/light.png', sha256: 'b'.repeat(64) }, status: 'captured' }
       ]
     })
 

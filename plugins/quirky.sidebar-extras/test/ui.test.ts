@@ -190,6 +190,7 @@ async function mountItem(responses: DirtyResponse[]) {
 function expectAccessibleTitle(element: HTMLElement, title: string): void {
   const button = element.querySelector('button')
   expect(button).not.toBeNull()
+  expect(element.querySelector('svg')).toBeNull()
   expect(button?.getAttribute('title')).toBe(title)
   expect(button?.getAttribute('aria-label')).toContain(title)
 }
@@ -265,6 +266,30 @@ test('the mounted activity item reports singular, plural and capped status and c
   expect(item.panelToggles.at(-1)?.id).toBe(PANEL)
 })
 
+
+test('the item leaves its icon to the host and keeps only the button, the dirty count and a failure dot', async () => {
+  const dirty = status('wt-fix', 3, false, 'Source Control — 3 uncommitted changes')
+  const item = await mountItem([() => Promise.resolve(dirty)])
+  await item.waitForDirtyCalls(1)
+  await act(async () => { await item.dirtyRequests[0]! })
+
+  expect(item.element.querySelector('svg')).toBeNull()
+  expect(item.element.querySelectorAll('button')).toHaveLength(1)
+  expect(item.element.querySelector('.ui-badge')?.textContent).toBe('3')
+  expect(item.element.querySelector('.ui-status-dot')).toBeNull()
+})
+
+test('a clean worktree still says so to assistive tech, with no dot or badge on the stripe', async () => {
+  const item = await mountItem([() => Promise.resolve(status('wt-fix', 0, false, 'Source Control'))])
+  await item.waitForDirtyCalls(1)
+  await act(async () => { await item.dirtyRequests[0]! })
+
+  const button = item.element.querySelector('button')
+  expect(button?.getAttribute('aria-label')).toBe('Source Control — no uncommitted changes')
+  expect(button?.getAttribute('title')).toBe('Source Control')
+  expect(item.element.querySelector('.ui-badge')).toBeNull()
+  expect(item.element.querySelector('.ui-status-dot')).toBeNull()
+})
 
 test('a delayed dirty response cannot overwrite a newer workspace status', async () => {
   const delayed = deferred<DirtyResult>()

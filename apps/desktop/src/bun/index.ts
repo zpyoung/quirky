@@ -24,6 +24,7 @@ import {
   type TrayState
 } from './events'
 import { daemonUrl, errorPageHtml } from './page'
+import { nativeWindowOptions } from './window-chrome'
 import { findRepoRoot, resolveRuntimeEnv, trayDotPath } from './paths'
 import { createNativeBrowserHandlers, nativeBrowserPreloadSource, popupWindowTitle, type NativeBrowserHostRPC, type NativeBrowserPopup } from './native-browser'
 import { createNativeBrowserStorage, loadNativeBrowserInstallId } from './native-browser-storage'
@@ -282,6 +283,7 @@ function createWindow(
     title: lifecycle.kind === 'auxiliary' ? lifecycle.title : WINDOW_TITLE,
     frame: { width: 1400, height: 900, x: 80, y: 80 },
     ...content,
+    ...nativeWindowOptions(lifecycle),
     ...nativeBrowserWindowOptions
   })
   const ownedWindow = created

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type KeyboardEvent, type MouseEvent as ReactMouseEvent } from 'react'
 import type { UiPluginContext } from '@quirky/protocol'
-import { Button, IconButton, ListRow, Menu, TextField } from '@quirky/ui'
+import { Button, ControlIcon, IconButton, ListRow, Menu, TextField, ToolPanelFrame } from '@quirky/ui'
 import type { ExplorerInteraction } from '../types'
 import { activeDocument } from './activeDocument'
 import { useEditorState, worktreeFromLayout } from './editorState'
@@ -852,35 +852,43 @@ export function ExplorerPanel({ context, report }: { context: UiPluginContext; r
   }
 
 
+  const tools = (
+    <>
+      <IconButton label="New File" title="New File" onClick={() => startNewItem('file')}><ControlIcon name="plus" /></IconButton>
+      <IconButton label="New Folder" title="New Folder" onClick={() => startNewItem('folder')}>▭</IconButton>
+      <IconButton label="Collapse All" title="Collapse All" onClick={() => void collapseAll()}>⊟</IconButton>
+      <IconButton label="Refresh Explorer" title="Refresh Explorer" onClick={() => void refreshExplorer()}><ControlIcon name="arrows-clockwise" /></IconButton>
+      <IconButton label="Undo file operation" title="Undo file operation" onClick={() => void context.call('quirky.editor/history', { worktree, action: 'undo' }).then(refreshExplorer).catch((reason: unknown) => setError(messageOf(reason)))}>↶</IconButton>
+      <IconButton label="Redo file operation" title="Redo file operation" onClick={() => void context.call('quirky.editor/history', { worktree, action: 'redo' }).then(refreshExplorer).catch((reason: unknown) => setError(messageOf(reason)))}>↷</IconButton>
+      <IconButton label="Source Control" title="Source Control" onClick={() => void openSourceControl()}>⑂</IconButton>
+    </>
+  )
+  const actions = (
+    <details className="qe-explorer-more-actions">
+      <summary className="qe-disclosure-trigger" aria-label="More Explorer Actions"><ControlIcon name="dots-three" /></summary>
+      <div className="qe-file-actions-menu">
+        <label><input type="checkbox" checked={state?.explorer.showDotfiles ?? true} onChange={() => void toggleDotfiles()} />Show Dotfiles</label>
+        <label><input type="checkbox" checked={settings.showGitIgnored} onChange={(event) => void setEditorSetting(context, 'showGitIgnoredFiles', event.currentTarget.checked).then(refreshExplorer).catch((reason: unknown) => setError(messageOf(reason)))} />Show Git Ignored Files</label>
+        <label><input type="checkbox" checked={settings.followSymlinkedDirectories} onChange={(event) => void setEditorSetting(context, 'followSymlinkedDirectories', event.currentTarget.checked).then(refreshExplorer).catch((reason: unknown) => setError(messageOf(reason)))} />Follow symlinked directories</label>
+        <label className="qe-range-setting">Explorer Sidebar Width
+          <input type="range" min="220" max="900" step="10" value={settings.sidebarWidth} onChange={(event) => void setEditorSetting(context, 'editorSidebarWidth', Number(event.currentTarget.value)).catch((reason: unknown) => setError(messageOf(reason)))} />
+          <span>{settings.sidebarWidth}px</span>
+        </label>
+      </div>
+    </details>
+  )
+
   return (
+    <ToolPanelFrame title="Explorer" tools={tools} actions={actions}>
     <section className="qe-explorer" aria-label="File Explorer">
-      <header className="qe-explorer-toolbar">
+      <div className="qe-explorer-location">
         {worktrees.length > 1 && !layoutWorktree && (
           <select className="ui-text-field__input qe-explorer-worktree" aria-label="Worktree" value={worktree ?? ''} onChange={(event) => setSelectedWorktree(event.currentTarget.value)}>
             {worktrees.map((entry) => <option key={entry.id} value={entry.id}>{entry.name ?? entry.path}</option>)}
           </select>
         )}
         <span className="qe-explorer-root" title={rootListing?.root ?? ''}>{rootListing?.root ?? 'Explorer'}</span>
-        <Button title="New File" onClick={() => startNewItem('file')}>New File</Button>
-        <Button title="New Folder" onClick={() => startNewItem('folder')}>New Folder</Button>
-        <Button title="Collapse All" onClick={() => void collapseAll()}>Collapse All</Button>
-        <IconButton label="Refresh Explorer" title="Refresh Explorer" onClick={() => void refreshExplorer()}>↻</IconButton>
-        <Button title="Undo file operation" onClick={() => void context.call('quirky.editor/history', { worktree, action: 'undo' }).then(refreshExplorer).catch((reason: unknown) => setError(messageOf(reason)))}>Undo</Button>
-        <Button title="Redo file operation" onClick={() => void context.call('quirky.editor/history', { worktree, action: 'redo' }).then(refreshExplorer).catch((reason: unknown) => setError(messageOf(reason)))}>Redo</Button>
-        <Button onClick={() => void openSourceControl()}>Source Control</Button>
-        <details className="qe-explorer-more-actions">
-          <summary className="qe-disclosure-trigger" aria-label="More Explorer Actions">More</summary>
-          <div className="qe-file-actions-menu">
-            <label><input type="checkbox" checked={state?.explorer.showDotfiles ?? true} onChange={() => void toggleDotfiles()} />Show Dotfiles</label>
-            <label><input type="checkbox" checked={settings.showGitIgnored} onChange={(event) => void setEditorSetting(context, 'showGitIgnoredFiles', event.currentTarget.checked).then(refreshExplorer).catch((reason: unknown) => setError(messageOf(reason)))} />Show Git Ignored Files</label>
-            <label><input type="checkbox" checked={settings.followSymlinkedDirectories} onChange={(event) => void setEditorSetting(context, 'followSymlinkedDirectories', event.currentTarget.checked).then(refreshExplorer).catch((reason: unknown) => setError(messageOf(reason)))} />Follow symlinked directories</label>
-            <label className="qe-range-setting">Explorer Sidebar Width
-              <input type="range" min="220" max="900" step="10" value={settings.sidebarWidth} onChange={(event) => void setEditorSetting(context, 'editorSidebarWidth', Number(event.currentTarget.value)).catch((reason: unknown) => setError(messageOf(reason)))} />
-              <span>{settings.sidebarWidth}px</span>
-            </label>
-          </div>
-        </details>
-      </header>
+      </div>
       <div className="qe-explorer-search-mode" role="group" aria-label="Explorer search mode">
         <Button aria-pressed={searchMode === 'names'} onClick={() => setSearchMode('names')}>Names</Button>
         <Button aria-pressed={searchMode === 'contents'} onClick={() => setSearchMode('contents')}>Contents</Button>
@@ -1101,5 +1109,6 @@ export function ExplorerPanel({ context, report }: { context: UiPluginContext; r
       {rootListing?.truncated && <p className="muted">More files may be available.</p>}
       {state?.explorer.expanded.length === 0 && expanded.size > 0 && <span className="sr-only">Expanded folders are open.</span>}
     </section>
+    </ToolPanelFrame>
   )
 }

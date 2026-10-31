@@ -193,6 +193,15 @@ test('conditional dock bindings win from terminal and composer focus; palette ro
   await waitForPalette(t.caller, false)
 })
 
+test('the window host carries the daemon-saved palette recents', async () => {
+  const t = await boot()
+  expect(t.host.getState().layout.paletteRecents).toBeUndefined()
+  await t.caller.call('ui.palette.recent', { id: 'command:one' })
+  await t.caller.call('ui.palette.recent', { id: 'worktree:two' })
+  await waitFor(() => t.host.getState().layout.paletteRecents?.length === 2)
+  expect(t.host.getState().layout.paletteRecents).toEqual(['worktree:two', 'command:one'])
+})
+
 test('an installed replacement owns Mod+Shift+P without a palette fallback', async () => {
   const t = await boot({ override: true })
   const bindings = t.host.getState().model!.keybindings
@@ -471,7 +480,8 @@ test('palette prioritizes exact title matches while preserving result order and 
   const tool: UiToolEntry = {
     id: 'tool:acme.files/files',
     title: 'Files',
-    icon: 'folder',
+    icon: 'folders',
+    hue: 'sand',
     defaultSlot: 'right-top',
     contributionId: 'acme.files',
     aliases: []

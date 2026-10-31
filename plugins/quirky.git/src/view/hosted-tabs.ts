@@ -19,6 +19,7 @@ type PublicWorkspace = { id: string; revision: number; activeGroup: string; root
 type TabLocation = { tab: PublicViewTab; group: PublicGroup }
 
 const subscribed = new WeakSet<UiPluginContext>()
+const DIFF_TAB_ICON = { kind: 'tool', name: 'git-diff', hue: 'azure' } as const
 
 function workspaceFrom(value: unknown): PublicWorkspace {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) throw new Error('Terminal returned an invalid workspace.')
@@ -136,6 +137,7 @@ export async function openHostedDiff(context: UiPluginContext, requested: DiffVi
     key,
     input: apiInput,
     title: titleOf(input),
+    icon: DIFF_TAB_ICON,
     reuse: true,
     activate: true,
     preview,
@@ -209,6 +211,7 @@ export async function updateHostedDiffDirty(context: UiPluginContext, input: Dif
     key: current.tab.key,
     input: apiInput,
     title: current.tab.title,
+    icon: DIFF_TAB_ICON,
     reuse: true,
     activate: false,
     preview: current.tab.preview,

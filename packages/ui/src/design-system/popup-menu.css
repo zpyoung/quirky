@@ -1,0 +1,61 @@
+.ui-popup {
+  position: fixed;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  min-width: calc(var(--ui-space-24) * 13);
+  max-width: calc(var(--ui-space-24) * 18);
+  overflow-y: auto;
+  border: var(--ui-border-width) solid var(--ui-border);
+  border-radius: var(--ui-radius-window);
+  background: var(--ui-surface);
+  color: var(--ui-text);
+  font-size: var(--ui-font-body);
+  box-shadow: 0 var(--ui-space-8) var(--ui-space-24) var(--ui-shadow);
+}
+.ui-popup > .qt-menu { border: 0; background: var(--ui-transparent); padding: var(--ui-space-8); }
+.ui-popup__title {
+  padding: var(--ui-space-8) var(--ui-space-12) var(--ui-space-4);
+  color: var(--ui-muted);
+  font-size: var(--ui-font-section);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.ui-popup__empty { padding: var(--ui-space-8) var(--ui-space-12); color: var(--ui-muted); }
+.ui-popup__search {
+  display: flex;
+  align-items: center;
+  gap: var(--ui-space-8);
+  margin: var(--ui-space-8) var(--ui-space-8) 0;
+  padding-inline-start: var(--ui-space-8);
+  border-radius: var(--ui-radius-control);
+  background: var(--ui-selected);
+  color: var(--ui-muted);
+}
+.ui-popup .qt-menu-search {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  padding-inline-start: 0;
+  border-color: var(--ui-transparent);
+  background: var(--ui-transparent);
+}
+.ui-popup .qt-menu-label.ui-stack { gap: 0; }
+.ui-popup .qt-menu-heading {
+  padding: var(--ui-space-8) var(--ui-space-8) var(--ui-space-2);
+  color: var(--ui-muted);
+  font-size: var(--ui-font-section);
+  font-weight: 600;
+}
+.ui-popup .qt-menu-item { border-radius: var(--ui-radius-control); }
+.ui-popup .qt-menu-item[data-current],
+.ui-popup .qt-menu-item[data-current].qt-highlight {
+  background: var(--ui-accent);
+  color: var(--ui-rail);
+}
+.ui-popup .qt-menu-item[data-current] .qt-menu-key,
+.ui-popup .qt-menu-item[data-current] .ui-text-muted { color: inherit; }
+.ui-popup .qt-menu-item > [aria-label='Current'] { display: none; }
+.ui-popup .qt-menu-item[data-current] .ui-status-dot { outline: var(--ui-space-2) solid var(--ui-rail); }

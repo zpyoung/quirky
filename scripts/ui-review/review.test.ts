@@ -2,20 +2,21 @@ import { afterEach, beforeEach, expect, test } from 'bun:test'
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { createHash } from 'node:crypto'
 import { tmpdir } from 'node:os'
-import { fileURLToPath } from 'node:url'
 import { join } from 'node:path'
-import { CAPTURE_SCHEMA_VERSION, type CaptureManifest, type ReviewOptions } from './contracts'
+import { CAPTURE_SCHEMA_VERSION, type CaptureManifest, type CaptureTheme, type ReviewOptions } from './contracts'
+import { goldenFor } from './goldens'
 import { reviewManifest } from './review'
 
 const goldenPaths = {
-  dark: fileURLToPath(new URL('../../docs/quirk/specs/2026-10-28-ui-redesign/img/golden-dark.png', import.meta.url)),
-  light: fileURLToPath(new URL('../../docs/quirk/specs/2026-10-28-ui-redesign/img/golden-light.png', import.meta.url))
+  dark: goldenFor('host:shell', 'dark'),
+  light: goldenFor('host:shell', 'light')
 }
 let scratch = ''
 let outputDir = ''
 let reviewerExecutable = ''
 let childPidFile = ''
 let reviewStartedFile = ''
+let promptLogFile = ''
 let previousEnv = new Map<string, string | undefined>()
 
 function setEnv(name: string, value: string | undefined): void {
@@ -34,12 +35,14 @@ beforeEach(() => {
   mkdirSync(quirkyHome)
   childPidFile = join(scratch, 'review-child.pid')
   reviewStartedFile = join(scratch, 'review-started')
+  promptLogFile = join(scratch, 'review-prompts.jsonl')
   setEnv('HOME', testHome)
   setEnv('QUIRKY_HOME', quirkyHome)
   setEnv('XDG_CONFIG_HOME', join(testHome, '.config'))
   setEnv('UI_REVIEW_FAKE_MODE', 'pass')
   setEnv('UI_REVIEW_FAKE_CHILD_PID', childPidFile)
   setEnv('UI_REVIEW_FAKE_REVIEW_STARTED', reviewStartedFile)
+  setEnv('UI_REVIEW_FAKE_PROMPTS', promptLogFile)
   reviewerExecutable = join(scratch, 'fake-pi-watch.cjs')
   writeFileSync(reviewerExecutable, fakeReviewerSource(), { mode: 0o700 })
   chmodSync(reviewerExecutable, 0o700)
@@ -73,7 +76,7 @@ function crc32(bytes: Buffer): number {
   return (value ^ 0xffffffff) >>> 0
 }
 
-function capturePng(theme: 'dark' | 'light'): Buffer {
+function capturePng(theme: CaptureTheme): Buffer {
   const source = readFileSync(goldenPaths[theme])
   const ihdrEnd = 8 + 12 + source.readUInt32BE(8)
   const type = Buffer.from('tEXt')
@@ -85,12 +88,19 @@ function capturePng(theme: 'dark' | 'light'): Buffer {
   return Buffer.concat([source.subarray(0, ihdrEnd), length, type, data, checksum, source.subarray(ihdrEnd)])
 }
 
-function manifest(): CaptureManifest {
+function manifest(targetId = 'sample.panel'): CaptureManifest {
   const targetsDir = mkdtempSync(join(scratch, 'captures-'))
   const captures = (['dark', 'light'] as const).map((theme) => {
     const path = join(targetsDir, `${theme}.png`)
+    const golden = goldenFor(targetId, theme)
     writeFileSync(path, capturePng(theme))
-    return { targetId: 'sample.panel', theme, image: { path, sha256: sha256(path) }, status: 'captured' as const }
+    return {
+      targetId,
+      theme,
+      image: { path, sha256: sha256(path) },
+      reference: { path: golden, sha256: sha256(golden) },
+      status: 'captured' as const
+    }
   })
   return {
     schemaVersion: CAPTURE_SCHEMA_VERSION,
@@ -100,11 +110,7 @@ function manifest(): CaptureManifest {
     viewport: { width: 1280, height: 800 },
     scope: 'full',
     selectors: [],
-    targets: [{ id: 'sample.panel', plugin: 'sample', title: 'Sample panel', kind: 'panel' }],
-    references: {
-      dark: { path: goldenPaths.dark, sha256: sha256(goldenPaths.dark) },
-      light: { path: goldenPaths.light, sha256: sha256(goldenPaths.light) }
-    },
+    targets: [{ id: targetId, plugin: 'sample', title: 'Sample panel', kind: targetId.startsWith('host:') ? 'host' : 'panel' }],
     captures,
     failures: []
   }
@@ -144,6 +150,7 @@ if (mode === 'timeout') {
 if (mode === 'process-fail') { process.stderr.write('dispatch failed' + String.fromCharCode(10)); process.exit(9); }
 if (mode === 'env-leak') process.stderr.write('OPENAI_API_KEY=sk-secret-value-123456789012345 HOME=/tmp/private-runtime-home' + String.fromCharCode(10));
 const prompt = args[args.length - 1] || '';
+if (process.env.UI_REVIEW_FAKE_PROMPTS) fs.appendFileSync(process.env.UI_REVIEW_FAKE_PROMPTS, JSON.stringify(prompt) + String.fromCharCode(10));
 if (mode === 'tamper-image') {
   const marker = 'Capture metadata (JSON): ';
   const metadata = JSON.parse(prompt.slice(prompt.indexOf(marker) + marker.length));
@@ -245,7 +252,7 @@ test('duplicate target IDs are reviewer errors', async () => {
 
 test('a substituted non-approved golden image is rejected', async () => {
   const input = manifest()
-  input.references.dark = { path: goldenPaths.light, sha256: sha256(goldenPaths.light) }
+  input.captures[0]!.reference = { path: goldenPaths.light, sha256: sha256(goldenPaths.light) }
   const report = await reviewManifest(input, options())
 
   expect(report.status).toBe('error')
@@ -256,7 +263,7 @@ test('a substituted non-approved golden image is rejected', async () => {
 test('bad capture and golden digests cannot reach the reviewer', async () => {
   for (const mutate of [
     (input: CaptureManifest) => { input.captures[0]!.image!.sha256 = '0'.repeat(64) },
-    (input: CaptureManifest) => { input.references.dark.sha256 = '0'.repeat(64) }
+    (input: CaptureManifest) => { input.captures[0]!.reference.sha256 = '0'.repeat(64) }
   ]) {
     const input = manifest()
     mutate(input)
@@ -264,6 +271,44 @@ test('bad capture and golden digests cannot reach the reviewer', async () => {
     expect(report.status).toBe('error')
     expect(report.captures).toHaveLength(0)
   }
+})
+
+test('each target is sent its own golden, and a different golden is rejected', async () => {
+  for (const [targetId, name] of [['host:shell', 'shell'], ['host:scoped', 'scoped'], ['host:popups', 'popups']] as const) {
+    rmSync(promptLogFile, { force: true })
+    const report = await reviewManifest(manifest(targetId), options())
+
+    expect(report.status).toBe('passed')
+    const prompts = readFileSync(promptLogFile, 'utf8').trim().split('\n').map((line) => JSON.parse(line) as string)
+    expect(prompts).toHaveLength(2)
+    prompts.forEach((prompt, index) => {
+      const theme = index === 0 ? 'dark' : 'light'
+      expect(prompt).toContain(`golden-${name}-${theme}.png`)
+    })
+    expect(report.captures.map(({ reference }) => reference.path)).toEqual([goldenFor(targetId, 'dark'), goldenFor(targetId, 'light')])
+  }
+
+  const wrong = manifest('host:scoped')
+  wrong.captures[0]!.reference = { path: goldenPaths.dark, sha256: sha256(goldenPaths.dark) }
+  const report = await reviewManifest(wrong, options())
+  expect(report.status).toBe('error')
+  expect(report.captures).toHaveLength(0)
+  expect(report.failures.join(' ')).toMatch(/approved golden/i)
+})
+
+test('the reviewer is told the traffic lights are native and absent from captures', async () => {
+  await reviewManifest(manifest(), options())
+
+  const prompt = JSON.parse(readFileSync(promptLogFile, 'utf8').trim().split('\n')[0]!) as string
+  expect(prompt).toMatch(/traffic lights are native window controls/i)
+  expect(prompt).toMatch(/absent from these browser-rendered captures/i)
+})
+
+test('the reviewer is told host:popups deliberately shows several popups together', async () => {
+  await reviewManifest(manifest('host:popups'), options())
+
+  const prompt = JSON.parse(readFileSync(promptLogFile, 'utf8').trim().split('\n')[0]!) as string
+  expect(prompt).toMatch(/host:popups target deliberately shows several popups at once/i)
 })
 
 test('invalid JSON and out-of-range scores are reviewer errors', async () => {

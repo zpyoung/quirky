@@ -336,6 +336,10 @@
   text-align: left;
 }
 
+.ui-list-row__main:hover:not(:disabled) {
+  background: inherit;
+}
+
 .ui-list-row__main:disabled {
   color: var(--ui-muted);
   cursor: not-allowed;
@@ -470,6 +474,11 @@
 
 .ui-tabs__tab:disabled {
   cursor: not-allowed;
+}
+
+.ui-tabs__count {
+  color: var(--ui-muted);
+  margin-inline-start: var(--ui-space-4);
 }
 
 .ui-menu {
@@ -775,17 +784,19 @@
   border: var(--ui-border-width) solid var(--ui-border);
   border-radius: var(--ui-radius-window);
   color: var(--ui-text);
-  display: flex;
-  flex-direction: column;
+  container-type: inline-size;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-rows: auto auto minmax(0, 1fr);
   min-width: 0;
 }
 
 .ui-tool-panel-frame__header {
   align-items: center;
-  border-bottom: var(--ui-border-width) solid var(--ui-border);
   display: flex;
-  flex-wrap: wrap;
   gap: var(--ui-space-8);
+  grid-column: 1 / -1;
+  grid-row: 1;
   justify-content: space-between;
   min-height: var(--ui-row-double);
   padding: var(--ui-space-4) var(--ui-space-8);
@@ -807,7 +818,7 @@
 }
 
 .ui-tool-panel-frame__title {
-  flex: 1 1 auto;
+  flex: 0 0 auto;
   font-size: var(--ui-font-body);
   font-weight: 650;
   line-height: 1.3;
@@ -816,6 +827,41 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.ui-tool-panel-frame__tabs {
+  display: flex;
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.ui-tool-panel-frame__tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.ui-tool-panel-frame__tabs:empty {
+  display: none;
+}
+
+.ui-tool-panel-frame__tabs .ui-tabs {
+  border-bottom: 0;
+  gap: var(--ui-space-4);
+}
+
+.ui-tool-panel-frame__tabs .ui-tabs__tab {
+  background: var(--ui-transparent);
+  border-color: var(--ui-transparent);
+  border-radius: var(--ui-radius-control);
+  line-height: 1.2;
+  padding: var(--ui-space-2) var(--ui-space-8);
+}
+
+.ui-tool-panel-frame__tabs .ui-tabs__tab[aria-selected="true"] {
+  background: var(--ui-transparent);
+  border-color: var(--ui-accent);
+  color: var(--ui-text);
 }
 
 .ui-tool-panel-frame__actions {
@@ -854,8 +900,61 @@
 }
 
 .ui-tool-panel-frame__body {
+  grid-column: 2;
+  grid-row: 2 / span 2;
   min-width: 0;
   padding: var(--ui-space-8);
+}
+
+.ui-tool-panel-frame__rail {
+  align-items: center;
+  display: flex;
+  flex-direction: column;
+  gap: var(--ui-space-4);
+  grid-column: 1;
+  grid-row: 2 / span 2;
+  padding: var(--ui-space-4);
+}
+
+.ui-tool-panel-frame__rail:empty {
+  display: none;
+}
+
+@container (width < 320px) {
+  .ui-tool-panel-frame__rail {
+    flex-direction: row;
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+
+  .ui-tool-panel-frame__body {
+    grid-column: 1 / -1;
+    grid-row: 3;
+  }
+}
+
+.ui-tool-panel-frame__actions .ui-icon-button:not(.ui-button--primary),
+.ui-tool-panel-frame__rail .ui-icon-button:not(.ui-button--primary) {
+  background: var(--ui-transparent);
+  border-color: var(--ui-transparent);
+  color: var(--ui-muted);
+}
+
+.ui-tool-panel-frame__actions .ui-icon-button:not(.ui-button--primary):hover:not(:disabled),
+.ui-tool-panel-frame__rail .ui-icon-button:not(.ui-button--primary):hover:not(:disabled) {
+  background: var(--ui-selected);
+  border-color: var(--ui-transparent);
+  color: var(--ui-text);
+}
+
+[data-tool-panel] .ui-tool-panel-frame__actions {
+  opacity: 0;
+}
+
+[data-tool-panel][data-panel-focused] .ui-tool-panel-frame__actions,
+[data-tool-panel]:hover .ui-tool-panel-frame__actions,
+[data-tool-panel]:focus-within .ui-tool-panel-frame__actions {
+  opacity: 1;
 }
 
 .ui-inline-agent-card {
@@ -1161,6 +1260,24 @@
 
 .ui-tree .ui-list-row--interactive:hover {
   background: var(--ui-selected);
+}
+
+[data-panel-focused] .ui-list-row--selected,
+[data-panel-focused] .ui-list-row--selected:hover:not([aria-disabled="true"]),
+[data-panel-focused] .ui-tree .ui-list-row--selected,
+[data-panel-focused] .ui-tree .ui-list-row--selected:hover {
+  background: var(--ui-accent);
+  color: var(--ui-rail);
+}
+
+[data-panel-focused] .ui-list-row--selected .ui-list-row__description,
+[data-panel-focused] .ui-list-row--selected .ui-list-row__trailing,
+[data-panel-focused] .ui-list-row--selected .ui-text-muted {
+  color: inherit;
+}
+
+[data-panel-focused] .ui-list-row--selected .ui-status-dot {
+  outline: var(--ui-space-2) solid var(--ui-rail);
 }
 
 

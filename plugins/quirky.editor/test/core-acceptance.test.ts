@@ -270,6 +270,15 @@ test('SC-5/6: reveal refreshes an inactive dirty buffer after atomic replacement
   expect(await activeTab(fixture)).toBe(active.openedTabId)
 })
 
+test('renaming a directory moves an open file tab icon to the new path', async () => {
+  const fixture = await boot()
+  writeFixture(fixture, 'src/nested/child.ts', 'base text\n')
+  await open(fixture, 'src/nested/child.ts', { mode: 'source', focus: true })
+  await fixture.call('quirky.editor/mutate', { worktree: fixture.worktreeId, action: 'rename', path: 'src', newPath: 'renamed-src' })
+  const active = await fixture.call<{ icon: { path?: string } | null }>('quirky.terminal/activeTabIcon', { workspace: `id:${fixture.worktreeId}` })
+  expect(active.icon?.path).toEndWith('/renamed-src/nested/child.ts')
+})
+
 test('SC-6/8: renaming a directory rekeys an open descendant without changing its buffer, tab or draft', async () => {
   const fixture = await boot()
   const original = 'base text\n'

@@ -144,6 +144,15 @@ describe('editor core through the daemon API', () => {
     }
   }, 20_000)
 
+  test('opens its tab with the file path as the tab icon', async () => {
+    const t = await boot()
+    await write(t, 'src/App.tsx', 'export {}\n')
+    const buffer = await open(t, 'src/App.tsx', { focus: true })
+    const icon = await t.call<{ icon: unknown }>('quirky.terminal/activeTabIcon', { workspace: `id:${t.worktreeId}` })
+    expect(icon).toEqual({ icon: { kind: 'file', path: buffer.path } })
+    expect(buffer.path.endsWith('/src/App.tsx')).toBe(true)
+  })
+
   test('SC-2: rejects stale draft revisions without losing either client version and saves against the loaded baseline', async () => {
     const t = await boot()
     await write(t, 'answer.ts', 'const answer = 1;\n')

@@ -19,12 +19,17 @@ export type AttentionToast = {
   phase: 'ready' | 'answering' | 'failed'
   error?: string
 }
+/** A project's own name, mark and tile color as set in its project settings; each is null until set. */
+export type ProjectIdentity = { displayName: string | null; icon: string | null; color: string | null }
 export type AttentionSnapshot = {
   repos: Repo[] | null
   worktrees: Worktree[] | null
   sessions: Session[] | null
   asks: Ask[] | null
   selectedWorktreeId: string | null
+  /** Projects the Worktrees panel and the worktree switcher are narrowed to; empty means All projects. */
+  filterRepoIds: string[]
+  projectIdentities: Record<string, ProjectIdentity>
   errors: Partial<Record<SnapshotError, string>>
   toasts: AttentionToast[]
 }
@@ -40,6 +45,16 @@ export type AttentionStore = {
   openDelegatedQuestion(askId: string): Promise<boolean>
   openInbox(): void
   dismissToast(askId: string): void
+  /**
+   * Narrows the view to one project, or back to All projects with null. When the selected worktree
+   * falls outside the project, opens its most recently active worktree. Resolves to an error
+   * message, or null on success.
+   */
+  selectProject(repoId: string | null): Promise<string | null>
+  /** Opens `worktreeId` in this window; the daemon returns the view to All projects when it is hidden. */
+  openWorktree(worktreeId: string): Promise<string | null>
+  /** Opens the neighbouring worktree in this window's navigation history. */
+  navigateHistory(direction: 'back' | 'forward'): Promise<string | null>
 }
 
 const systemClock: AttentionClock = {
@@ -48,6 +63,39 @@ const systemClock: AttentionClock = {
 }
 
 const messageOf = (error: unknown): string => error instanceof Error ? error.message : String(error)
+
+function filterIdsOf(value: unknown): string[] | null {
+  if (typeof value !== 'object' || value === null) return null
+  const ids = (value as { filterRepoIds?: unknown }).filterRepoIds
+  return Array.isArray(ids) && ids.every((id) => typeof id === 'string') ? ids as string[] : null
+}
+
+function identitiesOf(value: unknown): Record<string, ProjectIdentity> | null {
+  if (!Array.isArray(value)) return null
+  const identities: Record<string, ProjectIdentity> = {}
+  const text = (field: unknown) => typeof field === 'string' ? field : null
+  for (const item of value) {
+    if (typeof item !== 'object' || item === null) return null
+    const { repoId, identity } = item as { repoId?: unknown; identity?: unknown }
+    if (typeof repoId !== 'string' || typeof identity !== 'object' || identity === null) return null
+    const fields = identity as Record<string, unknown>
+    identities[repoId] = { displayName: text(fields.displayName), icon: text(fields.icon), color: text(fields.color) }
+  }
+  return identities
+}
+
+const sameIds = (left: string[], right: string[]) => left.length === right.length && left.every((id, index) => id === right[index])
+const sameIdentities = (left: Record<string, ProjectIdentity>, right: Record<string, ProjectIdentity>) =>
+  JSON.stringify(left) === JSON.stringify(right)
+
+async function windowIdOf(connection: Pick<Connection, 'callAny'>): Promise<number> {
+  const self = await connection.callAny('ui.window.self', {})
+  if (typeof self !== 'object' || self === null || !('connId' in self) ||
+    typeof self.connId !== 'number' || !Number.isSafeInteger(self.connId) || self.connId < 1) {
+    throw new Error('The daemon did not identify this window.')
+  }
+  return self.connId
+}
 
 function askFromEvent(event: QuirkyEvent): Ask | null {
   if (!('data' in event) || typeof event.data !== 'object' || event.data === null) return null
@@ -81,6 +129,8 @@ export function createAttentionStore(
     sessions: null,
     asks: null,
     selectedWorktreeId: host.getState().layout.worktree ?? null,
+    filterRepoIds: [],
+    projectIdentities: {},
     errors: {},
     toasts: []
   }
@@ -125,6 +175,31 @@ export function createAttentionStore(
       ...(repos === null ? {} : { repos }),
       ...(worktrees === null ? {} : { worktrees })
     })
+  }
+
+  let scopeVersion = 0
+  const setFilter = (filterRepoIds: string[]) => {
+    scopeVersion += 1
+    if (!sameIds(state.filterRepoIds, filterRepoIds)) publish({ filterRepoIds })
+  }
+
+  const refreshScope = async () => {
+    const version = ++scopeVersion
+    try {
+      const ids = filterIdsOf(await connection.callAny('quirky.worktree/options', {}))
+      if (active && version === scopeVersion && ids !== null) setFilter(ids)
+    } catch {
+      // the worktree plugin may be absent; the scope then stays All projects
+    }
+  }
+
+  const refreshIdentities = async () => {
+    try {
+      const identities = identitiesOf(await connection.callAny('quirky.worktree/projectMetadataList', {}))
+      if (active && identities !== null && !sameIdentities(state.projectIdentities, identities)) publish({ projectIdentities: identities })
+    } catch {
+      // identities only decorate the switcher; the repo name and a generated tile stand in
+    }
   }
 
   const refreshSessions = async () => {
@@ -185,6 +260,8 @@ export function createAttentionStore(
     void refreshInventory()
     void refreshSessions()
     void refreshAsks()
+    void refreshScope()
+    void refreshIdentities()
   }
 
   const updateSelection = () => {
@@ -196,9 +273,21 @@ export function createAttentionStore(
     switch (event.type) {
       case 'quirky.repo/changed':
       case 'quirky.worktree/changed':
-      case 'quirky.worktree/projectMetadataChanged':
         void refreshInventory()
         break
+      case 'quirky.worktree/projectMetadataChanged':
+        void refreshInventory()
+        void refreshIdentities()
+        break
+      case 'quirky.worktree/optionsChanged': {
+        const options = 'data' in event && typeof event.data === 'object' && event.data !== null
+          ? (event.data as { options?: unknown }).options
+          : undefined
+        const ids = filterIdsOf(options)
+        if (ids === null) void refreshScope()
+        else setFilter(ids)
+        break
+      }
       case 'quirky.session/changed':
       case 'quirky.session/removed':
         void refreshSessions()
@@ -322,6 +411,43 @@ export function createAttentionStore(
     }
   }
 
+  const openWorktree = async (worktreeId: string): Promise<string | null> => {
+    try {
+      const window = await windowIdOf(connection)
+      await connection.callAny('quirky.worktree/navigate', { worktree: worktreeId, window })
+      return null
+    } catch (error) {
+      return messageOf(error)
+    }
+  }
+
+  const selectProject = async (repoId: string | null): Promise<string | null> => {
+    const filterRepoIds = repoId === null ? [] : [repoId]
+    try {
+      await connection.callAny('quirky.worktree/setOptions', { filterRepoIds })
+    } catch (error) {
+      return messageOf(error)
+    }
+    setFilter(filterRepoIds)
+    if (repoId === null) return null
+    const selected = state.worktrees?.find((worktree) => worktree.id === state.selectedWorktreeId)
+    if (selected?.repoId === repoId) return null
+    const mostRecent = (state.worktrees ?? [])
+      .filter((worktree) => worktree.repoId === repoId && !worktree.removing)
+      .sort((left, right) => right.lastActivityAt - left.lastActivityAt || right.createdAt - left.createdAt || left.id.localeCompare(right.id))[0]
+    return mostRecent ? openWorktree(mostRecent.id) : null
+  }
+
+  const navigateHistory = async (direction: 'back' | 'forward'): Promise<string | null> => {
+    try {
+      const window = await windowIdOf(connection)
+      await connection.callAny(direction === 'back' ? 'quirky.worktree/navigationBack' : 'quirky.worktree/navigationForward', { window })
+      return null
+    } catch (error) {
+      return messageOf(error)
+    }
+  }
+
   return {
     getSnapshot: () => state,
     subscribe(listener) {
@@ -336,13 +462,16 @@ export function createAttentionStore(
     answer,
     openDelegatedQuestion,
     openInbox: () => host.openTool(INBOX_TOOL_ID),
-    dismissToast
+    dismissToast,
+    selectProject,
+    openWorktree,
+    navigateHistory
   }
 }
 
 const stores = new WeakMap<Connection, AttentionStore>()
 
-/** One store is shared by titlebar, status bar, Inbox and toast consumers in this exact window. */
+/** One store is shared by window bar, status bar, Inbox and toast consumers in this exact window. */
 export function attentionStoreFor(connection: Connection, host: WindowPluginHost): AttentionStore {
   let store = stores.get(connection)
   if (!store) {

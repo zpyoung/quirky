@@ -1,6 +1,6 @@
 import { existsSync } from 'node:fs'
 import { isAbsolute, join } from 'node:path'
-import { RpcErrorCode } from '@quirky/protocol'
+import { RpcErrorCode, UI_TOOL_HUES } from '@quirky/protocol'
 import type { MethodHandler, PluginCaller, PluginContext, PtyFact, Session, TerminalTabCounts } from '@quirky/protocol'
 import { applyFloatingUpdate } from '../floating'
 import type { StoredFloating } from '../floating'
@@ -16,7 +16,7 @@ import { displayTitle, nextTerminalTitle } from './titles'
 import { findGroup, findPane, paneLeaves } from './tree'
 import type { GroupSide, TreeError } from './tree'
 import { FLOATING_WORKSPACE, isTerminalTab, isViewTab, TITLE_MAX } from './types'
-import type { ClosedTab, Edge, FloatingState, GroupNode, PaneLeaf, SplitDirection, Tab, TerminalTab, ViewTab, Workspace } from './types'
+import type { ClosedTab, Edge, FloatingState, GroupNode, PaneLeaf, SplitDirection, Tab, TabIcon, TerminalTab, ViewTab, Workspace } from './types'
 
 type Params = Record<string, unknown>
 
@@ -54,6 +54,26 @@ type NewTabIds = { tab: string; pane: string }
 
 /** A start directory for a new session; a `soft` one is dropped when the session plugin refuses it. */
 type StartCwd = { path: string; soft: boolean }
+
+const ICON_NAME_MAX = 64
+const ICON_PATH_MAX = 4096
+
+/** Whether `value` is a well-formed tab icon; a tool or control name is not checked against the glyph set, which the renderer owns. */
+function isTabIcon(value: unknown): value is TabIcon {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false
+  const icon = value as Record<string, unknown>
+  const name = (candidate: unknown) => typeof candidate === 'string' && candidate !== '' && candidate.length <= ICON_NAME_MAX
+  switch (icon.kind) {
+    case 'tool':
+      return name(icon.name) && typeof icon.hue === 'string' && (UI_TOOL_HUES as readonly string[]).includes(icon.hue)
+    case 'file':
+      return typeof icon.path === 'string' && icon.path !== '' && icon.path.length <= ICON_PATH_MAX
+    case 'control':
+      return name(icon.name)
+    default:
+      return false
+  }
+}
 
 /**
  * The daemon-side owner of every workspace layout: one serial queue runs each mutation and each
@@ -106,6 +126,7 @@ export class LayoutService {
   readonly methods: Record<string, MethodHandler> = {
     workspace: (params, caller) => this.queued(() => this.workspace(params, caller)),
     groupInfo: (params) => this.queued(() => this.groupInfo(params)),
+    activeTabIcon: (params, caller) => this.queued(() => this.activeTabIcon(params, caller)),
     adoptSession: (params) => this.queued(() => this.adoptSession(params)),
     openViewTab: (params, caller) => this.queued(() => this.openViewTab(params, caller)),
     rekeyViewTabs: (params, caller) => this.queued(() => this.rekeyViewTabs(params, caller)),
@@ -261,6 +282,16 @@ export class LayoutService {
   /** Starts a session and binds it as a new tab in one queue slot. */
   createTab(workspaceId: string, spec: NewTabSpec): Promise<{ workspace: Workspace; session: Session } & NewTabIds> {
     return this.queued(() => this.addTab(workspaceId, spec))
+  }
+
+  /** The icon of the workspace's active tab, or null when it has none or the workspace has no tabs. */
+  private async activeTabIcon(params: Params, caller: PluginCaller): Promise<{ icon: TabIcon | null }> {
+    const id = await this.resolveWorkspace(params.workspace, caller)
+    const ws = this.workspaces.get(id)
+    if (!ws) return { icon: null }
+    const group = findGroup(ws.root, ws.activeGroup)
+    const tab = group?.tabs.find((candidate) => candidate.id === group.activeTab)
+    return { icon: tab && isViewTab(tab) && isTabIcon(tab.icon) ? tab.icon : null }
   }
 
   private groupInfo(params: Params): { workspace: string } {
@@ -567,6 +598,10 @@ export class LayoutService {
     if (inputValue !== undefined && (typeof inputValue !== 'object' || inputValue === null || Array.isArray(inputValue))) {
       throw this.context.error('invalid-params', 'input must be an object')
     }
+    const icon = params.icon
+    if (icon !== undefined && !isTabIcon(icon)) {
+      throw this.context.error('invalid-params', 'icon must be a tool, file or control icon')
+    }
     const closeParamsValue = params.closeParams
     if (closeParamsValue !== undefined && (typeof closeParamsValue !== 'object' || closeParamsValue === null || Array.isArray(closeParamsValue))) {
       throw this.context.error('invalid-params', 'closeParams must be an object')
@@ -619,6 +654,7 @@ export class LayoutService {
           ...tab,
           title: cleanTitle,
           ...(suppliedInput === undefined ? {} : { input: suppliedInput }),
+          ...(icon === undefined ? {} : { icon }),
           ...(closeCommand === undefined ? {} : { closeCommand }),
           ...(closeMethod === undefined ? {} : { closeMethod }),
           ...(suppliedCloseParams === undefined ? {} : { closeParams: suppliedCloseParams }),
@@ -644,6 +680,7 @@ export class LayoutService {
         viewId,
         key,
         ...(suppliedInput === undefined ? {} : { input: suppliedInput }),
+        ...(icon === undefined ? {} : { icon }),
         title: cleanTitle,
         color: tab.color,
         pinned: tab.pinned,
@@ -670,6 +707,7 @@ export class LayoutService {
       viewId,
       key,
       ...(suppliedInput === undefined ? {} : { input: suppliedInput }),
+      ...(icon === undefined ? {} : { icon }),
       title: cleanTitle,
       color: 'none',
       pinned: false,
@@ -695,7 +733,7 @@ export class LayoutService {
     this.checkRevision(ws, params.revision)
     if (changes.length === 0) return { workspace: ws }
 
-    const updates: { tab: string; key: string; input?: Record<string, unknown>; title?: string; preview?: boolean }[] = []
+    const updates: { tab: string; key: string; input?: Record<string, unknown>; title?: string; icon?: TabIcon; preview?: boolean }[] = []
     const byTab = new Map<string, (typeof updates)[number]>()
     for (const raw of changes) {
       if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) throw this.context.error('invalid-params', 'each change must be an object')
@@ -725,11 +763,13 @@ export class LayoutService {
       if (change.preview !== undefined && typeof change.preview !== 'boolean') {
         throw this.context.error('invalid-params', 'preview must be a boolean')
       }
+      if (change.icon !== undefined && !isTabIcon(change.icon)) throw this.context.error('invalid-params', 'icon is malformed')
       const update = {
         tab: change.tab,
         key: change.key,
         ...(input === undefined ? {} : { input }),
         ...(title === undefined ? {} : { title }),
+        ...(change.icon === undefined ? {} : { icon: change.icon as TabIcon }),
         ...(change.preview === undefined ? {} : { preview: change.preview as boolean })
       }
       updates.push(update)
@@ -753,6 +793,7 @@ export class LayoutService {
         key: update.key,
         ...(update.input === undefined ? {} : { input: update.input }),
         ...(update.title === undefined ? {} : { title: update.title }),
+        ...(update.icon === undefined ? {} : { icon: update.icon }),
         ...(update.preview === undefined ? {} : { preview: update.preview })
       })))
     }

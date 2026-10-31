@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import type { UiPluginContext } from '@quirky/protocol'
 import type { QuickCommand } from '../../layout/types'
-import { Badge, Button, EmptyState, FormRow, IconButton, ListRow, ToolPanelFrame } from '@quirky/ui'
+import { Badge, ControlIcon, EmptyState, FormRow, IconButton, ListRow, ToolPanelFrame } from '@quirky/ui'
 import { QuickCommandDialog } from './QuickCommandDialog'
 import { searchQuickCommands } from './search'
 import { PencilIcon, TrashIcon, confirmAndRemove, summaryOf, useQuickCommands } from './shared'
@@ -86,9 +86,16 @@ export function QuickCommandsPanel({ context, report, repo: repoOverride }: Prop
 
   return (
     <div className="tt-tool-panel-fill qc-panel-shell">
-      <ToolPanelFrame title="Quick Commands" actions={<Button onClick={() => setDialog({ command: null })}>Add Command</Button>}>
+      <ToolPanelFrame
+        title="Quick Commands"
+        tools={
+          <IconButton label="Add Command" title="Add Command" onClick={() => setDialog({ command: null })}>
+            <ControlIcon name="plus" />
+          </IconButton>
+        }
+      >
         <div className="qc-panel">
-          <header className="qc-header">
+          <div className="qc-filters">
             <FormRow label="Search" htmlFor="quick-command-search">
               <input
                 id="quick-command-search"
@@ -115,7 +122,7 @@ export function QuickCommandsPanel({ context, report, repo: repoOverride }: Prop
                 ))}
               </select>
             </FormRow>
-          </header>
+          </div>
           {!loaded ? null : commands.length === 0 ? (
             <EmptyState message={EMPTY_TEXT} />
           ) : rows.length === 0 ? (

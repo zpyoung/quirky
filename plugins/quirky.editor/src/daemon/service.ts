@@ -375,6 +375,7 @@ export class EditorDaemon {
       key: keyValue,
       input: { bufferId: buffer.id, mode },
       title: editorTabTitle(buffer.name, mode),
+      icon: { kind: 'file', path: buffer.path },
       reuse,
       ...(replaceablePreview === undefined ? {} : { replace: replaceablePreview.tabId }),
       activate: focus,
@@ -742,6 +743,7 @@ export class EditorDaemon {
             key: tab.key,
             input: { bufferId: params.bufferId, mode: tab.inputMode },
             title: editorTabTitle(nextBuffer.name, tab.inputMode),
+            icon: { kind: 'file', path: nextBuffer.path },
             preview: tab.preview
           }))
         }) as { workspace?: TerminalWorkspace }
@@ -2295,6 +2297,7 @@ export class EditorDaemon {
             key: tab.key,
             input: { bufferId: previous.id, mode: tab.inputMode },
             title: editorTabTitle(state.buffer.name, tab.inputMode),
+            icon: { kind: 'file', path: state.buffer.path },
             preview: tab.preview
           }))
         }) as { workspace?: TerminalWorkspace }

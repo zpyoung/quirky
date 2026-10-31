@@ -166,7 +166,8 @@ function setup(
     const tool = model.tools?.find((entry) => entry.id === id)
     if (!tool) throw new Error(`no tool ${id}`)
     const current = effective().tools!
-    const placement = current.placements[tool.id] ?? tool.defaultSlot
+    const stored = current.placements[tool.id]
+    const placement = stored === undefined || stored === 'overflow' ? tool.defaultSlot : stored
     const open = { ...current.open }
     if (shouldOpen) open[placement] = tool.id
     else if (open[placement] === tool.id) open[placement] = null
@@ -497,7 +498,7 @@ test('S1: an ask created while another tool is open sets the Questions badge wit
   })
   t.useModule(NOTES, recording([OTHER_TOOL]).module)
   await t.host.refresh()
-  const placement = state(t).layout.tools!.placements[OTHER_TOOL]!
+  const placement = state(t).layout.tools!.placements[OTHER_TOOL] as UiToolSlot
   t.host.togglePanel(OTHER_TOOL, true)
   await until(() => state(t).layout.tools!.open[placement] === OTHER_TOOL)
   t.host.mount(OTHER_TOOL, element())
@@ -609,7 +610,7 @@ test('SC-9: opening a panel contribution selects its canonical tool slot, and to
     ]
   }))
   await t.host.refresh()
-  const placement = state(t).layout.tools!.placements[outline]!
+  const placement = state(t).layout.tools!.placements[outline] as UiToolSlot
 
   t.host.togglePanel(outline)
   await until(() => state(t).layout.tools!.open[placement] === outline)
@@ -1416,7 +1417,7 @@ test('SC-4: an open view or tool that leaves the model is gone from the layout a
   const side = 'panel:acme.notes/side'
   const t = setup(makeModel({ panels: [panel(NOTES, 'side')], views: [view(NOTES, 'page')] }))
   await t.host.refresh()
-  const placement = state(t).layout.tools!.placements[side]!
+  const placement = state(t).layout.tools!.placements[side] as UiToolSlot
   t.host.togglePanel(side)
   await until(() => state(t).layout.tools!.open[placement] === side)
   t.host.openView(PAGE, { a: 1 })
@@ -1805,7 +1806,7 @@ test('host subscribers are notified as canonical tool state changes until they u
   const side = 'panel:acme.notes/side'
   const t = setup(makeModel({ panels: [panel(NOTES, 'side', { defaultSlot: 'right-top' })] }))
   await t.host.refresh()
-  const placement = state(t).layout.tools!.placements[side]!
+  const placement = state(t).layout.tools!.placements[side] as UiToolSlot
   const seen: (string | null)[] = []
   const off = t.host.subscribe(() => seen.push(state(t).layout.tools!.open[placement]))
   t.host.openTool(side)

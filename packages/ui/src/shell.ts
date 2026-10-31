@@ -51,13 +51,47 @@ async function answerDesktopShellRequest(
   }
 }
 
-/** Window focus as the browser reports it. */
+function markWindowInactive(inactive: boolean): void {
+  document.querySelector('.app')?.toggleAttribute('data-window-inactive', inactive)
+}
+
+/**
+ * Whether the window fills its whole screen, which only native fullscreen does: a zoomed window
+ * stops under the menu bar. A fullscreen window on a notched display stays under the notch too, so
+ * this reads false there and the bar keeps its traffic light space, which is the safe side.
+ */
+export function isNativeFullscreen(view: { innerWidth: number; innerHeight: number }, screen: { width: number; height: number }): boolean {
+  return view.innerWidth >= screen.width && view.innerHeight >= screen.height
+}
+
+/** Keeps `data-window-fullscreen` on `.app` in step with the window size, and returns how to stop. */
+export function trackWindowFullscreen(): () => void {
+  const sync = () => {
+    document.querySelector('.app')?.toggleAttribute('data-window-fullscreen', isNativeFullscreen(window, window.screen))
+  }
+  sync()
+  window.addEventListener('resize', sync)
+  return () => window.removeEventListener('resize', sync)
+}
+
+/** Marks `.app` inactive when the window is not focused now; for an `.app` that mounts after the window's focus events began. */
+export function syncWindowInactive(): void {
+  markWindowInactive(!document.hasFocus())
+}
+
+/** Window focus as the browser reports it; also keeps `data-window-inactive` on `.app` in step. */
 export function browserWindowFocus(): NonNullable<HostDeps['windowFocus']> {
   return {
     hasFocus: () => document.hasFocus(),
     subscribe(listener) {
-      const gained = () => listener(true)
-      const lost = () => listener(false)
+      const gained = () => {
+        markWindowInactive(false)
+        listener(true)
+      }
+      const lost = () => {
+        markWindowInactive(true)
+        listener(false)
+      }
       window.addEventListener('focus', gained)
       window.addEventListener('blur', lost)
       return () => {

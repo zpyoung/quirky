@@ -209,12 +209,12 @@ test(
       await runCommand(features, 'command:quirky.vault/open')
       const report = await reportOf<HistoryReport>(features, HISTORY_PANEL, 'the old active-worktree source', (state) => state.scope === 'workspace' && state.visibleIds.includes(old!.id) && !state.loading)
       expect(report.visibleIds).toContain(old.id)
-      const workspaceTab = [...features.win.document.querySelectorAll<HTMLButtonElement>('.qvh-scope-switch button')]
+      const workspaceTab = [...features.win.document.querySelectorAll<HTMLButtonElement>('[role="tablist"][aria-label="History scope"] button')]
         .find((button) => button.textContent?.trim() === 'Workspace')
       expect(workspaceTab?.disabled).toBe(false)
       expect(existsSync(oldPath)).toBe(true)
 
-      const all = features.win.document.querySelector<HTMLButtonElement>('.qvh-scope-switch button:last-child')
+      const all = features.win.document.querySelector<HTMLButtonElement>('[role="tablist"][aria-label="History scope"] button:last-child')
       all?.click()
       const global = await reportOf<HistoryReport>(features, HISTORY_PANEL, 'bounded All history', (state) => state.scope === 'all' && !state.loading && state.listedCount === 250)
       expect(global.visibleIds.length).toBeLessThan(50)
@@ -264,8 +264,8 @@ test(
       if (!projectSession) throw new Error('The real project-scoped list did not include its source session.')
       const report = await reportOf<HistoryReport>(features, HISTORY_PANEL, 'Project context and its source session', (state) => state.scope === 'project' && state.visibleIds.includes(projectSession.id) && !state.loading)
       expect(report.visibleIds).toContain(projectSession.id)
-      const workspace = [...features.win.document.querySelectorAll<HTMLButtonElement>('.qvh-scope-switch button')].find((button) => button.textContent?.trim() === 'Workspace')
-      const project = [...features.win.document.querySelectorAll<HTMLButtonElement>('.qvh-scope-switch button')].find((button) => button.textContent?.trim() === 'Project')
+      const workspace = [...features.win.document.querySelectorAll<HTMLButtonElement>('[role="tablist"][aria-label="History scope"] button')].find((button) => button.textContent?.trim() === 'Workspace')
+      const project = [...features.win.document.querySelectorAll<HTMLButtonElement>('[role="tablist"][aria-label="History scope"] button')].find((button) => button.textContent?.trim() === 'Project')
       expect(workspace?.disabled).toBe(true)
       expect(project?.disabled).toBe(false)
       expect(existsSync(sourcePath)).toBe(true)

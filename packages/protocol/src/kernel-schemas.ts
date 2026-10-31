@@ -1,6 +1,7 @@
 import type { MethodName, QuirkyEvent } from './rpc'
 import type { PluginEvent } from './plugins'
 import type { Schema } from './schema'
+import { UI_TOOL_HUES } from './tool-hues'
 import { UI_TOOL_SLOTS } from './tool-slots'
 
 export type KernelEventType = Exclude<QuirkyEvent, PluginEvent>['type']
@@ -176,16 +177,19 @@ const uiMenuItem = object(
   ['id', 'plugin', 'menu', 'title', 'command']
 )
 const toolSlot: Schema = { type: 'string', enum: [...UI_TOOL_SLOTS] }
+const toolPlacement: Schema = { type: 'string', enum: [...UI_TOOL_SLOTS, 'overflow'] }
+const toolHue: Schema = { type: 'string', enum: [...UI_TOOL_HUES] }
 const uiTool = object(
   {
     id: string(),
     title: string(),
     icon: string(),
+    hue: toolHue,
     defaultSlot: toolSlot,
     contributionId: { description: 'A contribution ID, or null for the host-owned Inbox.' },
     aliases: strings
   },
-  ['id', 'title', 'icon', 'defaultSlot', 'contributionId', 'aliases']
+  ['id', 'title', 'icon', 'hue', 'defaultSlot', 'contributionId', 'aliases']
 )
 const uiToolLayout = object(
   {
@@ -260,6 +264,7 @@ const uiLayout = object(
     focus: { description: "'sidebar', 'view', 'panel' or null." },
     panelWidths: { type: 'object', additionalProperties: true, description: 'Desired width by panel ID.' },
     palette: { type: 'boolean', description: 'Whether the command palette is open; absent means closed.' },
+    paletteRecents: { type: 'array', items: { type: 'string' }, description: 'Recently run palette entry IDs, newest first; at most 10.' },
     viewTabs: listOf(uiViewTab, 'Open center view contributions, retaining each view’s latest input.'),
     tools: uiToolLayout
   },
@@ -582,6 +587,11 @@ export const KERNEL_METHOD_SCHEMAS = {
     params: object({ open: { type: 'boolean', description: 'True opens, false closes; omitted toggles.' } }),
     result: uiLayout
   },
+  'ui.palette.recent': {
+    description: 'Records a palette entry as the most recent one, removing any earlier copy and keeping at most 10.',
+    params: object({ id: string('The palette entry ID, at most 2,048 characters.') }, ['id']),
+    result: uiLayout
+  },
   'ui.tool.open': {
     description: 'Opens tool `id` in its assigned slot, toggling that slot closed when the tool is already shown.',
     params: object({ id: string() }, ['id']),
@@ -593,8 +603,8 @@ export const KERNEL_METHOD_SCHEMAS = {
     result: uiLayout
   },
   'ui.tool.move': {
-    description: 'Moves tool `id` to `slot`, moving it there atomically when it is currently open.',
-    params: object({ id: string(), slot: toolSlot }, ['id', 'slot']),
+    description: 'Moves tool `id` to `slot`, moving it there atomically when it is currently open. The slot `overflow` closes the tool and lists it in the left stripe overflow.',
+    params: object({ id: string(), slot: toolPlacement }, ['id', 'slot']),
     result: uiLayout
   },
   'ui.tool.resize': {

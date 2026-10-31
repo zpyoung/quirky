@@ -15,6 +15,8 @@ describe('tool slot RPC schemas', () => {
     expect(validateValue(close, { slot: 'bottom-right' })).toBeNull()
     expect(validateValue(close, { slot: 'middle' })).toBe("params.slot must be one of left-top, left-bottom, right-top, right-bottom, bottom-left, bottom-right")
     expect(validateValue(move, { id: 'panel:quirky.git/source-control', slot: 'right-bottom' })).toBeNull()
+    expect(validateValue(move, { id: 'panel:quirky.git/source-control', slot: 'overflow' })).toBeNull()
+    expect(validateValue(close, { slot: 'overflow' })).toContain('params.slot must be one of')
     expect(validateValue(move, { id: 'panel:quirky.git/source-control', slot: 'middle' })).toContain('params.slot must be one of')
     expect(validateValue(resize, { left: 160, right: 1200, bottom: 1000, leftSplit: 0.15, rightSplit: 0.5, bottomSplit: 0.85 })).toBeNull()
     expect(validateValue(resize, { left: 159 })).toBe('params.left must be at least 160')

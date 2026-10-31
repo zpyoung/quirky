@@ -10,6 +10,13 @@ export function emptyMainMessage({ views, repos }: { views: number; repos: numbe
   return repos ? 'Pick a worktree to get started.' : 'Add a repo and pick a worktree to get started.'
 }
 
+const WORKTREE_VIEW = 'view:quirky.session/worktree'
+
+/** Whether the row of open views shows: the worktree view alone draws its own tab strip, so a second row would only repeat it. */
+export function showsViewTabs(tabs: readonly { id: string }[]): boolean {
+  return !(tabs.length === 1 && tabs[0]!.id === WORKTREE_VIEW)
+}
+
 /** The active center contribution and only the view contributions actually opened in this window. */
 export function MainArea() {
   const { model, layout, windowRoute } = usePluginState()
@@ -35,7 +42,7 @@ export function MainArea() {
 
   return (
     <main className="main" {...region}>
-      <div className={`main-header${windowRoute ? '' : ' shell-main-header'}`}>
+      {(windowRoute || showsViewTabs(tabs)) && <div className={`main-header${windowRoute ? '' : ' shell-main-header'}`}>
         {windowRoute ? (
           <div className="main-title">
             {windowRoute.title ? <strong>{windowRoute.title}</strong> : view ? <strong>{view.title}</strong> : <span className="muted">Auxiliary window</span>}
@@ -51,7 +58,7 @@ export function MainArea() {
         ) : (
           <div className="main-title"><span className="muted">Quirky</span></div>
         )}
-      </div>
+      </div>}
       <div className="main-body">
         {view && <PluginSlot key={windowRoute ? `${windowRoute.windowId}:${view.id}` : view.id} id={view.id} input={input} />}
         {windowRoute && model && !view && (

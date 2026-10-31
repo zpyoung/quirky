@@ -4,10 +4,15 @@ export { ContextMenu, ContextMenuList, CONTEXT_MENU_SEPARATOR } from './context-
 export type { ContextMenuItem, ContextMenuListProps, ContextMenuProps } from './context-menu-contracts'
 export { Toast, Dialog } from './overlays'
 export { Popover } from './floating'
-export { EmptyState, FormRow, ToolPanelActions, ToolPanelFrame, InlineAgentCard } from './panels'
+export { PopupMenu } from './popup-menu'
+export { StatusBarItem } from './status-bar-item'
+export { ControlIcon, FileIcon, ProjectTile, ToolIcon } from './tool-icons'
+export { EmptyState, FormRow, ToolPanelActions, ToolPanelFrame, ToolPanelTabs, ToolPanelTools, InlineAgentCard } from './panels'
 export { uiTokens, type UiTokenName } from './tokens'
 export type {
   BadgeProps,
+  ControlIconProps,
+  FileIconProps,
   ButtonProps,
   DialogProps,
   EmptyStateProps,
@@ -19,16 +24,23 @@ export type {
   MenuItem,
   MenuProps,
   PopoverProps,
+  PopupItem,
+  PopupMenuProps,
+  ProjectTileProps,
   SectionHeaderProps,
+  StatusBarItemProps,
   StatusDotProps,
   TabItem,
   TabsProps,
+  ToolIconProps,
   TextFieldProps,
   TextAreaProps,
   SelectFieldProps,
   ToastProps,
   ToolPanelFrameProps,
   ToolPanelActionsProps,
+  ToolPanelTabsProps,
+  ToolPanelToolsProps,
   UiAction,
   UiLayoutProps,
   UiStatus,

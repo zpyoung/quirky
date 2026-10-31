@@ -1,6 +1,6 @@
 import { useMemo, useRef, type DragEvent, type MouseEvent } from 'react'
-import { Badge, Button, IconButton, ListRow } from '@quirky/ui'
-import type { UiStatus, UiTone } from '@quirky/ui'
+import { Badge, Button, FileIcon, IconButton, ListRow } from '@quirky/ui'
+import type { UiTone } from '@quirky/ui'
 import type { GitChangeStatus, GitStatusEntry } from '@quirky/protocol'
 import { conflictLabel, splitPath, statusLetter } from './format'
 import { buildTree, flattenTree, type TreeNode } from './tree'
@@ -77,14 +77,6 @@ function scopedCollapsed(scope: string, collapsed: ReadonlySet<string>, tree: Tr
   return out
 }
 
-function statusFor(status: GitChangeStatus): UiStatus {
-  if (status === 'modified') return 'needs-you'
-  if (status === 'deleted') return 'failing'
-  if (status === 'renamed' || status === 'copied') return 'done'
-  if (status === 'added' || status === 'untracked') return 'working'
-  return 'idle'
-}
-
 function toneFor(status: GitChangeStatus): UiTone {
   if (status === 'modified') return 'needs-you'
   if (status === 'deleted') return 'failing'
@@ -96,7 +88,7 @@ function toneFor(status: GitChangeStatus): UiTone {
 function Buttons({ buttons, subject }: { buttons: RowButton[]; subject: string }) {
   if (buttons.length === 0) return null
   return (
-    <span className="ui-cluster">
+    <span className="ui-cluster git-row__buttons">
       {buttons.map((button) => (
         <IconButton
           key={button.label}
@@ -124,19 +116,49 @@ function Counts({ item }: { item: RowItem }) {
   )
 }
 
+/** The row's single status letter: coloured text, labelled for assistive tech. */
+function StatusLetter({ status }: { status: GitChangeStatus }) {
+  return (
+    <span className={`git-row__status git-row__status--${toneFor(status)}`} role="img" aria-label={`Git status ${status}`}>
+      {statusLetter(status)}
+    </span>
+  )
+}
+
+/** A file's icon and name; the name truncates, the parent directory trails it. */
+function RowTitle({ path, name, dir }: { path: string; name: string; dir: string | null }) {
+  return (
+    <span className="git-row__title">
+      <FileIcon path={path} />
+      <span className="git-row__text">
+        <span data-row-name>{name}</span>
+        {dir !== null && <span data-row-dir={dir} className="ui-text-muted">{` · ${dir}`}</span>}
+      </span>
+    </span>
+  )
+}
+
 function NoteCount({ count }: { count: number | undefined }) {
   if (count === undefined || count === 0) return null
   const title = `${count} ${count === 1 ? 'note' : 'notes'}`
   return <span data-note-count title={title}><Badge tone="neutral" label={title}>✎ {count}</Badge></span>
 }
 
-function Trailing({ item }: { item: RowItem }) {
+/** What ends a row: counts and actions (revealed on hover or focus) over a resting status letter. */
+function Trailing({ item, buttons }: { item: RowItem; buttons: RowButton[] }) {
   const conflict = item.entry?.conflict
+  const reveal = (
+    <span className="ui-cluster git-row__reveal">
+      <Counts item={item} />
+      <Buttons buttons={buttons} subject={item.path} />
+    </span>
+  )
   if (conflict) {
     const unresolved = conflict.state === 'unresolved'
     const text = unresolved ? 'Unresolved' : 'Resolved locally'
     return (
-      <>
+      <span className="ui-cluster git-row__end">
+        {reveal}
         <NoteCount count={item.notes} />
         <Badge
           tone={unresolved ? 'needs-you' : 'accent'}
@@ -144,15 +166,15 @@ function Trailing({ item }: { item: RowItem }) {
         >
           {unresolved ? '⚠' : '✓'} {text}
         </Badge>
-      </>
+      </span>
     )
   }
   return (
-    <>
+    <span className="ui-cluster git-row__end">
+      {reveal}
       <NoteCount count={item.notes} />
-      <Counts item={item} />
-      <Badge tone={toneFor(item.status)} label={`Git status ${item.status}`}>{statusLetter(item.status)}</Badge>
-    </>
+      <StatusLetter status={item.status} />
+    </span>
   )
 }
 
@@ -174,12 +196,10 @@ function SubmoduleEntries({ expansion, depth, tree }: { expansion: Expansion; de
         {expansion.entries.map((inside) => {
           const { name, dir } = splitPath(inside.path)
           return (
-            <li key={`${inside.area}:${inside.path}`} data-submodule-entry data-row-path={inside.path}>
+            <li key={`${inside.area}:${inside.path}`} className="git-row" data-submodule-entry data-row-path={inside.path}>
               <ListRow
-                title={<span title={inside.path}><span data-row-name>{name}</span>{dir !== '' && <span data-row-dir={dir} className="ui-text-muted">{` · ${dir}`}</span>}</span>}
-                status={statusFor(inside.status)}
-                statusLabel={`Git status ${inside.status}`}
-                trailing={<Badge tone={toneFor(inside.status)} label={`Git status ${inside.status}`}>{statusLetter(inside.status)}</Badge>}
+                title={<RowTitle path={inside.path} name={name} dir={dir !== '' ? dir : null} />}
+                trailing={<span className="ui-cluster git-row__end"><StatusLetter status={inside.status} /></span>}
               />
             </li>
           )
@@ -200,6 +220,7 @@ function FileRow({ item, depth, tree, selected, handlers }: { item: RowItem; dep
   return (
     <>
       <li
+        className="git-row"
         data-row-path={item.path}
         title={item.path}
         style={tree ? { paddingInlineStart: `calc(${depth} * var(--ui-space-12))` } : undefined}
@@ -214,17 +235,10 @@ function FileRow({ item, depth, tree, selected, handlers }: { item: RowItem; dep
         <div className="ui-cluster" style={{ flexWrap: 'nowrap' }}>
           <div style={{ flex: 1, minWidth: 0 }}>
             <ListRow
-              title={<span><span data-row-name>{name}</span>{!tree && dir !== '' && <span data-row-dir={dir} className="ui-text-muted">{` · ${dir}`}</span>}</span>}
+              title={<RowTitle path={item.path} name={name} dir={!tree && dir !== '' ? dir : null} />}
               description={hint ?? undefined}
-              status={statusFor(item.status)}
-              statusLabel={`Git status ${item.status}`}
               selected={selected}
-              trailing={
-                <span className="ui-cluster">
-                  <Trailing item={item} />
-                  <Buttons buttons={handlers.buttons(item)} subject={item.path} />
-                </span>
-              }
+              trailing={<Trailing item={item} buttons={handlers.buttons(item)} />}
               onClick={() => handlers.click(item, activation.current.kind, activation.current.permanent)}
             />
           </div>
@@ -255,13 +269,13 @@ function TreeRows({ scope, nodes, collapsedDirs, onToggleDir, selected, handlers
         const collapsed = collapsedDirs.has(key)
         return (
           <li key={key} data-directory-path={node.path} data-directory-name={node.name} style={{ paddingInlineStart: `calc(${node.depth} * var(--ui-space-12))` }}>
-            <div className="ui-cluster">
+            <div className="ui-cluster git-folder-head">
               <Button title={node.path} aria-expanded={!collapsed} onClick={() => onToggleDir(key)}>
                 <span aria-hidden="true">{collapsed ? '▸' : '▾'}</span>
                 <span>{node.name}</span>
                 <Badge label={`${node.fileCount} files`}>{node.fileCount}</Badge>
               </Button>
-              <Buttons buttons={handlers.folderButtons(node.items)} subject={node.path} />
+              <span className="git-row__reveal"><Buttons buttons={handlers.folderButtons(node.items)} subject={node.path} /></span>
             </div>
             {!collapsed && (
               <ul className="ui-stack" style={ROW_STYLE}>
@@ -279,7 +293,7 @@ function TreeRows({ scope, nodes, collapsedDirs, onToggleDir, selected, handlers
 export function Rows({ scope, items, viewMode, collapsedDirs, onToggleDir, selected, handlers }: Props) {
   const tree = useMemo(() => (viewMode === 'tree' ? buildTree(items) : []), [items, viewMode])
   return (
-    <ul className="ui-stack" style={ROW_STYLE}>
+    <ul className="ui-stack git-rows" style={ROW_STYLE}>
       {viewMode === 'tree' ? (
         <TreeRows scope={scope} nodes={tree} collapsedDirs={collapsedDirs} onToggleDir={onToggleDir} selected={selected} handlers={handlers} />
       ) : (

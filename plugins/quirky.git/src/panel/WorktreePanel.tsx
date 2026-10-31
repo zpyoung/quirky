@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Button, ContextMenu, Dialog, EmptyState, IconButton, SectionHeader } from '@quirky/ui'
+import { Button, ContextMenu, Dialog, EmptyState, IconButton } from '@quirky/ui'
 import type { ContextMenuItem } from '@quirky/ui'
 import type { GitBusyOp, GitChange, GitCommit, GitStatus, GitStatusEntry, UiPluginContext } from '@quirky/protocol'
 import { CommitSparkle } from '../ai/CommitSparkle'
@@ -231,6 +231,7 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
   const notes = useNotes(context, worktree)
   const counts = useMemo(() => noteCounts(notes), [notes])
 
+  const [openedPath, setOpenedPath] = useState<string | null>(null)
   const [filter, setFilter] = useState('')
   const [filterOpen, setFilterOpen] = useState(false)
   const [selection, setSelectionState] = useState<SelectionState>(EMPTY_SELECTION)
@@ -562,7 +563,10 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
       if (item.entry === undefined) return openRow(item, { permanent })
       const type = kind === 'mod' ? 'mod-click' : kind === 'shift' ? 'shift-click' : 'click'
       const action: SelectionAction = type === 'shift-click' ? { type, path: item.path, order } : { type, path: item.path }
-      if (dispatchSelection(action) !== null) openRow(item, { permanent })
+      if (dispatchSelection(action) !== null) {
+        setOpenedPath(item.path)
+        openRow(item, { permanent })
+      }
     },
     contextMenu: (item, x, y) => {
       if (item.entry) dispatchSelection({ type: 'context-click', path: item.path })
@@ -1043,7 +1047,6 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
   if (data.unavailable !== null) {
     return (
       <div className="ui-stack" data-git-panel ref={root} onKeyDown={onKeyDown} style={{ height: '100%', minHeight: 0, gap: 0 }}>
-        <SectionHeader title="Source control" />
         <EmptyState message={data.unavailable} action={{ label: 'Retry', onAction: () => void data.refresh() }} />
       </div>
     )
@@ -1211,7 +1214,7 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
                 viewMode={viewMode}
                 collapsedDirs={collapsed}
                 onToggleDir={sectionToggle}
-                selected={selected}
+                selected={selected.length === 0 && openedPath !== null ? [openedPath] : selected}
                 handlers={handlers}
               />
             </SectionFrame>

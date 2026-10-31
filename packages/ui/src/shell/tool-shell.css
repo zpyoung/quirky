@@ -1,6 +1,7 @@
 .shell-workspace {
-  --tool-shell-rail-width: var(--compat-px-40);
-  --tool-shell-splitter-width: var(--ui-space-4);
+  --tool-shell-rail-width: var(--compat-px-42);
+  --tool-shell-splitter-width: var(--ui-card-gap);
+  --tool-shell-card-gap: var(--ui-card-gap);
   --tool-shell-center-min-width: var(--compat-px-320);
   --tool-shell-center-min-height: var(--compat-px-72);
   position: relative;
@@ -8,6 +9,10 @@
   min-width: 0;
   min-height: 0;
   overflow: hidden;
+  background: var(--ui-rail);
+}
+
+.shell-workspace--auxiliary {
   background: var(--ui-surface);
 }
 
@@ -24,9 +29,12 @@
   top: 0;
   left: calc((var(--tool-left-rail) + var(--tool-left-panel-width) + var(--tool-left-edge)) * var(--compat-px-1));
   right: calc((var(--tool-right-rail) + var(--tool-right-panel-width) + var(--tool-right-edge)) * var(--compat-px-1));
-  bottom: calc((var(--tool-bottom-panel-height) + var(--tool-bottom-edge) + var(--tool-bottom-rail)) * var(--compat-px-1));
+  bottom: calc((var(--tool-bottom-panel-height) + var(--tool-bottom-edge)) * var(--compat-px-1));
   min-width: 0;
   min-height: 0;
+  overflow: hidden;
+  border-radius: var(--ui-radius-window);
+  background: var(--ui-surface);
 }
 
 /* dialogs render in place, so their region must stack above app overlays */
@@ -50,104 +58,83 @@
 .tool-shell__stripe {
   position: absolute;
   z-index: 2;
-  overflow: visible;
-  background: var(--ui-rail);
-  pointer-events: auto;
-}
-
-.tool-shell__stripe-scroll {
-  position: absolute;
-  inset: 0;
+  top: 0;
+  bottom: 0;
   display: flex;
-  align-items: center;
-  justify-content: flex-start;
-  gap: var(--ui-space-4);
-  overflow: auto;
-  padding: var(--ui-space-4);
+  flex-direction: column;
+  align-items: stretch;
+  padding: var(--ui-space-4) 0;
   background: var(--ui-rail);
   pointer-events: auto;
 }
 
-.tool-shell__stripe--left-top .tool-shell__stripe-scroll,
-.tool-shell__stripe--left-bottom .tool-shell__stripe-scroll,
-.tool-shell__stripe--right-top .tool-shell__stripe-scroll,
-.tool-shell__stripe--right-bottom .tool-shell__stripe-scroll {
+.tool-shell__stripe--left {
+  left: 0;
+  width: calc(var(--tool-left-rail) * var(--compat-px-1));
+}
+
+.tool-shell__stripe--right {
+  right: 0;
+  width: calc(var(--tool-right-rail) * var(--compat-px-1));
+}
+
+.tool-shell__group {
+  display: flex;
+  flex: 0 0 auto;
   flex-direction: column;
-  align-items: center;
+  align-items: stretch;
+  gap: var(--ui-space-2);
+  min-height: var(--ui-space-8);
 }
 
-.tool-shell__stripe--left-top {
-  top: 0;
-  left: 0;
-  width: calc(var(--tool-left-rail) * var(--compat-px-1));
-  height: calc(var(--tool-left-top-stripe-height) * var(--compat-px-1));
-  border-right: var(--ui-border-width) solid var(--ui-border);
-}
-
-.tool-shell__stripe--left-bottom {
-  top: calc((var(--tool-side-height) - var(--tool-left-bottom-stripe-height)) * var(--compat-px-1));
-  left: 0;
-  width: calc(var(--tool-left-rail) * var(--compat-px-1));
-  height: calc(var(--tool-left-bottom-stripe-height) * var(--compat-px-1));
-  border-right: var(--ui-border-width) solid var(--ui-border);
-}
-
-.tool-shell__stripe--right-top {
-  top: 0;
-  right: 0;
-  width: calc(var(--tool-right-rail) * var(--compat-px-1));
-  height: calc(var(--tool-right-top-stripe-height) * var(--compat-px-1));
-  border-left: var(--ui-border-width) solid var(--ui-border);
-}
-
-.tool-shell__stripe--right-bottom {
-  top: calc((var(--tool-side-height) - var(--tool-right-bottom-stripe-height)) * var(--compat-px-1));
-  right: 0;
-  width: calc(var(--tool-right-rail) * var(--compat-px-1));
-  height: calc(var(--tool-right-bottom-stripe-height) * var(--compat-px-1));
-  border-left: var(--ui-border-width) solid var(--ui-border);
-}
-
-.tool-shell__stripe--bottom-left {
-  bottom: 0;
-  left: 0;
-  width: calc(var(--tool-bottom-left-stripe-width) * var(--compat-px-1));
-  height: calc(var(--tool-bottom-rail) * var(--compat-px-1));
-  border-top: var(--ui-border-width) solid var(--ui-border);
-}
-
-.tool-shell__stripe--bottom-right {
-  right: 0;
-  bottom: 0;
-  width: calc(var(--tool-bottom-right-stripe-width) * var(--compat-px-1));
-  height: calc(var(--tool-bottom-rail) * var(--compat-px-1));
-  border-top: var(--ui-border-width) solid var(--ui-border);
-}
-
-.tool-shell__stripe--bottom-left .tool-shell__stripe-scroll,
-.tool-shell__stripe--bottom-right .tool-shell__stripe-scroll {
-  gap: var(--ui-space-8);
-}
-
-.tool-shell__stripe--bottom-right .tool-shell__stripe-scroll {
-  inset-inline-end: calc(var(--tool-right-rail) * var(--compat-px-1));
-}
-
-.tool-shell__overlay-button-anchor {
-  position: absolute;
-  right: 0;
-  bottom: 0;
-  width: calc(var(--tool-right-rail) * var(--compat-px-1));
-  height: calc(var(--tool-bottom-rail) * var(--compat-px-1));
-}
-
-.tool-shell__stripe[data-drop-target='true'] {
+.tool-shell__group[data-drop-target='true'] {
+  background: var(--ui-selected);
   outline: var(--ui-focus-width) solid var(--ui-accent);
   outline-offset: var(--compat-px-n1);
 }
 
-.tool-shell__stripe[data-drop-target='true'] .tool-shell__stripe-scroll {
+.tool-shell__separator {
+  flex: 0 0 auto;
+  height: var(--ui-border-width);
+  margin: var(--ui-space-4) var(--ui-space-8);
+  background: var(--ui-border);
+}
+
+.tool-shell__spacer {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.tool-shell__overflow {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  height: var(--compat-px-36);
+}
+
+.tool-shell__overflow-button.ui-icon-button {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  padding: 0;
+  border-color: var(--compat-color-transparent);
+  border-radius: 0;
+  background: var(--compat-color-transparent);
+  color: var(--ui-muted);
+}
+
+.tool-shell__overflow-button.ui-icon-button:hover:not(:disabled) {
   background: var(--ui-selected);
+  color: var(--ui-text);
+}
+
+.tool-shell__overlay-button-anchor {
+  position: absolute;
+  right: calc((var(--tool-right-rail) + var(--tool-right-panel-width) + var(--tool-right-edge)) * var(--compat-px-1) + var(--ui-card-gap));
+  bottom: calc((var(--tool-bottom-panel-height) + var(--tool-bottom-edge)) * var(--compat-px-1) + var(--ui-card-gap));
+  width: var(--compat-px-40);
+  height: var(--compat-px-40);
 }
 
 .tool-shell__tool {
@@ -156,38 +143,48 @@
   flex: 0 0 auto;
   align-items: center;
   justify-content: center;
-  width: var(--compat-px-28);
-  min-height: var(--compat-px-28);
+  width: 100%;
+  height: var(--compat-px-36);
+}
+
+.tool-shell__tool[data-selected='true'],
+.tool-shell__tool:hover {
+  background: var(--ui-selected);
+}
+
+.tool-shell__tool .ui-tool-icon {
+  width: var(--ui-icon-size);
+  height: var(--ui-icon-size);
+  flex: none;
 }
 
 .tool-shell__tool-button.ui-icon-button {
-  width: var(--compat-px-28);
-  min-height: var(--compat-px-28);
-  padding: var(--ui-space-4);
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  padding: 0;
   border-color: var(--compat-color-transparent);
+  border-radius: 0;
   background: var(--compat-color-transparent);
-  color: var(--ui-muted);
-  font-size: var(--ui-icon-size);
 }
 
-.tool-shell__tool-button.ui-icon-button:hover:not(:disabled),
-.tool-shell__tool-button.ui-icon-button[aria-pressed='true'] {
-  background: var(--ui-selected);
-  color: var(--ui-accent);
+.tool-shell__tool-button.ui-icon-button:hover:not(:disabled) {
+  background: var(--compat-color-transparent);
 }
+
 .tool-shell__tool-provider {
+  position: relative;
   display: flex;
   width: 100%;
-  min-height: var(--compat-px-28);
+  height: 100%;
   align-items: center;
   justify-content: center;
 }
 
 .tool-shell__tool-provider .plugin-slot {
-  width: 100%;
-  min-height: var(--compat-px-28);
-  align-items: center;
-  justify-content: center;
+  position: absolute;
+  inset: 0;
+  display: flex;
 }
 
 .tool-shell__tool-provider .plugin-slot-head {
@@ -196,62 +193,55 @@
 
 .tool-shell__tool-provider .plugin-slot-body {
   display: flex;
-  align-items: center;
-  justify-content: center;
+  flex: 1 1 auto;
+  min-width: 0;
 }
+
 .tool-shell__tool-provider .ui-cluster {
-  position: relative;
-  flex-wrap: nowrap;
   gap: 0;
 }
 
 .tool-shell__tool-provider .ui-status-dot {
   position: absolute;
-  top: 0;
-  right: 0;
+  top: var(--ui-space-8);
+  right: var(--ui-space-8);
 }
 
 .tool-shell__tool-provider .ui-badge {
   position: absolute;
   z-index: 1;
-  right: 0;
-  bottom: 0;
+  right: var(--ui-space-2);
+  bottom: var(--ui-space-2);
   padding: 0 var(--ui-space-2);
   font-size: var(--ui-font-section);
   line-height: 1;
   pointer-events: none;
 }
 
-
 .tool-shell__tool-provider .ui-icon-button {
-  width: var(--compat-px-28);
-  min-width: var(--compat-px-28);
-  min-height: var(--compat-px-28);
-  padding: var(--ui-space-4);
+  width: 100%;
+  min-width: 0;
+  height: 100%;
+  min-height: 0;
+  padding: 0;
+  border-color: var(--compat-color-transparent);
+  border-radius: 0;
+  background: var(--compat-color-transparent);
+}
+
+.tool-shell__tool-provider .ui-icon-button:hover:not(:disabled) {
   border-color: var(--compat-color-transparent);
   background: var(--compat-color-transparent);
-  color: var(--ui-muted);
-  font-size: var(--ui-icon-size);
 }
-
-.tool-shell__tool-provider .ui-icon-button:hover:not(:disabled),
-.tool-shell__tool-provider[data-selected='true'] .ui-icon-button {
-  border-color: var(--compat-color-transparent);
-  background: var(--ui-selected);
-  color: var(--ui-accent);
-}
-
 
 .tool-shell__tool > .ui-badge {
   position: absolute;
   z-index: 2;
-  top: 0;
-  right: 0;
+  top: var(--ui-space-2);
+  right: var(--ui-space-2);
   max-width: 100%;
-  transform: translate(25%, -25%);
   pointer-events: none;
 }
-
 
 .tool-shell__panels {
   position: absolute;
@@ -265,6 +255,7 @@
   min-width: 0;
   min-height: 0;
   overflow: hidden;
+  border-radius: var(--ui-radius-window);
   background: var(--ui-surface);
   pointer-events: auto;
 }
@@ -308,12 +299,12 @@
 }
 
 .tool-shell__panel--bottom-left {
-  left: 0;
+  left: calc(var(--tool-left-rail) * var(--compat-px-1));
   width: calc(var(--tool-bottom-left-panel-width) * var(--compat-px-1));
 }
 
 .tool-shell__panel--bottom-right {
-  right: 0;
+  right: calc(var(--tool-right-rail) * var(--compat-px-1));
   width: calc(var(--tool-bottom-right-panel-width) * var(--compat-px-1));
 }
 
@@ -400,22 +391,16 @@
 
 .tool-shell__resize--bottom-edge {
   top: calc(var(--tool-side-height) * var(--compat-px-1));
-  left: 0;
-  width: 100%;
+  left: calc(var(--tool-left-rail) * var(--compat-px-1));
+  right: calc(var(--tool-right-rail) * var(--compat-px-1));
   height: calc(var(--tool-bottom-edge) * var(--compat-px-1));
   cursor: row-resize;
 }
 
 .tool-shell__resize--bottom-split {
   top: calc(var(--tool-bottom-panel-top) * var(--compat-px-1));
-  left: calc(var(--tool-bottom-left-panel-width) * var(--compat-px-1));
+  left: calc((var(--tool-left-rail) + var(--tool-bottom-left-panel-width)) * var(--compat-px-1));
   width: calc(var(--tool-bottom-split-handle-width) * var(--compat-px-1));
   height: calc(var(--tool-bottom-panel-height) * var(--compat-px-1));
   cursor: col-resize;
-}
-
-.tool-shell__icon {
-  width: var(--ui-icon-size);
-  height: var(--ui-icon-size);
-  flex: none;
 }

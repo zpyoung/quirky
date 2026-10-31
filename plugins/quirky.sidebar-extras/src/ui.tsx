@@ -69,43 +69,16 @@ function unavailable(worktreeId: string | null, error: unknown): DirtyResult {
   }
 }
 
-function BranchIcon() {
-  return createElement(
-    'svg',
-    { width: '1em', height: '1em', viewBox: '0 0 16 16', fill: 'none', 'aria-hidden': 'true', focusable: 'false' },
-    createElement('path', {
-      d: 'M5 3.5v8.9M5 7.8h4.2a2.3 2.3 0 0 0 2.3-2.3V3.5',
-      stroke: 'currentColor',
-      strokeWidth: 1.5,
-      strokeLinecap: 'round'
-    }),
-    createElement('circle', { cx: 5, cy: 3.5, r: 1.7, stroke: 'currentColor', strokeWidth: 1.3 }),
-    createElement('circle', { cx: 5, cy: 12.5, r: 1.7, stroke: 'currentColor', strokeWidth: 1.3 }),
-    createElement('circle', { cx: 11.5, cy: 3.5, r: 1.7, stroke: 'currentColor', strokeWidth: 1.3 })
-  )
-}
-
+/** The stripe cell over the host-drawn tool icon: a transparent button, the dirty count, and a dot when status is unavailable. */
 function ActivityButton({ context, status }: { context: UiPluginContext; status: DirtyResult | null }) {
   const title = status?.title ?? STOCK_TITLE
-  const label = status?.available === false && status.error
+  const unavailableStatus = status !== null && !status.available
+  const clean = status !== null && status.available && status.worktreeId !== null && !status.dirty
+  const label = unavailableStatus && status.error
     ? `${title} — status unavailable: ${status.error}`
-    : title
-  const statusKind = status === null || (status.available && status.worktreeId === null)
-    ? 'idle'
-    : !status.available
-      ? 'failing'
-      : status.dirty
-        ? 'needs-you'
-        : 'done'
-  const statusLabel = status === null
-    ? 'Source Control status loading'
-    : !status.available
-      ? 'Source Control status unavailable'
-      : status.worktreeId === null
-        ? 'No active worktree'
-        : status.dirty
-          ? 'Uncommitted changes are present'
-          : 'No uncommitted changes'
+    : clean
+      ? `${title} — no uncommitted changes`
+      : title
   const count = status?.capped ? `${status.count}+` : String(status?.count ?? 0)
   return (
     <IconButton
@@ -116,8 +89,7 @@ function ActivityButton({ context, status }: { context: UiPluginContext; status:
       onClick={() => context.togglePanel(PANEL_ID)}
     >
       <span className="ui-cluster">
-        <BranchIcon />
-        <StatusDot status={statusKind} label={statusLabel} />
+        {unavailableStatus ? <StatusDot status="failing" label="Source Control status unavailable" /> : null}
         {status?.available && status.dirty ? <Badge tone="needs-you">{count}</Badge> : null}
       </span>
     </IconButton>

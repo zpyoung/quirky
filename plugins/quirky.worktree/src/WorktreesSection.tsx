@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Button, EmptyState, ExpandingIconButton, IconButton, Popover, ToolPanelActions } from '@quirky/ui'
+import { Button, ControlIcon, EmptyState, ExpandingIconButton, IconButton, Popover, ToolPanelActions } from '@quirky/ui'
 import type { Repo, Session, UiLayout, UiPluginContext, Worktree } from '@quirky/protocol'
 import { confirmsDelete, currentWindowId, deleteWorkspace, setWorktree, type CreateRequests, type KeptBranch, type TrustChoice, type TrustRequest } from './actions'
 import { AddProjectDialog } from './AddProjectDialog'
@@ -12,7 +12,7 @@ import { Notices } from './Notices'
 import { ActivityFilters } from './ActivityFilters'
 import { ProjectSettingsDialog } from './ProjectSettingsDialog'
 import { RemoveProjectDialog } from './RemoveProjectDialog'
-import { buildReport, buildTreeModel, isAddFlow, repoLabel, type DialogState, type GroupNode, type PendingCreate, type SeparatorReport, type TreeRow, type WorktreesReport } from './report'
+import { buildReport, buildTreeModel, isAddFlow, narrowTreeModel, repoLabel, type DialogState, type GroupNode, type PendingCreate, type SeparatorReport, type TreeRow, type WorktreesReport } from './report'
 import { useNow } from './StatusDot'
 import { Tree } from './Tree'
 import { TrustDialog } from './TrustDialog'
@@ -67,7 +67,7 @@ function projectIdentitiesOf(value: unknown): Record<string, WorktreeProjectIden
   }
   return result
 }
-type Props = { context: UiPluginContext; report?(state: unknown): void; requests?: CreateRequests }
+type Props = { context: UiPluginContext; report?(state: unknown): void; requests?: CreateRequests; addProjectRequests?: CreateRequests }
 
 /** A trust question waiting for an answer; `resolve` hands it back to the create that asked. */
 type TrustPrompt = { request: TrustRequest; resolve(choice: TrustChoice): void }
@@ -122,7 +122,7 @@ function isSleeping(worktree: WorktreeControl): boolean {
 const CREATE_GRACE_MS = 5 * 60 * 1_000
 
 /** The sidebar's workspace tree with its menus, dialogs, add-project form and `ui state` report. */
-export function WorktreesSection({ context, report, requests }: Props) {
+export function WorktreesSection({ context, report, requests, addProjectRequests }: Props) {
   const { repos, groups, worktrees, sessions, otherClientByWorktree, hasAuthenticatedDesktopClient, loaded } = useTree(context)
   const now = useNow()
   const [layout, setLayout] = useState(() => context.getLayout())
@@ -232,6 +232,7 @@ export function WorktreesSection({ context, report, requests }: Props) {
   }, [context])
 
   useEffect(() => requests?.attach(setRequested), [requests])
+  useEffect(() => addProjectRequests?.attach(() => setDialog({ kind: 'add-project' })), [addProjectRequests])
 
   const selectedId = layout.worktree ?? null
   const activity = useSidebarActivity(context, selectedId, loaded)
@@ -386,7 +387,10 @@ export function WorktreesSection({ context, report, requests }: Props) {
     () => (deleting.size === 0 ? ordered : ordered.map((worktree) => (deleting.has(worktree.id) ? { ...worktree, removing: true } : worktree))),
     [ordered, deleting]
   )
-  const model = useMemo(() => buildTreeModel(orderedRepos, groups, shown, pending, treeVisibleIds), [orderedRepos, groups, shown, pending, treeVisibleIds])
+  const model = useMemo(
+    () => narrowTreeModel(buildTreeModel(orderedRepos, groups, shown, pending, treeVisibleIds), stockOptions.filterRepoIds),
+    [orderedRepos, groups, shown, pending, treeVisibleIds, stockOptions.filterRepoIds]
+  )
   const state: WorktreesReport = useMemo(() => {
     // a stacked question is what the person is looking at, so it is what `ui state` reports
     const front: DialogState | null = trust
@@ -540,9 +544,7 @@ export function WorktreesSection({ context, report, requests }: Props) {
             aria-haspopup="dialog"
             onClick={() => setOptionsOpen((open) => !open)}
           >
-            <svg viewBox="0 0 24 24" width="var(--ui-icon-size)" height="var(--ui-icon-size)" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-              <path d="M4 5h16l-6.5 7.4V18l-3 1.5v-7.1L4 5Z" />
-            </svg>
+            <ControlIcon name="funnel" />
           </IconButton>
           <Popover open={optionsOpen} label="Worktrees options" anchor={optionsButton} onClose={() => setOptionsOpen(false)}>
             <div className="ui-stack">

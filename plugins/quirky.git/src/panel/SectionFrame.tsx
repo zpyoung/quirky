@@ -19,7 +19,7 @@ type Props = {
 /** A collapsible section: heading with its count, the header buttons, and the rows. */
 export function SectionFrame({ id, heading, count, title, note, collapsed, onToggle, buttons, children }: Props) {
   return (
-    <section className="ui-stack" data-section={id} title={title} style={{ gap: 'var(--ui-space-4)' }}>
+    <section className="ui-stack git-section" data-section={id} title={title} style={{ gap: 'var(--ui-space-4)' }}>
       <SectionHeader
         title={heading}
         actions={
@@ -33,18 +33,20 @@ export function SectionFrame({ id, heading, count, title, note, collapsed, onTog
             >
               {collapsed ? '▸' : '▾'}
             </IconButton>
-            {buttons.map((button) => (
-              <IconButton
-                key={button.label}
-                label={button.label}
-                title={button.label}
-                data-section-action
-                variant={button.destructive ? 'destructive' : 'secondary'}
-                onClick={button.run}
-              >
-                {button.glyph}
-              </IconButton>
-            ))}
+            <span className="ui-cluster git-section__reveal">
+              {buttons.map((button) => (
+                <IconButton
+                  key={button.label}
+                  label={button.label}
+                  title={button.label}
+                  data-section-action
+                  variant={button.destructive ? 'destructive' : 'secondary'}
+                  onClick={button.run}
+                >
+                  {button.glyph}
+                </IconButton>
+              ))}
+            </span>
           </div>
         }
       />

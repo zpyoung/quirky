@@ -1,4 +1,6 @@
+import type { UiToolHue } from '@quirky/protocol'
 import type { ButtonHTMLAttributes, HTMLAttributes, InputHTMLAttributes, ReactNode, Ref, RefObject, SelectHTMLAttributes, TextareaHTMLAttributes } from 'react'
+import type { ContextMenuItem } from './context-menu-contracts'
 
 /** Shared graphite presentation contracts; feature state and side effects stay with the caller. */
 export type UiTheme = 'dark' | 'light'
@@ -28,8 +30,8 @@ export type ListRowProps = {
   mainLabel?: string
   onClick?: () => void
 }
-export type SectionHeaderProps = Omit<HTMLAttributes<HTMLElement>, 'title'> & { title: string; titleTooltip?: string; actions?: ReactNode }
-export type TabItem = { id: string; label: string; disabled?: boolean; panelId?: string }
+export type SectionHeaderProps = Omit<HTMLAttributes<HTMLElement>, 'title'> & { title: ReactNode; titleTooltip?: string; actions?: ReactNode }
+export type TabItem = { id: string; label: string; count?: number; disabled?: boolean; panelId?: string }
 export type TabsProps = { label: string; items: readonly TabItem[]; value: string; onChange: (id: string) => void }
 export type MenuItem = { id: string; label: string; onAction: () => void; disabled?: boolean; destructive?: boolean; checked?: boolean }
 export type MenuProps = { label: string; trigger?: ReactNode; items: readonly MenuItem[] }
@@ -39,8 +41,39 @@ export type ToastProps = { title: string; description?: ReactNode; status?: UiSt
 export type DialogProps = { open: boolean; title: string; children: ReactNode; actions?: ReactNode; onClose?: () => void; variant?: 'dialog' | 'sheet'; placement?: 'center' | 'top'; size?: 'default' | 'wide'; closeOnBackdrop?: boolean; scrollBody?: boolean }
 export type EmptyStateProps = { message: string; action?: UiAction; icon?: ReactNode }
 export type FormRowProps = { label: string; htmlFor: string; help?: string; error?: string; children: ReactNode }
-export type ToolPanelFrameProps = { title: string; actions?: ReactNode; onMinimize?: () => void; children: ReactNode }
+export type ToolPanelFrameProps = { title: string; tabs?: ReactNode; tools?: ReactNode; actions?: ReactNode; onMinimize?: () => void; children: ReactNode }
 /** Plugin-owned controls portaled into their nearest shared tool frame header. */
 export type ToolPanelActionsProps = { children: ReactNode }
+/** Plugin-owned tool buttons portaled into their nearest shared tool frame's left rail. */
+export type ToolPanelToolsProps = { children: ReactNode }
+/** Plugin-owned tabs portaled into their nearest shared tool frame header, after the title. */
+export type ToolPanelTabsProps = { children: ReactNode }
 export type InlineAgentCardProps = { title: string; description?: ReactNode; status: UiStatus; action?: UiAction }
 export type UiLayoutProps = HTMLAttributes<HTMLDivElement>
+/** Icon props: `size` is the square edge in CSS pixels (default 16); an icon is decorative unless given a `label`. */
+export type ToolIconProps = { name: string; hue: UiToolHue; size?: number; label?: string }
+export type ControlIconProps = { name: string; size?: number; label?: string }
+export type FileIconProps = { path: string; size?: number; label?: string }
+export type ProjectTileProps = { name: string; color?: string | null; size?: number; label?: string }
+export type PopupItem = ContextMenuItem & {
+  /** Leading mark such as a status dot or project tile. */
+  lead?: ReactNode
+  /** Second line under the label; the search field matches it too. */
+  subtitle?: string
+  /** Draws the pill on the row. */
+  selected?: boolean
+  /** Right-aligned content; a shortcut in `key` renders after it. */
+  trailing?: ReactNode
+}
+export type PopupMenuProps = {
+  anchor: HTMLElement
+  items: PopupItem[]
+  title?: string
+  searchPlaceholder?: string
+  onClose(): void
+}
+/**
+ * A status bar value. With `items` it is a button that opens a `PopupMenu` titled `popupTitle` (default
+ * `label`); without them it is plain, non-interactive content. `label` names the control for assistive tech.
+ */
+export type StatusBarItemProps = { label: string; items?: PopupItem[]; popupTitle?: string; children: ReactNode }

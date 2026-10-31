@@ -1,0 +1,127 @@
+[data-git-panel] {
+  padding-inline: var(--ui-space-12);
+}
+
+.git-rows .git-row .ui-list-row {
+  border: 0;
+  flex-wrap: nowrap;
+}
+
+.git-rows .git-row .ui-list-row:not(.ui-list-row--selected) {
+  background: var(--ui-transparent);
+}
+
+.git-rows .git-row .ui-list-row--interactive:focus-within:not(.ui-list-row--selected) {
+  background: var(--ui-selected);
+}
+
+.git-rows .git-row .ui-list-row__body,
+.git-rows .git-row .ui-list-row__title {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.git-rows .git-row__title {
+  align-items: center;
+  display: flex;
+  gap: var(--ui-space-6);
+  min-width: 0;
+}
+
+.git-rows .git-row__title .ui-file-icon {
+  flex: none;
+}
+
+.git-rows .git-row__text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.git-rows .git-row__end {
+  flex: none;
+  gap: var(--ui-space-6);
+  position: relative;
+}
+
+.git-rows .git-row__status {
+  font-size: var(--ui-font-label);
+  font-weight: 600;
+  line-height: 1.2;
+  min-width: var(--ui-space-12);
+  text-align: center;
+}
+
+.git-rows .git-row__status--needs-you {
+  color: var(--ui-needs-you);
+}
+
+.git-rows .git-row__status--failing {
+  color: var(--ui-failing);
+}
+
+.git-rows .git-row__status--working {
+  color: var(--ui-working);
+}
+
+.git-rows .git-row__status--accent {
+  color: var(--ui-accent);
+}
+
+.git-rows .git-row__status--neutral {
+  color: var(--ui-muted);
+}
+
+[data-panel-focused] .git-rows .ui-list-row--selected .git-row__status {
+  color: inherit;
+}
+
+.git-rows .git-row__end .git-row__reveal {
+  background: var(--ui-selected);
+  border-radius: var(--ui-radius-mark);
+  flex-wrap: nowrap;
+  inset-block-start: 50%;
+  inset-inline-end: 100%;
+  padding-inline: var(--ui-space-4);
+  position: absolute;
+  transform: translateY(-50%);
+}
+
+.git-rows .git-row__end .git-row__reveal .git-row__buttons {
+  flex-wrap: nowrap;
+}
+
+[data-panel-focused] .git-rows .ui-list-row--selected .git-row__end .git-row__reveal {
+  background: var(--ui-accent);
+}
+
+.git-rows .git-row__reveal,
+.git-section .git-section__reveal {
+  opacity: 0;
+}
+
+.git-rows .git-row:hover .git-row__reveal,
+.git-rows .git-row:focus-within .git-row__reveal,
+.git-rows .git-folder-head:hover .git-row__reveal,
+.git-rows .git-folder-head:focus-within .git-row__reveal,
+.git-section .ui-section-header:hover .git-section__reveal,
+.git-section .ui-section-header:focus-within .git-section__reveal {
+  opacity: 1;
+}
+
+.git-rows .ui-button--destructive,
+.git-section .ui-button--destructive {
+  background: var(--ui-selected);
+  border-color: var(--ui-border);
+  color: var(--ui-failing);
+}
+
+.git-rows .ui-button--destructive:hover:not(:disabled),
+.git-rows .ui-button--destructive:focus-visible,
+.git-section .ui-button--destructive:hover:not(:disabled),
+.git-section .ui-button--destructive:focus-visible {
+  background: var(--ui-failing);
+  border-color: var(--ui-failing);
+  color: var(--ui-surface);
+}
