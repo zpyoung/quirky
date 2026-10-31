@@ -178,10 +178,7 @@ export async function openHostedDiff(context: UiPluginContext, requested: DiffVi
     revision: openedWorkspace.revision
   })
   setActiveHostedView(opened.tab)
-  const shown = context.getLayout().view
-  const shownInput = shown?.input
-  if (shown?.id !== SESSIONS_VIEW_ID || typeof shownInput !== 'object' || shownInput === null ||
-    !('worktree' in shownInput) || shownInput.worktree !== requested.worktree) {
+  if (shownWorktree(context) !== requested.worktree) {
     context.openView(SESSIONS_VIEW_ID, { worktree: requested.worktree })
   }
   return finalInput
@@ -248,6 +245,13 @@ async function promotePinnedPreviews(context: UiPluginContext, worktree: string)
   })
 }
 
+function shownWorktree(context: UiPluginContext): string | null {
+  const shown = context.getLayout().view
+  const input = shown?.input
+  if (shown?.id !== SESSIONS_VIEW_ID || typeof input !== 'object' || input === null || !('worktree' in input)) return null
+  return typeof input.worktree === 'string' ? input.worktree : null
+}
+
 async function refreshActiveHostedView(context: UiPluginContext): Promise<void> {
   try {
     const focusValue = await context.call('quirky.terminal/focusContext')
@@ -256,11 +260,13 @@ async function refreshActiveHostedView(context: UiPluginContext): Promise<void> 
       return
     }
     const focus = focusValue as Record<string, unknown>
-    if (typeof focus.workspace !== 'string' || focus.workspace === '') {
+    // focus is only reported once a terminal takes it, and a diff can be the first thing opened
+    const worktree = typeof focus.workspace === 'string' && focus.workspace !== '' ? focus.workspace : shownWorktree(context)
+    if (worktree === null) {
       setActiveHostedView(null)
       return
     }
-    const workspace = await readWorkspace(context, focus.workspace)
+    const workspace = await readWorkspace(context, worktree)
     const group = groupsIn(workspace.root).find((candidate) => candidate.id === workspace.activeGroup)
     const activeTab = typeof group?.activeTab === 'string' ? tabById(workspace, group.activeTab) : undefined
     setActiveHostedView(activeTab?.tab.viewId === DIFF_VIEW_ID ? activeTab.tab.id : null)

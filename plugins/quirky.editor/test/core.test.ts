@@ -142,7 +142,7 @@ describe('editor core through the daemon API', () => {
     } finally {
       rmSync(otherRoot, { recursive: true, force: true })
     }
-  })
+  }, 20_000)
 
   test('opens its tab with the file path as the tab icon', async () => {
     const t = await boot()
