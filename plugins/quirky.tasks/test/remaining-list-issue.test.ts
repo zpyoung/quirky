@@ -414,21 +414,32 @@ test('a pull request whose head advances after safety metadata cannot be merged 
   expect(persisted).toMatchObject({ state: 'open', headRefOid: nextHead })
 }, 30_000)
 
-test('a repository without an origin has one plain empty state and cannot create GitHub issues', async () => {
+test.each(['issues', 'prs'] as const)('a repository without an origin leads with an empty state and hides unusable GitHub controls in %s', async (mode) => {
   const host = await bootTasks(listFixtureSource)
   hosts.push(host)
   git(host.repoPath, 'remote', 'remove', 'origin')
-  await host.call('navigate', { mode: 'issues', repoIds: [host.repoId], query: 'is:issue is:open' })
+  await host.call('navigate', { mode, repoIds: [host.repoId], query: 'is:open' })
   const state = taskState(await host.call('state'))
   const driver = uiContext(host)
   const mounted = await mount(React.createElement(TasksList, { context: driver.context, state, refresh: async () => undefined }))
   await waitForUi(() => completedCall(driver.receipts, 'quirky.tasks/list'), 'missing-origin list response')
 
-  expect(mounted.container.querySelector<HTMLButtonElement>('button[aria-label="New GitHub issue"]')?.disabled).toBe(true)
+  expect(mounted.container.querySelector('button[aria-label="New GitHub issue"]')).toBeNull()
+  expect(mounted.container.querySelector('[aria-label^="Search GitHub"]')).toBeNull()
+  expect(mounted.container.querySelector('[aria-label="Task presets"]')).toBeNull()
+  expect(mounted.container.querySelector('button[aria-haspopup="dialog"]')).toBeNull()
+  expect(mounted.container.querySelector('[aria-label="GitHub task filters"]')).toBeNull()
+  expect(mounted.container.querySelector('[aria-label="Active task filters"]')).toBeNull()
+  expect(mounted.container.querySelector('button[aria-label$="GitHub work"]')).toBeNull()
+  expect(mounted.container.textContent).not.toContain('Open repository in GitHub')
+  expect(mounted.container.querySelector<HTMLButtonElement>('button[aria-haspopup="listbox"]')?.disabled).toBe(false)
   expect(mounted.container.querySelectorAll('[role="alert"]')).toHaveLength(0)
   expect(mounted.container.querySelectorAll('.tasks-list__notice')).toHaveLength(0)
   expect(mounted.container.querySelectorAll('.tasks-list__empty')).toHaveLength(1)
   expect(mounted.container.querySelector('.tasks-list__empty')?.textContent).toMatch(/no GitHub remote/i)
+  const emptyState = mounted.container.querySelector('.tasks-list__empty')!
+  const sourceContext = mounted.container.querySelector('[aria-label="Task source context"]')!
+  expect(emptyState.compareDocumentPosition(sourceContext) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   expect(mounted.container.querySelector('[aria-label="Task source context"]')?.textContent).not.toMatch(/no origin|unavailable/i)
   expect(mounted.container.textContent).not.toContain(host.repoId)
 }, 30_000)
