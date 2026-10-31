@@ -671,6 +671,10 @@ export function ExplorerPanel({ context, report }: { context: UiPluginContext; r
   }
 
   const commitNewItem = async () => {
+    if (inlineBlurTimer.current !== undefined) {
+      window.clearTimeout(inlineBlurTimer.current)
+      inlineBlurTimer.current = undefined
+    }
     if (!worktree || !newItemKind || !newItemName.trim()) return
     const path = newItemName.trim()
     const focusHandoff = newItemKind === 'file' ? beginEditorFocusHandoff() : null
