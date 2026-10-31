@@ -17,6 +17,19 @@ describe('MARINE_NAMES', () => {
 })
 
 describe('pickGeneratedName', () => {
+  test.each([1, 2, 3])('excludes the truncated sperm whale name in tier %i', (tier) => {
+    const unavailable = new Set<string>()
+    for (let occupiedTier = 1; occupiedTier < tier; occupiedTier++) {
+      const suffix = occupiedTier === 1 ? '' : `-${occupiedTier}`
+      for (const name of MARINE_NAMES) unavailable.add(`${name}${suffix}`)
+    }
+
+    for (let index = 0; index < MARINE_NAMES.length; index++) {
+      const name = pickGeneratedName(unavailable, () => (index + 0.5) / MARINE_NAMES.length)
+      expect(name).not.toMatch(/^sperm(?:-\d+)?$/)
+    }
+  })
+
   test('picks from the pool by random index', () => {
     expect(pickGeneratedName(new Set(), () => 0)).toBe(MARINE_NAMES[0])
     expect(pickGeneratedName(new Set(), () => 0.999999)).toBe(MARINE_NAMES[MARINE_NAMES.length - 1])

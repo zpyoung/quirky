@@ -7,6 +7,7 @@
 **Amendments:**
 - 2026-10-26, before build: Codex adversarial review. A create naming a project but no name uses `--repo` (one positional is always the name; SC-18, SC-21); a create from an existing branch with no name takes its folder from the branch (SC-18); an explicit `--setup skip` gives no warning, only an inherited skip does (SC-30); a wait-for-setup create returns with the agent pending (SC-38); an orphan stays deletable after a list, and Force deletes only inside the folder it was created under (SC-54); Mod+N opens the create dialog, also through the API (SC-62).
 - 2026-10-30: Deleting a workspace also removes its bound view tabs from shared, per-window and auxiliary layouts. Selection follows a surviving workspace-bound fallback or clears; global views and unrelated workspaces remain.
+- 2026-10-31: Generated workspace names exclude `sperm`, the ambiguous truncation of “sperm whale”, from suggestions and blank-name creates, including numbered fallbacks. User-entered names and existing workspaces are unchanged.
 
 ## Conceptual model
 
