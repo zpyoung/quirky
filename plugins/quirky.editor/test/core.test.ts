@@ -221,7 +221,18 @@ describe('editor core through the daemon API', () => {
     const positioned = await open(t, 'guide.md', { mode: 'source', line: 1, column: 2, matchLength: 7, focus: false })
     expect(positioned.id).toBe(opened.id)
     expect(positioned.openedTabId).toBe(opened.openedTabId)
-    expect(positioned.view).toMatchObject({ byTabId: { [opened.openedTabId]: { line: 1, column: 2, matchLength: 7 } } })
+    expect(positioned.view).toMatchObject({ byTabId: { [opened.openedTabId]: { line: 1, column: 2, matchLength: 7, focused: false } } })
+    const consumed = await t.call<EditorBuffer>('quirky.editor/view', {
+      bufferId: opened.id, tabId: opened.openedTabId, action: 'update',
+      patch: { line: null, column: null, matchLength: null, focused: false }
+    })
+    expect(consumed.view).toMatchObject({
+      byTabId: { [opened.openedTabId]: { line: null, column: null, matchLength: null, focused: false } }
+    })
+    const repeated = await open(t, 'guide.md', { mode: 'source', line: 1, column: 2, matchLength: 7, focus: true })
+    expect(repeated.view).toMatchObject({
+      byTabId: { [opened.openedTabId]: { line: 1, column: 2, matchLength: 7, focused: true } }
+    })
     const cleared = await t.call<EditorBuffer>('quirky.editor/view', {
       bufferId: opened.id, tabId: opened.openedTabId, action: 'update', patch: { markdownAnchor: null }
     })
@@ -239,6 +250,36 @@ describe('editor core through the daemon API', () => {
     await expect(t.call('quirky.editor/view', {
       bufferId: plain.id, tabId: plain.openedTabId, action: 'update', patch: { markdownAnchor: 'section' }
     })).rejects.toThrow()
+  })
+
+  test('stale navigation acknowledgments preserve the newest source location', async () => {
+    const t = await boot()
+    await write(t, 'navigation.txt', 'first\nsecond\nthird\n')
+    const first = await open(t, 'navigation.txt', { line: 2, column: 1, focus: true })
+    const second = await open(t, 'navigation.txt', { line: 3, column: 2, focus: true })
+    const tabId = second.openedTabId
+    const tabView = (buffer: EditorBuffer) =>
+      (buffer.view.byTabId as Record<string, Record<string, unknown>>)[tabId]!
+    const firstId = tabView(first).navigationId
+    const secondId = tabView(second).navigationId
+    expect(typeof firstId).toBe('string')
+    expect(secondId).not.toBe(firstId)
+    const stale = await t.call<EditorBuffer>('quirky.editor/view', {
+      bufferId: second.id, tabId, action: 'update',
+      patch: {
+        navigationId: firstId, line: null, column: null, matchLength: null, focused: false,
+        selection: { anchor: 6, head: 6 }, cursor: { line: 2, column: 1 }
+      }
+    })
+    expect(tabView(stale)).toEqual(tabView(second))
+    const consumed = await t.call<EditorBuffer>('quirky.editor/view', {
+      bufferId: second.id, tabId, action: 'update',
+      patch: { navigationId: secondId, line: null, column: null, matchLength: null, focused: false }
+    })
+    expect(tabView(consumed)).toMatchObject({ line: null, column: null, focused: false })
+    const repeated = await open(t, 'navigation.txt', { line: 3, focus: true })
+    expect(tabView(repeated).navigationId).not.toBe(secondId)
+    expect(tabView(repeated)).toMatchObject({ line: 3, column: 1, matchLength: 0 })
   })
 
 
@@ -993,7 +1034,7 @@ describe('editor core through the daemon API', () => {
     const viewPatchSchema = methods.get('quirky.editor/view')?.params.properties?.patch
     expect(viewPatchSchema?.properties?.markdownAnchor?.type).toBeUndefined()
     expect(viewPatchSchema?.properties?.markdownAnchor?.description).toContain('512 UTF-8 bytes')
-    expect(viewPatchSchema?.properties?.matchLength?.type).toBe('integer')
+    expect(viewPatchSchema?.properties?.matchLength?.description).toContain('null')
     const notebookSchema = methods.get('quirky.editor/notebook')?.params
     expect(notebookSchema?.properties?.browse?.type).toBe('boolean')
     const transferSchema = methods.get('quirky.editor/transfer')?.params
