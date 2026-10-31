@@ -77,6 +77,9 @@ reports the tree it shows to `quirky ui state`.
 a new repo, scans a folder for repos and imports them (optionally as a group), keeps groups and
 project settings, and emits `quirky.repo/changed`. Removing a project closes its sessions and drops
 its workspaces' metadata; the folder stays on disk.
+In manual project order, new projects follow the existing ordered projects in registration order.
+The sidebar refreshes that order when projects change, so the live order matches the restored order
+after restart.
 
 ## Key decisions
 

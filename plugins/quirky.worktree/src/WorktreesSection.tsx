@@ -159,9 +159,10 @@ export function WorktreesSection({ context, report, requests, addProjectRequests
     let active = true
     const unsubscribe = context.subscribe((event) => {
       if (!('data' in event) || typeof event.data !== 'object' || event.data === null) return
-      if (event.type === 'quirky.worktree/optionsChanged') {
-        const data = event.data
-        if ('options' in data && isStockWorktreeOptions(data.options)) setStockOptions(data.options)
+      if (event.type === 'quirky.worktree/optionsChanged' || event.type === 'quirky.repo/changed') {
+        if (event.type === 'quirky.worktree/optionsChanged' && 'options' in event.data && isStockWorktreeOptions(event.data.options)) {
+          setStockOptions(event.data.options)
+        }
         void context.call('quirky.worktree/projectOrder').then((value: unknown) => {
           if (active && Array.isArray(value) && value.every((id) => typeof id === 'string')) setProjectOrder(value)
         }).catch((error: unknown) => context.log(`could not reload project order: ${error instanceof Error ? error.message : String(error)}`))

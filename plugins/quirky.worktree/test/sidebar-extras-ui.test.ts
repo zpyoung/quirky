@@ -900,6 +900,34 @@ function setRect(element: Element, top: number, bottom: number): void {
   })
 }
 
+test('project sidebar order follows repo registration order when projects are added after mount', async () => {
+  const h = setup()
+  h.world.repos = []
+  h.world.groups = []
+  h.world.worktrees = []
+  h.world.sessions = []
+  await h.mount()
+
+  await act(async () => {
+    h.world.repos.push(repo('r-zeta', 'zeta'))
+    await h.emit('quirky.repo/changed')
+  })
+  await h.flush()
+  await act(async () => {
+    h.world.repos.push(repo('r-alpha', 'alpha'))
+    await h.emit('quirky.repo/changed')
+  })
+  await h.flush()
+
+  const registrationOrder = ['r-zeta', 'r-alpha']
+  expect(lastReport(h).projects.map((project) => project.id)).toEqual(registrationOrder)
+
+  await currentCleanup?.()
+  currentCleanup = null
+  await h.mount()
+  expect(lastReport(h).projects.map((project) => project.id)).toEqual(registrationOrder)
+})
+
 test('SC-03/05: loose hierarchy keeps child disclosures while delete confirmation counts canonical descendants', async () => {
   const h = setup()
   await h.mount()
