@@ -43,6 +43,8 @@ Combined-diff navigation and Git open commands use the same hosted-tab route. Op
 
 Combined diffs open at the first file and keep their scroll position as sections load. Single-file diffs still jump to the first change; change-navigation commands remain available in both views.
 
+Combined-diff headers preserve commit-subject casing and keep the compact toolbar on the padded title row. Long subjects remain available in the header tooltip.
+
 Plugin integrations split a tab through `quirky.terminal/moveTab` with `tab`, `split`, `of`, and the acknowledged `revision`; the tab determines its workspace, so this method does not accept a `workspace` field.
 
 Explicit standalone diffs opened through `ui.view.open` publish a top-level slot report. Embedded hosted views intentionally have no separate slot report; their tab identity and placement are available through `quirky.terminal/workspace`.

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Badge, Button, EmptyState, IconButton, ListRow, SectionHeader } from '@quirky/ui'
+import { Badge, Button, EmptyState, IconButton, ListRow, Menu, SectionHeader } from '@quirky/ui'
 import type { GitCompare, GitDiff, GitStatus } from '@quirky/protocol'
 
 import { reuseGitDiff } from '../diffRefresh'
@@ -303,9 +303,11 @@ export function CombinedDiff({ context, input, settings, setSetting, report, bin
   return (
     <div className="ui-stack" style={{ flex: 1, minHeight: 0, minWidth: 0, overflow: 'hidden' }}>
       <SectionHeader
-        title={title}
+        title={<span style={{ textTransform: 'none' }}>{title}</span>}
+        titleTooltip={title}
+        style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto', padding: 'var(--ui-space-8)' }}
         actions={
-          <div className="ui-cluster" style={{ justifyContent: 'flex-end' }}>
+          <div className="ui-cluster" style={{ justifyContent: 'flex-end', flexWrap: 'nowrap', gap: 'var(--ui-space-4)', width: 'max-content' }}>
             {data && <Badge label={`${count} changed file${count === 1 ? '' : 's'}`}>{`${count} changed file${count === 1 ? '' : 's'}`}</Badge>}
             {notes.length > 0 && (
               <>
@@ -327,18 +329,39 @@ export function CombinedDiff({ context, input, settings, setSetting, report, bin
             <Button onClick={() => setAllCollapsed(!allCollapsed)}>
               {allCollapsed ? 'Expand All' : 'Collapse All'}
             </Button>
-            <Button onClick={() => setSetting('diffDefaultView', settings.sideBySide ? 'inline' : 'side-by-side')}>
-              {settings.sideBySide ? 'Inline' : 'Side by Side'}
-            </Button>
-            <Button onClick={() => setSetting('diffWordWrap', !settings.wrap)}>
-              {settings.wrap ? 'Wrap Off' : 'Wrap On'}
-            </Button>
-            <Button onClick={() => setSetting('diffShowWhitespace', !settings.showWhitespace)}>
-              {settings.showWhitespace ? 'Whitespace Off' : 'Whitespace On'}
-            </Button>
-            <Button onClick={() => setSetting('combinedDiffFileTree', settings.fileTree ? 'hidden' : 'shown')}>
-              {settings.fileTree ? 'Hide file tree' : 'Show file tree'}
-            </Button>
+            <IconButton
+              label={settings.sideBySide ? 'Switch to inline diff' : 'Switch to side-by-side diff'}
+              title={settings.sideBySide ? 'Switch to inline diff' : 'Switch to side-by-side diff'}
+              onClick={() => setSetting('diffDefaultView', settings.sideBySide ? 'inline' : 'side-by-side')}
+            >
+              {settings.sideBySide ? '▤' : '▥'}
+            </IconButton>
+            <div title="More actions">
+              <Menu
+                label="More actions"
+                trigger="⋯"
+                items={[
+                  {
+                    id: 'word-wrap',
+                    label: 'Word Wrap',
+                    checked: settings.wrap,
+                    onAction: () => setSetting('diffWordWrap', !settings.wrap)
+                  },
+                  {
+                    id: 'show-whitespace',
+                    label: 'Show Whitespace',
+                    checked: settings.showWhitespace,
+                    onAction: () => setSetting('diffShowWhitespace', !settings.showWhitespace)
+                  },
+                  {
+                    id: 'file-tree',
+                    label: 'Show file tree',
+                    checked: settings.fileTree,
+                    onAction: () => setSetting('combinedDiffFileTree', settings.fileTree ? 'hidden' : 'shown')
+                  }
+                ]}
+              />
+            </div>
             <IconButton label="Close" title="Close" onClick={close}>×</IconButton>
           </div>
         }
