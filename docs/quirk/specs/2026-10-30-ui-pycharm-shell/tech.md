@@ -200,6 +200,7 @@ ViewTab.icon?: { kind: 'tool'; name: ToolIconName; hue: UiToolHue } | { kind: 'f
 ### ⌘K ([Center tabs and ⌘K](logic.md#center-tabs-and-k))
 
 - Scope tabs filter `PaletteEntry.kind`: All is everything, Worktrees is `worktree`, Commands is `command`, Files is a new `file` kind.
+- Search ranks case-insensitive title matches as exact, prefix, then substring, ahead of metadata-only matches across all kinds. Equal-ranked entries keep their source order; an empty query keeps the existing recents and scope order.
 - Files calls the existing `quirky.editor/quickOpen` (`action: 'search'`, fuzzy file names) debounced at 150ms, returning nothing and showing the empty state if the plugin is absent. `quirky.editor/search` matches file contents, so it doesn't fit. Picking a file uses `quirky.editor/open` and records it with `quickOpen`'s `action: 'record'`.
 - Recents are the last 10 ids in `UiLayout.paletteRecents`, persisted by the daemon, because a daemon-served page's origin changes with its port and `localStorage` wouldn't survive. `ui.palette.recent { id }` records one.
 - Entries show `ToolIcon` or `FileIcon`, and section headers split recents from matches.

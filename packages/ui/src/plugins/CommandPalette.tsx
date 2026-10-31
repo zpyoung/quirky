@@ -12,7 +12,7 @@ import {
   cycleScope,
   decodeFileId,
   entryKey,
-  exactTitleFirst,
+  rankPaletteEntries,
   fileEntry,
   paletteKey,
   paletteSections,
@@ -211,7 +211,7 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
     )
     const files = fileSearchActive && fileResults?.key === fileSearchKey ? fileResults.entries : []
     return {
-      entries: exactTitleFirst([...matching, ...files], filter.trim().toLowerCase()),
+      entries: rankPaletteEntries([...matching, ...files], filter.trim().toLowerCase()),
       worktreeIds: new Set(worktrees.map((worktree) => worktree.id))
     }
   }, [enabledAgentIds, fileResults, fileSearchActive, fileSearchKey, filter, model?.commands, model?.tools, model?.views, snapshot.errors.repos, snapshot.errors.worktrees, snapshot.repos, snapshot.worktrees, windowRoute])
