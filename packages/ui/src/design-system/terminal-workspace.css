@@ -31,7 +31,7 @@
 .qt-group-divider:hover { background: var(--ui-accent); }
 .qt-group-divider-right { cursor: col-resize; }
 .qt-group-divider-down { cursor: row-resize; }
-.qt-group { display: flex; flex: 1; flex-direction: column; min-width: 0; min-height: 0; }
+.qt-group { display: flex; flex: 1; flex-direction: column; min-width: 0; min-height: 0; container-type: inline-size; container-name: qt-group; }
 
 .qt-strip {
   display: flex;
@@ -64,6 +64,11 @@
 }
 .qt-tab-more:hover,
 .qt-tab-more[aria-expanded="true"] { background: var(--ui-selected); color: var(--ui-text); }
+@container qt-group (max-width: 480px) {
+  .qt-strip { flex-wrap: wrap; }
+  .qt-tab-navigation { flex-basis: 100%; }
+}
+
 @container qt-strip (max-width: 210px) {
   .qt-tab-navigation { flex-wrap: wrap; justify-content: center; }
   .qt-tabs { flex: 1 1 100%; order: 0; }
