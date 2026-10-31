@@ -170,31 +170,44 @@ describe('quirky.git combined diff', () => {
     expect(report().loadedSections).toContain('big.txt')
   })
 
-  test('SC-62: the toolbar toggles write their settings and flip their labels', async () => {
+  test('SC-62: toolbar controls update settings and menu checked states', async () => {
     const { element } = await open()
-    await click(byText(element, 'Side by Side'))
+    await click(byLabel(element, 'Switch to side-by-side diff'))
     expect(fake.settings.diffDefaultView).toBe('side-by-side')
-    expect(byText(element, 'Inline')).not.toBeNull()
+    expect(byLabel(element, 'Switch to inline diff')).not.toBeNull()
     expect(sectionOf(element, 'f1.ts').querySelectorAll('.cm-mergeViewEditor').length).toBe(2)
-    await click(byText(element, 'Wrap On'))
+    const menuItems = () => [...element.querySelectorAll<HTMLButtonElement>('[role="menuitemcheckbox"]')]
+    await click(byLabel(element, 'More actions'))
+    expect(menuItems().map((item) => item.getAttribute('aria-checked'))).toEqual(['false', 'false', 'false'])
+    await click(menuItems()[0])
     expect(fake.settings.diffWordWrap).toBe(true)
-    expect(byText(element, 'Wrap Off')).not.toBeNull()
-    await click(byText(element, 'Whitespace On'))
+    expect(sectionOf(element, 'f1.ts').querySelector('.cm-lineWrapping')).not.toBeNull()
+    await click(byLabel(element, 'More actions'))
+    expect(menuItems().map((item) => item.getAttribute('aria-checked'))).toEqual(['true', 'false', 'false'])
+    await click(menuItems()[1])
     expect(fake.settings.diffShowWhitespace).toBe(true)
-    expect(byText(element, 'Whitespace Off')).not.toBeNull()
-    await click(byText(element, 'Inline'))
+    await click(byLabel(element, 'More actions'))
+    expect(menuItems().map((item) => item.getAttribute('aria-checked'))).toEqual(['true', 'true', 'false'])
+    await click(byLabel(element, 'Switch to inline diff'))
     expect(fake.settings.diffDefaultView).toBe('inline')
+    expect(byLabel(element, 'Switch to side-by-side diff')).not.toBeNull()
+    expect(sectionOf(element, 'f1.ts').querySelectorAll('.cm-mergeViewEditor').length).toBe(0)
   })
 
-  test('SC-62: Show file tree lists the files and writes combinedDiffFileTree', async () => {
+  test('SC-62: the file tree menu option toggles its setting and lists files', async () => {
     const { element } = await open()
     expect(element.querySelector('nav[aria-label=Files]')).toBeNull()
-    await click(byText(element, 'Show file tree'))
+    const menuItems = () => [...element.querySelectorAll<HTMLButtonElement>('[role="menuitemcheckbox"]')]
+    await click(byLabel(element, 'More actions'))
+    expect(menuItems().map((item) => item.getAttribute('aria-checked'))).toEqual(['false', 'false', 'false'])
+    await click(menuItems()[2])
     expect(fake.settings.combinedDiffFileTree).toBe('shown')
     const items = [...element.querySelectorAll('nav[aria-label="Files"] button[aria-pressed]')].map((i) => i.textContent)
     expect(items).toEqual([...small, 'big.txt'])
-    expect(byText(element, 'Hide file tree')).not.toBeNull()
-    await click(byText(element, 'Hide file tree'))
+    await click(byLabel(element, 'More actions'))
+    expect(menuItems().map((item) => item.getAttribute('aria-checked'))).toEqual(['false', 'false', 'true'])
+    await click(menuItems()[2])
+    expect(fake.settings.combinedDiffFileTree).toBe('hidden')
     expect(element.querySelector('nav[aria-label=Files]')).toBeNull()
   })
 
@@ -264,6 +277,32 @@ describe('quirky.git combined diff', () => {
     expect(fake.callsTo('quirky.git/diff')[0].params).toEqual({ worktree: 'w1', path: 'a.ts', source: 'commit', commit: oid })
     expect(element.querySelector('h2')?.textContent).toBe('Commit ccccccc')
     expect(byText(element, 'Open Branch Diff')).toBeNull()
+  })
+
+  test('a commit subject keeps its case and its header preserves padding and the full title', async () => {
+    const style = document.createElement('style')
+    style.textContent = [
+      readFileSync(new URL('../../../../packages/ui/src/design-system/tokens.css', import.meta.url), 'utf8'),
+      readFileSync(new URL('../../../../packages/ui/src/design-system/components.css', import.meta.url), 'utf8')
+    ].join('\n')
+    document.head.appendChild(style)
+    try {
+      const subject = 'Refactor HTTP response handling'
+      fake.handlers['quirky.git/commitFiles'] = () => ({
+        commit: 'c'.repeat(40),
+        parent: null,
+        entries: [{ path: 'a.ts', status: 'added', added: 1, removed: 0, binary: false }]
+      })
+      const { element } = await open({ worktree: 'w1', mode: 'combined', commit: 'ccccccc', title: subject })
+      const heading = element.querySelector<HTMLElement>('h2')!
+      const header = heading.parentElement!
+      expect(getComputedStyle(heading.firstElementChild ?? heading).textTransform).toBe('none')
+      expect(heading.textContent).toBe(subject)
+      expect(heading.title).toBe(subject)
+      expect(Number.parseFloat(getComputedStyle(header).paddingTop)).toBeGreaterThan(0)
+    } finally {
+      style.remove()
+    }
   })
 
   test('no changes: says so', async () => {

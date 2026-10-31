@@ -3,7 +3,7 @@ import { EditorView } from '@codemirror/view'
 import { readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { isolateGitConfig } from '../../../quirky.repo/test/git-fixtures'
-import { buttonText, click, modifiedEditor, q, qa, rowOf, stubIntersectionObserver, text } from './dom'
+import { buttonText, byLabel, click, modifiedEditor, q, qa, rowOf, stubIntersectionObserver, text } from './dom'
 import { BASE_FILES, boot, DIFF_VIEW, openView, shutdown, type World } from './world'
 
 const { scratch } = isolateGitConfig()
@@ -61,13 +61,16 @@ test('SC-62: View all opens a combined diff with lazy sections, a Load diff for 
       buttonText('Collapse All', root) !== undefined &&
       qa('section[data-path] button[aria-expanded="true"]', root).length === 7
     )
-    await click(buttonText('Side by Side', q('[data-git-view-root]')!))
+    await click(byLabel('Switch to side-by-side diff'))
     expect(await settingValue(w, 'diffDefaultView')).toBe('side-by-side')
-    await click(buttonText('Wrap On', q('[data-git-view-root]')!))
+    await click(byLabel('More actions'))
+    await click(qa('[role="menuitemcheckbox"]').find((item) => text(item).endsWith('Word Wrap')))
     expect(await settingValue(w, 'diffWordWrap')).toBe(true)
-    await click(buttonText('Whitespace On', q('[data-git-view-root]')!))
+    await click(byLabel('More actions'))
+    await click(qa('[role="menuitemcheckbox"]').find((item) => text(item).endsWith('Show Whitespace')))
     expect(await settingValue(w, 'diffShowWhitespace')).toBe(true)
-    await click(buttonText('Show file tree', q('[data-git-view-root]')!))
+    await click(byLabel('More actions'))
+    await click(qa('[role="menuitemcheckbox"]').find((item) => text(item).endsWith('Show file tree')))
     await w.win.waitFor(() => q('[data-git-view-root] nav[aria-label="Files"]'))
     expect(qa('[data-git-view-root] nav[aria-label="Files"] button[aria-pressed]')).toHaveLength(7)
 
