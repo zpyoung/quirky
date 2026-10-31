@@ -427,7 +427,6 @@ describe('SC-18: the row menu and dragging', () => {
     await settle()
   }
 
-
   test('offers View, Copy Path, Copy Relative Path and Reveal in Finder', async () => {
     const copied: string[] = []
     Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: async (t: string) => void copied.push(t) } })

@@ -1093,11 +1093,7 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
           <Button onClick={() => void data.refresh()}>Retry</Button>
         </div>
       )}
-      <div
-        className="ui-stack"
-        data-git-content
-        style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}
-      >
+      <div className="ui-stack" data-git-content style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
         {status === null && data.error === null && <EmptyState message="Loading…" />}
         {status && operation !== 'none' && (
           <OperationCard
