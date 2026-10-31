@@ -268,6 +268,26 @@ async function renderExplorer(fixture: Fixture, context = makeContext(fixture)):
   return surface
 }
 
+async function renderStandaloneExplorer(context: UiPluginContext): Promise<Mounted> {
+  const element = document.createElement('div')
+  document.body.append(element)
+  const root = createRoot(element)
+  let unmounted = false
+  const surface: Mounted = {
+    element,
+    async unmount() {
+      if (unmounted) return
+      unmounted = true
+      await act(async () => root.unmount())
+    }
+  }
+  mounted.push(surface)
+  await act(async () => {
+    root.render(<ExplorerPanel context={context} />)
+  })
+  return surface
+}
+
 function rowActionTrigger(row: HTMLElement): HTMLButtonElement {
   const trigger = row.querySelector<HTMLButtonElement>('button[aria-label^="Actions for "]')
   if (!trigger) throw new Error(`Missing row actions for ${row.dataset.path}`)
@@ -545,6 +565,117 @@ test('Explorer Rename closes row actions, focuses the inline field, and renames 
   expect(readFileSync(renamedPath, 'utf8')).toBe('alpha\n')
   expect(findRow(panel.element, originalPath)).toBeNull()
 })
+
+test('Explorer identifies row and footer deletion targets without mutating after cancellation', async () => {
+  const root = '/test'
+  const worktree = 'delete-confirmation-test'
+  const displayRoot = join(root, 'nested')
+  const filePath = join(root, FILE_A)
+  const folderPath = join(root, 'nested/archive')
+  const listing = {
+    root: displayRoot,
+    entries: [
+      { path: filePath, name: basename(filePath), isDirectory: false, isSymlink: false },
+      { path: folderPath, name: basename(folderPath), isDirectory: true, isSymlink: false }
+    ],
+    showDotfiles: true,
+    showIgnored: false,
+    followSymlinkedDirectories: false
+  }
+  const confirmations: Parameters<UiPluginContext['confirm']>[0][] = []
+  const deleteOperations: Record<string, unknown>[] = []
+  let selectedPaths: string[] = []
+  let focusedPath: string | null = null
+  const context = {
+    pluginId: 'quirky.editor',
+    log() {},
+    call: async (method: string, params: Record<string, unknown> = {}) => {
+      if (method === 'quirky.editor/state') {
+        return {
+          buffers: [],
+          tabs: [],
+          explorer: {
+            worktreeId: worktree,
+            showDotfiles: true,
+            expanded: [],
+            selectedPaths: [...selectedPaths],
+            focusedPath,
+            selectionAnchor: focusedPath
+          },
+          search: null,
+          quickOpenHistory: [],
+          closeRequests: []
+        }
+      }
+      if (method === 'quirky.editor/documentRoot') return { id: worktree, path: root }
+      if (method === 'quirky.git/status') return { files: [] }
+      if (method === 'quirky.editor/explorer') {
+        if (params.action === 'select' && typeof params.path === 'string') {
+          selectedPaths = [params.path]
+          focusedPath = params.path
+          return {
+            ...listing,
+            interaction: { selectedPaths: [...selectedPaths], focusedPath, selectionAnchor: focusedPath }
+          }
+        }
+        return listing
+      }
+      if (method === 'quirky.editor/mutate' && params.action === 'delete') deleteOperations.push(params)
+      return {}
+    },
+    subscribe: () => () => {},
+    getSetting: (name: string) => {
+      if (name === 'editorFontFamily') return 'monospace'
+      if (name === 'editorAutoSaveDelayMs') return 1000
+      if (name === 'editorSidebarWidth') return 320
+      if (name === 'editorFontZoomLevel') return 0
+      return false
+    },
+    getLayout: () => ({ worktree, view: null, panel: null, sidebar: true, focus: 'view' }),
+    onLayout: () => () => {},
+    onConnection: () => () => {},
+    confirm: async (options: Parameters<UiPluginContext['confirm']>[0]) => {
+      confirmations.push(options)
+      return false
+    },
+    toast() {}
+  } as unknown as UiPluginContext
+
+  const panel = await renderStandaloneExplorer(context)
+  try {
+    await waitForUi(() => findRow(panel.element, filePath) && findRow(panel.element, folderPath) || false)
+
+    const actions = [
+      { targetPath: filePath, action: 'row' },
+      { targetPath: folderPath, action: 'row' },
+      { targetPath: filePath, action: 'footer' },
+      { targetPath: folderPath, action: 'footer' }
+    ] as const
+    for (const { targetPath, action } of actions) {
+      const confirmationIndex = confirmations.length
+      if (action === 'row') {
+        const row = findRow(panel.element, targetPath)
+        if (!row) throw new Error(`Missing Explorer row ${targetPath}`)
+        const button = await actionButton(row, 'Delete')
+        await act(async () => button.click())
+      } else {
+        const row = findRow(panel.element, targetPath)
+        if (!row) throw new Error(`Missing Explorer row ${targetPath}`)
+        await act(async () => {
+          row.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
+        })
+        await waitForUi(() => findRow(panel.element, targetPath)?.getAttribute('aria-selected') === 'true' || false)
+        await act(async () => footerButton(panel.element, 'Delete').click())
+      }
+
+      const confirmation = await waitForUi(() => confirmations[confirmationIndex] ?? false)
+      expect(confirmation.title).toContain(basename(targetPath))
+      expect(deleteOperations).toEqual([])
+    }
+  } finally {
+    await panel.unmount()
+  }
+}, 60_000)
 
 test('Explorer rename clears stale selection before row Delete and keeps footer state authoritative', async () => {
   const fixture = await makeFixture({ displayRoot: 'nested' })
