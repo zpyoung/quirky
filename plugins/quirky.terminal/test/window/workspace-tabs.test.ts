@@ -268,6 +268,37 @@ describe('SC-11: clicking a tab activates it', () => {
     }
   })
 
+  test('hides a close-only left fragment and restores it when scrolled into view', async () => {
+    const resize = observeResize()
+    try {
+      const view = await mount(fakeDaemon(makeWorkspace(group('grp-1', terminalTabs(3)))))
+      const layout = installTabLayout(view, 220, { 'tab-1': 100, 'tab-2': 100, 'tab-3': 100 })
+      await flushResize(resize)
+      const first = view.q<HTMLElement>('[data-tab="tab-1"]')!
+      const close = view.q<HTMLButtonElement>('[data-tab="tab-1"] .qt-tab-close')!
+      const originalVisibility = getComputedStyle(first).visibility
+      const originalCloseVisibility = getComputedStyle(close).visibility
+      const scrollWidth = layout.viewport.scrollWidth
+
+      layout.viewport.scrollLeft = 80
+      await fire(layout.viewport, new Event('scroll'))
+
+      expect(first.getBoundingClientRect().right - layout.viewport.getBoundingClientRect().left).toBe(20)
+      expect(first.getBoundingClientRect().width).toBe(100)
+      expect(layout.viewport.scrollWidth).toBe(scrollWidth)
+      expect(getComputedStyle(first).visibility).toBe('hidden')
+      expect(getComputedStyle(close).visibility).toBe('hidden')
+
+      layout.viewport.scrollLeft = 0
+      await fire(layout.viewport, new Event('scroll'))
+
+      expect(getComputedStyle(first).visibility).toBe(originalVisibility)
+      expect(getComputedStyle(close).visibility).toBe(originalCloseVisibility)
+    } finally {
+      resize.restore()
+    }
+  })
+
   test('the popup lists exactly the hidden tabs, and picking one activates it and scrolls it into view', async () => {
     const resize = observeResize()
     const scroll = spyOn(Element.prototype, 'scrollIntoView').mockImplementation(function (this: Element) {

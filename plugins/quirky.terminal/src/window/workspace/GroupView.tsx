@@ -19,7 +19,7 @@ import { useBoxSize } from './useBoxSize'
 
 type Common = { controller: WorkspaceController; state: ControllerState }
 
-function TabItem({ controller, state, group, tab, index, others, now, overflow, viewportWidth }: Common & { group: Group; tab: Tab; index: number; others: Tab[]; now: number; overflow: boolean; viewportWidth: number }) {
+function TabItem({ controller, state, group, tab, index, others, now, overflow, viewportWidth, hiddenByOverflow }: Common & { group: Group; tab: Tab; index: number; others: Tab[]; now: number; overflow: boolean; viewportWidth: number; hiddenByOverflow: boolean }) {
   const selected = group.activeTab === tab.id
   const terminal = isViewTab(tab) ? null : tab
   const leaves = terminal ? paneLeaves(terminal.root) : []
@@ -49,6 +49,7 @@ function TabItem({ controller, state, group, tab, index, others, now, overflow, 
       ref={element}
       role="presentation"
       className={`qt-tab${selected ? ' qt-selected' : ''}${mark ? ' qt-drop-before' : ''}${paneTarget ? ' qt-drop-target' : ''}`}
+      style={hiddenByOverflow ? { visibility: 'hidden' } : undefined}
       data-tab={tab.id}
       data-pinned={tab.pinned ? 'true' : undefined}
       title={`${title}${index < 9 ? ` (⌘${index + 1})` : ''}`}
@@ -288,7 +289,7 @@ function GroupView({ controller, state, group }: Common & { group: Group }) {
         <div className="qt-tab-navigation" ref={tabNavigation}>
           <div className="qt-tabs" ref={tabViewport} role="tablist">
             {group.tabs.map((entry, index) => (
-              <TabItem key={entry.id} controller={controller} state={state} group={group} tab={entry} index={index} others={others} now={now} overflow={hasHidden} viewportWidth={viewportWidth} />
+              <TabItem key={entry.id} controller={controller} state={state} group={group} tab={entry} index={index} others={others} now={now} overflow={hasHidden} viewportWidth={viewportWidth} hiddenByOverflow={hiddenTabs.includes(entry.id)} />
             ))}
           </div>
           {hasHidden ? (
