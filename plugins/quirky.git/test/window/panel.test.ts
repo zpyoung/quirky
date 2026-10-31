@@ -196,7 +196,7 @@ test('SC-7: a dirty submodule row expands to its read-only changes from the daem
   await w.win.waitFor(() => qa('[data-submodule-entry]').length === 1)
   const submoduleEntry = q('[data-submodule-entry]')!
   expect(text(q('[data-row-name]', submoduleEntry))).toBe('x.c')
-  expect(text(q('[aria-label="Git status modified"]', submoduleEntry))).toBe('M')
+  expect(text(q('.ui-badge[aria-label="Git status modified"]', submoduleEntry))).toBe('M')
   expect(qa('[data-submodule-entry] button')).toHaveLength(0)
   expect((await openView(w))?.id).not.toBe(DIFF_VIEW)
 
