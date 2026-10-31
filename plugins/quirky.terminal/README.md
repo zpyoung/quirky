@@ -12,6 +12,8 @@ If the session starts but its tab cannot be opened, the dialog keeps the submitt
 
 Closing a terminal with a running command or agent asks for confirmation unless **Don't ask again for running terminals** is enabled. The confirmation starts with **Cancel** focused, so Return or Space keeps the terminal running; select **Stop and Close** or **Stop Agent** to stop it.
 
+When a pane closes, its sibling takes the removed pane's space. If the closed pane was active, focus moves to the first pane in its promoted sibling subtree; closing an inactive pane leaves focus unchanged.
+
 ## Fork Agent Session
 
 Agent terminal panes contribute **Fork Agent Session** to the public `quirky.terminal/pane` menu after Quick Commands. The menu is hidden on plain shell panes.

@@ -200,7 +200,7 @@ test(
     expect(closed.code).toBe(0)
     expect(closed.stderr).toBe('')
     expect(await tabShape(h, tab.id)).toEqual(['right', 0.5, a.id, c.id])
-    expect(findTab(await layoutOf(h), tab.id).activePane).toBe(a.id)
+    expect(findTab(await layoutOf(h), tab.id).activePane).toBe(c.id)
     await waitFor('the pane session to be gone', async () => !(await h.sessionRecords()).some((session) => session.id === b.session))
 
     await terminal(h, 'pane', 'close', lone.pane.id)
