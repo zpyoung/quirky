@@ -130,6 +130,14 @@ describe('window inactive state', () => {
     expect(heard).toEqual([false, true])
   })
 
+  test('only a window filling the whole screen reads as fullscreen', async () => {
+    const shell = await import('../src/shell')
+    const screen = { width: 1512, height: 982 }
+    expect(shell.isNativeFullscreen({ innerWidth: 1512, innerHeight: 982 }, screen)).toBe(true)
+    expect(shell.isNativeFullscreen({ innerWidth: 1512, innerHeight: 945 }, screen)).toBe(false)
+    expect(shell.isNativeFullscreen({ innerWidth: 1400, innerHeight: 880 }, screen)).toBe(false)
+  })
+
   test('a window that is unfocused when the app mounts is marked, and a focused one is not', async () => {
     const shell = await import('../src/shell')
     hasFocus(false)

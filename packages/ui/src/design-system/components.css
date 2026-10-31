@@ -293,6 +293,10 @@
   text-align: left;
 }
 
+.ui-list-row__main:hover:not(:disabled) {
+  background: inherit;
+}
+
 .ui-list-row__main:disabled {
   color: var(--ui-muted);
   cursor: not-allowed;

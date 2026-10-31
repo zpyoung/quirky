@@ -10,7 +10,7 @@ import { useAppState, usePluginHost, usePluginState } from './context'
 import { CommandPalette } from './plugins/CommandPalette'
 import { OverlayLayer } from './plugins/OverlayLayer'
 import { useThemeVariables } from './plugins/useThemeVariables'
-import { syncWindowInactive } from './shell'
+import { syncWindowInactive, trackWindowFullscreen } from './shell'
 import { ShellStatusBar } from './shell/StatusBar'
 import {
   fitToolShellGeometry,
@@ -61,7 +61,9 @@ export function App() {
 
   const noToken = state.connection === 'no-token'
   useEffect(() => {
-    if (!noToken) syncWindowInactive()
+    if (noToken) return
+    syncWindowInactive()
+    return trackWindowFullscreen()
   }, [noToken])
 
   useEffect(() => {

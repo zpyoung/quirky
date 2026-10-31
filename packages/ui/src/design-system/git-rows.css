@@ -1,3 +1,7 @@
+[data-git-panel] {
+  padding-inline: var(--ui-space-12);
+}
+
 .git-rows .git-row .ui-list-row {
   border: 0;
   flex-wrap: nowrap;

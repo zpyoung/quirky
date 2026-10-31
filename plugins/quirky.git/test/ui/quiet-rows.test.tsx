@@ -2,6 +2,7 @@ import { afterAll, beforeEach, describe, expect, test } from 'bun:test'
 import { readFileSync } from 'node:fs'
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
 import { registerDom } from './register-dom'
+import { act } from 'react'
 
 registerDom()
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
@@ -40,6 +41,17 @@ describe('Changes rows are quiet', () => {
     expect(letter.classList.contains('ui-badge')).toBe(false)
     expect(q(rowItem(element, 'gone.md'), '[aria-label="Git status deleted"]')?.textContent).toBe('D')
     expect(q(rowItem(element, 'notes.txt'), '[aria-label="Git status untracked"]')?.textContent).toBe('U')
+    unmount()
+  })
+
+  test('clicking a row marks it selected, so the opened file shows in the list', async () => {
+    const { element, unmount } = await open()
+    const main = q(rowItem(element, 'src/math.ts'), '.ui-list-row__main') as HTMLElement
+    expect(q(rowItem(element, 'src/math.ts'), '.ui-list-row--selected')).toBeNull()
+    await act(async () => { main.click() })
+    await settle()
+    expect(q(rowItem(element, 'src/math.ts'), '.ui-list-row--selected')).not.toBeNull()
+    expect(q(rowItem(element, 'notes.txt'), '.ui-list-row--selected')).toBeNull()
     unmount()
   })
 
@@ -91,7 +103,7 @@ describe('git-rows.css', () => {
 
   test('every selector is scoped under a git panel class', () => {
     expect(rules.length).toBeGreaterThan(0)
-    for (const rule of rules) for (const selector of rule.selectors) expect(selector).toMatch(/\.git-(rows|section)\b/)
+    for (const rule of rules) for (const selector of rule.selectors) expect(selector).toMatch(/\.git-(rows|section)\b|\[data-git-panel\]/)
   })
 
   test('a destructive button is filled red only on its own hover or focus', () => {

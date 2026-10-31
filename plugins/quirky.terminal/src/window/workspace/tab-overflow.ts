@@ -1,17 +1,18 @@
 /** A horizontal extent in viewport coordinates. */
 export type Span = { left: number; right: number }
 
-/** Pixels of overhang ignored, so rounding in layout never hides a tab that looks fully visible. */
+/** Pixels of overhang ignored, so rounding in layout never reads a tab as not fitting. */
 const ROUNDING = 1
 
 /**
- * The indexes of the tabs not fully inside the strip's visible width, on either side. A tab that is
- * partly clipped counts as hidden.
+ * The indexes of the tabs too clipped to use: less than half of the tab shows in the strip, on
+ * either side. A tab with most of itself showing stays clickable, so listing it would only mislead.
  */
 export function hiddenTabIndexes(viewport: Span, tabs: readonly Span[]): number[] {
   const hidden: number[] = []
   tabs.forEach((tab, index) => {
-    if (tab.left < viewport.left - ROUNDING || tab.right > viewport.right + ROUNDING) hidden.push(index)
+    const showing = Math.min(tab.right, viewport.right) - Math.max(tab.left, viewport.left)
+    if (showing < (tab.right - tab.left) / 2) hidden.push(index)
   })
   return hidden
 }

@@ -231,6 +231,7 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
   const notes = useNotes(context, worktree)
   const counts = useMemo(() => noteCounts(notes), [notes])
 
+  const [openedPath, setOpenedPath] = useState<string | null>(null)
   const [filter, setFilter] = useState('')
   const [filterOpen, setFilterOpen] = useState(false)
   const [selection, setSelectionState] = useState<SelectionState>(EMPTY_SELECTION)
@@ -562,7 +563,10 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
       if (item.entry === undefined) return openRow(item, { permanent })
       const type = kind === 'mod' ? 'mod-click' : kind === 'shift' ? 'shift-click' : 'click'
       const action: SelectionAction = type === 'shift-click' ? { type, path: item.path, order } : { type, path: item.path }
-      if (dispatchSelection(action) !== null) openRow(item, { permanent })
+      if (dispatchSelection(action) !== null) {
+        setOpenedPath(item.path)
+        openRow(item, { permanent })
+      }
     },
     contextMenu: (item, x, y) => {
       if (item.entry) dispatchSelection({ type: 'context-click', path: item.path })
@@ -1210,7 +1214,7 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
                 viewMode={viewMode}
                 collapsedDirs={collapsed}
                 onToggleDir={sectionToggle}
-                selected={selected}
+                selected={openedPath === null || selected.includes(openedPath) ? selected : [...selected, openedPath]}
                 handlers={handlers}
               />
             </SectionFrame>

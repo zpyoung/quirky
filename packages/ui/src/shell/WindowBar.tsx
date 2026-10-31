@@ -510,7 +510,8 @@ export function WindowBar({ onSettings }: WindowBarProps) {
   }
   const step = (direction: 'back' | 'forward') => {
     void store.navigateHistory(direction).then((error) => {
-      if (error) showError(connection, 'Could not navigate', error)
+      // an empty history is the normal state at first launch, not a failure worth a toast
+      if (error && !error.startsWith('There is no workspace to navigate')) showError(connection, 'Could not navigate', error)
     })
   }
 

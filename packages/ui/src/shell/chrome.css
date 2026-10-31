@@ -12,6 +12,11 @@
   height: var(--window-bar-height);
   padding: 0 var(--ui-space-12) 0 var(--window-bar-traffic-lights);
   user-select: none;
+  user-select: none;
+}
+
+.app[data-window-fullscreen] .window-bar {
+  padding-inline-start: var(--ui-space-12);
 }
 
 .window-bar__group {

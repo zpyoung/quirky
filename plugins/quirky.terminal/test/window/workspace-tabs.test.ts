@@ -228,7 +228,7 @@ describe('SC-11: clicking a tab activates it', () => {
       await flushResize(resize)
       expect(view.q('.qt-tab-more')).toBeNull()
 
-      layout.setWidth(220)
+      layout.setWidth(200)
       await flushResize(resize)
       const more = view.q('.qt-tab-more')!
       expect(more.textContent).toBe('2 more')
@@ -239,7 +239,7 @@ describe('SC-11: clicking a tab activates it', () => {
       await flushResize(resize)
       expect(view.q('.qt-tab-more')).toBeNull()
 
-      layout.setWidth(220)
+      layout.setWidth(200)
       await flushResize(resize)
       expect(view.q('.qt-tab-more')).not.toBeNull()
       layout.setTabWidths({ 'tab-1': 50, 'tab-2': 50, 'tab-3': 50 })
@@ -254,12 +254,12 @@ describe('SC-11: clicking a tab activates it', () => {
     const resize = observeResize()
     try {
       const view = await mount(fakeDaemon(makeWorkspace(group('grp-1', terminalTabs(4)))))
-      const layout = installTabLayout(view, 220, { 'tab-1': 100, 'tab-2': 100, 'tab-3': 100, 'tab-4': 100 })
+      const layout = installTabLayout(view, 200, { 'tab-1': 100, 'tab-2': 100, 'tab-3': 100, 'tab-4': 100 })
       await flushResize(resize)
       expect(view.q('.qt-tab-more')!.textContent).toBe('3 more')
       layout.viewport.scrollLeft = 244
       await fire(layout.viewport, new Event('scroll'))
-      expect(view.q('.qt-tab-more')!.textContent).toBe('3 more')
+      expect(view.q('.qt-tab-more')!.textContent).toBe('2 more')
       layout.viewport.scrollLeft = 100
       await fire(layout.viewport, new Event('scroll'))
       expect(view.q('.qt-tab-more')!.textContent).toBe('3 more')
@@ -280,7 +280,7 @@ describe('SC-11: clicking a tab activates it', () => {
     })
     try {
       const view = await mount(fakeDaemon(makeWorkspace(group('grp-1', terminalTabs(4)))))
-      const layout = installTabLayout(view, 220, { 'tab-1': 100, 'tab-2': 100, 'tab-3': 100, 'tab-4': 100 })
+      const layout = installTabLayout(view, 200, { 'tab-1': 100, 'tab-2': 100, 'tab-3': 100, 'tab-4': 100 })
       await flushResize(resize)
       await click(view.q('.qt-tab-more'))
       const rows = [...document.querySelectorAll<HTMLElement>('.ui-popup [role="menuitem"]')]

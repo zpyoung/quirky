@@ -21,17 +21,22 @@ describe('hiddenTabIndexes', () => {
   })
 
   test('reports the tabs past the right edge', () => {
-    expect(hiddenTabIndexes(viewport, row(viewport, [100, 100, 100, 100]))).toEqual([2, 3])
+    expect(hiddenTabIndexes(viewport, row(viewport, [100, 100, 100, 100]))).toEqual([3])
   })
 
   test('reports tabs on both sides of a scrolled strip', () => {
-    expect(hiddenTabIndexes(viewport, row(viewport, [100, 100, 100, 100, 100], 200))).toEqual([0, 1, 4])
+    expect(hiddenTabIndexes(viewport, row(viewport, [100, 100, 100, 100, 100, 100], 200))).toEqual([0, 1, 5])
   })
 
-  test('counts a partly clipped tab as hidden, whichever edge clips it', () => {
-    expect(hiddenTabIndexes(viewport, row(viewport, [100, 100, 100]))).toEqual([2])
-    expect(hiddenTabIndexes(viewport, row(viewport, [100, 100, 100, 100], 50))).toEqual([0, 3])
-    expect(hiddenTabIndexes(viewport, row(viewport, [100, 100, 100], 100))).toEqual([0])
+  test('a tab is hidden when less than half of it shows, whichever edge clips it', () => {
+    expect(hiddenTabIndexes(viewport, [span(200, 100)])).toEqual([])
+    expect(hiddenTabIndexes(viewport, [span(201, 100)])).toEqual([0])
+    expect(hiddenTabIndexes(viewport, [span(-50, 100)])).toEqual([])
+    expect(hiddenTabIndexes(viewport, [span(-51, 100)])).toEqual([0])
+  })
+
+  test('the active tab with only its edge clipped is not listed', () => {
+    expect(hiddenTabIndexes(viewport, [span(0, 252), span(252, 100), span(352, 100)])).toEqual([1, 2])
   })
 
   test('ignores sub-pixel overhang from rounding', () => {
@@ -41,7 +46,7 @@ describe('hiddenTabIndexes', () => {
 
   test('works from a viewport that does not start at zero', () => {
     const offset = span(32, 150)
-    expect(hiddenTabIndexes(offset, row(offset, [100, 100, 100]))).toEqual([1, 2])
+    expect(hiddenTabIndexes(offset, row(offset, [100, 100, 100]))).toEqual([2])
   })
 })
 
