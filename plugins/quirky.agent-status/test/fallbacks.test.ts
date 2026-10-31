@@ -2,6 +2,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, test } from 'bun:test
 import { removeTempDirs } from '../../../packages/daemon/test/plugins/fixtures'
 import { facetOf, programEvidence, titleEvidence } from '../src/fallbacks'
 import { newRow } from '../src/apply'
+import { displayOf, STALE_AFTER_MS } from '../src/model'
 import type { AgentRow } from '../src/types'
 import { Rig, waitForAsync } from './support'
 
@@ -38,10 +39,26 @@ describe('SC-21: terminal titles fill in where hooks are silent', () => {
     expect(rig.notifies()).toEqual([])
   })
 
+  test('OpenCode at its empty prompt stays idle until a working title precedes completion', async () => {
+    rig = await Rig.start({ sessions: [{ agent: 'opencode', title: 'OpenCode' }] })
+    await rig.title('OpenCode')
+    expect(await rig.row()).toMatchObject({ state: 'done', display: 'idle', label: 'Idle', source: 'title' })
+
+    await rig.title('OpenCode')
+    expect(await rig.row()).toMatchObject({ display: 'idle' })
+    expect(rig.settles()).toEqual([])
+
+    await rig.title('⠋ OC | Review the change')
+    expect(await rig.row()).toMatchObject({ state: 'working', display: 'working' })
+    await rig.title('OC | Review the change')
+    expect(await rig.row()).toMatchObject({ state: 'done', display: 'done', label: 'Done' })
+    expect(rig.settles()).toMatchObject([{ sessionId: 's1', state: 'done' }])
+  })
+
   test('a title that moves a row into waiting or done settles it; the row a title starts and a repeated title do not', async () => {
     rig = await Rig.start()
     await rig.title('✳ Claude Code')
-    expect(await rig.row()).toMatchObject({ state: 'done', source: 'title' })
+    expect(await rig.row()).toMatchObject({ state: 'done', display: 'idle', source: 'title' })
     await rig.title('⠋ Working on it')
     await rig.title('✋ gemini')
     await rig.title('✋ gemini')
@@ -257,5 +274,12 @@ describe('precedence when the hooks setting is off', () => {
     expect(titleEvidence(hook, 'idle', { sessionId: 's1', agent: 'claude', at: at + 1000, title: '✳ claude' })).toBe(hook)
     const program = programEvidence(null, { id: null, state: 'working' }, ev({})).row!
     expect(titleEvidence(program, 'idle', { sessionId: 's1', agent: 'claude', at: at + 1000, title: '✳ claude' })).toBe(program)
+  })
+
+  test('an idle title after stale hooks preserves completed work across a compaction boundary', () => {
+    const completed: AgentRow = { ...hooked(), state: 'done', sessionBoundary: true, prompt: 'Review the change' }
+    const now = at + STALE_AFTER_MS + 1
+    const row = titleEvidence(completed, 'idle', { sessionId: 's1', agent: 'claude', at: now, title: '✳ Claude Code' })
+    expect(displayOf(row, now, true).display).toBe('done')
   })
 })
