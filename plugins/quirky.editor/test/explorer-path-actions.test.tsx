@@ -994,8 +994,6 @@ test('Explorer footer Search in Files focuses the contents query', async () => {
   expect(document.activeElement).toBe(queryInput)
 })
 
-
-
 test('Explorer header actions copy all selected paths', async () => {
   const root = '/test'
   const worktree = 'copy-selection-test'
@@ -1068,6 +1066,7 @@ test('Explorer header actions copy all selected paths', async () => {
     await panel.unmount()
   }
 }, 60_000)
+
 test('Explorer footer copies multi-selection paths and row drags satisfy the Terminal worktree-path contract', async () => {
   const fixture = await makeFixture({ displayRoot: 'nested' })
   expect(fixture.listing.root).toBe(join(fixture.root, 'nested'))

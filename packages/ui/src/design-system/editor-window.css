@@ -709,7 +709,6 @@
   container-type: size;
 }
 
-
 .qe-explorer-location {
   align-items: center;
   border-bottom: var(--ui-border-width) solid var(--ui-border);
@@ -799,7 +798,6 @@
   overscroll-behavior: contain;
   padding: var(--ui-space-4) var(--ui-space-6);
 }
-
 
 .qe-explorer-tree-content:focus-visible {
   outline: var(--ui-focus-width) solid var(--ui-accent);
@@ -982,7 +980,6 @@
     padding: 0 var(--ui-space-4);
   }
 
-
   .qe-explorer-query {
     gap: var(--ui-space-4);
     padding: var(--ui-space-2) var(--ui-space-4);
@@ -1006,7 +1003,6 @@
   .qe-explorer-footer {
     display: none;
   }
-
 }
 
 .tool-shell__panel .qe-explorer-more-actions {

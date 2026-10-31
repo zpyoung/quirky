@@ -164,7 +164,6 @@ test.skipIf(!existsSync(executable))('file rows are visible and scrollable in sh
       const last = page.locator('[role="treeitem"][data-path="/repo/file-12.txt"]')
       expect(await rowFitsInTree(first)).toBe(true)
 
-
       const tree = page.locator('.qe-explorer-tree')
       const scrollMetrics = await tree.evaluate((element) => ({ clientHeight: element.clientHeight, scrollHeight: element.scrollHeight }))
       expect(scrollMetrics.scrollHeight).toBeGreaterThan(scrollMetrics.clientHeight)
