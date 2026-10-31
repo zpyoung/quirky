@@ -1009,7 +1009,7 @@ function DocumentBody({ context, input }: { context: UiPluginContext; input: Doc
   }
   const changeWrap = (value: boolean) => void saveSetting('editorWordWrap', value)
   const pathTitle = buffer.relativePath || buffer.name
-  const changesBuffer = localText === null
+  const editingBuffer = localText === null
     ? buffer
     : { ...buffer, draft: localText === buffer.content ? null : localText, dirty: localText !== buffer.content }
 
@@ -1139,7 +1139,7 @@ function DocumentBody({ context, input }: { context: UiPluginContext; input: Doc
       <div className="qe-document-content">
         {showChanges && <ChangesSurface
           context={context}
-          buffer={changesBuffer}
+          buffer={editingBuffer}
           tabId={actualTabId}
           fontSize={fontSize}
           fontFamily={settings.fontFamily}
@@ -1158,7 +1158,7 @@ function DocumentBody({ context, input }: { context: UiPluginContext; input: Doc
           <SourceEditor
             key={`${buffer.id}:${editorGeneration}`}
             ref={sourceRef}
-            buffer={buffer}
+            buffer={editingBuffer}
             tabId={actualTabId}
             wrap={settings.wordWrap}
             minimap={settings.minimap}

@@ -34,6 +34,8 @@ The daemon's internal `EditorBuffer` owns `content`, nullable `draft`, and nulla
 
 Draft writes compare `expectedRevision` with `contentRevision`; stale writes conflict without replacing the current draft. General state changes advance `revision`, while content changes advance `contentRevision`. Text `read` chunks are bounded to 64 Ki UTF-16 code units, carry the matching `contentRevision`, and avoid splitting surrogate pairs. Disk reads also require the current `diskSignature`. Use these reads to hydrate omitted snapshot text rather than treating absent fields as content.
 
+Source and Changes render the latest local text while draft writes await acknowledgement, rather than replacing it with an earlier acknowledged draft. `DocumentSurface` correlates shared revisions with pending and acknowledged writes; a genuinely competing revision preserves local text and exposes Compare local text.
+
 ## Staged transfers
 
 The UI uses inline draft calls through 128 KiB and stages larger drafts. Staging leaves the existing 16 MiB frame cap unchanged; a staged chunk contains at most 64 KiB decoded bytes. Drafts and individual files are limited to 50 MiB. Import accepts at most 256 files, 50 MiB aggregate data, and 256 KiB of path/name metadata. The daemon permits at most four active transfers and 100 MiB of reserved staged data, with a five-minute idle expiry.
