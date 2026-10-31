@@ -10,6 +10,11 @@ const OUTLINE = 'panel:acme.shell/outline'
 
 const slot = (id: string) => `[data-plugin-slot="${id}"]`
 const region = (name: string) => `[data-region="${name}"]`
+const contextMenu = (target: Element) => {
+  const event = new MouseEvent('contextmenu', { bubbles: true, cancelable: true })
+  target.dispatchEvent(event)
+  return event
+}
 
 /** A plugin with a tool contribution, two views and a panel. */
 function writeShellPlugin(installed: string): void {
@@ -86,7 +91,9 @@ test('tool stripes toggle panels and move tools with pointer and keyboard contex
   expect(env.win.document.querySelector('button[aria-label="Outline"]')?.getAttribute('aria-pressed')).toBe('false')
 
   const pointerIcon = await env.win.waitFor(() => env.win.document.querySelector<HTMLButtonElement>('button[aria-label="Outline"]'))
-  pointerIcon.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 40, clientY: 50 }))
+  const pointerEvent = new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 40, clientY: 50 })
+  pointerIcon.dispatchEvent(pointerEvent)
+  expect(pointerEvent.defaultPrevented).toBe(true)
   const pointerMenu = await env.win.waitFor(menu)
   expect(menuItems(pointerMenu).map((item) => item.textContent?.trim())).toHaveLength(7)
   expect(itemNamed(pointerMenu, 'Remove from stripe')).toBeDefined()
@@ -117,6 +124,84 @@ test('tool stripes toggle panels and move tools with pointer and keyboard contex
   await key(dismissMenu, 'Escape')
   await env.win.waitFor(() => !menu() && env.win.document.activeElement === focusedIcon)
   expect(env.win.document.activeElement).toBe(focusedIcon)
+})
+
+test('the shell suppresses native context menus on blank center space', async () => {
+  const env = await boot()
+  const blankArea = await env.win.waitFor(() => env.win.document.querySelector<HTMLElement>('.shell-main-region'))
+
+  expect(contextMenu(blankArea).defaultPrevented).toBe(true)
+  await env.agent.callAny('ui.tool.open', { id: OUTLINE })
+  const panel = await env.win.waitFor(() => env.win.document.querySelector<HTMLElement>(slot(OUTLINE)))
+  expect(contextMenu(panel).defaultPrevented).toBe(true)
+  expect(env.win.document.querySelector('[role="menu"]')).toBeNull()
+})
+
+test('the shell keeps native context menus inside editable content', async () => {
+  const env = await boot()
+  const document = env.win.document
+  const blankArea = await env.win.waitFor(() => document.querySelector<HTMLElement>('.shell-main-region'))
+  const controls = document.createElement('div')
+  const commitMessage = document.createElement('textarea')
+  commitMessage.setAttribute('aria-label', 'Commit message')
+  const input = document.createElement('input')
+  const select = document.createElement('select')
+  select.append(document.createElement('option'))
+  const editableDescendants = ['', 'true', 'plaintext-only'].map((value) => {
+    const editable = document.createElement('div')
+    editable.setAttribute('contenteditable', value)
+    const descendant = document.createElement('span')
+    editable.append(descendant)
+    controls.append(editable)
+    return descendant
+  })
+  controls.prepend(commitMessage, input, select)
+  blankArea.append(controls)
+
+  expect(contextMenu(commitMessage).defaultPrevented).toBe(false)
+  expect(contextMenu(input).defaultPrevented).toBe(false)
+  expect(contextMenu(select).defaultPrevented).toBe(false)
+  for (const descendant of editableDescendants) {
+    expect(contextMenu(descendant).defaultPrevented).toBe(false)
+  }
+})
+
+test('the shell preserves native context menus for a text selection, then suppresses them when it is cleared', async () => {
+  const env = await boot()
+  const document = env.win.document
+  const blankArea = await env.win.waitFor(() => document.querySelector<HTMLElement>('.shell-main-region'))
+  const text = document.createTextNode('selected shell text')
+  blankArea.append(text)
+
+  const selection = document.getSelection()
+  expect(selection).not.toBeNull()
+  const range = document.createRange()
+  range.selectNodeContents(text)
+  selection!.removeAllRanges()
+  selection!.addRange(range)
+  expect(selection!.toString()).toBe('selected shell text')
+  expect(contextMenu(blankArea).defaultPrevented).toBe(false)
+
+  selection!.removeAllRanges()
+  expect(contextMenu(blankArea).defaultPrevented).toBe(true)
+})
+
+test('development builds keep blank shell context menus native', async () => {
+  const previousChannel = process.env.QUIRKY_BUILD_CHANNEL
+  process.env.QUIRKY_BUILD_CHANNEL = 'dev'
+
+  try {
+    const env = await boot()
+    const blankArea = await env.win.waitFor(() => env.win.document.querySelector<HTMLElement>('.shell-main-region'))
+    expect(contextMenu(blankArea).defaultPrevented).toBe(false)
+  } finally {
+    try {
+      await closeWindows()
+    } finally {
+      if (previousChannel === undefined) delete process.env.QUIRKY_BUILD_CHANNEL
+      else process.env.QUIRKY_BUILD_CHANNEL = previousChannel
+    }
+  }
 })
 
 

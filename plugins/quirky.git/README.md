@@ -26,6 +26,8 @@ In the command palette, **Save Source Control File** saves edits in the focused 
 
 Screen readers announce file rows with their Git state (such as modified or untracked) and history rows as commits. Row colors do not change those names to agent activity states.
 
+Right-click a file row for its Source Control actions. Blank Changes areas follow the [shell's context-menu behavior](../../README.md#shared-desktop-ui-components), including native editing and selected-text menus.
+
 For Markdown files, **Preview** shows only the rendered modified content and hides both source diff sides. **Source** restores the diff.
 
 Combined-diff navigation and Git open commands use the same hosted-tab route. Opening a diff selects its workspace view if another top-level view was showing. The `open-changes` and `open-commit` commands await the hosted-tab operation before replying.
