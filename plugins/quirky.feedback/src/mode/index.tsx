@@ -37,7 +37,15 @@ export function mountFeedbackMode(context: UiPluginContext, options: Options): (
       picker.setSuspended(suspended)
     }
   })
-  const picker = createPicker(doc, { pick: session.pick, escape: session.escape })
+  const picker = createPicker(doc, {
+    pick(target) {
+      const previous = session.getState().card?.serial
+      session.pick(target)
+      return session.getState().card?.serial !== previous
+    },
+    escape: session.escape
+  })
+  const unsubscribePicker = session.subscribe(() => picker.setSelection(session.getState().target))
   const layout = createLayout(context, win)
 
   const rootElement = fixedLayer(doc)
@@ -53,6 +61,7 @@ export function mountFeedbackMode(context: UiPluginContext, options: Options): (
   return () => {
     if (!mounted) return
     mounted = false
+    unsubscribePicker()
     session.dispose()
     layout.dispose()
     picker.dispose()

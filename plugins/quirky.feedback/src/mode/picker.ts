@@ -5,7 +5,7 @@ const STOPPED = new Set(['pointerdown', 'pointerup', 'mousedown', 'mouseup', 'cl
 const OBSERVED = [...STOPPED, 'pointermove', 'mousemove']
 
 export type PickerHandlers = {
-  pick(target: Target): void
+  pick(target: Target): boolean
   escape(): void
 }
 
@@ -13,6 +13,7 @@ export type Picker = {
   host: HTMLElement
   /** While suspended the host is hidden and every event passes through untouched. */
   setSuspended(suspended: boolean): void
+  setSelection(target: Target | null): void
   focus(): void
   dispose(): void
 }
@@ -27,27 +28,19 @@ export function createPicker(doc: Document, handlers: PickerHandlers): Picker {
   const { host, surface, highlight, label } = createSelectionOverlay(doc, selectionOverlayStyles)
   let held = false
   let suspended = false
+  let selected: Target | null = null
+  let lastPointer: MouseEvent | null = null
 
   const hideHighlight = () => {
     highlight.hidden = true
     label.hidden = true
   }
 
-  const setHeld = (next: boolean) => {
-    if (held === next) return
-    held = next
-    for (const element of [host, surface]) element.style.setProperty('pointer-events', next ? 'none' : 'auto', 'important')
-    if (next) hideHighlight()
-  }
-
-  const follow = (event: MouseEvent) => {
-    const element = elementAtPoint(doc, event.clientX, event.clientY)
-    if (element === null) return hideHighlight()
-    const { element: target, label: name } = resolveTarget(element)
-    const box = target.getBoundingClientRect()
+  function drawTarget(target: Target) {
+    const box = target.element.getBoundingClientRect()
     if (box.width <= 0 || box.height <= 0) return hideHighlight()
     Object.assign(highlight.style, { left: `${box.left}px`, top: `${box.top}px`, width: `${box.width}px`, height: `${box.height}px` })
-    label.textContent = name
+    label.textContent = target.label
     Object.assign(label.style, { left: '0px', top: '0px' })
     highlight.hidden = false
     label.hidden = false
@@ -58,9 +51,31 @@ export function createPicker(doc: Document, handlers: PickerHandlers): Picker {
     Object.assign(label.style, { left: `${left}px`, top: `${top}px` })
   }
 
-  const select = (event: MouseEvent) => {
+  const setHeld = (next: boolean) => {
+    if (held === next) return
+    held = next
+    for (const element of [host, surface]) element.style.setProperty('pointer-events', next ? 'none' : 'auto', 'important')
+    if (next) hideHighlight()
+    else if (!suspended && selected !== null) drawTarget(selected)
+  }
+
+  const follow = (event: MouseEvent) => {
+    lastPointer = event
+    if (selected !== null) return drawTarget(selected)
     const element = elementAtPoint(doc, event.clientX, event.clientY)
-    if (element !== null) handlers.pick(resolveTarget(element))
+    if (element === null) return hideHighlight()
+    drawTarget(resolveTarget(element))
+  }
+
+  const select = (event: MouseEvent) => {
+    lastPointer = event
+    const element = elementAtPoint(doc, event.clientX, event.clientY)
+    if (element === null) return
+    const target = resolveTarget(element)
+    if (handlers.pick(target)) {
+      selected = target
+      drawTarget(target)
+    }
   }
 
   const onPointer = (event: Event) => {
@@ -111,7 +126,16 @@ export function createPicker(doc: Document, handlers: PickerHandlers): Picker {
       } else {
         host.style.removeProperty('display')
         surface.focus()
+        if (!held && selected !== null) drawTarget(selected)
       }
+    },
+    setSelection(target) {
+      selected = target
+      if (suspended || held) hideHighlight()
+      else if (target === null) {
+        if (lastPointer === null) hideHighlight()
+        else follow(lastPointer)
+      } else drawTarget(target)
     },
     focus: () => surface.focus(),
     dispose() {

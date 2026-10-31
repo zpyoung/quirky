@@ -44,6 +44,7 @@ Copy turns every stored comment into one Markdown block. File issue builds a dra
    - **Given** the mode is on
    - **When** someone clicks an element, chooses Change or Question, types a comment and adds it
    - **Then** the click doesn't reach the app, and the tray count goes up by one and the element gets a numbered dot
+   - While composing, the card names the target by its safe accessible name or visible text, falling back to its tag or pane name. The selected target stays outlined, and the card opens near it without extending beyond the viewport.
    - **Data before:** **Tray**: 2 comments
    - **Walkthrough:**
      1. The person clicks the Commit button; Quirky highlights it and opens the comment card
