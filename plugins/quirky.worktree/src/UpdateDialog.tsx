@@ -89,7 +89,7 @@ export function UpdateDialog({ context, worktree, onClose }: Props) {
           <TextField label="Reference URL" id="workspace-reference-url" value={referenceUrl} onChange={(event) => setReferenceUrl(event.target.value)} placeholder="https://…" />
           <TextField label="Reference label" id="workspace-reference-label" value={referenceLabel} onChange={(event) => setReferenceLabel(event.target.value)} placeholder="APP-42" />
           <Button type="button" disabled={referenceUrl.trim() === ''} onClick={() => void addReference()}>Add reference</Button>
-          <p className="ui-help-text">Links are displayed as text here and are never executed by the worktree plugin.</p>
+          <p className="ui-help-text">Links are displayed as text here and are not opened.</p>
         </section>
         <div className="ui-actions">
           <span className="ui-text-muted">Changes apply when you save</span>
