@@ -3026,7 +3026,8 @@
       },
       {
         "id": "save",
-        "title": "Save File"
+        "title": "Save Source Control File",
+        "description": "Save edits in the focused Source Control diff."
       },
       {
         "id": "reload-from-disk",
