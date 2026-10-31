@@ -291,6 +291,7 @@ function WorktreeCard({
         }
         description={description ? <span className="ui-text-ellipsis" title={description}>{description}</span> : undefined}
         status={rowStatus}
+        statusLabel={needsYou ? undefined : `Status: ${activity}`}
         progress={progress}
         selected={selected}
         compact={options.compact}
