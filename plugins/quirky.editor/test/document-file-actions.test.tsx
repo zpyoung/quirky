@@ -134,6 +134,7 @@ async function renderDocument(options: { dirty?: boolean; withCloseOverlay?: boo
     getSetting: (name: string) => settings.get(name),
     getLayout: () => ({ worktree: WORKTREE_ID, view: null, panel: null, sidebar: true, focus: 'view' }),
     setContext() {},
+    toast() {},
     togglePanel: (panel: string, open: boolean) => { panelToggles.push({ panel, open }) },
   } as unknown as UiPluginContext
   const element = document.createElement('div')
@@ -194,7 +195,6 @@ function outsideSourceControl(): HTMLButtonElement {
   document.body.append(button)
   return button
 }
-
 
 async function openFileActions(surface: Mounted): Promise<void> {
   const details = fileActions(surface.element)
@@ -375,6 +375,7 @@ test('File actions keep secondary controls usable and their settings persistent'
     value: 0
   })
 })
+
 test('cancelling a keyboard-activated dirty Close tab returns focus to the visible File actions trigger', async () => {
   const surface = await renderDocument({ dirty: true, withCloseOverlay: true })
   const details = fileActions(surface.element)
