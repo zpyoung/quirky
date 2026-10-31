@@ -5,8 +5,10 @@ import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 
 const uiDir = join(import.meta.dir, '..')
+const repoRoot = join(uiDir, '../..')
 let out = ''
 let plugins = ''
+const scratch: string[] = []
 
 /** Source of a plugin UI module that imports React bare and a sibling file, as the built-ins do. */
 const FIXTURE_UI = [
@@ -14,33 +16,64 @@ const FIXTURE_UI = [
   "import { createPortal } from 'react-dom'",
   "import { jsx } from 'react/jsx-runtime'",
   "import { greeting } from './greeting'",
+  "import { Panel } from './Panel'",
+  'export const buildInfo = [process.env.QUIRKY_BUILD_VERSION, process.env.QUIRKY_BUILD_COMMIT, process.env.QUIRKY_BUILD_CHANNEL]',
   'export function activate(context: { provide(id: string, impl: unknown): void }) {',
-  "  context.provide('view:acme.fixture/page', () => jsx('p', { children: [greeting, typeof useState, typeof createPortal] }))",
+  "  context.provide('view:acme.fixture/page', () => jsx('p', { children: [greeting, typeof useState, typeof createPortal, Panel] }))",
   '}',
   ''
 ].join('\n')
 
-beforeAll(async () => {
-  out = mkdtempSync(join(tmpdir(), 'quirky-ui-build-'))
-  plugins = mkdtempSync(join(tmpdir(), 'quirky-ui-plugins-'))
-  mkdirSync(join(plugins, 'acme.fixture', 'src'), { recursive: true })
-  writeFileSync(join(plugins, 'acme.fixture', 'src', 'ui.tsx'), FIXTURE_UI)
-  writeFileSync(join(plugins, 'acme.fixture', 'src', 'greeting.ts'), "export const greeting = 'hello from the bundle'\n")
-  mkdirSync(join(plugins, 'acme.headless'), { recursive: true })
-  writeFileSync(join(plugins, 'acme.headless', 'main.ts'), 'export function activate() {}\n')
+const FIXTURE_PANEL = [
+  "import { jsx } from 'react/jsx-runtime'",
+  'export function Panel() {',
+  '  return (',
+  '    <section>',
+  '      <Inner />',
+  '    </section>',
+  '  )',
+  '}',
+  'function Inner() {',
+  "  return jsx('i', {})",
+  '}',
+  ''
+].join('\n')
+
+function fixturePlugins(): string {
+  const dir = mkdtempSync(join(tmpdir(), 'quirky-ui-plugins-'))
+  scratch.push(dir)
+  mkdirSync(join(dir, 'acme.fixture', 'src'), { recursive: true })
+  writeFileSync(join(dir, 'acme.fixture', 'src', 'ui.tsx'), FIXTURE_UI)
+  writeFileSync(join(dir, 'acme.fixture', 'src', 'Panel.tsx'), FIXTURE_PANEL)
+  writeFileSync(join(dir, 'acme.fixture', 'src', 'greeting.ts'), "export const greeting = 'hello from the bundle'\n")
+  mkdirSync(join(dir, 'acme.headless'), { recursive: true })
+  writeFileSync(join(dir, 'acme.headless', 'main.ts'), 'export function activate() {}\n')
+  return dir
+}
+
+/** Runs packages/ui/build.ts into fresh output directories; the flavor is chosen by `QUIRKY_UI_DEV`. */
+async function runBuild(flavor: { dev: boolean }, pluginsDir: string) {
+  const outDir = mkdtempSync(join(tmpdir(), 'quirky-ui-build-'))
+  scratch.push(outDir)
   const proc = Bun.spawn(['bun', join(uiDir, 'build.ts')], {
     cwd: uiDir,
-    env: { ...process.env, QUIRKY_UI_OUT: out, QUIRKY_PLUGINS_DIR: plugins },
+    env: { ...process.env, QUIRKY_UI_OUT: outDir, QUIRKY_PLUGINS_DIR: pluginsDir, QUIRKY_UI_DEV: flavor.dev ? '1' : '' },
     stdout: 'pipe',
     stderr: 'pipe'
   })
   const [code, stderr] = await Promise.all([proc.exited, new Response(proc.stderr).text()])
-  if (code !== 0) throw new Error(`build failed (${code}): ${stderr}`)
+  return { outDir, code, stderr }
+}
+
+beforeAll(async () => {
+  plugins = fixturePlugins()
+  const result = await runBuild({ dev: false }, plugins)
+  if (result.code !== 0) throw new Error(`build failed (${result.code}): ${result.stderr}`)
+  out = result.outDir
 }, 60_000)
 
 afterAll(() => {
-  if (out) rmSync(out, { recursive: true, force: true })
-  if (plugins) rmSync(plugins, { recursive: true, force: true })
+  for (const dir of scratch) rmSync(dir, { recursive: true, force: true })
 })
 
 const read = (rel: string) => readFileSync(join(out, rel), 'utf8')
@@ -137,5 +170,71 @@ describe('plugin UI modules are bundled beside their plugins', () => {
   test('the app build leaves no plugin output in the app directory', () => {
     expect(existsSync(join(out, 'ui.js'))).toBe(false)
     expect(existsSync(join(out, 'acme.fixture'))).toBe(false)
+  })
+})
+
+describe('build flavors', () => {
+  const version = readFileSync(join(repoRoot, 'apps/desktop/electrobun.config.ts'), 'utf8').match(/version:\s*'([^']*)'/)![1]!
+  const commit = (() => {
+    const result = Bun.spawnSync(['git', 'rev-parse', '--short', 'HEAD'], { cwd: repoRoot })
+    return result.exitCode === 0 ? result.stdout.toString().trim() : 'unknown'
+  })()
+  const releaseBundle = () => readFileSync(join(plugins, 'acme.fixture', 'dist', 'ui.js'), 'utf8')
+
+  test('a release build carries no source attributes anywhere', () => {
+    expect(read('main.js')).not.toContain('data-quirky-source')
+    expect(read('gallery.js')).not.toContain('data-quirky-source')
+    expect(releaseBundle()).not.toContain('data-quirky-source')
+  })
+
+  test('a release build resolves the build defines with the release channel', () => {
+    const text = releaseBundle()
+    expect(text).toContain(`"${version}","${commit}","release"`)
+    expect(text).not.toContain('process.env.QUIRKY_BUILD')
+  })
+
+  describe('with QUIRKY_UI_DEV=1', () => {
+    let devOut = ''
+    let devPlugins = ''
+    const devBundle = () => readFileSync(join(devPlugins, 'acme.fixture', 'dist', 'ui.js'), 'utf8')
+
+    beforeAll(async () => {
+      devPlugins = fixturePlugins()
+      const result = await runBuild({ dev: true }, devPlugins)
+      if (result.code !== 0) throw new Error(`dev build failed (${result.code}): ${result.stderr}`)
+      devOut = result.outDir
+    }, 60_000)
+
+    test('a plugin UI intrinsic element records its file and line, and a component does not', () => {
+      const text = devBundle()
+      expect(text).toMatch(/"data-quirky-source":\s*"[^"]*acme\.fixture\/src\/Panel\.tsx:4"/)
+      expect(text.match(/data-quirky-source/g)).toHaveLength(1)
+    })
+
+    test('the app records repo-relative paths under packages/ui/src', () => {
+      const text = readFileSync(join(devOut, 'main.js'), 'utf8')
+      expect(text).toMatch(/"data-quirky-source":\s*"packages\/ui\/src\/[^"]+\.tsx:\d+"/)
+    })
+
+    test('output stays unminified on one production runtime', () => {
+      const text = devBundle()
+      expect(text.split('\n').length).toBeGreaterThan(10)
+      expect(text).not.toContain('jsxDEV')
+      expect(readFileSync(join(devOut, 'main.js'), 'utf8')).not.toContain('jsxDEV')
+    })
+
+    test('the build defines resolve with the dev channel', () => {
+      const text = devBundle()
+      expect(text).toMatch(new RegExp(`"${version}",\\s*"${commit}",\\s*"dev"`))
+      expect(text).not.toContain('process.env.QUIRKY_BUILD')
+    })
+
+    test('a plugin file that does not parse fails the build and names the file', async () => {
+      const broken = fixturePlugins()
+      writeFileSync(join(broken, 'acme.fixture', 'src', 'Panel.tsx'), 'export const Panel = () => <div>\n')
+      const result = await runBuild({ dev: true }, broken)
+      expect(result.code).not.toBe(0)
+      expect(result.stderr).toContain('Panel.tsx')
+    }, 60_000)
   })
 })

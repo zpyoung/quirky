@@ -1531,7 +1531,7 @@ test('Worktrees options dismiss and reopen without losing applied activity filte
   expect(trigger?.getAttribute('aria-expanded')).toBe('false')
   expect(trigger?.getAttribute('aria-haspopup')).toBe('dialog')
   expect(optionsPopover()).toBeNull()
-  for (const label of ['Add project', 'Workspace options', 'Activity filters', 'More workspace tools']) {
+  for (const label of ['Workspace options', 'Activity filters', 'More workspace tools']) {
     expect(host.textContent).not.toContain(label)
   }
 

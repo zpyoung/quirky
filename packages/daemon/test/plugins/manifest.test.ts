@@ -90,6 +90,26 @@ describe('parseManifest', () => {
     }
   })
 
+  test('accepts a GitHub repository URL', () => {
+    expect(parse({ ...base, repository: 'https://github.com/zpyoung/quirky' })).toEqual({
+      ok: true,
+      manifest: { ...base, repository: 'https://github.com/zpyoung/quirky' },
+    })
+  })
+
+  test.each([
+    ['a non-GitHub host', 'https://gitlab.com/zpyoung/quirky'],
+    ['an http URL', 'http://github.com/zpyoung/quirky'],
+    ['an extra path segment', 'https://github.com/zpyoung/quirky/issues'],
+    ['a missing repository segment', 'https://github.com/zpyoung'],
+    ['a trailing slash', 'https://github.com/zpyoung/quirky/'],
+    ['a query string', 'https://github.com/zpyoung/quirky?x=1'],
+    ['an empty string', ''],
+    ['a non-string', 1],
+  ])('rejects a repository with %s', (_name, repository) => {
+    expect(errorsOf({ ...base, repository }).join('\n')).toContain("field 'repository' must be")
+  })
+
   test('reports API incompatibility alongside other manifest problems', () => {
     const errors = errorsOf({ ...base, apiVersion: '2.0.0', extra: true, main: '/outside.js' })
     expect(errors).toContain("unknown field 'extra'")

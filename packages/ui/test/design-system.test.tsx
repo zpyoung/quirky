@@ -10,6 +10,7 @@ import {
   Dialog,
   EmptyState,
   FormRow,
+  ExpandingIconButton,
   IconButton,
   InlineAgentCard,
   ListRow,
@@ -129,6 +130,19 @@ describe('shared graphite components', () => {
     expect(calls).toEqual(['clicked'])
     await click(container.querySelector('button[aria-label="Close panel"]')!)
     expect(calls).toEqual(['clicked', 'clicked'])
+  })
+
+  test('an expanding icon button keeps its accessible name at rest and activates like a button', async () => {
+    const calls: string[] = []
+    await render(<ExpandingIconButton label="Add project" onClick={() => calls.push('clicked')}><svg aria-hidden="true" /></ExpandingIconButton>)
+
+    const button = container.querySelector<HTMLButtonElement>('button')!
+    expect(button.getAttribute('aria-label')).toBe('Add project')
+    expect(button.getAttribute('type')).toBe('button')
+    // the visible label must not double the name once it is revealed
+    expect(button.querySelector('.ui-expanding-icon-button__label')?.getAttribute('aria-hidden')).toBe('true')
+    await click(button)
+    expect(calls).toEqual(['clicked'])
   })
 
   test('text fields expose their label, disabled state, help and error descriptions', async () => {

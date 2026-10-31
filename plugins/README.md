@@ -1037,3 +1037,20 @@ Remove a saved target with `quirky cli runtime remove --selector <id> --yes`.
 Removal prevents new connections through that saved selector; it does not revoke
 the remote device grant or terminate an already established connection.
 
+
+## Feedback mode
+
+Feedback mode lets you point at part of Quirky, write a comment, and copy the comments for an agent or open them as GitHub issue drafts. Turn it on with View → Feedback Mode, the "Toggle Feedback Mode" palette command, or `Cmd+Option+K`. The **Enable Feedback Mode** setting removes all three when it's off.
+
+While the mode is on, a banner at the top says so and a tray at the bottom right lists your comments.
+
+- Click an element, choose Change or Question, type, and choose Add. Your click doesn't reach the app. The element gets a numbered dot, and if it isn't on screen later, its tray row says "No longer on screen".
+- Hold Option to use the app as usual, including opening menus. Let go and your next click selects again, so you can pick a menu item without choosing it.
+- Esc closes an empty comment box. With text in the box, the first Esc warns you and the second throws the text away. With no box open, Esc turns the mode off, and so does the banner's Exit button.
+- Clicking inside a terminal selects the whole pane. Terminal text is never captured, copied or stored.
+- A Native browser pane shows a chip with Comment on this pane and Annotate this page. Annotate this page leaves feedback mode and starts Browser Annotate on that pane.
+- Click a tray row to edit it, or choose Delete. Both save at once. Clear asks first, then removes every comment.
+- Copy puts every comment on the clipboard as one Markdown block, and Quirky confirms once the copy has worked.
+- File issue opens one GitHub draft per repository. Built-in plugins go to `zpyoung/quirky`, and a third-party plugin goes to the repository its manifest declares. If a plugin declares none, use Copy for its comments. When a draft can't hold every comment, it takes as many whole comments as fit and the tray says how many are left. Delete the filed ones and choose File issue again.
+
+The tray holds up to 50 comments of up to 2,000 characters each, and they survive a restart. Feedback mode itself starts off every time Quirky opens. Nothing leaves your machine until you choose Copy or File issue.

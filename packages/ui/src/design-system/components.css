@@ -109,6 +109,49 @@
   line-height: 1;
 }
 
+.ui-expanding-icon-button {
+  flex: 0 0 auto;
+  gap: 0;
+  padding: var(--ui-space-4);
+  transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease;
+}
+
+.ui-expanding-icon-button:hover:not(:disabled),
+.ui-expanding-icon-button:focus-visible:not(:disabled) {
+  background: var(--ui-accent);
+  border-color: var(--ui-accent);
+  color: var(--ui-surface);
+}
+
+.ui-expanding-icon-button__label {
+  display: inline-grid;
+  grid-template-columns: 0fr;
+  transition: grid-template-columns 120ms ease;
+}
+
+.ui-expanding-icon-button:hover:not(:disabled) .ui-expanding-icon-button__label,
+.ui-expanding-icon-button:focus-visible:not(:disabled) .ui-expanding-icon-button__label {
+  grid-template-columns: 1fr;
+}
+
+.ui-expanding-icon-button__text {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.ui-expanding-icon-button:hover:not(:disabled) .ui-expanding-icon-button__text,
+.ui-expanding-icon-button:focus-visible:not(:disabled) .ui-expanding-icon-button__text {
+  padding-inline-start: var(--ui-space-4);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ui-expanding-icon-button,
+  .ui-expanding-icon-button__label {
+    transition: none;
+  }
+}
+
 .ui-text-field {
   display: flex;
   flex-direction: column;
@@ -759,6 +802,21 @@
   padding: var(--ui-space-4) var(--ui-space-8);
 }
 
+/* growth must eat the title and overflow into the left padding, because wrapping would move the button off the cursor */
+.ui-tool-panel-frame__header:has(.ui-expanding-icon-button) {
+  container: ui-tool-panel-header / inline-size;
+  flex-shrink: 0;
+  flex-wrap: nowrap;
+  justify-content: flex-end;
+}
+
+/* widths assume the funnel and minimize controls sit to the button's right */
+@container ui-tool-panel-header (max-width: 140px) {
+  .ui-expanding-icon-button__label {
+    display: none;
+  }
+}
+
 .ui-tool-panel-frame__title {
   flex: 0 0 auto;
   font-size: var(--ui-font-body);
@@ -813,6 +871,18 @@
   gap: var(--ui-space-4);
   margin-inline-start: auto;
   min-width: 0;
+}
+
+@container ui-tool-panel-header (max-width: 72px) {
+  .ui-tool-panel-frame__title {
+    display: none;
+  }
+
+  .ui-tool-panel-frame__actions {
+    flex: 0 1 auto;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
 }
 
 .ui-tool-panel-frame__minimize {

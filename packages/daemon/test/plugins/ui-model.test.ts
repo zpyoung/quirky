@@ -1,6 +1,7 @@
 import { PLUGIN_API_VERSION, type ContributionInfo, type ContributionStatus, type PluginInfo, type PluginSource } from '@quirky/protocol'
 import { describe, expect, test } from 'bun:test'
 import { buildUiModel } from '../../src/plugins/ui-model'
+import { checkUiKindEntry } from '../../src/plugins/ui-kinds'
 
 function plugin(id: string, extra: Partial<PluginInfo> = {}, source: PluginSource = 'installed'): PluginInfo {
   return {
@@ -224,6 +225,64 @@ describe('contributions shown only while a setting is on', () => {
     const { model } = buildUiModel({ declarations, plugins: [withUi('acme.board')], chosenTheme: 'default', settingValue: () => true })
     expect(ids(model).sections).toEqual(['sidebar-section:acme.board/always', 'sidebar-section:acme.board/board'])
     expect(ids(model).tools).toContain('sidebar-section:acme.board/board')
+  })
+})
+
+describe('commands and keybindings shown only while a setting is on', () => {
+  const declarations = [
+    decl('setting', 'acme.board', 'board-enabled', { type: 'boolean', title: 'Board', default: false }),
+    decl('setting', 'acme.board', 'gated', { type: 'boolean', title: 'Gated', default: true, whenSetting: 'board-enabled' }),
+    decl('command', 'acme.board', 'open', { title: 'Open board', whenSetting: 'board-enabled' }),
+    decl('command', 'acme.board', 'always', { title: 'Always' }),
+    decl('keybinding', 'acme.board', 'open-key', { key: 'mod+shift+b', command: 'command:acme.board/open', whenSetting: 'board-enabled' }),
+    decl('keybinding', 'acme.board', 'always-key', { key: 'mod+shift+a', command: 'command:acme.board/always' })
+  ]
+  const model = (value: boolean) =>
+    buildUiModel({ declarations, plugins: [withUi('acme.board')], chosenTheme: 'default', settingValue: () => value })
+
+  test('a command and a keybinding whose setting is off leave the model without a warning', () => {
+    const { model: off, warnings } = model(false)
+    expect(off.commands.map((entry) => entry.id)).toEqual(['command:acme.board/always'])
+    expect(off.keybindings.map((entry) => entry.id)).toEqual(['keybinding:acme.board/always-key'])
+    expect(warnings.get('acme.board') ?? []).toEqual([])
+  })
+
+  test('they appear once the setting is on', () => {
+    const { model: on } = model(true)
+    expect(on.commands.map((entry) => entry.id)).toEqual(['command:acme.board/always', 'command:acme.board/open'])
+    expect(on.keybindings.map((entry) => entry.id).sort()).toEqual(['keybinding:acme.board/always-key', 'keybinding:acme.board/open-key'])
+  })
+
+  test('a setting with whenSetting stays in the model and carries the field', () => {
+    const { model: off } = model(false)
+    expect(off.settings.find((entry) => entry.id === 'setting:acme.board/gated')?.whenSetting).toBe('board-enabled')
+    expect(off.visibilitySettings).toEqual(['setting:acme.board/board-enabled'])
+  })
+
+  test('without a settingValue source everything is shown', () => {
+    const { model: all } = buildUiModel({ declarations, plugins: [withUi('acme.board')], chosenTheme: 'default' })
+    expect(all.commands).toHaveLength(2)
+    expect(all.keybindings).toHaveLength(2)
+  })
+})
+
+describe('whenSetting validation on settings, commands and keybindings', () => {
+  const entries: Array<[string, Record<string, unknown>]> = [
+    ['setting', { id: 'a', type: 'boolean', title: 'A', default: false }],
+    ['command', { id: 'a', title: 'A' }],
+    ['keybinding', { id: 'a', key: 'mod+b', command: 'command:acme/a' }]
+  ]
+
+  test.each(entries)('%s accepts a non-empty whenSetting', (kind, entry) => {
+    const errors: string[] = []
+    checkUiKindEntry(kind, `${kind} a`, { ...entry, whenSetting: 'enabled' }, errors)
+    expect(errors).toEqual([])
+  })
+
+  test.each(entries)('%s rejects an empty whenSetting', (kind, entry) => {
+    const errors: string[] = []
+    checkUiKindEntry(kind, `${kind} a`, { ...entry, whenSetting: '' }, errors)
+    expect(errors).toEqual([`${kind} a: whenSetting must be a non-empty string`])
   })
 })
 

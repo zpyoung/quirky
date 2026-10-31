@@ -9,6 +9,7 @@ export type UiTone = 'neutral' | 'accent' | 'working' | 'needs-you' | 'failing'
 export type UiAction = { label: string; onAction: () => void; disabled?: boolean }
 export type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & { variant?: 'primary' | 'secondary' | 'destructive'; ref?: Ref<HTMLButtonElement> }
 export type IconButtonProps = Omit<ButtonProps, 'children'> & { label: string; children: ReactNode }
+export type ExpandingIconButtonProps = Omit<ButtonProps, 'children' | 'variant'> & { label: string; children: ReactNode }
 export type TextFieldProps = InputHTMLAttributes<HTMLInputElement> & { label: string; help?: string; error?: string; ref?: Ref<HTMLInputElement> }
 export type TextAreaProps = TextareaHTMLAttributes<HTMLTextAreaElement> & { label: string; help?: string; error?: string }
 export type SelectFieldProps = SelectHTMLAttributes<HTMLSelectElement> & { label: string; help?: string; error?: string }

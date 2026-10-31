@@ -25,9 +25,9 @@ const ALLOWED_FIELDS: Record<string, readonly string[]> = {
   'settings-section': ['title', 'description', 'order'],
   view: ['title', 'description', 'settings'],
   overlay: ['title', 'description', 'order'],
-  command: ['title', 'description', 'args', 'palette'],
-  keybinding: ['key', 'command', 'description', 'when'],
-  setting: ['type', 'default', 'title', 'description', 'category', 'section', 'minimum', 'maximum', 'values', 'menu'],
+  command: ['title', 'description', 'args', 'palette', 'whenSetting'],
+  keybinding: ['key', 'command', 'description', 'when', 'whenSetting'],
+  setting: ['type', 'default', 'title', 'description', 'category', 'section', 'minimum', 'maximum', 'values', 'menu', 'whenSetting'],
   theme: ['title', 'appearance', 'colors', 'description'],
   'menu-item': ['menu', 'title', 'command', 'when', 'after'],
 } satisfies Record<(typeof UI_KINDS)[number], readonly string[]>

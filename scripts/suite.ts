@@ -36,7 +36,7 @@ export type HostState = 'free' | 'full' | 'down'
 type HostChoice = { host: Host; note?: string } | { error: string }
 type Run = (cwd: string, args: string[]) => Promise<{ code: number; output: string }>
 
-const TEST_FILE = /[._](test|spec)\.[cm]?[jt]sx?$/
+export const TEST_FILE = /[._](test|spec)\.[cm]?[jt]sx?$/
 const RESULT_PREFIX = 'suite-result '
 const FILE_PROFILE_PREFIX = 'suite-file '
 const SLOT_BUSY = 75
@@ -125,6 +125,25 @@ async function withTestHome<T>(run: (env: NodeJS.ProcessEnv, scope: ProcessScope
 
 const bunTest = (cwd: string, args: string[], echo = true, profileFile?: string) =>
   withTestHome((env, scope) => exec(['bun', 'test', ...args], cwd, echo, undefined, scope, env, profileFile))
+/**
+ * One `bun test` run quietly inside its own test home. Past `limitMs` the whole process tree is reaped
+ * through the scope's cleanup and `timedOut` is true, so nothing the run started outlives the call.
+ */
+export function bunTestFile(cwd: string, args: string[], limitMs: number): Promise<{ code: number; output: string; timedOut: boolean }> {
+  return withTestHome(async (env, scope) => {
+    let timedOut = false
+    const timer = setTimeout(() => {
+      timedOut = true
+      void scope.cleanup()
+    }, limitMs)
+    try {
+      const { code, output } = await exec(['bun', 'test', ...args], cwd, false, undefined, scope, env)
+      return { code, output, timedOut }
+    } finally {
+      clearTimeout(timer)
+    }
+  })
+}
 const asPath = (file: string) => (isAbsolute(file) ? file : `./${file}`)
 
 /** Files with a failing test in a junit report, and how many tests failed in all. */

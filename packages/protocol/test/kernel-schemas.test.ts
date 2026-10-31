@@ -53,6 +53,12 @@ describe('kernel method schemas', () => {
     }
   })
 
+  test('setting and plugin info schemas carry whenSetting and repository', () => {
+    const settingItem = KERNEL_METHOD_SCHEMAS['setting.list'].result.items!
+    expect(Object.keys(settingItem.properties!)).toContain('whenSetting')
+    expect(Object.keys(KERNEL_METHOD_SCHEMAS['plugin.list'].result.items!.properties!)).toContain('repository')
+  })
+
 
 
 })

@@ -7,13 +7,22 @@ function record(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
 }
 
+/** The `setting:<plugin>/<whenSetting>` a row depends on, or null for a row with no `whenSetting`. */
+function gateSettingId(entry: Record<string, unknown>): string | null {
+  return entry.whenSetting === undefined ? null : `setting:${entry.plugin}/${entry.whenSetting}`
+}
+
 /** Native menus are projections of the same effective declarations and values as the CLI. */
 export async function loadViewMenuSettings(call: Call): Promise<ViewMenuSetting[]> {
   const entries = await call('setting.list', {})
   if (!Array.isArray(entries)) throw new Error('Settings list is unavailable')
   const items: ViewMenuSetting[] = []
+  const values = new Map<string, unknown>()
+  for (const entry of entries) if (record(entry) && typeof entry.id === 'string') values.set(entry.id, entry.value)
   for (const entry of entries) {
     if (!record(entry) || entry.menu !== 'view') continue
+    const gate = gateSettingId(entry)
+    if (gate !== null && values.get(gate) !== true) continue
     if (entry.type !== 'boolean' || typeof entry.value !== 'boolean' || typeof entry.id !== 'string' || typeof entry.title !== 'string') throw new Error('Invalid native View menu setting')
     items.push({ id: entry.id, label: entry.title, checked: entry.value })
   }
@@ -25,6 +34,11 @@ export async function toggleViewMenuSetting(call: Call, id: string): Promise<voi
   if (parseContributionId(id)?.kind !== 'setting') throw new Error('Invalid View menu setting ID')
   const current = await call('setting.get', { id })
   if (!record(current) || current.type !== 'boolean' || current.menu !== 'view' || typeof current.value !== 'boolean') throw new Error('This setting is no longer available in the View menu')
+  const gate = gateSettingId(current)
+  if (gate !== null) {
+    const sibling = await call('setting.get', { id: gate }).catch(() => null)
+    if (!record(sibling) || sibling.value !== true) throw new Error('This setting is no longer available in the View menu')
+  }
   await call('setting.set', { id, value: !current.value })
 }
 

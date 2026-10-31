@@ -27,5 +27,6 @@
   "quirky.cli",
   "quirky.palette",
   "quirky.sidebar-extras",
-  "quirky.worktree"
+  "quirky.worktree",
+  "quirky.feedback"
 ]
