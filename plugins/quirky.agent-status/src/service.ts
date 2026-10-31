@@ -4,7 +4,7 @@ import { isRecord, readFirstString } from './normalize/shared'
 import { RpcErrorCode, type AgentStatusSummary, type ContributionInfo, type PluginContext, type PtyFact, type QuirkyEvent, type Session } from '@quirky/protocol'
 import { ActivityFeed } from './activity'
 import type { ActivityAcknowledgment, ActivityQuery, ActivityThread } from './activity-types'
-import { applyEvent } from './apply'
+import { applyEvent, becauseOf, newRow } from './apply'
 import { explanationOf, type Explanation } from './explain'
 import { foldLead } from './fold'
 import { facetOf, HOOK_SILENCE_MS, parseRecords, programEvidence, serializeRecords, titleEvidence } from './fallbacks'
@@ -42,6 +42,7 @@ import { parseProviderTranscriptLine, type ProviderCall, type TranscriptRecord }
 const RESTORE_MAX_AGE_MS = 7 * 24 * 3_600_000
 const MAX_PROVIDER_ID = 512
 const CONTROL_CHARACTERS = /[\u0000-\u001f\u007f]/
+const PRESENCE_SCREEN_DEADLINE_MS = 250
 
 const TRANSCRIPT_POLL_MS = 100
 const TRANSCRIPT_POLL_WINDOW_MS = 10_000
@@ -109,6 +110,18 @@ type SettledState = 'done' | 'waiting' | 'blocked'
 const validProviderId = (id: string) => id.length >= 1 && id.length <= MAX_PROVIDER_ID && !id.startsWith('-') && !CONTROL_CHARACTERS.test(id)
 
 const sameSummary = (a: AgentStatusSummary | null | undefined, b: AgentStatusSummary | null) => JSON.stringify(a ?? null) === JSON.stringify(b)
+const CLAUDE_SCREEN_RULE_PREFIX = 'Claude screen rule '
+
+const isClaudeScreenInference = (row: AgentRow | null | undefined): row is AgentRow =>
+  row?.agent === 'claude' && row.source === 'inference' && row.because?.source === 'inference' && row.because.rule.startsWith(CLAUDE_SCREEN_RULE_PREFIX)
+
+const hasHookOrProgramStatus = (row: AgentRow | null): boolean =>
+  row !== null &&
+  (row.lastHookAt !== null ||
+    row.source === 'hook' ||
+    row.source === 'replay' ||
+    row.source === 'program-status' ||
+    row.programStatus !== undefined)
 
 /**
  * Owns status rows and durable Activity snapshots: turns hooks, and where hooks are silent titles, OSC 7501 reports
@@ -117,6 +130,7 @@ const sameSummary = (a: AgentStatusSummary | null | undefined, b: AgentStatusSum
  */
 export class AgentStatusService {
   private readonly queues = new Map<string, Promise<void>>()
+  private readonly hookedSessions = new Set<string>()
   private readonly caches = new Map<string, NormalizerCache>()
   private readonly records = new Map<string, ProgramStatusRecords>()
   private readonly timers = new Set<ReturnType<typeof setTimeout>>()
@@ -182,11 +196,13 @@ export class AgentStatusService {
     this.transcriptTimers.clear()
     this.transcriptPolls.clear()
     this.oscTurns.clear()
+    this.hookedSessions.clear()
     this.matcher.dispose()
   }
 
   /** Handles a hook after every earlier event for its session; failures are logged, never thrown. */
   ingest(input: HookInput): Promise<void> {
+    this.hookedSessions.add(input.sessionId)
     return this.enqueue(input.sessionId, () => this.handle(input))
   }
 
@@ -207,6 +223,7 @@ export class AgentStatusService {
       this.records.delete(sessionId)
       this.escapes.delete(sessionId)
       this.titles.delete(sessionId)
+      this.hookedSessions.delete(sessionId)
       this.sampler.forget(sessionId)
       this.cancelTranscriptPoll(sessionId)
       this.oscTurns.delete(sessionId)
@@ -241,13 +258,27 @@ export class AgentStatusService {
     if (data.includes('\r')) void this.enqueue(sessionId, () => this.handleEnter(sessionId))
   }
 
-  /**
-   * Ends the rows whose agent process is gone, done rows included: the agent left without saying
-   * so. Each is rechecked in its session's queue, because a hook may have moved the lead since.
-   */
+  /** Ends dead-agent rows and samples live Claude sessions for pre-hook status. */
   async sweepPresence(): Promise<void> {
-    const watched = this.rows.all().filter(({ row }) => row.lead.agentPid !== null && !row.lead.ended)
-    await Promise.all(watched.map(({ row }) => this.enqueue(row.sessionId, () => this.endIfGone(row.sessionId))))
+    const sessions = (await this.context.call('quirky.session/list', {})) as Session[]
+    const work: Promise<void>[] = []
+    for (const { row } of this.rows.all()) {
+      if (row.lead.agentPid !== null && !row.lead.ended) {
+        work.push(this.enqueue(row.sessionId, () => this.endIfGone(row.sessionId)))
+      }
+    }
+    for (const session of sessions) {
+      if (
+        session.kind === 'terminal' &&
+        session.agent === 'claude' &&
+        session.status !== 'exited' &&
+        !this.hookedSessions.has(session.id) &&
+        !hasHookOrProgramStatus(this.rows.get(session.id))
+      ) {
+        work.push(this.enqueue(session.id, () => this.sampleClaudeScreen(session.id)))
+      }
+    }
+    await Promise.all(work)
   }
 
   /** Follows session lifecycle events: an exited or removed session loses its live row, not its Activity snapshot. */
@@ -280,6 +311,7 @@ export class AgentStatusService {
    */
   async hydrate(): Promise<void> {
     for (const { row, updatedAt } of this.rows.all()) {
+      if (row.lastHookAt !== null) this.hookedSessions.add(row.sessionId)
       const session = await this.findSession(row.sessionId)
       if (!session || session.kind !== 'terminal' || session.status === 'exited') {
         this.rows.transaction(() => {
@@ -1019,6 +1051,55 @@ export class AgentStatusService {
         this.rows.delete(sessionId)
       })
     }
+  }
+
+  private async sampleClaudeScreen(sessionId: string): Promise<void> {
+    if (this.hookedSessions.has(sessionId)) return
+    let session = await this.liveSession(sessionId)
+    if (!session || session.agent !== 'claude') return
+
+    const previous = this.rows.get(sessionId)
+    if (hasHookOrProgramStatus(previous)) return
+    const timeoutMs = PRESENCE_SCREEN_DEADLINE_MS * this.timing.scale
+    const timeout = Promise.withResolvers<null>()
+    const timer = setTimeout(() => timeout.resolve(null), timeoutMs)
+    let reading: ScreenReading | null
+    try {
+      reading = await Promise.race([
+        readScreen(this.screen, sessionId, 'claude', this.now() + timeoutMs),
+        timeout.promise
+      ])
+    } finally {
+      clearTimeout(timer)
+    }
+    if (reading === null || reading.sample === null || reading.origin === null || reading.unavailable !== undefined) return
+
+    session = await this.liveSession(sessionId)
+    if (!session || session.agent !== 'claude' || this.hookedSessions.has(sessionId)) return
+    const row = this.rows.get(sessionId)
+    if (hasHookOrProgramStatus(row)) return
+    if (reading.verdict?.state === 'blocked') {
+      await this.commit(session, this.claudeScreenInference(sessionId, row, reading.verdict.rule))
+    } else if (isClaudeScreenInference(row)) {
+      await this.commit(session, null)
+    }
+  }
+
+  private claudeScreenInference(sessionId: string, previous: AgentRow | null, rule: string): AgentRow {
+    const at = this.now()
+    const row = isClaudeScreenInference(previous)
+      ? { ...previous, lead: { ...previous.lead }, children: [...previous.children] }
+      : newRow({ sessionId, source: 'claude', at, replay: false })
+    if (row.state !== 'blocked') row.stateStartedAt = at
+    if (row.lead.state !== 'blocked') row.lead.stateStartedAt = at
+    row.state = 'blocked'
+    row.lead.state = 'blocked'
+    row.source = 'inference'
+    row.evidenceAt = at
+    row.because = becauseOf('inference', `${CLAUDE_SCREEN_RULE_PREFIX}${rule} → blocked`, at)
+    delete row.restoredUnconfirmed
+    row.detail = readableDetail(row)
+    return row
   }
 
   private async capture(session: Session, normalized: Normalized): Promise<void> {

@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test } from 'bun:test'
 import { symlinkSync } from 'node:fs'
 import { join, resolve } from 'node:path'
-import { PLUGIN_API_VERSION, QuirkyClient, type Repo, type Worktree } from '@quirky/protocol'
+import { PLUGIN_API_VERSION, QuirkyClient, type Ask, type Repo, type Session, type Worktree } from '@quirky/protocol'
 import { rpcUrl } from '@quirky/protocol/node'
 import { makeTempDir, writePlugin } from '../../daemon/test/plugins/fixtures'
 import { languageName, relativeToWorktree } from '../src/shell/StatusBar'
@@ -148,6 +148,61 @@ async function seedSessions(env: WindowEnv, worktrees: Worktree[], failing = fal
   }))
   await env.agent.callAny('quirky.session/seed', { sessions, failing })
 }
+function waitingSession(worktree: Worktree, options: {
+  id?: string
+  title?: string
+  evidenceAt?: number
+  restoredUnconfirmed?: boolean
+} = {}): Session {
+  const now = Date.now()
+  return {
+    id: options.id ?? `waiting_${worktree.id}`,
+    kind: 'terminal',
+    agent: 'claude',
+    worktreeId: worktree.id,
+    cwd: worktree.path,
+    title: options.title ?? 'Claude',
+    status: 'waiting',
+    createdAt: now,
+    lastActivityAt: now,
+    exitCode: null,
+    exitSignal: null,
+    exitCause: null,
+    restorable: false,
+    agentStatus: {
+      state: 'waiting',
+      display: 'permission',
+      label: 'Permission needed',
+      detail: 'Waiting for permission',
+      progress: null,
+      stateStartedAt: now,
+      evidenceAt: options.evidenceAt ?? now,
+      restoredUnconfirmed: options.restoredUnconfirmed ?? false
+    }
+  }
+}
+
+async function seedWaitingSessions(env: WindowEnv, worktrees: Worktree[]): Promise<Session[]> {
+  const sessions = worktrees.map((worktree) => waitingSession(worktree))
+  await env.agent.callAny('quirky.session/seed', { sessions })
+  return sessions
+}
+
+function pendingAsk(id: string, title: string, sessionId: string | null, worktreeId: string): Ask {
+  return {
+    id,
+    spec: { title, questions: [{ id: 'q', type: 'confirm', question: 'Proceed?' }] },
+    sessionId,
+    worktreeId,
+    createdAt: Date.now(),
+    envelope: { status: 'pending', askId: id, answers: {}, skipped: [], summary: '' },
+    seq: 1,
+    queued: false,
+    partial: {},
+    expiresAt: null
+  }
+}
+
 
 async function askIn(env: WindowEnv, worktree: Worktree, title: string): Promise<void> {
   const caller = await QuirkyClient.connect(rpcUrl(env.harness.runtime), { role: 'cli', name: 'status-bar-test', worktreeId: worktree.id })
@@ -157,6 +212,20 @@ async function askIn(env: WindowEnv, worktree: Worktree, title: string): Promise
     requestId: crypto.randomUUID()
   })
 }
+async function seedPendingAsks(env: WindowEnv, asks: Ask[]): Promise<void> {
+  const connection = env.win.connection
+  const callAny = connection.callAny.bind(connection)
+  connection.callAny = (method, params) =>
+    method === 'quirky.ask/list' ? Promise.resolve(asks) : callAny(method, params)
+  const expectedIds = new Set(asks.map((ask) => ask.id))
+  const attention = attentionStoreFor(connection, env.win.host)
+  attention.refresh()
+  await env.win.waitFor(() => {
+    const current = attention.getSnapshot().asks
+    return current !== null && current.length === asks.length && current.every((ask) => expectedIds.has(ask.id))
+  })
+}
+
 
 const setIcon = (env: WindowEnv, worktree: Worktree, icon: unknown) =>
   env.agent.callAny('quirky.terminal/setIcon', { workspace: worktree.id, icon })
@@ -288,6 +357,88 @@ describe('status bar', () => {
     await click(popupRows(env).at(-1))
     expect(opened).toEqual(['host:inbox'])
   })
+  test('a waiting Claude session contributes to needs-you and opens its worktree', async () => {
+    const { env, attention, second } = await boot()
+    const [session] = await seedWaitingSessions(env, [second])
+    await env.win.waitFor(() => {
+      const snapshot = attention.getSnapshot()
+      return snapshot.sessions?.some((candidate) => candidate.id === session!.id) &&
+        snapshot.asks !== null && !snapshot.errors.sessions && !snapshot.errors.asks
+    })
+    const item = await env.win.waitFor(() =>
+      values(env).find((value) => value.matches('button.ui-status-bar-item') && value.textContent?.includes('needs you'))
+    )
+    expect((item?.textContent ?? '').replace(/\s+/g, ' ').trim()).toBe('1 needs you')
+    await click(item)
+    await env.win.waitFor(() => popups(env).length === 1)
+    expect(popups(env)[0]!.querySelector('.ui-popup__title')?.textContent).toBe('Needs you')
+    const sessionRow = popupRows(env).find((row) => row.textContent?.includes('Claude'))
+    expect(sessionRow?.textContent).toContain('Permission needed')
+    expect(sessionRow?.textContent).toContain(second.name)
+
+    await click(sessionRow)
+    await env.win.waitFor(() => attention.getSnapshot().selectedWorktreeId === second.id)
+  })
+  test('needs-you ignores expired summaries but honors fresh and restored waiting summaries', async () => {
+    const { env, attention, first, second } = await boot()
+    const now = Date.now()
+    const expiredAt = now - 31 * 60_000
+    const sessions = [
+      waitingSession(first, { id: 'expired_waiting', title: 'Expired Claude', evidenceAt: expiredAt }),
+      waitingSession(second, { id: 'fresh_waiting', title: 'Fresh Claude', evidenceAt: now }),
+      waitingSession(first, { id: 'restored_waiting', title: 'Restored Claude', evidenceAt: expiredAt, restoredUnconfirmed: true })
+    ]
+    await env.agent.callAny('quirky.session/seed', { sessions })
+    await env.win.waitFor(() => {
+      const snapshot = attention.getSnapshot()
+      return snapshot.sessions?.some((session) => session.id === 'restored_waiting') &&
+        snapshot.asks !== null && !snapshot.errors.sessions && !snapshot.errors.asks
+    })
+
+    const item = await env.win.waitFor(() =>
+      values(env).find((value) => value.matches('button.ui-status-bar-item') && value.textContent?.includes('needs you'))
+    )
+    expect((item?.textContent ?? '').replace(/\s+/g, ' ').trim()).toBe('2 needs you')
+    await click(item)
+    await env.win.waitFor(() => popups(env).length === 1)
+    const rows = popupRows(env).map((row) => row.textContent ?? '')
+    expect(rows.some((row) => row.includes('Fresh Claude'))).toBe(true)
+    expect(rows.some((row) => row.includes('Restored Claude'))).toBe(true)
+    expect(rows.some((row) => row.includes('Expired Claude'))).toBe(false)
+  })
+
+
+  test('a same-session ask and a same-worktree unrelated ask do not duplicate session attention', async () => {
+    const { env, first, second } = await boot()
+    const [session] = await seedWaitingSessions(env, [first, second])
+    await seedPendingAsks(env, [
+      pendingAsk('ask_matching', 'Matching question', session!.id, first.id),
+      pendingAsk('ask_unrelated', 'Unrelated question', null, first.id)
+    ])
+    const attention = attentionStoreFor(env.win.connection, env.win.host)
+    await env.win.waitFor(() => attention.getSnapshot().sessions?.some((candidate) => candidate.id === session!.id))
+
+    const item = await env.win.waitFor(() =>
+      values(env).find((value) => value.matches('button.ui-status-bar-item') && value.textContent?.includes('needs you'))
+    )
+    expect((item?.textContent ?? '').replace(/\s+/g, ' ').trim()).toBe('3 needs you')
+    await click(item)
+    await env.win.waitFor(() => popups(env).length === 1)
+    const rows = popupRows(env)
+    expect(rows).toHaveLength(4)
+    expect(rows.some((row) => row.textContent?.includes('Matching question'))).toBe(true)
+    expect(rows.some((row) => row.textContent?.includes('Unrelated question'))).toBe(true)
+    const sessionRows = rows.filter((row) => row.textContent?.includes('Permission needed'))
+    expect(sessionRows).toHaveLength(1)
+    expect(sessionRows[0]?.textContent).toContain(second.name)
+
+    const opened: string[] = []
+    const openTool = env.win.host.openTool.bind(env.win.host)
+    env.win.host.openTool = (id: string) => { opened.push(id); openTool(id) }
+    await click(rows.find((row) => row.textContent?.includes('Matching question')))
+    expect(opened).toEqual(['host:inbox'])
+  })
+
 
   test('only one popup is open at a time and Escape closes it and returns focus to its item', async () => {
     const { env, first, second } = await boot()
@@ -308,11 +459,25 @@ describe('status bar', () => {
     expect(env.win.document.activeElement).toBe(needsYou)
   })
 
+  test('the needs-you count stays unavailable when inbox data is unavailable', async () => {
+    const { env, second } = await boot()
+    await seedWaitingSessions(env, [second])
+    const attention = attentionStoreFor(env.win.connection, env.win.host)
+    await env.win.waitFor(() => attention.getSnapshot().asks !== null && !attention.getSnapshot().errors.asks)
+    const callAny = env.win.connection.callAny.bind(env.win.connection)
+    env.win.connection.callAny = (method, params) =>
+      method === 'quirky.ask/list' ? Promise.reject(new Error('asks are offline')) : callAny(method, params)
+    attention.refresh()
+
+    await env.win.waitFor(() => texts(env).includes('Inbox status unavailable'))
+    expect(values(env).filter((value) => value.textContent?.includes('needs you'))).toHaveLength(0)
+  })
+
   test('a count is hidden while its data is unavailable and the error text stays', async () => {
     const { env, first, second } = await boot()
     await seedSessions(env, [first, second], true)
     await env.win.waitFor(() => texts(env).includes('Agent status unavailable'))
     expect(itemLabelled(env, '2 agents working')).toBeUndefined()
-    expect(texts(env).some((text) => text.endsWith('working'))).toBe(false)
+    expect(values(env).filter((value) => value.textContent?.includes('needs you'))).toHaveLength(0)
   })
 })

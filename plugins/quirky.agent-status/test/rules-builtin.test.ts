@@ -105,6 +105,14 @@ describe('built-in rules: SC-8', () => {
     expect(run('codex', fixture('codex', 'plan-implement-menu', 'miss')).verdict?.state).not.toBe('blocked')
   })
 
+  test('SC-8: Claude folder-trust menu is blocked only while it remains at the bottom', () => {
+    const screen = fixture('claude', 'folder-trust-menu', 'match')
+    const verdict = run('claude', screen).verdict
+    expect(verdict).toMatchObject({ rule: 'folder-trust-menu', state: 'blocked', kind: 'approval' })
+    const scrolled = { title: screen.title, lines: [...screen.lines, ...Array.from({ length: 9 }, (_, index) => `output ${index}`)] }
+    expect(run('claude', scrolled).verdict?.rule).not.toBe('folder-trust-menu')
+  })
+
   test('SC-8: claude title ✳ Claude Code with a quiet screen is idle', () => {
     const screen: Screen = { title: '✳ Claude Code', lines: ['● Done.', '> '] }
     expect(run('claude', screen, 1000).verdict).toMatchObject({ rule: 'rest-title', state: 'idle' })

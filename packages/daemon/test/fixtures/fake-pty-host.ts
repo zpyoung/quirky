@@ -30,6 +30,8 @@ type ConnState = {
   endWhenDrained: boolean
 }
 type AcceptedWriteHandler = (sessionId: string, bytes: Uint8Array) => void | Promise<void>
+type HeldRead = { requested: Promise<void>; release(): void }
+type ReadGate = HeldRead & { arrive(send: () => void): void }
 
 export type FakeSession = {
   info: PtySessionInfo
@@ -55,6 +57,7 @@ export type FakePtyHost = {
   dropConnections(): void
   setWriteAcceptedHandler(handler: AcceptedWriteHandler | null): void
   setReadResult(result: { lines: string[]; cols: number; rows: number; alt: boolean }): void
+  holdNextRead(): HeldRead
   setSnapshotResult(result: PtySnapshot): void
   setHistoryResult(result: PtyHistoryPage): void
   /** Makes every request of `type` fail with `error`; `null` clears it. */
@@ -83,6 +86,34 @@ export function startFakePtyHost(home: string, options: FakePtyHostOptions = {})
   const inputs: { sessionId: string; text: string }[] = []
   const connections = new Set<Socket<ConnState>>()
   let readResult = { lines: ['hello from the screen'], cols: 80, rows: 24, alt: false }
+  let nextReadGate: ReadGate | null = null
+
+  function holdNextRead(): HeldRead {
+    if (nextReadGate !== null) throw new Error('fake pty: a read is already held')
+    const { promise: requested, resolve: notifyRequested } = Promise.withResolvers<void>()
+    let send: (() => void) | null = null
+    let released = false
+    let sent = false
+    const sendIfReady = () => {
+      if (!released || sent || send === null) return
+      sent = true
+      send()
+    }
+    const gate: ReadGate = {
+      requested,
+      arrive(response) {
+        send = response
+        notifyRequested()
+        sendIfReady()
+      },
+      release() {
+        released = true
+        sendIfReady()
+      }
+    }
+    nextReadGate = gate
+    return { requested, release: () => gate.release() }
+  }
   let snapshotResult: PtySnapshot = {
     ansi: 'hello from the screen',
     cols: 80,
@@ -298,9 +329,16 @@ export function startFakePtyHost(home: string, options: FakePtyHostOptions = {})
         sessions.get(request.sessionId)?.subscribers.delete(socket)
         reply(socket, request.id, {})
         return
-      case 'read':
-        reply(socket, request.id, readResult)
+      case 'read': {
+        const held = nextReadGate
+        if (held) {
+          nextReadGate = null
+          held.arrive(() => reply(socket, request.id, readResult))
+        } else {
+          reply(socket, request.id, readResult)
+        }
         return
+      }
       case 'snapshot':
         reply(socket, request.id, snapshotResult)
         return
@@ -391,6 +429,7 @@ export function startFakePtyHost(home: string, options: FakePtyHostOptions = {})
     setReadResult(result) {
       readResult = result
     },
+    holdNextRead,
     setSnapshotResult(result) {
       snapshotResult = result
     },

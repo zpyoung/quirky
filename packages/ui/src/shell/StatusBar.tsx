@@ -18,6 +18,8 @@ import './chrome.css'
 const WORKTREES_TOOL = 'sidebar-section:quirky.worktree/worktrees'
 const ACTIVE_TAB_ICON = 'quirky.terminal/activeTabIcon'
 const LAYOUT_EVENT = 'quirky.terminal/layout'
+const STALE_AFTER_MS = 30 * 60 * 1000
+const CLOCK_TICK_MS = 60_000
 
 const LANGUAGES: Record<string, string> = {
   ts: 'TypeScript', tsx: 'TypeScript', mts: 'TypeScript', cts: 'TypeScript',
@@ -97,10 +99,27 @@ function linkRow(label: string, lead: ReactNode, onSelect: () => void): PopupIte
 
 const emptyRow = (label: string): PopupItem => ({ label, enabled: false })
 
-function sessionActivity(session: Session): string {
+function sessionActivity(session: Session, fallback = 'Working'): string {
   const identity = session.title.trim() || session.agent || session.kind
-  const activity = session.agentStatus?.label.trim() || 'Working'
+  const activity = session.agentStatus?.label.trim() || fallback
   return [identity, activity].filter(Boolean).join(' · ')
+}
+
+function useNow(): number {
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), CLOCK_TICK_MS)
+    return () => clearInterval(timer)
+  }, [])
+  return now
+}
+
+function sessionNeedsYou(session: Session, now: number): boolean {
+  const summary = session.agentStatus
+  if (!summary) return session.status === 'waiting'
+  const stale = summary.state !== 'done' && !summary.restoredUnconfirmed && now - summary.evidenceAt > STALE_AFTER_MS
+  if (stale) return false
+  return summary.display === 'waiting' || summary.display === 'permission' || summary.display === 'blocked'
 }
 
 function Breadcrumb({ worktree, repo, color, file }: { worktree: Worktree; repo: Repo | undefined; color: string | null | undefined; file: string | null }) {
@@ -144,6 +163,7 @@ export function ShellStatusBar() {
   const { model, windowRoute } = usePluginState()
   const host = usePluginHost()
   const connection = useConnection()
+  const now = useNow()
   const selected = snapshot.errors.worktrees
     ? undefined
     : snapshot.worktrees?.find((worktree) => worktree.id === snapshot.selectedWorktreeId)
@@ -152,10 +172,20 @@ export function ShellStatusBar() {
 
   const repo = selected ? snapshot.repos?.find((candidate) => candidate.id === selected.repoId) : undefined
   const worktrees = snapshot.errors.worktrees ? [] : snapshot.worktrees ?? []
-  const working: Session[] | undefined = snapshot.errors.sessions || snapshot.sessions === null
-    ? undefined
-    : snapshot.sessions.filter((session) => session.status === 'working')
+  const sessions: Session[] | undefined = snapshot.errors.sessions || snapshot.sessions === null ? undefined : snapshot.sessions
+  const working = sessions?.filter((session) => session.status === 'working')
   const asks: Ask[] | undefined = snapshot.errors.asks || snapshot.asks === null ? undefined : snapshot.asks
+  const needsYouSessions = sessions === undefined || asks === undefined
+    ? undefined
+    : sessions.filter((session) => sessionNeedsYou(session, now)).filter((session) => !asks.some((ask) => ask.sessionId === session.id))
+  const needsYouCount = needsYouSessions === undefined || asks === undefined
+    ? undefined
+    : needsYouSessions.length + asks.length
+  const needsYouLabel = needsYouSessions === undefined || asks === undefined || needsYouCount === undefined
+    ? undefined
+    : needsYouSessions.length === 0
+      ? `${asks.length} pending ${asks.length === 1 ? 'question' : 'questions'}`
+      : `${needsYouCount} needs you`
   const statusBars = model?.statusBars ?? []
 
   const openWorktree = (worktreeId: string) => {
@@ -182,15 +212,20 @@ export function ShellStatusBar() {
       }))),
     ...linkRow('Open the Worktrees panel', <ToolIcon name="git-branch" hue="blue" />, () => host.openTool(WORKTREES_TOOL))
   ]
-  const askItems: PopupItem[] = asks === undefined ? [] : [
-    ...(asks.length === 0
-      ? [emptyRow('No pending questions')]
-      : asks.map((ask): PopupItem => ({
-        label: ask.spec.title ?? 'An agent has a question',
-        subtitle: locationOf(ask),
-        lead: <StatusDot status="needs-you" label="Needs you" />,
-        onSelect: () => store.openInbox()
-      }))),
+  const needsYouItems: PopupItem[] = needsYouCount === undefined || needsYouSessions === undefined || asks === undefined ? [] : [
+    ...(needsYouCount === 0 ? [emptyRow('No pending questions')] : []),
+    ...needsYouSessions.map((session): PopupItem => ({
+      label: worktrees.find((worktree) => worktree.id === session.worktreeId)?.name ?? session.worktreeId,
+      subtitle: sessionActivity(session, 'Needs you'),
+      lead: <StatusDot status="needs-you" label="Needs you" />,
+      onSelect: () => openWorktree(session.worktreeId)
+    })),
+    ...asks.map((ask): PopupItem => ({
+      label: ask.spec.title ?? 'An agent has a question',
+      subtitle: locationOf(ask),
+      lead: <StatusDot status="needs-you" label="Needs you" />,
+      onSelect: () => store.openInbox()
+    })),
     ...linkRow('Open the Inbox', <ToolIcon name="tray" hue="violet" />, () => store.openInbox())
   ]
 
@@ -209,10 +244,10 @@ export function ShellStatusBar() {
             <span>{working.length} working</span>
           </StatusBarItem>
         )}
-        {asks !== undefined && (
-          <StatusBarItem label={`${asks.length} pending ${asks.length === 1 ? 'question' : 'questions'}`} popupTitle="Needs you" items={askItems}>
-            <StatusDot status={asks.length > 0 ? 'needs-you' : 'idle'} />
-            <span className={asks.length > 0 ? 'shell-statusbar__needs-you' : undefined}>{asks.length} needs you</span>
+        {needsYouCount !== undefined && needsYouLabel !== undefined && (
+          <StatusBarItem label={needsYouLabel} popupTitle="Needs you" items={needsYouItems}>
+            <StatusDot status={needsYouCount > 0 ? 'needs-you' : 'idle'} />
+            <span className={needsYouCount > 0 ? 'shell-statusbar__needs-you' : undefined}>{needsYouCount} needs you</span>
           </StatusBarItem>
         )}
         {statusBars.map((entry) => <PluginSlot key={entry.id} id={entry.id} />)}
