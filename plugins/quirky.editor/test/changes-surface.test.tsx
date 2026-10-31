@@ -190,6 +190,15 @@ async function flush(): Promise<void> {
   setTimeout(resolve, 0)
   await act(async () => { await promise })
 }
+type InlineRowExpectation = { kind: 'context' | 'added' | 'removed'; text: string }
+
+function inlineRows(element: HTMLElement): InlineRowExpectation[] {
+  return [...element.querySelectorAll<HTMLElement>('.qe-changes-inline-row')].map((row) => {
+    const kind = row.classList.contains('added') ? 'added' : row.classList.contains('removed') ? 'removed' : 'context'
+    const text = row.querySelector('code')?.textContent ?? ''
+    return { kind, text: text === ' ' ? '' : text }
+  })
+}
 
 test('Changes compares HEAD to the shared draft, not staged content, in the same editable tab', async () => {
   const surface = await renderChanges(makeBuffer('text', 'Working file\n', 'Shared draft\n'), {
@@ -204,18 +213,179 @@ test('Changes compares HEAD to the shared draft, not staged content, in the same
   expect(surface.element.querySelector('[aria-pressed="true"][aria-label="Side by side"]')).not.toBeNull()
   await act(async () => surface.element.querySelector<HTMLButtonElement>('[aria-label="Inline"]')?.click())
   expect(surface.element.querySelector('.qe-changes-inline')).not.toBeNull()
-  const inlineRows = [...surface.element.querySelectorAll<HTMLElement>('.qe-changes-inline-row')]
-  const reconstruct = (excluded: 'added' | 'removed') => {
-    const rows = inlineRows
-      .filter((row) => !row.classList.contains(excluded))
-      .map((row) => row.querySelector('code')?.textContent ?? '')
-    // Empty diff rows are visually spaced, but do not add source text.
-    if (rows.at(-1)?.trim() === '') rows.pop()
-    return rows.join('')
-  }
-  expect(reconstruct('added')).toBe('Committed HEAD')
-  expect(reconstruct('removed')).toBe('Shared draft')
+  const rows = inlineRows(surface.element)
+  expect(rows).toEqual([
+    { kind: 'removed', text: 'Committed HEAD' },
+    { kind: 'added', text: 'Shared draft' }
+  ])
   expect(surface.element.querySelector('[aria-label="Next change"]')).not.toBeNull()
+})
+
+test.each([
+  {
+    name: 'mid-word insertion',
+    original: 'keep\ncolor\nend\n',
+    modified: 'keep\ncolXor\nend\n',
+    rows: [
+      { kind: 'context', text: 'keep' },
+      { kind: 'removed', text: 'color' },
+      { kind: 'added', text: 'colXor' },
+      { kind: 'context', text: 'end' }
+    ]
+  },
+  {
+    name: 'mid-line deletion',
+    original: 'keep\ncolor\nend\n',
+    modified: 'keep\ncolo\nend\n',
+    rows: [
+      { kind: 'context', text: 'keep' },
+      { kind: 'removed', text: 'color' },
+      { kind: 'added', text: 'colo' },
+      { kind: 'context', text: 'end' }
+    ]
+  },
+  {
+    name: 'mid-line replacement',
+    original: 'keep\nold value\nend\n',
+    modified: 'keep\nnew value\nend\n',
+    rows: [
+      { kind: 'context', text: 'keep' },
+      { kind: 'removed', text: 'old value' },
+      { kind: 'added', text: 'new value' },
+      { kind: 'context', text: 'end' }
+    ]
+  },
+  {
+    name: 'newline insertion',
+    original: 'beforeafter\nnext\n',
+    modified: 'before\nafter\nnext\n',
+    rows: [
+      { kind: 'removed', text: 'beforeafter' },
+      { kind: 'added', text: 'before' },
+      { kind: 'added', text: 'after' },
+      { kind: 'context', text: 'next' }
+    ]
+  },
+  {
+    name: 'newline deletion',
+    original: 'before\nafter\nnext\n',
+    modified: 'beforeafter\nnext\n',
+    rows: [
+      { kind: 'removed', text: 'before' },
+      { kind: 'removed', text: 'after' },
+      { kind: 'added', text: 'beforeafter' },
+      { kind: 'context', text: 'next' }
+    ]
+  },
+  {
+    name: 'whole-line addition',
+    original: 'first\nlast\n',
+    modified: 'first\nadded\nlast\n',
+    rows: [
+      { kind: 'context', text: 'first' },
+      { kind: 'added', text: 'added' },
+      { kind: 'context', text: 'last' }
+    ]
+  },
+  {
+    name: 'whole-line deletion',
+    original: 'first\nremoved\nlast\n',
+    modified: 'first\nlast\n',
+    rows: [
+      { kind: 'context', text: 'first' },
+      { kind: 'removed', text: 'removed' },
+      { kind: 'context', text: 'last' }
+    ]
+  },
+  {
+    name: 'multiline addition in one operation',
+    original: '',
+    modified: 'added\nsecond\n',
+    rows: [
+      { kind: 'added', text: 'added' },
+      { kind: 'added', text: 'second' }
+    ]
+  },
+  {
+    name: 'multiline deletion in one operation',
+    original: 'removed\nsecond\n',
+    modified: '',
+    rows: [
+      { kind: 'removed', text: 'removed' },
+      { kind: 'removed', text: 'second' }
+    ]
+  },
+  {
+    name: 'empty-line addition',
+    original: 'first\nlast\n',
+    modified: 'first\n\nlast\n',
+    rows: [
+      { kind: 'context', text: 'first' },
+      { kind: 'added', text: '' },
+      { kind: 'context', text: 'last' }
+    ]
+  },
+  {
+    name: 'unterminated final-line replacement',
+    original: 'first\nlast',
+    modified: 'first\nlast!',
+    rows: [
+      { kind: 'context', text: 'first' },
+      { kind: 'removed', text: 'last' },
+      { kind: 'added', text: 'last!' }
+    ]
+  },
+  {
+    name: 'final newline insertion',
+    original: 'line',
+    modified: 'line\n',
+    rows: [
+      { kind: 'removed', text: 'line' },
+      { kind: 'added', text: 'line' }
+    ]
+  },
+  {
+    name: 'final newline deletion',
+    original: 'line\n',
+    modified: 'line',
+    rows: [
+      { kind: 'removed', text: 'line' },
+      { kind: 'added', text: 'line' }
+    ]
+  },
+  {
+    name: 'empty-file addition',
+    original: '',
+    modified: 'added',
+    rows: [{ kind: 'added', text: 'added' }]
+  },
+  {
+    name: 'empty-file deletion',
+    original: 'removed',
+    modified: '',
+    rows: [{ kind: 'removed', text: 'removed' }]
+  }
+] satisfies { name: string; original: string; modified: string; rows: InlineRowExpectation[] }[])(
+  'Changes inline diff displays whole lines for $name',
+  async ({ original, modified, rows }) => {
+    const surface = await renderChanges(makeBuffer('text', modified, null), { original, modified })
+    await flush()
+    await act(async () => surface.element.querySelector<HTMLButtonElement>('[aria-label="Inline"]')?.click())
+
+    const actualRows = inlineRows(surface.element)
+    expect(actualRows).toEqual(rows)
+  }
+)
+
+test('Changes navigation reveals the changed modified line', async () => {
+  const original = 'first\nlast\n'
+  const modified = 'first\nadded\nlast\n'
+  const surface = await renderChanges(makeBuffer('text', modified, null), { original, modified })
+  await flush()
+  await act(async () => surface.element.querySelector<HTMLButtonElement>('[aria-label="Inline"]')?.click())
+  await act(async () => surface.element.querySelector<HTMLButtonElement>('[aria-label="Next change"]')?.click())
+
+  expect(surface.element.querySelector<HTMLElement>('[aria-label="Modified editor"] .cm-activeLine')?.textContent).toBe('added')
 })
 
 test('Changes Markdown preview renders the shared draft image and releases it when Source returns', async () => {
