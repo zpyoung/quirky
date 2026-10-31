@@ -386,6 +386,10 @@
   gap: var(--ui-space-4);
 }
 
+.accounts-ui .usage-trigger:focus-visible {
+  outline-offset: calc(var(--ui-focus-offset) * -1);
+}
+
 .accounts-ui .usage-refresh {
   flex: 0 0 auto;
 }
