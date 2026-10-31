@@ -31,6 +31,8 @@ The gallery renders Button (primary/secondary/destructive and disabled), IconBut
 
 Menu lists size to their labels and remain at least as wide as their trigger. Icon-only triggers, including the diff toolbar's More actions control, must not squeeze ordinary option labels into letter-by-letter wrapping. Section-header menus align to the trigger's right edge so they open inward; header actions remain right-aligned when the title wraps onto a separate row.
 
+Tabs keep a complete focus-visible ring inside their horizontal scrollport, including the first and last tabs. The ring is inset so it remains visible without changing control sizing or disabling horizontal scrolling.
+
 ### SC3 — Gallery is a working page
 After the ordinary UI build, `/gallery.html` loads actual shared components with no daemon connection or token required. Both theme columns show every category; toggling tabs, typing, selecting menu items, showing/closing dialogs, dismissing a toast, and invoking the card action updates visible local demonstration state. The gallery has no private duplicated controls or local CSS; its layout classes are defined with the shared system.
 
