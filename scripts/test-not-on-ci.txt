@@ -1,0 +1,3 @@
+# Test files that cannot run on a GitHub runner. A file listed here runs in no CI job, so the Tests check lists it
+# as not checked and the author runs it locally. Add a file only for a confirmed runner limitation, and say why.
+# Never add one because it is slow or flaky: that removes coverage from every pull request.

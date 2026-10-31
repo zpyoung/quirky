@@ -1,0 +1,284 @@
+name: Tests
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+env:
+  BUN_VERSION: 1.4.0
+
+jobs:
+  plan:
+    name: Plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      linux_shards: ${{ steps.shards.outputs.linux_shards }}
+      has_macos: ${{ steps.shards.outputs.has_macos }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - run: bun install --frozen-lockfile
+
+      - name: Plan the run
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: bun scripts/test-baseline/cli.ts plan --event "$EVENT_NAME" --out plan
+
+      - name: Publish shard indices
+        id: shards
+        run: |
+          echo "linux_shards=$(jq -c '[range(0; (.linuxShards | length))]' plan/plan.json)" >> "$GITHUB_OUTPUT"
+          echo "has_macos=$(jq '(.macos | length) > 0' plan/plan.json)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: test-plan
+          path: plan/
+          retention-days: 1
+          if-no-files-found: error
+
+  linux:
+    name: Linux shard ${{ matrix.shard }}
+    needs: plan
+    if: needs.plan.outputs.linux_shards != '[]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: ${{ fromJSON(needs.plan.outputs.linux_shards) }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - name: Install test tools
+        run: |
+          sudo apt-get update && sudo apt-get install -y zsh ripgrep
+          # ubuntu's zshrc runs compinit, which stops at a prompt over the runner's writable function directories
+          zsh -fc 'autoload -U compaudit; compaudit' | grep '^/' | xargs -r sudo chmod go-w
+
+      - run: bun install --frozen-lockfile
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: test-plan
+          path: plan
+
+      - name: Run shard
+        env:
+          SHARD: ${{ matrix.shard }}
+        run: bun scripts/test-baseline/cli.ts run-shard --plan plan --shard "$SHARD" --out "results/linux-$SHARD.json"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: test-results-linux-${{ matrix.shard }}
+          path: results/
+          retention-days: 1
+          if-no-files-found: error
+
+  macos:
+    name: macOS
+    needs: plan
+    if: needs.plan.outputs.has_macos == 'true'
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - name: Install test tools
+        run: |
+          HOMEBREW_NO_AUTO_UPDATE=1 brew install ripgrep
+          # the runner's long hostname wraps zsh's default prompt, and the tests read that prompt back
+          sudo scutil --set HostName ci && sudo hostname ci
+
+      - run: bun install --frozen-lockfile
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: test-plan
+          path: plan
+
+      - name: Run macOS files
+        run: bun scripts/test-baseline/cli.ts run-shard --plan plan --macos --out results/macos.json
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: test-results-macos
+          path: results/
+          retention-days: 1
+          if-no-files-found: error
+
+  rerun:
+    name: Rerun failures
+    needs: [plan, linux]
+    if: >-
+      always()
+      && needs.plan.result == 'success'
+      && needs.plan.outputs.linux_shards != '[]'
+      && !contains(needs.*.result, 'cancelled')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: test-plan
+          path: plan
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: test-results-linux-*
+          path: results
+          merge-multiple: true
+
+      - name: Look for failures
+        id: failures
+        run: |
+          mkdir -p results
+          if cat results/*.json | jq -e -s 'any(.[][]; .first.fileError != null or any(.first.tests[]; .status == "failed"))' > /dev/null; then
+            echo "needed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "needed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: oven-sh/setup-bun@v2
+        if: steps.failures.outputs.needed == 'true'
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - name: Install dependencies
+        if: steps.failures.outputs.needed == 'true'
+        run: |
+          sudo apt-get update && sudo apt-get install -y zsh ripgrep
+          # ubuntu's zshrc runs compinit, which stops at a prompt over the runner's writable function directories
+          zsh -fc 'autoload -U compaudit; compaudit' | grep '^/' | xargs -r sudo chmod go-w
+          bun install --frozen-lockfile
+
+      - name: Rerun failed files alone
+        if: steps.failures.outputs.needed == 'true'
+        run: bun scripts/test-baseline/cli.ts rerun --plan plan --in results --out rerun/rerun.json
+
+      - uses: actions/upload-artifact@v4
+        if: steps.failures.outputs.needed == 'true'
+        with:
+          name: test-results-rerun
+          path: rerun/
+          retention-days: 1
+          if-no-files-found: error
+
+  tests:
+    name: Tests
+    needs: [plan, linux, macos, rerun]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: test-plan
+          path: plan
+          merge-multiple: true
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: test-results-*
+          path: results
+          merge-multiple: true
+
+      - name: Judge the run
+        id: verdict
+        continue-on-error: true
+        run: |
+          mkdir -p plan results out
+          bun scripts/test-baseline/cli.ts verdict --plan plan --in results --out out --jobs-ok ${{ !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') }}
+
+      - name: Ensure a comment exists
+        if: always()
+        run: |
+          mkdir -p out
+          if [ ! -f out/comment.md ]; then
+            printf '<!-- test-baseline-verdict -->\n## Tests\n\nThe verdict was not produced, so this run counts as failed.\n' > out/comment.md
+          fi
+
+      - name: Write the step summary
+        if: always() && github.event_name == 'pull_request'
+        run: cat out/comment.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Update the pull request comment
+        if: always() && github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          marker='<!-- test-baseline-verdict -->'
+          {
+            existing=$(gh api --paginate "repos/$REPO/issues/$PR_NUMBER/comments" --jq ".[] | select(.body | contains(\"$marker\")) | .id" | head -n 1)
+            if [ -n "$existing" ]; then
+              gh api --method PATCH "repos/$REPO/issues/comments/$existing" -F body=@out/comment.md > /dev/null
+            else
+              gh api --method POST "repos/$REPO/issues/$PR_NUMBER/comments" -F body=@out/comment.md > /dev/null
+            fi
+          } || echo "::warning::could not post the verdict comment"
+
+      - name: File issues
+        if: github.event_name == 'push' && hashFiles('out/baseline.json') != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bun scripts/test-baseline/cli.ts issues --plan plan --baseline out/baseline.json --only open
+
+      - uses: actions/upload-artifact@v4
+        if: github.event_name == 'push' && hashFiles('out/baseline.json') != ''
+        with:
+          name: test-baseline-${{ github.sha }}
+          path: out/baseline.json
+          retention-days: 14
+          if-no-files-found: error
+
+      - name: Close resolved issues
+        if: github.event_name == 'push' && hashFiles('out/baseline.json') != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bun scripts/test-baseline/cli.ts issues --plan plan --baseline out/baseline.json --only close
+
+      - name: Fail when the verdict failed
+        if: always() && steps.verdict.outcome == 'failure'
+        run: exit 1
