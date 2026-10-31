@@ -532,6 +532,7 @@ a scenario says otherwise, so `--worktree` defaults to it.
     - **Given** 8 changed files, one of them with 12,000 changed lines and one an unresolved conflict
     - **When** the person clicks View all on Changes, then Collapse All, Side by Side, Wrap On, Whitespace On and "Show file tree", then "Load diff" on the large file
     - **Then** the view reads "Changes" with the file count, the toolbar's buttons toggle as named (and write their settings), the first six sections load and the rest load as they scroll into view, the large file shows "Large diffs are not rendered by default." with "Load diff", and the conflict is left out with "Conflicted files are reviewed separately" and "1 unresolved conflicts were excluded from this diff view." with Review conflicts. Each section header shows the path, the counts, copy path and "Open diff". Unstaged sections are editable and save as in SC-61. "Open Branch Diff" switches to the branch's combined diff, titled "Branch Changes (origin/main)".
+    - Collapsing a section hides its entire diff body and leaves its header visible. Collapse All leaves only section headers; expanding restores the bodies. This applies to working-tree, branch, and whole-commit combined diffs.
 
 63. **SC-63: big and binary diffs show a fallback** (UI)
     - **Given** the files of SC-56

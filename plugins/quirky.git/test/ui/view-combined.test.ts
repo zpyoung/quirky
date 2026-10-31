@@ -1,11 +1,15 @@
 import { afterAll, afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
+import { readFileSync } from 'node:fs'
 import { registerDom } from './register-dom'
 import type { GitStatusEntry } from '@quirky/protocol'
 
 registerDom()
 const s = await import('./support')
 afterAll(() => GlobalRegistrator.unregister())
+
+const sharedStyles = document.createElement('style')
+sharedStyles.textContent = readFileSync(new URL('../../../../packages/ui/src/design-system/components.css', import.meta.url), 'utf8')
 
 const { act, byLabel, byText, click, edit, failure, fakeContext, layoutFor, mountView, numbered, settle, status, stubIntersectionObserver, textDiff } = s
 
@@ -42,6 +46,7 @@ const sectionOf = (root: ParentNode, path: string) => root.querySelector<HTMLEle
 
 beforeEach(() => {
   document.body.innerHTML = ''
+  document.head.appendChild(sharedStyles)
   fake = fakeContext(layoutFor('w1'))
   observer = stubIntersectionObserver()
   loading = { active: 0, peak: 0, order: [] }
@@ -59,6 +64,7 @@ afterEach(() => {
   mounted?.unmount()
   mounted = null
   observer.restore()
+  sharedStyles.remove()
 })
 
 describe('quirky.git combined diff', () => {
@@ -124,12 +130,14 @@ describe('quirky.git combined diff', () => {
     expect(report().collapsed).toBe(true)
     for (const path of [...small, 'big.txt']) {
       expect(sectionToggle(path)?.getAttribute('aria-expanded')).toBe('false')
+      expect(getComputedStyle(sectionOf(element, path).querySelector<HTMLElement>(':scope > div')!).display).toBe('none')
     }
     expect(byText(element, 'Expand All')).not.toBeNull()
     await click(byText(element, 'Expand All'))
     expect(report().collapsed).toBe(false)
     for (const path of [...small, 'big.txt']) {
       expect(sectionToggle(path)?.getAttribute('aria-expanded')).toBe('true')
+      expect(getComputedStyle(sectionOf(element, path).querySelector<HTMLElement>(':scope > div')!).display).toBe('flex')
     }
     await act(async () => void (await fake.run('collapse-all', { collapsed: true })))
     await settle()
@@ -147,6 +155,11 @@ describe('quirky.git combined diff', () => {
     await click(byLabel(element, 'Collapse f2.ts'))
     expect(sectionOf(element, 'f2.ts').querySelector<HTMLButtonElement>('button[aria-expanded]:not([aria-haspopup])')?.getAttribute('aria-expanded')).toBe('false')
     expect(sectionOf(element, 'f1.ts').querySelector<HTMLButtonElement>('button[aria-expanded]:not([aria-haspopup])')?.getAttribute('aria-expanded')).toBe('true')
+    const content = sectionOf(element, 'f2.ts').querySelector<HTMLElement>(':scope > div')!
+    expect(getComputedStyle(content).display).toBe('none')
+    expect(getComputedStyle(sectionOf(element, 'f1.ts').querySelector<HTMLElement>(':scope > div')!).display).toBe('flex')
+    await click(byLabel(element, 'Expand f2.ts'))
+    expect(getComputedStyle(content).display).toBe('flex')
   })
 
   test('SC-64: load-diff still works on a collapsed section', async () => {
