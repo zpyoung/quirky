@@ -741,6 +741,8 @@
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
+  margin-inline: calc(-1 * (var(--ui-focus-width) + var(--ui-focus-offset)));
+  padding-inline: calc(var(--ui-focus-width) + var(--ui-focus-offset));
 }
 
 .ui-dialog__actions {
