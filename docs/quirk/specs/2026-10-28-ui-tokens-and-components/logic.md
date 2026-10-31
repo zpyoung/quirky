@@ -33,6 +33,8 @@ Menu lists size to their labels and remain at least as wide as their trigger. Ic
 
 Tabs keep a complete focus-visible ring inside their horizontal scrollport, including the first and last tabs. The ring is inset so it remains visible without changing control sizing or disabling horizontal scrolling.
 
+Scrollable dialog bodies leave inline clearance for outward focus rings, including Settings checkboxes at the content edge. Content stays aligned with the dialog header and actions, and the body keeps vertical scrolling.
+
 ### SC3 — Gallery is a working page
 After the ordinary UI build, `/gallery.html` loads actual shared components with no daemon connection or token required. Both theme columns show every category; toggling tabs, typing, selecting menu items, showing/closing dialogs, dismissing a toast, and invoking the card action updates visible local demonstration state. The gallery has no private duplicated controls or local CSS; its layout classes are defined with the shared system.
 
