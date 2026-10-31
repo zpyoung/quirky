@@ -16,6 +16,7 @@ import { filterSlashCatalog, SLASH_CATALOG, type SlashItem } from './slashCatalo
 import { MermaidDiagram } from './MermaidDiagram'
 import { destinationDirectory } from './files'
 import { MARKDOWN_PREVIEW_REHYPE_PLUGINS, previewHeadingId } from './previewPipeline'
+import { registerEditorFocus } from '../window/editorFocus'
 
 const MARKDOWN_METHOD = 'quirky.editor/markdown'
 const NOTES_METHOD = 'quirky.editor/notes'
@@ -685,6 +686,16 @@ function RichSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
     onBlur: () => { void flushRef.current().catch(() => {}) }
   }, [buffer.id])
   editorRef.current = editor
+  useEffect(() => {
+    if (!editor || buffer.tabId === null) return
+    const tabId = buffer.tabId
+    const editorDom = editor.view.dom
+    return registerEditorFocus(tabId, () => {
+      const group = editorDom.closest<HTMLElement>('.qt-group')
+      const hostedView = editorDom.closest<HTMLElement>('.qt-hosted-view')
+      if (group?.classList.contains('qt-active') && hostedView?.dataset.hostedView === tabId) editor.view.focus()
+    })
+  }, [buffer.tabId, editor])
 
   const updateCompletions = useCallback((current: Editor) => {
     const dismissDocuments = () => {
