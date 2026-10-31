@@ -13,13 +13,12 @@ import {
 import { useConnection, usePluginHost, usePluginState } from '../context'
 import { PluginSlot } from '../plugins/PluginSlot'
 import { useAttention } from './attention'
+import { isAgentStatusStale, useNow } from './freshness'
 import './chrome.css'
 
 const WORKTREES_TOOL = 'sidebar-section:quirky.worktree/worktrees'
 const ACTIVE_TAB_ICON = 'quirky.terminal/activeTabIcon'
 const LAYOUT_EVENT = 'quirky.terminal/layout'
-const STALE_AFTER_MS = 30 * 60 * 1000
-const CLOCK_TICK_MS = 60_000
 
 const LANGUAGES: Record<string, string> = {
   ts: 'TypeScript', tsx: 'TypeScript', mts: 'TypeScript', cts: 'TypeScript',
@@ -105,19 +104,10 @@ function sessionActivity(session: Session, fallback = 'Working'): string {
   return [identity, activity].filter(Boolean).join(' · ')
 }
 
-function useNow(): number {
-  const [now, setNow] = useState(() => Date.now())
-  useEffect(() => {
-    const timer = setInterval(() => setNow(Date.now()), CLOCK_TICK_MS)
-    return () => clearInterval(timer)
-  }, [])
-  return now
-}
-
 function sessionNeedsYou(session: Session, now: number): boolean {
   const summary = session.agentStatus
   if (!summary) return session.status === 'waiting'
-  const stale = summary.state !== 'done' && !summary.restoredUnconfirmed && now - summary.evidenceAt > STALE_AFTER_MS
+  const stale = isAgentStatusStale(summary, now)
   if (stale) return false
   return summary.display === 'waiting' || summary.display === 'permission' || summary.display === 'blocked'
 }

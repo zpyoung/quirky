@@ -8,7 +8,7 @@
       "state": "blocked",
       "kind": "approval",
       "region": "screen",
-      "lastLines": 12,
+      "lastLines": 200,
       "all": [
         {
           "regex": "^.{0,32}Quick safety check[^\\n]*\\n[\\s\\S]*^.{0,32}Yes, I trust this folder[ \\t]*\\n[\\s\\S]*^.{0,64}Enter to confirm · Esc to cancel.{0,32}(?![\\s\\S])"

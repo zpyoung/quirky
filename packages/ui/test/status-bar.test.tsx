@@ -478,6 +478,7 @@ describe('status bar', () => {
     await seedSessions(env, [first, second], true)
     await env.win.waitFor(() => texts(env).includes('Agent status unavailable'))
     expect(itemLabelled(env, '2 agents working')).toBeUndefined()
+    expect(texts(env).some((text) => text.endsWith('working'))).toBe(false)
     expect(values(env).filter((value) => value.textContent?.includes('needs you'))).toHaveLength(0)
   })
 })

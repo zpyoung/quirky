@@ -92,6 +92,18 @@ describe('SC-19: an agent that exits without saying so ends its row', () => {
     expect(changed.at(-1)).toMatchObject({ data: { sessionId: 's1', row: null } })
   })
 
+  test('ends a dead-agent row even when session listing fails', async () => {
+    rig = await Rig.start()
+    const agent = agentProcess()
+    await prompt(agent)
+    await killed(agent.process)
+    await rig.client.callAny('quirky.session/failNextList', {})
+
+    await runPresence()
+    await waitForAsync(async () => (await rig.row()) === null ? true : null)
+    expect(await rig.session()).toMatchObject({ status: 'running', agentStatus: null })
+  })
+
   test('a done row ends too, and rows of live agents stay', async () => {
     rig = await Rig.start({ sessions: [{}, { id: 's2' }] })
     const gone = agentProcess()

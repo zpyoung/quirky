@@ -18,7 +18,7 @@ Without `--host`, hooks setup/removal and status reads retain their local behavi
 
 ## Claude folder trust needs attention before hooks start
 
-The presence check recognizes Claude's folder-trust menu before Claude sends its first hook. It publishes a blocked session summary so the worktree row names Claude instead of a shell tab. The inferred status clears when the menu disappears; hooks and program-status reports take precedence. A slow or failed terminal read leaves the status unchanged and does not hold up hook processing.
+The presence check recognizes Claude's folder-trust menu before Claude sends its first hook, including prompts wrapped in narrow terminal panes. It publishes a blocked session summary so the worktree row names Claude instead of a shell tab. The inferred status clears when the menu disappears; hooks and program-status reports take precedence. A slow or failed terminal read leaves the status unchanged and does not hold up hook processing. Dead-agent cleanup runs even if the live-session list is unavailable.
 
 The status bar's “needs you” count includes waiting sessions as well as pending Inbox questions. A question linked to a waiting session counts once. Session entries open their worktree; questions open the Inbox. Stale summaries stop contributing unless they are restored and unconfirmed. The combined count is hidden if either data source is unavailable.
 

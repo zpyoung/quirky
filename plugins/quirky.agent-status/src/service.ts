@@ -258,15 +258,19 @@ export class AgentStatusService {
     if (data.includes('\r')) void this.enqueue(sessionId, () => this.handleEnter(sessionId))
   }
 
-  /** Ends dead-agent rows and samples live Claude sessions for pre-hook status. */
+  /**
+   * Ends the rows whose agent process is gone, done rows included: the agent left without saying
+   * so. Each is rechecked in its session's queue, because a hook may have moved the lead since.
+   * The sweep also samples live Claude sessions for pre-hook status.
+   */
   async sweepPresence(): Promise<void> {
-    const sessions = (await this.context.call('quirky.session/list', {})) as Session[]
     const work: Promise<void>[] = []
     for (const { row } of this.rows.all()) {
       if (row.lead.agentPid !== null && !row.lead.ended) {
         work.push(this.enqueue(row.sessionId, () => this.endIfGone(row.sessionId)))
       }
     }
+    const sessions = (await this.context.call('quirky.session/list', {})) as Session[]
     for (const session of sessions) {
       if (
         session.kind === 'terminal' &&
