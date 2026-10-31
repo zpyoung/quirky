@@ -470,7 +470,7 @@ test('palette Enter keeps the selected agent when an earlier launch disappears',
   expect(palette.runCommands).toEqual(['command:quirky.agents/new-codex-tab'])
 })
 
-test('palette prioritizes exact title matches while preserving result order and Enter opens the tool', async () => {
+test('palette prioritizes exact and prefix title matches while preserving ties and Enter opens the tool', async () => {
   const commands = [
     paletteCommand('collapse', 'Collapse', 'acme.files'),
     paletteCommand('filter-changed', 'Filter Changed', 'acme.files'),
@@ -492,7 +492,7 @@ test('palette prioritizes exact title matches while preserving result order and 
   expect(palette.titles()).toEqual(['Files', 'Collapse', 'Filter Changed', 'Search', 'Select'])
 
   await palette.search('file')
-  expect(palette.titles()).toEqual(['Collapse', 'Filter Changed', 'Search', 'Select', 'Files'])
+  expect(palette.titles()).toEqual(['Files', 'Collapse', 'Filter Changed', 'Search', 'Select'])
 
   await palette.search('')
   expect(palette.titles()).toEqual(['Collapse', 'Filter Changed', 'Search', 'Select', 'Files'])
