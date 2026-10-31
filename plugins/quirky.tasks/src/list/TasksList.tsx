@@ -1289,9 +1289,9 @@ export function TasksList({ context, state, refresh }: TasksSurfaceProps) {
         </div>
       )) : null}
 
-      {!noGitHubRemote ? (
-        <>
-          <div className="tasks-list__toolbar">
+      <div className="tasks-list__toolbar">
+        {!noGitHubRemote ? (
+          <>
             <div role="group" aria-label="Task presets" className="tasks-list__presets">
               {presets.map((item) => (
                 <Button key={item.id} type="button" onClick={() => presetClick(item)} onContextMenu={(event) => void makeDefaultPreset(item, event)} title="Right-click to make this the default">{item.label}</Button>
@@ -1311,9 +1311,13 @@ export function TasksList({ context, state, refresh }: TasksSurfaceProps) {
             />
             <IconButton type="button" label="Clear search" title="Clear search" onClick={() => commitSearch(presetQuery(normalizedPreset(state.preferences.defaultTaskViewPreset, kind), kind))}>×</IconButton>
             {kind === 'issue' ? <Button variant="primary" type="button" aria-label="New GitHub issue" disabled={selectedRepoIds.length === 0} onClick={() => void navigate({ newIssue: true })}>＋ New GitHub issue</Button> : null}
-            <Button type="button" aria-label={refreshing ? 'Refreshing GitHub work' : 'Refresh GitHub work'} disabled={refreshing || selectedRepoIds.length === 0} onClick={() => void loadList(true, true)}>{refreshing ? 'Refreshing…' : 'Refresh'}</Button>
-          </div>
+          </>
+        ) : null}
+        <Button type="button" aria-label={refreshing ? 'Refreshing GitHub work' : 'Refresh GitHub work'} disabled={refreshing || selectedRepoIds.length === 0} onClick={() => void loadList(true, true)}>{refreshing ? 'Refreshing…' : 'Refresh'}</Button>
+      </div>
 
+      {!noGitHubRemote ? (
+        <>
           {pills.length > 0 ? (
             <div aria-label="Active task filters" className="tasks-list__filter-pills">
               {pills.map((pill, index) => <Button key={`${pill.category}:${pill.value ?? index}`} type="button" aria-label={`Remove ${pill.label} filter`} onClick={() => removeFilter(pill.category, pill.value)}>{pill.label} ×</Button>)}

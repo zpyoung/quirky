@@ -110,8 +110,5 @@
 - **Revisit if:** final controller merge typecheck or end-phase visual/behavioral checks identify a conflict
 - **Source:** assumed — autonomous
 
-## No GitHub remote
-When no GitHub remote is configured, the explanation appears before the source context and repository picker. GitHub presets, search, filters, create, refresh, and open-repository controls are hidden because they cannot operate until a remote exists. The repository picker remains available so users can select a configured source.
-
 ## Progress
 Ready to land. Source/components/docs and consumer-visible regressions are complete; authored tests remain unrun under build-first. Sole roadmap catch-up completed and six incoming binding logs read in full. Final composed typecheck, renderer build and bounded actual UI passed (D10); no suites, review, full dogfood, golden/native acceptance claimed. All workers/scouts returned; component worktrees removed after full unrelated metadata preservation; all four private runtime services exited0; all owned managed tabs released and both exact Chrome services stopped. Next: commit final receipt, archive credential-free evidence, detach and run canonical queue.ts land ui-restyle-tasks, await authoritative success, then remove only owned scratch.

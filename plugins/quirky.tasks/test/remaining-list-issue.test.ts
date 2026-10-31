@@ -417,6 +417,11 @@ test('a pull request whose head advances after safety metadata cannot be merged 
 test.each(['issues', 'prs'] as const)('a repository without an origin leads with an empty state and hides unusable GitHub controls in %s', async (mode) => {
   const host = await bootTasks(listFixtureSource)
   hosts.push(host)
+  const item = mode === 'issues'
+    ? fixtureIssue('test-owner', 'test-repo', 7, '2026-10-01T00:00:00Z')
+    : fixturePullRequest('test-owner', 'test-repo', 12, '2026-10-01T00:00:00Z')
+  item.title = 'Task recovered after adding a remote'
+  host.writeState(seedListFixture({ 'test-owner/test-repo': [item] }))
   git(host.repoPath, 'remote', 'remove', 'origin')
   await host.call('navigate', { mode, repoIds: [host.repoId], query: 'is:open' })
   const state = taskState(await host.call('state'))
@@ -430,7 +435,7 @@ test.each(['issues', 'prs'] as const)('a repository without an origin leads with
   expect(mounted.container.querySelector('button[aria-haspopup="dialog"]')).toBeNull()
   expect(mounted.container.querySelector('[aria-label="GitHub task filters"]')).toBeNull()
   expect(mounted.container.querySelector('[aria-label="Active task filters"]')).toBeNull()
-  expect(mounted.container.querySelector('button[aria-label$="GitHub work"]')).toBeNull()
+  expect(mounted.container.querySelector<HTMLButtonElement>('button[aria-label$="GitHub work"]')?.disabled).toBe(false)
   expect(mounted.container.textContent).not.toContain('Open repository in GitHub')
   expect(mounted.container.querySelector<HTMLButtonElement>('button[aria-haspopup="listbox"]')?.disabled).toBe(false)
   expect(mounted.container.querySelectorAll('[role="alert"]')).toHaveLength(0)
@@ -442,6 +447,13 @@ test.each(['issues', 'prs'] as const)('a repository without an origin leads with
   expect(emptyState.compareDocumentPosition(sourceContext) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   expect(mounted.container.querySelector('[aria-label="Task source context"]')?.textContent).not.toMatch(/no origin|unavailable/i)
   expect(mounted.container.textContent).not.toContain(host.repoId)
+
+  git(host.repoPath, 'remote', 'add', 'origin', 'https://github.com/test-owner/test-repo.git')
+  await click(button(mounted.container, 'Refresh'))
+  await waitForUi(() => mounted.container.textContent?.includes(item.title) === true, 'tasks loaded from the newly added remote')
+  expect(mounted.container.querySelector('.tasks-list__empty')).toBeNull()
+  expect(mounted.container.textContent).not.toMatch(/no GitHub remote/i)
+  expect(mounted.container.querySelector('[aria-label^="Search GitHub"]')).not.toBeNull()
 }, 30_000)
 
 test('an origin switch prevents a lagging upstream refresh from repainting the current issue list', async () => {
