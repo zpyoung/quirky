@@ -233,12 +233,13 @@ async function flushReact(): Promise<void> {
 }
 
 async function waitForUi<T>(
-  check: () => T | false | null | undefined | Promise<T | false | null | undefined>
+  check: () => T | false | null | undefined | Promise<T | false | null | undefined>,
+  timeoutMs?: number
 ): Promise<T> {
   return await waitForAsync(async () => {
     await flushReact()
     return await check()
-  })
+  }, timeoutMs)
 }
 
 async function renderExplorer(fixture: Fixture, context = makeContext(fixture)): Promise<Mounted> {
@@ -965,6 +966,53 @@ for (const entryPoint of ['Contents', 'Search in Files']) {
     }
   })
 }
+
+test('Explorer explains an unmatched Contents query in Names and clears it to reveal a newly created file', async () => {
+  const fixture = await makeFixture()
+  const panel = await renderExplorer(fixture)
+  await act(async () => footerButton(panel.element, 'Search in Files').click())
+  const query = panel.element.querySelector<HTMLInputElement>('input[placeholder="Search"]')!
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(query, 'alpha')
+    query.dispatchEvent(new Event('input', { bubbles: true }))
+    query.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+  })
+  await waitForUi(() => panel.element.querySelector('.qe-search-file code')?.textContent?.includes('alpha'), 15_000)
+  const names = Array.from(panel.element.querySelectorAll<HTMLButtonElement>('.qe-explorer-search-mode button'))
+    .find((button) => button.textContent === 'Names')!
+  await act(async () => names.click())
+  await waitForUi(() => panel.element.querySelector('[role="tree"]')?.children.length === 0, 15_000)
+  const emptyMessage = Array.from(panel.element.querySelectorAll<HTMLElement>('[role="status"]'))
+    .find((element) => /no files match/i.test(element.textContent ?? ''))
+  expect(emptyMessage).toBeDefined()
+  expect(emptyMessage!.textContent).toContain('alpha')
+  expect(query.value).toBe('alpha')
+  const clear = Array.from(panel.element.querySelectorAll<HTMLButtonElement>('button'))
+    .find((button) => /clear filter/i.test(button.textContent ?? ''))
+  expect(clear).toBeDefined()
+
+  await act(async () => panel.element.querySelector<HTMLButtonElement>('button[title="New File"]')!.click())
+  const input = panel.element.querySelector<HTMLInputElement>('.qe-explorer-inline-row input')!
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, 'qa-focus.txt')
+    input.dispatchEvent(new Event('input', { bubbles: true }))
+  })
+  const create = Array.from(panel.element.querySelectorAll<HTMLButtonElement>('.qe-explorer-inline-row button'))
+    .find((button) => button.textContent === 'Create')!
+  await act(async () => create.click())
+  const created = join(fixture.root, 'qa-focus.txt')
+  await waitForUi(() => existsSync(created) && !panel.element.querySelector('.qe-explorer-inline-row'), 15_000)
+  expect(findRow(panel.element, created)).toBeNull()
+  expect(emptyMessage!.isConnected).toBe(true)
+
+  await act(async () => clear!.click())
+  await waitForUi(() => findRow(panel.element, created)?.getAttribute('aria-selected') === 'true', 15_000)
+  expect(query.value).toBe('')
+  expect(document.activeElement).toBe(query)
+  expect(emptyMessage!.isConnected).toBe(false)
+  await act(async () => footerButton(panel.element, 'Copy Relative Path').click())
+  expect(await navigator.clipboard.readText()).toBe('qa-focus.txt')
+}, 60_000)
 
 test('Explorer footer Search in Files focuses the contents query', async () => {
   const fixture = await makeFixture({ displayRoot: 'nested' })
