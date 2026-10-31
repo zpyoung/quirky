@@ -38,6 +38,7 @@ type MatchData = {
 
 type RunningSearch = {
   id: string
+  cancelled: boolean
   child: ChildProcessByStdio<null, Readable, Readable>
   timer: ReturnType<typeof setTimeout>
   result: SearchResult
@@ -56,7 +57,7 @@ export class ContentsSearch {
     const worktree = await this.paths.resolve(params.worktree, caller)
     if (params.action === 'state') return this.state(worktree.id)
     if (params.action === 'cancel') {
-      this.cancel(worktree.id)
+      this.cancel(worktree.id, params.requestId)
       return this.state(worktree.id)
     }
     return await this.start(worktree.id, worktree.path, params)
@@ -130,7 +131,7 @@ export class ContentsSearch {
     const publish = (loading: boolean) => {
       result.loading = loading
       result.files = [...byPath.values()]
-      if (this.running.get(worktreeId)?.id === requestId || !loading) this.states.set(worktreeId, { ...result, files: [...result.files] })
+      if (this.running.get(worktreeId)?.child === child) this.states.set(worktreeId, { ...result, files: [...result.files] })
     }
     const finish = (error?: string) => {
       if (settled) return
@@ -140,8 +141,11 @@ export class ContentsSearch {
       result.error = error ?? null
       result.files = [...byPath.values()]
       const final = { ...result, files: [...result.files] }
-      if (this.running.get(worktreeId)?.id === requestId || this.running.has(worktreeId) === false) this.states.set(worktreeId, final)
-      if (this.running.get(worktreeId)?.id === requestId) this.running.delete(worktreeId)
+      const isCurrent = this.running.get(worktreeId)?.child === child
+      if (isCurrent) {
+        this.states.set(worktreeId, final)
+        this.running.delete(worktreeId)
+      }
       resolve(final)
     }
     const acceptLine = (raw: string) => {
@@ -199,7 +203,7 @@ export class ContentsSearch {
       result.truncated = true
       child.kill('SIGTERM')
     }, SEARCH_TIMEOUT_MS)
-    const running: RunningSearch = { id: requestId, child, timer, result, done: promise, resolve }
+    const running: RunningSearch = { id: requestId, child, timer, result, done: promise, resolve, cancelled: false }
     this.running.set(worktreeId, running)
     this.states.set(worktreeId, { ...result, files: [] })
 
@@ -228,15 +232,16 @@ export class ContentsSearch {
     })
     child.once('close', (code) => {
       if (pendingLine !== '') acceptLine(pendingLine)
-      if (code !== 0 && code !== 1 && !result.truncated) finish(stderr.trim() || `ripgrep exited with status ${code}`)
+      if (!running.cancelled && code !== 0 && code !== 1 && !result.truncated) finish(stderr.trim() || `ripgrep exited with status ${code}`)
       else finish()
     })
     return await promise
   }
 
-  private cancel(worktreeId: string): void {
+  private cancel(worktreeId: string, requestId?: string): void {
     const active = this.running.get(worktreeId)
-    if (active === undefined) return
+    if (active === undefined || (requestId !== undefined && active.id !== requestId)) return
+    active.cancelled = true
     clearTimeout(active.timer)
     active.child.kill('SIGTERM')
     active.result.loading = false
