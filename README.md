@@ -332,7 +332,9 @@ quirky ui state --json
 `ui.tool.open` is idempotent; the stripe explicitly closes an already open tool.
 The existing panel/sidebar APIs update the same tool state. The obsolete editor top/side
 activity-bar setting is removed. ⌘K searches commands, tools, views and worktrees while
-preserving contributed shortcut priority. Exact title matches rank first in nonempty searches;
+preserving contributed shortcut priority. The Search button qualifies its ⌘K hint as
+“outside terminal”: with terminal focus, ⌘K clears terminal output; click Search to open
+the palette without clearing it. Exact title matches rank first in nonempty searches;
 tool locations use readable slot labels. Off-worktree questions raise eight-second corner
 toasts and amber worktree/Inbox counts; dismissing a toast never answers its durable question.
 
