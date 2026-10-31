@@ -208,17 +208,13 @@ function FloatingSetupOverlay({ context, report }: FloatingSetupProps) {
         pointerEvents: 'auto'
       }}
     >
-      <ToolPanelFrame
-        title="Enable orchestration"
-        actions={
-          <div className="ui-cluster">
-            <Button onClick={() => void dismiss()}>Dismiss</Button>
-            <Button variant="primary" onClick={() => void openSettings()}>Enable</Button>
-          </div>
-        }
-      >
+      <ToolPanelFrame title="Enable orchestration">
         <p className="ui-text-muted">Set up the skill so agents can coordinate supervised work through Quirky.</p>
         {error && <p className="ui-error-text" role="alert">{error}</p>}
+        <div className="ui-cluster">
+          <Button onClick={() => void dismiss()}>Dismiss</Button>
+          <Button variant="primary" onClick={() => void openSettings()}>Enable</Button>
+        </div>
       </ToolPanelFrame>
     </aside>
   )

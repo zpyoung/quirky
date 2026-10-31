@@ -65,6 +65,8 @@ Before: owned active worker terminal. Programmatic preamble/terminal query respo
 ### AC9 — Setup affordance and lifecycle cleanup
 Before: uninstalled skill in floating workspace. Setup affordance opens the same setup content; Dismiss persists; actual installed detection suppresses it rather than mere Install click. The card stays clear of the live draggable toggle and measured status-bar region, within viewport bounds after trigger movement or resize; in short viewports, constrain it to the largest safe space and keep Enable and Dismiss reachable by scrolling. Disabling orchestration removes its UI contributions/subscriptions, leaves generic worktree/terminal UI usable, and no polling/timers/processes leak. Re-enable rechecks actual skill/policy/fleet and does not use stale success. Read-only paired windows never offer mutable depth. Native-only OS clipboard/window integration is recorded pending if web cannot verify it.
 
+The compact setup card places Dismiss and Enable below its description. Both buttons remain fully inside the card at desktop and narrow viewport widths.
+
 ## Recorded Orca defects / negative acceptance
 - Source stale “Settings→Experimental required” documentation is not copied: AC1/4 use orchestration with no toggle.
 - Worker opaque terminal name observed in source is not reused as meaningful primary label: AC7 preserves actual task title (worker dependency already fixed creation title).
