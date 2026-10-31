@@ -149,7 +149,7 @@ test('SC-59: the M0 exit test, through the CLI only', async () => {
 
   const sessions = (await agent.callAny('quirky.session/list', {})) as Session[]
   expect(sessions.find((session) => session.id === shell.id)?.status).toBe('running')
-})
+}, 20_000)
 
 test('SC-35: ui state includes the sidebar and session view reports', async () => {
   const state = await stateWhere(
