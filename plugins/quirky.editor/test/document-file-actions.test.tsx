@@ -7,10 +7,13 @@ import type { DocumentSurface as DocumentSurfaceComponent } from '../src/window/
 import { CloseOverlay } from '../src/window/CloseOverlay'
 import type { EditorBufferInfo } from '../src/types'
 import { activeDocument } from '../src/window/activeDocument'
+import type { EditorView as EditorViewType } from '@codemirror/view'
 
 type SettingWrite = { id: string; value: unknown }
 type SettingChange = { type: 'setting.changed'; id: string; value: unknown }
+type ContextEvent = SettingChange | { type: 'quirky.editor/changed' }
 type PanelToggle = { panel: string; open: boolean }
+type DraftRequest = { content: string; expectedRevision: number; release(): void }
 type Mounted = {
   element: HTMLElement
   settingWrites: SettingWrite[]
@@ -19,6 +22,9 @@ type Mounted = {
   saveStarted: Promise<void>
   buffer: EditorBufferInfo
   completeSave(): void
+  draftRequests: DraftRequest[]
+  savedContents: string[]
+  publishCompetitorDraft(content: string): void
   unmount(): Promise<void>
 }
 
@@ -44,6 +50,7 @@ const SETTINGS = new Map<string, unknown>([
 let createRoot: (container: HTMLElement) => Root
 let DocumentSurface: typeof DocumentSurfaceComponent
 let mounted: Mounted[] = []
+let findEditorView: (node: HTMLElement) => EditorViewType | null
 
 beforeAll(async () => {
   GlobalRegistrator.register()
@@ -51,6 +58,8 @@ beforeAll(async () => {
   // DocumentSurface initializes editor browser APIs, so load it after Happy DOM is registered.
   ;({ createRoot } = await import('react-dom/client'))
   ;({ DocumentSurface } = await import('../src/window/DocumentSurface'))
+  const { EditorView } = await import('@codemirror/view')
+  findEditorView = (node) => EditorView.findFromDOM(node)
 })
 afterAll(async () => {
   await GlobalRegistrator.unregister()
@@ -104,8 +113,9 @@ async function renderDocument(options: {
   withCloseOverlay?: boolean
   mode?: 'source' | 'rich'
   deferSave?: boolean
+  delayDraftWrites?: boolean
 } = {}): Promise<Mounted> {
-  const info = makeBufferInfo(options.dirty ?? false, options.mode)
+  let info = makeBufferInfo(options.dirty ?? false, options.mode)
   const state = {
     buffers: [info],
     tabs: [{ tabId: TAB_ID, bufferId: BUFFER_ID, mode: 'edit' as const }],
@@ -114,12 +124,14 @@ async function renderDocument(options: {
     quickOpenHistory: [],
     closeRequests: []
   }
-  const settingListeners = new Set<(event: SettingChange) => void>()
+  const settingListeners = new Set<(event: ContextEvent) => void>()
   const panelToggles: PanelToggle[] = []
   const settingWrites: SettingWrite[] = []
   const saveCalls: Record<string, unknown>[] = []
   const { promise: saveStarted, resolve: announceSaveStarted } = Promise.withResolvers<void>()
   let releaseSave: (() => void) | undefined
+  const draftRequests: DraftRequest[] = []
+  const savedContents: string[] = []
   const settings = new Map(SETTINGS)
   const savedInfo = (): EditorBufferInfo => {
     const saved = {
@@ -135,10 +147,68 @@ async function renderDocument(options: {
     state.buffers[0] = saved
     return saved
   }
+  const publishCompetitorDraft = (content: string) => {
+    info = {
+      ...info,
+      draft: content,
+      draftLength: content.length,
+      draftBytes: new TextEncoder().encode(content).byteLength,
+      dirty: content !== info.content,
+      revision: info.revision + 1,
+      contentRevision: info.contentRevision + 1
+    }
+    publishDraftChange()
+  }
+  const publishDraftChange = () => {
+    for (const listener of settingListeners) listener({ type: 'quirky.editor/changed' })
+  }
   const context = {
     pluginId: 'quirky.editor',
     async call(method: string, params: Record<string, unknown> = {}) {
-      if (method === 'quirky.editor/state') return state
+      if (method === 'quirky.editor/state') {
+        return options.delayDraftWrites ? { ...state, buffers: [{ ...info }] } : state
+      }
+      if (method === 'quirky.editor/draft' && options.delayDraftWrites) {
+        const content = typeof params.content === 'string' ? params.content : ''
+        const expectedRevision = typeof params.expectedRevision === 'number' ? params.expectedRevision : info.contentRevision
+        const pending = Promise.withResolvers<EditorBufferInfo>()
+        draftRequests.push({
+          content,
+          expectedRevision,
+          release() {
+            info = {
+              ...info,
+              draft: content,
+              draftLength: content.length,
+              draftBytes: new TextEncoder().encode(content).byteLength,
+              dirty: content !== info.content,
+              revision: info.revision + 1,
+              contentRevision: expectedRevision + 1
+            }
+            publishDraftChange()
+            pending.resolve({ ...info })
+          }
+        })
+        return await pending.promise
+      }
+      if (method === 'quirky.editor/save' && options.delayDraftWrites) {
+        const content = info.draft ?? info.content ?? ''
+        savedContents.push(content)
+        info = {
+          ...info,
+          content,
+          draft: null,
+          dirty: false,
+          revision: info.revision + 1,
+          contentRevision: info.contentRevision + 1,
+          contentLength: content.length,
+          draftLength: null,
+          contentBytes: new TextEncoder().encode(content).byteLength,
+          draftBytes: null
+        }
+        publishDraftChange()
+        return { ...info }
+      }
       if (method === 'quirky.editor/close') {
         if (info.dirty && params.choice === undefined) return { closed: false, needsDecision: true }
         return { closed: true }
@@ -170,7 +240,7 @@ async function renderDocument(options: {
       if (method === 'quirky.editor/notes') return { notes: [] }
       return {}
     },
-    subscribe: (listener: (event: SettingChange) => void) => {
+    subscribe: (listener: (event: ContextEvent) => void) => {
       settingListeners.add(listener)
       return () => settingListeners.delete(listener)
     },
@@ -204,6 +274,9 @@ async function renderDocument(options: {
       releaseSave()
       releaseSave = undefined
     },
+    draftRequests,
+    publishCompetitorDraft,
+    savedContents,
     async unmount() {
       if (unmounted) return
       unmounted = true
@@ -364,6 +437,13 @@ async function pressEscape(target: HTMLElement): Promise<{ event: KeyboardEvent;
     window.removeEventListener('keydown', onWindowKeydown)
   }
   return { event, reachedWindow }
+}
+function sourceEditorView(element: HTMLElement): EditorViewType {
+  const editor = element.querySelector<HTMLElement>('.cm-editor')
+  if (!editor) throw new Error('DocumentSurface did not render the source editor.')
+  const view = findEditorView(editor)
+  if (!view) throw new Error('The source editor has no CodeMirror view.')
+  return view
 }
 
 test('Escape from the File actions trigger closes it and keeps focus on the trigger', async () => {
@@ -563,4 +643,70 @@ test('cancelling a keyboard-activated dirty Close tab returns focus to the visib
   expect(details.open).toBe(false)
   expect(document.activeElement).toBe(trigger)
   expect(surface.buffer.dirty).toBe(true)
+})
+
+test('Source keeps the latest local text when an earlier draft acknowledgment arrives, then saves it without a conflict alert', async () => {
+  const surface = await renderDocument({ delayDraftWrites: true })
+  const editor = sourceEditorView(surface.element)
+  const firstText = `${CONTENT}first edit\n`
+  const latestText = `${firstText}second edit\n`
+
+  await act(async () => {
+    editor.dispatch({ changes: { from: 0, to: editor.state.doc.length, insert: firstText } })
+  })
+  await flushReact()
+  expect(surface.draftRequests).toHaveLength(1)
+
+  await act(async () => {
+    editor.dispatch({ changes: { from: 0, to: editor.state.doc.length, insert: latestText } })
+  })
+  await flushReact()
+  expect(surface.draftRequests).toHaveLength(1)
+  expect(editor.state.doc.toString()).toBe(latestText)
+
+  await act(async () => surface.draftRequests[0]!.release())
+  await flushReact()
+
+  expect(editor.state.doc.toString()).toBe(latestText)
+  expect(surface.element.textContent).not.toContain('A newer shared draft arrived.')
+  expect(surface.draftRequests).toHaveLength(2)
+  expect(surface.draftRequests[1]).toMatchObject({ content: latestText, expectedRevision: 2 })
+
+  await act(async () => surface.draftRequests[1]!.release())
+  await flushReact()
+  await act(async () => buttonByText(surface.element, 'Save').click())
+  await flushReact()
+
+  expect(surface.savedContents).toEqual([latestText])
+  expect(editor.state.doc.toString()).toBe(latestText)
+  expect(surface.element.textContent).not.toContain('A newer shared draft arrived.')
+})
+
+test('Source preserves local edits and opens Compare for a newer competing draft', async () => {
+  const surface = await renderDocument({ delayDraftWrites: true })
+  const editor = sourceEditorView(surface.element)
+  const localText = `${CONTENT}local draft\n`
+  const sharedText = `${CONTENT}shared draft\n`
+
+  await act(async () => {
+    editor.dispatch({ changes: { from: 0, to: editor.state.doc.length, insert: localText } })
+  })
+  await flushReact()
+  expect(surface.draftRequests).toHaveLength(1)
+  await act(async () => surface.draftRequests[0]!.release())
+  await flushReact()
+
+  expect(editor.state.doc.toString()).toBe(localText)
+  expect(surface.element.textContent).not.toContain('A newer shared draft arrived.')
+
+  await act(async () => surface.publishCompetitorDraft(sharedText))
+  await flushReact()
+
+  expect(editor.state.doc.toString()).toBe(localText)
+  expect(surface.element.textContent).toContain('A newer shared draft arrived.')
+  await act(async () => buttonByText(surface.element, 'Compare local text').click())
+  await flushReact()
+
+  const comparedVersions = [...surface.element.querySelectorAll<HTMLTextAreaElement>('.qe-compare-textarea')]
+  expect(comparedVersions.map((textarea) => textarea.value)).toEqual([sharedText, localText])
 })
