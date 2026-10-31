@@ -42,7 +42,7 @@ function browserEntry(): string {
   return `
     import { createElement as h, Fragment } from 'react'
     import { createRoot } from 'react-dom/client'
-    import { ExpandingIconButton, IconButton, ProjectTile, SectionHeader, Tabs, ToolPanelFrame } from ${JSON.stringify(uiModule)}
+    import { Badge, ExpandingIconButton, IconButton, ListRow, ProjectTile, SectionHeader, Tabs, ToolPanelFrame } from ${JSON.stringify(uiModule)}
 
     const projectName = 'QuirkyWorktreeProject'
     const projectActions = h('span', { className: 'ui-cluster repo-actions' },
@@ -57,6 +57,40 @@ function browserEntry(): string {
       title: h(Fragment, null, h(ProjectTile, { name: projectName }), ' ' + projectName),
       actions: projectActions
     })
+    const worktreeDescription = 'Primary worktree located in the local project folder with a deliberately long description that must truncate instead of wrapping onto another line.'
+    const makeWorktreeRow = (worktree) => h('li', {
+      className: 'worktree',
+      'data-worktree-id': worktree.id
+    }, h(ListRow, {
+      title: h('span', { className: 'ui-cluster' },
+        h('span', { className: 'worktree-name ui-text-ellipsis', title: worktree.name }, worktree.name)
+      ),
+      description: h('span', { className: 'ui-text-ellipsis', title: worktreeDescription }, worktreeDescription),
+      status: 'working',
+      statusLabel: 'Status: Active',
+      compact: worktree.compact,
+      mainTitle: '/workspace/' + worktree.name,
+      mainLabel: 'Open ' + worktree.name,
+      onClick() {},
+      trailing: h('span', { className: 'ui-cluster' },
+        worktree.needsYou ? h(Badge, { tone: 'needs-you', label: 'Needs attention' }, '2') : null,
+        h('span', { className: 'ui-cluster worktree-reveal' },
+          worktree.primary ? h(Badge, null, 'Primary') : null,
+          h(IconButton, {
+            className: 'worktree-menu',
+            label: 'Actions for ' + worktree.name,
+            'aria-haspopup': 'menu'
+          }, '⋯')
+        )
+      )
+    }))
+    const worktreeRows = [
+      { id: 'primary', name: 'main', primary: true, compact: false },
+      { id: 'ordinary', name: 'feature-qa-new-features-3', primary: false, compact: false, needsYou: true },
+      { id: 'primary-needs-you', name: 'main-needs-you', primary: true, compact: false, needsYou: true },
+      { id: 'compact-primary', name: 'compact-main', primary: true, compact: true }
+    ]
+    const worktreeList = h('ul', { className: 'worktree-list ui-tree' }, worktreeRows.map(makeWorktreeRow))
     const tabs = h(Tabs, {
       label: 'Worktree views',
       items: [{ id: 'tree', label: 'Tree' }],
@@ -71,10 +105,14 @@ function browserEntry(): string {
         h(IconButton, { label: 'Filter worktrees', title: 'Filter worktrees' }, '⌕')
       ),
       onMinimize() {}
-    }, h('div', { className: 'worktree-tree ui-stack' },
-      h('section', { className: 'repo ui-stack' },
-        projectHeader,
-        h('ul', { className: 'worktree-list ui-tree' }, h('li', null, 'main'))
+    }, h('div', { className: 'ui-stack ui-panel-content' },
+      h('div', { className: 'ui-scroll ui-grow' },
+        h('div', { className: 'worktree-tree ui-stack' },
+          h('section', { className: 'repo ui-stack' },
+            projectHeader,
+            worktreeList
+          )
+        )
       )
     ))
     const changesFrame = h(ToolPanelFrame, {
@@ -106,7 +144,7 @@ function pageMarkup(): string {
           * { box-sizing: border-box; }
           html, body, #root { height: 100%; margin: 0; }
           body { font: 13px/1.4 -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif; }
-          #layout { display: grid; grid-template-columns: ${GUTTER}px var(--sidebar-width) minmax(0, ${CENTER_WIDTH}px) var(--sidebar-width) ${GUTTER}px; height: 100%; min-width: 0; }
+          #layout { display: grid; grid-template-columns: ${GUTTER}px var(--worktree-sidebar-width, var(--sidebar-width)) minmax(0, 1fr) var(--sidebar-width) ${GUTTER}px; height: 100%; min-width: 0; }
           .panel { height: 100%; min-width: 0; }
           .ui-tool-panel-frame { height: 100%; min-width: 0; }
           #center { min-width: 0; }
@@ -348,6 +386,179 @@ test.skipIf(!existsSync(chromium.executablePath()))('keeps tool and project head
         const hoveredLayout = await metrics()
         expectContained({ left: hovered!.x, top: hovered!.y, right: hovered!.x + hovered!.width, bottom: hovered!.y + hovered!.height }, hoveredLayout.frame)
         expect(overlaps(hoveredLayout.toolTitle, hoveredLayout.toolActions)).toBe(false)
+      }
+    }
+  } finally {
+    await context.close()
+  }
+}, 60_000)
+test.skipIf(!existsSync(chromium.executablePath()))('keeps worktree rows compact and their menus usable in a narrow sidebar', async () => {
+  const context = await browser!.newContext({ viewport: { width: 646, height: HEIGHT } })
+  const page = await context.newPage()
+  try {
+    await page.setContent(pageMarkup())
+    for (const stylesheet of STYLESHEETS) {
+      await page.addStyleTag({ content: readFileSync(join(ROOT, stylesheet), 'utf8') })
+    }
+    await page.addScriptTag({ content: browserBundle })
+    await page.getByRole('button', { name: 'Actions for main', exact: true }).waitFor()
+    await page.locator('#layout').evaluate((element) => {
+      ;(element as HTMLElement).style.setProperty('--sidebar-width', '280px')
+      ;(element as HTMLElement).style.setProperty('--worktree-sidebar-width', '240px')
+    })
+
+    const measure = async () => page.evaluate(() => {
+      const bounds = (element: { getBoundingClientRect(): DOMRect }) => {
+        const rect = element.getBoundingClientRect()
+        return { left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom, height: rect.height }
+      }
+      const panel = document.querySelector('#worktrees-panel')!
+      return {
+        viewportWidth: window.innerWidth,
+        panelWidth: panel.getBoundingClientRect().width,
+        rows: [...panel.querySelectorAll<HTMLElement>('.worktree-tree .worktree')].map((item) => {
+          const row = item.querySelector<HTMLElement>('.ui-list-row')!
+          const main = row.querySelector<HTMLElement>('.ui-list-row__main')!
+          const title = row.querySelector<HTMLElement>('.worktree-name')!
+          const firstCharacter = document.createRange()
+          firstCharacter.setStart(title.firstChild!, 0)
+          firstCharacter.setEnd(title.firstChild!, 1)
+          const firstCharacterRect = firstCharacter.getBoundingClientRect()
+          const titleTarget = document.elementFromPoint(
+            firstCharacterRect.left + firstCharacterRect.width / 2,
+            firstCharacterRect.top + firstCharacterRect.height / 2
+          )
+          const description = row.querySelector<HTMLElement>('.ui-list-row__description .ui-text-ellipsis')!
+          const descriptionText = document.createRange()
+          descriptionText.selectNodeContents(description)
+          const menu = row.querySelector<HTMLButtonElement>('.worktree-menu')!
+          const attention = row.querySelector<HTMLElement>('.ui-badge--needs-you')
+          return {
+            id: item.dataset.worktreeId,
+            itemHeight: item.getBoundingClientRect().height,
+            row: bounds(row),
+            titleVisible: firstCharacterRect.width > 0 && titleTarget !== null && main.contains(titleTarget),
+            descriptionLines: new Set(Array.from(descriptionText.getClientRects(), (rect) => Math.round(rect.top))).size,
+            descriptionTruncated: description.scrollWidth > description.clientWidth,
+            attention: attention ? bounds(attention) : null,
+            menu: bounds(menu)
+          }
+        })
+      }
+    })
+    const expectContained = (
+      inner: { left: number; top: number; right: number; bottom: number },
+      outer: { left: number; top: number; right: number; bottom: number }
+    ) => {
+      expect(inner.left).toBeGreaterThanOrEqual(outer.left - 0.5)
+      expect(inner.top).toBeGreaterThanOrEqual(outer.top - 0.5)
+      expect(inner.right).toBeLessThanOrEqual(outer.right + 0.5)
+      expect(inner.bottom).toBeLessThanOrEqual(outer.bottom + 0.5)
+    }
+    function rowFor<T extends { id?: string }>(rows: T[], id: string): T {
+      return rows.find((row) => row.id === id)!
+    }
+    const rowsToTest = [
+      { id: 'primary', name: 'main' },
+      { id: 'ordinary', name: 'feature-qa-new-features-3' },
+      { id: 'primary-needs-you', name: 'main-needs-you' },
+      { id: 'compact-primary', name: 'compact-main' }
+    ]
+
+    await page.mouse.move(0, 0)
+    const wide = await measure()
+    expect(wide.viewportWidth).toBe(646)
+    expect(wide.panelWidth).toBeCloseTo(240, 0)
+    for (const { id } of rowsToTest) {
+      const row = rowFor(wide.rows, id)
+      expect(row.titleVisible).toBe(true)
+      expect(row.descriptionLines).toBe(1)
+      expect(row.descriptionTruncated).toBe(true)
+      expect(row.itemHeight).toBeCloseTo(row.row.height, 0)
+      if (id === 'ordinary' || id === 'primary-needs-you') {
+        expect(row.attention?.height).toBeGreaterThan(0)
+        expectContained(row.attention!, row.row)
+      }
+      expectContained(row.menu, row.row)
+    }
+
+    for (const sidebarWidth of [160, 116, 84]) {
+      await page.locator('#layout').evaluate((element, width) => {
+        ;(element as HTMLElement).style.setProperty('--worktree-sidebar-width', `${width}px`)
+      }, sidebarWidth)
+      await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur())
+      await page.mouse.move(0, 0)
+      const narrow = await measure()
+      expect(narrow.viewportWidth).toBe(646)
+      expect(narrow.panelWidth).toBeCloseTo(sidebarWidth, 0)
+
+      for (const { id, name } of rowsToTest) {
+        const wideRow = rowFor(wide.rows, id)
+        const row = rowFor(narrow.rows, id)
+        expect(row.row.height).toBeCloseTo(wideRow.row.height, 0)
+        expect(row.itemHeight).toBeCloseTo(row.row.height, 0)
+        expect(row.titleVisible).toBe(true)
+        expect(row.descriptionLines).toBe(1)
+        expect(row.descriptionTruncated).toBe(true)
+        if (id === 'ordinary' || id === 'primary-needs-you') {
+          expect(row.attention?.height).toBeGreaterThan(0)
+          expectContained(row.attention!, row.row)
+        }
+
+        const menu = page.getByRole('button', { name: `Actions for ${name}`, exact: true })
+        expect(await menu.getAttribute('aria-haspopup')).toBe('menu')
+        expect(await menu.isEnabled()).toBe(true)
+        await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur())
+        await page.locator(`[data-worktree-id="${id}"]`).hover()
+        await menu.hover()
+        const hoveredRow = rowFor((await measure()).rows, id)
+        expect(hoveredRow.row.height).toBeCloseTo(wideRow.row.height, 0)
+        expectContained(hoveredRow.menu, hoveredRow.row)
+        if ((sidebarWidth === 160 || sidebarWidth === 116) && (id === 'primary' || id === 'primary-needs-you')) expect(hoveredRow.titleVisible).toBe(true)
+        if (id === 'ordinary' || id === 'primary-needs-you') {
+          expect(hoveredRow.attention?.height).toBeGreaterThan(0)
+          expectContained(hoveredRow.attention!, hoveredRow.row)
+        }
+
+        await page.mouse.move(0, 0)
+        await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur())
+        await page.getByRole('button', { name: `Open ${name}`, exact: true }).focus()
+        await page.keyboard.press('Tab')
+        expect(await menu.evaluate((element) => document.activeElement === element)).toBe(true)
+        expect(await menu.evaluate((element) => element.matches(':focus-visible'))).toBe(true)
+        const focusRingVisible = await menu.evaluate((element) => {
+          const outline = getComputedStyle(element)
+          const outlineWidth = Number.parseFloat(outline.outlineWidth)
+          const outlineExtent = Math.max(0, outlineWidth + Number.parseFloat(outline.outlineOffset))
+          if (outline.outlineStyle === 'none' || outlineWidth === 0) return 'missing focus outline'
+          const rect = element.getBoundingClientRect()
+          const ring = {
+            left: rect.left - outlineExtent,
+            top: rect.top - outlineExtent,
+            right: rect.right + outlineExtent,
+            bottom: rect.bottom + outlineExtent
+          }
+          for (let ancestor = element.parentElement; ancestor; ancestor = ancestor.parentElement) {
+            const style = getComputedStyle(ancestor)
+            const bounds = ancestor.getBoundingClientRect()
+            const clipLeft = bounds.left + ancestor.clientLeft
+            const clipTop = bounds.top + ancestor.clientTop
+            const clipRight = clipLeft + ancestor.clientWidth
+            const clipBottom = clipTop + ancestor.clientHeight
+            if (style.overflowX !== 'visible' && (ring.left < clipLeft - 0.5 || ring.right > clipRight + 0.5)) return `${ancestor.className}: horizontal clip`
+            if (style.overflowY !== 'visible' && (ring.top < clipTop - 0.5 || ring.bottom > clipBottom + 0.5)) return `${ancestor.className}: vertical clip`
+          }
+          return null
+        })
+        expect(focusRingVisible).toBeNull()
+        const focusedRow = rowFor((await measure()).rows, id)
+        expect(focusedRow.row.height).toBeCloseTo(wideRow.row.height, 0)
+        expectContained(focusedRow.menu, focusedRow.row)
+        if ((sidebarWidth === 160 || sidebarWidth === 116) && (id === 'primary' || id === 'primary-needs-you')) expect(focusedRow.titleVisible).toBe(true)
+        if (id === 'ordinary' || id === 'primary-needs-you') {
+          expect(focusedRow.attention?.height).toBeGreaterThan(0)
+          expectContained(focusedRow.attention!, focusedRow.row)
+        }
       }
     }
   } finally {

@@ -30,7 +30,7 @@ All criteria must hold:
 
 Recommended: migrate in place with existing component APIs and a small reusable shared-layout vocabulary where necessary. CSS-only repaint would leave bespoke controls and drift; a new repo tool would duplicate authority and change behavior. Keep the host frame rather than nest a second titled ToolPanelFrame inside it.
 
-Layout uses comfortable two-line list rows; optional metadata and action controls remain available. Low-frequency panel options collapse under shared controls to avoid obscuring the tree. Loading/error remain explicit; failures are never hidden as empty data. Existing user-selected status/project colors stay data but presentation uses tokens under the approved palette. Identity labels and editable values remain available.
+Layout uses comfortable two-line list rows; optional metadata and action controls remain available. Narrowing the Worktrees panel to 160px or the window to 646px keeps the same row height: idle reveal controls do not reserve a blank action line, and hover or keyboard focus exposes the menu without increasing row height. At effective panel widths of 160px or less, the Primary badge yields to the menu; attention counts remain visible. Low-frequency panel options collapse under shared controls to avoid obscuring the tree. Loading/error remain explicit; failures are never hidden as empty data. Existing user-selected status/project colors stay data but presentation uses tokens under the approved palette. Identity labels and editable values remain available.
 
 ## Decisions locked
 

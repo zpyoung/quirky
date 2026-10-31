@@ -57,3 +57,44 @@
 .worktree-tree .worktree:focus-within .worktree-reveal {
   opacity: 1;
 }
+
+@container ui-tool-panel (max-width: 220px) {
+  .worktree-tree .worktree .ui-list-row {
+    flex-wrap: nowrap;
+  }
+
+  .worktree-tree .worktree .worktree-reveal {
+    flex-wrap: nowrap;
+    max-width: 0;
+    min-width: 0;
+    overflow: hidden;
+    pointer-events: none;
+  }
+
+  .worktree-tree .worktree:hover .worktree-reveal,
+  .worktree-tree .worktree:focus-within .worktree-reveal {
+    max-width: none;
+    overflow: visible;
+    pointer-events: auto;
+  }
+
+  .worktree-tree .worktree .worktree-menu:focus-visible {
+    outline-offset: calc(-1 * var(--ui-focus-width));
+  }
+}
+
+@container ui-tool-panel (max-width: 160px) {
+  .worktree-tree .worktree .ui-list-row {
+    gap: 0;
+    padding-inline: 0;
+  }
+
+  .worktree-tree .worktree .ui-list-row__trailing > .ui-cluster {
+    flex-wrap: nowrap;
+    gap: var(--ui-space-4);
+  }
+
+  .worktree-tree .worktree .worktree-reveal > .ui-badge {
+    display: none;
+  }
+}
