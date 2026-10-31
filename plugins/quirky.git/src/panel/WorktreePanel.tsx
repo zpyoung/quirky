@@ -1096,10 +1096,6 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
       <div
         className="ui-stack"
         data-git-content
-        onContextMenu={(event) => {
-          if (event.target instanceof HTMLElement && event.target.closest('input, textarea, select, [contenteditable="true"]')) return
-          event.preventDefault()
-        }}
         style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}
       >
         {status === null && data.error === null && <EmptyState message="Loading…" />}

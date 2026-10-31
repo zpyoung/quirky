@@ -58,6 +58,26 @@ export function App() {
   const auxiliary = windowRoute !== null
   useShortcuts()
   useThemeVariables()
+  useEffect(() => {
+    if (process.env.QUIRKY_BUILD_CHANNEL === 'dev') return
+    const handleContextMenu = (event: MouseEvent) => {
+      if (event.defaultPrevented) return
+      const target = event.target
+      if (target instanceof Element) {
+        if (target.closest('input, textarea, select')) return
+        for (let element: Element | null = target; element; element = element.parentElement) {
+          if (!element.hasAttribute('contenteditable')) continue
+          const value = element.getAttribute('contenteditable')?.toLowerCase()
+          if (value === '' || value === 'true' || value === 'plaintext-only') return
+          if (value === 'false') break
+        }
+      }
+      if (window.getSelection()?.toString()) return
+      event.preventDefault()
+    }
+    document.addEventListener('contextmenu', handleContextMenu)
+    return () => document.removeEventListener('contextmenu', handleContextMenu)
+  }, [])
 
   const noToken = state.connection === 'no-token'
   useEffect(() => {
