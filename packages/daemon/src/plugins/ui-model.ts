@@ -381,6 +381,7 @@ export function buildUiModel(input: {
     id: declaration.id,
     plugin: declaration.plugin,
     ...(declaration.data as SettingDeclaration),
+    pluginName: byId.get(declaration.plugin)?.name ?? declaration.plugin,
   }))
   settings.sort((a, b) => compare(a.id, b.id))
 

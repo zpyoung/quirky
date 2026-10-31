@@ -23,6 +23,7 @@ test('palette clamps a selection left over from a longer list', () => {
 
 const setting = (over: Partial<SettingInfo> & Pick<SettingInfo, 'id' | 'type' | 'value'>): SettingInfo => ({
   plugin: 'acme.notes',
+  pluginName: 'Notes',
   title: over.id,
   default: over.value,
   ...over

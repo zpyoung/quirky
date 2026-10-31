@@ -163,7 +163,7 @@ export type SettingDeclaration = {
   whenSetting?: string
 }
 
-export type UiSettingEntry = { id: string; plugin: string } & SettingDeclaration
+export type UiSettingEntry = { id: string; plugin: string; pluginName: string } & SettingDeclaration
 
 /** A setting with its current value; `stored` is absent when nothing is stored. */
 export type SettingInfo = UiSettingEntry & {

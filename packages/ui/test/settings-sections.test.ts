@@ -33,3 +33,26 @@ test('SettingsDialog mounts a generic settings-section beside preserved scalar c
   expect(env.win.document.querySelector(`[data-plugin-slot="${sectionId}"]`)).not.toBeNull()
   expect(env.win.document.querySelector('input[type="checkbox"]')).not.toBeNull()
 })
+
+test('uncategorized plugin settings use the manifest name for the group and heading', async () => {
+  const pluginId = 'acme.history'
+  const pluginName = 'Readable label'
+  const env = await bootWindow((installed) => {
+    installUiPlugin(
+      installed,
+      pluginId,
+      { setting: [{ id: 'enabled', type: 'boolean', title: 'Enable history', default: false }] },
+      '',
+      { name: pluginName }
+    )
+  })
+
+  await openSettings(env.win)
+  await env.win.waitFor(() => env.win.document.body.textContent?.includes('Enable history'))
+
+  const group = [...env.win.document.querySelectorAll<HTMLElement>('[role="group"]')]
+    .find((candidate) => candidate.querySelector('input[type="checkbox"]') !== null)
+  expect(group).not.toBeNull()
+  expect(group?.getAttribute('aria-label')).toBe(pluginName)
+  expect(group?.querySelector('.ui-settings-group-heading')?.textContent?.trim()).toBe(pluginName)
+})

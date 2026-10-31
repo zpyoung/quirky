@@ -218,6 +218,7 @@ describe('the UI model', () => {
       {
         id: notesSetting,
         plugin: 'acme.notes',
+        pluginName: 'acme.notes',
         type: 'number',
         title: 'Font size',
         default: 13,
