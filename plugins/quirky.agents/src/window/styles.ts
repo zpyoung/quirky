@@ -2,7 +2,7 @@ import type { CSSProperties } from 'react'
 
 /** Layout-only values; shared UI components own control and surface appearance. */
 export const s = {
-  page: { display: 'flex', flex: 1, minHeight: 0, minWidth: 0, overflowY: 'auto', color: 'var(--ui-text)' },
+  page: { display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, minWidth: 0, overflowY: 'auto', color: 'var(--ui-text)' },
   column: { display: 'flex', flexDirection: 'column', gap: 'var(--ui-space-16)', padding: 'var(--ui-space-16)', minWidth: 0 },
   intro: { margin: 0, color: 'var(--ui-muted)', fontSize: 'var(--ui-font-body)', overflowWrap: 'anywhere' },
   section: { display: 'flex', flexDirection: 'column', gap: 'var(--ui-space-8)', minWidth: 0 },
