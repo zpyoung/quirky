@@ -171,6 +171,22 @@ describe('SC-22: the + menu', () => {
     expect(view.last().menu).toMatchObject({ kind: 'plus', target: 'grp-1' })
   })
 
+  test('keeps search text literal so one Enter opens the highlighted background agent', async () => {
+    const view = await mount()
+    await open(view)
+    const input = search(view)
+    expect(input.getAttribute('autocorrect')).toBe('off')
+    expect(input.getAttribute('autocapitalize')).toBe('off')
+    expect(input.getAttribute('spellcheck')).toBe('false')
+
+    await type(input, 'backgr')
+    expect(input.value).toBe('backgr')
+    expect(rows(view)).toEqual(['Claude (background)'])
+    await key(input, 'Enter')
+    expect(view.last().menu).toBeNull()
+    expect(view.last().dialog).toEqual({ kind: 'new-session', title: 'New Claude (background) session' })
+  })
+
   test('the plus button toggles the menu', async () => {
     const view = await mount()
     await open(view)
