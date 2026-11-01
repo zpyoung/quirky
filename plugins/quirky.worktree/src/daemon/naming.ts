@@ -1,10 +1,14 @@
-/** Thrown when a worktree name sanitises to nothing usable. */
+/** Thrown when a worktree name is unusable. */
 export class InvalidNameError extends Error {
-  constructor() {
-    super('Invalid worktree name')
+  constructor(message = 'Invalid worktree name') {
+    super(message)
     this.name = 'InvalidNameError'
   }
 }
+
+// Reserve Git's `.lock` and the longest automatic `-100` suffix within a 255-byte component.
+export const MAX_WORKTREE_NAME_BYTES = 246
+const utf8Encoder = new TextEncoder()
 
 /** Thrown when every candidate in the suffix walk is taken. */
 export class NoFreeNameError extends Error {
@@ -19,7 +23,7 @@ export class NoFreeNameError extends Error {
  *
  * The result contains only letters, digits, `.`, `_` and `-`, never starts or ends with `.` or
  * `-`, and cannot be `.` or `..`, so it can never leave the worktrees folder. Input made only of
- * emoji yields `workspace`. Throws `InvalidNameError` when nothing usable is left.
+ * emoji yields `workspace`. Throws `InvalidNameError` when unusable or longer than the byte limit.
  */
 export function sanitizeName(input: string): string {
   const name = input
@@ -30,6 +34,9 @@ export function sanitizeName(input: string): string {
     .replace(/^[.-]+|[.-]+$/g, '')
   if (name === '' && /\p{Extended_Pictographic}/u.test(input)) return 'workspace'
   if (name === '' || name === '.' || name === '..') throw new InvalidNameError()
+  if (utf8Encoder.encode(name).byteLength > MAX_WORKTREE_NAME_BYTES) {
+    throw new InvalidNameError(`Workspace name is too long (maximum ${MAX_WORKTREE_NAME_BYTES} UTF-8 bytes).`)
+  }
   return name
 }
 
