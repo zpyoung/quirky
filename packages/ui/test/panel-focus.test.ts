@@ -71,6 +71,40 @@ test('a press outside every panel and the center card leaves the attribute where
   expect(focused().map((element) => element.getAttribute('data-tool-panel'))).toEqual(['changes'])
 })
 
+test.each(['worktrees', 'outside'])('modal interactions in %s preserve the previous panel owner', (location) => {
+  const container = document.querySelector(location === 'worktrees' ? '[data-tool-panel="worktrees"]' : '#outside')!
+  const backdrop = document.createElement('div')
+  backdrop.className = 'ui-dialog-backdrop'
+  backdrop.innerHTML = '<section role="dialog" aria-modal="true"><input id="modal-input"></section>'
+  container.append(backdrop)
+  const tracker = focus.createPanelFocusTracker(document)
+  stop = tracker.dispose
+  const center = document.querySelector<HTMLElement>('#center-child')!
+  center.focus()
+
+  document.querySelector<HTMLInputElement>('#modal-input')!.focus()
+  expect(tracker.current()?.className).toBe('shell-main-region')
+  pointerdown('#modal-input')
+  pointerdown('.ui-dialog-backdrop')
+  expect(focused().map((element) => element.className)).toEqual(['shell-main-region'])
+
+  backdrop.remove()
+  focusin('#outside-button')
+  expect(tracker.current()?.className).toBe('shell-main-region')
+  document.querySelector<HTMLButtonElement>('#a-button')!.focus()
+  expect(tracker.current()?.getAttribute('data-tool-panel')).toBe('worktrees')
+})
+
+test('tracking started inside a panel-hosted modal does not mark that panel', () => {
+  document.querySelector('[data-tool-panel="worktrees"]')!.insertAdjacentHTML(
+    'beforeend',
+    '<section role="dialog" aria-modal="true"><input id="modal-input"></section>'
+  )
+  document.querySelector<HTMLInputElement>('#modal-input')!.focus()
+  stop = focus.trackPanelFocus(document)
+  expect(focused()).toEqual([])
+})
+
 test('an unmounted holder is not remembered, and the next focus leaves exactly one holder', () => {
   const tracker = focus.createPanelFocusTracker(document)
   stop = tracker.dispose

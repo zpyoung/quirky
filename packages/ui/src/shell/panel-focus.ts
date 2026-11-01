@@ -9,13 +9,15 @@ export type PanelFocusTracker = {
 }
 
 function holderOf(target: EventTarget | null): HTMLElement | null {
-  return target instanceof Element ? target.closest<HTMLElement>(FOCUS_HOLDER_SELECTOR) : null
+  if (!(target instanceof Element) || target.closest('[aria-modal="true"], .ui-dialog-backdrop')) return null
+  return target.closest<HTMLElement>(FOCUS_HOLDER_SELECTOR)
 }
 
 /**
  * Tracks which tool panel or center card the person last pressed or focused, writing
  * `data-panel-focused` on that element alone. WebKit doesn't focus a button on click, so
- * `:focus-within` can't carry this. A press or focus outside every holder changes nothing.
+ * `:focus-within` can't carry this. Modal interactions and events outside every holder
+ * leave the existing owner unchanged, regardless of where a dialog is mounted.
  */
 export function createPanelFocusTracker(doc: Document): PanelFocusTracker {
   let holder: HTMLElement | null = null

@@ -116,6 +116,7 @@ New rule `ui/tool-icon-hue`. It checks every plugin `quirky-plugin.json` and `to
 ### Focus ([Focus](logic.md#focus))
 
 - `:focus-within` isn't enough, because WebKit doesn't focus buttons on click. `ToolShell` tracks the focused panel in renderer state, from capture-phase `pointerdown` and `focusin` on `[data-tool-panel]` and on the center card, and sets `data-panel-focused` on that element only.
+- Modal dialogs and their backdrops do not claim panel focus, even when mounted inside a panel. Their interactions preserve the previous panel owner; ordinary focus restored to an opener inside a panel can claim it again.
 - Header buttons are visible when the panel has `data-panel-focused`, `:hover` or `:focus-within`. Hidden buttons use `opacity: 0`, never `display: none` or `visibility: hidden`, so they stay in the tab order and appear when focused.
 - `.ui-list-row--selected` is `--ui-accent` under `[data-panel-focused]` and `--ui-selected` otherwise. `StatusDot` inside an accent row gets the ring.
 - Window inactive: `browserWindowFocus()` also sets `data-window-inactive` on `.app`, and CSS dims the whole window. Electrobun fires `blur`, confirmed in the native scenario. Native browser panes aren't dimmed, which is accepted.
