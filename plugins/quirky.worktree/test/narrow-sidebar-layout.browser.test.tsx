@@ -43,12 +43,14 @@ function browserEntry(): string {
   const uiModule = join(ROOT, 'packages/ui/src/design-system/index.ts')
   const treeModule = join(ROOT, 'plugins/quirky.worktree/src/Tree.tsx')
   const controlTypesModule = join(ROOT, 'plugins/quirky.worktree/src/control-types.ts')
+  const worktreeBoardModule = join(ROOT, 'plugins/quirky.worktree/src/WorktreeBoard.tsx')
   const activityFiltersModule = join(ROOT, 'plugins/quirky.worktree/src/ActivityFilters.tsx')
   const activityTypesModule = join(ROOT, 'plugins/quirky.worktree/src/useSidebarActivity.ts')
   return `
     import { createElement as h, useRef, useState } from 'react'
     import { createRoot } from 'react-dom/client'
     import { Tree } from ${JSON.stringify(treeModule)}
+    import { WorktreeBoard } from ${JSON.stringify(worktreeBoardModule)}
     import { DEFAULT_STOCK_OPTIONS } from ${JSON.stringify(controlTypesModule)}
     import { ActivityFilters } from ${JSON.stringify(activityFiltersModule)}
     import type { ActivityPreferencePatch, ActivityPreferences, SidebarProjection } from ${JSON.stringify(activityTypesModule)}
@@ -91,6 +93,7 @@ function browserEntry(): string {
     }
 
     const projectName = 'QuirkyWorktreeProject'
+    const boardRegressionEnabled = document.documentElement.dataset.worktreeBoardRegression === 'true'
     const projectActionResult = document.createElement('output')
     projectActionResult.id = 'project-action-result'
     projectActionResult.setAttribute('role', 'status')
@@ -177,15 +180,68 @@ function browserEntry(): string {
       { id: 'primary', name: 'main', primary: true, compact: false },
       { id: 'ordinary', name: 'feature-qa-new-features-3', primary: false, compact: false, needsYou: true },
       { id: 'primary-needs-you', name: 'main-needs-you', primary: true, compact: false, needsYou: true },
-      { id: 'compact-primary', name: 'compact-main', primary: true, compact: true }
+      { id: 'compact-primary', name: 'compact-main', primary: true, compact: true },
+      ...(boardRegressionEnabled ? Array.from({ length: 20 }, (_, index) => ({
+        id: 'tree-worktree-' + index,
+        name: 'tree-workspace-' + index,
+        primary: false,
+        compact: false
+      })) : [])
     ]
     const worktreeList = h('ul', { className: 'worktree-list ui-tree' }, worktreeRows.map(makeWorktreeRow))
+    const boardStatuses = [
+      { id: 'todo', label: 'To do' },
+      { id: 'in-progress', label: 'In progress' },
+      { id: 'in-review', label: 'In review' },
+      { id: 'done', label: 'Done' }
+    ]
+    const boardWorktrees = [
+      ...Array.from({ length: 16 }, (_, index) => ({
+        id: 'board-progress-' + index,
+        repoId: 'r1',
+        name: 'Progress ' + index,
+        status: 'in-progress'
+      })),
+      { id: 'board-done', repoId: 'r2', name: 'Completed card', status: 'done' }
+    ]
+    function BoardRegressionFixture() {
+      const [worktrees, setWorktrees] = useState(boardWorktrees)
+      return h('div', { className: 'worktree-tree-board-scroll ui-scroll', 'data-board-scroll': '' },
+        h(WorktreeBoard, {
+          worktrees,
+          statuses: boardStatuses,
+          repos: [
+            { id: 'r1', name: projectName, displayName: null },
+            { id: 'r2', name: 'OtherProject', displayName: null }
+          ],
+          open() {},
+          setStatus(worktree, status) {
+            setWorktrees((current) => current.map((item) => item.id === worktree.id ? { ...item, status } : item))
+          }
+        })
+      )
+    }
     const tabs = h(Tabs, {
       label: 'Worktree views',
       items: [{ id: 'tree', label: 'Tree' }],
       value: 'tree',
       onChange() {}
     })
+    const panelContent = h('div', {
+      className: boardRegressionEnabled ? 'ui-stack ui-panel-content worktree-tree-section' : 'ui-stack ui-panel-content'
+    },
+      boardRegressionEnabled ? h(BoardRegressionFixture) : null,
+      h('div', { className: 'ui-scroll ui-grow', 'data-tree-scroll': '' },
+        h('div', { className: 'worktree-tree ui-stack' },
+          tree,
+          worktreeList
+        )
+      )
+    )
+    const panelSlot = boardRegressionEnabled
+      ? h('div', { className: 'plugin-slot' },
+        h('div', { className: 'plugin-slot-body' }, panelContent))
+      : panelContent
     const worktreeFrame = h(ToolPanelFrame, {
       title: 'Worktrees',
       tabs,
@@ -194,14 +250,7 @@ function browserEntry(): string {
         h(IconButton, { label: 'Filter worktrees', title: 'Filter worktrees' }, '⌕')
       ),
       onMinimize() {}
-    }, h('div', { className: 'ui-stack ui-panel-content' },
-      h('div', { className: 'ui-scroll ui-grow' },
-        h('div', { className: 'worktree-tree ui-stack' },
-          tree,
-          worktreeList
-        )
-      )
-    ))
+    }, panelSlot)
     const changesFrame = h(ToolPanelFrame, {
       title: 'Changes',
       actions: h('div', { className: 'ui-cluster' },
@@ -327,7 +376,11 @@ function pageMarkup(): string {
           body { font: 13px/1.4 -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif; }
           #layout { display: grid; grid-template-columns: ${GUTTER}px var(--worktree-sidebar-width, var(--sidebar-width)) minmax(0, 1fr) var(--sidebar-width) ${GUTTER}px; height: 100%; min-width: 0; }
           .panel { height: 100%; min-width: 0; }
+          #worktrees-panel:has(.plugin-slot) { min-height: 0; }
           .ui-tool-panel-frame { height: 100%; min-width: 0; }
+          #worktrees-panel .ui-tool-panel-frame__body:has(.plugin-slot) { display: flex; min-height: 0; }
+          .plugin-slot { display: flex; flex: 1 1 auto; flex-direction: column; min-height: 0; min-width: 0; overflow: auto; }
+          .plugin-slot-body { display: block; flex: 1 1 auto; height: 100%; min-height: 0; min-width: 0; width: 100%; }
           #center { min-width: 0; }
         </style>
       </head>
@@ -1344,6 +1397,114 @@ test.skipIf(!existsSync(chromium.executablePath()))('ellipsizes the Worktrees he
       await host.evaluate((element) => element.removeAttribute('data-panel-focused'))
       expect(await measure()).toEqual(resting)
     }
+  } finally {
+    await context.close()
+  }
+}, 60_000)
+test.skipIf(!existsSync(chromium.executablePath()))('keeps the workspace board in a horizontally scrollable row without displacing the tree', async () => {
+  const context = await browser!.newContext({ viewport: { width: GUTTER * 2 + CENTER_WIDTH + 280 * 2, height: HEIGHT } })
+  const page = await context.newPage()
+  try {
+    await page.setContent(pageMarkup())
+    for (const stylesheet of STYLESHEETS) {
+      await page.addStyleTag({ content: readFileSync(join(ROOT, stylesheet), 'utf8') })
+    }
+    await page.evaluate(() => { document.documentElement.dataset.worktreeBoardRegression = 'true' })
+    await page.addScriptTag({ content: browserBundle })
+    await page.locator('#layout').waitFor()
+    await page.locator('#layout').evaluate((element) => {
+      ;(element as HTMLElement).style.setProperty('--sidebar-width', '280px')
+      ;(element as HTMLElement).style.setProperty('--worktree-sidebar-width', '280px')
+    })
+    const board = page.getByRole('region', { name: 'Workspace board', exact: true })
+    await board.waitFor()
+
+    const measure = () => page.evaluate(() => {
+      const bounds = (element: Element) => {
+        const rect = element.getBoundingClientRect()
+        return { left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom, width: rect.width, height: rect.height }
+      }
+      const panel = document.querySelector<HTMLElement>('#worktrees-panel')!
+      const content = panel.querySelector<HTMLElement>('.ui-panel-content')!
+      const boardViewport = panel.querySelector<HTMLElement>('[data-board-scroll]')!
+      const board = boardViewport.querySelector<HTMLElement>('.worktree-tree-board')!
+      const columns = [...board.querySelectorAll<HTMLElement>('.worktree-tree-board-column')]
+      const treeViewport = panel.querySelector<HTMLElement>('[data-tree-scroll]')!
+      const laneCount = (label: string) => board.querySelectorAll(
+        `.worktree-tree-board-column[aria-label="${label} workspaces"] .worktree-board-card`
+      ).length
+      return {
+        panel: bounds(panel),
+        viewportHeight: window.innerHeight,
+        content: bounds(content),
+        boardViewport: bounds(boardViewport),
+        boardClientWidth: boardViewport.clientWidth,
+        boardScrollWidth: boardViewport.scrollWidth,
+        boardScrollHeight: boardViewport.scrollHeight,
+        boardScrollLeft: boardViewport.scrollLeft,
+        boardScrollTop: boardViewport.scrollTop,
+        columns: columns.map((column) => ({
+          bounds: bounds(column),
+          heading: bounds(column.querySelector('.ui-section-header__title')!)
+        })),
+        lastColumn: bounds(columns.at(-1)!),
+        treeViewport: bounds(treeViewport),
+        treeScrollHeight: treeViewport.scrollHeight,
+        treeScrollTop: treeViewport.scrollTop,
+        lanes: {
+          todo: laneCount('To do'),
+          inProgress: laneCount('In progress'),
+          review: laneCount('In review'),
+          done: laneCount('Done')
+        }
+      }
+    })
+
+    const initial = await measure()
+    expect(initial.panel.bottom).toBeLessThanOrEqual(initial.viewportHeight + 1)
+    expect(initial.panel.width).toBeCloseTo(280, 0)
+    expect(initial.columns).toHaveLength(4)
+    expect(initial.boardScrollWidth).toBeGreaterThan(initial.boardClientWidth)
+    expect(initial.boardViewport.height).toBeLessThanOrEqual(initial.content.height / 2 + 2)
+    expect(initial.treeViewport.height).toBeGreaterThan(180)
+    expect(initial.treeViewport.bottom).toBeLessThanOrEqual(initial.content.bottom + 1)
+    expect(initial.content.bottom).toBeLessThanOrEqual(initial.panel.bottom + 1)
+    expect(initial.boardViewport.bottom).toBeLessThanOrEqual(initial.treeViewport.top + 1)
+    expect(initial.boardScrollHeight).toBeGreaterThan(initial.boardViewport.height)
+    expect(initial.treeScrollHeight).toBeGreaterThan(initial.treeViewport.height)
+    expect(initial.lanes).toEqual({ todo: 0, inProgress: 16, review: 0, done: 1 })
+
+    const top = initial.columns[0]!.heading.top
+    const laneWidth = initial.columns[0]!.bounds.width
+    for (const [index, column] of initial.columns.entries()) {
+      expect(column.heading.top).toBeCloseTo(top, 0)
+      expect(column.bounds.width).toBeCloseTo(laneWidth, 0)
+      expect(column.bounds.width).toBeGreaterThanOrEqual(200)
+      if (index > 0) expect(column.bounds.left).toBeGreaterThan(initial.columns[index - 1]!.bounds.left)
+    }
+
+    await page.locator('[data-board-scroll]').evaluate((element) => {
+      element.scrollLeft = element.scrollWidth
+      element.scrollTop = element.scrollHeight
+    })
+    const boardScrolled = await measure()
+    expect(boardScrolled.boardScrollLeft).toBeGreaterThan(0)
+    expect(boardScrolled.boardScrollTop).toBeGreaterThan(0)
+    expect(boardScrolled.treeScrollTop).toBe(0)
+    expect(boardScrolled.lastColumn.right).toBeLessThanOrEqual(boardScrolled.boardViewport.right + 1)
+    await page.locator('[data-tree-scroll]').evaluate((element) => { element.scrollTop = element.scrollHeight })
+    const bothScrolled = await measure()
+    expect(bothScrolled.treeScrollTop).toBeGreaterThan(0)
+    expect(bothScrolled.boardScrollTop).toBe(boardScrolled.boardScrollTop)
+
+    await page.locator('[data-board-scroll]').evaluate((element) => { element.scrollLeft = 0; element.scrollTop = 0 })
+    await page.locator('.worktree-tree-board-column[aria-label="In progress workspaces"] select').first().selectOption('done')
+    const moved = await measure()
+    expect(moved.lanes).toEqual({ todo: 0, inProgress: 15, review: 0, done: 2 })
+    for (const column of moved.columns) expect(column.heading.top).toBeCloseTo(top, 0)
+    expect(moved.columns.map((column) => column.bounds.width)).toEqual(
+      initial.columns.map((column) => column.bounds.width)
+    )
   } finally {
     await context.close()
   }
