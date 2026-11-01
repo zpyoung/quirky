@@ -118,50 +118,254 @@ function selectionForReview(editor: Editor): { text: string; startLine: number; 
 function isSafePreviewHref(href: string | undefined): href is string {
   return Boolean(href && isSafeMarkdownLink(href))
 }
-function expandDocumentLinks(markdown: string): string {
+type PreviewOffsetReplacement = {
+  sourceFrom: number
+  sourceTo: number
+  expandedFrom: number
+  expandedTo: number
+  labelSourceFrom: number | null
+  labelSourceTo: number | null
+  labelExpandedFrom: number
+}
+
+type ExpandedPreviewMarkdown = {
+  markdown: string
+  mapRange(from: number, to: number): { from: number; to: number } | null
+}
+
+function expandDocumentLinkChunk(
+  chunk: string,
+  sourceFrom: number,
+  expandedFrom: number,
+  replacements: PreviewOffsetReplacement[]
+): string {
+  const links = /\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g
+  let output = ''
+  let cursor = 0
+  let match: RegExpExecArray | null
+  while ((match = links.exec(chunk)) !== null) {
+    output += chunk.slice(cursor, match.index)
+    const rawTarget = match[1]!
+    const rawLabel = match[2]
+    const target = rawTarget.trim()
+    const rawVisibleLabel = rawLabel ?? target
+    const label = rawVisibleLabel.replace(/\\/g, '\\\\').replace(/\[/g, '\\[').replace(/\]/g, '\\]')
+    const anchorStart = target.indexOf('#')
+    const path = anchorStart < 0 ? target : target.slice(0, anchorStart)
+    const anchor = anchorStart < 0 ? undefined : target.slice(anchorStart + 1)
+    const encodedPath = path.split('/').map((part) => {
+      try { return encodeURIComponent(decodeURIComponent(part)) }
+      catch { return encodeURIComponent(part) }
+    }).join('/')
+    const href = `${encodedPath}${anchor === undefined ? '' : `#${encodeURIComponent(anchor)}`}`
+    const expandedLink = `[${label}](${href})`
+    const rawStart = sourceFrom + match.index
+    const visibleLabelCanMap = label === rawVisibleLabel && (rawLabel !== undefined || rawTarget === target)
+    const labelSourceFrom = visibleLabelCanMap
+      ? rawStart + 2 + (rawLabel === undefined ? 0 : rawTarget.length + 1)
+      : null
+    replacements.push({
+      sourceFrom: rawStart,
+      sourceTo: rawStart + match[0].length,
+      expandedFrom: expandedFrom + output.length,
+      expandedTo: expandedFrom + output.length + expandedLink.length,
+      labelSourceFrom,
+      labelSourceTo: labelSourceFrom === null ? null : labelSourceFrom + rawVisibleLabel.length,
+      labelExpandedFrom: expandedFrom + output.length + 1
+    })
+    output += expandedLink
+    cursor = links.lastIndex
+  }
+  return output + chunk.slice(cursor)
+}
+
+function expandDocumentLinks(markdown: string): ExpandedPreviewMarkdown {
   let fence: { char: string; size: number } | null = null
-  return markdown.split(/\r?\n/).map((line) => {
+  const replacements: PreviewOffsetReplacement[] = []
+  const lines = markdown.split(/\r?\n/)
+  let sourceOffset = 0
+  let expandedOffset = 0
+  const expandedLines = lines.map((line, lineIndex) => {
     const marker = /^ {0,3}(`{3,}|~{3,})/.exec(line)?.[1]
+    const isFenceLine = Boolean(marker)
     if (marker) {
       if (!fence) fence = { char: marker[0]!, size: marker.length }
       else if (marker[0] === fence.char && marker.length >= fence.size) fence = null
-      return line
     }
-    if (fence) return line
-    const chunks = line.split(/(`+[^`]*`+)/g)
-    return chunks.map((chunk, index) => {
-      if (index % 2 === 1) return chunk
-      return chunk.replace(/\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g, (_match, rawTarget: string, rawLabel?: string) => {
-        const target = rawTarget.trim()
-        const label = (rawLabel ?? target).replace(/\\/g, '\\\\').replace(/\[/g, '\\[').replace(/\]/g, '\\]')
-        const anchorStart = target.indexOf('#')
-        const path = anchorStart < 0 ? target : target.slice(0, anchorStart)
-        const anchor = anchorStart < 0 ? undefined : target.slice(anchorStart + 1)
-        const encodedPath = path.split('/').map((part) => {
-          try { return encodeURIComponent(decodeURIComponent(part)) }
-          catch { return encodeURIComponent(part) }
-        }).join('/')
-        const href = `${encodedPath}${anchor === undefined ? '' : `#${encodeURIComponent(anchor)}`}`
-        return `[${label}](${href})`
+    let expandedLine = line
+    if (!isFenceLine && !fence) {
+      let sourceChunkOffset = 0
+      let expandedChunkOffset = 0
+      expandedLine = line.split(/(`+[^`]*`+)/g).map((chunk, index) => {
+        const expandedChunk = index % 2 === 1
+          ? chunk
+          : expandDocumentLinkChunk(chunk, sourceOffset + sourceChunkOffset, expandedOffset + expandedChunkOffset, replacements)
+        sourceChunkOffset += chunk.length
+        expandedChunkOffset += expandedChunk.length
+        return expandedChunk
+      }).join('')
+    }
+    const lineBreakLength = lineIndex < lines.length - 1
+      ? markdown.slice(sourceOffset + line.length, sourceOffset + line.length + 2) === '\r\n' ? 2 : 1
+      : 0
+    const expandedLineBreakLength = lineIndex < lines.length - 1 ? 1 : 0
+    if (lineBreakLength !== expandedLineBreakLength) {
+      const lineBreakSourceFrom = sourceOffset + line.length
+      const lineBreakExpandedFrom = expandedOffset + expandedLine.length
+      replacements.push({
+        sourceFrom: lineBreakSourceFrom,
+        sourceTo: lineBreakSourceFrom + lineBreakLength,
+        expandedFrom: lineBreakExpandedFrom,
+        expandedTo: lineBreakExpandedFrom + expandedLineBreakLength,
+        labelSourceFrom: null,
+        labelSourceTo: null,
+        labelExpandedFrom: lineBreakExpandedFrom
       })
-    }).join('')
-  }).join('\n')
+    }
+    sourceOffset += line.length + lineBreakLength
+    expandedOffset += expandedLine.length + expandedLineBreakLength
+    return expandedLine
+  })
+  const mapOffset = (offset: number): number | null => {
+    let delta = 0
+    for (const replacement of replacements) {
+      if (offset < replacement.sourceFrom) break
+      if (offset > replacement.sourceTo) {
+        delta += (replacement.expandedTo - replacement.expandedFrom) - (replacement.sourceTo - replacement.sourceFrom)
+        continue
+      }
+      if (offset === replacement.sourceFrom) return replacement.expandedFrom
+      if (offset === replacement.sourceTo) return replacement.expandedTo
+      if (
+        replacement.labelSourceFrom !== null &&
+        replacement.labelSourceTo !== null &&
+        offset >= replacement.labelSourceFrom &&
+        offset <= replacement.labelSourceTo
+      ) {
+        return replacement.labelExpandedFrom + offset - replacement.labelSourceFrom
+      }
+      return null
+    }
+    return offset + delta
+  }
+  return {
+    markdown: expandedLines.join('\n'),
+    mapRange(from, to) {
+      for (const replacement of replacements) {
+        if (from < replacement.sourceTo && to > replacement.sourceFrom) {
+          const withinVisibleLabel = replacement.labelSourceFrom !== null &&
+            replacement.labelSourceTo !== null &&
+            from >= replacement.labelSourceFrom &&
+            to <= replacement.labelSourceTo
+          if (!withinVisibleLabel) return null
+        }
+      }
+      const expandedFrom = mapOffset(from)
+      const expandedTo = mapOffset(to)
+      return expandedFrom === null || expandedTo === null || expandedTo < expandedFrom
+        ? null
+        : { from: expandedFrom, to: expandedTo }
+    }
+  }
 }
 
-function documentLinkTarget(currentPath: string, documentPath: string): string {
-  const from = currentPath.split('/').slice(0, -1).filter((part) => part !== '' && part !== '.')
-  const to = documentPath.replace(/\.(?:md|markdown|mdx)$/i, '').split('/').filter((part) => part !== '' && part !== '.')
-  let common = 0
-  while (common < from.length && common < to.length && from[common] === to[common]) common += 1
-  const relative = [
-    ...Array.from({ length: from.length - common }, () => '..'),
-    ...to.slice(common)
-  ].join('/') || to.at(-1) || ''
-  return relative.split('/').map((part) => part === '..' ? part : encodeURIComponent(part)).join('/')
+type PreviewSearchNode = {
+  type: string
+  value?: string
+  lang?: string | null
+  position?: { start?: { offset?: number }; end?: { offset?: number } }
+  data?: { hName?: string; hProperties?: Record<string, unknown> }
+  children?: PreviewSearchNode[]
+}
+
+function previewSearchTextNodes(value: string, start: number, end: number): PreviewSearchNode[] {
+  const nodes: PreviewSearchNode[] = []
+  const before = value.slice(0, start)
+  const selected = value.slice(start, end)
+  const after = value.slice(end)
+  if (before) nodes.push({ type: 'text', value: before })
+  nodes.push({
+    type: 'previewSearchMatch',
+    data: {
+      hName: 'mark',
+      hProperties: { className: ['markdown-preview-search-match'] }
+    },
+    children: [{ type: 'text', value: selected }]
+  })
+  if (after) nodes.push({ type: 'text', value: after })
+  return nodes
+}
+
+function remarkPreviewSearchMatch(match: { from: number; to: number } | null, markdown: string) {
+  return () => (tree: PreviewSearchNode) => {
+    if (!match) return
+    let inserted = false
+    const visit = (parent: PreviewSearchNode) => {
+      if (!parent.children) return
+      const children: PreviewSearchNode[] = []
+      for (const child of parent.children) {
+        if (!inserted && child.type === 'code' && child.lang !== 'mermaid' && typeof child.value === 'string') {
+          const nodeStart = child.position?.start?.offset
+          const openingLineEnd = nodeStart === undefined ? -1 : markdown.indexOf('\n', nodeStart)
+          const contentStart = openingLineEnd + 1
+          const start = match.from - contentStart
+          const end = match.to - contentStart
+          if (
+            openingLineEnd >= 0 &&
+            start >= 0 &&
+            end > start &&
+            end <= child.value.length &&
+            markdown.slice(match.from, match.to) === child.value.slice(start, end)
+          ) {
+            children.push({
+              type: 'previewSearchCode',
+              data: { hName: 'pre' },
+              children: [{
+                type: 'previewSearchCodeContent',
+                data: {
+                  hName: 'code',
+                  hProperties: child.lang ? { className: [`language-${child.lang}`] } : {}
+                },
+                children: previewSearchTextNodes(`${child.value}\n`, start, end)
+              }]
+            })
+            inserted = true
+            continue
+          }
+        }
+        const sourceFrom = child.position?.start?.offset
+        const sourceTo = child.position?.end?.offset
+        if (
+          !inserted &&
+          child.type === 'text' &&
+          typeof child.value === 'string' &&
+          sourceFrom !== undefined &&
+          sourceTo !== undefined &&
+          sourceTo - sourceFrom === child.value.length &&
+          match.from >= sourceFrom &&
+          match.to <= sourceTo
+        ) {
+          const start = match.from - sourceFrom
+          const end = match.to - sourceFrom
+          if (end > start) {
+            children.push(...previewSearchTextNodes(child.value, start, end))
+            inserted = true
+            continue
+          }
+        }
+        visit(child)
+        children.push(child)
+      }
+      parent.children = children
+    }
+    visit(tree)
+  }
 }
 
 function MarkdownPreview({
   source,
+  sourceOffset,
+  searchMatch,
   imageUrls,
   openLink,
   markdownAnchor,
@@ -170,6 +374,8 @@ function MarkdownPreview({
   articleRef
 }: {
   source: string
+  sourceOffset: number
+  searchMatch: { from: number; to: number } | null
   imageUrls: Readonly<Record<string, string>>
   openLink(href: string, event: React.MouseEvent<HTMLAnchorElement>): void
   markdownAnchor: string | null
@@ -177,6 +383,16 @@ function MarkdownPreview({
   onMissingAnchor(anchor: string): void
   articleRef: React.RefObject<HTMLElement | null>
 }): React.JSX.Element {
+  const expandedSource = useMemo(() => expandDocumentLinks(source), [source])
+  const expandedMatch = useMemo(() => searchMatch
+    ? expandedSource.mapRange(searchMatch.from - sourceOffset, searchMatch.to - sourceOffset)
+    : null, [expandedSource, searchMatch, sourceOffset])
+
+  useEffect(() => {
+    articleRef.current?.querySelector<HTMLElement>('.markdown-preview-search-match')
+      ?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  }, [articleRef, expandedMatch])
+
   useEffect(() => {
     if (!markdownAnchor) return
     const headingId = previewHeadingId(source, markdownAnchor)
@@ -191,7 +407,7 @@ function MarkdownPreview({
   return (
     <article ref={articleRef} className="markdown-body markdown-body--editor markdown-preview-body">
       <ReactMarkdown
-        remarkPlugins={[remarkGfm, remarkMath]}
+        remarkPlugins={[remarkGfm, remarkMath, remarkPreviewSearchMatch(expandedMatch, expandedSource.markdown)]}
         rehypePlugins={MARKDOWN_PREVIEW_REHYPE_PLUGINS}
         components={{
           a({ href, children }) {
@@ -211,11 +427,25 @@ function MarkdownPreview({
           }
         }}
       >
-        {expandDocumentLinks(source)}
+        {expandedSource.markdown}
       </ReactMarkdown>
     </article>
   )
 }
+
+
+function documentLinkTarget(currentPath: string, documentPath: string): string {
+  const from = currentPath.split('/').slice(0, -1).filter((part) => part !== '' && part !== '.')
+  const to = documentPath.replace(/\.(?:md|markdown|mdx)$/i, '').split('/').filter((part) => part !== '' && part !== '.')
+  let common = 0
+  while (common < from.length && common < to.length && from[common] === to[common]) common += 1
+  const relative = [
+    ...Array.from({ length: from.length - common }, () => '..'),
+    ...to.slice(common)
+  ].join('/') || to.at(-1) || ''
+  return relative.split('/').map((part) => part === '..' ? part : encodeURIComponent(part)).join('/')
+}
+
 
 
 function SourceSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
@@ -286,6 +516,7 @@ function PreviewSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
   const searchInput = useRef<HTMLInputElement>(null)
   const searchOpener = useRef<HTMLElement | null>(null)
   const previewArticle = useRef<HTMLElement | null>(null)
+  const searchRequest = useRef(0)
   const [query, setQuery] = useState('')
   const [searchResult, setSearchResult] = useState<{ total: number; matches: { from: number; to: number; line: number; text: string }[] } | null>(null)
   const [matchCase, setMatchCase] = useState(false)
@@ -295,6 +526,7 @@ function PreviewSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
   const [searchIndex, setSearchIndex] = useState(0)
   const content = sourceValue(props.buffer)
   const split = splitFrontMatter(content)
+  const activeSearchMatch = searchResult?.matches[searchIndex] ?? null
 
   const refresh = useCallback(async () => {
     setBusy(true)
@@ -361,17 +593,13 @@ function PreviewSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
     }
   }, [props.buffer.id, props.buffer.worktreeId, props.context, props.onAction, props.onView])
 
-  const revealPreviewMatch = useCallback((match: { text: string }) => {
-    const root = previewArticle.current
-    const target = Array.from(root?.querySelectorAll('p,h1,h2,h3,h4,h5,h6,li,pre,blockquote,td,th') ?? [])
-      .find((element) => element.textContent?.includes(match.text))
-    target?.scrollIntoView({ behavior: 'smooth', block: 'center' })
-  }, [])
   const runSearch = useCallback(async () => {
     if (query === '') {
+      searchRequest.current += 1
       setSearchResult(null)
       return
     }
+    const request = ++searchRequest.current
     try {
       const result = await props.onAction(MARKDOWN_METHOD, methodParams(props.buffer.id, {
         action: 'search',
@@ -379,21 +607,21 @@ function PreviewSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
         matchCase,
         wholeWord
       })) as { total: number; matches: { from: number; to: number; line: number; text: string }[] }
+      if (request !== searchRequest.current) return
       setSearchResult(result)
       setSearchIndex(0)
-      if (result.matches[0]) revealPreviewMatch(result.matches[0])
     } catch (cause) {
-      setError(errorText(cause))
+      if (request === searchRequest.current) setError(errorText(cause))
     }
-  }, [matchCase, wholeWord, props.buffer.id, props.onAction, query, revealPreviewMatch])
+  }, [matchCase, wholeWord, props.buffer.id, props.onAction, query])
   const movePreviewSearch = useCallback((delta: number) => {
     if (!searchResult || searchResult.matches.length === 0) return
     const next = (searchIndex + delta + searchResult.matches.length) % searchResult.matches.length
     setSearchIndex(next)
-    revealPreviewMatch(searchResult.matches[next]!)
-  }, [revealPreviewMatch, searchIndex, searchResult])
+  }, [searchIndex, searchResult])
 
   const replacePreview = useCallback(async (all: boolean) => {
+    searchRequest.current += 1
     try {
       const result = await props.onAction(MARKDOWN_METHOD, methodParams(props.buffer.id, {
         action: 'replace',
@@ -409,6 +637,7 @@ function PreviewSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
     } catch (cause) { setError(errorText(cause)) }
   }, [matchCase, props.buffer.contentRevision, props.buffer.id, props.onAction, query, replaceText, wholeWord])
   const closeSearch = useCallback(() => {
+    searchRequest.current += 1
     setSearchOpen(false)
     setSearchResult(null)
     const opener = searchOpener.current
@@ -419,12 +648,20 @@ function PreviewSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
     const requestedQuery = typeof args?.query === 'string' ? args.query : undefined
     if (!searchOpen) {
       searchOpener.current = opener instanceof HTMLElement ? opener : null
+      searchRequest.current += 1
     }
     setSearchOpen(true)
     setReplaceOpen(replace)
-    if (requestedQuery !== undefined) setQuery(requestedQuery)
+    if (requestedQuery !== undefined) {
+      setQuery(requestedQuery)
+      searchRequest.current += 1
+    }
     window.requestAnimationFrame(() => searchInput.current?.focus())
-    if (requestedQuery === undefined || requestedQuery === '') return { opened: true, replace }
+    if (requestedQuery === undefined || requestedQuery === '') {
+      if (requestedQuery === '') setSearchResult(null)
+      return { opened: true, replace }
+    }
+    const request = ++searchRequest.current
     try {
       const result = await props.onAction(MARKDOWN_METHOD, methodParams(props.buffer.id, {
         action: 'search',
@@ -432,15 +669,16 @@ function PreviewSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
         matchCase,
         wholeWord
       })) as { total: number; matches: { from: number; to: number; line: number; text: string }[] }
-      setSearchResult(result)
-      setSearchIndex(0)
-      if (result.matches[0]) revealPreviewMatch(result.matches[0])
+      if (request === searchRequest.current) {
+        setSearchResult(result)
+        setSearchIndex(0)
+      }
       return { opened: true, replace, query: requestedQuery, total: result.total }
     } catch (cause) {
-      setError(errorText(cause))
+      if (request === searchRequest.current) setError(errorText(cause))
       throw cause
     }
-  }, [matchCase, wholeWord, props.buffer.id, props.onAction, revealPreviewMatch, searchOpen])
+  }, [matchCase, wholeWord, props.buffer.id, props.onAction, searchOpen])
   useEffect(() => props.registerCommandHandlers({
     find: (args) => openSearch(false, args),
     replace: (args) => openSearch(true, args)
@@ -470,7 +708,12 @@ function PreviewSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
         <span>Markdown Preview</span>
       </div>
       {searchOpen && <div className="markdown-toolbar markdown-toolbar--search">
-        <input ref={searchInput} className="markdown-input" aria-label="Find in preview" placeholder="Find in preview" value={query} onChange={(event) => setQuery(event.currentTarget.value)} onKeyDown={(event) => { if (event.key === 'Enter') void runSearch() }} />
+        <input ref={searchInput} className="markdown-input" aria-label="Find in preview" placeholder="Find in preview" value={query} onChange={(event) => {
+          const value = event.currentTarget.value
+          searchRequest.current += 1
+          setQuery(value)
+          if (value === '') setSearchResult(null)
+        }} onKeyDown={(event) => { if (event.key === 'Enter') void runSearch() }} />
         <label className="markdown-check"><input type="checkbox" aria-label="Match case" checked={matchCase} onChange={(event) => setMatchCase(event.currentTarget.checked)} /> Match case</label>
         <label className="markdown-check"><input type="checkbox" aria-label="Match whole word" checked={wholeWord} onChange={(event) => setWholeWord(event.currentTarget.checked)} /> Match whole word</label>
         <Button type="button" onClick={() => void runSearch()}>Find</Button>
@@ -490,6 +733,8 @@ function PreviewSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
       </div>}
       {!busy && preview?.available && <MarkdownPreview
         source={split.body}
+        sourceOffset={split.prefix.length}
+        searchMatch={activeSearchMatch}
         imageUrls={preview.imageUrls}
         openLink={(href, event) => void openLink(href, event)}
         markdownAnchor={typeof props.buffer.view.markdownAnchor === 'string' ? props.buffer.view.markdownAnchor : null}

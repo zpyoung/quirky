@@ -5,8 +5,13 @@ import { GlobalRegistrator } from '@happy-dom/global-registrator'
 import type { UiPluginContext } from '@quirky/protocol'
 import type { ComponentType } from 'react'
 import type { EditorSurfaceBuffer, SurfaceProps } from '../src/types'
+import { searchMarkdown, type SearchMatch } from '../src/markdown/source'
 
 type Mode = 'preview' | 'rich'
+type PreviewSearchResponse = { total: number; matches: SearchMatch[] }
+type DeferredSearchResponse = {
+  resolve(value: PreviewSearchResponse | PromiseLike<PreviewSearchResponse>): void
+}
 type CommandHandlers = Parameters<SurfaceProps['registerCommandHandlers']>[0]
 type MountedSurface = {
   element: HTMLElement
@@ -67,7 +72,11 @@ function makeBuffer(mode: Mode, content: string): EditorSurfaceBuffer {
   }
 }
 
-async function renderSurface(mode: Mode, content: string): Promise<MountedSurface> {
+async function renderSurface(
+  mode: Mode,
+  content: string,
+  searchResponse?: (query: string) => Promise<PreviewSearchResponse>
+): Promise<MountedSurface> {
   let commands: CommandHandlers | undefined
   const onAction: SurfaceProps['onAction'] = async (method, params) => {
     if (method === 'quirky.editor/markdown') {
@@ -77,7 +86,15 @@ async function renderSurface(mode: Mode, content: string): Promise<MountedSurfac
           : { richEligible: true }
       }
       if (params.action === 'toc') return { headings: [] }
-      if (params.action === 'search') return { total: 0, matches: [] }
+      if (params.action === 'search') {
+        const query = typeof params.query === 'string' ? params.query : ''
+        if (searchResponse) return searchResponse(query)
+        const result = searchMarkdown(content, query, {
+          matchCase: params.matchCase === true,
+          wholeWord: params.wholeWord === true
+        })
+        return { total: result.total, matches: result.matches }
+      }
     }
     if (method === 'quirky.editor/notes' && params.action === 'list') return { notes: [] }
     return {}
@@ -114,8 +131,8 @@ async function renderSurface(mode: Mode, content: string): Promise<MountedSurfac
   return surface
 }
 
-async function waitFor<T>(condition: () => T | null | undefined | false, description: string): Promise<T> {
-  const deadline = Date.now() + 1_000
+async function waitFor<T>(condition: () => T | null | undefined | false, description: string, timeoutMs = 1_000): Promise<T> {
+  const deadline = Date.now() + timeoutMs
   while (Date.now() < deadline) {
     let result: T | null | undefined | false
     await act(async () => { result = condition() })
@@ -169,6 +186,14 @@ async function waitForClosed(surface: MountedSurface): Promise<void> {
 
 async function waitForFocus(target: HTMLElement, description: string): Promise<void> {
   await waitFor(() => document.activeElement === target ? target : false, description)
+}
+async function changeInputValue(input: HTMLInputElement, value: string): Promise<void> {
+  await act(async () => {
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set
+    if (!setter) throw new Error('The test DOM does not expose the input value setter.')
+    setter.call(input, value)
+    input.dispatchEvent(new Event('input', { bubbles: true }))
+  })
 }
 
 async function pressEscape(target: HTMLElement): Promise<KeyboardEvent> {
@@ -362,4 +387,163 @@ test('Rich Find Enter advances through repeated matches and wraps without editin
     expect(editor.textContent).toBe(originalText)
     expect(editor.querySelectorAll('input[type="checkbox"]').length).toBe(originalCheckboxes)
   }
+})
+test('Preview Find highlights and scrolls each source match in nested task text without editing the preview', async () => {
+  const content = '---\ntitle: isolated\n---\n# Tasks\n\n- [ ] parent\n  - [ ] isolated task; isolated again\n'
+  const surface = await renderSurface('preview', content)
+  const originalScrollIntoView = HTMLElement.prototype.scrollIntoView
+  const scrollTargets: HTMLElement[] = []
+  HTMLElement.prototype.scrollIntoView = function () { scrollTargets.push(this) }
+  try {
+    let commandResult: unknown
+    await act(async () => { commandResult = await surface.commands()!.find!({ query: 'isolated' }) })
+    expect(commandResult).toEqual({ opened: true, replace: false, query: 'isolated', total: 2 })
+    expect(searchToolbar(surface)?.textContent).toContain('1 of 2')
+    const input = await waitFor(() => {
+      const candidate = searchInput(surface, 'preview')
+      return candidate && document.activeElement === candidate ? candidate : false
+    }, 'queried Preview search input focus')
+    const article = surface.element.querySelector<HTMLElement>('.markdown-preview-body')!
+    const originalText = article.textContent
+    const firstMatch = await waitFor(() => surface.element.querySelector<HTMLElement>('.markdown-preview-search-match'), 'first Preview search highlight')
+
+    expect(searchToolbar(surface)?.textContent).toContain('1 of 2')
+    expect(firstMatch.textContent).toBe('isolated')
+    expect(firstMatch.closest('li')?.textContent).toContain('isolated task')
+    expect(scrollTargets.at(-1)).toBe(firstMatch)
+    expect(document.activeElement).toBe(input)
+
+    await act(async () => { buttonByText(searchToolbar(surface)!, 'Next')!.click() })
+    expect(searchToolbar(surface)?.textContent).toContain('2 of 2')
+    const secondMatch = await waitFor(() => {
+      const match = surface.element.querySelector<HTMLElement>('.markdown-preview-search-match')
+      return match && match.previousSibling?.textContent === ' isolated task; ' ? match : false
+    }, 'next Preview search highlight')
+    expect(secondMatch.textContent).toBe('isolated')
+    expect(secondMatch.previousSibling?.textContent).toBe(' isolated task; ')
+    expect(scrollTargets.at(-1)).toBe(secondMatch)
+
+    await act(async () => { buttonByText(searchToolbar(surface)!, 'Previous')!.click() })
+    const previousMatch = await waitFor(() => {
+      const match = surface.element.querySelector<HTMLElement>('.markdown-preview-search-match')
+      return match && match.previousSibling?.textContent === ' ' ? match : false
+    }, 'previous Preview search highlight')
+    expect(previousMatch.previousSibling?.textContent).toBe(' ')
+    expect(scrollTargets.at(-1)).toBe(previousMatch)
+    expect(article.textContent).toBe(originalText)
+
+    await act(async () => { buttonByText(searchToolbar(surface)!, 'Close')!.click() })
+    await waitForClosed(surface)
+    expect(surface.element.querySelector('.markdown-preview-search-match')).toBeNull()
+    expect(article.textContent).toBe(originalText)
+  } finally {
+    HTMLElement.prototype.scrollIntoView = originalScrollIntoView
+  }
+})
+
+test('Preview Find clears its highlight for no-result and empty queries', async () => {
+  const surface = await renderSurface('preview', '- [ ] isolated\n')
+  await act(async () => { await surface.commands()!.find!({ query: 'isolated' }) })
+  const marker = surface.element.querySelector<HTMLElement>('.markdown-preview-body mark')!
+  expect(marker.className).toBe('markdown-preview-search-match')
+  await waitFor(() => surface.element.querySelector('.markdown-preview-search-match'), 'Preview search highlight before clearing')
+
+  await act(async () => { await surface.commands()!.find!({ query: 'missing' }) })
+  expect(searchToolbar(surface)?.textContent).toContain('No results')
+  expect(surface.element.querySelector('.markdown-preview-search-match')).toBeNull()
+
+  await act(async () => { await surface.commands()!.find!({ query: '' }) })
+  expect(surface.element.querySelector('.markdown-preview-search-match')).toBeNull()
+})
+test('Preview Find maps unlabeled document links and CRLF-normalized source offsets', async () => {
+  const content = '---\r\ntitle: Search offsets\r\n---\r\n# Heading\r\n\r\nSee [[needle]]\r\nThen needle\r\n'
+  const surface = await renderSurface('preview', content)
+  let commandResult: unknown
+  await act(async () => { commandResult = await surface.commands()!.find!({ query: 'needle' }) })
+  expect(commandResult).toEqual({ opened: true, replace: false, query: 'needle', total: 2 })
+  const article = surface.element.querySelector<HTMLElement>('.markdown-preview-body')!
+  const originalText = article.textContent
+  const firstMatch = await waitFor(() => surface.element.querySelector<HTMLElement>('.markdown-preview-search-match'), 'unlabeled document-link Preview highlight')
+  expect(firstMatch.closest('a')).not.toBeNull()
+  expect(firstMatch.textContent).toBe('needle')
+
+  await act(async () => { buttonByText(searchToolbar(surface)!, 'Next')!.click() })
+  expect(searchToolbar(surface)?.textContent).toContain('2 of 2')
+  const secondMatch = await waitFor(() => {
+    const match = surface.element.querySelector<HTMLElement>('.markdown-preview-search-match')
+    return match && !match.closest('a') ? match : false
+  }, 'CRLF-normalized next Preview highlight')
+  expect(secondMatch.closest('p')?.textContent).toBe('See needle\nThen needle')
+  expect(secondMatch.previousSibling?.textContent).toBe('\nThen ')
+  expect(article.textContent).toBe(originalText)
+})
+test('Preview Find highlights matches inside fenced code without editing code text', async () => {
+  const content = '# Code\n\n```ts\nconst needle = "raw";\n\n```\n'
+  const surface = await renderSurface('preview', content)
+  const article = surface.element.querySelector<HTMLElement>('.markdown-preview-body')!
+  const originalCodeText = article.querySelector('pre code')?.textContent
+  expect(originalCodeText).toBe('const needle = "raw";\n\n')
+  await act(async () => { await surface.commands()!.find!({ query: 'needle' }) })
+
+  const match = await waitFor(() => surface.element.querySelector<HTMLElement>('.markdown-preview-search-match'), 'fenced-code Preview highlight')
+  expect(match.textContent).toBe('needle')
+  expect(match.closest('code')).not.toBeNull()
+  expect(article.querySelector('pre code')?.textContent).toBe(originalCodeText)
+})
+test('Preview Find leaves Mermaid code for the real diagram renderer', async () => {
+  const source = 'graph TD\n  A[needle] --> B[done]'
+  const surface = await renderSurface('preview', `\`\`\`mermaid\n${source}\n\`\`\`\n`)
+  await act(async () => { await surface.commands()!.find!({ query: 'needle' }) })
+
+  const rendered = await waitFor(() => surface.element.querySelector<HTMLElement>('[role="img"][aria-label="Mermaid diagram"], .markdown-mermaid-error'), 'Mermaid renderer result', 10_000)
+  if (rendered.classList.contains('markdown-mermaid-error')) {
+    expect(rendered.querySelector('details pre')?.textContent).toBe(source)
+  } else {
+    expect(rendered.querySelector('svg')).not.toBeNull()
+  }
+  expect(surface.element.querySelector('.markdown-preview-search-match')).toBeNull()
+})
+
+test('Preview command Find ignores delayed results after empty-query and Close changes', async () => {
+  const content = 'needle in a paragraph'
+  const deferred: DeferredSearchResponse[] = []
+  const surface = await renderSurface('preview', content, () => {
+    const response = Promise.withResolvers<PreviewSearchResponse>()
+    deferred.push({ resolve: response.resolve })
+    return response.promise
+  })
+  let pendingAfterEmpty: unknown
+  await act(async () => { pendingAfterEmpty = surface.commands()!.find!({ query: 'needle' }) })
+  await act(async () => { await surface.commands()!.find!({ query: '' }) })
+  deferred[0]!.resolve({ total: 1, matches: searchMarkdown(content, 'needle').matches })
+  await act(async () => { await pendingAfterEmpty })
+  expect(surface.element.querySelector('.markdown-preview-search-match')).toBeNull()
+
+  let pendingAfterClose: unknown
+  await act(async () => { pendingAfterClose = surface.commands()!.find!({ query: 'needle' }) })
+  await act(async () => { buttonByText(searchToolbar(surface)!, 'Close')!.click() })
+  await waitForClosed(surface)
+  deferred[1]!.resolve({ total: 1, matches: searchMarkdown(content, 'needle').matches })
+  await act(async () => { await pendingAfterClose })
+  expect(surface.element.querySelector('.markdown-preview-search-match')).toBeNull()
+})
+
+test('Preview toolbar Find ignores a delayed result after its query is emptied', async () => {
+  const content = 'needle in a paragraph'
+  const deferred = Promise.withResolvers<PreviewSearchResponse>()
+  let searchRequests = 0
+  const surface = await renderSurface('preview', content, () => {
+    searchRequests += 1
+    return deferred.promise
+  })
+  await act(async () => { await surface.commands()!.find!() })
+  const input = searchInput(surface, 'preview')!
+  await changeInputValue(input, 'needle')
+  await act(async () => { buttonByText(searchToolbar(surface)!, 'Find')!.click() })
+  await waitFor(() => searchRequests === 1 ? true : false, 'deferred toolbar search request')
+  await changeInputValue(input, '')
+
+  deferred.resolve({ total: 1, matches: searchMarkdown(content, 'needle').matches })
+  await act(async () => { await deferred.promise })
+  expect(surface.element.querySelector('.markdown-preview-search-match')).toBeNull()
 })

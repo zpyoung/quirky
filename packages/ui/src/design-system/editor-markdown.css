@@ -167,6 +167,12 @@
   overflow-wrap: anywhere;
 }
 
+.markdown-preview-search-match {
+  background-color: var(--ui-selected);
+  outline: var(--ui-focus-width) solid var(--ui-accent);
+  border-radius: var(--ui-radius-mark);
+}
+
 .markdown-body--editor a {
   color: var(--ui-accent);
 }
