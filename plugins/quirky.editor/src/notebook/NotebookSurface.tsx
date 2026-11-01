@@ -114,6 +114,8 @@ export function NotebookSurface(props: SurfaceProps) {
   const cellTimer = useRef<number | undefined>(undefined)
   const sourceMode = buffer.mode === 'source'
   const bufferId = buffer.id
+  const submittedNotebooks = useRef<Array<{ bufferId: string; content: string }>>([])
+  const lastObservedNotebook = useRef<{ bufferId: string; content: string } | null>(null)
 
   useEffect(() => {
     let active = true
@@ -142,12 +144,32 @@ export function NotebookSurface(props: SurfaceProps) {
   }, [props.context, bufferId, buffer.contentRevision, onAction])
 
   useEffect(() => {
+    const previous = lastObservedNotebook.current
+    lastObservedNotebook.current = { bufferId, content }
+    if (previous?.bufferId === bufferId && previous.content === content) return
+
+    if (previous?.bufferId === bufferId) {
+      const acknowledgedIndex = submittedNotebooks.current.findIndex(
+        (submitted) => submitted.bufferId === bufferId && submitted.content === content
+      )
+      if (acknowledgedIndex !== -1) {
+        submittedNotebooks.current.splice(0, acknowledgedIndex + 1)
+        return
+      }
+    }
+
+    submittedNotebooks.current = []
+    pendingCellChanges.current.clear()
+    if (cellTimer.current !== undefined) {
+      window.clearTimeout(cellTimer.current)
+      cellTimer.current = undefined
+    }
     setCellDrafts({})
     setEditingCell(null)
     setCellOffset(0)
     setOutputLimits({})
     setSourceError(null)
-  }, [bufferId, buffer.contentRevision])
+  }, [bufferId, buffer.contentRevision, content])
 
   const refreshRuntime = async () => {
     const request = ++runtimeRefreshSequence.current
@@ -170,7 +192,9 @@ export function NotebookSurface(props: SurfaceProps) {
       if (cell) cell.source = sourceLines(value)
     }
     pendingCellChanges.current.clear()
-    onDraft(serializeNotebook(updated))
+    const serialized = serializeNotebook(updated)
+    submittedNotebooks.current.push({ bufferId, content: serialized })
+    onDraft(serialized)
   }
 
   const flushCellChangesRef = useRef(flushCellChanges)
