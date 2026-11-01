@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
 import type { EffectiveHooks, GitHubWorktreeSource, ProjectSettings, Repo, RepoDetails, UiPluginContext, Worktree } from '@quirky/protocol'
 import { Badge, Button, Dialog, FormRow, Tabs, TextField } from '@quirky/ui'
 import { createWorkspace, messageOf, SETUP_CHOICE_NEEDED, type CreateHooks } from './actions'
@@ -217,6 +217,18 @@ export function CreateDialog({ context, repos, worktrees, repoId, onRepoChange, 
   const sourceRequest = useRef(0)
   const searchRequest = useRef(0)
   const branchRequest = useRef(0)
+  const form = useRef<HTMLFormElement>(null)
+  const resetFocusPending = useRef(false)
+
+  useLayoutEffect(() => {
+    if (!resetFocusPending.current) return
+    resetFocusPending.current = false
+    const inputId = mode === 'smart' ? 'create-smart-name' :
+      mode === 'github' ? 'create-github-query' :
+        mode === 'branch' ? 'create-branch' : 'create-name'
+    const input = form.current?.querySelector<HTMLInputElement>(`#${inputId}`)
+    if (input?.isConnected) input.focus()
+  }, [suggestion, mode])
   const activeInput = useRef<ActiveInput>({ repoId, primaryId: primary?.id, mode, smartInput: '', query: '', branch: '' })
   activeInput.current = { repoId, primaryId: primary?.id, mode, smartInput: smartInput.trim(), query: query.trim(), branch: branch.trim() }
 
@@ -514,6 +526,7 @@ export function CreateDialog({ context, repos, worktrees, repoId, onRepoChange, 
     }
     if (!result) return
     if (!createMore) return onClose()
+    resetFocusPending.current = true
     sourceRequest.current += 1
     setSelectedSource(null)
     setSourceBusy(false)
@@ -566,7 +579,7 @@ export function CreateDialog({ context, repos, worktrees, repoId, onRepoChange, 
 
   return (
     <Dialog open title="New workspace" onClose={onClose} size="wide">
-      <form className="ui-stack" onSubmit={onSubmit} onKeyDown={onKeyDown}>
+      <form ref={form} className="ui-stack" onSubmit={onSubmit} onKeyDown={onKeyDown}>
         <FormRow label="Project" htmlFor="create-project">
           <select id="create-project" className="ui-text-field__input" value={repoId} onChange={(event) => onRepoChange(event.target.value)}>
             {repos.map((r) => (
