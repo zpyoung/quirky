@@ -32,7 +32,7 @@ File diff tabs include `(Diff)` after the path so they remain distinguishable fr
 
 Single-file diff headers preserve the path's casing for unstaged, staged, branch, and commit diffs. The full path remains available in the header tooltip.
 
-Renamed-file headers and tooltips show `old path → new path` for staged, branch, and commit diffs, including pure renames with no content changes. Staged renames compare the old path in HEAD with the new path in the index. An open staged diff refreshes its rename metadata from current status after a commit.
+Renamed-file headers and tooltips show `old path → new path` for staged, branch, and commit diffs, including pure renames with no content changes. Staged renames compare the old path in HEAD with the new path in the index. An open staged diff refreshes its rename metadata from current status after a commit. If unstaged edits remain, it switches to their diff and clears the committed rename's old path.
 
 In the command palette, **Save Source Control File** saves edits in the focused Source Control diff. **Save File** saves the focused editor draft.
 

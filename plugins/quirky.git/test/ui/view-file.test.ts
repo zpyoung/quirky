@@ -1,6 +1,6 @@
 import { afterAll, afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
-import { readFileSync } from 'node:fs'
+import { readFileSync, writeFileSync } from 'node:fs'
 import { registerDom } from './register-dom'
 import { diffSource, type DiffRequest } from '../../../../packages/git/src/diffs'
 import { statusV2 } from '../../../../packages/git/src/status'
@@ -64,6 +64,17 @@ describe('quirky.git file diff view', () => {
     } finally {
       style.remove()
     }
+  })
+
+  test('SC-60: a rename and a commit diff pass oldPath and commit to the daemon', async () => {
+    await open(textDiff(), { worktree: 'w1', mode: 'file', source: 'commit', path: 'b.ts', oldPath: 'a.ts', commit: 'c'.repeat(40) })
+    expect(fake.callsTo('quirky.git/diff')[0].params).toEqual({
+      worktree: 'w1',
+      path: 'b.ts',
+      source: 'commit',
+      oldPath: 'a.ts',
+      commit: 'c'.repeat(40)
+    })
   })
 
   test.each(['staged', 'branch', 'commit'])('%s pure rename identifies both paths even without content changes', async (source) => {
@@ -247,9 +258,10 @@ describe('quirky.git file diff view', () => {
     expect(element.querySelector('.cm-editor')).toBe(before)
   })
 
-  test('committing an open staged rename refreshes to a clean diff', async () => {
+  test.each([false, true])('committing an open staged rename refreshes its diff with unstaged edits: %s', async (unstagedEdits) => {
     const dir = makeRepo(fixture.scratch(), { 'old.ts': 'same\n' })
     git(dir, 'mv', 'old.ts', 'new.ts')
+    if (unstagedEdits) writeFileSync(`${dir}/new.ts`, 'working\n')
     fake.handlers['quirky.git/status'] = () => statusV2(dir)
     let loaded = Promise.withResolvers<void>()
     fake.handlers['quirky.git/diff'] = async (params) => {
@@ -269,8 +281,14 @@ describe('quirky.git file diff view', () => {
       await loaded.promise
     })
     await settle()
-    expect(mounted.element.querySelector('[role="status"]')?.textContent).toContain('No changes')
-    expect(mounted.report()).toMatchObject({ changes: 0, currentChange: null })
+    if (unstagedEdits) {
+      expect(mounted.report()).toMatchObject({ source: 'unstaged' })
+      expect(mounted.element.querySelector('.cm-content')?.textContent).toContain('working')
+      expect(mounted.report()).toMatchObject({ changes: 1, currentChange: 1 })
+    } else {
+      expect(mounted.element.querySelector('[role="status"]')?.textContent).toContain('No changes')
+      expect(mounted.report()).toMatchObject({ changes: 0, currentChange: null })
+    }
     const heading = mounted.element.querySelector<HTMLElement>('h2')!
     expect(heading.textContent).not.toContain('old.ts')
     expect(heading.title).not.toContain('old.ts')

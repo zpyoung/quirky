@@ -53,6 +53,7 @@ export function FileDiff({ context, input, settings, setSetting, report, bind, c
         if (requestedSource === 'staged' && !hasStaged && hasUnstaged) effectiveSource = 'unstaged'
         else if (requestedSource === 'unstaged' && !hasUnstaged && hasStaged) effectiveSource = 'staged'
         if (effectiveSource === 'staged') oldPath = file?.origPath
+        else if (requestedSource === 'staged') oldPath = undefined
       }
     }
     return fetchDiff(context, input.worktree, {
