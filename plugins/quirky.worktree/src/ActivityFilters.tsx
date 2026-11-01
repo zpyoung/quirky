@@ -78,7 +78,7 @@ export function ActivityFilters({ projection, error, loading = false, setPrefere
         </div>
       )}
       {open && projection && preferences && (
-        <div id="workspace-activity-filter-options" className="ui-stack" role="group" aria-label="Activity filters">
+        <div id="workspace-activity-filter-options" className="worktree-tree-activity-filters ui-stack" role="group" aria-label="Activity filters">
           <Tabs
             label="Workspace activity window"
             items={WINDOW_TABS}

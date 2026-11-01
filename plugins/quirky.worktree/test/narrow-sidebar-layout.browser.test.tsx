@@ -100,8 +100,8 @@ function browserEntry(): string {
     document.body.append(projectActionResult)
     const treeContext = {
       call: async () => [],
-      log: () => {},
       toast: () => {},
+      log: () => {},
       subscribe: () => () => {},
       onConnection: () => () => {}
     }
@@ -1348,6 +1348,7 @@ test.skipIf(!existsSync(chromium.executablePath()))('ellipsizes the Worktrees he
     await context.close()
   }
 }, 60_000)
+
 test.skipIf(!existsSync(chromium.executablePath()))('keeps all Worktrees activity window tabs visible without horizontal scrolling', async () => {
   const context = await browser!.newContext({ viewport: { width: 1280, height: 720 } })
   const page = await context.newPage()

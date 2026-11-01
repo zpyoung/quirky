@@ -125,6 +125,6 @@
   }
 }
 
-#workspace-activity-filter-options .ui-tabs {
+.worktree-tree-activity-filters .ui-tabs {
   flex-wrap: wrap;
 }
