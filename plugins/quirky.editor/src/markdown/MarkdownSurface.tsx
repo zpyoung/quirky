@@ -291,6 +291,7 @@ function PreviewSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
   const [error, setError] = useState<string | null>(null)
   const [searchOpen, setSearchOpen] = useState(false)
   const searchInput = useRef<HTMLInputElement>(null)
+  const searchOpener = useRef<HTMLElement | null>(null)
   const previewArticle = useRef<HTMLElement | null>(null)
   const [query, setQuery] = useState('')
   const [searchResult, setSearchResult] = useState<{ total: number; matches: { from: number; to: number; line: number; text: string }[] } | null>(null)
@@ -414,8 +415,18 @@ function PreviewSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
       setError(`${result.replacements ?? 0} replacement(s)`)
     } catch (cause) { setError(errorText(cause)) }
   }, [matchCase, props.buffer.contentRevision, props.buffer.id, props.onAction, query, replaceText, wholeWord])
-  const openSearch = useCallback(async (replace: boolean, args?: Record<string, unknown>) => {
+  const closeSearch = useCallback(() => {
+    setSearchOpen(false)
+    setSearchResult(null)
+    const opener = searchOpener.current
+    searchOpener.current = null
+    opener?.focus()
+  }, [])
+  const openSearch = useCallback(async (replace: boolean, args?: Record<string, unknown>, opener: Element | null = document.activeElement) => {
     const requestedQuery = typeof args?.query === 'string' ? args.query : undefined
+    if (!searchOpen) {
+      searchOpener.current = opener instanceof HTMLElement ? opener : null
+    }
     setSearchOpen(true)
     setReplaceOpen(replace)
     if (requestedQuery !== undefined) setQuery(requestedQuery)
@@ -436,7 +447,7 @@ function PreviewSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
       setError(errorText(cause))
       throw cause
     }
-  }, [matchCase, wholeWord, props.buffer.id, props.onAction, revealPreviewMatch])
+  }, [matchCase, wholeWord, props.buffer.id, props.onAction, revealPreviewMatch, searchOpen])
   useEffect(() => props.registerCommandHandlers({
     find: (args) => openSearch(false, args),
     replace: (args) => openSearch(true, args)
@@ -449,10 +460,19 @@ function PreviewSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
   }, [])
 
   return (
-    <div className="markdown-surface markdown-surface--preview" style={{ fontSize: props.fontSize }}>
+    <div
+      className="markdown-surface markdown-surface--preview"
+      style={{ fontSize: props.fontSize }}
+      onKeyDown={(event) => {
+        if (event.defaultPrevented || event.key !== 'Escape' || !searchOpen) return
+        event.preventDefault()
+        event.stopPropagation()
+        closeSearch()
+      }}
+    >
       <div className="markdown-toolbar">
         <Button type="button" onClick={() => void openSource()}>Source</Button>
-        <Button type="button" onClick={() => setSearchOpen((open) => !open)}>Find in preview</Button>
+        <Button type="button" onClick={(event) => searchOpen ? closeSearch() : void openSearch(false, undefined, event.currentTarget)}>Find in preview</Button>
         <Button type="button" onClick={() => props.onAction(MARKDOWN_METHOD, methodParams(props.buffer.id, { action: 'exportPdf' }))}>Export as PDF</Button>
         <span>Markdown Preview</span>
       </div>
@@ -466,7 +486,7 @@ function PreviewSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
         <Button type="button" onClick={() => setReplaceOpen((open) => !open)}>Replace</Button>
         {replaceOpen && <><input className="markdown-input" aria-label="Replace with" value={replaceText} onChange={(event) => setReplaceText(event.currentTarget.value)} /><Button type="button" onClick={() => void replacePreview(false)}>Replace</Button><Button type="button" onClick={() => void replacePreview(true)}>Replace all</Button></>}
         {searchResult && <span>{searchResult.total === 0 ? 'No results' : `${searchIndex + 1} of ${searchResult.total}`}</span>}
-        <Button type="button" onClick={() => { setSearchOpen(false); setSearchResult(null) }}>Close</Button>
+        <Button type="button" onClick={closeSearch}>Close</Button>
       </div>}
       {error && <div role="alert" className="markdown-alert markdown-alert--error">{error}<Button type="button" onClick={() => setError(null)}>Dismiss</Button></div>}
       {busy && <div role="status" className="markdown-status">Preparing preview…</div>}
@@ -508,6 +528,7 @@ function RichSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
   const [moreOpen, setMoreOpen] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
   const searchInput = useRef<HTMLInputElement>(null)
+  const searchOpener = useRef<HTMLElement | null>(null)
   const [searchReplace, setSearchReplace] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [matchCase, setMatchCase] = useState(false)
@@ -1089,9 +1110,18 @@ function RichSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
       if (position) editor?.chain().focus().setTextSelection(position).scrollIntoView().run()
     } catch (cause) { setFeedback(errorText(cause)) }
   }, [call, editor, matchCase, wholeWord, searchQuery])
-  const openSearch = useCallback(async (replace: boolean, args?: Record<string, unknown>) => {
+  const closeSearch = useCallback(() => {
+    setSearchOpen(false)
+    const opener = searchOpener.current
+    searchOpener.current = null
+    opener?.focus()
+  }, [])
+  const openSearch = useCallback(async (replace: boolean, args?: Record<string, unknown>, opener: Element | null = document.activeElement) => {
     if (!editor) throw new Error('The rich Markdown editor is not ready.')
     const requestedQuery = typeof args?.query === 'string' ? args.query : undefined
+    if (!searchOpen) {
+      searchOpener.current = opener instanceof HTMLElement ? opener : null
+    }
     setSearchOpen(true)
     setSearchReplace(replace)
     if (requestedQuery !== undefined) setSearchQuery(requestedQuery)
@@ -1103,7 +1133,7 @@ function RichSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
     const position = result.matches[0] ? findTextPosition(editor, requestedQuery) : null
     if (position) editor.chain().focus().setTextSelection(position).scrollIntoView().run()
     return { opened: true, replace, query: requestedQuery, total: result.total }
-  }, [call, editor, matchCase, wholeWord])
+  }, [call, editor, matchCase, searchOpen, wholeWord])
 
   const moveSearch = useCallback((direction: number) => {
     if (!editor || !searchResult || searchResult.matches.length === 0) return
@@ -1344,7 +1374,16 @@ function RichSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
   )
 
   return (
-    <div className="markdown-surface markdown-surface--rich" style={{ fontSize: props.fontSize }}>
+    <div
+      className="markdown-surface markdown-surface--rich"
+      style={{ fontSize: props.fontSize }}
+      onKeyDown={(event) => {
+        if (event.defaultPrevented || event.key !== 'Escape' || !searchOpen) return
+        event.preventDefault()
+        event.stopPropagation()
+        closeSearch()
+      }}
+    >
       <div className="markdown-toolbar" role="toolbar" aria-label="Markdown formatting">
         <Button type="button" aria-expanded={notesOpen} onClick={() => setNotesOpen((open) => !open)}>Review notes ({notes.length})</Button>
         <Button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => insertToolbarFormat('body')}>Body text</Button>
@@ -1361,7 +1400,7 @@ function RichSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
         <Button type="button" onClick={() => setMoreOpen((open) => !open)}>More blocks ▾</Button>
         <Button type="button" onClick={() => void openSource()}>Source</Button>
         <Button type="button" onClick={() => void openPreview()}>Preview</Button>
-        <Button type="button" onClick={() => setSearchOpen((open) => !open)}>Find</Button>
+        <Button type="button" onClick={(event) => searchOpen ? closeSearch() : void openSearch(false, undefined, event.currentTarget)}>Find</Button>
         <Button type="button" onClick={() => void toggleToc()}>TOC</Button>
         {frontmatter && <Button type="button" onClick={() => void toggleFrontMatter()}>Front Matter</Button>}
         <Button type="button" onClick={() => void exportPdf()}>Export PDF</Button>
@@ -1411,7 +1450,7 @@ function RichSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
         <Button type="button" onClick={() => setSearchReplace((show) => !show)}>Replace</Button>
         {searchReplace && <><input aria-label="Replace with" value={replaceText} onChange={(event) => setReplaceText(event.currentTarget.value)} /><Button type="button" onClick={() => void replaceMatches(false)}>Replace</Button><Button type="button" onClick={() => void replaceMatches(true)}>Replace all</Button></>}
         {searchResult && <span>{searchResult.total ? `${searchIndex + 1} of ${searchResult.total}` : 'No results'}</span>}
-        <Button type="button" onClick={() => setSearchOpen(false)}>Close</Button>
+        <Button type="button" onClick={closeSearch}>Close</Button>
       </div>}
 
       {docMenu && <div role="dialog" aria-label="Markdown document links" className="markdown-popover markdown-popover--list">
