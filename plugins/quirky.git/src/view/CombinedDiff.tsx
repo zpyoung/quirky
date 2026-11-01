@@ -372,7 +372,7 @@ export function CombinedDiff({ context, input, settings, setSetting, report, bin
             {entries.map((entry) => (
               <div key={entry.key} data-path={entry.path}>
                 <ListRow
-                  title={<span title={entry.path}>{entry.path}</span>}
+                  title={<span title={entry.path} style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{entry.path}</span>}
                   selected={activeKey === entry.key}
                   onClick={() => {
                     treeTargets.current.get(entry.key)?.scrollIntoView?.({ block: 'start' })
