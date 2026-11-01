@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
-import type { EffectiveHooks, GitHubWorktreeSource, ProjectSettings, Repo, RepoDetails, UiPluginContext, Worktree } from '@quirky/protocol'
+import type { EffectiveHooks, GitHubWorktreeSource, ProjectSettings, Repo, RepoDetails, UiPluginContext, Worktree, WorktreeCreateResult } from '@quirky/protocol'
 import { Badge, Button, Dialog, FormRow, Tabs, TextField } from '@quirky/ui'
 import { createWorkspace, messageOf, SETUP_CHOICE_NEEDED, type CreateHooks } from './actions'
 import { isGitHubWorktreeReference, parseWorkItemsPage, parseWorktreeSource, type GitHubWorkItem } from './github'
@@ -202,6 +202,7 @@ export function CreateDialog({ context, repos, worktrees, repoId, onRepoChange, 
   const [choiceDemanded, setChoiceDemanded] = useState(false)
   const [createMore, setCreateMore] = useState(false)
   const [busy, setBusy] = useState(false)
+  const [createError, setCreateError] = useState<string | null>(null)
   const [placeholder, setPlaceholder] = useState('')
   const [suggestion, setSuggestion] = useState(0)
   const [project, setProject] = useState<Project | null>(null)
@@ -241,6 +242,7 @@ export function CreateDialog({ context, repos, worktrees, repoId, onRepoChange, 
     setSelectedDefaultTabs([])
     setSelectedHost('')
     setProject(null)
+    setCreateError(null)
     setSetupChoice(null)
     setModel('')
     setLaunchPicks({})
@@ -517,11 +519,19 @@ export function CreateDialog({ context, repos, worktrees, repoId, onRepoChange, 
   const submit = async () => {
     if (blocked) return
     setBusy(true)
+    setCreateError(null)
     const label = workspaceName || source?.item.title || (fromBranch ? branch.trim() : placeholder) || 'new workspace'
     const clearPending = onPending(repoId, label)
-    const result = await createWorkspace(context, fields(), hooks)
-    clearPending()
-    setBusy(false)
+    let result: WorktreeCreateResult | typeof SETUP_CHOICE_NEEDED | null
+    try {
+      result = await createWorkspace(context, fields(), hooks)
+    } catch (error) {
+      setCreateError(messageOf(error))
+      return
+    } finally {
+      clearPending()
+      setBusy(false)
+    }
     if (result === SETUP_CHOICE_NEEDED) {
       setChoiceDemanded(true)
       setAdvanced(true)
@@ -948,6 +958,11 @@ export function CreateDialog({ context, repos, worktrees, repoId, onRepoChange, 
               </section>
             )}
           </div>
+        )}
+        {createError !== null && (
+          <p className="ui-error-text" role="alert" tabIndex={0} style={{ maxHeight: '6rem', overflowY: 'auto' }}>
+            Could not create worktree: {createError}
+          </p>
         )}
         <div className="ui-actions">
           <label className="ui-checkbox-label">

@@ -380,18 +380,38 @@ test('the Advanced fields reach the new workspace', async () => {
   expect(basename(made.path)).toBe('adv')
 }, SLOW)
 
-test('a failed create toasts, keeps the dialog open and clears the pending row', async () => {
+test('a failed create shows its error inline, clears pending, and permits retry and cancel', async () => {
   const w = await boot()
   const api = await addProject(w, 'api')
+  const web = await addProject(w, 'web')
   const dialog = await openCreate(w, api)
+  await click(field<HTMLInputElement>(dialog, 'Create more')!)
   await click(button(dialog, 'Branch')!)
   await setText(field(dialog, 'Existing branch')!, 'ghost')
   await click(button(dialog, 'Create')!)
-  await w.win.waitFor(() => toastMessages().some((message) => message.includes('Could not create worktree')))
+  await w.win.waitFor(() => {
+    const message = dialog.querySelector('[role="alert"]')?.textContent ?? ''
+    return message.includes('Could not create worktree') && message.includes('Branch "ghost" was not found.')
+  })
+  expect(toastMessages().some((message) => message.includes('Could not create worktree'))).toBe(false)
   expect(dialogNamed(CREATE)).toBe(dialog)
   await w.win.waitFor(async () => !(await pendingWorktree(w, 'ghost')))
   expect((await worktrees(w.agent)).some((item) => item.name === 'ghost')).toBe(false)
   expect(button(dialog, 'Create')!.disabled).toBe(false)
+
+  const project = field<HTMLSelectElement>(dialog, 'Project')!
+  await setSelect(project, web.repo.id)
+  await w.win.waitFor(() => dialog.querySelector('[role="alert"]') === null)
+  await setSelect(project, api.repo.id)
+  await w.win.waitFor(() => button(dialog, 'Smart')?.getAttribute('aria-selected') === 'true')
+  await click(button(dialog, 'Name')!)
+  await setText(field(dialog, 'Name')!, 'retry')
+  await click(button(dialog, 'Create')!)
+  expect((await named(w, 'retry')).repoId).toBe(api.repo.id)
+  expect(dialogNamed(CREATE)).toBe(dialog)
+  expect(dialog.querySelector('[role="alert"]')).toBeNull()
+  await click(button(dialog, 'Cancel')!)
+  await closed(w, CREATE)
 }, SLOW)
 
 test('the project select switches the placeholder and the report follows it', async () => {

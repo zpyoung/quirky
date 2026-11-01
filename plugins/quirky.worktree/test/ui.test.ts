@@ -1492,11 +1492,14 @@ test('SC-33: Escape on the trust question abandons the create and leaves the for
   expect(rowOf('nope', 'api')).toBeUndefined()
 })
 
-test('any other create failure toasts and keeps the dialog open', async () => {
+test('any other create failure is shown inline and keeps the dialog open', async () => {
   const h = setup()
   h.world.createFailures = [new RpcLike('Branch "x" was not found.', RpcErrorCode.InvalidParams, { reason: 'x' })]
   await submitNamed(h, 'broken')
-  expect(h.toasts).toEqual([{ title: 'Could not create worktree', body: 'Branch "x" was not found.' }])
+  const errorText = dialogByTitle('New workspace')?.querySelector('[role="alert"]')?.textContent ?? ''
+  expect(errorText).toContain('Could not create worktree')
+  expect(errorText).toContain('Branch "x" was not found.')
+  expect(h.toasts).toEqual([])
   expect(dialogTitles()).toEqual(['New workspace'])
   expect(h.opened).toEqual([])
 })
