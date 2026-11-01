@@ -23,6 +23,8 @@ export function ChangeBaseDialog({ context, worktree, current, onClose, onChange
   const [refs, setRefs] = useState<Ref[]>([])
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+  const [loading, setLoading] = useState(true)
+  const branches = useRef<HTMLDivElement>(null)
 
   const alive = useRef(true)
   useEffect(() => {
@@ -39,15 +41,20 @@ export function ChangeBaseDialog({ context, worktree, current, onClose, onChange
 
   useEffect(() => {
     let cancelled = false
+    setLoading(true)
     context
       .call('quirky.git/branches', query.trim() === '' ? { worktree } : { worktree, query: query.trim() })
       .then((result) => {
         if (cancelled) return
         setRefs((result as { refs: Ref[] }).refs)
         setError(null)
+        setLoading(false)
       })
       .catch((e: unknown) => {
-        if (!cancelled) setError(messageOf(e))
+        if (cancelled) return
+        setRefs([])
+        setError(messageOf(e))
+        setLoading(false)
       })
     return () => {
       cancelled = true
@@ -91,17 +98,30 @@ export function ChangeBaseDialog({ context, worktree, current, onClose, onChange
           aria-label="Search branches"
           placeholder="Search branches…"
           value={query}
-          onChange={(event) => setQuery(event.target.value)}
+          onChange={(event) => {
+            setLoading(true)
+            setQuery(event.target.value)
+          }}
+          onKeyDown={(event) => {
+            if (event.nativeEvent.isComposing || loading || saving) return
+            if (event.key === 'ArrowDown') {
+              event.preventDefault()
+              branches.current?.querySelector<HTMLButtonElement>('button:not(:disabled)')?.focus()
+            } else if (event.key === 'Enter' && refs.length === 1) {
+              event.preventDefault()
+              void save({ base: refs[0]!.name })
+            }
+          }}
         />
         {error !== null && <p role="alert" style={{ color: 'var(--ui-failing)' }}>{error}</p>}
-        <div className="ui-stack" role="list" aria-label="Branches" style={{ gap: 'var(--ui-space-2)' }}>
+        <div ref={branches} className="ui-stack" role="list" aria-label="Branches" style={{ gap: 'var(--ui-space-2)' }}>
           {refs.map((ref) => (
             <ListRow
               key={`${ref.kind}:${ref.name}`}
               title={ref.name}
               description={<span className="ui-cluster"><span>{ref.kind}</span>{ref.name === base && <Badge tone="accent">Current</Badge>}</span>}
               selected={ref.name === base}
-              disabled={saving}
+              disabled={saving || loading}
               onClick={() => void save({ base: ref.name })}
             />
           ))}
