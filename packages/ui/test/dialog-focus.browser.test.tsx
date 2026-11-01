@@ -20,8 +20,8 @@ const BROWSER_IMPORTS: Record<string, string> = {
 function browserEntry(app: string): string {
   return `
     import { createRoot } from 'react-dom/client'
-    import { StrictMode, useEffect, useState } from 'react'
-    import { Dialog } from '@quirky/ui'
+    import { StrictMode, useEffect, useRef, useState } from 'react'
+    import { Dialog, Popover } from '@quirky/ui'
     ${app}
     createRoot(document.getElementById('dialog-mount')!).render(<App />)
   `
@@ -72,6 +72,48 @@ async function mountDialogApp(page: Page, app: string): Promise<void> {
   await page.setContent('<main id="dialog-mount"></main>')
   await page.addScriptTag({ content: clientScript })
 }
+
+test.skipIf(!existsSync(executable))('Tab enters a newly opened portaled popover instead of the next header control', async () => {
+  const browser = await chromium.launch({ headless: true, args: process.platform === 'linux' ? ['--no-sandbox'] : [] })
+  try {
+    const page = await browser.newPage()
+    await mountDialogApp(page, `
+      function App() {
+        const anchor = useRef(null)
+        const [open, setOpen] = useState(false)
+        return (
+          <>
+            <button ref={anchor} onClick={() => setOpen((value) => !value)}>Worktrees options</button>
+            <button>Minimize Worktrees</button>
+            <Popover open={open} label="Worktrees options" anchor={anchor} onClose={() => setOpen(false)}>
+              <details>
+                <summary>Workspace options</summary>
+                <button>Group by</button>
+              </details>
+            </Popover>
+          </>
+        )
+      }
+    `)
+    const opener = page.getByRole('button', { name: 'Worktrees options', exact: true })
+    await opener.click()
+    await page.getByRole('dialog', { name: 'Worktrees options' }).waitFor()
+    await page.keyboard.press('Tab')
+    expect(await page.locator('summary').evaluate((element) => document.activeElement === element)).toBe(true)
+    await page.keyboard.press('Enter')
+    await page.keyboard.press('Tab')
+    expect(await page.getByRole('button', { name: 'Group by' }).evaluate((element) => document.activeElement === element)).toBe(true)
+    await page.keyboard.press('Escape')
+    await page.getByRole('dialog').waitFor({ state: 'detached' })
+    expect(await opener.evaluate((element) => document.activeElement === element)).toBe(true)
+    await opener.click()
+    await page.getByRole('dialog').waitFor()
+    await page.keyboard.press('Tab')
+    expect(await page.locator('summary').evaluate((element) => document.activeElement === element)).toBe(true)
+  } finally {
+    await browser.close()
+  }
+}, 60_000)
 
 test.skipIf(!existsSync(executable))('autofocused dialog restores its exact opener after Escape and close-button dismissal, including reopen', async () => {
   const browser = await chromium.launch({ headless: true, args: process.platform === 'linux' ? ['--no-sandbox'] : [] })
