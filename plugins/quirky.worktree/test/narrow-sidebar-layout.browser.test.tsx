@@ -381,6 +381,7 @@ test.skipIf(!existsSync(chromium.executablePath()))('keeps tool and project head
         firstWorktreeRow: box(firstWorktreeRow),
         firstWorktreeName: box(firstWorktreeName),
         projectCount: box(projectCount),
+        expandingLabelDisplay: getComputedStyle(frame.querySelector('.ui-expanding-icon-button__label')!).display,
       }
     })
     const overlaps = (a: { left: number; top: number; right: number; bottom: number }, b: { left: number; top: number; right: number; bottom: number }) =>
@@ -457,6 +458,8 @@ test.skipIf(!existsSync(chromium.executablePath()))('keeps tool and project head
       )).toBeLessThanOrEqual(3)
       if (sidebarWidth <= 160) expect(layout.projectNameOverflow).toBe(true)
       for (const button of layout.projectButtons) expectContained(button, layout.projectHeader)
+      if (sidebarWidth <= 160) expect(layout.expandingLabelDisplay).toBe('none')
+      else expect(layout.expandingLabelDisplay).not.toBe('none')
 
       if (sidebarWidth <= 220) {
         expect(layout.toolActions.top).toBeGreaterThan(layout.toolTitle.bottom)
