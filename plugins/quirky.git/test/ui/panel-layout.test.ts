@@ -274,6 +274,31 @@ describe('opening diffs', () => {
     unmount()
   })
 
+  test.each(['util.ts', 'README.md'])('opening branch diff %s moves the highlight out of Changes', async (branchPath) => {
+    const { element, unmount } = await open((fake) => {
+      fake.status = statusOf([entry('README.md', 'unstaged')])
+      fake.compare = compareOf({
+        entries: [{ path: branchPath, status: 'modified', added: 2, removed: 1, binary: false }]
+      })
+    })
+    try {
+      await click(rowOf(element, 'README.md', 'unstaged'))
+      expect(rowOf(element, 'README.md', 'unstaged')?.getAttribute('aria-pressed')).toBe('true')
+      expect(rowOf(element, branchPath, 'branch')?.getAttribute('aria-pressed')).toBe('false')
+
+      await click(rowOf(element, branchPath, 'branch'))
+      expect(rowOf(element, 'README.md', 'unstaged')?.getAttribute('aria-pressed')).toBe('false')
+      expect(rowOf(element, branchPath, 'branch')?.getAttribute('aria-pressed')).toBe('true')
+      expect(q(element, '[role="toolbar"][aria-label="Selection actions"]')).toBeNull()
+
+      await click(rowOf(element, 'README.md', 'unstaged'))
+      expect(rowOf(element, 'README.md', 'unstaged')?.getAttribute('aria-pressed')).toBe('true')
+      expect(rowOf(element, branchPath, 'branch')?.getAttribute('aria-pressed')).toBe('false')
+    } finally {
+      unmount()
+    }
+  })
+
   test('a conflict row opens the conflict file; View all opens the combined diff or the conflict review', async () => {
     const { fake, element, unmount } = await open((f) => {
       f.status = statusOf([
