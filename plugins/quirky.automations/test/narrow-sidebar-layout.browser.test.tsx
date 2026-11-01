@@ -362,6 +362,9 @@ test.skipIf(!existsSync(chromium.executablePath()))('keeps the Automations heade
         const actions = document.querySelector('.ui-tool-panel-frame__actions')
         return actions !== null && getComputedStyle(actions).opacity === '1'
       })
+      for (const name of ['Automation settings', 'Refresh automations', 'New Automation']) {
+        expect(await page.getByRole('button', { name, exact: true }).getAttribute('title')).toBe(name)
+      }
       for (const name of actionNames) {
         const button = page.getByRole('button', { name, exact: true })
         expect(await button.count()).toBe(1)

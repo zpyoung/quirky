@@ -1233,9 +1233,9 @@ export function AutomationsPage(props: AutomationSurfaceProps) {
     }
     return <main className="auto-automations" aria-label="Automations">
       <ToolPanelActions>
-          <IconButton label="Refresh automations" onClick={() => void refreshAll()} disabled={refreshing} aria-busy={refreshing}><ControlIcon name="arrows-clockwise" /></IconButton>
+          <IconButton label="Refresh automations" title="Refresh automations" onClick={() => void refreshAll()} disabled={refreshing} aria-busy={refreshing}><ControlIcon name="arrows-clockwise" /></IconButton>
           <Button onClick={() => void navigate({ page: 'runs', automationId: null, runId: null, host: 'all' })}>Runs</Button>
-          <IconButton label={busyAction === 'create' ? 'Opening…' : 'New Automation'} variant="primary" onClick={() => void openEditor()} disabled={busyAction !== null || !canCreateLocally}><ControlIcon name="plus" /></IconButton>
+          <IconButton label={busyAction === 'create' ? 'Opening…' : 'New Automation'} title={busyAction === 'create' ? 'Opening…' : 'New Automation'} variant="primary" onClick={() => void openEditor()} disabled={busyAction !== null || !canCreateLocally}><ControlIcon name="plus" /></IconButton>
       </ToolPanelActions>
       <span className="auto-cell-sub">Schedule structured agent work and review its run history.</span>
       {showSettingsLink && <div className="auto-info" role="status">The confirmation preference was saved. <Button onClick={() => { setShowSettingsLink(false); props.context.openView(AUTOMATIONS_SETTINGS_VIEW) }}>Open Settings</Button><Button onClick={() => setShowSettingsLink(false)}>Dismiss</Button></div>}

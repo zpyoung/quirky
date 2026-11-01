@@ -50,7 +50,7 @@ function AutomationApp({ context, report }: SurfaceProps) {
   }, [state, error, report])
   return <div className="quirky-automations">
     <ToolPanelFrame title="Automations" actions={<>
-      <IconButton label="Automation settings" onClick={() => void context.call(`${API}settings`, {}).catch(cause => notify(message(cause), 'error'))}><ControlIcon name="gear" /></IconButton>
+      <IconButton label="Automation settings" title="Automation settings" onClick={() => void context.call(`${API}settings`, {}).catch(cause => notify(message(cause), 'error'))}><ControlIcon name="gear" /></IconButton>
     </>}>
       <div className="auto-app-body">
         {error && <div className="auto-shell-error" role="alert">{error} <Button onClick={() => void refresh()}>Retry</Button></div>}
