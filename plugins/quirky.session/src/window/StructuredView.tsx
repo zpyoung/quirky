@@ -3,6 +3,7 @@ import { RpcErrorCode, type Session, type StructuredMessage, type UiPluginContex
 import { Button, EmptyState, FormRow, SectionHeader } from '@quirky/ui'
 import { MessageRow } from './MessageRow'
 import { mergeMessages, visibleMessages } from './transcript'
+import { rememberShowAllEvents, showAllEventsFor } from './model'
 
 const NO_MESSAGES: StructuredMessage[] = []
 
@@ -48,7 +49,7 @@ export function StructuredView({ context, session }: { context: UiPluginContext;
   const [stored, setStored] = useState<StructuredMessage[]>(NO_MESSAGES)
   const [off, setOff] = useState(false)
   const [text, setText] = useState('')
-  const [showAll, setShowAll] = useState(false)
+  const [showAll, setShowAll] = useState(() => showAllEventsFor(session))
   const scroller = useRef<HTMLDivElement>(null)
   const showAllId = useId()
   const messageId = useId()
@@ -124,7 +125,11 @@ export function StructuredView({ context, session }: { context: UiPluginContext;
               id={showAllId}
               type="checkbox"
               checked={showAll}
-              onChange={(event) => setShowAll(event.target.checked)}
+              onChange={(event) => {
+                const enabled = event.target.checked
+                setShowAll(enabled)
+                rememberShowAllEvents(session, enabled)
+              }}
             />
             <span>Show all events</span>
           </label>
