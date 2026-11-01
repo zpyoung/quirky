@@ -1,7 +1,8 @@
 import { afterAll, afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
-import { RpcErrorCode } from '@quirky/protocol'
+import { RpcErrorCode, type GitStatus } from '@quirky/protocol'
 import { registerDom } from './register-dom'
+import { POLL_MS } from '../../src/view/data'
 
 registerDom()
 const s = await import('./support')
@@ -764,6 +765,59 @@ describe('quirky.git conflict review view', () => {
     expect(fake.panelToggles.at(-1)).toEqual({ id: s.PANEL, open: true })
     await click(byText(element, 'Dismiss'))
     expectOpened(fake, s.SESSIONS_VIEW, { worktree: 'w1' })
+  })
+
+  test.each(['event', 'poll'] as const)('an open review follows resolutions through the last conflict via %s', async (trigger) => {
+    const refresh = async () => {
+      if (trigger === 'event') {
+        await act(async () => fake.emit({ type: 'quirky.git/changed', data: { worktreeId: 'w1' } }))
+        await settle()
+      } else {
+        await s.wait(POLL_MS + 50)
+      }
+    }
+    fake.handlers['quirky.git/status'] = () => status([conflict('a.ts'), conflict('b.ts')])
+    const { element, report } = await openReview()
+    const row = (path: string) => element.querySelector(`[data-path="${path}"]`)!
+    expect(report().conflicts).toBe(2)
+
+    fake.handlers['quirky.git/status'] = () =>
+      status([{ path: 'a.ts', area: 'staged', status: 'modified' }, conflict('b.ts')])
+    await refresh()
+    expect(row('a.ts').textContent).toContain('Resolved')
+    expect(row('a.ts').querySelector('button')).toBeNull()
+    expect(row('b.ts').textContent).toContain('Unresolved')
+    expect(row('b.ts').querySelector('button')).not.toBeNull()
+    expect(report().conflicts).toBe(1)
+
+    fake.handlers['quirky.git/status'] = () => status([
+      { path: 'a.ts', area: 'staged', status: 'modified' },
+      { path: 'b.ts', area: 'staged', status: 'modified' }
+    ])
+    await refresh()
+    expect(element.querySelector('[aria-label="All conflicts resolved"]')).not.toBeNull()
+    expect(row('b.ts').textContent).toContain('Resolved')
+    expect(row('b.ts').querySelector('button')).toBeNull()
+    expect(report().conflicts).toBe(0)
+  }, 15_000)
+
+  test('a change during the initial status read preserves every original review file', async () => {
+    const initial = Promise.withResolvers<GitStatus>()
+    fake.handlers['quirky.git/status'] = () => initial.promise
+    const { element, report } = await openReview()
+    fake.handlers['quirky.git/status'] = () =>
+      status([{ path: 'a.ts', area: 'staged', status: 'modified' }, conflict('b.ts')])
+    await act(async () => fake.emit({ type: 'quirky.git/changed', data: { worktreeId: 'w1' } }))
+    await settle()
+    await act(async () => initial.resolve(status([conflict('a.ts'), conflict('b.ts')])))
+    await settle()
+    await act(async () => fake.emit({ type: 'quirky.git/changed', data: { worktreeId: 'w1' } }))
+    await settle()
+
+    expect(element.querySelector('[data-path="a.ts"]')?.textContent).toContain('Resolved')
+    expect(element.querySelector('[data-path="a.ts"] button')).toBeNull()
+    expect(element.querySelector('[data-path="b.ts"]')?.textContent).toContain('Unresolved')
+    expect(report().conflicts).toBe(1)
   })
 
   test('SC-45: a path with no row that is still on disk reads Resolved; a staged deletion reads Gone', async () => {
