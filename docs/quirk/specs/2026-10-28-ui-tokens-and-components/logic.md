@@ -37,6 +37,8 @@ Tool-panel header tab groups wrap whole tabs within their available width instea
 
 Scrollable dialog bodies leave inline clearance for outward focus rings, including Settings checkboxes at the content edge. Content stays aligned with the dialog header and actions, and the body keeps vertical scrolling.
 
+Dialog dismissal restores the control focused before opening, even when a child uses `autoFocus`. Reopening captures the new opener. Closing a nested dialog returns focus to its opener inside the parent; closing the parent returns focus outside it.
+
 At narrow panel widths, EmptyState and Vault search-consent prose keep words intact when they fit the section or card. Tokens wider than that boundary wrap within it; neither the message box nor its text may overflow the panel.
 
 ### SC3 — Gallery is a working page

@@ -109,6 +109,7 @@ async function mount(options: {
   worktrees?: Worktree[]
   model?: UiModel
   handlers?: Record<string, Handler>
+  onClose?: () => void
 } = {}) {
   const calls: Call[] = []
   const toasts: unknown[] = []
@@ -162,7 +163,7 @@ async function mount(options: {
   root = createRoot(container)
   const debounce = controlDebounce()
   await act(async () => {
-    root!.render(h(AppContext.Provider, { value }, h(CommandPalette, { onClose: () => {} })))
+    root!.render(h(AppContext.Provider, { value }, h(CommandPalette, { onClose: options.onClose ?? (() => {}) })))
   })
   await flush()
 
@@ -217,6 +218,50 @@ async function mount(options: {
 const quickOpen = (...paths: string[]) => ({ results: paths.map((path) => ({ path, name: path, score: 1 })), truncated: false, history: [] })
 const searchCalls = (palette: Awaited<ReturnType<typeof mount>>) =>
   palette.callsTo('quirky.editor/quickOpen').filter((call) => (call.params as { action: string }).action === 'search')
+
+for (const tag of ['button', 'textarea'] as const) {
+  for (const dismissal of ['Escape', 'close button'] as const) {
+    test(`dismissing Search with ${dismissal} restores the previous ${tag} focus`, async () => {
+      const opener = document.createElement(tag)
+      document.body.appendChild(opener)
+      opener.focus()
+      try {
+        const palette = await mount({ onClose: () => root!.render(null) })
+        expect(document.activeElement).toBe(palette.input())
+        if (dismissal === 'Escape') await palette.key('Escape')
+        else await act(async () => container!.querySelector<HTMLButtonElement>('[aria-label="Close dialog"]')!.click())
+        expect(container!.querySelector('[role="dialog"]')).toBeNull()
+        expect(document.activeElement).toBe(opener)
+      } finally {
+        opener.remove()
+      }
+    })
+  }
+}
+
+test('selecting a worktree leaves focus at the navigation destination', async () => {
+  const opener = document.createElement('button')
+  const terminal = document.createElement('textarea')
+  document.body.append(opener, terminal)
+  opener.focus()
+  try {
+    const palette = await mount({
+      onClose: () => root!.render(null),
+      handlers: {
+        'ui.window.self': () => ({ connId: 4 }),
+        'quirky.worktree/navigate': () => terminal.focus()
+      }
+    })
+    await palette.search('beta-tree')
+    await palette.key('Enter')
+    await flush()
+    expect(container!.querySelector('[role="dialog"]')).toBeNull()
+    expect(document.activeElement).toBe(terminal)
+  } finally {
+    opener.remove()
+    terminal.remove()
+  }
+})
 
 test('each scope shows only its kinds', async () => {
   const palette = await mount({ handlers: { 'quirky.editor/quickOpen': () => quickOpen('src/main.ts') } })

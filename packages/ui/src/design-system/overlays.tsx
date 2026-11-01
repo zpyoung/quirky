@@ -91,7 +91,16 @@ function syncDialogIsolation(ownerDocument: Document, state: DialogState) {
 
 export function Dialog({ open, title, children, actions, onClose, variant = 'dialog', placement = 'center', size = 'default', closeOnBackdrop = true, scrollBody = false }: DialogProps) {
   const dialogRef = useRef<HTMLElement | null>(null)
+  const wasOpenRef = useRef(false)
+  const openerRef = useRef<HTMLElement | null>(null)
   const titleId = useId()
+
+  if (open && !wasOpenRef.current) {
+    openerRef.current = typeof document !== 'undefined' && document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : null
+  }
+  wasOpenRef.current = open
 
   useEffect(() => {
     if (!open) return
@@ -100,7 +109,7 @@ export function Dialog({ open, title, children, actions, onClose, variant = 'dia
     const ownerDocument = element.ownerDocument
     const state = getDialogState(ownerDocument)
     state.stack.push(element)
-    const opener = ownerDocument.activeElement instanceof HTMLElement ? ownerDocument.activeElement : null
+    const opener = openerRef.current
     syncDialogIsolation(ownerDocument, state)
     if (!element.contains(ownerDocument.activeElement)) {
       const firstFocusable = element.querySelector<HTMLElement>(focusableSelector)
@@ -120,6 +129,8 @@ export function Dialog({ open, title, children, actions, onClose, variant = 'dia
       const index = state.stack.indexOf(element)
       if (index >= 0) state.stack.splice(index, 1)
       syncDialogIsolation(ownerDocument, state)
+      // strict mode replays effects without dismissing the connected dialog
+      if (element.isConnected) return
       if (wasTop && opener?.isConnected) opener.focus()
       const parent = state.stack[state.stack.length - 1]
       if (parent && !parent.contains(ownerDocument.activeElement)) {
