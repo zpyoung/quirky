@@ -1,6 +1,6 @@
 # Tasks: a compact panel that expands into a center tab
 
-**Status:** Draft, design approved on the visual sheet 2026-11-01
+**Status:** Approved 2026-11-01
 
 Tasks becomes one tool with two forms. Its side panel is a short list you can glance at, and Expand moves it into a center tab with the list beside a full detail pane. Both forms read the same list, filters and selection, so moving between them never loses your place.
 
@@ -275,7 +275,7 @@ Chosen during design and approved on the visual sheet
 - A narrow center swaps between list and detail
 - The panel stays compact in any slot
 
-Set while writing this spec, not yet separately reviewed
+Set while writing this spec and approved with it
 
 - If more than one dot applies, the order is amber, red, green, indigo, grey
 - Red applies only to your own PRs
@@ -314,7 +314,7 @@ Set while writing this spec, not yet separately reviewed
 
 ## Status & amendments
 
-Draft, awaiting the user's review of this written spec.
+Approved 2026-11-01.
 
 **Amendments:**
 
