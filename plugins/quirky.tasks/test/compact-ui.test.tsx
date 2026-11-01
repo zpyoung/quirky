@@ -603,11 +603,20 @@ test('a failed refresh with cached rows keeps the rows and adds the notice', asy
   expect(element.querySelector('[role="alert"]')).toBeNull()
 })
 
-test('a failed refresh with a cached empty list shows the notice instead of a current empty state', async () => {
+test('a failed refresh with a cached empty list leaves Retry as the only action', async () => {
   await seedSnapshot([])
-  const { element } = await mountCompact({ handlers: { 'quirky.tasks/list': () => { throw new Error('daemon exploded') } } })
+  let fail = true
+  const { element } = await mountCompact({ handlers: { 'quirky.tasks/list': () => { if (fail) throw new Error('daemon exploded'); return listResult([]) } } })
   expect(notice(element)!.textContent).toContain(REFRESH_NOTICE)
-  expect(button(element, 'Retry')).toBeDefined()
+  const body = element.querySelector('.tasks-compact__list')!
+  expect(body.textContent).toContain('No open pull requests')
+  expect([...body.querySelectorAll('button')].map((candidate) => candidate.textContent)).toEqual(['Retry'])
+  expect(button(element, 'Expand to change filters')).toBeUndefined()
+  fail = false
+  await act(async () => button(element, 'Retry')!.click())
+  await settle()
+  expect(notice(element)).toBeUndefined()
+  expect(button(element, 'Expand to change filters')).toBeDefined()
 })
 
 test('Retry reads the list again and a success clears the notice', async () => {

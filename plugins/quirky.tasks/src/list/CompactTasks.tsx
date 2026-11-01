@@ -225,7 +225,7 @@ export function CompactTasks({ context, report }: { context: UiPluginContext; re
   } else if (problem) {
     body = <div role="alert" className="tasks-compact__problem"><EmptyState message={problem} action={{ label: 'Open task sources', onAction: openTaskSources }} /></div>
   } else if (rows.length === 0) {
-    body = <div role="status" className="tasks-compact__empty"><EmptyState message={`No ${filter ? 'matching' : 'open'} ${kind === 'issue' ? 'issues' : 'pull requests'}`} action={{ label: 'Expand to change filters', onAction: expand }} /></div>
+    body = <div role="status" className="tasks-compact__empty"><EmptyState message={`No ${filter ? 'matching' : 'open'} ${kind === 'issue' ? 'issues' : 'pull requests'}`} {...(staleNotice ? {} : { action: { label: 'Expand to change filters', onAction: expand } })} /></div>
   } else {
     const hasMore = list.result!.page < list.result!.totalPages
     body = <>
