@@ -7,7 +7,7 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { Banner } from '../../../plugins/quirky.feedback/src/mode/Banner'
 import { Button, Tabs } from '../src/design-system'
 import { makeTempDir } from '../../daemon/test/plugins/fixtures'
-import { launchableAgents, projectCounts, scopeLabel, worktreeRowState } from '../src/shell/WindowBar'
+import { launchableAgents, newAgentItems, projectCounts, scopeLabel, worktreeRowState } from '../src/shell/WindowBar'
 import { attentionStoreFor } from '../src/shell/attention'
 import { bootWindow, closeWindows, installUiPlugin, provide, type WindowEnv } from './fixtures/window-env'
 
@@ -290,6 +290,26 @@ describe('window bar', () => {
     await click(env, barButton(env, 'Choose agent'))
     await env.win.waitFor(() => rowNamed(env, 'Agent settings…'))
     expect(rowsOf(env).at(-1)?.textContent).toBe('Agent settings…')
+  })
+
+  test('New agent rows lead with the agent icon and keep their labels and commands', () => {
+    const ran: string[] = []
+    const settings: string[] = []
+    const items = newAgentItems(
+      [{ id: 'claude-agent-teams', label: 'Claude Agent Teams', isDefault: true }, { id: 'omp', label: 'OMP', isDefault: false }],
+      (command) => ran.push(command),
+      () => settings.push('opened')
+    )
+    expect(items.map((item) => item.label)).toEqual(['Claude Agent Teams', 'OMP', '', 'Agent settings…'])
+    expect(items[0]!.subtitle).toBe('Default')
+    expect(renderToStaticMarkup(<>{items[0]!.lead}</>)).toContain('data-icon="claude"')
+    expect(renderToStaticMarkup(<>{items[1]!.lead}</>)).toContain('ui-agent-monogram')
+    expect(items[2]!.separator).toBe(true)
+    expect(renderToStaticMarkup(<>{items[3]!.lead}</>)).toContain('ui-control-icon')
+    items[1]!.onSelect?.()
+    items[3]!.onSelect?.()
+    expect(ran).toEqual(['command:quirky.agents/new-omp-tab'])
+    expect(settings).toEqual(['opened'])
   })
 
   test('Settings is reachable only through More', async () => {

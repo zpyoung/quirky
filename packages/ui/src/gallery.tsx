@@ -2,6 +2,7 @@ import { useRef, useState, type ReactNode } from 'react'
 import { createRoot } from 'react-dom/client'
 import type { UiToolHue } from '@quirky/protocol'
 import {
+  AgentIcon,
   Badge,
   Button,
   ControlIcon,
@@ -43,6 +44,7 @@ type CategoryName =
   | 'FormRow'
   | 'ToolPanelFrame'
   | 'InlineAgentCard'
+  | 'AgentIcon'
   | 'ToolIcon'
   | 'ControlIcon'
   | 'FileIcon'
@@ -376,6 +378,18 @@ const PROJECT_SAMPLES: readonly [name: string, color: string | null][] = [
   ['quirky', null], ['orca-fork', null], ['web_app', null], ['api', null], ['docs site', null], ['mobile', null], ['brand', '#c0408a'], ['status-clash', '#4cc38a']
 ]
 
+const AGENT_SAMPLES = ['claude', 'codex', 'opencode', 'pi', 'gemini', 'aider', 'cursor', 'rovo', 'grok', 'antigravity', 'kimi', 'zcode', 'omp', 'minimax'] as const
+
+function AgentIconDemo({ theme }: { theme: Theme }) {
+  return (
+    <Category name="AgentIcon" theme={theme}>
+      <div className="ui-cluster">
+        {AGENT_SAMPLES.map((id) => <AgentIcon key={id} id={id} />)}
+      </div>
+    </Category>
+  )
+}
+
 function ToolIconDemo({ theme }: { theme: Theme }) {
   return (
     <Category name="ToolIcon" theme={theme}>
@@ -465,6 +479,7 @@ function ThemeGallery({ theme, label }: { theme: Theme; label: string }) {
         <FormRowDemo theme={theme} />
         <ToolPanelFrameDemo theme={theme} />
         <InlineAgentCardDemo theme={theme} />
+        <AgentIconDemo theme={theme} />
         <ToolIconDemo theme={theme} />
         <ControlIconDemo theme={theme} />
         <FileIconDemo theme={theme} />

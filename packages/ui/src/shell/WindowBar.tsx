@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode, type Ref } from 'react'
 import type { AgentDisplayState, Ask, Repo, Session, SessionStatus, Worktree } from '@quirky/protocol'
-import { Badge, CONTEXT_MENU_SEPARATOR, ControlIcon, PopupMenu, ProjectTile, StatusDot, ToolIcon, type PopupItem, type UiStatus } from '../design-system'
+import { AgentIcon, Badge, CONTEXT_MENU_SEPARATOR, ControlIcon, PopupMenu, ProjectTile, StatusDot, ToolIcon, type PopupItem, type UiStatus } from '../design-system'
 import { useConnection, usePluginHost, usePluginState } from '../context'
 import type { Connection } from '../connection'
 import { useAttention, type ProjectIdentity } from './attention'
@@ -215,6 +215,20 @@ export function launchableAgents(listing: unknown, commands: ReadonlySet<string>
     choices.push({ id: agent.id, label: agent.label, isDefault: agent.isDefault === true || agent.id === defaultAgent })
   }
   return [...choices.filter((choice) => choice.isDefault), ...choices.filter((choice) => !choice.isDefault)]
+}
+
+/** The New agent caret's rows: each launchable agent under its icon, then Agent settings. */
+export function newAgentItems(agents: readonly AgentChoice[], run: (command: string) => void, openSettings: () => void): PopupItem[] {
+  return [
+    ...agents.map((agent): PopupItem => ({
+      label: agent.label,
+      subtitle: agent.isDefault ? 'Default' : undefined,
+      lead: <AgentIcon id={agent.id} />,
+      onSelect: () => run(`command:quirky.agents/new-${agent.id}-tab`)
+    })),
+    CONTEXT_MENU_SEPARATOR,
+    { label: 'Agent settings…', lead: <ControlIcon name="gear" />, onSelect: openSettings }
+  ]
 }
 
 function useAgentListing(connection: Connection): unknown {
@@ -442,15 +456,7 @@ function NewAgent() {
   const run = (command: string) => {
     void host.runCommand(command).catch((error) => showError(connection, 'Could not start an agent', error))
   }
-  const items: PopupItem[] = [
-    ...agents.map((agent): PopupItem => ({
-      label: agent.label,
-      subtitle: agent.isDefault ? 'Default' : undefined,
-      onSelect: () => run(`command:quirky.agents/new-${agent.id}-tab`)
-    })),
-    CONTEXT_MENU_SEPARATOR,
-    { label: 'Agent settings…', onSelect: () => host.openView(AGENT_SETTINGS_VIEW) }
-  ]
+  const items = newAgentItems(agents, run, () => host.openView(AGENT_SETTINGS_VIEW))
 
   return (
     <>
