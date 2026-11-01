@@ -940,6 +940,25 @@ test('project Actions menu takes focus and Escape returns it to the button', asy
   expect(menu()).toBeNull()
 })
 
+test('worktree Actions menu returns focus to the exact trigger on Escape', async () => {
+  const h = setup()
+  await h.mountInto(host)
+
+  for (const trigger of [
+    actionButton(rowOf('fix-login', 'api'))!,
+    actionButton(rowOf('main', 'api'))!
+  ]) {
+    trigger.focus()
+    expect(document.activeElement).toBe(trigger)
+    await click(trigger)
+    expect(menu()).not.toBeNull()
+    expect(document.activeElement).toBe(menu())
+    await press('Escape')
+    expect(menu()).toBeNull()
+    expect(document.activeElement).toBe(trigger)
+  }
+})
+
 test('SC-43: the card menu opens and closes on Escape and outside click', async () => {
   const h = setup()
   await h.mountInto(host)
