@@ -952,7 +952,10 @@ export function ExplorerPanel({ context, report }: { context: UiPluginContext; r
     if (!worktree) return
     try {
       const result = await context.call('quirky.editor/mutate', { worktree, action: 'duplicate', path }) as { path: string }
+      await enqueueInteraction({ action: 'reveal', path: result.path })
+      await enqueueInteraction({ action: 'select', path: result.path })
       await loadDirectory()
+      await reloadExpandedDirectories()
       await openFile(result.path, { preview: false, pinned: true })
     } catch (reason) {
       setError(messageOf(reason))

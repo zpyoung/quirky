@@ -593,6 +593,54 @@ test.each([
   expect(existsSync(parent)).toBe(true)
 })
 
+test('Explorer Duplicate selects and opens the copy and targets it in footer actions', async () => {
+  const fixture = await makeFixture({ displayRoot: 'nested' })
+  const context = makeContext(fixture)
+  context.confirm = async () => true
+  const panel = await renderExplorer(fixture, context)
+  const source = join(fixture.root, ARCHIVE_FILE)
+  const copyRelativePath = 'nested/archive/keep copy.txt'
+  const copy = join(fixture.root, copyRelativePath)
+  const archive = join(fixture.root, 'nested/archive')
+
+  await act(async () => findRow(panel.element, archive)!.click())
+  await waitForUi(() => findRow(panel.element, source) || false)
+  const sourceRow = findRow(panel.element, source)
+  if (!sourceRow) throw new Error('Missing expanded source row for Duplicate')
+  await act(async () => sourceRow.click())
+  await waitForUi(() =>
+    findRow(panel.element, source)?.getAttribute('aria-selected') === 'true' &&
+    panel.element.querySelectorAll<HTMLElement>('[data-path][aria-selected="true"]').length === 1 || false
+  )
+
+  const selectedSourceRow = findRow(panel.element, source)
+  if (!selectedSourceRow) throw new Error('Missing selected source row for Duplicate')
+  const duplicate = await actionButton(selectedSourceRow, 'Duplicate')
+  await act(async () => duplicate.click())
+  const openedCopy = await waitForUi(async () => {
+    const state = await call<{
+      explorer: { selectedPaths: string[] }
+      buffers: { id: string; relativePath: string; tabId: string | null }[]
+      tabs: { tabId: string; bufferId: string; mode: 'edit' | 'preview' }[]
+    }>(fixture.client, 'quirky.editor/state', { worktree: fixture.worktree.id })
+    const buffer = state.buffers.find((entry) => entry.relativePath === copyRelativePath)
+    return buffer && state.tabs.some((tab) => tab.bufferId === buffer.id) ? { state, buffer } : false
+  }, 30_000)
+  expect(openedCopy.state.explorer.selectedPaths).toEqual([copy])
+  expect(openedCopy.state.tabs).toContainEqual(expect.objectContaining({ bufferId: openedCopy.buffer.id }))
+  await waitForUi(() => findRow(panel.element, copy) || false)
+  expect(findRow(panel.element, copy)?.getAttribute('aria-selected')).toBe('true')
+  expect(panel.element.querySelectorAll<HTMLElement>('[data-path][aria-selected="true"]')).toHaveLength(1)
+
+  await act(async () => footerButton(panel.element, 'Copy Path').click())
+  expect(await navigator.clipboard.readText()).toBe(copy)
+  await act(async () => footerButton(panel.element, 'Copy Relative Path').click())
+  expect(await navigator.clipboard.readText()).toBe(copyRelativePath)
+  await act(async () => footerButton(panel.element, 'Delete').click())
+  await waitForUi(() => !existsSync(copy))
+  expect(existsSync(source)).toBe(true)
+}, 60_000)
+
 test('Explorer Rename closes row actions, then focuses the renamed tree row after Enter', async () => {
   const fixture = await makeFixture({ displayRoot: 'nested' })
   const panel = await renderExplorer(fixture)
