@@ -42,12 +42,12 @@ export function OperationCard({ operation, unresolved, busy, onReview, onContinu
             <div className="ui-stack">
               <p>Resolved files move back to normal changes after they leave the live conflict state.</p>
               <div className="ui-cluster">
+                <Button variant="primary" onClick={onReview}>Review conflicts</Button>
                 {fix && <FixSplitButton {...fix} />}
                 {abort}
               </div>
             </div>
           }
-          action={{ label: 'Review conflicts', onAction: onReview }}
         />
       </div>
     )

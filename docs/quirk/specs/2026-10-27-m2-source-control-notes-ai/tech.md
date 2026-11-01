@@ -120,6 +120,9 @@ Small cross-plugin growths (API unstable until M7):
   scope-then-target menus; `PopupMenu` (`:26`) renders a submenu on hover and on ArrowRight.
 - `QG/src/panel/Cards.tsx:26` `OperationCard` and `:97` `BlockedCard`: optional `fix?:
   FixButtonProps`.
+  Conflict descriptions use the card's available content width, with Review conflicts,
+  Resolve with AI and Abort in a wrapping action row below the explanation. The AI primary
+  button and agent chooser stay together as one non-wrapping group.
 - `QG/src/ui.tsx:10-21`: provide the `ai-settings` view and new commands; `QG/test/ui.test.ts`
   (SC-36) checks provided equals declared, so manifest and `ui.tsx` change together.
 - `QG/src/view/commands.ts:40-86` `commandHandlers`: `add-review-note`, `send-review-notes`,
