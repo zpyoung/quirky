@@ -1,11 +1,11 @@
 import { afterEach, expect, test } from 'bun:test'
 import { EditorView } from '@codemirror/view'
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { Buffer } from 'node:buffer'
 import { isolateGitConfig } from '../../../quirky.repo/test/git-fixtures'
 import { boot, shutdown, DIFF_VIEW, type World } from './world'
-import { modifiedEditor, q, rowOf, text } from './dom'
+import { modifiedEditor, q, rowOf, text, toasts } from './dom'
 
 const { scratch } = isolateGitConfig()
 const SLOW = 90_000
@@ -46,6 +46,146 @@ function clickRow(path: string, detail = 1, init: MouseEventInit = {}): void {
   if (!target) throw new Error(`missing Source Control row ${path}`)
   target.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, detail, ...init }))
 }
+const MATH_BASE = 'a\nb\nc\nd\ne\n'
+const MATH_ON_DISK = 'a\nb\nchanged\nd\ne\n'
+
+async function openChangedMath(world: World): Promise<{ tab: RecordValue & { id: string }; editor: EditorView }> {
+  world.write('math.ts', MATH_ON_DISK)
+  await world.win.waitFor(() => rowOf('math.ts'))
+  clickRow('math.ts')
+  const opened = await world.win.waitFor(async () => {
+    const tabs = diffTabs(await terminalWorkspace(world))
+    return tabs.find(({ tab }) => record(tab.input).path === 'math.ts' && record(tab.input).tabId === tab.id) ?? null
+  })
+  const tabId = opened.tab.id
+  if (typeof tabId !== 'string') throw new Error('opened diff tab had no string identity')
+  await world.win.waitFor(() => q('[data-git-view-root] [contenteditable]'))
+  return {
+    tab: { ...opened.tab, id: tabId },
+    editor: modifiedEditor(EditorView, q('[data-git-view-root]')!)
+  }
+}
+
+function tabCloseButton(tabId: string): HTMLButtonElement {
+  const button = q(`[data-tab="${tabId}"] button.qt-tab-close`)
+  if (!button) throw new Error(`missing close button for terminal tab ${tabId}`)
+  return button as HTMLButtonElement
+}
+
+function closeChoice(label: string): HTMLButtonElement {
+  const dialog = q('[role="dialog"]')
+  if (!dialog) throw new Error('missing unsaved-diff close dialog')
+  const button = [...dialog.querySelectorAll<HTMLButtonElement>('button')].find((candidate) => text(candidate) === label)
+  if (!button) throw new Error(`missing ${label} choice in unsaved-diff close dialog`)
+  return button
+}
+
+async function waitForCloseDialog(world: World): Promise<void> {
+  await world.win.waitFor(() => q('[role="dialog"]'))
+  const dialog = q('[role="dialog"]')
+  expect(text(dialog)).toContain('Save')
+  expect(text(dialog)).toContain("Don't Save")
+  expect(text(dialog)).toContain('Cancel')
+}
+
+async function waitForDirtyTab(world: World, tabId: string): Promise<void> {
+  await world.win.waitFor(async () => {
+    const current = diffTabs(await terminalWorkspace(world)).find(({ tab }) => tab.id === tabId)
+    return current !== undefined && typeof current.tab.closeParams === 'object' &&
+      current.tab.closeParams !== null && record(current.tab.closeParams).dirty === true
+  })
+}
+
+
+test('Revert Block marks a hosted diff unsaved, and terminal-tab close can cancel or save it', async () => {
+  const world = await boot(scratch, { published: false })
+  const { tab, editor } = await openChangedMath(world)
+  const revert = q('[data-git-view-root] button[name="reject"]')
+  if (!revert) throw new Error('missing inline Revert Block button')
+  revert.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }))
+  await world.win.waitFor(() => editor.state.sliceDoc() === MATH_BASE)
+  await waitForDirtyTab(world, tab.id)
+  await world.win.waitFor(() =>
+    text(q('[data-git-view-root] h2')).includes('Unsaved') &&
+    text(q(`[data-tab="${tab.id}"]`)).includes('Unsaved')
+  )
+
+  expect(text(q('[data-git-view-root] h2'))).toContain('Unsaved')
+  expect(text(q(`[data-tab="${tab.id}"]`))).toContain('Unsaved')
+  expect(readFileSync(join(world.dir, 'math.ts'), 'utf8')).toBe(MATH_ON_DISK)
+  expect(editor.state.sliceDoc()).toBe(MATH_BASE)
+
+  tabCloseButton(tab.id).click()
+  await waitForCloseDialog(world)
+  closeChoice('Cancel').click()
+  await world.win.waitFor(() => q('[role="dialog"]') === null)
+  await waitForDirtyTab(world, tab.id)
+  expect(diffTabs(await terminalWorkspace(world)).some(({ tab: current }) => current.id === tab.id)).toBe(true)
+  expect(editor.state.sliceDoc()).toBe(MATH_BASE)
+  expect(readFileSync(join(world.dir, 'math.ts'), 'utf8')).toBe(MATH_ON_DISK)
+
+  tabCloseButton(tab.id).click()
+  await waitForCloseDialog(world)
+  closeChoice('Save').click()
+  await world.win.waitFor(async () =>
+    !diffTabs(await terminalWorkspace(world)).some(({ tab: current }) => current.id === tab.id)
+  )
+  expect(readFileSync(join(world.dir, 'math.ts'), 'utf8')).toBe(MATH_BASE)
+  await world.win.waitFor(() => q(`[data-tab="${tab.id}"]`) === null)
+  expect(q(`[data-tab="${tab.id}"]`)).toBeNull()
+}, SLOW)
+
+test('header close can discard a hosted diff draft without changing disk', async () => {
+  const world = await boot(scratch, { published: false })
+  const { tab, editor } = await openChangedMath(world)
+  editor.dispatch({ changes: { from: 0, insert: 'unsaved draft\n' } })
+  const draft = editor.state.sliceDoc()
+  await waitForDirtyTab(world, tab.id)
+
+  const headerClose = q('[data-git-view-root] button[aria-label="Close"]')
+  if (!headerClose) throw new Error('missing diff header close button')
+  headerClose.click()
+  await waitForCloseDialog(world)
+  closeChoice("Don't Save").click()
+  await world.win.waitFor(async () =>
+    !diffTabs(await terminalWorkspace(world)).some(({ tab: current }) => current.id === tab.id)
+  )
+  expect(readFileSync(join(world.dir, 'math.ts'), 'utf8')).toBe(MATH_ON_DISK)
+  await world.win.waitFor(() => q(`[data-tab="${tab.id}"]`) === null)
+  expect(q(`[data-tab="${tab.id}"]`)).toBeNull()
+
+  await world.run('open-diff', { path: 'math.ts', source: 'unstaged' })
+  await world.win.waitFor(() => q('[data-git-view-root] [contenteditable]'))
+  const reopened = await world.win.waitFor(async () =>
+    diffTabs(await terminalWorkspace(world)).find(({ tab: current }) => record(current.input).path === 'math.ts') ?? null
+  )
+  const reopenedEditor = modifiedEditor(EditorView, q('[data-git-view-root]')!)
+  expect(reopened.tab.id).not.toBe(tab.id)
+  expect(reopenedEditor.state.sliceDoc()).toBe(MATH_ON_DISK)
+  expect(reopenedEditor.state.sliceDoc()).not.toBe(draft)
+}, SLOW)
+
+test('a failed Save from terminal-tab close keeps the dirty draft and tab open', async () => {
+  const world = await boot(scratch, { published: false })
+  const { tab, editor } = await openChangedMath(world)
+  editor.dispatch({ changes: { from: 0, insert: 'unsaved draft\n' } })
+  const draft = editor.state.sliceDoc()
+  await waitForDirtyTab(world, tab.id)
+
+  const path = join(world.dir, 'math.ts')
+  rmSync(path)
+  mkdirSync(path)
+  tabCloseButton(tab.id).click()
+  await waitForCloseDialog(world)
+  closeChoice('Save').click()
+
+  await world.win.waitFor(() => toasts().some((message) => message.includes('Save failed')))
+  await waitForDirtyTab(world, tab.id)
+  expect(diffTabs(await terminalWorkspace(world)).some(({ tab: current }) => current.id === tab.id)).toBe(true)
+  expect(editor.state.sliceDoc()).toBe(draft)
+  expect(statSync(path).isDirectory()).toBe(true)
+}, SLOW)
+
 
 function imageSource(html: string): string {
   const match = /<img\b[^>]*\bsrc="([^"]+)"/i.exec(html)
@@ -117,6 +257,17 @@ test('branch and commit file diffs of the same path have distinct terminal tab t
   const commitTitle = await world.win.waitFor(() => q(`[data-tab="${String(tabs.commit.tab.id)}"] .qt-tab-title`))
   expect(text(branchTitle)).toBe(`${path} (Branch Diff)`)
   expect(text(commitTitle)).toBe(`${path} (Commit Diff)`)
+
+  const closeBranch = q(`[data-tab="${String(tabs.branch.tab.id)}"] button.qt-tab-close`)
+  if (!closeBranch) throw new Error('missing inactive branch diff close button')
+  closeBranch.click()
+  await world.win.waitFor(async () =>
+    !diffTabs(await terminalWorkspace(world)).some(({ tab }) => tab.id === tabs.branch.tab.id)
+  )
+  const remaining = diffTabs(await terminalWorkspace(world))
+  expect(remaining).toHaveLength(1)
+  expect(remaining[0]?.tab.id).toBe(tabs.commit.tab.id)
+  expect(remaining[0]?.group.activeTab).toBe(tabs.commit.tab.id)
 }, SLOW)
 
 test('Source Control preview replaces only a clean hosted tab, promotes on double click or pin, and splits with Option-click', async () => {

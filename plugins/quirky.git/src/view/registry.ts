@@ -13,6 +13,7 @@ export type ViewHandle = {
   overwrite(): Promise<void>
   collapseAll(collapsed?: boolean): void
   loadDiff(path: string): Promise<void>
+  requestClose(): Promise<void>
 }
 
 const hostedHandles = new Map<string, ViewHandle>()
@@ -38,6 +39,12 @@ export function registerView(handle: ViewHandle): () => void {
 export function setActiveHostedView(tabId: string | null): void {
   activeHostedTab = tabId
   current = tabId === null ? null : hostedHandles.get(tabId) ?? null
+}
+
+/** Requests a close from this hosted tab's mounted view, or returns null when it is inactive. */
+export function requestHostedDiffClose(tabId: string): Promise<void> | null {
+  const handle = hostedHandles.get(tabId)
+  return handle?.requestClose() ?? null
 }
 
 /** The mounted diff view, or null when none is open. */

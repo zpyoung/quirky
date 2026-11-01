@@ -63,15 +63,15 @@ export function diff(env: DaemonEnv): Handler {
   }
 }
 
-const saveTails = new Map<string, Promise<unknown>>()
+const fileTails = new Map<string, Promise<unknown>>()
 
-/** Runs `task` after every earlier task for `key` has settled, so same-file saves never interleave. */
-function serialised<T>(key: string, task: () => Promise<T>): Promise<T> {
-  const run = (saveTails.get(key) ?? Promise.resolve()).then(task, task)
+/** Runs a mutation after earlier work on the same absolute file path has settled. */
+export function serialised<T>(key: string, task: () => Promise<T>): Promise<T> {
+  const run = (fileTails.get(key) ?? Promise.resolve()).then(task, task)
   const tail = run.catch(() => {})
-  saveTails.set(key, tail)
+  fileTails.set(key, tail)
   void tail.then(() => {
-    if (saveTails.get(key) === tail) saveTails.delete(key)
+    if (fileTails.get(key) === tail) fileTails.delete(key)
   })
   return run
 }

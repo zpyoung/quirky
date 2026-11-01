@@ -1,4 +1,4 @@
-import type { GitConflictKind, GitDiffSource } from '@quirky/protocol'
+import type { GitCommit, GitConflictKind, GitDiffSource } from '@quirky/protocol'
 
 export const DIFF_VIEW_ID = 'view:quirky.git/diff'
 export const PANEL_ID = 'panel:quirky.git/source-control'
@@ -20,6 +20,7 @@ export type DiffViewInput = {
   oldPath?: string
   area?: 'staged' | 'unstaged' | 'untracked' | 'branch' | 'all'
   commit?: string
+  commitMessage?: Pick<GitCommit, 'subject' | 'body'>
   title?: string
   /** Replaceable preview by default; permanent opens cannot replace an existing permanent tab. */
   preview?: boolean

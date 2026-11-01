@@ -1,7 +1,9 @@
-import { gitApi } from '@quirky/git'
+import { ChangedOnDiskError, gitApi } from '@quirky/git'
+import { unlink } from 'node:fs/promises'
 import type { GitOperation } from '@quirky/protocol'
 import type { DaemonEnv, Handler } from './env'
 import { containedPath } from './paths'
+import { serialised } from './files'
 
 /**
  * A conflicted file's working text and hash. Opening it is what lets it show as resolved locally
@@ -22,6 +24,35 @@ export function conflictFile(env: DaemonEnv): Handler {
       })
     }
     return { path: rel, kind: entry.conflict.kind, state: entry.conflict.state, content, hash, operation: status.operation }
+  }
+}
+
+/** Removes and stages an unresolved modify/delete conflict after checking its current file hash. */
+export function acceptConflictDeletion(env: DaemonEnv): Handler {
+  return async (params, caller) => {
+    const worktree = await env.resolve(params, caller)
+    const { absolute: key } = await containedPath(worktree.path, params.path)
+    return serialised(key, async () => {
+      const { rel, absolute, leaf } = await containedPath(worktree.path, params.path)
+      const status = await env.readStatus(worktree)
+      const entry = status.entries.find((candidate) => candidate.area === 'conflicts' && candidate.path === rel)
+      if (!entry?.conflict) throw env.context.error('not-found', `${rel} is not in conflict.`)
+
+      const kind = entry.conflict.kind
+      if (entry.conflict.state !== 'unresolved' || (kind !== 'deleted_by_us' && kind !== 'deleted_by_them')) {
+        throw env.errors.reasoned('invalid-params', 'not-allowed', `${rel} is not an unresolved modify/delete conflict.`)
+      }
+      if (entry.submodule || leaf?.isDirectory()) {
+        throw env.errors.reasoned('invalid-params', 'not-allowed', `${rel} is a submodule or directory.`)
+      }
+
+      const { hash } = await gitApi().readConflictFile(worktree.path, rel)
+      if (params.expected !== hash) throw new ChangedOnDiskError()
+      if (leaf !== null) await unlink(absolute)
+      await gitApi().stagePaths(worktree.path, [rel])
+      env.changed(worktree)
+      return { ok: true }
+    })
   }
 }
 

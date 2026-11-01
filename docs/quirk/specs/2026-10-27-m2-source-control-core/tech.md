@@ -254,6 +254,13 @@ detached HEAD (`detached`, "Check out a branch first.").
 - `conflictFile {path}` → `{path, kind, state, content: string | null, hash: string | null,
   operation}`; content is the working file (null when missing; binary → refused
   `not-allowed`). Records the path in `opened.ts` for the current operation.
+  The panel tracks `not-allowed` reads separately from readable marker-free files and allows
+  row and bulk Stage for those unreadable modify/delete conflicts.
+- `acceptConflictDeletion {path, expected: string | null}` → `{ok: true}`: only a live unresolved
+  modify/delete conflict is eligible. Within the same absolute-path queue as `save`, recheck
+  containment, refuse submodules/directories, compare the working-file hash with `expected`,
+  unlink the file if present, then stage the path. A mismatched hash returns `changed-on-disk`;
+  only a successful mutation emits `changed`.
 - `continue {}`: no operation → `nothing-to-continue` "Nothing to continue."; any unresolved
   entry → `unresolved` "Resolve every conflict before continuing.". Then
   `COMMAND:` `GIT_EDITOR=true git -c core.editor=true <merge|rebase|cherry-pick> --continue`
@@ -404,6 +411,10 @@ detached HEAD (`detached`, "Check out a branch first.").
   `qg-conflict-current|base|incoming|marker` and the trailing labels "Current change", "Common
   ancestor", "Incoming change", "End conflict"; banner, counter and wrap-around navigation;
   Mod+S saves with `expected` = the read hash.
+  Unresolved modify/delete conflicts offer Keep file (guarded save, then stage) and Accept
+  deletion (`acceptConflictDeletion` with the latest read/saved hash). Missing working files
+  disable Keep; pending actions disable both choices and editing. Successful resolution reloads
+  the file and removes the choices. Panel row and bulk staging exclude these conflict kinds.
 - Close: reopens `view:quirky.session/worktree` with `{worktree}`.
 - `report(state)`: `{mode, source, path, area, commit, changes: number, currentChange: number |
   null, dirty: boolean, stale: boolean, tooLarge: boolean, sections?: number, loadedSections?:

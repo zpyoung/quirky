@@ -2003,6 +2003,47 @@ for (const { label, extraFiles, results, files } of [
   }, 30_000)
 }
 
+for (const { field, pattern } of [
+  { field: 'include', pattern: '*.txt' },
+  { field: 'exclude', pattern: '*.md' }
+]) {
+  test(`Explorer Enter in Files to ${field} searches the current query and filters`, async () => {
+    const fixture = await makeFixture({ extraFiles: { 'search-notes.md': 'alpha\nbeta\n' } })
+    const panel = await renderExplorer(fixture)
+    await act(async () => footerButton(panel.element, 'Search in Files').click())
+    const query = panel.element.querySelector<HTMLInputElement>('input[placeholder="Search"]')!
+    const filter = panel.element.querySelector<HTMLInputElement>(`input[placeholder^="files to ${field}"]`)!
+    const resultPaths = () => Array.from(panel.element.querySelectorAll('.qe-search-file h4'))
+      .map((heading) => heading.textContent).sort()
+    const setInput = async (input: HTMLInputElement, value: string) => {
+      await act(async () => {
+        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, value)
+        input.dispatchEvent(new Event('input', { bubbles: true }))
+      })
+    }
+    const pressEnter = async (input: HTMLInputElement) => {
+      await act(async () => input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })))
+    }
+
+    await setInput(query, 'alpha')
+    await pressEnter(query)
+    await waitForUi(() => resultPaths().includes('search-notes.md'), 15_000)
+    expect(resultPaths()).toEqual([FILE_A, 'search-notes.md'].sort())
+
+    await setInput(query, 'beta')
+    await setInput(filter, pattern)
+    await pressEnter(filter)
+    await waitForUi(() => resultPaths().includes(FILE_B), 15_000)
+    expect(resultPaths()).toEqual([FILE_B])
+    expect(panel.element.querySelector('.qe-search-file code')?.textContent).toContain('beta')
+
+    await setInput(filter, field === 'include' ? '*.md' : '*.txt')
+    await pressEnter(filter)
+    await waitForUi(() => resultPaths().includes('search-notes.md'), 15_000)
+    expect(resultPaths()).toEqual(['search-notes.md'])
+  }, 60_000)
+}
+
 test('Explorer follows external creates and deletes in root and expanded directories without an editor buffer', async () => {
   const fixture = await makeFixture()
   const panel = await renderExplorer(fixture)

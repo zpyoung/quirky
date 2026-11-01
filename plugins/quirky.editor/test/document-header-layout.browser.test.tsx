@@ -30,7 +30,8 @@ const STYLESHEETS = [
   'packages/ui/src/design-system/tokens.css',
   'packages/ui/src/design-system/components.css',
   'packages/ui/src/design-system/editor-window.css',
-  'packages/ui/src/design-system/editor-markdown.css'
+  'packages/ui/src/design-system/editor-markdown.css',
+  'packages/ui/src/design-system/editor-viewers.css'
 ]
 
 const executable = chromium.executablePath()
@@ -48,17 +49,25 @@ function browserEntry(): string {
     const bufferId = 'buffer-document-header-layout'
     const tabId = 'tab-document-header-layout'
     const worktreeId = 'wt-document-header-layout'
+    const csv = location.hash === '#csv'
     const mode = location.hash === '#preview' ? 'preview' : 'rich'
-    const content = '# Notes\\n\\nCurrent notes for the layout fixture.\\n'
+    const content = csv ? 'name,value\\nalpha,1\\nbravo,2\\ncharlie,3\\n' : '# Notes\\n\\nCurrent notes for the layout fixture.\\n'
     const baseline = '# Notes\\n\\nOriginal notes for the layout fixture.\\n'
+    const csvRows = [
+      { index: 0, cells: ['name', 'value'] },
+      { index: 1, cells: ['alpha', '1'] },
+      { index: 2, cells: ['bravo', '2'] },
+      { index: 3, cells: ['charlie', '3'] }
+    ]
+    let csvFilter = ''
     const buffer = {
       id: bufferId,
       worktreeId,
       root: '/workspace',
-      path: '/workspace/notes.md',
-      relativePath: 'notes.md',
-      name: 'notes.md',
-      kind: 'markdown',
+      path: csv ? '/workspace/data.csv' : '/workspace/notes.md',
+      relativePath: csv ? 'data.csv' : 'notes.md',
+      name: csv ? 'data.csv' : 'notes.md',
+      kind: csv ? 'csv' : 'markdown',
       content,
       draft: null,
       baseline,
@@ -110,6 +119,19 @@ function browserEntry(): string {
     const context = {
       pluginId: 'quirky.editor',
       call(method: string, params: Record<string, unknown> = {}) {
+        if (method === 'quirky.editor/viewer' && csv) {
+          if (params.action === 'metadata') return Promise.resolve({ rows: csvRows.length, columns: 2, delimiter: ',' })
+          if (params.action === 'filter') {
+            csvFilter = typeof params.query === 'string' ? params.query.toLowerCase() : ''
+            return Promise.resolve({})
+          }
+          if (params.action === 'page') {
+            const rows = [csvRows[0], ...csvRows.slice(1).filter((row) =>
+              row.cells.some((cell) => cell.toLowerCase().includes(csvFilter))
+            )]
+            return Promise.resolve({ rows, nextPage: null, delimiter: ',' })
+          }
+        }
         if (method === 'quirky.editor/state') return Promise.resolve(state)
         if (method === 'quirky.git/diff') {
           return Promise.resolve({ kind: 'text', original: baseline, modified: content })
@@ -235,6 +257,18 @@ async function measurePreviewToolbar(page: Page) {
       exportButton,
       label: rect(label)
     }
+  })
+}
+async function measureCsvRows(page: Page) {
+  return page.evaluate(() => {
+    const pane = document.querySelector<HTMLElement>('#document-pane')
+    const rows = [...document.querySelectorAll<HTMLElement>('.viewer-table tbody tr')]
+    if (!pane || rows.length === 0) throw new Error('The CSV table rows did not render.')
+    const rect = (element: Element) => {
+      const bounds = element.getBoundingClientRect()
+      return { top: bounds.top, bottom: bounds.bottom, width: bounds.width }
+    }
+    return { pane: rect(pane), rows: rows.map(rect) }
   })
 }
 
@@ -419,6 +453,79 @@ test.skipIf(!existsSync(executable))('spans the Markdown preview toolbar across 
         expect(exportToLabelGap).toBeGreaterThanOrEqual(interButtonGap)
       }
     }
+  } finally {
+    await context.close()
+  }
+}, 60_000)
+test.skipIf(!existsSync(executable))('keeps CSV rows visible with paste and range controls collapsed', async () => {
+  const context = await browser!.newContext({ viewport: { width: 1280, height: 720 } })
+  const page = await context.newPage()
+  try {
+    await page.setContent(pageMarkup())
+    for (const stylesheet of STYLESHEETS) {
+      await page.addStyleTag({ content: readFileSync(join(ROOT, stylesheet), 'utf8') })
+    }
+    await page.evaluate(() => {
+      location.hash = '#csv'
+      const pane = document.querySelector<HTMLElement>('#document-pane')
+      if (!pane) throw new Error('The document pane did not render.')
+      pane.style.width = '626px'
+      pane.style.height = '600px'
+      const base = document.createElement('base')
+      base.href = 'http://localhost/'
+      document.head.append(base)
+    })
+    await page.addScriptTag({ type: 'module', content: browserBundle })
+    await page.locator('.viewer-table tbody tr').nth(2).waitFor({ timeout: 10_000 })
+
+    const filter = page.getByLabel('Filter rows')
+    expect(await filter.isVisible()).toBe(true)
+    const toolbar = page.locator('.viewer-csv > .viewer-toolbar')
+    for (const name of ['Save', 'Add row', 'Add column']) {
+      expect(await toolbar.getByRole('button', { name, exact: true }).isVisible()).toBe(true)
+    }
+    expect(await toolbar.getByLabel('Delimiter').isVisible()).toBe(true)
+    const initial = await measureCsvRows(page)
+    expect(initial.pane.width).toBe(626)
+    expect(initial.rows).toHaveLength(3)
+    expect(initial.rows.every((row) => row.top >= initial.pane.top && row.bottom <= initial.pane.bottom - 48)).toBe(true)
+
+    await filter.fill('bravo')
+    await page.waitForFunction(() => document.querySelectorAll('.viewer-table tbody tr').length === 1)
+    expect(await page.getByLabel('Row 3, column 1').inputValue()).toBe('bravo')
+    await filter.fill('')
+    await page.waitForFunction(() => document.querySelectorAll('.viewer-table tbody tr').length === 3)
+
+    const disclosure = page.locator('.viewer-csv-advanced')
+    expect(await disclosure.count()).toBe(1)
+    const summary = disclosure.locator('summary')
+    expect(await disclosure.evaluate((element) => (element as HTMLDetailsElement).open)).toBe(false)
+    expect(await page.getByLabel('Paste CSV cells').isVisible()).toBe(false)
+
+    await summary.focus()
+    await page.keyboard.press('Enter')
+    await page.waitForFunction(() => (document.querySelector('.viewer-csv-advanced') as HTMLDetailsElement | null)?.open === true)
+    expect(await page.getByLabel('Paste CSV cells').isVisible()).toBe(true)
+    expect(await page.getByLabel('Paste row').isVisible()).toBe(true)
+    expect(await page.getByLabel('Paste column').isVisible()).toBe(true)
+    expect(await page.locator('.viewer-copy-range').isVisible()).toBe(true)
+    expect(await page.getByRole('button', { name: 'Paste', exact: true }).isVisible()).toBe(true)
+    for (const name of [
+      'Copy range start row (source index)',
+      'Copy range start column (source index)',
+      'Copy range end row (source index)',
+      'Copy range end column (source index)'
+    ]) {
+      expect(await page.getByLabel(name).isVisible()).toBe(true)
+    }
+    expect(await page.getByRole('button', { name: 'Copy range', exact: true }).isVisible()).toBe(true)
+
+    await summary.press('Enter')
+    await page.waitForFunction(() => (document.querySelector('.viewer-csv-advanced') as HTMLDetailsElement | null)?.open === false)
+    expect(await page.getByLabel('Paste CSV cells').isVisible()).toBe(false)
+    const collapsed = await measureCsvRows(page)
+    expect(collapsed.rows).toHaveLength(3)
+    expect(collapsed.rows.every((row) => row.top >= collapsed.pane.top && row.bottom <= collapsed.pane.bottom - 48)).toBe(true)
   } finally {
     await context.close()
   }

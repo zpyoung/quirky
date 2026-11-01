@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useRef } from 'react'
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { createRoot } from 'react-dom/client'
-import { EmptyState } from '@quirky/ui'
+import { Button, Dialog, EmptyState } from '@quirky/ui'
 import type { MountFunction, UiPluginContext } from '@quirky/protocol'
 
 import { DIFF_VIEW_ID, SESSIONS_VIEW_ID, type DiffViewInput, type ReviewSnapshot } from '../shared/view-input'
@@ -14,6 +14,7 @@ import { useDiffSettings } from './settings'
 import type { Controller, ViewReport } from './types'
 
 const MODES: ReadonlyArray<DiffViewInput['mode']> = ['file', 'combined', 'conflicts', 'conflict-file']
+type CloseChoice = 'save' | 'discard' | 'cancel'
 
 /** The mount input as a `DiffViewInput`, or null when it names no worktree. A missing mode means a file diff. */
 export function parseInput(input: unknown): DiffViewInput | null {
@@ -35,20 +36,83 @@ function isReview(value: unknown): value is ReviewSnapshot {
 function DiffWindow({ context, input, report }: { context: UiPluginContext; input: DiffViewInput; report(state: ViewReport): void }) {
   const { settings, setSetting } = useDiffSettings(context)
   const controller = useRef<Controller>({})
+  const [closeDialogOpen, setCloseDialogOpen] = useState(false)
+  const [closeBusy, setCloseBusy] = useState(false)
+  const closeChoiceResolver = useRef<((choice: CloseChoice) => void) | null>(null)
+  const closeChoicePromise = useRef<Promise<CloseChoice> | null>(null)
+  const closeTask = useRef<Promise<void> | null>(null)
   const bind = useCallback((next: Controller) => {
     controller.current = next
   }, [])
-  const close = useCallback(() => {
+  const closeAfterDecision = useCallback(async (restoreDirty: boolean) => {
     if (input.tabId !== undefined) {
-      void closeHostedDiff(context, input).catch((error: unknown) =>
-        context.toast('Could not close diff', error instanceof Error ? error.message : String(error))
-      )
+      await closeHostedDiff(context, input, restoreDirty)
     } else if (input.mode === 'conflict-file' && input.review) {
       context.openView(DIFF_VIEW_ID, { worktree: input.worktree, mode: 'conflicts', review: input.review })
     } else {
       context.openView(SESSIONS_VIEW_ID, { worktree: input.worktree })
     }
   }, [context, input])
+  const askCloseChoice = useCallback(() => {
+    if (closeChoicePromise.current !== null) return closeChoicePromise.current
+    const pending = Promise.withResolvers<CloseChoice>()
+    closeChoiceResolver.current = pending.resolve
+    closeChoicePromise.current = pending.promise
+    setCloseDialogOpen(true)
+    return pending.promise
+  }, [])
+  const chooseClose = useCallback((choice: CloseChoice) => {
+    if (closeBusy) return
+    const resolve = closeChoiceResolver.current
+    if (!resolve) return
+    closeChoiceResolver.current = null
+    closeChoicePromise.current = null
+    resolve(choice)
+  }, [closeBusy])
+  const requestClose = useCallback(() => {
+    if (closeTask.current !== null) return closeTask.current
+    const task = (async () => {
+      try {
+        let restoreDirty = false
+        if (controller.current.isDirty?.() ?? true) {
+          const choice = await askCloseChoice()
+          if (choice === 'cancel') return
+          if (choice === 'save') {
+            setCloseBusy(true)
+            try {
+              await controller.current.save?.()
+            } finally {
+              setCloseBusy(false)
+            }
+            if (controller.current.isDirty?.() ?? true) return
+          } else {
+            restoreDirty = true
+            setCloseBusy(true)
+          }
+        }
+        await closeAfterDecision(restoreDirty)
+      } finally {
+        setCloseBusy(false)
+        setCloseDialogOpen(false)
+      }
+    })()
+    closeTask.current = task
+    const clear = () => {
+      if (closeTask.current === task) closeTask.current = null
+    }
+    void task.then(clear, clear)
+    return task
+  }, [askCloseChoice, closeAfterDecision])
+  const toastFailure = useCallback((title: string, error: unknown) => {
+    try {
+      context.toast(title, error instanceof Error ? error.message : String(error))
+    } catch {
+      // these failures can land after the plugin is revoked, when toast itself throws
+    }
+  }, [context])
+  const close = useCallback(() => {
+    void requestClose().catch((error: unknown) => toastFailure('Could not close diff', error))
+  }, [requestClose, toastFailure])
 
   const lastDirty = useRef<boolean | null>(null)
   const send = useCallback((state: ViewReport) => {
@@ -65,10 +129,10 @@ function DiffWindow({ context, input, report }: { context: UiPluginContext; inpu
     if (input.tabId !== undefined && lastDirty.current !== dirty) {
       lastDirty.current = dirty
       void updateHostedDiffDirty(context, input, dirty).catch((error: unknown) =>
-        context.toast('Could not update diff tab close protection', error instanceof Error ? error.message : String(error))
+        toastFailure('Could not update diff tab close protection', error)
       )
     }
-  }, [context, input, report])
+  }, [context, input, report, toastFailure])
 
   useEffect(() => {
     const call = <K extends keyof Controller>(name: K) =>
@@ -86,25 +150,51 @@ function DiffWindow({ context, input, report }: { context: UiPluginContext; inpu
       save: async('save'),
       reloadFromDisk: async('reloadFromDisk'),
       overwrite: async('overwrite'),
+      requestClose,
       collapseAll: (collapsed) => controller.current.collapseAll?.(collapsed),
       loadDiff: async (path) => {
         await controller.current.loadDiff?.(path)
       }
     }
     return registerView(handle)
-  }, [input])
+  }, [input, requestClose])
 
   const props = { context, input, settings, setSetting, report: send, bind, close }
+  let content: ReactNode
   switch (input.mode) {
     case 'combined':
-      return <CombinedDiff {...props} />
+      content = <CombinedDiff {...props} />
+      break
     case 'conflicts':
-      return <ConflictReview {...props} />
+      content = <ConflictReview {...props} />
+      break
     case 'conflict-file':
-      return <ConflictFile {...props} />
+      content = <ConflictFile {...props} />
+      break
     case 'file':
-      return <FileDiff {...props} />
+      content = <FileDiff {...props} />
+      break
   }
+  const closePath = input.mode === 'file' ? input.path : undefined
+  return (
+    <>
+      {content}
+      {closeDialogOpen && (
+        <Dialog
+          open
+          title="Unsaved changes"
+          onClose={() => { if (!closeBusy) chooseClose('cancel') }}
+        >
+          <p>Save changes to {closePath ?? 'this diff'} before closing?</p>
+          <div className="ui-dialog__actions">
+            <Button variant="secondary" disabled={closeBusy} onClick={() => chooseClose('cancel')}>Cancel</Button>
+            <Button variant="secondary" disabled={closeBusy} onClick={() => chooseClose('discard')}>Don't Save</Button>
+            <Button variant="primary" disabled={closeBusy} onClick={() => chooseClose('save')}>Save</Button>
+          </div>
+        </Dialog>
+      )}
+    </>
+  )
 }
 
 /** The `view:quirky.git/diff` mount function; the host remounts it with the new input whenever the input changes. */

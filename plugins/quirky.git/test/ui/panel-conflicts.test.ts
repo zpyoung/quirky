@@ -89,13 +89,14 @@ describe('SC-41: conflicts lead to Continue', () => {
 
   test('a conflict whose file is gone counts as marker-free; one whose read fails stays blocked', async () => {
     const { element, unmount } = await open((f) => {
-      f.status = statusOf([conflict('gone.ts', 'deleted_by_them'), conflict('broken.ts')], { operation: 'merge' })
+      f.status = statusOf([conflict('gone.ts'), conflict('deleted-gone.ts', 'deleted_by_them'), conflict('broken.ts')], { operation: 'merge' })
       f.on('quirky.git/conflictFile', (params) => {
         if (params.path === 'broken.ts') throw new Error('boom')
         return { path: params.path, content: null }
       })
     })
     expect(byLabel(element, 'Stage gone.ts')).not.toBeNull()
+    expect(byLabel(element, 'Stage deleted-gone.ts')).toBeNull()
     expect(byLabel(element, 'Stage broken.ts')).toBeNull()
     unmount()
   })

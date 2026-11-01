@@ -448,6 +448,28 @@ export function Tree({
     ...model.projects,
     ...allGroupNodes.flatMap((node) => node.projects)
   ], [allGroupNodes, model])
+  const flatRows = useMemo(() => {
+    if (options.groupBy !== 'none') return []
+    const rowsById = new Map<string, TreeRow>()
+    for (const node of allGroupNodes) {
+      for (const row of node.rows) rowsById.set(row.worktree.id, row)
+      for (const row of node.looseRows) rowsById.set(row.worktree.id, row)
+    }
+    for (const project of allProjects) {
+      for (const row of project.rows) rowsById.set(row.worktree.id, row)
+    }
+    const flat: TreeRow[] = []
+    for (const worktree of allWorktrees) {
+      if (worktree.pinned) continue
+      const row = rowsById.get(worktree.id)
+      if (row) flat.push({ ...row, depth: 0, childCount: 0, ancestors: [] })
+    }
+    return flat
+  }, [allGroupNodes, allProjects, allWorktrees, options.groupBy])
+  const flatPending = useMemo(
+    () => options.groupBy === 'none' ? allProjects.flatMap((project) => project.pending) : [],
+    [allProjects, options.groupBy]
+  )
   const repoById = useMemo(() => new Map(allProjects.map((project) => [project.repo.id, project.repo])), [allProjects])
   const descendantsOf = new Map<string, number>()
   for (const node of allGroupNodes) {
@@ -461,9 +483,11 @@ export function Tree({
 
   const topSections = useMemo(() => [
     ...(model.pinned.length > 0 ? [{ key: 'pinned' }] : []),
-    ...model.groups.map((node) => ({ key: `group:${node.group.id}` })),
-    ...model.projects.map((node) => ({ key: `repo:${node.repo.id}` }))
-  ], [model])
+    ...(options.groupBy === 'none' ? [] : [
+      ...model.groups.map((node) => ({ key: `group:${node.group.id}` })),
+      ...model.projects.map((node) => ({ key: `repo:${node.repo.id}` }))
+    ])
+  ], [model, options.groupBy])
   const eligibleBoundaries = useMemo(
     () => projectSeparatorBoundaries(topSections.map((section) => section.key), stickySections, separatorEnabled),
     [separatorEnabled, stickySections, topSections]
@@ -1025,8 +1049,17 @@ export function Tree({
           </ul>
         </section>
       )}
-      {model.groups.map((node) => groupSection(node, true))}
-      {model.projects.map((node) => project(node, true))}
+      {options.groupBy === 'none' ? (
+        <ul className="worktree-list ui-tree">
+          {rows(flatRows)}
+          {flatPending.map((create) => <PendingCard key={`${create.repoId}:${create.name}`} name={create.name} />)}
+        </ul>
+      ) : (
+        <>
+          {model.groups.map((node) => groupSection(node, true))}
+          {model.projects.map((node) => project(node, true))}
+        </>
+      )}
       {menu && <ContextMenu {...menu} onClose={() => setMenu(null)} />}
     </div>
   )

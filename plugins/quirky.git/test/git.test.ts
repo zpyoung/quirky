@@ -1,7 +1,10 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
+import { createHash } from 'node:crypto'
+import { readFileSync, writeFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { QuirkyClient, RpcError, RpcErrorCode } from '@quirky/protocol'
 import { rpcUrl } from '@quirky/protocol/node'
-import { GitError } from '@quirky/git'
+import { ChangedOnDiskError, GitError } from '@quirky/git'
 import { waitFor } from '../../../packages/daemon/test/helpers'
 import { startGitHarness, type GitHarness } from './support'
 
@@ -110,4 +113,71 @@ describe('quirky.git methods', () => {
       inSession.close()
     }
   })
+  test('accepting conflict deletion serializes with a pending same-file save', async () => {
+    const original = 'ours\n'
+    const updated = 'saved\n'
+    const expected = createHash('sha256').update(original).digest('hex')
+    const path = join(g.main.path, 'a.txt')
+    writeFileSync(path, original)
+
+    const originalStatus = g.git.statusV2.bind(g.git)
+    g.git.statusV2 = async (cwd, options) => ({
+      ...(await originalStatus(cwd, options)),
+      entries: [
+        {
+          path: 'a.txt',
+          area: 'conflicts',
+          status: 'modified',
+          conflict: { kind: 'deleted_by_them', state: 'unresolved' }
+        }
+      ]
+    })
+
+    const readConflictFile = g.git.readConflictFile.bind(g.git)
+    const realSave = g.git.saveWorkingFile.bind(g.git)
+    const { promise: saveStarted, resolve: markSaveStarted } = Promise.withResolvers<void>()
+    const { promise: saveGate, resolve: releaseSave } = Promise.withResolvers<void>()
+    let deletionSettled = false
+    g.git.saveWorkingFile = async (cwd, rel, content, expectedHash) => {
+      const current = await readConflictFile(cwd, rel)
+      if (expectedHash !== undefined && current.hash !== expectedHash) throw new ChangedOnDiskError()
+      markSaveStarted()
+      await saveGate
+      return realSave(cwd, rel, content)
+    }
+
+    const saving = g.call('quirky.git/save', {
+      worktree: g.main.id,
+      path: 'a.txt',
+      content: updated,
+      expected
+    })
+    await saveStarted
+
+    const deleting = g.call('quirky.git/acceptConflictDeletion', {
+      worktree: g.main.id,
+      path: 'a.txt',
+      expected
+    }).then(
+      () => ({ status: 'fulfilled' as const }),
+      (error: unknown) => ({ status: 'rejected' as const, error })
+    ).then((result) => {
+      deletionSettled = true
+      return result
+    })
+    await g.call('quirky.git/status', { worktree: g.main.id })
+    const deletionBeforeSaveRelease = deletionSettled
+
+    releaseSave()
+    await saving
+    const deletion = await deleting
+    expect(deletionBeforeSaveRelease).toBe(false)
+    expect(deletion).toMatchObject({
+      status: 'rejected',
+      error: { code: RpcErrorCode.Conflict, data: { reason: 'changed-on-disk' } }
+    })
+    expect(readFileSync(path, 'utf8')).toBe(updated)
+    expect(g.git.calls.filter((call) => call.fn === 'stagePaths')).toEqual([])
+  })
+
 })

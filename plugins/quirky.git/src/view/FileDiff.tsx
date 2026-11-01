@@ -119,6 +119,7 @@ export function FileDiff({ context, input, settings, setSetting, report, bind, c
     previousChange: () => void paneRef.current?.previousChange(),
     revertChange: () => void paneRef.current?.revertChange(),
     save: () => paneRef.current?.save() ?? Promise.resolve(),
+    isDirty: () => paneRef.current?.isDirty() ?? false,
     reloadFromDisk: () => paneRef.current?.reload() ?? Promise.resolve(),
     overwrite: () => paneRef.current?.overwrite() ?? Promise.resolve()
   })
@@ -195,7 +196,8 @@ export function FileDiff({ context, input, settings, setSetting, report, bind, c
 
 
   const oldPath = loaded ? loaded.diff.oldPath : input.oldPath
-  const title = `${oldPath ? `${oldPath} → ${path}` : path} (diff)`
+  const baseTitle = `${oldPath ? `${oldPath} → ${path}` : path} (diff)`
+  const title = pane.dirty ? `${baseTitle} • Unsaved` : baseTitle
   const sideLabel = settings.sideBySide ? 'Switch to inline diff' : 'Switch to side-by-side diff'
   const sourceLabel = SOURCE_LABELS[effectiveSource]
   const switchDisplay = () => {

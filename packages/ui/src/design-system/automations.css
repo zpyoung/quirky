@@ -671,8 +671,12 @@
   display: contents;
 }
 
+.auto-editor-scope > .ui-dialog-backdrop {
+  padding-block: calc(var(--ui-window-bar-height) + var(--ui-space-16)) calc(var(--ui-row-single) + var(--ui-space-16));
+}
+
 .ui-dialog:has(.auto-editor) {
-  max-height: calc(100vh - var(--ui-space-24));
+  max-height: 100%;
   max-width: var(--compat-px-720);
   overflow: hidden;
   width: min(100%, var(--compat-px-720));

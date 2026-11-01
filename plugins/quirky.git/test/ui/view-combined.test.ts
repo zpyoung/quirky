@@ -304,30 +304,57 @@ describe('quirky.git combined diff', () => {
     expect(selectedPaths()).toEqual(['src/format.ts'])
   })
 
-  test('a commit subject keeps its case and its header preserves padding and the full title', async () => {
-    const style = document.createElement('style')
-    style.textContent = [
-      readFileSync(new URL('../../../../packages/ui/src/design-system/tokens.css', import.meta.url), 'utf8'),
-      readFileSync(new URL('../../../../packages/ui/src/design-system/components.css', import.meta.url), 'utf8')
-    ].join('\n')
-    document.head.appendChild(style)
-    try {
-      const subject = 'Refactor HTTP response handling'
-      fake.handlers['quirky.git/commitFiles'] = () => ({
-        commit: 'c'.repeat(40),
-        parent: null,
-        entries: [{ path: 'a.ts', status: 'added', added: 1, removed: 0, binary: false }]
-      })
-      const { element } = await open({ worktree: 'w1', mode: 'combined', commit: 'ccccccc', title: subject })
-      const heading = element.querySelector<HTMLElement>('h2')!
-      const header = heading.parentElement!
-      expect(getComputedStyle(heading.firstElementChild ?? heading).textTransform).toBe('none')
-      expect(heading.textContent).toBe(subject)
-      expect(heading.title).toBe(subject)
-      expect(Number.parseFloat(getComputedStyle(header).paddingTop)).toBeGreaterThan(0)
-    } finally {
-      style.remove()
-    }
+  test('a whole-commit message is accessible in full before its file diffs', async () => {
+    const subject = `Refactor HTTP response handling: ${'unbroken-subject-'.repeat(12)}`
+    const body = `Preserves each authored line.\nA long token: ${'boundaryless'.repeat(12)}\nFinal line.`
+    fake.handlers['quirky.git/commitFiles'] = () => ({
+      commit: 'c'.repeat(40),
+      parent: null,
+      entries: [{ path: 'a.ts', status: 'added', added: 1, removed: 0, binary: false }]
+    })
+    const { element } = await open({
+      worktree: 'w1',
+      mode: 'combined',
+      commit: 'ccccccc',
+      commitMessage: { subject, body }
+    })
+    const message = element.querySelector<HTMLElement>('[role="region"][aria-label="Commit message"]')
+    expect(message).not.toBeNull()
+    if (!message) return
+    const heading = message.querySelector<HTMLElement>('h1, h2, h3, h4, h5, h6')!
+    const paragraph = message.querySelector<HTMLElement>('p')!
+    const firstFile = element.querySelector('section[data-path="a.ts"]')!
+    expect(element.querySelector('h2')?.textContent).toBe('Commit ccccccc')
+    expect(heading.style.textTransform).toBe('none')
+    expect(heading.textContent).toBe(subject)
+    expect(heading.style.overflowWrap).toBe('anywhere')
+    expect(paragraph.textContent).toBe(body)
+    expect(paragraph.style.whiteSpace).toBe('pre-wrap')
+    expect(paragraph.style.overflowWrap).toBe('anywhere')
+    expect(message.style.flexShrink).toBe('0')
+    expect(message.compareDocumentPosition(firstFile) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0)
+
+    await click(byText(element, 'Collapse All'))
+    expect(byText(element, 'Expand All')).not.toBeNull()
+  })
+
+  test('a subject-only commit message omits its empty body', async () => {
+    fake.handlers['quirky.git/commitFiles'] = () => ({
+      commit: 'c'.repeat(40),
+      parent: null,
+      entries: []
+    })
+    const { element } = await open({
+      worktree: 'w1',
+      mode: 'combined',
+      commit: 'ccccccc',
+      commitMessage: { subject: 'Subject only', body: '' }
+    })
+    const message = element.querySelector<HTMLElement>('[role="region"][aria-label="Commit message"]')
+    expect(message).not.toBeNull()
+    if (!message) return
+    expect(message.querySelector('h1, h2, h3, h4, h5, h6')?.textContent).toBe('Subject only')
+    expect(message.querySelector('p')).toBeNull()
   })
 
   test('no changes: says so', async () => {

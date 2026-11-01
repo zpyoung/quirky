@@ -21,7 +21,6 @@ import { useCompare, useSettings, useStatus, useWorktreePath } from './data'
 import { ConfirmDialog } from './Dialog'
 import { applyFilter, matchesFilter } from './filter'
 import {
-  commitTitle,
   dataOf,
   hasMoreDetail,
   manyDiscardText,
@@ -183,7 +182,7 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
   const root = useRef<HTMLDivElement>(null)
   const [settings, setViewMode] = useSettings(context)
   const data = useStatus(context, worktree)
-  const { status: polled, markersGone } = data
+  const { status: polled, markersGone, unreadableConflicts } = data
   const [localBusy, setLocalBusy] = useState<GitBusyOp | null>(null)
   const status = useMemo<GitStatus | null>(() => (polled === null ? null : { ...polled, busy: polled.busy ?? localBusy }), [polled, localBusy])
   const githubReview = useGitHubReview(context, worktree, status)
@@ -276,7 +275,7 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
   const filtering = applyFilter([], filter).state !== 'inactive'
   const query = filter.trim()
   const entries = status?.entries ?? []
-  const actionContext: ActionContext = useMemo(() => ({ markersGone }), [markersGone])
+  const actionContext: ActionContext = useMemo(() => ({ markersGone, unreadableConflicts }), [markersGone, unreadableConflicts])
 
   const setSelection = useCallback((next: SelectionState) => {
     selectionRef.current = next
@@ -999,7 +998,7 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
     section.id === 'conflicts' ? open({ mode: 'conflicts' }) : open({ mode: 'combined', area: section.id })
 
   const sectionButtonsFor = (section: Section): RowButton[] => {
-    const wanted = sectionButtons(section, { markersGone, capped: status?.capped, filtering })
+    const wanted = sectionButtons(section, { ...actionContext, capped: status?.capped, filtering })
     const buttons: RowButton[] = []
     if (wanted.discardAll) {
       buttons.push({
@@ -1037,7 +1036,8 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
     open(noteViewInput(note.path, note.id, entries, compare))
   }
 
-  const openCommit = (commit: GitCommit) => open({ mode: 'combined', commit: commit.oid, title: commitTitle(commit.oid, commit.subject) })
+  const openCommit = (commit: GitCommit) =>
+    open({ mode: 'combined', commit: commit.oid, commitMessage: { subject: commit.subject, body: commit.body } })
   const openCommitFile = (commit: GitCommit, change: GitChange) =>
     open({ mode: 'file', source: 'commit', commit: commit.oid, path: change.path, ...(change.oldPath === undefined ? {} : { oldPath: change.oldPath }) })
 

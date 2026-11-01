@@ -174,7 +174,7 @@ describe('SC-50: Change Base Ref', () => {
     }
   })
 
-  test('ArrowDown in search focuses the first matching branch without changing the base', async () => {
+  test('arrow keys navigate matching branches without changing the base', async () => {
     const { fake, element, unmount } = await open(setup)
     try {
       await click(q(element, '[data-base-ref]'))
@@ -183,6 +183,14 @@ describe('SC-50: Change Base Ref', () => {
       search.focus()
       await press(search, 'ArrowDown')
       expect(document.activeElement === q(dialog()!, '[aria-label="Branches"] button')).toBe(true)
+      expect(document.activeElement?.textContent).toBe('releaselocal')
+      await press(document.activeElement!, 'ArrowDown')
+      expect(document.activeElement?.textContent).toBe('origin/releaseremote')
+      await press(document.activeElement!, 'ArrowDown')
+      expect(document.activeElement?.textContent).toBe('releaselocal')
+      await press(document.activeElement!, 'ArrowUp')
+      expect(document.activeElement?.textContent).toBe('origin/releaseremote')
+      await press(document.activeElement!, 'ArrowUp')
       expect(document.activeElement?.textContent).toBe('releaselocal')
       expect(fake.called('quirky.git/setBase')).toHaveLength(0)
     } finally {
@@ -409,7 +417,7 @@ describe('SC-54: the Commits dock', () => {
     authoredAt: Date.now() - 3 * 3600_000,
     committedAt: Date.now(),
     subject,
-    body: '',
+    body: n === 1 ? 'Merge body\ncontinued' : '',
     refs: n === 1 ? ['HEAD -> zoe/feat', 'tag: v1'] : []
   })
 
@@ -493,7 +501,15 @@ describe('SC-54: the Commits dock', () => {
     const { fake, element, unmount } = await open(history)
     await click(byLabel(element, 'Expand Commits'))
     await click(q(element, '[data-commit-row] .ui-list-row__main'))
-    expect(fake.views.at(-1)).toEqual({ id: DIFF_VIEW, input: { worktree: 'feat', mode: 'combined', commit: '1'.repeat(40), title: 'Commit 1111111: Merge main' } })
+    expect(fake.views.at(-1)).toEqual({
+      id: DIFF_VIEW,
+      input: {
+        worktree: 'feat',
+        mode: 'combined',
+        commit: '1'.repeat(40),
+        commitMessage: { subject: 'Merge main', body: 'Merge body\ncontinued' }
+      }
+    })
     await click(byLabel(element, 'Expand commit 1111111'))
     expect(fake.called('quirky.git/commitFiles').at(-1)?.params).toEqual({ worktree: 'feat', commit: '1'.repeat(40) })
     await click(rowOf(element, 'new.ts', 'history'))
