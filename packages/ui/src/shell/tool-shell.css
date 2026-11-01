@@ -234,6 +234,11 @@
   background: var(--compat-color-transparent);
 }
 
+.tool-shell__tool-provider .ui-icon-button:focus-visible {
+  border-radius: var(--ui-radius-control);
+  outline-offset: calc(var(--ui-focus-offset) * -1);
+}
+
 .tool-shell__tool-provider .ui-icon-button:hover:not(:disabled) {
   border-color: var(--compat-color-transparent);
   background: var(--compat-color-transparent);
