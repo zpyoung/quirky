@@ -141,7 +141,7 @@ export async function guardedWrite(
   if (existing === undefined) {
     if (!allowMissing) return 'missing'
     try {
-      const created = await open(path, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | noFollowFlag(), 0o600)
+      const created = await open(path, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | noFollowFlag())
       try {
         await created.writeFile(bytes)
         await created.sync()

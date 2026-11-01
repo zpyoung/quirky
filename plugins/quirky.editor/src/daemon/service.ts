@@ -2508,7 +2508,7 @@ export class EditorDaemon {
       return 'written'
     } catch (error) {
       if ((error as NodeJS.ErrnoException | null)?.code !== 'ENOENT') throw error
-      const handle = await openFile(path, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | (constants.O_NOFOLLOW ?? 0), 0o600)
+      const handle = await openFile(path, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | (constants.O_NOFOLLOW ?? 0))
       try {
         await handle.writeFile(bytes)
         await handle.sync()
