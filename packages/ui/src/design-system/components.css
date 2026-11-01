@@ -864,7 +864,7 @@
   border-color: var(--ui-transparent);
   border-radius: var(--ui-radius-control);
   line-height: 1.2;
-  padding: var(--ui-space-2) var(--ui-space-8);
+  padding: var(--ui-space-2) var(--ui-space-4);
 }
 
 .ui-tool-panel-frame__tabs .ui-tabs__tab[aria-selected="true"] {
