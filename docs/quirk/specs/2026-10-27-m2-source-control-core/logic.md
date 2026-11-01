@@ -8,6 +8,7 @@
 - 2026-10-27, before build: Codex adversarial review ([D42](../../../loop/decisions/m2-source-control-core.md)). Staging an unresolved conflict is allowed once its markers are gone, and that is what clears git's unmerged record (SC-13, SC-41); the daemon unstages a rename's old path itself (SC-12); a worktree's own base wins over "Branch upstream" (SC-49); actionable messages are panel notices (SC-24, SC-59); editable diffs have Revert Block (SC-61) and a saveable fallback once a draft crosses the limits (SC-63); view controls have commands (SC-64); symlinks never lead outside the worktree (SC-67).
 - 2026-10-27, during build ([D50](../../../loop/decisions/m2-source-control-core.md)): a `lint-staged` pre-push failure is reason `lint`, as Orca classifies it (SC-38); SC-35(b)'s walkthrough counts the newer main commit as ahead.
 - 2026-10-29: An open Changes diff follows status as its path moves between unstaged and staged; partial staging keeps the index comparison, and source changes do not replace a dirty draft (SC-61).
+- 2026-11-01: SC-44 keeps explicit choices for readable modify/delete files and preserves Stage for binary or symlink conflicts that the text editor cannot open.
 
 ## Conceptual model
 
@@ -428,7 +429,9 @@ a scenario says otherwise, so `--worktree` defaults to it.
 44. **SC-44: the conflict file view** (UI)
     - **Given** `math.ts` with two conflict blocks, the second with a common-ancestor section
     - **When** the person opens it from the Conflicts section and uses Next conflict twice
-    - **Then** the view shows the banner "Unresolved conflict · Both modified" and "1 / 2"; marker lines are tinted, with the labels "Current change", "Common ancestor", "Incoming change" and "End conflict"; Next moves to "2 / 2" then wraps to "1 / 2". A "deleted by them" file shows "Decide whether to keep the file or accept deletion"; a side with no working file shows "No working-tree file is available to edit for this conflict."
+    - **Then** the view shows the banner "Unresolved conflict · Both modified" and "1 / 2"; marker lines are tinted, with the labels "Current change", "Common ancestor", "Incoming change" and "End conflict"; Next moves to "2 / 2" then wraps to "1 / 2". A side with no working file shows "No working-tree file is available to edit for this conflict."
+    - An unresolved "Deleted by them" or "Deleted by us" file offers "Keep file" and "Accept deletion" instead of a generic Stage shortcut. Keep saves any edits and stages the working file; it is unavailable when that file is missing. Accept deletion removes the working file and stages its removal, refusing a file changed since it was read or saved. Both choices are disabled while resolving and disappear after resolution; failures leave the conflict unresolved.
+    - Binary or symlink modify/delete files cannot open in the text conflict editor. They retain row and bulk Stage to resolve the current working-tree state; readable text conflicts still require the named choices.
 
 45. **SC-45: the conflict review view** (UI)
     - **Given** a merge with `a.ts` and `b.ts` unresolved
@@ -558,7 +561,7 @@ a scenario says otherwise, so `--worktree` defaults to it.
 66. **SC-66: the API lists every method with its schema** (CLI)
     - **Given** a running daemon
     - **When** the agent runs `quirky api --json`
-    - **Then** `quirky.git` lists `status`, `diff`, `stage`, `unstage`, `discard`, `describeDiscard`, `commit`, `push`, `forcePush`, `describeForcePush`, `pull`, `fastForward`, `fetch`, `sync`, `rebaseFromBase`, `continue`, `abort`, `describeAbort`, `compare`, `setBase`, `branches`, `history`, `commitFiles`, `conflictFile`, `save`, `submoduleStatus`, `hugeFolders`, `ignoreFolder` and `reveal`, each with params and result schemas, with `discard`, `forcePush` and `abort` destructive; `quirky git --help` lists the same as commands
+    - **Then** `quirky.git` lists `status`, `diff`, `stage`, `unstage`, `discard`, `describeDiscard`, `commit`, `push`, `forcePush`, `describeForcePush`, `pull`, `fastForward`, `fetch`, `sync`, `rebaseFromBase`, `continue`, `abort`, `describeAbort`, `compare`, `setBase`, `branches`, `history`, `commitFiles`, `conflictFile`, `acceptConflictDeletion`, `save`, `submoduleStatus`, `hugeFolders`, `ignoreFolder` and `reveal`, each with params and result schemas, with `discard`, `forcePush` and `abort` destructive; `quirky git --help` lists the same as commands
 
 67. **SC-67: paths never escape the worktree, even through a symlink** (API)
     - **Given** **feat** with a committed symlink `link.txt` pointing at `/tmp/s/secret.txt` outside the worktree, and a symlinked folder `out` pointing at `/tmp/s`
