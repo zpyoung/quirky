@@ -108,7 +108,11 @@ test('SC-54: the Commits dock opens a commit\'s combined diff and one of its fil
 
   await click(q('[data-commit-row] button[aria-pressed]', row))
   await w.win.waitFor(async () => (await openView(w))?.id === DIFF_VIEW)
-  expect((await openView(w))!.input).toMatchObject({ mode: 'combined', commit: oid, title: `Commit ${oid.slice(0, 7)}: Touch two files` })
+  expect((await openView(w))!.input).toMatchObject({
+    mode: 'combined',
+    commit: oid,
+    commitMessage: { subject: 'Touch two files', body: '' }
+  })
   await w.win.waitFor(() => qa('[data-git-view-root] section[data-path]').length === 2)
   expect(qa('[data-git-view-root] section[data-path]').map((section) => section.getAttribute('data-path'))).toEqual(['math.ts', 'util.ts'])
 

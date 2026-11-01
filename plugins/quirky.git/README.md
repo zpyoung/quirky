@@ -28,7 +28,9 @@ Names are drafts only. Generating a candidate does not create or rename a Git br
 
 ## Hosted diff navigation
 
-Click a Source Control row to preview its diff in the selected terminal workspace. Double-click to keep the tab; Option-click to open it in a split group. Dirty diff tabs refuse close and are not replaced by another preview.
+Click a Source Control row to preview its diff in the selected terminal workspace. Double-click to keep the tab; Option-click to open it in a split group. Dirty diff tabs are not replaced by another preview.
+
+Replacing a clean preview keeps the tab on the newly selected file. Delayed dirty-state reports from the previous diff cannot change the replacement's input, title, or unsaved state.
 
 Conflict-file tabs keep the editor draft while status changes. A staged resolution shows “Resolved” without deletion choices or conflict navigation; when the Git operation ends, the tab shows a neutral ended status and removes conflict controls.
 
@@ -41,6 +43,8 @@ Single-file diff headers preserve the path's casing for unstaged, staged, branch
 Renamed-file headers and tooltips show `old path → new path` for staged, branch, and commit diffs, including pure renames with no content changes. Staged renames compare the old path in HEAD with the new path in the index. An open staged diff refreshes its rename metadata from current status after a commit. If unstaged edits remain, it switches to their diff and clears the committed rename's old path.
 
 In the command palette, **Save Source Control File** saves edits in the focused Source Control diff. **Save File** saves the focused editor draft.
+
+Editing a diff or using Revert Block changes an unsaved draft, not the file on disk. The file header and tab title show `Unsaved`. Closing the open diff from either the tab or header offers Save, Don't Save, and Cancel. Save writes the draft before closing; Don't Save leaves disk unchanged; Cancel keeps the draft open. A failed save keeps the draft and tab open.
 
 Screen readers announce file rows with their Git state (such as modified or untracked) and history rows as commits. Row colors do not change those names to agent activity states.
 Tree-view folder counts use singular wording for one file and plural wording for multiple files. Folder discard confirmations describe the same count in their heading and warning.
@@ -59,7 +63,7 @@ Conflict review's **Open** opens the file in a normal worktree tab. Switching be
 
 Combined diffs open at the first file and keep their scroll position as sections load. Single-file diffs still jump to the first change; change-navigation commands remain available in both views.
 
-Combined-diff headers preserve commit-subject casing and keep the compact toolbar on the padded title row. Long subjects remain available in the header tooltip.
+History-opened whole-commit diffs keep the compact toolbar title and show the complete commit subject and body in a scrollable message section above the file diffs.
 
 Plugin integrations split a tab through `quirky.terminal/moveTab` with `tab`, `split`, `of`, and the acknowledged `revision`; the tab determines its workspace, so this method does not accept a `workspace` field.
 

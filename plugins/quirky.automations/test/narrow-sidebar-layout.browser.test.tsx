@@ -87,24 +87,70 @@ function headerBrowserEntry(): string {
     import { initialUiState } from ${JSON.stringify(stateModule)}
 
     const provided = new Map()
+    const listeners = new Set()
+    let uiState = initialUiState()
+    const publishUiState = () => {
+      for (const listener of listeners) listener({ type: 'quirky.automations/uiChanged' })
+    }
     const context = {
       provide(id, implementation) { provided.set(id, implementation) },
       async call(method) {
-        if (method === 'quirky.automations/uiState') return initialUiState()
+        if (method === 'quirky.automations/uiState') return uiState
         if (method === 'quirky.automations/list') return []
         if (method === 'quirky.automations/editorData') {
           return {
             hosts: [{ id: 'local', label: 'Local', available: true }],
-            projects: [],
-            workspaces: [],
-            agents: [],
+            projects: [{ id: 'repo-1', name: 'Repository', hostId: 'local', path: '/repo-1', kind: 'git' }],
+            workspaces: [{ id: 'workspace-1', repoId: 'repo-1', name: 'Main workspace', path: '/repo-1/workspace', isMain: true }],
+            agents: [{ id: 'codex', label: 'Codex', enabled: true, installed: true, isDefault: true }],
             errors: []
           }
         }
+        if (method === 'quirky.automations/openEditor') {
+          uiState = {
+            ...uiState,
+            revision: uiState.revision + 1,
+            editor: {
+              id: null,
+              original: null,
+              creationKey: 'browser-create',
+              draft: {
+                name: '',
+                prompt: '',
+                agentId: 'codex',
+                projectId: 'repo-1',
+                workspaceMode: 'existing',
+                workspaceId: 'workspace-1',
+                baseBranch: null,
+                setupDecision: 'skip',
+                reuseSession: false,
+                timezone: 'UTC',
+                rrule: 'FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR;BYHOUR=9;BYMINUTE=0',
+                missedRunGraceMinutes: 720,
+                precheck: null,
+                launchOverrides: null,
+                runContext: null,
+                sourceContext: null
+              }
+            }
+          }
+          publishUiState()
+          return uiState
+        }
+        if (method === 'quirky.automations/cancelEditor') {
+          uiState = { ...uiState, revision: uiState.revision + 1, editor: null }
+          publishUiState()
+          return uiState
+        }
         if (method === 'quirky.automations/externalList') return { managers: [] }
+        if (method === 'quirky.agents/options') return { supported: true, structured: true, unlisted: 'accept', models: [], unlistedOptions: [] }
+        if (method === 'quirky.repo/show') return { settings: { defaultBase: 'main', setupScript: '', setupPolicy: null }, hooks: { setup: null } }
         throw new Error('Unexpected Automations UI call: ' + method)
       },
-      subscribe() { return () => {} },
+      subscribe(listener) {
+        listeners.add(listener)
+        return () => listeners.delete(listener)
+      },
       getSetting() { return true },
       openView() {},
       toast() {}
@@ -402,5 +448,131 @@ test.skipIf(!existsSync(chromium.executablePath()))('keeps the Automations heade
     }
   } finally {
     await context.close()
+  }
+}, 60_000)
+
+test.skipIf(!existsSync(chromium.executablePath()))('keeps the Create automation dialog within the shell workspace and its controls reachable', async () => {
+  for (const viewport of [HEADER_VIEWPORT, { width: 640, height: 480 }]) {
+    const context = await browser!.newContext({ viewport })
+    const page = await context.newPage()
+    try {
+      await page.setContent(headerPageMarkup('tool-shell__panel--left-top'))
+      for (const stylesheet of [...STYLESHEETS, HOST_STYLESHEET]) {
+        await page.addStyleTag({ content: readFileSync(join(ROOT, stylesheet), 'utf8') })
+      }
+      await page.locator('.shell-workspace').evaluate((workspace) => {
+        workspace.style.setProperty('--tool-left-top-height', String(workspace.clientHeight))
+      })
+      await page.addScriptTag({ content: headerBrowserBundle })
+
+      await page.locator('.auto-empty-automations').waitFor()
+      const panel = page.locator('#header-panel')
+      await panel.hover()
+      await page.waitForFunction(() => {
+        const actions = document.querySelector('.ui-tool-panel-frame__actions')
+        return actions !== null && getComputedStyle(actions).opacity === '1'
+      })
+      const newAutomation = page.getByRole('button', { name: 'New Automation', exact: true })
+      await newAutomation.waitFor({ state: 'visible' })
+      await newAutomation.click()
+      let dialog = page.getByRole('dialog', { name: 'Create automation' })
+      await dialog.waitFor({ state: 'visible' })
+      await page.waitForFunction(() => {
+        const create = document.querySelector<HTMLButtonElement>('.ui-dialog__actions button[type="submit"]')
+        return create !== null && !create.disabled
+      })
+
+      const initialBounds = await dialog.evaluate((element) => {
+        const workspace = document.querySelector('.shell-workspace')!.getBoundingClientRect()
+        const within = (rect: DOMRect, outer: DOMRect) =>
+          rect.left >= outer.left - 0.5 && rect.right <= outer.right + 0.5
+          && rect.top >= outer.top - 0.5 && rect.bottom <= outer.bottom + 0.5
+        const hitTarget = (target: Element) => {
+          const rect = target.getBoundingClientRect()
+          const hit = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2)
+          return hit !== null && (hit === target || target.contains(hit))
+        }
+        const header = element.querySelector('.ui-dialog__header')!
+        const title = element.querySelector('.ui-dialog__title')!
+        const titleRange = document.createRange()
+        titleRange.selectNodeContents(title)
+        const close = element.querySelector('.ui-dialog__close')!
+        const footer = element.querySelector('.ui-dialog__actions')!
+        const cancel = Array.from(footer.querySelectorAll('button')).find((button) => button.textContent?.trim() === 'Cancel')!
+        const create = footer.querySelector<HTMLButtonElement>('button[type="submit"]')!
+        return {
+          dialogInsideWorkspace: within(element.getBoundingClientRect(), workspace),
+          headerInsideWorkspace: within(header.getBoundingClientRect(), workspace),
+          titleInsideWorkspace: within(titleRange.getBoundingClientRect(), workspace),
+          titleHit: hitTarget(title),
+          closeInsideWorkspace: within(close.getBoundingClientRect(), workspace),
+          closeHit: hitTarget(close),
+          footerInsideWorkspace: within(footer.getBoundingClientRect(), workspace),
+          cancelInsideWorkspace: within(cancel.getBoundingClientRect(), workspace),
+          cancelHit: hitTarget(cancel),
+          createInsideWorkspace: within(create.getBoundingClientRect(), workspace),
+          createHit: hitTarget(create)
+        }
+      })
+      expect(initialBounds.dialogInsideWorkspace).toBe(true)
+      expect(initialBounds.headerInsideWorkspace).toBe(true)
+      expect(initialBounds.titleInsideWorkspace).toBe(true)
+      expect(initialBounds.titleHit).toBe(true)
+      expect(initialBounds.closeInsideWorkspace).toBe(true)
+      expect(initialBounds.closeHit).toBe(true)
+      expect(initialBounds.footerInsideWorkspace).toBe(true)
+      expect(initialBounds.cancelInsideWorkspace).toBe(true)
+      expect(initialBounds.cancelHit).toBe(true)
+      expect(initialBounds.createInsideWorkspace).toBe(true)
+      expect(initialBounds.createHit).toBe(true)
+
+      const closeBounds = await page.getByRole('button', { name: 'Close dialog' }).boundingBox()
+      if (!closeBounds) throw new Error('The Create automation dialog close button has no bounds.')
+      await page.mouse.click(closeBounds.x + closeBounds.width / 2, closeBounds.y + closeBounds.height / 2)
+      await dialog.waitFor({ state: 'detached' })
+
+      await newAutomation.click()
+      dialog = page.getByRole('dialog', { name: 'Create automation' })
+      await dialog.waitFor({ state: 'visible' })
+      const lastSetting = page.locator('#auto-editor-precheck')
+      await lastSetting.scrollIntoViewIfNeeded()
+      const scrollMetrics = await lastSetting.evaluate((element) => {
+        const scrollArea = element.closest('.auto-editor__layout')!
+        const viewport = scrollArea.getBoundingClientRect()
+        const control = element.getBoundingClientRect()
+        const hit = document.elementFromPoint(control.left + control.width / 2, control.top + control.height / 2)
+        return {
+          scrollTop: scrollArea.scrollTop,
+          scrollHeight: scrollArea.scrollHeight,
+          clientHeight: scrollArea.clientHeight,
+          controlInsideScrollArea: control.top >= viewport.top - 0.5 && control.bottom <= viewport.bottom + 0.5,
+          controlHit: hit === element || element.contains(hit)
+        }
+      })
+      expect(scrollMetrics.scrollHeight).toBeGreaterThan(scrollMetrics.clientHeight)
+      expect(scrollMetrics.scrollTop).toBeGreaterThan(0)
+      expect(scrollMetrics.controlInsideScrollArea).toBe(true)
+      expect(scrollMetrics.controlHit).toBe(true)
+
+      const cancel = page.getByRole('button', { name: 'Cancel', exact: true })
+      const cancelBounds = await cancel.boundingBox()
+      if (!cancelBounds) throw new Error('The Create automation dialog footer has no bounds.')
+      const footerHit = await cancel.evaluate((element) => {
+        const rect = element.getBoundingClientRect()
+        const workspace = document.querySelector('.shell-workspace')!.getBoundingClientRect()
+        const hit = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2)
+        return {
+          insideWorkspace: rect.left >= workspace.left - 0.5 && rect.right <= workspace.right + 0.5
+            && rect.top >= workspace.top - 0.5 && rect.bottom <= workspace.bottom + 0.5,
+          hitTarget: hit !== null && (hit === element || element.contains(hit))
+        }
+      })
+      expect(footerHit.insideWorkspace).toBe(true)
+      expect(footerHit.hitTarget).toBe(true)
+      await page.mouse.click(cancelBounds.x + cancelBounds.width / 2, cancelBounds.y + cancelBounds.height / 2)
+      await dialog.waitFor({ state: 'detached' })
+    } finally {
+      await context.close()
+    }
   }
 }, 60_000)

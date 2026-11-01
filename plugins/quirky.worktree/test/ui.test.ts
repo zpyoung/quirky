@@ -2059,7 +2059,7 @@ test('stock worktree controls persist options, reveal sleeping rows and wake wit
 
   const reveal = buttonNamed(optionsContent(), 'Show 1 hidden sleeping worktree')!
   await click(reveal)
-  const row = rowOf('fix-login', 'api')
+  const row = rowIn(host, 'fix-login')!
   expect(row).toBeDefined()
   expect(row.textContent).toContain('topic/fix-login')
   expect(row.textContent).toContain('keep this note')
@@ -2072,10 +2072,77 @@ test('stock worktree controls persist options, reveal sleeping rows and wake wit
   expect(itemLabels()).toContain('Wake')
   await click(itemNamed('Wake'))
   await h.emit({ type: 'quirky.worktree/changed', data: { repoId: 'r1' } })
-  await contextMenu(openButton(rowOf('fix-login', 'api'))!)
+  await contextMenu(openButton(rowIn(host, 'fix-login')!)!)
   expect(itemLabels()).toContain('Sleep')
   expect(itemLabels()).not.toContain('Wake')
   await unmount()
+})
+
+test('Group by None and Sort by Name show a flat global list across projects', async () => {
+  const h = setup()
+  h.world.repos = [
+    { ...repos[0]!, groupId: 'g1' },
+    repos[1]!,
+    { id: 'r3', name: 'docs', path: '/r/docs', addedAt: 0, ...REPO_DEFAULTS }
+  ]
+  h.world.groups = [group('g1', 'services', ['r1'])]
+  h.world.worktrees = [
+    wt('w-api-main', 'r1', 'main', { isMain: true }),
+    wt('w-notes', 'r2', 'ui-review-notes', { projectGroupId: 'g1' }),
+    wt('w-ready', 'group:g1', 'ui-review-ready'),
+    wt('w-web-main', 'r2', 'main', { isMain: true }),
+    wt('w-retry', 'r2', 'retry-queue'),
+    wt('w-docs-main', 'r3', 'main', { isMain: true }),
+    wt('w-export', 'r3', 'export-csv'),
+    wt('w-pinned', 'r2', 'pinned-worktree', { pinned: true })
+  ]
+  const { promise: createGate, resolve: release } = Promise.withResolvers<void>()
+  h.world.createGate = createGate
+  await h.mountInto(host)
+
+  await openDisclosure('Workspace options')
+  const setOption = async (label: string, value: string) => {
+    const select = optionsContent().querySelector(`select[aria-label="${label}"]`) as HTMLSelectElement
+    await act(async () => {
+      select.value = value
+      select.dispatchEvent(new Event('change', { bubbles: true }))
+    })
+  }
+  await setOption('Group by', 'none')
+  await setOption('Sort by', 'name')
+  expect(h.world.options).toMatchObject({ groupBy: 'none', sortBy: 'name' })
+
+  const tree = host.querySelector<HTMLElement>('.worktree-tree')!
+  expect([...tree.querySelectorAll<HTMLElement>('[data-worktree-id]')]
+    .filter((row) => !row.closest('[data-top-level-section="pinned"]'))
+    .map((row) => row.dataset.worktreeId)).toEqual([
+    'w-export',
+    'w-api-main',
+    'w-docs-main',
+    'w-web-main',
+    'w-retry',
+    'w-notes',
+    'w-ready'
+  ])
+  expect(tree.querySelectorAll('section[data-top-level-section^="group:"], section[data-top-level-section^="repo:"]')).toHaveLength(0)
+  expect(tree.querySelectorAll('.ui-section-separated')).toHaveLength(0)
+  expect(lastReport(h).separators.eligibleBoundaries).toEqual([])
+  expect(tree.querySelectorAll('[data-worktree-id="w-pinned"]')).toHaveLength(1)
+
+  await h.runCommand({ repo: 'api' })
+  await selectNameMode()
+  await typeInto(dialogField('Name')!, 'pending-flat')
+  await act(async () => void (document.querySelector('[role="dialog"] button[type="submit"]') as HTMLButtonElement).click())
+  const pending = [...tree.querySelectorAll<HTMLLIElement>('li.worktree.pending')]
+    .find((row) => row.textContent?.includes('pending-flat'))
+  expect(pending?.textContent).toContain('Creating…')
+  expect(pending?.parentElement?.parentElement).toBe(tree)
+  await act(async () => release())
+
+  await setOption('Group by', 'project')
+  expect(groupSection('services')).toBeDefined()
+  expect(projectSection('api').closest('[data-top-level-section="group:g1"]')).not.toBeNull()
+  expect(projectSection('web')).toBeDefined()
 })
 test('PR grouping, CLI-origin filtering and filtered-row reveal change the workspace list', async () => {
   const h = setup()
@@ -2159,9 +2226,39 @@ test('workspace board exposes status controls for a worktree with a project-defi
   await openDisclosure('More workspace tools')
   await click(buttonNamed(optionsContent(), 'Workspace board')!)
   const board = host.querySelector('section[aria-label="Workspace board"]')!
-  const statusControl = board.querySelector<HTMLSelectElement>('select[aria-label="Move fix-login to status"]')
+  const statusControl = board.querySelector<HTMLSelectElement>('select[aria-label="Move fix-login in api to status"]')
   expect(statusControl).not.toBeNull()
   expect(statusControl?.value).toBe('blocked')
+  await unmount()
+})
+
+test('workspace board identifies duplicate worktree names by project and keeps project-qualified actions', async () => {
+  const h = setup()
+  h.world.repos = h.world.repos.map((repo) => repo.id === 'r1' ? { ...repo, displayName: 'Payments API' } : repo)
+  h.world.worktrees[1] = wt('w2', 'r1', 'duplicate')
+  h.world.worktrees.push(wt('w4', 'r2', 'duplicate'))
+  const unmount = await h.mountInto(host)
+  await openDisclosure('More workspace tools')
+  await click(buttonNamed(optionsContent(), 'Workspace board')!)
+
+  const board = host.querySelector<HTMLElement>('section[aria-label="Workspace board"]')!
+  const apiCard = board.querySelector<HTMLSelectElement>('#worktree-status-w2')!.closest<HTMLElement>('.worktree-board-card')!
+  const webCard = board.querySelector<HTMLSelectElement>('#worktree-status-w4')!.closest<HTMLElement>('.worktree-board-card')!
+  expect(apiCard.querySelector('.ui-list-row__description')?.textContent?.trim()).toBe('Payments API')
+  expect(webCard.querySelector('.ui-list-row__description')?.textContent?.trim()).toBe('web')
+  const apiOpen = apiCard.querySelector<HTMLButtonElement>('button[aria-label]')!
+  const webOpen = webCard.querySelector<HTMLButtonElement>('button[aria-label]')!
+  const apiStatus = apiCard.querySelector<HTMLSelectElement>('select')!
+  const webStatus = webCard.querySelector<HTMLSelectElement>('select')!
+  expect(apiOpen.getAttribute('aria-label')).toBe('Open duplicate in Payments API')
+  expect(webOpen.getAttribute('aria-label')).toBe('Open duplicate in web')
+  expect(apiStatus.getAttribute('aria-label')).toBe('Move duplicate in Payments API to status')
+  expect(webStatus.getAttribute('aria-label')).toBe('Move duplicate in web to status')
+
+  await click(apiOpen)
+  await selectInto(webStatus, 'done')
+  expect(h.callsTo('quirky.worktree/navigate')).toEqual([{ worktree: 'w2', window: 1 }])
+  expect(h.callsTo('quirky.worktree/set')).toEqual([{ worktree: 'w4', status: 'done' }])
   await unmount()
 })
 

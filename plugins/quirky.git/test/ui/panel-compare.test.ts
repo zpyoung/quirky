@@ -417,7 +417,7 @@ describe('SC-54: the Commits dock', () => {
     authoredAt: Date.now() - 3 * 3600_000,
     committedAt: Date.now(),
     subject,
-    body: '',
+    body: n === 1 ? 'Merge body\ncontinued' : '',
     refs: n === 1 ? ['HEAD -> zoe/feat', 'tag: v1'] : []
   })
 
@@ -501,7 +501,15 @@ describe('SC-54: the Commits dock', () => {
     const { fake, element, unmount } = await open(history)
     await click(byLabel(element, 'Expand Commits'))
     await click(q(element, '[data-commit-row] .ui-list-row__main'))
-    expect(fake.views.at(-1)).toEqual({ id: DIFF_VIEW, input: { worktree: 'feat', mode: 'combined', commit: '1'.repeat(40), title: 'Commit 1111111: Merge main' } })
+    expect(fake.views.at(-1)).toEqual({
+      id: DIFF_VIEW,
+      input: {
+        worktree: 'feat',
+        mode: 'combined',
+        commit: '1'.repeat(40),
+        commitMessage: { subject: 'Merge main', body: 'Merge body\ncontinued' }
+      }
+    })
     await click(byLabel(element, 'Expand commit 1111111'))
     expect(fake.called('quirky.git/commitFiles').at(-1)?.params).toEqual({ worktree: 'feat', commit: '1'.repeat(40) })
     await click(rowOf(element, 'new.ts', 'history'))

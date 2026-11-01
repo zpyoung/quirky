@@ -107,7 +107,7 @@ function navigationOrder(worktrees: WorktreeControl[], options: StockWorktreeOpt
     (options.showSleeping || !worktree.sleeping)
   )
   return visible.sort((left, right) => {
-    if (left.isMain !== right.isMain) return left.isMain ? -1 : 1
+    if (!(options.groupBy === 'none' && options.sortBy === 'name') && left.isMain !== right.isMain) return left.isMain ? -1 : 1
     if (options.sortBy === 'name') return left.name.localeCompare(right.name) || left.id.localeCompare(right.id)
     if (options.sortBy === 'manual') return right.manualOrder - left.manualOrder || left.createdAt - right.createdAt || left.id.localeCompare(right.id)
     if (options.sortBy === 'project') {

@@ -360,6 +360,7 @@ export function ConflictFile({ context, input, settings, report, bind, close }: 
     nextConflict: () => step(1),
     previousConflict: () => step(-1),
     save: async () => { await save(false) },
+    isDirty: () => dirtyRef.current,
     reloadFromDisk: reload,
     overwrite: async () => { await save(true) }
   })

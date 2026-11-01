@@ -11,6 +11,7 @@ const { act, fakeContext, layoutFor, mountView, numbered, registerPanel, settle,
 const COMMANDS = [
   'show',
   'open-diff',
+  'close-diff',
   'open-changes',
   'open-branch-changes',
   'open-commit',

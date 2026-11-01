@@ -7,6 +7,7 @@ Reader: people and scripts managing worktrees — Decision: choose how the sideb
 Worktrees is the host-managed tool in the left-top slot by default. Add project is a folder-plus
 button in its panel header. Workspace options, Activity filters and More workspace tools stay inside
 the header's options popover; the latter includes the board and status editor. Project management uses the existing `quirky.repo` API, not a second tool.
+Activity-window tabs wrap inside the popover so all six choices stay visible without horizontal scrolling.
 Rows show name plus activity, with selected branch/note/status metadata on the secondary line
 and full text available on hover. The activity indicator's accessible name follows its displayed
 activity; pending questions show “Needs you” in the activity text and take priority in the indicator.
@@ -31,8 +32,8 @@ worktree. A visible tracker project or drop-target badge keeps a separate row so
 
 Options persist in the worktree plugin's SQLite store; no new global setting IDs are used. Defaults are project grouping, recent sorting, manual project order, detailed cards, all available card properties, sleeping worktrees shown, external worktrees hidden globally, and archived worktrees hidden.
 
-- `groupBy`: `project`, `status`, `pr`, or `none`. PR grouping uses the worktree's recorded linked PR; rows without one use a “No pull request” lane. Parent and descendants stay together.
-- `sortBy`: `recent`, `agent-activity`, `name`, `project`, or `manual`. Agent activity prioritizes sessions in `waiting` status, then uses persisted activity timestamps. Project sorting uses project name then activity.
+- `groupBy`: `project`, `status`, `pr`, or `none`. PR grouping uses the worktree's recorded linked PR; rows without one use a “No pull request” lane. Parent and descendants stay together in grouped views; `none` renders one flat unpinned list across projects, with pinned worktrees separate.
+- `sortBy`: `recent`, `agent-activity`, `name`, `project`, or `manual`. In `none` mode, name sorting orders the global unpinned list without forcing primary worktrees first. Agent activity prioritizes sessions in `waiting` status, then uses persisted activity timestamps. Project sorting uses project name then activity.
 - `projectOrderBy`: `manual` or `recent`; manual project order is persisted by `quirky.worktree/reorderProjects({projects:[...]})`.
 - `compact`, `showProperties`, and `showSleeping` control card layout, available branch/note/PR/issue/automation/activity properties, and sleeping visibility. Hiding rows leaves a count and a temporary reveal control.
 - `hideCliCreated`, `hideDefaultBranch`, `hideDetached`, `hideArchived`, `hideOtherClients`, and `filterRepoIds` filter only worktrees with authoritative local provenance/branch/project data or a caller-relative authenticated creator comparison.
@@ -56,6 +57,8 @@ Use `quirky.worktree/projectMetadata({repo})`, `setProjectMetadata({repo,identit
 `linkReference({worktree,url,label?})` accepts absolute HTTP or HTTPS references, persists them independently of branch/path, and displays them as text rather than opening them. `references({worktree})` reads them and `unlinkReference({worktree,reference})` removes one by stable ID. The workspace details dialog has the same link/unlink controls and explains that links are displayed as text, not opened.
 
 `statusDefinitions({})` reads the built-ins and custom definitions; `setStatusDefinitions({statuses})` requires the four built-in IDs and refuses to remove a status that a workspace still uses. Status labels, color metadata and safe text icons persist. The board and status-group lanes use shared semantic colors rather than arbitrary stored paint. More workspace tools opens the Workspace statuses editor; `quirky worktree status-set --statuses '<json>'` uses the same API.
+
+The board sits above the worktree tree in its own scroll area, capped at half the available sidebar height. Its fixed-width lanes stay in one top-aligned row; scroll horizontally to reach lanes outside the viewport. Each card shows its project below the worktree name, and the Open and Move to status controls include the project in their accessible names so same-named worktrees remain distinguishable.
 
 ## Navigation and Open in
 

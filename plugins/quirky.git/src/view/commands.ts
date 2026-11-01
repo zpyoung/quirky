@@ -8,7 +8,7 @@ import type { Note } from '../notes/useNotes'
 import { PANEL_ID, type DiffViewInput } from '../shared/view-input'
 import { messageOf } from './data'
 import { openHostedDiff } from './hosted-tabs'
-import { activeView, openDiffView } from './registry'
+import { activeView, openDiffView, requestHostedDiffClose } from './registry'
 
 type Args = Record<string, unknown>
 
@@ -70,6 +70,11 @@ export function commandHandlers(context: UiPluginContext): Record<string, (args?
   return {
     show: () => context.togglePanel(PANEL_ID, true),
     'open-diff': (args) => open(openDiffInput(worktreeFor(context, argsOf(args)), argsOf(args))),
+    'close-diff': (args) => {
+      const tabId = text(argsOf(args).tabId)
+      if (!tabId) throw new Error('close-diff needs a tabId.')
+      return requestHostedDiffClose(tabId) ?? context.call('quirky.terminal/closeTab', { tab: tabId })
+    },
     'open-changes': (args) => {
       const given = argsOf(args)
       const area = AREAS.find((a) => a === given.area) ?? 'unstaged'

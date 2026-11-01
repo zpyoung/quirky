@@ -256,7 +256,17 @@ export function CombinedDiff({ context, input, settings, setSetting, report, bin
     nextChange: () => navigate(1),
     previousChange: () => navigate(-1),
     revertChange: () => void handles.current.get(activeRef.current ?? '')?.revertChange(),
-    save: () => eachPane((s) => s.dirty, (h) => h.save()),
+    save: async () => {
+      for (const handle of handles.current.values()) {
+        if (handle.isDirty()) await handle.save()
+      }
+    },
+    isDirty: () => {
+      for (const handle of handles.current.values()) {
+        if (handle.isDirty()) return true
+      }
+      return false
+    },
     reloadFromDisk: () => eachPane((s) => s.stale, (h) => h.reload()),
     overwrite: () => eachPane((s) => s.stale, (h) => h.overwrite()),
     collapseAll: (value) => setAllCollapsed(value ?? !allCollapsed),
@@ -385,6 +395,19 @@ export function CombinedDiff({ context, input, settings, setSetting, report, bin
           </nav>
         )}
         <div className="ui-stack" ref={setScrollEl} style={{ flex: 1, minHeight: 0, minWidth: 0, overflow: 'auto' }}>
+          {input.commitMessage && (
+            <section
+              className="ui-stack"
+              role="region"
+              aria-label="Commit message"
+              style={{ flexShrink: 0, minWidth: 0, overflowWrap: 'anywhere', padding: 'var(--ui-space-12)' }}
+            >
+              <h3 style={{ margin: 0, textTransform: 'none', overflowWrap: 'anywhere' }}>{input.commitMessage.subject}</h3>
+              {input.commitMessage.body.trim() !== '' && (
+                <p style={{ margin: 0, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{input.commitMessage.body}</p>
+              )}
+            </section>
+          )}
           {error !== null && data === null && <ErrorNotice message={error} />}
           {data === null && error === null && <p className="ui-text-muted" style={{ padding: 'var(--ui-space-8)' }}>Loading diff...</p>}
           {showConflicts && (

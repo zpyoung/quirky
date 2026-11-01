@@ -113,7 +113,7 @@ export function ConflictReview({ context, input, report, bind, close }: ModeProp
     void refresh()
   }, [])
 
-  bind({})
+  bind({ isDirty: () => false })
 
   const unresolved = rows?.filter((row) => row.state === 'unresolved').length ?? 0
   useEffect(() => {

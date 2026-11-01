@@ -7,11 +7,12 @@ import { extractHeadings, slugHeading } from './source'
 
 const MARKDOWN_SANITIZE_SCHEMA = {
   ...defaultSchema,
-  tagNames: [...new Set([...(defaultSchema.tagNames ?? []), 'details', 'summary'])],
+  tagNames: [...new Set([...(defaultSchema.tagNames ?? []), 'details', 'summary', 'mark'])],
   attributes: {
     ...defaultSchema.attributes,
     code: [['className', /^(?:language-[\w.+-]+|math-inline|math-display)$/]],
-    details: ['open']
+    details: ['open'],
+    mark: [['className', /^markdown-preview-search-match$/]]
   },
   protocols: {
     ...defaultSchema.protocols,
@@ -61,12 +62,13 @@ function rehypeStripUntrustedPresentation() {
     stripRawMathAndSvg(tree)
     visitPreviewNodes(tree, (node) => {
       if (node.type !== 'element') return
-      if (node.data?.[MARKDOWN_CLASS_MARKER] !== true && node.properties) {
-        const className = node.properties.className
-        const classNames = Array.isArray(className)
-          ? className
-          : typeof className === 'string' ? className.split(/\s+/) : []
-        // Preserve only code-language and KaTeX token classes if raw-HTML parsing drops provenance.
+      const className = node.properties?.className
+      const classNames = Array.isArray(className)
+        ? className
+        : typeof className === 'string' ? className.split(/\s+/) : []
+      const isPreviewSearchMatch = node.tagName === 'mark' && classNames.includes('markdown-preview-search-match')
+      if (node.data?.[MARKDOWN_CLASS_MARKER] !== true && !isPreviewSearchMatch && node.properties) {
+        // Preserve only supported code, KaTeX and Preview Find classes if raw-HTML parsing drops provenance.
         if (node.tagName === 'code') {
           const safeClasses = classNames.filter((name) =>
             typeof name === 'string' && /^(?:language-[\w.+-]+|math-inline|math-display)$/.test(name)
