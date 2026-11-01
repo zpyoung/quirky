@@ -86,7 +86,7 @@ quirky worktree wake id:wt_parent --with-descendants
 
 Sleep state and change timestamps survive daemon restart. An explicit `window` targets that live `connId`; omitting `window` refuses an ambiguous multiwindow selection, and stale or missing identities refuse rather than redirecting another window.
 
-Navigation history and cleanup use the same canonical owner resolution. Each live `connId` keeps history of canonical worktree IDs; unresolved, ambiguous, or malformed workspace views block sleep and cleanup, and only the exact resolved owner receives an active-workspace cleanup blocker. Sleep preserves sessions, PTYs, history, drafts, and buffers.
+Navigation history and cleanup use the same canonical owner resolution. Each live `connId` keeps history of canonical worktree IDs; unresolved, ambiguous, or malformed workspace views block sleep and cleanup, and only the exact resolved owner receives an active-workspace cleanup blocker. Those views never stop a window navigating elsewhere: `navigate`, `openIn`, `navigationIndex`, `navigationBack`, and `navigationForward` open the target and add no history entry for the view being left. `navigationMove` refuses with not-found because it has no current worktree to step from. Sleep preserves sessions, PTYs, history, drafts, and buffers.
 
 ## Project ownership and removal
 

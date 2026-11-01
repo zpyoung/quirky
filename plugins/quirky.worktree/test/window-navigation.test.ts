@@ -1,6 +1,7 @@
+import { rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { afterEach, expect, test } from 'bun:test'
-import type { QuirkyClient, Repo, UiLayout, UiState, Worktree, WorktreeCreateResult } from '@quirky/protocol'
+import { RpcErrorCode, type QuirkyClient, type Repo, type UiLayout, type UiState, type Worktree, type WorktreeCreateResult } from '@quirky/protocol'
 import { makeHomeWithoutAutoHooks } from '../../../packages/daemon/test/helpers'
 import { spawnCli } from '../../../packages/cli/test/fixtures/fake-daemon'
 import { makeTempDir } from '../../../packages/daemon/test/plugins/fixtures'
@@ -346,9 +347,115 @@ test('history and next/previous/index resolve active selectors without crossing 
     id: 'view:quirky.session/worktree',
     input: { worktree: 'id:wt_missing' }
   })
-  await expect(call(w.harness.client, 'quirky.worktree/navigationIndex', { index: 1, window: firstId })).rejects.toThrow(/owner|workspace|selector/i)
-  expect(await call(w.harness.client, 'quirky.worktree/navigationState', { window: firstId })).toEqual(before)
-  expect((await layoutFor(first, firstId!)).view?.input).toEqual({ worktree: 'id:wt_missing' })
+  const fromMissing = await call(w.harness.client, 'quirky.worktree/navigationIndex', { index: 1, window: firstId }) as { worktreeId: string }
+  expect(fromMissing.worktreeId).toBe(primary.id)
+  expect(viewWorktree(await layoutFor(first, firstId!))).toBe(primary.id)
+  const after = await call(w.harness.client, 'quirky.worktree/navigationState', { window: firstId }) as { worktrees: string[]; index: number }
+  expect(after).not.toEqual(before)
+  expect(after.worktrees).not.toContain('wt_missing')
+  expect(after.worktrees[after.index]).toBe(primary.id)
+})
+
+test('navigate and open-in leave a missing-owner view without recording the dead id', async () => {
+  const w = await start()
+  world = w
+  const ui = await w.harness.connectAs({}, 'ui')
+  const [connId] = await connIds(w.harness.client)
+  const alpha = await create(w.harness.client, w.repo.id, 'leave-alpha')
+  const beta = await create(w.harness.client, w.repo.id, 'leave-beta')
+  const openMissing = () => call(ui, 'ui.window.view.open', {
+    connId,
+    id: 'view:quirky.session/worktree',
+    input: { worktree: 'wt_missing' }
+  })
+
+  await openMissing()
+  await call(w.harness.client, 'quirky.worktree/navigate', { worktree: alpha.id, window: connId })
+  expect(viewWorktree(await layoutFor(ui, connId!))).toBe(alpha.id)
+  expect(await call(w.harness.client, 'quirky.worktree/navigationState', { window: connId })).toEqual({ worktrees: [alpha.id], index: 0 })
+
+  await openMissing()
+  await call(w.harness.client, 'quirky.worktree/openIn', { worktree: beta.id, target: 'changes', window: connId })
+  const layout = await layoutFor(ui, connId!)
+  expect(layout.view?.id).toBe('view:quirky.git/diff')
+  expect(viewWorktree(layout)).toBe(beta.id)
+  expect(await call(w.harness.client, 'quirky.worktree/navigationState', { window: connId })).toEqual({ worktrees: [alpha.id, beta.id], index: 1 })
+})
+
+test('back and forward work after leaving a missing-owner view', async () => {
+  const w = await start()
+  world = w
+  const ui = await w.harness.connectAs({}, 'ui')
+  const [connId] = await connIds(w.harness.client)
+  const alpha = await create(w.harness.client, w.repo.id, 'history-alpha')
+  const beta = await create(w.harness.client, w.repo.id, 'history-beta')
+  await call(w.harness.client, 'quirky.worktree/navigate', { worktree: alpha.id, window: connId })
+  await call(ui, 'ui.window.view.open', { connId, id: 'view:quirky.session/worktree', input: { worktree: 'id:wt_missing' } })
+
+  await call(w.harness.client, 'quirky.worktree/navigate', { worktree: beta.id, window: connId })
+  expect(await call(w.harness.client, 'quirky.worktree/navigationState', { window: connId })).toEqual({ worktrees: [alpha.id, beta.id], index: 1 })
+
+  await call(w.harness.client, 'quirky.worktree/navigationBack', { window: connId })
+  expect(viewWorktree(await layoutFor(ui, connId!))).toBe(alpha.id)
+  await call(w.harness.client, 'quirky.worktree/navigationForward', { window: connId })
+  expect(viewWorktree(await layoutFor(ui, connId!))).toBe(beta.id)
+})
+
+test('back leaves a view whose worktree folder was deleted', async () => {
+  const w = await start()
+  world = w
+  const ui = await w.harness.connectAs({}, 'ui')
+  const [connId] = await connIds(w.harness.client)
+  const alpha = await create(w.harness.client, w.repo.id, 'deleted-alpha')
+  const doomed = await create(w.harness.client, w.repo.id, 'deleted-doomed')
+  await call(w.harness.client, 'quirky.worktree/navigate', { worktree: alpha.id, window: connId })
+  await call(w.harness.client, 'quirky.worktree/navigate', { worktree: doomed.id, window: connId })
+  rmSync(doomed.path, { recursive: true, force: true })
+  const listed = await call(w.harness.client, 'quirky.worktree/list') as Worktree[]
+  expect(listed.some((row) => row.id === doomed.id)).toBe(false)
+  expect(viewWorktree(await layoutFor(ui, connId!))).toBe(doomed.id)
+
+  await call(w.harness.client, 'quirky.worktree/navigationBack', { window: connId })
+  expect(viewWorktree(await layoutFor(ui, connId!))).toBe(alpha.id)
+})
+
+test('clicking away from a view whose worktree folder was deleted keeps history usable', async () => {
+  const w = await start()
+  world = w
+  const ui = await w.harness.connectAs({}, 'ui')
+  const [connId] = await connIds(w.harness.client)
+  const alpha = await create(w.harness.client, w.repo.id, 'clicked-alpha')
+  const doomed = await create(w.harness.client, w.repo.id, 'clicked-doomed')
+  const beta = await create(w.harness.client, w.repo.id, 'clicked-beta')
+  await call(w.harness.client, 'quirky.worktree/navigate', { worktree: alpha.id, window: connId })
+  await call(w.harness.client, 'quirky.worktree/navigate', { worktree: doomed.id, window: connId })
+  rmSync(doomed.path, { recursive: true, force: true })
+
+  await call(w.harness.client, 'quirky.worktree/navigate', { worktree: beta.id, window: connId })
+  expect(viewWorktree(await layoutFor(ui, connId!))).toBe(beta.id)
+
+  await call(w.harness.client, 'quirky.worktree/navigationBack', { window: connId })
+  expect(viewWorktree(await layoutFor(ui, connId!))).toBe(alpha.id)
+  await call(w.harness.client, 'quirky.worktree/navigationForward', { window: connId })
+  expect(viewWorktree(await layoutFor(ui, connId!))).toBe(beta.id)
+})
+
+test('previous and next refuse from a missing-owner view because there is nothing to step from', async () => {
+  const w = await start()
+  world = w
+  const ui = await w.harness.connectAs({}, 'ui')
+  const [connId] = await connIds(w.harness.client)
+  const alpha = await create(w.harness.client, w.repo.id, 'step-alpha')
+  await call(w.harness.client, 'quirky.worktree/navigate', { worktree: alpha.id, window: connId })
+  const before = await call(w.harness.client, 'quirky.worktree/navigationState', { window: connId })
+  await call(ui, 'ui.window.view.open', { connId, id: 'view:quirky.session/worktree', input: { worktree: 'id:wt_missing' } })
+
+  for (const direction of ['previous', 'next']) {
+    await expect(call(w.harness.client, 'quirky.worktree/navigationMove', { direction, window: connId }))
+      .rejects.toMatchObject({ code: RpcErrorCode.NotFound, message: 'The current view is not a listed worktree.' })
+  }
+  expect(await call(w.harness.client, 'quirky.worktree/navigationState', { window: connId })).toEqual(before)
+  expect((await layoutFor(ui, connId!)).view?.input).toEqual({ worktree: 'id:wt_missing' })
 })
 
 test('compare-and-close refuses a stale inspected view without closing the newly selected view', async () => {

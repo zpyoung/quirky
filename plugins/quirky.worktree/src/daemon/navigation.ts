@@ -88,11 +88,12 @@ function writeHistory(store: PluginStore, selected: SelectedWindow, history: Nav
   }
 }
 
-function activeWorktree(view: unknown, worktrees: WorktreeControl[], fail: NavigationEnv['fail']): string | null {
+/**
+ * The worktree the selected view belongs to, or null when no listed worktree uniquely owns it.
+ * Navigation only needs this as a history position, so a stale view can always be left.
+ */
+function activeWorktree(view: unknown, worktrees: WorktreeControl[]): string | null {
   const resolution = resolveWorkspaceViewOwner(view, worktrees)
-  if (resolution.kind === 'unknown') {
-    throw fail('conflict', 'The selected workspace view has no unique canonical worktree owner.')
-  }
   return resolution.kind === 'owned' ? resolution.owner.worktreeId : null
 }
 
@@ -164,7 +165,7 @@ export async function navigate(
   const target = targetOf(params.target, env.fail)
   const selected = await selectWindow(env, params.window)
   const { worktree, all } = await env.find(params.worktree, identity)
-  const previous = activeWorktree(selected.view, all, env.fail)
+  const previous = activeWorktree(selected.view, all)
   await openView(env, selected, worktree, target)
   pushHistory(env.store, selected, worktree.id, previous)
   return { worktreeId: worktree.id, target }
@@ -189,7 +190,7 @@ export async function navigationHistoryMove(
 ): Promise<{ worktreeId: string; target: 'terminal' }> {
   const selected = await selectWindow(env, window)
   const listed = await env.list()
-  const current = activeWorktree(selected.view, listed, env.fail)
+  const current = activeWorktree(selected.view, listed)
   const available = new Set(listed.map((worktree) => worktree.id))
   const history = readHistory(env.store, selected)
   let worktrees = history.worktrees.filter((id) => available.has(id))
@@ -199,7 +200,8 @@ export async function navigationHistoryMove(
     worktrees.push(current)
     index = worktrees.length - 1
   } else if (current === null) {
-    index = Math.min(history.index, worktrees.length - 1)
+    // not an off-by-one: a cursor past the survivors means the view being left followed them, so back still reaches the last
+    index = Math.min(history.index, worktrees.length)
   }
   const nextIndex = index + (direction === 'back' ? -1 : 1)
   if (nextIndex < 0 || nextIndex >= worktrees.length) throw env.fail('not-found', `There is no workspace to navigate ${direction}.`)
@@ -218,7 +220,7 @@ export async function navigationStep(
 ): Promise<{ worktreeId: string; target: 'terminal' }> {
   const selected = await selectWindow(env, window)
   const listed = await env.list()
-  const current = activeWorktree(selected.view, listed, env.fail)
+  const current = activeWorktree(selected.view, listed)
   const worktrees = navigationOrder(listed, env.options())
   const index = worktrees.findIndex((worktree) => worktree.id === current)
   if (index < 0) throw env.fail('not-found', 'The current view is not a listed worktree.')
@@ -240,7 +242,7 @@ export async function navigationIndex(
   }
   const selected = await selectWindow(env, window)
   const listed = await env.list()
-  const previous = activeWorktree(selected.view, listed, env.fail)
+  const previous = activeWorktree(selected.view, listed)
   const worktrees = navigationOrder(listed, env.options())
   const target = worktrees[value - 1]
   if (!target) throw env.fail('not-found', `Workspace index ${value} is not available.`)
