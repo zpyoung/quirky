@@ -114,7 +114,23 @@ export function ChangeBaseDialog({ context, worktree, current, onClose, onChange
           }}
         />
         {error !== null && <p role="alert" style={{ color: 'var(--ui-failing)' }}>{error}</p>}
-        <div ref={branches} className="ui-stack" role="list" aria-label="Branches" style={{ gap: 'var(--ui-space-2)' }}>
+        <div
+          ref={branches}
+          className="ui-stack"
+          role="list"
+          aria-label="Branches"
+          style={{ gap: 'var(--ui-space-2)' }}
+          onKeyDown={(event) => {
+            if (event.nativeEvent.isComposing || loading || saving) return
+            if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return
+            const buttons = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>('button:not(:disabled)'))
+            const index = buttons.indexOf(event.target as HTMLButtonElement)
+            if (index < 0) return
+            event.preventDefault()
+            const direction = event.key === 'ArrowDown' ? 1 : -1
+            buttons[(index + direction + buttons.length) % buttons.length]?.focus()
+          }}
+        >
           {refs.map((ref) => (
             <ListRow
               key={`${ref.kind}:${ref.name}`}
