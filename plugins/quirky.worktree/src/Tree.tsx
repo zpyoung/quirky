@@ -725,7 +725,7 @@ export function Tree({
           />
         )
       })
-  const groupedRows = (list: TreeRow[]) => {
+  const groupedRows = (list: TreeRow[], projectLabel?: string) => {
     if (options.groupBy !== 'status' && options.groupBy !== 'pr') return rows(list)
     const byId = new Map(list.map((row) => [row.worktree.id, row]))
     const rootById = new Map<string, string>()
@@ -765,7 +765,7 @@ export function Tree({
       const laneRows = list.filter((row) => lane.roots.has(rootById.get(row.worktree.id)!))
       return (
         <li className="worktree-status-lane ui-tree-item ui-stack" key={key}>
-          <SectionHeader title={`${lane.icon ? `${lane.icon} ` : ''}${lane.label}`} />
+          <SectionHeader title={`${projectLabel ? `${projectLabel} · ` : ''}${lane.icon ? `${lane.icon} ` : ''}${lane.label}`} />
           <ul className="worktree-list ui-tree">{rows(laneRows)}</ul>
         </li>
       )
@@ -835,7 +835,7 @@ export function Tree({
           }
         />
         <ul className="worktree-list ui-tree">
-          {groupedRows(projectRows)}
+          {groupedRows(projectRows, repoLabel(repo))}
           {pendingCreates.map((create) => <PendingCard key={create.name} name={create.name} />)}
         </ul>
       </section>
