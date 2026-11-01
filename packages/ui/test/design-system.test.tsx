@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
-import { act, createElement as h, createRef, useState, type ReactNode } from 'react'
+import { act, createElement as h, createRef, StrictMode, useState, type ReactNode } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { ToolPanelActions } from '@quirky/ui'
 import {
@@ -441,6 +441,46 @@ describe('shared graphite components', () => {
     await act(async () => { outside.dispatchEvent(new Event('pointerdown', { bubbles: true })) })
     expect(calls).toEqual(['copy', 'close'])
     expect(document.querySelector('[role="dialog"][aria-label="AI notes"]')).toBeNull()
+  })
+
+  test('opening a popover moves keyboard focus into it and Escape returns to the opener', async () => {
+    const anchor = createRef<HTMLButtonElement>()
+    function Example() {
+      const [open, setOpen] = useState(false)
+      return <><button ref={anchor} onClick={() => setOpen((value) => !value)}>Worktrees options</button>
+        <button>Minimize Worktrees</button>
+        <Popover open={open} label="Worktrees options" anchor={anchor} onClose={() => setOpen(false)}>
+          <details><summary>Workspace options</summary><Button>Group by</Button></details>
+        </Popover></>
+    }
+    await render(<Example />)
+    anchor.current!.focus()
+    await click(anchor.current!)
+    const dialog = document.querySelector<HTMLElement>('[role="dialog"][aria-label="Worktrees options"]')!
+    expect(document.activeElement).toBe(dialog)
+    const summary = dialog.querySelector('summary')!
+    summary.focus()
+    await key(summary, 'Escape')
+    expect(document.querySelector('[role="dialog"][aria-label="Worktrees options"]')).toBeNull()
+    expect(document.activeElement).toBe(anchor.current)
+  })
+
+  test('a popover preserves child autofocus and restores its opener under StrictMode', async () => {
+    const anchor = createRef<HTMLButtonElement>()
+    function Example() {
+      const [open, setOpen] = useState(false)
+      return <><button ref={anchor} onClick={() => setOpen(true)}>Notes</button>
+        {open && <StrictMode><Popover open label="AI notes" anchor={anchor} onClose={() => setOpen(false)}>
+          <input aria-label="Note" autoFocus />
+        </Popover></StrictMode>}</>
+    }
+    await render(<Example />)
+    anchor.current!.focus()
+    await click(anchor.current!)
+    const input = document.querySelector<HTMLInputElement>('input[aria-label="Note"]')!
+    expect(document.activeElement).toBe(input)
+    await key(input, 'Escape')
+    expect(document.activeElement).toBe(anchor.current)
   })
 
   test('toasts dismiss on expiration and expiration never invokes the action', async () => {

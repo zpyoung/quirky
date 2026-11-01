@@ -3,12 +3,20 @@ import { createPortal } from 'react-dom'
 import type { CSSProperties } from 'react'
 import type { PopoverProps } from './contracts'
 
-/** Nonmodal shared dialog variant anchored to a control, with no focus trap or backdrop. */
+/** Nonmodal anchored dialog that receives focus on open, without a focus trap or backdrop. */
 export function Popover({ open, label, anchor, boundary, onClose, children }: PopoverProps) {
   const root = useRef<HTMLDivElement>(null)
+  const wasOpen = useRef(false)
+  const opener = useRef<HTMLElement | null>(null)
   const close = useRef(onClose)
   close.current = onClose
   const [position, setPosition] = useState<CSSProperties>({ visibility: 'hidden' })
+  if (open && !wasOpen.current) {
+    opener.current = typeof document !== 'undefined' && document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : null
+  }
+  wasOpen.current = open
   useLayoutEffect(() => {
     if (!open) return
     const update = () => {
@@ -39,14 +47,26 @@ export function Popover({ open, label, anchor, boundary, onClose, children }: Po
     return () => { window.removeEventListener('resize', update); window.removeEventListener('scroll', update, true) }
   }, [open, anchor, boundary, children])
   useEffect(() => {
+    if (!open || position.visibility === 'hidden') return
+    const node = root.current
+    if (!node?.contains(document.activeElement)) node?.focus()
+  }, [open, position.visibility])
+  useEffect(() => {
     if (!open) return
+    const node = root.current
     const outside = (event: PointerEvent) => {
       if (event.target instanceof Node && !anchor.current?.contains(event.target) && !root.current?.contains(event.target)) close.current()
     }
-    const keydown = (event: KeyboardEvent) => { if (event.key === 'Escape') { event.stopPropagation(); close.current() } }
+    const keydown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.stopPropagation()
+        if (node?.contains(document.activeElement)) opener.current?.focus()
+        close.current()
+      }
+    }
     document.addEventListener('pointerdown', outside, true)
     document.addEventListener('keydown', keydown, true)
     return () => { document.removeEventListener('pointerdown', outside, true); document.removeEventListener('keydown', keydown, true) }
   }, [open, anchor])
-  return open ? createPortal(<div ref={root} className="ui-popover ui-stack" role="dialog" aria-label={label} style={position}>{children}</div>, document.body) : null
+  return open ? createPortal(<div ref={root} className="ui-popover ui-stack" role="dialog" aria-label={label} tabIndex={-1} style={position}>{children}</div>, document.body) : null
 }

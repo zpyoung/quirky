@@ -39,6 +39,8 @@ Scrollable dialog bodies leave inline clearance for outward focus rings, includi
 
 Dialog dismissal restores the control focused before opening, even when a child uses `autoFocus`. Reopening captures the new opener. Closing a nested dialog returns focus to its opener inside the parent; closing the parent returns focus outside it.
 
+Nonmodal popovers receive focus once visible, unless a child already has focus. Tab enters their controls in native order, including disclosure summaries such as Worktrees' Workspace options. Escape closes the popover and returns focus to its opener when focus was inside; outside controls remain reachable without a focus trap.
+
 At narrow panel widths, EmptyState and Vault search-consent prose keep words intact when they fit the section or card. Tokens wider than that boundary wrap within it; neither the message box nor its text may overflow the panel.
 
 ### SC3 — Gallery is a working page
