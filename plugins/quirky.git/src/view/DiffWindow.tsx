@@ -103,11 +103,16 @@ function DiffWindow({ context, input, report }: { context: UiPluginContext; inpu
     void task.then(clear, clear)
     return task
   }, [askCloseChoice, closeAfterDecision])
+  const toastFailure = useCallback((title: string, error: unknown) => {
+    try {
+      context.toast(title, error instanceof Error ? error.message : String(error))
+    } catch {
+      // these failures can land after the plugin is revoked, when toast itself throws
+    }
+  }, [context])
   const close = useCallback(() => {
-    void requestClose().catch((error: unknown) =>
-      context.toast('Could not close diff', error instanceof Error ? error.message : String(error))
-    )
-  }, [context, requestClose])
+    void requestClose().catch((error: unknown) => toastFailure('Could not close diff', error))
+  }, [requestClose, toastFailure])
 
   const lastDirty = useRef<boolean | null>(null)
   const send = useCallback((state: ViewReport) => {
@@ -124,10 +129,10 @@ function DiffWindow({ context, input, report }: { context: UiPluginContext; inpu
     if (input.tabId !== undefined && lastDirty.current !== dirty) {
       lastDirty.current = dirty
       void updateHostedDiffDirty(context, input, dirty).catch((error: unknown) =>
-        context.toast('Could not update diff tab close protection', error instanceof Error ? error.message : String(error))
+        toastFailure('Could not update diff tab close protection', error)
       )
     }
-  }, [context, input, report])
+  }, [context, input, report, toastFailure])
 
   useEffect(() => {
     const call = <K extends keyof Controller>(name: K) =>
