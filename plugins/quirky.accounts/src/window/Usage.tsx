@@ -597,7 +597,7 @@ export function StatusBarUsage({ store, report }: { store: AccountsUiStore; repo
       <Button ref={triggerRef} type="button" className="usage-trigger" aria-label="Open Usage" aria-expanded={snapshot.ui.open} onClick={() => void store.setUiState({ open: !snapshot.ui.open })}>Usage <small>{preferences?.direction === 'remaining' ? 'Remaining' : 'Used'}</small></Button>
       {!showEmptyCta && <div ref={chipsRef} className="usage-chips" aria-label="Provider usage status bar">
             {visibleChips.map((provider) => <StatusChip key={provider.provider} store={store} snapshot={provider} preferences={preferences ?? DEFAULT_USAGE_PREFERENCES} />)}
-            {firstCollapsed && <Button type="button" className="usage-chip" aria-label={`${collapsed.length} more providers`} title={tooltip} onClick={() => {
+            {firstCollapsed && <Button type="button" className="usage-chip" aria-label={`${collapsed.length} more ${collapsed.length === 1 ? 'provider' : 'providers'}`} title={tooltip} onClick={() => {
               const provider = firstCollapsed.provider
               void store.setUiState({ open: true, provider, ...(provider === 'claude' || provider === 'codex' ? { expanded: null } : {}) })
             }}>+{collapsed.length}</Button>}

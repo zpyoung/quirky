@@ -24,6 +24,8 @@ Account selection, inactive-account usage, and usage refresh operate on the sele
 
 The Usage status bar measures the rendered chip container, gaps and overflow-button widths. Its preferred width comes from all configured, visible provider chips, so it uses free status-bar space and restores collapsed chips when space returns. It keeps an exact visible prefix and a `+N` button for the omitted providers; the button's tooltip names that suffix, and clicking the button opens the first omitted provider's details. Compact, Detailed, Remaining and badge-only changes remeasure, and hidden measurement elements do not enlarge the status bar. Escape closes the Usage popover and returns focus to the status-bar trigger; outside-pointer dismissal only closes it.
 
+The overflow button's accessible name announces `1 more provider` for one omitted provider and `N more providers` for multiple omitted providers.
+
 Refreshing usage does not add chips for unconfigured providers. Providers with account, credential or cached-usage evidence remain visible while fetching.
 
 Each provider chip opens that provider's usage details; Claude and Codex details include the account switcher. Chips support click, Enter and Space, and their accessible names include the provider and current usage or status, plus reset timing when available.

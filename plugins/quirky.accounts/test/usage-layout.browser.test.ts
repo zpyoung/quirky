@@ -64,6 +64,7 @@ test.skipIf(!existsSync(executable))('usage chips use free status-bar space and 
     expect(await providers.evaluateAll((chips) => chips.map((chip) => chip.getAttribute('data-provider')))).toEqual(['claude'])
     expect(await page.locator('.shell-statusbar').evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true)
     const suffix = page.locator('.usage-chips button[title^="Also: Codex"]')
+    expect(await suffix.getAttribute('aria-label')).toMatch(/\b1 more provider\b/)
     await suffix.click()
     await page.waitForSelector('.usage-popover > .provider-details[aria-label="Codex usage details"]')
     await page.getByRole('button', { name: 'Close Usage', exact: true }).click()
