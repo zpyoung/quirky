@@ -912,6 +912,7 @@ test('sidebar renders a durable linked PR as an external link beside the editabl
     onToggleAutomationDetails() {},
     now: 0,
     separatorEnabled: false,
+    canShowSleeping: () => true,
     statusDefinitions: DEFAULT_WORKTREE_STATUSES.map((status) => ({ ...status })),
     projectIdentities: {},
     onDropPreviewChange() {},

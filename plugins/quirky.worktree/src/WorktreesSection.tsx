@@ -272,6 +272,8 @@ export function WorktreesSection({ context, report, requests, addProjectRequests
     [currentProjection]
   )
   const alwaysShowPrimary = activityProjection?.preferences.alwaysShowDefaultBranchWorkspace ?? true
+  const canShowSleeping = (worktree: Worktree) =>
+    stockOptions.showSleeping || revealSleeping || (worktree.isMain && alwaysShowPrimary)
   const ordered = useMemo(() => orderedWorktrees(worktrees, stockOptions.sortBy, sessions, repos), [worktrees, stockOptions.sortBy, sessions, repos])
   const hiddenFilteredWorktrees = useMemo(
     () => revealFiltered ? [] : ordered.filter((worktree) =>
@@ -290,7 +292,7 @@ export function WorktreesSection({ context, report, requests, addProjectRequests
     const result = new Set<string>()
     for (const worktree of ordered) {
       if (!revealFiltered && !passesStockFilters(worktree, stockOptions, hasAuthenticatedDesktopClient, otherClientByWorktree)) continue
-      const showSleeping = !isSleeping(worktree) || stockOptions.showSleeping || revealSleeping || (worktree.isMain && alwaysShowPrimary)
+      const showSleeping = !isSleeping(worktree) || canShowSleeping(worktree)
       if (showSleeping && (!visibleIds || visibleIds.has(worktree.id))) result.add(worktree.id)
     }
     return result
@@ -632,6 +634,7 @@ export function WorktreesSection({ context, report, requests, addProjectRequests
             now={now}
             separatorEnabled={separatorEnabled}
             options={stockOptions}
+            canShowSleeping={canShowSleeping}
             statusDefinitions={statusDefinitions}
             projectIdentities={projectIdentities}
             allWorktrees={ordered}

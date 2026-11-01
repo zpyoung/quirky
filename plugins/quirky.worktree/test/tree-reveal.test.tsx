@@ -66,7 +66,7 @@ async function mount(options = DEFAULT_STOCK_OPTIONS) {
   const props: TreeProps = {
     context, model, groups: [], sessions: [], selectedId: null,
     automationExpandedId: null, automationAvailability: null, onToggleAutomationDetails: () => {},
-    now: 1, separatorEnabled: false, options, statusDefinitions: [], projectIdentities: {},
+    now: 1, separatorEnabled: false, options, canShowSleeping: (worktree) => options.showSleeping || worktree.isMain, statusDefinitions: [], projectIdentities: {},
     openDialog: () => {}, requestDelete: () => {}, onDropPreviewChange: () => {}, onSeparatorStateChange: () => {}
   }
   root = createRoot(host)

@@ -29,6 +29,7 @@ export type TreeProps = {
   now: number
   separatorEnabled: boolean
   options?: StockWorktreeOptions
+  canShowSleeping(worktree: Worktree): boolean
   statusDefinitions: WorktreeStatusDefinition[]
   projectIdentities: Record<string, WorktreeProjectIdentity>
   allWorktrees?: WorktreeControl[]
@@ -408,6 +409,7 @@ export function Tree({
   now,
   separatorEnabled,
   options = DEFAULT_STOCK_OPTIONS,
+  canShowSleeping,
   statusDefinitions,
   projectIdentities,
   allWorktrees = [],
@@ -425,6 +427,8 @@ export function Tree({
   const [stickySections, setStickySections] = useState<ReadonlySet<string>>(new Set())
   const [folded, setFolded] = useState<Set<string>>(() => new Set())
   const treeRoot = useRef<HTMLDivElement>(null)
+  const menuActionFocus = useRef<{ worktreeId: string; allowPinned: boolean; skipRows: boolean } | null>(null)
+  const previousFocusOwner = useRef<HTMLElement | null>(null)
   const draggedWorktree = useRef<Worktree | null>(null)
   const previewRef = useRef<MembershipTarget | null>(null)
   const allGroupNodes = useMemo(() => {
@@ -478,6 +482,42 @@ export function Tree({
       return next
     })
   }, [model, separatorEnabled])
+
+  useEffect(() => {
+    const rememberFocusOwner = (event: FocusEvent) => {
+      const target = event.target
+      if (!(target instanceof HTMLElement) || treeRoot.current?.contains(target) || target.closest('[role="menu"]')) return
+      previousFocusOwner.current = target
+    }
+    document.addEventListener('focusin', rememberFocusOwner)
+    return () => document.removeEventListener('focusin', rememberFocusOwner)
+  }, [])
+
+  useLayoutEffect(() => {
+    const pending = menuActionFocus.current
+    if (menu !== null || pending === null) return
+    menuActionFocus.current = null
+
+    let pinnedFallback: HTMLButtonElement | null = null
+    if (!pending.skipRows) {
+      for (const row of treeRoot.current?.querySelectorAll<HTMLElement>('[data-worktree-id]') ?? []) {
+        if (row.dataset.worktreeId !== pending.worktreeId) continue
+        const actions = row.querySelector<HTMLButtonElement>('.worktree-menu')
+        if (!actions?.isConnected) continue
+        if (row.closest('[data-top-level-section="pinned"]')) {
+          pinnedFallback ??= actions
+          continue
+        }
+        actions.focus()
+        return
+      }
+      if (pending.allowPinned && pinnedFallback) {
+        pinnedFallback.focus()
+        return
+      }
+    }
+    if (previousFocusOwner.current?.isConnected) previousFocusOwner.current.focus()
+  }, [menu])
 
   useEffect(() => {
     onSeparatorStateChange({ enabled: separatorEnabled, eligibleBoundaries })
@@ -555,7 +595,10 @@ export function Tree({
       label: `Actions for ${worktree.name}`,
       items: workspaceMenu(worktree, descendantsOf.get(worktree.id) ?? 0, groups, repo, {
         setStatus: (item, status) => void setWorktree(context, item.id, { status }),
-        setPinned: (item, pinned) => void setWorktree(context, item.id, { pinned }),
+        setPinned: (item, pinned) => {
+          menuActionFocus.current = { worktreeId: item.id, allowPinned: pinned, skipRows: false }
+          void setWorktree(context, item.id, { pinned })
+        },
         setUnread: (item, unread) => void setWorktree(context, item.id, { unread }),
         removeParent: (item) => void setWorktree(context, item.id, { noParent: true }),
         copy: (text) => void copyText(context, text),
@@ -563,7 +606,15 @@ export function Tree({
         openDeleteDialog: requestDelete,
         setMembership: changeMembership,
         moveProject,
-        setSleeping: (item, sleeping, withDescendants) => void setWorkspaceSleeping(context, item.id, sleeping, withDescendants),
+        setSleeping: (item, sleeping, withDescendants) => {
+          const rowRemainsVisible = !sleeping || canShowSleeping(item)
+          menuActionFocus.current = {
+            worktreeId: item.id,
+            allowPinned: rowRemainsVisible,
+            skipRows: !rowRemainsVisible
+          }
+          void setWorkspaceSleeping(context, item.id, sleeping, withDescendants)
+        },
         openIn: (item, target) => {
           void currentWindowId(context).then((window) =>
             context.call('quirky.worktree/openIn', { worktree: item.id, target, window })
