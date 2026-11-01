@@ -819,7 +819,7 @@
 }
 
 /* widths assume the funnel and minimize controls sit to the button's right */
-@container ui-tool-panel-header (max-width: 140px) {
+@container ui-tool-panel-header (max-width: 156px) {
   .ui-expanding-icon-button__label {
     display: none;
   }

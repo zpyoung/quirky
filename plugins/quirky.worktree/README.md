@@ -23,6 +23,7 @@ Unpin from Pinned returns focus to the remaining project row. If the action hide
 focus returns to the previous focus owner.
 
 In narrow panels, the panel heading and project names sit above their controls so they remain readable.
+Add project stays icon-only on hover or keyboard focus when its label and neighboring controls do not fit together; when they do, its label expands without moving the filter or minimize controls.
 Project names truncate with an ellipsis; project avatars stay whole, and hover or keyboard focus reveals
 the project controls without moving the name or count.
 
