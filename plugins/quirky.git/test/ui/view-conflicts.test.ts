@@ -139,10 +139,57 @@ describe('quirky.git conflict file view', () => {
     expect(byLabel(element, 'Next conflict')).toBeNull()
   })
 
-  test('SC-41: a resolved-locally file says git no longer lists it', async () => {
-    const { element } = await openFile(conflictFile({ state: 'resolved_locally' }))
-    expect(element.textContent).toContain('Resolved locally conflict · Both modified')
-    expect(element.textContent).toContain('Session-local continuity state. Git is no longer reporting this file as unmerged.')
+  test('SC-41: refreshing a staged deleted conflict presents plain resolved state without conflict actions', async () => {
+    const { element, report } = await openFile(conflictFile({ kind: 'deleted_by_them' }))
+    const editor = view(element)
+    fake.handlers['quirky.git/conflictFile'] = () => conflictFile({ kind: 'deleted_by_them', state: 'resolved_locally' })
+    await act(async () => fake.emit({ type: 'quirky.git/changed', data: { worktreeId: 'w1' } }))
+    await settle()
+    const statusText = element.querySelector('[role="status"]')?.textContent ?? ''
+    expect(statusText).toContain('Resolved')
+    expect(statusText.toLowerCase()).not.toContain('conflict')
+    expect(element.querySelector('h2')?.textContent?.toLowerCase()).not.toContain('conflict')
+    expect(element.textContent).not.toContain('Decide whether to keep the file or accept deletion')
+    expect(counter(element)).toBeUndefined()
+    expect(byLabel(element, 'Previous conflict')).toBeNull()
+    expect(byLabel(element, 'Next conflict')).toBeNull()
+    expect(view(element)).toBe(editor)
+    expect(report()).toMatchObject({ conflicts: 0, currentConflict: null })
+  })
+
+  test('SC-41: a failed file refresh clears conflict UI only after status confirms the operation ended', async () => {
+    const { element, report } = await openFile()
+    const editor = view(element)
+    act(() => editor.dispatch({ changes: { from: 0, insert: 'draft ' } }))
+    const draft = editor.state.sliceDoc()
+    fake.handlers['quirky.git/conflictFile'] = () => {
+      throw failure('math.ts is no longer conflicted.', 'not-found')
+    }
+    await act(async () => fake.emit({ type: 'quirky.git/changed', data: { worktreeId: 'w1' } }))
+    await settle()
+    const statusText = element.querySelector('[role="status"]')?.textContent ?? ''
+    expect(statusText.toLowerCase()).toContain('operation ended')
+    expect(element.querySelector('h2')?.textContent?.toLowerCase()).not.toContain('conflict')
+    expect(counter(element)).toBeUndefined()
+    expect(byLabel(element, 'Previous conflict')).toBeNull()
+    expect(byLabel(element, 'Next conflict')).toBeNull()
+    expect(view(element)).toBe(editor)
+    expect(view(element).state.sliceDoc()).toBe(draft)
+    expect(report()).toMatchObject({ dirty: true, conflicts: 0, currentConflict: null })
+  })
+
+  test('SC-41: a transient file refresh error keeps conflict UI while status reports an active merge', async () => {
+    const { element, report } = await openFile()
+    fake.handlers['quirky.git/conflictFile'] = () => {
+      throw new Error('temporary read failure')
+    }
+    fake.handlers['quirky.git/status'] = () => ({ ...status(), operation: 'merge' })
+    await act(async () => fake.emit({ type: 'quirky.git/changed', data: { worktreeId: 'w1' } }))
+    await settle()
+
+    expect(element.querySelector('[role="status"]')?.textContent).toContain('Unresolved conflict')
+    expect(counter(element)).toBe('1 / 2')
+    expect(report()).toMatchObject({ conflicts: 2 })
   })
 
   test('SC-41: Mod+S saves the file with the hash it was read with, and the next save the new hash', async () => {
@@ -204,16 +251,6 @@ describe('quirky.git conflict file view', () => {
     await settle()
     expect(report().stale).toBe(true)
     expect(view(element).state.sliceDoc().startsWith('x')).toBe(true)
-  })
-
-  test('a refresh that finds the file state changed updates the banner without rebuilding the editor', async () => {
-    const { element } = await openFile()
-    const before = element.querySelector('.cm-editor')
-    fake.handlers['quirky.git/conflictFile'] = () => conflictFile({ state: 'resolved_locally' })
-    await act(async () => fake.emit({ type: 'quirky.git/changed', data: { worktreeId: 'w1' } }))
-    await settle()
-    expect(element.textContent).toContain('Resolved locally conflict')
-    expect(element.querySelector('.cm-editor')).toBe(before)
   })
 
   test('a file that cannot be read shows the error', async () => {
