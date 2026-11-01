@@ -990,6 +990,8 @@ insert shell-escaped paths; **Open in Terminal** uses the selected directory dir
 The footer's **Copy Path**, **Copy Relative Path**, and **Delete** actions are disabled
 in Contents mode because its search results don't expose the tree selection. Returning
 to Names restores access to the retained selection.
+Creating or duplicating a file selects the new path in Explorer, so footer path-copy
+and deletion actions target it, including inside expanded folders.
 
 The buffer's optional `diskWritable` is advisory effective OS access, separate from the
 format's `readOnly` capability. A readable non-writable Markdown file can keep drafts and
