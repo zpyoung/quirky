@@ -460,6 +460,7 @@ a scenario says otherwise, so `--worktree` defaults to it.
     - **Given** **w1** and **w2** of SC-49, and local branches `main` and `release`, remote branches `origin/main` and `origin/release`
     - **When** the person opens "Change Base Ref…" on **w1**, searches `rel` and picks the local branch `release`; then on **w2** picks `origin/main`; then on **w2** clicks Use Primary
     - **Then** the dialog reads "Change Base Ref" with "Pick the branch compare target for this repository.", lists branches matching the search, and marks the current one; **w1**'s worktree base becomes `release`; **w2** has no base of its own, so the project's default base becomes `origin/main`, which every worktree of the project without its own base now uses; Use Primary clears the project's default, so **w2** falls back to the detected default. `quirky git setBase --base release` and `quirky git setBase --clear` do the same from the CLI.
+    - **Keyboard:** in Search branches, Enter picks the sole matching branch once the search finishes; with zero or multiple matches it leaves the base unchanged. ArrowDown focuses the first matching branch button, where Enter picks it. While a search or base save is pending, keyboard selection cannot submit a stale match or repeat the save.
 
 51. **SC-51: compare refreshes on its own** (UI)
     - **Given** the panel showing Committed on Branch

@@ -5,7 +5,7 @@ import { registerDom } from './register-dom'
 registerDom()
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 const s = await import('./panel-support')
-const { act, byLabel, buttonText, click, compareOf, DIFF_VIEW, entry, failure, fakeContext, layoutFor, mountPanel, noticeOf, q, qa, rowOf, settle, statusOf, type } = s
+const { act, byLabel, buttonText, click, compareOf, DIFF_VIEW, entry, failure, fakeContext, layoutFor, mountPanel, noticeOf, press, q, qa, rowOf, settle, statusOf, type } = s
 const { activePanel } = await import('../../src/panel/registry')
 
 afterAll(() => GlobalRegistrator.unregister())
@@ -153,6 +153,118 @@ describe('SC-50: Change Base Ref', () => {
       deferCompare = false
       pendingCompare.resolve(fake.compare)
       await settle()
+      unmount()
+    }
+  })
+
+  test('Enter in search chooses the sole matching branch and refreshes compare', async () => {
+    const { fake, element, unmount } = await open(setup)
+    try {
+      await click(q(element, '[data-base-ref]'))
+      await type(byLabel(dialog()!, 'Search branches') as HTMLInputElement, 'origin/release')
+      fake.compare = compareOf({ base: 'origin/release' })
+      const beforeCompare = fake.called('quirky.git/compare').length
+      await press(byLabel(dialog()!, 'Search branches')!, 'Enter')
+      expect(fake.called('quirky.git/setBase').at(-1)?.params).toEqual({ worktree: 'feat', base: 'origin/release' })
+      expect(fake.called('quirky.git/compare')).toHaveLength(beforeCompare + 1)
+      expect(dialog()).toBeNull()
+      expect(q(element, '[data-base-ref]')?.textContent).toContain('origin/release')
+    } finally {
+      unmount()
+    }
+  })
+
+  test('ArrowDown in search focuses the first matching branch without changing the base', async () => {
+    const { fake, element, unmount } = await open(setup)
+    try {
+      await click(q(element, '[data-base-ref]'))
+      const search = byLabel(dialog()!, 'Search branches') as HTMLInputElement
+      await type(search, 'rel')
+      search.focus()
+      await press(search, 'ArrowDown')
+      expect(document.activeElement === q(dialog()!, '[aria-label="Branches"] button')).toBe(true)
+      expect(document.activeElement?.textContent).toBe('releaselocal')
+      expect(fake.called('quirky.git/setBase')).toHaveLength(0)
+    } finally {
+      unmount()
+    }
+  })
+
+  test('Enter in search leaves ambiguous or empty matches unchanged', async () => {
+    const { fake, element, unmount } = await open(setup)
+    try {
+      await click(q(element, '[data-base-ref]'))
+      const search = byLabel(dialog()!, 'Search branches') as HTMLInputElement
+      await type(search, 'rel')
+      await press(search, 'Enter')
+      expect(fake.called('quirky.git/setBase')).toHaveLength(0)
+      await type(search, 'missing')
+      await press(search, 'Enter')
+      await press(search, 'ArrowDown')
+      expect(fake.called('quirky.git/setBase')).toHaveLength(0)
+      expect(dialog()).not.toBeNull()
+    } finally {
+      unmount()
+    }
+  })
+
+  test('Enter cannot select a stale match while the new search is pending', async () => {
+    const { fake, element, unmount } = await open(setup)
+    const pending = Promise.withResolvers<{ refs: typeof refs }>()
+    try {
+      await click(q(element, '[data-base-ref]'))
+      const search = byLabel(dialog()!, 'Search branches') as HTMLInputElement
+      await type(search, 'origin/release')
+      fake.on('quirky.git/branches', () => pending.promise)
+      await type(search, 'main')
+      await press(search, 'Enter')
+      expect(fake.called('quirky.git/setBase')).toHaveLength(0)
+      expect(dialog()).not.toBeNull()
+    } finally {
+      await act(async () => pending.resolve({ refs: refs.filter((ref) => ref.name.includes('main')) }))
+      await settle()
+      unmount()
+    }
+  })
+
+  test('repeated Enter cannot submit the base again while compare is refreshing', async () => {
+    const { fake, element, unmount } = await open(setup)
+    const pending = Promise.withResolvers<typeof fake.compare>()
+    try {
+      await click(q(element, '[data-base-ref]'))
+      const search = byLabel(dialog()!, 'Search branches') as HTMLInputElement
+      await type(search, 'origin/release')
+      fake.on('quirky.git/compare', () => pending.promise)
+      await press(search, 'Enter')
+      await press(search, 'Enter')
+      expect(fake.called('quirky.git/setBase')).toHaveLength(1)
+      expect(dialog()).not.toBeNull()
+    } finally {
+      await act(async () => pending.resolve(compareOf({ base: 'origin/release' })))
+      await settle()
+      unmount()
+    }
+  })
+
+  test('keyboard selection can retry after a base save fails', async () => {
+    const { fake, element, unmount } = await open(setup)
+    try {
+      await click(q(element, '[data-base-ref]'))
+      const search = byLabel(dialog()!, 'Search branches') as HTMLInputElement
+      await type(search, 'origin/release')
+      fake.on('quirky.git/setBase', () => { throw new Error('Cannot save base') })
+      await press(search, 'Enter')
+      expect(q(dialog()!, '[role="alert"]')?.textContent).toContain('Cannot save base')
+      await press(search, 'ArrowDown')
+      expect(document.activeElement === q(dialog()!, '[aria-label="Branches"] button')).toBe(true)
+      fake.on('quirky.git/setBase', () => ({}))
+      fake.compare = compareOf({ base: 'origin/release' })
+      search.focus()
+      await press(search, 'Enter')
+      expect(fake.called('quirky.git/setBase')).toHaveLength(2)
+      expect(dialog()).toBeNull()
+      expect(q(element, '[data-base-ref]')?.textContent).toContain('origin/release')
+    } finally {
       unmount()
     }
   })
