@@ -62,6 +62,7 @@ async function wire(options: { mount?: boolean; settings?: Record<string, unknow
       'quirky.terminal/paneOf': (params) => ({ workspace: 'wt-main', tab: 'tab-1', pane: params.pane }),
       'quirky.terminal/focusContext': (params) => ({ workspace: params.workspace ?? null }),
       'quirky.terminal/openSession': () => ({ workspace: daemon.current, pane: 'pane-1' }),
+      'quirky.worktree/resolve': () => ({ repoId: 'repo-1' }),
       'quirky.worktree/wake': options.wake ?? (() => ({})),
       'quirky.terminal/floating': () => floating,
       'quirky.terminal/setFloating': (params) => {
