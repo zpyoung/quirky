@@ -301,15 +301,18 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
     await Promise.all([data.refresh(), compareData.refresh()])
   }, [data.refresh, compareData.refresh])
 
-  const recoverPanelFocus = useCallback((opener: Element | null) => {
-    const active = document.activeElement
-    const activeIsValid = active !== null && active !== document.body && active.isConnected && !active.hasAttribute('disabled')
-    if (activeIsValid && active !== opener) return
+  const focusPanel = useCallback(() => {
     const panel = root.current
     const target = panel?.querySelector<HTMLButtonElement>('[data-base-ref]:not(:disabled)')
       ?? panel?.querySelector<HTMLButtonElement>('[aria-label="More commit and remote actions"]:not(:disabled)')
     target?.focus()
   }, [])
+  const recoverPanelFocus = useCallback((opener: Element | null) => {
+    const active = document.activeElement
+    const activeIsValid = active !== null && active !== document.body && active.isConnected && !active.hasAttribute('disabled')
+    if (activeIsValid && active !== opener) return
+    focusPanel()
+  }, [focusPanel])
   const requestFocusRecovery = useCallback((opener: Element | null = null) => {
     setFocusRecovery((request) => ({ revision: request.revision + 1, opener }))
   }, [])
@@ -318,9 +321,9 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
   }, [focusRecovery, recoverPanelFocus])
   useEffect(() => {
     const baseDialogOpen = dialog?.kind === 'base'
-    if (baseDialogWasOpen.current && !baseDialogOpen) recoverPanelFocus(null)
+    if (baseDialogWasOpen.current && dialog === null) focusPanel()
     baseDialogWasOpen.current = baseDialogOpen
-  }, [dialog?.kind, recoverPanelFocus])
+  }, [dialog, focusPanel])
 
   const sections = useMemo(() => groupSections(entries, settings.groupOrder), [entries, settings.groupOrder])
   const visibleEntries = useCallback(
