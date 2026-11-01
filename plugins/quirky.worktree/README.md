@@ -86,7 +86,7 @@ Navigation history and cleanup use the same canonical owner resolution. Each liv
 
 `quirky.worktree/ownedIds({repo})` returns the project's primary, currently listed, and durably recorded worktree IDs. Recorded IDs remain available when Git can no longer list a checkout, so project removal can still find its sessions. Removing a project forgets metadata rather than deleting its folders; ledger removal previews retain revision-guarded records for detachment and later recovery.
 
-The Delete Workspace confirmation initially focuses Cancel, so Return dismisses it without deleting anything. To delete the workspace, explicitly choose Delete Workspace.
+The Delete Workspace confirmation warns how many agents are still running in the workspace and any descendants being deleted, and that deletion ends those sessions. It initially focuses Cancel, so Return dismisses it without deleting anything. To delete the workspace, explicitly choose Delete Workspace.
 
 ## Cleanup preview and removal
 
