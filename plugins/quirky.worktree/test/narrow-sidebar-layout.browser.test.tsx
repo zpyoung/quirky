@@ -43,12 +43,52 @@ function browserEntry(): string {
   const uiModule = join(ROOT, 'packages/ui/src/design-system/index.ts')
   const treeModule = join(ROOT, 'plugins/quirky.worktree/src/Tree.tsx')
   const controlTypesModule = join(ROOT, 'plugins/quirky.worktree/src/control-types.ts')
+  const activityFiltersModule = join(ROOT, 'plugins/quirky.worktree/src/ActivityFilters.tsx')
+  const activityTypesModule = join(ROOT, 'plugins/quirky.worktree/src/useSidebarActivity.ts')
   return `
-    import { createElement as h } from 'react'
+    import { createElement as h, useRef, useState } from 'react'
     import { createRoot } from 'react-dom/client'
     import { Tree } from ${JSON.stringify(treeModule)}
     import { DEFAULT_STOCK_OPTIONS } from ${JSON.stringify(controlTypesModule)}
-    import { Badge, ExpandingIconButton, IconButton, ListRow, Tabs, ToolPanelFrame } from ${JSON.stringify(uiModule)}
+    import { ActivityFilters } from ${JSON.stringify(activityFiltersModule)}
+    import type { ActivityPreferencePatch, ActivityPreferences, SidebarProjection } from ${JSON.stringify(activityTypesModule)}
+    import { Badge, ExpandingIconButton, IconButton, ListRow, Popover, Tabs, ToolPanelFrame } from ${JSON.stringify(uiModule)}
+
+    function ActivityFiltersRegressionFixture() {
+      const [open, setOpen] = useState(false)
+      const [preferences, setPreferenceState] = useState<ActivityPreferences>({
+        workspaceActivityWindow: 'week',
+        workspaceActivityCustomDays: 14,
+        alwaysShowDefaultBranchWorkspace: false,
+        workspaceActivityWindowBeforeLiveOnly: 'week',
+        hideCompletedReviewWorkspaces: false,
+        hidePassingCheckWorkspaces: false,
+        hideAutomationCreated: false
+      })
+      const anchor = useRef<HTMLButtonElement | null>(null)
+      const projection = {
+        preferences,
+        filterCount: 0,
+        hiddenCount: 0,
+        automationHiddenCount: 0
+      } as SidebarProjection
+      const setPreferences = async (patch: ActivityPreferencePatch): Promise<boolean> => {
+        setPreferenceState((current) => ({ ...current, ...patch }))
+        return true
+      }
+      return h('div', null,
+        h(IconButton, {
+          ref: anchor,
+          label: 'Worktrees options',
+          'aria-expanded': open,
+          'aria-haspopup': 'dialog',
+          onClick: () => setOpen((value) => !value)
+        }, '⋯'),
+        h(Popover, { open, label: 'Worktrees options', anchor, onClose: () => setOpen(false) },
+          h(ActivityFilters, { projection, error: null, setPreferences })
+        )
+      )
+    }
 
     const projectName = 'QuirkyWorktreeProject'
     const projectActionResult = document.createElement('output')
@@ -60,7 +100,6 @@ function browserEntry(): string {
     document.body.append(projectActionResult)
     const treeContext = {
       call: async () => [],
-      toast: () => {},
       log: () => {},
       subscribe: () => () => {},
       onConnection: () => () => {}
@@ -178,9 +217,14 @@ function browserEntry(): string {
       h('div', { className: 'gutter' })
     )
 
-    createRoot(document.getElementById('root')).render(layout)
+    createRoot(document.getElementById('root')).render(
+      document.documentElement.dataset.activityFiltersRegression === 'true'
+        ? h(ActivityFiltersRegressionFixture)
+        : layout
+    )
   `
 }
+
 
 function panelHeaderRegressionBrowserEntry(): string {
   const uiModule = join(ROOT, 'packages/ui/src/design-system/index.ts')
@@ -1299,6 +1343,108 @@ test.skipIf(!existsSync(chromium.executablePath()))('ellipsizes the Worktrees he
       await addProject.evaluate((element) => (element as HTMLElement).blur())
       await host.evaluate((element) => element.removeAttribute('data-panel-focused'))
       expect(await measure()).toEqual(resting)
+    }
+  } finally {
+    await context.close()
+  }
+}, 60_000)
+test.skipIf(!existsSync(chromium.executablePath()))('keeps all Worktrees activity window tabs visible without horizontal scrolling', async () => {
+  const context = await browser!.newContext({ viewport: { width: 1280, height: 720 } })
+  const page = await context.newPage()
+  try {
+    await page.setContent(pageMarkup())
+    await page.evaluate(() => {
+      document.documentElement.dataset.activityFiltersRegression = 'true'
+    })
+    for (const stylesheet of STYLESHEETS) {
+      await page.addStyleTag({ content: readFileSync(join(ROOT, stylesheet), 'utf8') })
+    }
+    await page.addScriptTag({ content: browserBundle })
+    const optionsButton = page.getByRole('button', { name: 'Worktrees options', exact: true })
+    await optionsButton.waitFor()
+    const expectedTabs = ['All', 'Live only', 'Past 24 hours', 'Past 7 days', 'Past 30 days', 'Custom']
+
+    const expectContained = (
+      inner: { left: number; top: number; right: number; bottom: number },
+      outer: { left: number; top: number; right: number; bottom: number }
+    ) => {
+      expect(inner.left).toBeGreaterThanOrEqual(outer.left - 0.5)
+      expect(inner.top).toBeGreaterThanOrEqual(outer.top - 0.5)
+      expect(inner.right).toBeLessThanOrEqual(outer.right + 0.5)
+      expect(inner.bottom).toBeLessThanOrEqual(outer.bottom + 0.5)
+    }
+
+    for (const width of [1280, 360]) {
+      await page.setViewportSize({ width, height: 720 })
+      await optionsButton.click()
+      const popover = page.getByRole('dialog', { name: 'Worktrees options' })
+      await popover.waitFor({ state: 'visible' })
+      await popover.getByRole('button', { name: /^Activity filters/ }).click()
+      const tablist = popover.getByRole('tablist', { name: 'Workspace activity window' })
+      await tablist.waitFor({ state: 'visible' })
+
+      const geometry = await page.evaluate(() => {
+        const tablist = document.querySelector<HTMLElement>('#workspace-activity-filter-options [role="tablist"]')!
+        const popover = document.querySelector<HTMLElement>('.ui-popover')!
+        const clientBounds = (element: HTMLElement) => {
+          const rect = element.getBoundingClientRect()
+          return {
+            left: rect.left + element.clientLeft,
+            top: rect.top + element.clientTop,
+            right: rect.left + element.clientLeft + element.clientWidth,
+            bottom: rect.top + element.clientTop + element.clientHeight
+          }
+        }
+        const rectBounds = (element: HTMLElement) => {
+          const rect = element.getBoundingClientRect()
+          return { left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom }
+        }
+        const popoverBounds = clientBounds(popover)
+        return {
+          viewportWidth: window.innerWidth,
+          viewportHeight: window.innerHeight,
+          popover: rectBounds(popover),
+          visiblePopover: {
+            left: Math.max(0, popoverBounds.left),
+            top: Math.max(0, popoverBounds.top),
+            right: Math.min(window.innerWidth, popoverBounds.right),
+            bottom: Math.min(window.innerHeight, popoverBounds.bottom)
+          },
+          tablist: {
+            ...clientBounds(tablist),
+            clientWidth: tablist.clientWidth,
+            scrollWidth: tablist.scrollWidth
+          },
+          tabs: [...tablist.querySelectorAll<HTMLElement>('[role="tab"]')].map((tab) => ({
+            name: tab.textContent?.trim() ?? '',
+            ...rectBounds(tab)
+          }))
+        }
+      })
+
+      expect(geometry.viewportWidth).toBe(width)
+      expect(geometry.viewportHeight).toBe(720)
+      expectContained(geometry.popover, {
+        left: 0,
+        top: 0,
+        right: geometry.viewportWidth,
+        bottom: geometry.viewportHeight
+      })
+      expect(geometry.tabs.map(({ name }) => name)).toEqual(expectedTabs)
+      expect(geometry.tablist.scrollWidth).toBeLessThanOrEqual(geometry.tablist.clientWidth)
+      for (const tab of geometry.tabs) {
+        expectContained(tab, geometry.tablist)
+        expectContained(tab, geometry.visiblePopover)
+      }
+
+      if (width === 360) {
+        await tablist.getByRole('tab', { name: 'Custom', exact: true }).click()
+        const customDays = popover.getByRole('textbox', { name: 'Custom days' })
+        await customDays.waitFor({ state: 'visible' })
+        expect(await customDays.inputValue()).toBe('14')
+      } else {
+        await optionsButton.click()
+      }
     }
   } finally {
     await context.close()

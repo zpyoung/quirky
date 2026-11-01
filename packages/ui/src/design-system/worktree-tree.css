@@ -124,3 +124,7 @@
     display: none;
   }
 }
+
+#workspace-activity-filter-options .ui-tabs {
+  flex-wrap: wrap;
+}
