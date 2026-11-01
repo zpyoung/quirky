@@ -213,6 +213,7 @@ export function ConflictFile({ context, input, settings, report, bind, close }: 
     nextConflict: () => step(1),
     previousConflict: () => step(-1),
     save: () => save(false),
+    isDirty: () => dirtyRef.current,
     reloadFromDisk: reload,
     overwrite: () => save(true)
   })

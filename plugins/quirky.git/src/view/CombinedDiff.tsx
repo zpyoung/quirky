@@ -256,7 +256,17 @@ export function CombinedDiff({ context, input, settings, setSetting, report, bin
     nextChange: () => navigate(1),
     previousChange: () => navigate(-1),
     revertChange: () => void handles.current.get(activeRef.current ?? '')?.revertChange(),
-    save: () => eachPane((s) => s.dirty, (h) => h.save()),
+    save: async () => {
+      for (const handle of handles.current.values()) {
+        if (handle.isDirty()) await handle.save()
+      }
+    },
+    isDirty: () => {
+      for (const handle of handles.current.values()) {
+        if (handle.isDirty()) return true
+      }
+      return false
+    },
     reloadFromDisk: () => eachPane((s) => s.stale, (h) => h.reload()),
     overwrite: () => eachPane((s) => s.stale, (h) => h.overwrite()),
     collapseAll: (value) => setAllCollapsed(value ?? !allCollapsed),

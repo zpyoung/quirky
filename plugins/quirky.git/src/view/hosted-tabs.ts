@@ -20,6 +20,8 @@ type TabLocation = { tab: PublicViewTab; group: PublicGroup }
 
 const subscribed = new WeakSet<UiPluginContext>()
 const DIFF_TAB_ICON = { kind: 'tool', name: 'git-diff', hue: 'azure' } as const
+const CLOSE_DIFF_COMMAND = 'command:quirky.git/close-diff'
+const dirtyUpdates = new Map<string, Promise<void>>()
 
 function workspaceFrom(value: unknown): PublicWorkspace {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) throw new Error('Terminal returned an invalid workspace.')
@@ -79,14 +81,15 @@ function tabLocations(workspace: PublicWorkspace): TabLocation[] {
 }
 
 
-function titleOf(input: DiffViewInput): string {
-  const title = input.mode === 'file'
+function titleOf(input: DiffViewInput, dirty = false): string {
+  const base = input.mode === 'file'
     ? input.path ? `${input.path} (${input.source === 'branch' ? 'Branch Diff' : input.source === 'commit' ? 'Commit Diff' : 'Diff'})` : 'Diff'
     : input.mode === 'combined'
       ? input.commit ? `Commit ${input.commit.slice(0, 8)}` : `${input.area ?? 'Changes'} Diff`
       : input.mode === 'conflicts'
         ? 'Conflicts'
         : input.path ?? 'Conflict'
+  const title = dirty ? `${base} • Unsaved` : base
   return title.length <= 200 ? title : `…${title.slice(-199)}`
 }
 
@@ -113,6 +116,7 @@ export async function openHostedDiff(context: UiPluginContext, requested: DiffVi
 
   const key = diffViewKey(requested)
   const sameView = tabLocations(workspace).find(({ tab }) => tab.viewId === DIFF_VIEW_ID && tab.key === key)
+  const dirty = sameView?.tab.closeParams?.dirty === true
   let preview = requested.split === true ? false : requested.preview === true
   let replace: string | undefined
   if (preview) {
@@ -136,13 +140,14 @@ export async function openHostedDiff(context: UiPluginContext, requested: DiffVi
     viewId: DIFF_VIEW_ID,
     key,
     input: apiInput,
-    title: titleOf(input),
+    title: titleOf(input, dirty),
     icon: DIFF_TAB_ICON,
     reuse: true,
     activate: true,
     preview,
+    closeCommand: CLOSE_DIFF_COMMAND,
     closeMethod: 'quirky.git/diffCloseGuard',
-    closeParams: { worktree: requested.worktree, dirty: false },
+    closeParams: { worktree: requested.worktree, dirty },
     closeContext: true,
     revision: workspace.revision,
     ...(replace === undefined ? {} : { replace })
@@ -174,7 +179,7 @@ export async function openHostedDiff(context: UiPluginContext, requested: DiffVi
   await context.call('quirky.terminal/rekeyViewTabs', {
     workspace: `id:${requested.worktree}`,
     viewId: DIFF_VIEW_ID,
-    changes: [{ tab: opened.tab, key, input: finalApiInput, title: titleOf(finalInput), preview }],
+    changes: [{ tab: opened.tab, key, input: finalApiInput, title: titleOf(finalInput, dirty), preview }],
     revision: openedWorkspace.revision
   })
   setActiveHostedView(opened.tab)
@@ -184,19 +189,36 @@ export async function openHostedDiff(context: UiPluginContext, requested: DiffVi
   return finalInput
 }
 
-export async function closeHostedDiff(context: UiPluginContext, input: DiffViewInput): Promise<void> {
-  if (!input.tabId) {
-    context.closeView()
-    return
+export async function closeHostedDiff(context: UiPluginContext, input: DiffViewInput, restoreDirty = false): Promise<void> {
+  if (!input.tabId) throw new Error('Hosted diff tab identity is missing.')
+  try {
+    await updateHostedDiffDirty(context, input, false)
+    await context.call('quirky.terminal/closeTab', { tab: input.tabId })
+  } catch (error) {
+    if (restoreDirty) await updateHostedDiffDirty(context, input, true).catch(() => {})
+    throw error
   }
-  await context.call('quirky.terminal/closeTab', { tab: input.tabId })
 }
 
-export async function updateHostedDiffDirty(context: UiPluginContext, input: DiffViewInput, dirty: boolean): Promise<void> {
+export function updateHostedDiffDirty(context: UiPluginContext, input: DiffViewInput, dirty: boolean): Promise<void> {
+  if (!input.tabId) return Promise.resolve()
+  const key = `${input.worktree}\0${input.tabId}`
+  const previous = dirtyUpdates.get(key) ?? Promise.resolve()
+  const update = previous.catch(() => {}).then(() => updateHostedDiffDirtyNow(context, input, dirty))
+  dirtyUpdates.set(key, update)
+  const cleanup = () => {
+    if (dirtyUpdates.get(key) === update) dirtyUpdates.delete(key)
+  }
+  void update.then(cleanup, cleanup)
+  return update
+}
+
+async function updateHostedDiffDirtyNow(context: UiPluginContext, input: DiffViewInput, dirty: boolean): Promise<void> {
   if (!input.tabId) return
   const workspace = await readWorkspace(context, input.worktree)
   const current = tabById(workspace, input.tabId)
-  if (!current || current.tab.closeParams?.dirty === dirty) return
+  const title = titleOf(input, dirty)
+  if (!current || (current.tab.closeParams?.dirty === dirty && current.tab.title === title)) return
   const hostedInput = withHostedIdentity(input, {
     tabId: current.tab.id,
     groupId: current.group.id,
@@ -210,11 +232,12 @@ export async function updateHostedDiffDirty(context: UiPluginContext, input: Dif
     viewId: DIFF_VIEW_ID,
     key: current.tab.key,
     input: apiInput,
-    title: current.tab.title,
+    title,
     icon: DIFF_TAB_ICON,
     reuse: true,
     activate: false,
     preview: current.tab.preview,
+    closeCommand: CLOSE_DIFF_COMMAND,
     closeMethod: 'quirky.git/diffCloseGuard',
     closeParams: { worktree: input.worktree, dirty },
     closeContext: true

@@ -30,7 +30,7 @@ export type ViewReport = {
 }
 
 /** The commands a mode implements; the root forwards the view handle's calls to it. */
-export type Controller = Partial<Omit<ViewHandle, 'input'>>
+export type Controller = Partial<Omit<ViewHandle, 'input' | 'requestClose'>> & { isDirty?(): boolean }
 
 /** What the root hands every mode. */
 export type ModeProps = {

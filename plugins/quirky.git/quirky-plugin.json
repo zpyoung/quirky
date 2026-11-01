@@ -2935,6 +2935,22 @@
         }
       },
       {
+        "id": "close-diff",
+        "title": "Close Source Control Diff",
+        "args": {
+          "type": "object",
+          "properties": {
+            "tabId": {
+              "type": "string",
+              "description": "Identity of the hosted terminal diff tab."
+            },
+            "worktree": { "type": "string" },
+            "dirty": { "type": "boolean" }
+          },
+          "required": ["tabId"]
+        }
+      },
+      {
         "id": "open-changes",
         "title": "View All Changes",
         "args": {
