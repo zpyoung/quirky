@@ -881,10 +881,6 @@
   text-align: center;
 }
 
-.qe-explorer-chevron:empty {
-  display: none;
-}
-
 .qe-explorer-name {
   flex: 1 1 auto;
   min-width: 0;
@@ -919,6 +915,10 @@
 }
 
 @container ui-tool-panel (max-width: 160px) {
+  .ui-tool-panel-frame:has(.qe-explorer) .qe-explorer-chevron:empty {
+    display: none;
+  }
+
   .ui-tool-panel-frame:has(.qe-explorer) .qe-explorer-row {
     padding-inline-start: var(--qe-tree-indent, 0rem);
     position: relative;

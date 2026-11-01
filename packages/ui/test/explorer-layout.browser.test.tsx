@@ -523,6 +523,31 @@ test.skipIf(!existsSync(executable))('Explorer rows and controls stay usable at 
   }
 }, 60_000)
 
+test.skipIf(!existsSync(executable))('file names align with sibling folders in a 300px Explorer rail', async () => {
+  const context = await browser!.newContext({ viewport: { width: 1280, height: 720 } })
+  try {
+    const page = await context.newPage()
+    await mountLiveExplorer(page)
+    await page.locator('.tool-shell__panel').evaluate((panel) => {
+      ;(panel as HTMLElement).style.width = '300px'
+    })
+    const alignment = await page.locator('.qe-explorer-row[data-path="/repo/notes.md"]').evaluate((file) => {
+      const folder = document.querySelector('.qe-explorer-row[data-path="/repo/src"]')!
+      return {
+        fileSlotWidth: file.querySelector('.qe-explorer-chevron')!.getBoundingClientRect().width,
+        folderSlotWidth: folder.querySelector('.qe-explorer-chevron')!.getBoundingClientRect().width,
+        fileNameLeft: file.querySelector('.qe-explorer-name')!.getBoundingClientRect().left,
+        folderNameLeft: folder.querySelector('.qe-explorer-name')!.getBoundingClientRect().left,
+      }
+    })
+    expect(alignment.fileSlotWidth).toBeGreaterThan(0)
+    expect(alignment.fileSlotWidth).toBe(alignment.folderSlotWidth)
+    expect(alignment.fileNameLeft).toBe(alignment.folderNameLeft)
+  } finally {
+    await context.close()
+  }
+}, 60_000)
+
 test.skipIf(!existsSync(executable))('shows full Markdown filenames and keeps Explorer row actions reachable at 116px', async () => {
   const context = await browser!.newContext({ viewport: { width: 647, height: 900 } })
   try {
