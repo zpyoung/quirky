@@ -35,6 +35,8 @@ Tabs keep a complete focus-visible ring inside their horizontal scrollport, incl
 
 Tool-panel header tab groups wrap whole tabs within their available width instead of leaving a partial label at the panel edge. Narrow tool-panel titles retain ellipsis truncation; tabs remain keyboard-accessible across wrapped rows.
 
+At the 160 px panel minimum, hosted headers without tabs keep a single row. Hidden actions reserve no extra row; hover, panel focus, and keyboard focus reveal usable controls over the title without moving the panel content. Expanding header actions stay icon-only at narrow widths so every control remains inside the panel.
+
 Scrollable dialog bodies leave inline clearance for outward focus rings, including Settings checkboxes at the content edge. Content stays aligned with the dialog header and actions, and the body keeps vertical scrolling.
 
 Dialog dismissal restores the control focused before opening, even when a child uses `autoFocus`. Reopening captures the new opener. Closing a nested dialog returns focus to its opener inside the parent; closing the parent returns focus outside it.
