@@ -1550,7 +1550,6 @@ test.each([
   expect(active?.closest<HTMLElement>('[data-worktree-id]')?.dataset.worktreeId).toBe('w2')
 })
 
-
 test('SC-41: Set Parent offers the other workspaces, not the workspace or its descendants', async () => {
   const h = setup()
   h.world.worktrees.push(wt('w4', 'r1', 'child', { parentId: 'w2' }), wt('w5', 'r1', 'docs'))
@@ -1737,6 +1736,26 @@ test.each([true, false])('sleep overrides live session activity and wake restore
     expect(row().textContent).toContain('Running')
     expect(row().querySelector('[aria-label^="Status: "]')?.getAttribute('aria-label')).toBe(activeStatus)
   }
+})
+
+test('sleeping a hidden non-primary row restores focus outside the tree after refresh', async () => {
+  const h = setup()
+  h.world.options.showSleeping = false
+  await h.mountInto(host)
+
+  const terminalInput = document.createElement('textarea')
+  document.body.append(terminalInput)
+  terminalInput.focus()
+  expect(document.activeElement).toBe(terminalInput)
+
+  await click(actionButton(rowOf('fix-login', 'api'))!)
+  expect(menu()?.contains(document.activeElement)).toBe(true)
+  await click(itemNamed('Sleep'))
+  expect(h.world.worktrees.find((worktree) => worktree.id === 'w2')?.sleeping).toBe(true)
+  await h.emit({ type: 'quirky.worktree/changed', data: { repoId: 'r1' } })
+
+  expect(rowOf('fix-login', 'api')).toBeUndefined()
+  expect(document.activeElement).toBe(terminalInput)
 })
 
 test('sleeping the retained primary row restores Actions focus when sleeping rows are hidden', async () => {
