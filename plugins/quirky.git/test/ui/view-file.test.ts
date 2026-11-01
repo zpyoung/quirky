@@ -1,11 +1,15 @@
 import { afterAll, afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
-import { readFileSync } from 'node:fs'
+import { readFileSync, writeFileSync } from 'node:fs'
 import { registerDom } from './register-dom'
+import { diffSource, type DiffRequest } from '../../../../packages/git/src/diffs'
+import { statusV2 } from '../../../../packages/git/src/status'
+import { git, isolateGitConfig, makeRepo } from '../../../quirky.repo/test/git-fixtures'
 
 registerDom()
 const s = await import('./support')
 afterAll(() => GlobalRegistrator.unregister())
+const fixture = isolateGitConfig()
 
 const { act, byLabel, byText, click, edit, expectOpened, failure, fakeContext, layoutFor, mountView, numbered, settle, status, textDiff, wait } = s
 
@@ -71,6 +75,22 @@ describe('quirky.git file diff view', () => {
       oldPath: 'a.ts',
       commit: 'c'.repeat(40)
     })
+  })
+
+  test.each(['staged', 'branch', 'commit'])('%s pure rename identifies both paths even without content changes', async (source) => {
+    const path = 'src/Fmt.ts'
+    const oldPath = 'src/Format.ts'
+    const { element, report } = await open(
+      textDiff({ path, oldPath, original: 'same\n', modified: 'same\n' }),
+      { ...input, source, path, oldPath, commit: source === 'commit' ? 'c'.repeat(40) : undefined }
+    )
+    const heading = element.querySelector<HTMLElement>('h2')!
+    expect(heading.textContent).toContain(oldPath)
+    expect(heading.textContent).toContain(path)
+    expect(heading.title).toContain(oldPath)
+    expect(heading.title).toContain(path)
+    expect(element.querySelector('[role="status"]')?.textContent).toContain('No changes')
+    expect(report()).toMatchObject({ changes: 0, currentChange: null })
   })
 
   test('SC-60: it opens on the first change and F7 / Shift+F7 walk the changes through the commands', async () => {
@@ -237,6 +257,42 @@ describe('quirky.git file diff view', () => {
     await settle()
     expect(element.querySelector('.cm-editor')).toBe(before)
   })
+
+  test.each([false, true])('committing an open staged rename refreshes its diff with unstaged edits: %s', async (unstagedEdits) => {
+    const dir = makeRepo(fixture.scratch(), { 'old.ts': 'same\n' })
+    git(dir, 'mv', 'old.ts', 'new.ts')
+    if (unstagedEdits) writeFileSync(`${dir}/new.ts`, 'working\n')
+    fake.handlers['quirky.git/status'] = () => statusV2(dir)
+    let loaded = Promise.withResolvers<void>()
+    fake.handlers['quirky.git/diff'] = async (params) => {
+      const diff = await diffSource(dir, params as DiffRequest)
+      loaded.resolve()
+      return diff
+    }
+    mounted = mountView(fake, { ...input, source: 'staged', path: 'new.ts', oldPath: 'old.ts' })
+    await act(async () => loaded.promise)
+    await settle()
+    expect(mounted.report()).toMatchObject({ changes: 0, currentChange: null })
+
+    git(dir, 'commit', '-q', '-m', 'rename')
+    loaded = Promise.withResolvers<void>()
+    await act(async () => {
+      fake.emit({ type: 'quirky.git/changed', data: { worktreeId: 'w1' } })
+      await loaded.promise
+    })
+    await settle()
+    if (unstagedEdits) {
+      expect(mounted.report()).toMatchObject({ source: 'unstaged' })
+      expect(mounted.element.querySelector('.cm-content')?.textContent).toContain('working')
+      expect(mounted.report()).toMatchObject({ changes: 1, currentChange: 1 })
+    } else {
+      expect(mounted.element.querySelector('[role="status"]')?.textContent).toContain('No changes')
+      expect(mounted.report()).toMatchObject({ changes: 0, currentChange: null })
+    }
+    const heading = mounted.element.querySelector<HTMLElement>('h2')!
+    expect(heading.textContent).not.toContain('old.ts')
+    expect(heading.title).not.toContain('old.ts')
+  }, 30_000)
 
   test('unmounting releases diff listeners without removing the plugin-owned listener', async () => {
     const persistentListeners = fake.listeners()

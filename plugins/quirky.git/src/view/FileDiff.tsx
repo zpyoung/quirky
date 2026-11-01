@@ -42,6 +42,7 @@ export function FileDiff({ context, input, settings, setSetting, report, bind, c
   const fetchCurrentDiff = useCallback(async () => {
     const requestedSource = source
     let effectiveSource = requestedSource
+    let oldPath = input.oldPath
     if (requestedSource === 'staged' || requestedSource === 'unstaged') {
       const status = (await context.call('quirky.git/status', { worktree: input.worktree })) as GitStatus
       const hasConflict = status.entries.some((entry) => entry.path === path && entry.area === 'conflicts')
@@ -51,12 +52,14 @@ export function FileDiff({ context, input, settings, setSetting, report, bind, c
         const hasUnstaged = file !== undefined && (file.worktree !== ' ' || file.untracked)
         if (requestedSource === 'staged' && !hasStaged && hasUnstaged) effectiveSource = 'unstaged'
         else if (requestedSource === 'unstaged' && !hasUnstaged && hasStaged) effectiveSource = 'staged'
+        if (effectiveSource === 'staged') oldPath = file?.origPath
+        else if (requestedSource === 'staged') oldPath = undefined
       }
     }
     return fetchDiff(context, input.worktree, {
       path,
       source: effectiveSource,
-      oldPath: input.oldPath,
+      oldPath,
       commit: input.commit
     })
   }, [context, input.worktree, input.oldPath, input.commit, path, source])
@@ -191,6 +194,8 @@ export function FileDiff({ context, input, settings, setSetting, report, bind, c
   }, [context, input.worktree, path, showMarkdownPreview, loaded?.revision, stateKey])
 
 
+  const oldPath = loaded ? loaded.diff.oldPath : input.oldPath
+  const title = `${oldPath ? `${oldPath} → ${path}` : path} (diff)`
   const sideLabel = settings.sideBySide ? 'Switch to inline diff' : 'Switch to side-by-side diff'
   const sourceLabel = SOURCE_LABELS[effectiveSource]
   const switchDisplay = () => {
@@ -203,8 +208,8 @@ export function FileDiff({ context, input, settings, setSetting, report, bind, c
   return (
     <div className="ui-stack" style={{ flex: 1, minHeight: 0, minWidth: 0, overflow: 'hidden' }}>
       <SectionHeader
-        title={<span style={{ textTransform: 'none' }}>{`${path} (diff)`}</span>}
-        titleTooltip={`${path} (diff)`}
+        title={<span style={{ textTransform: 'none' }}>{title}</span>}
+        titleTooltip={title}
         style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto', padding: 'var(--ui-space-8)' }}
         actions={
           <div className="ui-cluster" style={{ justifyContent: 'flex-end', flexWrap: 'nowrap', gap: 'var(--ui-space-4)', width: 'max-content' }}>

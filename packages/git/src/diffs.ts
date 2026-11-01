@@ -185,7 +185,7 @@ export async function diffSource(cwd: string, request: DiffRequest): Promise<Git
   let modified: Side
   let working: WorkingFile | undefined
   if (source === 'staged') {
-    ;[original, modified] = await Promise.all([readBlob(cwd, `HEAD:${path}`), readBlob(cwd, `:${path}`)])
+    ;[original, modified] = await Promise.all([readBlob(cwd, `HEAD:${fromPath}`), readBlob(cwd, `:${path}`)])
   } else if (source === 'unstaged') {
     if (request.compareAgainstHead === true) {
       const [headSide, file] = await Promise.all([readBlob(cwd, `HEAD:${fromPath}`), readWorkingFile(cwd, path)])

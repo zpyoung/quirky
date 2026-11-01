@@ -66,6 +66,20 @@ describe('diffSource sides', () => {
     expect(unstaged.modifiedDeleted).toBeUndefined()
   })
 
+  test.each(['before\n', 'after\n'])('a staged rename compares the old HEAD path to index content %j', async (stagedContent) => {
+    const dir = makeRepo(fixture.scratch(), { 'old.ts': 'before\n' })
+    git(dir, 'mv', 'old.ts', 'new.ts')
+    writeFileSync(join(dir, 'new.ts'), stagedContent)
+    git(dir, 'add', 'new.ts')
+    writeFileSync(join(dir, 'new.ts'), 'unstaged\n')
+
+    expect(await diffSource(dir, { path: 'new.ts', oldPath: 'old.ts', source: 'staged' })).toMatchObject({
+      original: 'before\n',
+      modified: stagedContent,
+      oldPath: 'old.ts'
+    })
+  })
+
   test('an untracked file is empty to its content', async () => {
     const dir = threeVersions()
     const d = await diffSource(dir, { path: 'notes.txt', source: 'unstaged' })
