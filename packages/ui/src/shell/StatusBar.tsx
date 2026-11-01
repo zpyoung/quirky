@@ -163,8 +163,8 @@ export function ShellStatusBar() {
   const repo = selected ? snapshot.repos?.find((candidate) => candidate.id === selected.repoId) : undefined
   const worktrees = snapshot.errors.worktrees ? [] : snapshot.worktrees ?? []
   const sessions: Session[] | undefined = snapshot.errors.sessions || snapshot.sessions === null ? undefined : snapshot.sessions
-  const working = sessions?.filter((session) => session.status === 'working')
   const asks: Ask[] | undefined = snapshot.errors.asks || snapshot.asks === null ? undefined : snapshot.asks
+  const working = sessions?.filter((session) => session.status === 'working' && !asks?.some((ask) => ask.sessionId === session.id))
   const needsYouSessions = sessions === undefined || asks === undefined
     ? undefined
     : sessions.filter((session) => sessionNeedsYou(session, now)).filter((session) => !asks.some((ask) => ask.sessionId === session.id))

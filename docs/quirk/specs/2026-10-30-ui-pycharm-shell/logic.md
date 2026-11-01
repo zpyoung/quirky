@@ -155,6 +155,8 @@ The left side is a breadcrumb of the selected project, worktree and open file, w
 
 The working and needs-you counts have accessible names that identify agents and pending questions. They use singular nouns at one ("1 agent working", "1 pending question") and plural nouns at zero and above one.
 
+A session with a pending question counts only under needs-you, not in the working count or its popup, even while the agent is monitoring background tasks. Once the question is answered, a still-working session returns to the working count.
+
 ### Center tabs and ⌘K
 
 Center tabs show a tool or file icon and an accent underline on the active tab, with a close button on the active or hovered tab. When tabs don't fit, a "3 more" button at the end of the row lists the hidden ones, and the visible tabs don't shrink to fit.
