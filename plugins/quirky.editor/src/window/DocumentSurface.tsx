@@ -38,6 +38,15 @@ const TAB_METHODS: Record<string, true> = {
   'quirky.editor/close': true,
   'quirky.editor/canClose': true
 }
+const VIEWER_DRAFT_ACTIONS: Record<string, true> = {
+  edit: true,
+  insertRow: true,
+  deleteRow: true,
+  insertColumn: true,
+  deleteColumn: true,
+  delimiter: true,
+  paste: true
+}
 
 type SurfaceMode = 'source' | 'rich' | 'preview'
 type DocumentInput = { bufferId: string; tabId: string | null; mode?: SurfaceMode; line?: number; column?: number }
@@ -287,7 +296,7 @@ function DocumentBody({ context, input }: { context: UiPluginContext; input: Doc
   const acknowledgedBuffer = useRef<AcknowledgedDocumentDraft | null>(null)
   const pendingDrafts = useRef(new Map<number, DraftAcknowledgement>())
   const ownDraftAcknowledgements = useRef(new Map<number, string | null>())
-  const pendingRichApplies = useRef(0)
+  const pendingActionAcknowledgements = useRef(0)
   const pendingSaveAcknowledgement = useRef<DraftAcknowledgement | null>(null)
   const draftWriteId = useRef(0)
   const blockedDraft = useRef(false)
@@ -364,7 +373,7 @@ function DocumentBody({ context, input }: { context: UiPluginContext; input: Doc
   }, [])
 
   useEffect(() => {
-    if (!buffer || pendingRichApplies.current > 0) return
+    if (!buffer || pendingActionAcknowledgements.current > 0) return
     reconcileDraftObservation(buffer)
   }, [buffer?.content, buffer?.contentRevision, buffer?.draft, reconcileDraftObservation])
 
@@ -487,7 +496,7 @@ function DocumentBody({ context, input }: { context: UiPluginContext; input: Doc
     if (current) setBuffer(mergeSurfaceBuffer(current, updated, { content: acceptedContent, draft: acceptedDraft }))
   }, [context, input.bufferId])
 
-  const save = useCallback(async (trigger: 'user' | 'overwrite' = 'user') => {
+  const save = useCallback(async (trigger: 'user' | 'overwrite' = 'user'): Promise<EditorBufferInfo> => {
     await flushSurfaceEditors()
     if (trigger === 'overwrite') {
       await draftQueue.current
@@ -538,6 +547,7 @@ function DocumentBody({ context, input }: { context: UiPluginContext; input: Doc
     }
     setUiError(null)
     refresh()
+    return saved
   }, [context, flushDrafts, flushSurfaceEditors, input.bufferId, refresh, writeLocalDraftAtLatest])
   const runViewAction = useCallback(async (action: 'reload' | 'keep' | 'undoReload' | 'compare' | 'promote' | 'pin' | 'reveal', patch?: Record<string, unknown>) => {
     if (action === 'keep') {
@@ -641,42 +651,52 @@ function DocumentBody({ context, input }: { context: UiPluginContext; input: Doc
     const request = needsBuffer || needsTab ? { ...params } : params
     if (needsBuffer) request.bufferId = input.bufferId
     if (needsTab) request.tabId = actualTabId
-    if (method !== 'quirky.editor/markdown' || request.action !== 'apply') return context.call(method, request)
 
-    pendingRichApplies.current += 1
+    const markdownApply = method === 'quirky.editor/markdown' && request.action === 'apply'
+    const viewerAction = method === 'quirky.editor/viewer' && typeof request.action === 'string'
+      ? request.action
+      : null
+    if (viewerAction === 'save') return save('user')
+    const viewerMutation = viewerAction !== null && VIEWER_DRAFT_ACTIONS[viewerAction] === true
+    if (!markdownApply && !viewerMutation) return context.call(method, request)
+
+    pendingActionAcknowledgements.current += 1
     return (async () => {
       try {
         const result = await context.call(method, request)
         const updated = (result as { buffer?: EditorBufferInfo } | null | undefined)?.buffer
         if (!updated || updated.contentRevision < ackRevision.current) return result
-        const acceptedDraft = updated.draft === undefined
-          ? updated.draftLength === null ? null : undefined
-          : updated.draft
+        const acknowledged = updated.content === undefined ||
+          (updated.draft === undefined && updated.draftLength !== null)
+          ? await hydrateBuffer(context, updated)
+          : updated
+        if (acknowledged.contentRevision < ackRevision.current) return result
+        const acceptedDraft = acknowledged.draft ?? null
         if (acceptedDraft !== null && typeof acceptedDraft !== 'string') return result
         const previousAcknowledgement = acknowledgedBuffer.current ?? {
           content: bufferRef.current?.content ?? '',
           draft: bufferRef.current?.draft ?? null
         }
-        const acceptedContent = typeof updated.content === 'string' ? updated.content : previousAcknowledgement.content
+        const acceptedContent = typeof acknowledged.content === 'string' ? acknowledged.content : previousAcknowledgement.content
         rememberDraftAcknowledgement(ownDraftAcknowledgements.current, {
-          contentRevision: updated.contentRevision,
+          contentRevision: acknowledged.contentRevision,
           draft: acceptedDraft
         })
-        ackRevision.current = Math.max(ackRevision.current, updated.contentRevision)
+        ackRevision.current = Math.max(ackRevision.current, acknowledged.contentRevision)
         acknowledgedBuffer.current = { content: acceptedContent, draft: acceptedDraft }
         localTextRef.current = acceptedDraft ?? acceptedContent
         setLocalText(acceptedDraft ?? acceptedContent)
         refresh()
         return result
       } finally {
-        pendingRichApplies.current -= 1
-        if (pendingRichApplies.current === 0) {
+        pendingActionAcknowledgements.current -= 1
+        if (pendingActionAcknowledgements.current === 0) {
           const latest = bufferRef.current
           if (latest) reconcileDraftObservation(latest)
         }
       }
     })()
-  }, [actualTabId, context, input.bufferId, reconcileDraftObservation, refresh])
+  }, [actualTabId, context, input.bufferId, reconcileDraftObservation, refresh, save])
 
   const featureProps = useMemo<SurfaceProps | null>(() => {
     if (!buffer) return null
@@ -759,7 +779,7 @@ function DocumentBody({ context, input }: { context: UiPluginContext; input: Doc
 
   activeActions.current = {
     flush: flushActiveDocument,
-    save: () => save('user'),
+    save: async () => { await save('user') },
     close: () => requestSingleClose(context, input.bufferId, actualTabId ?? undefined),
     focus: () => {
       if (sourceRef.current) sourceRef.current.focus()
