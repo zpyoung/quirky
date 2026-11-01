@@ -1,7 +1,8 @@
-import { afterAll, afterEach, beforeAll, describe, expect, mock, test } from 'bun:test'
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, mock, test } from 'bun:test'
 import { act } from 'react'
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
 import { RpcError, RpcErrorCode, type Session } from '@quirky/protocol'
+import { resetSessionMemory } from '../src/window/model'
 import { fakeContext, session, settle, type FakeContext } from './ui-fake'
 
 const VIEW = 'view:quirky.session/structured'
@@ -32,6 +33,10 @@ beforeAll(async () => {
 afterAll(async () => {
   await GlobalRegistrator.unregister()
 })
+beforeEach(() => {
+  resetSessionMemory()
+})
+
 afterEach(async () => {
   if (unmount) await act(async () => void (unmount as () => void)())
   unmount = undefined
@@ -65,6 +70,76 @@ async function mount(input: unknown) {
 const rows = (root: Element) => [...root.querySelectorAll('article[aria-label$="message"]')].map((row) => row.textContent)
 
 describe('the structured session view', () => {
+  test('remembers Show all events for its session across unmounts until unticked', async () => {
+    const other = session({ id: 'other', kind: 'structured', agent: 'claude', title: 'Other background' })
+    const current = { session: bg as Session | null }
+    const messagesFor = (sessionId: string) =>
+      [message(1, 'user', 'hi'), message(2, 'system', 'hook_pre: diagnostic'), message(3, 'assistant', 'hello')]
+        .map((entry) => ({ ...entry, sessionId }))
+    start(current, { 'quirky.structured/messages': (params) => messagesFor(params.session) })
+
+    const reopen = async (next: Session) => {
+      await act(async () => void (unmount as () => void)())
+      unmount = undefined
+      document.body.innerHTML = ''
+      current.session = next
+      return mount({ session: next.id })
+    }
+
+    const view = await mount({ session: 'bg' })
+    const checkbox = view.querySelector<HTMLInputElement>('input[type="checkbox"]')!
+    expect(checkbox.checked).toBe(false)
+    expect(view.textContent).not.toContain('hook_pre: diagnostic')
+
+    await act(async () => checkbox.click())
+    expect(checkbox.checked).toBe(true)
+    expect(view.textContent).toContain('hook_pre: diagnostic')
+
+    const sameSession = await reopen(bg)
+    expect(sameSession.querySelector<HTMLInputElement>('input[type="checkbox"]')!.checked).toBe(true)
+    expect(sameSession.textContent).toContain('hook_pre: diagnostic')
+
+    const otherSession = await reopen(other)
+    expect(otherSession.querySelector<HTMLInputElement>('input[type="checkbox"]')!.checked).toBe(false)
+    expect(otherSession.textContent).not.toContain('hook_pre: diagnostic')
+
+    const returned = await reopen(bg)
+    const returnedCheckbox = returned.querySelector<HTMLInputElement>('input[type="checkbox"]')!
+    expect(returnedCheckbox.checked).toBe(true)
+    expect(returned.textContent).toContain('hook_pre: diagnostic')
+    await act(async () => returnedCheckbox.click())
+    expect(returnedCheckbox.checked).toBe(false)
+    expect(returned.textContent).not.toContain('hook_pre: diagnostic')
+
+    const unticked = await reopen(bg)
+    expect(unticked.querySelector<HTMLInputElement>('input[type="checkbox"]')!.checked).toBe(false)
+    expect(unticked.textContent).not.toContain('hook_pre: diagnostic')
+  })
+
+  test('forgets Show all events when a session is removed while its structured view is unmounted', async () => {
+    const current = { session: bg as Session | null }
+    const messagesFor = (sessionId: string) =>
+      [message(1, 'user', 'hi'), message(2, 'system', 'hook_pre: diagnostic'), message(3, 'assistant', 'hello')]
+        .map((entry) => ({ ...entry, sessionId }))
+    start(current, { 'quirky.structured/messages': (params) => messagesFor(params.session) })
+
+    const view = await mount({ session: 'bg' })
+    const checkbox = view.querySelector<HTMLInputElement>('input[type="checkbox"]')!
+    await act(async () => checkbox.click())
+    expect(checkbox.checked).toBe(true)
+    expect(view.textContent).toContain('hook_pre: diagnostic')
+
+    await act(async () => void (unmount as () => void)())
+    unmount = undefined
+    current.session = null
+    await fake.emit({ type: 'quirky.session/removed', data: { sessionId: 'bg' } })
+
+    current.session = bg
+    const remounted = await mount({ session: 'bg' })
+    expect(remounted.querySelector<HTMLInputElement>('input[type="checkbox"]')!.checked).toBe(false)
+    expect(remounted.textContent).not.toContain('hook_pre: diagnostic')
+  })
+
   test('SC-69: shows the transcript and input of the session named in the input, and switching away unmounts it', async () => {
     start({ session: bg })
     const view = await mount({ session: 'bg' })

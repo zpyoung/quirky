@@ -2,7 +2,7 @@ import { EmptyState } from '@quirky/ui'
 import { useEffect, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import { RpcErrorCode, type MountFunction, type QuirkyEvent, type Session, type UiPluginContext } from '@quirky/protocol'
-import { WORKTREE_VIEW_ID, WorktreeSessions } from './window/model'
+import { forgetShowAllEvents, WORKTREE_VIEW_ID, WorktreeSessions } from './window/model'
 import { StructuredView } from './window/StructuredView'
 import { WorktreeView } from './window/WorktreeView'
 
@@ -83,6 +83,14 @@ function StructuredSession({ context, id }: { context: UiPluginContext; id: stri
  * the open view.
  */
 export function activate(context: UiPluginContext): void {
+  context.subscribe((event) => {
+    if (event.type !== 'quirky.session/removed') return
+    const data = event.data
+    if (data === null || typeof data !== 'object' || !('sessionId' in data)) return
+    const sessionId = data.sessionId
+    if (typeof sessionId === 'string') forgetShowAllEvents(sessionId)
+  })
+
   let current: WorktreeSessions | null = null
 
   const mountView: MountFunction = (element, { input, report }) => {

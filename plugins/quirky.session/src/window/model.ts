@@ -21,10 +21,40 @@ export type ViewSnapshot = {
 }
 
 const lastActiveByWorktree = new Map<string, string>()
+const showAllEventsBySession = new Map<string, string>()
 
-/** Forgets which session was last active in each worktree. */
+/** Forgets remembered session choices for this window. */
 export function resetSessionMemory(): void {
   lastActiveByWorktree.clear()
+  showAllEventsBySession.clear()
+}
+
+/** Whether the background transcript should include events hidden by default for `session`. */
+export function showAllEventsFor(session: Pick<Session, 'id' | 'worktreeId'>): boolean {
+  return showAllEventsBySession.get(session.id) === session.worktreeId
+}
+
+/** Remembers whether the background transcript should include events hidden by default for `session`. */
+export function rememberShowAllEvents(session: Pick<Session, 'id' | 'worktreeId'>, enabled: boolean): void {
+  if (enabled) {
+    showAllEventsBySession.set(session.id, session.worktreeId)
+  } else if (showAllEventsBySession.get(session.id) === session.worktreeId) {
+    showAllEventsBySession.delete(session.id)
+  }
+}
+
+/** Forgets remembered background-event visibility when a session is removed. */
+export function forgetShowAllEvents(sessionId: string): void {
+  showAllEventsBySession.delete(sessionId)
+}
+
+function pruneShowAllEvents(worktreeId: string, sessions: Session[]): void {
+  if (showAllEventsBySession.size === 0) return
+  const sessionIds = new Set<string>()
+  for (const session of sessions) sessionIds.add(session.id)
+  for (const [sessionId, owner] of showAllEventsBySession) {
+    if (owner === worktreeId && !sessionIds.has(sessionId)) showAllEventsBySession.delete(sessionId)
+  }
 }
 
 /**
@@ -189,10 +219,12 @@ export class WorktreeSessions {
     if (this.stopped) return
     const byId = new Map(sessions.map((session) => [session.id, session]))
     for (const event of this.queued.splice(0)) this.applyToMap(byId, event, worktree.id)
+    const loadedSessions = [...byId.values()]
+    pruneShowAllEvents(worktree.id, loadedSessions)
     this.commit({
       status: 'ready',
       worktree: { id: worktree.id, name: worktree.name, path: worktree.path },
-      sessions: [...byId.values()]
+      sessions: loadedSessions
     })
   }
 
