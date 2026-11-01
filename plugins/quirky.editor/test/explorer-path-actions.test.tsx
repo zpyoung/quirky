@@ -491,6 +491,101 @@ test('Explorer keeps inline create and rename controls outside the tree ownershi
   await act(async () => cancelRename.click())
   await waitForUi(() => panel.element.querySelector('.qe-explorer-inline-row') === null || false)
 })
+test.each([
+  { action: 'New File', dismissal: 'Escape' },
+  { action: 'New File', dismissal: 'Cancel' },
+  { action: 'New Folder', dismissal: 'Escape' },
+  { action: 'New Folder', dismissal: 'Cancel' },
+  { action: 'Rename', dismissal: 'Escape' },
+  { action: 'Rename', dismissal: 'Cancel' }
+] as const)('Explorer clears failed $action error after $dismissal', async ({ action, dismissal }) => {
+  const { context, filePath } = makeDeleteConfirmationFixture()
+  const mutationAction = action === 'New File' ? 'createFile' : action === 'New Folder' ? 'createFolder' : 'rename'
+  const errorMessage = `injected ${action} failure`
+  const originalCall = context.call
+  context.call = (async (method: string, params: Record<string, unknown> = {}) => {
+    if (method === 'quirky.editor/mutate' && params.action === mutationAction) throw new Error(errorMessage)
+    return await originalCall(method, params)
+  }) as typeof context.call
+  const panel = await renderStandaloneExplorer(context)
+
+  try {
+    await waitForUi(() => findRow(panel.element, filePath) ?? false)
+    let input: HTMLInputElement
+    let failurePath: string
+    let submit: HTMLButtonElement
+
+    if (action === 'New File' || action === 'New Folder') {
+      const createAction = panel.element.querySelector<HTMLButtonElement>(`button[title="${action}"]`)
+      if (!createAction) throw new Error(`Missing ${action} action`)
+      await act(async () => createAction.click())
+      input = await waitForUi(() => panel.element.querySelector<HTMLInputElement>('.qe-explorer-inline-row input') ?? false)
+      failurePath = action === 'New File' ? 'failed-create.txt' : 'failed-create-folder'
+      const inlineRow = input.closest<HTMLElement>('.qe-explorer-inline-row')
+      if (!inlineRow) throw new Error(`Missing inline form for ${action}`)
+      const createButton = Array.from(inlineRow.querySelectorAll<HTMLButtonElement>('button'))
+        .find((button) => button.textContent?.trim() === 'Create')
+      if (!createButton) throw new Error(`Missing Create action for ${action}`)
+      submit = createButton
+    } else {
+      const sourceRow = findRow(panel.element, filePath)
+      if (!sourceRow) throw new Error('Missing rename source row')
+      const renameAction = await actionButton(sourceRow, 'Rename')
+      await act(async () => renameAction.click())
+      input = await waitForUi(() => panel.element.querySelector<HTMLInputElement>('input[aria-label="Rename file"]') ?? false)
+      failurePath = 'failed-rename.txt'
+      const inlineRow = input.closest<HTMLElement>('.qe-explorer-inline-row')
+      if (!inlineRow) throw new Error('Missing inline Rename form')
+      const renameButton = Array.from(inlineRow.querySelectorAll<HTMLButtonElement>('button'))
+        .find((button) => button.textContent?.trim() === 'Rename')
+      if (!renameButton) throw new Error('Missing Rename action')
+      submit = renameButton
+    }
+
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, failurePath)
+      input.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+    await act(async () => submit.click())
+    const errorText = await waitForUi(() => panel.element.querySelector<HTMLElement>('[role="alert"]')?.textContent?.trim() || false)
+    expect(errorText).toBe(errorMessage)
+    expect(input.isConnected).toBe(true)
+
+    if (dismissal === 'Escape') {
+      await act(async () => {
+        input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }))
+      })
+    } else {
+      const inlineRow = input.closest<HTMLElement>('.qe-explorer-inline-row')
+      if (!inlineRow) throw new Error('Missing inline form before Cancel')
+      const cancel = Array.from(inlineRow.querySelectorAll<HTMLButtonElement>('button'))
+        .find((button) => button.textContent?.trim() === 'Cancel')
+      if (!cancel) throw new Error(`Missing Cancel action for ${action}`)
+      if (action !== 'Rename') {
+        const blurDelay = Promise.withResolvers<void>()
+        setTimeout(blurDelay.resolve, 210)
+        await blurDelay.promise
+        await act(async () => {
+          input.focus()
+          input.blur()
+          cancel.click()
+        })
+      } else {
+        await act(async () => cancel.click())
+      }
+    }
+
+    await waitForUi(() => !input.isConnected || false)
+    if (dismissal === 'Cancel' && action !== 'Rename') {
+      const delay = Promise.withResolvers<void>()
+      setTimeout(delay.resolve, 200)
+      await delay.promise
+    }
+    expect(panel.element.querySelector('[role="alert"]')).toBeNull()
+  } finally {
+    await panel.unmount()
+  }
+}, 60_000)
 
 test('Explorer row actions copy canonical absolute and worktree-relative paths and open the real directory in Terminal', async () => {
   const fixture = await makeFixture({ displayRoot: 'nested' })
@@ -1077,6 +1172,52 @@ test('Explorer failed rename keeps focus in the inline editor', async () => {
   const tree = panel.element.querySelector<HTMLElement>('[role="tree"]')
   expect(tree?.getAttribute('aria-activedescendant')).toBe(row.id)
   expect(existsSync(join(dirname(source), 'failed-rename.txt'))).toBe(false)
+}, 60_000)
+test('Explorer cancelling a New File form preserves a failed Rename error', async () => {
+  const { context, filePath } = makeDeleteConfirmationFixture()
+  const originalCall = context.call
+  context.call = (async (method: string, params: Record<string, unknown> = {}) => {
+    if (method === 'quirky.editor/mutate' && params.action === 'rename') throw new Error('injected rename failure')
+    return await originalCall(method, params)
+  }) as typeof context.call
+  const panel = await renderStandaloneExplorer(context)
+
+  try {
+    const row = await waitForUi(() => findRow(panel.element, filePath) ?? false)
+    const rename = await actionButton(row, 'Rename')
+    await act(async () => rename.click())
+    const renameInput = await waitForUi(() => panel.element.querySelector<HTMLInputElement>('input[aria-label="Rename file"]') ?? false)
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(renameInput, 'failed-rename.txt')
+      renameInput.dispatchEvent(new Event('input', { bubbles: true }))
+      renameInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }))
+    })
+    await waitForUi(() => panel.element.querySelector('[role="alert"]')?.textContent?.includes('injected rename failure') || false)
+
+    const newFile = panel.element.querySelector<HTMLButtonElement>('button[title="New File"]')
+    if (!newFile) throw new Error('Missing New File action')
+    await act(async () => newFile.click())
+    const createForm = await waitForUi(() => Array.from(panel.element.querySelectorAll<HTMLElement>('.qe-explorer-inline-row'))
+      .find((form) => Array.from(form.querySelectorAll('label')).some((label) => label.textContent?.trim() === 'New file name')) ?? false)
+    const createCancel = Array.from(createForm.querySelectorAll<HTMLButtonElement>('button'))
+      .find((button) => button.textContent?.trim() === 'Cancel')
+    if (!createCancel) throw new Error('Missing Cancel action for New File')
+    await act(async () => createCancel.click())
+    await waitForUi(() => !createForm.isConnected || false)
+    expect(renameInput.isConnected).toBe(true)
+    expect(panel.element.querySelector('[role="alert"]')?.textContent).toContain('injected rename failure')
+
+    const renameForm = renameInput.closest<HTMLElement>('.qe-explorer-inline-row')
+    if (!renameForm) throw new Error('Missing inline Rename form')
+    const renameCancel = Array.from(renameForm.querySelectorAll<HTMLButtonElement>('button'))
+      .find((button) => button.textContent?.trim() === 'Cancel')
+    if (!renameCancel) throw new Error('Missing Cancel action for Rename')
+    await act(async () => renameCancel.click())
+    await waitForUi(() => !renameInput.isConnected || false)
+    expect(panel.element.querySelector('[role="alert"]')).toBeNull()
+  } finally {
+    await panel.unmount()
+  }
 }, 60_000)
 
 test('Explorer failed confirmed deletion preserves tree focus', async () => {
