@@ -402,13 +402,38 @@ describe('SC-17: the tree view', () => {
     unmount()
   })
 
-  test('View as tree from the menu writes the view-mode setting', async () => {
+  test('Escape from source control actions returns focus to its trigger', async () => {
+    const { element, unmount } = await open()
+    try {
+      const trigger = byLabel(element, 'More source control actions')!
+      trigger.focus()
+      await click(trigger)
+      const menu = q(document.body, '[role="menu"]')!
+      expect(document.activeElement).toBe(menu)
+      await press(menu, 'Escape')
+      expect(q(document.body, '[role="menu"]')).toBeNull()
+      expect(document.activeElement).toBe(trigger)
+    } finally {
+      unmount()
+    }
+  })
+
+  test('View as tree changes the view and returns focus to the actions trigger', async () => {
     const { fake, element, unmount } = await open()
-    await click(byLabel(element, 'More source control actions'))
-    await click(buttonText(document.body, 'View as tree'))
-    expect(fake.called('setting.set').at(-1)?.params).toEqual({ id: 'setting:quirky.git/viewMode', value: 'tree' })
-    expect(qa(element, '[data-directory-path]').length).toBeGreaterThan(0)
-    unmount()
+    try {
+      const trigger = byLabel(element, 'More source control actions')!
+      trigger.focus()
+      await click(trigger)
+      const action = buttonText(document.body, 'View as tree')!
+      action.focus()
+      await click(action)
+      expect(fake.called('setting.set').at(-1)?.params).toEqual({ id: 'setting:quirky.git/viewMode', value: 'tree' })
+      expect(qa(element, '[data-directory-path]').map((dir) => dir.getAttribute('data-directory-path'))).toContain('src')
+      expect(q(document.body, '[role="menu"]')).toBeNull()
+      expect(document.activeElement).toBe(trigger)
+    } finally {
+      unmount()
+    }
   })
 
   test('the more-actions menu lists View as list/tree, Change Base Ref… and Refresh branch compare', async () => {
