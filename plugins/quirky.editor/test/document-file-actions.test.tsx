@@ -71,8 +71,14 @@ afterEach(async () => {
   document.body.replaceChildren()
 })
 
-function makeBufferInfo(dirty = false, mode: 'source' | 'rich' = 'source'): EditorBufferInfo {
-  const content = mode === 'rich' ? '# File actions regression fixture\n' : CONTENT
+function makeBufferInfo(options: {
+  dirty?: boolean
+  mode?: 'source' | 'rich'
+  external?: EditorBufferInfo['external']
+  draft?: string
+} = {}): EditorBufferInfo {
+  const content = options.mode === 'rich' ? '# File actions regression fixture\n' : CONTENT
+  const draft = options.draft ?? null
   return {
     id: BUFFER_ID,
     worktreeId: WORKTREE_ID,
@@ -80,16 +86,16 @@ function makeBufferInfo(dirty = false, mode: 'source' | 'rich' = 'source'): Edit
     path: '/tmp/file-actions-worktree/README.txt',
     relativePath: 'README.txt',
     name: 'README.txt',
-    kind: mode === 'rich' ? 'markdown' : 'text',
+    kind: options.mode === 'rich' ? 'markdown' : 'text',
     content,
-    draft: null,
+    draft,
     baseline: null,
     size: content.length,
     readOnly: false,
     diskWritable: true,
-    dirty,
-    external: null,
-    mode,
+    dirty: options.dirty ?? false,
+    external: options.external ?? null,
+    mode: options.mode ?? 'source',
     tabId: TAB_ID,
     preview: false,
     pinned: false,
@@ -99,10 +105,10 @@ function makeBufferInfo(dirty = false, mode: 'source' | 'rich' = 'source'): Edit
     view: {},
     error: null,
     contentLength: content.length,
-    draftLength: null,
+    draftLength: draft?.length ?? null,
     diskContentLength: null,
     contentBytes: new TextEncoder().encode(content).byteLength,
-    draftBytes: null,
+    draftBytes: draft === null ? null : new TextEncoder().encode(draft).byteLength,
     diskContentBytes: null,
     diskSignature: null
   }
@@ -114,8 +120,10 @@ async function renderDocument(options: {
   mode?: 'source' | 'rich'
   deferSave?: boolean
   delayDraftWrites?: boolean
+  external?: EditorBufferInfo['external']
+  draft?: string
 } = {}): Promise<Mounted> {
-  let info = makeBufferInfo(options.dirty ?? false, options.mode)
+  let info = makeBufferInfo(options)
   const state = {
     buffers: [info],
     tabs: [{ tabId: TAB_ID, bufferId: BUFFER_ID, mode: 'edit' as const }],
@@ -709,4 +717,32 @@ test('Source preserves local edits and opens Compare for a newer competing draft
 
   const comparedVersions = [...surface.element.querySelectorAll<HTMLTextAreaElement>('.qe-compare-textarea')]
   expect(comparedVersions.map((textarea) => textarea.value)).toEqual([sharedText, localText])
+})
+
+test('deleted-file banner keeps the editable draft and explicit recovery actions', async () => {
+  const draft = `${CONTENT}my unsaved draft\n`
+  const surface = await renderDocument({ dirty: true, external: 'deleted', draft })
+  const banner = surface.element.querySelector<HTMLElement>('.qe-external-change-banner')
+  if (!banner) throw new Error('The deleted-file banner did not render.')
+  const editor = sourceEditorView(surface.element)
+  const bannerButtons = Array.from(banner.querySelectorAll('button'), (button) => button.textContent?.trim())
+
+  expect(editor.state.doc.toString()).toBe(draft)
+  expect(editor.contentDOM.getAttribute('contenteditable')).toBe('true')
+  expect(bannerButtons).not.toContain('Compare')
+  expect(bannerButtons).not.toContain('Reload from Disk')
+  expect(bannerButtons).not.toContain('Keep My Edits')
+  expect(buttonByText(banner, 'Overwrite').disabled).toBe(false)
+  expect(buttonByText(surface.element, 'Save').disabled).toBe(false)
+})
+
+test('changed-file banner keeps disk comparison and recovery actions', async () => {
+  const surface = await renderDocument({ dirty: true, external: 'changed', draft: `${CONTENT}my unsaved draft\n` })
+  const banner = surface.element.querySelector<HTMLElement>('.qe-external-change-banner')
+  if (!banner) throw new Error('The changed-file banner did not render.')
+
+  expect(buttonByText(banner, 'Compare')).toBeDefined()
+  expect(buttonByText(banner, 'Reload from Disk')).toBeDefined()
+  expect(buttonByText(banner, 'Keep My Edits')).toBeDefined()
+  expect(buttonByText(banner, 'Overwrite')).toBeDefined()
 })
