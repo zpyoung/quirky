@@ -401,6 +401,11 @@ export function ExplorerPanel({ context, report }: { context: UiPluginContext; r
     if (searchMode === 'names' && query.trim() !== '' && filterResult) return filterResult.entries.map((entry) => ({ entry, depth: 0 }))
     return flattenEntries(rootListing?.entries ?? [], expanded, children)
   }, [children, expanded, filterResult, query, rootListing, searchMode])
+
+  const visibleSelectedPaths = useMemo(() => {
+    const visiblePaths = new Set(rows.map(({ entry }) => entry.path))
+    return selectedPaths.filter((path) => visiblePaths.has(path))
+  }, [rows, selectedPaths])
   const entryForPath = (path: string | null): ExplorerEntry | undefined => {
     if (path === null) return undefined
     if (searchMode === 'names' && query.trim() !== '') return filterResult?.entries.find((entry) => entry.path === path)
@@ -755,7 +760,7 @@ export function ExplorerPanel({ context, report }: { context: UiPluginContext; r
   }
 
 
-  const copyPaths = async (relative: boolean, paths = selectedPaths) => {
+  const copyPaths = async (relative: boolean, paths = visibleSelectedPaths) => {
     if (paths.length === 0) return
     try {
       let values = paths
@@ -874,7 +879,7 @@ export function ExplorerPanel({ context, report }: { context: UiPluginContext; r
     }
   }
 
-  const deleteSelected = async (paths = selectedPaths) => {
+  const deleteSelected = async (paths = visibleSelectedPaths) => {
     const requestedWorktree = worktree
     if (!requestedWorktree || paths.length === 0) return
     const requestedPaths = [...paths]
@@ -1099,9 +1104,9 @@ export function ExplorerPanel({ context, report }: { context: UiPluginContext; r
   )
   const selectionActions = (
     <>
-      <Button disabled={searchMode !== 'names' || selectedPaths.length === 0} onClick={() => void copyPaths(false)}>Copy Path</Button>
-      <Button disabled={searchMode !== 'names' || selectedPaths.length === 0 || !worktree} onClick={() => void copyPaths(true)}>Copy Relative Path</Button>
-      <Button variant="destructive" disabled={searchMode !== 'names' || selectedPaths.length === 0 || !worktree} onClick={() => void deleteSelected()}>Delete</Button>
+      <Button disabled={searchMode !== 'names' || visibleSelectedPaths.length === 0} onClick={() => void copyPaths(false)}>Copy Path</Button>
+      <Button disabled={searchMode !== 'names' || visibleSelectedPaths.length === 0 || !worktree} onClick={() => void copyPaths(true)}>Copy Relative Path</Button>
+      <Button variant="destructive" disabled={searchMode !== 'names' || visibleSelectedPaths.length === 0 || !worktree} onClick={() => void deleteSelected()}>Delete</Button>
       <Button onClick={() => { setSearchMode('contents'); setQuery(''); setIncludePattern(''); searchInputRef.current?.focus() }}>Search in Files</Button>
     </>
   )
