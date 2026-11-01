@@ -223,6 +223,29 @@ function makeContext(fixture: Fixture): UiPluginContext {
   }
 }
 
+function interceptExplorerChanged(context: UiPluginContext, fixture: Fixture): () => void {
+  const listeners = new Set<Parameters<UiPluginContext['subscribe']>[0]>()
+  const subscribe = context.subscribe
+  context.subscribe = (next) => {
+    listeners.add(next)
+    const unsubscribe = subscribe((event) => {
+      if (event.type !== 'quirky.editor/explorerChanged') void next(event)
+    })
+    return () => {
+      listeners.delete(next)
+      unsubscribe()
+    }
+  }
+  return () => {
+    for (const listener of listeners) {
+      void listener({
+        type: 'quirky.editor/explorerChanged',
+        data: { worktreeId: fixture.worktree.id }
+      })
+    }
+  }
+}
+
 function findRow(element: HTMLElement, path: string): HTMLElement | null {
   return Array.from(element.querySelectorAll<HTMLElement>('[data-path]')).find((row) => row.dataset.path === path) ?? null
 }
@@ -235,7 +258,7 @@ async function flushReact(): Promise<void> {
 
 async function waitForUi<T>(
   check: () => T | false | null | undefined | Promise<T | false | null | undefined>,
-  timeoutMs?: number
+  timeoutMs = 15_000
 ): Promise<T> {
   return await waitForAsync(async () => {
     await flushReact()
@@ -1373,6 +1396,98 @@ test('Explorer rename and deletion preserve tree navigation made during refresh'
   }
 }, 60_000)
 
+test('Explorer watcher refreshes do not cancel rename or delete focus restoration', async () => {
+  const fixture = await makeFixture({ displayRoot: 'nested' })
+  const context = makeContext(fixture)
+  context.confirm = async () => true
+  const emitExplorerChanged = interceptExplorerChanged(context, fixture)
+  const originalCall = context.call
+  const makeRefreshGate = () => ({ started: false, released: Promise.withResolvers<void>() })
+  let activeGate = makeRefreshGate()
+  let holdNextRootList = false
+  context.call = (async (method: string, params: Record<string, unknown> = {}) => {
+    if (method === 'quirky.editor/mutate' && (params.action === 'rename' || params.action === 'delete')) {
+      const result = await originalCall(method, params)
+      holdNextRootList = true
+      return result
+    }
+    if (holdNextRootList && method === 'quirky.editor/explorer' && params.action === 'list' && params.path === undefined) {
+      holdNextRootList = false
+      const gate = activeGate
+      gate.started = true
+      await gate.released.promise
+    }
+    return await originalCall(method, params)
+  }) as typeof context.call
+  const panel = await renderExplorer(fixture, context)
+  const source = join(fixture.root, FILE_A)
+  const other = join(fixture.root, FILE_B)
+  const renamed = join(fixture.root, 'nested/A renamed-after-watcher.txt')
+
+  try {
+    const sourceRow = findRow(panel.element, source)
+    if (!sourceRow) throw new Error('Missing rename source row')
+    const rename = await actionButton(sourceRow, 'Rename')
+    await act(async () => rename.click())
+    const input = await waitForUi(() => panel.element.querySelector<HTMLInputElement>('input[aria-label="Rename file"]') ?? false)
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, basename(renamed))
+      input.dispatchEvent(new Event('input', { bubbles: true }))
+      input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }))
+    })
+
+    const renameGate = activeGate
+    await waitForUi(() => renameGate.started || false, 15_000)
+    await waitForUi(() => panel.element.querySelector('input[aria-label="Rename file"]') === null || false)
+    emitExplorerChanged()
+    const renameDebounce = Promise.withResolvers<void>()
+    setTimeout(renameDebounce.resolve, 150)
+    await act(async () => { await renameDebounce.promise })
+    renameGate.released.resolve()
+    await waitForTreeFocus(panel.element, renamed)
+    expect(findRow(panel.element, renamed)?.getAttribute('aria-selected')).toBe('true')
+    const stateAfterRename = await waitForUi(async () => {
+      const state = await call<{
+        explorer: { selectedPaths: string[]; focusedPath: string | null; selectionAnchor: string | null }
+      }>(fixture.client, 'quirky.editor/state', { worktree: fixture.worktree.id })
+      return state.explorer.focusedPath === renamed ? state : false
+    }, 15_000)
+    expect(stateAfterRename.explorer).toMatchObject({
+      selectedPaths: [renamed],
+      focusedPath: renamed,
+      selectionAnchor: renamed
+    })
+
+    activeGate = makeRefreshGate()
+    const deleteGate = activeGate
+    const renamedRow = findRow(panel.element, renamed)
+    if (!renamedRow) throw new Error('Missing renamed row for Delete')
+    const deleteAction = await actionButton(renamedRow, 'Delete')
+    await act(async () => deleteAction.click())
+    await waitForUi(() => deleteGate.started || false, 15_000)
+    emitExplorerChanged()
+    const deleteDebounce = Promise.withResolvers<void>()
+    setTimeout(deleteDebounce.resolve, 150)
+    await act(async () => { await deleteDebounce.promise })
+    deleteGate.released.resolve()
+    await waitForTreeFocus(panel.element, other)
+    expect(findRow(panel.element, other)?.getAttribute('aria-selected')).toBe('true')
+    const stateAfterDelete = await waitForUi(async () => {
+      const state = await call<{
+        explorer: { selectedPaths: string[]; focusedPath: string | null; selectionAnchor: string | null }
+      }>(fixture.client, 'quirky.editor/state', { worktree: fixture.worktree.id })
+      return state.explorer.focusedPath === other ? state : false
+    }, 15_000)
+    expect(stateAfterDelete.explorer).toMatchObject({
+      selectedPaths: [other],
+      focusedPath: other,
+      selectionAnchor: other
+    })
+  } finally {
+    activeGate.released.resolve()
+  }
+}, 60_000)
+
 
 test('Explorer Markdown Preview closes row actions and opens a real preview tab', async () => {
   const fixture = await makeFixture({ displayRoot: 'nested' })
@@ -1861,6 +1976,174 @@ test('Explorer refreshes an active Names filter after external filesystem change
       panel.element.querySelector('.qe-explorer-filter-empty') !== null || false, 15_000)
   } finally {
     await panel.unmount()
+  }
+}, 60_000)
+
+test('Explorer background watcher refresh keeps rows visible without a loading status', async () => {
+  const fixture = await makeFixture()
+  const context = makeContext(fixture)
+  const emitExplorerChanged = interceptExplorerChanged(context, fixture)
+  const originalCall = context.call
+  const makeRefreshGate = () => ({ started: false, released: Promise.withResolvers<void>() })
+  const firstGate = makeRefreshGate()
+  const gates = [firstGate]
+  let activeGate = firstGate
+  let holdNextRootList = false
+  let holdNextNestedList = false
+  const nested = join(fixture.root, 'nested')
+  context.call = (async (method: string, params: Record<string, unknown> = {}) => {
+    const isRootList = method === 'quirky.editor/explorer' && params.action === 'list' && params.path === undefined
+    const isNestedList = method === 'quirky.editor/explorer' && params.action === 'list' && params.path === nested
+    if ((holdNextRootList && isRootList) || (holdNextNestedList && isNestedList)) {
+      holdNextRootList = false
+      holdNextNestedList = false
+      const gate = activeGate
+      gate.started = true
+      await gate.released.promise
+    }
+    return await originalCall(method, params)
+  }) as typeof context.call
+  const panel = await renderExplorer(fixture, context)
+  const existing = join(fixture.root, FILE_A)
+  const external = join(nested, 'external-watcher-created.txt')
+  const loadingFiles = () => Array.from(panel.element.querySelectorAll<HTMLElement>('[role="status"]'))
+    .some((status) => status.textContent?.trim() === 'Loading files…')
+
+  try {
+    holdNextRootList = true
+    const userGate = activeGate
+    const refresh = panel.element.querySelector<HTMLButtonElement>('button[aria-label="Refresh Explorer"]')
+    if (!refresh) throw new Error('Missing Refresh Explorer action')
+    await act(async () => refresh.click())
+    await waitForUi(() => userGate.started || false, 15_000)
+    expect(findRow(panel.element, nested)).not.toBeNull()
+    expect(loadingFiles()).toBe(true)
+    userGate.released.resolve()
+    await waitForUi(() => !loadingFiles() || false)
+
+    const nestedRow = findRow(panel.element, nested)
+    if (!nestedRow) throw new Error('Missing nested directory row')
+    await act(async () => nestedRow.click())
+    await waitForUi(() => findRow(panel.element, existing) || false, 15_000)
+    await waitForUi(() => !loadingFiles() || false)
+
+    activeGate = makeRefreshGate()
+    gates.push(activeGate)
+    holdNextRootList = true
+    const backgroundGate = activeGate
+    writeFileSync(external, 'external\n')
+    emitExplorerChanged()
+    await waitForUi(() => backgroundGate.started || false, 15_000)
+    expect(findRow(panel.element, existing)).not.toBeNull()
+    expect(loadingFiles()).toBe(false)
+    activeGate = makeRefreshGate()
+    gates.push(activeGate)
+    holdNextNestedList = true
+    const expandedGate = activeGate
+    backgroundGate.released.resolve()
+    await waitForUi(() => expandedGate.started || false, 15_000)
+    expect(findRow(panel.element, existing)).not.toBeNull()
+    expect(loadingFiles()).toBe(false)
+    expandedGate.released.resolve()
+    await waitForUi(() => findRow(panel.element, external) || false, 15_000)
+    expect(findRow(panel.element, external)).not.toBeNull()
+    expect(loadingFiles()).toBe(false)
+  } finally {
+    for (const gate of gates) gate.released.resolve()
+  }
+}, 60_000)
+
+test('Explorer keeps user loading visible until its listing resolves during watcher refresh', async () => {
+  const fixture = await makeFixture()
+  const context = makeContext(fixture)
+  const emitExplorerChanged = interceptExplorerChanged(context, fixture)
+  const originalCall = context.call
+  const makeRefreshGate = () => ({ started: false, released: Promise.withResolvers<void>() })
+  const userGate = makeRefreshGate()
+  const backgroundGate = makeRefreshGate()
+  const gates = [userGate, backgroundGate]
+  const queuedRootListGates: typeof gates = []
+  context.call = (async (method: string, params: Record<string, unknown> = {}) => {
+    if (method === 'quirky.editor/explorer' && params.action === 'list' && params.path === undefined) {
+      const gate = queuedRootListGates.shift()
+      if (gate !== undefined) {
+        gate.started = true
+        await gate.released.promise
+      }
+    }
+    return await originalCall(method, params)
+  }) as typeof context.call
+  const panel = await renderExplorer(fixture, context)
+  const external = join(fixture.root, 'external-user-overlap.txt')
+  const loadingFiles = () => Array.from(panel.element.querySelectorAll<HTMLElement>('[role="status"]'))
+    .some((status) => status.textContent?.trim() === 'Loading files…')
+
+  try {
+    queuedRootListGates.push(userGate)
+    const refresh = panel.element.querySelector<HTMLButtonElement>('button[aria-label="Refresh Explorer"]')
+    if (!refresh) throw new Error('Missing Refresh Explorer action')
+    await act(async () => refresh.click())
+    await waitForUi(() => userGate.started || false, 15_000)
+    expect(loadingFiles()).toBe(true)
+
+    writeFileSync(external, 'external\n')
+    queuedRootListGates.push(backgroundGate)
+    emitExplorerChanged()
+    await waitForUi(() => backgroundGate.started || false, 15_000)
+    expect(loadingFiles()).toBe(true)
+
+    backgroundGate.released.resolve()
+    await waitForUi(() => findRow(panel.element, external) || false, 15_000)
+    expect(loadingFiles()).toBe(true)
+    userGate.released.resolve()
+    await waitForUi(() => !loadingFiles() || false)
+  } finally {
+    for (const gate of gates) gate.released.resolve()
+  }
+}, 60_000)
+
+test('Explorer user refresh promotes a joined background listing to visible loading', async () => {
+  const fixture = await makeFixture()
+  const context = makeContext(fixture)
+  const emitExplorerChanged = interceptExplorerChanged(context, fixture)
+  const originalCall = context.call
+  const backgroundGate = { started: false, released: Promise.withResolvers<void>() }
+  const gates = [backgroundGate]
+  const queuedRootListGates: typeof gates = []
+  context.call = (async (method: string, params: Record<string, unknown> = {}) => {
+    if (method === 'quirky.editor/explorer' && params.action === 'list' && params.path === undefined) {
+      const gate = queuedRootListGates.shift()
+      if (gate !== undefined) {
+        gate.started = true
+        await gate.released.promise
+      }
+    }
+    return await originalCall(method, params)
+  }) as typeof context.call
+  const panel = await renderExplorer(fixture, context)
+  const external = join(fixture.root, 'external-background-overlap.txt')
+  const loadingFiles = () => Array.from(panel.element.querySelectorAll<HTMLElement>('[role="status"]'))
+    .some((status) => status.textContent?.trim() === 'Loading files…')
+
+  try {
+    writeFileSync(external, 'external\n')
+    queuedRootListGates.push(backgroundGate)
+    emitExplorerChanged()
+    await waitForUi(() => backgroundGate.started || false, 15_000)
+    expect(loadingFiles()).toBe(false)
+
+    const refresh = panel.element.querySelector<HTMLButtonElement>('button[aria-label="Refresh Explorer"]')
+    if (!refresh) throw new Error('Missing Refresh Explorer action')
+    await act(async () => refresh.click())
+    await waitForUi(() => loadingFiles() || false, 15_000)
+    expect(loadingFiles()).toBe(true)
+
+    backgroundGate.released.resolve()
+    await waitForUi(() => Boolean(findRow(panel.element, external)) && !loadingFiles() || false, 15_000)
+    expect(findRow(panel.element, external)).not.toBeNull()
+    expect(loadingFiles()).toBe(false)
+  } finally {
+    for (const gate of gates) gate.released.resolve()
   }
 }, 60_000)
 
