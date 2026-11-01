@@ -1,6 +1,6 @@
 # Tasks: a compact panel that expands into a center tab
 
-**Status:** Approved 2026-11-01
+**Status:** Approved 2026-11-01. Tech spec: [tech.md](tech.md), authored because the work crosses a subsystem boundary and touches more than three source files.
 
 Tasks becomes one tool with two forms. Its side panel is a short list you can glance at, and Expand moves it into a center tab with the list beside a full detail pane. Both forms read the same list, filters and selection, so moving between them never loses your place.
 
@@ -170,7 +170,7 @@ The list, filters, page and open row already live in the daemon's Tasks state, s
       | Menu items | | Start workspace, Review on PRs, Open on GitHub, Copy link |
 
 12. **Filters set in the tab show in the panel**
-    - **Given** the user filtered PRs to Needs review plus one label, then collapsed
+    - **Given** the user filtered PRs to Needs review plus two labels, then collapsed
     - **When** the panel shows
     - **Then** ✓ one line under the header names the preset and the filter count; ✓ its clear button resets to the default view; ✓ with no filters, the line isn't there
     - **Screen copy:**
@@ -318,4 +318,4 @@ Approved 2026-11-01.
 
 **Amendments:**
 
-None yet.
+- 2026-11-01: scenario 12's Given now says two labels, so it agrees with its screen copy of "2 filters". The preset's own qualifiers don't count as filters, and no behavior changed.
