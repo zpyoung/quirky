@@ -650,6 +650,78 @@ test('Explorer row actions copy canonical absolute and worktree-relative paths a
   )
   expect(sessionIds).toContain(terminalSession.id)
 })
+
+test.each([
+  { kind: 'file', path: 'created-during-watcher.txt', nested: false },
+  { kind: 'folder', path: 'created-during-watcher-folder', nested: false },
+  { kind: 'file', path: 'nested/created-during-watcher.txt', nested: true },
+  { kind: 'folder', path: 'nested/created-during-watcher-folder', nested: true }
+] as const)('Explorer keeps a new $kind at $path selected when a watcher overlaps its listing', async ({ kind, path, nested }) => {
+  const fixture = await makeFixture()
+  const context = makeContext(fixture)
+  const emitExplorerChanged = interceptExplorerChanged(context, fixture)
+  const originalCall = context.call
+  const makeListingGate = () => ({ started: false, released: Promise.withResolvers<void>() })
+  const createListingGate = makeListingGate()
+  const watcherListingGate = makeListingGate()
+  const rootListingGates: (typeof createListingGate)[] = []
+  context.call = (async (method: string, params: Record<string, unknown> = {}) => {
+    if (method === 'quirky.editor/explorer' && params.action === 'list' && params.path === undefined) {
+      const gate = rootListingGates.shift()
+      if (gate !== undefined) {
+        gate.started = true
+        await gate.released.promise
+      }
+    }
+    return await originalCall(method, params)
+  }) as typeof context.call
+  const panel = await renderExplorer(fixture, context)
+
+  try {
+    const parent = join(fixture.root, 'nested')
+    if (nested) {
+      await act(async () => findRow(panel.element, parent)!.click())
+      await waitForUi(() => findRow(panel.element, join(fixture.root, FILE_A)) || false)
+      await selectRow(panel.element, join(fixture.root, FILE_A))
+    } else {
+      await selectRow(panel.element, parent)
+    }
+
+    const newButton = panel.element.querySelector<HTMLButtonElement>(`button[title="New ${kind === 'file' ? 'File' : 'Folder'}"]`)
+    if (!newButton) throw new Error(`Missing New ${kind} action`)
+    await act(async () => newButton.click())
+    const input = await waitForUi(() => panel.element.querySelector<HTMLInputElement>('.qe-explorer-inline-row input') ?? false)
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, path)
+      input.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+    const create = Array.from(panel.element.querySelectorAll<HTMLButtonElement>('.qe-explorer-inline-row button'))
+      .find((button) => button.textContent === 'Create')
+    if (!create) throw new Error(`Missing Create action for new ${kind}`)
+
+    rootListingGates.push(createListingGate, watcherListingGate)
+    await act(async () => create.click())
+    await waitForUi(() => createListingGate.started || false)
+    emitExplorerChanged()
+    const debounce = Promise.withResolvers<void>()
+    setTimeout(debounce.resolve, 150)
+    await act(async () => { await debounce.promise })
+    createListingGate.released.resolve()
+    await waitForUi(() => watcherListingGate.started || false)
+    await waitForUi(() => panel.element.querySelector('.qe-explorer-inline-row') === null || false)
+
+    const created = join(fixture.root, path)
+    const row = findRow(panel.element, created)
+    expect(row).not.toBeNull()
+    expect(row!.getAttribute('aria-selected')).toBe('true')
+  } finally {
+    createListingGate.released.resolve()
+    watcherListingGate.released.resolve()
+    await panel.unmount()
+  }
+}, 60_000)
+
+
 test.each([
   { kind: 'file', path: 'created.md', expandedParent: false },
   { kind: 'folder', path: 'created-folder', expandedParent: false },

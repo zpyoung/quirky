@@ -1052,7 +1052,10 @@ export function ExplorerPanel({ context, report }: { context: UiPluginContext; r
       window.clearTimeout(inlineBlurTimer.current)
       inlineBlurTimer.current = undefined
     }
-    if (!worktree || !newItemKind || !newItemName.trim()) return
+    const requestedWorktree = worktree
+    const requestedMode = searchMode
+    const requestedQuery = query
+    if (!requestedWorktree || !newItemKind || !newItemName.trim()) return
     const path = newItemName.trim()
     const focusHandoff = newItemKind === 'file' ? beginEditorFocusHandoff() : null
     if (focusHandoff !== null) focusHandoffRef.current = focusHandoff
@@ -1060,19 +1063,18 @@ export function ExplorerPanel({ context, report }: { context: UiPluginContext; r
     let openedTabId: string | undefined
     try {
       if (newItemKind === 'file') {
-        await context.call('quirky.editor/mutate', { worktree, action: 'createFile', path, content: '' })
-        const opened = await context.call('quirky.editor/open', { worktree, path, preview: false, focus: true }) as { openedTabId?: unknown }
+        await context.call('quirky.editor/mutate', { worktree: requestedWorktree, action: 'createFile', path, content: '' })
+        const opened = await context.call('quirky.editor/open', { worktree: requestedWorktree, path, preview: false, focus: true }) as { openedTabId?: unknown }
         if (typeof opened.openedTabId === 'string' && opened.openedTabId !== '') {
           openedTabId = opened.openedTabId
           focusHandoff?.setTarget(openedTabId)
         }
       } else {
-        await context.call('quirky.editor/mutate', { worktree, action: 'createFolder', path })
+        await context.call('quirky.editor/mutate', { worktree: requestedWorktree, action: 'createFolder', path })
       }
       await enqueueInteraction({ action: 'reveal', path })
       await enqueueInteraction({ action: 'select', path })
-      await loadDirectory()
-      await reloadExpandedDirectories()
+      await reloadAfterMutation(requestedWorktree, requestedMode, requestedQuery)
       setNewItemKind(null)
       setNewItemName('')
       if (openedTabId !== undefined && focusHandoff !== null && focusHandoffRef.current === focusHandoff) {
@@ -1151,13 +1153,15 @@ export function ExplorerPanel({ context, report }: { context: UiPluginContext; r
   }
 
   const duplicatePath = async (path: string) => {
-    if (!worktree) return
+    const requestedWorktree = worktree
+    const requestedMode = searchMode
+    const requestedQuery = query
+    if (!requestedWorktree) return
     try {
-      const result = await context.call('quirky.editor/mutate', { worktree, action: 'duplicate', path }) as { path: string }
+      const result = await context.call('quirky.editor/mutate', { worktree: requestedWorktree, action: 'duplicate', path }) as { path: string }
       await enqueueInteraction({ action: 'reveal', path: result.path })
       await enqueueInteraction({ action: 'select', path: result.path })
-      await loadDirectory()
-      await reloadExpandedDirectories()
+      await reloadAfterMutation(requestedWorktree, requestedMode, requestedQuery)
       await openFile(result.path, { preview: false, pinned: true })
     } catch (reason) {
       setError(messageOf(reason))
@@ -1243,7 +1247,13 @@ export function ExplorerPanel({ context, report }: { context: UiPluginContext; r
       void deleteSelected()
     } else if (event.key.toLowerCase() === 'z' && (event.metaKey || event.ctrlKey) && !event.altKey) {
       event.preventDefault()
-      void context.call('quirky.editor/history', { worktree, action: event.shiftKey ? 'redo' : 'undo' }).then(() => loadDirectory()).catch((reason: unknown) => setError(messageOf(reason)))
+      const requestedWorktree = worktree
+      if (!requestedWorktree) return
+      const requestedMode = searchMode
+      const requestedQuery = query
+      void context.call('quirky.editor/history', { worktree: requestedWorktree, action: event.shiftKey ? 'redo' : 'undo' })
+        .then(() => reloadAfterMutation(requestedWorktree, requestedMode, requestedQuery))
+        .catch((reason: unknown) => setError(messageOf(reason)))
     }
   }
 
@@ -1259,12 +1269,19 @@ export function ExplorerPanel({ context, report }: { context: UiPluginContext; r
     }
   }
 
-  const refreshExplorer = async () => {
-    if (!worktree) return
+  const refreshExplorer = async (mutation = false) => {
+    const requestedWorktree = worktree
+    const requestedMode = searchMode
+    const requestedQuery = query
+    if (!requestedWorktree) return
     try {
-      await context.call('quirky.editor/explorer', { worktree, action: 'refresh' })
-      await loadDirectory()
-      await reloadExpandedDirectories()
+      await context.call('quirky.editor/explorer', { worktree: requestedWorktree, action: 'refresh' })
+      if (mutation) {
+        await reloadAfterMutation(requestedWorktree, requestedMode, requestedQuery)
+      } else {
+        await loadDirectory()
+        await reloadExpandedDirectories()
+      }
     } catch (reason) {
       setError(messageOf(reason))
     }
@@ -1283,14 +1300,14 @@ export function ExplorerPanel({ context, report }: { context: UiPluginContext; r
         if (newPath === path) continue
         await context.call('quirky.editor/mutate', { worktree, action: 'move', path, newPath })
       }
-      await refreshExplorer()
+      await refreshExplorer(true)
       return
     }
     const files = Array.from(event.dataTransfer.files)
     if (files.length > 0) {
       const imported = await importFiles(context, worktree, destination || '.', files)
       for (const path of imported) await openFile(path, { preview: false, pinned: true })
-      await refreshExplorer()
+      await refreshExplorer(true)
       return
     }
     const uris = event.dataTransfer.getData('text/uri-list')
@@ -1312,7 +1329,7 @@ export function ExplorerPanel({ context, report }: { context: UiPluginContext; r
       const imported = result.paths ?? (result.path ? [result.path] : [])
       if (imported.length === 0) throw new Error('The dropped files could not be imported.')
       for (const path of imported) await openFile(path, { preview: false, pinned: true })
-      await refreshExplorer()
+      await refreshExplorer(true)
     }
   }
 
@@ -1323,8 +1340,8 @@ export function ExplorerPanel({ context, report }: { context: UiPluginContext; r
       <IconButton label="New Folder" title="New Folder" onClick={() => startNewItem('folder')}>▭</IconButton>
       <IconButton label="Collapse All" title="Collapse All" onClick={() => void collapseAll()}>⊟</IconButton>
       <IconButton label="Refresh Explorer" title="Refresh Explorer" onClick={() => void refreshExplorer()}><ControlIcon name="arrows-clockwise" /></IconButton>
-      <IconButton label="Undo file operation" title="Undo file operation" onClick={() => void context.call('quirky.editor/history', { worktree, action: 'undo' }).then(refreshExplorer).catch((reason: unknown) => setError(messageOf(reason)))}>↶</IconButton>
-      <IconButton label="Redo file operation" title="Redo file operation" onClick={() => void context.call('quirky.editor/history', { worktree, action: 'redo' }).then(refreshExplorer).catch((reason: unknown) => setError(messageOf(reason)))}>↷</IconButton>
+      <IconButton label="Undo file operation" title="Undo file operation" onClick={() => void context.call('quirky.editor/history', { worktree, action: 'undo' }).then(() => refreshExplorer(true)).catch((reason: unknown) => setError(messageOf(reason)))}>↶</IconButton>
+      <IconButton label="Redo file operation" title="Redo file operation" onClick={() => void context.call('quirky.editor/history', { worktree, action: 'redo' }).then(() => refreshExplorer(true)).catch((reason: unknown) => setError(messageOf(reason)))}>↷</IconButton>
       <IconButton label="Source Control" title="Source Control" onClick={() => void openSourceControl()}>⑂</IconButton>
     </>
   )
@@ -1342,8 +1359,8 @@ export function ExplorerPanel({ context, report }: { context: UiPluginContext; r
       <div className="qe-file-actions-menu">
         {selectionActions}
         <label><input type="checkbox" checked={state?.explorer.showDotfiles ?? true} onChange={() => void toggleDotfiles()} />Show Dotfiles</label>
-        <label><input type="checkbox" checked={settings.showGitIgnored} onChange={(event) => void setEditorSetting(context, 'showGitIgnoredFiles', event.currentTarget.checked).then(refreshExplorer).catch((reason: unknown) => setError(messageOf(reason)))} />Show Git Ignored Files</label>
-        <label><input type="checkbox" checked={settings.followSymlinkedDirectories} onChange={(event) => void setEditorSetting(context, 'followSymlinkedDirectories', event.currentTarget.checked).then(refreshExplorer).catch((reason: unknown) => setError(messageOf(reason)))} />Follow symlinked directories</label>
+        <label><input type="checkbox" checked={settings.showGitIgnored} onChange={(event) => void setEditorSetting(context, 'showGitIgnoredFiles', event.currentTarget.checked).then(() => refreshExplorer()).catch((reason: unknown) => setError(messageOf(reason)))} />Show Git Ignored Files</label>
+        <label><input type="checkbox" checked={settings.followSymlinkedDirectories} onChange={(event) => void setEditorSetting(context, 'followSymlinkedDirectories', event.currentTarget.checked).then(() => refreshExplorer()).catch((reason: unknown) => setError(messageOf(reason)))} />Follow symlinked directories</label>
         <label className="qe-range-setting">Explorer Sidebar Width
           <input type="range" min="220" max="900" step="10" value={settings.sidebarWidth} onChange={(event) => void setEditorSetting(context, 'editorSidebarWidth', Number(event.currentTarget.value)).catch((reason: unknown) => setError(messageOf(reason)))} />
           <span>{settings.sidebarWidth}px</span>
