@@ -124,6 +124,11 @@
   color: var(--ui-muted);
 }
 
+.tool-shell__overflow-button.ui-icon-button:focus-visible {
+  border-radius: var(--ui-radius-control);
+  outline-offset: calc(var(--ui-focus-offset) * -1);
+}
+
 .tool-shell__overflow-button.ui-icon-button:hover:not(:disabled) {
   background: var(--ui-selected);
   color: var(--ui-text);

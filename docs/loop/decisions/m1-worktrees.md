@@ -333,7 +333,7 @@
 ## D31: The create dialog has Project, Name, Create from, Agent, Advanced and Create more
 - **Question:** layout-style: the create dialog
 - **Options:** v1's name and base fields; Orca's composer minus the hosting tabs
-- **Chose:** Project; Name (blank shows the generated name it will use); Create from, either a base ref (the detected default shown) or an existing branch (reuse); Agent (optional, empty) with a prompt; Advanced with display name, branch name, parent worktree, note, and the setup choice when the project has setup (with its source, "quirky.yaml", "orca.yaml" or "local settings"); a Create more switch that keeps the dialog open and resets name, agent and setup choice; Mod+Enter submits. The GitHub and GitLab tabs wait for M4.
+- **Chose:** Project; Name (blank shows the generated name it will use); Create from, either a base ref (the detected default shown) or an existing branch (reuse); Agent (optional, empty) with a prompt; Advanced with display name, branch name, parent worktree, note, and the setup choice when the project has setup (with its source, "quirky.yaml", "orca.yaml" or "local settings"); a Create more switch that keeps the dialog open, resets name, agent and setup choice, and refocuses the current source/name input for the next create; Mod+Enter submits. The GitHub and GitLab tabs wait for M4.
 - **Why:** parity for the flows in scope (D3)
 - **Evidence:** worktrees.md flow 2
 - **Reversibility:** easy

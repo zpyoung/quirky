@@ -305,10 +305,10 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
     <Dialog open title="Command palette" placement="top" onClose={onClose}>
       <TextField
         ref={fieldRef}
+        autoFocus
         label="Search"
         aria-label="Search commands, tools, views, worktrees, and files"
         placeholder="Type to search"
-        autoFocus
         value={filter}
         onChange={(event) => {
           setFilter(event.target.value)

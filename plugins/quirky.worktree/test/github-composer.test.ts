@@ -667,6 +667,104 @@ test('Name mode keeps blank generated-name creation available', async () => {
   expect(h.calls.find((call) => call.method === 'quirky.worktree/create')?.params).not.toHaveProperty('name')
   expect(h.pending).toEqual([suggestion])
 })
+test('SC-26 focus: Create more focuses the active branch source after success', async () => {
+  const response = deferred<WorktreeCreateResult>()
+  const h = mountCreate({
+    onCall: (method) => (method === 'quirky.worktree/create' ? response.promise : undefined)
+  })
+  await h.ready
+  const dialog = h.element.querySelector('[role="dialog"]')!
+  const branchTab = button(dialog, 'Branch')!
+  branchTab.focus()
+  await click(branchTab)
+  const source = labelField<HTMLInputElement>(dialog, 'Existing branch')!
+  await setText(source, 'qa27-before')
+  await click(labelField<HTMLInputElement>(dialog, 'Create more')!)
+  const submit = button(dialog, 'Create')!
+  submit.focus()
+  expect(document.activeElement === submit).toBe(true)
+  await click(submit)
+  expect(submit.disabled).toBe(true)
+  expect(h.calls.find((call) => call.method === 'quirky.worktree/create')?.params).toMatchObject({
+    repo: 'r1',
+    branch: 'qa27-before'
+  })
+
+  const created: Worktree = {
+    ...main('r1', 'wt-created'),
+    isMain: false,
+    branch: 'qa27-before',
+    name: 'qa27-before',
+    path: '/worktrees/qa27-before',
+    createdBy: 'window'
+  }
+  await act(async () => {
+    response.resolve({ worktree: created, warnings: [], setup: { ran: 'none' } })
+    await response.promise
+  })
+  await waitFor(() => source.value === '' ? source : null)
+  expect(document.activeElement === source).toBe(true)
+})
+test('SC-26 focus: Create more focuses Name after success', async () => {
+  const h = mountCreate()
+  await h.ready
+  const dialog = h.element.querySelector('[role="dialog"]')!
+  const nameTab = button(dialog, 'Name')!
+  nameTab.focus()
+  await click(nameTab)
+  const name = labelField<HTMLInputElement>(dialog, 'Name')!
+  await setText(name, 'qa27-name')
+  await click(labelField<HTMLInputElement>(dialog, 'Create more')!)
+  nameTab.focus()
+  const submit = button(dialog, 'Create')!
+  submit.focus()
+  expect(document.activeElement === submit).toBe(true)
+  await click(submit)
+  await waitFor(() => name.value === '' ? name : null)
+  expect(document.activeElement === name).toBe(true)
+})
+test('SC-26 mode change focus: Create more focuses the current Branch source', async () => {
+  const response = deferred<WorktreeCreateResult>()
+  const h = mountCreate({
+    onCall: (method) => (method === 'quirky.worktree/create' ? response.promise : undefined)
+  })
+  await h.ready
+  const dialog = h.element.querySelector('[role="dialog"]')!
+  const nameTab = button(dialog, 'Name')!
+  nameTab.focus()
+  await click(nameTab)
+  await setText(labelField<HTMLInputElement>(dialog, 'Name')!, 'qa27-before')
+  await click(labelField<HTMLInputElement>(dialog, 'Create more')!)
+  const submit = button(dialog, 'Create')!
+  submit.focus()
+  expect(document.activeElement === submit).toBe(true)
+  await click(submit)
+  expect(submit.disabled).toBe(true)
+
+  const branchTab = button(dialog, 'Branch')!
+  branchTab.focus()
+  await click(branchTab)
+  const nextName = labelField<HTMLInputElement>(dialog, 'Name')!
+  const source = labelField<HTMLInputElement>(dialog, 'Existing branch')!
+  nextName.focus()
+
+  const created: Worktree = {
+    ...main('r1', 'wt-created'),
+    isMain: false,
+    branch: 'qa27-before',
+    name: 'qa27-before',
+    path: '/worktrees/qa27-before',
+    createdBy: 'window'
+  }
+  await act(async () => {
+    response.resolve({ worktree: created, warnings: [], setup: { ran: 'none' } })
+    await response.promise
+  })
+  await waitFor(() => !submit.disabled && nextName.value === '' && source.value === '' ? source : null)
+  expect(document.activeElement === source).toBe(true)
+})
+
+
 
 test('create more resets the selected source, name, query, agent and setup choice', async () => {
   const setup: EffectiveHooks = {
@@ -912,6 +1010,7 @@ test('sidebar renders a durable linked PR as an external link beside the editabl
     onToggleAutomationDetails() {},
     now: 0,
     separatorEnabled: false,
+    canShowSleeping: () => true,
     statusDefinitions: DEFAULT_WORKTREE_STATUSES.map((status) => ({ ...status })),
     projectIdentities: {},
     onDropPreviewChange() {},

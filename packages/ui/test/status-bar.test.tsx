@@ -408,6 +408,34 @@ describe('status bar', () => {
   })
 
 
+  test.each([0, 1])('a monitoring session with a pending ask is not working alongside %i other agents', async (otherAgents) => {
+    const { env, attention, first, second } = await boot()
+    await seedSessions(env, otherAgents === 0 ? [first] : [first, second])
+    await env.win.waitFor(() => attention.getSnapshot().sessions?.length === otherAgents + 1)
+    const sessions = attention.getSnapshot().sessions!.map((session) => session.id === 's_0'
+      ? { ...session, agentStatus: { ...session.agentStatus!, display: 'monitoring', label: 'Monitoring background tasks' } }
+      : session)
+    await env.agent.callAny('quirky.session/seed', { sessions })
+    await seedPendingAsks(env, [pendingAsk('ask_monitoring', 'Choose a color', 's_0', first.id)])
+    await env.win.waitFor(() => attention.getSnapshot().sessions?.[0]?.agentStatus?.display === 'monitoring')
+    await env.win.waitFor(() => itemLabelled(env, '1 pending question'))
+
+    expect(texts(env)).toContain(`${otherAgents} working`)
+    expect(texts(env)).toContain('1 needs you')
+    await click(itemLabelled(env, `${otherAgents} ${otherAgents === 1 ? 'agent' : 'agents'} working`))
+    await env.win.waitFor(() => popups(env).length === 1)
+    expect(popupRows(env).some((row) => row.textContent?.includes('Monitoring background tasks'))).toBe(false)
+    if (otherAgents === 1) {
+      expect(popupRows(env).some((row) => row.textContent?.includes(second.name))).toBe(true)
+    } else {
+      expect(popupRows(env).some((row) => row.textContent?.includes('No agents are working'))).toBe(true)
+    }
+
+    await seedPendingAsks(env, [])
+    await env.win.waitFor(() => itemLabelled(env, `${otherAgents + 1} ${otherAgents === 0 ? 'agent' : 'agents'} working`))
+    expect(texts(env)).toContain('0 needs you')
+  })
+
   test('a same-session ask and a same-worktree unrelated ask do not duplicate session attention', async () => {
     const { env, first, second } = await boot()
     const [session] = await seedWaitingSessions(env, [first, second])

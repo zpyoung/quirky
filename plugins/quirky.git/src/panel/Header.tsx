@@ -22,12 +22,16 @@ type HeaderProps = {
 
 /** The panel's filter toggle (frame rail) and "More source control actions" menu (frame header), with the filter box in the body. */
 export function Header({ filter, filterOpen, onFilterOpen, onFilter, viewMode, onViewMode, onChangeBase, onRefreshCompare, notes = 0, onNotes }: HeaderProps) {
-  const [menuAt, setMenuAt] = useState<{ x: number; y: number } | null>(null)
+  const [menuAt, setMenuAt] = useState<{ x: number; y: number; trigger: HTMLButtonElement } | null>(null)
+  const select = (action?: () => void) => () => {
+    menuAt?.trigger.focus()
+    action?.()
+  }
   const entries: ContextMenuItem[] = [
-    viewMode === 'list' ? { label: 'View as tree', onSelect: () => onViewMode('tree') } : { label: 'View as list', onSelect: () => onViewMode('list') },
-    { label: 'Change Base Ref…', onSelect: onChangeBase },
-    { label: 'Refresh branch compare', onSelect: onRefreshCompare },
-    ...(notes > 0 ? [{ label: `Notes ${notes}`, onSelect: onNotes }] : [])
+    viewMode === 'list' ? { label: 'View as tree', onSelect: select(() => onViewMode('tree')) } : { label: 'View as list', onSelect: select(() => onViewMode('list')) },
+    { label: 'Change Base Ref…', onSelect: select(onChangeBase) },
+    { label: 'Refresh branch compare', onSelect: select(onRefreshCompare) },
+    ...(notes > 0 ? [{ label: `Notes ${notes}`, onSelect: select(onNotes) }] : [])
   ]
   const close = () => {
     onFilter('')
@@ -51,7 +55,7 @@ export function Header({ filter, filterOpen, onFilterOpen, onFilter, viewMode, o
           title="More source control actions"
           onClick={(event) => {
             const box = event.currentTarget.getBoundingClientRect()
-            setMenuAt({ x: box.right, y: box.bottom })
+            setMenuAt({ x: box.right, y: box.bottom, trigger: event.currentTarget })
           }}
         >
           <ControlIcon name="dots-three" />
@@ -79,7 +83,7 @@ export function Header({ filter, filterOpen, onFilterOpen, onFilter, viewMode, o
           </IconButton>
         </div>
       )}
-      {menuAt && <ContextMenu x={menuAt.x} y={menuAt.y} align="end" label="Source control actions" items={entries} onClose={() => setMenuAt(null)} />}
+      {menuAt && <ContextMenu x={menuAt.x} y={menuAt.y} align="end" label="Source control actions" items={entries} returnFocusTo={menuAt.trigger} onClose={() => setMenuAt(null)} />}
     </>
   )
 }

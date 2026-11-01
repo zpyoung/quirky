@@ -855,6 +855,7 @@
 
 .ui-tool-panel-frame__tabs .ui-tabs {
   border-bottom: 0;
+  flex-wrap: wrap;
   gap: var(--ui-space-4);
 }
 

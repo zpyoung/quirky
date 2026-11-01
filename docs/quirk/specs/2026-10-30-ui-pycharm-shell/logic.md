@@ -103,7 +103,7 @@ Each side's stripe runs top to bottom in this order:
 
 The row of bottom-tool icons is removed, which gives the work about 40 more height. The six slots and their rules are unchanged: left foot opens bottom left and right foot opens bottom right. The open tool's icon gets a full-width `selected` block rather than a small rounded square.
 
-Overflow lists tools that aren't on a stripe, either because the user took them off or because the window is too short to fit them, and shows their shortcuts where they have one.
+Overflow lists tools that aren't on a stripe, either because the user took them off or because the window is too short to fit them, and shows their shortcuts where they have one. Escape closes More tools and returns focus to its button, with a complete rounded focus ring inside the stripe.
 
 ### Icons
 
@@ -155,11 +155,15 @@ The left side is a breadcrumb of the selected project, worktree and open file, w
 
 The working and needs-you counts have accessible names that identify agents and pending questions. They use singular nouns at one ("1 agent working", "1 pending question") and plural nouns at zero and above one.
 
+A session with a pending question counts only under needs-you, not in the working count or its popup, even while the agent is monitoring background tasks. Once the question is answered, a still-working session returns to the working count.
+
 ### Center tabs and ⌘K
 
 Center tabs show a tool or file icon and an accent underline on the active tab, with a close button on the active or hovered tab. When tabs don't fit, a "3 more" button at the end of the row lists the hidden ones, and the visible tabs don't shrink to fit.
 
 ⌘K gains scope tabs for All, Worktrees, Commands and Files, and shows recent items before anything is typed.
+
+Search focuses its query field when it opens. Dismissing it with Escape or its close button returns focus to the control or terminal that had focus before it opened. Selecting a result instead lets that destination take focus.
 
 ## The golden screens
 

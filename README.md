@@ -429,6 +429,9 @@ Copy, scoped clear and send use the canonical owner stores; confirmed sends remo
 snapshots, and concurrent edits survive. A shared delivery reservation prevents a Markdown note
 from being sent simultaneously from its editor rail and Source Control.
 
+Source Control's More actions menu returns focus to its trigger on Escape and after choosing
+an action, unless the action opens another focused control. Tab then continues from the panel header.
+
 Source Control resolves GitHub review state for the current branch and HEAD before offering
 review creation, then hands the guarded preparation result to the existing Reviews composer.
 The [parity sweep specification](docs/quirk/specs/2026-10-28-m7-sweep-editor-source-control/logic.md)
