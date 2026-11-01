@@ -23,6 +23,10 @@ export type CompactList = {
   loading: boolean
   /** The read's error while no rows are available for the current view. */
   error: string | null
+  /** The latest read's error for the current view, whether or not rows are cached for it. */
+  refreshError: string | null
+  /** Re-runs the list read for the current view. */
+  retry(): void
   checks: Readonly<Record<string, CheckResult>>
   merges: Readonly<Record<string, MergeMetadata>>
   /** The signed-in GitHub login, or null when unknown. */
@@ -76,6 +80,7 @@ export function useCompactList(
   const [details, setDetails] = useState<{ key: string; checks: Record<string, CheckResult>; merges: Record<string, MergeMetadata> } | null>(null)
   const [viewer, setViewer] = useState<string | null>(null)
   const [counts, setCounts] = useState<CompactCounts>({ issues: null, prs: null })
+  const [attempt, setAttempt] = useState(0)
   const rowsRef = useRef<HTMLElement | null>(null)
   const latestKey = useRef(viewKey)
   const fetchGeneration = useRef(0)
@@ -96,7 +101,8 @@ export function useCompactList(
   const ownDetails = details?.key === viewKey ? details : null
   const checks: Record<string, CheckResult> = ownDetails?.checks ?? snapshot?.checks ?? NO_DETAILS
   const merges: Record<string, MergeMetadata> = ownDetails?.merges ?? snapshot?.merge ?? NO_DETAILS
-  const error = !idle && result === null && failed?.key === viewKey ? failed.message : null
+  const refreshError = !idle && failed?.key === viewKey ? failed.message : null
+  const error = result === null ? refreshError : null
   const loading = result === null && error === null
 
   useEffect(() => {
@@ -114,7 +120,7 @@ export function useCompactList(
       }
     })()
     return () => { fetchGeneration.current += 1 }
-  }, [context, viewKey, idle])
+  }, [context, viewKey, idle, attempt])
 
   useEffect(() => {
     if (idle) return
@@ -156,6 +162,8 @@ export function useCompactList(
       }
     })()
   }, [context, result])
+
+  const retry = useCallback(() => setAttempt((count) => count + 1), [])
 
   const loadChecks = useCallback(async (item: ListItem) => {
     const key = rowKey(item)
@@ -216,5 +224,5 @@ export function useCompactList(
     return () => observer.disconnect()
   }, [items, loadChecks, loadMerge])
 
-  return { view, viewKey, result, loading, error, checks, merges, viewer, counts, rowsRef }
+  return { view, viewKey, result, loading, error, refreshError, retry, checks, merges, viewer, counts, rowsRef }
 }

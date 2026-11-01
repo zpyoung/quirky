@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { UiPluginContext } from '@quirky/protocol'
-import { ContextMenu, ControlIcon, EmptyState, IconButton, ListRow, Menu, Tabs, ToolPanelFrame } from '@quirky/ui'
+import { Button, ContextMenu, ControlIcon, EmptyState, IconButton, ListRow, Menu, Tabs, ToolPanelFrame } from '@quirky/ui'
 import { TASKS_VIEW, type ItemKind, type TaskNavigation, type TasksState } from '../contracts'
-import { countFilters, errorMessage, filtersFromQuery, normalizedPreset, object, presetQuery, rowKey, rowTarget, tokenize, type ListItem } from './model'
+import { countFilters, errorMessage, filtersFromQuery, normalizedPreset, object, parseSource, presetQuery, rowKey, rowTarget, tokenize, type ListItem } from './model'
 import { place } from './place'
 import { rowDescription, rowStatus } from './row-status'
 import { queryForKind } from './search'
@@ -204,6 +204,14 @@ export function CompactTasks({ context, report }: { context: UiPluginContext; re
   const sourceFailures = list.result?.failures.filter((failure) => failure.stage !== 'count') ?? []
   const noRepositories = navigation?.repoIds?.length === 0 || list.result?.repositories.length === 0
   const problem = stateError ?? list.error ?? (list.result && rows.length === 0 && sourceFailures.length > 0 ? sourceFailures[0]!.message : null)
+  const selectedRepos = list.result ? list.result.repositories.filter((repo) => navigation?.repoIds == null || navigation.repoIds.includes(repo.id)) : []
+  const noGitHubRemote = !stateError && list.result !== null && selectedRepos.length > 0 &&
+    selectedRepos.length === (navigation?.repoIds?.length ?? selectedRepos.length) &&
+    selectedRepos.every((repo) => parseSource(list.result!.sources[repo.id]).reason === 'missing_origin')
+  const noGitHubRemoteMessage = selectedRepos.length === 1
+    ? `No GitHub remote is configured for ${selectedRepos[0]!.displayName || selectedRepos[0]!.name}. Add a GitHub remote to this repository to load GitHub tasks.`
+    : `No GitHub remotes are configured for the selected ${selectedRepos.length} repositories. Add a GitHub remote to each repository to load GitHub tasks.`
+  const staleNotice = state && list.result && !noRepositories && list.refreshError !== null
 
   let body
   if (stateError && !state) {
@@ -212,6 +220,8 @@ export function CompactTasks({ context, report }: { context: UiPluginContext; re
     body = <div role="status" aria-label="Loading tasks" className="tasks-compact__loading">{[0, 1, 2, 3].map((index) => <div key={index} className="tasks-compact__skeleton" aria-hidden="true" />)}</div>
   } else if (noRepositories) {
     body = <div role="status" className="tasks-compact__empty"><EmptyState message="No repositories selected." action={{ label: 'Expand to select projects', onAction: expand }} /></div>
+  } else if (noGitHubRemote) {
+    body = <div role="status" className="tasks-compact__empty"><EmptyState message={noGitHubRemoteMessage} /></div>
   } else if (problem) {
     body = <div role="alert" className="tasks-compact__problem"><EmptyState message={problem} action={{ label: 'Open task sources', onAction: openTaskSources }} /></div>
   } else if (rows.length === 0) {
@@ -269,6 +279,10 @@ export function CompactTasks({ context, report }: { context: UiPluginContext; re
         ref={(element) => { scroller.current = element; list.rowsRef.current = element }}
         onScroll={(event) => { if (restoredKey.current === list.viewKey) place.setScrollTop('compact', list.viewKey, event.currentTarget.scrollTop) }}
       >
+        {staleNotice && <div role="status" className="tasks-compact__notice">
+          Couldn't refresh. Showing the last loaded tasks.
+          <Button variant="secondary" onClick={list.retry}>Retry</Button>
+        </div>}
         {body}
       </div>
     </ToolPanelFrame>

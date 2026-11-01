@@ -365,6 +365,7 @@ test('an unavailable source shows its message and Open task sources', async () =
   const failures = [{ repoId: 'repo-1', stage: 'availability', reason: 'unauthenticated', message: 'GitHub is not signed in.' }]
   const { element, calls } = await mountCompact({ handlers: { 'quirky.tasks/list': () => listResult([], { failures }), 'quirky.tasks/settings': () => ({}) } })
   expect(element.textContent).toContain('GitHub is not signed in.')
+  expect(element.querySelector('[role="alert"]')).not.toBeNull()
   await act(async () => button(element, 'Open task sources')!.click())
   expect(calls.some((call) => call.method === 'quirky.tasks/settings')).toBe(true)
 })
@@ -372,6 +373,33 @@ test('an unavailable source shows its message and Open task sources', async () =
 test('a failed list read shows the problem state', async () => {
   const { element } = await mountCompact({ handlers: { 'quirky.tasks/list': () => { throw new Error('daemon exploded') } } })
   expect(element.textContent).toContain('daemon exploded')
+  expect(button(element, 'Open task sources')).toBeDefined()
+})
+
+test('a repository with no GitHub remote reports a status, not an alert, and offers no source action', async () => {
+  const sources = { 'repo-1': { status: 'unavailable', reason: 'missing_origin', message: 'No origin remote.' } }
+  const failures = [{ repoId: 'repo-1', stage: 'availability', reason: 'missing_origin', message: 'No origin remote.' }]
+  const { element } = await mountCompact({ handlers: { 'quirky.tasks/list': () => listResult([], { sources, failures }) } })
+  expect(element.textContent).toContain('No GitHub remote is configured for quirky. Add a GitHub remote to this repository to load GitHub tasks.')
+  expect(element.querySelector('[role="alert"]')).toBeNull()
+  expect(element.querySelector('.tasks-compact__list [role="status"]')).not.toBeNull()
+  expect(button(element, 'Open task sources')).toBeUndefined()
+})
+
+test('several repositories with no GitHub remote use the plural wording', async () => {
+  const second = { ...repository, id: 'repo-2', name: 'other', worktree: 'wt-other' }
+  const sources = { 'repo-1': { status: 'unavailable', reason: 'missing_origin' }, 'repo-2': { status: 'unavailable', reason: 'missing_origin' } }
+  const { element } = await mountCompact({ handlers: { 'quirky.tasks/list': () => listResult([], { repositories: [repository, second], sources }) } })
+  expect(element.textContent).toContain('No GitHub remotes are configured for the selected 2 repositories. Add a GitHub remote to each repository to load GitHub tasks.')
+  expect(element.querySelector('[role="alert"]')).toBeNull()
+})
+
+test('a missing remote on only some repositories keeps the alert and Open task sources', async () => {
+  const second = { ...repository, id: 'repo-2', name: 'other', worktree: 'wt-other' }
+  const sources = { 'repo-1': { status: 'unavailable', reason: 'missing_origin' }, 'repo-2': { status: 'unavailable', reason: 'unauthenticated' } }
+  const failures = [{ repoId: 'repo-2', stage: 'availability', reason: 'unauthenticated', message: 'GitHub is not signed in.' }]
+  const { element } = await mountCompact({ handlers: { 'quirky.tasks/list': () => listResult([], { repositories: [repository, second], sources, failures }) } })
+  expect(element.querySelector('[role="alert"]')!.textContent).toContain('GitHub is not signed in.')
   expect(button(element, 'Open task sources')).toBeDefined()
 })
 
@@ -559,6 +587,64 @@ test('a loaded list is saved as the snapshot for its view key', async () => {
   const { element } = await mountCompact()
   expect(rowTitles(element)).toHaveLength(2)
   expect(place.listSnapshot(prsKey)?.list.items.map((item) => item.number)).toEqual([274, 275])
+})
+
+const REFRESH_NOTICE = "Couldn't refresh. Showing the last loaded tasks."
+const notice = (element: HTMLElement) => [...element.querySelectorAll('.tasks-compact__notice')].find((node) => node.textContent?.includes("Couldn't refresh"))
+
+test('a failed refresh with cached rows keeps the rows and adds the notice', async () => {
+  await seedSnapshot([pr(274), pr(275)])
+  const { element } = await mountCompact({ handlers: { 'quirky.tasks/list': () => { throw new Error('daemon exploded') } } })
+  expect(rowTitles(element)).toEqual(['Pull request 274', 'Pull request 275'])
+  const shown = notice(element)!
+  expect(shown.getAttribute('role')).toBe('status')
+  expect(shown.textContent).toContain(REFRESH_NOTICE)
+  expect(button(shown, 'Retry')).toBeDefined()
+  expect(element.querySelector('[role="alert"]')).toBeNull()
+})
+
+test('a failed refresh with a cached empty list shows the notice instead of a current empty state', async () => {
+  await seedSnapshot([])
+  const { element } = await mountCompact({ handlers: { 'quirky.tasks/list': () => { throw new Error('daemon exploded') } } })
+  expect(notice(element)!.textContent).toContain(REFRESH_NOTICE)
+  expect(button(element, 'Retry')).toBeDefined()
+})
+
+test('Retry reads the list again and a success clears the notice', async () => {
+  await seedSnapshot([pr(274)])
+  let fail = true
+  const { element, calls } = await mountCompact({ handlers: { 'quirky.tasks/list': () => { if (fail) throw new Error('daemon exploded'); return listResult([pr(274), pr(280)]) } } })
+  expect(notice(element)).toBeDefined()
+  fail = false
+  await act(async () => button(element, 'Retry')!.click())
+  await settle()
+  expect(calls.filter((call) => call.method === 'quirky.tasks/list')).toHaveLength(2)
+  expect(notice(element)).toBeUndefined()
+  expect(rowTitles(element)).toEqual(['Pull request 274', 'Pull request 280'])
+})
+
+test('a failure from a read the panel has moved past raises no notice', async () => {
+  await seedSnapshot([pr(274)])
+  let current = prsState
+  const issuesState = withNavigation({ mode: 'issues', query: 'is:issue is:open', lastList: { mode: 'issues', query: 'is:issue is:open', page: 1 } })
+  const rejects: (() => void)[] = []
+  const { element, emit } = await mountCompact({
+    handlers: {
+      'quirky.tasks/state': () => current,
+      'quirky.tasks/list': (params) => params.mode === 'prs'
+        ? new Promise((_, reject) => { rejects.push(() => reject(new Error('late failure'))) })
+        : listResult([issue(9)])
+    }
+  })
+  current = { ...issuesState, revision: 4 }
+  await emit({ type: 'quirky.tasks/changed', revision: 4 })
+  current = { ...prsState, revision: 5 }
+  await emit({ type: 'quirky.tasks/changed', revision: 5 })
+  expect(rejects).toHaveLength(2)
+  rejects[0]!()
+  await settle()
+  expect(notice(element)).toBeUndefined()
+  expect(rowTitles(element)).toEqual(['Pull request 274'])
 })
 
 test('the Start button is an icon, not a text glyph', async () => {
