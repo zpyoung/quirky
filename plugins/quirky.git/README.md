@@ -45,6 +45,8 @@ Tree-view folder counts use singular wording for one file and plural wording for
 
 The Commits dock gives the subject its own full-width line and wraps refs beneath it. Long ref labels are ellipsized visually; the full value remains available in the tooltip and screen-reader label.
 
+The Changes header ellipsizes long branch names, keeping the comparison arrow and base-ref button beside the name on one row.
+
 Right-click a file row for its Source Control actions. Blank Changes areas follow the [shell's context-menu behavior](../../README.md#shared-desktop-ui-components), including native editing and selected-text menus.
 
 For Markdown files, **Preview** shows only the rendered modified content and hides both source diff sides. **Source** restores the diff.
