@@ -237,6 +237,28 @@
   gap: var(--ui-space-8);
   min-inline-size: 0;
 }
+.viewer-csv-advanced {
+  flex: 0 0 auto;
+  min-inline-size: 0;
+}
+
+.viewer-csv-advanced[open] {
+  flex: 1 0 100%;
+}
+
+.viewer-csv-advanced__body {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: var(--ui-space-8);
+  inline-size: 100%;
+  min-inline-size: 0;
+  padding-block-start: var(--ui-space-8);
+}
+
+.viewer-csv-advanced__body > .viewer-copy-range {
+  flex: 1 0 100%;
+}
 
 .viewer-paste {
   flex: 1 1 14rem;
