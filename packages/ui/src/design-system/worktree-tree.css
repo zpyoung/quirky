@@ -38,15 +38,31 @@
 }
 
 @container ui-tool-panel (max-width: 220px) {
-  .repo-header.project-header {
-    align-items: stretch;
-    flex-direction: column;
+  .repo-header.project-header:not([hidden]) {
+    align-items: center;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .repo-header.project-header > .ui-section-header__title {
+    grid-area: 1 / 1;
   }
 
   .repo-header.project-header > .ui-section-header__actions {
-    align-self: stretch;
+    grid-area: 1 / 1;
+    justify-self: end;
     justify-content: flex-end;
     margin-inline-start: 0;
+  }
+
+  .repo-header.project-header:has(.repo-actions > .ui-badge) > .ui-section-header__actions {
+    grid-area: 2 / 1;
+    justify-self: stretch;
+  }
+
+  .repo-header.project-header:hover .project-reveal,
+  .repo-header.project-header:focus-within .project-reveal {
+    background: var(--ui-surface);
   }
 }
 

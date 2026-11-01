@@ -22,7 +22,7 @@ Pin, Unpin, Sleep and Wake restore focus to a visible worktree Actions button af
 Unpin from Pinned returns focus to the remaining project row. If the action hides the row,
 focus returns to the previous focus owner.
 
-In narrow panels, the panel heading overlays its controls on reveal without reserving an empty row.
+In narrow panels, the panel heading sits above its controls so it remains readable.
 Add project stays icon-only on hover or keyboard focus when its label and neighboring controls do not fit together; when they do, its label expands without moving the filter or minimize controls.
 Project names truncate with an ellipsis; avatars stay whole, and the worktree count stays beside the name.
 Project controls overlay the title on hover or keyboard focus without moving the name, count or first
