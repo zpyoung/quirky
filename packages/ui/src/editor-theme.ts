@@ -19,7 +19,7 @@ export const editorTheme: Extension = EditorView.theme({
   '.cm-deletedLine': { backgroundColor: 'color-mix(in srgb, var(--ui-failing) 12%, var(--ui-transparent))' },
   '.cm-changeGutter': { width: 'var(--ui-space-4)', paddingLeft: 'var(--ui-border-width)' },
   '.cm-gutterElement.cm-changedLineGutter, .cm-changedLineGutter': { background: 'var(--ui-working)' },
-  '.cm-gutterElement.cm-deletedLineGutter, .cm-deletedLineGutter': { background: 'var(--ui-failing)' },
+  '&.cm-merge-a .cm-changedLineGutter, .cm-gutterElement.cm-deletedLineGutter, .cm-deletedLineGutter': { background: 'var(--ui-failing)' },
   '.cm-collapsedLines': { color: 'var(--ui-muted)', background: 'var(--ui-selected)', cursor: 'pointer', padding: 'var(--ui-space-2) var(--ui-space-8)', fontSize: 'var(--ui-font-label)' },
   '.cm-deletedChunk .cm-chunkButtons': { position: 'sticky', float: 'right', height: '0', insetInlineEnd: 'var(--ui-space-6)' },
   '.cm-chunkButtons button': { background: 'var(--ui-selected)', color: 'var(--ui-text)', border: 'var(--ui-border-width) solid var(--ui-border)', borderRadius: 'var(--ui-radius-mark)', padding: '0 var(--ui-space-6)', fontSize: 'var(--ui-font-label)' },

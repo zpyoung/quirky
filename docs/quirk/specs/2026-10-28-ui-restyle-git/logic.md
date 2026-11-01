@@ -17,7 +17,7 @@ Non-goals: changing Git/hosting/check runner APIs, feature behavior, stable cont
 1. Reuse @quirky/ui's existing fifteen controlled components and its public stylesheet. Reject plugin-private CSS or a parallel toolkit because they violate the approved contract.
 2. Compose shared rows, badges/status dots, headers, buttons, fields, forms, tabs, dialogs and empty states. Native textarea/select/checkbox controls may live in shared FormRow with shared field classes; their labels, values and callbacks remain unchanged. Layout-only wrappers may use shared utility classes and token-valued inline geometry, never raw colors/pixels or copied component styling.
 3. Keep Changes, Reviews and Checks in their existing right-top defaults and keep diffs in center views. Preserve host IDs and public routing rather than re-registering tools.
-4. Preserve semantic status: working/pass/additions green, attention/modified amber, failures/deletions destructive red, completed indigo, idle/queued muted. Both appearances inherit canonical --ui-* tokens.
+4. Preserve semantic status: working/pass/additions green, attention/modified amber, failures/deletions destructive red, completed indigo, idle/queued muted. In side-by-side diffs, original-side change bars are red and modified-side change bars are green, including line removals and whole-file deletions. Both appearances inherit canonical --ui-* tokens.
 5. Preserve current consumer-visible control names, worktree ownership, selection, loading/errors, confirmation and disabled rules. Text about implementation may change only where the approved parent gives exact screen copy.
 
 ## Data flow
