@@ -549,7 +549,7 @@ export function WorktreesSection({ context, report, requests, addProjectRequests
   }
 
   return (
-    <div ref={sectionRoot} className="ui-stack ui-panel-content worktree-section">
+    <div ref={sectionRoot} className="ui-stack ui-panel-content worktree-tree-section">
       <ToolPanelActions>
         <>
           {!(loaded && repos.length === 0) && (
@@ -603,7 +603,7 @@ export function WorktreesSection({ context, report, requests, addProjectRequests
         </>
       </ToolPanelActions>
       {boardOpen && (
-        <div className="worktree-board-scroll ui-scroll">
+        <div className="worktree-tree-board-scroll ui-scroll">
           <WorktreeBoard
             worktrees={ordered.filter((worktree) => treeVisibleIds.has(worktree.id))}
             statuses={statusDefinitions}

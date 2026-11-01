@@ -166,7 +166,7 @@ function browserEntry(): string {
     ]
     function BoardRegressionFixture() {
       const [worktrees, setWorktrees] = useState(boardWorktrees)
-      return h('div', { className: 'worktree-board-scroll ui-scroll', 'data-board-scroll': '' },
+      return h('div', { className: 'worktree-tree-board-scroll ui-scroll', 'data-board-scroll': '' },
         h(WorktreeBoard, {
           worktrees,
           statuses: boardStatuses,
@@ -188,7 +188,7 @@ function browserEntry(): string {
       onChange() {}
     })
     const panelContent = h('div', {
-      className: boardRegressionEnabled ? 'ui-stack ui-panel-content worktree-section' : 'ui-stack ui-panel-content'
+      className: boardRegressionEnabled ? 'ui-stack ui-panel-content worktree-tree-section' : 'ui-stack ui-panel-content'
     },
       boardRegressionEnabled ? h(BoardRegressionFixture) : null,
       h('div', { className: 'ui-scroll ui-grow', 'data-tree-scroll': '' },
@@ -1383,11 +1383,11 @@ test.skipIf(!existsSync(chromium.executablePath()))('keeps the workspace board i
       const panel = document.querySelector<HTMLElement>('#worktrees-panel')!
       const content = panel.querySelector<HTMLElement>('.ui-panel-content')!
       const boardViewport = panel.querySelector<HTMLElement>('[data-board-scroll]')!
-      const board = boardViewport.querySelector<HTMLElement>('.worktree-board')!
-      const columns = [...board.querySelectorAll<HTMLElement>('.worktree-board-column')]
+      const board = boardViewport.querySelector<HTMLElement>('.worktree-tree-board')!
+      const columns = [...board.querySelectorAll<HTMLElement>('.worktree-tree-board-column')]
       const treeViewport = panel.querySelector<HTMLElement>('[data-tree-scroll]')!
       const laneCount = (label: string) => board.querySelectorAll(
-        `.worktree-board-column[aria-label="${label} workspaces"] .worktree-board-card`
+        `.worktree-tree-board-column[aria-label="${label} workspaces"] .worktree-board-card`
       ).length
       return {
         panel: bounds(panel),
@@ -1454,7 +1454,7 @@ test.skipIf(!existsSync(chromium.executablePath()))('keeps the workspace board i
     expect(bothScrolled.boardScrollTop).toBe(boardScrolled.boardScrollTop)
 
     await page.locator('[data-board-scroll]').evaluate((element) => { element.scrollLeft = 0; element.scrollTop = 0 })
-    await page.locator('.worktree-board-column[aria-label="In progress workspaces"] select').first().selectOption('done')
+    await page.locator('.worktree-tree-board-column[aria-label="In progress workspaces"] select').first().selectOption('done')
     const moved = await measure()
     expect(moved.lanes).toEqual({ todo: 0, inProgress: 15, review: 0, done: 2 })
     for (const column of moved.columns) expect(column.heading.top).toBeCloseTo(top, 0)

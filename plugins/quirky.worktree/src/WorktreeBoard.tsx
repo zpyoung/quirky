@@ -14,9 +14,9 @@ export type WorktreeBoardProps = {
 export function WorktreeBoard({ worktrees, statuses, repos, open, setStatus }: WorktreeBoardProps) {
   const reposById = new Map(repos.map((repo) => [repo.id, repo] as const))
   return (
-    <section className="worktree-board ui-cluster" aria-label="Workspace board">
+    <section className="worktree-tree-board ui-cluster" aria-label="Workspace board">
       {statuses.map((status) => (
-        <section className="worktree-board-column ui-stack" key={status.id} aria-label={`${status.label} workspaces`}>
+        <section className="worktree-tree-board-column ui-stack" key={status.id} aria-label={`${status.label} workspaces`}>
           <SectionHeader title={`${status.icon ? `${status.icon} ` : ''}${status.label}`} />
           <ul className="worktree-list ui-tree">
             {worktrees.filter((worktree) => worktree.status === status.id).map((worktree) => {

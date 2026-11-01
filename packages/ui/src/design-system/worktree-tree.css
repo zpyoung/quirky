@@ -125,23 +125,23 @@
   }
 }
 
-.worktree-section {
+.worktree-tree-section {
   height: 100%;
   min-height: 0;
 }
 
-.worktree-board-scroll {
+.worktree-tree-board-scroll {
   flex: 0 1 auto;
   max-height: 50%;
 }
 
-.worktree-board {
+.worktree-tree-board {
   align-items: flex-start;
   flex-wrap: nowrap;
   min-width: max-content;
 }
 
-.worktree-board-column {
+.worktree-tree-board-column {
   flex: 0 0 calc(var(--ui-form-column-width) - var(--ui-space-16));
   min-width: calc(var(--ui-form-column-width) - var(--ui-space-16));
 }
