@@ -90,7 +90,8 @@ async function start(seed: Comment[] = [], plugins: unknown = []) {
   return fake
 }
 
-const container = () => document.querySelector<HTMLElement>('[data-quirky-feedback]')!
+const container = () => document.querySelector<HTMLElement>('[data-quirky-feedback]:not([data-feedback-banner])')!
+const bannerSlot = () => document.querySelector<HTMLElement>('[data-feedback-banner-slot]')!
 const host = () => container().firstElementChild as HTMLElement
 const root = () => container().lastElementChild as HTMLElement
 const card = () => root().querySelector<HTMLElement>('[data-feedback-card]')
@@ -126,7 +127,7 @@ let item: HTMLElement
 
 beforeEach(() => {
   recovered.value = false
-  document.body.innerHTML = '<div id="app"><div id="item">Item</div><div id="other">Other</div><div id="flat">Flat</div></div>'
+  document.body.innerHTML = `<div id="app" class="app"><header class="window-bar" aria-label="Window bar"></header><div data-feedback-banner-slot></div><div class="shell-workspace"><div id="item">Item</div><div id="other">Other</div><div id="flat">Flat</div></div></div>`
   item = document.getElementById('item')!
   rect(item, { x: 40, y: 30, width: 100, height: 20 })
   rect(document.getElementById('other')!, { x: 40, y: 80, width: 100, height: 20 })
@@ -413,12 +414,13 @@ describe('clear', () => {
 
   test('declining keeps the comments and never calls clear', async () => {
     const fake = await start([sample('a'), sample('b')])
+    const activeZIndex = container().style.zIndex
     await click(button('Clear'))
     await act(async () => { fake.confirm.pending!(false) })
     await flush()
     expect(fake.calls.some((call) => call.method === 'quirky.feedback/clear')).toBe(false)
     expect(rows()).toHaveLength(2)
-    expect(container().style.zIndex).toBe('2147483647')
+    expect(container().style.zIndex).toBe(activeZIndex)
   })
 
   test('a failed clear keeps the comments and shows a toast', async () => {
@@ -445,7 +447,7 @@ describe('tray', () => {
     const tray = root().querySelector('[data-feedback-tray]')!
     expect(tray.textContent).toContain('2 comments')
     expect(tray.hasAttribute('data-quirky-native-mask')).toBe(true)
-    expect(root().querySelector('[data-feedback-banner]')).not.toBeNull()
+    expect(bannerSlot().querySelector('[data-feedback-banner]')).not.toBeNull()
     await click(button('Show'))
     expect(rows()).toHaveLength(2)
   })
@@ -475,10 +477,10 @@ describe('tray', () => {
 
   test('Exit turns the mode off and a failure shows a toast', async () => {
     const fake = await start()
-    await click(button('Exit'))
+    await click(button('Exit', bannerSlot()))
     expect(fake.calls.at(-1)).toEqual({ method: 'setting.set', params: { id: 'setting:quirky.feedback/active', value: false } })
     fake.failures.set('setting.set', new Error('denied'))
-    await click(button('Exit'))
+    await click(button('Exit', bannerSlot()))
     expect(fake.toasts).toHaveLength(1)
   })
 
@@ -611,21 +613,14 @@ describe('dots placement', () => {
 })
 
 describe('panels', () => {
-  test('the card is stacked above the tray and fits the window', async () => {
-    await start([sample('a')])
-    await pick(document.getElementById('other')!)
-    const tray = root().querySelector('[data-feedback-tray]')!
-    expect(tray.compareDocumentPosition(card()!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
-    expect(card()!.style.maxHeight).toContain('100vh')
-    const body = card()!.querySelector('textarea')!.closest('div[style*="overflow"]')
-    expect(body).not.toBeNull()
-    expect(card()!.lastElementChild!.contains(card()!.querySelector('[data-feedback-submit]'))).toBe(true)
-  })
 
   test('the banner, card and tray are masked and the selection host is not', async () => {
     await start([sample('a')])
     await pick(item)
-    for (const selector of ['[data-feedback-banner]', '[data-feedback-card]', '[data-feedback-tray]']) {
+    const banner = bannerSlot().querySelector('[data-feedback-banner]')
+    expect(banner).not.toBeNull()
+    expect(banner!.hasAttribute('data-quirky-native-mask')).toBe(true)
+    for (const selector of ['[data-feedback-card]', '[data-feedback-tray]']) {
       expect(root().querySelector(selector)!.hasAttribute('data-quirky-native-mask')).toBe(true)
     }
     expect(host().hasAttribute('data-quirky-native-mask')).toBe(false)

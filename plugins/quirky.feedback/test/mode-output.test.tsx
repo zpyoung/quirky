@@ -76,7 +76,7 @@ async function start(seed: Comment[] = [], plugins: unknown = []) {
   return fake
 }
 
-const container = () => document.querySelector<HTMLElement>('[data-quirky-feedback]')!
+const container = () => document.querySelector<HTMLElement>('[data-quirky-feedback]:not([data-feedback-banner])')!
 const host = () => container().firstElementChild as HTMLElement
 const root = () => container().lastElementChild as HTMLElement
 const button = (label: string) => [...root().querySelectorAll<HTMLButtonElement>('button')].find((entry) => entry.textContent === label)!
@@ -98,7 +98,7 @@ beforeEach(() => {
   annotated = []
   clipboard.writes = []
   clipboard.settle = null
-  document.body.innerHTML = '<div id="app"></div>'
+  document.body.innerHTML = '<div id="app" class="app"><header class="window-bar" aria-label="Window bar"></header><div data-feedback-banner-slot></div><div class="shell-workspace"></div></div>'
   Object.defineProperty(navigator, 'clipboard', {
     configurable: true,
     value: {

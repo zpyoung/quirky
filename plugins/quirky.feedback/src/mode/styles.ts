@@ -17,14 +17,18 @@ const panel: CSSProperties = {
 
 export const banner: CSSProperties = {
   ...panel,
-  top: 'calc(var(--ui-window-bar-height) + var(--ui-space-12))',
-  left: '50%',
-  transform: 'translateX(-50%)',
+  position: 'relative',
+  zIndex: MAX_Z_INDEX,
   display: 'flex',
   alignItems: 'center',
+  flexWrap: 'wrap',
+  justifyContent: 'center',
   gap: 'var(--ui-space-12)',
+  maxWidth: 'calc(100vw - var(--ui-space-24))',
+  margin: 'var(--ui-space-12) auto 0',
   padding: 'var(--ui-space-6) var(--ui-space-12)',
-  whiteSpace: 'nowrap'
+  whiteSpace: 'normal',
+  overflowWrap: 'anywhere'
 }
 
 export const tray: CSSProperties = {
