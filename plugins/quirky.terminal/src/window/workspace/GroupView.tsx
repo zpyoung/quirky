@@ -13,7 +13,7 @@ import { activeTabOf, byPaneId, groupRects, px } from './model'
 import type { GroupDividerRect } from './model'
 import { InlineField, PaneLayer } from './PaneLayer'
 import { StatusGlyph, UnreadBell, useNow } from './StatusGlyph'
-import { hiddenTabIndexes, tabsFit } from './tab-overflow'
+import { firstTabBeside, hiddenTabIndexes, scrollBackToFill, tabsFit, trailingScrollSlack } from './tab-overflow'
 import { leadSessionOf, tabIconOf } from './TabIcon'
 import { useBoxSize } from './useBoxSize'
 
@@ -26,16 +26,9 @@ function revealTab(tab: HTMLElement | null) {
   const target = tab.getBoundingClientRect()
   const bounds = viewport.getBoundingClientRect()
   if (target.left >= bounds.left && target.right <= bounds.right) return
-  const targetRight = target.right
-  const viewportWidth = viewport.clientWidth
-  let first = tab
-  let previous = tab.previousElementSibling as HTMLElement | null
-  while (previous) {
-    if (targetRight - previous.getBoundingClientRect().left > viewportWidth) break
-    first = previous
-    previous = previous.previousElementSibling as HTMLElement | null
-  }
-  first.scrollIntoView?.({ block: 'nearest', inline: 'start' })
+  const items = [...viewport.children] as HTMLElement[]
+  const first = firstTabBeside(bounds.width, items.map((item) => item.getBoundingClientRect()), items.indexOf(tab))
+  items[first]!.scrollIntoView?.({ block: 'nearest', inline: 'start' })
 }
 
 function TabItem({ controller, state, group, tab, index, others, now, overflow, viewportWidth, hiddenByOverflow }: Common & { group: Group; tab: Tab; index: number; others: Tab[]; now: number; overflow: boolean; viewportWidth: number; hiddenByOverflow: boolean }) {
@@ -209,6 +202,7 @@ function GroupView({ controller, state, group }: Common & { group: Group }) {
   const tabNavigation = useRef<HTMLDivElement>(null)
   const tabViewport = useRef<HTMLDivElement>(null)
   const moreButton = useRef<HTMLButtonElement>(null)
+  const measuredLayout = useRef('')
   const [hiddenTabs, setHiddenTabs] = useState<string[]>([])
   const [viewportWidth, setViewportWidth] = useState(0)
   const [moreOpen, setMoreOpen] = useState(false)
@@ -217,15 +211,19 @@ function GroupView({ controller, state, group }: Common & { group: Group }) {
     const viewport = tabViewport.current
     if (!navigation || !viewport) return
     const items = [...viewport.children] as HTMLElement[]
-    const rects = items.map((item) => item.getBoundingClientRect())
-    const contentWidth = rects.reduce((total, rect) => total + rect.width, 0)
+    const rectsOf = () => items.map((item) => item.getBoundingClientRect())
+    const measured = rectsOf()
+    const contentWidth = measured.reduce((total, rect) => total + rect.width, 0)
     const fits = tabsFit(navigation.clientWidth, contentWidth)
-    const lastTabRect = rects[rects.length - 1]
-    const slack = fits || !lastTabRect ? 0 : Math.max(0, viewport.clientWidth - lastTabRect.width)
+    const bounds = viewport.getBoundingClientRect()
+    const slack = fits ? 0 : trailingScrollSlack(bounds.width, measured)
     viewport.style.setProperty('--qt-tab-scroll-slack', `${slack}px`)
-    const hidden = fits
-      ? []
-      : hiddenTabIndexes(viewport.getBoundingClientRect(), rects).map((index) => items[index]!.dataset.tab!)
+    const layout = [bounds.width, ...measured.map((rect) => rect.width)].join()
+    // only on a layout change: doing this after a wheel scroll would stop it reaching tabs past a short gap
+    if (!fits && layout !== measuredLayout.current) viewport.scrollLeft -= scrollBackToFill(bounds, rectsOf())
+    measuredLayout.current = layout
+    // less slack or the scroll above moves the tabs measured earlier
+    const hidden = fits ? [] : hiddenTabIndexes(bounds, rectsOf()).map((index) => items[index]!.dataset.tab!)
     setHiddenTabs((current) => (current.length === hidden.length && current.every((id, index) => id === hidden[index]) ? current : hidden))
     setViewportWidth(viewport.clientWidth)
   }, [])

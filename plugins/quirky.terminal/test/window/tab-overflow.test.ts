@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { hiddenTabIndexes, tabsFit } from '../../src/window/workspace/tab-overflow'
+import { firstTabBeside, hiddenTabIndexes, scrollBackToFill, tabsFit, trailingScrollSlack } from '../../src/window/workspace/tab-overflow'
 
 const span = (left: number, width: number) => ({ left, right: left + width })
 const row = (viewport: { left: number; right: number }, widths: number[], scroll = 0) => {
@@ -56,5 +56,70 @@ describe('tabsFit', () => {
     expect(tabsFit(300, 299)).toBe(true)
     expect(tabsFit(300, 300.4)).toBe(true)
     expect(tabsFit(300, 302)).toBe(false)
+  })
+})
+
+describe('firstTabBeside', () => {
+  const tabs = row(span(0, 0), [100, 100, 150, 100])
+
+  test('walks back as far as the tabs still fit beside the target', () => {
+    expect(firstTabBeside(350, tabs, 3)).toBe(1)
+    expect(firstTabBeside(340, tabs, 3)).toBe(2)
+    expect(firstTabBeside(250, tabs, 2)).toBe(1)
+  })
+
+  test('allows layout rounding, the same as hiddenTabIndexes', () => {
+    expect(firstTabBeside(349.4, tabs, 3)).toBe(1)
+    expect(firstTabBeside(348.9, tabs, 3)).toBe(2)
+  })
+
+  test('stops at the target when not even it fits', () => {
+    expect(firstTabBeside(50, tabs, 3)).toBe(3)
+  })
+
+  test('reads the same at any scroll position', () => {
+    expect(firstTabBeside(350, row(span(0, 0), [100, 100, 150, 100], 240), 3)).toBe(1)
+  })
+})
+
+describe('trailingScrollSlack', () => {
+  test('lets the last tab reach the leading edge when no other tab fits beside it', () => {
+    expect(trailingScrollSlack(156, row(span(0, 0), [100, 100, 100]))).toBe(56)
+  })
+
+  test('stops at the earliest tab that fits beside the last, so no earlier tab fits in what is left', () => {
+    expect(trailingScrollSlack(360, row(span(0, 0), [100, 150, 100, 100]))).toBe(10)
+    expect(trailingScrollSlack(300, row(span(0, 0), [100, 100, 100, 100]))).toBe(0)
+  })
+
+  test('adds nothing for a last tab wider than the viewport or for an empty strip', () => {
+    expect(trailingScrollSlack(100, row(span(0, 0), [50, 300]))).toBe(0)
+    expect(trailingScrollSlack(100, [])).toBe(0)
+  })
+
+  test('does not depend on where the strip is scrolled', () => {
+    expect(trailingScrollSlack(360, row(span(0, 0), [100, 150, 100, 100], 100))).toBe(10)
+  })
+})
+
+describe('scrollBackToFill', () => {
+  const viewport = span(0, 520)
+
+  test('returns the width of the hidden tabs that fit in the blank space after the visible run', () => {
+    expect(scrollBackToFill(viewport, row(viewport, [100, 200, 200, 400, 100], 100))).toBe(100)
+    expect(scrollBackToFill(viewport, row(viewport, [60, 60, 200, 200, 400], 120))).toBe(120)
+  })
+
+  test('stops at a hidden tab too wide for what is left', () => {
+    expect(scrollBackToFill(viewport, row(viewport, [130, 200, 200, 400], 130))).toBe(0)
+  })
+
+  test('returns nothing at the start of the strip', () => {
+    expect(scrollBackToFill(viewport, row(viewport, [100, 200, 400]))).toBe(0)
+  })
+
+  test('returns nothing when no tab fully fits, as with an oversized tab filling the viewport', () => {
+    expect(scrollBackToFill(viewport, row(viewport, [100, 900], 100))).toBe(0)
+    expect(scrollBackToFill(viewport, [])).toBe(0)
   })
 })
