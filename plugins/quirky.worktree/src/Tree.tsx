@@ -114,15 +114,17 @@ function sameGlyph(candidate: WorktreeGlyph | null, expected: WorktreeGlyph): bo
 }
 
 
-function activityFor(sessions: Session[] | null, worktreeId: string, now: number, glyph: WorktreeGlyph | null): string {
-  if (sessions === null) return 'Activity unavailable'
-  if (!glyph) return 'Idle'
+function activityFor(sessions: Session[] | null, worktreeId: string, now: number, glyph: WorktreeGlyph | null, needsYou: boolean): string {
+  if (sessions === null) return needsYou ? 'Needs you' : 'Activity unavailable'
+  if (!glyph) return needsYou ? 'Needs you' : 'Idle'
   const session = sessions.find((item) =>
     item.worktreeId === worktreeId && sameGlyph(worktreeGlyph([item], worktreeId, now), glyph)
   )
-  const activity = glyph.kind === 'agent'
-    ? glyph.label.trim() || (ACTIVITY_LABELS[glyph.display] ?? glyph.display)
-    : ACTIVITY_LABELS[glyph.status] ?? glyph.status
+  const activity = needsYou
+    ? 'Needs you'
+    : glyph.kind === 'agent'
+      ? glyph.label.trim() || (ACTIVITY_LABELS[glyph.display] ?? glyph.display)
+      : ACTIVITY_LABELS[glyph.status] ?? glyph.status
   if (!session) return activity
   const identity = session.title.trim() || session.agent || session.kind
   return [identity, activity].filter(Boolean).join(' · ')
@@ -184,8 +186,8 @@ function WorktreeCard({
     ? 'Deleting…'
     : sleeping
       ? 'Sleeping'
-      : glyph
-        ? activityFor(sessions, worktree.id, now, glyph)
+      : glyph || needsYou
+        ? activityFor(sessions, worktree.id, now, glyph, needsYou)
         : archivedAt !== null
           ? 'Archived'
           : sessions === null
@@ -221,7 +223,7 @@ function WorktreeCard({
   const description = [
     sleeping || options.showProperties.includes('activity') ? activity : null,
     worktree.status !== 'in-progress' ? statusLabel : null,
-    archivedAt !== null && glyph ? 'Archived' : null,
+    archivedAt !== null && (glyph || needsYou) ? 'Archived' : null,
     repoName,
     options.showBranch && options.showProperties.includes('branch') ? worktree.branch : null,
     options.showComment && options.showProperties.includes('notes') ? worktree.comment : null,

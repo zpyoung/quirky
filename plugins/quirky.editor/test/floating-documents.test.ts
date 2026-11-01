@@ -24,7 +24,7 @@ test('floating Markdown is confined to its explicit owner root and exact destina
   expect(readFileSync(join(root.path, note.path), 'utf8')).toBe('')
   const outside = join(home, 'outside.txt')
   writeFileSync(outside, 'private')
-  await expect(call('quirky.editor/open', { worktree: 'floating', path: outside })).rejects.toThrow('outside')
+  await expect(call('quirky.editor/open', { worktree: 'floating', path: outside })).rejects.toThrow('within the worktree')
   symlinkSync(outside, join(root.path, 'escape.txt'))
   await expect(call('quirky.editor/open', { worktree: 'id:floating', path: 'escape.txt' })).rejects.toThrow('outside')
   expect(readFileSync(outside, 'utf8')).toBe('private')

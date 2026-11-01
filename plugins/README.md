@@ -992,6 +992,9 @@ in Contents mode because its search results don't expose the tree selection. Ret
 to Names restores access to the retained selection.
 Creating or duplicating a file selects the new path in Explorer, so footer path-copy
 and deletion actions target it, including inside expanded folders.
+Search in Files uses singular or plural result and file counts independently, and
+shows “No results” when a completed search has no matches. While a search is running,
+only “Searching files…” appears; the result summary waits until it completes.
 
 The buffer's optional `diskWritable` is advisory effective OS access, separate from the
 format's `readOnly` capability. A readable non-writable Markdown file can keep drafts and
@@ -1047,7 +1050,7 @@ the remote device grant or terminate an already established connection.
 
 Feedback mode lets you point at part of Quirky, write a comment, and copy the comments for an agent or open them as GitHub issue drafts. Turn it on with View → Feedback Mode, the "Toggle Feedback Mode" palette command, or `Cmd+Option+K`. The **Enable Feedback Mode** setting removes all three when it's off.
 
-While the mode is on, a banner at the top says so and a tray at the bottom right lists your comments.
+In the main window only, a banner above the workspace tells you feedback mode is on and offers Exit without covering workspace controls. It sits below the window bar; a tray at the bottom right lists your comments.
 
 - Click an element, choose Change or Question, type, and choose Add. Your click doesn't reach the app. The element gets a numbered dot, and if it isn't on screen later, its tray row says "No longer on screen".
 - Hold Option to use the app as usual, including opening menus. Let go and your next click selects again, so you can pick a menu item without choosing it.

@@ -135,7 +135,7 @@
 ## D13: Creating from an existing branch checks it out and keeps it on delete
 - **Question:** primary behavior: the Branch tab and "Reuse branch"
 - **Options:** always cut a new branch; reuse the branch
-- **Chose:** a create naming an existing branch checks that branch out. A remote-only branch becomes a local branch of the same name tracking it. The worktree is marked to keep its branch on delete. A branch checked out in another worktree is refused, naming where.
+- **Chose:** a create naming an existing branch checks that branch out. A remote-only branch becomes a local branch of the same name tracking it. The worktree is marked to keep its branch on delete. The Branch tab marks branches already in use with their workspace name and disables them, including remote choices that resolve to an occupied local branch. Typing an occupied branch also blocks creation. A branch checked out in another worktree is refused, naming the workspace without exposing its full path and suggesting opening it or choosing another branch.
 - **Why:** parity; deleting a branch the user brought in would lose work they never gave Quirky
 - **Evidence:** worktrees.md flow 2 Branch tab, create step 8, step 13 (`preserveBranchOnDelete`)
 - **Reversibility:** easy

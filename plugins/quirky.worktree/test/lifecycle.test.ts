@@ -1,7 +1,7 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from 'bun:test'
 import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { basename, join } from 'node:path'
 import { RpcError, RpcErrorCode, type QuirkyClient, type Repo, type Worktree, type WorktreeCreateResult } from '@quirky/protocol'
 import { startPluginHarness, type PluginHarness } from '../../quirky.repo/test/harness'
 
@@ -120,7 +120,11 @@ describe('quirky.worktree/create with an existing branch', () => {
     const failure = await errorOf(call('quirky.worktree/create', { repo: repo.id, branch: 'busy' }))
     expect(failure.code).toBe(RpcErrorCode.Conflict)
     expect(failure.message).toContain('busy')
-    expect(failure.message).toContain(repoDir)
+    expect(failure.message).toContain(basename(repoDir))
+    expect(failure.message.toLowerCase()).toContain('workspace')
+    expect(failure.message.toLowerCase()).toContain('open')
+    expect(failure.message.toLowerCase()).toContain('choose another branch')
+    expect(failure.message).not.toContain(repoDir)
   })
 })
 

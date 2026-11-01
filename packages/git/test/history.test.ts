@@ -160,18 +160,66 @@ describe('listBranches', () => {
     expect(current).toBe('main')
     expect(refs).toEqual([
       { name: 'Alpha', kind: 'local' },
-      { name: 'main', kind: 'local' },
+      { name: 'main', kind: 'local', checkedOutIn: dir },
       { name: 'release/1.0', kind: 'local' },
       { name: 'zeta', kind: 'local' },
       { name: 'origin/main', kind: 'remote' },
       { name: 'origin/release/1.0', kind: 'remote' }
     ])
   })
+  test('reports worktree holders for local refs and remote aliases like create resolves them', async () => {
+    const dir = branchRepo()
+    git(dir, 'remote', 'add', 'origin', 'https://example.invalid/repo')
+    const linked = join(fixture.scratch(), 'linked-release')
+    const exact = join(fixture.scratch(), 'linked-origin-release')
+    git(dir, 'branch', 'origin/release/1.0')
+    git(dir, 'worktree', 'add', '-q', linked, 'release/1.0')
+    git(dir, 'worktree', 'add', '-q', exact, 'origin/release/1.0')
+
+    const { refs } = await listBranches(dir)
+    const ref = (name: string, kind: 'local' | 'remote') => refs.find((item) => item.name === name && item.kind === kind)
+    expect(ref('main', 'local')).toMatchObject({ checkedOutIn: dir })
+    expect(ref('release/1.0', 'local')).toMatchObject({ checkedOutIn: linked })
+    expect(ref('zeta', 'local')).toEqual({ name: 'zeta', kind: 'local' })
+    expect(ref('origin/main', 'remote')).toMatchObject({ checkedOutIn: dir })
+    expect(ref('origin/release/1.0', 'local')).toMatchObject({ checkedOutIn: exact })
+    expect(ref('origin/release/1.0', 'remote')).toMatchObject({ checkedOutIn: exact })
+  })
+
+  test('a detached HEAD does not mark a branch as checked out', async () => {
+    const dir = makeRepo(fixture.scratch())
+    git(dir, 'checkout', '-q', '--detach')
+    const { refs, current } = await listBranches(dir)
+    expect(current).toBeNull()
+    expect(refs.find((ref) => ref.name === 'main' && ref.kind === 'local')).toEqual({ name: 'main', kind: 'local' })
+  })
+
 
   test('the query is a case-insensitive substring', async () => {
     const dir = branchRepo()
     const { refs } = await listBranches(dir, 'REL')
     expect(refs.map((r) => r.name)).toEqual(['release/1.0', 'origin/release/1.0'])
+  })
+
+  test('keeps an occupied exact query in the capped sorted results', async () => {
+    const dir = makeRepo(fixture.scratch())
+    const creates = Array.from(
+      { length: 230 },
+      (_, i) => `create refs/heads/a${String(i).padStart(3, '0')}-main HEAD\n`
+    ).join('')
+    const result = Bun.spawnSync(['git', 'update-ref', '--stdin'], {
+      cwd: dir,
+      stdin: new TextEncoder().encode(creates)
+    })
+    expect(result.exitCode).toBe(0)
+
+    const { refs } = await listBranches(dir, 'main')
+    expect(refs).toHaveLength(200)
+    expect(refs.map((ref) => ref.name)).toEqual([
+      ...Array.from({ length: 199 }, (_, i) => `a${String(i).padStart(3, '0')}-main`),
+      'main'
+    ])
+    expect(refs.at(-1)).toEqual({ name: 'main', kind: 'local', checkedOutIn: dir })
   })
 
   test('a detached HEAD has no current branch and results are capped at 200', async () => {

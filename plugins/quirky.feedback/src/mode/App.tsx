@@ -1,3 +1,4 @@
+import { createPortal } from 'react-dom'
 import { useMemo, useSyncExternalStore } from 'react'
 import { Banner } from './Banner'
 import { Card } from './Card'
@@ -8,16 +9,16 @@ import { findMarkers } from './markers'
 import type { Session } from './session'
 import { Tray } from './Tray'
 
-type Props = { session: Session; layout: Layout; annotate(pane: string): void }
+type Props = { session: Session; layout: Layout; bannerSlot: HTMLElement; annotate(pane: string): void }
 
-export function App({ session, layout, annotate }: Props) {
+export function App({ session, layout, bannerSlot, annotate }: Props) {
   const state = useSyncExternalStore(session.subscribe, session.getState)
   const version = useSyncExternalStore(layout.subscribe, layout.version)
   const found = useMemo(() => findMarkers(state.comments), [state.comments, version])
   const chips = useMemo(findPaneChips, [version])
   const editing = state.card?.id == null ? -1 : state.comments.findIndex((comment) => comment.id === state.card?.id)
   return <>
-    <Banner onExit={() => void session.exit()} />
+    {createPortal(<Banner onExit={() => void session.exit()} />, bannerSlot)}
     <Dots comments={state.comments} found={found} />
     <Chips chips={chips} onComment={session.pickElement} onAnnotate={annotate} />
     <Tray state={state} found={found} session={session} />

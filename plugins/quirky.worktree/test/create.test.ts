@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, setDefaultTimeout, test } from 'bun:test'
 import { existsSync, mkdirSync, readdirSync, realpathSync, writeFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { basename, join } from 'node:path'
 import { RpcErrorCode, type GitHubWorktreeSource, type Repo, type Session, type Worktree, type WorktreeCreateResult } from '@quirky/protocol'
 import { waitFor } from '../../../packages/daemon/test/helpers'
 import { gitApi } from '@quirky/git'
@@ -291,7 +291,12 @@ describe('SC-18: creating from an existing branch checks it out and keeps it (CL
     const before = worktreeCount(dir)
     const refused = await failure(cli([], { repo: 'api', branch: 'main' }))
     expect(refused.code).toBe(RpcErrorCode.Conflict)
-    expect(refused.message).toContain(dir)
+    expect(refused.message).toContain('main')
+    expect(refused.message).toContain(basename(dir))
+    expect(refused.message.toLowerCase()).toContain('workspace')
+    expect(refused.message.toLowerCase()).toContain('open')
+    expect(refused.message.toLowerCase()).toContain('choose another branch')
+    expect(refused.message).not.toContain(dir)
     expect(refused.data).toMatchObject({ reason: 'branch-checked-out', branch: 'main', path: dir })
     expect(worktreeCount(dir)).toBe(before)
   })

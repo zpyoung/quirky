@@ -120,7 +120,7 @@ type SearchState = {
   error?: string
 }
 type SelectedSource = { repoId: string; primaryId: string; source: GitHubWorktreeSource }
-type BranchRef = { name: string; kind: 'local' | 'remote' }
+type BranchRef = { name: string; kind: 'local' | 'remote'; checkedOutIn?: string }
 type BranchSearchState = {
   repoId: string
   primaryId: string
@@ -134,7 +134,8 @@ type ActiveInput = { repoId: string; primaryId: string | undefined; mode: Mode; 
 function isBranchRef(value: unknown): value is BranchRef {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) return false
   const ref = value as Record<string, unknown>
-  return typeof ref.name === 'string' && (ref.kind === 'local' || ref.kind === 'remote')
+  return typeof ref.name === 'string' && (ref.kind === 'local' || ref.kind === 'remote') &&
+    (ref.checkedOutIn === undefined || typeof ref.checkedOutIn === 'string')
 }
 
 function parseBranchRefs(value: unknown): BranchRef[] {
@@ -479,12 +480,14 @@ export function CreateDialog({ context, repos, worktrees, repoId, onRepoChange, 
   const currentSearch = search && mode === 'github' && search.repoId === repoId && search.primaryId === (primary?.id ?? '') && search.query === query.trim() ? search : null
   const currentBranchSearch = branchSearch && mode === 'branch' && branchSearch.repoId === repoId && branchSearch.primaryId === (primary?.id ?? '') && branchSearch.query === branch.trim() ? branchSearch : null
   const issuePromptIsDerived = source?.item.kind === 'issue' && prompt.trim() === ''
+  const occupiedBranch = currentBranchSearch?.refs.find((ref) => ref.name === branch.trim() && ref.checkedOutIn)
+  const branchUnavailable = fromBranch && (currentBranchSearch?.status !== 'ready' || occupiedBranch !== undefined)
   const plainSmartInputNeedsChoice = mode === 'smart' && smartInput.trim() !== '' && !explicitSmartReference
   const workspaceName = (plainSmartInputNeedsChoice ? smartInput : name).trim()
   const showBase = !folder && (source ? source.item.kind === 'issue' : mode !== 'github' && !fromBranch && !explicitSmartReference)
   const showBranchName = !folder && !isPullRequest && !fromBranch && (source ? source.item.kind === 'issue' : mode !== 'github' && !explicitSmartReference)
   const blocked = !repo || busy || (asksForSetup && setupChoice === null) || sourceBusy || unsupportedFolderReference ||
-    (mode === 'github' && source === null) || (explicitSmartReference && source === null) || selectedHostUnavailable ||
+    (mode === 'github' && source === null) || (explicitSmartReference && source === null) || selectedHostUnavailable || branchUnavailable ||
     (launchSelectionRequested && (!agentOptionsCatalog?.supported || agentOptionsState?.status !== 'ready'))
 
   const fields = (): Record<string, unknown> => {
@@ -689,13 +692,18 @@ export function CreateDialog({ context, repos, worktrees, repoId, onRepoChange, 
             <TextField label="Existing branch" id="create-branch" value={branch} onChange={(event) => setBranch(event.target.value)} placeholder="Search or enter an existing branch" />
             {currentBranchSearch?.status === 'loading' && <p className="ui-text-muted" role="status">Loading branches…</p>}
             {currentBranchSearch?.status === 'error' && <p className="ui-error-text" role="alert">Could not search branches: {currentBranchSearch.error}</p>}
+            {occupiedBranch && (
+              <p className="ui-error-text" role="alert">
+                Branch “{occupiedBranch.name}” is already in use in workspace “{occupiedBranch.checkedOutIn?.split('/').at(-1)}”. Open that workspace or choose another branch.
+              </p>
+            )}
             {currentBranchSearch?.status === 'ready' && currentBranchSearch.refs.length === 0 && <p className="ui-text-muted" role="status">No matching branches.</p>}
             {currentBranchSearch?.status === 'ready' && currentBranchSearch.refs.length > 0 && (
               <ul className="ui-tree">
                 {currentBranchSearch.refs.map((ref) => (
                   <li key={`${ref.kind}:${ref.name}`} className="ui-tree-item">
-                    <Button type="button" aria-pressed={branch.trim() === ref.name} onClick={() => setBranch(ref.name)}>
-                      {ref.name} <span className="ui-text-muted">{ref.kind}</span>
+                    <Button type="button" aria-pressed={branch.trim() === ref.name} disabled={!!ref.checkedOutIn} onClick={() => setBranch(ref.name)}>
+                      {ref.name} <span className="ui-text-muted">{ref.kind}{ref.checkedOutIn ? ` · In use in ${ref.checkedOutIn.split('/').at(-1)}` : ''}</span>
                     </Button>
                   </li>
                 ))}

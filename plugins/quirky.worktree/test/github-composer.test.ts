@@ -651,6 +651,68 @@ test('Smart text searches local and remote branches through the public Git API',
   expect(h.calls.find((call) => call.method === 'quirky.worktree/create')?.params).toMatchObject({ branch: 'origin/feat/conflict' })
 })
 
+test('occupied branches identify their workspace and cannot be picked or submitted by typing', async () => {
+  const occupiedPath = '/private/tmp/fixture/worktrees/review-notes'
+  const refs = [
+    { name: 'review-notes', kind: 'local', checkedOutIn: occupiedPath },
+    { name: 'origin/review-notes', kind: 'remote', checkedOutIn: occupiedPath },
+    { name: 'review-free', kind: 'local' }
+  ]
+  const h = mountCreate({ onCall: (method) => (method === 'quirky.git/branches' ? { refs, current: 'main' } : undefined) })
+  await h.ready
+  const dialog = h.element.querySelector('[role="dialog"]')!
+  await setText(labelField<HTMLInputElement>(dialog, 'Name')!, 'review')
+  await click(button(dialog, 'Search branches')!)
+  const occupied = await waitFor(() => buttonContaining(dialog, 'review-notes'))
+  expect(occupied.disabled).toBe(true)
+  expect(occupied.textContent).toContain('In use')
+  expect(occupied.textContent).toContain('review-notes')
+  expect(dialog.textContent).not.toContain('/private/tmp')
+  expect(buttonContaining(dialog, 'origin/review-notes')?.disabled).toBe(true)
+  await click(occupied)
+  expect(labelField<HTMLInputElement>(dialog, 'Existing branch')?.value).toBe('review')
+
+  await setText(labelField<HTMLInputElement>(dialog, 'Existing branch')!, 'review-notes')
+  await waitFor(() => dialog.querySelector('[role="alert"]'))
+  expect(dialog.querySelector('[role="alert"]')?.textContent).toContain('review-notes')
+  expect(dialog.querySelector('[role="alert"]')?.textContent).toMatch(/open|choose/i)
+  expect(button(dialog, 'Create')?.disabled).toBe(true)
+  await act(async () => {
+    dialog.querySelector('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+    await Promise.resolve()
+  })
+  expect(h.calls.some((call) => call.method === 'quirky.worktree/create')).toBe(false)
+
+  await setText(labelField<HTMLInputElement>(dialog, 'Existing branch')!, 'review-free')
+  await flush()
+  expect(button(dialog, 'Create')?.disabled).toBe(false)
+  await click(button(dialog, 'Create')!)
+  expect(h.calls.find((call) => call.method === 'quirky.worktree/create')?.params).toMatchObject({ branch: 'review-free' })
+})
+
+test('branch submission waits for the current occupancy lookup', async () => {
+  const pending = deferred<unknown>()
+  const h = mountCreate({
+    onCall: (method, params) => method === 'quirky.git/branches' && params.query === 'busy' ? pending.promise : undefined
+  })
+  await h.ready
+  const dialog = h.element.querySelector('[role="dialog"]')!
+  await click(button(dialog, 'Branch')!)
+  await setText(labelField<HTMLInputElement>(dialog, 'Existing branch')!, 'busy')
+  expect(button(dialog, 'Create')?.disabled).toBe(true)
+  await act(async () => {
+    dialog.querySelector('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+    await Promise.resolve()
+  })
+  expect(h.calls.some((call) => call.method === 'quirky.worktree/create')).toBe(false)
+  await act(async () => pending.resolve({
+    refs: [{ name: 'busy', kind: 'local', checkedOutIn: '/tmp/worktrees/busy-workspace' }],
+    current: 'main'
+  }))
+  expect(button(dialog, 'Create')?.disabled).toBe(true)
+  expect(dialog.querySelector('[role="alert"]')?.textContent).toContain('busy-workspace')
+})
+
 test('Name mode keeps blank generated-name creation available', async () => {
   const h = mountCreate()
   await h.ready

@@ -7,6 +7,8 @@ import { createSession } from './session'
 import { MAX_Z_INDEX } from './styles'
 import { OVERLAY_ATTRIBUTE } from './target'
 
+const FEEDBACK_CONTAINER_Z_INDEX = '2147483646'
+
 type Options = { annotate(pane: string): Promise<void> }
 
 function fixedLayer(doc: Document): HTMLElement {
@@ -23,17 +25,24 @@ function fixedLayer(doc: Document): HTMLElement {
  */
 export function mountFeedbackMode(context: UiPluginContext, options: Options): () => void {
   const doc = document
+  const bannerSlot = doc.querySelector<HTMLElement>('[data-feedback-banner-slot]')
+  if (bannerSlot === null) throw new Error('Feedback mode requires a data-feedback-banner-slot host element')
+  const previousBannerZIndex = bannerSlot.style.zIndex
+  bannerSlot.style.zIndex = MAX_Z_INDEX
   const win = doc.defaultView!
   const focused = doc.activeElement instanceof HTMLElement && doc.activeElement !== doc.body ? doc.activeElement : null
 
   const container = fixedLayer(doc)
+  container.style.zIndex = FEEDBACK_CONTAINER_Z_INDEX
   container.setAttribute(OVERLAY_ATTRIBUTE, '')
   const stopFocus = (event: Event) => event.stopPropagation()
   container.addEventListener('focusin', stopFocus)
+  bannerSlot.addEventListener('focusin', stopFocus)
 
   const session = createSession(context, {
     suspend(suspended) {
-      container.style.zIndex = suspended ? '0' : MAX_Z_INDEX
+      container.style.zIndex = suspended ? '0' : FEEDBACK_CONTAINER_Z_INDEX
+      bannerSlot.style.zIndex = suspended ? '0' : MAX_Z_INDEX
       picker.setSuspended(suspended)
     }
   })
@@ -54,7 +63,7 @@ export function mountFeedbackMode(context: UiPluginContext, options: Options): (
   picker.focus()
 
   const root = createRoot(rootElement)
-  root.render(<App session={session} layout={layout} annotate={(pane) => { void options.annotate(pane).catch((cause) => context.log(`feedback: annotate failed: ${cause instanceof Error ? cause.message : String(cause)}`)) }} />)
+  root.render(<App session={session} layout={layout} bannerSlot={bannerSlot} annotate={(pane) => { void options.annotate(pane).catch((cause) => context.log(`feedback: annotate failed: ${cause instanceof Error ? cause.message : String(cause)}`)) }} />)
   void session.load()
 
   let mounted = true
@@ -67,7 +76,9 @@ export function mountFeedbackMode(context: UiPluginContext, options: Options): (
     picker.dispose()
     root.unmount()
     container.removeEventListener('focusin', stopFocus)
+    bannerSlot.removeEventListener('focusin', stopFocus)
     container.remove()
+    bannerSlot.style.zIndex = previousBannerZIndex
     if (focused?.isConnected) focused.focus()
   }
 }

@@ -757,8 +757,31 @@ test('pending questions keep attention priority in the status accessible name', 
   await h.mountInto(host)
 
   const row = rowOf('fix-login', 'api')
-  expect(row.textContent).toContain('Running')
   expect(row.querySelector('[aria-label^="Status: "]')?.getAttribute('aria-label')).toBe('Status: needs-you')
+})
+
+test('pending questions preserve archive metadata without a session', async () => {
+  const h = setup()
+  h.world.sessions = []
+  h.world.options.hideArchived = false
+  h.world.worktrees[1] = { ...h.world.worktrees[1]!, archivedAt: Date.now() }
+  h.world.asks = [{
+    id: 'ask-archived',
+    spec: { questions: [{ id: 'continue', type: 'confirm', question: 'Continue?' }] },
+    sessionId: null,
+    worktreeId: 'w2',
+    createdAt: Date.now(),
+    envelope: { askId: 'ask-archived', answers: {}, skipped: [], summary: '', status: 'pending' },
+    seq: 1,
+    queued: false,
+    partial: {},
+    expiresAt: null
+  }]
+  await h.mountInto(host)
+
+  const subtitle = subtitleOf(rowOf('fix-login', 'api'))
+  expect(subtitle).toContain('Needs you')
+  expect(subtitle).toContain('Archived')
 })
 
 test('session subtitle shows one identity for shell and Claude sessions', async () => {
@@ -1745,6 +1768,41 @@ describe('agent status presentation', () => {
     agentStatus: summary(display, label, over)
   })
   const statusDot = () => rowOf('fix-login', 'api').querySelector<HTMLElement>('[aria-label^="Status: "]')
+
+  test.each([
+    ['working', 'Working'],
+    ['monitoring', 'Monitoring background tasks']
+  ] as const)('pending asks replace %s agent activity and restore it when resolved', async (display, activeLabel) => {
+    const h = setup()
+    h.world.sessions = [{
+      ...withSummary('s1', display, activeLabel),
+      agent: 'claude',
+      title: 'Claude'
+    }]
+    h.world.asks = [{
+      id: 'ask-1',
+      spec: { questions: [{ id: 'continue', type: 'confirm', question: 'Continue?' }] },
+      sessionId: 's1',
+      worktreeId: 'w2',
+      createdAt: Date.now(),
+      envelope: { askId: 'ask-1', answers: {}, skipped: [], summary: '', status: 'pending' },
+      seq: 1,
+      queued: false,
+      partial: {},
+      expiresAt: null
+    }]
+    await h.mountInto(host)
+
+    expect(subtitleOf(rowOf('fix-login', 'api'))).toContain('Claude')
+    expect(subtitleOf(rowOf('fix-login', 'api'))).toContain('Needs you')
+    expect(subtitleOf(rowOf('fix-login', 'api'))).not.toContain(activeLabel)
+
+    h.world.asks = []
+    await h.emit({ type: 'quirky.ask/resolved', data: { askId: 'ask-1' } })
+    expect(subtitleOf(rowOf('fix-login', 'api'))).toContain('Claude')
+    expect(subtitleOf(rowOf('fix-login', 'api'))).toContain(activeLabel)
+    expect(subtitleOf(rowOf('fix-login', 'api'))).not.toContain('Needs you')
+  })
 
   const states: [AgentDisplayState, string][] = [
     ['working', 'Working'],

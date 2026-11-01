@@ -1300,7 +1300,15 @@ async function createGit(
 }
 
 const branchCheckedOut = (env: CreateEnv, branch: string, path: string | null) =>
-  reasoned(env, 'conflict', 'branch-checked-out', `branch '${branch}' is already checked out${path ? ` at ${path}` : ' in another worktree'}`, { branch, path })
+  reasoned(
+    env,
+    'conflict',
+    'branch-checked-out',
+    path
+      ? `Branch "${branch}" is already checked out in workspace "${basename(path)}". Open that existing workspace or choose another branch.`
+      : `Branch "${branch}" is already checked out in another workspace. Open the existing workspace or choose another branch.`,
+    { branch, path }
+  )
 
 /** Step 7: `git worktree add`, with a local tracking branch made first for a remote-only branch. */
 async function addWorktree(
