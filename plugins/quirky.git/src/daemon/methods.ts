@@ -6,7 +6,7 @@ import type { DaemonEnv, Handler } from './env'
 import { commit } from './commit'
 import { branches, compare, setBase } from './compare'
 import { describeSwitchBranch, switchBranch } from './branch-switch'
-import { abort, conflictFile, continueOperation, describeAbort } from './conflicts'
+import { abort, acceptConflictDeletion, conflictFile, continueOperation, describeAbort } from './conflicts'
 import { diff, hugeFolders, ignoreFolder, reveal, save, submoduleStatus } from './files'
 import { commitFiles, history } from './history'
 import { addNote, clearNotes, deleteNote, describeClearNotes, editNote, formatNotes, notes } from './notes'
@@ -34,6 +34,7 @@ export function methodTable(env: DaemonEnv): Record<string, Handler> {
     abort: abort(env),
     describeAbort: describeAbort(env),
     conflictFile: conflictFile(env),
+    acceptConflictDeletion: acceptConflictDeletion(env),
     save: save(env),
     submoduleStatus: submoduleStatus(env),
     hugeFolders: hugeFolders(env),

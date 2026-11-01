@@ -428,7 +428,8 @@ a scenario says otherwise, so `--worktree` defaults to it.
 44. **SC-44: the conflict file view** (UI)
     - **Given** `math.ts` with two conflict blocks, the second with a common-ancestor section
     - **When** the person opens it from the Conflicts section and uses Next conflict twice
-    - **Then** the view shows the banner "Unresolved conflict · Both modified" and "1 / 2"; marker lines are tinted, with the labels "Current change", "Common ancestor", "Incoming change" and "End conflict"; Next moves to "2 / 2" then wraps to "1 / 2". A "deleted by them" file shows "Decide whether to keep the file or accept deletion"; a side with no working file shows "No working-tree file is available to edit for this conflict."
+    - **Then** the view shows the banner "Unresolved conflict · Both modified" and "1 / 2"; marker lines are tinted, with the labels "Current change", "Common ancestor", "Incoming change" and "End conflict"; Next moves to "2 / 2" then wraps to "1 / 2". A side with no working file shows "No working-tree file is available to edit for this conflict."
+    - An unresolved "Deleted by them" or "Deleted by us" file offers "Keep file" and "Accept deletion" instead of a generic Stage shortcut. Keep saves any edits and stages the working file; it is unavailable when that file is missing. Accept deletion removes the working file and stages its removal, refusing a file changed since it was read or saved. Both choices are disabled while resolving and disappear after resolution; failures leave the conflict unresolved.
 
 45. **SC-45: the conflict review view** (UI)
     - **Given** a merge with `a.ts` and `b.ts` unresolved
@@ -558,7 +559,7 @@ a scenario says otherwise, so `--worktree` defaults to it.
 66. **SC-66: the API lists every method with its schema** (CLI)
     - **Given** a running daemon
     - **When** the agent runs `quirky api --json`
-    - **Then** `quirky.git` lists `status`, `diff`, `stage`, `unstage`, `discard`, `describeDiscard`, `commit`, `push`, `forcePush`, `describeForcePush`, `pull`, `fastForward`, `fetch`, `sync`, `rebaseFromBase`, `continue`, `abort`, `describeAbort`, `compare`, `setBase`, `branches`, `history`, `commitFiles`, `conflictFile`, `save`, `submoduleStatus`, `hugeFolders`, `ignoreFolder` and `reveal`, each with params and result schemas, with `discard`, `forcePush` and `abort` destructive; `quirky git --help` lists the same as commands
+    - **Then** `quirky.git` lists `status`, `diff`, `stage`, `unstage`, `discard`, `describeDiscard`, `commit`, `push`, `forcePush`, `describeForcePush`, `pull`, `fastForward`, `fetch`, `sync`, `rebaseFromBase`, `continue`, `abort`, `describeAbort`, `compare`, `setBase`, `branches`, `history`, `commitFiles`, `conflictFile`, `acceptConflictDeletion`, `save`, `submoduleStatus`, `hugeFolders`, `ignoreFolder` and `reveal`, each with params and result schemas, with `discard`, `forcePush` and `abort` destructive; `quirky git --help` lists the same as commands
 
 67. **SC-67: paths never escape the worktree, even through a symlink** (API)
     - **Given** **feat** with a committed symlink `link.txt` pointing at `/tmp/s/secret.txt` outside the worktree, and a symlinked folder `out` pointing at `/tmp/s`

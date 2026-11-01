@@ -127,10 +127,144 @@ describe('quirky.git conflict file view', () => {
     expect(element.querySelectorAll('.ui-editor-conflict-marker').length).toBe(0)
   })
 
-  test('SC-44: a "deleted by them" file asks whether to keep it', async () => {
-    const { element } = await openFile(conflictFile({ kind: 'deleted_by_them', content: 'kept\n' }))
-    expect(element.textContent).toContain('Deleted by them')
-    expect(element.textContent).toContain('Decide whether to keep the file or accept deletion')
+  for (const kind of ['deleted_by_them', 'deleted_by_us'] as const) {
+    test(`SC-44: ${kind} conflicts offer explicit resolution choices`, async () => {
+      const { element } = await openFile(conflictFile({ kind, content: 'current\n' }))
+      expect(byText(element, 'Keep file')).not.toBeNull()
+      expect(byText(element, 'Accept deletion')).not.toBeNull()
+    })
+
+    test(`SC-44: ${kind} with no working file disables Keep and explains why`, async () => {
+      const { element } = await openFile(conflictFile({ kind, content: null, hash: null }))
+      const keep = byText(element, 'Keep file')
+      expect(keep?.disabled).toBe(true)
+      expect(keep?.title?.toLowerCase()).toContain('working')
+      expect(keep?.title?.toLowerCase()).toContain('file')
+      expect(byText(element, 'Accept deletion')?.disabled).toBe(false)
+    })
+
+    test(`SC-44: resolved ${kind} hides the resolution choices`, async () => {
+      const { element } = await openFile(conflictFile({ kind, state: 'resolved_locally' }))
+      expect(byText(element, 'Keep file')).toBeNull()
+      expect(byText(element, 'Accept deletion')).toBeNull()
+    })
+  }
+
+  test('SC-44: Keep saves the dirty working file before staging it', async () => {
+    let fresh = conflictFile({ kind: 'deleted_by_them', content: 'ours\n' })
+    const { element, report } = await openFile(fresh)
+    fake.handlers['quirky.git/conflictFile'] = () => fresh
+    fake.handlers['quirky.git/save'] = () => {
+      fresh = conflictFile({ kind: 'deleted_by_them', content: 'kept\n', hash: 'h2' })
+      return { hash: 'h2' }
+    }
+    fake.handlers['quirky.git/stage'] = () => {
+      fresh = conflictFile({ kind: 'deleted_by_them', state: 'resolved_locally', content: 'kept\n', hash: 'h2' })
+      fake.emit({ type: 'quirky.git/changed', data: { worktreeId: 'w1' } })
+    }
+    const editor = view(element)
+    act(() => editor.dispatch({ changes: { from: 0, to: editor.state.doc.length, insert: 'kept\n' } }))
+
+    await click(byText(element, 'Keep file'))
+
+    expect(fake.calls.filter((call) => call.method === 'quirky.git/save' || call.method === 'quirky.git/stage').map((call) => call.method)).toEqual([
+      'quirky.git/save',
+      'quirky.git/stage'
+    ])
+    expect(fake.callsTo('quirky.git/save')[0].params.expected).toBe('h1')
+    expect(fake.callsTo('quirky.git/stage')[0].params.paths).toEqual(['math.ts'])
+    expect(report()).toMatchObject({ dirty: false, stale: false })
+    expect(byText(element, 'Keep file')).toBeNull()
+    expect(byText(element, 'Accept deletion')).toBeNull()
+  })
+
+  test('SC-44: Keep refuses to stage when the file disappears after it was opened', async () => {
+    const { element } = await openFile(conflictFile({ kind: 'deleted_by_them', content: 'ours\n' }))
+    fake.handlers['quirky.git/conflictFile'] = () => conflictFile({ kind: 'deleted_by_them', content: null, hash: null })
+
+    await click(byText(element, 'Keep file'))
+
+    expect(fake.callsTo('quirky.git/stage')).toHaveLength(0)
+    expect(fake.toasts.length > 0 || element.querySelector('[role="alert"]') !== null).toBe(true)
+    expect(element.querySelector('[role="status"]')?.textContent).toContain('Unresolved conflict')
+  })
+
+  test('SC-44: a failed guarded save prevents Keep from staging and leaves the conflict unresolved', async () => {
+    const { element, report } = await openFile(conflictFile({ kind: 'deleted_by_them', content: 'ours\n' }))
+    fake.handlers['quirky.git/save'] = () => {
+      throw failure('The file changed on disk.', 'changed-on-disk')
+    }
+    const editor = view(element)
+    act(() => editor.dispatch({ changes: { from: 0, insert: 'draft ' } }))
+
+    await click(byText(element, 'Keep file'))
+
+    expect(fake.callsTo('quirky.git/stage')).toHaveLength(0)
+    expect(report()).toMatchObject({ dirty: true, stale: true })
+    expect(element.querySelector('[role="alert"]')).not.toBeNull()
+    expect(element.querySelector('[role="status"]')?.textContent).toContain('Unresolved conflict')
+    expect(byText(element, 'Keep file')).not.toBeNull()
+    expect(byText(element, 'Accept deletion')).not.toBeNull()
+  })
+
+  test('SC-44: Accept deletion refreshes resolution and clears a dirty draft', async () => {
+    let fresh = conflictFile({ kind: 'deleted_by_us', content: 'incoming\n' })
+    const { element, report } = await openFile(fresh)
+    fake.handlers['quirky.git/conflictFile'] = () => fresh
+    fake.handlers['quirky.git/acceptConflictDeletion'] = () => {
+      fresh = conflictFile({ kind: 'deleted_by_us', state: 'resolved_locally', content: null, hash: null })
+      fake.emit({ type: 'quirky.git/changed', data: { worktreeId: 'w1' } })
+      return { ok: true }
+    }
+    act(() => view(element).dispatch({ changes: { from: 0, insert: 'draft ' } }))
+
+    await click(byText(element, 'Accept deletion'))
+
+    expect(fake.callsTo('quirky.git/acceptConflictDeletion')[0].params.expected).toBe('h1')
+    expect(fake.callsTo('quirky.git/save')).toHaveLength(0)
+    expect(report()).toMatchObject({ dirty: false, stale: false })
+    expect(byText(element, 'Keep file')).toBeNull()
+    expect(byText(element, 'Accept deletion')).toBeNull()
+  })
+
+  test('SC-44: Accept deletion uses the saved file version after saving an edit', async () => {
+    let fresh = conflictFile({ kind: 'deleted_by_them', content: 'ours\n' })
+    const { element, report } = await openFile(fresh)
+    fake.handlers['quirky.git/conflictFile'] = () => fresh
+    fake.handlers['quirky.git/save'] = () => {
+      fresh = conflictFile({ kind: 'deleted_by_them', content: 'edited\n', hash: 'h2' })
+      return { hash: 'h2' }
+    }
+    fake.handlers['quirky.git/acceptConflictDeletion'] = (params) => {
+      if (params.expected !== fresh.hash) throw failure('The file changed on disk.', 'changed-on-disk')
+      fresh = conflictFile({ kind: 'deleted_by_them', state: 'resolved_locally', content: null, hash: null })
+      return { ok: true }
+    }
+    act(() => view(element).dispatch({ changes: { from: 0, to: view(element).state.doc.length, insert: 'edited\n' } }))
+    await act(async () => void (await fake.run('save')))
+    await settle()
+
+    await click(byText(element, 'Accept deletion'))
+
+    expect(report()).toMatchObject({ dirty: false, stale: false })
+    expect(byText(element, 'Accept deletion')).toBeNull()
+  })
+
+  test('SC-44: both resolution choices are disabled while deletion is pending and failure leaves it unresolved', async () => {
+    const { promise, reject } = Promise.withResolvers<void>()
+    const { element } = await openFile(conflictFile({ kind: 'deleted_by_them', content: 'ours\n' }))
+    fake.handlers['quirky.git/acceptConflictDeletion'] = () => promise
+
+    await click(byText(element, 'Accept deletion'))
+    expect(byText(element, 'Keep file')?.disabled).toBe(true)
+    expect(byText(element, 'Accept deletion')?.disabled).toBe(true)
+    reject(failure('Deletion could not be staged.'))
+    await settle()
+
+    expect(element.querySelector('[role="status"]')?.textContent).toContain('Unresolved conflict')
+    expect(byText(element, 'Keep file')?.disabled).toBe(false)
+    expect(byText(element, 'Accept deletion')?.disabled).toBe(false)
+    expect(fake.toasts.length > 0 || element.querySelector('[role="alert"]') !== null).toBe(true)
   })
 
   test('SC-44: a conflict with no working file says there is nothing to edit', async () => {
@@ -157,6 +291,25 @@ describe('quirky.git conflict file view', () => {
     expect(view(element)).toBe(editor)
     expect(report()).toMatchObject({ conflicts: 0, currentConflict: null })
   })
+
+  for (const outcome of ['resolved_locally', 'operation-ended'] as const) {
+    test(`SC-44: refreshing a modify/delete conflict to ${outcome} removes both resolution choices`, async () => {
+      const { element } = await openFile(conflictFile({ kind: 'deleted_by_them', content: 'ours\n' }))
+      expect(byText(element, 'Keep file')).not.toBeNull()
+      expect(byText(element, 'Accept deletion')).not.toBeNull()
+      fake.handlers['quirky.git/conflictFile'] = () => {
+        if (outcome === 'operation-ended') throw Object.assign(failure('math.ts is no longer conflicted.', 'not-found'), { code: RpcErrorCode.NotFound })
+        return conflictFile({ kind: 'deleted_by_them', state: 'resolved_locally', content: 'ours\n' })
+      }
+      fake.handlers['quirky.git/status'] = () => ({ ...status(), operation: outcome === 'operation-ended' ? 'none' : 'merge' })
+
+      await act(async () => fake.emit({ type: 'quirky.git/changed', data: { worktreeId: 'w1' } }))
+      await settle()
+
+      expect(byText(element, 'Keep file')).toBeNull()
+      expect(byText(element, 'Accept deletion')).toBeNull()
+    })
+  }
 
   test('SC-41: a failed file refresh clears conflict UI only after status confirms the operation ended', async () => {
     const { element, report } = await openFile()
@@ -338,6 +491,39 @@ describe('quirky.git conflict file view', () => {
     await settle()
     expect(mounted.report()).toMatchObject({ dirty: false, stale: false })
   })
+
+  test('a remounted modify/delete draft keeps both resolution choices available', async () => {
+    const input = { worktree: 'w1', mode: 'conflict-file', path: 'math.ts', tabId: 'modify-delete-draft' }
+    fake.handlers['quirky.git/conflictFile'] = () => conflictFile({ kind: 'deleted_by_them', content: 'ours\n' })
+    mounted = mountView(fake, input)
+    await settle()
+    s.edit(mounted.element, 'unsaved resolution\n')
+    await settle()
+    mounted.unmount()
+    mounted = mountView(fake, input)
+    await settle()
+    expect(view(mounted.element).state.sliceDoc()).toBe('unsaved resolution\n')
+    expect(['Keep file', 'Accept deletion'].map((label) => byText(mounted!.element, label)?.disabled)).toEqual([false, false])
+  })
+
+  for (const action of ['Keep file', 'Accept deletion']) {
+    test(`${action} stops pending work after the conflict tab unmounts`, async () => {
+      const result = conflictFile({ kind: 'deleted_by_them', content: 'ours\n' })
+      const { element } = await openFile(result)
+      const pending = Promise.withResolvers<typeof result>()
+      fake.handlers[action === 'Keep file' ? 'quirky.git/conflictFile' : 'quirky.git/acceptConflictDeletion'] = () => pending.promise
+      await click(byText(element, action))
+      const reads = fake.callsTo('quirky.git/conflictFile').length
+      mounted!.unmount()
+      mounted = null
+      await act(async () => {
+        pending.resolve(result)
+        await settle()
+      })
+      expect(fake.callsTo('quirky.git/stage')).toHaveLength(0)
+      expect(fake.callsTo('quirky.git/conflictFile')).toHaveLength(reads)
+    })
+  }
 
   test('a restored conflict draft keeps genuine read failures visible until a successful refresh', async () => {
     const input = { worktree: 'w1', mode: 'conflict-file', path: 'math.ts', tabId: 'draft-read-error' }

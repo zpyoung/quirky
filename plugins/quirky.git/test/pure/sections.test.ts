@@ -130,6 +130,22 @@ describe('entryActions', () => {
     expect(entryActions(a, { markersGone: new Set(['a.ts']) })).toEqual({ stage: true, unstage: false, discard: null })
   })
 
+  test('modify/delete conflicts require named resolution instead of row or bulk Stage', () => {
+    const context = { markersGone: new Set(['deleted-by-us.ts', 'deleted-by-them.ts', 'ordinary.ts']) }
+    for (const kind of ['deleted_by_us', 'deleted_by_them'] as const) {
+      const path = kind === 'deleted_by_us' ? 'deleted-by-us.ts' : 'deleted-by-them.ts'
+      const conflict = entry(path, 'conflicts', 'deleted', { conflict: { kind, state: 'unresolved' } })
+      expect(entryActions(conflict, context).stage).toBe(false)
+      expect(sectionButtons(groupSections([conflict], 'changes-first')[0], context).stageAll).toBe(false)
+      expect(actionPaths([conflict], 'stage', context)).toEqual([])
+    }
+
+    const ordinaryConflict = unresolved('ordinary.ts')
+    expect(entryActions(ordinaryConflict, context).stage).toBe(true)
+    expect(sectionButtons(groupSections([ordinaryConflict], 'changes-first')[0], context).stageAll).toBe(true)
+    expect(actionPaths([ordinaryConflict], 'stage', context)).toEqual(['ordinary.ts'])
+  })
+
   test('a conflict resolved locally is already staged in git, so it has no row actions', () => {
     expect(entryActions(resolved('d.ts'), { markersGone: new Set(['d.ts']) })).toEqual({
       stage: false,
