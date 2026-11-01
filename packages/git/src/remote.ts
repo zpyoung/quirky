@@ -202,9 +202,12 @@ export async function fastForward(cwd: string): Promise<void> {
   await runRemote(cwd, 'fast-forward', ['pull', '--ff-only'], { GIT_EDITOR: 'true' })
 }
 
-/** Fetches every configured remote's changes and prunes remote-tracking refs the remote deleted. */
+/** Fetches remote changes and prunes deleted refs; refuses repositories without a configured remote. */
 export async function fetch(cwd: string): Promise<void> {
   await currentBranch(cwd)
+  if ((await listRemotes(cwd)).length === 0) {
+    throw new RemoteError('failed', 'No remote is configured to fetch from. Add a remote first.')
+  }
   await runRemote(cwd, 'fetch', ['fetch', '--prune'])
 }
 

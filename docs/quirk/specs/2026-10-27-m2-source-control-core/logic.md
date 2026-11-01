@@ -401,6 +401,7 @@ a scenario says otherwise, so `--worktree` defaults to it.
     - **Given** **feat** with no upstream, and separately with a detached HEAD
     - **When** the agent runs `quirky git pull`, `quirky git fastForward` and `quirky git sync` in each
     - **Then** with no upstream each fails with reason `no-upstream` and "Branch has no upstream. Publish the branch first."; detached, each (and `push`) fails with "Check out a branch first."
+    - **Given** a repository with no configured remote, **when** Fetch is selected in the menu or run from the CLI, **then** it fails with reason `failed` and explains that there is no remote to fetch from and one must be added. The panel shows both a failure toast and a persistent inline error. A configured remote can still be fetched when the current branch has no upstream.
 
 ### Conflicts
 

@@ -6,7 +6,7 @@ import type { UiPluginContext } from '@quirky/protocol'
 import type { ComponentType } from 'react'
 import type { EditorSurfaceBuffer, SurfaceProps } from '../src/types'
 
-type Mounted = { element: HTMLElement; commands(): CommandHandlers | undefined; unmount(): Promise<void> }
+type Mounted = { element: HTMLElement; commands(): CommandHandlers | undefined; rerender(buffer: EditorSurfaceBuffer): Promise<void>; unmount(): Promise<void> }
 type CommandHandlers = Parameters<SurfaceProps['registerCommandHandlers']>[0]
 
 let createRoot: (container: HTMLElement) => Root
@@ -68,16 +68,17 @@ async function renderSurface(
   Component: ComponentType<SurfaceProps>,
   buffer: EditorSurfaceBuffer,
   onAction: SurfaceProps['onAction'],
+  onDraft: SurfaceProps['onDraft'] = () => {},
 ): Promise<Mounted> {
   let commands: CommandHandlers | undefined
-  const props: SurfaceProps = {
+  let props: SurfaceProps = {
     context: {
       pluginId: 'quirky.editor',
       subscribe: () => () => {}
     } as unknown as UiPluginContext,
     buffer,
     fontSize: 13,
-    onDraft() {},
+    onDraft,
     onAction,
     onView() {},
     registerCommandHandlers(handlers) {
@@ -93,6 +94,10 @@ async function renderSurface(
   const surface: Mounted = {
     element,
     commands: () => commands,
+    async rerender(buffer) {
+      props = { ...props, buffer }
+      await act(async () => root.render(<Component {...props} />))
+    },
     async unmount() {
       if (unmounted) return
       unmounted = true
@@ -108,6 +113,276 @@ async function flush(): Promise<void> {
   setTimeout(resolve, 0)
   await act(async () => { await promise })
 }
+
+function notebookWithSource(cellType: 'code' | 'markdown', source: string): string {
+  return JSON.stringify({
+    cells: [{
+      cell_type: cellType,
+      metadata: {},
+      source,
+      ...(cellType === 'code' ? { outputs: [], execution_count: null } : {})
+    }],
+    metadata: {},
+    nbformat: 4,
+    nbformat_minor: 5
+  })
+}
+
+function notebookCellSource(content: string): string {
+  const notebook = JSON.parse(content) as { cells: { source: string | string[] }[] }
+  const source = notebook.cells[0]!.source
+  return Array.isArray(source) ? source.join('') : source
+}
+
+async function setTextareaValue(textarea: HTMLTextAreaElement, value: string, selection: number): Promise<void> {
+  const setValue = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set
+  if (!setValue) throw new Error('The textarea value setter is unavailable.')
+  await act(async () => {
+    setValue.call(textarea, value)
+    textarea.dispatchEvent(new Event('input', { bubbles: true }))
+  })
+  await act(async () => textarea.setSelectionRange(selection, selection))
+}
+
+async function replaceTextareaSelection(textarea: HTMLTextAreaElement, replacement: string): Promise<void> {
+  const start = textarea.selectionStart ?? 0
+  const end = textarea.selectionEnd ?? start
+  await setTextareaValue(
+    textarea,
+    textarea.value.slice(0, start) + replacement + textarea.value.slice(end),
+    start + replacement.length
+  )
+}
+
+async function flushNotebookChanges(surface: Mounted): Promise<void> {
+  const flushChanges = surface.commands()?.flush
+  expect(flushChanges).toBeDefined()
+  await act(async () => { flushChanges!() })
+}
+
+test.each([
+  { cellType: 'code' as const },
+  { cellType: 'markdown' as const }
+])('accepting queued local $cellType cell drafts preserves editing focus and later input', async ({ cellType }) => {
+  const content = notebookWithSource(cellType, 'seed')
+  const buffer = makeBuffer('notebook', content)
+  const submittedDrafts: string[] = []
+  const surface = await renderSurface(
+    NotebookSurface,
+    buffer,
+    async () => ({}),
+    (draft) => { submittedDrafts.push(draft) }
+  )
+  await flush()
+
+  const editButton = [...surface.element.querySelectorAll<HTMLButtonElement>('button')]
+    .find((button) => button.textContent?.trim() === 'Edit cell')
+  expect(editButton).toBeDefined()
+  await act(async () => editButton!.click())
+  const textarea = surface.element.querySelector<HTMLTextAreaElement>('textarea.notebook-cell-editor')
+  expect(textarea).not.toBeNull()
+  await act(async () => {
+    textarea!.focus()
+    textarea!.setSelectionRange(1, 3)
+  })
+  await replaceTextareaSelection(textarea!, 'X')
+  expect(textarea!.value).toBe('sXd')
+
+  await flushNotebookChanges(surface)
+  expect(submittedDrafts).toHaveLength(1)
+  const firstDraft = submittedDrafts[0]!
+  expect(notebookCellSource(firstDraft)).toBe('sXd')
+  await replaceTextareaSelection(textarea!, 'Y')
+  expect(textarea!.value).toBe('sXYd')
+  await flushNotebookChanges(surface)
+  expect(submittedDrafts).toHaveLength(2)
+  const secondDraft = submittedDrafts[1]!
+  expect(notebookCellSource(secondDraft)).toBe('sXYd')
+  expect(surface.element.querySelector('textarea.notebook-cell-editor')).toBe(textarea)
+  expect(document.activeElement).toBe(textarea)
+  expect(textarea!.value).toBe('sXYd')
+
+  await surface.rerender({
+    ...buffer,
+    draft: firstDraft,
+    contentRevision: buffer.contentRevision + 1,
+    dirty: true
+  })
+  expect(surface.element.querySelector('textarea.notebook-cell-editor')).toBe(textarea)
+  expect(document.activeElement).toBe(textarea)
+  expect(textarea!.selectionStart).toBe(3)
+  expect(textarea!.selectionEnd).toBe(3)
+  expect(textarea!.value).toBe('sXYd')
+
+  await surface.rerender({
+    ...buffer,
+    draft: secondDraft,
+    contentRevision: buffer.contentRevision + 2,
+    dirty: true
+  })
+  expect(surface.element.querySelector('textarea.notebook-cell-editor')).toBe(textarea)
+  expect(document.activeElement).toBe(textarea)
+  expect(textarea!.value).toBe('sXYd')
+  expect(textarea!.selectionStart).toBe(3)
+  expect(textarea!.selectionEnd).toBe(3)
+  expect(notebookCellSource(secondDraft)).toBe('sXYd')
+
+  const doneButton = [...surface.element.querySelectorAll<HTMLButtonElement>('button')]
+    .find((button) => button.textContent?.trim() === 'Done editing')
+  expect(doneButton).toBeDefined()
+  await act(async () => doneButton!.click())
+  expect(surface.element.querySelector('textarea.notebook-cell-editor')).toBeNull()
+  expect(surface.element.querySelector('.notebook-cell-source')?.textContent).toBe('sXYd')
+})
+
+test('unrelated external replacements discard local cell text and reset editing', async () => {
+  const buffer = makeBuffer('notebook', notebookWithSource('code', 'seed'))
+  const submittedDrafts: string[] = []
+  const surface = await renderSurface(
+    NotebookSurface,
+    buffer,
+    async () => ({}),
+    (draft) => { submittedDrafts.push(draft) }
+  )
+  await flush()
+
+  const editButton = [...surface.element.querySelectorAll<HTMLButtonElement>('button')]
+    .find((button) => button.textContent?.trim() === 'Edit cell')
+  await act(async () => editButton!.click())
+  const textarea = surface.element.querySelector<HTMLTextAreaElement>('textarea.notebook-cell-editor')
+  expect(textarea).not.toBeNull()
+  await act(async () => textarea!.focus())
+  await setTextareaValue(textarea!, 'stale local text', 15)
+  await flushNotebookChanges(surface)
+  const acceptedA = submittedDrafts[0]!
+  expect(notebookCellSource(acceptedA)).toBe('stale local text')
+  await flushNotebookChanges(surface)
+  expect(submittedDrafts).toEqual([acceptedA])
+
+  const replacement = notebookWithSource('code', 'external replacement')
+  await surface.rerender({
+    ...buffer,
+    content: replacement
+  })
+
+  expect(surface.element.querySelector('textarea.notebook-cell-editor')).toBeNull()
+  expect(surface.element.querySelector('.notebook-cell-source')?.textContent).toBe('external replacement')
+  expect(surface.element.textContent).not.toContain('stale local text')
+  await flushNotebookChanges(surface)
+  expect(submittedDrafts).toEqual([acceptedA])
+
+  await surface.unmount()
+  expect(submittedDrafts).toEqual([acceptedA])
+})
+
+test('an unflushed cell edit is discarded when an external replacement arrives', async () => {
+  const buffer = makeBuffer('notebook', notebookWithSource('code', 'seed'))
+  const submittedDrafts: string[] = []
+  const surface = await renderSurface(
+    NotebookSurface,
+    buffer,
+    async () => ({}),
+    (draft) => { submittedDrafts.push(draft) }
+  )
+  await flush()
+
+  const editButton = [...surface.element.querySelectorAll<HTMLButtonElement>('button')]
+    .find((button) => button.textContent?.trim() === 'Edit cell')
+  await act(async () => editButton!.click())
+  const textarea = surface.element.querySelector<HTMLTextAreaElement>('textarea.notebook-cell-editor')
+  expect(textarea).not.toBeNull()
+  await act(async () => textarea!.focus())
+  await setTextareaValue(textarea!, 'unflushed local text', 20)
+
+  const replacement = notebookWithSource('code', 'external replacement')
+  await surface.rerender({
+    ...buffer,
+    content: replacement
+  })
+
+  expect(surface.element.querySelector('textarea.notebook-cell-editor')).toBeNull()
+  expect(surface.element.querySelector('.notebook-cell-source')?.textContent).toBe('external replacement')
+  await flushNotebookChanges(surface)
+  expect(submittedDrafts).toEqual([])
+  await surface.unmount()
+  expect(submittedDrafts).toEqual([])
+})
+
+
+test('an earlier local echo cannot hide an unrelated replacement that returns to its content', async () => {
+  const buffer = makeBuffer('notebook', notebookWithSource('code', 'seed'))
+  const submittedDrafts: string[] = []
+  const surface = await renderSurface(
+    NotebookSurface,
+    buffer,
+    async () => ({}),
+    (draft) => { submittedDrafts.push(draft) }
+  )
+  await flush()
+
+  const editButton = [...surface.element.querySelectorAll<HTMLButtonElement>('button')]
+    .find((button) => button.textContent?.trim() === 'Edit cell')
+  await act(async () => editButton!.click())
+  const textarea = surface.element.querySelector<HTMLTextAreaElement>('textarea.notebook-cell-editor')
+  expect(textarea).not.toBeNull()
+  await act(async () => {
+    textarea!.focus()
+    textarea!.setSelectionRange(1, 3)
+  })
+  await replaceTextareaSelection(textarea!, 'X')
+  await flushNotebookChanges(surface)
+  const submittedA = submittedDrafts[0]!
+  expect(notebookCellSource(submittedA)).toBe('sXd')
+
+  const externalB = notebookWithSource('code', 'external B')
+  await surface.rerender({
+    ...buffer,
+    content: externalB,
+    contentRevision: buffer.contentRevision + 1
+  })
+  expect(surface.element.querySelector('textarea.notebook-cell-editor')).toBeNull()
+  expect(surface.element.querySelector('.notebook-cell-source')?.textContent).toBe('external B')
+
+  const editExternalButton = [...surface.element.querySelectorAll<HTMLButtonElement>('button')]
+    .find((button) => button.textContent?.trim() === 'Edit cell')
+  await act(async () => editExternalButton!.click())
+  const externalTextarea = surface.element.querySelector<HTMLTextAreaElement>('textarea.notebook-cell-editor')
+  expect(externalTextarea).not.toBeNull()
+  await act(async () => externalTextarea!.focus())
+  await setTextareaValue(externalTextarea!, 'stale B edit', 12)
+
+  await surface.rerender({
+    ...buffer,
+    content: submittedA,
+    contentRevision: buffer.contentRevision + 2
+  })
+  expect(surface.element.querySelector('textarea.notebook-cell-editor')).toBeNull()
+  expect(surface.element.querySelector('.notebook-cell-source')?.textContent).toBe('sXd')
+  expect(surface.element.textContent).not.toContain('stale B edit')
+})
+
+test('switching notebook buffers resets cell editing', async () => {
+  const buffer = makeBuffer('notebook', notebookWithSource('code', 'first file'))
+  const surface = await renderSurface(NotebookSurface, buffer, async () => ({}))
+  await flush()
+
+  const editButton = [...surface.element.querySelectorAll<HTMLButtonElement>('button')]
+    .find((button) => button.textContent?.trim() === 'Edit cell')
+  await act(async () => editButton!.click())
+  expect(surface.element.querySelector('textarea.notebook-cell-editor')).not.toBeNull()
+
+  const nextBuffer = {
+    ...makeBuffer('notebook', notebookWithSource('markdown', 'second file')),
+    id: 'buffer-notebook-second',
+    path: '/tmp/viewer-worktree/second.ipynb',
+    relativePath: 'second.ipynb',
+    name: 'second.ipynb'
+  }
+  await surface.rerender(nextBuffer)
+
+  expect(surface.element.querySelector('textarea.notebook-cell-editor')).toBeNull()
+  expect(surface.element.querySelector('.notebook-cell-source')?.textContent).toBe('second file')
+})
 
 test('Escape cancels notebook trust without authorizing execution', async () => {
   const actions: string[] = []

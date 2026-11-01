@@ -393,6 +393,22 @@ describe('fastForward', () => {
 })
 
 describe('fetch', () => {
+  test('explains when no remote is configured instead of silently succeeding', async () => {
+    const work = makeRepo(scratch())
+    const error = await failureOf(fetch(work))
+    expect(error.reason).toBe('failed')
+    expect(error.message).toMatch(/no remote/i)
+    expect(error.message).toMatch(/configur|add/i)
+  })
+
+  test('fetches remote changes without an upstream on the current branch', async () => {
+    const env = setup()
+    const theirs = peerCommit(env, 'main', { 'upstream.txt': 'new\n' })
+    await fetch(env.work)
+    expect(await remoteTrackingSha(env.work, 'origin', 'main')).toBe(theirs)
+    expect(git(env.work, 'for-each-ref', '--format=%(upstream)', 'refs/heads/feat')).toBe('')
+  })
+
   test('updates remote-tracking refs and prunes deleted branches', async () => {
     const env = setup()
     await push(env.work)
