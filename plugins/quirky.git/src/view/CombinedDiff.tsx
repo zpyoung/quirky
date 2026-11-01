@@ -375,6 +375,7 @@ export function CombinedDiff({ context, input, settings, setSetting, report, bin
                   title={<span title={entry.path} style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{entry.path}</span>}
                   selected={activeKey === entry.key}
                   onClick={() => {
+                    activate(entry.key)
                     treeTargets.current.get(entry.key)?.scrollIntoView?.({ block: 'start' })
                     onVisible(entry.key)
                   }}
