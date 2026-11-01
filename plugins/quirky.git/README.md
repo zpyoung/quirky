@@ -59,7 +59,7 @@ Conflict review's **Open** opens the file in a normal worktree tab. Switching be
 
 Combined diffs open at the first file and keep their scroll position as sections load. Single-file diffs still jump to the first change; change-navigation commands remain available in both views.
 
-Combined-diff headers preserve commit-subject casing and keep the compact toolbar on the padded title row. Long subjects remain available in the header tooltip.
+History-opened whole-commit diffs keep the compact toolbar title and show the complete commit subject and body in a scrollable message section above the file diffs.
 
 Plugin integrations split a tab through `quirky.terminal/moveTab` with `tab`, `split`, `of`, and the acknowledged `revision`; the tab determines its workspace, so this method does not accept a `workspace` field.
 
