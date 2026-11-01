@@ -8,6 +8,7 @@
 - 2026-10-26, before build: Codex adversarial review. A create naming a project but no name uses `--repo` (one positional is always the name; SC-18, SC-21); a create from an existing branch with no name takes its folder from the branch (SC-18); an explicit `--setup skip` gives no warning, only an inherited skip does (SC-30); a wait-for-setup create returns with the agent pending (SC-38); an orphan stays deletable after a list, and Force deletes only inside the folder it was created under (SC-54); Mod+N opens the create dialog, also through the API (SC-62).
 - 2026-10-30: Deleting a workspace also removes its bound view tabs from shared, per-window and auxiliary layouts. Selection follows a surviving workspace-bound fallback or clears; global views and unrelated workspaces remain.
 - 2026-10-31: Generated workspace names exclude `sperm`, the ambiguous truncation of “sperm whale”, from suggestions and blank-name creates, including numbered fallbacks. User-entered names and existing workspaces are unchanged.
+- 2026-10-31: Workspace details stages manual reference additions and removals alongside display name and notes. Save applies them together; Cancel, Escape and closing the dialog discard the draft.
 
 ## Conceptual model
 
@@ -414,10 +415,12 @@ repository `/tmp/w/origin.git` with `main`; the worktrees folder `/tmp/w/ws`; an
     - **When** the agent runs `wt set a --parent-worktree c`, `wt set a --parent-worktree a`, `wt set c --no-parent`, then `wt show a`
     - **Then** the first two fail because **c** is a descendant of **a** and a worktree can't be its own parent; the third clears **c**'s parent; `wt show a` lists **b** as its only child
 
-42. **SC-42: Rename edits the display name and notes** (UI)
-    - **Given** worktree **fix-login** in the window
-    - **When** the person chooses Rename… from its menu, enters display name "Login fix" and notes, and saves
-    - **Then** the dialog was titled "Workspace details" with Display Name ("Shown in the sidebar. The folder name stays the same."), notes and Save; the card now reads "Login fix", and `wt list` shows the same name and comment with branch and folder unchanged
+42. **SC-42: Rename edits workspace details as one draft** (UI)
+    - **Given** worktree **fix-login** in the window, with a saved manual reference
+    - **When** the person chooses Rename… from its menu, enters display name "Login fix" and notes, unlinks the saved reference, adds another reference, and saves
+    - **Then** the dialog was titled "Workspace details" with Display Name ("Shown in the sidebar. The folder name stays the same."), notes and Save; the card now reads "Login fix", and `wt list` shows the same name and comment with branch and folder unchanged. Reopening shows the replacement reference. All changes apply together only on successful Save; a failed Save keeps the draft open.
+    - **When** the person changes the name or notes, adds or unlinks references, then chooses Cancel, presses Escape or closes the dialog
+    - **Then** reopening shows the last saved name, notes and references, with none of the discarded edits
 
 43. **SC-43: status, pin and unread from the card menu** (UI)
     - **Given** worktrees **fix-login** and **docs** in the window, with **main** open

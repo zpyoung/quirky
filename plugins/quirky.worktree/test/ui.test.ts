@@ -1440,6 +1440,58 @@ test('SC-42: Rename saves the display name and notes through set', async () => {
   expect(dialogTitles()).toEqual([])
 })
 
+test.each(['Cancel', 'Escape'])('Workspace details discards reference edits on %s', async (dismissal) => {
+  const h = setup()
+  h.world.worktrees[1]!.references = [{ id: 'ref_saved', url: 'https://example.com/saved', label: 'Saved task', createdAt: 1 }]
+  await h.mountInto(host)
+  await click(actionButton(rowOf('fix-login', 'api'))!)
+  await click(itemNamed('Rename…'))
+  await click(dialogButton('Unlink'))
+  expect(h.callsTo('quirky.worktree/unlinkReference')).toEqual([])
+  expect(document.querySelector('[aria-label="Linked references"]')!.textContent).not.toContain('Saved task')
+
+  await typeInto(dialogField('Reference URL')!, 'https://example.com/draft')
+  await typeInto(dialogField('Reference label')!, 'Draft task')
+  await click(dialogButton('Add reference'))
+  expect(h.callsTo('quirky.worktree/linkReference')).toEqual([])
+  expect(document.querySelector('[aria-label="Linked references"]')!.textContent).toContain('Draft task')
+
+  if (dismissal === 'Cancel') await click(dialogButton('Cancel'))
+  else await press('Escape')
+  expect(h.callsTo('quirky.worktree/set')).toEqual([])
+  await click(actionButton(rowOf('fix-login', 'api'))!)
+  await click(itemNamed('Rename…'))
+  const linked = document.querySelector('[aria-label="Linked references"]')!
+  expect(linked.textContent).toContain('Saved task')
+  expect(linked.textContent).not.toContain('Draft task')
+})
+
+test('Workspace details keeps its reference draft on failed Save and submits it with metadata on retry', async () => {
+  const h = setup()
+  h.world.worktrees[1]!.references = [{ id: 'ref_saved', url: 'https://example.com/saved', label: 'Saved task', createdAt: 1 }]
+  await h.mountInto(host)
+  await click(actionButton(rowOf('fix-login', 'api'))!)
+  await click(itemNamed('Rename…'))
+  await click(dialogButton('Unlink'))
+  await typeInto(dialogField('Reference URL')!, 'https://example.com/draft')
+  await typeInto(dialogField('Reference label')!, ' Draft task ')
+  await click(dialogButton('Add reference'))
+  await typeInto(dialogField('Display Name')!, 'Login fix')
+  h.world.failSet = new Error('Workspace unavailable')
+  await click(dialogButton('Save'))
+  expect(dialogTitles()).toEqual(['Workspace details'])
+  expect(document.querySelector('[aria-label="Linked references"]')!.textContent).toContain('Draft task')
+  expect(h.toasts).toEqual([{ title: 'Could not update workspace', body: 'Workspace unavailable' }])
+
+  h.world.failSet = null
+  await click(dialogButton('Save'))
+  expect(h.callsTo('quirky.worktree/set')).toEqual([
+    { worktree: 'w2', displayName: 'Login fix', comment: '', references: [{ url: 'https://example.com/draft', label: 'Draft task' }] },
+    { worktree: 'w2', displayName: 'Login fix', comment: '', references: [{ url: 'https://example.com/draft', label: 'Draft task' }] }
+  ])
+  expect(dialogTitles()).toEqual([])
+})
+
 test('Rename from a worktree Actions button restores focus to its renamed row after repeated saves', async () => {
   const h = setup()
   await h.mountInto(host)

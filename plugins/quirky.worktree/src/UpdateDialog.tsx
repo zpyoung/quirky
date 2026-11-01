@@ -2,7 +2,7 @@ import { useState, type FormEvent } from 'react'
 import type { UiPluginContext, Worktree } from '@quirky/protocol'
 import { Button, Dialog, FormRow, SectionHeader, TextField } from '@quirky/ui'
 import type { WorktreeReference } from './parity-types'
-import { messageOf, setWorktree } from './actions'
+import { setWorktree } from './actions'
 
 type EditableWorktree = Worktree & { references?: WorktreeReference[] }
 type Props = { context: UiPluginContext; worktree: EditableWorktree; onClose(): void }
@@ -11,42 +11,36 @@ type Props = { context: UiPluginContext; worktree: EditableWorktree; onClose(): 
 export function UpdateDialog({ context, worktree, onClose }: Props) {
   const [displayName, setDisplayName] = useState(worktree.displayName ?? '')
   const [notes, setNotes] = useState(worktree.comment)
-  const [references, setReferences] = useState(worktree.references ?? [])
+  const [references, setReferences] = useState<Array<Pick<WorktreeReference, 'url' | 'label'>>>(worktree.references ?? [])
+  const [referencesChanged, setReferencesChanged] = useState(false)
   const [referenceUrl, setReferenceUrl] = useState('')
   const [referenceLabel, setReferenceLabel] = useState('')
   const [busy, setBusy] = useState(false)
   const folderName = worktree.path.split('/').filter(Boolean).pop() ?? worktree.name
 
-  const addReference = async () => {
-    try {
-      const reference = await context.call('quirky.worktree/linkReference', {
-        worktree: worktree.id,
-        url: referenceUrl,
-        label: referenceLabel
-      }) as WorktreeReference
-      setReferences((current) => current.some((item) => item.id === reference.id)
-        ? current.map((item) => item.id === reference.id ? reference : item)
-        : [...current, reference])
-      setReferenceUrl('')
-      setReferenceLabel('')
-    } catch (error) {
-      context.toast('Could not link reference', messageOf(error))
-    }
+  const addReference = () => {
+    const reference = { url: referenceUrl, label: referenceLabel.trim() }
+    setReferences((current) => current.some((item) => item.url === reference.url)
+      ? current.map((item) => item.url === reference.url ? reference : item)
+      : [...current, reference])
+    setReferencesChanged(true)
+    setReferenceUrl('')
+    setReferenceLabel('')
   }
 
-  const unlinkReference = async (reference: WorktreeReference) => {
-    try {
-      await context.call('quirky.worktree/unlinkReference', { worktree: worktree.id, reference: reference.id })
-      setReferences((current) => current.filter((item) => item.id !== reference.id))
-    } catch (error) {
-      context.toast('Could not unlink reference', messageOf(error))
-    }
+  const unlinkReference = (url: string) => {
+    setReferences((current) => current.filter((item) => item.url !== url))
+    setReferencesChanged(true)
   }
 
   const save = async (event: FormEvent) => {
     event.preventDefault()
     setBusy(true)
-    const ok = await setWorktree(context, worktree.id, { displayName: displayName.trim(), comment: notes })
+    const ok = await setWorktree(context, worktree.id, {
+      displayName: displayName.trim(),
+      comment: notes,
+      ...(referencesChanged ? { references: references.map(({ url, label }) => ({ url, label: label === url ? '' : label })) } : {})
+    })
     setBusy(false)
     if (ok) onClose()
   }
@@ -79,16 +73,16 @@ export function UpdateDialog({ context, worktree, onClose }: Props) {
           {references.length === 0 ? <p className="ui-text-muted">No references linked.</p> : (
             <ul className="ui-tree">
               {references.map((reference) => (
-                <li className="ui-tree-item ui-cluster" key={reference.id}>
-                  <span className="ui-text-ellipsis">{reference.label} · {reference.url}</span>
-                  <Button type="button" aria-label={`Unlink ${reference.label}`} onClick={() => void unlinkReference(reference)}>Unlink</Button>
+                <li className="ui-tree-item ui-cluster" key={reference.url}>
+                  <span className="ui-text-ellipsis">{reference.label || reference.url} · {reference.url}</span>
+                  <Button type="button" disabled={busy} aria-label={`Unlink ${reference.label || reference.url}`} onClick={() => unlinkReference(reference.url)}>Unlink</Button>
                 </li>
               ))}
             </ul>
           )}
           <TextField label="Reference URL" id="workspace-reference-url" value={referenceUrl} onChange={(event) => setReferenceUrl(event.target.value)} placeholder="https://…" />
           <TextField label="Reference label" id="workspace-reference-label" value={referenceLabel} onChange={(event) => setReferenceLabel(event.target.value)} placeholder="APP-42" />
-          <Button type="button" disabled={referenceUrl.trim() === ''} onClick={() => void addReference()}>Add reference</Button>
+          <Button type="button" disabled={busy || referenceUrl.trim() === ''} onClick={addReference}>Add reference</Button>
           <p className="ui-help-text">Links are displayed as text here and are not opened.</p>
         </section>
         <div className="ui-actions">
