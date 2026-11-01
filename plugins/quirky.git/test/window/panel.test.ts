@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from 'bun:test'
-import { chmodSync, mkdirSync } from 'node:fs'
+import { chmodSync, mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { Repo, Worktree } from '@quirky/protocol'
 import { isolateGitConfig, makeRepo } from '../../../quirky.repo/test/git-fixtures'
@@ -8,6 +8,7 @@ import { boot, DIFF_VIEW, openView, SESSION_VIEW, sc1, shutdown, type World } fr
 
 const { scratch } = isolateGitConfig()
 const SLOW = 90_000
+type WorktreeWithSleeping = Worktree & { sleeping: boolean }
 afterEach(async () => {
   await shutdown()
   globalThis.__QUIRKY_TEST_REVEAL__ = undefined
@@ -30,17 +31,32 @@ test('SC-9: the group order setting reorders the sections live, with Conflicts f
   expect(sectionHeadings()).toEqual(['Untracked Files', 'Changes', 'Staged Changes', 'Commits'])
 }, SLOW)
 
-test('SC-10: opening a terminal from a clean Source Control panel opens its session', async () => {
+test('SC-10: opening a terminal from a sleeping Source Control worktree wakes it and opens its session', async () => {
   const w = await boot(scratch)
   await w.win.waitFor(() => q('[data-git-content] section p'))
+  const sessionsBefore = await w.agent.callAny('quirky.session/list', { worktree: w.feat.id }) as Array<{ id: string; agent: string }>
+  const previousSessionIds = new Set(sessionsBefore.map((session) => session.id))
+  await w.agent.callAny('quirky.worktree/sleep', { worktree: w.feat.id })
+  await w.win.waitFor(() => q('main .empty')?.textContent === 'This worktree is sleeping.')
+  expect((await w.agent.callAny('quirky.worktree/list', {}) as WorktreeWithSleeping[]).find((worktree) => worktree.id === w.feat.id)?.sleeping).toBe(true)
+
   await click(buttonText('Open terminal'))
   const terminal = await w.win.waitFor(async () => {
     const view = (await w.state()).slots.find((slot) => slot.id === SESSION_VIEW)?.report
+    const sessions = await w.agent.callAny('quirky.session/list', { worktree: w.feat.id }) as Array<{ id: string; agent: string }>
+    const worktrees = await w.agent.callAny('quirky.worktree/list', {}) as WorktreeWithSleeping[]
+    const sleeping = worktrees.find((worktree) => worktree.id === w.feat.id)?.sleeping
     return view && typeof view === 'object' && 'worktree' in view && view.worktree === w.feat.id &&
-      'active' in view && typeof view.active === 'string' ? view : undefined
+      'active' in view && typeof view.active === 'string' && !previousSessionIds.has(view.active) &&
+      sessions.length === sessionsBefore.length + 1 && sleeping === false &&
+      q('main .empty')?.textContent !== 'This worktree is sleeping.' ? view : undefined
   })
-  const openedSession = await w.agent.callAny('quirky.session/get', { session: terminal.active })
-  expect(openedSession).toMatchObject({ cwd: w.dir, agent: 'shell' })
+  const sessions = await w.agent.callAny('quirky.session/list', { worktree: w.feat.id }) as Array<{ id: string; agent: string }>
+  expect(sessions).toHaveLength(sessionsBefore.length + 1)
+  expect(sessions.find((session) => session.id === terminal.active)).toMatchObject({ id: terminal.active, agent: 'shell' })
+  expect((await w.agent.callAny('quirky.session/get', { session: terminal.active }))).toMatchObject({ cwd: w.dir, agent: 'shell' })
+  expect((await w.agent.callAny('quirky.worktree/list', {}) as WorktreeWithSleeping[]).find((worktree) => worktree.id === w.feat.id)?.sleeping).toBe(false)
+  expect(q('main .empty')?.textContent).not.toBe('This worktree is sleeping.')
 
   const notes = join(scratch(), 'notes')
   mkdirSync(notes, { recursive: true })
@@ -52,6 +68,48 @@ test('SC-10: opening a terminal from a clean Source Control panel opens its sess
   await w.agent.callAny('ui.view.close', {})
   await w.win.waitFor(async () => (await openView(w)) === null)
   expect(w.problems()).toEqual([])
+}, SLOW)
+
+test('New agent tab wakes a sleeping selected worktree and opens exactly its agent session', async () => {
+  const agentBin = scratch()
+  mkdirSync(agentBin, { recursive: true })
+  const executable = join(agentBin, 'opencode')
+  writeFileSync(executable, '#!/bin/sh\nexec /bin/sleep 30\n')
+  chmodSync(executable, 0o755)
+  const previousSearchDirs = process.env.QUIRKY_AGENT_SEARCH_DIRS
+  process.env.QUIRKY_AGENT_SEARCH_DIRS = agentBin
+
+  try {
+    const w = await boot(scratch)
+    await w.win.waitFor(() => q('[data-git-content] section p'))
+    const sessionsBefore = await w.agent.callAny('quirky.session/list', { worktree: w.feat.id }) as Array<{ id: string; agent: string }>
+    const previousSessionIds = new Set(sessionsBefore.map((session) => session.id))
+    await w.agent.callAny('quirky.agents/setDefault', { agent: 'opencode' })
+    expect(await w.agent.callAny('quirky.agents/pick', { forAgentTab: true })).toEqual({ agent: 'opencode' })
+    await w.agent.callAny('quirky.worktree/sleep', { worktree: w.feat.id })
+    await w.win.waitFor(() => q('main .empty')?.textContent === 'This worktree is sleeping.')
+
+    await w.agent.callAny('ui.command.run', { id: 'command:quirky.agents/new-agent-tab' })
+    const terminal = await w.win.waitFor(async () => {
+      const view = (await w.state()).slots.find((slot) => slot.id === SESSION_VIEW)?.report
+      const sessions = await w.agent.callAny('quirky.session/list', { worktree: w.feat.id }) as Array<{ id: string; agent: string }>
+      const worktrees = await w.agent.callAny('quirky.worktree/list', {}) as WorktreeWithSleeping[]
+      const sleeping = worktrees.find((worktree) => worktree.id === w.feat.id)?.sleeping
+      return view && typeof view === 'object' && 'worktree' in view && view.worktree === w.feat.id &&
+        'active' in view && typeof view.active === 'string' && !previousSessionIds.has(view.active) &&
+        sessions.length === sessionsBefore.length + 1 && sleeping === false &&
+        q('main .empty')?.textContent !== 'This worktree is sleeping.' ? view : undefined
+    })
+    const sessions = await w.agent.callAny('quirky.session/list', { worktree: w.feat.id }) as Array<{ id: string; agent: string }>
+    expect(sessions).toHaveLength(sessionsBefore.length + 1)
+    expect(sessions.find((session) => session.id === terminal.active)).toMatchObject({ id: terminal.active, agent: 'opencode' })
+    expect((await w.agent.callAny('quirky.worktree/list', {}) as WorktreeWithSleeping[]).find((worktree) => worktree.id === w.feat.id)?.sleeping).toBe(false)
+    expect(q('main .empty')?.textContent).not.toBe('This worktree is sleeping.')
+    expect(w.problems()).toEqual([])
+  } finally {
+    if (previousSearchDirs === undefined) delete process.env.QUIRKY_AGENT_SEARCH_DIRS
+    else process.env.QUIRKY_AGENT_SEARCH_DIRS = previousSearchDirs
+  }
 }, SLOW)
 
 test('SC-16: the filter narrows rows, hides the bulk buttons and refuses a long query', async () => {

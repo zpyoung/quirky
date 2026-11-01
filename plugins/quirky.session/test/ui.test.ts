@@ -561,6 +561,23 @@ describe('UI commands', () => {
     expect(fake.callsTo('quirky.session/create')[0]!.params).toEqual({ worktree: 'wt-other', agent: 'shell' })
   })
 
+  test('new-shell surfaces wake failure without creating a session', async () => {
+    let created = 0
+    start([shell1], {
+      'quirky.worktree/wake': () => { throw new Error('could not wake worktree') },
+      'quirky.session/create': () => {
+        created += 1
+        return session({ id: 'new' })
+      }
+    })
+    await open({ worktree: WORKTREE.id })
+    const openedBefore = [...fake.opened]
+    await expect(fake.command('new-shell')).rejects.toThrow('could not wake worktree')
+    expect(created).toBe(0)
+    expect(fake.opened).toEqual(openedBefore)
+  })
+
+
   test('close-session closes the active session', async () => {
     start([session({ id: 's1', status: 'exited', exitCode: 0 }), claude], { 'quirky.session/close': () => ({ ok: true }) })
     await open({ worktree: WORKTREE.id, session: 's1' })
