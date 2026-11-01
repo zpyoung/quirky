@@ -232,8 +232,12 @@ export class ContentsSearch {
     })
     child.once('close', (code) => {
       if (pendingLine !== '') acceptLine(pendingLine)
-      if (!running.cancelled && code !== 0 && code !== 1 && !result.truncated) finish(stderr.trim() || `ripgrep exited with status ${code}`)
-      else finish()
+      if (!running.cancelled && code !== 0 && code !== 1 && !result.truncated) {
+        const error = params.useRegex === true && /^(?:rg: )?regex parse error:/.test(stderr.trim())
+          ? `Invalid regular expression: ${query}`
+          : stderr.trim() || `ripgrep exited with status ${code}`
+        finish(error)
+      } else finish()
     })
     return await promise
   }

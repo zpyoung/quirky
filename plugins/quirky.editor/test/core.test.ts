@@ -876,8 +876,6 @@ describe('editor core through the daemon API', () => {
     expect(match.displayColumn).toBeDefined()
     expect(match.displayMatchLength).toBe(needle.length)
     expect(match.lineContent.slice(match.displayColumn! - 1, match.displayColumn! - 1 + match.displayMatchLength!)).toBe(needle)
-    const invalidRegex = await t.call<{ error: string | null }>('quirky.editor/search', { worktree: t.worktreeId, action: 'run', query: '[', useRegex: true })
-    expect(invalidRegex.error).toBeTruthy()
     const tooLong = await t.call<{ files: unknown[] }>('quirky.editor/search', {
       worktree: t.worktreeId,
       action: 'run',
@@ -886,6 +884,27 @@ describe('editor core through the daemon API', () => {
     expect(tooLong.files).toEqual([])
     await t.call('quirky.editor/search', { worktree: t.worktreeId, action: 'cancel' })
     expect((await t.call<{ loading: boolean }>('quirky.editor/search', { worktree: t.worktreeId, action: 'state' })).loading).toBe(false)
+  })
+
+  test('invalid regex errors name the entered query without ripgrep wrappers or caret diagnostics', async () => {
+    const t = await boot()
+    for (const query of ['(unclosed', '[', '(?=needle)']) {
+      for (const wholeWord of [false, true]) {
+        const result = await t.call<EditorSearchState>('quirky.editor/search', {
+          worktree: t.worktreeId, action: 'run', query, useRegex: true, wholeWord
+        })
+        expect(result.error).toMatch(/invalid regular expression/i)
+        expect(result.error).toContain(query)
+        expect(result.error).not.toMatch(/regex parse error|\(\?:|\n\s*\^/)
+        expect(result).toMatchObject({ loading: false, files: [], totalMatches: 0 })
+      }
+    }
+    await write(t, 'literal.txt', '(unclosed\n')
+    const literal = await t.call<EditorSearchState>('quirky.editor/search', {
+      worktree: t.worktreeId, action: 'run', query: '(unclosed', useRegex: false
+    })
+    expect(literal.error).toBeNull()
+    expect(literal.files).toMatchObject([{ relativePath: 'literal.txt', matches: [{ lineContent: '(unclosed' }] }])
   })
 
   test('SC-37: late cancellation is scoped to its request and old output cannot replace newer state', async () => {
