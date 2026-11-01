@@ -90,6 +90,7 @@ Back-link: [SC-1, SC-3, SC-8, SC-12, SC-13](logic.md#behavior-and-scenarios), [A
 
 - **Dots:** a comment finds its element only through its stored `selector`, re-queried with `document.querySelector`. Capture produces a selector unique at that moment, and terminal and browser panes use their pane marker. Re-query on mode start, layout change, resize, window scroll and page DOM changes outside the mode's overlay, at most once per animation frame. A miss hides the dot and marks the row "No longer on screen". A hit never updates stored context.
 - **Tray rows:** show number, intent, comment, owner and any stale label. Clicking a row reopens its text for editing. Each row has delete, without confirmation. Clear uses `context.confirm`, and only then calls `clear`. The tray collapses to a one-line bar that stays in the mode, and the collapse state isn't stored.
+- **Tray placement:** expanded and collapsed trays sit above the status bar with a `--ui-space-12` gap, reserving its `--ui-row-single` height so status items remain fully visible.
 - **Banner:** shows the mode text and an Exit button that sets `active` false. It sits below the window bar with a `--ui-space-12` gap, using the shared `--ui-window-bar-height` token so navigation, agent and worktree controls stay reachable.
 - **Failures:** a failed daemon call keeps the card or row as it was, and shows a toast. `feedback_full` shows the limit message without opening a card.
 - **Native masks:** the banner, card, tray and chip carry `data-quirky-native-mask`. The full-window selection host never does, because masking it would hide every Native page.
@@ -184,6 +185,7 @@ SCHEMA: `Comment` is `{ id: string, createdAt: number, intent: "change" | "quest
 - `packages/ui/test/`: dev flavor injects attributes, and release output has none. `selection-overlay` export stays self-contained.
 - `plugins/quirky.browser/test/design-format.test.ts` and `design-ui.test.tsx`: unchanged output, and `pane` targeting.
 - `plugins/quirky.feedback/test/`: store limits, atomic write, 0600 mode and corrupt-file recovery; capture owner, terminal no-text, and source caller; Markdown; drafts' sentinel exclusion, truncation and routing; the mode's click blocking, Option passthrough, Esc states and stub reset, using `@happy-dom/global-registrator`.
+- `plugins/quirky.feedback/test/tray-layout.browser.test.tsx`: real Chromium geometry checks keep expanded and collapsed trays above the status bar at default and smaller window sizes.
 - The acceptance bar is `bun run typecheck && bun run test`. The 8-of-10 agent check runs against a built app after review, per [Key decisions](logic.md#key-decisions-and-rationale).
 
 ## Non-goals
