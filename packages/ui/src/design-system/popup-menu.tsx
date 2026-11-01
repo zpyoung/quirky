@@ -182,6 +182,7 @@ export function PopupMenu({ anchor, items, title, searchPlaceholder, onClose }: 
         label={label}
         header={header}
         highlightFirst={searchable}
+        autoFocus={position.visibility !== 'hidden'}
         onClose={() => dismiss(true)}
         onChoose={(item) => {
           dismiss(false)
