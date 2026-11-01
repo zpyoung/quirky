@@ -308,18 +308,23 @@ function CsvSurface({ props, sourceMode }: { props: SurfaceProps; sourceMode: bo
           <option value=",">Comma</option><option value="\t">Tab</option><option value=";">Semicolon</option><option value="|">Pipe</option>
         </select>
         <TextField id={filterInputId} label="Filter rows" value={filter} onChange={(event) => void changeFilter(event.currentTarget.value)} />
-        <textarea className="editor-viewer-source viewer-paste" aria-label="Paste CSV cells" value={pasteText} onChange={(event) => setPasteText(event.currentTarget.value)} placeholder="Paste CSV or tab-separated cells" />
-        <TextField label="Paste row" type="number" min="0" value={pasteAt.row} onChange={(event) => { const value = Number(event.currentTarget.value); setPasteAt((old) => ({ ...old, row: value })) }} />
-        <TextField label="Paste column" type="number" min="0" value={pasteAt.column} onChange={(event) => { const value = Number(event.currentTarget.value); setPasteAt((old) => ({ ...old, column: value })) }} />
-        <Button type="button" onClick={() => void paste()} disabled={loading}>Paste</Button>
-        <fieldset className="viewer-copy-range">
-          <legend>Copy rectangular range (zero-based source coordinates)</legend>
-          <TextField label="Start row (source index)" aria-label="Copy range start row (source index)" type="number" min="0" step="1" value={copyRange.row} onChange={(event) => { const value = event.currentTarget.value; setCopyRange((old) => ({ ...old, row: value })) }} />
-          <TextField label="Start column (source index)" aria-label="Copy range start column (source index)" type="number" min="0" step="1" value={copyRange.column} onChange={(event) => { const value = event.currentTarget.value; setCopyRange((old) => ({ ...old, column: value })) }} />
-          <TextField label="End row (source index)" aria-label="Copy range end row (source index)" type="number" min="0" step="1" value={copyRange.endRow} onChange={(event) => { const value = event.currentTarget.value; setCopyRange((old) => ({ ...old, endRow: value })) }} />
-          <TextField label="End column (source index)" aria-label="Copy range end column (source index)" type="number" min="0" step="1" value={copyRange.endColumn} onChange={(event) => { const value = event.currentTarget.value; setCopyRange((old) => ({ ...old, endColumn: value })) }} />
-          <Button type="button" onClick={copySelectedRange} disabled={loading}>Copy range</Button>
-        </fieldset>
+        <details className="viewer-csv-advanced">
+          <summary className="qe-disclosure-trigger">Paste and copy range</summary>
+          <div className="viewer-csv-advanced__body">
+            <textarea className="editor-viewer-source viewer-paste" aria-label="Paste CSV cells" value={pasteText} onChange={(event) => setPasteText(event.currentTarget.value)} placeholder="Paste CSV or tab-separated cells" />
+            <TextField label="Paste row" type="number" min="0" value={pasteAt.row} onChange={(event) => { const value = Number(event.currentTarget.value); setPasteAt((old) => ({ ...old, row: value })) }} />
+            <TextField label="Paste column" type="number" min="0" value={pasteAt.column} onChange={(event) => { const value = Number(event.currentTarget.value); setPasteAt((old) => ({ ...old, column: value })) }} />
+            <Button type="button" onClick={() => void paste()} disabled={loading}>Paste</Button>
+            <fieldset className="viewer-copy-range">
+              <legend>Copy rectangular range (zero-based source coordinates)</legend>
+              <TextField label="Start row (source index)" aria-label="Copy range start row (source index)" type="number" min="0" step="1" value={copyRange.row} onChange={(event) => { const value = event.currentTarget.value; setCopyRange((old) => ({ ...old, row: value })) }} />
+              <TextField label="Start column (source index)" aria-label="Copy range start column (source index)" type="number" min="0" step="1" value={copyRange.column} onChange={(event) => { const value = event.currentTarget.value; setCopyRange((old) => ({ ...old, column: value })) }} />
+              <TextField label="End row (source index)" aria-label="Copy range end row (source index)" type="number" min="0" step="1" value={copyRange.endRow} onChange={(event) => { const value = event.currentTarget.value; setCopyRange((old) => ({ ...old, endRow: value })) }} />
+              <TextField label="End column (source index)" aria-label="Copy range end column (source index)" type="number" min="0" step="1" value={copyRange.endColumn} onChange={(event) => { const value = event.currentTarget.value; setCopyRange((old) => ({ ...old, endColumn: value })) }} />
+              <Button type="button" onClick={copySelectedRange} disabled={loading}>Copy range</Button>
+            </fieldset>
+          </div>
+        </details>
       </>}
     </header>
     {changedBanner}

@@ -428,6 +428,8 @@ scrolls horizontally instead of adding rows; search and review-note controls sti
 CSV table edits and the table toolbar's Save share the document's draft acknowledgments.
 Saving your own table changes leaves a clean, closable tab; newer competing drafts still
 require comparison before saving.
+Paste cells and rectangular-range copy controls are under **Paste and copy range**, collapsed
+by default so table rows stay visible. Filtering and the common table actions remain in the toolbar.
 
 New Markdown documents use collision-safe untitled placeholders. Save opens a relative-path
 Save As dialog; cancelling keeps the draft. The public `quirky.editor/saveAs` method accepts
