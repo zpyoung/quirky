@@ -76,6 +76,7 @@ function makeBufferInfo(options: {
   mode?: 'source' | 'rich'
   external?: EditorBufferInfo['external']
   draft?: string
+  diskWritable?: boolean
 } = {}): EditorBufferInfo {
   const content = options.mode === 'rich' ? '# File actions regression fixture\n' : CONTENT
   const draft = options.draft ?? null
@@ -92,7 +93,7 @@ function makeBufferInfo(options: {
     baseline: null,
     size: content.length,
     readOnly: false,
-    diskWritable: true,
+    diskWritable: options.diskWritable ?? true,
     dirty: options.dirty ?? false,
     external: options.external ?? null,
     mode: options.mode ?? 'source',
@@ -120,6 +121,7 @@ async function renderDocument(options: {
   mode?: 'source' | 'rich'
   deferSave?: boolean
   delayDraftWrites?: boolean
+  diskWritable?: boolean
   external?: EditorBufferInfo['external']
   draft?: string
 } = {}): Promise<Mounted> {
@@ -368,6 +370,27 @@ async function expectSaveRestoresFocus(mode: 'source' | 'rich'): Promise<void> {
   expect(surface.saveCalls).toHaveLength(1)
   expect(save.disabled).toBe(true)
   expect(document.activeElement === editor).toBe(true)
+}
+
+for (const dirty of [false, true]) {
+  test(`a deleted ${dirty ? 'dirty' : 'clean'} file offers recreation without claiming a permissions restriction`, async () => {
+    const surface = await renderDocument({ dirty, diskWritable: false, external: 'deleted' })
+
+    expect(surface.element.textContent).toContain('deleted on disk')
+    expect(surface.element.textContent).toContain('save can recreate')
+    expect(surface.element.textContent).not.toContain('OS permissions')
+    expect(buttonByText(surface.element, 'Save').disabled).toBe(false)
+  })
+}
+
+for (const external of [null, 'changed'] as const) {
+  test(`an existing unwritable file ${external ? 'with external changes' : 'without external changes'} explains the permissions restriction`, async () => {
+    const surface = await renderDocument({ dirty: true, diskWritable: false, external })
+
+    expect(surface.element.textContent).toContain('not writable')
+    expect(surface.element.textContent).toContain('OS permissions')
+    expect(surface.element.textContent).not.toContain('deleted on disk')
+  })
 }
 
 test('button Save restores focus to the source editor after saving', async () => {
