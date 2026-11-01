@@ -217,8 +217,9 @@ async function updateHostedDiffDirtyNow(context: UiPluginContext, input: DiffVie
   if (!input.tabId) return
   const workspace = await readWorkspace(context, input.worktree)
   const current = tabById(workspace, input.tabId)
+  if (!current || current.tab.viewId !== DIFF_VIEW_ID || current.tab.key !== diffViewKey(input)) return
   const title = titleOf(input, dirty)
-  if (!current || (current.tab.closeParams?.dirty === dirty && current.tab.title === title)) return
+  if (current.tab.closeParams?.dirty === dirty && current.tab.title === title) return
   const hostedInput = withHostedIdentity(input, {
     tabId: current.tab.id,
     groupId: current.group.id,
