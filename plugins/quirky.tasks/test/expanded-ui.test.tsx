@@ -10,6 +10,7 @@ type Event = { type: string; [key: string]: unknown }
 let act: (callback: () => unknown) => Promise<void>
 let activate: (context: UiPluginContext) => void
 let place: typeof import('../src/list/place').place
+let snapshotLimit: number
 let cleanup: (() => void) | null = null
 
 beforeAll(async () => {
@@ -17,14 +18,23 @@ beforeAll(async () => {
   ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
   act = (await import('react')).act as typeof act
   activate = (await import('../src/ui')).activate
-  place = (await import('../src/list/place')).place
+  const placeModule = await import('../src/list/place')
+  place = placeModule.place
+  snapshotLimit = placeModule.LIST_SNAPSHOT_LIMIT
 })
+
+/** Pushes every real snapshot out of the bounded store so one test's list never seeds the next. */
+function flushSnapshots() {
+  const empty = { list: { items: [], repositories: [], page: 1, totalPages: 1, perRepo: 0, failures: [], sources: {} }, checks: {}, merge: {} }
+  for (let index = 0; index < snapshotLimit; index++) place.setListSnapshot(`flush-${index}`, empty)
+}
 
 afterEach(async () => {
   await act(async () => cleanup?.())
   cleanup = null
   document.body.innerHTML = ''
   place.takeFocus()
+  flushSnapshots()
 })
 
 afterAll(async () => {
@@ -643,4 +653,200 @@ test('an edit made in the issue pane reloads the list so the row follows it', as
   expect(calls.find((call) => call.method === 'quirky.tasks/issueEdit')?.params).toEqual({ state: 'closed', stateReason: 'completed' })
   const reloads = calls.filter((call) => call.method === 'quirky.tasks/list').slice(before)
   expect(reloads.map((call) => call.params.noCache)).toEqual([true])
+})
+
+const tabLabels = (element: HTMLElement) => [...element.querySelectorAll('.ui-tool-panel-frame__header [role="tab"]')].map((tab) => tab.textContent)
+const countReads = (calls: Mounted['calls']) => calls.filter((call) => call.method === 'quirky.tasks/counts').length
+
+test('Escape closes the open merge menu and returns focus to its trigger, without touching the row or the tab', async () => {
+  const { element, calls } = await mountExpanded({ state: prDetailState() })
+  const trigger = button(detailColumn(element), 'Merge actions for PR #274')!
+  await click(trigger)
+  expect(detailColumn(element).querySelector('[role="menu"]')).not.toBeNull()
+  await press('Escape')
+  expect(detailColumn(element).querySelector('[role="menu"]')).toBeNull()
+  expect(trigger.getAttribute('aria-expanded')).toBe('false')
+  expect(document.activeElement).toBe(trigger)
+  expect(calls.some((call) => call.method === 'quirky.tasks/navigate')).toBe(false)
+  expect(calls.some((call) => call.method === 'ui.tool.open')).toBe(false)
+  await press('Escape')
+  expect(calls.filter((call) => call.method === 'quirky.tasks/navigate').at(-1)?.params).toEqual({ detail: null })
+})
+
+test('Escape closes the reviewers dialog from inside its text box and returns focus to its trigger', async () => {
+  const { element, calls } = await mountExpanded({ state: prDetailState() })
+  const trigger = detailColumn(element).querySelector<HTMLButtonElement>('button[aria-haspopup="dialog"]')!
+  await click(trigger)
+  const box = detailColumn(element).querySelector<HTMLTextAreaElement>('textarea[aria-label="Type or choose a reviewer"]')!
+  box.focus()
+  await press('Escape')
+  expect(detailColumn(element).querySelector('[role="dialog"]')).toBeNull()
+  expect(document.activeElement).toBe(trigger)
+  expect(calls.some((call) => call.method === 'quirky.tasks/navigate')).toBe(false)
+  expect(calls.some((call) => call.method === 'ui.tool.open')).toBe(false)
+  await press('Escape')
+  expect(calls.filter((call) => call.method === 'quirky.tasks/navigate').at(-1)?.params).toEqual({ detail: null })
+})
+
+test('Escape with the merge menu and the reviewers dialog both open closes the one that has focus first', async () => {
+  const { element } = await mountExpanded({ state: prDetailState() })
+  const mergeTrigger = button(detailColumn(element), 'Merge actions for PR #274')!
+  const reviewersTrigger = detailColumn(element).querySelector<HTMLButtonElement>('button[aria-haspopup="dialog"]')!
+  await click(reviewersTrigger)
+  await click(mergeTrigger)
+  mergeTrigger.focus()
+  await press('Escape')
+  expect(detailColumn(element).querySelector('[role="menu"]')).toBeNull()
+  expect(detailColumn(element).querySelector('[role="dialog"]')).not.toBeNull()
+  await press('Escape')
+  expect(detailColumn(element).querySelector('[role="dialog"]')).toBeNull()
+})
+
+test('Copy link in the PR detail copies the pull request URL through the copy-link command', async () => {
+  const { element, commands } = await mountExpanded({ state: prDetailState() })
+  await click(button(detailColumn(element), 'Copy link'))
+  expect(commands).toEqual([{ id: 'command:quirky.tasks/copy-link', args: { url: 'https://github.com/acme/quirky/pull/274' } }])
+})
+
+test('Refresh reads the tab counts again', async () => {
+  let prs = 5
+  const { element, calls } = await mountExpanded({ handlers: { 'quirky.tasks/counts': () => ({ issues: 12, prs }) } })
+  const before = countReads(calls)
+  prs = 6
+  await click(button(element, 'Refresh GitHub work'))
+  expect(countReads(calls)).toBe(before + 1)
+  expect(tabLabels(element)).toEqual(['Issues12', 'PRs6', 'Projects'])
+})
+
+test('a successful merge reads the tab counts again, and a failed one does not', async () => {
+  let prs = 5
+  let fail = true
+  const { element, calls } = await mountExpanded({
+    state: prDetailState(),
+    handlers: {
+      'quirky.tasks/counts': () => ({ issues: 12, prs }),
+      'quirky.tasks/row': () => { if (fail) throw new Error('merge rejected'); return { kind: 'merged' } }
+    }
+  })
+  const before = countReads(calls)
+  await click(button(detailColumn(element), 'Merge actions for PR #274'))
+  await click(menuItems(detailColumn(element))[0])
+  expect(countReads(calls)).toBe(before)
+  fail = false
+  prs = 4
+  await click(button(detailColumn(element), 'Merge actions for PR #274'))
+  await click(menuItems(detailColumn(element))[0])
+  expect(countReads(calls)).toBeGreaterThan(before)
+  expect(tabLabels(element)).toEqual(['Issues12', 'PRs4', 'Projects'])
+})
+
+test('an issue status edit from the pane reads the tab counts again', async () => {
+  const { element, calls } = await mountExpanded({
+    state: withNavigation({ ...issuesNavigation, detail: target(issue(281)) }),
+    handlers: { 'quirky.tasks/issueEdit': () => ({ item: { ...issue(281), state: 'closed' } }) }
+  })
+  const before = countReads(calls)
+  const select = detailColumn(element).querySelector<HTMLSelectElement>('select[aria-label="Issue status"]')!
+  await act(async () => {
+    select.value = 'closed-completed'
+    select.dispatchEvent(new Event('change', { bubbles: true }))
+  })
+  await settle()
+  expect(countReads(calls)).toBeGreaterThan(before)
+})
+
+test('a counts read that a newer one superseded does not overwrite it', async () => {
+  const pending: ((value: unknown) => void)[] = []
+  let reads = 0
+  const { element } = await mountExpanded({
+    handlers: { 'quirky.tasks/counts': () => { reads += 1; return reads === 1 ? new Promise((resolve) => pending.push(resolve)) : { issues: 12, prs: 7 } } }
+  })
+  await click(button(element, 'Refresh GitHub work'))
+  expect(tabLabels(element)).toEqual(['Issues12', 'PRs7', 'Projects'])
+  await act(async () => pending[0]!({ issues: 1, prs: 1 }))
+  await settle()
+  expect(tabLabels(element)).toEqual(['Issues12', 'PRs7', 'Projects'])
+})
+
+const prsKey = ['github', 'prs', '*', 'is:open', 1].join('\u0000')
+
+async function seedSnapshot(items: unknown[], extra: { merge?: Record<string, unknown> } = {}) {
+  const { parseListResult } = await import('../src/list/model')
+  place.setListSnapshot(prsKey, { list: parseListResult(listResult(items))!, checks: {}, merge: (extra.merge ?? {}) as never })
+}
+
+const pending = () => new Promise(() => {})
+
+test('mounting with a snapshot shows its rows with no skeleton and still reads the list', async () => {
+  await seedSnapshot([pr(274), pr(275)])
+  const { element, calls } = await mountExpanded({ handlers: { 'quirky.tasks/list': pending } })
+  expect(rowTitles(element)).toEqual(['Pull request 274', 'Pull request 275'])
+  expect(element.querySelector('[aria-label="Loading GitHub tasks"]')).toBeNull()
+  expect(calls.filter((call) => call.method === 'quirky.tasks/list')).toHaveLength(1)
+})
+
+test('the list read replaces a snapshot without skeletons', async () => {
+  await seedSnapshot([pr(274)])
+  const { element } = await mountExpanded({ handlers: { 'quirky.tasks/list': () => listResult([pr(274), pr(280)]) } })
+  expect(rowTitles(element)).toEqual(['Pull request 274', 'Pull request 280'])
+  expect(element.querySelector('[aria-label="Loading GitHub tasks"]')).toBeNull()
+})
+
+test('without a snapshot the list shows skeletons while it loads', async () => {
+  const { element } = await mountExpanded({ handlers: { 'quirky.tasks/list': pending } })
+  expect(element.querySelector('[aria-label="Loading GitHub tasks"]')).not.toBeNull()
+})
+
+test('a snapshot restores the open row, its highlight and focus on the first render', async () => {
+  await seedSnapshot([pr(274), pr(275)])
+  const { element } = await mountExpanded({ state: prDetailState(275), beforeMount: () => place.requestFocus('row'), handlers: { 'quirky.tasks/list': pending } })
+  expect([...element.querySelectorAll('.tasks-list__list .ui-list-row')].map((row) => row.classList.contains('ui-list-row--selected'))).toEqual([false, true])
+  expect(document.activeElement).toBe(rowButtons(element)[1]!)
+})
+
+test('merge metadata from a snapshot is read again, and merging waits for the fresh read', async () => {
+  const key = ['wt-main', 'pullRequest', 274, 'https://github.com/acme/quirky/pull/274'].join('\u0000')
+  await seedSnapshot([pr(274)], { merge: { [key]: metadata() } })
+  const { element, calls, confirms } = await mountExpanded({ state: prDetailState(), handlers: { 'quirky.tasks/mergeMetadata': pending, 'quirky.tasks/row': () => ({ kind: 'merged' }) } })
+  expect(calls.filter((call) => call.method === 'quirky.tasks/mergeMetadata' && (call.params.target as { number: number }).number === 274)).toHaveLength(1)
+  await click(button(detailColumn(element), 'Merge actions for PR #274'))
+  await click(menuItems(detailColumn(element))[0])
+  expect(confirms).toEqual([])
+  expect(calls.some((call) => call.method === 'quirky.tasks/row')).toBe(false)
+})
+
+test('a loaded list is saved as the snapshot for its view key', async () => {
+  const { element } = await mountExpanded()
+  expect(rowTitles(element)).toHaveLength(2)
+  expect(place.listSnapshot(prsKey)?.list.items.map((item) => item.number)).toEqual([274, 275])
+})
+
+test('a pull request with no row and no metadata yet shows one loading line and no controls', async () => {
+  const { element } = await mountExpanded({ state: withNavigation({ detail: target(pr(276)) }), handlers: { 'quirky.tasks/mergeMetadata': pending } })
+  const pane = detailColumn(element)
+  expect(pane.querySelector('[role="status"]')?.textContent).toBe('Loading pull request…')
+  expect(pane.textContent).not.toContain('unknown')
+  expect(pane.textContent).not.toContain('Pull request #276 ')
+  expect(pane.querySelector('h2')).toBeNull()
+  expect(pane.querySelector('.ui-badge')).toBeNull()
+  expect(button(pane, 'Review')).toBeUndefined()
+  expect(pane.querySelector('[aria-haspopup]')).toBeNull()
+})
+
+test('a pull request whose state is not known yet shows no state badge', async () => {
+  const { element } = await mountExpanded({
+    state: prDetailState(),
+    handlers: { 'quirky.tasks/list': () => listResult([pr(274, { state: 'unknown' })]), 'quirky.tasks/mergeMetadata': pending }
+  })
+  const pane = detailColumn(element)
+  expect(pane.querySelector('h2')?.textContent).toBe('Pull request 274')
+  expect(pane.textContent).not.toContain('unknown')
+})
+
+test('a pull request that could not be loaded says so and offers Retry', async () => {
+  const { element } = await mountExpanded({ state: withNavigation({ detail: target(pr(276)) }), handlers: { 'quirky.tasks/mergeMetadata': () => { throw new Error('GitHub is down') } } })
+  const pane = detailColumn(element)
+  expect(pane.textContent).toContain('Could not load pull request #276: GitHub is down')
+  expect(button(pane, 'Retry')).toBeDefined()
+  expect(button(pane, 'Review')).toBeUndefined()
 })

@@ -235,7 +235,7 @@ export function CompactTasks({ context, report }: { context: UiPluginContext; re
             selected={isOpenRow(item, navigation!.detail)}
             onClick={() => void openRow(item)}
             trailing={<>
-              <IconButton label={`${primary.label} for #${item.number}`} title={primary.label} onClick={primary.run}><span aria-hidden="true">▶</span></IconButton>
+              <IconButton label={`${primary.label} for #${item.number}`} title={primary.label} onClick={primary.run}><ControlIcon name="play" /></IconButton>
               <Menu label={`More actions for #${item.number}`} trigger={<ControlIcon name="dots-three" />} items={actions.map((action) => ({ id: action.id, label: action.label, onAction: action.run }))} />
             </>}
           />

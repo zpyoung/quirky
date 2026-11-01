@@ -34,7 +34,7 @@ Tech stack: Bun, React 19 with `createRoot` per mount, `@quirky/ui` shared compo
 | `LayoutService` construction or first layout read | `packages/daemon/src/plugins/layout.ts` | Normalize a stored layout that has both open, once at load |
 | `TASKS_TOOL` (new constant) | `plugins/quirky.tasks/src/contracts.ts` | `'sidebar-section:quirky.tasks/tasks'` |
 | `currentTasksToolState` | `plugins/quirky.tasks/src/env.ts:121` | Find the tool by `entry.id === TASKS_TOOL`, not by `contributionId === TASKS_VIEW` |
-| `env.navigate` | `plugins/quirky.tasks/src/env.ts:191` | Applies the [navigation contract](#tasks-daemon-contract) |
+| `env.navigate` | `plugins/quirky.tasks/src/env.ts:189` | Applies the [navigation contract](#tasks-daemon-contract) |
 | `coreMethods.open`, `close`, `restoreTasksCenterFromSettings` | `plugins/quirky.tasks/src/env.ts:235,280,142` | Apply the [entry rules](#tasks-daemon-contract) |
 | `TaskNavigation` | `plugins/quirky.tasks/src/contracts.ts:93` | Add `lastList` |
 | `validateNavigation`, `defaultState` | `plugins/quirky.tasks/src/env.ts` | Accept and default `lastList` |
@@ -93,7 +93,7 @@ TaskNavigation.lastList: { mode: 'issues' | 'prs', query: string, page: number }
 ```
 
 - `lastList` starts as `{ mode: 'issues', query: 'is:issue is:open', page: 1 }`, and the first `open` sets it from the default preset. After every update where the resulting `mode` isn't `projects`, it equals that mode, query and page. It's session state, like the rest of navigation, and isn't persisted.
-- `navigate(patch)` updates state and returns it. It changes layout only when `TASKS_VIEW` is the active view, where it republishes the view input as today. It never opens or closes a tab or slot. This is what keeps the phone's `quirky.tasks/navigate` calls from opening anything on the desktop.
+- `navigate(patch)` updates state and returns it, and it never touches layout. The UI reads live state from `quirky.tasks/state`, so nothing needs the view input republished. This is what keeps the phone's `quirky.tasks/navigate` calls from opening anything on the desktop, and it stops a slow call from reopening a tab the user just collapsed.
 - `prepare()` is a new method that applies the first-open defaults once and returns the state: `defaultTaskViewPreset`, `defaultRepoSelection` and `lastList`. The `opened` flag moves out of the `open` closure so `open` and `prepare` share it. Both mounts call `prepare` once on mount, because the stripe opens the panel through `ui.tool.open` and never reaches `open`. It changes no layout. It adds a `cli-command` entry like other methods.
 - `open(params)`:
   - Applies the first-open defaults once through the same path, as today. A later `open` applies only `params` and no longer clears `detail`, so a plain open keeps your place.
@@ -202,6 +202,8 @@ place.takeFocus(): 'row' | 'collapse' | 'expand' | null
 
 A module-level store in `list/place.ts`, living as long as the window's plugin UI module, because a `createRoot` remount loses component state and writing scroll to the daemon on every scroll would churn revisions. `viewKey` is the existing `currentKey` shape. `navigation.scrollTop` keeps its current behavior and is not used for this.
 
+- `place.listSnapshot(key)` and `place.setListSnapshot(key, { list, checks, merge })` hold the last list and row metadata per view, bounded to 20 views, with the key from `listViewKey` in `list/model.ts`. Both forms seed from it on mount and revalidate in the background, showing skeletons only when there's no snapshot, so moving between forms doesn't drop your rows.
+- Seeded merge metadata is display-only. `mergeItem` and `toggleAutoMerge` refuse to act until a fresh read lands, so a merge can't run from a snapshot.
 - Expand and row click request focus on `row`, which lands on the selected row or the first row.
 - Collapse requests `row`. The compact mount scrolls the selected row into view and focuses it once rows render.
 

@@ -1,6 +1,6 @@
 import { afterEach, expect, test } from 'bun:test'
 import { bootTasks, type TasksTest } from './helpers'
-import { RpcErrorCode, type PluginContext, type UiLayout, type UiToolSlot } from '@quirky/protocol'
+import { type PluginContext, type UiLayout, type UiToolSlot } from '@quirky/protocol'
 import { TASKS_SETTINGS_VIEW, TASKS_VIEW, type TasksState } from '../src/contracts'
 import { createTasksEnv } from '../src/env'
 
@@ -82,7 +82,7 @@ test('a plain open brings a background Tasks tab forward instead of opening the 
   expect(toolOpen(layout)).toBe(false)
 }, 20_000)
 
-test('navigate never opens or closes anything, and republishes only while the tab is active', async () => {
+test('navigate never opens, closes or republishes anything, with the tab active or not', async () => {
   const run = await bootWithCenter()
   const before = await layoutOf(run)
   await run.call('navigate', { mode: 'prs', query: 'is:pr is:open', page: 2 })
@@ -94,18 +94,16 @@ test('navigate never opens or closes anything, and republishes only while the ta
   expect(await layoutOf(run)).toEqual(withPanel)
 
   await run.call('open', { detail: target(run) })
-  const revision = ((await run.call('state')) as TasksState).revision
+  const withTab = await layoutOf(run)
   await run.call('navigate', { page: 4 })
-  let layout = await layoutOf(run)
-  expect(layout.view?.input).toMatchObject({ navigation: { page: 4 }, revision: revision + 1 })
+  expect(await layoutOf(run)).toEqual(withTab)
+  expect(((await run.call('state')) as TasksState).navigation.page).toBe(4)
 
   await run.client.callAny('ui.view.open', { id: REVIEW_VIEW })
   const behind = await layoutOf(run)
   await run.call('navigate', { page: 5 })
-  layout = await layoutOf(run)
-  expect(layout.view).toEqual(behind.view)
-  expect(layout.viewTabs).toEqual(behind.viewTabs)
-  expect(layout.viewTabs?.find(({ id }) => id === TASKS_VIEW)?.input).toMatchObject({ navigation: { page: 4 } })
+  expect(await layoutOf(run)).toEqual(behind)
+  expect(((await run.call('state')) as TasksState).navigation.page).toBe(5)
 }, 30_000)
 
 test('lastList follows every issues or PRs state and ignores Projects', async () => {
@@ -311,54 +309,27 @@ test('reactivation retains preferences but not transient navigation, and reopeni
 }, 20_000)
 
 
-type ViewOpen = { id: string; input: { revision: number } }
-
-/** A context whose layout shows the Tasks tab; `open` handles each ui.view.open and `stateDelays` slows successive ui.state reads. */
-function stubbedContext(open: (params: ViewOpen) => Promise<unknown>, stateDelays: number[] = []): PluginContext {
-  let stateReads = 0
+/** A context whose layout shows the Tasks tab and which records every call it receives. */
+function stubbedContext(calls: string[]): PluginContext {
   return {
     openStore: () => ({ get: () => undefined, run: () => undefined }),
     getSetting: () => undefined,
     emit: () => true,
     error: (_kind: string, message: string) => new Error(message),
-    async call(method: string, params: Record<string, unknown> = {}) {
-      if (method === 'ui.state') {
-        const delay = stateDelays[stateReads++] ?? 0
-        await new Promise((resolve) => setTimeout(resolve, delay))
-        return { layout: { view: { id: TASKS_VIEW } } }
-      }
+    async call(method: string) {
+      calls.push(method)
+      if (method === 'ui.state') return { layout: { view: { id: TASKS_VIEW } } }
       if (method === 'ui.contributions') return {}
-      if (method === 'ui.view.open') return open(params as unknown as ViewOpen)
       throw new Error(`unexpected call ${method}`)
     }
   } as unknown as PluginContext
 }
 
-test('overlapping navigates leave the view input at the daemon revision', async () => {
-  const published: number[] = []
-  const env = createTasksEnv(stubbedContext(async ({ input }) => { published.push(input.revision) }, [40, 0]))
-  await Promise.all([env.navigate({ page: 2 }), env.navigate({ page: 3 })])
-  expect(published.at(-1)).toBe(env.read().revision)
-  expect(env.read().revision).toBe(2)
-})
-
-test('overlapping navigates against the daemon leave the open tab at the current revision', async () => {
-  const run = await boot()
-  await run.call('open', { detail: target(run) })
-  await Promise.all([run.call('navigate', { page: 2 }), run.call('navigate', { page: 3 }), run.call('navigate', { page: 4 })])
-  const state = await run.call('state') as TasksState
-  expect((await layoutOf(run)).view?.input).toMatchObject({ revision: state.revision })
-}, 20_000)
-
-test('navigate keeps its state change when several windows are open', async () => {
-  const conflict = Object.assign(new Error('multiple Quirky windows are open; specify connId'), { code: RpcErrorCode.Conflict })
-  const env = createTasksEnv(stubbedContext(async () => { throw conflict }))
+test('navigate with the Tasks tab active updates state and makes no layout call', async () => {
+  const calls: string[] = []
+  const env = createTasksEnv(stubbedContext(calls))
   const result = await env.navigate({ page: 2 })
   expect(result.navigation.page).toBe(2)
   expect(env.read().navigation.page).toBe(2)
-})
-
-test('navigate still rejects when the view republish fails for another reason', async () => {
-  const env = createTasksEnv(stubbedContext(async () => { throw Object.assign(new Error('boom'), { code: RpcErrorCode.Internal }) }))
-  await expect(env.navigate({ page: 2 })).rejects.toThrow('boom')
+  expect(calls.filter((method) => method.startsWith('ui.'))).toEqual([])
 })

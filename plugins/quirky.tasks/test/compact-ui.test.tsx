@@ -10,6 +10,7 @@ type Event = { type: string; [key: string]: unknown }
 let act: (callback: () => unknown) => Promise<void>
 let activate: (context: UiPluginContext) => void
 let place: typeof import('../src/list/place').place
+let snapshotLimit: number
 let cleanup: (() => void) | null = null
 
 beforeAll(async () => {
@@ -17,14 +18,23 @@ beforeAll(async () => {
   ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
   act = (await import('react')).act as typeof act
   activate = (await import('../src/ui')).activate
-  place = (await import('../src/list/place')).place
+  const placeModule = await import('../src/list/place')
+  place = placeModule.place
+  snapshotLimit = placeModule.LIST_SNAPSHOT_LIMIT
 })
+
+/** Pushes every real snapshot out of the bounded store so one test's list never seeds the next. */
+function flushSnapshots() {
+  const empty = { list: { items: [], repositories: [], page: 1, totalPages: 1, perRepo: 0, failures: [], sources: {} }, checks: {}, merge: {} }
+  for (let index = 0; index < snapshotLimit; index++) place.setListSnapshot(`flush-${index}`, empty)
+}
 
 afterEach(async () => {
   await act(async () => cleanup?.())
   cleanup = null
   document.body.innerHTML = ''
   place.takeFocus()
+  flushSnapshots()
 })
 
 afterAll(async () => {
@@ -497,4 +507,63 @@ test('a change that leaves the effective list alone does not reload it', async (
   current = { ...prsState, revision: 9, navigation: { ...prsState.navigation, scrollTop: 40 } }
   await emit({ type: 'quirky.tasks/changed', revision: 9 })
   expect(calls.filter((call) => call.method === 'quirky.tasks/list')).toHaveLength(1)
+})
+
+const prsKey = ['github', 'prs', '*', 'is:pr is:open', 1].join('\u0000')
+
+async function seedSnapshot(items: unknown[], extra: { checks?: Record<string, unknown>; merge?: Record<string, unknown> } = {}) {
+  const { parseListResult } = await import('../src/list/model')
+  place.setListSnapshot(prsKey, { list: parseListResult(listResult(items))!, checks: (extra.checks ?? {}) as never, merge: (extra.merge ?? {}) as never })
+}
+
+const never = () => new Promise(() => {})
+
+test('mounting with a snapshot shows its rows with no skeleton and still reads the list', async () => {
+  await seedSnapshot([pr(274), pr(275)])
+  const { element, calls } = await mountCompact({ handlers: { 'quirky.tasks/list': never } })
+  expect(rowTitles(element)).toEqual(['Pull request 274', 'Pull request 275'])
+  expect(element.querySelector('.tasks-compact__skeleton')).toBeNull()
+  expect(calls.filter((call) => call.method === 'quirky.tasks/list')).toHaveLength(1)
+})
+
+test('the list read replaces a snapshot without showing skeletons on the way', async () => {
+  await seedSnapshot([pr(274)])
+  const { element } = await mountCompact({ handlers: { 'quirky.tasks/list': () => listResult([pr(274), pr(280)]) } })
+  expect(rowTitles(element)).toEqual(['Pull request 274', 'Pull request 280'])
+  expect(element.querySelector('.tasks-compact__skeleton')).toBeNull()
+})
+
+test('a snapshot is only used for the view it was saved for', async () => {
+  place.setListSnapshot(['github', 'prs', '*', 'is:pr label:other', 1].join('\u0000'), { list: { items: [], repositories: [], page: 1, totalPages: 1, perRepo: 0, failures: [], sources: {} }, checks: {}, merge: {} })
+  const { element } = await mountCompact({ handlers: { 'quirky.tasks/list': never } })
+  expect(element.querySelector('[role="status"][aria-label="Loading tasks"]')).not.toBeNull()
+})
+
+test('a snapshot keeps its row dots until the details are read again', async () => {
+  await seedSnapshot([pr(274), pr(275, { author: 'zach' })], { checks: { [['wt-main', 'pullRequest', 275, 'https://github.com/acme/quirky/pull/275'].join('\u0000')]: { rollup: 'failure', checks: [{ name: 'a', conclusion: 'failure' }, { name: 'b', conclusion: 'failure' }], partial: false, partialFailures: [] } } })
+  const { element } = await mountCompact({ handlers: { 'quirky.tasks/list': never, 'quirky.tasks/checks': never, 'quirky.tasks/mergeMetadata': never } })
+  expect(rowDescriptions(element)[1]).toBe('#275 · quirky · 2 checks failing')
+})
+
+test('collapsing with a snapshot focuses and highlights the open row on the first render', async () => {
+  await seedSnapshot([pr(274), pr(275)])
+  const detail = { worktree: 'wt-main', kind: 'pullRequest' as const, number: 275, url: 'https://github.com/acme/quirky/pull/275' }
+  place.requestFocus('row')
+  const { element } = await mountCompact({ state: withNavigation({ detail }), handlers: { 'quirky.tasks/list': never } })
+  const selected = element.querySelector('.ui-list-row--selected')!
+  expect(selected.querySelector('.ui-list-row__title')!.textContent).toBe('Pull request 275')
+  expect(document.activeElement).toBe(selected.querySelector('.ui-list-row__main'))
+})
+
+test('a loaded list is saved as the snapshot for its view key', async () => {
+  const { element } = await mountCompact()
+  expect(rowTitles(element)).toHaveLength(2)
+  expect(place.listSnapshot(prsKey)?.list.items.map((item) => item.number)).toEqual([274, 275])
+})
+
+test('the Start button is an icon, not a text glyph', async () => {
+  const { element } = await mountCompact()
+  const start = button(element, 'Start workspace for #274')!
+  expect(start.querySelector('svg, .ui-control-icon')).not.toBeNull()
+  expect(start.textContent).not.toContain('▶')
 })

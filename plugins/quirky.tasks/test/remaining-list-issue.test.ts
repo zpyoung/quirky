@@ -322,8 +322,7 @@ test('sticky all includes repositories added later and API, CLI, and visible nav
   const state = taskState(await host.call('state'))
   expect(state.preferences.defaultRepoSelection).toBeNull()
   expect(state.navigation.repoIds).toBeNull()
-  const visible = record(await host.client.callAny('ui.state', {}))
-  expect(record(record(visible.layout).view).input).toMatchObject({ navigation: { repoIds: null } })
+  expect(taskState(await host.call('state')).navigation).toMatchObject({ repoIds: null })
 }, 30_000)
 
 test('an explicit saved repository survives a temporary Beta deep link in API, CLI, and visible navigation', async () => {
@@ -347,11 +346,10 @@ test('an explicit saved repository survives a temporary Beta deep link in API, C
   const cli = await host.cli(['--json', 'tasks', 'list', '--worktree', host.worktree, '--mode', 'issues', '--query', 'is:issue is:open'])
   expect(cli).toMatchObject({ code: 0, stderr: '' })
   expect(new Set(repoIds(JSON.parse(cli.stdout)))).toEqual(new Set([betaId]))
-  const visible = record(await host.client.callAny('ui.state', {}))
-  expect(record(record(visible.layout).view).input).toMatchObject({ navigation: { repoIds: [betaId] } })
+  expect(taskState(await host.call('state')).navigation).toMatchObject({ repoIds: [betaId] })
 }, 30_000)
 
-test('changing Tasks mode clears an old issue target before publishing the new view', async () => {
+test('changing Tasks mode clears an old issue target in the navigation state', async () => {
   const host = await bootTasks(listFixtureSource)
   hosts.push(host)
   const target = { worktree: host.worktree, kind: 'issue', number: 7, url: 'https://github.com/test-owner/test-repo/issues/7' }
@@ -360,8 +358,7 @@ test('changing Tasks mode clears an old issue target before publishing the new v
   await host.call('navigate', { mode: 'prs' })
   const state = taskState(await host.call('state'))
   expect(state.navigation).toMatchObject({ mode: 'prs', query: 'is:pr is:open', detail: null })
-  const visible = record(await host.client.callAny('ui.state', {}))
-  expect(record(record(visible.layout).view).input).toMatchObject({ navigation: { mode: 'prs', detail: null } })
+  expect(taskState(await host.call('state')).navigation).toMatchObject({ mode: 'prs', detail: null })
 }, 20_000)
 
 test('queued PR outcomes remain open, and auto-merge enable/disable outcomes remain distinct from merge', async () => {

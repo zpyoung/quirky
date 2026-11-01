@@ -120,6 +120,14 @@ export function parseSource(value: unknown): ListSource {
   }
 }
 
+/**
+ * The key of one list view. The compact panel and the expanded list both build it here, so the
+ * same view has the same place memory and snapshot in either form.
+ */
+export function listViewKey(view: { source: string; mode: string; repoIds: readonly string[] | null; query: string; page: number }): string {
+  return `${view.source}\u0000${view.mode}\u0000${view.repoIds === null ? '*' : view.repoIds.join(',')}\u0000${view.query}\u0000${view.page}`
+}
+
 export function rowKey(item: Pick<ListItem, 'worktree' | 'kind' | 'number' | 'url'>): string {
   return `${item.worktree}\u0000${item.kind}\u0000${item.number}\u0000${item.url}`
 }

@@ -519,11 +519,13 @@ export function IssueSurface(props: TasksSurfaceProps) {
         <div className="quirky-tasks-issue__title-group">
           <h1 className="quirky-tasks-issue__title">{title}</h1>
           <div className="quirky-tasks-issue__meta">
-            <Badge tone={item?.state === 'closed' ? 'neutral' : 'working'} label={`Issue state: ${stateLabel}`}>{stateLabel}</Badge>
-            <span>{author} opened this issue</span>
-            <span aria-hidden="true">·</span>
-            <span title={item?.updatedAt ?? undefined}>updated {relativeTime(item?.updatedAt ?? null)}</span>
-            <span aria-hidden="true">·</span>
+            {item && <>
+              <Badge tone={item.state === 'closed' ? 'neutral' : 'working'} label={`Issue state: ${stateLabel}`}>{stateLabel}</Badge>
+              <span>{author} opened this issue</span>
+              <span aria-hidden="true">·</span>
+              <span title={item.updatedAt ?? undefined}>updated {relativeTime(item.updatedAt)}</span>
+              <span aria-hidden="true">·</span>
+            </>}
             <span>{detail?.source === 'project' ? 'GitHub Project item' : issueSourceLabel || 'GitHub issue source'}</span>
           </div>
         </div>

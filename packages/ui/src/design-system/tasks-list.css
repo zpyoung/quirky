@@ -12,13 +12,15 @@
 .quirky-tasks .tasks-list__controls {
   display: grid;
   flex: 0 0 auto;
-  gap: var(--ui-space-12);
+  gap: var(--ui-space-8);
   min-width: 0;
 }
 
+.quirky-tasks .tasks-list__source,
 .quirky-tasks .tasks-list__context,
 .quirky-tasks .tasks-list__repository-controls,
 .quirky-tasks .tasks-list__toolbar,
+.quirky-tasks .tasks-list__presets,
 .quirky-tasks .tasks-list__filter-pills {
   align-items: center;
   display: flex;
@@ -27,10 +29,15 @@
   min-width: 0;
 }
 
-.quirky-tasks .tasks-list__context {
+.quirky-tasks .tasks-list__source {
   border-block-end: var(--ui-border-width) solid var(--ui-border);
+  justify-content: space-between;
+  padding-block-end: var(--ui-space-8);
+}
+
+.quirky-tasks .tasks-list__context {
   color: var(--ui-muted);
-  padding-block: var(--ui-space-8);
+  flex: 1 1 auto;
 }
 
 .quirky-tasks .tasks-list__repo-picker {
@@ -62,6 +69,18 @@
 .quirky-tasks .tasks-list__toolbar .ui-text-field {
   flex: 1 1 var(--compat-px-240);
   min-width: var(--compat-px-180);
+}
+
+.quirky-tasks .tasks-list__toolbar .ui-text-field__label {
+  border: 0;
+  clip-path: inset(50%);
+  height: var(--ui-border-width);
+  margin: 0;
+  overflow: hidden;
+  padding: 0;
+  position: absolute;
+  white-space: nowrap;
+  width: var(--ui-border-width);
 }
 
 .quirky-tasks .tasks-list__search-input {
@@ -214,6 +233,24 @@
   flex-direction: column;
   font-size: var(--ui-font-label);
   padding-inline-end: var(--ui-space-4);
+}
+
+[data-panel-focused] .quirky-tasks .tasks-list__row .ui-list-row--selected,
+[data-panel-focused] .quirky-tasks .tasks-list__row .ui-list-row--selected:hover:not([aria-disabled="true"]) {
+  background: var(--ui-accent);
+  color: var(--ui-rail);
+}
+
+[data-panel-focused] .quirky-tasks .tasks-list__row .ui-list-row--selected .ui-list-row__trailing,
+[data-panel-focused] .quirky-tasks .tasks-list__row .ui-list-row--selected .ui-list-row__description {
+  color: inherit;
+}
+
+[data-panel-focused] .quirky-tasks .tasks-list__row .ui-list-row--selected .tasks-list__checks--danger,
+[data-panel-focused] .quirky-tasks .tasks-list__row .ui-list-row--selected .tasks-list__checks--warning,
+[data-panel-focused] .quirky-tasks .tasks-list__row .ui-list-row--selected .tasks-list__checks--success,
+[data-panel-focused] .quirky-tasks .tasks-list__row .ui-list-row--selected .tasks-list__age {
+  color: inherit;
 }
 
 .quirky-tasks .tasks-list__checks--danger {

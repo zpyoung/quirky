@@ -9,7 +9,7 @@ import { queryForKind } from './search'
 import { useAgentActivity } from './useAgentActivity'
 import {
   checkResult, checkSummary, countFilters, currentPreset, errorMessage, filterPills, filtersFromQuery, mergeMeta,
-  normalizedPreset, object, optionalLogins, parseListResult, parseSource, presetQuery, relativeTime, replaceFilters, reviewAuthors,
+  listViewKey, normalizedPreset, object, optionalLogins, parseListResult, parseSource, presetQuery, relativeTime, replaceFilters, reviewAuthors,
   reviewState, rowKey, rowTarget, strings,
   type CheckResult, type ListData, type ListItem, type ListSource, type MergeMetadata, type Preset
 } from './model'
@@ -90,10 +90,14 @@ function linkedWorktree(item: ListItem): string | undefined {
  * `initialFocus` says whether the mount that created this view asked for focus on a row; left undefined,
  * the list asks the place memory itself.
  */
-export function TasksList({ context, state, refresh, initialFocus }: TasksSurfaceProps & { initialFocus?: boolean }) {
-  const [result, setResult] = useState<ListData | null>(null)
-  const [resultKey, setResultKey] = useState<string | null>(null)
-  const [loading, setLoading] = useState(true)
+export function TasksList({ context, state, refresh, initialFocus, onDataChanged }: TasksSurfaceProps & { initialFocus?: boolean; onDataChanged?: () => void }) {
+  const navigation = state.navigation
+  const mode = navigation.mode === 'prs' ? 'prs' : 'issues'
+  const currentKey = listViewKey({ source: navigation.source, mode, repoIds: navigation.repoIds, query: navigation.query, page: navigation.page })
+  const [seed] = useState(() => place.listSnapshot(currentKey))
+  const [result, setResult] = useState<ListData | null>(seed?.list ?? null)
+  const [resultKey, setResultKey] = useState<string | null>(seed ? currentKey : null)
+  const [loading, setLoading] = useState(seed === null)
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [searchDraft, setSearchDraft] = useState(state.navigation.query)
@@ -103,10 +107,10 @@ export function TasksList({ context, state, refresh, initialFocus }: TasksSurfac
   const [reviewerText, setReviewerText] = useState('')
   const [reviewerOptions, setReviewerOptions] = useState<Record<string, ReviewerOptions>>({})
   const [mergeFor, setMergeFor] = useState<string | null>(null)
-  const [mergeMetadata, setMergeMetadata] = useState<Record<string, MergeMetadata>>({})
+  const [mergeMetadata, setMergeMetadata] = useState<Record<string, MergeMetadata>>({ ...seed?.merge })
   const [mergeLoading, setMergeLoading] = useState<Record<string, boolean>>({})
   const [mergeErrors, setMergeErrors] = useState<Record<string, string>>({})
-  const [checks, setChecks] = useState<Record<string, CheckResult>>({})
+  const [checks, setChecks] = useState<Record<string, CheckResult>>({ ...seed?.checks })
   const [checksLoading, setChecksLoading] = useState<Record<string, boolean>>({})
   const [repoLabels, setRepoLabels] = useState<string[]>([])
   const [repoAssignees, setRepoAssignees] = useState<string[]>([])
@@ -118,6 +122,8 @@ export function TasksList({ context, state, refresh, initialFocus }: TasksSurfac
   const [viewer, setViewer] = useState<string | null>(null)
   const mergeMetadataRef = useRef(mergeMetadata)
   mergeMetadataRef.current = mergeMetadata
+  const seededMergeKeys = useRef(new Set(Object.keys(seed?.merge ?? {})))
+  const checksOwner = useRef(currentKey)
   const fetchGeneration = useRef(0)
   const latestKey = useRef('')
   const mutationGenerations = useRef(new Map<string, number>())
@@ -135,14 +141,11 @@ export function TasksList({ context, state, refresh, initialFocus }: TasksSurfac
   const viewerRequested = useRef(false)
   const activity = useAgentActivity(context)
 
-  const navigation = state.navigation
-  const mode = navigation.mode === 'prs' ? 'prs' : 'issues'
   const kind: ItemKind = mode === 'prs' ? 'pullRequest' : 'issue'
   const allRepoIds = result?.repositories.map((repo) => repo.id) ?? []
   const selectedRepoIds = navigation.repoIds === null ? allRepoIds : navigation.repoIds
   const selectedRepos = result?.repositories.filter((repo) => selectedRepoIds.includes(repo.id)) ?? []
   const filterRepoId = selectedRepos.length === 1 ? selectedRepos[0]!.id : null
-  const currentKey = `${navigation.source}\u0000${mode}\u0000${navigation.repoIds === null ? '*' : navigation.repoIds.join(',')}\u0000${navigation.query}\u0000${navigation.page}`
   if (viewKey.current !== currentKey) {
     viewKey.current = currentKey
     viewGeneration.current += 1
@@ -216,9 +219,11 @@ export function TasksList({ context, state, refresh, initialFocus }: TasksSurfac
   }, [loadList])
   useEffect(() => {
     checkTriggered.current.clear()
-    setChecks({})
     setChecksLoading({})
     setMergeLoading({})
+    if (checksOwner.current === currentKey) return
+    checksOwner.current = currentKey
+    setChecks({})
   }, [currentKey])
 
   useEffect(() => {
@@ -341,6 +346,10 @@ export function TasksList({ context, state, refresh, initialFocus }: TasksSurfac
   const issueSource = selectedRepos.length === 1 ? parseSource(visibleResult?.sources[selectedRepos[0]!.id]) : {}
   const openLink = (url: string) => {
     void context.executeCommand('command:quirky.tasks/open-link', { url }).catch((cause) => setError(errorMessage(cause)))
+  }
+
+  const copyLink = (url: string) => {
+    void context.executeCommand('command:quirky.tasks/copy-link', { url }).catch((cause) => setError(errorMessage(cause)))
   }
 
   const setBusy = (key: string, value: boolean) => setBusyRows((previous) => ({ ...previous, [key]: value }))
@@ -544,7 +553,7 @@ export function TasksList({ context, state, refresh, initialFocus }: TasksSurfac
   const loadMergeMetadata = useCallback(async (item: ListItem) => {
     const key = rowKey(item)
     const owner = `${currentViewGeneration}\u0000${currentKey}`
-    if (mergeMetadataRef.current[key] || mutationInFlight.current.has(key) || mergeReadOwners.current.get(key) === owner) return
+    if ((mergeMetadataRef.current[key] && !seededMergeKeys.current.has(key)) || mutationInFlight.current.has(key) || mergeReadOwners.current.get(key) === owner) return
     const generation = (mergeReadGenerations.current.get(key) ?? 0) + 1
     mergeReadGenerations.current.set(key, generation)
     mergeReadOwners.current.set(key, owner)
@@ -566,6 +575,7 @@ export function TasksList({ context, state, refresh, initialFocus }: TasksSurfac
       const result = mergeMeta(await context.call('quirky.tasks/mergeMetadata', { target: rowTarget(item) }))
       if (!result) throw new Error('GitHub returned no merge safety metadata.')
       if (ownsRead()) {
+        seededMergeKeys.current.delete(key)
         setMergeMetadata((previous) => ({ ...previous, [key]: result }))
         setMergeErrors((previous) => {
           if (!previous[key]) return previous
@@ -575,7 +585,10 @@ export function TasksList({ context, state, refresh, initialFocus }: TasksSurfac
         })
       }
     } catch (cause) {
-      if (ownsRead()) setMergeErrors((previous) => ({ ...previous, [key]: errorMessage(cause) }))
+      if (ownsRead()) {
+        if (seededMergeKeys.current.delete(key)) setMergeMetadata((previous) => Object.fromEntries(Object.entries(previous).filter(([entry]) => entry !== key)))
+        setMergeErrors((previous) => ({ ...previous, [key]: errorMessage(cause) }))
+      }
     } finally {
       if (mergeReadGenerations.current.get(key) === generation) {
         mergeReadOwners.current.delete(key)
@@ -623,6 +636,10 @@ export function TasksList({ context, state, refresh, initialFocus }: TasksSurfac
 
   const mergeItem = async (item: ListItem, method: string, mergeAction: 'direct' | 'queue') => {
     const key = rowKey(item)
+    if (seededMergeKeys.current.has(key)) {
+      setError('Merge metadata is refreshing. Try again in a moment.')
+      return
+    }
     const metadata = mergeMetadata[key]
     const review = metadata?.review
     const expectedHead = typeof review?.headRefOid === 'string' ? review.headRefOid : ''
@@ -655,6 +672,10 @@ export function TasksList({ context, state, refresh, initialFocus }: TasksSurfac
 
   const toggleAutoMerge = async (item: ListItem) => {
     const key = rowKey(item)
+    if (seededMergeKeys.current.has(key)) {
+      setError('Merge metadata is refreshing. Try again in a moment.')
+      return
+    }
     const metadata = mergeMetadata[key]
     const review = metadata?.review
     if (!review || typeof review.headRefOid !== 'string') {
@@ -873,6 +894,13 @@ export function TasksList({ context, state, refresh, initialFocus }: TasksSurfac
     if (initialFocus === undefined ? place.takeFocus() === 'row' : initialFocus) wantsFocus.current = true
   }, [])
 
+  useEffect(() => {
+    if (!visibleResult) return
+    const rowKeys = new Set(visibleResult.items.map(rowKey))
+    const only = <T,>(source: Record<string, T>) => Object.fromEntries(Object.entries(source).filter(([key]) => rowKeys.has(key)))
+    place.setListSnapshot(currentKey, { list: visibleResult, checks: only(checks), merge: only(mergeMetadata) })
+  }, [visibleResult, checks, mergeMetadata, currentKey])
+
   const hasLoadedRows = visibleResult !== null
   useEffect(() => {
     const element = listScroll.current
@@ -960,7 +988,7 @@ export function TasksList({ context, state, refresh, initialFocus }: TasksSurfac
 
   const renderRow = (item: ListItem) => {
     const key = rowKey(item)
-    const check = checkSummary(checks[key], checksLoading[key] === true)
+    const check = checkSummary(checks[key], checksLoading[key] === true && checks[key] === undefined)
     const when = relativeTime(item.updatedAt)
     const worktree = linkedWorktree(item)
     const resolved = rowStatus(item, { viewer, checks: checks[key], merge: mergeMetadata[key], activity: worktree === undefined ? undefined : activity.get(worktree) })
@@ -1022,12 +1050,13 @@ export function TasksList({ context, state, refresh, initialFocus }: TasksSurfac
           metadata={mergeMetadata[prKey]}
           metadataLoading={mergeLoading[prKey] === true}
           metadataError={mergeErrors[prKey]}
-          check={checkSummary(checks[prKey], checksLoading[prKey] === true)}
+          check={checkSummary(checks[prKey], checksLoading[prKey] === true && checks[prKey] === undefined)}
           busy={busyRows[prKey] === true}
           linkedName={linkedName(selectedPr)}
           merge={{
             open: mergeFor === prKey,
             onToggle: () => toggleMergeMenu(selectedPr),
+            onClose: () => setMergeFor(null),
             onMerge: (method, action) => void mergeItem(selectedPr, method, action),
             onToggleAutoMerge: () => void toggleAutoMerge(selectedPr)
           }}
@@ -1046,6 +1075,7 @@ export function TasksList({ context, state, refresh, initialFocus }: TasksSurfac
           onRetryMetadata={() => void loadMergeMetadata(selectedPr)}
           onWorkspace={(action, newWorkspace) => startWorkspace(selectedPr, action, newWorkspace)}
           onOpenLink={openLink}
+          onCopyLink={copyLink}
         />
       ) : null
 
@@ -1055,30 +1085,32 @@ export function TasksList({ context, state, refresh, initialFocus }: TasksSurfac
         {noGitHubRemote ? (
           <div role="status" className="tasks-list__empty"><EmptyState message={noGitHubRemoteMessage} /></div>
         ) : null}
-        <div className="tasks-list__context">
-          <span aria-label="Task source context">{hostContext} · {userLabel()} · {sourceContext}</span>
-          {selectedSourceValues.length > 1 ? <span>{selectedSourceValues.length} selected sources</span> : null}
-          {issueSource.issueSourcePreference === 'upstream' && issueSource.issueSourceFellBack ? <span role="status">Upstream source fell back to origin</span> : null}
-          {!showIssueSource && mode === 'issues' && selectedIssueSource === 'upstream' && hasOneRepo ? <span aria-label="Issues use upstream source">Issues from upstream</span> : null}
-        </div>
+        <div className="tasks-list__source">
+          <div className="tasks-list__context">
+            <span aria-label="Task source context">{hostContext} · {userLabel()} · {sourceContext}</span>
+            {selectedSourceValues.length > 1 ? <span>{selectedSourceValues.length} selected sources</span> : null}
+            {issueSource.issueSourcePreference === 'upstream' && issueSource.issueSourceFellBack ? <span role="status">Upstream source fell back to origin</span> : null}
+            {!showIssueSource && mode === 'issues' && selectedIssueSource === 'upstream' && hasOneRepo ? <span aria-label="Issues use upstream source">Issues from upstream</span> : null}
+          </div>
 
-        <div className="tasks-list__repository-controls">
-          <div className="tasks-list__repo-picker">
-            <Button type="button" aria-haspopup="listbox" aria-expanded={repoOpen} onClick={() => setRepoOpen((open) => !open)}>{repoButtonLabel} ▾</Button>
-            {repoOpen ? (
-              <div role="group" aria-label="Select repositories" className="tasks-list__repo-menu">
-                <label className="tasks-list__check-option">
-                  <input type="checkbox" checked={navigation.repoIds === null && allRepoIds.length > 0} onChange={(event) => void selectRepositories(event.currentTarget.checked ? allRepoIds : [])} />
-                  <span>All repositories</span>
-                </label>
-                {result?.repositories.filter((repo) => repo.kind === 'git' && repo.path.trim().length > 0).map((repo) => (
-                  <label key={repo.id} className="tasks-list__check-option">
-                    <input type="checkbox" checked={selectedSet.has(repo.id)} onChange={(event) => void selectRepositories(event.currentTarget.checked ? [...selectedRepoIds, repo.id] : selectedRepoIds.filter((id) => id !== repo.id))} />
-                    <span>{repo.displayName || repo.name}</span>
+          <div className="tasks-list__repository-controls">
+            <div className="tasks-list__repo-picker">
+              <Button type="button" aria-haspopup="listbox" aria-expanded={repoOpen} onClick={() => setRepoOpen((open) => !open)}>{repoButtonLabel} ▾</Button>
+              {repoOpen ? (
+                <div role="group" aria-label="Select repositories" className="tasks-list__repo-menu">
+                  <label className="tasks-list__check-option">
+                    <input type="checkbox" checked={navigation.repoIds === null && allRepoIds.length > 0} onChange={(event) => void selectRepositories(event.currentTarget.checked ? allRepoIds : [])} />
+                    <span>All repositories</span>
                   </label>
-                ))}
-              </div>
-            ) : null}
+                  {result?.repositories.filter((repo) => repo.kind === 'git' && repo.path.trim().length > 0).map((repo) => (
+                    <label key={repo.id} className="tasks-list__check-option">
+                      <input type="checkbox" checked={selectedSet.has(repo.id)} onChange={(event) => void selectRepositories(event.currentTarget.checked ? [...selectedRepoIds, repo.id] : selectedRepoIds.filter((id) => id !== repo.id))} />
+                      <span>{repo.displayName || repo.name}</span>
+                    </label>
+                  ))}
+                </div>
+              ) : null}
+            </div>
           </div>
         </div>
 
@@ -1123,7 +1155,7 @@ export function TasksList({ context, state, refresh, initialFocus }: TasksSurfac
               {kind === 'issue' ? <Button variant="primary" type="button" aria-label="New GitHub issue" disabled={selectedRepoIds.length === 0} onClick={() => void navigate({ newIssue: true })}>＋ New GitHub issue</Button> : null}
             </>
           ) : null}
-          <Button type="button" aria-label={refreshing ? 'Refreshing GitHub work' : 'Refresh GitHub work'} disabled={refreshing || selectedRepoIds.length === 0} onClick={() => void loadList(true, true)}>{refreshing ? 'Refreshing…' : 'Refresh'}</Button>
+          <Button type="button" aria-label={refreshing ? 'Refreshing GitHub work' : 'Refresh GitHub work'} disabled={refreshing || selectedRepoIds.length === 0} onClick={() => { void loadList(true, true); onDataChanged?.() }}>{refreshing ? 'Refreshing…' : 'Refresh'}</Button>
           <Menu label="Tasks options" trigger={<ControlIcon name="dots-three" />} items={toolbarItems} />
         </div>
 

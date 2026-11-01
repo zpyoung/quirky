@@ -39,21 +39,28 @@
   white-space: nowrap;
 }
 
-/* the actions overlay the row's end instead of taking width from the title, and stay focusable while hidden */
+/* the actions sit in the row's flow at zero width while hidden, so shown they take width from the text, and they stay focusable */
+.tasks-compact__row .ui-list-row { flex-wrap: nowrap; gap: 0; }
 .tasks-compact__row .ui-list-row__trailing {
-  position: absolute;
-  inset-block-start: 50%;
-  inset-inline-end: var(--ui-space-4);
-  transform: translateY(-50%);
+  width: 0;
+  overflow: clip;
   opacity: 0;
   pointer-events: none;
-  background: var(--ui-selected);
-  border-radius: var(--ui-radius-control);
 }
 .tasks-compact__row:hover .ui-list-row__trailing,
 .tasks-compact__row:focus-within .ui-list-row__trailing {
+  width: auto;
+  overflow: visible;
+  margin-inline-start: var(--ui-space-8);
   opacity: 1;
   pointer-events: auto;
+  background: var(--ui-selected);
+  border-radius: var(--ui-radius-control);
+}
+[data-panel-focused] .tasks-compact__row .ui-list-row--selected,
+[data-panel-focused] .tasks-compact__row .ui-list-row--selected:hover:not([aria-disabled="true"]) {
+  background: var(--ui-accent);
+  color: var(--ui-rail);
 }
 .tasks-compact__row .ui-icon-button, .tasks-compact__row .ui-menu__trigger {
   background: var(--ui-transparent);

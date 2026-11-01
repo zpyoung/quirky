@@ -103,9 +103,14 @@ function countOf(value: unknown): number | null {
   return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : null
 }
 
-/** Reads the Issues and PRs tab counts for the list the tabs sit over; an unreadable count stays null. */
-function useTabCounts(context: UiPluginContext, navigation: TasksState['navigation'] | null): TabCounts {
+/**
+ * Reads the Issues and PRs tab counts for the list the tabs sit over; an unreadable count stays null.
+ * `reload` reads them again, and a read superseded by a newer one never overwrites it.
+ */
+function useTabCounts(context: UiPluginContext, navigation: TasksState['navigation'] | null): { counts: TabCounts; reload(): void } {
   const [counts, setCounts] = useState<TabCounts>({ issues: null, prs: null })
+  const [nonce, setNonce] = useState(0)
+  const reload = useCallback(() => setNonce((value) => value + 1), [])
   const generation = useRef(0)
   const view = navigation ? effectiveList(navigation) : null
   const repoIds = navigation?.repoIds ?? null
@@ -124,14 +129,18 @@ function useTabCounts(context: UiPluginContext, navigation: TasksState['navigati
       if (request === generation.current) setCounts(next)
     })()
     return () => { generation.current += 1 }
-  }, [context, key])
-  return counts
+  }, [context, key, nonce])
+  return { counts, reload }
 }
 
 function TasksApp({ context, report }: { context: UiPluginContext; report?: (state: unknown) => void }) {
   const { state, error, refresh } = useTasksState(context)
   const root = useRef<HTMLDivElement>(null)
-  const counts = useTabCounts(context, state?.navigation ?? null)
+  const { counts, reload: reloadCounts } = useTabCounts(context, state?.navigation ?? null)
+  const refreshAndCount = useCallback(async () => {
+    await refresh()
+    reloadCounts()
+  }, [refresh, reloadCounts])
   const focusRow = useRef<boolean | null>(null)
   if (focusRow.current === null) focusRow.current = place.takeFocus() === 'row'
   useEffect(() => { if (state) report?.({ navigation: state.navigation, revision: state.revision }) }, [state, report])
@@ -177,8 +186,8 @@ function TasksApp({ context, report }: { context: UiPluginContext; report?: (sta
     <ToolPanelFrame title="Tasks" tabs={state && <Tabs label="Task mode" items={tabs} value={state.navigation.mode} onChange={mode => void navigate(mode as 'issues' | 'prs' | 'projects')} />} actions={<IconButton label="Collapse Tasks" title="Collapse Tasks" onClick={collapse}><ControlIcon name="arrows-in" /></IconButton>}>
       {error && <EmptyState message={error} action={{ label: 'Retry', onAction: () => void refresh() }} />}
       {!state ? <p role="status">Loading Tasks…</p> : <>
-        <main className="tasks-body">{state.navigation.mode === 'projects' ? state.navigation.detail ? <IssueSurface context={context} state={state} refresh={refresh} /> : <ProjectsSurface context={context} state={state} refresh={refresh} /> : <TasksList context={context} state={state} refresh={refresh} initialFocus={focusRow.current} />}</main>
-        {state.navigation.newIssue && <NewIssueDialog context={context} state={state} refresh={refresh} />}
+        <main className="tasks-body">{state.navigation.mode === 'projects' ? state.navigation.detail ? <IssueSurface context={context} state={state} refresh={refresh} /> : <ProjectsSurface context={context} state={state} refresh={refresh} /> : <TasksList context={context} state={state} refresh={refreshAndCount} initialFocus={focusRow.current} onDataChanged={reloadCounts} />}</main>
+        {state.navigation.newIssue && <NewIssueDialog context={context} state={state} refresh={refreshAndCount} />}
       </>}
     </ToolPanelFrame>
   </div>

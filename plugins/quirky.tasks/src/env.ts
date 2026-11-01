@@ -1,4 +1,4 @@
-import { RpcErrorCode, UI_TOOL_SLOTS, validateValue, type PluginContext, type Schema, type UiLayout, type UiToolSlot } from '@quirky/protocol'
+import { UI_TOOL_SLOTS, validateValue, type PluginContext, type Schema, type UiLayout, type UiToolSlot } from '@quirky/protocol'
 import { TASKS_TOOL, TASKS_VIEW, TASKS_SETTINGS_VIEW, type TaskListView, type TaskNavigation, type TaskPreferences, type TaskRepo, type TasksEnv, type TasksState } from './contracts'
 
 const providers = ['github', 'gitlab', 'linear', 'jira']
@@ -186,18 +186,7 @@ export function createTasksEnv(context: PluginContext): TasksEnv {
       })
     },
     async navigate(input) {
-      const result = env.apply(input)
-      const toolState = await currentTasksToolState(context)
-      if (toolState.layout?.view?.id === TASKS_VIEW) {
-        const latest = env.read()
-        try {
-          await context.call('ui.view.open', { id: TASKS_VIEW, input: { navigation: latest.navigation, revision: latest.revision } })
-        } catch (error) {
-          // with several windows open the daemon cannot pick one; the view reads quirky.tasks/state, so skipping is harmless
-          if ((error as { code?: unknown } | null)?.code !== RpcErrorCode.Conflict) throw error
-        }
-      }
-      return result
+      return env.apply(input)
     },
     async repositories() {
       const repos = await context.call('quirky.repo/list', {})

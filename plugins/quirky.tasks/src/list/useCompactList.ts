@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from 'react'
 import type { UiPluginContext } from '@quirky/protocol'
 import type { TaskNavigation, TaskListView } from '../contracts'
-import { checkResult, errorMessage, mergeMeta, object, parseListResult, rowKey, rowTarget, type CheckResult, type ListData, type ListItem, type MergeMetadata } from './model'
+import { place } from './place'
+import { checkResult, errorMessage, listViewKey, mergeMeta, object, parseListResult, rowKey, rowTarget, type CheckResult, type ListData, type ListItem, type MergeMetadata } from './model'
 
 /** Attribute that lets the observer map a rendered row back to its item. */
 export const ROW_KEY_ATTRIBUTE = 'data-row-key'
 
 const EAGER_ROWS = 20
+const NO_DETAILS: Record<string, never> = {}
 const IDLE_VIEW: TaskListView = { mode: 'issues', query: '', page: 1 }
 
 export type CompactCounts = { issues: number | null; prs: number | null }
@@ -28,6 +30,22 @@ export type CompactList = {
   counts: CompactCounts
   /** Attach to the scrolling element that holds the rows so offscreen rows load their details on approach. */
   rowsRef: RefObject<HTMLElement | null>
+}
+
+/**
+ * Adds one row's detail to the details held for `viewKey`. A view that has no details yet starts
+ * from its snapshot, so a result that arrives first doesn't hide the rest of what was seeded.
+ */
+function withDetails<K extends 'checks' | 'merges'>(
+  previous: { key: string; checks: Record<string, CheckResult>; merges: Record<string, MergeMetadata> } | null,
+  viewKey: string,
+  field: K,
+  rowId: string,
+  value: K extends 'checks' ? CheckResult : MergeMetadata
+) {
+  const saved = place.listSnapshot(viewKey)
+  const base = previous?.key === viewKey ? previous : { key: viewKey, checks: { ...saved?.checks }, merges: { ...saved?.merge } }
+  return { ...base, [field]: { ...base[field], [rowId]: value } }
 }
 
 /** The list a compact panel shows: Projects has no compact form, so it falls back to the last list. */
@@ -52,11 +70,10 @@ export function useCompactList(
 ): CompactList {
   const view = navigation ? effectiveList(navigation) : IDLE_VIEW
   const repoIds = navigation?.repoIds ?? null
-  const viewKey = navigation === null ? '' : `${navigation.source}\u0000${view.mode}\u0000${repoIds === null ? '*' : repoIds.join(',')}\u0000${view.query}\u0000${view.page}`
+  const viewKey = navigation === null ? '' : listViewKey({ source: navigation.source, mode: view.mode, repoIds, query: view.query, page: view.page })
   const [loaded, setLoaded] = useState<{ key: string; result: ListData } | null>(null)
   const [failed, setFailed] = useState<{ key: string; message: string } | null>(null)
-  const [checks, setChecks] = useState<Record<string, CheckResult>>({})
-  const [merges, setMerges] = useState<Record<string, MergeMetadata>>({})
+  const [details, setDetails] = useState<{ key: string; checks: Record<string, CheckResult>; merges: Record<string, MergeMetadata> } | null>(null)
   const [viewer, setViewer] = useState<string | null>(null)
   const [counts, setCounts] = useState<CompactCounts>({ issues: null, prs: null })
   const rowsRef = useRef<HTMLElement | null>(null)
@@ -74,7 +91,11 @@ export function useCompactList(
   }
 
   const idle = navigation === null
-  const result = !idle && loaded?.key === viewKey ? loaded.result : null
+  const snapshot = idle ? null : place.listSnapshot(viewKey)
+  const result = idle ? null : loaded?.key === viewKey ? loaded.result : snapshot?.list ?? null
+  const ownDetails = details?.key === viewKey ? details : null
+  const checks: Record<string, CheckResult> = ownDetails?.checks ?? snapshot?.checks ?? NO_DETAILS
+  const merges: Record<string, MergeMetadata> = ownDetails?.merges ?? snapshot?.merge ?? NO_DETAILS
   const error = !idle && result === null && failed?.key === viewKey ? failed.message : null
   const loading = result === null && error === null
 
@@ -114,9 +135,11 @@ export function useCompactList(
   useEffect(() => {
     checkRequested.current.clear()
     mergeRequested.current.clear()
-    setChecks({})
-    setMerges({})
   }, [viewKey])
+
+  useEffect(() => {
+    if (result) place.setListSnapshot(viewKey, { list: result, checks, merge: merges })
+  }, [viewKey, result, checks, merges])
 
   useEffect(() => {
     if (viewerRequested.current || !result) return
@@ -143,7 +166,7 @@ export function useCompactList(
       const value = await context.call('quirky.tasks/checks', { target: rowTarget(item) })
       if (viewGeneration.current !== owner) return
       const parsed = checkResult(value) ?? { rollup: 'unknown', checks: [], partial: true, partialFailures: ['Invalid check result.'] }
-      setChecks((previous) => ({ ...previous, [key]: parsed }))
+      setDetails((previous) => withDetails(previous, latestKey.current, 'checks', key, parsed))
     } catch {
       if (viewGeneration.current === owner) checkRequested.current.delete(key)
     }
@@ -157,7 +180,7 @@ export function useCompactList(
     try {
       const parsed = mergeMeta(await context.call('quirky.tasks/mergeMetadata', { target: rowTarget(item) }))
       if (viewGeneration.current !== owner) return
-      if (parsed) setMerges((previous) => ({ ...previous, [key]: parsed }))
+      if (parsed) setDetails((previous) => withDetails(previous, latestKey.current, 'merges', key, parsed))
     } catch {
       if (viewGeneration.current === owner) mergeRequested.current.delete(key)
     }

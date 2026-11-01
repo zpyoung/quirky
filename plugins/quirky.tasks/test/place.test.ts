@@ -1,5 +1,5 @@
 import { beforeEach, expect, test } from 'bun:test'
-import { place } from '../src/list/place'
+import { LIST_SNAPSHOT_LIMIT, place, type ListSnapshot } from '../src/list/place'
 
 beforeEach(() => { place.takeFocus() })
 
@@ -38,4 +38,34 @@ test('a later requestFocus replaces an unclaimed one', () => {
   place.requestFocus('expand')
   expect(place.takeFocus()).toBe('expand')
   expect(place.takeFocus()).toBeNull()
+})
+
+function snapshot(page: number): ListSnapshot {
+  return { list: { items: [], repositories: [], page, totalPages: 1, perRepo: 0, failures: [], sources: {} }, checks: {}, merge: {} }
+}
+
+test('listSnapshot is null for a view that was never saved', () => {
+  expect(place.listSnapshot('never-saved')).toBeNull()
+})
+
+test('setListSnapshot keeps the latest snapshot per view key', () => {
+  place.setListSnapshot('snap-a', snapshot(1))
+  place.setListSnapshot('snap-b', snapshot(2))
+  place.setListSnapshot('snap-a', snapshot(3))
+  expect(place.listSnapshot('snap-a')?.list.page).toBe(3)
+  expect(place.listSnapshot('snap-b')?.list.page).toBe(2)
+})
+
+test('snapshots are bounded and drop the oldest view first', () => {
+  for (let index = 0; index < LIST_SNAPSHOT_LIMIT + 5; index++) place.setListSnapshot(`bound-${index}`, snapshot(index))
+  for (let index = 0; index < 5; index++) expect(place.listSnapshot(`bound-${index}`)).toBeNull()
+  for (let index = 5; index < LIST_SNAPSHOT_LIMIT + 5; index++) expect(place.listSnapshot(`bound-${index}`)?.list.page).toBe(index)
+})
+
+test('saving a view again makes it the newest, so it outlives older ones', () => {
+  for (let index = 0; index < LIST_SNAPSHOT_LIMIT; index++) place.setListSnapshot(`recent-${index}`, snapshot(index))
+  place.setListSnapshot('recent-0', snapshot(99))
+  place.setListSnapshot('recent-new', snapshot(100))
+  expect(place.listSnapshot('recent-0')?.list.page).toBe(99)
+  expect(place.listSnapshot('recent-1')).toBeNull()
 })

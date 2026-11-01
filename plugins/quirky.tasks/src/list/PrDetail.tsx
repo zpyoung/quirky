@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react'
 import { Badge, Button, FormRow } from '@quirky/ui'
 import { Markdown } from '../issue/Markdown'
 import { nonnegativeInteger, object, optionalLogins, relativeTime, reviewAuthors, reviewState, type ListItem, type MergeMetadata } from './model'
@@ -17,6 +18,7 @@ export type PrDetailProps = {
   merge: {
     open: boolean
     onToggle(): void
+    onClose(): void
     onMerge(method: string, action: 'direct' | 'queue'): void
     onToggleAutoMerge(): void
   }
@@ -35,6 +37,7 @@ export type PrDetailProps = {
   onRetryMetadata(): void
   onWorkspace(action: 'start' | 'resume', newWorkspace?: boolean): void
   onOpenLink(url: string): void
+  onCopyLink(url: string): void
 }
 
 const REVIEW_VERBS: Record<string, string> = {
@@ -71,8 +74,29 @@ function changesLabel(additions: number | undefined, deletions: number | undefin
 /**
  * The expanded Tasks view's pull-request pane. Presentational: the list owns every read and
  * mutation and passes them in, so the merge and reviewer safety rules stay in one place.
+ * Escape closes the open merge menu or reviewers dialog and returns focus to its control.
  */
-export function PrDetail({ item, onPage, metadata, metadataLoading, metadataError, check, busy, linkedName, merge, reviewers, onReview, onLoadChecks, onRetryMetadata, onWorkspace, onOpenLink }: PrDetailProps) {
+export function PrDetail({ item, onPage, metadata, metadataLoading, metadataError, check, busy, linkedName, merge, reviewers, onReview, onLoadChecks, onRetryMetadata, onWorkspace, onOpenLink, onCopyLink }: PrDetailProps) {
+  const mergeAnchor = useRef<HTMLDivElement>(null)
+  const reviewersAnchor = useRef<HTMLDivElement>(null)
+  const mergeOpen = merge.open
+  const reviewersOpen = reviewers.open
+  const closeMerge = merge.onClose
+  const closeReviewers = reviewers.onClose
+  useEffect(() => {
+    if (!mergeOpen && !reviewersOpen) return
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || event.defaultPrevented) return
+      const closesReviewers = reviewersOpen && (!mergeOpen || !mergeAnchor.current?.contains(document.activeElement))
+      event.preventDefault()
+      if (closesReviewers) closeReviewers()
+      else closeMerge()
+      ;(closesReviewers ? reviewersAnchor : mergeAnchor).current?.querySelector<HTMLElement>('button')?.focus()
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [mergeOpen, reviewersOpen, closeMerge, closeReviewers])
+
   const review = metadata?.review
   const displayState = item.state === 'unknown' ? reviewState(review?.state) ?? item.state : item.state
   const reviewDraft = typeof review?.isDraft === 'boolean' ? review.isDraft : reviewState(review?.state) === 'draft' ? true : undefined
@@ -101,12 +125,22 @@ export function PrDetail({ item, onPage, metadata, metadataLoading, metadataErro
   const when = relativeTime(item.updatedAt)
   const branches = item.headRefName && item.baseRefName ? `${item.author ?? 'someone'} wants to merge ${item.headRefName} into ${item.baseRefName}` : item.author ?? null
 
+  if (!onPage && !metadata) {
+    return (
+      <article className="tasks-pr" aria-label={`Pull request #${item.number}`}>
+        {metadataError
+          ? <p role="status" className="tasks-pr__notice">Could not load pull request #{item.number}: {metadataError} <Button type="button" onClick={onRetryMetadata}>Retry</Button></p>
+          : <p role="status" className="tasks-pr__notice">Loading pull request…</p>}
+      </article>
+    )
+  }
+
   return (
     <article className="tasks-pr" aria-label={`Pull request #${item.number}`}>
       <header className="tasks-pr__header">
         <div className="tasks-pr__heading">
           <h2 className="tasks-pr__title">{title}</h2>
-          {displayState !== 'open' && !isDraft ? <Badge tone={displayState === 'closed' ? 'neutral' : 'accent'}>{displayState}</Badge> : null}
+          {displayState !== 'open' && displayState !== 'unknown' && !isDraft ? <Badge tone={displayState === 'closed' ? 'neutral' : 'accent'}>{displayState}</Badge> : null}
           {isDraft ? <Badge>Draft</Badge> : null}
         </div>
         <p className="tasks-pr__meta">PR #{item.number}{onPage && branches ? ` · ${branches}` : ''}{onPage ? ` · ${when.label}` : ''}</p>
@@ -114,7 +148,7 @@ export function PrDetail({ item, onPage, metadata, metadataLoading, metadataErro
           <Button type="button" variant="primary" onClick={() => onReview('conversation')}>Review</Button>
           <Button type="button" disabled={busy} onClick={() => onWorkspace(linkedName ? 'resume' : 'start')}>{linkedName ? 'Resume' : 'Start'}</Button>
           {linkedName ? <Button type="button" onClick={() => onWorkspace('start', true)}>Start new</Button> : null}
-          <div className="tasks-pr__anchor">
+          <div className="tasks-pr__anchor" ref={mergeAnchor}>
             <Button type="button" aria-haspopup="menu" aria-expanded={merge.open} aria-label={metadataError ? `Merge metadata unavailable for PR #${item.number}` : `Merge actions for PR #${item.number}`} onClick={merge.onToggle} disabled={busy}>{metadataError ? 'Merge metadata unavailable' : displayState === 'merged' ? 'Merged' : metadata?.queueEligible ? 'Merge when ready' : metadata?.mergeEligible ? 'Merge' : 'Check merge safety'} ▾</Button>
             {merge.open ? <div role="menu" aria-label={`Merge PR #${item.number}`} className="tasks-pr__popover">
               {metadataLoading ? <span role="status">Loading merge metadata…</span> : null}
@@ -131,6 +165,7 @@ export function PrDetail({ item, onPage, metadata, metadataLoading, metadataErro
             </div> : null}
           </div>
           <Button type="button" aria-label={`Open pull request #${item.number} on GitHub`} onClick={() => onOpenLink(url)}>↗ GitHub</Button>
+          <Button type="button" onClick={() => onCopyLink(url)}>Copy link</Button>
         </div>
         {metadataError ? <span role="status" className="tasks-pr__notice">Review metadata unavailable: {metadataError} <Button type="button" onClick={onRetryMetadata}>Retry</Button></span> : null}
       </header>
@@ -154,7 +189,7 @@ export function PrDetail({ item, onPage, metadata, metadataLoading, metadataErro
 
           <section className="tasks-pr__fact">
             <h3 className="tasks-pr__section-title">Reviewers</h3>
-            <div className="tasks-pr__anchor">
+            <div className="tasks-pr__anchor" ref={reviewersAnchor}>
               <Button type="button" aria-haspopup="dialog" aria-expanded={reviewers.open} onClick={reviewers.onToggle}>{reviewerLabel}</Button>
               {reviewers.open ? <div role="dialog" aria-label={`Reviewers for PR #${item.number}`} className="tasks-pr__popover">
                 {requestedReviewers === null ? <span role="status">Requested reviewers are unavailable.</span> : requestedReviewers?.length ? <span>Currently requested: {requestedReviewers.join(', ')}</span> : null}

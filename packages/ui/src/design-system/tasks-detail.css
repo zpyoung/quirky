@@ -1130,7 +1130,7 @@
   overflow-wrap: anywhere;
 }
 
-.tasks-pr__section-title {
+.quirky-tasks .tasks-pr__section-title {
   color: var(--ui-muted);
   font-size: var(--ui-font-section);
   font-weight: 600;
