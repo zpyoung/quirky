@@ -184,7 +184,14 @@ export function ExplorerPanel({ context, report }: { context: UiPluginContext; r
   const [useRegex, setUseRegex] = useState(false)
   const [searchResult, setSearchResult] = useState<SearchResult | null>(null)
   const [treeLoading, setTreeLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [errorState, setErrorState] = useState<{ message: string; form?: 'create' | 'rename' } | null>(null)
+  const error = errorState?.message ?? null
+  const setError = (message: string | null, form?: 'create' | 'rename') => {
+    setErrorState(message === null ? null : form === undefined ? { message } : { message, form })
+  }
+  const clearInlineError = (form: 'create' | 'rename') => {
+    setErrorState((current) => current?.form === form ? null : current)
+  }
   const [newItemKind, setNewItemKind] = useState<'file' | 'folder' | null>(null)
   const [newItemName, setNewItemName] = useState('')
   const [renamePath, setRenamePath] = useState<string | null>(null)
@@ -734,6 +741,11 @@ export function ExplorerPanel({ context, report }: { context: UiPluginContext; r
     changeRenamePath(path)
     setRenameValue(basename(path))
   }
+  const dismissRename = () => {
+    changeRenamePath(null)
+    clearInlineError('rename')
+  }
+
 
   const renameFocused = () => {
     const requestedWorktree = worktree
@@ -835,7 +847,7 @@ export function ExplorerPanel({ context, report }: { context: UiPluginContext; r
       treeRef.current?.focus()
       refreshEditorState()
     } catch (reason) {
-      if (currentWorktree.current === requestedWorktree && mountedRef.current) setError(messageOf(reason))
+      if (currentWorktree.current === requestedWorktree && mountedRef.current) setError(messageOf(reason), 'rename')
     }
   }
 
@@ -843,6 +855,15 @@ export function ExplorerPanel({ context, report }: { context: UiPluginContext; r
     inlineOpenedAt.current = Date.now()
     setNewItemKind(kind)
     setNewItemName(directory === '.' ? '' : `${directory}/`)
+  }
+  const dismissNewItem = () => {
+    if (inlineBlurTimer.current !== undefined) {
+      window.clearTimeout(inlineBlurTimer.current)
+      inlineBlurTimer.current = undefined
+    }
+    setNewItemKind(null)
+    setNewItemName('')
+    clearInlineError('create')
   }
 
   const commitNewItem = async () => {
@@ -883,7 +904,7 @@ export function ExplorerPanel({ context, report }: { context: UiPluginContext; r
     } catch (reason) {
       focusHandoff?.cancel()
       if (focusHandoffRef.current === focusHandoff) focusHandoffRef.current = null
-      setError(messageOf(reason))
+      setError(messageOf(reason), 'create')
     } finally {
       setItemBusy(false)
     }
@@ -1310,7 +1331,7 @@ export function ExplorerPanel({ context, report }: { context: UiPluginContext; r
                 onChange={(event) => setNewItemName(event.currentTarget.value)}
                 onKeyDown={(event) => {
                   if (event.key === 'Enter') { event.preventDefault(); void commitNewItem() }
-                  if (event.key === 'Escape') { setNewItemKind(null); setNewItemName('') }
+                  if (event.key === 'Escape') dismissNewItem()
                 }}
                 onBlur={() => {
                   if (Date.now() - inlineOpenedAt.current < 200) return
@@ -1319,7 +1340,7 @@ export function ExplorerPanel({ context, report }: { context: UiPluginContext; r
                 }}
               />
               <Button variant="primary" disabled={itemBusy} onClick={() => void commitNewItem()}>Create</Button>
-              <Button onClick={() => { setNewItemKind(null); setNewItemName('') }}>Cancel</Button>
+              <Button onClick={dismissNewItem}>Cancel</Button>
             </div>
           )}
           {renamePath !== null && (
@@ -1333,11 +1354,11 @@ export function ExplorerPanel({ context, report }: { context: UiPluginContext; r
                 onChange={(event) => setRenameValue(event.currentTarget.value)}
                 onKeyDown={(event) => {
                   if (event.key === 'Enter') { event.preventDefault(); void renameSelected() }
-                  if (event.key === 'Escape') changeRenamePath(null)
+                  if (event.key === 'Escape') dismissRename()
                 }}
               />
               <Button variant="primary" onClick={() => void renameSelected()}>Rename</Button>
-              <Button onClick={() => changeRenamePath(null)}>Cancel</Button>
+              <Button onClick={dismissRename}>Cancel</Button>
             </div>
           )}
           {filterResult?.truncated && <p className="muted">More matches may be available.</p>}

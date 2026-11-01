@@ -413,7 +413,8 @@ presentation changes must use `@quirky/ui` components and semantic tokens, with 
 owned by the shared UI package rather than injected plugin CSS.
 
 In narrow Files rails, Explorer preserves filename space and reveals row actions on hover or
-keyboard focus.
+keyboard focus. Escape or Cancel dismisses inline New File, New Folder and Rename forms along
+with their operation errors.
 
 Document headers keep File actions beside the path, with view modes, Changes and Save below.
 Pinning, Explorer, Source Control, tab closing and font zoom are available in File actions, so
