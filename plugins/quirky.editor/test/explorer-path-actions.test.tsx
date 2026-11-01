@@ -13,6 +13,7 @@ import type { Workspace } from '../../quirky.terminal/src/layout/types'
 import { shellEscapePaths } from '../../quirky.terminal/src/shell-escape'
 import { readWorktreePathsDrop, resolveWorktreeDropPaths, type DropData } from '../../quirky.terminal/src/window/pane/drop'
 import type { ExplorerPanel as ExplorerPanelComponent } from '../src/window/ExplorerPanel'
+import { ConfirmHost, confirmForPlugin } from '../../../packages/ui/src/components/ConfirmHost'
 import { registerIsolatedEditorFixtures } from './isolated-environment'
 
 type Worktree = { id: string; path: string }
@@ -242,7 +243,13 @@ async function waitForUi<T>(
   }, timeoutMs)
 }
 
-async function renderExplorer(fixture: Fixture, context = makeContext(fixture)): Promise<Mounted> {
+async function waitForNextAnimationFrame(): Promise<void> {
+  const frame = Promise.withResolvers<void>()
+  requestAnimationFrame(() => frame.resolve())
+  await frame.promise
+}
+
+async function renderExplorer(fixture: Fixture, context = makeContext(fixture), includeConfirmHost = false): Promise<Mounted> {
   const element = document.createElement('div')
   document.body.append(element)
   const root = createRoot(element)
@@ -257,19 +264,24 @@ async function renderExplorer(fixture: Fixture, context = makeContext(fixture)):
   }
   mounted.push(surface)
   await act(async () => {
-    root.render(<ExplorerPanel context={context} report={(value) => {
-      if (typeof value !== 'object' || value === null || !('loading' in value) || typeof value.loading !== 'boolean') return
-      fixture.reports.push({
-        loading: value.loading,
-        error: 'error' in value && typeof value.error === 'string' ? value.error : null
-      })
-    }} />)
+    root.render(
+      <>
+        <ExplorerPanel context={context} report={(value) => {
+          if (typeof value !== 'object' || value === null || !('loading' in value) || typeof value.loading !== 'boolean') return
+          fixture.reports.push({
+            loading: value.loading,
+            error: 'error' in value && typeof value.error === 'string' ? value.error : null
+          })
+        }} />
+        {includeConfirmHost && <ConfirmHost />}
+      </>
+    )
   })
   await waitForUi(() => fixture.listing.entries.some((entry) => findRow(element, entry.path)))
   return surface
 }
 
-async function renderStandaloneExplorer(context: UiPluginContext): Promise<Mounted> {
+async function renderStandaloneExplorer(context: UiPluginContext, includeConfirmHost = false): Promise<Mounted> {
   const element = document.createElement('div')
   document.body.append(element)
   const root = createRoot(element)
@@ -284,7 +296,12 @@ async function renderStandaloneExplorer(context: UiPluginContext): Promise<Mount
   }
   mounted.push(surface)
   await act(async () => {
-    root.render(<ExplorerPanel context={context} />)
+    root.render(
+      <>
+        <ExplorerPanel context={context} />
+        {includeConfirmHost && <ConfirmHost />}
+      </>
+    )
   })
   return surface
 }
@@ -660,14 +677,13 @@ test('Explorer renaming to a hidden file selects the next visible neighbor when 
   })
 }, 60_000)
 
-test('Explorer identifies row and footer deletion targets without mutating after cancellation', async () => {
+function makeDeleteConfirmationFixture() {
   const root = '/test'
   const worktree = 'delete-confirmation-test'
-  const displayRoot = join(root, 'nested')
   const filePath = join(root, FILE_A)
   const folderPath = join(root, 'nested/archive')
   const listing = {
-    root: displayRoot,
+    root: join(root, 'nested'),
     entries: [
       { path: filePath, name: basename(filePath), isDirectory: false, isSymlink: false },
       { path: folderPath, name: basename(folderPath), isDirectory: true, isSymlink: false }
@@ -735,6 +751,17 @@ test('Explorer identifies row and footer deletion targets without mutating after
     toast() {}
   } as unknown as UiPluginContext
 
+  return { context, filePath, folderPath, confirmations, deleteOperations }
+}
+
+async function selectDeleteFixturePath(panel: Mounted, path: string): Promise<void> {
+  const row = findRow(panel.element, path)
+  if (!row) throw new Error(`Missing Explorer row ${path}`)
+  await act(async () => row.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })))
+  await waitForUi(() => findRow(panel.element, path)?.getAttribute('aria-selected') === 'true' || false)
+}
+test('Explorer identifies row and footer deletion targets without mutating after cancellation', async () => {
+  const { context, filePath, folderPath, confirmations, deleteOperations } = makeDeleteConfirmationFixture()
   const panel = await renderStandaloneExplorer(context)
   try {
     await waitForUi(() => findRow(panel.element, filePath) && findRow(panel.element, folderPath) || false)
@@ -776,6 +803,90 @@ test('Explorer identifies row and footer deletion targets without mutating after
     await waitForUi(() => confirmations.length === actions.length + 1 || false)
     await waitForTreeFocus(panel.element, folderPath)
     expect(deleteOperations).toEqual([])
+  } finally {
+    await panel.unmount()
+  }
+}, 60_000)
+
+for (const dismissal of ['Cancel', 'Escape'] as const) {
+  test(`Explorer footer Delete restores trigger focus when confirmation closes by ${dismissal}`, async () => {
+    const { context, filePath, deleteOperations } = makeDeleteConfirmationFixture()
+    context.confirm = confirmForPlugin
+    const panel = await renderStandaloneExplorer(context, true)
+
+    try {
+      await selectDeleteFixturePath(panel, filePath)
+      const trigger = footerButton(panel.element, 'Delete')
+      await act(async () => trigger.focus())
+      expect(document.activeElement).toBe(trigger)
+      await act(async () => trigger.click())
+
+      const dialog = await waitForUi(() => panel.element.querySelector<HTMLElement>('[role="dialog"]') ?? false)
+      expect(dialog.getAttribute('aria-label')).toContain(basename(filePath))
+      const cancel = Array.from(dialog.querySelectorAll<HTMLButtonElement>('button'))
+        .find((button) => button.textContent?.trim() === 'Cancel')
+      if (!cancel) throw new Error('Missing Cancel action in confirmation dialog')
+      await act(async () => cancel.focus())
+      expect(document.activeElement).toBe(cancel)
+
+      if (dismissal === 'Cancel') {
+        await act(async () => cancel.click())
+      } else {
+        await act(async () => {
+          window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }))
+        })
+      }
+
+      await waitForUi(() => panel.element.querySelector('[role="dialog"]') === null || false)
+      await waitForNextAnimationFrame()
+      expect(document.activeElement).toBe(trigger)
+      expect(findRow(panel.element, filePath)?.getAttribute('aria-selected')).toBe('true')
+      expect(deleteOperations).toEqual([])
+    } finally {
+      await panel.unmount()
+    }
+  }, 60_000)
+}
+
+test('Explorer footer cancellation preserves focus in a queued confirmation', async () => {
+  const { context, filePath, deleteOperations } = makeDeleteConfirmationFixture()
+  context.confirm = confirmForPlugin
+  const panel = await renderStandaloneExplorer(context, true)
+  let queuedConfirmation: Promise<boolean> | undefined
+
+  try {
+    await selectDeleteFixturePath(panel, filePath)
+    const trigger = footerButton(panel.element, 'Delete')
+    await act(async () => trigger.focus())
+    await act(async () => trigger.click())
+
+    const deleteDialog = await waitForUi(() => panel.element.querySelector<HTMLElement>('[role="dialog"]') ?? false)
+    const deleteCancel = Array.from(deleteDialog.querySelectorAll<HTMLButtonElement>('button'))
+      .find((button) => button.textContent?.trim() === 'Cancel')
+    if (!deleteCancel) throw new Error('Missing Cancel action in deletion confirmation')
+    await act(async () => deleteCancel.focus())
+
+    await act(async () => {
+      queuedConfirmation = confirmForPlugin({ title: 'Queued confirmation', body: 'The next request stays open.' })
+    })
+    await act(async () => deleteCancel.click())
+
+    const queuedDialog = await waitForUi(() => {
+      const dialog = panel.element.querySelector<HTMLElement>('[role="dialog"]')
+      return dialog?.getAttribute('aria-label') === 'Queued confirmation' ? dialog : false
+    })
+    await waitForNextAnimationFrame()
+    expect(document.activeElement).not.toBe(trigger)
+    expect(queuedDialog.contains(document.activeElement)).toBe(true)
+    expect(findRow(panel.element, filePath)?.getAttribute('aria-selected')).toBe('true')
+    expect(deleteOperations).toEqual([])
+
+    const queuedCancel = Array.from(queuedDialog.querySelectorAll<HTMLButtonElement>('button'))
+      .find((button) => button.textContent?.trim() === 'Cancel')
+    if (!queuedCancel) throw new Error('Missing Cancel action in queued confirmation')
+    await act(async () => queuedCancel.click())
+    if (!queuedConfirmation) throw new Error('Queued confirmation was not created')
+    expect(await queuedConfirmation).toBe(false)
   } finally {
     await panel.unmount()
   }
