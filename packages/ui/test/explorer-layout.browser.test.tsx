@@ -228,6 +228,9 @@ function liveBrowserEntry(): string {
         }
         if (method === 'quirky.git/status') return { files: [] }
         if (method === 'quirky.worktree/list') return [{ id: 'w1', path: '/repo', name: 'repo' }]
+        if (method === 'quirky.editor/mutate') {
+          throw new Error('A file already exists at the destination: file-02.txt')
+        }
         return {}
       },
       subscribe: () => () => {},
@@ -628,7 +631,7 @@ test.skipIf(!existsSync(executable))('shows full Markdown filenames and keeps Ex
 }, 60_000)
 
 test.skipIf(!existsSync(executable)).each(['New File', 'New Folder', 'Rename'] as const)(
-  'scrolls complete inline Explorer %s form into view after autofocus',
+  'keeps the complete inline Explorer %s form visible on open and after a mutation error',
   async (action) => {
     const context = await browser!.newContext({ viewport: { width: 1280, height: 720 } })
     try {
@@ -652,18 +655,32 @@ test.skipIf(!existsSync(executable)).each(['New File', 'New Folder', 'Rename'] a
         return promise
       })
 
-      const geometry = await inlineRowGeometry(page)
-      expect(geometry.focused).toBe(true)
-      expect(geometry.controls.map(({ label }) => label)).toEqual(action === 'Rename' ? ['input', 'Rename', 'Cancel'] : ['input', 'Create', 'Cancel'])
-      expect(geometry.row.top).toBeGreaterThanOrEqual(geometry.scrollport.top - 0.5)
-      expect(geometry.row.bottom).toBeLessThanOrEqual(geometry.scrollport.bottom + 0.5)
-      expect(geometry.row.bottom).toBeLessThanOrEqual(geometry.footer.top + 0.5)
-      for (const control of geometry.controls) {
-        expect(control.top).toBeGreaterThanOrEqual(geometry.scrollport.top - 0.5)
-        expect(control.bottom).toBeLessThanOrEqual(geometry.scrollport.bottom + 0.5)
-        expect(control.left).toBeGreaterThanOrEqual(geometry.scrollport.left - 0.5)
-        expect(control.right).toBeLessThanOrEqual(geometry.scrollport.right + 0.5)
+      const expectVisibleForm = async () => {
+        const geometry = await inlineRowGeometry(page)
+        expect(geometry.focused).toBe(true)
+        expect(geometry.controls.map(({ label }) => label)).toEqual(action === 'Rename' ? ['input', 'Rename', 'Cancel'] : ['input', 'Create', 'Cancel'])
+        expect(geometry.row.top).toBeGreaterThanOrEqual(geometry.scrollport.top - 0.5)
+        expect(geometry.row.bottom).toBeLessThanOrEqual(geometry.scrollport.bottom + 0.5)
+        expect(geometry.row.bottom).toBeLessThanOrEqual(geometry.footer.top + 0.5)
+        for (const control of geometry.controls) {
+          expect(control.top).toBeGreaterThanOrEqual(geometry.scrollport.top - 0.5)
+          expect(control.bottom).toBeLessThanOrEqual(geometry.scrollport.bottom + 0.5)
+          expect(control.left).toBeGreaterThanOrEqual(geometry.scrollport.left - 0.5)
+          expect(control.right).toBeLessThanOrEqual(geometry.scrollport.right + 0.5)
+        }
       }
+      await expectVisibleForm()
+
+      const input = page.locator('.qe-explorer-inline-row input')
+      await input.fill('file-02.txt')
+      await input.press('Enter')
+      await page.getByRole('alert').waitFor()
+      await page.evaluate(() => {
+        const { promise, resolve } = Promise.withResolvers<void>()
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
+        return promise
+      })
+      await expectVisibleForm()
     } finally {
       await context.close()
     }

@@ -441,11 +441,11 @@ export function ExplorerPanel({ context, report }: { context: UiPluginContext; r
 
   useEffect(() => {
     newItemRowRef.current?.scrollIntoView({ block: 'nearest' })
-  }, [newItemKind])
+  }, [newItemKind, error])
 
   useEffect(() => {
     renameRowRef.current?.scrollIntoView({ block: 'nearest' })
-  }, [renamePath])
+  }, [renamePath, error])
 
   useEffect(() => {
     report?.({
