@@ -23,11 +23,12 @@ function fixedLayer(doc: Document): HTMLElement {
  * directly. The returned function removes every node, listener and frame the mode created, and
  * calling it again does nothing.
  */
-
 export function mountFeedbackMode(context: UiPluginContext, options: Options): () => void {
   const doc = document
   const bannerSlot = doc.querySelector<HTMLElement>('[data-feedback-banner-slot]')
   if (bannerSlot === null) throw new Error('Feedback mode requires a data-feedback-banner-slot host element')
+  const previousBannerZIndex = bannerSlot.style.zIndex
+  bannerSlot.style.zIndex = MAX_Z_INDEX
   const win = doc.defaultView!
   const focused = doc.activeElement instanceof HTMLElement && doc.activeElement !== doc.body ? doc.activeElement : null
 
@@ -41,6 +42,7 @@ export function mountFeedbackMode(context: UiPluginContext, options: Options): (
   const session = createSession(context, {
     suspend(suspended) {
       container.style.zIndex = suspended ? '0' : FEEDBACK_CONTAINER_Z_INDEX
+      bannerSlot.style.zIndex = suspended ? '0' : MAX_Z_INDEX
       picker.setSuspended(suspended)
     }
   })
@@ -76,6 +78,7 @@ export function mountFeedbackMode(context: UiPluginContext, options: Options): (
     container.removeEventListener('focusin', stopFocus)
     bannerSlot.removeEventListener('focusin', stopFocus)
     container.remove()
+    bannerSlot.style.zIndex = previousBannerZIndex
     if (focused?.isConnected) focused.focus()
   }
 }

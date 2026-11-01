@@ -140,7 +140,6 @@ export function App() {
       <ConnectionBanner />
       {auxiliary ? (
         <>
-          <div className="feedback-banner-slot" data-feedback-banner-slot />
           <div className="shell-workspace shell-workspace--auxiliary">
             <MainArea />
           </div>

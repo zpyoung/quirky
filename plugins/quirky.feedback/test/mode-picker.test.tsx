@@ -196,6 +196,8 @@ describe('container structure', () => {
     const box = container()!
     expect(box.parentElement).toBe(document.body)
     expect(box.style.position).toBe('fixed')
+    expect(box.style.zIndex).toBe('2147483646')
+    expect(Number(bannerSlot().style.zIndex)).toBeGreaterThan(Number(box.style.zIndex))
     expect(box.style.pointerEvents).toBe('none')
     expect(box.children).toHaveLength(2)
     expect(host().style.getPropertyValue('pointer-events')).toBe('auto')
@@ -228,6 +230,7 @@ describe('container structure', () => {
 
     expect(slot.childElementCount).toBe(0)
     expect(slot.nextElementSibling).toBe(workspace)
+    expect(slot.style.zIndex).toBe('')
   })
 
   test('teardown removes everything and is safe to repeat', async () => {
@@ -968,15 +971,18 @@ describe('escape', () => {
   test('suspends the picker while a confirm is pending', async () => {
     const fake = await start([sample('c1')])
     const activeZIndex = container()!.style.zIndex
+    const activeBannerZIndex = bannerSlot().style.zIndex
     await act(async () => { reactRoot().querySelector<HTMLButtonElement>('[data-feedback-clear]')!.click() })
     expect(host().style.getPropertyValue('display')).toBe('none')
     expect(container()!.style.zIndex).toBe('0')
+    expect(bannerSlot().style.zIndex).toBe('0')
     const click = mouse(host(), 'click')
     expect(click.defaultPrevented).toBe(false)
     await act(async () => { fake.confirm.pending!(false) })
     await flush()
     expect(host().style.getPropertyValue('display')).not.toBe('none')
     expect(container()!.style.zIndex).toBe(activeZIndex)
+    expect(bannerSlot().style.zIndex).toBe(activeBannerZIndex)
   })
 })
 

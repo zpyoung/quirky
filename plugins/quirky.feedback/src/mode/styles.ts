@@ -18,7 +18,6 @@ const panel: CSSProperties = {
 export const banner: CSSProperties = {
   ...panel,
   position: 'relative',
-  zIndex: MAX_Z_INDEX,
   display: 'flex',
   alignItems: 'center',
   flexWrap: 'wrap',

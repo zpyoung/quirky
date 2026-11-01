@@ -613,7 +613,16 @@ describe('dots placement', () => {
 })
 
 describe('panels', () => {
-
+  test('the card is stacked above the tray and fits the window', async () => {
+    await start([sample('a')])
+    await pick(document.getElementById('other')!)
+    const tray = root().querySelector('[data-feedback-tray]')!
+    expect(tray.compareDocumentPosition(card()!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(card()!.style.maxHeight).toContain('744px')
+    const body = card()!.querySelector('textarea')!.closest('div[style*="overflow"]')
+    expect(body).not.toBeNull()
+    expect(card()!.lastElementChild!.contains(card()!.querySelector('[data-feedback-submit]'))).toBe(true)
+  })
   test('the banner, card and tray are masked and the selection host is not', async () => {
     await start([sample('a')])
     await pick(item)

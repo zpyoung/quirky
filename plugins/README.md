@@ -1047,7 +1047,7 @@ the remote device grant or terminate an already established connection.
 
 Feedback mode lets you point at part of Quirky, write a comment, and copy the comments for an agent or open them as GitHub issue drafts. Turn it on with View → Feedback Mode, the "Toggle Feedback Mode" palette command, or `Cmd+Option+K`. The **Enable Feedback Mode** setting removes all three when it's off.
 
-A banner above the workspace tells you feedback mode is on and offers Exit without covering workspace controls. In the main window, it sits below the window bar; a tray at the bottom right lists your comments.
+In the main window only, a banner above the workspace tells you feedback mode is on and offers Exit without covering workspace controls. It sits below the window bar; a tray at the bottom right lists your comments.
 
 - Click an element, choose Change or Question, type, and choose Add. Your click doesn't reach the app. The element gets a numbered dot, and if it isn't on screen later, its tray row says "No longer on screen".
 - Hold Option to use the app as usual, including opening menus. Let go and your next click selects again, so you can pick a menu item without choosing it.
