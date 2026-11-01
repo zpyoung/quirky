@@ -45,7 +45,7 @@ Open **Automations** from its tool stripe, Settings, or `quirky automations open
 
 Reopening standalone Automations from its settings reuses the existing Automations tab. A subsequent `automations close` returns to the original preceding view, not the settings detour.
 
-In narrow sidebar panels, the search field shrinks to the available width, its label wraps, and Filters moves onto another row when needed.
+The header uses labeled icon buttons for settings, refresh, and New Automation so the Automations title has room in the default sidebar. Header actions, including the host minimize control, fit within the panel and follow the shared hover and focus behavior. In narrow sidebar panels, the search field shrinks to the available width, its label wraps, and Filters moves onto another row when needed.
 
 **New Automation** opens a two-pane editor with four templates, project/workspace selection, structured agent model/options, preset or custom-cron schedule, timezone, grace, precheck, and setup choice. Reuse selects an existing worktree; New run selects a fresh session. Raw agent arguments are disabled because structured sessions reject them. Setup remains skipped unless explicitly selected and trusted; an uninspectable branch or hook fails closed to skip.
 
