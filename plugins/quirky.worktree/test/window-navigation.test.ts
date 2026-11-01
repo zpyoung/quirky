@@ -263,6 +263,23 @@ test('sleep refuses ambiguous and malformed known view owners before changing st
   }
 })
 
+test('None+Name index and next navigation follow alphabetical worktree order', async () => {
+  const w = await start()
+  world = w
+  const ui = await w.harness.connectAs({}, 'ui')
+  const [connId] = await connIds(w.harness.client)
+  const rows = await call(w.harness.client, 'quirky.worktree/list') as Worktree[]
+  const primary = rows.find((row) => row.isMain)!
+  const exportCsv = await create(w.harness.client, w.repo.id, 'export-csv')
+  await call(w.harness.client, 'quirky.worktree/setOptions', { groupBy: 'none', sortBy: 'name' })
+
+  const indexed = await call(w.harness.client, 'quirky.worktree/navigationIndex', { index: 1, window: connId }) as { worktreeId: string }
+  expect(indexed.worktreeId).toBe(exportCsv.id)
+
+  const next = await call(w.harness.client, 'quirky.worktree/navigationMove', { direction: 'next', window: connId }) as { worktreeId: string }
+  expect(next.worktreeId).toBe(primary.id)
+})
+
 test('history and next/previous/index resolve active selectors without crossing windows', async () => {
   const w = await start()
   world = w
