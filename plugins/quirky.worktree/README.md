@@ -9,7 +9,8 @@ button in its panel header. Workspace options, Activity filters and More workspa
 the header's options popover; the latter includes the board and status editor. Project management uses the existing `quirky.repo` API, not a second tool.
 Rows show name plus activity, with selected branch/note/status metadata on the secondary line
 and full text available on hover. The activity indicator's accessible name follows its displayed
-activity; pending questions retain attention priority. Attention counts and contextual actions remain
+activity; pending questions show “Needs you” in the activity text and take priority in the indicator.
+Answering them restores the session's current activity. Attention counts and contextual actions remain
 independently clickable. Controls, menus, dialogs and both appearances use the shared graphite system.
 Project and worktree Actions menus take keyboard focus when opened and close on Escape, including when
 the click also activates the Worktrees panel. When opened from an Actions button, Escape restores focus
