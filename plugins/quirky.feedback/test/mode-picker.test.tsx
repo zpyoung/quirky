@@ -460,14 +460,18 @@ describe('selected outline', () => {
     rect(selected, { x: 70, y: 80, width: 120, height: 30 })
     rect(other, { x: 340, y: 280, width: 120, height: 30 })
     stack(selected)
+    await act(async () => { mouse(host(), 'pointermove') })
+    expect(label().hidden).toBe(false)
     await act(async () => { mouse(host(), 'click') })
     expect(highlight().hidden).toBe(false)
     expect(highlight().style.left).toBe('70px')
+    expect(label().hidden).toBe(true)
     await type('draft')
     stack(other)
     await act(async () => { mouse(host(), 'pointermove') })
     expect(highlight().hidden).toBe(false)
     expect(highlight().style.left).toBe('70px')
+    expect(label().hidden).toBe(true)
     await act(async () => { mouse(host(), 'click') })
     const card = reactRoot().querySelector<HTMLElement>('[data-feedback-card]')!
     expect(card.querySelector('h2')!.textContent).toContain('Open Worktrees')
@@ -475,11 +479,13 @@ describe('selected outline', () => {
     expect(card.querySelector('textarea')!.value).toBe('draft')
     expect(highlight().style.left).toBe('70px')
     expect(highlight().hidden).toBe(false)
+    expect(label().hidden).toBe(true)
     const cancel = [...card.querySelectorAll('button')].find((button) => button.textContent?.trim() === 'Cancel')!
     await act(async () => { cancel.click() })
     expect(highlight().hidden).toBe(false)
     expect(highlight().style.left).toBe('340px')
     expect(reactRoot().querySelector('[data-feedback-card]')).toBeNull()
+    expect(label().hidden).toBe(false)
     await act(async () => { mouse(host(), 'pointermove') })
     expect(highlight().style.left).toBe('340px')
   })
@@ -497,10 +503,12 @@ describe('selected outline', () => {
     await act(async () => { mouse(host(), 'pointermove') })
     expect(highlight().hidden).toBe(false)
     expect(highlight().style.left).toBe('70px')
+    expect(label().hidden).toBe(true)
     await submit()
     expect(reactRoot().querySelector('[data-feedback-card]')).toBeNull()
     expect(highlight().hidden).toBe(false)
     expect(highlight().style.left).toBe('340px')
+    expect(label().hidden).toBe(false)
   })
 
   test('clears the selected target when switching to a saved comment', async () => {
@@ -534,6 +542,7 @@ describe('selected outline', () => {
     expect(reactRoot().querySelector('[data-feedback-card] h2')!.textContent).toContain('Browser pane')
     expect(highlight().style.left).toBe('210px')
     expect(highlight().hidden).toBe(false)
+    expect(label().hidden).toBe(true)
   })
 
   test('retains the current outline when a dirty selection through a pane chip is rejected', async () => {
