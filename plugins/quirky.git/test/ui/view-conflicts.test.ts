@@ -1,5 +1,6 @@
 import { afterAll, afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
+import { RpcErrorCode } from '@quirky/protocol'
 import { registerDom } from './register-dom'
 
 registerDom()
@@ -163,7 +164,7 @@ describe('quirky.git conflict file view', () => {
     act(() => editor.dispatch({ changes: { from: 0, insert: 'draft ' } }))
     const draft = editor.state.sliceDoc()
     fake.handlers['quirky.git/conflictFile'] = () => {
-      throw failure('math.ts is no longer conflicted.', 'not-found')
+      throw Object.assign(failure('math.ts is no longer conflicted.', 'not-found'), { code: RpcErrorCode.NotFound })
     }
     await act(async () => fake.emit({ type: 'quirky.git/changed', data: { worktreeId: 'w1' } }))
     await settle()
@@ -253,6 +254,165 @@ describe('quirky.git conflict file view', () => {
     expect(view(element).state.sliceDoc().startsWith('x')).toBe(true)
   })
 
+  test('a conflict tab remounted after Continue shows Git operation ended instead of a load error', async () => {
+    fake.handlers['quirky.git/conflictFile'] = () => {
+      throw Object.assign(new Error('math.ts is not in conflict.'), { code: RpcErrorCode.NotFound })
+    }
+    fake.handlers['quirky.git/status'] = () => status()
+    mounted = mountView(fake, { worktree: 'w1', mode: 'conflict-file', path: 'math.ts' })
+    await settle()
+    expect(mounted.element.querySelector('[role="status"]')?.textContent).toContain('Git operation ended')
+    expect(mounted.element.textContent).toContain('No working-tree file is available.')
+    expect(mounted.element.textContent).not.toContain('Error loading conflict file')
+  })
+
+  test('a NotFound refresh with an active conflict does not end the operation', async () => {
+    const { element, report } = await openFile()
+    fake.handlers['quirky.git/conflictFile'] = () => {
+      throw Object.assign(new Error('math.ts is not in conflict.'), { code: RpcErrorCode.NotFound })
+    }
+    fake.handlers['quirky.git/status'] = () => ({
+      ...status([{ path: 'math.ts', area: 'conflicts', status: 'modified', conflict: { kind: 'both_modified', state: 'unresolved' } }]),
+      operation: 'merge'
+    })
+    await act(async () => fake.emit({ type: 'quirky.git/changed', data: { worktreeId: 'w1' } }))
+    await settle()
+    expect(element.querySelector('[role="status"]')?.textContent).toContain('Unresolved conflict')
+    expect(element.textContent).not.toContain('Git operation ended')
+    expect(counter(element)).toBe('1 / 2')
+    expect(report()).toMatchObject({ conflicts: 2, currentConflict: 1 })
+  })
+
+  test('status can resolve a loaded file when its refresh fails', async () => {
+    const { element, report } = await openFile()
+    const editor = view(element)
+    fake.handlers['quirky.git/conflictFile'] = () => {
+      throw Object.assign(new Error('math.ts is no longer conflicted.'), { code: RpcErrorCode.NotFound })
+    }
+    fake.handlers['quirky.git/status'] = () => ({
+      ...status([{ path: 'math.ts', area: 'conflicts', status: 'modified', conflict: { kind: 'both_modified', state: 'resolved_locally' } }]),
+      operation: 'merge'
+    })
+    await act(async () => fake.emit({ type: 'quirky.git/changed', data: { worktreeId: 'w1' } }))
+    await settle()
+    expect(element.querySelector('[role="status"]')?.textContent).toContain('Resolved')
+    expect(element.textContent).not.toContain('Git operation ended')
+    expect(counter(element)).toBeUndefined()
+    expect(view(element)).toBe(editor)
+    expect(report()).toMatchObject({ conflicts: 0, currentConflict: null })
+  })
+
+  test('an initial NotFound stays visible when status is unavailable', async () => {
+    fake.handlers['quirky.git/conflictFile'] = () => {
+      throw Object.assign(new Error('math.ts is not in conflict.'), { code: RpcErrorCode.NotFound })
+    }
+    fake.handlers['quirky.git/status'] = () => {
+      throw new Error('status unavailable')
+    }
+    mounted = mountView(fake, { worktree: 'w1', mode: 'conflict-file', path: 'math.ts' })
+    await settle()
+    expect(mounted.element.textContent).toContain('Error loading conflict file: math.ts is not in conflict.')
+    expect(mounted.element.textContent).not.toContain('Git operation ended')
+  })
+
+  test('a hosted conflict draft survives tab remounts and retains its original save precondition', async () => {
+    const input = { worktree: 'w1', mode: 'conflict-file', path: 'math.ts', tabId: 'draft-remount' }
+    fake.handlers['quirky.git/conflictFile'] = () => conflictFile()
+    mounted = mountView(fake, input)
+    await settle()
+    const editor = view(mounted.element)
+    act(() => editor.dispatch({ changes: { from: 0, to: editor.state.doc.length, insert: 'unsaved resolution\n' } }))
+    await settle()
+    mounted.unmount()
+    fake.handlers['quirky.git/conflictFile'] = () => conflictFile({ content: 'external resolution\n', hash: 'h2' })
+    mounted = mountView(fake, input)
+    await settle()
+    expect(view(mounted.element).state.sliceDoc()).toBe('unsaved resolution\n')
+    expect(mounted.report()).toMatchObject({ dirty: true, stale: true })
+    fake.handlers['quirky.git/save'] = () => ({ hash: 'h3' })
+    await act(async () => void (await fake.run('save')))
+    expect(fake.callsTo('quirky.git/save').at(-1)?.params).toMatchObject({ content: 'unsaved resolution\n', expected: 'h1' })
+    mounted.unmount()
+    fake.handlers['quirky.git/conflictFile'] = () => conflictFile({ content: 'unsaved resolution\n', hash: 'h3' })
+    mounted = mountView(fake, input)
+    await settle()
+    expect(mounted.report()).toMatchObject({ dirty: false, stale: false })
+  })
+
+  test('a restored conflict draft keeps genuine read failures visible until a successful refresh', async () => {
+    const input = { worktree: 'w1', mode: 'conflict-file', path: 'math.ts', tabId: 'draft-read-error' }
+    fake.handlers['quirky.git/conflictFile'] = () => conflictFile()
+    mounted = mountView(fake, input)
+    await settle()
+    s.edit(mounted.element, 'unsaved resolution\n')
+    await settle()
+    mounted.unmount()
+    fake.handlers['quirky.git/conflictFile'] = () => { throw new Error('math.ts is binary') }
+    fake.handlers['quirky.git/status'] = () => ({ ...status(), operation: 'merge' })
+    mounted = mountView(fake, input)
+    await settle()
+    expect(mounted.element.textContent).toContain('Error loading conflict file: math.ts is binary')
+    expect(view(mounted.element).state.sliceDoc()).toBe('unsaved resolution\n')
+    expect(mounted.report().dirty).toBe(true)
+    fake.handlers['quirky.git/conflictFile'] = () => conflictFile()
+    await act(async () => fake.emit({ type: 'quirky.git/changed', data: { worktreeId: 'w1' } }))
+    await settle()
+    expect(mounted.element.textContent).not.toContain('Error loading conflict file')
+    expect(view(mounted.element).state.sliceDoc()).toBe('unsaved resolution\n')
+    fake.handlers['quirky.git/save'] = () => ({ hash: 'h2' })
+    await act(async () => void (await fake.run('save')))
+  })
+
+  test('a save completing after unmount cannot erase a newer hosted draft', async () => {
+    const input = { worktree: 'w1', mode: 'conflict-file', path: 'math.ts', tabId: 'pending-save-remount' }
+    fake.handlers['quirky.git/conflictFile'] = () => conflictFile()
+    mounted = mountView(fake, input)
+    await settle()
+    s.edit(mounted.element, 'resolution A\n')
+    await settle()
+    const pendingSave = Promise.withResolvers<{ hash: string }>()
+    fake.handlers['quirky.git/save'] = () => pendingSave.promise
+    const saving = fake.run('save')
+    await settle()
+    mounted.unmount()
+    mounted = mountView(fake, input)
+    await settle()
+    s.edit(mounted.element, 'resolution B\n')
+    await settle()
+    mounted.unmount()
+    mounted = null
+    await act(async () => {
+      pendingSave.resolve({ hash: 'h2' })
+      await saving
+    })
+    fake.handlers['quirky.git/conflictFile'] = () => conflictFile({ content: 'resolution A\n', hash: 'h2' })
+    mounted = mountView(fake, input)
+    await settle()
+    expect(view(mounted.element).state.sliceDoc()).toBe('resolution B\n')
+    expect(mounted.report()).toMatchObject({ dirty: true, stale: true })
+    fake.handlers['quirky.git/save'] = () => ({ hash: 'h3' })
+    await act(async () => void (await fake.run('overwrite')))
+  })
+
+  test('finishing an operation keeps an unsaved conflict draft available', async () => {
+    const { element, report } = await openFile()
+    const editor = view(element)
+    act(() => editor.dispatch({ changes: { from: 0, to: editor.state.doc.length, insert: 'unsaved resolution\n' } }))
+    fake.handlers['quirky.git/conflictFile'] = () => {
+      throw Object.assign(new Error('math.ts is not in conflict.'), { code: RpcErrorCode.NotFound })
+    }
+    fake.handlers['quirky.git/status'] = () => status()
+    await act(async () => fake.emit({ type: 'quirky.git/changed', data: { worktreeId: 'w1' } }))
+    await settle()
+    expect(element.querySelector('[role="status"]')?.textContent).toContain('Git operation ended')
+    expect(counter(element)).toBeUndefined()
+    expect(byLabel(element, 'Previous conflict')).toBeNull()
+    expect(byLabel(element, 'Next conflict')).toBeNull()
+    expect(view(element)).toBe(editor)
+    expect(view(element).state.sliceDoc()).toBe('unsaved resolution\n')
+    expect(report()).toMatchObject({ dirty: true, conflicts: 0, currentConflict: null })
+  })
+
   test('a file that cannot be read shows the error', async () => {
     fake.handlers['quirky.git/conflictFile'] = () => {
       throw new Error('math.ts is binary')
@@ -293,18 +453,73 @@ describe('quirky.git conflict review view', () => {
     expect(report()).toMatchObject({ mode: 'conflicts', conflicts: 2 })
   })
 
-  test('SC-45: Open shows the conflict file and carries the snapshot with it', async () => {
+  test('SC-45: opening a file persists the normal hosted review snapshot on its originating tab', async () => {
+    // ui-backed imports require the registered dom
+    const hosted = (await import('./panel-support')).fakeContext(layoutFor('w1'))
+    const { openHostedDiff } = await import('../../src/view/hosted-tabs')
+    const reviewInput = await openHostedDiff(hosted.context, { worktree: 'w1', mode: 'conflicts' })
+    expect(reviewInput.tabId).toBeDefined()
+    expect(reviewInput).not.toHaveProperty('review')
+    const groupId = reviewInput.groupId!
+    for (const method of ['quirky.terminal/workspace', 'quirky.terminal/openViewTab', 'quirky.terminal/rekeyViewTabs']) {
+      fake.handlers[method] = (params) => hosted.context.call(method, params)
+    }
     fake.handlers['quirky.git/status'] = () => status([conflict('a.ts'), conflict('b.ts')])
-    const { element } = await openReview()
-    await click(byText(element, 'Open'))
-    const opened = fake.opened.at(-1) as { id: string; input: { review: { capturedAt: number } } }
-    expect(typeof opened.input.review.capturedAt).toBe('number')
-    expectOpened(fake, s.DIFF_VIEW, {
-      worktree: 'w1',
-      mode: 'conflict-file',
-      path: 'a.ts',
-      review: { entries: [{ path: 'a.ts', kind: 'both_modified' }, { path: 'b.ts', kind: 'both_modified' }], capturedAt: opened.input.review.capturedAt }
+    const initialReview = mountView(fake, reviewInput)
+    mounted = initialReview
+    await settle()
+    await click(byText(initialReview.element, 'Open'))
+
+    const result = (await hosted.context.call('quirky.terminal/workspace', { workspace: 'id:w1' })) as {
+      workspace: {
+        activeGroup: string
+        root: {
+          kind: string
+          activeTab: string | null
+          tabs: Array<{ id: string; viewId: string; preview: boolean; input: Record<string, unknown> }>
+        }
+      }
+    }
+    expect(result.workspace.root.kind).toBe('group')
+    expect(result.workspace.activeGroup).toBe(groupId)
+    const tabs = result.workspace.root.tabs
+    const reviewTab = tabs.find((tab) => tab.id === reviewInput.tabId)
+    const opened = tabs.find((tab) => tab.input.mode === 'conflict-file')
+    expect(tabs).toHaveLength(2)
+    expect(reviewTab).toBeDefined()
+    expect(opened).toBeDefined()
+    if (!reviewTab || !opened) throw new Error('Expected both the originating review tab and opened conflict file tab.')
+    expect(reviewTab).toMatchObject({ preview: false, input: { groupId, mode: 'conflicts' } })
+    const persistedReview = reviewTab.input.review as { entries: Array<{ path: string; kind: string }>; capturedAt: number }
+    expect(persistedReview.entries).toEqual([
+      { path: 'a.ts', kind: 'both_modified' },
+      { path: 'b.ts', kind: 'both_modified' }
+    ])
+    expect(persistedReview.capturedAt).toBeGreaterThan(0)
+    expect(opened).toMatchObject({
+      viewId: s.DIFF_VIEW,
+      preview: false,
+      input: { worktree: 'w1', mode: 'conflict-file', path: 'a.ts', groupId, review: persistedReview }
     })
+    expect(result.workspace.root.activeTab).toBe(opened.id)
+
+    initialReview.unmount()
+    mounted = null
+    fake.handlers['quirky.git/status'] = () => status([conflict('a.ts'), conflict('new.ts')])
+    fake.handlers['quirky.git/conflictFile'] = (params) => {
+      expect(params.path).toBe('b.ts')
+      return { content: null }
+    }
+    const resumedReview = mountView(fake, reviewTab.input)
+    mounted = resumedReview
+    await settle()
+    expect([...resumedReview.element.querySelectorAll('nav[aria-label="Files"] [data-path]')].map((row) => row.textContent)).toEqual([
+      'a.tsUnresolvedOpen',
+      'b.tsGone'
+    ])
+    expect(resumedReview.element.textContent).toContain(
+      `Snapshot captured at ${new Date(persistedReview.capturedAt).toLocaleTimeString()}.`
+    )
   })
 
   test('SC-45: closing a file opened from the review returns to that review, not the sessions', async () => {

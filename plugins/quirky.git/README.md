@@ -55,6 +55,8 @@ For Markdown files, **Preview** shows only the rendered modified content and hid
 
 Combined-diff navigation and Git open commands use the same hosted-tab route. Opening a diff selects its workspace view if another top-level view was showing. The `open-changes` and `open-commit` commands await the hosted-tab operation before replying.
 
+Conflict review's **Open** opens the file in a normal worktree tab. Switching between review and file tabs keeps the original review snapshot and any unsaved resolution. After the merge, rebase, or cherry-pick finishes, the file tab shows “Git operation ended” instead of a load error. File-read failures remain visible alongside a retained draft until a successful refresh.
+
 Combined diffs open at the first file and keep their scroll position as sections load. Single-file diffs still jump to the first change; change-navigation commands remain available in both views.
 
 Combined-diff headers preserve commit-subject casing and keep the compact toolbar on the padded title row. Long subjects remain available in the header tooltip.
