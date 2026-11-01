@@ -298,6 +298,7 @@ a scenario says otherwise, so `--worktree` defaults to it.
     - **Given** a `pre-commit` hook that prints `eslint found 2 problems` and exits 1, and a staged file
     - **When** the agent runs `quirky git commit --message "Add math" --json`, then the person commits the same from the panel
     - **Then** the CLI's error has reason `lint`, summary "Lint failed during commit." and the hook's output; the panel shows the "Commit blocked" card with a "Lint" pill, the summary, and "Details", which opens "Commit Failed" with the raw output and "Close". A hook printing only `pre-commit: missing header` gives reason `hook` and "Pre-commit hook failed."; any other failure gives its first meaningful line, or "Commit failed."
+    - **Other commit failures:** reason `failed` also stays in a "Commit blocked" card with a "Failed" pill and keeps the draft message. Output beyond the summary remains available through "Details", even when it contains no lint or hook keywords; closing the dialog does not discard the output. A successful retry clears the card.
 
 ### The primary button and its menu
 

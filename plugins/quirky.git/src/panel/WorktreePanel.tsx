@@ -69,7 +69,7 @@ const OWN_BUTTON: ReadonlySet<GitBusyOp> = new Set(['switch', 'push', 'force-pus
 const RETRY_MS = 10_000
 const MESSAGE_REQUIRED = 'Enter a commit message to commit'
 
-type Blocked = { pill: 'Lint' | 'Hook'; summary: string; output: string }
+type Blocked = { pill: 'Lint' | 'Hook' | 'Failed'; summary: string; output: string }
 type PushTargetPurpose = 'review' | 'creation'
 type ReviewPushTarget =
   | { key: string; state: 'loading' }
@@ -749,6 +749,8 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
       const data = dataOf(e)
       if (reason === 'hook' || reason === 'lint') {
         setCommitBlocked({ pill: reason === 'lint' ? 'Lint' : 'Hook', summary: asText(data.summary) ?? messageOf(e), output: asText(data.output) ?? '' })
+      } else if (data.reason === 'failed') {
+        setCommitBlocked({ pill: 'Failed', summary: asText(data.summary) ?? messageOf(e), output: asText(data.output) ?? '' })
       } else {
         context.toast('Commit failed', messageOf(e))
       }
