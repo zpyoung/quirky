@@ -131,6 +131,7 @@ test('Revert Block marks a hosted diff unsaved, and terminal-tab close can cance
     !diffTabs(await terminalWorkspace(world)).some(({ tab: current }) => current.id === tab.id)
   )
   expect(readFileSync(join(world.dir, 'math.ts'), 'utf8')).toBe(MATH_BASE)
+  await world.win.waitFor(() => q(`[data-tab="${tab.id}"]`) === null)
   expect(q(`[data-tab="${tab.id}"]`)).toBeNull()
 }, SLOW)
 
@@ -150,6 +151,7 @@ test('header close can discard a hosted diff draft without changing disk', async
     !diffTabs(await terminalWorkspace(world)).some(({ tab: current }) => current.id === tab.id)
   )
   expect(readFileSync(join(world.dir, 'math.ts'), 'utf8')).toBe(MATH_ON_DISK)
+  await world.win.waitFor(() => q(`[data-tab="${tab.id}"]`) === null)
   expect(q(`[data-tab="${tab.id}"]`)).toBeNull()
 
   await world.run('open-diff', { path: 'math.ts', source: 'unstaged' })
