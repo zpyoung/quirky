@@ -279,6 +279,31 @@ describe('quirky.git combined diff', () => {
     expect(byText(element, 'Open Branch Diff')).toBeNull()
   })
 
+  test('a whole-commit file tree selects the file jumped to after a section interaction', async () => {
+    fake.settings.combinedDiffFileTree = 'shown'
+    fake.handlers['quirky.git/commitFiles'] = () => ({
+      commit: 'c'.repeat(40),
+      parent: null,
+      entries: ['README.md', 'src/app.ts', 'src/format.ts'].map((path) => ({
+        path, status: 'added', added: 1, removed: 0, binary: false
+      }))
+    })
+    const { element } = await open({ worktree: 'w1', mode: 'combined', commit: 'ccccccc' })
+    const tree = element.querySelector('nav[aria-label="Files"]')!
+    const selectedPaths = () => [...tree.querySelectorAll('button[aria-pressed="true"]')].map((button) => button.textContent)
+    const chevron = byLabel(sectionOf(element, 'src/app.ts'), 'Collapse src/app.ts')!
+    await act(async () => {
+      chevron.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }))
+    })
+    await click(chevron)
+    expect(selectedPaths()).toEqual(['src/app.ts'])
+
+    await click(byText(tree, 'README.md'))
+    expect(selectedPaths()).toEqual(['README.md'])
+    await click(byText(tree, 'src/format.ts'))
+    expect(selectedPaths()).toEqual(['src/format.ts'])
+  })
+
   test('a commit subject keeps its case and its header preserves padding and the full title', async () => {
     const style = document.createElement('style')
     style.textContent = [
