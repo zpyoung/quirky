@@ -2035,7 +2035,14 @@ export class EditorDaemon {
     const keys = await this.fileKeys(target.path)
     await this.fileQueue.run(keys, async () => {
       await mkdir(dirname(target.path), { recursive: true })
-      await mkdir(target.path)
+      try {
+        await mkdir(target.path)
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException | null)?.code === 'EEXIST') {
+          throw this.context.error('conflict', `Destination already exists: ${target.relativePath}`)
+        }
+        throw error
+      }
     })
     await this.pushHistory(worktree.id, {
       kind: 'create', worktreeId: worktree.id, root: worktree.path,

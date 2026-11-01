@@ -653,6 +653,22 @@ describe('editor core through the daemon API', () => {
     expect(readFileSync(join(t.root, 'README.md'), 'utf8')).toBe('# Existing\n')
   }, 20_000)
 
+  test('qa-files-50: createFolder reports a duplicate relative destination and preserves its contents', async () => {
+    const t = await boot()
+    await write(t, 'existing/child.txt', 'existing content\n')
+
+    const message = await rejectionMessage(t.call('quirky.editor/mutate', {
+      worktree: t.worktreeId,
+      action: 'createFolder',
+      path: 'existing'
+    }))
+    expect(message.toLowerCase()).toContain('destination already exists')
+    expect(message).toContain('existing')
+    expect(message).not.toContain(t.root)
+    expect(message).not.toContain('EEXIST')
+    expect(readFileSync(join(t.root, 'existing/child.txt'), 'utf8')).toBe('existing content\n')
+  }, 20_000)
+
   test('qa-files-50: rename into an open existing file reports a destination conflict and preserves both buffers', async () => {
     const t = await boot()
     await write(t, 'source.txt', 'source content\n')
