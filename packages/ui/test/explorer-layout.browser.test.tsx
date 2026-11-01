@@ -50,16 +50,37 @@ const settings: Record<string, unknown> = {
 }
 const listing = {
   root: '/repo',
-  entries: Array.from({ length: 12 }, (_, index) => {
-    const name = `file-${String(index + 1).padStart(2, '0')}.txt`
-    return { path: `/repo/${name}`, name, isDirectory: false, isSymlink: false }
-  }),
+  entries: [
+    ...Array.from({ length: 12 }, (_, index) => {
+      const name = `file-${String(index + 1).padStart(2, '0')}.txt`
+      return { path: `/repo/${name}`, name, isDirectory: false, isSymlink: false }
+    }),
+    {
+      path: '/repo/a-very-long-file-name-for-narrow-ellipsis-check.txt',
+      name: 'a-very-long-file-name-for-narrow-ellipsis-check.txt',
+      isDirectory: false,
+      isSymlink: false,
+    },
+  ],
   showDotfiles: true,
   showIgnored: false,
   followSymlinkedDirectories: false,
 }
-const LIVE_ROW_COUNT = 10
-const liveListing = { ...listing, entries: listing.entries.slice(0, LIVE_ROW_COUNT) }
+const liveRootEntries = [
+  ...listing.entries.slice(0, 7),
+  { path: '/repo/src', name: 'src', isDirectory: true, isSymlink: false },
+  { path: '/repo/notes.md', name: 'notes.md', isDirectory: false, isSymlink: false },
+  { path: '/repo/README.md', name: 'README.md', isDirectory: false, isSymlink: false },
+]
+const liveChildListing = {
+  root: '/repo/src',
+  entries: [{ path: '/repo/src/child.md', name: 'child.md', isDirectory: false, isSymlink: false }],
+  showDotfiles: true,
+  showIgnored: false,
+  followSymlinkedDirectories: false,
+}
+const LIVE_ROW_COUNT = liveRootEntries.length + liveChildListing.entries.length
+const liveListing = { ...listing, entries: liveRootEntries }
 
 let createRoot: typeof createRootFunction
 let ExplorerPanel: typeof ExplorerPanelComponent
@@ -192,16 +213,19 @@ function liveBrowserEntry(): string {
 
     const settings = ${JSON.stringify(settings)}
     const listing = ${JSON.stringify(liveListing)}
+    const childListing = ${JSON.stringify(liveChildListing)}
 
     const context = {
       pluginId: 'quirky.editor',
       log() {},
-      call: async (method) => {
+      call: async (method, params) => {
         if (method === 'quirky.editor/state') {
-          return { buffers: [], tabs: [], explorer: { worktreeId: 'w1', showDotfiles: true, expanded: [] }, search: null, quickOpenHistory: [], closeRequests: [] }
+          return { buffers: [], tabs: [], explorer: { worktreeId: 'w1', showDotfiles: true, expanded: ['src'] }, search: null, quickOpenHistory: [], closeRequests: [] }
         }
         if (method === 'quirky.editor/documentRoot') return { id: 'w1', path: '/repo' }
-        if (method === 'quirky.editor/explorer') return listing
+        if (method === 'quirky.editor/explorer') {
+          return params?.path === '/repo/src' ? childListing : listing
+        }
         if (method === 'quirky.git/status') return { files: [] }
         if (method === 'quirky.worktree/list') return [{ id: 'w1', path: '/repo', name: 'repo' }]
         return {}
@@ -287,7 +311,7 @@ test.skipIf(!existsSync(executable))('file rows are visible and scrollable in sh
     for (const height of [170, 205, 400]) {
       await page.setContent(`<style>${styles}</style>${slotMarkup(frame, height)}`)
       const first = page.locator('[role="treeitem"][data-path="/repo/file-01.txt"]')
-      const last = page.locator('[role="treeitem"][data-path="/repo/file-12.txt"]')
+      const last = page.locator('[role="treeitem"]').last()
       expect(await rowFitsInTree(first)).toBe(true)
 
       const tree = page.locator('.qe-explorer-tree')
@@ -358,6 +382,7 @@ test.skipIf(!existsSync(executable))('Explorer rows and controls stay usable at 
         const row = document.querySelector<HTMLElement>('.qe-explorer-row[data-path="/repo/file-01.txt"]')!
         const listRow = row.querySelector<HTMLElement>('.ui-list-row')!
         const name = row.querySelector<HTMLElement>('.qe-explorer-name')!
+        const longName = document.querySelector<HTMLElement>('.qe-explorer-row[data-path="/repo/a-very-long-file-name-for-narrow-ellipsis-check.txt"] .qe-explorer-name')!
         const rowAction = row.querySelector<HTMLElement>('.qe-explorer-row-action-trigger')!
         const modeGroup = document.querySelector<HTMLElement>('.qe-explorer-search-mode')!
         const modeButtons = Array.from(modeGroup.querySelectorAll<HTMLElement>(':scope > .ui-button'))
@@ -411,7 +436,7 @@ test.skipIf(!existsSync(executable))('Explorer rows and controls stay usable at 
           ),
           nameWidth: nameBounds.width,
           nameContained: nameBounds.left >= rowBounds.left - 0.5 && nameBounds.right <= rowBounds.right + 0.5,
-          nameOverflows: name.scrollWidth > name.clientWidth,
+          longNameOverflows: longName.scrollWidth > longName.clientWidth,
           nameTextOverflow: getComputedStyle(name).textOverflow,
           nameWhiteSpace: getComputedStyle(name).whiteSpace,
           nameOverflowStyle: getComputedStyle(name).overflow,
@@ -441,7 +466,7 @@ test.skipIf(!existsSync(executable))('Explorer rows and controls stay usable at 
       expect(layout.nameTextOverflow).toBe('ellipsis')
       expect(layout.nameWhiteSpace).toBe('nowrap')
       expect(layout.nameOverflowStyle).toBe('hidden')
-      if (width === 116) expect(layout.nameOverflows).toBe(true)
+      if (width === 116) expect(layout.longNameOverflows).toBe(true)
       expect(layout.modeGap).toBeGreaterThanOrEqual(3.5)
       expect(layout.modesContained).toBe(true)
       expect(layout.toolbarButtonCount).toBeGreaterThanOrEqual(6)
@@ -495,6 +520,85 @@ test.skipIf(!existsSync(executable))('Explorer rows and controls stay usable at 
     }
   } finally {
     await browser.close()
+  }
+}, 60_000)
+
+test.skipIf(!existsSync(executable))('shows full Markdown filenames and keeps Explorer row actions reachable at 116px', async () => {
+  const context = await browser!.newContext({ viewport: { width: 647, height: 900 } })
+  try {
+    const page = await context.newPage()
+    await mountLiveExplorer(page)
+    await page.locator('.tool-shell__panel').evaluate((panel) => {
+      const main = panel.closest<HTMLElement>('main')
+      if (main === null) throw new Error('The Explorer panel did not render inside its shell.')
+      main.style.width = '647px'
+      main.style.height = '900px'
+      ;(panel as HTMLElement).style.width = '116px'
+      ;(panel as HTMLElement).style.height = '900px'
+    })
+    await page.evaluate(() => {
+      const { promise, resolve } = Promise.withResolvers<void>()
+      requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
+      return promise
+    })
+
+    const filenames = await page.locator('.qe-explorer-row').evaluateAll((rows) => {
+      return ['/repo/notes.md', '/repo/README.md'].map((path) => {
+        const row = rows.find((candidate) => candidate.getAttribute('data-path') === path)
+        const name = row?.querySelector<HTMLElement>('.qe-explorer-name')
+        if (row === undefined || name === null || name === undefined) throw new Error(`The Explorer did not render ${path}.`)
+        const bounds = name.getBoundingClientRect()
+        return {
+          name: name.textContent,
+          fullyVisible: name.scrollWidth <= name.clientWidth && bounds.width > 0,
+        }
+      })
+    })
+    expect(filenames.map(({ name }) => name)).toEqual(['notes.md', 'README.md'])
+    expect(filenames.every(({ fullyVisible }) => fullyVisible)).toBe(true)
+
+    const hierarchy = await page.locator('.qe-explorer-row[data-path="/repo/src"]').evaluate((folder) => {
+      const rootName = document.querySelector<HTMLElement>('.qe-explorer-row[data-path="/repo/file-01.txt"] .qe-explorer-name')
+      const child = document.querySelector<HTMLElement>('.qe-explorer-row[data-path="/repo/src/child.md"]')
+      const childName = child?.querySelector<HTMLElement>('.qe-explorer-name')
+      if (rootName === null || child === null || childName == null) throw new Error('The nested Explorer folder did not render.')
+      return {
+        expanded: folder.getAttribute('aria-expanded'),
+        disclosureVisible: (folder.querySelector('.qe-explorer-chevron')?.getBoundingClientRect().width ?? 0) > 0,
+        childLevel: child.getAttribute('aria-level'),
+        childNameOffset: childName.getBoundingClientRect().left - rootName.getBoundingClientRect().left,
+      }
+    })
+    expect(hierarchy.expanded).toBe('true')
+    expect(hierarchy.disclosureVisible).toBe(true)
+    expect(hierarchy.childLevel).toBe('2')
+    expect(hierarchy.childNameOffset).toBeGreaterThan(0)
+
+    const notesRow = page.locator('.qe-explorer-row[data-path="/repo/notes.md"]')
+    const notesAction = page.getByRole('button', { name: 'Actions for notes.md' })
+    await notesRow.hover()
+    const revealedAction = async (action: Locator) => action.evaluate((button) => {
+      const row = button.closest('.qe-explorer-row')!
+      const name = row.querySelector('.qe-explorer-name')!
+      return {
+        opacity: getComputedStyle(button.parentElement!).opacity,
+        separated: name.getBoundingClientRect().right <= button.getBoundingClientRect().left,
+      }
+    })
+    expect(await revealedAction(notesAction)).toEqual({ opacity: '1', separated: true })
+    await notesAction.click()
+    expect(await notesAction.getAttribute('aria-expanded')).toBe('true')
+    await notesAction.click()
+
+    await page.locator('.qe-explorer-tree-content').focus()
+    for (let index = 0; index < LIVE_ROW_COUNT; index++) await page.keyboard.press('Tab')
+    const readmeAction = page.getByRole('button', { name: 'Actions for README.md' })
+    expect(await page.evaluate(() => (document.activeElement as HTMLElement | null)?.getAttribute('aria-label'))).toBe('Actions for README.md')
+    expect(await revealedAction(readmeAction)).toEqual({ opacity: '1', separated: true })
+    await page.keyboard.press('Enter')
+    expect(await readmeAction.getAttribute('aria-expanded')).toBe('true')
+  } finally {
+    await context.close()
   }
 }, 60_000)
 
