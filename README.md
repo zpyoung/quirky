@@ -412,6 +412,9 @@ their existing commands and save guards. `quirky.editor` is included in the UI l
 presentation changes must use `@quirky/ui` components and semantic tokens, with engine styles
 owned by the shared UI package rather than injected plugin CSS.
 
+In narrow Files rails, Explorer preserves filename space and reveals row actions on hover or
+keyboard focus.
+
 Document headers keep File actions beside the path, with view modes, Changes and Save below.
 Pinning, Explorer, Source Control, tab closing and font zoom are available in File actions, so
 the header fits two rows in the default window with Worktrees and Files open. Markdown formatting

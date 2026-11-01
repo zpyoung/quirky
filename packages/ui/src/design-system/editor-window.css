@@ -914,6 +914,34 @@
   opacity: 1;
 }
 
+@container ui-tool-panel (max-width: 160px) {
+  .ui-tool-panel-frame:has(.qe-explorer) .qe-explorer-chevron:empty {
+    display: none;
+  }
+
+  .ui-tool-panel-frame:has(.qe-explorer) .qe-explorer-row {
+    padding-inline-start: var(--qe-tree-indent, 0rem);
+    position: relative;
+  }
+
+  .ui-tool-panel-frame:has(.qe-explorer) .qe-explorer-row-actions {
+    inset-inline-end: var(--ui-space-4);
+    margin-inline-start: 0;
+    opacity: 0;
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+  }
+
+  .ui-tool-panel-frame:has(.qe-explorer) .qe-explorer-row:hover .qe-explorer-row-actions,
+  .ui-tool-panel-frame:has(.qe-explorer) .qe-explorer-row-actions:focus-within,
+  .ui-tool-panel-frame:has(.qe-explorer) .qe-explorer-row-actions.open {
+    opacity: 1;
+    position: static;
+    transform: none;
+  }
+}
+
 .qe-explorer-content-results > p {
   color: var(--ui-muted);
   margin: var(--ui-space-6);
