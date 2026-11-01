@@ -30,7 +30,7 @@ export const banner: CSSProperties = {
 export const tray: CSSProperties = {
   ...panel,
   right: 'var(--ui-space-12)',
-  bottom: 'var(--ui-space-12)',
+  bottom: 'calc(var(--ui-row-single) + var(--ui-space-12))',
   width: 'min(calc(var(--ui-row-double) * 12), calc(100vw - var(--ui-space-24)))',
   maxHeight: '60vh',
   display: 'flex',
