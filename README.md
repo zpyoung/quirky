@@ -306,6 +306,8 @@ Development builds retain the native browser menu for Inspect Element.
 
 Narrow panels reflow header actions and row controls before they can crowd out names.
 Section headings stay on one line with ellipsis; full project names remain available on hover.
+At minimum width, tool-panel headings use the full row while actions are hidden and
+ellipsize before the controls when hover or focus reveals them.
 The status bar reserves room for complete activity and needs-you metrics while usage adapts
 to the remaining width. The Usage button draws its focus ring inside the control so it stays
 visible at the window edge.

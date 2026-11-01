@@ -880,7 +880,7 @@ test.skipIf(!existsSync(chromium.executablePath()))('keeps host panel headers co
       content: `
         #panel-header-regression-fixtures { display: flex; gap: 16px; }
         .panel-header-regression-frame { height: 360px; min-width: 0; width: 116px; }
-        #remote-frame-host, #vault-frame-host { display: none; }
+        #remote-frame-host, #vault-frame-host, #add-project-frame-host { display: none; }
       `
     })
     await page.addScriptTag({ content: panelHeaderRegressionBundle })
@@ -1158,7 +1158,7 @@ test.skipIf(!existsSync(chromium.executablePath()))('keeps Add project controls 
     await page.addStyleTag({
       content: `
         #panel-header-regression-fixtures { display: block; }
-        #remote-frame-host, #vault-frame-host { display: none; }
+        #remote-frame-host, #vault-frame-host, #worktrees-frame-host, #files-frame-host { display: none; }
         #add-project-frame-host { height: 360px; min-width: 0; width: 160px; }
       `
     })
@@ -1239,6 +1239,66 @@ test.skipIf(!existsSync(chromium.executablePath()))('keeps Add project controls 
         })
         await page.waitForTimeout(150)
       }
+    }
+  } finally {
+    await context.close()
+  }
+}, 60_000)
+
+test.skipIf(!existsSync(chromium.executablePath()))('ellipsizes the Worktrees heading before revealed Add project controls', async () => {
+  const context = await browser!.newContext({ viewport: { width: 646, height: HEIGHT }, reducedMotion: 'reduce' })
+  const page = await context.newPage()
+  try {
+    await page.setContent(pageMarkup())
+    for (const stylesheet of STYLESHEETS) {
+      await page.addStyleTag({ content: readFileSync(join(ROOT, stylesheet), 'utf8') })
+    }
+    await page.addStyleTag({
+      content: `
+        #panel-header-regression-fixtures > :not(#add-project-frame-host) { display: none; }
+        #add-project-frame-host { height: 360px; width: 160px; }
+      `
+    })
+    await page.addScriptTag({ content: panelHeaderRegressionBundle })
+    const host = page.locator('#add-project-frame-host')
+    await host.waitFor()
+    await host.evaluate((element) => element.setAttribute('data-tool-panel', ''))
+    const title = host.getByRole('heading', { name: 'Worktrees', exact: true })
+    const addProject = host.getByRole('button', { name: 'Add project', exact: true })
+    const measure = () => title.evaluate((element) => {
+      const actions = element.parentElement!.querySelector('.ui-tool-panel-frame__actions')!
+      const style = getComputedStyle(element)
+      return {
+        titleRight: element.getBoundingClientRect().right,
+        actionsLeft: actions.getBoundingClientRect().left,
+        actionsOpacity: getComputedStyle(actions).opacity,
+        truncated: element.scrollWidth > element.clientWidth,
+        overflow: style.overflow,
+        textOverflow: style.textOverflow
+      }
+    })
+    await page.mouse.move(620, HEIGHT - 10)
+    const resting = await measure()
+    expect(resting.actionsOpacity).toBe('0')
+    expect(resting.truncated).toBe(false)
+
+    for (const interaction of ['hover', 'focus', 'panel-focused'] as const) {
+      if (interaction === 'hover') await addProject.hover()
+      if (interaction === 'focus') await addProject.focus()
+      if (interaction === 'panel-focused') {
+        await host.evaluate((element) => element.setAttribute('data-panel-focused', ''))
+      }
+      const active = await measure()
+      expect(active.actionsOpacity).toBe('1')
+      expect(active.titleRight).toBeLessThanOrEqual(active.actionsLeft)
+      expect(active.truncated).toBe(true)
+      expect(active.overflow).toBe('hidden')
+      expect(active.textOverflow).toBe('ellipsis')
+
+      await page.mouse.move(620, HEIGHT - 10)
+      await addProject.evaluate((element) => (element as HTMLElement).blur())
+      await host.evaluate((element) => element.removeAttribute('data-panel-focused'))
+      expect(await measure()).toEqual(resting)
     }
   } finally {
     await context.close()

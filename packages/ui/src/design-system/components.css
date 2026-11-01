@@ -896,17 +896,19 @@
 
   [data-tool-panel] .ui-tool-panel-frame__header:has(> .ui-tool-panel-frame__tabs:empty) {
     display: grid;
-    grid-template-columns: minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr) auto;
   }
 
-  [data-tool-panel] .ui-tool-panel-frame__header:has(> .ui-tool-panel-frame__tabs:empty) > .ui-tool-panel-frame__title,
-  [data-tool-panel] .ui-tool-panel-frame__header:has(> .ui-tool-panel-frame__tabs:empty) > .ui-tool-panel-frame__actions {
-    grid-area: 1 / 1;
+  [data-tool-panel] .ui-tool-panel-frame__header:has(> .ui-tool-panel-frame__tabs:empty) > .ui-tool-panel-frame__title {
+    grid-area: 1 / 1 / 2 / -1;
   }
 
   [data-tool-panel] .ui-tool-panel-frame__header:has(> .ui-tool-panel-frame__tabs:empty) > .ui-tool-panel-frame__actions {
-    background: var(--ui-surface);
-    z-index: 1;
+    grid-area: 1 / 2;
+  }
+
+  [data-tool-panel]:is([data-panel-focused], :hover, :focus-within) .ui-tool-panel-frame__header:has(> .ui-tool-panel-frame__tabs:empty) > .ui-tool-panel-frame__title {
+    grid-column: 1;
   }
 
   [data-tool-panel] .ui-tool-panel-frame__header:has(> .ui-tool-panel-frame__tabs:empty) .ui-expanding-icon-button__label {
