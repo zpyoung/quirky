@@ -320,7 +320,7 @@
 ## D32: The `+` menu keeps v1's rows under Orca's labels, with a search box over rows and open tabs
 - **Question:** the new-tab menu's contents
 - **Options:** Orca's full menu; Orca's rows that exist in Quirky
-- **Chose:** a search box ("Search open tabs and agents…") filtering the rows and the workspace's open tabs, then New Terminal (⌘T), then the agent rows Quirky already lists, then Agent settings…. Browser, Markdown and Mobile Emulator rows are left out (D5).
+- **Chose:** a search box ("Search open tabs and agents…") filtering the rows and the workspace's open tabs, then New Terminal (⌘T), then the agent rows Quirky already lists, then Agent settings…. Matching open tabs carry an "Open tab" badge to distinguish switching to an existing tab from starting a session. Browser, Markdown and Mobile Emulator rows are left out (D5).
 - **Why:** term-ui.md "Where to find it"; the agent rows already exist (plugins/quirky.session/src/window/NewSessionMenu.tsx)
 - **Evidence:** term-ui.md line 11
 - **Reversibility:** easy

@@ -1191,7 +1191,7 @@ export class WorkspaceController {
       for (const candidate of groupsInOrder(this.ws.root)) {
         for (const tab of candidate.tabs) {
           const title = displayTitle(tab)
-          if (title.toLowerCase().includes(needle)) rows.push({ label: title, onSelect: () => void this.activateTab(tab.id) })
+          if (title.toLowerCase().includes(needle)) rows.push({ label: title, badge: 'Open tab', onSelect: () => void this.activateTab(tab.id) })
         }
       }
     }

@@ -187,6 +187,35 @@ describe('SC-22: the + menu', () => {
     expect(rows(view)).toEqual(['New Terminal', 'Terminal 1'])
   })
 
+  test('distinguishes an open tab from an agent with the same name and keeps their actions separate', async () => {
+    const ws = makeWorkspace(
+      group('grp-1', [
+        tab('tab-1', pane('pane-1', 's-1'), { defaultTitle: 'Terminal 1' }),
+        tab('tab-2', pane('pane-2', 's-2'), { defaultTitle: 'Claude' })
+      ], { activeTab: 'tab-1' })
+    )
+    mounted = await mountFixture(fakeDaemon(ws, { agents: AGENTS }))
+    const view = mounted
+    await open(view)
+    await type(search(view), 'Claude')
+
+    const matches = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')]
+      .filter((el) => el.querySelector('.qt-menu-label')?.textContent === 'Claude')
+    expect(matches).toHaveLength(2)
+    expect(matches[0]!.textContent!.toLowerCase()).not.toContain('open tab')
+    expect(matches[1]!.textContent!.toLowerCase()).toContain('open tab')
+
+    await click(matches[1]!)
+    expect(callsTo(view.fake, 'activateTab')).toEqual([{ tab: 'tab-2' }])
+    expect(view.last().dialog).toBeNull()
+
+    await open(view)
+    await type(search(view), 'Claude')
+    await click(row(view, 'Claude'))
+    expect(view.last().dialog).toEqual({ kind: 'new-session', title: 'New Claude session' })
+    expect(callsTo(view.fake, 'newTab')).toEqual([])
+  })
+
   test('Enter on the open tab activates it', async () => {
     const view = await mount()
     await open(view)
