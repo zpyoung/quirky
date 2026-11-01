@@ -1,15 +1,39 @@
 import { afterAll, afterEach, beforeAll, expect, test } from 'bun:test'
-import { existsSync } from 'node:fs'
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join, resolve } from 'node:path'
 import { act } from 'react'
 import type { Root } from 'react-dom/client'
 import type { createRoot as createRootFunction } from 'react-dom/client'
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
 import type { UiPluginContext } from '@quirky/protocol'
-import { chromium, type Locator } from 'playwright'
+import { chromium, type Browser, type Locator, type Page } from 'playwright'
 import type { ExplorerPanel as ExplorerPanelComponent } from '../../../plugins/quirky.editor/src/window/ExplorerPanel'
 import type { ToolPanelFrame as ToolPanelFrameComponent } from '../src/design-system'
 
+const ROOT = resolve(import.meta.dir, '../../..')
+const EDITOR_MODULES = join(ROOT, 'plugins/quirky.editor/node_modules')
+const BROWSER_IMPORTS: Record<string, string> = {
+  react: join(EDITOR_MODULES, 'react/index.js'),
+  'react/jsx-runtime': join(EDITOR_MODULES, 'react/jsx-runtime.js'),
+  'react/jsx-dev-runtime': join(EDITOR_MODULES, 'react/jsx-dev-runtime.js'),
+  'react-dom': join(EDITOR_MODULES, 'react-dom/index.js'),
+  'react-dom/client': join(EDITOR_MODULES, 'react-dom/client.js'),
+  '@quirky/ui': join(ROOT, 'packages/ui/src/design-system/index.ts'),
+  '@quirky/protocol': join(ROOT, 'packages/protocol/src/index.ts')
+}
+const browserDependencyResolver: Bun.BunPlugin = {
+  name: 'explorer-inline-layout-browser-dependencies',
+  setup(builder) {
+    builder.onResolve(
+      { filter: /^(?:react|react\/jsx-runtime|react\/jsx-dev-runtime|react-dom|react-dom\/client|@quirky\/ui|@quirky\/protocol)$/ },
+      ({ path }) => ({ path: BROWSER_IMPORTS[path] })
+    )
+  }
+}
 const executable = chromium.executablePath()
+let browser: Browser | null = null
+let browserBundle = ''
 const settings: Record<string, unknown> = {
   editorAutoSave: false,
   editorAutoSaveDelayMs: 1000,
@@ -34,6 +58,8 @@ const listing = {
   showIgnored: false,
   followSymlinkedDirectories: false,
 }
+const LIVE_ROW_COUNT = 10
+const liveListing = { ...listing, entries: listing.entries.slice(0, LIVE_ROW_COUNT) }
 
 let createRoot: typeof createRootFunction
 let ExplorerPanel: typeof ExplorerPanelComponent
@@ -48,11 +74,36 @@ beforeAll(async () => {
   ;({ createRoot } = await import('react-dom/client'))
   ;({ ExplorerPanel } = await import('../../../plugins/quirky.editor/src/window/ExplorerPanel'))
   ;({ ToolPanelFrame } = await import('../src/design-system'))
-})
+  if (!existsSync(executable)) return
+  const tempDir = mkdtempSync(join(tmpdir(), 'quirky-explorer-inline-layout-'))
+  try {
+    const entrypoint = join(tempDir, 'browser-entry.ts')
+    writeFileSync(entrypoint, liveBrowserEntry())
+    const result = await Bun.build({
+      entrypoints: [entrypoint],
+      target: 'browser',
+      format: 'esm',
+      plugins: [browserDependencyResolver],
+      define: { 'process.env.NODE_ENV': '"production"' }
+    })
+    if (!result.success) throw new Error(result.logs.map((log) => log.message).join('\n'))
+    const output = result.outputs[0]
+    if (!output) throw new Error('The Explorer inline-layout browser bundle was empty.')
+    browserBundle = await output.text()
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true })
+  }
+  browser = await chromium.launch({
+    headless: true,
+    executablePath: executable,
+    args: process.platform === 'linux' ? ['--no-sandbox'] : []
+  })
+}, 60_000)
 
 afterAll(async () => {
+  await browser?.close()
   await GlobalRegistrator.unregister()
-})
+}, 60_000)
 
 afterEach(async () => {
   await act(async () => root?.unmount())
@@ -129,6 +180,81 @@ async function designSystemStyles(): Promise<string> {
   ])
   const globalRules = globalStyles.replace(/^@import ['"][^'"]+['"];\s*/gm, '')
   return `${compatibilityTokens}\n${tokens}\n${components}\n${icons}\n${editorWindow}\n${globalRules}\n${shell}`
+}
+
+function liveBrowserEntry(): string {
+  const explorerPanel = join(ROOT, 'plugins/quirky.editor/src/window/ExplorerPanel.tsx')
+  return `
+    import { createElement } from 'react'
+    import { createRoot } from 'react-dom/client'
+    import { ToolPanelFrame } from '@quirky/ui'
+    import { ExplorerPanel } from ${JSON.stringify(explorerPanel)}
+
+    const settings = ${JSON.stringify(settings)}
+    const listing = ${JSON.stringify(liveListing)}
+
+    const context = {
+      pluginId: 'quirky.editor',
+      log() {},
+      call: async (method) => {
+        if (method === 'quirky.editor/state') {
+          return { buffers: [], tabs: [], explorer: { worktreeId: 'w1', showDotfiles: true, expanded: [] }, search: null, quickOpenHistory: [], closeRequests: [] }
+        }
+        if (method === 'quirky.editor/documentRoot') return { id: 'w1', path: '/repo' }
+        if (method === 'quirky.editor/explorer') return listing
+        if (method === 'quirky.git/status') return { files: [] }
+        if (method === 'quirky.worktree/list') return [{ id: 'w1', path: '/repo', name: 'repo' }]
+        return {}
+      },
+      subscribe: () => () => {},
+      getSetting: (name) => settings[name],
+      getLayout: () => ({ worktree: 'w1', view: null, panel: null, sidebar: true, focus: 'view' }),
+      onLayout: () => () => {},
+      onConnection: () => () => {},
+      toast() {}
+    }
+    const explorer = createElement(ExplorerPanel, { context })
+    const pluginSlot = createElement('section', { className: 'plugin-slot' }, createElement('div', { className: 'plugin-slot-body' }, explorer))
+    const panel = createElement(ToolPanelFrame, { title: 'Explorer' }, pluginSlot)
+    createRoot(document.getElementById('explorer-mount')).render(panel)
+  `
+}
+
+function liveExplorerMarkup(): string {
+  return '<main data-theme="dark" style="position:relative;overflow:hidden;width:1280px;height:720px"><div id="explorer-mount" class="tool-shell__panel tool-shell__panel--left-bottom" style="left:0;top:0;width:280px;height:655px"></div></main>'
+}
+
+async function mountLiveExplorer(page: Page): Promise<void> {
+  await page.setContent(`<style>${await designSystemStyles()}</style>${liveExplorerMarkup()}`)
+  await page.addScriptTag({ type: 'module', content: browserBundle })
+  await page.waitForFunction((expectedCount) => document.querySelectorAll('.qe-explorer-row').length === expectedCount, LIVE_ROW_COUNT)
+}
+
+async function inlineRowGeometry(page: Page) {
+  return page.locator('.qe-explorer-inline-row').evaluate((row) => {
+    const tree = row.closest<HTMLElement>('.qe-explorer-tree')
+    const footer = document.querySelector<HTMLElement>('.qe-explorer-footer')
+    const input = row.querySelector<HTMLInputElement>('input')
+    if (!tree || !footer || !input) throw new Error('The inline Explorer form did not render inside its tree.')
+    const rect = (element: Element) => {
+      const bounds = element.getBoundingClientRect()
+      return { top: bounds.top, right: bounds.right, bottom: bounds.bottom, left: bounds.left }
+    }
+    const treeBounds = tree.getBoundingClientRect()
+    const left = treeBounds.left + tree.clientLeft
+    const top = treeBounds.top + tree.clientTop
+    return {
+      focused: document.activeElement === input,
+      scrollTop: tree.scrollTop,
+      scrollport: { top, right: left + tree.clientWidth, bottom: top + tree.clientHeight, left },
+      row: rect(row),
+      footer: rect(footer),
+      controls: [input, ...row.querySelectorAll('button')].map((control) => ({
+        label: control instanceof HTMLButtonElement ? control.textContent?.trim() ?? '' : 'input',
+        ...rect(control)
+      }))
+    }
+  })
 }
 
 function slotMarkup(frame: string, height: number, width = 160): string {
@@ -371,6 +497,50 @@ test.skipIf(!existsSync(executable))('Explorer rows and controls stay usable at 
     await browser.close()
   }
 }, 60_000)
+
+test.skipIf(!existsSync(executable)).each(['New File', 'New Folder', 'Rename'] as const)(
+  'scrolls complete inline Explorer %s form into view after autofocus',
+  async (action) => {
+    const context = await browser!.newContext({ viewport: { width: 1280, height: 720 } })
+    try {
+      const page = await context.newPage()
+      await mountLiveExplorer(page)
+      const tree = page.locator('.qe-explorer-tree')
+      expect(await tree.evaluate((element) => element.scrollTop)).toBe(0)
+      if (action === 'Rename') {
+        await page.getByRole('button', { name: 'Actions for file-01.txt' }).click()
+        await page.getByRole('menuitem', { name: 'Rename', exact: true }).click()
+      } else {
+        await page.getByRole('button', { name: action, exact: true }).click()
+      }
+      await page.waitForFunction(() => {
+        const input = document.querySelector<HTMLInputElement>('.qe-explorer-inline-row input')
+        return input !== null && document.activeElement === input
+      })
+      await page.evaluate(() => {
+        const { promise, resolve } = Promise.withResolvers<void>()
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
+        return promise
+      })
+
+      const geometry = await inlineRowGeometry(page)
+      expect(geometry.focused).toBe(true)
+      expect(geometry.controls.map(({ label }) => label)).toEqual(action === 'Rename' ? ['input', 'Rename', 'Cancel'] : ['input', 'Create', 'Cancel'])
+      expect(geometry.row.top).toBeGreaterThanOrEqual(geometry.scrollport.top - 0.5)
+      expect(geometry.row.bottom).toBeLessThanOrEqual(geometry.scrollport.bottom + 0.5)
+      expect(geometry.row.bottom).toBeLessThanOrEqual(geometry.footer.top + 0.5)
+      for (const control of geometry.controls) {
+        expect(control.top).toBeGreaterThanOrEqual(geometry.scrollport.top - 0.5)
+        expect(control.bottom).toBeLessThanOrEqual(geometry.scrollport.bottom + 0.5)
+        expect(control.left).toBeGreaterThanOrEqual(geometry.scrollport.left - 0.5)
+        expect(control.right).toBeLessThanOrEqual(geometry.scrollport.right + 0.5)
+      }
+    } finally {
+      await context.close()
+    }
+  },
+  60_000,
+)
 
 test.skipIf(!existsSync(executable))('search mode keeps its named input and a selector stays available without a layout worktree', async () => {
   await mountExplorer('w1')

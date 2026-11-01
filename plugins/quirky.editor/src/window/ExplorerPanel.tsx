@@ -163,6 +163,8 @@ export function ExplorerPanel({ context, report }: { context: UiPluginContext; r
   const worktreeRootSelectorRef = useRef<string | null>(null)
   const interactionQueue = useRef(Promise.resolve())
   const treeRef = useRef<HTMLDivElement>(null)
+  const newItemRowRef = useRef<HTMLDivElement>(null)
+  const renameRowRef = useRef<HTMLDivElement>(null)
   const renameInputRef = useRef<HTMLInputElement>(null)
   const renamePathRef = useRef<string | null>(null)
   const mountedRef = useRef(false)
@@ -431,6 +433,14 @@ export function ExplorerPanel({ context, report }: { context: UiPluginContext; r
       break
     }
   }, [focusedPath, rows])
+
+  useEffect(() => {
+    newItemRowRef.current?.scrollIntoView({ block: 'nearest' })
+  }, [newItemKind])
+
+  useEffect(() => {
+    renameRowRef.current?.scrollIntoView({ block: 'nearest' })
+  }, [renamePath])
 
   useEffect(() => {
     report?.({
@@ -1272,7 +1282,7 @@ export function ExplorerPanel({ context, report }: { context: UiPluginContext; r
             </div>
           )}
           {newItemKind && (
-            <div className="qe-explorer-inline-row">
+            <div className="qe-explorer-inline-row" ref={newItemRowRef}>
               <TextField
                 className="qe-explorer-inline-field"
                 label={newItemKind === 'file' ? 'New file name' : 'New folder name'}
@@ -1294,7 +1304,7 @@ export function ExplorerPanel({ context, report }: { context: UiPluginContext; r
             </div>
           )}
           {renamePath !== null && (
-            <div className="qe-explorer-inline-row">
+            <div className="qe-explorer-inline-row" ref={renameRowRef}>
               <input
                 ref={renameInputRef}
                 className="ui-text-field__input qe-explorer-inline-field"
