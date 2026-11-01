@@ -180,6 +180,16 @@ describe('SC-15: names are sanitised and cannot leave the worktrees folder (API)
   })
 })
 
+describe('workspace name byte limits (API)', () => {
+  test('a 304-character name is rejected before creating a worktree', async () => {
+    const { dir, root } = await startApi()
+    const refused = await failure(create({ repo: 'api', name: 'a'.repeat(304) }))
+    expect(refused).toMatchObject({ code: RpcErrorCode.InvalidParams, data: { reason: 'invalid-name' } })
+    expect(existsSync(join(root, 'api'))).toBe(false)
+    expect(worktreeCount(dir)).toBe(1)
+  })
+})
+
 describe('SC-16: taken names get the next free suffix (API)', () => {
   test('a remote-only branch and an existing folder are skipped, and an explicit branch name is not suffixed', async () => {
     const { dir, root } = await startApi()
@@ -227,6 +237,19 @@ describe('SC-16: taken names get the next free suffix (API)', () => {
     const refused = await failure(create({ repo: 'api', name: 'busy' }))
     expect(refused).toMatchObject({ code: RpcErrorCode.Conflict, message: 'Branch "busy-100" already exists locally.', data: { reason: 'branch-exists' } })
     expect(existsSync(join(root, 'api'))).toBe(false)
+  })
+})
+
+describe('workspace name byte limits with Git collisions (API)', () => {
+  test('a 246-byte name succeeds with a collision suffix', async () => {
+    const { dir, root } = await startApi()
+    const name = 'a'.repeat(246)
+    const first = await create({ repo: 'api', name })
+    const second = await create({ repo: 'api', name })
+    expect(first.worktree.path).toBe(join(root, 'api', name))
+    expect(second.worktree.path).toBe(join(root, 'api', `${name}-2`))
+    expect(second.worktree.branch).toBe(`zoe/${name}-2`)
+    expect(worktreeCount(dir)).toBe(3)
   })
 })
 

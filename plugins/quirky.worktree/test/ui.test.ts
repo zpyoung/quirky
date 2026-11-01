@@ -229,6 +229,8 @@ function setup(layout: UiLayout = { worktree: null, view: null, panel: null, sid
             structured: false,
             extraArgs: { supported: false, allowed: null, placeholder: null, message: null }
           }
+        case 'quirky.git/branches':
+          return { refs: [] }
         case 'quirky.repo/list':
           await world.repoListGate
           return [...world.repos]
@@ -1367,6 +1369,49 @@ test('the new-worktree dialog creates a worktree through a pending row and opens
   expect(document.querySelector('[role="dialog"]')).toBeNull()
   expect(pendingRow('feature-y', 'api')).toBeUndefined()
   expect(lastReport(h).dialog).toBeNull()
+})
+
+for (const mode of ['Smart', 'Name', 'Branch']) {
+  test(`${mode} rejects an oversized workspace name before starting creation and recovers after editing`, async () => {
+    const h = setup()
+    await h.mountInto(host)
+    await click(buttonNamed(host, 'New worktree in api')!)
+    if (mode !== 'Smart') {
+      const tab = [...document.querySelectorAll<HTMLButtonElement>('[role="dialog"] [role="tab"]')]
+        .find((button) => button.textContent?.trim() === mode)!
+      await click(tab)
+    }
+    const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!
+    const submit = dialog.querySelector<HTMLButtonElement>('button[type="submit"]')!
+    for (const name of ['longname'.repeat(38), '界'.repeat(83)]) {
+      await typeInto(dialogField('Name')!, name)
+      expect(submit.disabled).toBe(true)
+      expect(dialog.querySelector('[role="alert"]')?.textContent).toMatch(/name.*too long/i)
+      await act(async () => {
+        dialog.querySelector('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+      })
+      expect(h.callsTo('quirky.worktree/create')).toEqual([])
+      expect(pendingRow(name, 'api')).toBeUndefined()
+    }
+    await typeInto(dialogField('Name')!, 'a'.repeat(130))
+    expect(submit.disabled).toBe(false)
+    expect(dialog.querySelector('[role="alert"]')).toBeNull()
+    await click(submit)
+    expect(h.callsTo('quirky.worktree/create')[0]).toMatchObject({ name: 'a'.repeat(130) })
+  })
+}
+
+test('a remote-qualified branch is not treated as an explicit workspace name', async () => {
+  const h = setup()
+  await h.mountInto(host)
+  await click(buttonNamed(host, 'New worktree in api')!)
+  const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!
+  const tab = [...dialog.querySelectorAll<HTMLButtonElement>('[role="tab"]')]
+    .find((button) => button.textContent?.trim() === 'Branch')!
+  await click(tab)
+  await typeInto(dialogField('Existing branch')!, `origin/${'a'.repeat(240)}`)
+  expect(dialog.querySelector<HTMLButtonElement>('button[type="submit"]')!.disabled).toBe(false)
+  expect(dialog.querySelector('[role="alert"]')).toBeNull()
 })
 
 test('a create is not opened when the view changed meanwhile, and a toast names it', async () => {

@@ -233,6 +233,7 @@ repository `/tmp/w/origin.git` with `main`; the worktrees folder `/tmp/w/ws`; an
     - **Given** project **api**
     - **When** an agent creates worktrees named `Fix Login: ünïcode!`, `../../etc`, `🦀🦀` and `...`
     - **Then** they get folders and branch names `Fix-Login-ünïcode`, `etc`, `workspace`; the last is refused with "Invalid worktree name" and creates nothing. Every folder is inside `/tmp/w/ws/api`.
+    - Sanitised names must fit within 246 UTF-8 bytes after NFC normalisation. This reserves space for the collision suffix through `-100` and Git's `.lock` extension within a 255-byte filename component. Overlong names return `invalid-params` with reason `invalid-name` and a concise length error, without creating a worktree. The New workspace form shows the error and blocks submission before a pending row appears.
     - **Data before:** **Names typed**: `Fix Login: ünïcode!`; `../../etc`; `🦀🦀`; `...`
     - **Walkthrough:**
       1. Runs of other characters become `-`, `--` and `..` collapse, ends are trimmed

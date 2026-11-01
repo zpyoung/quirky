@@ -4,6 +4,7 @@ import { Badge, Button, Dialog, FormRow, Tabs, TextField } from '@quirky/ui'
 import { createWorkspace, messageOf, SETUP_CHOICE_NEEDED, type CreateHooks } from './actions'
 import { isGitHubWorktreeReference, parseWorkItemsPage, parseWorktreeSource, type GitHubWorkItem } from './github'
 import { repoLabel, workspaceOption } from './report'
+import { InvalidNameError, sanitizeName } from './daemon/naming'
 
 /** Offered when `quirky.agents` isn't there to say which agents are installed. */
 const FALLBACK_AGENTS = [
@@ -482,9 +483,19 @@ export function CreateDialog({ context, repos, worktrees, repoId, onRepoChange, 
   const branchUnavailable = fromBranch && (currentBranchSearch?.status !== 'ready' || occupiedBranch !== undefined)
   const plainSmartInputNeedsChoice = mode === 'smart' && smartInput.trim() !== '' && !explicitSmartReference
   const workspaceName = (plainSmartInputNeedsChoice ? smartInput : name).trim()
+  const effectiveName = workspaceName || source?.item.title.toLowerCase() || ''
+  let nameError: string | null = null
+  if (effectiveName) {
+    try {
+      sanitizeName(effectiveName)
+    } catch (error) {
+      if (!(error instanceof InvalidNameError)) throw error
+      nameError = error.message
+    }
+  }
   const showBase = !folder && (source ? source.item.kind === 'issue' : mode !== 'github' && !fromBranch && !explicitSmartReference)
   const showBranchName = !folder && !isPullRequest && !fromBranch && (source ? source.item.kind === 'issue' : mode !== 'github' && !explicitSmartReference)
-  const blocked = !repo || busy || (asksForSetup && setupChoice === null) || sourceBusy || unsupportedFolderReference ||
+  const blocked = !repo || busy || nameError !== null || (asksForSetup && setupChoice === null) || sourceBusy || unsupportedFolderReference ||
     (mode === 'github' && source === null) || (explicitSmartReference && source === null) || selectedHostUnavailable || branchUnavailable ||
     (launchSelectionRequested && (!agentOptionsCatalog?.supported || agentOptionsState?.status !== 'ready'))
 
@@ -721,6 +732,7 @@ export function CreateDialog({ context, repos, worktrees, repoId, onRepoChange, 
             />
           </>
         )}
+        {nameError && <p className="ui-error-text" role="alert">{nameError}</p>}
         {unsupportedFolderReference && <p className="ui-error-text" role="alert">GitHub worktree sources require a Git repository.</p>}
         {showBase && (
           <TextField

@@ -40,6 +40,31 @@ describe('sanitizeName', () => {
   test('error message', () => {
     expect(() => sanitizeName('...')).toThrow('Invalid worktree name')
   })
+
+  test('accepts a normalized Unicode name at the 246-byte boundary', () => {
+    const input = `${'a'.repeat(244)}u\u0308`
+    const expected = `${'a'.repeat(244)}ü`
+    expect(sanitizeName(input)).toBe(expected)
+    expect(new TextEncoder().encode(expected).byteLength).toBe(246)
+  })
+
+  test('accepts the reported 130-character name without truncation', () => {
+    const name = 'a'.repeat(130)
+    expect(sanitizeName(name)).toBe(name)
+  })
+
+  test('rejects a 304-character ASCII name', () => {
+    expect(() => sanitizeName('a'.repeat(304))).toThrow(InvalidNameError)
+  })
+
+  test('rejects names exceeding the UTF-8 byte limit', () => {
+    expect(() => sanitizeName('é'.repeat(124))).toThrow(InvalidNameError)
+  })
+
+  test('reports the maximum UTF-8 byte limit for overlong names', () => {
+    expect(() => sanitizeName('a'.repeat(247))).toThrow('maximum 246 UTF-8 bytes')
+  })
+
 })
 
 describe('normalizePrefix', () => {
