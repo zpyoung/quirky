@@ -147,7 +147,7 @@ type CardProps = {
   automationAvailability: AutomationAvailabilitySnapshot | null
   onToggle(): void
   onToggleAutomationDetails(): void
-  onMenu(worktree: Worktree, x: number, y: number): void
+  onMenu(worktree: Worktree, x: number, y: number, returnFocusTo?: HTMLElement): void
   onDragStart(worktree: Worktree, event: DragEvent<HTMLLIElement>): void
   onDragEnd(): void
 }
@@ -310,7 +310,7 @@ function WorktreeCard({
                 aria-haspopup="menu"
                 onClick={(event) => {
                   const box = event.currentTarget.getBoundingClientRect()
-                  onMenu(worktree, box.left, box.bottom)
+                  onMenu(worktree, box.left, box.bottom, event.currentTarget)
                 }}
               >
                 ⋯
@@ -587,10 +587,11 @@ export function Tree({
     )
   }
 
-  const openWorkspaceMenu = (worktree: Worktree, x: number, y: number) => {
+  const openWorkspaceMenu = (worktree: Worktree, x: number, y: number, returnFocusTo?: HTMLElement) => {
     const repo = repoById.get(worktree.repoId)
     setMenu({
       x,
+      returnFocusTo,
       y,
       label: `Actions for ${worktree.name}`,
       items: workspaceMenu(worktree, descendantsOf.get(worktree.id) ?? 0, groups, repo, {
