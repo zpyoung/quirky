@@ -44,11 +44,13 @@ export class ExplorerService {
     private readonly context: PluginContext,
     private readonly store: PluginStore,
     private readonly paths: WorktreePaths,
-    private readonly inventory: FileInventory
+    private readonly inventory: FileInventory,
+    private readonly onResolvedWorktree: (worktree: ResolvedWorktree) => void
   ) {}
 
   async call(params: ExplorerParams, caller?: PluginCaller): Promise<ExplorerResult> {
     const worktree = await this.paths.resolve(params.worktree, caller)
+    this.onResolvedWorktree(worktree)
     if (
       params.action === 'navigate' ||
       params.action === 'select' ||

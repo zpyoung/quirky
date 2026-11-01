@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type KeyboardEvent, type MouseEvent as ReactMouseEvent } from 'react'
-import type { UiPluginContext } from '@quirky/protocol'
+import { RpcErrorCode, type UiPluginContext } from '@quirky/protocol'
 import { Button, ControlIcon, IconButton, ListRow, PopupMenu, TextField, ToolPanelFrame } from '@quirky/ui'
 import type { ExplorerInteraction } from '../types'
 import { activeDocument } from './activeDocument'
@@ -132,6 +132,11 @@ function messageOf(reason: unknown): string {
   return reason instanceof Error ? reason.message : String(reason)
 }
 
+function isMissingExplorerPathError(reason: unknown): boolean {
+  if (typeof reason !== 'object' || reason === null || !('code' in reason)) return false
+  return reason.code === RpcErrorCode.NotFound || reason.code === 'ENOENT' || reason.code === 'ENOTDIR'
+}
+
 /** Explorer, names filtering, contents search, and safe file operations for one worktree. */
 export function ExplorerPanel({ context, report }: { context: UiPluginContext; report?(state: unknown): void }) {
   const [layoutWorktree, setLayoutWorktree] = useState(() => worktreeFromLayout(context))
@@ -149,6 +154,7 @@ export function ExplorerPanel({ context, report }: { context: UiPluginContext; r
   const [children, setChildren] = useState<Map<string, ExplorerEntry[]>>(new Map())
   const childrenRef = useRef<Map<string, ExplorerEntry[]>>(new Map())
   const directoryLoads = useRef(new Map<string, Promise<ExplorerListing | undefined>>())
+  const missingExpandedDirectories = useRef(false)
   const treeLoadGeneration = useRef(0)
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const expandedRef = useRef<Set<string>>(new Set())
@@ -159,6 +165,7 @@ export function ExplorerPanel({ context, report }: { context: UiPluginContext; r
   const focusedPathRef = useRef<string | null>(null)
   const [worktreeRoot, setWorktreeRoot] = useState<string | null>(null)
   const [resolvedWorktreeId, setResolvedWorktreeId] = useState<string | null>(null)
+  const resolvedWorktreeIdRef = useRef<string | null>(null)
   const worktreeRootRef = useRef<string | null>(null)
   const worktreeRootSelectorRef = useRef<string | null>(null)
   const interactionQueue = useRef(Promise.resolve())
@@ -289,13 +296,16 @@ export function ExplorerPanel({ context, report }: { context: UiPluginContext; r
 
   useEffect(() => {
     if (!worktree) {
+      worktreeRootRef.current = null
+      worktreeRootSelectorRef.current = null
+      resolvedWorktreeIdRef.current = null
       setWorktreeRoot(null)
       setResolvedWorktreeId(null)
       return
     }
     let cancelled = false
     context.call('quirky.editor/documentRoot', { worktree }).then((value) => {
-      if (cancelled) return
+      if (cancelled || currentWorktree.current !== worktree) return
       const resolved = value as { id?: unknown; path?: unknown }
       if (typeof resolved.id !== 'string' || typeof resolved.path !== 'string') {
         setError('The selected worktree could not be resolved.')
@@ -303,6 +313,7 @@ export function ExplorerPanel({ context, report }: { context: UiPluginContext; r
       }
       worktreeRootRef.current = resolved.path
       worktreeRootSelectorRef.current = worktree
+      resolvedWorktreeIdRef.current = resolved.id
       setResolvedWorktreeId(resolved.id)
       setWorktreeRoot(resolved.path)
     }).catch((reason: unknown) => {
@@ -310,8 +321,32 @@ export function ExplorerPanel({ context, report }: { context: UiPluginContext; r
     })
     return () => { cancelled = true }
   }, [context, worktree])
+  const pruneMissingDirectory = useCallback((requestedWorktree: string, path: string, generation: number) => {
+    if (!mountedRef.current || generation !== treeLoadGeneration.current || currentWorktree.current !== requestedWorktree) return
+    const root = worktreeRootRef.current
+    if (root === null || worktreeRootSelectorRef.current !== requestedWorktree) return
+    const previousExpanded = expandedRef.current
+    const nextExpanded = new Set(Array.from(previousExpanded).filter((candidate) => !isPathWithin(candidate, path)))
+    const nextChildren = new Map(childrenRef.current)
+    let childrenChanged = false
+    for (const candidate of nextChildren.keys()) {
+      if (isPathWithin(candidate, path)) {
+        nextChildren.delete(candidate)
+        childrenChanged = true
+      }
+    }
+    if (nextExpanded.size !== previousExpanded.size) {
+      expandedRef.current = nextExpanded
+      missingExpandedDirectories.current = true
+      setExpanded(nextExpanded)
+    }
+    if (childrenChanged) {
+      childrenRef.current = nextChildren
+      setChildren(nextChildren)
+    }
+  }, [])
   const loadDirectory = useCallback(async (path?: string) => {
-    if (!worktree) return
+    if (!mountedRef.current || !worktree || currentWorktree.current !== worktree) return
     const requestedWorktree = worktree
     const generation = treeLoadGeneration.current
     const key = `${requestedWorktree}\0${path ?? ''}`
@@ -325,7 +360,7 @@ export function ExplorerPanel({ context, report }: { context: UiPluginContext; r
           action: 'list',
           ...(path ? { path } : {})
         }) as ExplorerListing
-        if (generation !== treeLoadGeneration.current || currentWorktree.current !== requestedWorktree) return
+        if (!mountedRef.current || generation !== treeLoadGeneration.current || currentWorktree.current !== requestedWorktree) return
         if (path) {
           const next = new Map(childrenRef.current).set(path, listing.entries)
           childrenRef.current = next
@@ -336,9 +371,12 @@ export function ExplorerPanel({ context, report }: { context: UiPluginContext; r
         if (!path) setError(null)
         return listing
       } catch (reason) {
-        if (generation === treeLoadGeneration.current && currentWorktree.current === requestedWorktree) setError(messageOf(reason))
+        if (mountedRef.current && generation === treeLoadGeneration.current && currentWorktree.current === requestedWorktree) {
+          if (path && isMissingExplorerPathError(reason)) pruneMissingDirectory(requestedWorktree, path, generation)
+          else setError(messageOf(reason))
+        }
       } finally {
-        if (generation === treeLoadGeneration.current && currentWorktree.current === requestedWorktree) setTreeLoading(false)
+        if (mountedRef.current && generation === treeLoadGeneration.current && currentWorktree.current === requestedWorktree) setTreeLoading(false)
       }
     })()
     directoryLoads.current.set(key, request)
@@ -347,13 +385,58 @@ export function ExplorerPanel({ context, report }: { context: UiPluginContext; r
     } finally {
       if (directoryLoads.current.get(key) === request) directoryLoads.current.delete(key)
     }
-  }, [context, worktree])
-  const reloadExpandedDirectories = async () => {
+  }, [context, pruneMissingDirectory, worktree])
+  const reloadExpandedDirectories = async (
+    requestedWorktree = worktree,
+    generation = treeLoadGeneration.current
+  ) => {
+    if (
+      requestedWorktree === undefined ||
+      !mountedRef.current ||
+      currentWorktree.current !== requestedWorktree ||
+      generation !== treeLoadGeneration.current
+    ) return
     let count = 0
     for (const path of expandedRef.current) {
       if (count >= MAX_EXPLORER_CHILD_LISTINGS) break
+      if (
+        !mountedRef.current ||
+        currentWorktree.current !== requestedWorktree ||
+        generation !== treeLoadGeneration.current
+      ) return
       count++
       await loadDirectory(path)
+    }
+    const root = worktreeRootRef.current
+    if (
+      !missingExpandedDirectories.current ||
+      !mountedRef.current ||
+      currentWorktree.current !== requestedWorktree ||
+      generation !== treeLoadGeneration.current ||
+      root === null ||
+      worktreeRootSelectorRef.current !== requestedWorktree
+    ) return
+    try {
+      await context.call('quirky.editor/explorer', {
+        worktree: requestedWorktree,
+        action: 'preferences',
+        expanded: Array.from(expandedRef.current, (path) => relativeExplorerPath(root, path))
+          .filter((path): path is string => path !== null)
+      })
+      if (
+        currentWorktree.current === requestedWorktree &&
+        generation === treeLoadGeneration.current &&
+        mountedRef.current
+      ) {
+        missingExpandedDirectories.current = false
+        refreshEditorState()
+      }
+    } catch (reason) {
+      if (
+        currentWorktree.current === requestedWorktree &&
+        generation === treeLoadGeneration.current &&
+        mountedRef.current
+      ) setError(messageOf(reason))
     }
   }
 
@@ -361,6 +444,7 @@ export function ExplorerPanel({ context, report }: { context: UiPluginContext; r
   useEffect(() => {
     treeLoadGeneration.current++
     setTreeLoading(false)
+    missingExpandedDirectories.current = false
     directoryLoads.current.clear()
     childrenRef.current = new Map()
     expandedRef.current = new Set()
@@ -370,6 +454,9 @@ export function ExplorerPanel({ context, report }: { context: UiPluginContext; r
     focusedPathRef.current = null
     setFocusedPath(null)
     setResolvedWorktreeId(null)
+    worktreeRootRef.current = null
+    worktreeRootSelectorRef.current = null
+    resolvedWorktreeIdRef.current = null
     setWorktreeRoot(null)
     if (!worktree) {
       setRootListing(null)
@@ -568,6 +655,7 @@ export function ExplorerPanel({ context, report }: { context: UiPluginContext; r
     if (typeof resolved.id !== 'string' || typeof resolved.path !== 'string') throw new Error('The selected worktree could not be resolved.')
     worktreeRootRef.current = resolved.path
     worktreeRootSelectorRef.current = requestedWorktree
+    resolvedWorktreeIdRef.current = resolved.id
     setResolvedWorktreeId(resolved.id)
     setWorktreeRoot(resolved.path)
     return resolved.path
@@ -629,27 +717,84 @@ export function ExplorerPanel({ context, report }: { context: UiPluginContext; r
   ): Promise<ExplorerListing | null> => {
     if (currentWorktree.current !== requestedWorktree || !mountedRef.current) return null
     treeLoadGeneration.current++
+    const generation = treeLoadGeneration.current
     directoryLoads.current.clear()
     const listing = await loadDirectory()
-    await reloadExpandedDirectories()
-    if (currentWorktree.current !== requestedWorktree || !mountedRef.current) return null
+    if (
+      generation !== treeLoadGeneration.current ||
+      currentWorktree.current !== requestedWorktree ||
+      !mountedRef.current
+    ) return null
+    await reloadExpandedDirectories(requestedWorktree, generation)
+    if (
+      generation !== treeLoadGeneration.current ||
+      currentWorktree.current !== requestedWorktree ||
+      !mountedRef.current
+    ) return null
     if (requestedMode !== 'names' || requestedQuery.trim() === '') {
       return listing ? { ...listing, entries: flattenEntries(listing.entries, expandedRef.current, childrenRef.current).map(({ entry }) => entry) } : null
     }
+    if (searchModeRef.current !== requestedMode || queryRef.current !== requestedQuery) return null
+    if (generation !== treeLoadGeneration.current) return null
     try {
       const listing = await context.call('quirky.editor/explorer', {
         worktree: requestedWorktree,
         action: 'filter',
         query: requestedQuery
       }) as ExplorerListing
-      if (currentWorktree.current !== requestedWorktree || !mountedRef.current) return null
-      if (searchModeRef.current === requestedMode && queryRef.current === requestedQuery) setFilterResult(listing)
+      if (
+        currentWorktree.current !== requestedWorktree ||
+        !mountedRef.current ||
+        searchModeRef.current !== requestedMode ||
+        queryRef.current !== requestedQuery
+      ) return null
+      if (generation !== treeLoadGeneration.current) return null
+      setFilterResult(listing)
       return listing
     } catch (reason) {
-      if (currentWorktree.current === requestedWorktree && mountedRef.current) setError(messageOf(reason))
+      if (
+        currentWorktree.current === requestedWorktree &&
+        generation === treeLoadGeneration.current &&
+        mountedRef.current &&
+        searchModeRef.current === requestedMode &&
+        queryRef.current === requestedQuery
+      ) setError(messageOf(reason))
       return null
     }
   }
+  const reloadAfterMutationRef = useRef(reloadAfterMutation)
+  reloadAfterMutationRef.current = reloadAfterMutation
+
+  useEffect(() => {
+    let timer: number | undefined
+    const unsubscribe = context.subscribe((event) => {
+      if (event.type !== 'quirky.editor/explorerChanged' || typeof event.data !== 'object' || event.data === null || !('worktreeId' in event.data)) return
+      const worktreeId = event.data.worktreeId
+      const requestedWorktree = currentWorktree.current
+      if (
+        typeof worktreeId !== 'string' ||
+        requestedWorktree === undefined ||
+        worktreeRootSelectorRef.current !== requestedWorktree ||
+        resolvedWorktreeIdRef.current !== worktreeId
+      ) return
+      if (timer !== undefined) window.clearTimeout(timer)
+      timer = window.setTimeout(() => {
+        timer = undefined
+        if (
+          !mountedRef.current ||
+          currentWorktree.current !== requestedWorktree ||
+          worktreeRootSelectorRef.current !== requestedWorktree ||
+          resolvedWorktreeIdRef.current !== worktreeId
+        ) return
+        void reloadAfterMutationRef.current(requestedWorktree, searchModeRef.current, queryRef.current)
+      }, 100)
+    })
+    return () => {
+      unsubscribe()
+      if (timer !== undefined) window.clearTimeout(timer)
+    }
+  }, [context])
+
 
   const applyExplorerInteraction = useCallback(async (
     requestedWorktree: string,

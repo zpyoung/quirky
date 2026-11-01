@@ -20,7 +20,7 @@ type Worktree = { id: string; path: string }
 type ExplorerEntry = { path: string; name: string; isDirectory: boolean }
 type ExplorerListing = { root: string; entries: ExplorerEntry[] }
 type DocumentRoot = { id: string; path: string }
-type ExplorerReport = { loading: boolean; error: string | null }
+type ExplorerReport = { loading: boolean; error: string | null; expandedCount: number }
 type Fixture = {
   harness: Harness
   client: QuirkyClient
@@ -270,7 +270,8 @@ async function renderExplorer(fixture: Fixture, context = makeContext(fixture), 
           if (typeof value !== 'object' || value === null || !('loading' in value) || typeof value.loading !== 'boolean') return
           fixture.reports.push({
             loading: value.loading,
-            error: 'error' in value && typeof value.error === 'string' ? value.error : null
+            error: 'error' in value && typeof value.error === 'string' ? value.error : null,
+            expandedCount: 'expandedCount' in value && typeof value.expandedCount === 'number' ? value.expandedCount : 0
           })
         }} />
         {includeConfirmHost && <ConfirmHost />}
@@ -1816,6 +1817,76 @@ for (const { label, extraFiles, results, files } of [
     expect(panel.element.querySelectorAll('.qe-search-file').length).toBe(files)
   }, 30_000)
 }
+
+test('Explorer follows external creates and deletes in root and expanded directories without an editor buffer', async () => {
+  const fixture = await makeFixture()
+  const panel = await renderExplorer(fixture)
+  const rootFile = join(fixture.root, 'external-root.txt')
+  const childDirectory = join(fixture.root, 'nested')
+  const childFile = join(childDirectory, 'external-child.txt')
+  try {
+    writeFileSync(rootFile, 'external root\n')
+    await waitForUi(() => findRow(panel.element, rootFile) || false, 15_000)
+
+    await act(async () => findRow(panel.element, childDirectory)!.click())
+    await waitForUi(() => findRow(panel.element, join(fixture.root, FILE_A)) || false)
+    writeFileSync(childFile, 'external child\n')
+    await waitForUi(() => findRow(panel.element, childFile) || false, 15_000)
+
+    rmSync(rootFile)
+    rmSync(childFile)
+    await waitForUi(() => !findRow(panel.element, rootFile) && !findRow(panel.element, childFile) || false, 15_000)
+  } finally {
+    await panel.unmount()
+  }
+}, 60_000)
+
+test('Explorer refreshes an active Names filter after external filesystem changes', async () => {
+  const fixture = await makeFixture()
+  const panel = await renderExplorer(fixture)
+  const query = panel.element.querySelector<HTMLInputElement>('input[placeholder="Find files"]')
+  if (!query) throw new Error('Missing Explorer Names query')
+  const createdFile = join(fixture.root, 'external-filter-created.txt')
+  try {
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(query, 'external-filter-created')
+      query.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+    await waitForUi(() => panel.element.querySelector('.qe-explorer-filter-empty') || false, 15_000)
+
+    writeFileSync(createdFile, 'external filtered result\n')
+    await waitForUi(() => findRow(panel.element, createdFile) || false, 15_000)
+    rmSync(createdFile)
+    await waitForUi(() => findRow(panel.element, createdFile) === null &&
+      panel.element.querySelector('.qe-explorer-filter-empty') !== null || false, 15_000)
+  } finally {
+    await panel.unmount()
+  }
+}, 60_000)
+
+test('Explorer removes an externally deleted expanded directory without a stale-path error', async () => {
+  const fixture = await makeFixture()
+  await call(fixture.client, 'quirky.editor/explorer', {
+    worktree: fixture.worktree.id,
+    action: 'preferences',
+    expanded: ['nested', 'nested/archive']
+  })
+  const panel = await renderExplorer(fixture)
+  const archiveDirectory = join(fixture.root, 'nested/archive')
+  const archiveFile = join(archiveDirectory, 'keep.txt')
+  try {
+    await waitForUi(() => findRow(panel.element, archiveFile) || false)
+    rmSync(archiveDirectory, { recursive: true })
+    await waitForUi(() => findRow(panel.element, archiveDirectory) === null &&
+      findRow(panel.element, archiveFile) === null &&
+      fixture.reports.at(-1)?.expandedCount === 1 &&
+      fixture.reports.at(-1)?.loading === false || false, 15_000)
+    expect(panel.element.querySelector('[role="alert"]')).toBeNull()
+  } finally {
+    await panel.unmount()
+  }
+}, 60_000)
+
 
 test('Explorer explains an unmatched Contents query in Names and clears it to reveal a newly created file', async () => {
   const fixture = await makeFixture()

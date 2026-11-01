@@ -150,6 +150,7 @@ export class EditorDaemon {
   private readonly transferGateQueue = new KeyedQueue()
   private readonly transferDirectory: string
   private readonly changeTimers = new Map<string, ReturnType<typeof setTimeout>>()
+  private readonly explorerChangeTimers = new Map<string, ReturnType<typeof setTimeout>>()
   private readonly bufferQueue = new KeyedQueue()
   private readonly fileQueue = new KeyedQueue()
   private readonly closeListeners = new Set<(bufferId: string) => void>()
@@ -157,6 +158,7 @@ export class EditorDaemon {
   private readonly searchService: ContentsSearch
   private readonly explorerService: ExplorerService
   private readonly watcher: EditorWatcher
+  private readonly explorerWorktrees = new Set<string>()
   private disposed = false
   private stateRevision = 0
 
@@ -165,8 +167,17 @@ export class EditorDaemon {
     this.transferDirectory = join(context.dataDir, 'editor-transfers')
     this.paths = new WorktreePaths(context)
     this.inventory = new FileInventory(context)
+    this.watcher = new EditorWatcher({
+      change: (worktreeId, path) => {
+        this.scheduleReconcile(worktreeId, path)
+        this.scheduleExplorerChanged(worktreeId)
+      }
+    })
     this.searchService = new ContentsSearch(context, this.paths)
-    this.explorerService = new ExplorerService(context, store, this.paths, this.inventory)
+    this.explorerService = new ExplorerService(context, store, this.paths, this.inventory, (worktree) => {
+      this.explorerWorktrees.add(worktree.id)
+      this.watcher.keep(worktree.id, worktree.path)
+    })
     const cachedMetrics = loadBufferMetrics(store)
     for (const buffer of loadBuffers(store)) {
       const hold = store.get<{ autosave_hold: number }>('SELECT autosave_hold FROM editor_buffers WHERE id=?', buffer.id)?.autosave_hold === 1
@@ -188,9 +199,6 @@ export class EditorDaemon {
       this.buffers.set(buffer.id, state)
       this.pathIndex.set(this.pathKey(buffer.worktreeId, buffer.path), buffer.id)
     }
-    this.watcher = new EditorWatcher({
-      change: (worktreeId, path) => this.scheduleReconcile(worktreeId, path)
-    })
     this.services = {
       context,
       store,
@@ -1353,6 +1361,9 @@ export class EditorDaemon {
   async dispose(): Promise<void> {
     if (this.disposed) return
     this.disposed = true
+    for (const timer of this.explorerChangeTimers.values()) clearTimeout(timer)
+    this.explorerChangeTimers.clear()
+    this.explorerWorktrees.clear()
     for (const transfer of [...this.transfers.values()]) {
       await this.transferQueue.run([`transfer:${transfer.transferId}`], () => this.removeTransfer(transfer)).catch(() => undefined)
     }
@@ -1910,6 +1921,18 @@ export class EditorDaemon {
       }
     }, path === null ? 0 : 75)
     this.changeTimers.set(key, timer)
+  }
+
+  private scheduleExplorerChanged(worktreeId: string): void {
+    if (this.disposed) return
+    const existing = this.explorerChangeTimers.get(worktreeId)
+    if (existing !== undefined) clearTimeout(existing)
+    const timer = setTimeout(() => {
+      this.explorerChangeTimers.delete(worktreeId)
+      if (this.disposed) return
+      this.context.emit('explorerChanged', { worktreeId })
+    }, 100)
+    this.explorerChangeTimers.set(worktreeId, timer)
   }
 
   private async syncTerminalWorkspace(worktreeId: string): Promise<void> {
@@ -2641,7 +2664,7 @@ export class EditorDaemon {
     this.reloadUndo.delete(bufferId)
     this.closeRequests.forEach((request, tabId) => { if (request.bufferId === bufferId) this.closeRequests.delete(tabId) })
     const remaining = [...this.buffers.values()].some((item) => item.buffer.worktreeId === state.buffer.worktreeId)
-    if (!remaining) this.watcher.drop(state.buffer.worktreeId)
+    if (!remaining && !this.explorerWorktrees.has(state.buffer.worktreeId)) this.watcher.drop(state.buffer.worktreeId)
   }
 
   private async fileKeysForBuffer(state: PrivateBuffer): Promise<string[]> {
