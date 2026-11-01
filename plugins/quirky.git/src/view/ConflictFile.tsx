@@ -3,7 +3,7 @@ import { EditorState } from '@codemirror/state'
 import { EditorView, keymap, lineNumbers } from '@codemirror/view'
 import type { GitConflictKind, GitOperation, GitStatus } from '@quirky/protocol'
 import { RpcErrorCode } from '@quirky/protocol'
-import { Badge, EmptyState, IconButton, SectionHeader } from '@quirky/ui'
+import { Badge, Button, EmptyState, IconButton, SectionHeader } from '@quirky/ui'
 import { editorTheme } from '@quirky/ui/editor-theme'
 
 import { conflictBlocks, conflictDecorations, type ConflictBlock } from './conflict-markers'
@@ -41,6 +41,8 @@ const KIND_LABEL: Record<GitConflictKind, string> = {
   deleted_by_them: 'Deleted by them'
 }
 
+const isModifyDelete = (kind: GitConflictKind): boolean => kind === 'deleted_by_us' || kind === 'deleted_by_them'
+
 /**
  * One conflicted file in an editable editor: marker lines tinted and labelled, a banner with the
  * conflict's kind, an N / M counter with wrap-around Previous / Next conflict, and Mod+S to save
@@ -60,6 +62,8 @@ export function ConflictFile({ context, input, settings, report, bind, close }: 
   const [dirty, setDirty] = useState(restored !== undefined)
   const [stale, setStale] = useState(restored?.stale ?? false)
   const [operationEnded, setOperationEnded] = useState(false)
+  const [actionPending, setActionPending] = useState(false)
+  const actionInFlight = useRef(false)
   const hostRef = useRef<HTMLDivElement>(null)
   const viewRef = useRef<EditorView | null>(null)
   const fileRef = useRef<typeof file>(file)
@@ -191,9 +195,10 @@ export function ConflictFile({ context, input, settings, report, bind, close }: 
     goTo(((from - 1 + direction + count) % count) + 1)
   }
 
-  const save = async (force: boolean) => {
+  const save = async (force: boolean): Promise<boolean> => {
+    if (!active.current) return false
     const view = viewRef.current
-    if (!view || !dirtyRef.current) return
+    if (!view || !dirtyRef.current) return true
     const content = view.state.sliceDoc()
     try {
       const result = (await context.call('quirky.git/save', {
@@ -202,16 +207,18 @@ export function ConflictFile({ context, input, settings, report, bind, close }: 
         content,
         ...(!force && base.current.hash !== null ? { expected: base.current.hash } : {})
       })) as { hash: string }
-      if (!active.current) return
+      if (!active.current) return false
       base.current = { text: content, hash: result.hash }
       dirtyRef.current = view.state.sliceDoc() !== content
       setDirty(dirtyRef.current)
       setStale(false)
       if (draftKey && !dirtyRef.current) drafts.delete(draftKey)
+      return true
     } catch (e) {
-      if (!active.current) return
+      if (!active.current) return false
       if (reasonOf(e) === 'changed-on-disk') setStale(true)
       else context.toast('Save failed', messageOf(e))
+      return false
     }
   }
   const saveRef = useRef(save)
@@ -225,6 +232,70 @@ export function ConflictFile({ context, input, settings, report, bind, close }: 
     } catch (e) {
       if (!active.current) return
       context.toast('Reload failed', messageOf(e))
+    }
+  }
+
+  const keepFile = async () => {
+    if (!active.current) return
+    const current = fileRef.current?.result
+    if (operationEndedRef.current || actionInFlight.current || current?.state !== 'unresolved' || !isModifyDelete(current.kind)) return
+    if (current.content === null) {
+      context.toast('Keep file unavailable', 'No working-tree file is available to keep.')
+      return
+    }
+    actionInFlight.current = true
+    setActionPending(true)
+    try {
+      if (!(await save(false))) return
+      if (!active.current) return
+      if (dirtyRef.current) {
+        context.toast('Keep file failed', 'The editor changed while the file was being saved. Try Keep file again.')
+        return
+      }
+      const fresh = await load()
+      if (!active.current) return
+      if (fresh.state !== 'unresolved' || !isModifyDelete(fresh.kind)) {
+        replace(fresh)
+        return
+      }
+      if (fresh.content === null) {
+        replace(fresh)
+        context.toast('Keep file unavailable', 'The working-tree file no longer exists.')
+        return
+      }
+      await context.call('quirky.git/stage', { worktree, paths: [path] })
+      if (!active.current) return
+      const resolved = await load()
+      if (!active.current) return
+      replace(resolved)
+    } catch (e) {
+      if (!active.current) return
+      context.toast('Keep file failed', messageOf(e))
+    } finally {
+      actionInFlight.current = false
+      if (active.current) setActionPending(false)
+    }
+  }
+
+  const acceptDeletion = async () => {
+    if (!active.current) return
+    const current = fileRef.current?.result
+    if (operationEndedRef.current || actionInFlight.current || current?.state !== 'unresolved' || !isModifyDelete(current.kind)) return
+    actionInFlight.current = true
+    setActionPending(true)
+    try {
+      await context.call('quirky.git/acceptConflictDeletion', { worktree, path, expected: base.current.hash })
+      if (!active.current) return
+      const resolved = await load()
+      if (!active.current) return
+      replace(resolved)
+    } catch (e) {
+      if (!active.current) return
+      if (reasonOf(e) === 'changed-on-disk') setStale(true)
+      context.toast('Accept deletion failed', messageOf(e))
+    } finally {
+      actionInFlight.current = false
+      if (active.current) setActionPending(false)
     }
   }
 
@@ -242,6 +313,7 @@ export function ConflictFile({ context, input, settings, report, bind, close }: 
           syntaxExtensions(path, host),
           lineBreakExtension(base.current.text),
           conflictDecorations(),
+          EditorView.editable.of(!actionPending),
           ...(settings.wrap ? [EditorView.lineWrapping] : []),
           keymap.of([
             {
@@ -282,20 +354,20 @@ export function ConflictFile({ context, input, settings, report, bind, close }: 
       viewRef.current = null
       view.destroy()
     }
-  }, [file?.revision, file?.result.content === null, settings.wrap])
+  }, [file?.revision, file?.result.content === null, settings.wrap, actionPending])
 
   bind({
     nextConflict: () => step(1),
     previousConflict: () => step(-1),
-    save: () => save(false),
+    save: async () => { await save(false) },
     isDirty: () => dirtyRef.current,
     reloadFromDisk: reload,
-    overwrite: () => save(true)
+    overwrite: async () => { await save(true) }
   })
 
   const result = file?.result
   const resolved = operationEnded || result?.state === 'resolved_locally'
-  const kindHint = result && (result.kind === 'deleted_by_us' || result.kind === 'deleted_by_them')
+  const kindHint = result && isModifyDelete(result.kind)
   const conflictCount = resolved ? 0 : blocks.length
   const currentConflict = conflictCount === 0 ? null : current
   const stateKey = JSON.stringify([conflictCount, currentConflict, dirty, stale])
@@ -343,11 +415,22 @@ export function ConflictFile({ context, input, settings, report, bind, close }: 
           ) : result?.state === 'resolved_locally' ? (
             <Badge tone="accent">Resolved</Badge>
           ) : result ? (
-            <>
-              <Badge tone="needs-you">Unresolved conflict · {KIND_LABEL[result.kind]}</Badge>
-              {kindHint && <span>Decide whether to keep the file or accept deletion</span>}
-            </>
+            <Badge tone="needs-you">Unresolved conflict · {KIND_LABEL[result.kind]}</Badge>
           ) : null}
+          {result && kindHint && result.state === 'unresolved' && !operationEnded && (
+            <div className="ui-cluster">
+              <Button
+                disabled={actionPending || result.content === null}
+                title={result.content === null ? 'No working-tree file is available to keep.' : undefined}
+                onClick={() => void keepFile()}
+              >
+                Keep file
+              </Button>
+              <Button variant="destructive" disabled={actionPending} onClick={() => void acceptDeletion()}>
+                Accept deletion
+              </Button>
+            </div>
+          )}
         </div>
       )}
       {stale && <StaleBar variant="file" onReload={() => void reload()} onOverwrite={() => void save(true)} />}

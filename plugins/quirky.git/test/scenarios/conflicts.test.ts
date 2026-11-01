@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, test } from 'bun:test'
-import { readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { RpcErrorCode, type GitStatus } from '@quirky/protocol'
+import { actionPaths, entryActions } from '../../src/panel/sections'
 import { waitFor, waitForAsync } from '../../../../packages/daemon/test/helpers'
 import { diverge, installHook, isolateScenarioGit, jsonError, startScenario, type Scenario } from './fixture'
 
@@ -153,6 +154,85 @@ describe('opening a conflict', () => {
     expect(conflictRows(await status(s))).toEqual([['a.ts', 'deleted_by_them', 'resolved_locally']])
   })
 
+  test('SC-44: Keep saves and stages deleted-by-them content, then continues with the file', async () => {
+    s = await startScenario(scratch)
+    diverge(s, { 'a.ts': null }, { 'a.ts': 'ours\n' })
+    expect(s.gitTry(null, 'merge', 'other').code).toBe(1)
+
+    const opened = await s.api('conflictFile', { path: 'a.ts' })
+    expect(opened).toMatchObject({ kind: 'deleted_by_them', content: 'ours\n' })
+    await s.api('save', { path: 'a.ts', content: 'kept\n', expected: opened.hash })
+    await s.api('stage', { paths: ['a.ts'] })
+    expect(conflictRows(await status(s))).toEqual([['a.ts', 'deleted_by_them', 'resolved_locally']])
+
+    expect(await s.api('continue')).toEqual({ finished: true, operation: 'none' })
+    expect(readFileSync(join(s.feat.path, 'a.ts'), 'utf8')).toBe('kept\n')
+    expect(await status(s)).toMatchObject({ operation: 'none', entries: [] })
+  })
+
+  for (const kind of ['deleted_by_them', 'deleted_by_us'] as const) {
+    test(`SC-44: Accept deletion resolves ${kind}, stages the removal and continues`, async () => {
+      s = await startScenario(scratch)
+      const theirs = kind === 'deleted_by_them' ? { 'a.ts': null } : { 'a.ts': 'theirs\n' }
+      const ours = kind === 'deleted_by_them' ? { 'a.ts': 'ours\n' } : { 'a.ts': null }
+      diverge(s, theirs, ours)
+      expect(s.gitTry(null, 'merge', 'other').code).toBe(1)
+
+      const opened = await s.api('conflictFile', { path: 'a.ts' })
+      expect(opened).toMatchObject({ kind, content: kind === 'deleted_by_them' ? 'ours\n' : 'theirs\n' })
+      await s.api('acceptConflictDeletion', { path: 'a.ts', expected: opened.hash })
+      expect(existsSync(join(s.feat.path, 'a.ts'))).toBe(false)
+      expect(s.gitIn('ls-files', '-u')).toBe('')
+      expect(s.gitIn('ls-files', '--', 'a.ts')).toBe('')
+      if (kind === 'deleted_by_them') {
+        expect(s.gitIn('diff', '--cached', '--name-status').split(/\r?\n/)).toContain('D\ta.ts')
+      }
+      expect(conflictRows(await status(s))).toEqual([['a.ts', kind, 'resolved_locally']])
+
+      expect(await s.api('continue')).toEqual({ finished: true, operation: 'none' })
+      expect(existsSync(join(s.feat.path, 'a.ts'))).toBe(false)
+      expect(await status(s)).toMatchObject({ operation: 'none', entries: [] })
+    })
+  }
+
+  test('SC-44: Accept deletion resolves a missing deleted-by-them file', async () => {
+    s = await startScenario(scratch)
+    diverge(s, { 'a.ts': null }, { 'a.ts': 'ours\n' })
+    expect(s.gitTry(null, 'merge', 'other').code).toBe(1)
+    rmSync(join(s.feat.path, 'a.ts'))
+
+    const opened = await s.api('conflictFile', { path: 'a.ts' })
+    expect(opened).toMatchObject({ kind: 'deleted_by_them', content: null, hash: null })
+    await s.api('acceptConflictDeletion', { path: 'a.ts', expected: opened.hash })
+    expect(s.gitIn('ls-files', '-u')).toBe('')
+    expect(s.gitIn('ls-files', '--', 'a.ts')).toBe('')
+    expect(conflictRows(await status(s))).toEqual([['a.ts', 'deleted_by_them', 'resolved_locally']])
+
+    expect(await s.api('continue')).toEqual({ finished: true, operation: 'none' })
+    expect(existsSync(join(s.feat.path, 'a.ts'))).toBe(false)
+    expect(await status(s)).toMatchObject({ operation: 'none', entries: [] })
+  })
+
+  test('SC-44: acceptConflictDeletion refuses unrelated conflicts, paths outside the worktree and stale hashes', async () => {
+    s = await startScenario(scratch)
+    diverge(s, { 'a.ts': 'theirs a\n', 'b.ts': 'theirs b\n' }, { 'a.ts': null, 'b.ts': 'ours b\n' })
+    expect(s.gitTry(null, 'merge', 'other').code).toBe(1)
+    const opened = await s.api('conflictFile', { path: 'a.ts' })
+    const modified = await s.api('conflictFile', { path: 'b.ts' })
+
+    await s.fails(s.api('acceptConflictDeletion', { path: 'b.ts', expected: modified.hash }))
+    await s.fails(s.api('acceptConflictDeletion', { path: 'math.ts', expected: opened.hash }))
+    expect(await s.fails(s.api('acceptConflictDeletion', { path: '../outside', expected: opened.hash }))).toMatchObject({
+      code: RpcErrorCode.InvalidParams,
+      data: { reason: 'outside-worktree' }
+    })
+
+    s.write('a.ts', 'newer content\n')
+    await s.fails(s.api('acceptConflictDeletion', { path: 'a.ts', expected: opened.hash }))
+    expect(readFileSync(join(s.feat.path, 'a.ts'), 'utf8')).toBe('newer content\n')
+    expect(conflictRows(await status(s))).toContainEqual(['a.ts', 'deleted_by_us', 'unresolved'])
+  })
+
   test('conflictFile refuses a path that is not in conflict, a binary file and a path outside the worktree', async () => {
     s = await startScenario(scratch)
     diverge(s, { 'a.ts': 'theirs\n' }, { 'a.ts': 'ours\n' })
@@ -161,6 +241,36 @@ describe('opening a conflict', () => {
     expect(await s.fails(s.api('conflictFile', { path: '../x' }))).toMatchObject({ code: RpcErrorCode.InvalidParams, data: { reason: 'outside-worktree' } })
     writeFileSync(join(s.feat.path, 'a.ts'), Buffer.from([0, 1, 2, 3]))
     expect(await s.fails(s.api('conflictFile', { path: 'a.ts' }))).toMatchObject({ code: RpcErrorCode.InvalidParams, data: { reason: 'not-allowed' } })
+  })
+
+  test('a binary deleted-by-them conflict can be staged and continued', async () => {
+    s = await startScenario(scratch)
+    const path = 'math.ts'
+    const binaryContent = '\u0000ours binary\u0000content\n'
+    const expectedBytes = Buffer.from(binaryContent)
+    diverge(s, { [path]: null }, { [path]: binaryContent })
+    expect(s.gitTry(null, 'merge', 'other').code).toBe(1)
+
+    const merged = await status(s)
+    expect(conflictRows(merged)).toEqual([[path, 'deleted_by_them', 'unresolved']])
+    const refusal = await s.fails(s.api('conflictFile', { path, peek: true }))
+    expect(refusal.data.reason).toBe('not-allowed')
+
+    const conflict = merged.entries.find((entry) => entry.area === 'conflicts' && entry.path === path)!
+    const context = { markersGone: new Set([path]), unreadableConflicts: new Set([path]) }
+    expect(entryActions(conflict, context).stage).toBe(true)
+    const paths = actionPaths([conflict], 'stage', context)
+    expect(paths).toEqual([path])
+    await s.api('stage', { paths })
+
+    expect(s.gitIn('ls-files', '-u')).toBe('')
+    const staged = await status(s)
+    expect(staged.entries.some((entry) => entry.path === path && entry.conflict?.state === 'unresolved')).toBe(false)
+
+    expect(await s.api('continue')).toEqual({ finished: true, operation: 'none' })
+    expect(readFileSync(join(s.feat.path, path))).toEqual(expectedBytes)
+    expect(s.gitIn('rev-parse', 'HEAD^2')).toBe(s.gitIn('rev-parse', 'other'))
+    expect(await status(s)).toMatchObject({ operation: 'none', entries: [] })
   })
 })
 

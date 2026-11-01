@@ -1495,7 +1495,7 @@
               "description": "The working file's text; null when the file is missing."
             },
             "hash": {
-              "description": "sha-256 of the working file's bytes, for save's expected; null when missing."
+              "description": "sha-256 of the working file's bytes, for guarded saves or accepting deletion; null when missing."
             },
             "operation": {
               "type": "string",
@@ -1515,6 +1515,41 @@
             "content",
             "hash",
             "operation"
+          ]
+        }
+      },
+      {
+        "id": "acceptConflictDeletion",
+        "description": "Removes and stages an unresolved modify/delete conflict after checking its working-file hash.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string",
+              "description": "Worktree selector (id, name, branch, path: or current); defaults to the caller's worktree."
+            },
+            "path": {
+              "type": "string",
+              "description": "Conflicted path relative to the worktree root."
+            },
+            "expected": {
+              "description": "sha-256 of the working file, or null if it was absent when read."
+            }
+          },
+          "required": [
+            "path",
+            "expected"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "ok": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "ok"
           ]
         }
       },
