@@ -145,6 +145,10 @@ function panelHeaderRegressionBrowserEntry(): string {
 
     function PanelHeaderRegressionFixtures() {
       const [selectedVaultTab, setSelectedVaultTab] = useState('workspace')
+      const [createdWorktrees, setCreatedWorktrees] = useState(0)
+      const [worktreeFilterRequests, setWorktreeFilterRequests] = useState(0)
+      const [worktreeMinimizeRequests, setWorktreeMinimizeRequests] = useState(0)
+      const [filesMinimizeRequests, setFilesMinimizeRequests] = useState(0)
       const vaultTabs = h(Tabs, {
         label: 'Vault views',
         items: [
@@ -156,6 +160,34 @@ function panelHeaderRegressionBrowserEntry(): string {
         onChange: setSelectedVaultTab
       })
       return h('div', { id: 'panel-header-regression-fixtures' },
+        h('div', { id: 'worktrees-frame-host', className: 'panel-header-regression-frame', 'data-tool-panel': '' },
+          h(ToolPanelFrame, {
+            title: 'Worktrees',
+            actions: h('div', { className: 'ui-cluster' },
+              h(ExpandingIconButton, {
+                label: 'New worktree',
+                title: 'New worktree',
+                onClick: () => setCreatedWorktrees((count) => count + 1)
+              }, '+'),
+              h(IconButton, {
+                label: 'Filter worktrees',
+                title: 'Filter worktrees',
+                onClick: () => setWorktreeFilterRequests((count) => count + 1)
+              }, '⌕')
+            ),
+            onMinimize: () => setWorktreeMinimizeRequests((count) => count + 1)
+          }, h('div', null,
+            h('p', null, 'Worktrees created: ', h('output', { 'data-action-counter': 'worktrees-created' }, String(createdWorktrees))),
+            h('p', null, 'Filter requests: ', h('output', { 'data-action-counter': 'worktrees-filter' }, String(worktreeFilterRequests))),
+            h('p', null, 'Minimize requests: ', h('output', { 'data-action-counter': 'worktrees-minimize' }, String(worktreeMinimizeRequests)))
+          ))
+        ),
+        h('div', { id: 'files-frame-host', className: 'panel-header-regression-frame', 'data-tool-panel': '' },
+          h(ToolPanelFrame, {
+            title: 'Files',
+            onMinimize: () => setFilesMinimizeRequests((count) => count + 1)
+          }, h('p', null, 'Minimize requests: ', h('output', { 'data-action-counter': 'files-minimize' }, String(filesMinimizeRequests))))
+        ),
         h('div', { id: 'remote-frame-host', className: 'panel-header-regression-frame' },
           h(ToolPanelFrame, {
             title: 'Remote workspaces',
@@ -640,6 +672,152 @@ test.skipIf(!existsSync(chromium.executablePath()))('keeps worktree rows compact
   }
 }, 60_000)
 
+test.skipIf(!existsSync(chromium.executablePath()))('keeps host panel headers compact and actions usable without tabs at narrow widths', async () => {
+  const context = await browser!.newContext({ viewport: { width: 646, height: HEIGHT }, reducedMotion: 'reduce' })
+  const page = await context.newPage()
+  try {
+    await page.setContent(pageMarkup())
+    for (const stylesheet of STYLESHEETS) {
+      await page.addStyleTag({ content: readFileSync(join(ROOT, stylesheet), 'utf8') })
+    }
+    await page.addStyleTag({
+      content: `
+        #panel-header-regression-fixtures { display: flex; gap: 16px; }
+        .panel-header-regression-frame { height: 360px; min-width: 0; width: 116px; }
+        #remote-frame-host, #vault-frame-host { display: none; }
+      `
+    })
+    await page.addScriptTag({ content: panelHeaderRegressionBundle })
+    await page.locator('#worktrees-frame-host .ui-tool-panel-frame').waitFor()
+    await page.locator('#files-frame-host .ui-tool-panel-frame').waitFor()
+
+    type Rect = { left: number; top: number; right: number; bottom: number; width: number; height: number }
+    type PanelMetrics = { header: Rect; body: Rect; actionsOpacity: string; buttons: Rect[] }
+    const hostIds = ['worktrees-frame-host', 'files-frame-host']
+    const measure = async (hostId: string): Promise<PanelMetrics> => page.locator(`#${hostId}`).evaluate((host) => {
+      const bounds = (element: Element) => {
+        const rect = element.getBoundingClientRect()
+        return { left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom, width: rect.width, height: rect.height }
+      }
+      const frame = host.querySelector('.ui-tool-panel-frame')!
+      const header = frame.querySelector('.ui-tool-panel-frame__header')!
+      const actions = header.querySelector('.ui-tool-panel-frame__actions')!
+      return {
+        header: bounds(header),
+        body: bounds(frame.querySelector('.ui-tool-panel-frame__body')!),
+        actionsOpacity: getComputedStyle(actions).opacity,
+        buttons: [...actions.querySelectorAll('button')].map(bounds)
+      }
+    })
+    const expectContained = (inner: Rect, outer: Rect) => {
+      expect(inner.left).toBeGreaterThanOrEqual(outer.left - 0.5)
+      expect(inner.top).toBeGreaterThanOrEqual(outer.top - 0.5)
+      expect(inner.right).toBeLessThanOrEqual(outer.right + 0.5)
+      expect(inner.bottom).toBeLessThanOrEqual(outer.bottom + 0.5)
+    }
+    const expectStableHeader = (current: PanelMetrics, resting: PanelMetrics) => {
+      expect(current.header.height).toBeCloseTo(resting.header.height, 0)
+      expect(current.body.top).toBeCloseTo(resting.body.top, 0)
+    }
+    const setWidth = async (width: number) => {
+      for (const hostId of hostIds) {
+        await page.locator(`#${hostId}`).evaluate((host, nextWidth) => {
+          ;(host as HTMLElement).style.width = `${nextWidth}px`
+        }, width)
+      }
+    }
+    const counters: Record<string, string[]> = {
+      'worktrees-frame-host': ['worktrees-created', 'worktrees-filter', 'worktrees-minimize'],
+      'files-frame-host': ['files-minimize']
+    }
+    const wide: Record<string, PanelMetrics> = {}
+    await setWidth(240)
+    await page.mouse.move(1, HEIGHT - 1)
+    for (const hostId of hostIds) wide[hostId] = await measure(hostId)
+
+    await setWidth(160)
+    await page.mouse.move(1, HEIGHT - 1)
+    await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur())
+    const resting: Record<string, PanelMetrics> = {}
+    for (const hostId of hostIds) {
+      resting[hostId] = await measure(hostId)
+      expect(resting[hostId].actionsOpacity).toBe('0')
+      expect(resting[hostId].buttons.length).toBe(counters[hostId].length)
+      expectStableHeader(resting[hostId], wide[hostId])
+    }
+
+    for (const hostId of hostIds) {
+      await page.locator(`#${hostId}`).hover()
+      await page.waitForFunction((id) =>
+        getComputedStyle(document.querySelector(`#${id} .ui-tool-panel-frame__actions`)!).opacity === '1', hostId)
+      let hovered = await measure(hostId)
+      expect(hovered.actionsOpacity).toBe('1')
+      expectStableHeader(hovered, resting[hostId])
+      for (const button of hovered.buttons) expectContained(button, hovered.header)
+
+      const buttons = page.locator(`#${hostId} .ui-tool-panel-frame__actions button`)
+      for (let index = 0; index < counters[hostId].length; index++) {
+        const action = hostId === 'worktrees-frame-host' && index === 0
+          ? page.locator('#worktrees-frame-host .ui-expanding-icon-button')
+          : buttons.nth(index)
+        await action.hover()
+        hovered = await measure(hostId)
+        expectStableHeader(hovered, resting[hostId])
+        for (const button of hovered.buttons) expectContained(button, hovered.header)
+
+        const counter = page.locator(`#${hostId} [data-action-counter="${counters[hostId][index]}"]`)
+        const previousCount = Number(await counter.textContent())
+        await action.click()
+        expect(Number(await counter.textContent())).toBe(previousCount + 1)
+        const activated = await measure(hostId)
+        expectStableHeader(activated, resting[hostId])
+        for (const button of activated.buttons) expectContained(button, activated.header)
+      }
+      await page.mouse.move(1, HEIGHT - 1)
+      await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur())
+      const returnedToRest = await measure(hostId)
+      expect(returnedToRest.actionsOpacity).toBe('0')
+      expectStableHeader(returnedToRest, resting[hostId])
+    }
+
+    await page.keyboard.press('Tab')
+    const newWorktreeButton = page.locator('#worktrees-frame-host .ui-expanding-icon-button')
+    expect(await newWorktreeButton.evaluate((element) =>
+      document.activeElement === element && element.matches(':focus-visible'))).toBe(true)
+    await page.waitForFunction(() =>
+      getComputedStyle(document.querySelector('#worktrees-frame-host .ui-tool-panel-frame__actions')!).opacity === '1')
+    const focusedWorktrees = await measure('worktrees-frame-host')
+    expectStableHeader(focusedWorktrees, resting['worktrees-frame-host'])
+    for (const button of focusedWorktrees.buttons) expectContained(button, focusedWorktrees.header)
+    const createdCounter = page.locator('#worktrees-frame-host [data-action-counter="worktrees-created"]')
+    const createdBeforeKeyboard = Number(await createdCounter.textContent())
+    await page.keyboard.press('Enter')
+    expect(Number(await createdCounter.textContent())).toBe(createdBeforeKeyboard + 1)
+    const activatedWorktrees = await measure('worktrees-frame-host')
+    expectStableHeader(activatedWorktrees, resting['worktrees-frame-host'])
+    for (const button of activatedWorktrees.buttons) expectContained(button, activatedWorktrees.header)
+
+    for (let index = 0; index < 3; index++) await page.keyboard.press('Tab')
+    const fileMinimize = page.locator('#files-frame-host .ui-tool-panel-frame__actions button')
+    expect(await fileMinimize.evaluate((element) =>
+      document.activeElement === element && element.matches(':focus-visible'))).toBe(true)
+    await page.waitForFunction(() =>
+      getComputedStyle(document.querySelector('#files-frame-host .ui-tool-panel-frame__actions')!).opacity === '1')
+    const focusedFiles = await measure('files-frame-host')
+    expectStableHeader(focusedFiles, resting['files-frame-host'])
+    for (const button of focusedFiles.buttons) expectContained(button, focusedFiles.header)
+    const filesCounter = page.locator('#files-frame-host [data-action-counter="files-minimize"]')
+    const filesBeforeKeyboard = Number(await filesCounter.textContent())
+    await page.keyboard.press('Space')
+    expect(Number(await filesCounter.textContent())).toBe(filesBeforeKeyboard + 1)
+    const activatedFiles = await measure('files-frame-host')
+    expectStableHeader(activatedFiles, resting['files-frame-host'])
+    for (const button of activatedFiles.buttons) expectContained(button, activatedFiles.header)
+  } finally {
+    await context.close()
+  }
+}, 60_000)
+
 test.skipIf(!existsSync(chromium.executablePath()))('keeps remote and vault panel headers readable at narrow widths', async () => {
   const context = await browser!.newContext({ viewport: { width: 646, height: HEIGHT } })
   const page = await context.newPage()
@@ -652,6 +830,7 @@ test.skipIf(!existsSync(chromium.executablePath()))('keeps remote and vault pane
       content: `
         #panel-header-regression-fixtures { display: flex; gap: 16px; }
         .panel-header-regression-frame { height: 360px; min-width: 0; width: 116px; }
+        #worktrees-frame-host, #files-frame-host { display: none; }
       `
     })
     await page.addScriptTag({ content: panelHeaderRegressionBundle })
