@@ -85,6 +85,22 @@ describe('SC-23: the discard dialogs', () => {
     })
   }
 
+  for (const count of [1, 2]) {
+    test(`folder discard describes ${count} ${count === 1 ? 'file' : 'files'} consistently`, async () => {
+      const { element, unmount } = await open((fake) => {
+        fake.status = statusOf(Array.from({ length: count }, (_, i) => entry(`src/file-${i}.ts`, 'unstaged')))
+        fake.settings.viewMode = 'tree'
+      })
+      try {
+        await click(byLabel(element, 'Discard folder src'))
+        expect(dialogTitle()).toContain(`${count} ${count === 1 ? 'file?' : 'files?'}`)
+        expect(dialog()?.textContent).toContain(count === 1 ? 'this file.' : 'these files.')
+      } finally {
+        unmount()
+      }
+    })
+  }
+
   test('recovers focus before a delete completes and keeps it through a later row-removing status read', async () => {
     const pendingDiscard = Promise.withResolvers<{ ok: boolean }>()
     const { fake, element, unmount } = await open((f) => {

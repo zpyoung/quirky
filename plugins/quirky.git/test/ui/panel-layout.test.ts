@@ -418,6 +418,17 @@ describe('SC-17: the tree view', () => {
     }
   })
 
+  test('announces singular and plural file counts on folder badges', async () => {
+    const { element, unmount } = await open(tree)
+    try {
+      const dirs = qa(element, '[data-section="unstaged"] [data-directory-path]')
+      expect(q(dirs[0]!, '[role="img"]')?.getAttribute('aria-label')).toMatch(/^1 file$/)
+      expect(q(dirs[1]!, '[role="img"]')?.getAttribute('aria-label')).toMatch(/^2 files$/)
+    } finally {
+      unmount()
+    }
+  })
+
   test('View as tree changes the view and returns focus to the actions trigger', async () => {
     const { fake, element, unmount } = await open()
     try {
