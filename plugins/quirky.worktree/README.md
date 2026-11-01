@@ -7,6 +7,7 @@ Reader: people and scripts managing worktrees — Decision: choose how the sideb
 Worktrees is the host-managed tool in the left-top slot by default. Add project is a folder-plus
 button in its panel header. Workspace options, Activity filters and More workspace tools stay inside
 the header's options popover; the latter includes the board and status editor. Project management uses the existing `quirky.repo` API, not a second tool.
+Activity-window tabs wrap inside the popover so all six choices stay visible without horizontal scrolling.
 Rows show name plus activity, with selected branch/note/status metadata on the secondary line
 and full text available on hover. The activity indicator's accessible name follows its displayed
 activity; pending questions show “Needs you” in the activity text and take priority in the indicator.

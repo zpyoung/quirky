@@ -124,3 +124,7 @@
     display: none;
   }
 }
+
+.worktree-tree-activity-filters .ui-tabs {
+  flex-wrap: wrap;
+}
