@@ -42,6 +42,26 @@ describe('quirky.git file diff view', () => {
     expect(element.querySelector('.cm-editor')).not.toBeNull()
   })
 
+  test.each([
+    ['unstaged', 'README.md'],
+    ['staged', 'src/HttpClient.ts'],
+    ['branch', 'docs/ReviewNotes.md'],
+    ['commit', 'data/metrics.csv']
+  ])('%s diff headers preserve file path casing', async (source, path) => {
+    const style = document.createElement('style')
+    style.textContent = readFileSync(new URL('../../../../packages/ui/src/design-system/components.css', import.meta.url), 'utf8')
+    document.head.appendChild(style)
+    try {
+      const { element } = await open(textDiff({ path }), { ...input, source, path, commit: source === 'commit' ? 'c'.repeat(40) : undefined })
+      const heading = element.querySelector<HTMLElement>('h2')!
+      expect(heading.textContent).toContain(path)
+      expect(heading.title).toContain(path)
+      expect(getComputedStyle(heading.firstElementChild ?? heading).textTransform).toBe('none')
+    } finally {
+      style.remove()
+    }
+  })
+
   test('SC-60: a rename and a commit diff pass oldPath and commit to the daemon', async () => {
     await open(textDiff(), { worktree: 'w1', mode: 'file', source: 'commit', path: 'b.ts', oldPath: 'a.ts', commit: 'c'.repeat(40) })
     expect(fake.callsTo('quirky.git/diff')[0].params).toEqual({
